@@ -1,0 +1,39 @@
+name: Feature or decision proposal
+description: Propose a feature, a scope change or a new/changed decision (ADR)
+labels: ["proposal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste anything from CloudPanel (templates, docs, UI text, screenshots). Describe the behavior in your own words.
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What problem does this solve, and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options
+      description: Alternatives you considered, with pros and cons.
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommendation and consequences
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security impact
+      description: Does this touch the agent, privileges, user input, files or secrets?
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This does not require mail, DNS server, billing, reseller or multi-server support (non-goals for v1), or I explain why above.
+        - label: I did not copy material from CloudPanel.
+          required: true

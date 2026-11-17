@@ -26,6 +26,7 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 **Kontext.** `cloudpanel-ce` enthält keinen Quellcode. `vhost-templates` und `docs` haben keine LICENSE-Datei und sind damit urheberrechtlich geschützt. `dploy` ist MIT, `clp-wp-varnish-cache` GPLv3.
 
 **Entscheidung (Vorschlag).**
+
 - CloudPanel wird als **Funktionsreferenz** genutzt, nicht als Textvorlage. Keine Vhost-Templates, Doku-Texte, Screenshots oder UI-Texte übernehmen.
 - Eigene Templates und Texte schreiben. Wer sie schreibt, sollte nicht 1:1 aus den Referenz-Dateien abschreiben, die Struktur ergibt sich aus der Nginx-Dokumentation und den Anwendungen selbst.
 - MIT-Code (`dploy`) darf mit Lizenzhinweis verwendet werden. GPLv3-Code nur, wenn ADR-0002 das erlaubt.
@@ -94,14 +95,17 @@ Vorschlag: Einzelserver für Entwickler und Agenturen. Reseller, Mail, DNS-Serve
 **Entscheidung (17.11.2026):** Das Projekt heißt **Hostashi**, ein Kunstwort aus „Host“ und einem Sushi-Anklang.
 
 **Verworfen:**
+
 - *Hostwerk*: Der Name wird bereits häufig genutzt, auch als Marke und als `.io`- und `.de`-Domain.
 - Weitere Kandidaten, die geprüft und nicht gewählt wurden: Maki-Namen, Werft- und Küstenbegriffe, Nautik-Begriffe (Skerry, Keelson …), Hostwarte, Hostwacht, Hostmill, Hostkeep, Bentowerk, Servishi u. a.
 
 **Stand der Prüfung (17.11.2026):**
+
 - Domains `hostashi.de`, `.dev`, `.com`, `.io` waren laut RDAP-Abfrage **nicht registriert**.
 - Die Websuche (US, standard) fand keinen Treffer zum Namen, nur Ähnliches (Hisashi als Vorname, Hondashi als Würzmittel). Das ist kein Beweis, die Suche ist unscharf.
 
 **Noch zu tun, bevor irgendetwas veröffentlicht wird:**
+
 1. Domains sichern (`.de`, `.dev`, `.com`, `.io`), solange sie frei sind.
 2. Markenrecherche bei DPMA, EUIPO und USPTO (Klassen 9 und 42), idealerweise mit anwaltlicher Prüfung.
 3. GitHub-Organisation und Paketnamen (apt, npm, Go-Modul) prüfen, das war in der Recherche nicht erreichbar.

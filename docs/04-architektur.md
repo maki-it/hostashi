@@ -4,7 +4,7 @@ Alles hier ist ein Entwurf, der durch die Spikes in Phase 0 bestätigt oder verw
 
 ## 4.1 Überblick
 
-```
+```text
  Browser / CLI / API-Clients / (später) Terraform
           │ HTTPS
           ▼
@@ -70,7 +70,7 @@ Ein Interface `WebServerDriver` (Render, Validate, Reload). Erste Implementierun
 
 ## 4.6 Datenmodell (Auszug)
 
-```
+```text
 Server ─┬─ User ── Role / SiteGrant
         ├─ Site ─┬─ Domain (primary, alias, redirect)
         │        ├─ Runtime {type, version, port|socket, limits}

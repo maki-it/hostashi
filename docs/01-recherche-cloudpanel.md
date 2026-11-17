@@ -19,12 +19,14 @@ Die Lizenzangaben stammen aus den Dateien in den Klonen. Per GitHub-API konnte i
 ## 1.2 Funktionsumfang von CloudPanel v2 (aus der Doku)
 
 **Plattform**
+
 - Ubuntu 22.04/24.04/26.04 und Debian 11/12/13, x86-64 und ARM64, mindestens 1 Core, 2 GB RAM, 10 GB Disk.
 - Nur VMs, **keine Container** (LXC, LXD, OpenVZ).
 - Stack: Nginx 1.30 (HTTP/3, PageSpeed), MySQL 8.0/8.4, MariaDB 10.6–12.3, PHP 7.1–8.5, Redis, ProFTPD, Node.js 12–24 (nvm), Python 3.10–3.14, Varnish 7.x.
 - Installation per Skript oder Marketplace-Image bei AWS, DigitalOcean, Hetzner, GCE, Azure, Oracle, Vultr.
 
 **Sites** (Frontend-Bereich)
+
 - Typen: WordPress, PHP (mit Vhost-Template), Node.js, Static HTML, Python, Reverse Proxy.
 - Pro Site ein SSH-Benutzer („Site User“) mit Home unter `/home/<user>`.
 - Automatische www/non-www-Weiterleitung, HTTP→HTTPS.
@@ -36,6 +38,7 @@ Die Lizenzangaben stammen aus den Dateien in den Klonen. Per GitHub-API konnte i
 - PageSpeed-Modul, Varnish Cache mit WordPress-Plugin, Redis.
 
 **Admin-Bereich**
+
 - Firewall auf UFW-Basis, Basic Auth vor dem Panel, Panel-Port 8443.
 - Benutzer mit drei Rollen: Admin, Site Manager, User (auf Sites beschränkt). 2FA (TOTP).
 - Events (Audit-Log), Instanz-Verwaltung (Reboot, Dienste neu starten, Zeitzone, ProFTPD), Custom Domain fürs Panel.
@@ -43,6 +46,7 @@ Die Lizenzangaben stammen aus den Dateien in den Klonen. Per GitHub-API konnte i
 - Mehrsprachige UI (u. a. Finnisch, Ungarisch, Slowakisch, Thai).
 
 **CLI `clpctl`**
+
 - Root: Sites anlegen/löschen (PHP, Node, Static, Python, Reverse Proxy), DBs, Let's Encrypt, Benutzer, Vhost-Templates, Basic Auth, Cloudflare-IPs.
 - Site-User: Berechtigungen zurücksetzen, DB-Export/Import, Varnish-Purge.
 
