@@ -11,6 +11,11 @@
 - Target platforms: Ubuntu 24.04 and Debian 13 as primary [V: ADR-0009, `06-roadmap.md` S5]. Both are expected to use cgroup v2 by default [U].
 - Nothing in this ADR has been measured. No spike has run, and the target server's filesystem and hardware are not known to the project [A].
 
+## Owner input (2026-11-17)
+
+- Kim's current server (`web2`) uses ext4 on a single `/dev/sda1`, 38 GB, about 27 GB used, no quota mount options [V: Kim, `findmnt` and `df` output in thread].
+- Hostashi will run on a **completely fresh server**, not on `web2` [V: Kim, thread]. Effect: quota can be prepared at provisioning time. A reboot during first setup costs nothing, so the maintenance-window concern for existing servers does not apply to Kim's own use. It stays relevant for later adoption of existing servers (S6) and other users.
+
 ## What "resource" means here
 
 Five different things, each with a different mechanism. They should not be forced into one "limits" feature:
@@ -108,7 +113,7 @@ Strongest disk isolation, size is fixed by the volume. Contra: resizing is awkwa
 
 Time box: 2 to 4 days [E]. Answers, each with a measurement or a test:
 
-1. Which filesystem and mount options does Kim's production server use, and can project quota be enabled there, with or without reboot? What does the same question look like on a fresh Hetzner Ubuntu 24.04 and Debian 13 image?
+1. Which filesystem layout is best for the fresh target server, and can project quota be enabled on a stock Hetzner Ubuntu 24.04 image, with or without reboot? What does the same question look like on a fresh Hetzner Ubuntu 24.04 and Debian 13 image?
 2. Does a project quota correctly stop one site from filling the disk, and do the other sites keep working? What do PHP, WordPress and a Node app do when they hit `EDQUOT`?
 3. How much RAM does one idle `ondemand` FPM master cost, and what is the first-request latency after idle? Total for 22 sites, compared with a single shared master.
 4. Do `MemoryMax`, `MemoryHigh`, `TasksMax` and `CPUWeight` behave as expected for a PHP site and a fork bomb test, without affecting a neighbor? Does `IOWeight` do anything measurable on the target disk?
@@ -119,7 +124,6 @@ Abort criteria: if project quota cannot be enabled without unacceptable downtime
 
 ## Open questions
 
-1. What is the filesystem layout of Kim's server (ext4 or XFS, separate `/home` or data partition, LVM)? This decides how hard quota setup is.
-2. Is a reboot or maintenance window acceptable to enable quotas on the existing server?
-3. Should "unlimited" stay selectable in the UI at all, or only via CLI?
-4. Should SSH/SFTP sessions count against the site's limits, or only the web workload?
+1. Which layout for the fresh server: ext4 or XFS with quota enabled at creation, a separate data volume for the sites, or the provider's default image plus a reboot during first setup? Should the installer only detect and report quota support, or also enable it?
+2. Should "unlimited" stay selectable in the UI at all, or only via CLI?
+3. Should SSH/SFTP sessions count against the site's limits, or only the web workload?
