@@ -11,6 +11,10 @@
 - Security rules: the web process runs without root, the agent executes only typed operations, no shell strings, no general exec [V: `05-sicherheit.md`]. A location choice is exactly the kind of input that could turn into a path traversal or an arbitrary-write primitive if it is a free-form path.
 - Multi-server is a non-goal for v1 [V: ADR-0010]. This ADR is about several filesystems on one server.
 
+## Owner input (2026-11-17)
+
+- The pool of a site is chosen **only when the site is created** at first. Moving a site between pools comes later as a separate step [V: Kim, thread].
+
 ## Findings
 
 ### 1. Quota is per filesystem
@@ -84,7 +88,7 @@ Simplest. Contradicts Kim's wish.
 3. The site user's home directory is `<pool path>/<user>`, no symlinks.
 4. Quota (ADR-0015) is enabled and checked **per pool**. Hostashi does not format or partition. It can enable quota features on an already-mounted pool after the same preview and confirmation rules as the first-run setup.
 5. Mount safety per finding 2 is required before a second pool can be used: marker file, mountpoint check, `RequiresMountsFor`.
-6. Moving a site between pools is a later, separate operation with the sketch in finding 5. Pools themselves can ship first.
+6. The pool is chosen at site creation only (Kim's decision). Moving a site between pools is a later, separate operation with the sketch in finding 5, and until it exists a site stays on its pool.
 7. Phasing: `pool` field and the default pool in Alpha, additional pools in Beta together with disk quota, moving sites afterward [A, subject to Kim's priority].
 
 ## Consequences
@@ -105,6 +109,5 @@ Time box: 2 to 3 days [E]. Questions:
 
 ## Open questions
 
-1. Should the pool of an existing site be changeable in v1, or only chosen at creation?
-2. Should the admin be allowed to register a pool path that is not a separate mountpoint (just a directory on the same filesystem, for example for organizing)? Recommendation: no in v1, because quota and free-space semantics get confusing.
-3. Should the database of a site follow its pool, or stay on the MariaDB data directory? Recommendation: stay, document it.
+1. Should the admin be allowed to register a pool path that is not a separate mountpoint (just a directory on the same filesystem, for example for organizing)? Recommendation: no in v1, because quota and free-space semantics get confusing.
+2. Should the database of a site follow its pool, or stay on the MariaDB data directory? Recommendation: stay, document it.
