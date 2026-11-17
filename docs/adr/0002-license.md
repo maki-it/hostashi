@@ -26,6 +26,7 @@
 - Q2: the team is Kim alone, who masters Go [V: Kim, thread]. Bus factor is 1.
 - Q5: single-server v1, multi-server and reseller maybe much later [V: Kim, thread].
 - Q8: no budget for an external pentest or legal review [V: Kim, thread].
+- License direction: **AGPL-3.0-or-later** [V: Kim, thread, 2026-11-17]. Status stays Proposed until Kim sets Accepted.
 - Contributions: DCO for now, no CLA, open core stays off the table for the moment [V: Kim, thread]. Not final: the ADRs are still Proposed.
 
 Effect: with own use first and no budget for legal review, the license choice should be the simplest one with the fewest later obligations. That favors **no CLA and no relicensing plan**.
