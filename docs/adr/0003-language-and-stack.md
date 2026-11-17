@@ -16,6 +16,11 @@
 - Q5: single-server v1, multi-server and reseller maybe much later [V: Kim, thread].
 - Q8: no budget for an external pentest or legal review [V: Kim, thread].
 
+- Agent file operations: the agent starts a helper process under the site user instead of dropping root inside the agent itself. To be tested in spikes S1 and S4 [V: Kim, thread].
+- SQLite driver: pure Go as default, small benchmark in Phase 0 [V: Kim, thread].
+- SPA framework: React with Vite and TypeScript, chosen by Claude on Kim's request, because the maintainer is alone with little frontend experience and React has the largest ecosystem. Spike S7 may overturn it [A].
+- Agent code review: strict CI checks (fuzzing, static analysis), a small documented agent interface, public review by volunteers once the code is open, and no "1.0" label before an external review [V: Kim agreed in thread].
+
 Effect: the Go condition below is met. Open risk: one maintainer reviews all security-critical agent code himself.
 
 ## Options
@@ -85,5 +90,4 @@ Decision rule:
 
 ## Open questions
 
-1. Is the SPA framework set up front, or decided by spike S7?
-2. How is the agent code reviewed with a bus factor of 1 and no review budget (Q8)? Options: a second volunteer reviewer, public review once published, or a delayed 1.0.
+None at this level. Remaining before Accepted: Kim sets the status, and spikes S1, S2, S4 and S7 must not contradict the choice.
