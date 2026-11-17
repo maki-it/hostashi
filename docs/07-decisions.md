@@ -121,6 +121,11 @@ Ursprünglicher Vorschlag: Einzelserver für Entwickler und Agenturen. Reseller,
 3. GitHub-Organisation und Paketnamen (apt, npm, Go-Modul) prüfen, das war in der Recherche nicht erreichbar.
 4. Klang und Bedeutung in den wichtigsten Zielsprachen prüfen.
 
+**Stand 17.11.2026 (Angaben von Kim, nicht von Claude geprüft):**
+- `hostashi.de` ist von Kim registriert. `.dev`, `.com` und `.io` bleiben vorerst unregistriert.
+- Eigene Markenrecherche (Anleitung: `markenrecherche-anleitung.md` im Projektordner): keine Treffer. Das ist kein Beweis und ersetzt keine anwaltliche Prüfung.
+- Das Repo bleibt in der GitHub-Organisation `maki-it`, es gibt keine eigene Organisation für Hostashi.
+
 **Risiko:** Klingt der Name an „Hostinger“ oder andere „Host…“-Marken an, kann das im deutschen Markt zu Verwechslungsgefahr führen. Das ist ein Punkt für die Markenrecherche, nicht für diese Entscheidung.
 
 ## ADR-0012 Sprache von Code und Doku
