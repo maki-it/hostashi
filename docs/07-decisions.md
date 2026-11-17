@@ -19,6 +19,7 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 | 0013 | Geschäftsmodell und Governance | Proposed (Entwurf: [adr/0013](adr/0013-business-model-and-governance.md)) | **Ja** |
 | 0014 | Name des CLI-Werkzeugs | Proposed | Ja, kurz |
 | 0015 | Ressourcenlimits pro Site | Proposed (Entwurf: [adr/0015](adr/0015-per-site-resource-limits.md)) | **Ja** (Priorität Disk-Quota) |
+| 0016 | Speicherort pro Site (Storage-Pools) | Proposed (Entwurf: [adr/0016](adr/0016-per-site-storage-location.md)) | **Ja** |
 
 ---
 
@@ -164,6 +165,10 @@ ashi site add example.com --type php --php 8.4   # gleiches Programm
 ## ADR-0015 Ressourcenlimits pro Site
 
 **Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0015-per-site-resource-limits.md](adr/0015-per-site-resource-limits.md). Kurzfassung: Speicherplatz je Site per Dateisystem-Quota (bevorzugt Projekt-Quota auf ext4/XFS), CPU/RAM/Prozesse über ein systemd-Slice je Site mit eigenem PHP-FPM-Master, `pm=ondemand` als Standard, Datenbank nur mit Verbindungslimit und Größenwarnung (MariaDB hat keine Größenquota), Nginx-Rate-Limits optional, Traffic-Kontingente später. Disk-Quota soll von P2 auf P1 hochgestuft werden. Alle Zahlen und Mechanismen sind unverifiziert, Spike S8 (Quota auf dem echten Server, RAM-Messung) klärt das.
+
+## ADR-0016 Speicherort pro Site (Storage-Pools)
+
+**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0016-per-site-storage-location.md](adr/0016-per-site-storage-location.md). Kurzfassung: Der Speicherort ist wählbar über benannte **Storage-Pools** (zum Beispiel ein zweites Volume), nie über einen freien Pfad aus der API. Der Agent prüft Mountpoint, Marker-Datei und Quota je Pool, damit ein nicht eingehängtes Volume nicht die Root-Platte füllt. Das Home-Verzeichnis der Site liegt direkt im Pool, ohne Symlinks. Hostashi formatiert oder partitioniert keine Platten. Umzug zwischen Pools ist ein späterer, eigener Vorgang. Alle Mechanismen sind unverifiziert, Spike S9 klärt das.
 
 ---
 
