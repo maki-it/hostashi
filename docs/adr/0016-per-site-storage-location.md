@@ -14,6 +14,7 @@
 ## Owner input (2026-11-17)
 
 - The pool of a site is chosen **only when the site is created** at first. Moving a site between pools comes later as a separate step [V: Kim, thread].
+- A pool must be its **own mountpoint** (separate volume or partition). Plain directories on the same filesystem are not accepted as pools in v1 [V: Kim, thread].
 
 ## Findings
 
@@ -109,5 +110,4 @@ Time box: 2 to 3 days [E]. Questions:
 
 ## Open questions
 
-1. Should the admin be allowed to register a pool path that is not a separate mountpoint (just a directory on the same filesystem, for example for organizing)? Recommendation: no in v1, because quota and free-space semantics get confusing.
-2. Should the database of a site follow its pool, or stay on the MariaDB data directory? Recommendation: stay, document it.
+1. Should the database of a site follow its pool, or stay on the MariaDB data directory? Recommendation: stay, document it.
