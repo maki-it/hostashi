@@ -93,7 +93,11 @@ Restic als Engine (Verschlüsselung, Deduplizierung, viele Backends, auch über 
 
 Start: **Ubuntu 24.04 und Debian 13** (plus 22.04/Debian 12), **amd64 und arm64**. Ubuntu 26.04 nachziehen, wenn die Abhängigkeiten stabil sind. Keine EOL-Systeme (CloudPanel unterstützt noch Debian 11, das wir bewusst nicht übernehmen). Distribution per signiertem APT-Repo und `.deb`.
 
-**Zu entscheiden:** Wie weit zurück sollen wir unterstützen? Jede zusätzliche Version vergrößert die Matrix.
+**Nur frische Server (Kim, 2026-11-17):** Hostashi wird immer auf einem frisch installierten Server eingerichtet, kein Einbau in gewachsene Systeme. Empfohlenes Image: **Debian 13**, zweite unterstützte Option: **Ubuntu 24.04 LTS**. Ubuntu 26.04 LTS wird nachgezogen, sobald die Abhängigkeiten und Spikes S5 und S8 darauf laufen. Die Ersteinrichtung soll möglichst einfach und automatisiert sein, zum Beispiel ein Einzeiler oder ein cloud-init-Skript beim Bestellen (Spike S5).
+
+Begründung (Allgemeinwissen, ungeprüft): Debian ist konservativer, hat weniger Umbrüche zwischen Paketversionen und keine zusätzlichen Dienste wie snap oder Werbehinweise des Herstellers. Das passt zu einem Server, der lange unauffällig laufen soll. Ubuntu LTS ist ebenfalls stabil und bei Anbietern weit verbreitet. Gegen Ubuntu 26.04 als erste Wahl spricht nur, dass es neu ist. Mehrere PHP-Versionen brauchen auf beiden Systemen ein zusätzliches Paket-Repository (zu prüfen). Offen: Quota-Module auf den Kernels beider Systeme, wird in Spike S8 geprüft (siehe [ADR-0015](adr/0015-per-site-resource-limits.md)).
+
+**Zu entscheiden:** Wie weit zurück sollen wir unterstützen? Jede zusätzliche Version vergrößert die Matrix. Mit der Regel „nur frische Server“ spricht vieles dafür, 22.04 und Debian 12 nicht aufzunehmen.
 
 ## ADR-0010 Zielgruppe und Scope v1
 
