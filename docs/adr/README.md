@@ -24,7 +24,7 @@ Nothing here is legal advice. License, trademark and contract questions should b
 
 ## Decision order and dependencies
 
-```
+```text
 Q1 purpose ──► ADR-0013 business model ──► ADR-0002 license (and CLA vs DCO)
 Q5 scope   ──► ADR-0010 audience
 Q2 team    ──► ADR-0003 stack
