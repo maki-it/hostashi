@@ -18,6 +18,7 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 | 0012 | Sprache von Code und Doku | Proposed | Ja, kurz |
 | 0013 | Geschäftsmodell und Governance | Proposed (Entwurf: [adr/0013](adr/0013-business-model-and-governance.md)) | **Ja** |
 | 0014 | Name des CLI-Werkzeugs | Proposed | Ja, kurz |
+| 0015 | Ressourcenlimits pro Site | Proposed (Entwurf: [adr/0015](adr/0015-per-site-resource-limits.md)) | **Ja** (Priorität Disk-Quota) |
 
 ---
 
@@ -157,6 +158,10 @@ ashi site add example.com --type php --php 8.4   # gleiches Programm
 **Verworfen:** `hostctl` (meines Wissens existiert ein bekanntes Tool gleichen Namens für die hosts-Datei), `hashi` (Verwechslung mit HashiCorp), `hsi` (Xilinx-Werkzeug), `hostashictl` (zu lang).
 
 **Offen:** Ob `ashi` oder `hostashi` auf Debian/Ubuntu schon als Paket oder Programm existiert, ist **nicht geprüft** (im Container waren keine Paketlisten verfügbar). Vor dem ersten Release gegen die Paketquellen von Debian und Ubuntu abgleichen.
+
+## ADR-0015 Ressourcenlimits pro Site
+
+**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0015-per-site-resource-limits.md](adr/0015-per-site-resource-limits.md). Kurzfassung: Speicherplatz je Site per Dateisystem-Quota (bevorzugt Projekt-Quota auf ext4/XFS), CPU/RAM/Prozesse über ein systemd-Slice je Site mit eigenem PHP-FPM-Master, `pm=ondemand` als Standard, Datenbank nur mit Verbindungslimit und Größenwarnung (MariaDB hat keine Größenquota), Nginx-Rate-Limits optional, Traffic-Kontingente später. Disk-Quota soll von P2 auf P1 hochgestuft werden. Alle Zahlen und Mechanismen sind unverifiziert, Spike S8 (Quota auf dem echten Server, RAM-Messung) klärt das.
 
 ---
 
