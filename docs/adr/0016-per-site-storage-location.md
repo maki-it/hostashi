@@ -16,7 +16,6 @@
 - The pool of a site is chosen **only when the site is created** at first. Moving a site between pools comes later as a separate step [V: Kim, thread].
 - A pool must be its **own mountpoint** (separate volume or partition). Plain directories on the same filesystem are not accepted as pools in v1 [V: Kim, thread].
 - A site's database stays in the MariaDB default data directory and does not follow the pool. This is documented in the UI and docs [V: Kim, thread].
-- A site's database stays in the MariaDB default data directory and does not follow the pool. This is documented in the UI and docs [V: Kim, thread].
 
 ## Findings
 
