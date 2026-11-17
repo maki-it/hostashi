@@ -7,6 +7,4 @@ accept = ["200..=299", "429"]
 exclude = [
   # Repository-relative pages that only exist on github.com
   '^https://github\.com/maki-it/hostashi/security/advisories/new$',
-  # Placeholder domain
-  'example\.invalid',
 ]
