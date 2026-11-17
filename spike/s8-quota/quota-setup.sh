@@ -108,7 +108,7 @@ Before=multi-user.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# '-': ignore a non-zero exit (seen on Hetzner Debian 13 cloud kernel, reason not yet read from the journal)
+# '-': ignore a non-zero exit ("File exists" = enforcement already on, seen on the Hetzner Debian 13 cloud kernel)
 ExecStart=-/usr/sbin/quotaon -P /
 [Install]
 WantedBy=multi-user.target
