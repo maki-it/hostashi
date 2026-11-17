@@ -20,6 +20,15 @@
 - **[U]** Apache-2.0 includes an explicit patent grant and is widely accepted by companies. GPL-3.0 also has a patent grant. Apache-2.0 code can be included in a GPLv3 project, the reverse is not possible.
 - **[A]** The GPLv3 WordPress plugin `clp-wp-varnish-cache` is a separate program that runs inside WordPress. Using or recommending it does not by itself force our license. Copying its code into our repository would. Varnish is P2 anyway [V: `03-features.md` 3.9], so this should **not** drive the choice.
 
+## Owner input (2026-11-17)
+
+- Q1: Hostashi is first for Kim's own servers and customers [V: Kim, thread].
+- Q2: the team is Kim alone, who masters Go [V: Kim, thread]. Bus factor is 1.
+- Q5: single-server v1, multi-server and reseller maybe much later [V: Kim, thread].
+- Q8: no budget for an external pentest or legal review [V: Kim, thread].
+
+Effect: with own use first and no budget for legal review, the license choice should be the simplest one with the fewest later obligations. That favors **no CLA and no relicensing plan**.
+
 ## Options
 
 | Option | Pro | Contra |
@@ -59,7 +68,6 @@ Stated plainly, my pick under the current information is **option 1 (AGPL-3.0-or
 
 ## Open questions
 
-1. Answer to Q1 and the choice in ADR-0013.
-2. Must dual licensing or open core stay possible? (CLA vs DCO)
-3. Is there budget for a lawyer to review the license choice, contribution terms and trademark? (Q8)
-4. License for documentation and UI translations.
+1. Must dual licensing or open core stay possible? (CLA vs DCO)
+2. Accept publishing without a lawyer's review (Q8 is "no budget"), or wait until a basic check is possible?
+3. License for documentation and UI translations.

@@ -9,6 +9,15 @@
 - Team size and skills are unknown. A well-mastered stack beats the ideal one [V: original ADR-0003]. The roadmap assumes two full-time developers, one with Linux systems experience [V: `06-roadmap.md`, itself an estimate].
 - Security rules (typed inputs, no `Exec`, path confinement) must be enforceable by the language and tooling, not only by discipline [V: `05-sicherheit.md`].
 
+## Owner input (2026-11-17)
+
+- Q1: Hostashi is first for Kim's own servers and customers [V: Kim, thread].
+- Q2: the team is Kim alone, who masters Go [V: Kim, thread]. Bus factor is 1.
+- Q5: single-server v1, multi-server and reseller maybe much later [V: Kim, thread].
+- Q8: no budget for an external pentest or legal review [V: Kim, thread].
+
+Effect: the Go condition below is met. Open risk: one maintainer reviews all security-critical agent code himself.
+
 ## Options
 
 ### Backend, agent and CLI
@@ -76,6 +85,5 @@ Decision rule:
 
 ## Open questions
 
-1. Team size and Go experience (Q2).
-2. Is the SPA framework a team decision (S7) or set up front?
-3. Acceptable external review budget for the agent code (Q8)?
+1. Is the SPA framework set up front, or decided by spike S7?
+2. How is the agent code reviewed with a bus factor of 1 and no review budget (Q8)? Options: a second volunteer reviewer, public review once published, or a delayed 1.0.

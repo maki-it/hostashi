@@ -10,6 +10,15 @@
 - Features marked P2 and phase 2+: multi-server, LXC mode, Docker-Compose apps, web terminal [V: `03-features.md`]. The architecture is meant to be prepared for multi-server but not to build it.
 - A market analysis against HestiaCP, ISPConfig, 1Panel, Coolify and others has **not** been done [V: `01-recherche-cloudpanel.md` 1.5]. Claims about their audiences below are [U].
 
+## Owner input (2026-11-17)
+
+- Q1: Hostashi is first for Kim's own servers and customers [V: Kim, thread].
+- Q2: the team is Kim alone, who masters Go [V: Kim, thread]. Bus factor is 1.
+- Q5: single-server v1, multi-server and reseller maybe much later [V: Kim, thread].
+- Q8: no budget for an external pentest or legal review [V: Kim, thread].
+
+Effect: option A is confirmed by the owner. The first user is Kim's own business.
+
 ## Options
 
 | Option | Who it serves | Pro | Contra |
@@ -45,7 +54,5 @@
 
 ## Open questions
 
-1. Is the first user Kim's own business (own client sites) or a broader public? (Q1)
-2. Reseller or multi-server from day one, or A as proposed? (Q5)
-3. Expected number of servers and sites in Kim's own use, as a sizing check.
-4. Are Hetzner, INWX and invoicing integrations mandatory or nice to have? (Q7)
+1. Expected number of servers and sites in Kim's own use, as a sizing check.
+2. Are Hetzner, INWX and invoicing integrations mandatory or nice to have? (Q7)

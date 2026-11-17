@@ -10,6 +10,15 @@
 - Security is the main selling point [V: `05-sicherheit.md`]. A business model that creates a security-relevant paid/free split (for example SSO or audit features only in a paid tier) would undermine that.
 - Out of scope for v1: billing, reseller, multi-server [V: `02-vision-scope.md`]. These are the typical "Pro" candidates, which matters for option (c).
 
+## Owner input (2026-11-17)
+
+- Q1: Hostashi is first for Kim's own servers and customers [V: Kim, thread].
+- Q2: the team is Kim alone, who masters Go [V: Kim, thread]. Bus factor is 1.
+- Q5: single-server v1, multi-server and reseller maybe much later [V: Kim, thread].
+- Q8: no budget for an external pentest or legal review [V: Kim, thread].
+
+Effect: option (d) fits the start. The missing budget is an uncovered risk, see below.
+
 ## Options
 
 ### (a) Community project, donations and sponsoring only
@@ -61,10 +70,12 @@ Build in the open once the license and name checks are done, use it on Kim's own
 - Needs from Kim before this can be Accepted: answers to questions 1 and 8, a statement whether a company or Kim personally acts as the owner, and whether a later open-core move must stay possible (if yes, ADR-0002 must choose CLA over DCO now).
 - Follow-ups if accepted: `GOVERNANCE.md`, `CONTRIBUTING.md` with DCO text, trademark policy, sponsoring setup (only after Kim's approval, this is outward-facing).
 
+## Uncovered risk: no budget (Q8)
+
+The roadmap requires an external pentest before 1.0 [V: `06-roadmap.md`]. Without budget there are three ways: sponsors or a grant pay for it, revenue from Kim's own customers pays for it later, or the release stays labeled Alpha/Beta. Recommendation: the last one is the default. Do not call a release 1.0 without the pentest. Publish the code only after at least a basic legal check of license and trademark, or accept that residual risk knowingly.
+
 ## Open questions
 
-1. Is Hostashi first for Kim's own servers, or primarily a public project? (Q1)
-2. Is there budget for the pentest and for legal review of license and trademark? (Q8)
-3. Is a later open-core move something to keep open? This decides CLA vs DCO.
-4. Who owns the trademark and the GitHub organization: Kim, a company, or later an association?
-5. Tax and legal structure for income from sponsoring and services was **not** assessed. Ask a tax advisor before accepting money.
+1. Is a later open-core move something to keep open? This decides CLA vs DCO.
+2. Who owns the trademark and the GitHub organization: Kim, a company, or later an association?
+3. Tax and legal structure for income from sponsoring and services was **not** assessed. Ask a tax advisor before accepting money.
