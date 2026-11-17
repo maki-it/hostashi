@@ -16,7 +16,7 @@
 - Q2: the team is Kim alone, who masters Go [V: Kim, thread]. Bus factor is 1.
 - Q5: single-server v1, multi-server and reseller maybe much later [V: Kim, thread].
 - Q8: no budget for an external pentest or legal review [V: Kim, thread].
-- Owner of the trademark and the GitHub organization: Maki IT, Kim's sole proprietorship [V: Kim, thread]. A sole proprietorship is not a separate legal person, so personal liability remains [U: general knowledge, not legal advice].
+- Owner of the trademark: Maki IT, Kim's sole proprietorship [V: Kim, thread]. The repository stays in the `maki-it` GitHub organization, there is no separate Hostashi organization [V: Kim, thread, 2026-11-17]. A sole proprietorship is not a separate legal person, so personal liability remains [U: general knowledge, not legal advice].
 - Money: no sponsoring or paid services are set up until a tax advisor has been asked [V: Kim agreed in thread].
 - Contributions: DCO for now, no CLA, open core stays off the table for the moment [V: Kim, thread]. Not final: the ADRs are still Proposed.
 
