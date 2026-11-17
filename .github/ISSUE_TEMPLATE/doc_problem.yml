@@ -1,0 +1,22 @@
+name: Documentation problem
+description: Report an error, contradiction or gap in the planning documents
+labels: ["documentation"]
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Document and section
+      placeholder: docs/04-architektur.md, section 4.2
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or missing?
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Source or evidence
+      description: Link to primary sources if you have them.

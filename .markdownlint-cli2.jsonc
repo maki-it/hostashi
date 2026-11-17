@@ -1,0 +1,21 @@
+{
+  // Lint the planning docs and repository-level Markdown files.
+  "globs": ["*.md", "docs/**/*.md", "claude-project/**/*.md", ".github/**/*.md"],
+  "ignores": ["node_modules/**", "claude-project/PROJEKTANWEISUNGEN.md"],
+  "config": {
+    "default": true,
+    // Planning docs use long prose lines and tables.
+    "MD013": false,
+    // Duplicate headings are fine in structured docs.
+    "MD024": { "siblings_only": true },
+    // Inline HTML comments are used for maintainer TODOs.
+    "MD033": false,
+    // Compact tables are fine; do not force padded pipes.
+    "MD060": false,
+    // Planning docs use a second H1 for the open-questions part and bold lead-ins.
+    "MD025": false,
+    "MD036": false,
+    // PR template legitimately starts with an H2.
+    "MD041": false
+  }
+}
