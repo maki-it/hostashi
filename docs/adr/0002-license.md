@@ -27,6 +27,8 @@
 - Q5: single-server v1, multi-server and reseller maybe much later [V: Kim, thread].
 - Q8: no budget for an external pentest or legal review [V: Kim, thread].
 - License direction: **AGPL-3.0-or-later** [V: Kim, thread, 2026-11-17]. Status stays Proposed until Kim sets Accepted.
+- Publication without a lawyer: Kim agrees to a simple self-check first (automated license check of dependencies, name and trademark search in public registers), lawyer later when budget exists [V: Kim, thread]. This is not legal advice and does not remove the risk.
+- Docs and translations: CC-BY-4.0 [V: Kim, thread].
 - Contributions: DCO for now, no CLA, open core stays off the table for the moment [V: Kim, thread]. Not final: the ADRs are still Proposed.
 
 Effect: with own use first and no budget for legal review, the license choice should be the simplest one with the fewest later obligations. That favors **no CLA and no relicensing plan**.
@@ -70,5 +72,4 @@ Stated plainly, my pick under the current information is **option 1 (AGPL-3.0-or
 
 ## Open questions
 
-1. Accept publishing without a lawyer's review (Q8 is "no budget"), or wait until a basic check is possible?
-2. License for documentation and UI translations.
+None at this level. Remaining before Accepted: Kim sets the status, and the self-check (dependency licenses, name and trademark search) is done before any publication.
