@@ -1,0 +1,14 @@
+# Build / local
+/bin/
+/dist/
+/node_modules/
+*.log
+.env
+.env.*
+!.env.example
+
+# Editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
