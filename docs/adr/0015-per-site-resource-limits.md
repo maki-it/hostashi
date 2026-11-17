@@ -16,6 +16,8 @@
 - Kim's current server (`web2`) uses ext4 on a single `/dev/sda1`, 38 GB, about 27 GB used, no quota mount options [V: Kim, `findmnt` and `df` output in thread].
 - Hostashi will run on a **completely fresh server**, not on `web2` [V: Kim, thread]. Effect: quota can be prepared at provisioning time. A reboot during first setup costs nothing, so the maintenance-window concern for existing servers does not apply to Kim's own use. It stays relevant for later adoption of existing servers (S6) and other users.
 
+- First-run setup should **enable quota itself**, not only detect it [V: Kim, thread, 2026-11-17].
+
 ## What "resource" means here
 
 Five different things, each with a different mechanism. They should not be forced into one "limits" feature:
@@ -100,14 +102,15 @@ Strongest disk isolation, size is fixed by the volume. Contra: resizing is awkwa
 5. **Database:** connection limit per DB user by default, size shown and warned about, **no automatic enforcement in v1**. Read-only lock is a later opt-in.
 6. **Nginx:** optional per-site `limit_req` and `limit_conn` presets, off by default. No traffic quotas in v1.
 7. **Defaults for new and imported sites:** every new site gets a preset with a disk limit, "unlimited" must be an explicit choice. Imported or adopted sites start with a limit derived from measured usage plus headroom, to avoid surprise write failures [A].
-8. **Mechanics respect the security rules:** the agent exposes typed operations such as `SetSiteDiskQuota{site, bytes, inodes}`, `SetSiteResourceLimits{site, preset|values}` and read-only `GetSiteUsage{site}`. Values are validated numeric ranges, site names resolve to known site records, no free-form unit text, no shell strings. systemd is driven through D-Bus or fixed argument vectors, and unit files are rendered by the reconciler with the diff preview from the architecture [V: `04-architektur.md` 4.3].
+8. **First-run setup enables quota itself** (Kim's decision). Proposed guard rails [A]: the setup first detects filesystem, mount options and quota support and shows exactly what it will change (preview, like the reconciler diff). Changes that touch the filesystem or need a reboot (for example `tune2fs` feature flags, `/etc/fstab` mount options) require an explicit confirmation by the admin, either a prompt or a flag such as `--enable-quota`, never silently. It backs up `/etc/fstab` before editing and validates the new entry before the reboot. If quota cannot be enabled safely (unsupported filesystem, root on a layout the setup does not know), it stops with a clear message and leaves the server unchanged, and Hostashi runs without disk limits until quota is available, visibly marked in the UI and in `hostashi doctor`. The setup is idempotent: a second run detects that quota is already active and changes nothing. Offline steps that cannot run on a mounted root (for example setting the ext4 `project` feature) may need a reboot into a one-shot initramfs or rescue step, which is a risk to test in S8 [A].
+9. **Mechanics respect the security rules:** the agent exposes typed operations such as `SetSiteDiskQuota{site, bytes, inodes}`, `SetSiteResourceLimits{site, preset|values}` and read-only `GetSiteUsage{site}`. Values are validated numeric ranges, site names resolve to known site records, no free-form unit text, no shell strings. systemd is driven through D-Bus or fixed argument vectors, and unit files are rendered by the reconciler with the diff preview from the architecture [V: `04-architektur.md` 4.3].
 
 ## Consequences
 
 - Positive: one noisy site cannot fill the disk or starve the others. Limits reuse kernel features, so runtime overhead is expected to be small [A]. The security model stays intact (typed agent operations).
 - Negative: one FPM master per site adds some idle memory and more units to manage. Quota setup depends on the host filesystem and may need a reboot or maintenance window on existing servers. Database size cannot be hard-limited.
 - Roadmap and feature matrix change if accepted: disk quota and resource limits move up in `03-features.md` and `06-roadmap.md`, a spike is added.
-- Follow-ups if accepted: update ADR-0007 text (per-site FPM master), `03-features.md` (priority and phase), `04-architektur.md` 4.4 (quota mechanism), `05-sicherheit.md` (new agent operations in the operation list), and the installer to detect and report quota support (`hostashi doctor`).
+- Follow-ups if accepted: update ADR-0007 text (per-site FPM master), `03-features.md` (priority and phase), `04-architektur.md` 4.4 (quota mechanism), `05-sicherheit.md` (new agent operations in the operation list), and the installer and first-run setup to detect, enable and report quota support (`hostashi doctor`).
 
 ## Spike S8 (proposed): resource limits on the target server
 
@@ -118,12 +121,13 @@ Time box: 2 to 4 days [E]. Answers, each with a measurement or a test:
 3. How much RAM does one idle `ondemand` FPM master cost, and what is the first-request latency after idle? Total for 22 sites, compared with a single shared master.
 4. Do `MemoryMax`, `MemoryHigh`, `TasksMax` and `CPUWeight` behave as expected for a PHP site and a fork bomb test, without affecting a neighbor? Does `IOWeight` do anything measurable on the target disk?
 5. Do cron jobs and SSH sessions stay inside the site's limits with the chosen mechanism?
-6. Can the agent read quota and cgroup usage cheaply enough for a dashboard poll?
+6. Can the first-run setup enable project quota on a stock image safely and idempotently, including the offline step and reboot, and what happens if it is interrupted?
+7. Can the agent read quota and cgroup usage cheaply enough for a dashboard poll?
 
 Abort criteria: if project quota cannot be enabled without unacceptable downtime and user quota is also unusable, re-evaluate option (d) before accepting this ADR.
 
 ## Open questions
 
-1. Which layout for the fresh server: ext4 or XFS with quota enabled at creation, a separate data volume for the sites, or the provider's default image plus a reboot during first setup? Should the installer only detect and report quota support, or also enable it?
+1. Which layout for the fresh server: ext4 or XFS with quota enabled at creation, a separate data volume for the sites, or the provider's default image plus a reboot during first setup? (How the first-run setup enables quota is decided below, see item 8 of the recommendation.)
 2. Should "unlimited" stay selectable in the UI at all, or only via CLI?
 3. Should SSH/SFTP sessions count against the site's limits, or only the web workload?
