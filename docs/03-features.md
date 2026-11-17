@@ -36,7 +36,7 @@
 | Vhost-Editor mit `nginx -t` und Rollback | P0 | A | CP | Eigene Snippets in Include-Dateien |
 | Per-Site PHP-Einstellungen (memory_limit, …) | P0 | A | CP | Über Pool-Config, nicht über `PHP_VALUE` im Nginx |
 | Ressourcenlimits je Site (CPU, RAM, Tasks, I/O) | P1 | B | NEU | systemd/cgroup v2 |
-| Disk-Quota je Site | P2 | 2+ | NEU | Abhängig vom Dateisystem |
+| Disk-Quota je Site | P1 | B | NEU | Projekt-Quota (ext4/XFS), von der Ersteinrichtung aktiviert, Details in [ADR-0015](adr/0015-per-site-resource-limits.md). Phase abhängig von Spike S8 |
 | HTTP/3 pro Site | P1 | B | CP | |
 | Docker-Compose-Apps als Site-Typ | P2 | 2+ | NEU | Rootless Podman als Option prüfen |
 | Staging/Klonen einer Site | P1 | 1 | NEU | Dateien + DB, Domain-Rewrite |
