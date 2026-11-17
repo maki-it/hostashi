@@ -5,18 +5,18 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 | ADR | Thema | Status | Entscheidung nötig von dir? |
 |-----|-------|--------|-----------------------------|
 | 0001 | Clean-room und Umgang mit Referenz-Repos | Proposed | Nein, rechtliche Mindestregel |
-| 0002 | Lizenz des Projekts | **Open** | **Ja** |
-| 0003 | Sprache und Stack | Proposed | **Ja** (Team-Know-how) |
+| 0002 | Lizenz des Projekts | Proposed (Entwurf: [adr/0002](adr/0002-license.md)) | **Ja** |
+| 0003 | Sprache und Stack | Proposed (Entwurf: [adr/0003](adr/0003-language-and-stack.md)) | **Ja** (Team-Know-how) |
 | 0004 | Rechtetrennung Web/Agent | Proposed | Nein |
 | 0005 | Webserver (Nginx, Caddy-Option) | Proposed | Nein, Spike S3 entscheidet |
 | 0006 | Zustandsspeicher und Reconciler | Proposed | Nein |
 | 0007 | Isolationsmodell pro Site | Proposed | Nein |
 | 0008 | Backups mit restic | Proposed | Nein |
 | 0009 | Zielplattformen und Paketierung | Proposed | Teilweise |
-| 0010 | Zielgruppe und Scope v1 | Proposed | **Ja** |
+| 0010 | Zielgruppe und Scope v1 | Proposed (Entwurf: [adr/0010](adr/0010-target-audience-and-v1-scope.md)) | **Ja** |
 | 0011 | Name und Marke | Accepted (vorbehaltlich Markenrecherche) | Erledigt, Marke offen |
 | 0012 | Sprache von Code und Doku | Proposed | Ja, kurz |
-| 0013 | Geschäftsmodell und Governance | **Open** | **Ja** |
+| 0013 | Geschäftsmodell und Governance | Proposed (Entwurf: [adr/0013](adr/0013-business-model-and-governance.md)) | **Ja** |
 | 0014 | Name des CLI-Werkzeugs | Proposed | Ja, kurz |
 
 ---
@@ -35,7 +35,11 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 
 **Konsequenz.** Etwas mehr Aufwand, dafür keine Altlasten.
 
-## ADR-0002 Lizenz des Projekts (offen)
+## ADR-0002 Lizenz des Projekts
+
+**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0002-license.md](adr/0002-license.md). Kurzfassung: AGPL-3.0-or-later mit DCO, wenn ADR-0013 wie empfohlen angenommen wird. Apache-2.0, wenn maximale Verbreitung wichtiger ist. Bei möglichem Open Core oder Dual-Licensing von Anfang an CLA. Keine Rechtsberatung.
+
+Ursprünglicher Vergleich:
 
 | Option | Pro | Contra |
 |--------|-----|--------|
@@ -47,6 +51,10 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 **Empfehlung:** Apache-2.0 für die Verbreitung, wenn das Ziel Community ist. AGPL-3.0, wenn der Schutz vor einem „Hoster klont und verkauft es“ wichtiger ist. Die Entscheidung hängt an ADR-0013. Vor der ersten Zeile veröffentlichtem Code festlegen, nachträgliche Änderung ist mit Beitragenden mühsam. Falls Dual-Licensing denkbar ist, **von Anfang an CLA statt DCO** verwenden.
 
 ## ADR-0003 Sprache und Stack
+
+**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0003-language-and-stack.md](adr/0003-language-and-stack.md). Kurzfassung: Go bestätigen, unter der Bedingung, dass das Team Go sicher beherrscht (Frage 2) und die Spikes S1, S2, S4, S7 nichts widerlegen.
+
+Ursprünglicher Vorschlag:
 
 **Vorschlag:** Go für Backend, Agent und CLI. SPA (Svelte oder React) eingebettet. SQLite. Begründung: ein statisches Binary, kleiner Footprint, einfache arm64-Builds, gute Standardbibliothek für Prozesse, Dateien und TLS, speichersicher gegenüber C/C++ und PHP-Fallstricken.
 
@@ -88,7 +96,9 @@ Start: **Ubuntu 24.04 und Debian 13** (plus 22.04/Debian 12), **amd64 und arm64*
 
 ## ADR-0010 Zielgruppe und Scope v1
 
-Vorschlag: Einzelserver für Entwickler und Agenturen. Reseller, Mail, DNS-Server und Multi-Server sind Nicht-Ziele für v1 (siehe [Vision](02-vision-scope.md)).
+**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0010-target-audience-and-v1-scope.md](adr/0010-target-audience-and-v1-scope.md). Kurzfassung: Option A (Einzelserver für Entwickler und Agenturen) mit Leitplanken.
+
+Ursprünglicher Vorschlag: Einzelserver für Entwickler und Agenturen. Reseller, Mail, DNS-Server und Multi-Server sind Nicht-Ziele für v1 (siehe [Vision](02-vision-scope.md)).
 
 ## ADR-0011 Name und Marke
 
@@ -117,7 +127,11 @@ Vorschlag: Einzelserver für Entwickler und Agenturen. Reseller, Mail, DNS-Serve
 
 Vorschlag: **Englisch** für Code, Kommentare, Issues, öffentliche Doku und UI-Standardsprache. Deutsch als vollständig gepflegte UI-Übersetzung. Diese Planungsdokumente sind deutsch, weil sie intern sind. Für die Veröffentlichung werden sie ins Englische übertragen.
 
-## ADR-0013 Geschäftsmodell und Governance (offen)
+## ADR-0013 Geschäftsmodell und Governance
+
+**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0013-business-model-and-governance.md](adr/0013-business-model-and-governance.md). Kurzfassung: Hybrid aus eigenem Einsatz, Community-Projekt mit Sponsoring und bezahlten Services, ohne Open Core in v1, DCO statt CLA.
+
+Ursprüngliche Optionen:
 
 Optionen: (a) reines Community-Projekt mit Spenden/Sponsoring, (b) kostenlos plus bezahlter Support und Hosting-Angebote, (c) Open Core mit Pro-Funktionen (z. B. Multi-Server, Reseller, SSO), (d) internes Werkzeug deiner Firma, das du später öffnest. Das bestimmt Lizenz (ADR-0002), Beitragsregeln (CLA/DCO), Roadmap-Priorität und Finanzierung des Pentests.
 
