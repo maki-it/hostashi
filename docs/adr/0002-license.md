@@ -26,6 +26,7 @@
 - Q2: the team is Kim alone, who masters Go [V: Kim, thread]. Bus factor is 1.
 - Q5: single-server v1, multi-server and reseller maybe much later [V: Kim, thread].
 - Q8: no budget for an external pentest or legal review [V: Kim, thread].
+- Contributions: DCO for now, no CLA, open core stays off the table for the moment [V: Kim, thread]. Not final: the ADRs are still Proposed.
 
 Effect: with own use first and no budget for legal review, the license choice should be the simplest one with the fewest later obligations. That favors **no CLA and no relicensing plan**.
 
@@ -68,6 +69,5 @@ Stated plainly, my pick under the current information is **option 1 (AGPL-3.0-or
 
 ## Open questions
 
-1. Must dual licensing or open core stay possible? (CLA vs DCO)
-2. Accept publishing without a lawyer's review (Q8 is "no budget"), or wait until a basic check is possible?
-3. License for documentation and UI translations.
+1. Accept publishing without a lawyer's review (Q8 is "no budget"), or wait until a basic check is possible?
+2. License for documentation and UI translations.

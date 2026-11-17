@@ -16,6 +16,7 @@
 - Q2: the team is Kim alone, who masters Go [V: Kim, thread]. Bus factor is 1.
 - Q5: single-server v1, multi-server and reseller maybe much later [V: Kim, thread].
 - Q8: no budget for an external pentest or legal review [V: Kim, thread].
+- Contributions: DCO for now, no CLA, open core stays off the table for the moment [V: Kim, thread]. Not final: the ADRs are still Proposed.
 
 Effect: option (d) fits the start. The missing budget is an uncovered risk, see below.
 
@@ -76,6 +77,5 @@ The roadmap requires an external pentest before 1.0 [V: `06-roadmap.md`]. Withou
 
 ## Open questions
 
-1. Is a later open-core move something to keep open? This decides CLA vs DCO.
-2. Who owns the trademark and the GitHub organization: Kim, a company, or later an association?
-3. Tax and legal structure for income from sponsoring and services was **not** assessed. Ask a tax advisor before accepting money.
+1. Who owns the trademark and the GitHub organization: Kim, a company, or later an association?
+2. Tax and legal structure for income from sponsoring and services was **not** assessed. Ask a tax advisor before accepting money.
