@@ -17,6 +17,9 @@
 - Q5: single-server v1, multi-server and reseller maybe much later [V: Kim, thread].
 - Q8: no budget for an external pentest or legal review [V: Kim, thread].
 
+- Size of own use: 1 server with 22 sites [V: Kim, thread]. The persona range is raised to about 25 to 30 sites per server [E: a sizing guess, not measured].
+- Integrations at the start: only Hetzner Storage Box as a backup target [V: Kim, thread]. INWX DNS, Hetzner Cloud/Robot and Lexware/Lexoffice stay out of the first release, they remain P2 or later.
+
 Effect: option A is confirmed by the owner. The first user is Kim's own business.
 
 ## Options
@@ -54,5 +57,4 @@ Effect: option A is confirmed by the owner. The first user is Kim's own business
 
 ## Open questions
 
-1. Expected number of servers and sites in Kim's own use, as a sizing check.
-2. Are Hetzner, INWX and invoicing integrations mandatory or nice to have? (Q7)
+None at this level. Remaining before Accepted: Kim sets the status, and the Phase 0 market analysis checks the audience assumption.
