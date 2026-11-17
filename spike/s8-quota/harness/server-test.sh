@@ -4,7 +4,8 @@
 #   ./server-test.sh show     prints the result written after the reboot
 # Result file: /root/s8-result.txt (contains only kernel/mount/quota facts, no secrets).
 set -u
-HERE=$(cd "$(dirname "$0")" && pwd); Q=$HERE/../quota-setup.sh; OUT=/root/s8-result.txt
+HERE=$(cd "$(dirname "$0")" && pwd); Q=$HERE/../quota-setup.sh; [ -x "$Q" ] || Q=$HERE/quota-setup.sh; OUT=/root/s8-result.txt
+[ -x "$Q" ] || { echo "quota-setup.sh not found next to this script (or one directory up), copy both files into the same directory and chmod +x" >&2; exit 1; }
 case "${1:-}" in
 start)
   apt-get update -qq && apt-get install -y -qq quota e2fsprogs initramfs-tools >/dev/null || exit 1
