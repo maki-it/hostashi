@@ -19,6 +19,7 @@ Ziel: Entscheidungen treffen und die riskantesten Annahmen mit Wegwerf-Code prü
 | S5 Installer | Idempotenter Installer auf frischen Ubuntu 24.04 und Debian 13 (amd64 + arm64) | Läuft zweimal ohne Änderung |
 | S6 CloudPanel-Adopt | Lässt sich eine echte CloudPanel-Instanz über das Dateisystem einlesen? | Wenn weniger als 80 % der Sites sauber übernommen werden, Importer zurückstellen |
 | S7 UI-Prototyp | Svelte vs. React, Terminal und Live-Graphen, Bundle-Größe | |
+| S8 Ressourcenlimits | Projekt-Quota auf frischem Debian 13 und Ubuntu 24.04 aktivierbar (idempotent, mit Reboot)? RAM je FPM-Master pro Site, Limits für Cron und Dienste ([ADR-0015](adr/0015-per-site-resource-limits.md)) | Wenn Quota nicht sicher aktivierbar ist, Alternativen (User-Quota, separates Volume) neu bewerten |
 
 **Weitere Aufgaben:** Marktanalyse (HestiaCP, ISPConfig, 1Panel, Coolify …), CloudPanel-Issues auswerten, Bedrohungsmodell mit externem Reviewer durchgehen, Repo, CI und Release-Pipeline aufsetzen, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`.
 
@@ -48,7 +49,7 @@ Ziel: Funktionsparität für die häufigsten CloudPanel-Anwendungsfälle.
 - Passkeys, Rate-Limiting, IP-/Bot-Blocking, Basic Auth je Site
 - DNS-01 mit ersten Providern (INWX, Cloudflare, Hetzner DNS), Wildcard-Zertifikate
 - Web-DB-Tool mit SSO, Redis, Dateimanager
-- FastCGI-Cache, HTTP/3, Ressourcenlimits je Site
+- FastCGI-Cache, HTTP/3, Ressourcenlimits und Disk-Quota je Site
 - Panel-Update im UI, `hostashi doctor`
 
 **Abnahme:** Mindestens 10 externe Testserver über 4 Wochen ohne Datenverlust, Backup-Restore-Test erfolgreich, Security-Review der API-Autorisierung.
