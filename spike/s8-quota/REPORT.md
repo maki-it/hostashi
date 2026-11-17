@@ -43,11 +43,12 @@ So **one master per site costs roughly 160 to 230 MB for 22 sites [V]**, inside 
 
 `detect`, `plan` (preview, no change), `apply --yes` (explicit confirmation). Steps for an ext4 root: back up fstab, add `prjquota` to `/`, install the initramfs hook (adds `quota_v2`, then `e2fsck -fp` and `tune2fs -O project,quota` before root is mounted, never blocks boot, exits 0 on any problem), install the enforcement unit, add `rootflags=prjquota` through a GRUB drop-in if `update-grub` exists, rebuild and verify the initramfs, ask for a reboot. Rollback on any failed step.
 
-Tested end to end in the VM: the version without the enforcement unit (stage 0, reboot, stage 1). The enforcement unit was tested separately afterwards by adding it to that VM. **The final script with the unit built in was not run through a full VM cycle [U].** The GRUB drop-in path was not exercised (the VM boots the kernel directly, there is no GRUB) [U].
+Tested end to end in the VM with the final script (apply, reboot, verify, re-run, enforcement), **on Debian 13 (kernel 6.12.107) and on Ubuntu 24.04 (kernel 6.8.0-31-generic, with `linux-modules-extra`) [V]**. Both: quota on after one reboot, `Nothing to do` on re-run, 20 MiB limit stops the site writer, the neighbour is unaffected. The Ubuntu `update-initramfs` run took very long under emulation (about 19 minutes), this is an emulation artefact [U]. The GRUB drop-in path was not exercised (the VMs boot the kernel directly, there is no GRUB) [U].
 
 ## Not done / open
 
-- Ubuntu 24.04 was only checked by inspecting the kernel packages, no boot test [U]. The same flow should work but the `linux-modules-extra` dependency is the likely trap.
+- Ubuntu 24.04 without `linux-modules-extra` (the refusal path) was not booted, only the package contents were inspected [V for packages].
+- Real Hetzner Debian 13 image (Kim ran it by hand): kernel `6.12.101+deb13-cloud-amd64`, `quota_v2.ko` present, root `/dev/sda1` ext4 without quota features and with `orphan_file` [V, from Kim's output]. Full run on that server: see below if added.
 - XFS (Debian kernel has `CONFIG_XFS_QUOTA=y`): would need `rootflags=prjquota` on the kernel command line and no feature step [U], not tested.
 - Interruption during `tune2fs`/`e2fsck` (power loss) not simulated [U]. The steps are short but not atomic.
 - Real Hetzner image behaviour (GRUB, cloud-init rewriting fstab or the kernel command line) not tested. A paid Hetzner VM was not created, it needs Kim's approval.
