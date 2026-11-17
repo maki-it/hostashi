@@ -48,7 +48,7 @@ Tested end to end in the VM with the final script (apply, reboot, verify, re-run
 ## Not done / open
 
 - Ubuntu 24.04 without `linux-modules-extra` (the refusal path) was not booted, only the package contents were inspected [V for packages].
-- Real Hetzner Debian 13 image (Kim ran it by hand): kernel `6.12.101+deb13-cloud-amd64`, `quota_v2.ko` present, root `/dev/sda1` ext4 without quota features and with `orphan_file` [V, from Kim's output]. Full run on that server: see below if added.
+- Real Hetzner Debian 13 image (Kim ran it by hand): kernel `6.12.101+deb13-cloud-amd64`, `quota_v2.ko` present, root `/dev/sda1` ext4 without quota features and with `orphan_file` [V, from Kim's output]. **Full run on that server (Kim, 2026-11-17): works [V].** `apply`, one reboot, root mounted with `prjquota`, features `quota project` set, re-run says `Nothing to do`, 20 MiB limit stopped the site writer (19 of 40 MiB), neighbour unaffected. Two oddities: `hostashi-quota-enforce.service` was reported `failed` although the limit was enforced (the cause is not read yet [U]; the unit now tolerates a non-zero exit), and `lsinitramfs` printed `unmkinitramfs: zstd failed` warnings (the verification still passed, harmless [U]).
 - XFS (Debian kernel has `CONFIG_XFS_QUOTA=y`): would need `rootflags=prjquota` on the kernel command line and no feature step [U], not tested.
 - Interruption during `tune2fs`/`e2fsck` (power loss) not simulated [U]. The steps are short but not atomic.
 - Real Hetzner image behaviour (GRUB, cloud-init rewriting fstab or the kernel command line) not tested. A paid Hetzner VM was not created, it needs Kim's approval.

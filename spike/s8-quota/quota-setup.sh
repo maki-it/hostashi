@@ -108,7 +108,8 @@ Before=multi-user.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/sbin/quotaon -P /
+# '-': ignore a non-zero exit (seen on Hetzner Debian 13 cloud kernel, reason not yet read from the journal)
+ExecStart=-/usr/sbin/quotaon -P /
 [Install]
 WantedBy=multi-user.target
 U
