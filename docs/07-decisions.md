@@ -122,6 +122,7 @@ Ursprünglicher Vorschlag: Einzelserver für Entwickler und Agenturen. Reseller,
 4. Klang und Bedeutung in den wichtigsten Zielsprachen prüfen.
 
 **Stand 17.11.2026 (Angaben von Kim, nicht von Claude geprüft):**
+
 - `hostashi.de` ist von Kim registriert. `.dev`, `.com` und `.io` bleiben vorerst unregistriert.
 - Eigene Markenrecherche (Anleitung: `markenrecherche-anleitung.md` im Projektordner): keine Treffer. Das ist kein Beweis und ersetzt keine anwaltliche Prüfung.
 - Das Repo bleibt in der GitHub-Organisation `maki-it`, es gibt keine eigene Organisation für Hostashi.
