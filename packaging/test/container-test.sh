@@ -229,6 +229,15 @@ try { $db->query("SELECT 1 FROM mysql.user"); echo " open"; } catch (mysqli_sql_
 PHP
 body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/db.php)
 [ "$body" = "db 42 jailed" ] || fail "PHP with database answered '$body'"
+# Export and import a dump in the site's home, as the site user.
+x /usr/local/bin/hostashi db export wp_db backup.sql.gz
+expect_mode /home/wp/backup.sql.gz "600 wp:wp"
+x mariadb -e 'DELETE FROM wp_db.t'
+x /usr/local/bin/hostashi db import wp_db backup.sql.gz
+[ "$(x mariadb -Nse 'SELECT SUM(i) FROM wp_db.t')" = 42 ] || fail "import did not restore the table"
+if x /usr/local/bin/hostashi db import wp_db ../other/backup.sql; then fail "path outside the home accepted"; fi
+[ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User LIKE 'hostashi%job%'")" ] || fail "job user left behind"
+x rm -f /home/wp/backup.sql.gz
 x /usr/local/bin/hostashi db delete wp_db
 [ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User='wp_user'")" ] || fail "database user still there"
 # The same through the panel API: the generated password works once, and

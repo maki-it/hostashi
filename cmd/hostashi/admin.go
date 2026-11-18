@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -138,6 +139,8 @@ func dbCmd(ctx context.Context, c *agentrpc.Client, args []string, out io.Writer
 		if generated {
 			fmt.Fprintf(out, "password: %s\n", pw)
 		}
+	case len(args) == 3 && (args[0] == "import" || args[0] == "export"):
+		return dumpCmd(ctx, c, args[0], args[1], args[2], out)
 	case len(args) == 3 && args[0] == "user" && args[1] == "delete":
 		if _, err := agentapi.DBUserDelete.Call(ctx, c, agentapi.DBUserDeleteRequest{User: args[2]}); err != nil {
 			return err
@@ -165,4 +168,43 @@ func readPassword() (pw string, generated bool, err error) {
 	}
 
 	return line, false, nil
+}
+
+// jobPoll is how often dumpCmd asks for the state of its job.
+var jobPoll = time.Second
+
+// dumpCmd starts an import or export and waits for it. The path is relative
+// to the home of the database's site.
+func dumpCmd(ctx context.Context, c *agentrpc.Client, kind, database, path string, out io.Writer) error {
+	op := agentapi.DBImport
+	if kind == "export" {
+		op = agentapi.DBExport
+	}
+
+	j, err := op.Call(ctx, c, agentapi.DBDumpRequest{Database: database, Path: path})
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(out, "%s of %s started (job %s)\n", kind, database, j.ID)
+
+	for j.State == agentapi.JobRunning {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("stopped waiting, the job keeps running: %w", ctx.Err())
+		case <-time.After(jobPoll):
+		}
+
+		if j, err = agentapi.DBJobStatus.Call(ctx, c, agentapi.DBJobRequest{ID: j.ID}); err != nil {
+			return err
+		}
+	}
+
+	if j.State == agentapi.JobFailed {
+		return fmt.Errorf("%s of %s failed: %s", kind, database, j.Error)
+	}
+
+	fmt.Fprintf(out, "%s of %s done in %s\n", kind, database, j.Finished.Sub(j.Started).Round(time.Second))
+
+	return nil
 }

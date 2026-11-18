@@ -67,6 +67,12 @@ type Manager struct {
 	db  Execer
 	reg *registry
 	log *slog.Logger
+
+	// Import and export (jobs.go); nil until EnableDumps.
+	dumps *Dumps
+	jobs  map[string]*agentapi.DBJob
+	busy  map[string]bool
+	done  map[string]chan struct{}
 }
 
 // Connect opens a pool to the server at socket as root. It does not connect
@@ -180,6 +186,10 @@ func (m *Manager) Delete(ctx context.Context, name string) error {
 	d, ok := m.reg.dbs[name]
 	if !ok {
 		return ErrNotFound
+	}
+
+	if m.busy[name] {
+		return ErrBusy
 	}
 
 	// Users first: they are useless without the database, and IF EXISTS

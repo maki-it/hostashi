@@ -3,8 +3,8 @@
 // Package resticctl runs the distribution's restic for the backups of
 // ADR-0008.
 //
-// It is the fourth package allowed to start processes (depguard rule in
-// .golangci.yml), and the exception is as narrow as the others: one binary
+// It is one of the few packages allowed to start processes (depguard rule
+// in .golangci.yml), and the exception is as narrow as the others: one binary
 // by absolute path, a fixed set of sub-commands with fixed flags, no shell,
 // a cleared environment, --json output parsed into types, and stderr only in
 // the log and in error values. Every variable part of an argument list

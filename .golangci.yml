@@ -53,6 +53,8 @@ linters:
         # internal/resticctl runs restic by absolute path with fixed
         # sub-commands and validated arguments; restic itself starts ssh and
         # mariadb-dump (see its package comment, ADR-0008).
+        # internal/mariadbctl runs mariadb and mariadb-dump as the site user
+        # with fixed arguments for import and export (ADR-0025).
         no-exec:
           files:
             - "$all"
@@ -61,6 +63,7 @@ linters:
             - "!**/internal/webctl/*.go"
             - "!**/internal/phpctl/*.go"
             - "!**/internal/resticctl/*.go"
+            - "!**/internal/mariadbctl/*.go"
           deny:
             - pkg: os/exec
               desc: "no process execution in product code (see docs/05-security.md)"

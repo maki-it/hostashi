@@ -712,7 +712,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if cfg.DB == nil {
-		cfg.DB, err = openDB(cfg.StateDir, cfg.Log)
+		cfg.DB, err = openDB(ctx, cfg.StateDir, cfg.Sites, cfg.Log)
 		if err != nil {
 			return err
 		}
