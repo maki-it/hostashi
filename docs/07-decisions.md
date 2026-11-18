@@ -20,6 +20,7 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 | 0014 | Name des CLI-Werkzeugs | Proposed | Ja, kurz |
 | 0015 | Ressourcenlimits pro Site | Proposed (Entwurf: [adr/0015](adr/0015-per-site-resource-limits.md)) | **Ja** (Priorität Disk-Quota) |
 | 0016 | Speicherort pro Site (Storage-Pools) | Proposed (Entwurf: [adr/0016](adr/0016-per-site-storage-location.md)) | **Ja** |
+| 0017 | CloudPanel-Import als Migration, Presets | Proposed (Entwurf: [adr/0017](adr/0017-cloudpanel-import-and-presets.md)) | **Ja** |
 
 ---
 
@@ -167,6 +168,10 @@ ashi site add example.com --type php --php 8.4   # gleiches Programm
 ## ADR-0016 Speicherort pro Site (Storage-Pools)
 
 **Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0016-per-site-storage-location.md](adr/0016-per-site-storage-location.md). Kurzfassung: Der Speicherort ist wählbar über benannte **Storage-Pools** (zum Beispiel ein zweites Volume), nie über einen freien Pfad aus der API. Der Agent prüft Mountpoint, Marker-Datei und Quota je Pool, damit ein nicht eingehängtes Volume nicht die Root-Platte füllt. Das Home-Verzeichnis der Site liegt direkt im Pool, ohne Symlinks. Hostashi formatiert oder partitioniert keine Platten. Umzug zwischen Pools ist ein späterer, eigener Vorgang. Alle Mechanismen sind unverifiziert, Spike S9 klärt das.
+
+## ADR-0017 CloudPanel-Import als Migration, Presets
+
+**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0017-cloudpanel-import-and-presets.md](adr/0017-cloudpanel-import-and-presets.md). Kurzfassung: Grundlage ist Spike S6 mit zwei Läufen auf `web2`, Ergebnis 0 % sauber und 90 % übernehmbar. Kim hat entschieden, dass eine Site als übernommen gilt, wenn kein Blocker vorliegt und jede eigene Regel einmal geprüft wird. Der Importer ist ein **Migrationswerkzeug**: Er liest den alten Server nur lesend, und der neue Server zieht die Daten. Die wiederkehrenden Regeln werden **nicht 1:1 übernommen**, sondern als eigene, typisierte Presets neu entworfen. Je Muster ist bewertet, ob es übernommen, verbessert oder weggelassen wird; zum Beispiel fällt PageSpeed weg, Security-Header werden neu gebaut und `if`-Weiterleitungen werden typisierte Redirects.
 
 ---
 
