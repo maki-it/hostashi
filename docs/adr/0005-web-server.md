@@ -1,6 +1,6 @@
 # ADR-0005 Web server
 
-**Status:** Proposed (not accepted). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0006 (state and reconciler), ADR-0009 (fresh servers, Debian 13), ADR-0015 (resource limits). **Evidence:** spikes S2 ([`spike/s2-reconciler/REPORT.md`](../../spike/s2-reconciler/REPORT.md)) and S3 ([`spike/s3-webserver/REPORT.md`](../../spike/s3-webserver/REPORT.md)).
+**Status:** Accepted (2026-11-18, by Kim). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0006 (state and reconciler), ADR-0009 (fresh servers, Debian 13), ADR-0015 (resource limits). **Evidence:** spikes S2 ([`spike/s2-reconciler/REPORT.md`](../../spike/s2-reconciler/REPORT.md)) and S3 ([`spike/s3-webserver/REPORT.md`](../../spike/s3-webserver/REPORT.md)).
 
 ## Context
 
@@ -53,4 +53,4 @@ Reasons, in order of weight:
 
 ## Open questions
 
-None for the choice. The status is set by Kim. Remaining work that follows from it: the cache design, the snippet policy (what a custom snippet may do, see S2 finding 3) and the repository setup in S5.
+None for the choice. Remaining work that follows from it: the cache design, the snippet policy (what a custom snippet may do, see S2 finding 3) and the repository setup in S5.
