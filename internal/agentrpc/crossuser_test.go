@@ -55,7 +55,7 @@ func TestCrossUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.RemoveAll(base) })
+	t.Cleanup(func() { _ = os.RemoveAll(base) })
 	if err := os.Chmod(base, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestCrossUser(t *testing.T) {
 
 	serve := func(auth Authorizer, gid int) func() {
 		s := newTestServer(auth, Options{})
-		if err := s.Listen(sock, gid); err != nil {
+		if err := s.Listen(context.Background(), sock, gid); err != nil {
 			t.Fatal(err)
 		}
 		ctx, cancel := context.WithCancel(context.Background())
@@ -122,7 +122,7 @@ func copyFile(t *testing.T, src, dst string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o755)
 	if err != nil {
 		t.Fatal(err)

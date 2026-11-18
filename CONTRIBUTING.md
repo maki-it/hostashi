@@ -16,7 +16,8 @@ One Go module at the repository root, one binary with three modes (see [`docs/04
 Run the checks locally:
 
 ```sh
-gofmt -l cmd internal
+golangci-lint fmt ./...    # gofmt and goimports, config in .golangci.yml
+golangci-lint run ./...    # includes staticcheck, gosec and a ban on os/exec
 go vet ./...
 go test -race ./...
 sudo env "PATH=$PATH" go test -race -run '^TestCrossUser$' ./internal/agentrpc/   # needs root
@@ -62,7 +63,7 @@ Mail server, DNS server, billing, reseller features and multi-server are non-goa
 
 - Commit messages in English, imperative mood, short subject (about 72 characters), for example `Add threat model for agent RPC`.
 - One logical change per pull request. Fill in the PR template.
-- Documentation changes must pass the CI checks (Markdown lint and link check). Go changes must pass the Go workflow (gofmt, vet, tests with race detector, short fuzzing, staticcheck, govulncheck). To run the lint locally: `npx markdownlint-cli2 "**/*.md"`.
+- Documentation changes must pass the CI checks (Markdown lint and link check). Go changes must pass the Go workflow (golangci-lint format and lint, vet, tests with race detector, short fuzzing, govulncheck). The Go version is pinned in `go.mod`. To run the lint locally: `npx markdownlint-cli2 "**/*.md"`.
 - Do not commit secrets. `.env` files are ignored.
 
 ## License and sign-off (DCO)

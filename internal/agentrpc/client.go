@@ -44,9 +44,9 @@ func (c *Client) roundTrip(ctx context.Context, op string, req any) (json.RawMes
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "unix", c.path)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	stop := context.AfterFunc(ctx, func() { _ = conn.SetDeadline(time.Now()) })
 	defer stop()
 	if dl, ok := ctx.Deadline(); ok {
@@ -58,12 +58,12 @@ func (c *Client) roundTrip(ctx context.Context, op string, req any) (json.RawMes
 		}
 		// The agent may close before reading, for example when the
 		// connection limit is reached or the peer is not authorized.
-		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	rb, err := readFrame(conn)
 	if err != nil {
 		// The agent closes without a reply for unauthorized peers.
-		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	var resp response
 	if err := json.Unmarshal(rb, &resp); err != nil {

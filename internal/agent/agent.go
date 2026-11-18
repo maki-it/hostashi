@@ -72,14 +72,14 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	return s
 }
 
-// Run starts the agent and blocks until ctx is cancelled.
+// Run starts the agent and blocks until ctx is canceled.
 func Run(ctx context.Context, cfg Config) error {
 	uid, gid, err := serveIdentity(cfg.ServeUser)
 	if err != nil {
 		return err
 	}
 	s := NewServer(cfg, uid)
-	if err := s.Listen(cfg.Socket, gid); err != nil {
+	if err := s.Listen(ctx, cfg.Socket, gid); err != nil {
 		return err
 	}
 	if cfg.Log != nil {

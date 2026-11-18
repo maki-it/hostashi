@@ -88,7 +88,7 @@ func start(t *testing.T, auth Authorizer, o Options) (string, *Client) {
 	t.Helper()
 	sock := filepath.Join(socketDir(t), "agent.sock")
 	s := newTestServer(auth, o)
-	if err := s.Listen(sock, -1); err != nil {
+	if err := s.Listen(context.Background(), sock, -1); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -210,7 +210,7 @@ func rawConn(t *testing.T, sock string) net.Conn {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { _ = conn.Close() })
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 	return conn
 }
@@ -240,7 +240,7 @@ func TestOversizedFrameClosesConnection(t *testing.T) {
 	if _, err := conn.Write(hdr[:]); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Read(make([]byte, 1)); err != io.EOF {
+	if _, err := conn.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
 		t.Fatalf("want EOF, got %v", err)
 	}
 	if _, err := opWho.Call(context.Background(), c, emptyReq{}); err != nil {
@@ -309,7 +309,7 @@ func TestConnectionLimit(t *testing.T) {
 func TestIdleTimeout(t *testing.T) {
 	sock, _ := start(t, allowSelf(), Options{IdleTimeout: 50 * time.Millisecond})
 	conn := rawConn(t, sock)
-	if _, err := conn.Read(make([]byte, 1)); err != io.EOF {
+	if _, err := conn.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
 		t.Fatalf("want EOF after idle timeout, got %v", err)
 	}
 }
@@ -332,13 +332,13 @@ func TestListenRejectsInsecureDirectory(t *testing.T) {
 			if err := os.Chmod(dir, mode); err != nil {
 				t.Fatal(err)
 			}
-			err := NewServer(nil, Options{}).Listen(filepath.Join(dir, "agent.sock"), -1)
+			err := NewServer(nil, Options{}).Listen(context.Background(), filepath.Join(dir, "agent.sock"), -1)
 			if !errors.Is(err, ErrInsecureSocketDir) {
 				t.Fatalf("want ErrInsecureSocketDir, got %v", err)
 			}
 		})
 	}
-	err := NewServer(nil, Options{}).Listen(filepath.Join(t.TempDir(), "missing", "agent.sock"), -1)
+	err := NewServer(nil, Options{}).Listen(context.Background(), filepath.Join(t.TempDir(), "missing", "agent.sock"), -1)
 	if err == nil {
 		t.Fatal("missing directory accepted")
 	}
@@ -350,7 +350,7 @@ func TestListenDoesNotRemoveRegularFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte("keep"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := NewServer(nil, Options{}).Listen(path, -1); err == nil {
+	if err := NewServer(nil, Options{}).Listen(context.Background(), path, -1); err == nil {
 		t.Fatal("regular file was replaced")
 	}
 	if b, _ := os.ReadFile(path); string(b) != "keep" {
@@ -366,12 +366,12 @@ func TestListenReplacesStaleSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	l.(*net.UnixListener).SetUnlinkOnClose(false)
-	l.Close()
+	_ = l.Close()
 	s := NewServer(nil, Options{})
-	if err := s.Listen(path, -1); err != nil {
+	if err := s.Listen(context.Background(), path, -1); err != nil {
 		t.Fatalf("stale socket not replaced: %v", err)
 	}
-	s.listener.Close()
+	_ = s.listener.Close()
 }
 
 func TestServeWithoutListen(t *testing.T) {
@@ -425,14 +425,14 @@ func TestClientWriteFailureIsUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer l.Close()
+	defer func() { _ = l.Close() }()
 	go func() {
 		for {
 			conn, err := l.Accept()
 			if err != nil {
 				return
 			}
-			conn.Close()
+			_ = conn.Close()
 		}
 	}()
 	c := NewClient(sock)

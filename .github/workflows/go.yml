@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  STATICCHECK_VERSION: "2026.2.2"
+  GOLANGCI_LINT_VERSION: "v2.15.0"
   GOVULNCHECK_VERSION: "v1.9.0"
 
 jobs:
@@ -29,10 +29,6 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - name: gofmt
-        run: |
-          out="$(gofmt -l cmd internal)"
-          if [ -n "$out" ]; then echo "Not gofmt-ed:"; echo "$out"; exit 1; fi
       - name: go vet
         run: go vet ./...
       - name: Tests (unprivileged)
@@ -51,7 +47,7 @@ jobs:
           GOARCH=arm64 go build -trimpath -o /dev/null ./cmd/hostashi
 
   lint:
-    name: Static analysis
+    name: Lint and static analysis
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -61,7 +57,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - name: staticcheck
-        run: go run "honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}" ./...
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          install-only: true
+      - name: golangci-lint fmt (gofmt, goimports)
+        run: golangci-lint fmt --diff ./...
+      - name: golangci-lint run
+        run: golangci-lint run ./...
       - name: govulncheck
         run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...

@@ -92,7 +92,7 @@ func Handler(cfg Config, ping pinger) http.Handler {
 	return mux
 }
 
-// Run starts the web process and blocks until ctx is cancelled.
+// Run starts the web process and blocks until ctx is canceled.
 func Run(ctx context.Context, cfg Config) error {
 	if err := CheckListen(cfg.Listen); err != nil {
 		return err
@@ -110,7 +110,8 @@ func Run(ctx context.Context, cfg Config) error {
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    64 << 10,
 	}
-	ln, err := net.Listen("tcp", cfg.Listen)
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", cfg.Listen)
 	if err != nil {
 		return err
 	}

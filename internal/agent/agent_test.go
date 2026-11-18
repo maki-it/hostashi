@@ -61,7 +61,7 @@ func TestPingThroughServer(t *testing.T) {
 	sock := filepath.Join(dir, "agent.sock")
 	// Allow the current test user as the "serve user".
 	s := NewServer(Config{Version: "1.2.3"}, uint32(os.Getuid()))
-	if err := s.Listen(sock, -1); err != nil {
+	if err := s.Listen(context.Background(), sock, -1); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())

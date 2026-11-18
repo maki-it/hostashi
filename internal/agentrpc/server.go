@@ -100,7 +100,7 @@ var ErrInsecureSocketDir = errors.New("agentrpc: socket directory must not be ac
 // and no group write (for example systemd RuntimeDirectoryMode=0750), which
 // closes the window between bind and chmod (spike S1, finding 3).
 // An existing socket file is replaced, any other file is left alone.
-func (s *Server) Listen(path string, gid int) error {
+func (s *Server) Listen(ctx context.Context, path string, gid int) error {
 	dir := filepath.Dir(path)
 	fi, err := os.Stat(dir)
 	if err != nil {
@@ -117,18 +117,20 @@ func (s *Server) Listen(path string, gid int) error {
 			return err
 		}
 	}
-	l, err := net.Listen("unix", path)
+	var lc net.ListenConfig
+	l, err := lc.Listen(ctx, "unix", path)
 	if err != nil {
 		return err
 	}
 	if gid >= 0 {
 		if err := os.Chown(path, -1, gid); err != nil {
-			l.Close()
+			_ = l.Close()
 			return err
 		}
 	}
-	if err := os.Chmod(path, 0o660); err != nil {
-		l.Close()
+	// 0660 is the point: the serve user's group must be able to connect.
+	if err := os.Chmod(path, 0o660); err != nil { //nolint:gosec // socket, group access is required
+		_ = l.Close()
 		return err
 	}
 	s.mu.Lock()
@@ -137,7 +139,7 @@ func (s *Server) Listen(path string, gid int) error {
 	return nil
 }
 
-// Serve accepts connections until ctx is cancelled, then waits for open
+// Serve accepts connections until ctx is canceled, then waits for open
 // connections to finish their current call.
 func (s *Server) Serve(ctx context.Context) error {
 	s.mu.Lock()
@@ -146,7 +148,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	if l == nil {
 		return errors.New("agentrpc: Listen not called")
 	}
-	stop := context.AfterFunc(ctx, func() { l.Close() })
+	stop := context.AfterFunc(ctx, func() { _ = l.Close() })
 	defer stop()
 	defer s.wg.Wait()
 	for {
@@ -162,7 +164,7 @@ func (s *Server) Serve(ctx context.Context) error {
 		default:
 			// Too many open connections: drop instead of queueing (finding 5).
 			s.log.Warn("connection limit reached")
-			conn.Close()
+			_ = conn.Close()
 			continue
 		}
 		s.wg.Add(1)
@@ -194,7 +196,7 @@ func PeerCred(c *net.UnixConn) (Caller, error) {
 }
 
 func (s *Server) serveConn(ctx context.Context, conn *net.UnixConn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	stop := context.AfterFunc(ctx, func() { _ = conn.SetReadDeadline(time.Now()) })
 	defer stop()
 	caller, err := PeerCred(conn)
