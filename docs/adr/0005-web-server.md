@@ -4,7 +4,7 @@
 
 ## Context
 
-- Hostashi renders web server config from its declared state and switches it atomically with rollback (ADR-0006, `04-architektur.md` 4.3). The web server sits behind a `WebServerDriver` interface (Render, Validate, Activate, Verify) [V: `04-architektur.md` 4.5, S2].
+- Hostashi renders web server config from its declared state and switches it atomically with rollback (ADR-0006, `04-architecture.md` 4.3). The web server sits behind a `WebServerDriver` interface (Render, Validate, Activate, Verify) [V: `04-architecture.md` 4.5, S2].
 - The main workload is PHP sites, WordPress first, behind PHP-FPM, plus reverse proxy for Node and Python apps [V: `02-vision-scope.md`].
 - Kim runs 22 sites on one server today [V: Kim, thread, 2026-11-17].
 - Boring tech is a project rule: prefer proven components [V: project instructions].
@@ -38,7 +38,7 @@ Reasons, in order of weight:
 ## Consequences
 
 - **Packages:** *Replaced by [ADR-0020](0020-nginx-package-source-and-brotli.md) (2026-11-18): nginx comes from the distribution, for brotli.* Original text: nginx.org stable repository on Debian 13 and Ubuntu 24.04, because the distribution packages for Ubuntu 24.04 (1.24) have no HTTP/3 [V: S3]. The `.deb` depends on this repository or vendors the signed packages [A, decide in S5].
-- **Reload verification is mandatory** in the reconciler: `nginx -t`, then reload, then proof that the new generation answers, with eight consecutive matches and a site health check; otherwise rollback. A bind conflict passes `-t` and a reload that exits 0 [V: S2, S3]. Changed in `04-architektur.md` 4.3.
+- **Reload verification is mandatory** in the reconciler: `nginx -t`, then reload, then proof that the new generation answers, with eight consecutive matches and a site health check; otherwise rollback. A bind conflict passes `-t` and a reload that exits 0 [V: S2, S3]. Changed in `04-architecture.md` 4.3.
 - **Generator rules:** per-site snippets live in their own include file (an unmatched `}` is rejected per file [V: S2]). Never add `add_header` in a location without repeating the inherited headers. Set the worker user explicitly (the nginx.org package defaults to a user `nginx` that must exist) [V: S3].
 - **HTTPS:** certificates through lego as a library, nginx reads them from files. Renewal triggers a validated reload [A: not built yet].
 - **Cache:** `fastcgi_cache` per site with a key and a purge operation in the agent. The design is a later ADR [A].

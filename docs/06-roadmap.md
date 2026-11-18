@@ -1,99 +1,99 @@
 # 6. Roadmap
 
-**Annahme für alle Zeitangaben:** 2 Entwickler in Vollzeit, einer davon mit Linux-Systemerfahrung, Frontend mindestens halbe Stelle. Mit einer Person verdoppelt sich die Dauer ungefähr, mit größerem Team wird sie wegen Abstimmung nicht proportional kürzer. Das sind **Schätzungen ohne Datengrundlage**, bitte nach Phase 0 neu kalibrieren.
+**Assumption for all time estimates:** 2 full-time developers, one of them with Linux systems experience, frontend at least half a position. With one person the duration roughly doubles, with a larger team it does not shrink proportionally because of coordination. These are **estimates without a data basis**, please recalibrate after Phase 0.
 
-## Phase 0: Fundament (3–4 Wochen)
+## Phase 0: Foundation (3–4 weeks)
 
-Ziel: Entscheidungen treffen und die riskantesten Annahmen mit Wegwerf-Code prüfen.
+Goal: make decisions and test the riskiest assumptions with throwaway code.
 
-**Entscheidungen:** Name und Markenprüfung, Lizenz, Stack, Zielgruppe, Hosting des Repos (siehe [ADRs](07-decisions.md)).
+**Decisions:** name and trademark check, license, stack, target audience, repository hosting (see [ADRs](07-decisions.md)).
 
-**Spikes** (jeweils 2–4 Tage, Ergebnis ist ein kurzer Bericht):
+**Spikes** (2–4 days each, the result is a short report):
 
-| Spike | Frage | Abbruchkriterium |
-|-------|-------|------------------|
-| S1 Agent-RPC | Reicht typisierte RPC über Unix-Socket mit Peer-Credentials, und bleibt der Code überschaubar? | Wenn mehr als 30 % Boilerplate pro Operation, Codegen einführen |
-| S2 Reconciler | Generation-Umschaltung, `nginx -t`, Reload und Rollback robust? | Fehlerinjektion: kaputte Vhosts dürfen nie zu Downtime führen |
-| S3 Nginx vs. Caddy | Welcher Treiber passt besser (Rewrites, HTTP/3, FastCGI-Cache, Templates)? | Entscheidung mit Messung |
-| S4 Isolation | Per-Site-User, FPM-Socket, systemd-Sandbox, Escape-Test | Test aus Site A kann Site B nicht lesen |
-| S5 Installer | Idempotenter Installer auf frischen Ubuntu 24.04 und Debian 13 (amd64 + arm64) | Läuft zweimal ohne Änderung |
-| S6 CloudPanel-Adopt | Lässt sich eine echte CloudPanel-Instanz über das Dateisystem einlesen? | Wenn weniger als 80 % der Sites sauber übernommen werden, Importer zurückstellen |
-| S7 UI-Prototyp | Svelte vs. React, Terminal und Live-Graphen, Bundle-Größe | |
-| S8 Ressourcenlimits | Projekt-Quota auf frischem Debian 13 und Ubuntu 24.04 aktivierbar (idempotent, mit Reboot)? RAM je FPM-Master pro Site, Limits für Cron und Dienste ([ADR-0015](adr/0015-per-site-resource-limits.md)) | Wenn Quota nicht sicher aktivierbar ist, Alternativen (User-Quota, separates Volume) neu bewerten |
-| S11 Brotli | Gibt es ein gepflegtes Brotli-Modul für die nginx.org-Builds auf Debian 13 und Ubuntu 24.04 ([ADR-0017](adr/0017-cloudpanel-import-and-presets.md))? | Wenn nein, bleibt gzip der Standard ([Bericht](../spike/s11-brotli/REPORT.md)) |
-| S12 nginx der Distribution | Liefern Debian 13 und Ubuntu 26.04 mit dem Distributions-nginx Brotli über HTTP/2 und HTTP/3 ([ADR-0020](adr/0020-nginx-package-source-and-brotli.md))? | Wenn nein, ADR-0020 neu bewerten ([Bericht](../spike/s12-nginx-distro/REPORT.md)) |
+| Spike | Question | Abort criterion |
+|-------|----------|-----------------|
+| S1 Agent RPC | Is typed RPC over a Unix socket with peer credentials enough, and does the code stay manageable? | If more than 30 % boilerplate per operation, introduce codegen |
+| S2 Reconciler | Are generation switch, `nginx -t`, reload and rollback robust? | Failure injection: broken vhosts must never cause downtime |
+| S3 Nginx vs. Caddy | Which driver fits better (rewrites, HTTP/3, FastCGI cache, templates)? | Decision backed by measurement |
+| S4 Isolation | Per-site user, FPM socket, systemd sandbox, escape test | A test from site A cannot read site B |
+| S5 Installer | Idempotent installer on fresh Ubuntu 24.04 and Debian 13 (amd64 + arm64) | Runs twice without changes |
+| S6 CloudPanel adopt | Can a real CloudPanel instance be read in through the file system? | If fewer than 80 % of the sites are taken over cleanly, postpone the importer |
+| S7 UI prototype | Svelte vs. React, terminal and live graphs, bundle size | |
+| S8 Resource limits | Can project quota be enabled on fresh Debian 13 and Ubuntu 24.04 (idempotent, with reboot)? RAM per FPM master per site, limits for cron and services ([ADR-0015](adr/0015-per-site-resource-limits.md)) | If quota cannot be enabled safely, re-evaluate alternatives (user quota, separate volume) |
+| S11 Brotli | Is there a maintained Brotli module for the nginx.org builds on Debian 13 and Ubuntu 24.04 ([ADR-0017](adr/0017-cloudpanel-import-and-presets.md))? | If not, gzip stays the default ([report](../spike/s11-brotli/REPORT.md)) |
+| S12 Distribution nginx | Do Debian 13 and Ubuntu 26.04 deliver Brotli over HTTP/2 and HTTP/3 with the distribution nginx ([ADR-0020](adr/0020-nginx-package-source-and-brotli.md))? | If not, re-evaluate ADR-0020 ([report](../spike/s12-nginx-distro/REPORT.md)) |
 
-**Weitere Aufgaben:** Marktanalyse (HestiaCP, ISPConfig, 1Panel, Coolify …), CloudPanel-Issues auswerten, Bedrohungsmodell mit externem Reviewer durchgehen, Repo, CI und Release-Pipeline aufsetzen, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`.
+**Further tasks:** market analysis (HestiaCP, ISPConfig, 1Panel, Coolify …), evaluate CloudPanel issues, go through the threat model with an external reviewer, set up repository, CI and release pipeline, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`.
 
-**Abnahme:** ADRs auf „Accepted“, Spike-Berichte liegen vor, CI baut Binary für amd64/arm64, Test-VM-Matrix steht.
+**Acceptance:** ADRs on "Accepted", spike reports available, CI builds the binary for amd64/arm64, test VM matrix in place.
 
-## Phase 1: Alpha (8–10 Wochen)
+## Phase 1: Alpha (8–10 weeks)
 
-Ziel: Auf einem frischen Server lässt sich eine PHP-Site mit HTTPS und Datenbank produktiv betreiben.
+Goal: a PHP site with HTTPS and a database can be run in production on a fresh server.
 
-- Installer/`.deb`, Ersteinrichtung per Token, Login mit TOTP und Passkeys, Rollen, API-Tokens, Audit-Log
-- Site-Typen Static, PHP, Node.js, Reverse Proxy; Linux-User, FPM-Pool, Aliase und Redirects
-- Vhost-Editor mit Validierung und Rollback
-- Let's Encrypt (HTTP-01), eigene Zertifikate, Panel unter eigener Domain
-- MariaDB/MySQL-Verwaltung, Import/Export
-- Cron, Logs, SSH-Keys/SFTP
-- Firewall mit Lockout-Schutz, Dienste-Verwaltung, Dashboard
-- CLI mit Basisbefehlen, OpenAPI-Spezifikation
+- Installer/`.deb`, initial setup by token, login with TOTP and passkeys, roles, API tokens, audit log
+- Site types static, PHP, Node.js, reverse proxy; Linux user, FPM pool, aliases and redirects
+- Vhost editor with validation and rollback
+- Let's Encrypt (HTTP-01), custom certificates, panel under its own domain
+- MariaDB/MySQL management, import/export
+- Cron, logs, SSH keys/SFTP
+- Firewall with lockout protection, service management, dashboard
+- CLI with basic commands, OpenAPI specification
 
-**Abnahme:** 20 Test-Szenarien (End-to-End) grün auf allen Matrix-OS, Isolations-Test grün, Doku für Installation und erste Site. Nur für Tests und Freiwillige, nicht für Produktion.
+**Acceptance:** 20 test scenarios (end-to-end) green on all matrix OSes, isolation test green, documentation for installation and the first site. Only for testing and volunteers, not for production.
 
-## Phase 2: Beta (10–12 Wochen)
+## Phase 2: Beta (10–12 weeks)
 
-Ziel: Funktionsparität für die häufigsten CloudPanel-Anwendungsfälle.
+Goal: feature parity for the most common CloudPanel use cases.
 
-- Backups mit restic (Ziele, Zeitplan, Retention, Restore in UI) und Benachrichtigungen
-- Python-Sites, WordPress-Schnellinstallation, Vhost-Templates (Laravel, Symfony, WP, Magento, Shopware …)
-- Rate-Limiting, IP-/Bot-Blocking, Basic Auth je Site
-- DNS-01 mit ersten Providern (INWX, Cloudflare, Hetzner DNS), Wildcard-Zertifikate
-- Web-DB-Tool mit SSO, Redis, Dateimanager
-- FastCGI-Cache, HTTP/3, Ressourcenlimits und Disk-Quota je Site
-- Panel-Update im UI, `hostashi doctor`
+- Backups with restic (targets, schedule, retention, restore in the UI) and notifications
+- Python sites, WordPress quick install, vhost templates (Laravel, Symfony, WP, Magento, Shopware …)
+- Rate limiting, IP/bot blocking, basic auth per site
+- DNS-01 with the first providers (INWX, Cloudflare, Hetzner DNS), wildcard certificates
+- Web DB tool with SSO, Redis, file manager
+- FastCGI cache, HTTP/3, resource limits and disk quota per site
+- Panel update in the UI, `hostashi doctor`
 
-**Abnahme:** Mindestens 10 externe Testserver über 4 Wochen ohne Datenverlust, Backup-Restore-Test erfolgreich, Security-Review der API-Autorisierung.
+**Acceptance:** at least 10 external test servers over 4 weeks without data loss, backup restore test successful, security review of API authorization.
 
-## Phase 3: Release 1.0 (8–10 Wochen)
+## Phase 3: Release 1.0 (8–10 weeks)
 
-Ziel: Vertrauenswürdig genug für Produktivserver.
+Goal: trustworthy enough for production servers.
 
-- Adopt-Modus und CloudPanel-Importer
-- PostgreSQL, Staging/Klonen, Zero-Downtime-Deployments
-- Zustand als YAML (Export/Apply), OIDC-SSO, Prometheus-Endpunkt, Fail2ban/CrowdSec
-- **Externer Pentest** und Behebung, Restore-Tests automatisiert
-- Doku vollständig (EN), UI auf EN/DE, Migrationsleitfäden
-- Signierte Releases, SBOM, Support- und Update-Richtlinie
+- Adopt mode and CloudPanel importer
+- PostgreSQL, staging/cloning, zero-downtime deployments
+- State as YAML (export/apply), OIDC SSO, Prometheus endpoint, Fail2ban/CrowdSec
+- **External pentest** and fixes, automated restore tests
+- Complete documentation (EN), UI in EN/DE, migration guides
+- Signed releases, SBOM, support and update policy
 
-**Abnahme:** Keine offenen kritischen oder hohen Findings aus dem Pentest, Upgrade-Tests von Beta auf 1.0, Release-Checkliste vollständig.
+**Acceptance:** no open critical or high findings from the pentest, upgrade tests from beta to 1.0, release checklist complete.
 
-## Phase 4 und später (nicht geplant, nur Optionen)
+## Phase 4 and later (not planned, options only)
 
-Multi-Server (Controller + Agents), Reseller und Pakete, Mail-Integration (Mailcow/Stalwart), Docker-Compose-Apps, Git-Deploy, Terraform-Provider, Plugin-System, LXC-Betrieb, Cloud-Provider-Integrationen (Hetzner Cloud und Robot, Snapshots, Firewalls), Web-Terminal, Malware-Scan.
+Multi-server (controller + agents), resellers and packages, mail integration (Mailcow/Stalwart), Docker Compose apps, Git deploy, Terraform provider, plugin system, LXC operation, cloud provider integrations (Hetzner Cloud and Robot, snapshots, firewalls), web terminal, malware scan.
 
-## Teststrategie
+## Test strategy
 
-| Ebene | Werkzeug | Inhalt |
-|-------|----------|--------|
-| Unit | Go-Tests, Golden Files | Generierte Configs, Parser, Validatoren |
-| Fuzzing | `go test -fuzz` | Domains, Pfade, Cron, Vhost-Snippets |
-| Integration | Incus/QEMU-VMs (kein Docker-Ersatz für systemd) | Reconciler gegen echte Nginx/FPM/MariaDB |
-| End-to-End | Playwright | Kern-Flows im UI |
-| Matrix | CI je OS × Architektur | Ubuntu 22.04/24.04/26.04, Debian 12/13 × amd64/arm64 |
-| Sicherheit | Isolations-Test, IDOR-Matrix, gosec, semgrep, govulncheck | Pro Release verpflichtend |
-| Upgrade | Alte Version installieren, Daten anlegen, aktualisieren, prüfen | Pro Release |
+| Level | Tool | Content |
+|-------|------|---------|
+| Unit | Go tests, golden files | Generated configs, parsers, validators |
+| Fuzzing | `go test -fuzz` | Domains, paths, cron, vhost snippets |
+| Integration | Incus/QEMU VMs (Docker is no substitute for systemd) | Reconciler against real Nginx/FPM/MariaDB |
+| End-to-end | Playwright | Core flows in the UI |
+| Matrix | CI per OS × architecture | Ubuntu 22.04/24.04/26.04, Debian 12/13 × amd64/arm64 |
+| Security | Isolation test, IDOR matrix, gosec, semgrep, govulncheck | Mandatory per release |
+| Upgrade | Install old version, create data, update, check | Per release |
 
-## Risiken
+## Risks
 
-| Risiko | Wahrscheinlichkeit | Wirkung | Gegenmaßnahme |
-|--------|--------------------|---------|---------------|
-| Sicherheitslücke nach Veröffentlichung beschädigt Vertrauen dauerhaft | mittel | hoch | Rechtetrennung, externer Pentest vor 1.0, Disclosure-Prozess, „Alpha/Beta“ ehrlich kennzeichnen |
-| Pflegeaufwand für OS-/PHP-/DB-Versionen frisst das Team auf | hoch | hoch | Matrix klein halten, Templates statt Code, Automatisierung, Support-Zeiträume festlegen |
-| Abhängigkeit von Drittrepos (sury.org, nginx.org, MariaDB) | mittel | mittel | Schlüssel pinnen, Mirror-Option, Doku zur Fallback-Quelle |
-| Rechtliche Probleme durch Übernahme von CloudPanel-Inhalten | niedrig bei Disziplin | hoch | Clean-room, Review-Regel „nichts aus Referenz-Repos kopieren“, ADR-0001 |
-| Namens- oder Markenkonflikt | mittel | mittel | Marken- und Domainsuche in Phase 0 |
-| Scope Creep (Mail, DNS, Billing) | hoch | hoch | Nicht-Ziele in [Vision](02-vision-scope.md), Änderungen nur per ADR |
-| Zu wenig Adoption gegen etablierte Panels | mittel | hoch | Klare Differenzierung (Sicherheit, Import, Offenheit), Doku, Community-Arbeit |
-| Einzelpersonen-Abhängigkeit (Bus-Faktor) | hoch | hoch | Zweite Maintainer-Person früh gewinnen, Entscheidungen dokumentieren |
+| Risk | Likelihood | Impact | Countermeasure |
+|------|------------|--------|----------------|
+| A security vulnerability after release damages trust permanently | medium | high | Privilege separation, external pentest before 1.0, disclosure process, honest "alpha/beta" labeling |
+| Maintenance effort for OS/PHP/DB versions eats up the team | high | high | Keep the matrix small, templates instead of code, automation, define support periods |
+| Dependency on third-party repositories (sury.org, nginx.org, MariaDB) | medium | medium | Pin keys, mirror option, documentation of the fallback source |
+| Legal problems from taking over CloudPanel content | low with discipline | high | Clean-room, review rule "copy nothing from reference repositories", ADR-0001 |
+| Name or trademark conflict | medium | medium | Trademark and domain search in Phase 0 |
+| Scope creep (mail, DNS, billing) | high | high | Non-goals in [vision](02-vision-scope.md), changes only through ADR |
+| Too little adoption against established panels | medium | high | Clear differentiation (security, import, openness), documentation, community work |
+| Single-person dependency (bus factor) | high | high | Win a second maintainer early, document decisions |

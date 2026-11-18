@@ -10,7 +10,7 @@ type Files struct {
 	Meta    map[string][]byte
 }
 
-// Driver is the spike version of the WebServerDriver from 04-architektur.md.
+// Driver is the spike version of the WebServerDriver from 04-architecture.md.
 type Driver interface {
 	// Render turns desired state into files, relative to the generation dir.
 	Render(d Desired, gen int) (Files, error)

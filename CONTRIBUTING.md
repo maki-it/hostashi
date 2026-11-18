@@ -4,7 +4,7 @@ Thanks for your interest. Hostashi is moving from **Phase 0 (planning)** to the 
 
 ## Code layout
 
-One Go module at the repository root, one binary with three modes (see [`docs/04-architektur.md`](docs/04-architektur.md)):
+One Go module at the repository root, one binary with three modes (see [`docs/04-architecture.md`](docs/04-architecture.md)):
 
 - `cmd/hostashi`: the `hostashi` binary (`serve`, `agent`, `ping`, `version`).
 - `internal/serve`: the web process. Refuses to run as root.
@@ -58,7 +58,7 @@ Design proposals must not weaken these principles without naming the conflict:
 - The web process runs without root. A small agent executes only typed operations.
 - No shell strings and no general exec interface.
 
-See [`docs/05-sicherheit.md`](docs/05-sicherheit.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+See [`docs/05-security.md`](docs/05-security.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## Decisions are made through ADRs
 

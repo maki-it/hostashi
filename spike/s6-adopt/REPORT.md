@@ -18,7 +18,7 @@ Evidence tags as in [docs/adr/README.md](../../docs/adr/README.md): **[V]** veri
   |------|--------------|
   | Vhost per site | `/etc/nginx/sites-enabled/<domain>.conf` |
   | Certificate and key | `/etc/nginx/ssl-certificates/<domain>.crt` / `.key` (the scanner follows whatever `ssl_certificate` says, so a different path only matters for the fixture) |
-  | PHP-FPM pool | `/etc/php/<version>/fpm/pool.d/<name>.conf`, `listen = 127.0.0.1:<port>` (TCP is verified from the template review in [01-recherche](../../docs/01-recherche-cloudpanel.md) 1.4, the path is not) |
+  | PHP-FPM pool | `/etc/php/<version>/fpm/pool.d/<name>.conf`, `listen = 127.0.0.1:<port>` (TCP is verified from the template review in [01-cloudpanel-research](../../docs/01-cloudpanel-research.md) 1.4, the path is not) |
   | Document root | `/home/<site-user>/htdocs/<domain>` (site user with home below `/home` is verified from the docs review, 1.2) |
   | Crontab | `/var/spool/cron/crontabs/<site-user>` (Debian/Ubuntu default) |
   | Panel | own vhost on port 8443 (port verified, 1.2), system user `clp` [U] |
@@ -129,7 +129,7 @@ Real findings for Kim from this run: on 21 of 21 sites the private key has mode 
 
 ## Findings
 
-1. **The real question is still open, and it is cheap to answer.** The scanner is ready to run read-only against real data. One run on `web2` (22 real sites) would answer the abort criterion directly. This needs Kim's explicit go-ahead, because it means running a binary on a production server, even if it only reads [A: Kim's rules, "Server verändern" only after approval]. Alternative: a fresh CloudPanel test VM with a few hand-made sites, which checks the layout but not the real mix of hand edits.
+1. **The real question is still open, and it is cheap to answer.** The scanner is ready to run read-only against real data. One run on `web2` (22 real sites) would answer the abort criterion directly. This needs Kim's explicit go-ahead, because it means running a binary on a production server, even if it only reads [A: Kim's rules, "changing servers" only after approval]. Alternative: a fresh CloudPanel test VM with a few hand-made sites, which checks the layout but not the real mix of hand edits.
 
 2. **"Adopted cleanly" needs a definition before the number means anything.** With hand-edited vhosts, nearly every real site will have at least one directive Hostashi does not model (headers, cache rules, redirects) [A]. If "clean" means "nothing to review", the 80 % bar is probably unreachable for any importer; if it means "no blocker, custom parts carried as a validated snippet", it is plausible [A]. Proposal: count *clean + review* as adopted, and use the share of *clean* as a measure of how much the model still lacks. The custom snippet must go through the S2 generation switch with `nginx -t`, never straight into a live config.
 
@@ -137,7 +137,7 @@ Real findings for Kim from this run: on 21 of 21 sites the private key has mode 
 
 4. **For Kim's own case "adopt" means "migrate", not "take over in place".** Hostashi is installed only on fresh servers (ADR-0009, ADR-0015 context). So the importer reads the old server (live over SSH, or a mounted snapshot), produces a plan, and then the new server pulls files and database dumps. The scanner here fits that: it has no write path at all. Taking over a running CloudPanel server in place would need quota activation with a reboot on a live system and a way to stop CloudPanel from rewriting files, both out of scope [A].
 
-5. **PHP-FPM over TCP turns into a security gain on import.** CloudPanel pools listen on `127.0.0.1:<port>` [V from template review in 01-recherche 1.4], so any local process, including other sites' PHP, can talk to them. The scanner matches vhost and pool by address and reports the move to a per-site unix socket as an automatic info finding [V]. A pool that runs as a different user than the site's home owner is a blocker [V], because adopting it would carry a cross-site hole over.
+5. **PHP-FPM over TCP turns into a security gain on import.** CloudPanel pools listen on `127.0.0.1:<port>` [V from template review in 01-cloudpanel-research 1.4], so any local process, including other sites' PHP, can talk to them. The scanner matches vhost and pool by address and reports the move to a per-site unix socket as an automatic info finding [V]. A pool that runs as a different user than the site's home owner is a blocker [V], because adopting it would carry a cross-site hole over.
 
 6. **Certificates do not need to be copied in the common case.** Let's Encrypt certificates are recognised by issuer and simply reissued by Hostashi after DNS points to the new server; only purchased certificates need their key moved [V for detection on synthetic certs, A that issuer matching is enough for real LE chains].
 

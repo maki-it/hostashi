@@ -6,8 +6,8 @@
 
 - Hostashi is in Phase 0, no code yet. The repository `maki-it/hostashi` is **private** [V: GitHub API, 2026-11-17]. Publishing it is an outward-facing step that needs Kim's explicit approval.
 - Open question 1 (own need, public open source, commercial product, or a mix) and question 8 (budget for an external pentest and legal review) are **unanswered** [V: `07-decisions.md`]. This draft is therefore conditional.
-- The roadmap requires an external pentest before 1.0 and lists the bus factor as a high risk [V: `06-roadmap.md`, `05-sicherheit.md`]. Both cost money or people.
-- Security is the main selling point [V: `05-sicherheit.md`]. A business model that creates a security-relevant paid/free split (for example SSO or audit features only in a paid tier) would undermine that.
+- The roadmap requires an external pentest before 1.0 and lists the bus factor as a high risk [V: `06-roadmap.md`, `05-security.md`]. Both cost money or people.
+- Security is the main selling point [V: `05-security.md`]. A business model that creates a security-relevant paid/free split (for example SSO or audit features only in a paid tier) would undermine that.
 - Out of scope for v1: billing, reseller, multi-server [V: `02-vision-scope.md`]. These are the typical "Pro" candidates, which matters for option (c).
 
 ## Owner input (2026-11-17)
@@ -37,7 +37,7 @@ Effect: option (d) fits the start. The missing budget is an uncovered risk, see 
 ### (c) Open core (open base, proprietary Pro modules such as multi-server, reseller, SSO)
 
 - Pro: the classic path to product revenue.
-- Contra: needs a CLA so the owner can relicense contributions [U]. Splits the community, doubles maintenance, and the Pro candidates are exactly the features that are non-goals for v1. Risk of the "closed core" criticism that Hostashi positions itself against (CloudPanel is free but not open source, see `01-recherche-cloudpanel.md`).
+- Contra: needs a CLA so the owner can relicense contributions [U]. Splits the community, doubles maintenance, and the Pro candidates are exactly the features that are non-goals for v1. Risk of the "closed core" criticism that Hostashi positions itself against (CloudPanel is free but not open source, see `01-cloudpanel-research.md`).
 
 ### (d) Internal tool of Kim's company, opened later
 
@@ -62,7 +62,7 @@ Build in the open once the license and name checks are done, use it on Kim's own
 - **Maintainer model:** Kim as lead maintainer (BDFL-style) in Phase 0 to 1. Decisions through ADRs, status set by the lead maintainer. A `GOVERNANCE.md` states this, how a second maintainer is added, and what happens if the lead is unavailable.
 - **Second maintainer:** recruit before 1.0 (bus factor, see roadmap risk table) [V: risk table].
 - **Trademark:** the name is protected by trademark law, not by the code license. Decide who holds the mark (Kim personally, the company, or later an association). Publish a short trademark policy (what forks may call themselves). Depends on the open DPMA/EUIPO/USPTO search from ADR-0011 [V: ADR-0011 lists it as open].
-- **Security policy:** `SECURITY.md` with a disclosure path before the first public release [V: `05-sicherheit.md` 5.9].
+- **Security policy:** `SECURITY.md` with a disclosure path before the first public release [V: `05-security.md` 5.9].
 - **Funding the pentest:** budget is unknown (question 8). Plan one of: own budget, sponsor pool, or a grant program. The cost of an external pentest for a product like this is probably in the low-to-mid five-digit euro range [E: no quote obtained; get two quotes in Phase 0].
 - **No telemetry by default** and no license-key checks in v1. Keeps the "no lock-in" principle [V: `02-vision-scope.md` 2.5].
 

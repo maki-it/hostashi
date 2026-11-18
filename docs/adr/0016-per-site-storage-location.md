@@ -5,10 +5,10 @@
 ## Context
 
 - Kim wants to optionally choose where a site lives, so that large sites can sit on other mountpoints, disks or volumes [V: Kim, thread, 2026-11-17].
-- Today's plan puts every site under `/home/<user>` with the web root below it [V: `04-architektur.md` 4.4]. There is no way to choose a location.
+- Today's plan puts every site under `/home/<user>` with the web root below it [V: `04-architecture.md` 4.4]. There is no way to choose a location.
 - Hostashi is installed on a freshly provisioned single server [V: Kim, thread, 2026-11-17, ADR-0009]. Extra disks are typically provider volumes (for example Hetzner Volumes) or additional partitions, mounted by the admin [A].
 - ADR-0015 recommends filesystem project quota per site. Quotas are a property of one filesystem, so a second filesystem needs its own quota setup [U].
-- Security rules: the web process runs without root, the agent executes only typed operations, no shell strings, no general exec [V: `05-sicherheit.md`]. A location choice is exactly the kind of input that could turn into a path traversal or an arbitrary-write primitive if it is a free-form path.
+- Security rules: the web process runs without root, the agent executes only typed operations, no shell strings, no general exec [V: `05-security.md`]. A location choice is exactly the kind of input that could turn into a path traversal or an arbitrary-write primitive if it is a free-form path.
 - Multi-server is a non-goal for v1 [V: ADR-0010]. This ADR is about several filesystems on one server.
 
 ## Owner input (2026-11-17)
@@ -39,7 +39,7 @@ If a volume is not mounted at boot (mount failed, provider detached it), a site 
 - The web process and API never send a filesystem path. They send a **pool name**. The agent resolves the name through its own registry, which only root-level pool operations can change [A].
 - Pool registration (admin-only, typed operation `RegisterStoragePool{name, path}`) validates: absolute path, no `..`, resolved without following symlinks (`openat2` with `RESOLVE_NO_SYMLINKS`), is a mountpoint of a supported filesystem (ext4 or XFS), directory owned by root with mode 0755, not inside system trees (`/`, `/etc`, `/usr`, `/var/lib/mysql`, `/proc`, `/sys`, `/dev`, `/run`, `/boot`), not nested inside or containing another pool [A].
 - Mount options `nosuid,nodev` are required or at least warned about. `noexec` would break some runtimes and is not required [A].
-- Site directories are `<pool path>/<site-user>/`, created by the agent with the site's UID. Names come from the same validated site-user rules that already exist for `/home` [V: ADR-0004 and path rules in `05-sicherheit.md` require validation of paths and usernames; exact rules not yet written].
+- Site directories are `<pool path>/<site-user>/`, created by the agent with the site's UID. Names come from the same validated site-user rules that already exist for `/home` [V: ADR-0004 and path rules in `05-security.md` require validation of paths and usernames; exact rules not yet written].
 
 ### 4. Where the home directory points
 
@@ -55,7 +55,7 @@ If a volume is not mounted at boot (mount failed, provider detached it), a site 
   3. Verify (file counts, sizes, checksums on a sample).
   4. Switch through the reconciler: home path, FPM socket and pool config, Nginx root, systemd units, project quota ID on the new filesystem.
   5. Keep the old copy as rollback until the admin confirms, then delete.
-- Downtime is proportional to site size [E: minutes for typical sites, much longer for hundreds of GB]. A two-pass copy (live first pass, short final pass in maintenance) shortens it [A]. The move must be resumable and idempotent, matching the reconciler principles [V: `04-architektur.md` 4.3].
+- Downtime is proportional to site size [E: minutes for typical sites, much longer for hundreds of GB]. A two-pass copy (live first pass, short final pass in maintenance) shortens it [A]. The move must be resumable and idempotent, matching the reconciler principles [V: `04-architecture.md` 4.3].
 - Database data stays where MariaDB keeps it. A site's DB size is not affected by the pool. Moving the MariaDB data directory is a separate topic [A].
 
 ### 6. Monitoring
@@ -97,7 +97,7 @@ Simplest. Contradicts Kim's wish.
 
 - Positive: large sites can live on their own volume, the root filesystem is protected from runaway sites, and the API still never receives a path.
 - Negative: more state to keep consistent (pool registry, mount checks, per-pool quota), a more complex backup and restore story, and a cross-filesystem move operation that needs careful testing.
-- Follow-ups if accepted: `03-features.md` (new rows for storage pools and site moves), `04-architektur.md` 4.4 and the site model, `05-sicherheit.md` (pool registration validation, new agent operations), ADR-0015 cross-reference, `hostashi doctor` checks per pool.
+- Follow-ups if accepted: `03-features.md` (new rows for storage pools and site moves), `04-architecture.md` 4.4 and the site model, `05-security.md` (pool registration validation, new agent operations), ADR-0015 cross-reference, `hostashi doctor` checks per pool.
 
 ## Spike S9 (proposed): storage pools
 

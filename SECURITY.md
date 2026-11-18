@@ -2,7 +2,7 @@
 
 Hostashi is a hosting control panel. A vulnerability in it can mean full server compromise, so we take reports seriously.
 
-> **Status:** Phase 0 (planning). There is no released code yet. This policy already applies to the design documents in `docs/`, for example flaws in the threat model in [`docs/05-sicherheit.md`](docs/05-sicherheit.md).
+> **Status:** Phase 0 (planning). There is no released code yet. This policy already applies to the design documents in `docs/`, for example flaws in the threat model in [`docs/05-security.md`](docs/05-security.md).
 
 ## Reporting a vulnerability
 
