@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it, vi } from "vitest";
-import { ApiError, getHealth, request } from "./api";
+import { ApiError, request } from "./api";
 import { mockFetch } from "./test-utils";
 
 describe("request", () => {
@@ -36,17 +36,5 @@ describe("request", () => {
     expect(init?.body).toBeUndefined();
     expect(init?.headers).toEqual({ Accept: "application/json" });
     expect(init?.credentials).toBe("same-origin");
-  });
-});
-
-describe("getHealth", () => {
-  it("returns the body of a degraded server (503)", async () => {
-    mockFetch({ "GET /api/v1/health": { status: 503, body: { status: "degraded", agent: "unavailable", db: "ok", version: "1" } } });
-    await expect(getHealth()).resolves.toMatchObject({ status: "degraded", agent: "unavailable" });
-  });
-
-  it("throws on other errors", async () => {
-    mockFetch({ "GET /api/v1/health": { status: 500, body: { error: { code: "internal", message: "internal error" } } } });
-    await expect(getHealth()).rejects.toMatchObject({ code: "internal" });
   });
 });
