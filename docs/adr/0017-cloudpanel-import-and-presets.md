@@ -90,6 +90,6 @@ The values are a starting point [A]; each preset spec confirms or changes them. 
 Accepting this ADR settles Parts 1 to 4 in principle. The questions below are still open unless marked as decided.
 
 1. ~~Is a second server during migration acceptable?~~ Decided by Kim (2026-11-18): yes. Kim starts on a fresh server and shuts the old CloudPanel server down after the migration [V: Kim, thread].
-2. ~~Which presets are default-on?~~ Decided in principle: per site type (Part 4). Open: confirm the default matrix.
+2. ~~Which presets are default-on?~~ Decided: per site type (Part 4). Kim confirmed the default matrix on 2026-11-18, including HTTP/3 and compression as defaults.
 3. ~~Do we keep a Varnish option?~~ Decided by Kim: yes, in the same phase as the importer. The Varnish configuration (VCL) and the purge integration must be our own; the CloudPanel WordPress purge plugin is GPLv3 and usable only if ADR-0002 allows it [V: `01-recherche-cloudpanel.md`].
 4. ~~Should the importer keep custom snippets verbatim?~~ Decided by Kim (2026-11-18): yes, after a one-time review by a person; they stay visible as custom snippets (Part 2).
