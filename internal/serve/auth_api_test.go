@@ -3,7 +3,9 @@
 package serve
 
 import (
+	"bytes"
 	"context"
+	"encoding/base32"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -48,7 +51,13 @@ func newAPI(t *testing.T) *apiEnv {
 	}
 
 	ok := func(context.Context) error { return nil }
-	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath})
+
+	box, err := secrets.New(bytes.Repeat([]byte{3}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath, Box: box})
 
 	return &apiEnv{h: Handler(Config{}, Deps{PingAgent: ok, PingDB: ok, Auth: svc}), tokenPath: tokenPath}
 }
@@ -336,5 +345,106 @@ func TestForgedSessionCookies(t *testing.T) {
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("cookie %q: %d", v, rec.Code)
 		}
+	}
+}
+
+func (e *apiEnv) login(t *testing.T, body string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	return e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/login", body: body})
+}
+
+func TestTOTPEndpoints(t *testing.T) {
+	e := newAPI(t)
+	e.setupAdmin(t)
+
+	// All TOTP routes need a session.
+	for _, p := range []string{"enroll", "confirm", "disable"} {
+		rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/totp/" + p, body: `{"code":"123456","password":"x"}`})
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("%s without session: %d", p, rec.Code)
+		}
+	}
+
+	rec := e.login(t, `{"username":"kim","password":"`+apiPassword+`"}`)
+	c := sessionCookieOf(t, rec)
+
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/totp/enroll", cookie: c})
+	if rec.Code != 200 {
+		t.Fatalf("enroll: %d %s", rec.Code, rec.Body)
+	}
+
+	var enr struct {
+		Secret string `json:"secret"`
+		URI    string `json:"uri"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &enr); err != nil || !strings.HasPrefix(enr.URI, "otpauth://") {
+		t.Fatalf("%s %v", rec.Body, err)
+	}
+
+	seed, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(enr.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/totp/confirm", cookie: c, body: `{"code":"000000"}`})
+	if rec.Code != http.StatusUnauthorized || errCode(t, rec) != "invalid_credentials" {
+		t.Fatalf("wrong confirm code: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/totp/confirm", cookie: c,
+		body: `{"code":"` + auth.TOTPCode(seed, auth.TOTPStep(time.Now())) + `"}`,
+	})
+	if rec.Code != 200 {
+		t.Fatalf("confirm: %d %s", rec.Code, rec.Body)
+	}
+
+	var conf struct {
+		RecoveryCodes []string `json:"recoveryCodes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &conf); err != nil || len(conf.RecoveryCodes) != 8 {
+		t.Fatalf("%s %v", rec.Body, err)
+	}
+
+	// Enrolling again while enabled is a conflict.
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/totp/enroll", cookie: c})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "totp_state" {
+		t.Fatalf("re-enroll: %d %s", rec.Code, rec.Body)
+	}
+
+	// Login now asks for the code and sets no cookie.
+	rec = e.login(t, `{"username":"kim","password":"`+apiPassword+`"}`)
+	if rec.Code != http.StatusUnauthorized || errCode(t, rec) != "totp_required" || len(rec.Result().Cookies()) != 0 {
+		t.Fatalf("login without code: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.login(t, `{"username":"kim","password":"`+apiPassword+`","totp":"`+conf.RecoveryCodes[0]+`"}`)
+	if rec.Code != 200 {
+		t.Fatalf("login with recovery code: %d %s", rec.Code, rec.Body)
+	}
+
+	c2 := sessionCookieOf(t, rec)
+
+	// Disable needs password and a code.
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/totp/disable", cookie: c2,
+		body: `{"password":"wrong password!!","code":"` + conf.RecoveryCodes[1] + `"}`,
+	})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("disable with wrong password: %d", rec.Code)
+	}
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/totp/disable", cookie: c2,
+		body: `{"password":"` + apiPassword + `","code":"` + conf.RecoveryCodes[1] + `"}`,
+	})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("disable: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.login(t, `{"username":"kim","password":"`+apiPassword+`"}`)
+	if rec.Code != 200 {
+		t.Fatalf("login after disable: %d %s", rec.Code, rec.Body)
 	}
 }

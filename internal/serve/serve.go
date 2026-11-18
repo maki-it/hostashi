@@ -18,6 +18,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -26,6 +27,7 @@ type Config struct {
 	Listen  string // host:port, loopback only until TLS exists
 	Socket  string // agent socket
 	DBPath  string // SQLite database, directory must not be group or world writable
+	KeyPath string // encryption key for stored secrets, created on first start
 	Version string
 	Log     *slog.Logger
 }
@@ -146,7 +148,12 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
-	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath})
+	box, err := secrets.LoadOrCreate(cfg.KeyPath)
+	if err != nil {
+		return err
+	}
+
+	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath, Box: box})
 
 	go cleanupLoop(ctx, svc, cfg.Log)
 
