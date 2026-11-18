@@ -42,8 +42,10 @@ func (s *Service) certCovers(site store.Site, margin time.Duration) bool {
 	return true
 }
 
-// TLSActive reports whether site is served over HTTPS now.
-func (s *Service) TLSActive(site store.Site) bool { return site.TLS && s.certCovers(site, 0) }
+// TLSActive reports whether site is served over HTTPS now: the last web
+// state the agent accepted had HTTPS for it. Between storing a new
+// certificate and the web server switch it is still false.
+func (s *Service) TLSActive(site store.Site) bool { return site.TLSLive }
 
 // Kick asks the renewal loop to look at all sites now.
 func (s *Service) Kick() {

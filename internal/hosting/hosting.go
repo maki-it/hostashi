@@ -412,11 +412,17 @@ func (s *Service) applyWeb(ctx context.Context) error {
 	}
 
 	req := agentapi.WebApplyRequest{Sites: []agentapi.WebSite{}}
+	live := []string{}
 
 	for _, site := range sites {
 		if site.State == store.SiteActive && len(site.Domains) > 0 {
+			tls := site.TLS && s.certCovers(site, 0)
+			if tls {
+				live = append(live, site.Name)
+			}
+
 			req.Sites = append(req.Sites, agentapi.WebSite{
-				User: site.Name, Domains: site.Domains, PHP: site.PHP, TLS: site.TLS && s.certCovers(site, 0), HSTS: site.HSTS,
+				User: site.Name, Domains: site.Domains, PHP: site.PHP, TLS: tls, HSTS: site.HSTS,
 			})
 		}
 	}
@@ -424,6 +430,12 @@ func (s *Service) applyWeb(ctx context.Context) error {
 	res, err := s.ag.WebApply(ctx, req)
 	if err != nil {
 		return err
+	}
+
+	// Only now is the site served over HTTPS (or no longer). A failure to
+	// record it leaves the API one change behind, nothing more.
+	if err := s.st.SetTLSLive(context.WithoutCancel(ctx), live); err != nil {
+		s.log.Error("record https state", "err", err)
 	}
 
 	if res.Changed {
