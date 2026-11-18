@@ -1,6 +1,6 @@
 # Contributing to Hostashi
 
-Thanks for your interest. Hostashi is in **Phase 0 (planning)**: there is no code yet, and the license ([ADR-0002](docs/07-decisions.md)) and stack ([ADR-0003](docs/07-decisions.md)) are not decided. Until then, contributions are mostly discussion, review of the planning documents, and research. Please do not submit code pull requests yet.
+Thanks for your interest. Hostashi is in **Phase 0 (planning)**: there is no product code yet. The license ([ADR-0002](docs/adr/0002-license.md)) and the stack ([ADR-0003](docs/adr/0003-language-and-stack.md)) are decided. Until the first alpha, contributions are mostly discussion, review of the planning documents, and research. Please ask in an issue before you start on code.
 
 ## Clean-room rule
 
@@ -44,6 +44,12 @@ Mail server, DNS server, billing, reseller features and multi-server are non-goa
 - One logical change per pull request. Fill in the PR template.
 - Documentation changes must pass the CI checks (Markdown lint and link check). To run the lint locally: `npx markdownlint-cli2 "**/*.md"`.
 - Do not commit secrets. `.env` files are ignored.
+
+## License and sign-off (DCO)
+
+- Code is licensed under **AGPL-3.0-or-later** (see [`LICENSE`](LICENSE)). Documentation and translations are licensed under **CC-BY-4.0** (see [`LICENSES/CC-BY-4.0.txt`](LICENSES/CC-BY-4.0.txt)).
+- There is no CLA. Instead, every commit must carry a `Signed-off-by:` line, which certifies the [Developer Certificate of Origin 1.1](https://developercertificate.org/). Use `git commit -s`.
+- Do not contribute code or text you do not have the right to license under these terms.
 
 ## Conduct
 
