@@ -61,6 +61,7 @@ The panel's own rate limit stays. It answers inside the request and works withou
 
 ## Open questions
 
-1. Is fail2ban on by default with `sshd` and `hostashi-panel` jails acceptable, or should the installer ask?
-2. Path of the per-site nginx logs: under `/var/log/nginx/sites/<site>/` (recommended, root-owned) or in the site's home (readable for the site user, but writable risks).
-3. `fail2ban-client` via a second `os/exec` exception (recommended), or the socket protocol.
+Decided (Kim, 2026-11-18): fail2ban is on by default with the `sshd`, `hostashi-panel` and `recidive` jails, the installer does not ask.
+
+1. Path of the per-site nginx logs: under `/var/log/nginx/sites/<site>/` (recommended, root-owned) or in the site's home (readable for the site user, but writable risks).
+2. `fail2ban-client` via a second `os/exec` exception (recommended), or the socket protocol.
