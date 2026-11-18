@@ -56,7 +56,11 @@ func (a *stubAgent) TLSCSR(_ context.Context, user string, _ []string) (string, 
 	return "csr " + user, nil
 }
 
-func (a *stubAgent) TLSInstall(_ context.Context, _, _ string) (agentapi.TLSCertInfo, error) {
+func (a *stubAgent) TLSInstall(_ context.Context, user, _ string) (agentapi.TLSCertInfo, error) {
+	if user == agentapi.PanelCert {
+		return agentapi.TLSCertInfo{Domains: []string{"panel.example.org"}, NotAfter: time.Now().Add(90 * 24 * time.Hour)}, nil
+	}
+
 	return agentapi.TLSCertInfo{Domains: []string{"blog.example.org"}, NotAfter: time.Now().Add(90 * 24 * time.Hour)}, nil
 }
 
@@ -288,5 +292,33 @@ func TestSiteTLSOverHTTP(t *testing.T) {
 	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/tls", cookie: c, body: `{"enabled":false}`})
 	if rec.Code != http.StatusOK || ag.web.Sites[0].TLS {
 		t.Fatalf("tls off: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestPanelTLSOverHTTP(t *testing.T) {
+	ag := &stubAgent{}
+	e := newAPIWithAgent(t, ag)
+	c := e.adminCookie(t)
+
+	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/panel/tls", cookie: c})
+	if rec.Code != http.StatusOK || rec.Body.String() != `{"enabled":false,"domain":"","active":false,"domains":[],"notAfter":null}`+"\n" {
+		t.Fatalf("without a panel name: %d %s", rec.Code, rec.Body)
+	}
+
+	if err := e.sites.EnablePanel("panel.example.org"); err != nil {
+		t.Fatal(err)
+	}
+
+	e.sites.EnableTLS(stubIssuer{})
+	e.sites.RenewDue(t.Context())
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/panel/tls", cookie: c})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `{"enabled":true,"domain":"panel.example.org","active":true,"domains":["panel.example.org"],"notAfter":"`) ||
+		ag.web.Panel == nil || !ag.web.Panel.TLS {
+		t.Fatalf("after issue: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/panel/tls"}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("without login: %d", rec.Code)
 	}
 }

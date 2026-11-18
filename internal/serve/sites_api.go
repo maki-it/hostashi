@@ -39,6 +39,19 @@ type tlsJSON struct {
 	FailedAt *time.Time `json:"failedAt,omitempty"`
 }
 
+// panelTLSJSON is the HTTPS state of the panel's own address: whether
+// nginx serves one (enabled), whether HTTPS is live (active), the live
+// certificate and the reason of the last failed attempt.
+type panelTLSJSON struct {
+	Enabled  bool       `json:"enabled"`
+	Domain   string     `json:"domain"`
+	Active   bool       `json:"active"`
+	Domains  []string   `json:"domains"`
+	NotAfter *time.Time `json:"notAfter"`
+	Error    string     `json:"error,omitempty"`
+	FailedAt *time.Time `json:"failedAt,omitempty"`
+}
+
 func timeOrNil(t time.Time) *time.Time {
 	if t.IsZero() {
 		return nil
@@ -323,6 +336,22 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 		}
 
 		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	// The panel's own HTTPS (ADR-0023). Disabled without a host name in
+	// the public URL; then the panel is reachable through the SSH tunnel only.
+	mux.HandleFunc("GET /api/v1/panel/tls", admin("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		p, err := svc.PanelTLS(r.Context())
+		if err != nil {
+			siteFail(log, w, err, "panel tls")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, panelTLSJSON{
+			Enabled: p.Domain != "", Domain: p.Domain, Active: p.Live, Domains: p.Domains,
+			NotAfter: timeOrNil(p.NotAfter), Error: p.Error, FailedAt: timeOrNil(p.FailedAt),
+		})
 	}))
 
 	// Sends the stored state to the web server again, for example after a
