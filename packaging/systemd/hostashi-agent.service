@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Hostashi agent: runs as root, listens only on a Unix socket and executes
+# only the typed operations in internal/agentapi.
+#
+# It cannot use ProtectSystem or ProtectHome: creating a site writes
+# /etc/passwd and /etc/group (useradd) and the home below /home or a pool.
+# Widen RestrictAddressFamilies only when an operation needs it (for example
+# ACME needs AF_INET and AF_INET6).
+
+[Unit]
+Description=Hostashi agent (privileged, typed operations only)
+Documentation=https://github.com/maki-it/hostashi
+After=local-fs.target
+Before=hostashi.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/hostashi agent -serve-user hostashi -socket /run/hostashi/agent.sock -state-dir /var/lib/hostashi-agent
+# root:root 0750; the agent gives the group to the serve user at start.
+RuntimeDirectory=hostashi
+RuntimeDirectoryMode=0750
+StateDirectory=hostashi-agent
+StateDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=2s
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateNetwork=no
+IPAddressDeny=any
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictRealtime=yes
+# No RestrictSUIDSGID=: systemd enforces it by making openat2() fail with
+# ENOSYS, and the agent needs openat2 for every path it touches (spike S4).
+# Found in the container test of the installer.
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

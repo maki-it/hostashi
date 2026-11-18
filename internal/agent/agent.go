@@ -11,7 +11,10 @@ import (
 	"log/slog"
 	"os"
 	"os/user"
+	"path/filepath"
 	"strconv"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -155,6 +158,39 @@ func mapSiteError(err error) error {
 	}
 }
 
+// prepareSocketDir gives the socket directory to the serve user's group, so
+// the web process can reach the socket. systemd creates it as root:root 0750
+// (RuntimeDirectory=hostashi); the agent then only changes the group, on the
+// open directory. A directory owned by anyone but root, or open to others,
+// is refused.
+func prepareSocketDir(dir string, gid int) error {
+	fd, err := unix.Open(dir, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return fmt.Errorf("socket directory %s: %w", dir, err)
+	}
+
+	defer unix.Close(fd) // read-only fd, nothing to flush
+
+	var st unix.Stat_t
+	if err := unix.Fstat(fd, &st); err != nil {
+		return fmt.Errorf("socket directory %s: %w", dir, err)
+	}
+
+	if st.Uid != 0 || st.Mode&0o027 != 0 {
+		return fmt.Errorf("%w: %s must be owned by root with mode 0750", agentrpc.ErrInsecureSocketDir, dir)
+	}
+
+	if int(st.Gid) == gid {
+		return nil
+	}
+
+	if err := unix.Fchown(fd, -1, gid); err != nil {
+		return fmt.Errorf("socket directory %s: %w", dir, err)
+	}
+
+	return nil
+}
+
 // openSites loads the registry from stateDir and builds the production manager.
 func openSites(stateDir string, log *slog.Logger) (*sites.Manager, error) {
 	if stateDir == "" {
@@ -185,6 +221,10 @@ func Run(ctx context.Context, cfg Config) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	if err := prepareSocketDir(filepath.Dir(cfg.Socket), gid); err != nil {
+		return err
 	}
 
 	s := NewServer(cfg, uid)

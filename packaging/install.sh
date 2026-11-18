@@ -1,0 +1,308 @@
+#!/bin/bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Hostashi installer: sets up the panel itself (account, directories, key,
+# binary, systemd units) on a FRESH Debian 13 or Ubuntu 26.04 server.
+# It follows the step model of spike S5: every step has a read-only check
+# and an apply, apply runs only if the check fails, and the check must pass
+# afterwards. Running it twice changes nothing.
+#
+#   install.sh [plan] [options]          read-only: preflight and the steps that would change
+#   install.sh apply --yes [options]     apply
+#
+# Options:
+#   --binary PATH        the hostashi binary to install (required for apply)
+#   --public-url URL     address users open the panel at, e.g. https://panel.example.com (enables passkeys)
+#   --listen ADDR        panel listen address, default 127.0.0.1:8080 (loopback only until TLS exists)
+#   --allow-untested     accept an OS release that is not on the supported list
+#
+# Not yet part of this installer: nginx, PHP, MariaDB and project quota
+# (spike S5/S8 and ADR-0020). They follow with the reconciler.
+#
+# Exit codes: 0 ok, 2 refused by preflight (server unchanged), 3 a step
+# failed (re-running is safe), 64 usage.
+#
+# Test hooks (environment): HOSTASHI_OS_RELEASE (file), HOSTASHI_ARCH.
+
+# The chk_*/do_* step functions are called by name from run_steps.
+# shellcheck disable=SC2329
+set -u
+set -o pipefail
+umask 077
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+UNIT_DIR=${HOSTASHI_UNIT_SRC:-$HERE/systemd}
+STATE_DIR=/var/lib/hostashi-installer
+STATE_FILE=$STATE_DIR/state
+LOG=/var/log/hostashi-install.log
+OS_RELEASE=${HOSTASHI_OS_RELEASE:-/etc/os-release}
+BIN=/usr/local/bin/hostashi
+
+MODE=plan YES=no BINARY="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 ALLOW_UNTESTED=no
+CHANGES=0 BINARY_CHANGED=no CONFIG_CHANGED=no
+
+log()    { echo "install: $*" >&2; }
+note()   { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" >>"$LOG" 2>/dev/null || true; }
+refuse() { log "REFUSED: $*"; log "server left unchanged"; exit 2; }
+
+detect() {
+  # shellcheck source=/dev/null
+  OS_ID=$(. "$OS_RELEASE" && echo "${ID:-}")
+  # shellcheck source=/dev/null
+  OS_VER=$(. "$OS_RELEASE" && echo "${VERSION_ID:-}")
+  RAW_ARCH=${HOSTASHI_ARCH:-$(uname -m)}
+  case "$RAW_ARCH" in x86_64|amd64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; *) ARCH=unsupported;; esac
+}
+
+pkg_installed() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q '^install ok installed$'; }
+
+# write_file PATH MODE OWNER:GROUP < content. Returns 0 if the file changed.
+write_file() {
+  local path=$1 mode=$2 owner=$3 tmp
+  tmp=$(mktemp "$path.XXXXXX") || return 2
+  cat >"$tmp"
+  if ! chmod "$mode" "$tmp" || ! chown "$owner" "$tmp"; then rm -f "$tmp"; return 2; fi
+  if [ -f "$path" ] && [ ! -L "$path" ] && cmp -s "$tmp" "$path" &&
+     [ "$(stat -c '%a %U:%G' "$path")" = "${mode#0} $owner" ]; then
+    rm -f "$tmp"; return 1
+  fi
+  mv -f "$tmp" "$path"
+}
+
+# file_matches PATH MODE OWNER:GROUP < expected content (read-only twin of write_file).
+file_matches() {
+  local path=$1 mode=$2 owner=$3 tmp rc
+  tmp=$(mktemp) || return 1
+  cat >"$tmp"
+  [ -f "$path" ] && [ ! -L "$path" ] && cmp -s "$tmp" "$path" && [ "$(stat -c '%a %U:%G' "$path")" = "${mode#0} $owner" ]
+  rc=$?
+  rm -f "$tmp"
+  return "$rc"
+}
+
+dir_ok() { [ -d "$1" ] && [ ! -L "$1" ] && [ "$(stat -c '%a %U:%G' "$1")" = "$2 $3" ]; }
+
+# ------------------------------------------------------------- preflight
+preflight() {
+  local problems=0
+  fail() { log "preflight: FAIL: $*"; problems=$((problems + 1)); }
+  detect
+
+  [ "$(id -u)" = 0 ] || fail "must run as root"
+
+  case "$OS_ID-$OS_VER" in
+    debian-13 | ubuntu-26.04) ;;   # ADR-0020
+    *) [ "$ALLOW_UNTESTED" = yes ] || fail "unsupported OS '$OS_ID $OS_VER' (supported: Debian 13, Ubuntu 26.04; --allow-untested to try anyway)";;
+  esac
+  [ "$ARCH" != unsupported ] || fail "unsupported architecture '$RAW_ARCH' (amd64 and arm64 only)"
+  [ -d /run/systemd/system ] || fail "systemd is not running as PID 1"
+  [ -d "$UNIT_DIR" ] && [ -f "$UNIT_DIR/hostashi.service" ] && [ -f "$UNIT_DIR/hostashi-agent.service" ] ||
+    fail "systemd units not found in $UNIT_DIR"
+
+  case "$LISTEN" in
+    127.0.0.1:[0-9]* | localhost:[0-9]* | \[::1\]:[0-9]*) ;;
+    *) fail "--listen '$LISTEN' must be a loopback address until TLS exists";;
+  esac
+  if [ -n "$PUBLIC_URL" ]; then
+    printf '%s' "$PUBLIC_URL" | grep -Eq '^(https://[A-Za-z0-9.-]+(:[0-9]+)?|http://localhost(:[0-9]+)?)/?$' ||
+      fail "--public-url '$PUBLIC_URL' must look like https://panel.example.com"
+  fi
+
+  if [ "$MODE" = apply ]; then
+    [ -n "$BINARY" ] || fail "--binary PATH is required for apply"
+  fi
+  if [ -n "$BINARY" ]; then
+    if [ ! -f "$BINARY" ] || [ ! -x "$BINARY" ]; then
+      fail "--binary '$BINARY' is not an executable file"
+    elif ! "$BINARY" version >/dev/null 2>&1; then
+      fail "--binary '$BINARY' does not run on this system (wrong architecture?)"
+    fi
+  fi
+
+  # Fresh servers only, unless this installer was here before (re-run after a failure).
+  if [ ! -f "$STATE_FILE" ]; then
+    local p found=""
+    for p in apache2 caddy lighttpd; do pkg_installed "$p" && found="$found $p"; done
+    [ -z "$found" ] || fail "not a fresh server, found installed:$found"
+    if getent passwd hostashi >/dev/null && [ ! -x "$BIN" ]; then
+      fail "a user 'hostashi' exists that this installer did not create"
+    fi
+  fi
+
+  [ $problems -eq 0 ] || refuse "$problems preflight problem(s)"
+  log "preflight: ok ($OS_ID $OS_VER $ARCH)"
+}
+
+# ------------------------------------------------------------- steps
+# chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
+STEPS="account dirs key binary config units service"
+
+chk_account() {
+  getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
+  [ "$(getent passwd hostashi | cut -d: -f7)" = /usr/sbin/nologin ] || { echo "hostashi has a login shell"; return 1; }
+  [ "$(id -u hostashi)" != 0 ] || { echo "hostashi has uid 0"; return 1; }
+}
+do_account() {
+  adduser --system --group --no-create-home --home /var/lib/hostashi --shell /usr/sbin/nologin hostashi >>"$LOG" 2>&1
+}
+
+chk_dirs() {
+  dir_ok /etc/hostashi 750 root:hostashi || { echo "/etc/hostashi"; return 1; }
+  dir_ok /var/lib/hostashi 750 hostashi:hostashi || { echo "/var/lib/hostashi"; return 1; }
+  dir_ok /var/lib/hostashi-agent 700 root:root || { echo "/var/lib/hostashi-agent"; return 1; }
+  dir_ok "$STATE_DIR" 700 root:root || { echo "$STATE_DIR"; return 1; }
+}
+do_dirs() {
+  install -d -m 0750 -o root -g hostashi /etc/hostashi &&
+  install -d -m 0750 -o hostashi -g hostashi /var/lib/hostashi &&
+  install -d -m 0700 -o root -g root /var/lib/hostashi-agent "$STATE_DIR"
+}
+
+# The encryption key for stored secrets (TOTP seeds): 32 random bytes, read
+# only by the panel. It is never replaced, because losing it makes every
+# stored secret unreadable. Keep it out of the database backup.
+chk_key() {
+  [ -f /etc/hostashi/secret.key ] && [ ! -L /etc/hostashi/secret.key ] || { echo "key missing"; return 1; }
+  [ "$(stat -c '%a %U:%G %s' /etc/hostashi/secret.key)" = "400 hostashi:hostashi 32" ] || { echo "key has wrong owner, mode or size"; return 1; }
+}
+do_key() {
+  if [ -e /etc/hostashi/secret.key ]; then
+    # Never overwrite an existing key; only fix owner and mode of a proper one.
+    [ "$(stat -c %s /etc/hostashi/secret.key)" = 32 ] || { log "existing /etc/hostashi/secret.key has the wrong size, not touching it"; return 1; }
+    chown hostashi:hostashi /etc/hostashi/secret.key && chmod 0400 /etc/hostashi/secret.key
+    return
+  fi
+  local tmp
+  tmp=$(mktemp /etc/hostashi/.secret.key.XXXXXX) || return 1
+  head -c 32 /dev/urandom >"$tmp" && chown hostashi:hostashi "$tmp" && chmod 0400 "$tmp" && mv -n "$tmp" /etc/hostashi/secret.key
+}
+
+chk_binary() {
+  [ -x "$BIN" ] || { echo "binary missing"; return 1; }
+  [ -z "$BINARY" ] || cmp -s "$BINARY" "$BIN" || { echo "binary differs"; return 1; }
+  [ "$(stat -c '%a %U:%G' "$BIN")" = "755 root:root" ] || { echo "binary has wrong owner or mode"; return 1; }
+}
+do_binary() {
+  install -m 0755 -o root -g root "$BINARY" "$BIN.new" && mv -f "$BIN.new" "$BIN" && BINARY_CHANGED=yes
+}
+
+env_file() {
+  echo "# Managed by the Hostashi installer. Re-run it with other options to change these."
+  echo "HOSTASHI_LISTEN=$LISTEN"
+  echo "HOSTASHI_PUBLIC_URL=$PUBLIC_URL"
+}
+chk_config() { env_file | file_matches /etc/hostashi/hostashi.env 0640 root:hostashi || { echo "settings differ"; return 1; }; }
+do_config() { env_file | write_file /etc/hostashi/hostashi.env 0640 root:hostashi; [ $? -le 1 ] && CONFIG_CHANGED=yes; }
+
+chk_units() {
+  local u
+  for u in hostashi-agent.service hostashi.service; do
+    file_matches "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u" || { echo "$u differs"; return 1; }
+  done
+}
+do_units() {
+  local u
+  for u in hostashi-agent.service hostashi.service; do
+    write_file "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u"
+    [ $? -le 1 ] || return 1
+  done
+  CONFIG_CHANGED=yes
+  systemctl daemon-reload >>"$LOG" 2>&1
+}
+
+chk_service() {
+  local u
+  for u in hostashi-agent hostashi; do
+    [ "$(systemctl is-enabled "$u.service" 2>/dev/null)" = enabled ] || { echo "$u not enabled"; return 1; }
+    [ "$(systemctl is-active "$u.service" 2>/dev/null)" = active ] || { echo "$u not running"; return 1; }
+  done
+  [ "$BINARY_CHANGED" = no ] && [ "$CONFIG_CHANGED" = no ] || { echo "restart needed after a change"; return 1; }
+}
+do_service() {
+  systemctl enable hostashi-agent.service hostashi.service >>"$LOG" 2>&1 || return 1
+  if [ "$BINARY_CHANGED" = yes ] || [ "$CONFIG_CHANGED" = yes ]; then
+    systemctl restart hostashi-agent.service hostashi.service >>"$LOG" 2>&1 || return 1
+  else
+    systemctl start hostashi-agent.service hostashi.service >>"$LOG" 2>&1 || return 1
+  fi
+  BINARY_CHANGED=no CONFIG_CHANGED=no
+  # Give the units a moment, then the check verifies they stayed up.
+  sleep 2
+}
+
+run_steps() {
+  local s why
+  for s in $STEPS; do
+    if why=$(chk_"$s" 2>&1); then
+      printf '  [ok]      %s\n' "$s"
+      continue
+    fi
+    if [ "$MODE" = plan ]; then
+      printf '  [change]  %s: %s\n' "$s" "$why"
+      CHANGES=$((CHANGES + 1))
+      continue
+    fi
+    printf '  [apply]   %s: %s\n' "$s" "$why"
+    note "step $s: $why"
+    if ! do_"$s" || ! why=$(chk_"$s" 2>&1); then
+      log "step '$s' FAILED${why:+ ($why)}, see $LOG. Re-running the installer is safe."
+      return 3
+    fi
+    CHANGES=$((CHANGES + 1))
+  done
+}
+
+main() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      plan) MODE=plan;;
+      apply) MODE=apply;;
+      --yes) YES=yes;;
+      --allow-untested) ALLOW_UNTESTED=yes;;
+      --binary) shift; BINARY=${1:-};;
+      --public-url) shift; PUBLIC_URL=${1:-};;
+      --listen) shift; LISTEN=${1:-};;
+      *) echo "usage: $0 [plan | apply --yes] --binary PATH [--public-url URL] [--listen ADDR] [--allow-untested]" >&2; exit 64;;
+    esac
+    shift
+  done
+  if [ "$MODE" = apply ] && [ "$YES" != yes ]; then
+    log "refusing to change anything without --yes (run 'plan' first)"
+    exit 2
+  fi
+
+  preflight
+
+  if [ "$MODE" = apply ]; then
+    touch "$LOG" && chmod 600 "$LOG"
+    if [ ! -f "$STATE_FILE" ]; then
+      install -d -m 0700 -o root -g root "$STATE_DIR"
+      printf 'started=%s\nos=%s-%s\narch=%s\n' "$(date -u +%FT%TZ)" "$OS_ID" "$OS_VER" "$ARCH" >"$STATE_FILE"
+    fi
+  fi
+
+  run_steps || exit $?
+
+  if [ "$MODE" = plan ]; then
+    if [ $CHANGES -eq 0 ]; then echo "Nothing to do."; else echo "$CHANGES step(s) would change something. Apply with: $0 apply --yes --binary PATH"; fi
+    exit 0
+  fi
+
+  if [ $CHANGES -eq 0 ]; then echo "Nothing to do. (changes=0)"; else echo "Done. changes=$CHANGES"; fi
+  grep -q '^completed=' "$STATE_FILE" 2>/dev/null || printf 'completed=%s\n' "$(date -u +%FT%TZ)" >>"$STATE_FILE"
+
+  # The panel writes the setup token on its first start; wait briefly for it.
+  local tok=""
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    tok=$("$BIN" setup-token -db /var/lib/hostashi/hostashi.db 2>/dev/null) && [ -n "$tok" ] && break
+    tok=""
+    sleep 1
+  done
+  if [ -n "$tok" ]; then
+    echo "First login: open the panel and use this one-time setup token (valid 24 hours):"
+    echo "  $tok"
+  fi
+  exit 0
+}
+
+main "$@"

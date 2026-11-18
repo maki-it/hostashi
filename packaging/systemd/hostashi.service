@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Hostashi panel (web UI and API). Runs as the unprivileged user hostashi
+# and reaches the agent only through /run/hostashi/agent.sock.
+#
+# /etc/hostashi/hostashi.env sets HOSTASHI_LISTEN and HOSTASHI_PUBLIC_URL
+# (written by the installer). Until TLS exists the panel listens on
+# loopback only; put a TLS proxy in front or use an SSH tunnel.
+
+[Unit]
+Description=Hostashi panel (web UI and API, no root)
+Documentation=https://github.com/maki-it/hostashi
+After=network.target hostashi-agent.service
+Wants=hostashi-agent.service
+
+[Service]
+Type=simple
+User=hostashi
+Group=hostashi
+Environment=HOSTASHI_LISTEN=127.0.0.1:8080 HOSTASHI_PUBLIC_URL=
+EnvironmentFile=-/etc/hostashi/hostashi.env
+ExecStart=/usr/local/bin/hostashi serve "-listen=${HOSTASHI_LISTEN}" "-public-url=${HOSTASHI_PUBLIC_URL}" -db /var/lib/hostashi/hostashi.db -key /etc/hostashi/secret.key -socket /run/hostashi/agent.sock
+UMask=0077
+Restart=on-failure
+RestartSec=2s
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/hostashi
+ReadOnlyPaths=/etc/hostashi
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateUsers=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target

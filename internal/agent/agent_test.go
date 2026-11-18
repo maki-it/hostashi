@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -95,5 +96,61 @@ func TestRunFailsWithoutServeUser(t *testing.T) {
 	err := Run(context.Background(), Config{Socket: filepath.Join(t.TempDir(), "a.sock"), ServeUser: "hostashi"})
 	if err == nil {
 		t.Fatal("want error")
+	}
+}
+
+func TestPrepareSocketDir(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("needs root to own and chown the directory")
+	}
+
+	base := t.TempDir()
+	dir := filepath.Join(base, "run")
+
+	if err := os.Mkdir(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := prepareSocketDir(dir, 65534); err != nil {
+		t.Fatal(err)
+	}
+
+	fi, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if st, ok := fi.Sys().(*syscall.Stat_t); !ok || st.Gid != 65534 || st.Uid != 0 {
+		t.Fatalf("owner %+v", fi.Sys())
+	}
+
+	// Open to others, owned by someone else, or a symlink: refused.
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := prepareSocketDir(dir, 65534); !errors.Is(err, agentrpc.ErrInsecureSocketDir) {
+		t.Fatalf("0755: %v", err)
+	}
+
+	if err := os.Chmod(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Chown(dir, 65534, 65534); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := prepareSocketDir(dir, 65534); !errors.Is(err, agentrpc.ErrInsecureSocketDir) {
+		t.Fatalf("foreign owner: %v", err)
+	}
+
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(dir, link); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := prepareSocketDir(link, 65534); err == nil {
+		t.Fatal("symlink accepted")
 	}
 }
