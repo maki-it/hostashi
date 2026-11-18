@@ -25,6 +25,9 @@ const (
 	CodeBadRequest       = "bad_request"
 	CodeInvalidArgument  = "invalid_argument"
 	CodeUnknownOperation = "unknown_operation"
+	CodeNotFound         = "not_found"
+	CodeConflict         = "conflict"
+	CodePrecondition     = "failed_precondition"
 	CodeInternal         = "internal"
 )
 

@@ -35,6 +35,8 @@ jobs:
         run: go test -race ./...
       - name: Cross-user test (root agent, client as uid 65534)
         run: sudo env "PATH=$PATH" go test -race -run '^TestCrossUser$' -v ./internal/agentrpc/
+      - name: Site account tests (root, real useradd and bind mount)
+        run: sudo env "PATH=$PATH" go test -race -count=1 -run '^TestRoot' -v ./internal/sysuser/
       - name: Fuzz (short)
         run: |
           go test -run '^$' -fuzz '^FuzzReadFrame$' -fuzztime 20s ./internal/agentrpc/
