@@ -53,7 +53,12 @@ func (c *Client) roundTrip(ctx context.Context, op string, req any) (json.RawMes
 		_ = conn.SetDeadline(dl)
 	}
 	if err := writeFrame(conn, body); err != nil {
-		return nil, err
+		if errors.Is(err, ErrFrameTooLarge) {
+			return nil, err
+		}
+		// The agent may close before reading, for example when the
+		// connection limit is reached or the peer is not authorized.
+		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
 	rb, err := readFrame(conn)
 	if err != nil {

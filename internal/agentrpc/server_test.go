@@ -415,3 +415,30 @@ func TestAllowUIDs(t *testing.T) {
 		t.Error("empty allow list accepts root")
 	}
 }
+
+// TestClientWriteFailureIsUnavailable covers the race where the agent closes
+// the connection before the client has written its request.
+func TestClientWriteFailureIsUnavailable(t *testing.T) {
+	dir := socketDir(t)
+	sock := filepath.Join(dir, "agent.sock")
+	l, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				return
+			}
+			conn.Close()
+		}
+	}()
+	c := NewClient(sock)
+	for i := 0; i < 50; i++ {
+		if _, err := opEcho.Call(context.Background(), c, echoReq{Text: "x"}); !errors.Is(err, ErrUnavailable) {
+			t.Fatalf("call %d: want ErrUnavailable, got %v", i, err)
+		}
+	}
+}
