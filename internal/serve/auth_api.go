@@ -52,6 +52,11 @@ func writeError(w http.ResponseWriter, code int, errCode, msg string) {
 // decodeJSON reads one JSON object with a size limit. It rejects other
 // content types, unknown fields and trailing data.
 func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
+	return decodeJSONLimit(w, r, v, maxBodyBytes)
+}
+
+// decodeJSONLimit is decodeJSON with another size limit.
+func decodeJSONLimit(w http.ResponseWriter, r *http.Request, v any, limit int64) bool {
 	mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mt != "application/json" {
 		writeError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Content-Type must be application/json")
@@ -59,7 +64,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 		return false
 	}
 
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
 	dec.DisallowUnknownFields()
 
 	if err := dec.Decode(v); err != nil {
@@ -157,6 +162,17 @@ type failFunc func(w http.ResponseWriter, err error, what string)
 func newFail(log *slog.Logger) failFunc {
 	return func(w http.ResponseWriter, err error, what string) {
 		switch {
+		case errors.Is(err, auth.ErrPasskeyUnavailable):
+			writeError(w, http.StatusNotImplemented, "passkeys_unavailable", "passkeys are not configured on this server (public URL missing)")
+		case errors.Is(err, auth.ErrPasskeyFailed):
+			writeError(w, http.StatusUnauthorized, "passkey_failed", "passkey verification failed")
+		case errors.Is(err, auth.ErrPasskeyNotFound):
+			writeError(w, http.StatusNotFound, "not_found", "no such passkey")
+		case errors.Is(err, auth.ErrTooManyPasskeys):
+			writeError(w, http.StatusConflict, "too_many_passkeys", "too many passkeys, remove one first")
+		case errors.Is(err, auth.ErrBusy):
+			w.Header().Set("Retry-After", "60")
+			writeError(w, http.StatusServiceUnavailable, "busy", "too many open passkey requests, try again shortly")
 		case errors.Is(err, auth.ErrTokenNotAllowedFromIP):
 			writeError(w, http.StatusForbidden, "ip_not_allowed", "API tokens are not accepted from this address")
 		case errors.Is(err, auth.ErrInvalidToken), errors.Is(err, auth.ErrInvalidAllowlist):
@@ -339,4 +355,5 @@ func registerAuth(mux *http.ServeMux, svc *auth.Service, log *slog.Logger) {
 	})
 
 	registerTokens(mux, a)
+	registerPasskeys(mux, a)
 }

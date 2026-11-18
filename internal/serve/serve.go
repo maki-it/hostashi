@@ -28,8 +28,11 @@ type Config struct {
 	Socket  string // agent socket
 	DBPath  string // SQLite database, directory must not be group or world writable
 	KeyPath string // encryption key for stored secrets, created on first start
-	Version string
-	Log     *slog.Logger
+	// PublicURL is the address users open the panel at. Passkeys are bound
+	// to its host name and are off while it is empty.
+	PublicURL string
+	Version   string
+	Log       *slog.Logger
 }
 
 // ErrRoot is returned when serve is started as root.
@@ -154,6 +157,9 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath, Box: box})
+	if err := svc.EnablePasskeys(auth.PasskeyConfig{PublicURL: cfg.PublicURL}); err != nil {
+		return err
+	}
 
 	go cleanupLoop(ctx, svc, cfg.Log)
 
