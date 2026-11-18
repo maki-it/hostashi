@@ -131,7 +131,7 @@
 
 | Feature | Prio | Phase | Quelle | Anmerkung |
 |---------|------|-------|--------|-----------|
-| REST-API (OpenAPI 3.1) | P0 | A | NEU | UI nutzt dieselbe API |
+| REST-API (OpenAPI 3.1) | P0 | A | NEU | UI nutzt dieselbe API, keine Funktion nur in der UI, Details in [ADR-0018](adr/0018-public-rest-api.md) |
 | CLI (`hostashi`) mit Parität zu `clpctl` | P0 | A | CP | |
 | Zustand als YAML exportieren/anwenden | P1 | 1 | NEU | Basis für GitOps |
 | CloudPanel-Importer | P1 | 1 | NEU | Siehe unten und ADR-0017 (Migration, Spike S6) |
