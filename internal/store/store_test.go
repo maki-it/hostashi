@@ -52,7 +52,7 @@ func TestOpenCreatesDatabase(t *testing.T) {
 	}
 
 	v, err := s.SchemaVersion(ctx)
-	if err != nil || v != 1 {
+	if err != nil || v != 2 {
 		t.Fatalf("version %d, %v", v, err)
 	}
 

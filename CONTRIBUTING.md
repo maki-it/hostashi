@@ -11,6 +11,7 @@ One Go module at the repository root, one binary with three modes (see [`docs/04
 - `internal/agent`: the root agent. Unix socket only, accepts only root and the serve user (by uid).
 - `internal/agentrpc`: the typed RPC between them (length-prefixed JSON, `SO_PEERCRED`).
 - `internal/store`: SQLite (pure Go driver, WAL) with embedded, numbered migrations in `internal/store/migrations/`. Only `serve` opens it. Migrations are append-only: never edit a merged one, add the next number.
+- `internal/auth`: Argon2id passwords, server-side sessions (only the token hash is stored), login rate limits and the one-time setup token (file `setup-token` next to the database, mode 0600, valid 24 hours, shown with `hostashi setup-token`).
 - `internal/agentapi`: the complete list of agent operations. New operations go here, each with a request type that validates its own input. There is no generic exec operation.
 - `spike/`: throwaway prototypes, separate modules, not product code.
 

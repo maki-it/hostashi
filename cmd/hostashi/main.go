@@ -17,10 +17,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/maki-it/hostashi/internal/agent"
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/serve"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -34,6 +36,7 @@ commands:
   serve     run the web process (never as root)
   agent     run the privileged agent (root only)
   ping      check that the agent answers
+  setup-token  print the one-time token for the first login (read as the serve user or root)
   version   print the version
 `
 
@@ -95,6 +98,16 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		r, err = agentapi.Ping.Call(ctx, agentrpc.NewClient(*socket), agentapi.PingRequest{})
 		if err == nil {
 			fmt.Fprintf(stdout, "agent %s answered, caller uid %d\n", r.Version, r.CallerUID)
+		}
+	case "setup-token":
+		dbPath := fs.String("db", store.DefaultPath, "SQLite database path")
+		if fs.Parse(args) != nil || fs.NArg() != 0 {
+			return 2
+		}
+
+		var tok string
+		if tok, err = auth.ReadSetupToken(serve.SetupTokenPath(*dbPath), time.Now()); err == nil {
+			fmt.Fprintln(stdout, tok)
 		}
 	case "version":
 		fmt.Fprintln(stdout, version)

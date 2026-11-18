@@ -12,10 +12,12 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -68,6 +70,7 @@ func CheckListen(addr string) error {
 type Deps struct {
 	PingAgent func(ctx context.Context) error
 	PingDB    func(ctx context.Context) error
+	Auth      *auth.Service // nil disables the auth routes (tests)
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -113,7 +116,16 @@ func Handler(cfg Config, deps Deps) http.Handler {
 		_ = json.NewEncoder(w).Encode(h)
 	})
 
-	return mux
+	if deps.Auth != nil {
+		registerAuth(mux, deps.Auth, log)
+	}
+
+	return secure(mux)
+}
+
+// SetupTokenPath is where the one-time setup token lives, next to the database.
+func SetupTokenPath(dbPath string) string {
+	return filepath.Join(filepath.Dir(dbPath), "setup-token")
 }
 
 // Run starts the web process and blocks until ctx is canceled.
@@ -129,6 +141,15 @@ func Run(ctx context.Context, cfg Config) error {
 
 	defer func() { _ = st.Close() }()
 
+	tokenPath := SetupTokenPath(cfg.DBPath)
+	if err := auth.EnsureSetupToken(ctx, st, tokenPath, time.Now()); err != nil {
+		return err
+	}
+
+	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath})
+
+	go cleanupLoop(ctx, svc, cfg.Log)
+
 	client := agentrpc.NewClient(cfg.Socket)
 	deps := Deps{
 		PingAgent: func(ctx context.Context) error {
@@ -136,6 +157,7 @@ func Run(ctx context.Context, cfg Config) error {
 			return err
 		},
 		PingDB: st.Ping,
+		Auth:   svc,
 	}
 	srv := &http.Server{
 		Addr:              cfg.Listen,
@@ -155,7 +177,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if cfg.Log != nil {
-		cfg.Log.Info("serve listening", "addr", ln.Addr().String(), "agentSocket", cfg.Socket, "db", cfg.DBPath)
+		cfg.Log.Info("serve listening", "addr", ln.Addr().String(), "agentSocket", cfg.Socket, "db", cfg.DBPath, "setupTokenFile", tokenPath)
 	}
 
 	errc := make(chan error, 1)
@@ -171,4 +193,21 @@ func Run(ctx context.Context, cfg Config) error {
 	defer cancel()
 
 	return srv.Shutdown(shutdownCtx)
+}
+
+// cleanupLoop removes expired sessions every ten minutes.
+func cleanupLoop(ctx context.Context, svc *auth.Service, log *slog.Logger) {
+	t := time.NewTicker(10 * time.Minute)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := svc.Cleanup(ctx); err != nil && log != nil {
+				log.Warn("session cleanup failed", "err", err)
+			}
+		}
+	}
 }

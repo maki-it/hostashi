@@ -58,10 +58,10 @@ func TestHealth(t *testing.T) {
 		code              int
 		status, agent, db string
 	}{
-		{"all up", Deps{up, up}, http.StatusOK, "ok", "ok", "ok"},
-		{"agent down", Deps{agentDown, up}, http.StatusServiceUnavailable, "degraded", "unavailable", "ok"},
-		{"db down", Deps{up, dbDown}, http.StatusServiceUnavailable, "degraded", "ok", "unavailable"},
-		{"both down", Deps{agentDown, dbDown}, http.StatusServiceUnavailable, "degraded", "unavailable", "unavailable"},
+		{"all up", Deps{PingAgent: up, PingDB: up}, http.StatusOK, "ok", "ok", "ok"},
+		{"agent down", Deps{PingAgent: agentDown, PingDB: up}, http.StatusServiceUnavailable, "degraded", "unavailable", "ok"},
+		{"db down", Deps{PingAgent: up, PingDB: dbDown}, http.StatusServiceUnavailable, "degraded", "ok", "unavailable"},
+		{"both down", Deps{PingAgent: agentDown, PingDB: dbDown}, http.StatusServiceUnavailable, "degraded", "unavailable", "unavailable"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -94,7 +94,7 @@ func TestHealth(t *testing.T) {
 
 func TestUnknownRoutesAndMethods(t *testing.T) {
 	ok := func(context.Context) error { return nil }
-	h := Handler(Config{}, Deps{ok, ok})
+	h := Handler(Config{}, Deps{PingAgent: ok, PingDB: ok})
 
 	for _, tc := range []struct {
 		method, path string
