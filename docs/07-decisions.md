@@ -22,6 +22,7 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 | 0016 | Speicherort pro Site (Storage-Pools) | Proposed (Entwurf: [adr/0016](adr/0016-per-site-storage-location.md)) | **Ja** |
 | 0017 | CloudPanel-Import als Migration, Presets | Proposed (Entwurf: [adr/0017](adr/0017-cloudpanel-import-and-presets.md)) | **Ja** |
 | 0018 | Öffentliche REST-API | Proposed (Entwurf: [adr/0018](adr/0018-public-rest-api.md)) | **Ja** |
+| 0019 | PHP-Paketquelle und mehrere PHP-Versionen | Proposed (Entwurf: [adr/0019](adr/0019-php-package-source-and-versions.md)) | **Ja** |
 
 ---
 
@@ -190,3 +191,7 @@ ashi site add example.com --type php --php 8.4   # gleiches Programm
 6. **Wo soll das Repo liegen?** GitHub (Sichtbarkeit, Beiträge) oder dein eigener Git-Server (`git.prod.maki-it.de`)? Dort kann ich es auf Wunsch anlegen. Ich habe das noch nicht getan.
 7. **Integrationen:** Sind Hetzner (Cloud, Robot, Storage Box), INWX-DNS und Lexware/Lexoffice-Anbindung für dich Pflicht oder nur nice-to-have? Das beeinflusst die Reihenfolge der Provider-Integrationen.
 8. **Budget:** Gibt es Budget für einen externen Pentest vor 1.0 und für Rechtsprüfung (Marke, Lizenz)?
+
+## ADR-0019 PHP-Paketquelle und mehrere PHP-Versionen
+
+**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0019-php-package-source-and-versions.md](adr/0019-php-package-source-and-versions.md). Kurzfassung: Kein eigener PHP-Fork (Kims Entscheidung), sondern offizielle Pakete. Weil Distros nur eine Version liefern (Debian 13: 8.4, Ubuntu 24.04: 8.3), die Sites aber unterschiedliche Versionen brauchen, ist die Empfehlung: Standard ist die Distro-Version, weitere Versionen kommen auf ausdrücklichen Wunsch über das Repository von sury.org (geprüft: PHP 5.6 bis 8.5 für amd64 und arm64 auf trixie und noble, im Test liefen 7.4, 8.1 und 8.4 parallel). Benannte Konflikte: Drittquelle mit Root-Installation, und alte Versionen sind unsicher, daher EOL-Warnung und Freigabeliste statt freier Paketnamen. Offen: ob nach der Aktivierung alles PHP von sury.org kommt (Spike S10).
