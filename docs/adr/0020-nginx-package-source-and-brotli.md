@@ -21,7 +21,7 @@ ADR-0005 stays valid for the choice of nginx. This ADR only changes one conseque
 | Ubuntu 26.04 LTS | 1.28.3 | yes | yes (1.0.0~rc-7) | yes, `nginx-abi-1.28.3-1` |
 | Ubuntu 24.04 LTS | 1.24.0 | no | yes (1.0.0~rc-5) | yes, but no HTTP/3 |
 
-The build flag shows that the module is compiled in. It is not a run test: a real HTTP/3 request against each distribution build was not made [A].
+The build flag shows that the module is compiled in. Spike S12 ([`spike/s12-nginx-distro/REPORT.md`](../../spike/s12-nginx-distro/REPORT.md)) then ran both builds in fresh containers and verified real HTTP/1.1, HTTP/2 and HTTP/3 requests with brotli, gzip and pre-compressed `.br` responses [V: S12, amd64, no VM or firewall].
 
 ## Options
 
@@ -55,4 +55,4 @@ Ubuntu 24.04 is the open point: its nginx has no HTTP/3. Either it is dropped fo
 
 ## Open questions
 
-None. Kim agreed on 2026-11-18 to the recommendation: Ubuntu 24.04 is dropped for v1, and the nginx version difference between Debian 13 (1.26.3) and Ubuntu 26.04 (1.28.x) is acceptable. Still to do: the S5 installer test on Ubuntu 26.04 and a real HTTP/3 and brotli request on both builds.
+None. Kim agreed on 2026-11-18 to the recommendation: Ubuntu 24.04 is dropped for v1, and the nginx version difference between Debian 13 (1.26.3) and Ubuntu 26.04 (1.28.x) is acceptable. Still to do: the S5 installer test on Ubuntu 26.04 (the real HTTP/3 and brotli requests are done, see S12).
