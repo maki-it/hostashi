@@ -19,6 +19,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/certs"
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
 	"github.com/maki-it/hostashi/internal/sites"
@@ -51,6 +52,10 @@ type Config struct {
 	// PHP runs the sites' PHP-FPM pools for web.apply. Run builds it from
 	// StateDir; without it a site with PHP is refused.
 	PHP *php.Manager
+
+	// Certs keeps the sites' TLS keys and certificates. Run builds it from
+	// StateDir; without it tls.* and sites with TLS are refused.
+	Certs *certs.Store
 }
 
 // ErrNotRoot is returned when the agent is started without root.
@@ -111,7 +116,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, log: log}
+		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, log: log}
 		h.register(s)
 	}
 
@@ -122,11 +127,12 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 // web.apply, so a site cannot lose its home while a virtual host or a PHP
 // pool is being built for it.
 type siteOps struct {
-	m   *sites.Manager
-	web *web.Reconciler
-	php *php.Manager
-	log *slog.Logger
-	mu  sync.Mutex
+	m     *sites.Manager
+	web   *web.Reconciler
+	php   *php.Manager
+	certs *certs.Store
+	log   *slog.Logger
+	mu    sync.Mutex
 }
 
 // register adds the operations. Only the errors listed in the map functions
@@ -177,6 +183,12 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			return agentapi.SiteDeleteResponse{}, mapSiteError(err)
 		}
 
+		if h.certs != nil {
+			if err := h.certs.Remove(req.User); err != nil {
+				h.log.Error("remove certificate of deleted site", "site", req.User, "err", err)
+			}
+		}
+
 		return agentapi.SiteDeleteResponse{}, nil
 	})
 
@@ -195,6 +207,9 @@ func (h *siteOps) register(s *agentrpc.Server) {
 	})
 
 	agentrpc.Handle(s, agentapi.WebApply, h.webApply)
+
+	agentrpc.Handle(s, agentapi.TLSCSR, h.tlsCSR)
+	agentrpc.Handle(s, agentapi.TLSInstall, h.tlsInstall)
 
 	agentrpc.Handle(s, agentapi.PHPVersionsList, func(_ context.Context, _ agentrpc.Caller, _ agentapi.PHPVersionsRequest) (agentapi.PHPVersionsResponse, error) {
 		if h.php == nil || h.php.Installed == nil {
@@ -224,6 +239,12 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		}
 
 		site := web.Site{User: s.User, Domains: s.Domains, Root: home + "/" + sites.WebRootName}
+
+		if s.TLS {
+			if err := h.tlsFor(&site, s.Domains); err != nil {
+				return agentapi.WebApplyResponse{}, err
+			}
+		}
 
 		if s.PHP != "" {
 			if h.php == nil {
@@ -262,6 +283,76 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 	}
 
 	return agentapi.WebApplyResponse{Generation: res.Generation, Changed: res.Changed}, nil
+}
+
+// tlsFor puts the live certificate of a site into site, after checking that
+// it is valid and names every domain.
+func (h *siteOps) tlsFor(site *web.Site, domains []string) error {
+	if h.certs == nil || len(h.web.Driver.ListenTLS) == 0 {
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "HTTPS is not available on this server"}
+	}
+
+	ok, err := h.certs.Covers(site.User, domains)
+	if err != nil {
+		return err
+	}
+
+	if !ok {
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "site " + site.User + " has no valid certificate for all its domains"}
+	}
+
+	site.Cert, site.Key = h.certs.CertPath(site.User), h.certs.KeyPath(site.User)
+
+	return nil
+}
+
+func (h *siteOps) tlsCSR(_ context.Context, _ agentrpc.Caller, req agentapi.TLSCSRRequest) (agentapi.TLSCSRResponse, error) {
+	if h.certs == nil {
+		return agentapi.TLSCSRResponse{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "HTTPS is not available on this server"}
+	}
+
+	if _, ok := h.m.Home(req.User); !ok {
+		return agentapi.TLSCSRResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site"}
+	}
+
+	csr, err := h.certs.CSR(req.User, req.Domains)
+	if err != nil {
+		return agentapi.TLSCSRResponse{}, mapCertError(err)
+	}
+
+	return agentapi.TLSCSRResponse{CSR: string(csr)}, nil
+}
+
+func (h *siteOps) tlsInstall(_ context.Context, _ agentrpc.Caller, req agentapi.TLSInstallRequest) (agentapi.TLSCertInfo, error) {
+	if h.certs == nil {
+		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "HTTPS is not available on this server"}
+	}
+
+	if _, ok := h.m.Home(req.User); !ok {
+		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site"}
+	}
+
+	// The live pair changes; web.apply reads it under the same lock.
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	info, err := h.certs.Install(req.User, []byte(req.Chain))
+	if err != nil {
+		return agentapi.TLSCertInfo{}, mapCertError(err)
+	}
+
+	return agentapi.TLSCertInfo{Domains: info.Domains, NotAfter: info.NotAfter}, nil
+}
+
+func mapCertError(err error) error {
+	switch {
+	case errors.Is(err, certs.ErrInvalid):
+		return &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "invalid certificate or request"}
+	case errors.Is(err, certs.ErrNoPendingKey):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the certificate does not belong to the pending key of this site"}
+	default:
+		return err
+	}
 }
 
 // mapPHPError gives the caller a fixed message; the details (php-fpm and
@@ -416,9 +507,9 @@ func openWeb(stateDir string, log *slog.Logger) *web.Reconciler {
 		}
 	}
 
-	listen := []string{"80"}
+	listen, listenTLS := []string{"80"}, []string{"443"}
 	if ipv6Available() {
-		listen = append(listen, "[::]:80")
+		listen, listenTLS = append(listen, "[::]:80"), append(listenTLS, "[::]:443")
 	}
 
 	return &web.Reconciler{
@@ -435,6 +526,8 @@ func openWeb(stateDir string, log *slog.Logger) *web.Reconciler {
 			Modules:       "/etc/nginx/modules-enabled/*.conf",
 			MimeTypes:     "/etc/nginx/mime.types",
 			Brotli:        brotli,
+			ListenTLS:     listenTLS,
+			ACMERoot:      ACMERoot,
 		},
 	}
 }
@@ -451,6 +544,11 @@ func ipv6Available() bool {
 
 	return true
 }
+
+// ACMERoot is where the panel puts HTTP-01 challenge files
+// (.well-known/acme-challenge/<token>); nginx serves them on port 80 for
+// every site. The installer creates it (hostashi writes, www-data reads).
+const ACMERoot = "/var/lib/hostashi-acme"
 
 // PHPSocketDir holds one directory per site with its FPM socket, created by
 // the site's unit (RuntimeDirectory=hostashi-php/%i).
@@ -505,6 +603,15 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.PHP == nil {
 		cfg.PHP = openPHP(cfg.StateDir, cfg.Log)
+	}
+
+	if cfg.Certs == nil {
+		dir := cfg.StateDir
+		if dir == "" {
+			dir = DefaultStateDir
+		}
+
+		cfg.Certs = &certs.Store{Dir: filepath.Join(dir, "tls")}
 	}
 
 	if cfg.PHP != nil {

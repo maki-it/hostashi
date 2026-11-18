@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -50,6 +51,18 @@ func (a *stubAgent) WebApply(_ context.Context, req agentapi.WebApplyRequest) (a
 }
 
 func (a *stubAgent) PHPVersions(context.Context) ([]string, error) { return []string{"8.4"}, nil }
+
+func (a *stubAgent) TLSCSR(_ context.Context, user string, _ []string) (string, error) {
+	return "csr " + user, nil
+}
+
+func (a *stubAgent) TLSInstall(_ context.Context, _, _ string) (agentapi.TLSCertInfo, error) {
+	return agentapi.TLSCertInfo{Domains: []string{"blog.example.org"}, NotAfter: time.Now().Add(90 * 24 * time.Hour)}, nil
+}
+
+type stubIssuer struct{}
+
+func (stubIssuer) Obtain(context.Context, []byte) ([]byte, error) { return []byte("chain"), nil }
 
 func TestSiteLifecycleOverHTTP(t *testing.T) {
 	ag := &stubAgent{}
@@ -208,5 +221,45 @@ func TestSiteRoutesNeedScopes(t *testing.T) {
 	rec = e.do(t, reqOpts{method: "DELETE", path: "/api/v1/sites/blog", header: bearerHeader(write.Token)})
 	if rec.Code != http.StatusForbidden || errCode(t, rec) != "insufficient_scope" {
 		t.Fatalf("write token delete: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestSiteTLSOverHTTP(t *testing.T) {
+	ag := &stubAgent{}
+	e := newAPIWithAgent(t, ag)
+	c := e.adminCookie(t)
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"blog","domains":["blog.example.org"]}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/tls", cookie: c, body: `{"enabled":true}`})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "tls_unavailable" {
+		t.Fatalf("without issuer: %d %s", rec.Code, rec.Body)
+	}
+
+	e.sites.EnableTLS(stubIssuer{})
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/tls", cookie: c, body: `{"enabled":true}`})
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"tls":{"enabled":true,"active":false,"domains":[],"notAfter":null}`) {
+		t.Fatalf("tls on: %d %s", rec.Code, rec.Body)
+	}
+
+	e.sites.RenewDue(t.Context())
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/blog", cookie: c})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"enabled":true,"active":true,"domains":["blog.example.org"]`) || !ag.web.Sites[0].TLS {
+		t.Fatalf("after issue: %d %s", rec.Code, rec.Body)
+	}
+
+	for _, body := range []string{`{}`, `{"enabled":"yes"}`} {
+		if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/tls", cookie: c, body: body}); rec.Code < 400 {
+			t.Errorf("%s: %d", body, rec.Code)
+		}
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/tls", cookie: c, body: `{"enabled":false}`})
+	if rec.Code != http.StatusOK || ag.web.Sites[0].TLS {
+		t.Fatalf("tls off: %d %s", rec.Code, rec.Body)
 	}
 }

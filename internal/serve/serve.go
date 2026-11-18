@@ -6,15 +6,19 @@ package serve
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/acme"
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
@@ -34,7 +38,18 @@ type Config struct {
 	PublicURL string
 	Version   string
 	Log       *slog.Logger
+
+	// ACMEDirectory is the CA for site certificates; empty turns them off.
+	ACMEDirectory string
+	// ACMECAFile is an extra root CA for the ACME server (tests).
+	ACMECAFile string
+	// ACMEChallengeDir receives HTTP-01 challenge files for nginx.
+	ACMEChallengeDir string
 }
+
+// DefaultChallengeDir is where nginx looks for HTTP-01 challenge files
+// (agent.ACMERoot plus the well-known path).
+const DefaultChallengeDir = "/var/lib/hostashi-acme/.well-known/acme-challenge"
 
 // ErrRoot is returned when serve is started as root.
 var ErrRoot = errors.New("serve must not run as root")
@@ -179,6 +194,15 @@ func Run(ctx context.Context, cfg Config) error {
 		Auth:   svc,
 		Sites:  hosting.New(st, hosting.RPCAgent{C: client}, cfg.Log),
 	}
+
+	if iss, err := newIssuer(cfg, st, box); err != nil {
+		return err
+	} else if iss != nil {
+		deps.Sites.EnableTLS(iss)
+
+		go deps.Sites.RunTLS(ctx)
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           Handler(cfg, deps),
@@ -213,6 +237,54 @@ func Run(ctx context.Context, cfg Config) error {
 	defer cancel()
 
 	return srv.Shutdown(shutdownCtx)
+}
+
+// newIssuer builds the ACME client, or nil when certificates are off or the
+// challenge directory is missing (no installer step yet).
+func newIssuer(cfg Config, st *store.Store, box *secrets.Box) (*acme.Client, error) {
+	if cfg.ACMEDirectory == "" {
+		return nil, nil //nolint:nilnil // certificates are off
+	}
+
+	if st, err := os.Stat(cfg.ACMEChallengeDir); err != nil || !st.IsDir() {
+		if cfg.Log != nil {
+			cfg.Log.Warn("no ACME challenge directory, site certificates are off", "dir", cfg.ACMEChallengeDir)
+		}
+
+		return nil, nil //nolint:nilnil // certificates are off
+	}
+
+	c := &acme.Client{
+		Directory:    cfg.ACMEDirectory,
+		ChallengeDir: cfg.ACMEChallengeDir,
+		Keys: acme.SettingsKeys{
+			Get: st.Setting, Set: st.SetSetting,
+			Seal: box.Seal, Open: box.Open,
+		},
+	}
+
+	if cfg.ACMECAFile != "" {
+		pem, err := os.ReadFile(cfg.ACMECAFile)
+		if err != nil {
+			return nil, fmt.Errorf("acme ca: %w", err)
+		}
+
+		pool, err := x509.SystemCertPool()
+		if err != nil {
+			pool = x509.NewCertPool()
+		}
+
+		if !pool.AppendCertsFromPEM(pem) {
+			return nil, fmt.Errorf("acme ca: no certificate in %s", cfg.ACMECAFile)
+		}
+
+		c.HTTPClient = &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}},
+		}
+	}
+
+	return c, nil
 }
 
 // cleanupLoop removes expired sessions every ten minutes.

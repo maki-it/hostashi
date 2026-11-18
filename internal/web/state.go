@@ -24,6 +24,10 @@ type Site struct {
 	Root    string   `json:"root"` // absolute document root
 	// PHPSocket is the site's PHP-FPM socket; empty serves static files only.
 	PHPSocket string `json:"phpSocket,omitempty"`
+	// Cert and Key are the site's certificate chain and key files; empty
+	// serves the site over HTTP only. With them, HTTP redirects to HTTPS.
+	Cert string `json:"cert,omitempty"`
+	Key  string `json:"key,omitempty"`
 }
 
 // Desired is the complete web server state.
@@ -45,8 +49,14 @@ func (d Desired) Validate() error {
 			return fmt.Errorf("site %q: invalid root %q", s.User, s.Root)
 		}
 
-		if s.PHPSocket != "" && (!rootRe.MatchString(s.PHPSocket) || path.Clean(s.PHPSocket) != s.PHPSocket) {
-			return fmt.Errorf("site %q: invalid PHP socket %q", s.User, s.PHPSocket)
+		for name, p := range map[string]string{"PHP socket": s.PHPSocket, "certificate": s.Cert, "key": s.Key} {
+			if p != "" && (!rootRe.MatchString(p) || path.Clean(p) != p) {
+				return fmt.Errorf("site %q: invalid %s path %q", s.User, name, p)
+			}
+		}
+
+		if (s.Cert == "") != (s.Key == "") {
+			return fmt.Errorf("site %q: certificate and key go together", s.User)
 		}
 	}
 

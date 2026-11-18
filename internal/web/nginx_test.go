@@ -5,9 +5,17 @@ package web
 import (
 	"bufio"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/fcgi"
@@ -627,5 +635,159 @@ func TestBrokenApplicationDoesNotBlockChanges(t *testing.T) {
 	// Another site can still be added.
 	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{s, e.site(t, "beta", "b", "beta.example.com")}}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// legacyHTTP2 reports whether nginx is older than 1.25.1 ("http2 on" unknown).
+func legacyHTTP2(t *testing.T, bin string) bool {
+	t.Helper()
+
+	out, err := exec.Command(bin, "-v").CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var a, b, c int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(out)[strings.Index(string(out), "/")+1:]), "%d.%d.%d", &a, &b, &c); err != nil {
+		t.Fatalf("nginx -v: %q", out)
+	}
+
+	return a == 1 && (b < 25 || b == 25 && c < 1)
+}
+
+// selfSigned writes a certificate for domains and its key into dir.
+func selfSigned(t *testing.T, dir string, domains ...string) (certFile, keyFile string, pool *x509.CertPool) {
+	t.Helper()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: domains[0]}, DNSNames: domains,
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keyDER, _ := x509.MarshalPKCS8PrivateKey(key)
+	certFile, keyFile = filepath.Join(dir, "cert.pem"), filepath.Join(dir, "key.pem")
+
+	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, _ := x509.ParseCertificate(der)
+	pool = x509.NewCertPool()
+	pool.AddCert(c)
+
+	return certFile, keyFile, pool
+}
+
+func TestTLSSite(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+
+	tlsPort := freePort(t)
+	e.r.Driver.ListenTLS = []string{"127.0.0.1:" + strconv.Itoa(tlsPort)}
+	e.r.Driver.LegacyHTTP2 = legacyHTTP2(t, e.ctl.bin)
+	e.r.Driver.ACMERoot = filepath.Join(e.dir, "acme")
+
+	challenge := filepath.Join(e.r.Driver.ACMERoot, ".well-known", "acme-challenge")
+	if err := os.MkdirAll(challenge, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(challenge, "tok123"), []byte("tok123.thumb"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	secure := e.site(t, "alpha", "hello tls", "alpha.example.com")
+	certDir := filepath.Join(e.dir, "certs")
+
+	if err := os.MkdirAll(certDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	var pool *x509.CertPool
+
+	secure.Cert, secure.Key, pool = selfSigned(t, certDir, "alpha.example.com")
+	plain := e.site(t, "beta", "hello plain", "beta.example.com")
+
+	if _, err := e.r.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{secure, plain}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// HTTP: redirect for the TLS site, content for the other, challenges for both.
+	if code, _ := e.fetch(t, "alpha.example.com"); code != http.StatusMovedPermanently {
+		t.Fatalf("http on the TLS site answered %d, want 301", code)
+	}
+
+	if code, body := e.fetch(t, "beta.example.com"); code != http.StatusOK || body != "hello plain" {
+		t.Fatalf("plain site: %d %q", code, body)
+	}
+
+	for _, host := range []string{"alpha.example.com", "beta.example.com"} {
+		if code, body := e.fetchPath(t, host, "/.well-known/acme-challenge/tok123"); code != http.StatusOK || body != "tok123.thumb" {
+			t.Errorf("challenge on %s: %d %q", host, code, body)
+		}
+	}
+
+	addr := "127.0.0.1:" + strconv.Itoa(tlsPort)
+	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			var d net.Dialer
+
+			return d.DialContext(ctx, network, addr)
+		},
+		ForceAttemptHTTP2: true,
+	}}
+
+	resp, err := client.Get("https://alpha.example.com/")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK || string(body) != "hello tls" || resp.ProtoMajor != 2 {
+		t.Fatalf("https: %d %q %s", resp.StatusCode, body, resp.Proto)
+	}
+
+	// Another name over TLS: no certificate is shown at all.
+	conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: "beta.example.com", InsecureSkipVerify: true})
+	if err == nil {
+		_ = conn.Close()
+
+		t.Fatal("handshake for a site without TLS succeeded")
+	}
+}
+
+func TestCertificateNeedsTLSListener(t *testing.T) {
+	n := &Nginx{Ctl: &testCtl{}, Listen: []string{"80"}, ControlSocket: "/run/x.sock", PIDFile: "/run/x.pid", ErrorLog: "/var/log/x", MimeTypes: "/etc/x"}
+
+	_, err := n.Render(Desired{Sites: []Site{{User: "alpha", Domains: []string{"a.example.com"}, Root: "/srv/a", Cert: "/c.pem", Key: "/k.pem"}}}, 1)
+	if err == nil || !strings.Contains(err.Error(), "no HTTPS listener") {
+		t.Fatalf("err %v", err)
+	}
+
+	if err := (Desired{Sites: []Site{{User: "alpha", Domains: []string{"a.example.com"}, Root: "/srv/a", Cert: "/c.pem"}}}).Validate(); err == nil {
+		t.Fatal("certificate without key accepted")
 	}
 }
