@@ -16,12 +16,14 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 // Config is the web process configuration.
 type Config struct {
 	Listen  string // host:port, loopback only until TLS exists
 	Socket  string // agent socket
+	DBPath  string // SQLite database, directory must not be group or world writable
 	Version string
 	Log     *slog.Logger
 }
@@ -62,11 +64,14 @@ func CheckListen(addr string) error {
 	return nil
 }
 
-// pinger is the part of the agent client the handlers need.
-type pinger func(ctx context.Context) (agentapi.PingResponse, error)
+// Deps are the backends the handlers talk to. Tests replace them.
+type Deps struct {
+	PingAgent func(ctx context.Context) error
+	PingDB    func(ctx context.Context) error
+}
 
 // Handler returns the HTTP routes of the web process.
-func Handler(cfg Config, ping pinger) http.Handler {
+func Handler(cfg Config, deps Deps) http.Handler {
 	log := cfg.Log
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
@@ -77,20 +82,28 @@ func Handler(cfg Config, ping pinger) http.Handler {
 		type health struct {
 			Status  string `json:"status"`
 			Agent   string `json:"agent"`
+			DB      string `json:"db"`
 			Version string `json:"version"`
 		}
 
-		h := health{Status: "ok", Agent: "ok", Version: cfg.Version}
+		h := health{Status: "ok", Agent: "ok", DB: "ok", Version: cfg.Version}
 		code := http.StatusOK
 
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
 
-		if _, err := ping(ctx); err != nil {
-			// Details go to the log, not to the client.
+		// Details go to the log, not to the client.
+		if err := deps.PingAgent(ctx); err != nil {
 			log.Warn("agent ping failed", "err", err)
 
 			h.Status, h.Agent = "degraded", "unavailable"
+			code = http.StatusServiceUnavailable
+		}
+
+		if err := deps.PingDB(ctx); err != nil {
+			log.Error("database ping failed", "err", err)
+
+			h.Status, h.DB = "degraded", "unavailable"
 			code = http.StatusServiceUnavailable
 		}
 
@@ -109,13 +122,24 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
+	st, err := store.Open(ctx, cfg.DBPath)
+	if err != nil {
+		return err
+	}
+
+	defer func() { _ = st.Close() }()
+
 	client := agentrpc.NewClient(cfg.Socket)
-	ping := func(ctx context.Context) (agentapi.PingResponse, error) {
-		return agentapi.Ping.Call(ctx, client, agentapi.PingRequest{})
+	deps := Deps{
+		PingAgent: func(ctx context.Context) error {
+			_, err := agentapi.Ping.Call(ctx, client, agentapi.PingRequest{})
+			return err
+		},
+		PingDB: st.Ping,
 	}
 	srv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           Handler(cfg, ping),
+		Handler:           Handler(cfg, deps),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -131,7 +155,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if cfg.Log != nil {
-		cfg.Log.Info("serve listening", "addr", ln.Addr().String(), "agentSocket", cfg.Socket)
+		cfg.Log.Info("serve listening", "addr", ln.Addr().String(), "agentSocket", cfg.Socket, "db", cfg.DBPath)
 	}
 
 	errc := make(chan error, 1)
