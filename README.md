@@ -2,7 +2,7 @@
 
 Ein modernes, **wirklich quelloffenes** Hosting-Control-Panel für einzelne Linux-Server – als Alternative zu [CloudPanel](https://www.cloudpanel.io/).
 
-> **Status:** Phase 0 – Planung. Es gibt noch keinen Code. Der Name ist gewählt (vorbehaltlich Markenrecherche), Lizenz und Stack sind Vorschläge und stehen in [`docs/07-decisions.md`](docs/07-decisions.md) zur Entscheidung.
+> **Status:** Übergang von Phase 0 (Planung) zur Alpha. Lizenz (ADR-0002) und Stack (ADR-0003) sind entschieden, die Spikes liegen unter [`spike/`](spike/). Das Go-Grundgerüst steht: ein Binary mit `serve` (ohne Root), `agent` (Root, nur typisierte Operationen) und einer typisierten Verbindung dazwischen. Es kann noch keine Sites verwalten. Aufbau und lokale Checks: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Kurzfassung
 
@@ -30,4 +30,4 @@ Code: **AGPL-3.0-or-later** ([`LICENSE`](LICENSE)). Dokumentation: **CC-BY-4.0**
 
 ## Nächster Schritt
 
-Die Fragen in Abschnitt „Offene Fragen“ von [`docs/07-decisions.md`](docs/07-decisions.md) beantworten (Lizenz, Stack, Team, Geschäftsmodell). Danach beginnt Phase 0 mit den Spikes aus der [Roadmap](docs/06-roadmap.md).
+Phase 1 (Alpha) aus der [Roadmap](docs/06-roadmap.md): auf dem Grundgerüst die ersten echten Agent-Operationen, Zustand in SQLite und systemd-Units aufbauen. Offene Entscheidungen stehen in [`docs/07-decisions.md`](docs/07-decisions.md).
