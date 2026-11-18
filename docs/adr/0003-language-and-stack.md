@@ -1,6 +1,6 @@
 # ADR-0003 Language and stack
 
-**Status:** Proposed (not accepted). **Date drafted:** 2026-11-17. **Decides:** Kim. **Depends on:** open question 2 (team and skills). Independent of the license.
+**Status:** Accepted (2026-11-18, by Kim). **Date drafted:** 2026-11-17. **Decides:** Kim. **Depends on:** open question 2 (team and skills). Independent of the license.
 
 ## Context
 
@@ -88,6 +88,19 @@ Decision rule:
 - Dependency risk of a root-adjacent process: keep the agent's dependency set minimal and reviewed.
 - Pure-Go SQLite driver maturity and performance under write load are unverified [U]. Needs a small benchmark.
 
+## Acceptance note (2026-11-18)
+
+Kim accepted this ADR after spikes S1 and S4 confirmed the stack:
+
+- S1 (agent RPC): typed RPC over a Unix socket with peer credentials works, no code generation needed [V: [`spike/s1-agent-rpc/REPORT.md`](../../spike/s1-agent-rpc/REPORT.md)].
+- S4 (file access as the site user): the helper-process pattern with `openat2` confinement works, including real quota in a Debian 13 VM [V: [`spike/s4-site-helper/REPORT.md`](../../spike/s4-site-helper/REPORT.md)].
+
+Still open, and the original reopen rule stays in force:
+
+- S2 (reconciler) and S7 (UI prototype) have not run. A failed S2 reopens this ADR. S7 may still replace React with another framework or fall back to HTMX plus templ [A].
+- The SQLite benchmark (pure Go driver) is still to be done in Phase 0.
+- No "1.0" label before an external review of the agent (see Owner input).
+
 ## Open questions
 
-None at this level. Remaining before Accepted: Kim sets the status, and spikes S1, S2, S4 and S7 must not contradict the choice.
+None at this level.
