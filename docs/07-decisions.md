@@ -23,6 +23,7 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 | 0017 | CloudPanel-Import als Migration, Presets | Accepted am 2026-11-18 ([adr/0017](adr/0017-cloudpanel-import-and-presets.md)) | Erledigt |
 | 0018 | Öffentliche REST-API | Accepted am 2026-11-18 ([adr/0018](adr/0018-public-rest-api.md)) | Erledigt |
 | 0019 | PHP-Paketquelle und mehrere PHP-Versionen | Accepted (Kim, 2026-11-18, [adr/0019](adr/0019-php-package-source-and-versions.md)) | **Ja** |
+| 0020 | nginx-Paketquelle und Brotli | Proposed (Entwurf: [adr/0020](adr/0020-nginx-package-source-and-brotli.md)) | **Ja** |
 
 ---
 
@@ -195,3 +196,7 @@ ashi site add example.com --type php --php 8.4   # gleiches Programm
 ## ADR-0019 PHP-Paketquelle und mehrere PHP-Versionen
 
 **Vollständiger Text (Englisch, Status Accepted):** [adr/0019-php-package-source-and-versions.md](adr/0019-php-package-source-and-versions.md). Kurzfassung: Kein eigener PHP-Fork (Kims Entscheidung), sondern offizielle Pakete. Weil Distros nur eine Version liefern (Debian 13: 8.4, Ubuntu 24.04: 8.3), die Sites aber unterschiedliche Versionen brauchen, ist die Empfehlung: Standard ist die Distro-Version, weitere Versionen kommen auf ausdrücklichen Wunsch über das Repository von sury.org (geprüft: PHP 5.6 bis 8.5 für amd64 und arm64 auf trixie und noble, im Test liefen 7.4, 8.1 und 8.4 parallel). Benannte Konflikte: Drittquelle mit Root-Installation, und alte Versionen sind unsicher, daher EOL-Warnung und Freigabeliste statt freier Paketnamen. Entschieden (Kim, 2026-11-18, nach Spike S10 angepasst): Standard sind PHP 8.3 bis 8.5, Legacy (nur auf ausdrücklichen Wunsch) 8.2, 8.1 und 7.4, ältere Versionen werden nicht angeboten. Spike S10 (2026-11-18): Mit einem Pin bleibt die Standardversion bei der Distro, weitere Versionen kommen von sury.org (Debian 13 und Ubuntu 24.04 getestet); ohne Pin würde die Standardversion beim nächsten Update still ersetzt. Nach dem offiziellen Release-Plan endet der Support für 8.2 am 2026-12-31, daher wird 8.2 gleich als Legacy geführt.
+
+## ADR-0020 nginx-Paketquelle und Brotli
+
+**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0020-nginx-package-source-and-brotli.md](adr/0020-nginx-package-source-and-brotli.md). Kurzfassung: Kim will Brotli und HTTP/3 als Standard. Das nginx.org-Repository hat kein Brotli-Modul, die Brotli-Pakete der Distributionen passen nur zum nginx der jeweiligen Distribution (Spike S11). Geprüft in den Paketlisten und den Build-Regeln: Debian 13 (nginx 1.26.3) und Ubuntu 26.04 (nginx 1.28.3) haben HTTP/3 eingebaut und passende Brotli-Module, Ubuntu 24.04 (nginx 1.24) hat kein HTTP/3. Empfehlung: nginx aus der Distribution samt Brotli-Modulen auf Debian 13 und Ubuntu 26.04, Ubuntu 24.04 für v1 streichen. Das ersetzt die Paketquelle aus ADR-0005 (nginx.org). Ein echter HTTP/3-Test steht noch aus.

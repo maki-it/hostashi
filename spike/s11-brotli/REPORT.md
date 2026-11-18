@@ -8,7 +8,7 @@ Checked on 2026-11-18, package indexes of nginx.org, Debian trixie and Ubuntu no
 
 ## Result
 
-**No. There is no brotli module for the nginx.org builds. [V]** Brotli would have to be compiled by us. Recommendation: keep gzip as the default for v1 and revisit brotli later.
+**No brotli module exists for the nginx.org builds. [V]** But the distributions ship matching modules for their own nginx, and two of the three checked builds have HTTP/3 compiled in (see the addendum). Recommendation: use the distribution nginx with brotli, see [ADR-0020](../../docs/adr/0020-nginx-package-source-and-brotli.md). The original gzip-only recommendation below applies only if the nginx.org build stays.
 
 ## Findings
 
@@ -35,3 +35,15 @@ Side finding: the nginx.org repository ships `nginx-module-acme` [V]. This is re
 - Whether Debian 13's nginx is built with HTTP/3 (running the downloaded binary was not done in this spike).
 - Real size and CPU difference between gzip and brotli on typical WordPress output.
 - Whether nginx.org plans a brotli module.
+
+## Addendum: distribution builds (Kim's follow-up question, 2026-11-18)
+
+Checked in the package indexes and in `debian/rules` of the source packages. No binary was run [A: build flag is not a run test].
+
+| Distribution | nginx | `--with-http_v3_module` | Brotli modules (ABI matches) |
+|--------------|-------|--------------------------|------------------------------|
+| Debian 13 | 1.26.3 | yes [V] | yes, `nginx-abi-1.26.3-1` [V] |
+| Ubuntu 26.04 (resolute) | 1.28.3 | yes [V] | yes, `nginx-abi-1.28.3-1` [V] |
+| Ubuntu 24.04 | 1.24.0 | no [V] | yes, but no HTTP/3 |
+
+Debian 13 and Ubuntu 26.04 therefore give brotli and HTTP/3 together from the distribution archive. Option B in the table above (distribution nginx) becomes the recommendation, written up as ADR-0020.
