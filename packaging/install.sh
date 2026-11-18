@@ -16,8 +16,9 @@
 #   --listen ADDR        panel listen address, default 127.0.0.1:8080 (loopback only until TLS exists)
 #   --allow-untested     accept an OS release that is not on the supported list
 #
-# Not yet part of this installer: nginx, PHP, MariaDB and project quota
-# (spike S5/S8 and ADR-0020). They follow with the reconciler.
+# nginx comes from the distribution with its brotli modules (ADR-0020) and
+# runs on the configuration the agent renders. Not yet part of this
+# installer: PHP, MariaDB, project quota (spike S5/S8), firewall and TLS.
 #
 # Exit codes: 0 ok, 2 refused by preflight (server unchanged), 3 a step
 # failed (re-running is safe), 64 usage.
@@ -135,7 +136,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config units service"
+STEPS="account dirs key binary config nginx units service"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -194,11 +195,27 @@ env_file() {
 chk_config() { env_file | file_matches /etc/hostashi/hostashi.env 0640 root:hostashi || { echo "settings differ"; return 1; }; }
 do_config() { env_file | write_file /etc/hostashi/hostashi.env 0640 root:hostashi; [ $? -le 1 ] && CONFIG_CHANGED=yes; }
 
+# nginx and its brotli modules from the distribution (ADR-0020). The agent
+# renders the whole config; the package's default site is never used.
+NGINX_PKGS=(nginx libnginx-mod-http-brotli-filter libnginx-mod-http-brotli-static)
+NGINX_DROPIN=/etc/systemd/system/nginx.service.d/hostashi.conf
+
+chk_nginx() {
+  local p
+  for p in "${NGINX_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
+}
+do_nginx() {
+  apt-get update -qq >>"$LOG" 2>&1 &&
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${NGINX_PKGS[@]}" >>"$LOG" 2>&1
+}
+
 chk_units() {
   local u
   for u in hostashi-agent.service hostashi.service; do
     file_matches "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u" || { echo "$u differs"; return 1; }
   done
+  dir_ok "$(dirname "$NGINX_DROPIN")" 755 root:root || { echo "nginx drop-in directory"; return 1; }
+  file_matches "$NGINX_DROPIN" 0644 root:root <"$UNIT_DIR/nginx-hostashi.conf" || { echo "nginx drop-in differs"; return 1; }
 }
 do_units() {
   local u
@@ -206,27 +223,38 @@ do_units() {
     write_file "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u"
     [ $? -le 1 ] || return 1
   done
+  install -d -m 0755 -o root -g root "$(dirname "$NGINX_DROPIN")" || return 1
+  write_file "$NGINX_DROPIN" 0644 root:root <"$UNIT_DIR/nginx-hostashi.conf"
+  [ $? -le 1 ] || return 1
   CONFIG_CHANGED=yes
   systemctl daemon-reload >>"$LOG" 2>&1
 }
 
 chk_service() {
   local u
-  for u in hostashi-agent hostashi; do
+  for u in hostashi-agent hostashi nginx; do
     [ "$(systemctl is-enabled "$u.service" 2>/dev/null)" = enabled ] || { echo "$u not enabled"; return 1; }
     [ "$(systemctl is-active "$u.service" 2>/dev/null)" = active ] || { echo "$u not running"; return 1; }
   done
+  # The agent puts nginx on its own config at start (first generation).
+  [ -L /var/lib/hostashi-agent/web/current ] || { echo "nginx not on a Hostashi generation yet"; return 1; }
   [ "$BINARY_CHANGED" = no ] && [ "$CONFIG_CHANGED" = no ] || { echo "restart needed after a change"; return 1; }
 }
 do_service() {
-  systemctl enable hostashi-agent.service hostashi.service >>"$LOG" 2>&1 || return 1
+  systemctl enable nginx.service hostashi-agent.service hostashi.service >>"$LOG" 2>&1 || return 1
   if [ "$BINARY_CHANGED" = yes ] || [ "$CONFIG_CHANGED" = yes ]; then
     systemctl restart hostashi-agent.service hostashi.service >>"$LOG" 2>&1 || return 1
   else
     systemctl start hostashi-agent.service hostashi.service >>"$LOG" 2>&1 || return 1
   fi
   BINARY_CHANGED=no CONFIG_CHANGED=no
-  # Give the units a moment, then the check verifies they stayed up.
+  # Give the units a moment (the agent's first generation restarts nginx),
+  # then the check verifies they stayed up.
+  local _i
+  for _i in 1 2 3 4 5 6 7 8 9 10; do
+    [ -L /var/lib/hostashi-agent/web/current ] && break
+    sleep 1
+  done
   sleep 2
 }
 

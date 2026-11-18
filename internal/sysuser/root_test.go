@@ -67,7 +67,25 @@ func rootEnv(t *testing.T) (m *sites.Manager, pool string, name string) {
 
 	t.Cleanup(func() { _ = acc.Delete(context.Background(), name) })
 
-	return sites.NewManager(reg, acc, sites.Options{}), pool, name
+	return sites.NewManager(reg, acc, sites.Options{WebGID: webGID(t)}), pool, name
+}
+
+// webGID is the gid of www-data, or 0 (the site's own group) where the test
+// machine has no such group.
+func webGID(t *testing.T) uint32 {
+	t.Helper()
+
+	g, err := user.LookupGroup("www-data")
+	if err != nil {
+		return 0
+	}
+
+	id, err := strconv.ParseUint(g.Gid, 10, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return uint32(id)
 }
 
 func TestRootSiteLifecycle(t *testing.T) {
@@ -99,8 +117,21 @@ func TestRootSiteLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if st.Uid != site.UID || st.Gid != site.GID || st.Mode&0o7777 != 0o750 {
-		t.Fatalf("home owner %d:%d mode %o", st.Uid, st.Gid, st.Mode&0o7777)
+	wantGID := webGID(t)
+	if wantGID == 0 {
+		wantGID = site.GID
+	}
+
+	if st.Uid != site.UID || st.Gid != wantGID || st.Mode&0o7777 != 0o750 {
+		t.Fatalf("home owner %d:%d mode %o, want %d:%d 750", st.Uid, st.Gid, st.Mode&0o7777, site.UID, wantGID)
+	}
+
+	if err := syscall.Stat(filepath.Join(home, sites.WebRootName), &st); err != nil {
+		t.Fatal(err)
+	}
+
+	if st.Uid != site.UID || st.Gid != site.GID || st.Mode&0o7777 != 0o755 {
+		t.Fatalf("web root owner %d:%d mode %o", st.Uid, st.Gid, st.Mode&0o7777)
 	}
 
 	if u.HomeDir != home {
@@ -163,9 +194,14 @@ func TestRootDeleteRefusesForeignHome(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var orig syscall.Stat_t
+	if err := syscall.Stat(home, &orig); err != nil {
+		t.Fatal(err)
+	}
+
 	// An admin (or an attacker with root-less access to the pool, which the
 	// pool checks prevent) gave the home to another uid.
-	if err := os.Chown(home, int(site.UID)+1, int(site.GID)); err != nil {
+	if err := os.Chown(home, int(site.UID)+1, int(orig.Gid)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -178,7 +214,7 @@ func TestRootDeleteRefusesForeignHome(t *testing.T) {
 	}
 
 	// Put it back: the retry finishes the job (the account is gone already).
-	if err := os.Chown(home, int(site.UID), int(site.GID)); err != nil {
+	if err := os.Chown(home, int(site.UID), int(orig.Gid)); err != nil {
 		t.Fatal(err)
 	}
 

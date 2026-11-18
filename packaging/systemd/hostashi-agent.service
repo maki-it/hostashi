@@ -4,8 +4,10 @@
 #
 # It cannot use ProtectSystem or ProtectHome: creating a site writes
 # /etc/passwd and /etc/group (useradd) and the home below /home or a pool.
-# Widen RestrictAddressFamilies only when an operation needs it (for example
-# ACME needs AF_INET and AF_INET6).
+# nginx -t (run by the agent before every switch) creates IPv4 and IPv6
+# sockets for the listen addresses without binding them, so AF_INET and
+# AF_INET6 are allowed. IPAddressDeny=any still blocks every packet: the
+# checks after a reload go through nginx's Unix control socket.
 
 [Unit]
 Description=Hostashi agent (privileged, typed operations only)
@@ -29,7 +31,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateNetwork=no
 IPAddressDeny=any
-RestrictAddressFamilies=AF_UNIX AF_NETLINK
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes

@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -44,5 +45,29 @@ func TestRun(t *testing.T) {
 				t.Fatalf("stderr %q does not contain %q", &errOut, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestAdminUsage(t *testing.T) {
+	for _, args := range [][]string{{"site"}, {"site", "bogus"}, {"site", "delete"}, {"web"}, {"web", "apply", "extra"}} {
+		var out, errOut bytes.Buffer
+		if code := run(t.Context(), args, 0, &out, &errOut); code != 2 {
+			t.Errorf("%v: exit %d, want 2", args, code)
+		}
+	}
+}
+
+func TestWebApplyRejectsUnknownFields(t *testing.T) {
+	stdin = strings.NewReader(`{"sites":[{"user":"blog","domains":["a.example.com"],"root":"/etc"}]}`)
+
+	t.Cleanup(func() { stdin = os.Stdin })
+
+	var out, errOut bytes.Buffer
+	if code := run(t.Context(), []string{"web", "-socket", "/nonexistent", "apply"}, 0, &out, &errOut); code != 1 {
+		t.Fatalf("exit %d, want 1", code)
+	}
+
+	if !strings.Contains(errOut.String(), "unknown field") {
+		t.Fatalf("stderr = %q", errOut.String())
 	}
 }

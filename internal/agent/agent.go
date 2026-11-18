@@ -13,6 +13,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"sync"
 
 	"golang.org/x/sys/unix"
 
@@ -20,6 +21,8 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/sites"
 	"github.com/maki-it/hostashi/internal/sysuser"
+	"github.com/maki-it/hostashi/internal/web"
+	"github.com/maki-it/hostashi/internal/webctl"
 )
 
 // DefaultStateDir holds the agent's own state (the site registry). It is a
@@ -38,6 +41,10 @@ type Config struct {
 	// Sites serves the site operations. Run builds it from StateDir if nil;
 	// NewServer registers no site operations without it.
 	Sites *sites.Manager
+
+	// Web serves web.apply. Run builds it from StateDir if nginx is
+	// installed; without it the operation answers failed_precondition.
+	Web *web.Reconciler
 }
 
 // ErrNotRoot is returned when the agent is started without root.
@@ -93,15 +100,27 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	})
 
 	if cfg.Sites != nil {
-		registerSites(s, cfg.Sites)
+		h := &siteOps{m: cfg.Sites, web: cfg.Web}
+		h.register(s)
 	}
 
 	return s
 }
 
-// registerSites adds the site operations. Only the errors listed here reach
-// the caller with a code; everything else becomes "internal error".
-func registerSites(s *agentrpc.Server, m *sites.Manager) {
+// siteOps serves the site and web operations. mu orders site.delete against
+// web.apply, so a site cannot lose its home while a virtual host is being
+// built for it.
+type siteOps struct {
+	m   *sites.Manager
+	web *web.Reconciler
+	mu  sync.Mutex
+}
+
+// register adds the operations. Only the errors listed in the map functions
+// reach the caller with a code; everything else becomes "internal error".
+func (h *siteOps) register(s *agentrpc.Server) {
+	m := h.m
+
 	agentrpc.Handle(s, agentapi.SiteCreate, func(ctx context.Context, _ agentrpc.Caller, req agentapi.SiteCreateRequest) (agentapi.SiteInfo, error) {
 		site, err := m.Create(ctx, req.User, req.Pool)
 		if err != nil {
@@ -112,6 +131,22 @@ func registerSites(s *agentrpc.Server, m *sites.Manager) {
 	})
 
 	agentrpc.Handle(s, agentapi.SiteDelete, func(ctx context.Context, _ agentrpc.Caller, req agentapi.SiteDeleteRequest) (agentapi.SiteDeleteResponse, error) {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+
+		if h.web != nil {
+			cur, _, err := h.web.Current()
+			if err != nil {
+				return agentapi.SiteDeleteResponse{}, err
+			}
+
+			if cur.Users()[req.User] {
+				return agentapi.SiteDeleteResponse{}, &agentrpc.Error{
+					Code: agentrpc.CodePrecondition, Message: "site still has a virtual host, remove it with web.apply first",
+				}
+			}
+		}
+
 		if err := m.Delete(ctx, req.User); err != nil {
 			return agentapi.SiteDeleteResponse{}, mapSiteError(err)
 		}
@@ -132,6 +167,52 @@ func registerSites(s *agentrpc.Server, m *sites.Manager) {
 
 		return agentapi.SiteListResponse{Sites: out}, nil
 	})
+
+	agentrpc.Handle(s, agentapi.WebApply, h.webApply)
+}
+
+func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.WebApplyRequest) (agentapi.WebApplyResponse, error) {
+	if h.web == nil {
+		return agentapi.WebApplyResponse{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "nginx is not installed"}
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	d := web.Desired{Sites: make([]web.Site, 0, len(req.Sites))}
+
+	for _, s := range req.Sites {
+		root, ok := h.m.WebRoot(s.User)
+		if !ok {
+			return agentapi.WebApplyResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site " + s.User}
+		}
+
+		d.Sites = append(d.Sites, web.Site{User: s.User, Domains: s.Domains, Root: root})
+	}
+
+	res, err := h.web.Apply(ctx, d)
+	if err != nil {
+		return agentapi.WebApplyResponse{Generation: res.Generation}, mapWebError(err)
+	}
+
+	return agentapi.WebApplyResponse{Generation: res.Generation, Changed: res.Changed}, nil
+}
+
+// mapWebError gives the caller a fixed message; the details (nginx output)
+// stay in the agent log.
+func mapWebError(err error) error {
+	switch {
+	case errors.Is(err, web.ErrInvalidDesired):
+		return &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "invalid web server state"}
+	case errors.Is(err, web.ErrValidation):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "nginx rejected the configuration, nothing was changed"}
+	case errors.Is(err, web.ErrApplyFailed):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the new configuration did not go live, the previous one was restored"}
+	case errors.Is(err, web.ErrBusy):
+		return &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "another web server change is running"}
+	default:
+		return err
+	}
 }
 
 func siteInfo(s sites.Site) agentapi.SiteInfo {
@@ -206,8 +287,91 @@ func openSites(stateDir string, log *slog.Logger) (*sites.Manager, error) {
 		return nil, err
 	}
 
-	return sites.NewManager(reg, sysuser.New(log), sites.Options{Log: log}), nil
+	return sites.NewManager(reg, sysuser.New(log), sites.Options{Log: log, WebGID: webGID(log)}), nil
 }
+
+// WebUser is the distribution's nginx worker user and group.
+const WebUser = "www-data"
+
+// lookupGroup is replaced in tests.
+var lookupGroup = user.LookupGroup
+
+func webGID(log *slog.Logger) uint32 {
+	g, err := lookupGroup(WebUser)
+	if err == nil {
+		if id, perr := strconv.ParseUint(g.Gid, 10, 32); perr == nil && id != 0 {
+			return uint32(id)
+		}
+	}
+
+	if log != nil {
+		log.Warn("no web server group, new site homes keep the site's own group", "group", WebUser)
+	}
+
+	return 0
+}
+
+// openWeb builds the production reconciler, or nil when nginx is missing.
+func openWeb(stateDir string, log *slog.Logger) *web.Reconciler {
+	if _, err := os.Stat(webctl.Nginx); err != nil {
+		if log != nil {
+			log.Warn("nginx not installed, web operations disabled", "path", webctl.Nginx)
+		}
+
+		return nil
+	}
+
+	if stateDir == "" {
+		stateDir = DefaultStateDir
+	}
+
+	brotli := true
+
+	for _, m := range []string{"50-mod-http-brotli-filter.conf", "50-mod-http-brotli-static.conf"} {
+		if _, err := os.Stat(filepath.Join("/etc/nginx/modules-enabled", m)); err != nil {
+			brotli = false
+		}
+	}
+
+	listen := []string{"80"}
+	if ipv6Available() {
+		listen = append(listen, "[::]:80")
+	}
+
+	return &web.Reconciler{
+		Base: filepath.Join(stateDir, "web"),
+		Log:  log,
+		Driver: &web.Nginx{
+			Ctl:           webctl.Controller{},
+			Listen:        listen,
+			ControlSocket: WebControlSocket,
+			User:          WebUser,
+			PIDFile:       "/run/nginx.pid",
+			ErrorLog:      "/var/log/nginx/error.log",
+			AccessLog:     "/var/log/nginx/access.log",
+			Modules:       "/etc/nginx/modules-enabled/*.conf",
+			MimeTypes:     "/etc/nginx/mime.types",
+			Brotli:        brotli,
+		},
+	}
+}
+
+// ipv6Available reports whether the kernel can create IPv6 sockets. nginx
+// refuses the whole config if a listen address has an unsupported family.
+func ipv6Available() bool {
+	fd, err := unix.Socket(unix.AF_INET6, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		return false
+	}
+
+	_ = unix.Close(fd)
+
+	return true
+}
+
+// WebControlSocket is where nginx answers the agent's checks. Its directory
+// is the RuntimeDirectory of the nginx unit drop-in (root, 0700).
+const WebControlSocket = "/run/hostashi-web/control.sock"
 
 // Run starts the agent and blocks until ctx is canceled.
 func Run(ctx context.Context, cfg Config) error {
@@ -220,6 +384,21 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.Sites, err = openSites(cfg.StateDir, cfg.Log)
 		if err != nil {
 			return err
+		}
+	}
+
+	if cfg.Web == nil {
+		cfg.Web = openWeb(cfg.StateDir, cfg.Log)
+	}
+
+	if cfg.Web != nil {
+		// A failure here must not keep the agent down: web.apply retries.
+		if res, err := cfg.Web.Recover(ctx); err != nil {
+			if cfg.Log != nil {
+				cfg.Log.Error("web server recovery failed", "err", err)
+			}
+		} else if cfg.Log != nil {
+			cfg.Log.Info("web server on generation", "generation", res.Generation)
 		}
 	}
 
