@@ -14,16 +14,16 @@ func TestSiteStoreRoundTrip(t *testing.T) {
 	ctx := t.Context()
 	now := time.Unix(2_000_000, 0)
 
-	site, err := s.CreateSite(ctx, "blog", "default", []string{"blog.example.com", "www.blog.example.com"}, now)
+	site, err := s.CreateSite(ctx, "blog", "default", "8.4", []string{"blog.example.com", "www.blog.example.com"}, now)
 	if err != nil || site.ID == 0 || site.State != SiteCreating {
 		t.Fatalf("%+v %v", site, err)
 	}
 
-	if _, err := s.CreateSite(ctx, "blog", "default", []string{"other.example.com"}, now); !errors.Is(err, ErrSiteExists) {
+	if _, err := s.CreateSite(ctx, "blog", "default", "", []string{"other.example.com"}, now); !errors.Is(err, ErrSiteExists) {
 		t.Fatalf("duplicate name: %v", err)
 	}
 
-	if _, err := s.CreateSite(ctx, "shop", "default", []string{"www.blog.example.com"}, now); !errors.Is(err, ErrDomainTaken) {
+	if _, err := s.CreateSite(ctx, "shop", "default", "", []string{"www.blog.example.com"}, now); !errors.Is(err, ErrDomainTaken) {
 		t.Fatalf("taken domain: %v", err)
 	}
 
@@ -42,11 +42,23 @@ func TestSiteStoreRoundTrip(t *testing.T) {
 	}
 
 	got, err := s.SiteByName(ctx, "blog")
-	if err != nil || got.State != SiteActive || fmt.Sprint(got.Domains) != "[www.blog.example.com blog.example.org]" {
+	if err != nil || got.State != SiteActive || got.PHP != "8.4" || fmt.Sprint(got.Domains) != "[www.blog.example.com blog.example.org]" {
 		t.Fatalf("got %+v %v", got, err)
 	}
 
-	if _, err := s.CreateSite(ctx, "shop", "default", []string{"shop.example.com"}, now); err != nil {
+	if oldPHP, err := s.SetSitePHP(ctx, "blog", "8.3", now); err != nil || oldPHP != "8.4" {
+		t.Fatalf("set php: %q %v", oldPHP, err)
+	}
+
+	if _, err := s.SetSitePHP(ctx, "blog", "8.4; x", now); err == nil {
+		t.Fatal("bad php version stored")
+	}
+
+	if _, err := s.SetSitePHP(ctx, "nope", "8.4", now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown site: %v", err)
+	}
+
+	if _, err := s.CreateSite(ctx, "shop", "default", "", []string{"shop.example.com"}, now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,7 +67,7 @@ func TestSiteStoreRoundTrip(t *testing.T) {
 	}
 
 	all, err := s.Sites(ctx)
-	if err != nil || len(all) != 2 || all[0].Name != "blog" || fmt.Sprint(all[1].Domains) != "[shop.example.com]" {
+	if err != nil || len(all) != 2 || all[0].Name != "blog" || all[0].PHP != "8.3" || all[1].PHP != "" || fmt.Sprint(all[1].Domains) != "[shop.example.com]" {
 		t.Fatalf("sites %+v %v", all, err)
 	}
 

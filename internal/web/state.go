@@ -22,6 +22,8 @@ type Site struct {
 	User    string   `json:"user"`
 	Domains []string `json:"domains"`
 	Root    string   `json:"root"` // absolute document root
+	// PHPSocket is the site's PHP-FPM socket; empty serves static files only.
+	PHPSocket string `json:"phpSocket,omitempty"`
 }
 
 // Desired is the complete web server state.
@@ -41,6 +43,10 @@ func (d Desired) Validate() error {
 
 		if !rootRe.MatchString(s.Root) || path.Clean(s.Root) != s.Root {
 			return fmt.Errorf("site %q: invalid root %q", s.User, s.Root)
+		}
+
+		if s.PHPSocket != "" && (!rootRe.MatchString(s.PHPSocket) || path.Clean(s.PHPSocket) != s.PHPSocket) {
+			return fmt.Errorf("site %q: invalid PHP socket %q", s.User, s.PHPSocket)
 		}
 	}
 

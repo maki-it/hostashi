@@ -26,6 +26,7 @@ type Agent interface {
 	SiteCreate(ctx context.Context, req agentapi.SiteCreateRequest) (agentapi.SiteInfo, error)
 	SiteDelete(ctx context.Context, req agentapi.SiteDeleteRequest) error
 	WebApply(ctx context.Context, req agentapi.WebApplyRequest) (agentapi.WebApplyResponse, error)
+	PHPVersions(ctx context.Context) ([]string, error)
 }
 
 // RPCAgent calls the real agent.
@@ -46,6 +47,13 @@ func (a RPCAgent) SiteDelete(ctx context.Context, req agentapi.SiteDeleteRequest
 // WebApply calls web.apply.
 func (a RPCAgent) WebApply(ctx context.Context, req agentapi.WebApplyRequest) (agentapi.WebApplyResponse, error) {
 	return agentapi.WebApply.Call(ctx, a.C, req)
+}
+
+// PHPVersions calls php.versions.
+func (a RPCAgent) PHPVersions(ctx context.Context) ([]string, error) {
+	res, err := agentapi.PHPVersionsList.Call(ctx, a.C, agentapi.PHPVersionsRequest{})
+
+	return res.Installed, err
 }
 
 // Errors a caller can act on. Errors of the agent come back as
@@ -81,7 +89,22 @@ func New(st *store.Store, ag Agent, log *slog.Logger) *Service {
 type CreateRequest struct {
 	Name    string
 	Pool    string // empty: the default pool
+	PHP     string // PHP version, empty: no PHP
 	Domains []string
+}
+
+// checkPHP accepts a version from agentapi.PHPVersions or "" (no PHP).
+// Whether it is installed is the agent's answer.
+func checkPHP(v string) error {
+	if v == "" {
+		return nil
+	}
+
+	if err := agentapi.ValidatePHPVersion(v); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	return nil
 }
 
 // NormalizeDomains lower-cases and trims the list and checks it. The order
@@ -143,10 +166,14 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, err
 	}
 
+	if err := checkPHP(req.PHP); err != nil {
+		return store.Site{}, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	site, err := s.st.CreateSite(ctx, req.Name, req.Pool, domains, s.now())
+	site, err := s.st.CreateSite(ctx, req.Name, req.Pool, req.PHP, domains, s.now())
 
 	switch {
 	case errors.Is(err, store.ErrSiteExists):
@@ -178,7 +205,7 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, err
 	}
 
-	s.audit(ctx, actor, "site.create", req.Name, map[string]string{"pool": req.Pool, "domains": strings.Join(domains, " ")})
+	s.audit(ctx, actor, "site.create", req.Name, map[string]string{"pool": req.Pool, "php": req.PHP, "domains": strings.Join(domains, " ")})
 
 	site.State = store.SiteActive
 
@@ -250,6 +277,50 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 	return site, nil
 }
 
+// SetPHP sets the PHP version of an active site; "" turns PHP off. If the
+// change cannot go live, the previous version is stored again.
+func (s *Service) SetPHP(ctx context.Context, actor int64, name, version string) (store.Site, error) {
+	if err := checkPHP(version); err != nil {
+		return store.Site{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	site, err := s.Get(ctx, name)
+	if err != nil {
+		return store.Site{}, err
+	}
+
+	if site.State != store.SiteActive {
+		return store.Site{}, ErrState
+	}
+
+	old, err := s.st.SetSitePHP(ctx, name, version, s.now())
+	if err != nil {
+		return store.Site{}, err
+	}
+
+	if err := s.applyWeb(ctx); err != nil {
+		if _, rerr := s.st.SetSitePHP(context.WithoutCancel(ctx), name, old, s.now()); rerr != nil {
+			s.log.Error("restore php version after failed change", "site", name, "err", rerr)
+		}
+
+		return store.Site{}, err
+	}
+
+	s.audit(ctx, actor, "site.php", name, map[string]string{"php": version, "previous": old})
+
+	site.PHP = version
+
+	return site, nil
+}
+
+// PHPVersions returns the PHP versions installed on the server.
+func (s *Service) PHPVersions(ctx context.Context) ([]string, error) {
+	return s.ag.PHPVersions(ctx)
+}
+
 // Delete takes the site out of the web server, removes account and files
 // (agent) and then the row. A delete that stops halfway leaves the site in
 // state deleting and can be repeated.
@@ -298,7 +369,8 @@ func (s *Service) Sync(ctx context.Context) error {
 	return s.applyWeb(ctx)
 }
 
-// applyWeb sends the complete web state: every active site with its domains.
+// applyWeb sends the complete web state: every active site with its domains
+// and PHP version.
 func (s *Service) applyWeb(ctx context.Context) error {
 	sites, err := s.st.Sites(ctx)
 	if err != nil {
@@ -309,7 +381,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 
 	for _, site := range sites {
 		if site.State == store.SiteActive && len(site.Domains) > 0 {
-			req.Sites = append(req.Sites, agentapi.WebSite{User: site.Name, Domains: site.Domains})
+			req.Sites = append(req.Sites, agentapi.WebSite{User: site.Name, Domains: site.Domains, PHP: site.PHP})
 		}
 	}
 

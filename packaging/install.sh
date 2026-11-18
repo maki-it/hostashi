@@ -17,8 +17,10 @@
 #   --allow-untested     accept an OS release that is not on the supported list
 #
 # nginx comes from the distribution with its brotli modules (ADR-0020) and
-# runs on the configuration the agent renders. Not yet part of this
-# installer: PHP, MariaDB, project quota (spike S5/S8), firewall and TLS.
+# runs on the configuration the agent renders. PHP is the distribution's
+# (ADR-0019); each site gets its own FPM master, so the package's own FPM
+# service stays off. Not yet part of this installer: more PHP versions
+# (sury.org), MariaDB, project quota (spike S5/S8), firewall and TLS.
 #
 # Exit codes: 0 ok, 2 refused by preflight (server unchanged), 3 a step
 # failed (re-running is safe), 64 usage.
@@ -97,7 +99,8 @@ preflight() {
   esac
   [ "$ARCH" != unsupported ] || fail "unsupported architecture '$RAW_ARCH' (amd64 and arm64 only)"
   [ -d /run/systemd/system ] || fail "systemd is not running as PID 1"
-  [ -d "$UNIT_DIR" ] && [ -f "$UNIT_DIR/hostashi.service" ] && [ -f "$UNIT_DIR/hostashi-agent.service" ] ||
+  [ -d "$UNIT_DIR" ] && [ -f "$UNIT_DIR/hostashi.service" ] && [ -f "$UNIT_DIR/hostashi-agent.service" ] &&
+    [ -f "$UNIT_DIR/hostashi-php@.service" ] ||
     fail "systemd units not found in $UNIT_DIR"
 
   case "$LISTEN" in
@@ -136,7 +139,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config nginx units service"
+STEPS="account dirs key binary config nginx php units service"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -209,6 +212,41 @@ do_nginx() {
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${NGINX_PKGS[@]}" >>"$LOG" 2>&1
 }
 
+# PHP from the distribution (Debian 13: 8.4, Ubuntu 26.04: 8.5) with the
+# extensions of spike S5. The agent runs one FPM master per site.
+PHP_PKGS=(php-fpm php-cli php-mysql php-curl php-gd php-mbstring php-xml php-zip php-intl php-bcmath)
+# Every version the agent may run a site on (agentapi.PHPVersions); a unit
+# template is installed for each, whether the version is installed or not.
+PHP_VERSIONS=(7.4 8.1 8.2 8.3 8.4 8.5)
+
+# distro_fpm_units prints the package FPM units (php8.4-fpm.service, ...).
+distro_fpm_units() {
+  local v
+  for v in "${PHP_VERSIONS[@]}"; do
+    [ -e "/usr/lib/systemd/system/php$v-fpm.service" ] && echo "php$v-fpm.service"
+  done
+  return 0
+}
+
+chk_php() {
+  local p u
+  for p in "${PHP_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
+  for u in $(distro_fpm_units); do
+    [ "$(systemctl is-enabled "$u" 2>/dev/null)" != enabled ] || { echo "$u is enabled"; return 1; }
+    [ "$(systemctl is-active "$u" 2>/dev/null)" != active ] || { echo "$u is running"; return 1; }
+  done
+}
+do_php() {
+  apt-get update -qq >>"$LOG" 2>&1 &&
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${PHP_PKGS[@]}" >>"$LOG" 2>&1 || return 1
+  local u
+  for u in $(distro_fpm_units); do
+    systemctl disable --now "$u" >>"$LOG" 2>&1 || return 1
+  done
+}
+
+php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }
+
 chk_units() {
   local u
   for u in hostashi-agent.service hostashi.service; do
@@ -216,6 +254,10 @@ chk_units() {
   done
   dir_ok "$(dirname "$NGINX_DROPIN")" 755 root:root || { echo "nginx drop-in directory"; return 1; }
   file_matches "$NGINX_DROPIN" 0644 root:root <"$UNIT_DIR/nginx-hostashi.conf" || { echo "nginx drop-in differs"; return 1; }
+  local v
+  for v in "${PHP_VERSIONS[@]}"; do
+    php_unit "$v" | file_matches "/etc/systemd/system/hostashi-php-$v@.service" 0644 root:root || { echo "PHP $v unit differs"; return 1; }
+  done
 }
 do_units() {
   local u
@@ -226,6 +268,11 @@ do_units() {
   install -d -m 0755 -o root -g root "$(dirname "$NGINX_DROPIN")" || return 1
   write_file "$NGINX_DROPIN" 0644 root:root <"$UNIT_DIR/nginx-hostashi.conf"
   [ $? -le 1 ] || return 1
+  local v
+  for v in "${PHP_VERSIONS[@]}"; do
+    php_unit "$v" | write_file "/etc/systemd/system/hostashi-php-$v@.service" 0644 root:root
+    [ $? -le 1 ] || return 1
+  done
   CONFIG_CHANGED=yes
   systemctl daemon-reload >>"$LOG" 2>&1
 }

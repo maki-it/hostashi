@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/hosting"
@@ -19,6 +20,7 @@ type siteJSON struct {
 	Name      string    `json:"name"`
 	Pool      string    `json:"pool"`
 	State     string    `json:"state"`
+	PHP       string    `json:"php"`     // PHP version, "" for no PHP
 	Domains   []string  `json:"domains"` // the first one is the primary domain
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -30,7 +32,7 @@ func toSiteJSON(s store.Site) siteJSON {
 		d = []string{}
 	}
 
-	return siteJSON{Name: s.Name, Pool: s.Pool, State: s.State, Domains: d, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt}
+	return siteJSON{Name: s.Name, Pool: s.Pool, State: s.State, PHP: s.PHP, Domains: d, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt}
 }
 
 // agentTimeout bounds one site change: account, web server switch and checks.
@@ -119,6 +121,7 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 		var in struct {
 			Name    string   `json:"name"`
 			Pool    string   `json:"pool"`
+			PHP     string   `json:"php"`
 			Domains []string `json:"domains"`
 		}
 		if !decodeJSON(w, r, &in) {
@@ -128,7 +131,7 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
-		s, err := svc.Create(ctx, p.User.ID, hosting.CreateRequest{Name: in.Name, Pool: in.Pool, Domains: in.Domains})
+		s, err := svc.Create(ctx, p.User.ID, hosting.CreateRequest{Name: in.Name, Pool: in.Pool, PHP: in.PHP, Domains: in.Domains})
 		if err != nil {
 			siteFail(log, w, err, "create site")
 
@@ -157,6 +160,55 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 		}
 
 		writeJSON(w, http.StatusOK, toSiteJSON(s))
+	}))
+
+	mux.HandleFunc("PUT /api/v1/sites/{name}/php", admin("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in struct {
+			PHP *string `json:"php"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if in.PHP == nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", `"php" is required ("" turns PHP off)`)
+
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		s, err := svc.SetPHP(ctx, p.User.ID, r.PathValue("name"), *in.PHP)
+		if err != nil {
+			siteFail(log, w, err, "set php")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toSiteJSON(s))
+	}))
+
+	// The versions a site can use: installed ones from the agent, plus the
+	// supported list and which of them are legacy (ADR-0019).
+	mux.HandleFunc("GET /api/v1/php/versions", admin("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		installed, err := svc.PHPVersions(ctx)
+		if err != nil {
+			siteFail(log, w, err, "php versions")
+
+			return
+		}
+
+		if installed == nil {
+			installed = []string{}
+		}
+
+		writeJSON(w, http.StatusOK, map[string][]string{
+			"installed": installed, "supported": agentapi.PHPVersions, "legacy": agentapi.LegacyPHPVersions,
+		})
 	}))
 
 	mux.HandleFunc("DELETE /api/v1/sites/{name}", admin("sites:delete", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {

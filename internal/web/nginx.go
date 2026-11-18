@@ -195,15 +195,69 @@ server {
     listen unix:{{.N.ControlSocket}};
     server_name{{range .S.Domains}} {{.}}{{end}};
     root {{.S.Root}};
+    {{- if .S.PHPSocket}}
+    index index.php index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ /index.php$is_args$args;
+    }
+
+    location ~ \.php$ {
+        try_files $fastcgi_script_name =404;
+        fastcgi_pass unix:{{.S.PHPSocket}};
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        fastcgi_param DOCUMENT_ROOT $realpath_root;
+        fastcgi_param SCRIPT_NAME $fastcgi_script_name;
+        fastcgi_param QUERY_STRING $query_string;
+        fastcgi_param REQUEST_METHOD $request_method;
+        fastcgi_param CONTENT_TYPE $content_type;
+        fastcgi_param CONTENT_LENGTH $content_length;
+        fastcgi_param REQUEST_URI $request_uri;
+        fastcgi_param DOCUMENT_URI $document_uri;
+        fastcgi_param SERVER_PROTOCOL $server_protocol;
+        fastcgi_param REQUEST_SCHEME $scheme;
+        fastcgi_param HTTPS $https if_not_empty;
+        fastcgi_param GATEWAY_INTERFACE CGI/1.1;
+        fastcgi_param SERVER_SOFTWARE nginx;
+        fastcgi_param REMOTE_ADDR $remote_addr;
+        fastcgi_param REMOTE_PORT $remote_port;
+        fastcgi_param SERVER_ADDR $server_addr;
+        fastcgi_param SERVER_PORT $server_port;
+        fastcgi_param SERVER_NAME $server_name;
+        fastcgi_param REDIRECT_STATUS 200;
+        # httpoxy: never pass a client's Proxy header on as HTTP_PROXY.
+        fastcgi_param HTTP_PROXY "";
+    }
+    {{- else}}
     index index.html index.htm;
 
     location / {
         try_files $uri $uri/ =404;
     }
 
+    # Without PHP, PHP files are never sent as text: they may hold secrets
+    # such as database passwords.
+    location ~ \.php$ {
+        deny all;
+    }
+    {{- end}}
+
     # Hidden files stay hidden, except /.well-known (RFC 8615).
     location ~ /\.(?!well-known/) {
         deny all;
+    }
+
+    # Health check of the agent after a reload, only through its Unix socket.
+    # It never reaches the site's application, so a broken application does
+    # not block configuration changes of other sites.
+    location = /.hostashi/health {
+        if ($remote_addr != "unix:") {
+            return 404;
+        }
+        access_log off;
+        default_type text/plain;
+        return 200 "{{.S.User}}";
     }
 }
 `))
@@ -324,8 +378,10 @@ func (n *Nginx) liveGeneration(ctx context.Context) (int, error) {
 const stableAnswers = 8
 
 // Verify waits until the control endpoint reports gen several times in a
-// row, then asks every site for "/" on its primary domain. A transport error
-// or a status of 500 or more fails the generation.
+// row, then asks every site's health location on its primary domain: it
+// must answer 200 with the site's name, which proves that the domain reaches
+// the right server block. A transport error or any other answer fails the
+// generation.
 func (n *Nginx) Verify(ctx context.Context, gen int, d Desired) error {
 	timeout := n.VerifyTimeout
 	if timeout == 0 {
@@ -359,12 +415,12 @@ func (n *Nginx) Verify(ctx context.Context, gen int, d Desired) error {
 	}
 
 	for _, s := range d.Sites {
-		code, _, err := n.get(ctx, s.Domains[0], "/")
+		code, body, err := n.get(ctx, s.Domains[0], "/.hostashi/health")
 		if err != nil {
 			return fmt.Errorf("web: site %s: %w", s.User, err)
 		}
 
-		if code >= http.StatusInternalServerError {
+		if code != http.StatusOK || body != s.User {
 			return fmt.Errorf("web: site %s: health check answered %d", s.User, code)
 		}
 	}
