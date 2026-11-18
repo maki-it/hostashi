@@ -10,7 +10,7 @@ Evidence tags as in [docs/adr/README.md](../../docs/adr/README.md): **[V]** veri
 
 - Sandbox container, root with full capabilities, kernel 6.18, Go 1.24.7, `golang.org/x/sys` v0.33.0. No real Debian 13 or Ubuntu 24.04 server was used, nothing was bought or changed, nothing was created at Hetzner.
 - Site users are plain numeric uids (20001, 20002) without passwd entries. The helper never needs a passwd entry [V].
-- The sandbox kernel has no `quota_v2` (see S8), so **real project quota was not tested**. A size-limited tmpfs stands in for a full quota (`ENOSPC` instead of `EDQUOT`, the error path is identical in code) [V for the stand-in, A for real quota].
+- The sandbox kernel has neither `quota_v2` nor XFS quota support (see S8). Real project quota was therefore tested in a QEMU VM with the **stock Debian 13 kernel 6.12.107** (`harness/vm-quota-test.sh`, same approach as S8, software emulation). In the sandbox itself a size-limited tmpfs stands in for a full quota.
 - `fs.protected_symlinks` is 0 in this sandbox (Debian and Ubuntu default: 1). The design does not rely on it [V, tests ran with it off].
 - Debian 13 (kernel 6.12) and Ubuntu 24.04 (kernel 6.8) are far above the 5.6 needed for `openat2` and the 5.8 needed for `STATX_ATTR_MOUNT_ROOT` [V from S8 kernel notes]. arm64: `go vet` passes, tests were not run there.
 
@@ -55,7 +55,9 @@ There is no generic exec operation anywhere. The helper only knows eight operati
 | setuid, setgid and sticky bits cannot be set (write, mkdir, chmod), at path, helper and RPC level | [V] `TestModeBitsRefused`, `TestMalformedHelperInput`, `TestRPCEndToEnd` |
 | Atomic write: temp file in the same directory, `RENAME_NOREPLACE` unless overwrite is asked for, wrong body length leaves old content and no temp file | [V] `TestWriteSemantics`, `TestLargeBodyBothWays` |
 | Files and directories are created owned by the site user with exactly the requested mode, without any `chown` | [V] `TestRoundTripAsSiteUser` |
-| Out of space: error code `no_space`, no partial file, old content intact, delete and writes work again afterwards | [V on tmpfs stand-in] `TestNoSpaceLeavesNoPartialFile`, `TestRPCQuotaStandIn` |
+| Out of space: error code `no_space`, no partial file, old content intact, delete and writes work again afterwards | [V on tmpfs stand-in in the sandbox] `TestNoSpaceLeavesNoPartialFile`, `TestRPCQuotaStandIn` |
+| **Real ext4 project quota (Debian 13 kernel, VM):** project id and `+P` set only on the site home by root; every directory and file created later by the helper inherits project 42 without any `chattr` by the helper; the 256 KiB limit stops the 8th 32 KiB write with `no_space` (usage 227 of 256 KiB), no temp file left, delete frees budget, a neighbour without limit on the same file system is unaffected | [V] `TestRPCRealProjectQuotaExt4`, one run, log excerpt below |
+| Pool, home and RPC end-to-end tests also pass on the Debian 13 kernel (including real `statx` mount-root check on a real ext4 mount) | [V] same VM run |
 | Malformed helper input (garbage, giant header, unknown field, NUL, trailing data, short body, huge size) produces an error response, no panic, no hang, no file | [V] `TestMalformedHelperInput` |
 | Helper that never answers is killed at the timeout | [V] `TestTimeoutKillsHelper` |
 | Unmounted pool: a plain directory where the volume should be is refused (`STATX_ATTR_MOUNT_ROOT`), also after a detach; wrong or missing or symlinked or writable marker is refused | [V] `TestUnmountedPoolIsRefused`, `TestOpenRootChecks` |
@@ -94,8 +96,8 @@ Conclusion: **no long-lived helper, no pool of helpers, no session protocol need
 3. **The classic root-chown bug class disappears.** Files are created by the site uid, so there is no `chown` of a path the site user can swap for a symlink. [V]
 4. **`st_dev` is not enough to detect a mount inside the tree.** A bind mount of the same file system has the same `st_dev`; the first version of recursive remove would have emptied a bind-mounted directory outside the site. Found by `TestNoXdevRefusesMountInsideTree`, fixed with `RESOLVE_NO_XDEV` on every step. [V]
 5. **The helper is not a sandbox.** It has exactly the powers of the site's own PHP processes: world-readable system files, network, other processes of the same uid. The claim is only: *a bug in the helper cannot do more than the site user can already do, and cannot cross into other sites or root-owned state.* Homes must therefore be 0750 or 0700 (the agent refuses group/world-writable homes; world-readable is **not** refused yet, add it to the doctor checks). [V and A]
-6. **Quota (ADR-0015, S8 finding 4):** root bypasses project quota; a helper running as the site user does not, so file-manager uploads and restores through this path count against the site by construction. The error path (`no_space`, no partial file, delete still works) is verified on a tmpfs stand-in. That new files inherit the site's project id from the parent directory (`chattr +P`) is **[A]**, not tested here; run it in the S8 VM harness before relying on it. [A]
-7. **Storage pools (ADR-0016) fit.** Pool name to path stays in root-owned state; the marker check plus mount-root check (`statx` mount-root attribute, kernel 5.8 and later) prevents writing into an empty mount point after a detach. `RequiresMountsFor=` in the site units was not tested here. [V for the check, A for systemd]
+6. **Quota (ADR-0015, S8 finding 4):** root bypasses project quota; a helper running as the site user does not, so file-manager uploads and restores through this path count against the site by construction. Verified on real ext4 project quota in the Debian 13 VM: new files and directories inherit the project id from the home directory (`chattr -p 42 +P` once, by root), the limit turns into `no_space`, and nothing partial remains. Still **[A]**: mixing helper writes with PHP-FPM writes under the same limit at load, and root-run restores (these would bypass the limit, so they must run as the site user too). [V and A]
+7. **Storage pools (ADR-0016) fit.** Pool name to path stays in root-owned state; the marker check plus mount-root check (`statx` mount-root attribute, kernel 5.8 and later, also verified on the Debian 13 kernel) prevents writing into an empty mount point after a detach. `RequiresMountsFor=` in the site units was not tested here. [V for the check, A for systemd]
 8. **S1 integration works, with two limits.** A new operation costs about 10 lines in the agent. But the S1 frame limit (64 KiB) means file content is inline up to 32 KiB only and directory listings must be paged (limit 500 per call). **Bulk transfer (upload, download, archives) needs a separate data path.** Suggestion [A, not built]: the web process passes a pipe or socket fd with `SCM_RIGHTS` along with the RPC call and the agent connects it to the helper's stdin or stdout; the helper protocol already streams raw bodies. The S1 frame code would need fd passing.
 9. **Authorization boundary, stated openly.** The agent trusts the web process to decide *which panel user may touch which site*. A compromised web process can therefore read and change the files of **every site** and, by writing a PHP file, run code as any site user. It cannot reach root, other paths, pool or panel state, or anything outside a site home. This is inherent to a panel and is the same trust level as the session layer; it belongs into `05-sicherheit.md` as a named residual risk. [A for the wording, V for the technical limits]
 10. **Capability bounding set is not dropped in the helper** (`CapBnd` stays full as inherited from the agent). With `NoNewPrivs=1`, a non-root uid and empty permitted and effective sets it cannot be used [A], but defense in depth is cheap: a `CapabilityBoundingSet=` on the agent unit shrinks it for the helper too. No seccomp filter was tried; an allowlist for the helper (open, openat2, read, write, getdents, rename, unlink, fchmod, statx and a few more) is a sensible follow-up, as are `CLONE_NEWNET` and `CLONE_NEWIPC` in `SysProcAttr.Cloneflags`. [A]
@@ -116,11 +118,23 @@ Suggested text changes, Kim decides:
 
 ## Not covered
 
-- Real project quota and project id inheritance (needs the S8 QEMU harness), `RequiresMountsFor`, a real Debian 13 and Ubuntu 24.04 host, arm64 execution.
+- `RequiresMountsFor`, Ubuntu 24.04 (needs `linux-modules-extra` for quota), a real Hetzner host instead of the VM, arm64 execution, XFS quota.
 - Streaming bulk transfer and fd passing (finding 8), seccomp and namespaces for the helper (finding 10), archive operations, copy, rights reset.
 - Interaction with PHP-FPM and cron running as the same uid (shared `NOFILE` or process limits via cgroups from ADR-0015).
 - Fuzzing the helper header parser and `Request.Validate` (only `ParseRel` was fuzzed, for 15 s).
 - A hostile site user racing the **agent-side** `OpenRoot` checks: the pool directory is root-owned and not writable by others, so a site user cannot rename its own home [A, checked by the writable-pool test, not by an active attacker].
+
+### Quota test log (VM, Debian 13, kernel 6.12.107)
+
+```text
+=== S4 VM: kernel 6.12.107+deb13-amd64
+--- PASS: TestOpenRootChecks / TestUnmountedPoolIsRefused / TestRPCEndToEnd
+quota_test.go: 7 writes of 32 KiB succeeded before no_space; quota report:
+Project  used  soft  hard
+#0          13     0     0
+#42        227     0   256
+--- PASS: TestRPCRealProjectQuotaExt4 (1.87s)
+```
 
 ## How to run
 
@@ -131,5 +145,7 @@ sudo go test ./...               # full run, needs mount and setuid permission
 sudo go test -race -short ./...  # helper starts are slow under the race detector
 go test -fuzz FuzzParseRel -fuzztime 30s ./confine
 ```
+
+The quota test and the pool tests in a Debian 13 VM: `sudo spike/s4-site-helper/harness/vm-quota-test.sh` (needs qemu and debootstrap, about 15 minutes the first time).
 
 Tests create temporary directories under `/tmp`, mount small tmpfs instances and use uids 20001 and 20002. They do not touch anything else.
