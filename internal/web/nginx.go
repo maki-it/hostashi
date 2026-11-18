@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"text/template"
@@ -70,6 +71,16 @@ type Nginx struct {
 	// Brotli turns on the brotli filter and static modules (ADR-0020).
 	Brotli bool
 
+	// ListenTLS are the HTTPS listen addresses, e.g. "443" and "[::]:443";
+	// empty serves no site over HTTPS.
+	ListenTLS []string
+	// ACMERoot holds /.well-known/acme-challenge/<token> files of HTTP-01
+	// challenges; every site answers them on port 80. Empty: none.
+	ACMERoot string
+	// LegacyHTTP2 writes "listen ... ssl http2" instead of "http2 on" for
+	// nginx before 1.25.1 (tests on older distributions only).
+	LegacyHTTP2 bool
+
 	VerifyTimeout time.Duration
 }
 
@@ -83,7 +94,7 @@ func (n *Nginx) check() error {
 		return errors.New("web: nginx driver needs a controller and listen addresses")
 	}
 
-	for _, l := range n.Listen {
+	for _, l := range append(slices.Clone(n.Listen), n.ListenTLS...) {
 		if !listenRe.MatchString(l) {
 			return fmt.Errorf("web: invalid listen address %q", l)
 		}
@@ -95,7 +106,7 @@ func (n *Nginx) check() error {
 		}
 	}
 
-	for _, p := range []string{n.AccessLog, n.TempDir, n.Modules} {
+	for _, p := range []string{n.AccessLog, n.TempDir, n.Modules, n.ACMERoot} {
 		if p != "" && !confPathRe.MatchString(p) {
 			return fmt.Errorf("web: invalid path %q", p)
 		}
@@ -160,6 +171,17 @@ http {
     brotli_types {{.Types}};
     {{- end}}
 
+    {{- if .N.ListenTLS}}
+
+    # TLS settings (Mozilla "intermediate"). Certificates are per site.
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:hostashi_tls:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+    {{- end}}
+
     # Unknown host names get no answer.
     server {
         {{- range .N.Listen}}
@@ -169,6 +191,18 @@ http {
         server_name _;
         return 444;
     }
+    {{- if .N.ListenTLS}}
+
+    # Unknown host names over TLS: the handshake is refused, no certificate
+    # of another site is shown.
+    server {
+        {{- range .N.ListenTLS}}
+        listen {{.}} ssl default_server;
+        {{- end}}
+        server_name _;
+        ssl_reject_handshake on;
+    }
+    {{- end}}
 
     # Control endpoint, reachable only through the agent's Unix socket.
     server {
@@ -194,6 +228,45 @@ server {
     {{- end}}
     listen unix:{{.N.ControlSocket}};
     server_name{{range .S.Domains}} {{.}}{{end}};
+    {{- if .N.ACMERoot}}
+
+    # HTTP-01 challenges of the panel's ACME client.
+    location ^~ /.well-known/acme-challenge/ {
+        root {{.N.ACMERoot}};
+        default_type text/plain;
+        try_files $uri =404;
+    }
+    {{- end}}
+
+    # Health check of the agent after a reload, only through its Unix socket.
+    # It never reaches the site's application, so a broken application does
+    # not block configuration changes of other sites.
+    location = /.hostashi/health {
+        if ($remote_addr != "unix:") {
+            return 404;
+        }
+        access_log off;
+        default_type text/plain;
+        return 200 "{{.S.User}}";
+    }
+    {{- if .S.Cert}}
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    {{- range .N.ListenTLS}}
+    listen {{.}} ssl{{if $.N.LegacyHTTP2}} http2{{end}};
+    {{- end}}
+    {{- if not .N.LegacyHTTP2}}
+    http2 on;
+    {{- end}}
+    server_name{{range .S.Domains}} {{.}}{{end}};
+    ssl_certificate {{.S.Cert}};
+    ssl_certificate_key {{.S.Key}};
+    {{- end}}
     root {{.S.Root}};
     {{- if .S.PHPSocket}}
     index index.php index.html index.htm;
@@ -247,18 +320,6 @@ server {
     location ~ /\.(?!well-known/) {
         deny all;
     }
-
-    # Health check of the agent after a reload, only through its Unix socket.
-    # It never reaches the site's application, so a broken application does
-    # not block configuration changes of other sites.
-    location = /.hostashi/health {
-        if ($remote_addr != "unix:") {
-            return 404;
-        }
-        access_log off;
-        default_type text/plain;
-        return 200 "{{.S.User}}";
-    }
 }
 `))
 
@@ -278,6 +339,10 @@ func (n *Nginx) Render(d Desired, gen int) (Files, error) {
 	f.Content["nginx.conf"] = bytes.Clone(b.Bytes())
 
 	for _, s := range d.Sites {
+		if s.Cert != "" && len(n.ListenTLS) == 0 {
+			return Files{}, fmt.Errorf("web: site %s has a certificate but there is no HTTPS listener", s.User)
+		}
+
 		b.Reset()
 
 		if err := siteTmpl.Execute(&b, map[string]any{"N": n, "S": s}); err != nil {

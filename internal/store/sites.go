@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -25,14 +26,21 @@ var (
 
 // Site is a stored site with its domains, the primary one first.
 type Site struct {
-	ID        int64
-	Name      string
-	Pool      string
-	State     string
-	PHP       string // PHP version, empty for no PHP
-	Domains   []string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID      int64
+	Name    string
+	Pool    string
+	State   string
+	PHP     string // PHP version, empty for no PHP
+	Domains []string
+	TLS     bool // HTTPS wanted
+	// TLSDomains and TLSNotAfter describe the live certificate (none: empty).
+	TLSDomains  []string
+	TLSNotAfter time.Time
+	// TLSError is the reason of the last failed attempt at TLSFailedAt.
+	TLSError    string
+	TLSFailedAt time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // CreateSite stores a new site in state creating together with its domains.
@@ -75,7 +83,7 @@ func (s *Store) CreateSite(ctx context.Context, name, pool, php string, domains 
 
 	t := time.Unix(now.Unix(), 0).UTC()
 
-	return Site{ID: id, Name: name, Pool: pool, State: SiteCreating, PHP: php, Domains: domains, CreatedAt: t, UpdatedAt: t}, nil
+	return Site{ID: id, Name: name, Pool: pool, State: SiteCreating, PHP: php, Domains: domains, TLSDomains: []string{}, CreatedAt: t, UpdatedAt: t}, nil
 }
 
 func insertDomains(ctx context.Context, tx *sql.Tx, siteID int64, domains []string) error {
@@ -219,7 +227,7 @@ func domainsOf(ctx context.Context, q queryer, siteID int64) ([]string, error) {
 // Sites returns all sites sorted by name, with their domains.
 func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, pool, state, php, created_at, updated_at FROM sites ORDER BY name`)
+		`SELECT id, name, pool, state, php, tls, tls_domains, tls_not_after, tls_error, tls_failed_at, created_at, updated_at FROM sites ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("store: %w", err)
 	}
@@ -227,18 +235,13 @@ func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 	var out []Site
 
 	for rows.Next() {
-		var (
-			st       Site
-			cre, upd int64
-		)
-
-		if err := rows.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &cre, &upd); err != nil {
+		st, err := scanSite(rows)
+		if err != nil {
 			_ = rows.Close()
 
-			return nil, fmt.Errorf("store: %w", err)
+			return nil, err
 		}
 
-		st.CreatedAt, st.UpdatedAt = time.Unix(cre, 0).UTC(), time.Unix(upd, 0).UTC()
 		out = append(out, st)
 	}
 
@@ -261,29 +264,120 @@ func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 
 // SiteByName returns one site or ErrNotFound.
 func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
-	var (
-		st       Site
-		cre, upd int64
-	)
-
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, pool, state, php, created_at, updated_at FROM sites WHERE name = ?`, name).
-		Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &cre, &upd)
+	st, err := scanSite(s.db.QueryRowContext(ctx, `SELECT id, name, pool, state, php, tls, tls_domains, tls_not_after, tls_error, tls_failed_at, created_at, updated_at FROM sites WHERE name = ?`, name))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, ErrNotFound
 	}
 
 	if err != nil {
-		return Site{}, fmt.Errorf("store: %w", err)
+		return Site{}, err
 	}
-
-	st.CreatedAt, st.UpdatedAt = time.Unix(cre, 0).UTC(), time.Unix(upd, 0).UTC()
 
 	if st.Domains, err = domainsOf(ctx, s.db, st.ID); err != nil {
 		return Site{}, err
 	}
 
 	return st, nil
+}
+
+type scanner interface{ Scan(dest ...any) error }
+
+func scanSite(r scanner) (Site, error) {
+	var (
+		st                         Site
+		tls                        int
+		tlsDomains                 string
+		notAfter, failed, cre, upd int64
+	)
+
+	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &tls, &tlsDomains, &notAfter, &st.TLSError, &failed, &cre, &upd)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Site{}, err
+	}
+
+	if err != nil {
+		return Site{}, fmt.Errorf("store: %w", err)
+	}
+
+	st.TLS = tls == 1
+	st.TLSDomains = strings.Fields(tlsDomains)
+	st.TLSNotAfter, st.TLSFailedAt = unixOrZero(notAfter), unixOrZero(failed)
+	st.CreatedAt, st.UpdatedAt = time.Unix(cre, 0).UTC(), time.Unix(upd, 0).UTC()
+
+	return st, nil
+}
+
+func unixOrZero(v int64) time.Time {
+	if v == 0 {
+		return time.Time{}
+	}
+
+	return time.Unix(v, 0).UTC()
+}
+
+// SetSiteTLS sets whether a site wants HTTPS and returns the previous value.
+func (s *Store) SetSiteTLS(ctx context.Context, name string, on bool, now time.Time) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var old int
+	if err := tx.QueryRowContext(ctx, `SELECT tls FROM sites WHERE name = ?`, name).Scan(&old); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, ErrNotFound
+		}
+
+		return false, fmt.Errorf("store: %w", err)
+	}
+
+	v := 0
+	if on {
+		v = 1
+	}
+
+	// A new request starts without the old failure, so it is tried at once.
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET tls = ?, tls_error = '', tls_failed_at = 0, updated_at = ? WHERE name = ?`,
+		v, now.Unix(), name); err != nil {
+		return false, fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("store: %w", err)
+	}
+
+	return old == 1, nil
+}
+
+// SetSiteCert records a newly installed certificate and clears the error.
+func (s *Store) SetSiteCert(ctx context.Context, name string, domains []string, notAfter, now time.Time) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE sites SET tls_domains = ?, tls_not_after = ?, tls_error = '', tls_failed_at = 0, updated_at = ? WHERE name = ?`,
+		strings.Join(domains, " "), notAfter.Unix(), now.Unix(), name)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// SetSiteTLSError records a failed attempt to get a certificate.
+func (s *Store) SetSiteTLSError(ctx context.Context, name, msg string, at time.Time) error {
+	if len(msg) > 1000 {
+		msg = strings.ToValidUTF8(msg[:1000], "")
+	}
+
+	if _, err := s.db.ExecContext(ctx, `UPDATE sites SET tls_error = ?, tls_failed_at = ? WHERE name = ?`, msg, at.Unix(), name); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteSite removes a site and its domains. A missing site is not an error.

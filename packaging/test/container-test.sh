@@ -12,6 +12,9 @@
 # HOSTASHI_TEST_CA (optional): a CA bundle to trust inside the container,
 # for build sandboxes behind a TLS-intercepting proxy. CI does not need it.
 # KEEP=1 leaves the container running after the test, for debugging.
+# PEBBLE_DIR (optional): a directory with the pebble and pebble-challtestsrv
+# binaries (v2.10.3). With it, a site gets a certificate from Pebble, a
+# local test CA; the test never talks to the real Let's Encrypt.
 set -euo pipefail
 
 IMG=$1
@@ -99,6 +102,8 @@ expect_mode /var/lib/hostashi-agent "700 root:root"
 expect_mode /var/lib/hostashi-agent/sites.json "600 root:root"
 expect_mode /run/hostashi "750 root:hostashi"
 expect_mode /run/hostashi/agent.sock "660 root:hostashi"
+expect_mode /var/lib/hostashi-acme "755 root:root"
+expect_mode /var/lib/hostashi-acme/.well-known/acme-challenge "2750 hostashi:www-data"
 
 step "nginx runs on the agent's generation"
 [ "$(x systemctl is-active nginx.service)" = active ] || fail "nginx is not running"
@@ -197,5 +202,65 @@ body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/)
 [ "$(api DELETE /api/v1/sites/wp)" = 204 ] || fail "delete PHP site: $(x cat /tmp/api.out)"
 ! x systemctl is-active --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit still running after delete"
 x test ! -e /home/wp || fail "PHP site home still there"
+
+if [ -z "${PEBBLE_DIR:-}" ]; then
+  echo "PEBBLE_DIR not set, skipping the certificate test"
+else
+  step "a certificate from a test CA (Pebble)"
+  x mkdir -p /opt/pebble
+  docker cp "$PEBBLE_DIR/pebble" "$NAME:/opt/pebble/pebble"
+  docker cp "$PEBBLE_DIR/pebble-challtestsrv" "$NAME:/opt/pebble/pebble-challtestsrv"
+  # Pebble's own HTTPS listener: a self-signed certificate for localhost,
+  # which the panel trusts through HOSTASHI_ACME_CA.
+  tmp=$(mktemp -d)
+  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 2 -subj /CN=localhost \
+    -addext subjectAltName=DNS:localhost -addext basicConstraints=critical,CA:TRUE \
+    -keyout "$tmp/pebble.key" -out "$tmp/pebble.pem" 2>/dev/null
+  docker cp "$tmp/pebble.key" "$NAME:/opt/pebble/key.pem"
+  docker cp "$tmp/pebble.pem" "$NAME:/opt/pebble/cert.pem"
+  rm -rf "$tmp"
+  xi sh -c 'cat >/opt/pebble/config.json' <<'JSON'
+{"pebble": {"listenAddress": "127.0.0.1:14000", "managementListenAddress": "127.0.0.1:15000",
+  "certificate": "/opt/pebble/cert.pem", "privateKey": "/opt/pebble/key.pem",
+  "httpPort": 80, "tlsPort": 443, "externalAccountBindingRequired": false}}
+JSON
+  # DNS: every name resolves to 127.0.0.1, where nginx answers the challenge.
+  x systemd-run --unit pebble-dns /opt/pebble/pebble-challtestsrv -defaultIPv4 127.0.0.1 -defaultIPv6 "" \
+    -dnsserver 127.0.0.1:8053 -doh "" -http01 "" -https01 "" -tlsalpn01 "" -management 127.0.0.1:8055 >/dev/null
+  x systemd-run --unit pebble -E PEBBLE_VA_NOSLEEP=1 -E PEBBLE_WFE_NONCEREJECT=0 \
+    /opt/pebble/pebble -config /opt/pebble/config.json -dnsserver 127.0.0.1:8053 >/dev/null
+  x install -m 0640 -o root -g hostashi /opt/pebble/cert.pem /etc/hostashi/pebble-ca.pem
+  x mkdir -p /etc/systemd/system/hostashi.service.d
+  xi sh -c 'cat >/etc/systemd/system/hostashi.service.d/pebble.conf' <<'UNIT'
+[Service]
+Environment=HOSTASHI_ACME_DIRECTORY=https://localhost:14000/dir HOSTASHI_ACME_CA=/etc/hostashi/pebble-ca.pem
+UNIT
+  for _ in $(seq 1 30); do x curl -sfk -o /dev/null https://localhost:14000/dir && break; sleep 1; done
+  x systemctl daemon-reload
+  x systemctl restart hostashi.service
+  for _ in $(seq 1 30); do x curl -sf -o /dev/null http://127.0.0.1:8080/api/v1/health && break; sleep 1; done
+
+  [ "$(api POST /api/v1/sites '{"name":"secure","domains":["secure.example.com","www.secure.example.com"]}')" = 201 ] ||
+    fail "create site: $(x cat /tmp/api.out)"
+  x sh -c 'echo "hello over https" >/home/secure/htdocs/index.html'
+  [ "$(api PUT /api/v1/sites/secure/tls '{"enabled":true}')" = 202 ] || fail "TLS on: $(x cat /tmp/api.out)"
+  active=""
+  for _ in $(seq 1 60); do
+    [ "$(api GET /api/v1/sites/secure)" = 200 ] || fail "get site: $(x cat /tmp/api.out)"
+    if x grep -q '"active":true' /tmp/api.out; then active=1; break; fi
+    if x grep -q '"error":' /tmp/api.out; then fail "certificate failed: $(x cat /tmp/api.out)"; fi
+    sleep 2
+  done
+  [ -n "$active" ] || fail "TLS not active after two minutes: $(x cat /tmp/api.out)"
+  body=$(x curl -fsSk --resolve www.secure.example.com:443:127.0.0.1 https://www.secure.example.com/)
+  [ "$body" = "hello over https" ] || fail "HTTPS answered '$body'"
+  loc=$(x curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' -H 'Host: secure.example.com' http://127.0.0.1/a?b=1)
+  [ "$loc" = "301 https://secure.example.com/a?b=1" ] || fail "HTTP did not redirect: '$loc'"
+  # The key never leaves root; the panel cannot read it.
+  expect_mode /var/lib/hostashi-agent/tls/secure/key.pem "600 root:root"
+  if x runuser -u hostashi -- cat /var/lib/hostashi-agent/tls/secure/key.pem >/dev/null 2>&1; then fail "panel user can read the site key"; fi
+  [ "$(api DELETE /api/v1/sites/secure)" = 204 ] || fail "delete TLS site: $(x cat /tmp/api.out)"
+  x test ! -e /var/lib/hostashi-agent/tls/secure || fail "certificate of a deleted site still there"
+fi
 
 echo "PASS: installer test on $IMG"

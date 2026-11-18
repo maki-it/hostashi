@@ -8,8 +8,11 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -24,7 +27,8 @@ type fakeAgent struct {
 	web      agentapi.WebApplyRequest
 	applies  int
 
-	createErr, deleteErr, webErr error
+	createErr, deleteErr, webErr, tlsErr error
+	installed                            int
 }
 
 func newFake() *fakeAgent { return &fakeAgent{accounts: map[string]bool{}} }
@@ -93,6 +97,36 @@ func (f *fakeAgent) WebApply(_ context.Context, req agentapi.WebApplyRequest) (a
 	return agentapi.WebApplyResponse{Generation: f.applies, Changed: true}, nil
 }
 
+// TLSCSR returns a fake request that names the domains.
+func (f *fakeAgent) TLSCSR(_ context.Context, user string, domains []string) (string, error) {
+	return "csr " + user + " " + strings.Join(domains, ","), nil
+}
+
+// TLSInstall accepts a fake chain from fakeIssuer.
+func (f *fakeAgent) TLSInstall(_ context.Context, user, chain string) (agentapi.TLSCertInfo, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.tlsErr != nil {
+		return agentapi.TLSCertInfo{}, f.tlsErr
+	}
+
+	parts := strings.Fields(chain)
+	if len(parts) != 4 || parts[0] != "cert" || parts[1] != user {
+		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "bad chain"}
+	}
+
+	f.installed++
+
+	return agentapi.TLSCertInfo{Domains: strings.Split(parts[2], ","), NotAfter: time.Unix(0, 0).Add(parseDays(parts[3]))}, nil
+}
+
+func parseDays(s string) time.Duration {
+	n, _ := strconv.Atoi(s)
+
+	return time.Duration(n) * 24 * time.Hour
+}
+
 func (f *fakeAgent) PHPVersions(context.Context) ([]string, error) {
 	return []string{"8.3", "8.4"}, nil
 }
@@ -108,6 +142,10 @@ func (f *fakeAgent) live() string {
 		entry := fmt.Sprintf("%s=%v", s.User, s.Domains)
 		if s.PHP != "" {
 			entry += "+php" + s.PHP
+		}
+
+		if s.TLS {
+			entry += "+tls"
 		}
 
 		out = append(out, entry)
@@ -378,5 +416,160 @@ func TestPHPVersionChange(t *testing.T) {
 	var n int
 	if err := st.RawCount(ctx, `SELECT count(*) FROM audit_log WHERE action = ?`, "site.php", &n); err != nil || n != 2 {
 		t.Fatalf("audit entries %d %v", n, err)
+	}
+}
+
+// fakeIssuer signs fake requests; the certificate is valid until day
+// validDays after the Unix epoch.
+type fakeIssuer struct {
+	mu        sync.Mutex
+	calls     int
+	err       error
+	validDays int
+}
+
+func (i *fakeIssuer) Obtain(_ context.Context, csr []byte) ([]byte, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	i.calls++
+
+	if i.err != nil {
+		return nil, i.err
+	}
+
+	p := strings.Fields(string(csr)) // "csr user domains"
+
+	return []byte(fmt.Sprintf("cert %s %s %d", p[1], p[2], i.validDays)), nil
+}
+
+func TestTLSLifecycle(t *testing.T) {
+	s, ag, _ := newService(t)
+	ctx := t.Context()
+
+	day := func(d int) time.Time { return time.Unix(0, 0).Add(time.Duration(d) * 24 * time.Hour) }
+	now := day(1000)
+	s.now = func() time.Time { return now }
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", Domains: []string{"blog.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.SetTLS(ctx, 1, "blog", true); !errors.Is(err, ErrNoTLS) {
+		t.Fatalf("without issuer: %v", err)
+	}
+
+	iss := &fakeIssuer{validDays: 1090}
+	s.EnableTLS(iss)
+
+	site, err := s.SetTLS(ctx, 1, "blog", true)
+	if err != nil || !site.TLS || ag.live() != "[blog=[blog.example.com]]" {
+		t.Fatalf("tls on: %+v %v live %s", site, err, ag.live())
+	}
+
+	s.RenewDue(ctx)
+
+	if got := ag.live(); got != "[blog=[blog.example.com]+tls]" || iss.calls != 1 {
+		t.Fatalf("after issue: live %s, calls %d", got, iss.calls)
+	}
+
+	// Still valid for 90 days: nothing to do.
+	s.RenewDue(ctx)
+
+	if iss.calls != 1 {
+		t.Fatalf("renewed a fresh certificate: %d", iss.calls)
+	}
+
+	// A new domain: HTTP only until the new certificate is there.
+	if _, err := s.SetDomains(ctx, 1, "blog", []string{"blog.example.com", "www.blog.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := ag.live(); got != "[blog=[blog.example.com www.blog.example.com]]" {
+		t.Fatalf("after domain change: %s", got)
+	}
+
+	s.RenewDue(ctx)
+
+	if got := ag.live(); got != "[blog=[blog.example.com www.blog.example.com]+tls]" || iss.calls != 2 {
+		t.Fatalf("after reissue: %s, calls %d", got, iss.calls)
+	}
+
+	// 70 days later the renewal fails: the error is kept, the old
+	// certificate keeps serving, and the next try waits RetryAfter.
+	now = day(1070)
+	iss.err = errors.New("acme: error: 400 :: urn:ietf:params:acme:error:dns :: NXDOMAIN")
+
+	s.RenewDue(ctx)
+
+	site, _ = s.Get(ctx, "blog")
+	if !strings.Contains(site.TLSError, "NXDOMAIN") || !site.TLSFailedAt.Equal(now) || ag.live() != "[blog=[blog.example.com www.blog.example.com]+tls]" {
+		t.Fatalf("after failure: %+v live %s", site, ag.live())
+	}
+
+	s.RenewDue(ctx)
+
+	if iss.calls != 3 {
+		t.Fatalf("retried within RetryAfter: %d calls", iss.calls)
+	}
+
+	now = now.Add(RetryAfter + time.Minute)
+	iss.err = nil
+	iss.validDays = 1160
+
+	s.RenewDue(ctx)
+
+	site, _ = s.Get(ctx, "blog")
+	if iss.calls != 4 || site.TLSError != "" || !site.TLSNotAfter.Equal(day(1160)) {
+		t.Fatalf("after retry: calls %d site %+v", iss.calls, site)
+	}
+
+	// Expired without renewal: back to HTTP.
+	now = day(1200)
+	iss.err = errors.New("down")
+
+	s.RenewDue(ctx)
+
+	if err := s.Sync(ctx); err != nil || ag.live() != "[blog=[blog.example.com www.blog.example.com]]" {
+		t.Fatalf("expired: %v live %s", err, ag.live())
+	}
+
+	// Off: no more attempts.
+	if site, err := s.SetTLS(ctx, 1, "blog", false); err != nil || site.TLS {
+		t.Fatalf("off: %+v %v", site, err)
+	}
+
+	calls := iss.calls
+	now = now.Add(2 * RetryAfter)
+
+	s.RenewDue(ctx)
+
+	if iss.calls != calls {
+		t.Fatal("certificate requested for a site without TLS")
+	}
+}
+
+func TestTLSInstallFailureIsRecorded(t *testing.T) {
+	s, ag, _ := newService(t)
+	ctx := t.Context()
+
+	s.now = func() time.Time { return time.Unix(0, 0).Add(1000 * 24 * time.Hour) }
+	s.EnableTLS(&fakeIssuer{validDays: 1090})
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", Domains: []string{"blog.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.SetTLS(ctx, 1, "blog", true); err != nil {
+		t.Fatal(err)
+	}
+
+	ag.tlsErr = &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the certificate does not belong to the pending key of this site"}
+
+	s.RenewDue(ctx)
+
+	site, _ := s.Get(ctx, "blog")
+	if !strings.Contains(site.TLSError, "pending key") || len(site.TLSDomains) != 0 || ag.live() != "[blog=[blog.example.com]]" {
+		t.Fatalf("%+v live %s", site, ag.live())
 	}
 }

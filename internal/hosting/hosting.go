@@ -27,6 +27,14 @@ type Agent interface {
 	SiteDelete(ctx context.Context, req agentapi.SiteDeleteRequest) error
 	WebApply(ctx context.Context, req agentapi.WebApplyRequest) (agentapi.WebApplyResponse, error)
 	PHPVersions(ctx context.Context) ([]string, error)
+	TLSCSR(ctx context.Context, user string, domains []string) (string, error)
+	TLSInstall(ctx context.Context, user, chain string) (agentapi.TLSCertInfo, error)
+}
+
+// Issuer turns a certificate signing request into a certificate chain. The
+// production one is package acme.
+type Issuer interface {
+	Obtain(ctx context.Context, csrPEM []byte) ([]byte, error)
 }
 
 // RPCAgent calls the real agent.
@@ -56,6 +64,18 @@ func (a RPCAgent) PHPVersions(ctx context.Context) ([]string, error) {
 	return res.Installed, err
 }
 
+// TLSCSR calls tls.csr.
+func (a RPCAgent) TLSCSR(ctx context.Context, user string, domains []string) (string, error) {
+	res, err := agentapi.TLSCSR.Call(ctx, a.C, agentapi.TLSCSRRequest{User: user, Domains: domains})
+
+	return res.CSR, err
+}
+
+// TLSInstall calls tls.install.
+func (a RPCAgent) TLSInstall(ctx context.Context, user, chain string) (agentapi.TLSCertInfo, error) {
+	return agentapi.TLSInstall.Call(ctx, a.C, agentapi.TLSInstallRequest{User: user, Chain: chain})
+}
+
 // Errors a caller can act on. Errors of the agent come back as
 // *agentrpc.Error with its code.
 var (
@@ -64,6 +84,8 @@ var (
 	ErrDomainTaken = errors.New("hosting: domain belongs to another site")
 	ErrNotFound    = errors.New("hosting: unknown site")
 	ErrState       = errors.New("hosting: the site is being created or deleted")
+	// ErrNoTLS means the panel has no ACME client configured.
+	ErrNoTLS = errors.New("hosting: certificates are not available")
 )
 
 // Service manages sites. Changes are serialized: each one ends with the
@@ -74,6 +96,9 @@ type Service struct {
 	log *slog.Logger
 	now func() time.Time
 	mu  sync.Mutex
+
+	issuer Issuer
+	kick   chan struct{}
 }
 
 // New builds a Service.
@@ -82,8 +107,11 @@ func New(st *store.Store, ag Agent, log *slog.Logger) *Service {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Service{st: st, ag: ag, log: log, now: time.Now}
+	return &Service{st: st, ag: ag, log: log, now: time.Now, kick: make(chan struct{}, 1)}
 }
+
+// EnableTLS sets the ACME client. Without one, sites cannot get HTTPS.
+func (s *Service) EnableTLS(i Issuer) { s.issuer = i }
 
 // CreateRequest describes a new site.
 type CreateRequest struct {
@@ -274,6 +302,12 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 
 	site.Domains = domains
 
+	// A certificate for the old names no longer covers the site: the site
+	// is served over HTTP until the new one is there.
+	if site.TLS {
+		s.Kick()
+	}
+
 	return site, nil
 }
 
@@ -369,8 +403,8 @@ func (s *Service) Sync(ctx context.Context) error {
 	return s.applyWeb(ctx)
 }
 
-// applyWeb sends the complete web state: every active site with its domains
-// and PHP version.
+// applyWeb sends the complete web state: every active site with its domains,
+// PHP version and HTTPS when its certificate covers all its domains.
 func (s *Service) applyWeb(ctx context.Context) error {
 	sites, err := s.st.Sites(ctx)
 	if err != nil {
@@ -381,7 +415,9 @@ func (s *Service) applyWeb(ctx context.Context) error {
 
 	for _, site := range sites {
 		if site.State == store.SiteActive && len(site.Domains) > 0 {
-			req.Sites = append(req.Sites, agentapi.WebSite{User: site.Name, Domains: site.Domains, PHP: site.PHP})
+			req.Sites = append(req.Sites, agentapi.WebSite{
+				User: site.Name, Domains: site.Domains, PHP: site.PHP, TLS: site.TLS && s.certCovers(site, 0),
+			})
 		}
 	}
 

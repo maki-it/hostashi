@@ -102,7 +102,10 @@ func TestUnknownRoutesAndMethods(t *testing.T) {
 	}{
 		{"POST", "/api/v1/health", http.StatusMethodNotAllowed},
 		{"GET", "/api/v1/agent/exec", http.StatusNotFound},
-		{"GET", "/", http.StatusNotFound},
+		{"POST", "/api/v1/agent/exec", http.StatusNotFound},
+		{"GET", "/api", http.StatusNotFound},
+		{"POST", "/", http.StatusMethodNotAllowed},
+		{"GET", "/favicon.ico", http.StatusNotFound},
 	} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
@@ -110,6 +113,32 @@ func TestUnknownRoutesAndMethods(t *testing.T) {
 		if rec.Code != tc.code {
 			t.Errorf("%s %s: %d, want %d", tc.method, tc.path, rec.Code, tc.code)
 		}
+	}
+}
+
+// TestWebInterface checks that the frontend is mounted and keeps its own CSP
+// while the API keeps the strict one. Without a frontend build the page is
+// a 503 notice.
+func TestWebInterface(t *testing.T) {
+	ok := func(context.Context) error { return nil }
+	h := Handler(Config{}, Deps{PingAgent: ok, PingDB: ok})
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/login", nil))
+
+	if rec.Code != http.StatusOK && rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("GET /login: %d", rec.Code)
+	}
+
+	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'self'") {
+		t.Fatalf("UI CSP %q", csp)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/health", nil))
+
+	if csp := rec.Header().Get("Content-Security-Policy"); csp != "default-src 'none'; frame-ancestors 'none'" {
+		t.Fatalf("API CSP %q", csp)
 	}
 }
 

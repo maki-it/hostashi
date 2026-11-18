@@ -1,0 +1,80 @@
+name: Web
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Frontend (typecheck, test, build, embed, e2e)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install (no install scripts)
+        run: npm ci --ignore-scripts
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Build into internal/ui/dist
+        run: npm run build
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Go tests with the built frontend embedded
+        working-directory: .
+        run: go test -race -count=1 ./internal/ui/ ./internal/serve/
+      - name: Build the binary with the frontend
+        working-directory: .
+        env:
+          CGO_ENABLED: "0"
+        run: go build -trimpath -o "$RUNNER_TEMP/hostashi" ./cmd/hostashi
+      - name: Start hostashi serve (fresh database, no agent)
+        run: |
+          data="$RUNNER_TEMP/data"
+          mkdir -m 700 "$data"
+          "$RUNNER_TEMP/hostashi" serve -listen 127.0.0.1:8080 -public-url http://localhost:8080 \
+            -db "$data/h.db" -key "$data/secret.key" -socket "$data/agent.sock" > "$RUNNER_TEMP/serve.log" 2>&1 &
+          for _ in $(seq 1 50); do
+            curl -fsS http://127.0.0.1:8080/api/v1/setup > /dev/null && exit 0
+            sleep 0.2
+          done
+          cat "$RUNNER_TEMP/serve.log"
+          exit 1
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end login test (setup, password, TOTP, passkey)
+        env:
+          HOSTASHI_URL: http://localhost:8080
+          SCREENSHOTS: ${{ runner.temp }}/screenshots
+        run: HOSTASHI_SETUP_TOKEN_FILE="$RUNNER_TEMP/data/setup-token" npm run e2e
+      - name: Server log
+        if: failure()
+        run: cat "$RUNNER_TEMP/serve.log"
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-screenshots
+          path: ${{ runner.temp }}/screenshots
+          if-no-files-found: ignore

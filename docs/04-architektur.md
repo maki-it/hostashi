@@ -58,6 +58,7 @@ Panels dieser Klasse sind Angriffsziel Nummer eins: wer das Panel übernimmt, ha
 |-------|----------|
 | Benutzer | Eigener Linux-User und Gruppe, Home `/home/<user>`, Web-Root darunter |
 | PHP | Eigener FPM-Master pro Site (`hostashi-php-<version>@<site>.service`, `internal/php`), Pool als Site-User, **Unix-Socket** `/run/hostashi-php/<site>/php-fpm.sock` mit Rechten `site-user:www-data 0660`, `open_basedir` auf Home und das eigene `/tmp` der Unit (`PrivateTmp`), Pool-eigene `php_admin_value`. Offen: `disable_functions`-Defaults |
+| TLS | Schlüssel pro Site erzeugt der Agent (`internal/certs`), er verlässt root nie. Das Panel holt das Zertifikat per ACME HTTP-01 (`internal/acme`, Let's Encrypt) nur über einen CSR. HTTP leitet per 301 auf HTTPS um, sobald das Zertifikat alle Domains abdeckt. Offen: HSTS, HTTP/3 |
 | Node/Python | systemd-Service als Site-User mit `NoNewPrivileges`, `ProtectSystem=strict`, `PrivateTmp`, `ReadWritePaths` auf Site-Home |
 | Ressourcen | cgroup v2 über systemd: `MemoryMax`, `CPUQuota`, `TasksMax`, `IOWeight` |
 | Netzwerk | Optional: ausgehende Regeln je Site-UID über nftables (`meta skuid`) |

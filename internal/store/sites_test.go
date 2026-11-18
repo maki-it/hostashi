@@ -5,6 +5,7 @@ package store
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -82,5 +83,51 @@ func TestSiteStoreRoundTrip(t *testing.T) {
 
 	if err := s.SetSiteState(ctx, "blog", SiteActive, now); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("state of deleted site: %v", err)
+	}
+}
+
+func TestSiteTLSColumns(t *testing.T) {
+	s := open(t, dbPath(t))
+	ctx := t.Context()
+	now := time.Unix(2_000_000, 0)
+
+	if _, err := s.CreateSite(ctx, "blog", "default", "", []string{"blog.example.com"}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if old, err := s.SetSiteTLS(ctx, "blog", true, now); err != nil || old {
+		t.Fatalf("set tls: %v %v", old, err)
+	}
+
+	if err := s.SetSiteTLSError(ctx, "blog", "DNS problem: NXDOMAIN", now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.SiteByName(ctx, "blog")
+	if err != nil || !got.TLS || got.TLSError != "DNS problem: NXDOMAIN" || !got.TLSFailedAt.Equal(now.Add(time.Minute)) || !got.TLSNotAfter.IsZero() {
+		t.Fatalf("%+v %v", got, err)
+	}
+
+	notAfter := now.Add(90 * 24 * time.Hour)
+	if err := s.SetSiteCert(ctx, "blog", []string{"blog.example.com", "www.blog.example.com"}, notAfter, now); err != nil {
+		t.Fatal(err)
+	}
+
+	all, err := s.Sites(ctx)
+	if err != nil || len(all) != 1 || fmt.Sprint(all[0].TLSDomains) != "[blog.example.com www.blog.example.com]" ||
+		!all[0].TLSNotAfter.Equal(notAfter) || all[0].TLSError != "" || !all[0].TLSFailedAt.IsZero() {
+		t.Fatalf("%+v %v", all, err)
+	}
+
+	if err := s.SetSiteTLSError(ctx, "blog", strings.Repeat("ä", 800), now); err != nil {
+		t.Fatalf("long error: %v", err)
+	}
+
+	if old, err := s.SetSiteTLS(ctx, "blog", false, now); err != nil || !old {
+		t.Fatalf("tls off: %v %v", old, err)
+	}
+
+	if err := s.SetSiteCert(ctx, "nope", nil, now, now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown: %v", err)
 	}
 }

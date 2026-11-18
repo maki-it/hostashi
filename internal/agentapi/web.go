@@ -63,6 +63,9 @@ type WebSite struct {
 	// PHP is the PHP version of the site's FPM pool, empty for a site
 	// without PHP (static files only).
 	PHP string `json:"php,omitempty"`
+	// TLS serves the site over HTTPS with its live certificate (tls.install)
+	// and redirects HTTP to HTTPS. The certificate must name every domain.
+	TLS bool `json:"tls,omitempty"`
 }
 
 // WebApplyRequest is the complete desired web server state. Sites that are

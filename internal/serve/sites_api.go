@@ -22,17 +22,49 @@ type siteJSON struct {
 	State     string    `json:"state"`
 	PHP       string    `json:"php"`     // PHP version, "" for no PHP
 	Domains   []string  `json:"domains"` // the first one is the primary domain
+	TLS       tlsJSON   `json:"tls"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-func toSiteJSON(s store.Site) siteJSON {
+// tlsJSON is the HTTPS state of a site: wanted (enabled), served (active),
+// the live certificate, and the reason of the last failed attempt.
+type tlsJSON struct {
+	Enabled  bool       `json:"enabled"`
+	Active   bool       `json:"active"`
+	Domains  []string   `json:"domains"`
+	NotAfter *time.Time `json:"notAfter"`
+	Error    string     `json:"error,omitempty"`
+	FailedAt *time.Time `json:"failedAt,omitempty"`
+}
+
+func timeOrNil(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+
+	return &t
+}
+
+func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	d := s.Domains
 	if d == nil {
 		d = []string{}
 	}
 
-	return siteJSON{Name: s.Name, Pool: s.Pool, State: s.State, PHP: s.PHP, Domains: d, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt}
+	td := s.TLSDomains
+	if td == nil {
+		td = []string{}
+	}
+
+	return siteJSON{
+		Name: s.Name, Pool: s.Pool, State: s.State, PHP: s.PHP, Domains: d,
+		TLS: tlsJSON{
+			Enabled: s.TLS, Active: svc.TLSActive(s), Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
+			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
+		},
+		CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
+	}
 }
 
 // agentTimeout bounds one site change: account, web server switch and checks.
@@ -52,6 +84,8 @@ func siteFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "site_exists", "a site with this name exists")
 	case errors.Is(err, hosting.ErrDomainTaken):
 		writeError(w, http.StatusConflict, "domain_taken", err.Error())
+	case errors.Is(err, hosting.ErrNoTLS):
+		writeError(w, http.StatusConflict, "tls_unavailable", "certificates are not available on this panel")
 	case errors.Is(err, hosting.ErrState):
 		writeError(w, http.StatusConflict, "site_busy", "the site is being created or deleted")
 	case errors.As(err, &ae):
@@ -100,7 +134,7 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 
 		out := make([]siteJSON, 0, len(sites))
 		for _, s := range sites {
-			out = append(out, toSiteJSON(s))
+			out = append(out, toSiteJSON(svc, s))
 		}
 
 		writeJSON(w, http.StatusOK, map[string][]siteJSON{"sites": out})
@@ -114,7 +148,7 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 			return
 		}
 
-		writeJSON(w, http.StatusOK, toSiteJSON(s))
+		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
 	}))
 
 	mux.HandleFunc("POST /api/v1/sites", admin("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
@@ -138,7 +172,7 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 			return
 		}
 
-		writeJSON(w, http.StatusCreated, toSiteJSON(s))
+		writeJSON(w, http.StatusCreated, toSiteJSON(svc, s))
 	}))
 
 	mux.HandleFunc("PUT /api/v1/sites/{name}/domains", admin("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
@@ -159,7 +193,7 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 			return
 		}
 
-		writeJSON(w, http.StatusOK, toSiteJSON(s))
+		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
 	}))
 
 	mux.HandleFunc("PUT /api/v1/sites/{name}/php", admin("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
@@ -186,7 +220,41 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 			return
 		}
 
-		writeJSON(w, http.StatusOK, toSiteJSON(s))
+		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
+	}))
+
+	mux.HandleFunc("PUT /api/v1/sites/{name}/tls", admin("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if in.Enabled == nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", `"enabled" is required`)
+
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		// On: the certificate comes in the background; "tls.active" turns
+		// true when the site is served over HTTPS.
+		s, err := svc.SetTLS(ctx, p.User.ID, r.PathValue("name"), *in.Enabled)
+		if err != nil {
+			siteFail(log, w, err, "set tls")
+
+			return
+		}
+
+		code := http.StatusOK
+		if *in.Enabled && !svc.TLSActive(s) {
+			code = http.StatusAccepted
+		}
+
+		writeJSON(w, code, toSiteJSON(svc, s))
 	}))
 
 	// The versions a site can use: installed ones from the agent, plus the
