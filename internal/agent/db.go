@@ -8,15 +8,17 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/mariadb"
+	"github.com/maki-it/hostashi/internal/sites"
 )
 
 // openDB builds the database manager. It does not connect: a server without
 // MariaDB still starts the agent, and db.* report that MariaDB is missing.
-func openDB(stateDir string, log *slog.Logger) (*mariadb.Manager, error) {
+func openDB(ctx context.Context, stateDir string, sm *sites.Manager, log *slog.Logger) (*mariadb.Manager, error) {
 	if stateDir == "" {
 		stateDir = DefaultStateDir
 	}
@@ -25,12 +27,47 @@ func openDB(stateDir string, log *slog.Logger) (*mariadb.Manager, error) {
 		return nil, fmt.Errorf("state directory: %w", err)
 	}
 
-	m, err := mariadb.New(stateDir, mariadb.Connect(mariadb.DefaultSocket), mariadb.Options{Log: log})
+	conn := mariadb.Connect(mariadb.DefaultSocket)
+
+	m, err := mariadb.New(stateDir, conn, mariadb.Options{Log: log})
 	if err != nil {
 		return nil, fmt.Errorf("database registry: %w", err)
 	}
 
+	if sm != nil {
+		m.EnableDumps(mariadb.Dumps{Tools: mariadb.RealTools{}, HomeOf: siteHome(sm), Socket: mariadb.DefaultSocket, Ctx: ctx})
+	}
+
+	// Temporary users of jobs an earlier run did not finish. MariaDB may not
+	// be installed or still be starting; that is only logged.
+	go func() {
+		rctx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+
+		if err := m.RemoveJobUsers(rctx, conn); err != nil && log != nil {
+			log.Warn("remove leftover database job users", "err", err)
+		}
+	}()
+
 	return m, nil
+}
+
+// siteHome looks up home, uid and gid of a site for dump files.
+func siteHome(sm *sites.Manager) func(string) (mariadb.SiteHome, bool) {
+	return func(site string) (mariadb.SiteHome, bool) {
+		home, ok := sm.Home(site)
+		if !ok {
+			return mariadb.SiteHome{}, false
+		}
+
+		for _, s := range sm.List() {
+			if s.User == site {
+				return mariadb.SiteHome{Home: home, UID: s.UID, GID: s.GID}, true
+			}
+		}
+
+		return mariadb.SiteHome{}, false
+	}
 }
 
 var errNoDB = &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "MariaDB is not available on this server"}
@@ -100,6 +137,38 @@ func (h *siteOps) registerDB(s *agentrpc.Server) {
 		return agentapi.DBUserResponse{}, mapDBError(h.db.DeleteUser(ctx, req.User))
 	})
 
+	agentrpc.Handle(s, agentapi.DBImport, func(_ context.Context, _ agentrpc.Caller, req agentapi.DBDumpRequest) (agentapi.DBJob, error) {
+		if h.db == nil {
+			return agentapi.DBJob{}, errNoDB
+		}
+
+		//nolint:contextcheck // the job outlives the request and runs under the agent context
+		j, err := h.db.StartImport(req.Database, req.Path)
+
+		return j, mapDBError(err)
+	})
+
+	agentrpc.Handle(s, agentapi.DBExport, func(_ context.Context, _ agentrpc.Caller, req agentapi.DBDumpRequest) (agentapi.DBJob, error) {
+		if h.db == nil {
+			return agentapi.DBJob{}, errNoDB
+		}
+
+		//nolint:contextcheck // the job outlives the request and runs under the agent context
+		j, err := h.db.StartExport(req.Database, req.Path)
+
+		return j, mapDBError(err)
+	})
+
+	agentrpc.Handle(s, agentapi.DBJobStatus, func(_ context.Context, _ agentrpc.Caller, req agentapi.DBJobRequest) (agentapi.DBJob, error) {
+		if h.db == nil {
+			return agentapi.DBJob{}, errNoDB
+		}
+
+		j, err := h.db.Job(req.ID)
+
+		return j, mapDBError(err)
+	})
+
 	agentrpc.Handle(s, agentapi.DBUserPassword, func(ctx context.Context, _ agentrpc.Caller, req agentapi.DBUserPasswordRequest) (agentapi.DBUserResponse, error) {
 		if h.db == nil {
 			return agentapi.DBUserResponse{}, errNoDB
@@ -132,6 +201,16 @@ func mapDBError(err error) error {
 		return &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "invalid database name, user or password"}
 	case errors.Is(err, mariadb.ErrUnavailable):
 		return errNoDB
+	case errors.Is(err, mariadb.ErrBusy):
+		return &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "another import or export of this database is running"}
+	case errors.Is(err, mariadb.ErrNoDumps):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "import and export are not available"}
+	case errors.Is(err, mariadb.ErrFileExists):
+		return &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "the export file exists already"}
+	case errors.Is(err, mariadb.ErrFileUnsafe):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the dump file must be a regular file of the site user inside its home, its directory must exist"}
+	case errors.Is(err, mariadb.ErrJobNotFound):
+		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown job"}
 	default:
 		return err
 	}

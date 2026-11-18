@@ -44,6 +44,8 @@ commands:
             e.g. {"sites":[{"user":"blog","domains":["blog.example.com"]}]}
   db list | db create SITE NAME | db delete NAME
   db user create DATABASE USER | db user password USER | db user delete USER
+  db import DATABASE FILE | db export DATABASE FILE
+            with FILE relative to the site home, ending in .sql or .sql.gz
             manage databases through the agent (root on the server); the
             password is read from stdin, an empty line generates one
   setup-token  print the one-time token for the first login (read as the serve user or root)

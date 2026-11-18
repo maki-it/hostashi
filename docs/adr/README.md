@@ -19,6 +19,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0022](0022-metrics-and-tracing.md) | Metrics, logs and tracing | Accepted |
 | [0023](0023-panel-https.md) | HTTPS for the panel | Accepted |
 | [0024](0024-mariadb-databases-per-site.md) | MariaDB databases per site | Proposed |
+| [0025](0025-database-import-export.md) | Database import and export | Proposed |
 
 Only the project owner sets a status to `Accepted`.
 
