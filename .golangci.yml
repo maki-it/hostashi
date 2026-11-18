@@ -1,0 +1,141 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  # standard set: errcheck, govet, ineffassign, staticcheck, unused
+  default: standard
+  enable:
+    # Same base as kimdre/doco-cd
+    - asciicheck
+    - bodyclose
+    - contextcheck
+    - copyloopvar
+    - dupword
+    - durationcheck
+    - errname
+    - gocritic
+    - godot
+    - gosec
+    - makezero
+    - misspell
+    - nilerr
+    - perfsprint
+    - revive
+    - unconvert
+    - wsl_v5
+    # Security and agent specific
+    - depguard
+    - errorlint
+    - exhaustive
+    - forcetypeassert
+    - musttag
+    - noctx
+    - nolintlint
+    - sloglint
+  settings:
+    depguard:
+      rules:
+        # Security rule: no shell strings and no general exec interface.
+        # Product code must not start processes through os/exec. A future
+        # helper or restic wrapper gets a reviewed, narrow exception here.
+        no-exec:
+          files:
+            - "$all"
+            - "!$test"
+          deny:
+            - pkg: os/exec
+              desc: "no process execution in product code (see docs/05-sicherheit.md)"
+    errcheck:
+      exclude-functions:
+        # Usage and status output to stdout/stderr; nothing useful to do on failure.
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+    exhaustive:
+      default-signifies-exhaustive: false
+    misspell:
+      locale: US
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    revive:
+      severity: warning
+      confidence: 0.8
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: defer
+        - name: dot-imports
+        - name: empty-block
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unhandled-error
+          arguments:
+            - fmt.Printf
+            - fmt.Print
+            - fmt.Println
+            - fmt.Fprint
+            - fmt.Fprintf
+            - fmt.Fprintln
+            - io.Closer.Close
+            - io.Writer.Write
+            - strings.Builder.WriteString
+        - name: unreachable-code
+        - name: unused-parameter
+        - name: var-declaration
+        - name: var-naming
+          arguments:
+            - ["ID", "HTTP", "URL", "API"]
+            - []
+    sloglint:
+      kv-only: true
+      context: ""
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - spike
+    rules:
+      # Tests create files, sockets and processes on purpose.
+      - path: _test\.go
+        linters:
+          - gosec
+          - noctx
+
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/maki-it/hostashi
+  exclusions:
+    paths:
+      - spike
