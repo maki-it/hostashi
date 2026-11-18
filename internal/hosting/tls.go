@@ -98,6 +98,44 @@ func (s *Service) SetTLS(ctx context.Context, actor int64, name string, on bool)
 	return s.Get(ctx, name)
 }
 
+// SetHSTS turns Strict-Transport-Security of an active site on or off. It
+// takes effect while the site is served over HTTPS; it can be set before.
+func (s *Service) SetHSTS(ctx context.Context, actor int64, name string, on bool) (store.Site, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	site, err := s.Get(ctx, name)
+	if err != nil {
+		return store.Site{}, err
+	}
+
+	if site.State != store.SiteActive {
+		return store.Site{}, ErrState
+	}
+
+	old, err := s.st.SetSiteHSTS(ctx, name, on, s.now())
+	if err != nil {
+		return store.Site{}, err
+	}
+
+	if err := s.applyWeb(ctx); err != nil {
+		if _, rerr := s.st.SetSiteHSTS(context.WithoutCancel(ctx), name, old, s.now()); rerr != nil {
+			s.log.Error("restore hsts setting after failed change", "site", name, "err", rerr)
+		}
+
+		return store.Site{}, err
+	}
+
+	action := "site.hsts.off"
+	if on {
+		action = "site.hsts.on"
+	}
+
+	s.audit(ctx, actor, action, name, nil)
+
+	return s.Get(ctx, name)
+}
+
 // RunTLS obtains and renews certificates until ctx ends: at start, every
 // hour and after Kick.
 func (s *Service) RunTLS(ctx context.Context) {

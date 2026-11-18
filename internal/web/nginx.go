@@ -80,6 +80,10 @@ type Nginx struct {
 	// LegacyHTTP2 writes "listen ... ssl http2" instead of "http2 on" for
 	// nginx before 1.25.1 (tests on older distributions only).
 	LegacyHTTP2 bool
+	// HTTP3 adds QUIC listeners (UDP) on the ListenTLS addresses and
+	// announces them with Alt-Svc. It needs nginx built with
+	// http_v3_module (1.25 and later).
+	HTTP3 bool
 
 	VerifyTimeout time.Duration
 }
@@ -112,11 +116,26 @@ func (n *Nginx) check() error {
 		}
 	}
 
+	if n.HTTP3 && len(n.ListenTLS) == 0 {
+		return errors.New("web: HTTP/3 needs HTTPS listen addresses")
+	}
+
 	if n.User != "" && !regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`).MatchString(n.User) {
 		return fmt.Errorf("web: invalid worker user %q", n.User)
 	}
 
 	return nil
+}
+
+// TLSPort is the port of the first HTTPS address, for Alt-Svc.
+func (n *Nginx) TLSPort() string {
+	if len(n.ListenTLS) == 0 {
+		return ""
+	}
+
+	l := n.ListenTLS[0]
+
+	return l[strings.LastIndex(l, ":")+1:]
 }
 
 const compressTypes = "text/plain text/css text/xml text/javascript application/javascript application/json " +
@@ -198,6 +217,9 @@ http {
     server {
         {{- range .N.ListenTLS}}
         listen {{.}} ssl default_server;
+        {{- if $.N.HTTP3}}
+        listen {{.}} quic reuseport default_server;
+        {{- end}}
         {{- end}}
         server_name _;
         ssl_reject_handshake on;
@@ -259,6 +281,9 @@ server {
 server {
     {{- range .N.ListenTLS}}
     listen {{.}} ssl{{if $.N.LegacyHTTP2}} http2{{end}};
+    {{- if $.N.HTTP3}}
+    listen {{.}} quic;
+    {{- end}}
     {{- end}}
     {{- if not .N.LegacyHTTP2}}
     http2 on;
@@ -266,6 +291,14 @@ server {
     server_name{{range .S.Domains}} {{.}}{{end}};
     ssl_certificate {{.S.Cert}};
     ssl_certificate_key {{.S.Key}};
+    # Headers here apply to every response of the site; a location with its
+    # own add_header would drop them, so locations set none.
+    {{- if .N.HTTP3}}
+    add_header Alt-Svc 'h3=":{{.N.TLSPort}}"; ma=86400' always;
+    {{- end}}
+    {{- if .S.HSTS}}
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    {{- end}}
     {{- end}}
     root {{.S.Root}};
     {{- if .S.PHPSocket}}

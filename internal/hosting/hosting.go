@@ -416,7 +416,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 	for _, site := range sites {
 		if site.State == store.SiteActive && len(site.Domains) > 0 {
 			req.Sites = append(req.Sites, agentapi.WebSite{
-				User: site.Name, Domains: site.Domains, PHP: site.PHP, TLS: site.TLS && s.certCovers(site, 0),
+				User: site.Name, Domains: site.Domains, PHP: site.PHP, TLS: site.TLS && s.certCovers(site, 0), HSTS: site.HSTS,
 			})
 		}
 	}

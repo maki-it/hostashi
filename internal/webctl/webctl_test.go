@@ -4,6 +4,7 @@ package webctl
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 )
@@ -29,5 +30,15 @@ func TestLimitedWriter(t *testing.T) {
 	n, err := w.Write([]byte("abcdef"))
 	if n != 6 || err != nil || w.buf.String() != "abcd" {
 		t.Fatalf("n=%d err=%v buf=%q", n, err, w.buf.String())
+	}
+}
+
+func TestHasHTTP3(t *testing.T) {
+	if _, err := os.Stat(Nginx); err != nil {
+		t.Skip("nginx not installed")
+	}
+
+	if _, err := (Controller{}).HasHTTP3(t.Context()); err != nil {
+		t.Fatal(err)
 	}
 }

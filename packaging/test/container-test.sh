@@ -254,6 +254,26 @@ UNIT
   [ -n "$active" ] || fail "TLS not active after two minutes: $(x cat /tmp/api.out)"
   body=$(x curl -fsSk --resolve www.secure.example.com:443:127.0.0.1 https://www.secure.example.com/)
   [ "$body" = "hello over https" ] || fail "HTTPS answered '$body'"
+  hdr() { x curl -fsSk -o /dev/null -D - --resolve secure.example.com:443:127.0.0.1 https://secure.example.com/ | tr -d '\r' | grep -i "^$1:" || true; }
+  [ -z "$(hdr strict-transport-security)" ] || fail "HSTS sent without the setting"
+  [ "$(api PUT /api/v1/sites/secure/hsts '{"enabled":true}')" = 200 ] || fail "HSTS on: $(x cat /tmp/api.out)"
+  [ "$(hdr strict-transport-security)" = "strict-transport-security: max-age=31536000" ] ||
+    fail "HSTS header: '$(hdr strict-transport-security)'"
+  if x sh -c 'nginx -V 2>&1' | grep -q -- --with-http_v3_module; then
+    [ "$(hdr alt-svc)" = 'alt-svc: h3=":443"; ma=86400' ] || fail "Alt-Svc header: '$(hdr alt-svc)'"
+    if x curl -V | grep -q 'Features:.* HTTP3'; then
+      out=$(x curl -fsSk --http3-only -o /tmp/h3.out -w '%{http_version}' --resolve www.secure.example.com:443:127.0.0.1 https://www.secure.example.com/)
+      [ "$out" = 3 ] && [ "$(x cat /tmp/h3.out)" = "hello over https" ] || fail "HTTP/3 answered '$out' '$(x cat /tmp/h3.out)'"
+      # Unknown names over QUIC get no certificate either.
+      if x curl -sSk --http3-only -o /dev/null --resolve other.example.com:443:127.0.0.1 https://other.example.com/ 2>/dev/null; then
+        fail "QUIC handshake for an unknown name succeeded"
+      fi
+    else
+      echo "curl without HTTP/3, skipping the QUIC request"
+    fi
+  else
+    fail "nginx on $IMG has no HTTP/3"
+  fi
   loc=$(x curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' -H 'Host: secure.example.com' http://127.0.0.1/a?b=1)
   [ "$loc" = "301 https://secure.example.com/a?b=1" ] || fail "HTTP did not redirect: '$loc'"
   # The key never leaves root; the panel cannot read it.

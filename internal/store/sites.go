@@ -33,6 +33,8 @@ type Site struct {
 	PHP     string // PHP version, empty for no PHP
 	Domains []string
 	TLS     bool // HTTPS wanted
+	// HSTS sends Strict-Transport-Security while the site is on HTTPS.
+	HSTS bool
 	// TLSDomains and TLSNotAfter describe the live certificate (none: empty).
 	TLSDomains  []string
 	TLSNotAfter time.Time
@@ -227,7 +229,7 @@ func domainsOf(ctx context.Context, q queryer, siteID int64) ([]string, error) {
 // Sites returns all sites sorted by name, with their domains.
 func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, pool, state, php, tls, tls_domains, tls_not_after, tls_error, tls_failed_at, created_at, updated_at FROM sites ORDER BY name`)
+		`SELECT id, name, pool, state, php, tls, hsts, tls_domains, tls_not_after, tls_error, tls_failed_at, created_at, updated_at FROM sites ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("store: %w", err)
 	}
@@ -264,7 +266,7 @@ func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 
 // SiteByName returns one site or ErrNotFound.
 func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
-	st, err := scanSite(s.db.QueryRowContext(ctx, `SELECT id, name, pool, state, php, tls, tls_domains, tls_not_after, tls_error, tls_failed_at, created_at, updated_at FROM sites WHERE name = ?`, name))
+	st, err := scanSite(s.db.QueryRowContext(ctx, `SELECT id, name, pool, state, php, tls, hsts, tls_domains, tls_not_after, tls_error, tls_failed_at, created_at, updated_at FROM sites WHERE name = ?`, name))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, ErrNotFound
 	}
@@ -285,12 +287,12 @@ type scanner interface{ Scan(dest ...any) error }
 func scanSite(r scanner) (Site, error) {
 	var (
 		st                         Site
-		tls                        int
+		tls, hsts                  int
 		tlsDomains                 string
 		notAfter, failed, cre, upd int64
 	)
 
-	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &tls, &tlsDomains, &notAfter, &st.TLSError, &failed, &cre, &upd)
+	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &tls, &hsts, &tlsDomains, &notAfter, &st.TLSError, &failed, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
 	}
@@ -299,7 +301,7 @@ func scanSite(r scanner) (Site, error) {
 		return Site{}, fmt.Errorf("store: %w", err)
 	}
 
-	st.TLS = tls == 1
+	st.TLS, st.HSTS = tls == 1, hsts == 1
 	st.TLSDomains = strings.Fields(tlsDomains)
 	st.TLSNotAfter, st.TLSFailedAt = unixOrZero(notAfter), unixOrZero(failed)
 	st.CreatedAt, st.UpdatedAt = time.Unix(cre, 0).UTC(), time.Unix(upd, 0).UTC()
@@ -365,6 +367,40 @@ func (s *Store) SetSiteCert(ctx context.Context, name string, domains []string, 
 	}
 
 	return nil
+}
+
+// SetSiteHSTS sets whether a site sends HSTS and returns the previous value.
+func (s *Store) SetSiteHSTS(ctx context.Context, name string, on bool, now time.Time) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var old int
+	if err := tx.QueryRowContext(ctx, `SELECT hsts FROM sites WHERE name = ?`, name).Scan(&old); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, ErrNotFound
+		}
+
+		return false, fmt.Errorf("store: %w", err)
+	}
+
+	v := 0
+	if on {
+		v = 1
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET hsts = ?, updated_at = ? WHERE name = ?`, v, now.Unix(), name); err != nil {
+		return false, fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("store: %w", err)
+	}
+
+	return old == 1, nil
 }
 
 // SetSiteTLSError records a failed attempt to get a certificate.

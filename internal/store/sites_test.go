@@ -123,6 +123,18 @@ func TestSiteTLSColumns(t *testing.T) {
 		t.Fatalf("long error: %v", err)
 	}
 
+	if old, err := s.SetSiteHSTS(ctx, "blog", true, now); err != nil || old {
+		t.Fatalf("hsts on: %v %v", old, err)
+	}
+
+	if got, err := s.SiteByName(ctx, "blog"); err != nil || !got.HSTS {
+		t.Fatalf("hsts not stored: %+v %v", got, err)
+	}
+
+	if _, err := s.SetSiteHSTS(ctx, "nope", true, now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("hsts of a missing site: %v", err)
+	}
+
 	if old, err := s.SetSiteTLS(ctx, "blog", false, now); err != nil || !old {
 		t.Fatalf("tls off: %v %v", old, err)
 	}

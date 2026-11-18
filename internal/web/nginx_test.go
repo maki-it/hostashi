@@ -722,6 +722,7 @@ func TestTLSSite(t *testing.T) {
 	var pool *x509.CertPool
 
 	secure.Cert, secure.Key, pool = selfSigned(t, certDir, "alpha.example.com")
+	secure.HSTS = true
 	plain := e.site(t, "beta", "hello plain", "beta.example.com")
 
 	if _, err := e.r.Recover(ctx); err != nil {
@@ -770,12 +771,61 @@ func TestTLSSite(t *testing.T) {
 		t.Fatalf("https: %d %q %s", resp.StatusCode, body, resp.Proto)
 	}
 
+	if h := resp.Header.Get("Strict-Transport-Security"); h != "max-age=31536000" {
+		t.Fatalf("HSTS header %q", h)
+	}
+
 	// Another name over TLS: no certificate is shown at all.
 	conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: "beta.example.com", InsecureSkipVerify: true})
 	if err == nil {
 		_ = conn.Close()
 
 		t.Fatal("handshake for a site without TLS succeeded")
+	}
+}
+
+// TestHTTP3Render checks the QUIC listeners and headers in the rendered
+// files; the local nginx may lack http_v3_module, the container test runs
+// them for real.
+func TestHTTP3Render(t *testing.T) {
+	n := &Nginx{
+		Ctl: &testCtl{}, Listen: []string{"80"}, ListenTLS: []string{"443", "[::]:443"}, HTTP3: true,
+		ControlSocket: "/run/x.sock", PIDFile: "/run/x.pid", ErrorLog: "/var/log/x", MimeTypes: "/etc/x",
+	}
+
+	f, err := n.Render(Desired{Sites: []Site{
+		{User: "alpha", Domains: []string{"a.example.com"}, Root: "/srv/a", Cert: "/c.pem", Key: "/k.pem"},
+		{User: "beta", Domains: []string{"b.example.com"}, Root: "/srv/b"},
+	}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	main := string(f.Content["nginx.conf"])
+	for _, want := range []string{"listen 443 quic reuseport default_server;", "listen [::]:443 quic reuseport default_server;"} {
+		if !strings.Contains(main, want) {
+			t.Errorf("nginx.conf lacks %q", want)
+		}
+	}
+
+	alpha := string(f.Content["sites/alpha.conf"])
+	for _, want := range []string{"listen 443 quic;", "listen [::]:443 quic;", `add_header Alt-Svc 'h3=":443"; ma=86400' always;`} {
+		if !strings.Contains(alpha, want) {
+			t.Errorf("alpha.conf lacks %q", want)
+		}
+	}
+
+	if strings.Contains(alpha, "Strict-Transport-Security") {
+		t.Error("HSTS without the setting")
+	}
+
+	if beta := string(f.Content["sites/beta.conf"]); strings.Contains(beta, "quic") || strings.Contains(beta, "Alt-Svc") {
+		t.Errorf("site without TLS got HTTP/3:\n%s", beta)
+	}
+
+	n.ListenTLS = nil
+	if _, err := n.Render(Desired{}, 1); err == nil {
+		t.Fatal("HTTP/3 without HTTPS listeners accepted")
 	}
 }
 

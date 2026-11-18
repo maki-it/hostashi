@@ -241,14 +241,14 @@ func TestSiteTLSOverHTTP(t *testing.T) {
 	e.sites.EnableTLS(stubIssuer{})
 
 	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/tls", cookie: c, body: `{"enabled":true}`})
-	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"tls":{"enabled":true,"active":false,"domains":[],"notAfter":null}`) {
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"tls":{"enabled":true,"active":false,"hsts":false,"domains":[],"notAfter":null}`) {
 		t.Fatalf("tls on: %d %s", rec.Code, rec.Body)
 	}
 
 	e.sites.RenewDue(t.Context())
 
 	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/blog", cookie: c})
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"enabled":true,"active":true,"domains":["blog.example.org"]`) || !ag.web.Sites[0].TLS {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"enabled":true,"active":true,"hsts":false,"domains":["blog.example.org"]`) || !ag.web.Sites[0].TLS {
 		t.Fatalf("after issue: %d %s", rec.Code, rec.Body)
 	}
 
@@ -256,6 +256,19 @@ func TestSiteTLSOverHTTP(t *testing.T) {
 		if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/tls", cookie: c, body: body}); rec.Code < 400 {
 			t.Errorf("%s: %d", body, rec.Code)
 		}
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/hsts", cookie: c, body: `{"enabled":true}`})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"hsts":true`) || !ag.web.Sites[0].HSTS {
+		t.Fatalf("hsts on: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/hsts", cookie: c, body: `{}`}); rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("hsts without enabled: %d", rec.Code)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/nope/hsts", cookie: c, body: `{"enabled":true}`}); rec.Code != http.StatusNotFound {
+		t.Errorf("hsts of a missing site: %d", rec.Code)
 	}
 
 	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/tls", cookie: c, body: `{"enabled":false}`})
