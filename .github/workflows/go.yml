@@ -1,0 +1,67 @@
+name: Go
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  STATICCHECK_VERSION: "2025.1.1"
+  GOVULNCHECK_VERSION: "v1.1.4"
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: gofmt
+        run: |
+          out="$(gofmt -l cmd internal)"
+          if [ -n "$out" ]; then echo "Not gofmt-ed:"; echo "$out"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+      - name: Tests (unprivileged)
+        run: go test -race ./...
+      - name: Cross-user test (root agent, client as uid 65534)
+        run: sudo env "PATH=$PATH" go test -race -run '^TestCrossUser$' -v ./internal/agentrpc/
+      - name: Fuzz (short)
+        run: |
+          go test -run '^$' -fuzz '^FuzzReadFrame$' -fuzztime 20s ./internal/agentrpc/
+          go test -run '^$' -fuzz '^FuzzDispatch$' -fuzztime 40s ./internal/agentrpc/
+      - name: Build amd64 and arm64
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          GOARCH=amd64 go build -trimpath -o /dev/null ./cmd/hostashi
+          GOARCH=arm64 go build -trimpath -o /dev/null ./cmd/hostashi
+
+  lint:
+    name: Static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: staticcheck
+        run: go run "honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}" ./...
+      - name: govulncheck
+        run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...

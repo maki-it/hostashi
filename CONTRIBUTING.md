@@ -1,6 +1,26 @@
 # Contributing to Hostashi
 
-Thanks for your interest. Hostashi is in **Phase 0 (planning)**: there is no product code yet. The license ([ADR-0002](docs/adr/0002-license.md)) and the stack ([ADR-0003](docs/adr/0003-language-and-stack.md)) are decided. Until the first alpha, contributions are mostly discussion, review of the planning documents, and research. Please ask in an issue before you start on code.
+Thanks for your interest. Hostashi is moving from **Phase 0 (planning)** to the alpha: the first product code is the Go skeleton described below. The license ([ADR-0002](docs/adr/0002-license.md)) and the stack ([ADR-0003](docs/adr/0003-language-and-stack.md)) are decided. Until the first alpha, contributions are mostly discussion, review of the planning documents, and research. Please ask in an issue before you start on code.
+
+## Code layout
+
+One Go module at the repository root, one binary with three modes (see [`docs/04-architektur.md`](docs/04-architektur.md)):
+
+- `cmd/hostashi`: the `hostashi` binary (`serve`, `agent`, `ping`, `version`).
+- `internal/serve`: the web process. Refuses to run as root.
+- `internal/agent`: the root agent. Unix socket only, accepts only root and the serve user (by uid).
+- `internal/agentrpc`: the typed RPC between them (length-prefixed JSON, `SO_PEERCRED`).
+- `internal/agentapi`: the complete list of agent operations. New operations go here, each with a request type that validates its own input. There is no generic exec operation.
+- `spike/`: throwaway prototypes, separate modules, not product code.
+
+Run the checks locally:
+
+```sh
+gofmt -l cmd internal
+go vet ./...
+go test -race ./...
+sudo env "PATH=$PATH" go test -race -run '^TestCrossUser$' ./internal/agentrpc/   # needs root
+```
 
 ## Clean-room rule
 
@@ -42,7 +62,7 @@ Mail server, DNS server, billing, reseller features and multi-server are non-goa
 
 - Commit messages in English, imperative mood, short subject (about 72 characters), for example `Add threat model for agent RPC`.
 - One logical change per pull request. Fill in the PR template.
-- Documentation changes must pass the CI checks (Markdown lint and link check). To run the lint locally: `npx markdownlint-cli2 "**/*.md"`.
+- Documentation changes must pass the CI checks (Markdown lint and link check). Go changes must pass the Go workflow (gofmt, vet, tests with race detector, short fuzzing, staticcheck, govulncheck). To run the lint locally: `npx markdownlint-cli2 "**/*.md"`.
 - Do not commit secrets. `.env` files are ignored.
 
 ## License and sign-off (DCO)
