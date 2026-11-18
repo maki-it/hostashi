@@ -117,7 +117,7 @@
 | Feature | Prio | Phase | Quelle | Anmerkung |
 |---------|------|-------|--------|-----------|
 | Nginx FastCGI-Cache mit Purge | P1 | B | NEU | Einfacher als Varnish, deckt 80 % ab |
-| Varnish-Integration | P2 | 2+ | CP | WP-Plugin `clp-wp-varnish-cache` ist GPLv3, nur bei kompatibler Lizenz nutzbar |
+| Varnish-Integration | P1 | 1 | CP | Mit dem CloudPanel-Importer zusammen (ADR-0017, Kim 2026-11-18). Eigene VCL und Purge; WP-Plugin `clp-wp-varnish-cache` ist GPLv3, nur bei kompatibler Lizenz nutzbar |
 | Brotli/Gzip, Cache-Header-Presets | P1 | B | CP | |
 
 ## 3.10 Schnittstellen und Automatisierung
@@ -127,7 +127,8 @@
 | REST-API (OpenAPI 3.1) | P0 | A | NEU | UI nutzt dieselbe API |
 | CLI (`hostashi`) mit Parität zu `clpctl` | P0 | A | CP | |
 | Zustand als YAML exportieren/anwenden | P1 | 1 | NEU | Basis für GitOps |
-| CloudPanel-Importer | P1 | 1 | NEU | Siehe unten |
+| CloudPanel-Importer | P1 | 1 | NEU | Siehe unten und ADR-0017 (Migration, Spike S6) |
+| Presets je Site-Typ (WordPress, TYPO3, PHP, Static …) | P1 | 1 | NEU | Typisierte Härtungs- und Cache-Bausteine statt Vhost-Text, ADR-0017 |
 | Terraform-/OpenTofu-Provider | P2 | 2+ | NEU | |
 | Plugin-System | P2 | 2+ | NEU | Erst nach stabiler API |
 | Mehrsprachige UI (Start: EN, DE) | P1 | 1 | CP | Weblate o. ä. |
