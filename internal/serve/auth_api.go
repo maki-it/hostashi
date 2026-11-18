@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/maki-it/hostashi/internal/auth"
-	"github.com/maki-it/hostashi/internal/store"
 )
 
 const (
@@ -32,8 +31,10 @@ type apiErrorBody struct {
 }
 
 type userJSON struct {
-	Username string `json:"username"`
-	Role     string `json:"role"`
+	Username string   `json:"username"`
+	Role     string   `json:"role"`
+	Auth     string   `json:"auth,omitempty"`   // "session" or "token", only on /auth/me
+	Scopes   []string `json:"scopes,omitempty"` // token scopes, only on /auth/me
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -150,10 +151,23 @@ func sessionToken(r *http.Request) string {
 	return c.Value
 }
 
-// registerAuth adds the setup and session routes.
-func registerAuth(mux *http.ServeMux, svc *auth.Service, log *slog.Logger) {
-	fail := func(w http.ResponseWriter, err error, what string) {
+// failFunc writes the HTTP answer for an error of the auth service.
+type failFunc func(w http.ResponseWriter, err error, what string)
+
+func newFail(log *slog.Logger) failFunc {
+	return func(w http.ResponseWriter, err error, what string) {
 		switch {
+		case errors.Is(err, auth.ErrTokenNotAllowedFromIP):
+			writeError(w, http.StatusForbidden, "ip_not_allowed", "API tokens are not accepted from this address")
+		case errors.Is(err, auth.ErrInvalidToken), errors.Is(err, auth.ErrInvalidAllowlist):
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", err.Error())
+		case errors.Is(err, auth.ErrTooManyTokens):
+			writeError(w, http.StatusConflict, "too_many_tokens", "too many API tokens, revoke one first")
+		case errors.Is(err, auth.ErrTokenNotFound):
+			writeError(w, http.StatusNotFound, "not_found", "no such token")
+		case errors.Is(err, auth.ErrUnauthenticated):
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			writeError(w, http.StatusUnauthorized, "unauthenticated", "not logged in")
 		case errors.Is(err, auth.ErrRateLimited):
 			w.Header().Set("Retry-After", "900")
 			writeError(w, http.StatusTooManyRequests, "rate_limited", "too many attempts, try again later")
@@ -174,6 +188,12 @@ func registerAuth(mux *http.ServeMux, svc *auth.Service, log *slog.Logger) {
 			writeError(w, http.StatusInternalServerError, "internal", "internal error")
 		}
 	}
+}
+
+// registerAuth adds the setup, session and token routes.
+func registerAuth(mux *http.ServeMux, svc *auth.Service, log *slog.Logger) {
+	fail := newFail(log)
+	a := authn{svc: svc, fail: fail}
 
 	mux.HandleFunc("GET /api/v1/setup", func(w http.ResponseWriter, r *http.Request) {
 		req, err := svc.SetupRequired(r.Context())
@@ -238,23 +258,9 @@ func registerAuth(mux *http.ServeMux, svc *auth.Service, log *slog.Logger) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	// current returns the logged-in user or writes the 401 itself.
-	current := func(w http.ResponseWriter, r *http.Request) (store.User, bool) {
-		u, err := svc.Authenticate(r.Context(), sessionToken(r))
-		if errors.Is(err, auth.ErrUnauthenticated) {
-			writeError(w, http.StatusUnauthorized, "unauthenticated", "not logged in")
-
-			return store.User{}, false
-		}
-
-		if err != nil {
-			fail(w, err, "authenticate")
-
-			return store.User{}, false
-		}
-
-		return u, true
-	}
+	// current returns the user of the browser session or writes the 401 itself.
+	// Account security changes never accept an API token.
+	current := a.session
 
 	mux.HandleFunc("POST /api/v1/auth/totp/enroll", func(w http.ResponseWriter, r *http.Request) {
 		u, ok := current(w, r)
@@ -319,19 +325,18 @@ func registerAuth(mux *http.ServeMux, svc *auth.Service, log *slog.Logger) {
 	})
 
 	mux.HandleFunc("GET /api/v1/auth/me", func(w http.ResponseWriter, r *http.Request) {
-		u, err := svc.Authenticate(r.Context(), sessionToken(r))
-		if errors.Is(err, auth.ErrUnauthenticated) {
-			writeError(w, http.StatusUnauthorized, "unauthenticated", "not logged in")
-
+		p, ok := a.principal(w, r)
+		if !ok {
 			return
 		}
 
-		if err != nil {
-			fail(w, err, "me")
-
-			return
+		out := userJSON{Username: p.User.Username, Role: p.User.Role, Auth: "session"}
+		if p.IsToken() {
+			out.Auth, out.Scopes = "token", p.Scopes
 		}
 
-		writeJSON(w, http.StatusOK, userJSON{Username: u.Username, Role: u.Role})
+		writeJSON(w, http.StatusOK, out)
 	})
+
+	registerTokens(mux, a)
 }

@@ -57,8 +57,9 @@ type Service struct {
 	issuer    string
 	now       func() time.Time
 
-	ipLimit   *Limiter
-	userLimit *Limiter
+	ipLimit    *Limiter
+	userLimit  *Limiter
+	tokenLimit *Limiter
 
 	dummyOnce sync.Once
 	dummyHash string
@@ -84,6 +85,8 @@ func NewService(c Config) *Service {
 		now:       now,
 		ipLimit:   NewLimiter(10, 15*time.Minute, now),
 		userLimit: NewLimiter(20, 15*time.Minute, now),
+		// Unknown bearer tokens per address; a client with a valid token never counts.
+		tokenLimit: NewLimiter(30, 15*time.Minute, now),
 	}
 }
 

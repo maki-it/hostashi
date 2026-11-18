@@ -25,6 +25,7 @@ const apiPassword = "a long enough password"
 
 type apiEnv struct {
 	h         http.Handler
+	svc       *auth.Service
 	tokenPath string
 }
 
@@ -59,7 +60,7 @@ func newAPI(t *testing.T) *apiEnv {
 
 	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath, Box: box})
 
-	return &apiEnv{h: Handler(Config{}, Deps{PingAgent: ok, PingDB: ok, Auth: svc}), tokenPath: tokenPath}
+	return &apiEnv{h: Handler(Config{}, Deps{PingAgent: ok, PingDB: ok, Auth: svc}), svc: svc, tokenPath: tokenPath}
 }
 
 type reqOpts struct {

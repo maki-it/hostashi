@@ -52,9 +52,15 @@ func TestOpenCreatesDatabase(t *testing.T) {
 		t.Fatalf("mode %v, want 0600", fi.Mode().Perm())
 	}
 
+	all, err := loadMigrations(migrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A fresh database is at the newest embedded migration.
 	v, err := s.SchemaVersion(ctx)
-	if err != nil || v != 3 {
-		t.Fatalf("version %d, %v", v, err)
+	if err != nil || v != len(all) {
+		t.Fatalf("version %d, %v; want %d", v, err, len(all))
 	}
 
 	if err := s.Ping(ctx); err != nil {
