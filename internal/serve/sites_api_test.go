@@ -238,7 +238,21 @@ func TestSiteTLSOverHTTP(t *testing.T) {
 		t.Fatalf("without issuer: %d %s", rec.Code, rec.Body)
 	}
 
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"shop","domains":["shop.example.org"],"tls":true}`})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "tls_unavailable" {
+		t.Fatalf("create with tls, no issuer: %d %s", rec.Code, rec.Body)
+	}
+
 	e.sites.EnableTLS(stubIssuer{})
+
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"shop","domains":["shop.example.org"],"tls":true,"hsts":true}`})
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"tls":{"enabled":true,"active":false,"hsts":true`) {
+		t.Fatalf("create with tls: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "DELETE", path: "/api/v1/sites/shop", cookie: c}); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete shop: %d %s", rec.Code, rec.Body)
+	}
 
 	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/tls", cookie: c, body: `{"enabled":true}`})
 	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"tls":{"enabled":true,"active":false,"hsts":false,"domains":[],"notAfter":null}`) {
