@@ -18,7 +18,39 @@ env:
   GOVULNCHECK_VERSION: "v1.9.0"
 
 jobs:
+  # Pull requests run only the jobs their changed files can affect. Push to
+  # main and manual runs always run everything. A skipped job counts as passed.
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+      installer: ${{ steps.filter.outputs.installer }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Filter
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            echo "installer=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files="$(git diff --name-only "$BASE" HEAD)"
+          echo "$files"
+          match() { if grep -qE "$1" <<<"$files"; then echo true; else echo false; fi; }
+          echo "go=$(match '(\.go$|^go\.(mod|sum)$|^\.golangci\.yml$|^(cmd|internal|packaging)/|^\.github/workflows/go\.yml$)')" >> "$GITHUB_OUTPUT"
+          echo "installer=$(match '(^go\.(mod|sum)$|^(cmd|internal|packaging)/|^\.github/workflows/go\.yml$)')" >> "$GITHUB_OUTPUT"
+
   test:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     name: Test
     runs-on: ubuntu-latest
     steps:
@@ -43,6 +75,8 @@ jobs:
         run: sudo env "PATH=$PATH" go test -race -count=1 -run '^TestRoot' -v ./internal/sysuser/
 
   lint:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     name: Lint and static analysis
     runs-on: ubuntu-latest
     steps:
@@ -65,6 +99,8 @@ jobs:
         run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...
 
   fuzz:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     name: Fuzz (short)
     runs-on: ubuntu-latest
     steps:
@@ -81,6 +117,8 @@ jobs:
           go test -run '^$' -fuzz '^FuzzDispatch$' -fuzztime 40s ./internal/agentrpc/
 
   build:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     name: Build amd64 and arm64
     runs-on: ubuntu-latest
     steps:
@@ -99,6 +137,8 @@ jobs:
           GOARCH=arm64 go build -trimpath -o /dev/null ./cmd/hostashi
 
   installer:
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
     name: Installer (${{ matrix.image }})
     runs-on: ubuntu-latest
     strategy:
