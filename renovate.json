@@ -2,5 +2,37 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "local>maki-it/renovate-config"
+  ],
+  "timezone": "Europe/Berlin",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 3,
+  "prHourlyLimit": 2,
+  "packageRules": [
+    {
+      "description": "The engines range in web/package.json is a minimum, not a pin: do not bump it",
+      "matchDepTypes": ["engines"],
+      "enabled": false
+    },
+    {
+      "description": "One PR for all GitHub Actions updates that are not major",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "groupName": "github actions",
+      "groupSlug": "github-actions"
+    },
+    {
+      "description": "One PR for Go module updates that are not major",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "go modules",
+      "groupSlug": "go-modules"
+    },
+    {
+      "description": "One PR for npm updates that are not major",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "npm packages",
+      "groupSlug": "npm-packages"
+    }
   ]
 }
