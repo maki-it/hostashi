@@ -8,7 +8,7 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 | 0002 | Lizenz des Projekts | Proposed (Entwurf: [adr/0002](adr/0002-license.md)) | **Ja** |
 | 0003 | Sprache und Stack | Accepted am 2026-11-18 ([adr/0003](adr/0003-language-and-stack.md)) | **Ja** (Team-Know-how) |
 | 0004 | Rechtetrennung Web/Agent | Proposed | Nein |
-| 0005 | Webserver (Nginx, Caddy-Option) | Proposed | Nein, Spike S3 entscheidet |
+| 0005 | Webserver | Accepted am 2026-11-18 ([adr/0005](adr/0005-web-server.md)), nginx | Nein, S3 ist erledigt |
 | 0006 | Zustandsspeicher und Reconciler | Proposed | Nein |
 | 0007 | Isolationsmodell pro Site | Proposed | Nein |
 | 0008 | Backups mit restic | Proposed | Nein |
@@ -72,9 +72,7 @@ Siehe [Architektur 4.2](04-architektur.md). Zwei Prozesse, typisierte RPC über 
 
 ## ADR-0005 Webserver
 
-**Vorschlag:** Nginx (nginx.org-Repo) hinter einem `WebServerDriver`-Interface. Grund: riesiges Wissen und Rewrite-Beispiele für WordPress, Laravel, Magento, Shopware, etc., FastCGI-Cache, ausgereiftes HTTP/3 (ab 1.25), Nutzer kennen die Syntax aus CloudPanel.
-
-**Alternative Caddy:** automatisches HTTPS, JSON-Admin-API, speichersicher, einfachere Generierung. Nachteil: weniger bekannte Rewrite-Rezepte, anderer Cache-Ansatz. Spike S3 entscheidet mit Messung.
+**Vollständiger Text (Englisch, Status Accepted am 2026-11-18):** [adr/0005-web-server.md](adr/0005-web-server.md). Kurzfassung: nginx (nginx.org stable) hinter dem `WebServerDriver`-Interface, Kim hat sich nach Spike S3 für nginx entschieden. Gründe: eingebauter FastCGI-Cache, kleinerer Footprint, größte Rezeptbasis. Caddy bleibt als späterer zweiter Treiber möglich, LiteSpeed wird für v1 nicht genommen (proprietär bzw. eigene Konfigurationswelt).
 
 ## ADR-0006 Zustandsspeicher und Reconciler
 

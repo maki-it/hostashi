@@ -46,6 +46,7 @@ Panels dieser Klasse sind Angriffsziel Nummer eins: wer das Panel übernimmt, ha
 2. Der **Reconciler** im Agent berechnet daraus die Zielkonfiguration (Nginx-Vhosts, FPM-Pools, systemd-Units, Cron, nftables).
 3. Er schreibt sie **atomar** in eine neue „Generation“ (`/var/lib/hostashi/generations/<n>/`), validiert (`nginx -t`, `php-fpm -t`, `nft -c`) und schaltet erst dann um und lädt neu.
 4. Schlägt Validierung oder Health-Check fehl, wird die vorherige Generation wiederhergestellt und der Fehler im Job gemeldet.
+   Der Health-Check muss **beweisen, dass die neue Generation wirklich live ist** (Generationsnummer über einen Control-Endpunkt, mehrere Treffer in Folge) und erst danach die Sites prüfen. `nginx -t` erkennt z. B. keinen belegten Port, und ein Reload, der still scheitert, behält die alte Konfiguration (Spikes S2 und S3).
 5. **Drift-Erkennung:** Abweichungen von Hand geänderter, generierter Dateien werden im UI gezeigt (Übernehmen oder Überschreiben).
 6. **Diff-Vorschau** vor dem Anwenden. Idempotent, dadurch lässt sich nach Absturz einfach neu aufsetzen.
 
