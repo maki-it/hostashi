@@ -111,3 +111,23 @@ func TestGenerateDBPassword(t *testing.T) {
 		seen[pw] = true
 	}
 }
+
+func TestValidateDumpPath(t *testing.T) {
+	good := []string{"db.sql", "db.sql.gz", "backups/2026-11-19_shop.sql.gz", "a/b/c/d.sql", "Shop_WP.sql"}
+	bad := []string{
+		"", "/etc/shadow.sql", "../x.sql", "a/../b.sql", "./x.sql", ".hidden.sql", "a//b.sql", "a/b/",
+		"-x.sql", "x.txt", "x.sql.bz2", "x.sql ", "x y.sql", "a\\b.sql", "ä.sql", "x.sql\x00", strings.Repeat("a/", 130) + "x.sql",
+	}
+
+	for _, p := range good {
+		if err := ValidateDumpPath(p); err != nil {
+			t.Errorf("%q: %v", p, err)
+		}
+	}
+
+	for _, p := range bad {
+		if err := ValidateDumpPath(p); err == nil {
+			t.Errorf("%q accepted", p)
+		}
+	}
+}
