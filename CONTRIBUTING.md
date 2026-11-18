@@ -18,6 +18,7 @@ One Go module at the repository root, one binary with three modes (see [`docs/04
 - `internal/sites`: root-side site accounts. The registry (`sites.json`, in `/var/lib/hostashi-agent`, root-owned, mode 0700, deliberately not below the web process's directory) is the only source of uid, gid and storage pool. Home directories are created and removed with `openat2` on open fds, never with path strings. Deleting a site refuses homes owned by someone else and never crosses mounts or symlinks.
 - `internal/sysuser`: `useradd` and `userdel`, the only place in product code that starts a process (depguard exception in `.golangci.yml`): fixed absolute paths, arguments from validated names, empty environment.
 - `internal/agentapi`: the complete list of agent operations. New operations go here, each with a request type that validates its own input. There is no generic exec operation.
+- `packaging/`: systemd units and `install.sh` for a fresh Debian 13 or Ubuntu 26.04 server (step model of spike S5: `plan`, then `apply --yes`; idempotent). The agent unit must not set `RestrictSUIDSGID`, which makes `openat2` fail with ENOSYS. `packaging/test/container-test.sh IMAGE BINARY` runs the installer in a systemd container; CI runs it for both distros.
 - `spike/`: throwaway prototypes, separate modules, not product code.
 
 Run the checks locally:
