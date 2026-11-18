@@ -623,3 +623,38 @@ func TestTLSInstallFailureIsRecorded(t *testing.T) {
 		t.Fatalf("%+v live %s", site, ag.live())
 	}
 }
+
+func TestCreateWithTLS(t *testing.T) {
+	s, ag, _ := newService(t)
+	ctx := t.Context()
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", Domains: []string{"blog.example.com"}, TLS: true}); !errors.Is(err, ErrNoTLS) {
+		t.Fatalf("without issuer: %v", err)
+	}
+
+	if _, err := s.Get(ctx, "blog"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("refused create left a row: %v", err)
+	}
+
+	s.now = func() time.Time { return time.Unix(0, 0).Add(1000 * 24 * time.Hour) }
+	s.EnableTLS(&fakeIssuer{validDays: 1090})
+
+	site, err := s.Create(ctx, 1, CreateRequest{Name: "blog", Domains: []string{"blog.example.com"}, TLS: true, HSTS: true})
+	if err != nil || !site.TLS || !site.HSTS || s.TLSActive(site) || site.State != store.SiteActive {
+		t.Fatalf("create: %+v %v", site, err)
+	}
+
+	s.RenewDue(ctx)
+
+	if got := ag.live(); got != "[blog=[blog.example.com]+tls]" {
+		t.Fatalf("after issue: %s", got)
+	}
+
+	ag.mu.Lock()
+	hsts := ag.web.Sites[0].HSTS
+	ag.mu.Unlock()
+
+	if !hsts {
+		t.Fatal("HSTS not sent")
+	}
+}

@@ -158,6 +158,8 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 			Pool    string   `json:"pool"`
 			PHP     string   `json:"php"`
 			Domains []string `json:"domains"`
+			TLS     bool     `json:"tls"`  // ask for a certificate right away
+			HSTS    bool     `json:"hsts"` // sent once the site is on HTTPS
 		}
 		if !decodeJSON(w, r, &in) {
 			return
@@ -166,7 +168,9 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
-		s, err := svc.Create(ctx, p.User.ID, hosting.CreateRequest{Name: in.Name, Pool: in.Pool, PHP: in.PHP, Domains: in.Domains})
+		s, err := svc.Create(ctx, p.User.ID, hosting.CreateRequest{
+			Name: in.Name, Pool: in.Pool, PHP: in.PHP, Domains: in.Domains, TLS: in.TLS, HSTS: in.HSTS,
+		})
 		if err != nil {
 			siteFail(log, w, err, "create site")
 

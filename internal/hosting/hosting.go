@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -119,6 +120,10 @@ type CreateRequest struct {
 	Pool    string // empty: the default pool
 	PHP     string // PHP version, empty: no PHP
 	Domains []string
+	// TLS asks for a certificate right away (see SetTLS); HSTS is sent once
+	// the site is on HTTPS.
+	TLS  bool
+	HSTS bool
 }
 
 // checkPHP accepts a version from agentapi.PHPVersions or "" (no PHP).
@@ -198,10 +203,14 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, err
 	}
 
+	if req.TLS && s.issuer == nil {
+		return store.Site{}, ErrNoTLS
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	site, err := s.st.CreateSite(ctx, req.Name, req.Pool, req.PHP, domains, s.now())
+	_, err = s.st.CreateSite(ctx, req.Name, req.Pool, req.PHP, domains, s.now())
 
 	switch {
 	case errors.Is(err, store.ErrSiteExists):
@@ -214,6 +223,14 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 
 	// Cleanup must run even when the request was canceled meanwhile.
 	undo := context.WithoutCancel(ctx)
+
+	if err := s.storeTLSChoice(ctx, req); err != nil {
+		if derr := s.st.DeleteSite(undo, req.Name); derr != nil {
+			s.log.Error("remove site row after failed create", "site", req.Name, "err", derr)
+		}
+
+		return store.Site{}, err
+	}
 
 	if _, err := s.ag.SiteCreate(ctx, agentapi.SiteCreateRequest{User: req.Name, Pool: req.Pool}); err != nil {
 		if derr := s.st.DeleteSite(undo, req.Name); derr != nil {
@@ -233,11 +250,39 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, err
 	}
 
-	s.audit(ctx, actor, "site.create", req.Name, map[string]string{"pool": req.Pool, "php": req.PHP, "domains": strings.Join(domains, " ")})
+	s.audit(ctx, actor, "site.create", req.Name, map[string]string{
+		"pool": req.Pool, "php": req.PHP, "domains": strings.Join(domains, " "),
+		"tls": strconv.FormatBool(req.TLS), "hsts": strconv.FormatBool(req.HSTS),
+	})
 
-	site.State = store.SiteActive
+	if req.TLS {
+		s.Kick()
+	}
+
+	site, err := s.st.SiteByName(ctx, req.Name)
+	if err != nil {
+		return store.Site{}, err
+	}
 
 	return site, nil
+}
+
+// storeTLSChoice keeps the HTTPS settings of a new site. Before its first
+// certificate they change nothing in the web server state.
+func (s *Service) storeTLSChoice(ctx context.Context, req CreateRequest) error {
+	if req.TLS {
+		if _, err := s.st.SetSiteTLS(ctx, req.Name, true, s.now()); err != nil {
+			return err
+		}
+	}
+
+	if req.HSTS {
+		if _, err := s.st.SetSiteHSTS(ctx, req.Name, true, s.now()); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // removeAfterFailure takes a just created site away again. If the account
