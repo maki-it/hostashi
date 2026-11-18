@@ -1,6 +1,6 @@
 # ADR-0023 HTTPS for the panel
 
-**Status:** Proposed. **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0003 (stack, lego), ADR-0004 (web/agent privilege split), ADR-0005 and ADR-0020 (nginx), ADR-0018 (API under the panel address, IP allowlist), ADR-0021 (fail2ban), [`05-sicherheit.md`](../05-sicherheit.md) 5.3.
+**Status:** Accepted (2026-11-18, by Kim). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0003 (stack, lego), ADR-0004 (web/agent privilege split), ADR-0005 and ADR-0020 (nginx), ADR-0018 (API under the panel address, IP allowlist), ADR-0021 (fail2ban), [`05-sicherheit.md`](../05-sicherheit.md) 5.3.
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -23,12 +23,12 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Recommendation
 
-**Option A.** Kim chose option A with port 8443 on 2026-11-18. The status stays Proposed until Kim accepts the ADR.
+**Option A.** Kim chose option A with port 8443 and accepted the ADR on 2026-11-18.
 
 - nginx gets a panel server on its own port, `8443` by default (installer flag `--panel-port`), for the host name from `--public-url`. It proxies to `127.0.0.1:8080`.
 - The certificate for the panel name is obtained like a site certificate. The HTTP-01 challenge is answered on port 80 for the panel name too. The key is stored under `/var/lib/hostashi-agent/tls/_panel/` [A: a name that is not a valid site user, so it cannot clash].
 - Until the certificate is there, port 8443 refuses the TLS handshake, like an unknown site name. The panel stays reachable through an SSH tunnel.
-- HSTS is on for the panel by default, and HTTP/3 is on when nginx has it [A].
+- HSTS is on for the panel by default (decided by Kim, 2026-11-18), and HTTP/3 is on when nginx has it.
 - No public DNS name (only an IP): the panel stays on loopback and SSH tunnel, as today. IP certificates may come later [A].
 
 ## Consequences
@@ -41,4 +41,4 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions for Kim
 
-1. Should HSTS be on for the panel by default? Recommendation: yes. The panel is only ever served over HTTPS, and an HTTP fallback would only help an attacker [A].
+None.

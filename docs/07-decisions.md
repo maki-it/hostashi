@@ -26,7 +26,7 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 | 0020 | nginx-Paketquelle und Brotli | Accepted am 2026-11-18 ([adr/0020](adr/0020-nginx-package-source-and-brotli.md)) | Erledigt |
 | 0021 | Brute-Force- und Einbruchsschutz | Accepted am 2026-11-18 ([adr/0021](adr/0021-brute-force-and-intrusion-protection.md)) | Erledigt |
 | 0022 | Metriken, Logs und Tracing | Accepted am 2026-11-18 ([adr/0022](adr/0022-metrics-and-tracing.md)) | Erledigt |
-| 0023 | HTTPS für das Panel | Proposed ([adr/0023](adr/0023-panel-https.md)), Variante A gewählt (Kim, 2026-11-18) | Offen: HSTS fürs Panel standardmäßig an? |
+| 0023 | HTTPS für das Panel | Accepted am 2026-11-18 ([adr/0023](adr/0023-panel-https.md)) | Erledigt |
 
 ---
 
@@ -214,4 +214,4 @@ ashi site add example.com --type php --php 8.4   # gleiches Programm
 
 ## ADR-0023 HTTPS für das Panel
 
-**Vollständiger Text (Englisch, Status Proposed):** [adr/0023](adr/0023-panel-https.md). Kurzfassung: nginx macht TLS für die Panel-Adresse auf eigenem Port 8443 und leitet an das Panel auf `127.0.0.1:8080` weiter. Das Zertifikat kommt über denselben Weg wie bei den Sites, der Schlüssel bleibt bei root, HTTP/3 und HSTS kommen aus denselben Vorlagen. Das Panel bleibt auf Loopback. Folge: Das Panel übernimmt die Client-IP aus dem Header von nginx, aber nur bei Anfragen von Loopback. Fällt nginx aus, bleibt nur der SSH-Tunnel. Ohne DNS-Namen bleibt es beim SSH-Tunnel. Entschieden (Kim, 2026-11-18): Variante A mit Port 8443. Offen: HSTS fürs Panel standardmäßig an (Empfehlung: ja).
+**Vollständiger Text (Englisch, Status Accepted am 2026-11-18):** [adr/0023](adr/0023-panel-https.md). Kurzfassung: nginx macht TLS für die Panel-Adresse auf eigenem Port 8443 und leitet an das Panel auf `127.0.0.1:8080` weiter. Das Zertifikat kommt über denselben Weg wie bei den Sites, der Schlüssel bleibt bei root, HTTP/3 und HSTS kommen aus denselben Vorlagen. Das Panel bleibt auf Loopback. Folge: Das Panel übernimmt die Client-IP aus dem Header von nginx, aber nur bei Anfragen von Loopback. Fällt nginx aus, bleibt nur der SSH-Tunnel. Ohne DNS-Namen bleibt es beim SSH-Tunnel. Entschieden (Kim, 2026-11-18): Variante A mit Port 8443, HSTS fürs Panel standardmäßig an. Keine offenen Fragen mehr.
