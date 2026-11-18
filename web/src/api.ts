@@ -45,17 +45,3 @@ export async function request<T>(method: "GET" | "POST" | "DELETE", path: string
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
-
-export type Health = {
-  status: "ok" | "degraded";
-  agent: string;
-  db: string;
-  version: string;
-};
-
-// getHealth also returns the body of a 503, which still describes the server.
-export async function getHealth(): Promise<Health> {
-  const res = await fetch("/api/v1/health", { headers: { Accept: "application/json" } });
-  if (res.ok || res.status === 503) return (await res.json()) as Health;
-  throw await toApiError(res);
-}

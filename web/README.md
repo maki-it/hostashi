@@ -12,6 +12,7 @@ npm run dev               # dev server on http://localhost:5173, /api goes to 12
 npm test                  # unit tests (Vitest, jsdom)
 npm run typecheck         # TypeScript, strict
 npm run build             # typecheck, then write internal/ui/dist/
+npm run e2e               # browser test against a fresh "hostashi serve", see e2e/login.e2e.mjs
 ```
 
 After `npm run build`, rebuild the Go binary to embed the new files. A

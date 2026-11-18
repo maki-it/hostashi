@@ -1,0 +1,152 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+// End-to-end check of setup and login against a real "hostashi serve":
+// first-run setup, password login, session after reload, TOTP with a
+// recovery code, passkey registration and login (Chromium's virtual
+// authenticator), logout. The server must be fresh (setup not done) and
+// started with -public-url matching HOSTASHI_URL.
+//
+//   HOSTASHI_URL=http://localhost:8080 HOSTASHI_SETUP_TOKEN_FILE=/path/setup-token node e2e/login.e2e.mjs
+//
+// CHROMIUM_PATH selects a browser binary; SCREENSHOTS=dir writes screenshots.
+
+import { createHmac } from "node:crypto";
+import { mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { chromium } from "playwright";
+
+const base = process.env.HOSTASHI_URL ?? "http://localhost:8080";
+const token = readFileSync(process.env.HOSTASHI_SETUP_TOKEN_FILE ?? "setup-token", "utf8").trim();
+const shots = process.env.SCREENSHOTS;
+const password = "correct horse battery staple";
+
+function base32(s) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const c of s.replace(/=+$/, "").toUpperCase()) bits += alphabet.indexOf(c).toString(2).padStart(5, "0");
+  const out = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8) out.push(parseInt(bits.slice(i, i + 8), 2));
+  return Buffer.from(out);
+}
+
+function totp(secret) {
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+  const h = createHmac("sha1", base32(secret)).update(counter).digest();
+  const o = h[h.length - 1] & 15;
+  return String((h.readUInt32BE(o) & 0x7fffffff) % 1e6).padStart(6, "0");
+}
+
+const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
+const context = await browser.newContext({ viewport: { width: 480, height: 720 } });
+const page = await context.newPage();
+const pageErrors = [];
+page.on("pageerror", (e) => pageErrors.push(String(e)));
+page.on("console", (m) => {
+  // 401s from /auth/me and wrong passwords are expected; CSP violations are not.
+  if (m.type() === "error" && !m.text().includes("status of 401")) pageErrors.push(m.text());
+});
+
+let n = 0;
+async function ok(what) {
+  n++;
+  console.log("ok " + n + " - " + what);
+  if (shots) {
+    mkdirSync(shots, { recursive: true });
+    await page.screenshot({ path: join(shots, String(n).padStart(2, "0") + ".png") });
+  }
+}
+
+const loginButton = () => page.getByRole("button", { name: "Log in", exact: true });
+const welcome = () => page.getByRole("heading", { name: "Welcome, admin" });
+
+try {
+  await page.goto(base + "/");
+  await page.getByLabel("Setup token").fill(token);
+  await page.getByLabel("Username").fill("admin");
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByLabel("Repeat password").fill(password);
+  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByRole("status").filter({ hasText: "Administrator account created" }).waitFor();
+  await ok("setup creates the administrator");
+
+  await page.getByLabel("Username").fill("admin");
+  await page.getByLabel("Password").fill("wrong password!");
+  await loginButton().click();
+  await page.getByRole("alert").filter({ hasText: "Wrong username or password." }).waitFor();
+  await ok("wrong password is refused");
+
+  await page.getByLabel("Password").fill(password);
+  await loginButton().click();
+  await welcome().waitFor();
+  await page.reload();
+  await welcome().waitFor();
+  await ok("password login, session survives a reload");
+
+  const { secret } = await page.evaluate(() => fetch("/api/v1/auth/totp/enroll", { method: "POST" }).then((r) => r.json()));
+  const codes = await page.evaluate(
+    (code) =>
+      fetch("/api/v1/auth/totp/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) })
+        .then((r) => r.json())
+        .then((j) => j.recoveryCodes),
+    totp(secret),
+  );
+  if (!Array.isArray(codes) || codes.length === 0) throw new Error("TOTP enrollment returned no recovery codes");
+
+  const cdp = await context.newCDPSession(page);
+  await cdp.send("WebAuthn.enable");
+  await cdp.send("WebAuthn.addVirtualAuthenticator", {
+    options: { protocol: "ctap2", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+  });
+  const reg = await page.evaluate(async () => {
+    const dec = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(s.length / 4) * 4, "=")), (c) => c.charCodeAt(0));
+    const enc = (b) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const begin = await (await fetch("/api/v1/auth/passkeys/register/begin", { method: "POST" })).json();
+    const pk = begin.options.publicKey;
+    pk.challenge = dec(pk.challenge);
+    pk.user.id = dec(pk.user.id);
+    for (const c of pk.excludeCredentials ?? []) c.id = dec(c.id);
+    const c = await navigator.credentials.create({ publicKey: pk });
+    const credential = {
+      id: c.id,
+      rawId: enc(c.rawId),
+      type: c.type,
+      response: { attestationObject: enc(c.response.attestationObject), clientDataJSON: enc(c.response.clientDataJSON) },
+    };
+    const r = await fetch("/api/v1/auth/passkeys/register/finish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ceremonyId: begin.ceremonyId, name: "e2e", credential }),
+    });
+    return r.status;
+  });
+  if (reg !== 201) throw new Error("passkey registration: status " + reg);
+  await ok("TOTP and a passkey enrolled through the API");
+
+  await page.getByRole("button", { name: "Log out" }).click();
+  await loginButton().waitFor();
+  await page.reload();
+  await loginButton().waitFor();
+  await ok("logout ends the session");
+
+  await page.getByLabel("Username").fill("admin");
+  await page.getByLabel("Password").fill(password);
+  await loginButton().click();
+  await page.getByLabel(/One-time code/).fill("000000");
+  await page.getByRole("button", { name: "Verify" }).click();
+  await page.getByRole("alert").filter({ hasText: "Wrong code" }).waitFor();
+  await page.getByLabel(/One-time code/).fill(codes[0]);
+  await page.getByRole("button", { name: "Verify" }).click();
+  await welcome().waitFor();
+  await ok("second step: wrong code refused, recovery code accepted");
+
+  await page.getByRole("button", { name: "Log out" }).click();
+  await page.getByRole("button", { name: "Log in with a passkey" }).click();
+  await welcome().waitFor();
+  await ok("passkey login without password or code");
+
+  if (pageErrors.length > 0) throw new Error("browser errors:\n" + pageErrors.join("\n"));
+  await ok("no script errors or CSP violations");
+} finally {
+  await browser.close();
+}
