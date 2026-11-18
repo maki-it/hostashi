@@ -1,6 +1,6 @@
 # ADR-0022 Metrics, logs and tracing
 
-**Status:** Proposed. **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0004 (web/agent privilege split), ADR-0015 (per-site resource limits), ADR-0018 (public REST API and token scopes), ADR-0021 (brute-force protection), [`03-features.md`](../03-features.md) section 3.8, [`04-architektur.md`](../04-architektur.md) section 4.7.
+**Status:** Accepted (2026-11-18, by Kim). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0004 (web/agent privilege split), ADR-0015 (per-site resource limits), ADR-0018 (public REST API and token scopes), ADR-0021 (brute-force protection), [`03-features.md`](../03-features.md) section 3.8, [`04-architektur.md`](../04-architektur.md) section 4.7.
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
