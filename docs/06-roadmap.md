@@ -29,7 +29,7 @@ Ziel: Entscheidungen treffen und die riskantesten Annahmen mit Wegwerf-Code prü
 
 Ziel: Auf einem frischen Server lässt sich eine PHP-Site mit HTTPS und Datenbank produktiv betreiben.
 
-- Installer/`.deb`, Ersteinrichtung per Token, Login mit TOTP, Rollen, API-Tokens, Audit-Log
+- Installer/`.deb`, Ersteinrichtung per Token, Login mit TOTP und Passkeys, Rollen, API-Tokens, Audit-Log
 - Site-Typen Static, PHP, Node.js, Reverse Proxy; Linux-User, FPM-Pool, Aliase und Redirects
 - Vhost-Editor mit Validierung und Rollback
 - Let's Encrypt (HTTP-01), eigene Zertifikate, Panel unter eigener Domain
@@ -46,7 +46,7 @@ Ziel: Funktionsparität für die häufigsten CloudPanel-Anwendungsfälle.
 
 - Backups mit restic (Ziele, Zeitplan, Retention, Restore in UI) und Benachrichtigungen
 - Python-Sites, WordPress-Schnellinstallation, Vhost-Templates (Laravel, Symfony, WP, Magento, Shopware …)
-- Passkeys, Rate-Limiting, IP-/Bot-Blocking, Basic Auth je Site
+- Rate-Limiting, IP-/Bot-Blocking, Basic Auth je Site
 - DNS-01 mit ersten Providern (INWX, Cloudflare, Hetzner DNS), Wildcard-Zertifikate
 - Web-DB-Tool mit SSO, Redis, Dateimanager
 - FastCGI-Cache, HTTP/3, Ressourcenlimits und Disk-Quota je Site

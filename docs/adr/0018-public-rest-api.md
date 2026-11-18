@@ -40,6 +40,10 @@ Option A, with these rules:
 - Every write is written to the audit log with the actor, the token ID if any, and the diff.
 - Login and token use are rate-limited; failed token checks are logged without the token value.
 
+### Reachability
+
+The API is served on the panel's own address and port, no separate listener. An optional IP allowlist restricts bearer-token access; browser sessions are not affected by it [V: Kim, thread, 2026-11-18].
+
 ### Security boundary
 
 - The API is served by the web process, which runs without root (ADR-0004). It can only change desired state or call **typed agent operations**. No endpoint accepts a shell command, a command line, or a free path outside the site's root.
@@ -67,6 +71,6 @@ The shape is illustrative; the final resource names come with the spec.
 
 ## Open questions
 
-1. Should the API be reachable on a separate address or port (for example only from a management network), or on the panel's address with an optional IP allowlist for token access? Suggestion: same address, optional allowlist [A].
+1. ~~Should the API be reachable on a separate address or port, or on the panel's address?~~ Decided by Kim (2026-11-18): same address as the panel, with an optional IP allowlist for token access.
 2. Default maximum token lifetime: suggestion 90 days, with an explicit "no expiry" only for the owner role and a warning [E].
 3. Outgoing webhooks (events such as "backup failed") belong to notifications (`03-features.md` 3.8) and are not part of this ADR.
