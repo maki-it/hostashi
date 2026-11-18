@@ -114,6 +114,12 @@ func TestMappedDetails(t *testing.T) {
 	if s := got["nu-magazin.de.conf"]; len(s.Custom) != 3 {
 		t.Errorf("nu custom: want 2 add_header + 1 location, got %+v", s.Custom)
 	}
+	if s := got["zeta-handwerk.de.conf"]; s.Pool == nil || s.Pool.Version != "8.4" || !hasCode(s, "vhost_two_tier") || s.DocRoot != "/home/zeta/htdocs/zeta-handwerk.de" {
+		t.Errorf("two-tier: %+v", s)
+	}
+	if s := got["theta-app.de.conf"]; !hasCode(s, "vhost_cache_tier") || s.Type != "wordpress" {
+		t.Errorf("cache tier: %+v", s.Findings)
+	}
 	if s := got["kappa-portal.de.conf"]; s.Upstream != "https://10.0.0.5:8080" {
 		t.Errorf("proxy upstream %q", s.Upstream)
 	}
@@ -266,6 +272,19 @@ func TestHostileTrees(t *testing.T) {
 			}
 		case <-time.After(5 * time.Second):
 			t.Fatal("scan hangs on a FIFO")
+		}
+	})
+	t.Run("private key mode and its directory", func(t *testing.T) {
+		dir, _ := build(t)
+		key := filepath.Join(dir, "etc/nginx/ssl-certificates/alpha-shop.de.key")
+		os.Chmod(key, 0o644)
+		os.Chmod(filepath.Dir(key), 0o755)
+		if s, _ := status(t, dir, "alpha-shop.de.conf"); !hasCode(s, "tls_key_world_readable") {
+			t.Errorf("open dir: %+v", s.Findings)
+		}
+		os.Chmod(filepath.Dir(key), 0o700)
+		if s, _ := status(t, dir, "alpha-shop.de.conf"); !hasCode(s, "tls_key_mode") || s.Status != scan.StatusClean {
+			t.Errorf("closed dir: %+v", s.Findings)
 		}
 	})
 	t.Run("world-writable vhost", func(t *testing.T) {

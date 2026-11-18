@@ -181,6 +181,7 @@ type site struct {
 	rootOverride         string
 	upstream             string
 	broken               bool
+	tier                 string // "", "two" (TLS front + backend block), "cache" (front -> cache -> backend)
 	want, wantType, note string
 }
 
@@ -240,6 +241,8 @@ func (b *builder) add(s site) {
 	if s.certIssuer != "none" {
 		fmt.Fprintf(&v, "  ssl_certificate /etc/nginx/ssl-certificates/%s.crt;\n  ssl_certificate_key /etc/nginx/ssl-certificates/%s.key;\n", s.domain, s.domain)
 	}
+	front := v.String()
+	v.Reset()
 	fmt.Fprintf(&v, "  root %s;\n  index index.php index.html;\n  access_log /home/%s/logs/nginx/access.log;\n  error_log /home/%s/logs/nginx/error.log;\n  client_max_body_size 64m;\n", root, s.user, s.user)
 	if s.broken {
 		v.WriteString("  location / {\n    try_files $uri $uri/ /index.php?$args\n  }\n")
@@ -254,8 +257,20 @@ func (b *builder) add(s site) {
 		fmt.Fprintf(&v, "  location / {\n    proxy_pass %s;\n    proxy_http_version 1.1;\n    proxy_set_header Host $host;\n    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n    proxy_set_header X-Forwarded-Proto $scheme;\n  }\n", s.upstream)
 	}
 	v.WriteString(s.extraLocation)
-	v.WriteString("}\n")
-	b.write("/etc/nginx/sites-enabled/"+s.domain+".conf", v.String(), 0o644)
+	app := v.String()
+	var out string
+	switch s.tier {
+	case "":
+		out = front + app + "}\n"
+	default: // "two" or "cache": TLS front, application in a backend block on 8080
+		port := "8080"
+		if s.tier == "cache" {
+			port = "6081" // a cache listens here and forwards to 8080 [synthetic]
+		}
+		out = front + "  location / {\n    proxy_pass http://127.0.0.1:" + port + ";\n    proxy_set_header Host $host;\n    proxy_set_header X-Forwarded-Proto https;\n  }\n}\n\n" +
+			"server {\n  listen 127.0.0.1:8080;\n  server_name " + s.domain + ";\n" + app + "}\n"
+	}
+	b.write("/etc/nginx/sites-enabled/"+s.domain+".conf", out, 0o644)
 
 	if s.kind == "php" || s.kind == "wordpress" {
 		pu := s.user
@@ -286,9 +301,10 @@ func (b *builder) sites() {
 		b.add(site{domain: d, user: u, kind: "wordpress", www: true, php: []string{"8.1", "8.2", "8.3", "8.3"}[i],
 			cron: fmt.Sprintf(wpCron, u, d), want: "clean", wantType: "wordpress", note: "WordPress, www redirect, LE cert, cron"})
 	}
-	for i, d := range []string{"epsilon-kanzlei.de", "zeta-handwerk.de", "theta-app.de"} {
-		b.add(site{domain: d, kind: "php", www: i%2 == 0, php: []string{"8.2", "8.4", "7.4"}[i], want: "clean", wantType: "php", note: "plain PHP"})
+	for i, d := range []string{"epsilon-kanzlei.de", "zeta-handwerk.de"} {
+		b.add(site{domain: d, kind: "php", www: i%2 == 0, php: []string{"8.2", "8.4"}[i], tier: []string{"", "two"}[i], want: "clean", wantType: "php", note: "plain PHP; zeta as two-tier vhost (pattern seen on web2)"})
 	}
+	b.add(site{domain: "theta-app.de", kind: "wordpress", php: "7.4", tier: "cache", want: "review", wantType: "wordpress", note: "two-tier with a cache port in between"})
 	b.add(site{domain: "iota-landing.de", kind: "static", want: "clean", wantType: "static", note: "static HTML"})
 	b.add(site{domain: "kappa-portal.de", kind: "proxy", upstream: "https://10.0.0.5:8080", want: "clean", wantType: "proxy", note: "reverse proxy to another host"})
 	b.add(site{domain: "lambda-kunde.de", kind: "php", certIssuer: "other", want: "clean", wantType: "php", note: "purchased certificate, valid"})
@@ -304,7 +320,7 @@ func (b *builder) sites() {
 		want:          "review", wantType: "php", note: "basic auth on a path"})
 	b.add(site{domain: "omikron-crm.de", kind: "php", poolExtra: "env[APP_ENV] = production\nenv[DB_PASSWORD] = s3cr3t-synthetic-value\n",
 		want: "review", wantType: "php", note: "pool sets environment variables, value must not leak into the report"})
-	b.add(site{domain: "pi-alt.de", kind: "php", certIssuer: "other", certExpired: true, want: "review", wantType: "php", note: "expired purchased certificate"})
+	b.add(site{domain: "pi-alt.de", kind: "php", tier: "two", certIssuer: "other", certExpired: true, want: "review", wantType: "php", note: "expired purchased certificate, two-tier"})
 	b.add(site{domain: "rho-events.de", kind: "php",
 		cron: "MAILTO=\"\"\n0 3 * * * /usr/bin/php /home/rho/htdocs/rho-events.de/artisan schedule:run\n30 2 * * * tar czf /home/sigma/backup.tgz /home/rho/htdocs\n",
 		want: "review", wantType: "php", note: "cron with environment line and a reference to another home"})
@@ -324,6 +340,8 @@ func (b *builder) sites() {
 func (b *builder) extras() {
 	b.write("/etc/nginx/sites-enabled/00-panel.conf", "server {\n  listen 8443 ssl;\n  server_name _;\n  ssl_certificate /etc/nginx/ssl-certificates/panel.crt;\n  ssl_certificate_key /etc/nginx/ssl-certificates/panel.key;\n  location / {\n    proxy_pass http://127.0.0.1:9000;\n  }\n}\n", 0o644)
 	b.write("/etc/nginx/sites-enabled/01-default.conf", "server {\n  listen 80 default_server;\n  server_name _;\n  return 444;\n}\n", 0o644)
+	b.write("/etc/nginx/sites-enabled/02-panel-domain.conf", "server {\n  listen 443 ssl;\n  server_name panel.example-host.de;\n  ssl_certificate /etc/nginx/ssl-certificates/panel.crt;\n  ssl_certificate_key /etc/nginx/ssl-certificates/panel.key;\n  location / {\n    proxy_pass https://127.0.0.1:8443/;\n  }\n}\n", 0o644)
+	b.write("/etc/php/8.4/fpm/pool.d/default.conf", "[global]\npid = /run/php/x.pid\nerror_log = /var/log/x.log\n\n[default]\nuser = www-data\ngroup = www-data\nlisten = /run/php/php8.4-default.sock\npm = ondemand\npm.max_children = 2\n", 0o644)
 	b.write("/etc/php/8.3/fpm/pool.d/www.conf", "[www]\nuser = www-data\ngroup = www-data\nlisten = /run/php/php8.3-fpm.sock\npm = dynamic\npm.max_children = 5\n", 0o644)
 	b.write("/etc/php/8.2/fpm/pool.d/old-site.conf", "[old-site]\nuser = sigma\ngroup = sigma\nlisten = 127.0.0.1:16999\npm = ondemand\npm.max_children = 4\n", 0o644)
 	b.passwd = append(b.passwd, "sigma:x:1900:1900::/home/sigma:/bin/bash")

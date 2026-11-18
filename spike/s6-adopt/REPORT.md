@@ -6,7 +6,7 @@
 
 Evidence tags as in [docs/adr/README.md](../../docs/adr/README.md): **[V]** verified by test or code in this spike, **[A]** assumption, **[E]** estimate, **[U]** unverified general knowledge.
 
-**Result: the abort criterion cannot be decided yet.** No real CloudPanel instance was available, so the scanner ran only against a synthetic server whose mix of sites I invented. The 45 % clean and 82 % adoptable it reports are a property of that invented mix, not evidence about CloudPanel or `web2` [V for the numbers, A for their meaning]. What the spike does show: the scanner itself is small, read-only, safe against a hostile tree, and sorts every site into clean, review or blocked with a reason [V]. The missing piece is one read-only run against real data (see "Next step").
+**Result: the abort criterion cannot be decided yet.** No real CloudPanel instance was available, so the scanner ran only against a synthetic server whose mix of sites I invented. The 45 % clean and 82 % adoptable it reports are a property of that invented mix, not evidence about CloudPanel or `web2` [V for the numbers, A for their meaning]. What the spike does show: the scanner itself is small, read-only, safe against a hostile tree, and sorts every site into clean, review or blocked with a reason [V]. A first read-only run on `web2` confirmed the file layout and exposed two-tier vhosts the scanner did not understand (section "First run on real data"); a second run with the fixed build is pending.
 
 ## Environment and limits of this spike
 
@@ -73,6 +73,32 @@ Every case gets exactly the expected status and type, and the mapped values (dom
 | Upper-case domain lowercased, wildcard reported, `münchen.de` (not punycode) and `1.2.3.4` blocked | [V] |
 | `nginxconf` fuzz, 30 s, 4 million executions: no panic, every parsed directive reparses from its raw text | [V] (short run only) |
 | Crontab, pool and passwd parsers fuzz, 30 s: no panic | [V] |
+
+## First run on real data (`web2`, 2026-11-18)
+
+Kim ran the scanner (commit `3ad8fd1`) read-only on `web2` and shared the JSON. Only counts and structural observations are recorded here; customer domains, user names and paths stay out of the repository.
+
+| | Count |
+|-|-------|
+| Sites | 22 (matches the number Kim reported) [V] |
+| clean / review / blocked | 0 / 8 / 14 [V] |
+
+What the run showed [V, from the report]:
+
+- **The layout assumptions held**: vhosts in `sites-enabled`, certificates in `/etc/nginx/ssl-certificates`, document roots in `/home/<user>/htdocs/<domain>`, one TCP FPM pool per PHP site, the panel user `clp` and a catch-all default server.
+- **13 of the 14 blocks were a scanner gap, not a real problem** (the 14th is a real finding, see below). Real vhosts are **two-tier**: a TLS server proxies to `127.0.0.1:8080`, and a second server block in the same file listens there and runs PHP. One site has a cache port (`6081`, probably Varnish [A]) in between, one vhost is the panel under its own domain (proxy to `8443`). The first scanner treated the backend block as a second application (`vhost_multi_app`) and left the pools orphaned.
+- **Every site carries directives Hostashi does not model**: 276 custom findings in total. The same few locations appear on almost every site (ACME challenge path, `.git` deny, `xmlrpc.php`, WordPress login, static asset caching), plus individual hardening rules on single sites. So with "clean" meaning "nothing to review", the result is 0 % on real data.
+- **`[global]` and `[default]` sections in `pool.d`** (one per PHP version) were misread as pools; `rlimit_core` was unknown.
+- Real findings for Kim, not scanner bugs: all 22 private keys have mode `0644` (risk depends on the directory mode, which this version did not check); on 9 sites a `server_name` (`www1.` alias) is not covered by the certificate; one vhost includes a file below `/etc/nginx` that is not root-owned or is writable by others (correctly blocked); 5 users with a home below `/home` have no site; one of them has an unusual name that looks like a key file name.
+
+Changes after the run (this commit), each covered by a new fixture case or test [V]:
+
+- Two-tier vhosts are merged into one site: front block gives domains and TLS, backend block gives document root and PHP pool. A cache tier in between is a review finding. A vhost that proxies to the panel port is ignored.
+- `[global]` sections are skipped, `www-data` default pools are ignored instead of orphaned, `rlimit_core` is known.
+- A private key with mode `0644` is only a review finding if its directory lets others traverse it.
+- Custom server-level findings name the directive (`server: add_header`), still without its value, so the next run shows *which* directives are missing from the model.
+
+A second run with the new build is needed for the real numbers. Expected, not verified: blocked drops to about 1, and nearly all others become review because of the custom locations [A].
 
 ## Findings
 

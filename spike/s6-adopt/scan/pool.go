@@ -28,7 +28,7 @@ var poolKnown = map[string]bool{
 	"pm.max_spare_servers": true, "pm.max_requests": true, "pm.process_idle_timeout": true,
 	"pm.status_path": true, "ping.path": true, "request_terminate_timeout": true,
 	"request_slowlog_timeout": true, "slowlog": true, "chdir": true, "catch_workers_output": true,
-	"clear_env": true, "security.limit_extensions": true, "rlimit_files": true,
+	"clear_env": true, "security.limit_extensions": true, "rlimit_files": true, "rlimit_core": true,
 	"decorate_workers_output": true, "access.log": true, "access.format": true,
 }
 
@@ -49,13 +49,22 @@ func parsePools(src, source, version string) ([]poolDef, []Finding) {
 	var out []poolDef
 	var global []Finding
 	var cur *poolDef
+	skipGlobal := false
 	for i, raw := range strings.Split(src, "\n") {
 		ln := i + 1
 		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
 			continue
 		}
+		if line == "[global]" {
+			// FPM global section inside pool.d: daemon settings, not a pool.
+			cur = nil
+			global = append(global, Finding{SevInfo, "pool_global_section", "[global] section in a pool file, ignored", source, ln})
+			skipGlobal = true
+			continue
+		}
 		if m := poolHeaderRe.FindStringSubmatch(line); m != nil {
+			skipGlobal = false
 			out = append(out, poolDef{Pool: Pool{Name: m[1], Version: version, Source: source, Settings: map[string]string{}}, Line: ln})
 			cur = &out[len(out)-1]
 			continue
@@ -72,6 +81,9 @@ func parsePools(src, source, version string) ([]poolDef, []Finding) {
 		}
 		k, v = strings.TrimSpace(k), strings.Trim(strings.TrimSpace(v), `"`)
 		if cur == nil {
+			if skipGlobal {
+				continue
+			}
 			if k != "include" { // [global] style keys outside a pool are not expected in pool.d
 				global = append(global, Finding{SevReview, "pool_outside_section", fmt.Sprintf("key %q outside a pool section", k), source, ln})
 			}

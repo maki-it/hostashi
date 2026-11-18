@@ -120,7 +120,7 @@ func analyseServer(d nginxconf.Directive, source string, inc includer) server {
 			s.analyseLocation(x, src)
 		default:
 			if !serverMapped[x.Name] {
-				s.Custom = append(s.Custom, Custom{Context: "server", Raw: x.Raw, Source: src, Line: x.Line})
+				s.Custom = append(s.Custom, Custom{Context: "server: " + x.Name, Raw: x.Raw, Source: src, Line: x.Line})
 			}
 		}
 	}

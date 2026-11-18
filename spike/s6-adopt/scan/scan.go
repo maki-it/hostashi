@@ -234,8 +234,48 @@ func (s *scanner) vhostFile(p string) {
 			primary = c
 		}
 	}
+	// Two-tier vhost: the TLS server proxies to a loopback port that
+	// another server block in the same file listens on (seen on web2).
+	// The backend block is the application; the front block only
+	// terminates TLS. A cache (for example Varnish) may sit in between.
+	app := primary
+	var backend *server
+	if port, ok := loopbackPort(primary.ProxyPass); ok {
+		if port == panelPort {
+			s.rep.Ignored = append(s.rep.Ignored, Finding{SevInfo, "panel_proxy", "vhost proxies to the old panel on port " + panelPort + " (panel under its own domain)", p, primary.Line})
+			return
+		}
+		var others []int
+		for i, c := range content {
+			if c.Line == primary.Line {
+				continue
+			}
+			others = append(others, i)
+			if hasPort(c, port) {
+				backend = &content[i]
+			}
+		}
+		if backend == nil && len(others) == 1 && !content[others[0]].SSL {
+			backend = &content[others[0]]
+			site.Findings = append(site.Findings, Finding{SevReview, "vhost_cache_tier", fmt.Sprintf("front server proxies to port %s, backend block listens on %s: a cache (likely Varnish) sits in between and is not adopted", port, strings.Join(backend.Ports, ",")), p, primary.Line})
+		}
+		if backend != nil {
+			site.Findings = append(site.Findings, Finding{SevInfo, "vhost_two_tier", "TLS server proxies to a backend server block in the same file; adopted as one site", p, backend.Line})
+			app.Root = backend.Root
+			if app.Root == "" {
+				app.Root = primary.Root
+			}
+			app.FastCGI, app.ProxyPass = backend.FastCGI, backend.ProxyPass
+			if backend.MaxBody != "" {
+				app.MaxBody = backend.MaxBody
+			}
+			if app.FastCGI == "" && app.ProxyPass == "" {
+				app.ProxyPass = "" // static backend
+			}
+		}
+	}
 	for _, c := range content {
-		if c.Line == primary.Line {
+		if c.Line == primary.Line || (backend != nil && c.Line == backend.Line) {
 			continue
 		}
 		if c.Root != primary.Root || c.FastCGI != primary.FastCGI || c.ProxyPass != primary.ProxyPass {
@@ -244,10 +284,19 @@ func (s *scanner) vhostFile(p string) {
 			site.Findings = append(site.Findings, Finding{SevInfo, "vhost_plain_http", "site is also served without TLS on port 80; Hostashi will redirect to HTTPS instead", p, c.Line})
 		}
 	}
-	site.Findings = append(site.Findings, primary.Findings...)
-	site.Custom = append(site.Custom, primary.Custom...)
-	for _, c := range primary.Custom {
-		site.Findings = append(site.Findings, Finding{SevReview, "custom_directive", c.Context + ": not modelled, preserved as custom snippet", c.Source, c.Line})
+	tiers := []server{primary}
+	if backend != nil {
+		tiers = append(tiers, *backend)
+	}
+	for ti, t := range tiers {
+		site.Findings = append(site.Findings, t.Findings...)
+		for _, c := range t.Custom {
+			if ti == 1 {
+				c.Context = "backend " + c.Context
+			}
+			site.Custom = append(site.Custom, c)
+			site.Findings = append(site.Findings, Finding{SevReview, "custom_directive", c.Context + ": not modelled, preserved as custom snippet", c.Source, c.Line})
+		}
 	}
 
 	// Domains
@@ -282,7 +331,7 @@ func (s *scanner) vhostFile(p string) {
 	}
 
 	// Site user from the document root
-	user, ok := s.siteUser(&site, primary, p)
+	user, ok := s.siteUser(&site, app, p)
 	if !ok {
 		s.rep.Sites = append(s.rep.Sites, site)
 		return
@@ -290,13 +339,35 @@ func (s *scanner) vhostFile(p string) {
 	site.User = user
 	s.used[user] = true
 
-	s.siteType(&site, primary, p)
+	s.siteType(&site, app, p)
 	s.tls(&site, primary, p)
 	s.cron(&site)
-	if primary.MaxBody != "" {
-		site.ClientMaxBody = primary.MaxBody
+	if app.MaxBody != "" {
+		site.ClientMaxBody = app.MaxBody
 	}
 	s.rep.Sites = append(s.rep.Sites, site)
+}
+
+// loopbackPort returns the port of an http://127.0.0.1:N or localhost URL.
+func loopbackPort(u string) (string, bool) {
+	pu, err := url.Parse(u)
+	if err != nil || pu.Port() == "" {
+		return "", false
+	}
+	h := pu.Hostname()
+	if ip := net.ParseIP(h); h != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return "", false
+	}
+	return pu.Port(), true
+}
+
+func hasPort(sv server, port string) bool {
+	for _, p := range sv.Ports {
+		if p == port {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *scanner) domain(site *Site, n, p string, line int, seen map[string]bool) (string, bool) {
@@ -465,7 +536,12 @@ func (s *scanner) tls(site *Site, sv server, p string) {
 	if m, err := s.r.Mode(sv.Key); err != nil {
 		site.Findings = append(site.Findings, Finding{SevReview, "tls_key_missing", "private key file not found", sv.Key, 0})
 	} else if m.Perm()&0o004 != 0 {
-		site.Findings = append(site.Findings, Finding{SevReview, "tls_key_world_readable", fmt.Sprintf("private key mode %04o is readable by everyone", m.Perm()), sv.Key, 0})
+		dm, derr := s.r.Mode(path.Dir(sv.Key))
+		if derr == nil && dm.Perm()&0o001 == 0 {
+			site.Findings = append(site.Findings, Finding{SevInfo, "tls_key_mode", fmt.Sprintf("private key mode %04o, but its directory (%04o) is closed to others", m.Perm(), dm.Perm()), sv.Key, 0})
+		} else {
+			site.Findings = append(site.Findings, Finding{SevReview, "tls_key_world_readable", fmt.Sprintf("private key mode %04o and its directory let every local user read it", m.Perm()), sv.Key, 0})
+		}
 	}
 }
 
@@ -490,8 +566,8 @@ func (s *scanner) orphans() {
 		d := ref.def
 		switch {
 		case ref.used:
-		case d.User == "www-data" && d.Name == "www":
-			s.rep.Ignored = append(s.rep.Ignored, Finding{SevInfo, "pool_default", "distribution default pool www", d.Source, d.Line})
+		case d.User == "www-data":
+			s.rep.Ignored = append(s.rep.Ignored, Finding{SevInfo, "pool_default", "default pool "+d.Name+" running as www-data", d.Source, d.Line})
 		default:
 			s.rep.Orphans = append(s.rep.Orphans, Finding{SevReview, "pool_orphan", fmt.Sprintf("pool %s (user %s) is not used by any vhost", d.Name, d.User), d.Source, d.Line})
 		}
