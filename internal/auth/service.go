@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-webauthn/webauthn/webauthn"
+
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -61,11 +63,14 @@ type Service struct {
 	userLimit  *Limiter
 	tokenLimit *Limiter
 
+	wa  *webauthn.WebAuthn // nil: passkeys disabled
+	cer *ceremonies
+
 	dummyOnce sync.Once
 	dummyHash string
 }
 
-// NewService creates a Service.
+// NewService creates a Service. Passkeys are off until EnablePasskeys.
 func NewService(c Config) *Service {
 	now := c.Now
 	if now == nil {
@@ -78,6 +83,7 @@ func NewService(c Config) *Service {
 	}
 
 	return &Service{
+		cer:       &ceremonies{m: map[string]ceremony{}, now: now},
 		st:        c.Store,
 		tokenPath: c.SetupTokenPath,
 		box:       c.Box,
@@ -88,6 +94,19 @@ func NewService(c Config) *Service {
 		// Unknown bearer tokens per address; a client with a valid token never counts.
 		tokenLimit: NewLimiter(30, 15*time.Minute, now),
 	}
+}
+
+// EnablePasskeys turns on passkey registration and login for the panel at
+// c.PublicURL. Call it once, before serving requests.
+func (s *Service) EnablePasskeys(c PasskeyConfig) error {
+	wa, err := newWebAuthn(&c)
+	if err != nil {
+		return err
+	}
+
+	s.wa = wa
+
+	return nil
 }
 
 // SetupRequired reports whether the first admin still has to be created.
@@ -199,16 +218,9 @@ func (s *Service) Login(ctx context.Context, username, password, code, ip string
 		}
 	}
 
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return "", store.User{}, fmt.Errorf("auth: %w", err)
-	}
-
-	token := base64.RawURLEncoding.EncodeToString(raw)
-	now := s.now()
-
-	if err := s.st.CreateSession(ctx, u.ID, hashToken(token), now, now.Add(SessionTTL)); err != nil {
-		return "", store.User{}, fmt.Errorf("auth: %w", err)
+	token, err := s.newSession(ctx, u.ID)
+	if err != nil {
+		return "", store.User{}, err
 	}
 
 	s.ipLimit.Reset(ipKey)
@@ -218,6 +230,23 @@ func (s *Service) Login(ctx context.Context, username, password, code, ip string
 	u.PasswordHash, u.TOTPSecret = "", nil
 
 	return token, u, nil
+}
+
+// newSession stores a new session for the user and returns its token.
+func (s *Service) newSession(ctx context.Context, userID int64) (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("auth: %w", err)
+	}
+
+	token := base64.RawURLEncoding.EncodeToString(raw)
+	now := s.now()
+
+	if err := s.st.CreateSession(ctx, userID, hashToken(token), now, now.Add(SessionTTL)); err != nil {
+		return "", fmt.Errorf("auth: %w", err)
+	}
+
+	return token, nil
 }
 
 // Authenticate returns the user for a session token.

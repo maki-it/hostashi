@@ -75,12 +75,14 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		dbPath := fs.String("db", store.DefaultPath, "SQLite database path")
 
 		keyPath := fs.String("key", secrets.DefaultKeyPath, "encryption key file for stored secrets (created on first start)")
+
+		publicURL := fs.String("public-url", "", "address users open the panel at, e.g. https://panel.example.com (enables passkeys)")
 		if fs.Parse(args) != nil || fs.NArg() != 0 {
 			return 2
 		}
 
 		if err = serve.CheckEUID(euid); err == nil {
-			err = serve.Run(ctx, serve.Config{Listen: *listen, Socket: *socket, DBPath: *dbPath, KeyPath: *keyPath, Version: version, Log: log})
+			err = serve.Run(ctx, serve.Config{Listen: *listen, Socket: *socket, DBPath: *dbPath, KeyPath: *keyPath, PublicURL: *publicURL, Version: version, Log: log})
 		}
 	case "agent":
 		serveUser := fs.String("serve-user", "hostashi", "the only unprivileged user allowed to call the agent")
