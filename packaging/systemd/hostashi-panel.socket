@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# nginx's way to the panel (ADR-0023). systemd creates the socket and hands
+# it to hostashi.service at start. Only the panel (owner) and nginx's
+# workers (group www-data) may connect, so the panel trusts the client
+# address that nginx sends on this socket, and only on this one.
+
+[Unit]
+Description=Hostashi panel socket for nginx
+Documentation=https://github.com/maki-it/hostashi
+
+[Socket]
+ListenStream=/run/hostashi-panel.sock
+SocketUser=hostashi
+SocketGroup=www-data
+SocketMode=0660
+RemoveOnStop=yes
+Service=hostashi.service
+
+[Install]
+WantedBy=sockets.target

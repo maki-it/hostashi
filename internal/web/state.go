@@ -36,6 +36,16 @@ type Site struct {
 // Desired is the complete web server state.
 type Desired struct {
 	Sites []Site `json:"sites"`
+	// Panel is the panel's own address (ADR-0023); nil serves none.
+	Panel *Panel `json:"panel,omitempty"`
+}
+
+// Panel is served on the driver's panel port and proxied to its upstream.
+// Without a certificate, port 80 answers only ACME challenges for Domain.
+type Panel struct {
+	Domain string `json:"domain"`
+	Cert   string `json:"cert,omitempty"`
+	Key    string `json:"key,omitempty"`
 }
 
 // rootRe keeps nginx syntax out of the root path: no spaces, quotes,
@@ -60,6 +70,20 @@ func (d Desired) Validate() error {
 
 		if (s.Cert == "") != (s.Key == "") {
 			return fmt.Errorf("site %q: certificate and key go together", s.User)
+		}
+	}
+
+	if p := d.Panel; p != nil {
+		req.Panel = &agentapi.WebPanel{Domain: p.Domain}
+
+		for name, f := range map[string]string{"certificate": p.Cert, "key": p.Key} {
+			if f != "" && (!rootRe.MatchString(f) || path.Clean(f) != f) {
+				return fmt.Errorf("panel: invalid %s path %q", name, f)
+			}
+		}
+
+		if (p.Cert == "") != (p.Key == "") {
+			return errors.New("panel: certificate and key go together")
 		}
 	}
 

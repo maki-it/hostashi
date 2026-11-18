@@ -57,7 +57,18 @@ type Config struct {
 	// Certs keeps the sites' TLS keys and certificates. Run builds it from
 	// StateDir; without it tls.* and sites with TLS are refused.
 	Certs *certs.Store
+
+	// PanelPort is the HTTPS port of the panel's own address (ADR-0023);
+	// 0 means DefaultPanelPort.
+	PanelPort int
 }
+
+// DefaultPanelPort is the panel's HTTPS port (ADR-0023).
+const DefaultPanelPort = 8443
+
+// PanelSocket is the panel's Unix socket that nginx proxies to. systemd
+// creates it (hostashi-panel.socket) for hostashi and www-data only.
+const PanelSocket = "/run/hostashi-panel.sock"
 
 // ErrNotRoot is returned when the agent is started without root.
 var ErrNotRoot = errors.New("agent must run as root")
@@ -262,6 +273,15 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		d.Sites = append(d.Sites, site)
 	}
 
+	if req.Panel != nil {
+		panel, err := h.panelFor(*req.Panel)
+		if err != nil {
+			return agentapi.WebApplyResponse{}, err
+		}
+
+		d.Panel = panel
+	}
+
 	// New and changed pools first, so nginx never points at a socket that
 	// does not exist yet; pools of sites without PHP only after nginx no
 	// longer uses them.
@@ -309,12 +329,53 @@ func (h *siteOps) tlsFor(site *web.Site, domains []string) error {
 	return nil
 }
 
+// panelFor builds the panel's web state; with TLS its certificate must be
+// valid and name the domain.
+func (h *siteOps) panelFor(p agentapi.WebPanel) (*web.Panel, error) {
+	if len(h.web.Driver.PanelListen) == 0 {
+		return nil, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the panel address is not available on this server"}
+	}
+
+	panel := &web.Panel{Domain: p.Domain}
+	if !p.TLS {
+		return panel, nil
+	}
+
+	if h.certs == nil || len(h.web.Driver.ListenTLS) == 0 {
+		return nil, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "HTTPS is not available on this server"}
+	}
+
+	ok, err := h.certs.Covers(agentapi.PanelCert, []string{p.Domain})
+	if err != nil {
+		return nil, err
+	}
+
+	if !ok {
+		return nil, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the panel has no valid certificate for " + p.Domain}
+	}
+
+	panel.Cert, panel.Key = h.certs.CertPath(agentapi.PanelCert), h.certs.KeyPath(agentapi.PanelCert)
+
+	return panel, nil
+}
+
+// knownCertName accepts the panel's certificate or a registered site.
+func (h *siteOps) knownCertName(name string) bool {
+	if name == agentapi.PanelCert {
+		return true
+	}
+
+	_, ok := h.m.Home(name)
+
+	return ok
+}
+
 func (h *siteOps) tlsCSR(_ context.Context, _ agentrpc.Caller, req agentapi.TLSCSRRequest) (agentapi.TLSCSRResponse, error) {
 	if h.certs == nil {
 		return agentapi.TLSCSRResponse{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "HTTPS is not available on this server"}
 	}
 
-	if _, ok := h.m.Home(req.User); !ok {
+	if !h.knownCertName(req.User) {
 		return agentapi.TLSCSRResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site"}
 	}
 
@@ -331,7 +392,7 @@ func (h *siteOps) tlsInstall(_ context.Context, _ agentrpc.Caller, req agentapi.
 		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "HTTPS is not available on this server"}
 	}
 
-	if _, ok := h.m.Home(req.User); !ok {
+	if !h.knownCertName(req.User) {
 		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site"}
 	}
 
@@ -489,7 +550,7 @@ func webGID(log *slog.Logger) uint32 {
 }
 
 // openWeb builds the production reconciler, or nil when nginx is missing.
-func openWeb(ctx context.Context, stateDir string, log *slog.Logger) *web.Reconciler {
+func openWeb(ctx context.Context, stateDir string, panelPort int, log *slog.Logger) *web.Reconciler {
 	if _, err := os.Stat(webctl.Nginx); err != nil {
 		if log != nil {
 			log.Warn("nginx not installed, web operations disabled", "path", webctl.Nginx)
@@ -520,9 +581,15 @@ func openWeb(ctx context.Context, stateDir string, log *slog.Logger) *web.Reconc
 		log.Warn("cannot tell whether nginx has HTTP/3, leaving it off", "err", err)
 	}
 
-	listen, listenTLS := []string{"80"}, []string{"443"}
+	if panelPort == 0 {
+		panelPort = DefaultPanelPort
+	}
+
+	pp := strconv.Itoa(panelPort)
+
+	listen, listenTLS, listenPanel := []string{"80"}, []string{"443"}, []string{pp}
 	if ipv6Available() {
-		listen, listenTLS = append(listen, "[::]:80"), append(listenTLS, "[::]:443")
+		listen, listenTLS, listenPanel = append(listen, "[::]:80"), append(listenTLS, "[::]:443"), append(listenPanel, "[::]:"+pp)
 	}
 
 	return &web.Reconciler{
@@ -542,6 +609,8 @@ func openWeb(ctx context.Context, stateDir string, log *slog.Logger) *web.Reconc
 			ListenTLS:     listenTLS,
 			HTTP3:         http3,
 			ACMERoot:      ACMERoot,
+			PanelListen:   listenPanel,
+			PanelUpstream: PanelSocket,
 		},
 	}
 }
@@ -612,7 +681,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if cfg.Web == nil {
-		cfg.Web = openWeb(ctx, cfg.StateDir, cfg.Log)
+		cfg.Web = openWeb(ctx, cfg.StateDir, cfg.PanelPort, cfg.Log)
 	}
 
 	if cfg.PHP == nil {

@@ -65,6 +65,14 @@ docker cp "$BINARY" "$NAME:/opt/hostashi/hostashi"
 x() { docker exec "$NAME" "$@"; }
 xi() { docker exec -i "$NAME" "$@"; }
 
+# The panel name would otherwise go to the real Let's Encrypt at the first
+# start. The Pebble part below replaces this drop-in.
+x mkdir -p /etc/systemd/system/hostashi.service.d
+xi sh -c 'cat >/etc/systemd/system/hostashi.service.d/pebble.conf' <<'UNIT'
+[Service]
+Environment=HOSTASHI_ACME_DIRECTORY=
+UNIT
+
 step "apply without --yes is refused"
 if x /opt/hostashi/install.sh apply --binary /opt/hostashi/hostashi; then fail "apply ran without --yes"; fi
 
@@ -80,9 +88,10 @@ echo "$out"
 grep -q 'changes=0' <<<"$out" || fail "second run changed something"
 
 step "services, health and permissions"
-for u in hostashi-agent hostashi; do
-  [ "$(x systemctl is-active $u.service)" = active ] || fail "$u is not running"
+for u in hostashi-agent.service hostashi.service hostashi-panel.socket; do
+  [ "$(x systemctl is-active $u)" = active ] || fail "$u is not running"
 done
+x grep -qx 'HOSTASHI_PUBLIC_URL=https://panel.example.com:8443' /etc/hostashi/hostashi.env || fail "public URL without the panel port"
 health=$(x curl -fsS http://127.0.0.1:8080/api/v1/health)
 echo "$health"
 grep -q '"agent":"ok"' <<<"$health" || fail "panel cannot reach the agent"
@@ -102,6 +111,7 @@ expect_mode /var/lib/hostashi-agent "700 root:root"
 expect_mode /var/lib/hostashi-agent/sites.json "600 root:root"
 expect_mode /run/hostashi "750 root:hostashi"
 expect_mode /run/hostashi/agent.sock "660 root:hostashi"
+expect_mode /run/hostashi-panel.sock "660 hostashi:www-data"
 expect_mode /var/lib/hostashi-acme "755 root:root"
 expect_mode /var/lib/hostashi-acme/.well-known/acme-challenge "2750 hostashi:www-data"
 
@@ -281,6 +291,35 @@ UNIT
   if x runuser -u hostashi -- cat /var/lib/hostashi-agent/tls/secure/key.pem >/dev/null 2>&1; then fail "panel user can read the site key"; fi
   [ "$(api DELETE /api/v1/sites/secure)" = 204 ] || fail "delete TLS site: $(x cat /tmp/api.out)"
   x test ! -e /var/lib/hostashi-agent/tls/secure || fail "certificate of a deleted site still there"
+
+  step "the panel over HTTPS (ADR-0023)"
+  # The public URL is https://other.example.com:8443 since the settings change.
+  p8443() { x curl -sSk --resolve other.example.com:8443:127.0.0.1 "$@"; }
+  for _ in $(seq 1 60); do
+    p8443 -f -o /dev/null https://other.example.com:8443/api/v1/health 2>/dev/null && break
+    sleep 2
+  done
+  health=$(p8443 -f https://other.example.com:8443/api/v1/health) || fail "panel not served on 8443"
+  grep -q '"agent":"ok"' <<<"$health" || fail "panel over HTTPS: $health"
+  hsts=$(p8443 -f -o /dev/null -D - https://other.example.com:8443/ | tr -d '\r' | grep -i '^strict-transport-security:' || true)
+  [ "$hsts" = "strict-transport-security: max-age=31536000" ] || fail "panel HSTS: '$hsts'"
+  loc=$(x curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' -H 'Host: other.example.com' http://127.0.0.1/login)
+  [ "$loc" = "301 https://other.example.com:8443/login" ] || fail "panel HTTP did not redirect: '$loc'"
+  if x curl -sSk -o /dev/null --resolve unknown.example.com:8443:127.0.0.1 https://unknown.example.com:8443/ 2>/dev/null; then
+    fail "panel port answered an unknown name"
+  fi
+  expect_mode /var/lib/hostashi-agent/tls/_panel/key.pem "600 root:root"
+  # The panel takes the client address from nginx, never from the client.
+  ip=$(x hostname -I | awk '{print $1}')
+  [ "$(api POST /api/v1/tokens '{"name":"probe","scopes":["sites:read"],"expiresInDays":1}')" = 201 ] || fail "token: $(x cat /tmp/api.out)"
+  bearer=$(x sed -n 's/.*"token":"\([^"]*\)".*/\1/p' /tmp/api.out)
+  code=$(x curl -sSk -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $bearer" -H 'X-Real-IP: 203.0.113.9' \
+    -H 'X-Forwarded-For: 203.0.113.9' --resolve "other.example.com:8443:$ip" https://other.example.com:8443/api/v1/sites)
+  [ "$code" = 200 ] || fail "token over HTTPS: $code"
+  [ "$(api GET /api/v1/tokens)" = 200 ] || fail "list tokens: $(x cat /tmp/api.out)"
+  x grep -q "\"lastUsedIp\":\"$ip\"" /tmp/api.out || fail "panel did not see the client address $ip: $(x cat /tmp/api.out)"
+  # Only nginx and the panel may use the socket.
+  if x runuser -u nobody -- test -w /run/hostashi-panel.sock; then fail "another user can write the panel socket"; fi
 fi
 
 echo "PASS: installer test on $IMG"

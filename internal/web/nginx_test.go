@@ -841,3 +841,142 @@ func TestCertificateNeedsTLSListener(t *testing.T) {
 		t.Fatal("certificate without key accepted")
 	}
 }
+
+// TestPanelProxy serves the panel's address: only ACME on port 80 without a
+// certificate, then HTTPS on the panel port proxied to a Unix socket with the
+// client address in X-Real-IP.
+func TestPanelProxy(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+
+	panelPort := freePort(t)
+	e.r.Driver.ListenTLS = []string{"127.0.0.1:" + strconv.Itoa(freePort(t))}
+	e.r.Driver.PanelListen = []string{"127.0.0.1:" + strconv.Itoa(panelPort)}
+	e.r.Driver.PanelUpstream = filepath.Join(e.dir, "panel.sock")
+	e.r.Driver.LegacyHTTP2 = legacyHTTP2(t, e.ctl.bin)
+	e.r.Driver.ACMERoot = filepath.Join(e.dir, "acme")
+
+	challenge := filepath.Join(e.r.Driver.ACMERoot, ".well-known", "acme-challenge")
+	if err := os.MkdirAll(challenge, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(challenge, "tok456"), []byte("tok456.thumb"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The panel: echoes what nginx passes on.
+	ln, err := net.Listen("unix", e.r.Driver.PanelUpstream)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Chmod(e.r.Driver.PanelUpstream, 0o666); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := &http.Server{ReadHeaderTimeout: time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, "panel host=%s ip=%s xff=%q proto=%s", r.Host, r.Header.Get("X-Real-IP"), r.Header.Get("X-Forwarded-For"), r.Header.Get("X-Forwarded-Proto"))
+	})}
+
+	go func() { _ = srv.Serve(ln) }()
+
+	t.Cleanup(func() { _ = srv.Close() })
+
+	if _, err := e.r.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	panel := &Panel{Domain: "panel.example.com"}
+	if _, err := e.r.Apply(ctx, Desired{Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, body := e.fetchPath(t, "panel.example.com", "/.well-known/acme-challenge/tok456"); code != http.StatusOK || body != "tok456.thumb" {
+		t.Fatalf("challenge: %d %q", code, body)
+	}
+
+	if code, _ := e.fetch(t, "panel.example.com"); code != http.StatusNotFound {
+		t.Fatalf("panel over HTTP without a certificate answered %d, want 404", code)
+	}
+
+	certDir := filepath.Join(e.dir, "certs")
+	if err := os.MkdirAll(certDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	var pool *x509.CertPool
+
+	panel.Cert, panel.Key, pool = selfSigned(t, certDir, "panel.example.com")
+
+	if _, err := e.r.Apply(ctx, Desired{Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	addr := "127.0.0.1:" + strconv.Itoa(panelPort)
+	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			var d net.Dialer
+
+			return d.DialContext(ctx, network, addr)
+		},
+		ForceAttemptHTTP2: true,
+	}}
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://panel.example.com:"+strconv.Itoa(panelPort)+"/api/v1/health", nil)
+	req.Header.Set("X-Forwarded-For", "203.0.113.9")
+	req.Header.Set("X-Real-IP", "203.0.113.9")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+
+	want := fmt.Sprintf(`panel host=panel.example.com:%d ip=127.0.0.1 xff="" proto=https`, panelPort)
+	if resp.StatusCode != http.StatusOK || string(body) != want || resp.Header.Get("Strict-Transport-Security") == "" {
+		t.Fatalf("panel over https: %d %q %v", resp.StatusCode, body, resp.Header)
+	}
+
+	// Port 80 now redirects to the panel port.
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(e.port), 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _ = fmt.Fprintf(conn, "GET /login?x=1 HTTP/1.1\r\nHost: panel.example.com\r\nConnection: close\r\n\r\n")
+
+	r80, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err == nil {
+		_ = r80.Body.Close()
+	}
+
+	_ = conn.Close()
+
+	if err != nil || r80.StatusCode != http.StatusMovedPermanently ||
+		r80.Header.Get("Location") != fmt.Sprintf("https://panel.example.com:%d/login?x=1", panelPort) {
+		t.Fatalf("redirect: %v %v", err, r80)
+	}
+
+	// Another name on the panel port gets no certificate.
+	if c, err := tls.Dial("tcp", addr, &tls.Config{ServerName: "other.example.com", InsecureSkipVerify: true}); err == nil {
+		_ = c.Close()
+
+		t.Fatal("handshake for another name on the panel port succeeded")
+	}
+}
+
+func TestPanelNeedsListener(t *testing.T) {
+	n := &Nginx{Ctl: &testCtl{}, Listen: []string{"80"}, ControlSocket: "/run/x.sock", PIDFile: "/run/x.pid", ErrorLog: "/var/log/x", MimeTypes: "/etc/x"}
+
+	if _, err := n.Render(Desired{Panel: &Panel{Domain: "panel.example.com"}}, 1); err == nil || !strings.Contains(err.Error(), "no panel listener") {
+		t.Fatalf("err %v", err)
+	}
+
+	if err := (Desired{Sites: []Site{{User: "alpha", Domains: []string{"panel.example.com"}, Root: "/srv/a"}}, Panel: &Panel{Domain: "panel.example.com"}}).Validate(); err == nil {
+		t.Fatal("site domain equal to the panel's accepted")
+	}
+}

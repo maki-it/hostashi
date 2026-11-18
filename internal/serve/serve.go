@@ -219,14 +219,19 @@ func Run(ctx context.Context, cfg Config) error {
 		go deps.Sites.RunTLS(ctx)
 	}
 
-	srv := &http.Server{
-		Addr:              cfg.Listen,
-		Handler:           Handler(cfg, deps),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		MaxHeaderBytes:    64 << 10,
+	if d := PanelDomain(cfg.PublicURL); d != "" {
+		if err := deps.Sites.EnablePanel(d); err != nil {
+			return err
+		}
+	}
+
+	h := Handler(cfg, deps)
+	srv := newServer(h)
+
+	// nginx's way in (ADR-0023); without socket activation only TCP.
+	proxyLn, err := systemdListener()
+	if err != nil {
+		return err
 	}
 
 	var lc net.ListenConfig
@@ -240,19 +245,48 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.Log.Info("serve listening", "addr", ln.Addr().String(), "agentSocket", cfg.Socket, "db", cfg.DBPath, "setupTokenFile", tokenPath)
 	}
 
-	errc := make(chan error, 1)
+	errc := make(chan error, 2)
 	go func() { errc <- srv.Serve(ln) }()
 
+	servers := []*http.Server{srv}
+
+	if proxyLn != nil {
+		psrv := newServer(fromProxy(h))
+		servers = append(servers, psrv)
+
+		if cfg.Log != nil {
+			cfg.Log.Info("serve listening for nginx", "addr", proxyLn.Addr().String())
+		}
+
+		go func() { errc <- psrv.Serve(proxyLn) }()
+	}
+
+	var runErr error
+
 	select {
-	case err := <-errc:
-		return err
+	case runErr = <-errc:
 	case <-ctx.Done():
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 
-	return srv.Shutdown(shutdownCtx)
+	for _, s := range servers {
+		runErr = errors.Join(runErr, s.Shutdown(shutdownCtx))
+	}
+
+	return runErr
+}
+
+func newServer(h http.Handler) *http.Server {
+	return &http.Server{
+		Handler:           h,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    64 << 10,
+	}
 }
 
 // newIssuer builds the ACME client, or nil when certificates are off or the

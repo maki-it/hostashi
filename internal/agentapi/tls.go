@@ -10,6 +10,19 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 )
 
+// PanelCert names the certificate of the panel's own address (ADR-0023).
+// The underscore makes it impossible as a site user.
+const PanelCert = "_panel"
+
+// ValidateCertName accepts a site user or PanelCert.
+func ValidateCertName(name string) error {
+	if name == PanelCert {
+		return nil
+	}
+
+	return ValidateSiteUser(name)
+}
+
 // MaxCertChain bounds the PEM chain of tls.install (a Let's Encrypt chain
 // is about 4 KiB; one frame is at most agentrpc.MaxFrame).
 const MaxCertChain = 32 << 10
@@ -17,13 +30,13 @@ const MaxCertChain = 32 << 10
 // TLSCSRRequest asks for a new private key for a site and a certificate
 // signing request for its domains. The key stays with the agent.
 type TLSCSRRequest struct {
-	User    string   `json:"user"`
+	User    string   `json:"user"`    // a site user or PanelCert
 	Domains []string `json:"domains"` // the first one becomes the common name
 }
 
 // Validate checks the request.
 func (r TLSCSRRequest) Validate() error {
-	if err := ValidateSiteUser(r.User); err != nil {
+	if err := ValidateCertName(r.User); err != nil {
 		return err
 	}
 
@@ -66,7 +79,7 @@ type TLSInstallRequest struct {
 
 // Validate checks the request; the agent checks the chain itself.
 func (r TLSInstallRequest) Validate() error {
-	if err := ValidateSiteUser(r.User); err != nil {
+	if err := ValidateCertName(r.User); err != nil {
 		return err
 	}
 

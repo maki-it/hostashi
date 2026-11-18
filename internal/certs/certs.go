@@ -62,7 +62,7 @@ func (s *Store) now() time.Time {
 }
 
 func (s *Store) siteDir(user string) (string, error) {
-	if err := agentapi.ValidateSiteUser(user); err != nil {
+	if err := agentapi.ValidateCertName(user); err != nil {
 		return "", fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 

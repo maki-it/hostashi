@@ -426,6 +426,7 @@ type fakeIssuer struct {
 	calls     int
 	err       error
 	validDays int
+	before    func() // runs before each signature
 }
 
 func (i *fakeIssuer) Obtain(_ context.Context, csr []byte) ([]byte, error) {
@@ -433,6 +434,10 @@ func (i *fakeIssuer) Obtain(_ context.Context, csr []byte) ([]byte, error) {
 	defer i.mu.Unlock()
 
 	i.calls++
+
+	if i.before != nil {
+		i.before()
+	}
 
 	if i.err != nil {
 		return nil, i.err
