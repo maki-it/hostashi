@@ -15,7 +15,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0018](0018-public-rest-api.md) | Public REST API design | Accepted |
 | [0019](0019-php-package-source-and-versions.md) | PHP package source and multiple PHP versions | Accepted |
 | [0020](0020-nginx-package-source-and-brotli.md) | nginx package source and brotli | Accepted |
-| [0021](0021-brute-force-and-intrusion-protection.md) | Brute-force and intrusion protection | Proposed |
+| [0021](0021-brute-force-and-intrusion-protection.md) | Brute-force and intrusion protection | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 
