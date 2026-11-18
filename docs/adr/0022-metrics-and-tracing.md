@@ -98,6 +98,7 @@ All names start with `hostashi_`. Labels are closed sets, never free text from r
 
 ## Open questions
 
-1. Is the endpoint off by default, as `03-features.md` says, or on by default on the loopback listener only? Recommendation: off, because of the local-user risk above.
-2. Is a separate loopback listener for the token-free path fine, instead of a "comes from localhost" check on the main listener? Recommendation: separate listener.
-3. Is the site's system name fine as the `site` label, or should it be the numeric site ID, which says even less? Recommendation: system name, because dashboards without names are hard to read.
+Decided (Kim, 2026-11-18): the endpoint is off by default, as `03-features.md` says.
+
+1. Is a separate loopback listener for the token-free path fine, instead of a "comes from localhost" check on the main listener? Recommendation: separate listener.
+2. Is the site's system name fine as the `site` label, or should it be the numeric site ID, which says even less? Recommendation: system name, because dashboards without names are hard to read.
