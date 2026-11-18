@@ -1,0 +1,64 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+
+:root {
+  color-scheme: light dark;
+  --bg: #f6f7f9;
+  --fg: #1b1f24;
+  --muted: #5b6470;
+  --surface: #ffffff;
+  --border: #d5d9df;
+  --accent: #2f5fd0;
+  --danger: #b42318;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171b;
+    --fg: #e6e8eb;
+    --muted: #9aa3ad;
+    --surface: #1d2126;
+    --border: #353b43;
+    --accent: #7ea2f5;
+    --danger: #f97066;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.shell {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.status {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.status dt {
+  color: var(--muted);
+}
+
+.status dd {
+  margin: 0;
+}
+
+[role="alert"] {
+  color: var(--danger);
+}

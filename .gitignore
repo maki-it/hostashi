@@ -12,3 +12,8 @@
 .vscode/
 *.swp
 .DS_Store
+
+# Frontend build output, embedded by internal/ui (the directory itself stays)
+/internal/ui/dist/*
+!/internal/ui/dist/.gitkeep
+/web/node_modules/
