@@ -21,6 +21,7 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 | 0015 | Ressourcenlimits pro Site | Proposed (Entwurf: [adr/0015](adr/0015-per-site-resource-limits.md)) | **Ja** (Priorität Disk-Quota) |
 | 0016 | Speicherort pro Site (Storage-Pools) | Proposed (Entwurf: [adr/0016](adr/0016-per-site-storage-location.md)) | **Ja** |
 | 0017 | CloudPanel-Import als Migration, Presets | Proposed (Entwurf: [adr/0017](adr/0017-cloudpanel-import-and-presets.md)) | **Ja** |
+| 0018 | Öffentliche REST-API | Proposed (Entwurf: [adr/0018](adr/0018-public-rest-api.md)) | **Ja** |
 
 ---
 
@@ -172,6 +173,10 @@ ashi site add example.com --type php --php 8.4   # gleiches Programm
 ## ADR-0017 CloudPanel-Import als Migration, Presets
 
 **Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0017-cloudpanel-import-and-presets.md](adr/0017-cloudpanel-import-and-presets.md). Kurzfassung: Grundlage ist Spike S6 mit zwei Läufen auf `web2`, Ergebnis 0 % sauber und 90 % übernehmbar. Kim hat entschieden, dass eine Site als übernommen gilt, wenn kein Blocker vorliegt und jede eigene Regel einmal geprüft wird. Der Importer ist ein **Migrationswerkzeug**: Er liest den alten Server nur lesend, und der neue Server zieht die Daten. Die wiederkehrenden Regeln werden **nicht 1:1 übernommen**, sondern als eigene, typisierte Presets neu entworfen. Je Muster ist bewertet, ob es übernommen, verbessert oder weggelassen wird; zum Beispiel werden Security-Header neu gebaut und `if`-Weiterleitungen werden typisierte Redirects. Kims Vorgaben vom 2026-11-18: PageSpeed fällt weg, Varnish bleibt und kommt zusammen mit dem Importer (Release 1.0), Presets sind je Site-Typ aktiv (WordPress, TYPO3, generisches PHP, Static usw.).
+
+## ADR-0018 Öffentliche REST-API
+
+**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0018-public-rest-api.md](adr/0018-public-rest-api.md). Kurzfassung: REST mit OpenAPI 3.1 als Vertrag, **API-first**: Jede Funktion der UI läuft über einen dokumentierten Endpunkt, UI und CLI sind Clients derselben API. Pfad `/api/v1/`, ab 1.0 nur kompatible Änderungen. Ressourcen über feste IDs statt Domains. Schreibzugriffe ändern den Soll-Zustand, lange Vorgänge laufen als Job mit SSE. API-Tokens mit Ablaufdatum und Scopes (`resource:action`, optional auf einzelne Sites begrenzt); jede Anfrage prüft Scope, Rolle und Besitz. Die API läuft im Web-Prozess ohne Root und nutzt nur typisierte Agent-Operationen. Benannter Konflikt: eigene Nginx-Snippets sind Freitext und brauchen deshalb einen eigenen Hochrisiko-Scope. Beispiel im Entwurf: Wartungs- und Parkseiten per API schalten.
 
 ---
 
