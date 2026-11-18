@@ -28,25 +28,33 @@ func Handle[Req Validator, Resp any](s *Server, op Op[Req, Resp], fn func(ctx co
 	if !opNameRe.MatchString(op.Name) {
 		panic("agentrpc: invalid operation name " + op.Name)
 	}
+
 	if _, dup := s.ops[op.Name]; dup {
 		panic("agentrpc: duplicate operation " + op.Name)
 	}
+
 	s.ops[op.Name] = func(ctx context.Context, c Caller, raw json.RawMessage) (any, error) {
 		var req Req
+
 		if len(raw) == 0 {
 			raw = []byte("{}")
 		}
+
 		dec := json.NewDecoder(bytes.NewReader(raw))
 		dec.DisallowUnknownFields()
+
 		if err := dec.Decode(&req); err != nil {
 			return nil, &Error{CodeBadRequest, "params do not match the operation"}
 		}
+
 		if dec.More() {
 			return nil, &Error{CodeBadRequest, "params: trailing data"}
 		}
+
 		if err := req.Validate(); err != nil {
 			return nil, &Error{CodeInvalidArgument, err.Error()}
 		}
+
 		return fn(ctx, c, req)
 	}
 }
@@ -59,13 +67,16 @@ func (op Op[Req, Resp]) Call(ctx context.Context, c *Client, req Req) (Resp, err
 	if err := req.Validate(); err != nil {
 		return zero, &Error{CodeInvalidArgument, err.Error()}
 	}
+
 	raw, err := c.roundTrip(ctx, op.Name, req)
 	if err != nil {
 		return zero, err
 	}
+
 	var out Resp
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return zero, err
 	}
+
 	return out, nil
 }

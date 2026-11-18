@@ -12,6 +12,7 @@ import (
 
 func TestRun(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "none.sock")
+
 	cases := []struct {
 		name    string
 		args    []string
@@ -33,10 +34,12 @@ func TestRun(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var out, errOut bytes.Buffer
+
 			code := run(context.Background(), tc.args, tc.euid, &out, &errOut)
 			if code != tc.code {
 				t.Fatalf("exit %d, want %d\nstdout: %s\nstderr: %s", code, tc.code, &out, &errOut)
 			}
+
 			if tc.wantErr != "" && !strings.Contains(errOut.String(), tc.wantErr) {
 				t.Fatalf("stderr %q does not contain %q", &errOut, tc.wantErr)
 			}

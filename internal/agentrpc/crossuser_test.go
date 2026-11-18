@@ -32,8 +32,10 @@ func TestMain(m *testing.M) {
 		default:
 			fmt.Println("error:", err)
 		}
+
 		os.Exit(0)
 	}
+
 	os.Exit(m.Run())
 }
 
@@ -43,6 +45,7 @@ func TestCrossUser(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("needs root")
 	}
+
 	const nobody = 65534
 
 	// Copy the test binary somewhere uid 65534 can execute it.
@@ -55,10 +58,13 @@ func TestCrossUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = os.RemoveAll(base) })
+
 	if err := os.Chmod(base, 0o755); err != nil {
 		t.Fatal(err)
 	}
+
 	bin := filepath.Join(base, "client")
 	copyFile(t, self, bin)
 
@@ -66,17 +72,21 @@ func TestCrossUser(t *testing.T) {
 	if err := os.Mkdir(runDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
+
 	sock := filepath.Join(runDir, "agent.sock")
 
 	runAs := func() string {
 		t.Helper()
+
 		cmd := exec.Command(bin)
 		cmd.Env = []string{crossUserEnv + "=" + sock}
 		cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: nobody, Gid: nobody}}
+
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("client: %v\n%s", err, out)
 		}
+
 		return strings.TrimSpace(string(out))
 	}
 
@@ -85,32 +95,41 @@ func TestCrossUser(t *testing.T) {
 		if err := s.Listen(context.Background(), sock, gid); err != nil {
 			t.Fatal(err)
 		}
+
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan struct{})
+
 		go func() { _ = s.Serve(ctx); close(done) }()
+
 		return func() { cancel(); <-done }
 	}
 
 	// 1. Directory root:root 0750: uid 65534 cannot even reach the socket.
 	stop := serve(AllowUIDs(0, nobody), -1)
+
 	if got := runAs(); got != "denied-by-mode" {
 		t.Fatalf("step 1: %s", got)
 	}
+
 	stop()
 
 	// 2. Group access granted, but only root is authorized: no reply.
 	if err := os.Chown(runDir, 0, nobody); err != nil {
 		t.Fatal(err)
 	}
+
 	stop = serve(AllowUIDs(0), nobody)
+
 	if got := runAs(); got != "no-reply" {
 		t.Fatalf("step 2: %s", got)
 	}
+
 	stop()
 
 	// 3. Authorized by uid: the agent sees the kernel-reported uid.
 	stop = serve(AllowUIDs(0, nobody), nobody)
 	defer stop()
+
 	if got := runAs(); got != fmt.Sprintf("uid=%d", nobody) {
 		t.Fatalf("step 3: %s", got)
 	}
@@ -118,18 +137,23 @@ func TestCrossUser(t *testing.T) {
 
 func copyFile(t *testing.T, src, dst string) {
 	t.Helper()
+
 	in, err := os.Open(src)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = in.Close() }()
+
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o755)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err := io.Copy(out, in); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := out.Close(); err != nil {
 		t.Fatal(err)
 	}

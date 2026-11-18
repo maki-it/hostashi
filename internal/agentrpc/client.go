@@ -32,26 +32,35 @@ func (c *Client) roundTrip(ctx context.Context, op string, req any) (json.RawMes
 	if err != nil {
 		return nil, err
 	}
+
 	body, err := json.Marshal(request{Op: op, Params: params})
 	if err != nil {
 		return nil, err
 	}
+
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
+
 		ctx, cancel = context.WithTimeout(ctx, DefaultTimeout)
 		defer cancel()
 	}
+
 	var d net.Dialer
+
 	conn, err := d.DialContext(ctx, "unix", c.path)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+
 	defer func() { _ = conn.Close() }()
+
 	stop := context.AfterFunc(ctx, func() { _ = conn.SetDeadline(time.Now()) })
 	defer stop()
+
 	if dl, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(dl)
 	}
+
 	if err := writeFrame(conn, body); err != nil {
 		if errors.Is(err, ErrFrameTooLarge) {
 			return nil, err
@@ -60,20 +69,25 @@ func (c *Client) roundTrip(ctx context.Context, op string, req any) (json.RawMes
 		// connection limit is reached or the peer is not authorized.
 		return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+
 	rb, err := readFrame(conn)
 	if err != nil {
 		// The agent closes without a reply for unauthorized peers.
 		return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+
 	var resp response
 	if err := json.Unmarshal(rb, &resp); err != nil {
 		return nil, fmt.Errorf("agentrpc: bad response: %w", err)
 	}
+
 	if !resp.OK {
 		if resp.Error == nil {
 			return nil, errors.New("agentrpc: failure without error")
 		}
+
 		return nil, resp.Error
 	}
+
 	return resp.Result, nil
 }

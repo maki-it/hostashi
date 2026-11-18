@@ -14,10 +14,12 @@ import (
 func TestFrameRoundTrip(t *testing.T) {
 	for _, n := range []int{0, 1, MaxFrame} {
 		var buf bytes.Buffer
+
 		body := bytes.Repeat([]byte("a"), n)
 		if err := writeFrame(&buf, body); err != nil {
 			t.Fatal(err)
 		}
+
 		got, err := readFrame(&buf)
 		if err != nil || !bytes.Equal(got, body) {
 			t.Fatalf("n=%d: %v", n, err)
@@ -29,8 +31,10 @@ func TestFrameLimits(t *testing.T) {
 	if err := writeFrame(io.Discard, make([]byte, MaxFrame+1)); !errors.Is(err, ErrFrameTooLarge) {
 		t.Fatalf("write: %v", err)
 	}
+
 	var hdr [4]byte
 	binary.BigEndian.PutUint32(hdr[:], 0xFFFFFFFF)
+
 	if _, err := readFrame(bytes.NewReader(hdr[:])); !errors.Is(err, ErrFrameTooLarge) {
 		t.Fatalf("read: %v", err)
 	}
@@ -69,21 +73,26 @@ func FuzzDispatch(f *testing.F) {
 	} {
 		f.Add([]byte(s))
 	}
+
 	s := NewServer(nil, Options{})
 	Handle(s, opWho, func(_ context.Context, c Caller, _ emptyReq) (whoResp, error) { return whoResp{UID: c.UID}, nil })
 	Handle(s, opEcho, func(_ context.Context, _ Caller, r echoReq) (echoResp, error) { return echoResp(r), nil })
 	Handle(s, opBoom, func(context.Context, Caller, emptyReq) (whoResp, error) {
 		return whoResp{}, errors.New("internal detail")
 	})
+
 	known := map[string]bool{CodeBadRequest: true, CodeInvalidArgument: true, CodeUnknownOperation: true, CodeInternal: true}
+
 	f.Fuzz(func(t *testing.T, body []byte) {
 		resp := s.dispatch(context.Background(), Caller{}, body)
 		if resp.OK {
 			return
 		}
+
 		if resp.Error == nil || !known[resp.Error.Code] {
 			t.Fatalf("bad failure %+v", resp)
 		}
+
 		if bytes.Contains([]byte(resp.Error.Message), []byte("internal detail")) {
 			t.Fatal("internal error text leaked")
 		}

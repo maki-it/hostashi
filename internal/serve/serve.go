@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -35,6 +34,7 @@ func CheckEUID(euid int) error {
 	if euid == 0 {
 		return ErrRoot
 	}
+
 	return nil
 }
 
@@ -45,16 +45,20 @@ func CheckListen(addr string) error {
 	if err != nil {
 		return fmt.Errorf("listen address %q: %w", addr, err)
 	}
+
 	if port == "" {
 		return fmt.Errorf("listen address %q: missing port", addr)
 	}
+
 	if host == "localhost" {
 		return nil
 	}
+
 	ip := net.ParseIP(host)
 	if ip == nil || !ip.IsLoopback() {
 		return fmt.Errorf("listen address %q: only loopback is allowed until TLS is implemented", addr)
 	}
+
 	return nil
 }
 
@@ -65,8 +69,9 @@ type pinger func(ctx context.Context) (agentapi.PingResponse, error)
 func Handler(cfg Config, ping pinger) http.Handler {
 	log := cfg.Log
 	if log == nil {
-		log = slog.New(slog.NewTextHandler(io.Discard, nil))
+		log = slog.New(slog.DiscardHandler)
 	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, r *http.Request) {
 		type health struct {
@@ -74,21 +79,27 @@ func Handler(cfg Config, ping pinger) http.Handler {
 			Agent   string `json:"agent"`
 			Version string `json:"version"`
 		}
+
 		h := health{Status: "ok", Agent: "ok", Version: cfg.Version}
 		code := http.StatusOK
+
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
+
 		if _, err := ping(ctx); err != nil {
 			// Details go to the log, not to the client.
 			log.Warn("agent ping failed", "err", err)
+
 			h.Status, h.Agent = "degraded", "unavailable"
 			code = http.StatusServiceUnavailable
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(code)
 		_ = json.NewEncoder(w).Encode(h)
 	})
+
 	return mux
 }
 
@@ -97,6 +108,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if err := CheckListen(cfg.Listen); err != nil {
 		return err
 	}
+
 	client := agentrpc.NewClient(cfg.Socket)
 	ping := func(ctx context.Context) (agentapi.PingResponse, error) {
 		return agentapi.Ping.Call(ctx, client, agentapi.PingRequest{})
@@ -110,22 +122,29 @@ func Run(ctx context.Context, cfg Config) error {
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    64 << 10,
 	}
+
 	var lc net.ListenConfig
+
 	ln, err := lc.Listen(ctx, "tcp", cfg.Listen)
 	if err != nil {
 		return err
 	}
+
 	if cfg.Log != nil {
 		cfg.Log.Info("serve listening", "addr", ln.Addr().String(), "agentSocket", cfg.Socket)
 	}
+
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
+
 	select {
 	case err := <-errc:
 		return err
 	case <-ctx.Done():
 	}
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
+
 	return srv.Shutdown(shutdownCtx)
 }

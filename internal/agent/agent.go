@@ -32,6 +32,7 @@ func CheckEUID(euid int) error {
 	if euid != 0 {
 		return ErrNotRoot
 	}
+
 	return nil
 }
 
@@ -44,21 +45,26 @@ func serveIdentity(name string) (uid uint32, gid int, err error) {
 	if name == "" || name == "root" {
 		return 0, 0, fmt.Errorf("serve user must be a dedicated unprivileged user, got %q", name)
 	}
+
 	u, err := lookupUser(name)
 	if err != nil {
 		return 0, 0, fmt.Errorf("serve user %q: %w", name, err)
 	}
+
 	id, err := strconv.ParseUint(u.Uid, 10, 32)
 	if err != nil {
 		return 0, 0, fmt.Errorf("serve user %q: bad uid %q", name, u.Uid)
 	}
+
 	if id == 0 {
 		return 0, 0, fmt.Errorf("serve user %q has uid 0", name)
 	}
+
 	g, err := strconv.ParseUint(u.Gid, 10, 31)
 	if err != nil {
 		return 0, 0, fmt.Errorf("serve user %q: bad gid %q", name, u.Gid)
 	}
+
 	return uint32(id), int(g), nil
 }
 
@@ -69,6 +75,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	agentrpc.Handle(s, agentapi.Ping, func(_ context.Context, c agentrpc.Caller, _ agentapi.PingRequest) (agentapi.PingResponse, error) {
 		return agentapi.PingResponse{CallerUID: c.UID, Version: cfg.Version}, nil
 	})
+
 	return s
 }
 
@@ -78,12 +85,15 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
+
 	s := NewServer(cfg, uid)
 	if err := s.Listen(ctx, cfg.Socket, gid); err != nil {
 		return err
 	}
+
 	if cfg.Log != nil {
 		cfg.Log.Info("agent listening", "socket", cfg.Socket, "serveUser", cfg.ServeUser, "serveUid", uid)
 	}
+
 	return s.Serve(ctx)
 }
