@@ -11,7 +11,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0005 | Web server | Accepted on 2026-11-18 ([adr/0005](adr/0005-web-server.md)), nginx | No, S3 is done |
 | 0006 | State store and reconciler | Proposed | No |
 | 0007 | Isolation model per site | Proposed | No |
-| 0008 | Backups with restic | Proposed | No |
+| 0008 | Backups with restic | Accepted on 2026-11-19 ([adr/0008](adr/0008-backups-with-restic.md)) | Done |
 | 0009 | Target platforms and packaging | Proposed | Partly |
 | 0010 | Target audience and v1 scope | Proposed (draft: [adr/0010](adr/0010-target-audience-and-v1-scope.md)) | **Yes** |
 | 0011 | Name and trademark | Accepted (subject to trademark search) | Done, trademark open |
@@ -94,7 +94,9 @@ Linux user per site, FPM pool over a Unix socket, systemd sandbox, cgroup limits
 
 ## ADR-0008 Backups with restic
 
-Restic as the engine (encryption, deduplication, many backends, also through Rclone). Databases through consistent dumps (MariaDB: `mariadb-dump --single-transaction` or `mariabackup`, PostgreSQL: `pg_dump`). Restore test as a feature. The alternative Borg is good too, but has fewer backends.
+**Accepted (Kim, 2026-11-19):** [adr/0008-backups-with-restic.md](adr/0008-backups-with-restic.md). Summary: a sandboxed systemd unit runs restic for the agent, one repository per server on the Storage Box over SFTP, files, database dumps and the panel per run.
+
+Original entry: Restic as the engine (encryption, deduplication, many backends, also through Rclone). Databases through consistent dumps (MariaDB: `mariadb-dump --single-transaction` or `mariabackup`, PostgreSQL: `pg_dump`). Restore test as a feature. The alternative Borg is good too, but has fewer backends.
 
 ## ADR-0009 Target platforms and packaging
 
