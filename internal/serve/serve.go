@@ -145,6 +145,7 @@ func Handler(cfg Config, deps Deps) http.Handler {
 
 		if deps.Sites != nil {
 			registerSites(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerDatabases(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 		}
 	}
 

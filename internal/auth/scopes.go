@@ -23,6 +23,9 @@ var scopeCatalog = map[string]ScopeInfo{
 	"sites:write":             {Description: "Create and change sites"},
 	"sites:delete":            {Description: "Delete sites and their files", HighRisk: true},
 	"sites.maintenance:write": {Description: "Switch maintenance and parking pages"},
+	"databases:read":          {Description: "List databases and their users"},
+	"databases:write":         {Description: "Create databases and users, set passwords, remove users"},
+	"databases:delete":        {Description: "Delete databases and their data", HighRisk: true},
 	"backups:read":            {Description: "List backups"},
 	"backups:restore":         {Description: "Restore backups over live data", HighRisk: true},
 }

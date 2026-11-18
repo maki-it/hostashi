@@ -231,9 +231,20 @@ body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/db.php)
 [ "$body" = "db 42 jailed" ] || fail "PHP with database answered '$body'"
 x /usr/local/bin/hostashi db delete wp_db
 [ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User='wp_user'")" ] || fail "database user still there"
+# The same through the panel API: the generated password works once, and
+# deleting the site drops its database and user.
+[ "$(api POST /api/v1/sites/wp/databases '{"name":"wp_api","user":"wp_api"}')" = 201 ] ||
+  fail "create database: $(x cat /tmp/api.out)"
+dbpw=$(x cat /tmp/api.out | sed -n 's/.*"password":"\([A-Za-z0-9]*\)".*/\1/p')
+[ ${#dbpw} = 32 ] || fail "no generated password: $(x cat /tmp/api.out)"
+[ "$(x mariadb -u wp_api "-p$dbpw" -Nse 'SELECT DATABASE()' wp_api)" = wp_api ] || fail "generated password does not work"
+[ "$(api GET /api/v1/sites/wp/databases)" = 200 ] || fail "list databases: $(x cat /tmp/api.out)"
+! x grep -q "$dbpw" /tmp/api.out || fail "password returned by a read"
 [ "$(api DELETE /api/v1/sites/wp)" = 204 ] || fail "delete PHP site: $(x cat /tmp/api.out)"
 ! x systemctl is-active --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit still running after delete"
 x test ! -e /home/wp || fail "PHP site home still there"
+[ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User='wp_api'")" ] || fail "database user of a deleted site still there"
+[ -z "$(x mariadb -Nse "SHOW DATABASES LIKE 'wp\_api'")" ] || fail "database of a deleted site still there"
 
 if [ -z "${PEBBLE_DIR:-}" ]; then
   echo "PEBBLE_DIR not set, skipping the certificate test"

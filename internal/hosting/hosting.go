@@ -30,6 +30,11 @@ type Agent interface {
 	PHPVersions(ctx context.Context) ([]string, error)
 	TLSCSR(ctx context.Context, user string, domains []string) (string, error)
 	TLSInstall(ctx context.Context, user, chain string) (agentapi.TLSCertInfo, error)
+	DBCreate(ctx context.Context, site, name string) error
+	DBDelete(ctx context.Context, name string) error
+	DBUserCreate(ctx context.Context, database, user, password string) error
+	DBUserDelete(ctx context.Context, user string) error
+	DBUserPassword(ctx context.Context, user, password string) error
 }
 
 // Issuer turns a certificate signing request into a certificate chain. The
@@ -426,6 +431,11 @@ func (s *Service) Delete(ctx context.Context, actor int64, name string) error {
 			}
 		}
 
+		return err
+	}
+
+	// The site is offline now; its databases go before the account.
+	if err := s.deleteSiteDatabases(ctx, actor, name); err != nil {
 		return err
 	}
 

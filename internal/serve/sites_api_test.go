@@ -60,6 +60,16 @@ func (a *stubAgent) TLSInstall(_ context.Context, _, _ string) (agentapi.TLSCert
 	return agentapi.TLSCertInfo{Domains: []string{"blog.example.org"}, NotAfter: time.Now().Add(90 * 24 * time.Hour)}, nil
 }
 
+func (a *stubAgent) DBCreate(context.Context, string, string) error { return nil }
+
+func (a *stubAgent) DBDelete(context.Context, string) error { return nil }
+
+func (a *stubAgent) DBUserCreate(context.Context, string, string, string) error { return nil }
+
+func (a *stubAgent) DBUserDelete(context.Context, string) error { return nil }
+
+func (a *stubAgent) DBUserPassword(context.Context, string, string) error { return nil }
+
 type stubIssuer struct{}
 
 func (stubIssuer) Obtain(context.Context, []byte) ([]byte, error) { return []byte("chain"), nil }
