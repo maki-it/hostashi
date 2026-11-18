@@ -71,10 +71,21 @@ type WebSite struct {
 	HSTS bool `json:"hsts,omitempty"`
 }
 
+// WebPanel is the panel's own address (ADR-0023). The agent serves it on
+// its configured panel port and proxies to the panel's socket; the caller
+// names neither.
+type WebPanel struct {
+	Domain string `json:"domain"`
+	// TLS serves the panel with the live PanelCert certificate. Without it
+	// port 80 answers only ACME challenges for the domain.
+	TLS bool `json:"tls,omitempty"`
+}
+
 // WebApplyRequest is the complete desired web server state. Sites that are
 // not listed get no virtual host.
 type WebApplyRequest struct {
 	Sites []WebSite `json:"sites"`
+	Panel *WebPanel `json:"panel,omitempty"`
 }
 
 // Validate checks names and that no user or domain appears twice.
@@ -117,6 +128,16 @@ func (r WebApplyRequest) Validate() error {
 			}
 
 			domains[d] = true
+		}
+	}
+
+	if r.Panel != nil {
+		if err := ValidateDomain(r.Panel.Domain); err != nil {
+			return fmt.Errorf("panel: %w", err)
+		}
+
+		if domains[r.Panel.Domain] {
+			return errors.New("domain " + r.Panel.Domain + " is the panel's address")
 		}
 	}
 

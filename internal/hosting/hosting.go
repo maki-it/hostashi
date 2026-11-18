@@ -100,6 +100,9 @@ type Service struct {
 
 	issuer Issuer
 	kick   chan struct{}
+
+	panelDomain string // ADR-0023; empty: nginx serves no panel address
+	panelServed string // panel domain of the last accepted web state; under mu
 }
 
 // New builds a Service.
@@ -472,10 +475,16 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		}
 	}
 
+	if req.Panel, err = s.panelWeb(ctx); err != nil {
+		return err
+	}
+
 	res, err := s.ag.WebApply(ctx, req)
 	if err != nil {
 		return err
 	}
+
+	s.panelApplied(context.WithoutCancel(ctx), req.Panel)
 
 	// Only now is the site served over HTTPS (or no longer). A failure to
 	// record it leaves the API one change behind, nothing more.

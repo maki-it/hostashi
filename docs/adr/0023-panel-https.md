@@ -39,6 +39,10 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - The installer opens nothing in a firewall, because Hostashi does not manage one yet. The docs must say that TCP 8443 and UDP 8443 (HTTP/3) need to be open [A].
 - The panel's own health check must not depend on nginx, so `/api/v1/health` stays reachable on `127.0.0.1:8080` [A].
 
+## Implementation note (2026-11-18)
+
+nginx proxies to the Unix socket `/run/hostashi-panel.sock` instead of `127.0.0.1:8080`. Every local process, site users' PHP included, can connect to a loopback TCP port, so trusting `X-Real-IP` from loopback would let a site forge the client address. systemd creates the socket as `hostashi:www-data` 0660 (`hostashi-panel.socket`), so only nginx's workers and the panel can connect, and the panel trusts the header on this socket only [V: container test]. `127.0.0.1:8080` stays for the SSH tunnel and the health check and ignores forwarded headers. The decision (option A, port 8443, HSTS) is unchanged.
+
 ## Open questions for Kim
 
 None.

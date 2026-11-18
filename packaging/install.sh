@@ -12,15 +12,18 @@
 #
 # Options:
 #   --binary PATH        the hostashi binary to install (required for apply)
-#   --public-url URL     address users open the panel at, e.g. https://panel.example.com (enables passkeys)
-#   --listen ADDR        panel listen address, default 127.0.0.1:8080 (loopback only until TLS exists)
+#   --public-url URL     address users open the panel at, e.g. https://panel.example.com:8443
+#                        (enables passkeys). With a host name, nginx serves the panel there over
+#                        HTTPS with a Let's Encrypt certificate (ADR-0023); the port is the panel port.
+#   --panel-port PORT    HTTPS port of the panel, default 8443 (TCP and UDP must be open)
+#   --listen ADDR        panel listen address, default 127.0.0.1:8080 (loopback only: SSH tunnel)
 #   --allow-untested     accept an OS release that is not on the supported list
 #
 # nginx comes from the distribution with its brotli modules (ADR-0020) and
 # runs on the configuration the agent renders. PHP is the distribution's
 # (ADR-0019); each site gets its own FPM master, so the package's own FPM
 # service stays off. Not yet part of this installer: more PHP versions
-# (sury.org), MariaDB, project quota (spike S5/S8), firewall and TLS.
+# (sury.org), MariaDB, project quota (spike S5/S8) and a firewall.
 #
 # Exit codes: 0 ok, 2 refused by preflight (server unchanged), 3 a step
 # failed (re-running is safe), 64 usage.
@@ -42,7 +45,7 @@ LOG=/var/log/hostashi-install.log
 OS_RELEASE=${HOSTASHI_OS_RELEASE:-/etc/os-release}
 BIN=/usr/local/bin/hostashi
 
-MODE=plan YES=no BINARY="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 ALLOW_UNTESTED=no
+MODE=plan YES=no BINARY="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no
 CHANGES=0 BINARY_CHANGED=no CONFIG_CHANGED=no
 
 log()    { echo "install: $*" >&2; }
@@ -101,16 +104,36 @@ preflight() {
   [ "$ARCH" != unsupported ] || fail "unsupported architecture '$RAW_ARCH' (amd64 and arm64 only)"
   [ -d /run/systemd/system ] || fail "systemd is not running as PID 1"
   [ -d "$UNIT_DIR" ] && [ -f "$UNIT_DIR/hostashi.service" ] && [ -f "$UNIT_DIR/hostashi-agent.service" ] &&
-    [ -f "$UNIT_DIR/hostashi-php@.service" ] ||
+    [ -f "$UNIT_DIR/hostashi-php@.service" ] && [ -f "$UNIT_DIR/hostashi-panel.socket" ] ||
     fail "systemd units not found in $UNIT_DIR"
 
   case "$LISTEN" in
     127.0.0.1:[0-9]* | localhost:[0-9]* | \[::1\]:[0-9]*) ;;
-    *) fail "--listen '$LISTEN' must be a loopback address until TLS exists";;
+    *) fail "--listen '$LISTEN' must be a loopback address (nginx serves the panel over HTTPS)";;
   esac
+  case "$PANEL_PORT" in
+    80 | 443) fail "--panel-port $PANEL_PORT is taken by the sites";;
+    [1-9] | [1-9][0-9] | [1-9][0-9][0-9] | [1-9][0-9][0-9][0-9] | [1-9][0-9][0-9][0-9][0-9]) ;;
+    *) fail "--panel-port '$PANEL_PORT' is not a port";;
+  esac
+  [ "$PANEL_PORT" -le 65535 ] || fail "--panel-port '$PANEL_PORT' is not a port"
   if [ -n "$PUBLIC_URL" ]; then
     printf '%s' "$PUBLIC_URL" | grep -Eq '^(https://[A-Za-z0-9.-]+(:[0-9]+)?|http://localhost(:[0-9]+)?)/?$' ||
-      fail "--public-url '$PUBLIC_URL' must look like https://panel.example.com"
+      fail "--public-url '$PUBLIC_URL' must look like https://panel.example.com:$PANEL_PORT"
+    PUBLIC_URL=${PUBLIC_URL%/}
+    # A host name (not localhost, not an IP) is served by nginx on the panel port.
+    local host=${PUBLIC_URL#https://} port=""
+    host=${host%%:*}
+    case "$PUBLIC_URL" in https://*:*) port=${PUBLIC_URL##*:};; esac
+    if [ "${PUBLIC_URL#https://}" != "$PUBLIC_URL" ] && [ "$host" != localhost ] &&
+      ! printf '%s' "$host" | grep -Eq '^[0-9.]+$'; then
+      if [ -z "$port" ]; then
+        PUBLIC_URL="$PUBLIC_URL:$PANEL_PORT"
+        log "the panel is served on port $PANEL_PORT: public URL is $PUBLIC_URL"
+      elif [ "$port" != "$PANEL_PORT" ]; then
+        fail "--public-url port $port differs from --panel-port $PANEL_PORT"
+      fi
+    fi
   fi
 
   if [ "$MODE" = apply ]; then
@@ -203,6 +226,7 @@ env_file() {
   echo "# Managed by the Hostashi installer. Re-run it with other options to change these."
   echo "HOSTASHI_LISTEN=$LISTEN"
   echo "HOSTASHI_PUBLIC_URL=$PUBLIC_URL"
+  echo "HOSTASHI_PANEL_PORT=$PANEL_PORT"
 }
 chk_config() { env_file | file_matches /etc/hostashi/hostashi.env 0640 root:hostashi || { echo "settings differ"; return 1; }; }
 do_config() { env_file | write_file /etc/hostashi/hostashi.env 0640 root:hostashi; [ $? -le 1 ] && CONFIG_CHANGED=yes; }
@@ -258,7 +282,7 @@ php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }
 
 chk_units() {
   local u
-  for u in hostashi-agent.service hostashi.service; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket; do
     file_matches "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u" || { echo "$u differs"; return 1; }
   done
   dir_ok "$(dirname "$NGINX_DROPIN")" 755 root:root || { echo "nginx drop-in directory"; return 1; }
@@ -270,7 +294,7 @@ chk_units() {
 }
 do_units() {
   local u
-  for u in hostashi-agent.service hostashi.service; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket; do
     write_file "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u"
     [ $? -le 1 ] || return 1
   done
@@ -288,20 +312,22 @@ do_units() {
 
 chk_service() {
   local u
-  for u in hostashi-agent hostashi nginx; do
-    [ "$(systemctl is-enabled "$u.service" 2>/dev/null)" = enabled ] || { echo "$u not enabled"; return 1; }
-    [ "$(systemctl is-active "$u.service" 2>/dev/null)" = active ] || { echo "$u not running"; return 1; }
+  for u in hostashi-agent.service hostashi.service nginx.service hostashi-panel.socket; do
+    [ "$(systemctl is-enabled "$u" 2>/dev/null)" = enabled ] || { echo "$u not enabled"; return 1; }
+    [ "$(systemctl is-active "$u" 2>/dev/null)" = active ] || { echo "$u not running"; return 1; }
   done
   # The agent puts nginx on its own config at start (first generation).
   [ -L /var/lib/hostashi-agent/web/current ] || { echo "nginx not on a Hostashi generation yet"; return 1; }
   [ "$BINARY_CHANGED" = no ] && [ "$CONFIG_CHANGED" = no ] || { echo "restart needed after a change"; return 1; }
 }
 do_service() {
-  systemctl enable nginx.service hostashi-agent.service hostashi.service >>"$LOG" 2>&1 || return 1
+  systemctl enable nginx.service hostashi-agent.service hostashi-panel.socket hostashi.service >>"$LOG" 2>&1 || return 1
   if [ "$BINARY_CHANGED" = yes ] || [ "$CONFIG_CHANGED" = yes ]; then
-    systemctl restart hostashi-agent.service hostashi.service >>"$LOG" 2>&1 || return 1
+    systemctl stop hostashi.service >>"$LOG" 2>&1
+    systemctl restart hostashi-panel.socket hostashi-agent.service >>"$LOG" 2>&1 || return 1
+    systemctl start hostashi.service >>"$LOG" 2>&1 || return 1
   else
-    systemctl start hostashi-agent.service hostashi.service >>"$LOG" 2>&1 || return 1
+    systemctl start hostashi-panel.socket hostashi-agent.service hostashi.service >>"$LOG" 2>&1 || return 1
   fi
   BINARY_CHANGED=no CONFIG_CHANGED=no
   # Give the units a moment (the agent's first generation restarts nginx),
@@ -346,7 +372,8 @@ main() {
       --binary) shift; BINARY=${1:-};;
       --public-url) shift; PUBLIC_URL=${1:-};;
       --listen) shift; LISTEN=${1:-};;
-      *) echo "usage: $0 [plan | apply --yes] --binary PATH [--public-url URL] [--listen ADDR] [--allow-untested]" >&2; exit 64;;
+      --panel-port) shift; PANEL_PORT=${1:-};;
+      *) echo "usage: $0 [plan | apply --yes] --binary PATH [--public-url URL] [--panel-port PORT] [--listen ADDR] [--allow-untested]" >&2; exit 64;;
     esac
     shift
   done

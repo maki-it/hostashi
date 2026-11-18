@@ -3,8 +3,9 @@
 # and reaches the agent only through /run/hostashi/agent.sock.
 #
 # /etc/hostashi/hostashi.env sets HOSTASHI_LISTEN and HOSTASHI_PUBLIC_URL
-# (written by the installer). Until TLS exists the panel listens on
-# loopback only; put a TLS proxy in front or use an SSH tunnel.
+# (written by the installer). The panel listens on loopback only (SSH
+# tunnel, health check). nginx serves it over HTTPS on the panel port of
+# the public URL and reaches it through hostashi-panel.socket (ADR-0023).
 #
 # Site certificates come from HOSTASHI_ACME_DIRECTORY (Let's Encrypt by
 # default; empty turns certificates off). HOSTASHI_ACME_CA names an extra
@@ -13,11 +14,13 @@
 [Unit]
 Description=Hostashi panel (web UI and API, no root)
 Documentation=https://github.com/maki-it/hostashi
-After=network.target hostashi-agent.service
+After=network.target hostashi-agent.service hostashi-panel.socket
 Wants=hostashi-agent.service
+Requires=hostashi-panel.socket
 
 [Service]
 Type=simple
+Sockets=hostashi-panel.socket
 User=hostashi
 Group=hostashi
 Environment=HOSTASHI_LISTEN=127.0.0.1:8080 HOSTASHI_PUBLIC_URL=

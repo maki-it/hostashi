@@ -28,6 +28,8 @@ Everything here is a draft that the spikes in Phase 0 confirm or reject.
 
 One binary, three modes: `hostashi serve`, `hostashi agent`, `hostashi <cli-command>`. The CLI talks to the API (token) or, as root on the server, directly to the agent.
 
+The panel's HTTPS is nginx's (ADR-0023). nginx serves the host name of the public URL on the panel port (default 8443, TCP and UDP for HTTP/3) with a certificate that is obtained like a site certificate (name `_panel`), and proxies to the Unix socket `/run/hostashi-panel.sock`. systemd creates that socket (`hostashi-panel.socket`, `hostashi:www-data`, 0660), so only nginx's workers and the panel can connect, and the panel trusts `X-Real-IP` on this socket only. The panel itself listens on `127.0.0.1:8080` for the SSH tunnel and the health check, and never trusts a forwarded header there.
+
 ## 4.2 Privilege separation (core decision)
 
 Panels of this kind are the number one attack target: whoever takes over the panel has root. Therefore:

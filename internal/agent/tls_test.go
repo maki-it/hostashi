@@ -103,3 +103,39 @@ func TestTLSOperations(t *testing.T) {
 		t.Fatal("certificate stayed after delete")
 	}
 }
+
+func TestPanelCertificate(t *testing.T) {
+	store := &certs.Store{Dir: filepath.Join(t.TempDir(), "tls")}
+	rec := &web.Reconciler{Base: filepath.Join(t.TempDir(), "web"), Driver: &web.Nginx{ListenTLS: []string{"443"}, PanelListen: []string{"8443"}}}
+	c, _ := startSiteAgentCfg(t, Config{Web: rec, Certs: store})
+	ctx := context.Background()
+
+	// No certificate yet: the panel with TLS is refused before nginx is touched.
+	_, err := agentapi.WebApply.Call(ctx, c, agentapi.WebApplyRequest{Sites: []agentapi.WebSite{}, Panel: &agentapi.WebPanel{Domain: "panel.example.com", TLS: true}})
+	wantCode(t, err, agentrpc.CodePrecondition)
+
+	// The panel's name needs no site account.
+	res, err := agentapi.TLSCSR.Call(ctx, c, agentapi.TLSCSRRequest{User: agentapi.PanelCert, Domains: []string{"panel.example.com"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := agentapi.TLSInstall.Call(ctx, c, agentapi.TLSInstallRequest{User: agentapi.PanelCert, Chain: signCSR(t, res.CSR)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if ok, err := store.Covers(agentapi.PanelCert, []string{"panel.example.com"}); !ok || err != nil {
+		t.Fatalf("covers %v %v", ok, err)
+	}
+
+	// Other underscore names stay invalid.
+	_, err = agentapi.TLSCSR.Call(ctx, c, agentapi.TLSCSRRequest{User: "_other", Domains: []string{"panel.example.com"}})
+	wantCode(t, err, agentrpc.CodeInvalidArgument)
+
+	// A site cannot take the panel's domain.
+	_, err = agentapi.WebApply.Call(ctx, c, agentapi.WebApplyRequest{
+		Sites: []agentapi.WebSite{{User: "blog", Domains: []string{"panel.example.com"}}},
+		Panel: &agentapi.WebPanel{Domain: "panel.example.com"},
+	})
+	wantCode(t, err, agentrpc.CodeInvalidArgument)
+}

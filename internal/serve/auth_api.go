@@ -85,6 +85,10 @@ func decodeJSONLimit(w http.ResponseWriter, r *http.Request, v any, limit int64)
 // clientIP is the TCP peer address. Forwarded headers are not trusted,
 // because anyone who can reach the port could forge them.
 func clientIP(r *http.Request) string {
+	if ip, ok := r.Context().Value(clientIPKey{}).(string); ok {
+		return ip
+	}
+
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

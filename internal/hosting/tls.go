@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -138,6 +139,26 @@ func (s *Service) SetHSTS(ctx context.Context, actor int64, name string, on bool
 	return s.Get(ctx, name)
 }
 
+// obtain gets a certificate for a site or agentapi.PanelCert: a key and
+// CSR from the agent, the chain from the CA, the pair live through the
+// agent. The web server switch is the caller's.
+func (s *Service) obtain(ctx context.Context, name string, domains []string) (agentapi.TLSCertInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, issueTimeout)
+	defer cancel()
+
+	csr, err := s.ag.TLSCSR(ctx, name, domains)
+	if err != nil {
+		return agentapi.TLSCertInfo{}, err
+	}
+
+	chain, err := s.issuer.Obtain(ctx, []byte(csr))
+	if err != nil {
+		return agentapi.TLSCertInfo{}, err
+	}
+
+	return s.ag.TLSInstall(ctx, name, string(chain))
+}
+
 // RunTLS obtains and renews certificates until ctx ends: at start, every
 // hour and after Kick.
 func (s *Service) RunTLS(ctx context.Context) {
@@ -163,6 +184,8 @@ func (s *Service) RenewDue(ctx context.Context) {
 	if s.issuer == nil {
 		return
 	}
+
+	s.renewPanel(ctx)
 
 	sites, err := s.st.Sites(ctx)
 	if err != nil {
@@ -200,17 +223,7 @@ func (s *Service) issue(ctx context.Context, site store.Site) error {
 	ctx, cancel := context.WithTimeout(ctx, issueTimeout)
 	defer cancel()
 
-	csr, err := s.ag.TLSCSR(ctx, site.Name, site.Domains)
-	if err != nil {
-		return err
-	}
-
-	chain, err := s.issuer.Obtain(ctx, []byte(csr))
-	if err != nil {
-		return err
-	}
-
-	info, err := s.ag.TLSInstall(ctx, site.Name, string(chain))
+	info, err := s.obtain(ctx, site.Name, site.Domains)
 	if err != nil {
 		return err
 	}

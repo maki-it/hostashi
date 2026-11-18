@@ -17,7 +17,10 @@ Before=hostashi.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/hostashi agent -serve-user hostashi -socket /run/hostashi/agent.sock -state-dir /var/lib/hostashi-agent
+# HOSTASHI_PANEL_PORT: HTTPS port of the panel's own address (ADR-0023).
+Environment=HOSTASHI_PANEL_PORT=8443
+EnvironmentFile=-/etc/hostashi/hostashi.env
+ExecStart=/usr/local/bin/hostashi agent -serve-user hostashi -socket /run/hostashi/agent.sock -state-dir /var/lib/hostashi-agent "-panel-port=${HOSTASHI_PANEL_PORT}"
 # root:root 0750; the agent gives the group to the serve user at start.
 RuntimeDirectory=hostashi
 RuntimeDirectoryMode=0750
