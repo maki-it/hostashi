@@ -28,6 +28,9 @@ type Site struct {
 	// serves the site over HTTP only. With them, HTTP redirects to HTTPS.
 	Cert string `json:"cert,omitempty"`
 	Key  string `json:"key,omitempty"`
+	// HSTS adds Strict-Transport-Security to the HTTPS responses (one year,
+	// without includeSubDomains or preload). Ignored without a certificate.
+	HSTS bool `json:"hsts,omitempty"`
 }
 
 // Desired is the complete web server state.

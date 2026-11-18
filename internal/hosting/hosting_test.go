@@ -473,6 +473,10 @@ func TestTLSLifecycle(t *testing.T) {
 		t.Fatalf("after issue: live %s, calls %d", got, iss.calls)
 	}
 
+	if got, _ := s.Get(ctx, "blog"); !s.TLSActive(got) {
+		t.Fatalf("not active after the web server switch: %+v", got)
+	}
+
 	// Still valid for 90 days: nothing to do.
 	s.RenewDue(ctx)
 
@@ -487,6 +491,10 @@ func TestTLSLifecycle(t *testing.T) {
 
 	if got := ag.live(); got != "[blog=[blog.example.com www.blog.example.com]]" {
 		t.Fatalf("after domain change: %s", got)
+	}
+
+	if got, _ := s.Get(ctx, "blog"); s.TLSActive(got) {
+		t.Fatalf("active while served over HTTP only: %+v", got)
 	}
 
 	s.RenewDue(ctx)
@@ -546,6 +554,48 @@ func TestTLSLifecycle(t *testing.T) {
 
 	if iss.calls != calls {
 		t.Fatal("certificate requested for a site without TLS")
+	}
+}
+
+// The API must not report HTTPS before nginx serves it: the certificate is
+// stored first, the web server switch comes after.
+func TestTLSNotActiveWhenSwitchFails(t *testing.T) {
+	s, ag, _ := newService(t)
+	ctx := t.Context()
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", Domains: []string{"blog.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The fake certificate counts its days from 1970.
+	s.now = func() time.Time { return time.Unix(0, 0).Add(1000 * 24 * time.Hour) }
+	s.EnableTLS(&fakeIssuer{validDays: 1090})
+
+	if _, err := s.SetTLS(ctx, 1, "blog", true); err != nil {
+		t.Fatal(err)
+	}
+
+	ag.mu.Lock()
+	ag.webErr = errors.New("agent down")
+	ag.mu.Unlock()
+
+	s.RenewDue(ctx)
+
+	got, err := s.Get(ctx, "blog")
+	if err != nil || got.TLSNotAfter.IsZero() || s.TLSActive(got) {
+		t.Fatalf("certificate stored %v, active %v: %v", got.TLSNotAfter, s.TLSActive(got), err)
+	}
+
+	ag.mu.Lock()
+	ag.webErr = nil
+	ag.mu.Unlock()
+
+	if err := s.Sync(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, _ := s.Get(ctx, "blog"); !s.TLSActive(got) {
+		t.Fatal("not active after the switch went through")
 	}
 }
 

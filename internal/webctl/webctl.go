@@ -57,6 +57,13 @@ func (Controller) Restart(ctx context.Context) error {
 }
 
 func run(ctx context.Context, path string, args ...string) error {
+	_, err := output(ctx, 4096, path, args...)
+
+	return err
+}
+
+// output runs path and returns at most limit bytes of its combined output.
+func output(ctx context.Context, limit int, path string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 
@@ -65,22 +72,31 @@ func run(ctx context.Context, path string, args ...string) error {
 	cmd := exec.CommandContext(ctx, path, args...)
 	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C"}
 	cmd.Dir = "/"
-	cmd.Stdout = &limitedWriter{buf: &out, max: 4096}
+	cmd.Stdout = &limitedWriter{buf: &out, max: limit}
 	cmd.Stderr = cmd.Stdout
 
 	if err := cmd.Run(); err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
-			return fmt.Errorf("webctl: %s %s exited %d: %s", path, args[0], ee.ExitCode(), strings.TrimSpace(out.String()))
+			return "", fmt.Errorf("webctl: %s %s exited %d: %s", path, args[0], ee.ExitCode(), strings.TrimSpace(out.String()))
 		}
 
-		return fmt.Errorf("webctl: %s: %w", path, err)
+		return "", fmt.Errorf("webctl: %s: %w", path, err)
 	}
 
-	return nil
+	return out.String(), nil
 }
 
-// limitedWriter keeps the first max bytes and drops the rest.
+// HasHTTP3 reports whether nginx was built with http_v3_module (nginx -V).
+func (Controller) HasHTTP3(ctx context.Context) (bool, error) {
+	out, err := output(ctx, 64<<10, Nginx, "-V")
+	if err != nil {
+		return false, err
+	}
+
+	return strings.Contains(out, "--with-http_v3_module"), nil
+}
+
 type limitedWriter struct {
 	buf *bytes.Buffer
 	max int

@@ -66,6 +66,9 @@ type WebSite struct {
 	// TLS serves the site over HTTPS with its live certificate (tls.install)
 	// and redirects HTTP to HTTPS. The certificate must name every domain.
 	TLS bool `json:"tls,omitempty"`
+	// HSTS adds Strict-Transport-Security to HTTPS responses. Without TLS
+	// it has no effect.
+	HSTS bool `json:"hsts,omitempty"`
 }
 
 // WebApplyRequest is the complete desired web server state. Sites that are

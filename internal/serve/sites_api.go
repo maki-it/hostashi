@@ -28,10 +28,11 @@ type siteJSON struct {
 }
 
 // tlsJSON is the HTTPS state of a site: wanted (enabled), served (active),
-// the live certificate, and the reason of the last failed attempt.
+// HSTS, the live certificate, and the reason of the last failed attempt.
 type tlsJSON struct {
 	Enabled  bool       `json:"enabled"`
 	Active   bool       `json:"active"`
+	HSTS     bool       `json:"hsts"`
 	Domains  []string   `json:"domains"`
 	NotAfter *time.Time `json:"notAfter"`
 	Error    string     `json:"error,omitempty"`
@@ -60,7 +61,7 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	return siteJSON{
 		Name: s.Name, Pool: s.Pool, State: s.State, PHP: s.PHP, Domains: d,
 		TLS: tlsJSON{
-			Enabled: s.TLS, Active: svc.TLSActive(s), Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
+			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
 		},
 		CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
@@ -255,6 +256,34 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 		}
 
 		writeJSON(w, code, toSiteJSON(svc, s))
+	}))
+
+	// HSTS can be set before HTTPS is active; it is sent only over HTTPS.
+	mux.HandleFunc("PUT /api/v1/sites/{name}/hsts", admin("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if in.Enabled == nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", `"enabled" is required`)
+
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		s, err := svc.SetHSTS(ctx, p.User.ID, r.PathValue("name"), *in.Enabled)
+		if err != nil {
+			siteFail(log, w, err, "set hsts")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
 	}))
 
 	// The versions a site can use: installed ones from the agent, plus the

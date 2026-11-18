@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -244,6 +245,8 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			if err := h.tlsFor(&site, s.Domains); err != nil {
 				return agentapi.WebApplyResponse{}, err
 			}
+
+			site.HSTS = s.HSTS
 		}
 
 		if s.PHP != "" {
@@ -486,7 +489,7 @@ func webGID(log *slog.Logger) uint32 {
 }
 
 // openWeb builds the production reconciler, or nil when nginx is missing.
-func openWeb(stateDir string, log *slog.Logger) *web.Reconciler {
+func openWeb(ctx context.Context, stateDir string, log *slog.Logger) *web.Reconciler {
 	if _, err := os.Stat(webctl.Nginx); err != nil {
 		if log != nil {
 			log.Warn("nginx not installed, web operations disabled", "path", webctl.Nginx)
@@ -505,6 +508,16 @@ func openWeb(stateDir string, log *slog.Logger) *web.Reconciler {
 		if _, err := os.Stat(filepath.Join("/etc/nginx/modules-enabled", m)); err != nil {
 			brotli = false
 		}
+	}
+
+	// HTTP/3 where nginx has it (Debian 13 and Ubuntu 26.04 do).
+	vctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	http3, err := webctl.Controller{}.HasHTTP3(vctx)
+
+	cancel()
+
+	if err != nil && log != nil {
+		log.Warn("cannot tell whether nginx has HTTP/3, leaving it off", "err", err)
 	}
 
 	listen, listenTLS := []string{"80"}, []string{"443"}
@@ -527,6 +540,7 @@ func openWeb(stateDir string, log *slog.Logger) *web.Reconciler {
 			MimeTypes:     "/etc/nginx/mime.types",
 			Brotli:        brotli,
 			ListenTLS:     listenTLS,
+			HTTP3:         http3,
 			ACMERoot:      ACMERoot,
 		},
 	}
@@ -598,7 +612,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if cfg.Web == nil {
-		cfg.Web = openWeb(cfg.StateDir, cfg.Log)
+		cfg.Web = openWeb(ctx, cfg.StateDir, cfg.Log)
 	}
 
 	if cfg.PHP == nil {

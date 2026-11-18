@@ -42,8 +42,10 @@ func (s *Service) certCovers(site store.Site, margin time.Duration) bool {
 	return true
 }
 
-// TLSActive reports whether site is served over HTTPS now.
-func (s *Service) TLSActive(site store.Site) bool { return site.TLS && s.certCovers(site, 0) }
+// TLSActive reports whether site is served over HTTPS now: the last web
+// state the agent accepted had HTTPS for it. Between storing a new
+// certificate and the web server switch it is still false.
+func (s *Service) TLSActive(site store.Site) bool { return site.TLSLive }
 
 // Kick asks the renewal loop to look at all sites now.
 func (s *Service) Kick() {
@@ -91,6 +93,44 @@ func (s *Service) SetTLS(ctx context.Context, actor int64, name string, on bool)
 		action = "site.tls.on"
 
 		s.Kick()
+	}
+
+	s.audit(ctx, actor, action, name, nil)
+
+	return s.Get(ctx, name)
+}
+
+// SetHSTS turns Strict-Transport-Security of an active site on or off. It
+// takes effect while the site is served over HTTPS; it can be set before.
+func (s *Service) SetHSTS(ctx context.Context, actor int64, name string, on bool) (store.Site, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	site, err := s.Get(ctx, name)
+	if err != nil {
+		return store.Site{}, err
+	}
+
+	if site.State != store.SiteActive {
+		return store.Site{}, ErrState
+	}
+
+	old, err := s.st.SetSiteHSTS(ctx, name, on, s.now())
+	if err != nil {
+		return store.Site{}, err
+	}
+
+	if err := s.applyWeb(ctx); err != nil {
+		if _, rerr := s.st.SetSiteHSTS(context.WithoutCancel(ctx), name, old, s.now()); rerr != nil {
+			s.log.Error("restore hsts setting after failed change", "site", name, "err", rerr)
+		}
+
+		return store.Site{}, err
+	}
+
+	action := "site.hsts.off"
+	if on {
+		action = "site.hsts.on"
 	}
 
 	s.audit(ctx, actor, action, name, nil)
