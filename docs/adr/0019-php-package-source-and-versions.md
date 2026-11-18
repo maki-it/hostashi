@@ -1,6 +1,6 @@
 # ADR-0019 PHP package source and multiple PHP versions
 
-**Status:** Proposed (not accepted). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0015 (one FPM master per site), ADR-0005 (nginx.org as third-party apt source), ADR-0009 (supported distributions), Spike S5 (installer).
+**Status:** Accepted (Kim, 2026-11-18). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0015 (one FPM master per site), ADR-0005 (nginx.org as third-party apt source), ADR-0009 (supported distributions), Spike S5 (installer).
 
 ## Context
 
@@ -51,6 +51,6 @@ Rules:
 
 ## Open questions
 
-1. Which versions are offered by default and which only under "legacy"? Suggestion: all upstream-supported versions, plus 7.4 and 8.1 as legacy [A].
+1. ~~Which versions are offered?~~ Decided (Kim, 2026-11-18): PHP 8.2, 8.3, 8.4 and 8.5 as standard, 7.4 and 8.1 as legacy on explicit request, 8.0 and older not offered. The support status of each version is still to be checked against the official release schedule before the first release [U].
 2. All PHP from sury.org once enabled, or pin the default version to the distribution (needs Spike S10)?
 3. Is a PHP version also needed for the CLI per site (cron, SSH)? Probably yes, via the site's FPM version [A].
