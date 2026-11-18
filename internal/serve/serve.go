@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -21,6 +22,7 @@ import (
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
+	"github.com/maki-it/hostashi/internal/ui"
 )
 
 // Config is the web process configuration.
@@ -131,7 +133,21 @@ func Handler(cfg Config, deps Deps) http.Handler {
 		}
 	}
 
-	return secure(mux)
+	return secure(withUI(mux, ui.Handler()))
+}
+
+// withUI sends /api and everything below it to the API routes, so their 404
+// and 405 answers stay as they are, and every other path to the frontend.
+func withUI(api, web http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+			api.ServeHTTP(w, r)
+
+			return
+		}
+
+		web.ServeHTTP(w, r)
+	})
 }
 
 // SetupTokenPath is where the one-time setup token lives, next to the database.
