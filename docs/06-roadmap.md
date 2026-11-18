@@ -20,6 +20,7 @@ Ziel: Entscheidungen treffen und die riskantesten Annahmen mit Wegwerf-Code prü
 | S6 CloudPanel-Adopt | Lässt sich eine echte CloudPanel-Instanz über das Dateisystem einlesen? | Wenn weniger als 80 % der Sites sauber übernommen werden, Importer zurückstellen |
 | S7 UI-Prototyp | Svelte vs. React, Terminal und Live-Graphen, Bundle-Größe | |
 | S8 Ressourcenlimits | Projekt-Quota auf frischem Debian 13 und Ubuntu 24.04 aktivierbar (idempotent, mit Reboot)? RAM je FPM-Master pro Site, Limits für Cron und Dienste ([ADR-0015](adr/0015-per-site-resource-limits.md)) | Wenn Quota nicht sicher aktivierbar ist, Alternativen (User-Quota, separates Volume) neu bewerten |
+| S11 Brotli | Gibt es ein gepflegtes Brotli-Modul für die nginx.org-Builds auf Debian 13 und Ubuntu 24.04 ([ADR-0017](adr/0017-cloudpanel-import-and-presets.md))? | Wenn nein, bleibt gzip der Standard ([Bericht](../spike/s11-brotli/REPORT.md)) |
 
 **Weitere Aufgaben:** Marktanalyse (HestiaCP, ISPConfig, 1Panel, Coolify …), CloudPanel-Issues auswerten, Bedrohungsmodell mit externem Reviewer durchgehen, Repo, CI und Release-Pipeline aufsetzen, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`.
 
