@@ -142,4 +142,28 @@ web_apply '{"sites":[]}'
 x /usr/local/bin/hostashi site delete blog
 x test ! -e /home/blog || fail "site home still there"
 
+step "a site through the panel API"
+tok=$(x /usr/local/bin/hostashi setup-token -db /var/lib/hostashi/hostashi.db)
+pw="test-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+# api METHOD PATH [BODY] prints the status code and leaves the body in /tmp/api.out (container).
+api() {
+  x curl -sS -o /tmp/api.out -w '%{http_code}' -X "$1" -H 'Content-Type: application/json' \
+    ${cookie:+-H "Cookie: $cookie"} ${3:+--data "$3"} "http://127.0.0.1:8080$2"
+}
+cookie=""
+[ "$(api POST /api/v1/setup "{\"token\":\"$tok\",\"username\":\"kim\",\"password\":\"$pw\"}")" = 201 ] || fail "setup: $(x cat /tmp/api.out)"
+cookie=$(x curl -sS -o /dev/null -D - -H 'Content-Type: application/json' \
+  --data "{\"username\":\"kim\",\"password\":\"$pw\"}" http://127.0.0.1:8080/api/v1/auth/login |
+  tr -d '\r' | sed -n 's/^[Ss]et-[Cc]ookie: \(hostashi_session=[^;]*\).*/\1/p')
+[ -n "$cookie" ] || fail "login gave no session cookie"
+[ "$(api POST /api/v1/sites '{"name":"shop","domains":["shop.example.com"]}')" = 201 ] || fail "create site: $(x cat /tmp/api.out)"
+x sh -c 'echo "hello from shop" >/home/shop/htdocs/index.html'
+body=$(x curl -fsS -H 'Host: shop.example.com' http://127.0.0.1/)
+[ "$body" = "hello from shop" ] || fail "API site answered '$body'"
+[ "$(api PUT /api/v1/sites/shop/domains '{"domains":["www.shop.example.com"]}')" = 200 ] || fail "set domains: $(x cat /tmp/api.out)"
+body=$(x curl -fsS -H 'Host: www.shop.example.com' http://127.0.0.1/)
+[ "$body" = "hello from shop" ] || fail "new domain answered '$body'"
+[ "$(api DELETE /api/v1/sites/shop)" = 204 ] || fail "delete site: $(x cat /tmp/api.out)"
+x test ! -e /home/shop || fail "API site home still there"
+
 echo "PASS: installer test on $IMG"

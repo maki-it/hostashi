@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -30,6 +31,13 @@ type apiEnv struct {
 }
 
 func newAPI(t *testing.T) *apiEnv {
+	t.Helper()
+
+	return newAPIWithAgent(t, nil)
+}
+
+// newAPIWithAgent also serves the site routes against ag.
+func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	t.Helper()
 
 	dir := filepath.Join(t.TempDir(), "lib")
@@ -60,7 +68,12 @@ func newAPI(t *testing.T) *apiEnv {
 
 	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath, Box: box})
 
-	return &apiEnv{h: Handler(Config{}, Deps{PingAgent: ok, PingDB: ok, Auth: svc}), svc: svc, tokenPath: tokenPath}
+	deps := Deps{PingAgent: ok, PingDB: ok, Auth: svc}
+	if ag != nil {
+		deps.Sites = hosting.New(st, ag, nil)
+	}
+
+	return &apiEnv{h: Handler(Config{}, deps), svc: svc, tokenPath: tokenPath}
 }
 
 type reqOpts struct {
