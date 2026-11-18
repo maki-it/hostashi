@@ -24,6 +24,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/backup"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/serve"
 	"github.com/maki-it/hostashi/internal/store"
@@ -46,6 +47,7 @@ commands:
   db user create DATABASE USER | db user password USER | db user delete USER
             manage databases through the agent (root on the server); the
             password is read from stdin, an empty line generates one
+  backup run   one backup now (root; normally started by hostashi-backup.service)
   setup-token  print the one-time token for the first login (read as the serve user or root)
   version   print the version
 `
@@ -137,6 +139,15 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 
 			return 2
 		}
+	case "backup":
+		stateDir := fs.String("state-dir", agent.DefaultStateDir, "the agent's state directory with the site and database registries")
+		if fs.Parse(args) != nil || fs.NArg() != 1 || fs.Arg(0) != "run" {
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+
+		err = backup.RunOnce(ctx, backup.RunConfig{StateDir: *stateDir, Log: log})
 	case "setup-token":
 		dbPath := fs.String("db", store.DefaultPath, "SQLite database path")
 		if fs.Parse(args) != nil || fs.NArg() != 0 {

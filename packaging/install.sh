@@ -164,7 +164,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config nginx php mariadb units service"
+STEPS="account dirs key binary config nginx php mariadb backup units service"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -296,11 +296,25 @@ do_mariadb() {
   systemctl enable --now mariadb.service >>"$LOG" 2>&1
 }
 
+# restic from the distribution for the backups (ADR-0008), and the ssh
+# client its SFTP backend starts. The backup timer is installed with the
+# units but stays off until a backup target is set up.
+BACKUP_PKGS=(restic openssh-client)
+
+chk_backup() {
+  local p
+  for p in "${BACKUP_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
+}
+do_backup() {
+  apt-get update -qq >>"$LOG" 2>&1 &&
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${BACKUP_PKGS[@]}" >>"$LOG" 2>&1
+}
+
 php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }
 
 chk_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer; do
     file_matches "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u" || { echo "$u differs"; return 1; }
   done
   dir_ok "$(dirname "$NGINX_DROPIN")" 755 root:root || { echo "nginx drop-in directory"; return 1; }
@@ -312,7 +326,7 @@ chk_units() {
 }
 do_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer; do
     write_file "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u"
     [ $? -le 1 ] || return 1
   done
