@@ -6,7 +6,7 @@
 
 Evidence tags as in [docs/adr/README.md](../../docs/adr/README.md): **[V]** verified by test or code in this spike, **[A]** assumption, **[E]** estimate, **[U]** unverified general knowledge.
 
-**Result: the abort criterion cannot be decided yet.** No real CloudPanel instance was available, so the scanner ran only against a synthetic server whose mix of sites I invented. The 45 % clean and 82 % adoptable it reports are a property of that invented mix, not evidence about CloudPanel or `web2` [V for the numbers, A for their meaning]. What the spike does show: the scanner itself is small, read-only, safe against a hostile tree, and sorts every site into clean, review or blocked with a reason [V]. A first read-only run on `web2` confirmed the file layout and exposed two-tier vhosts the scanner did not understand (section "First run on real data"); a second run with the fixed build is pending.
+**Result on real data (`web2`, second run): 0 % clean, 90 % adoptable (19 of 21 sites without a blocker).** Whether that passes the abort criterion depends on what "adopted cleanly" means, which is the owner's call (finding 2). Every real site carries 10 to 43 directives Hostashi does not model; most of them recur on almost every site, so a small set of built-in presets would absorb the bulk [V for counts, A for the preset effect]. The scanner itself is small, read-only, safe against a hostile tree, and sorts every site into clean, review or blocked with a reason [V]. The synthetic corpus (45 % clean, 82 % adoptable) only tests the scanner; its numbers say nothing about real servers.
 
 ## Environment and limits of this spike
 
@@ -98,7 +98,34 @@ Changes after the run (this commit), each covered by a new fixture case or test 
 - A private key with mode `0644` is only a review finding if its directory lets others traverse it.
 - Custom server-level findings name the directive (`server: add_header`), still without its value, so the next run shows *which* directives are missing from the model.
 
-A second run with the new build is needed for the real numbers. Expected, not verified: blocked drops to about 1, and nearly all others become review because of the custom locations [A].
+## Second run on `web2` (2026-11-18, commit `4b26912`)
+
+| | Count |
+|-|-------|
+| Sites | 21 (the 22nd vhost is the panel under its own domain, now ignored) [V] |
+| clean / review / blocked | 0 / 19 / 2 [V] |
+| Custom directives per site | 10 to 43, median 17, 399 in total [V] |
+
+The two blocked sites: the include of a file that is not root-owned or is writable by others (real), and one vhost with a server block the two-tier logic does not cover yet (`vhost_multi_app`, not analysed further) [V].
+
+What the 399 custom findings are [V, directive names and location patterns only]:
+
+| Kind | Count | Sites | Comment |
+|------|-------|-------|---------|
+| `add_header` (front and backend block) | 141 | most | security and cache headers |
+| `if` at server level | 70 | most | probably host or scheme redirects [A] |
+| ACME challenge location | 21 | 21 | Hostashi has its own |
+| static asset cache location | 20 | 20 | candidate preset |
+| `pagespeed` | 18 | about 18 | module Hostashi does not ship [A] |
+| `try_files` at server level (backend) | 14 | 14 | standard, should be mapped (scanner gap) |
+| `location /` variants | 14 | 14 | |
+| `.git` deny, WordPress login, `xmlrpc.php` | 33 | 10 to 12 | candidate presets |
+| `rewrite`, `error_page`, `auth_basic`, `set`, `limit_req_zone`, `map` | 18 | few | individual |
+| unique hardening and path rules | about 25 | few | individual, need a person |
+
+So about 90 % of the custom findings fall into fewer than ten recurring patterns [E from the table], and about 50 individual rules remain across 21 sites.
+
+Real findings for Kim from this run: on 21 of 21 sites the private key has mode `0644` **and** its directory lets others in, so every local user, including every site's PHP code, can read every site's TLS key [V from the report, not checked on the server]. The other real findings from the first run still hold.
 
 ## Findings
 
@@ -127,12 +154,9 @@ A second run with the new build is needed for the real numbers. Expected, not ve
 
 ## Next step (recommendation)
 
-Do not shelve the importer yet. Get one real data point first, in this order of preference:
-
-1. **Kim runs the scanner read-only on `web2`** (`s6adopt -root / -json > web2.json`, as root, output with snippets and cron commands hidden) and shares the report. Effort: build plus a few minutes [E]. Needs Kim's explicit approval. It writes nothing [V], but it is still a binary from an unreviewed spike on a production server, so Kim should read `scan/fsx.go` first or run it against a snapshot of the disk mounted read-only.
-2. Or a throwaway CloudPanel VM with five or six hand-made sites, to check the layout assumptions. This needs a server or VM and the CloudPanel installer, so also Kim's approval [A: cost is a small cloud server for a few hours].
-
-Then decide the abort criterion with the definition from finding 2. If the result is positive, the follow-up is an ADR for the importer as a migration tool (finding 4) and database discovery.
+1. **Owner decides the definition** (finding 2). Recommendation: count a site as adopted when it has no blocker, and require that every custom part goes through the S2 candidate check (`nginx -t`) and is shown to a person once. Under that reading `web2` passes with 90 % [V], so the importer stays on the roadmap.
+2. If it stays: write an ADR for the importer as a migration tool (finding 4), with built-in presets for the recurring patterns above (own wording and implementation, clean-room), database discovery, and a review screen for the remaining individual rules.
+3. Independently of Hostashi: tighten the TLS key permissions on `web2` (only with Kim's approval, nothing was changed).
 
 ## How to run
 
