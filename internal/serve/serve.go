@@ -18,6 +18,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -75,7 +76,8 @@ func CheckListen(addr string) error {
 type Deps struct {
 	PingAgent func(ctx context.Context) error
 	PingDB    func(ctx context.Context) error
-	Auth      *auth.Service // nil disables the auth routes (tests)
+	Auth      *auth.Service    // nil disables the auth routes (tests)
+	Sites     *hosting.Service // nil disables the site routes; needs Auth
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -123,6 +125,10 @@ func Handler(cfg Config, deps Deps) http.Handler {
 
 	if deps.Auth != nil {
 		registerAuth(mux, deps.Auth, log)
+
+		if deps.Sites != nil {
+			registerSites(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+		}
 	}
 
 	return secure(mux)
@@ -171,6 +177,7 @@ func Run(ctx context.Context, cfg Config) error {
 		},
 		PingDB: st.Ping,
 		Auth:   svc,
+		Sites:  hosting.New(st, hosting.RPCAgent{C: client}, cfg.Log),
 	}
 	srv := &http.Server{
 		Addr:              cfg.Listen,
