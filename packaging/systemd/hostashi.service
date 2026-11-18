@@ -5,6 +5,10 @@
 # /etc/hostashi/hostashi.env sets HOSTASHI_LISTEN and HOSTASHI_PUBLIC_URL
 # (written by the installer). Until TLS exists the panel listens on
 # loopback only; put a TLS proxy in front or use an SSH tunnel.
+#
+# Site certificates come from HOSTASHI_ACME_DIRECTORY (Let's Encrypt by
+# default; empty turns certificates off). HOSTASHI_ACME_CA names an extra
+# CA file for a test CA such as Pebble.
 
 [Unit]
 Description=Hostashi panel (web UI and API, no root)
@@ -17,8 +21,9 @@ Type=simple
 User=hostashi
 Group=hostashi
 Environment=HOSTASHI_LISTEN=127.0.0.1:8080 HOSTASHI_PUBLIC_URL=
+Environment=HOSTASHI_ACME_DIRECTORY=https://acme-v02.api.letsencrypt.org/directory HOSTASHI_ACME_CA=
 EnvironmentFile=-/etc/hostashi/hostashi.env
-ExecStart=/usr/local/bin/hostashi serve "-listen=${HOSTASHI_LISTEN}" "-public-url=${HOSTASHI_PUBLIC_URL}" -db /var/lib/hostashi/hostashi.db -key /etc/hostashi/secret.key -socket /run/hostashi/agent.sock
+ExecStart=/usr/local/bin/hostashi serve "-listen=${HOSTASHI_LISTEN}" "-public-url=${HOSTASHI_PUBLIC_URL}" -db /var/lib/hostashi/hostashi.db -key /etc/hostashi/secret.key -socket /run/hostashi/agent.sock "-acme-directory=${HOSTASHI_ACME_DIRECTORY}" "-acme-ca=${HOSTASHI_ACME_CA}"
 UMask=0077
 Restart=on-failure
 RestartSec=2s
@@ -28,7 +33,7 @@ CapabilityBoundingSet=
 AmbientCapabilities=
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/lib/hostashi
+ReadWritePaths=/var/lib/hostashi /var/lib/hostashi-acme/.well-known/acme-challenge
 ReadOnlyPaths=/etc/hostashi
 PrivateTmp=yes
 PrivateDevices=yes

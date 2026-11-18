@@ -85,6 +85,14 @@ func startSiteAgentWith(t *testing.T, w *web.Reconciler) (*agentrpc.Client, stri
 func startSiteAgentPHP(t *testing.T, w *web.Reconciler, p *php.Manager) (*agentrpc.Client, string) {
 	t.Helper()
 
+	return startSiteAgentCfg(t, Config{Web: w, PHP: p})
+}
+
+// startSiteAgentCfg starts an agent with cfg and a site manager on a
+// temporary pool.
+func startSiteAgentCfg(t *testing.T, cfg Config) (*agentrpc.Client, string) {
+	t.Helper()
+
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +120,8 @@ func startSiteAgentPHP(t *testing.T, w *web.Reconciler, p *php.Manager) (*agentr
 	mgr := sites.NewManager(reg, &memAccounts{users: map[string]sites.Account{}}, sites.Options{OwnerUID: owner})
 
 	sock := filepath.Join(run, "agent.sock")
-	s := NewServer(Config{Version: "t", Sites: mgr, Web: w, PHP: p}, owner)
+	cfg.Version, cfg.Sites = "t", mgr
+	s := NewServer(cfg, owner)
 
 	if err := s.Listen(context.Background(), sock, -1); err != nil {
 		t.Fatal(err)

@@ -27,6 +27,7 @@ const apiPassword = "a long enough password"
 type apiEnv struct {
 	h         http.Handler
 	svc       *auth.Service
+	sites     *hosting.Service
 	tokenPath string
 }
 
@@ -73,7 +74,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 		deps.Sites = hosting.New(st, ag, nil)
 	}
 
-	return &apiEnv{h: Handler(Config{}, deps), svc: svc, tokenPath: tokenPath}
+	return &apiEnv{h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath}
 }
 
 type reqOpts struct {

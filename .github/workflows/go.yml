@@ -119,5 +119,14 @@ jobs:
         run: go build -trimpath -o hostashi ./cmd/hostashi
       - name: shellcheck
         run: shellcheck packaging/install.sh packaging/test/container-test.sh
+      - name: Build Pebble (local test CA, never the real Let's Encrypt)
+        env:
+          CGO_ENABLED: "0"
+          GOBIN: ${{ runner.temp }}/pebble
+        run: >-
+          go install github.com/letsencrypt/pebble/v2/cmd/pebble@v2.10.3
+          github.com/letsencrypt/pebble/v2/cmd/pebble-challtestsrv@v2.10.3
       - name: Install and check in a systemd container
+        env:
+          PEBBLE_DIR: ${{ runner.temp }}/pebble
         run: packaging/test/container-test.sh "${{ matrix.image }}" ./hostashi

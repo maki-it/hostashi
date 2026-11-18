@@ -36,6 +36,7 @@ umask 077
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 UNIT_DIR=${HOSTASHI_UNIT_SRC:-$HERE/systemd}
 STATE_DIR=/var/lib/hostashi-installer
+ACME_DIR=/var/lib/hostashi-acme
 STATE_FILE=$STATE_DIR/state
 LOG=/var/log/hostashi-install.log
 OS_RELEASE=${HOSTASHI_OS_RELEASE:-/etc/os-release}
@@ -155,11 +156,19 @@ chk_dirs() {
   dir_ok /var/lib/hostashi 750 hostashi:hostashi || { echo "/var/lib/hostashi"; return 1; }
   dir_ok /var/lib/hostashi-agent 700 root:root || { echo "/var/lib/hostashi-agent"; return 1; }
   dir_ok "$STATE_DIR" 700 root:root || { echo "$STATE_DIR"; return 1; }
+  dir_ok "$ACME_DIR" 755 root:root || { echo "$ACME_DIR"; return 1; }
+  dir_ok "$ACME_DIR/.well-known" 755 root:root || { echo "$ACME_DIR/.well-known"; return 1; }
+  dir_ok "$ACME_DIR/.well-known/acme-challenge" 2750 hostashi:www-data || { echo "$ACME_DIR/.well-known/acme-challenge"; return 1; }
 }
+# HTTP-01 challenge files: the panel writes them, nginx (www-data) serves
+# them; they are public anyway. The setgid bit gives every file the group
+# www-data.
 do_dirs() {
   install -d -m 0750 -o root -g hostashi /etc/hostashi &&
   install -d -m 0750 -o hostashi -g hostashi /var/lib/hostashi &&
-  install -d -m 0700 -o root -g root /var/lib/hostashi-agent "$STATE_DIR"
+  install -d -m 0700 -o root -g root /var/lib/hostashi-agent "$STATE_DIR" &&
+  install -d -m 0755 -o root -g root "$ACME_DIR" "$ACME_DIR/.well-known" &&
+  install -d -m 2750 -o hostashi -g www-data "$ACME_DIR/.well-known/acme-challenge"
 }
 
 # The encryption key for stored secrets (TOTP seeds): 32 random bytes, read
