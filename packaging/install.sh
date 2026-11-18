@@ -22,8 +22,9 @@
 # nginx comes from the distribution with its brotli modules (ADR-0020) and
 # runs on the configuration the agent renders. PHP is the distribution's
 # (ADR-0019); each site gets its own FPM master, so the package's own FPM
-# service stays off. Not yet part of this installer: more PHP versions
-# (sury.org), MariaDB, project quota (spike S5/S8) and a firewall.
+# service stays off. MariaDB is the distribution's (ADR-0024); the agent
+# talks to it as root over its Unix socket. Not yet part of this installer:
+# more PHP versions (sury.org), project quota (spike S5/S8) and a firewall.
 #
 # Exit codes: 0 ok, 2 refused by preflight (server unchanged), 3 a step
 # failed (re-running is safe), 64 usage.
@@ -150,7 +151,7 @@ preflight() {
   # Fresh servers only, unless this installer was here before (re-run after a failure).
   if [ ! -f "$STATE_FILE" ]; then
     local p found=""
-    for p in apache2 caddy lighttpd; do pkg_installed "$p" && found="$found $p"; done
+    for p in apache2 caddy lighttpd mysql-server; do pkg_installed "$p" && found="$found $p"; done
     [ -z "$found" ] || fail "not a fresh server, found installed:$found"
     if getent passwd hostashi >/dev/null && [ ! -x "$BIN" ]; then
       fail "a user 'hostashi' exists that this installer did not create"
@@ -163,7 +164,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config nginx php units service"
+STEPS="account dirs key binary config nginx php mariadb units service"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -276,6 +277,23 @@ do_php() {
   for u in $(distro_fpm_units); do
     systemctl disable --now "$u" >>"$LOG" 2>&1 || return 1
   done
+}
+
+# MariaDB from the distribution (ADR-0024). The package defaults stay: it
+# listens on 127.0.0.1 only and root logs in only through the Unix socket
+# (unix_socket), which is how the agent connects. No password is set.
+MARIADB_PKGS=(mariadb-server)
+
+chk_mariadb() {
+  local p
+  for p in "${MARIADB_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
+  [ "$(systemctl is-enabled mariadb.service 2>/dev/null)" = enabled ] || { echo "mariadb not enabled"; return 1; }
+  [ "$(systemctl is-active mariadb.service 2>/dev/null)" = active ] || { echo "mariadb not running"; return 1; }
+}
+do_mariadb() {
+  apt-get update -qq >>"$LOG" 2>&1 &&
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${MARIADB_PKGS[@]}" >>"$LOG" 2>&1 &&
+  systemctl enable --now mariadb.service >>"$LOG" 2>&1
 }
 
 php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }

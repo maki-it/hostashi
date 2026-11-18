@@ -86,3 +86,28 @@ func FuzzValidateDBPassword(f *testing.F) {
 		}
 	})
 }
+
+func TestGenerateDBPassword(t *testing.T) {
+	seen := map[string]bool{}
+
+	for range 100 {
+		pw := GenerateDBPassword()
+		if len(pw) != GeneratedDBPasswordLen {
+			t.Fatalf("length %d", len(pw))
+		}
+
+		if err := ValidateDBPassword(pw); err != nil {
+			t.Fatalf("%q: %v", pw, err)
+		}
+
+		if strings.Trim(pw, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789") != "" {
+			t.Fatalf("not alphanumeric: %q", pw)
+		}
+
+		if seen[pw] {
+			t.Fatal("repeated password")
+		}
+
+		seen[pw] = true
+	}
+}
