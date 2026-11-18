@@ -6,7 +6,7 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 |-----|-------|--------|-----------------------------|
 | 0001 | Clean-room und Umgang mit Referenz-Repos | Proposed | Nein, rechtliche Mindestregel |
 | 0002 | Lizenz des Projekts | Proposed (Entwurf: [adr/0002](adr/0002-license.md)) | **Ja** |
-| 0003 | Sprache und Stack | Proposed (Entwurf: [adr/0003](adr/0003-language-and-stack.md)) | **Ja** (Team-Know-how) |
+| 0003 | Sprache und Stack | Accepted am 2026-11-18 ([adr/0003](adr/0003-language-and-stack.md)) | **Ja** (Team-Know-how) |
 | 0004 | Rechtetrennung Web/Agent | Proposed | Nein |
 | 0005 | Webserver (Nginx, Caddy-Option) | Proposed | Nein, Spike S3 entscheidet |
 | 0006 | Zustandsspeicher und Reconciler | Proposed | Nein |
@@ -54,7 +54,7 @@ Ursprünglicher Vergleich:
 
 ## ADR-0003 Sprache und Stack
 
-**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0003-language-and-stack.md](adr/0003-language-and-stack.md). Kurzfassung: Go bestätigen, unter der Bedingung, dass das Team Go sicher beherrscht (Frage 2) und die Spikes S1, S2, S4, S7 nichts widerlegen.
+**Vollständiger Text (Englisch, Status Accepted am 2026-11-18):** [adr/0003-language-and-stack.md](adr/0003-language-and-stack.md). Kurzfassung: Go bestätigt; Spikes S1 und S4 haben nichts widerlegt. S2 und S7 stehen noch aus, ein Scheitern von S2 öffnet die ADR wieder, S7 darf das Frontend-Framework ändern.
 
 Ursprünglicher Vorschlag:
 
