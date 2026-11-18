@@ -1,0 +1,340 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+package serve
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/store"
+)
+
+const apiPassword = "a long enough password"
+
+type apiEnv struct {
+	h         http.Handler
+	tokenPath string
+}
+
+func newAPI(t *testing.T) *apiEnv {
+	t.Helper()
+
+	dir := filepath.Join(t.TempDir(), "lib")
+	if err := os.Mkdir(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+
+	st, err := store.Open(ctx, filepath.Join(dir, "h.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = st.Close() })
+
+	tokenPath := SetupTokenPath(filepath.Join(dir, "h.db"))
+	if err := auth.EnsureSetupToken(ctx, st, tokenPath, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	ok := func(context.Context) error { return nil }
+	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath})
+
+	return &apiEnv{h: Handler(Config{}, Deps{PingAgent: ok, PingDB: ok, Auth: svc}), tokenPath: tokenPath}
+}
+
+type reqOpts struct {
+	method, path, body string
+	header             map[string]string
+	cookie             *http.Cookie
+}
+
+func (e *apiEnv) do(t *testing.T, o reqOpts) *httptest.ResponseRecorder {
+	t.Helper()
+
+	var body io.Reader
+	if o.body != "" {
+		body = strings.NewReader(o.body)
+	}
+
+	r := httptest.NewRequest(o.method, o.path, body)
+	r.RemoteAddr = "192.0.2.10:5555"
+
+	if o.body != "" {
+		r.Header.Set("Content-Type", "application/json")
+	}
+
+	for k, v := range o.header {
+		r.Header.Set(k, v)
+	}
+
+	if o.cookie != nil {
+		r.AddCookie(o.cookie)
+	}
+
+	rec := httptest.NewRecorder()
+	e.h.ServeHTTP(rec, r)
+
+	return rec
+}
+
+func errCode(t *testing.T, rec *httptest.ResponseRecorder) string {
+	t.Helper()
+
+	var e apiError
+	if err := json.Unmarshal(rec.Body.Bytes(), &e); err != nil {
+		t.Fatalf("not an error body: %s", rec.Body)
+	}
+
+	return e.Error.Code
+}
+
+func (e *apiEnv) setupAdmin(t *testing.T) {
+	t.Helper()
+
+	tok, err := auth.ReadSetupToken(e.tokenPath, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/setup",
+		body: `{"token":"` + tok + `","username":"kim","password":"` + apiPassword + `"}`,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("setup: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func sessionCookieOf(t *testing.T, rec *httptest.ResponseRecorder) *http.Cookie {
+	t.Helper()
+
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == sessionCookie {
+			return c
+		}
+	}
+
+	t.Fatal("no session cookie")
+
+	return nil
+}
+
+func TestSetupAndLoginFlow(t *testing.T) {
+	e := newAPI(t)
+
+	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/setup"})
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"required":true`) {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+
+	// Setup with a wrong token.
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/setup",
+		body: `{"token":"nope","username":"kim","password":"` + apiPassword + `"}`,
+	})
+	if rec.Code != http.StatusForbidden || errCode(t, rec) != "setup_not_allowed" {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+
+	// Setup with invalid input is reported as such.
+	tok, _ := auth.ReadSetupToken(e.tokenPath, time.Now())
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/setup",
+		body: `{"token":"` + tok + `","username":"kim","password":"short"}`,
+	})
+	if rec.Code != http.StatusUnprocessableEntity || errCode(t, rec) != "invalid_argument" {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+
+	e.setupAdmin(t)
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/setup"})
+	if !strings.Contains(rec.Body.String(), `"required":false`) {
+		t.Fatalf("%s", rec.Body)
+	}
+
+	// Not logged in yet.
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/auth/me"})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("%d", rec.Code)
+	}
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/login",
+		body: `{"username":"kim","password":"` + apiPassword + `"}`,
+	})
+	if rec.Code != 200 {
+		t.Fatalf("login: %d %s", rec.Code, rec.Body)
+	}
+
+	c := sessionCookieOf(t, rec)
+	if !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteStrictMode || c.Path != "/" || c.MaxAge <= 0 {
+		t.Fatalf("weak cookie: %+v", c)
+	}
+
+	if strings.Contains(rec.Body.String(), "token") || strings.Contains(rec.Body.String(), "$argon2") {
+		t.Fatalf("secret in login response: %s", rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/auth/me", cookie: c})
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"username":"kim"`) {
+		t.Fatalf("me: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/logout", cookie: c})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("logout: %d", rec.Code)
+	}
+
+	if cleared := sessionCookieOf(t, rec); cleared.MaxAge >= 0 || cleared.Value != "" {
+		t.Fatalf("cookie not cleared: %+v", cleared)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/auth/me", cookie: c})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("session alive after logout: %d", rec.Code)
+	}
+}
+
+func TestLoginErrors(t *testing.T) {
+	e := newAPI(t)
+	e.setupAdmin(t)
+
+	rec := e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/login",
+		body: `{"username":"kim","password":"wrong password!!"}`,
+	})
+	if rec.Code != http.StatusUnauthorized || errCode(t, rec) != "invalid_credentials" {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+
+	if len(rec.Result().Cookies()) != 0 {
+		t.Fatal("cookie set on a failed login")
+	}
+
+	// The same body for an unknown user.
+	rec2 := e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/login",
+		body: `{"username":"nobody","password":"wrong password!!"}`,
+	})
+	if rec2.Code != rec.Code || rec2.Body.String() != rec.Body.String() {
+		t.Fatalf("login errors differ: %s vs %s", rec.Body, rec2.Body)
+	}
+
+	for i := 0; i < 10; i++ {
+		e.do(t, reqOpts{
+			method: "POST", path: "/api/v1/auth/login",
+			body: `{"username":"kim","password":"wrong password!!"}`,
+		})
+	}
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/login",
+		body: `{"username":"kim","password":"` + apiPassword + `"}`,
+	})
+	if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") == "" {
+		t.Fatalf("%d %v", rec.Code, rec.Header())
+	}
+}
+
+func TestRequestHardening(t *testing.T) {
+	e := newAPI(t)
+	e.setupAdmin(t)
+
+	login := `{"username":"kim","password":"` + apiPassword + `"}`
+
+	cases := []struct {
+		name string
+		o    reqOpts
+		code int
+	}{
+		{"wrong content type", reqOpts{
+			method: "POST", path: "/api/v1/auth/login", body: login,
+			header: map[string]string{"Content-Type": "text/plain"},
+		}, http.StatusUnsupportedMediaType},
+		{"form content type", reqOpts{
+			method: "POST", path: "/api/v1/auth/login", body: "username=kim&password=x",
+			header: map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
+		}, http.StatusUnsupportedMediaType},
+		{"unknown field", reqOpts{
+			method: "POST", path: "/api/v1/auth/login",
+			body: `{"username":"kim","password":"x","admin":true}`,
+		}, http.StatusBadRequest},
+		{"trailing data", reqOpts{method: "POST", path: "/api/v1/auth/login", body: login + `{}`}, http.StatusBadRequest},
+		{"not json", reqOpts{method: "POST", path: "/api/v1/auth/login", body: `username=kim`}, http.StatusBadRequest},
+		{"wrong field type", reqOpts{
+			method: "POST", path: "/api/v1/auth/login",
+			body: `{"username":1,"password":2}`,
+		}, http.StatusBadRequest},
+		{"oversized body", reqOpts{
+			method: "POST", path: "/api/v1/auth/login",
+			body: `{"username":"kim","password":"` + strings.Repeat("x", 5000) + `"}`,
+		}, http.StatusBadRequest},
+		{"cross-site origin", reqOpts{
+			method: "POST", path: "/api/v1/auth/login", body: login,
+			header: map[string]string{"Origin": "https://evil.example"},
+		}, http.StatusForbidden},
+		{"cross-site fetch metadata", reqOpts{
+			method: "POST", path: "/api/v1/auth/login", body: login,
+			header: map[string]string{"Sec-Fetch-Site": "cross-site"},
+		}, http.StatusForbidden},
+		{"same-site (sibling) fetch metadata", reqOpts{
+			method: "POST", path: "/api/v1/auth/logout",
+			header: map[string]string{"Sec-Fetch-Site": "same-site"},
+		}, http.StatusForbidden},
+		{"same origin ok", reqOpts{
+			method: "POST", path: "/api/v1/auth/login", body: login,
+			header: map[string]string{"Origin": "http://example.com", "Sec-Fetch-Site": "same-origin"},
+		}, http.StatusOK},
+		{"GET on POST route", reqOpts{method: "GET", path: "/api/v1/auth/login"}, http.StatusMethodNotAllowed},
+		{"POST on me", reqOpts{method: "POST", path: "/api/v1/auth/me"}, http.StatusMethodNotAllowed},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if rec := e.do(t, tc.o); rec.Code != tc.code {
+				t.Fatalf("got %d, want %d: %s", rec.Code, tc.code, rec.Body)
+			}
+		})
+	}
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	e := newAPI(t)
+	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/health"})
+
+	for k, want := range map[string]string{
+		"X-Content-Type-Options":  "nosniff",
+		"X-Frame-Options":         "DENY",
+		"Referrer-Policy":         "no-referrer",
+		"Cache-Control":           "no-store",
+		"Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+	} {
+		if got := rec.Header().Get(k); got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+}
+
+func TestForgedSessionCookies(t *testing.T) {
+	e := newAPI(t)
+	e.setupAdmin(t)
+
+	for _, v := range []string{"", "x", "admin", strings.Repeat("A", 43), strings.Repeat("A", 500), "' OR 1=1 --"} {
+		rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/auth/me", cookie: &http.Cookie{Name: sessionCookie, Value: v}})
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("cookie %q: %d", v, rec.Code)
+		}
+	}
+}
