@@ -209,6 +209,28 @@ body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/)
 [ "$body" = "php $ver user wp jailed" ] || fail "PHP site answered '$body' after PHP on"
 # The distribution's own FPM service stays off.
 ! x systemctl is-active --quiet "php$ver-fpm.service" || fail "distribution php$ver-fpm is running"
+
+step "a database for the PHP site (MariaDB)"
+[ "$(x systemctl is-active mariadb.service)" = active ] || fail "mariadb is not running"
+[ "$(x mariadb -Nse 'SELECT @@bind_address')" = 127.0.0.1 ] || fail "mariadb listens on more than loopback"
+x /usr/local/bin/hostashi db create wp wp_db
+xi /usr/local/bin/hostashi db user create wp_db wp_user <<<"Test-db-pass_12345"
+x /usr/local/bin/hostashi db list | grep -q '^wp_db	site=wp	users=wp_user$' || fail "db list: $(x /usr/local/bin/hostashi db list)"
+expect_mode /var/lib/hostashi-agent/databases.json "600 root:root"
+if xi /usr/local/bin/hostashi db create wp mysql </dev/null; then fail "system database accepted"; fi
+# The site's PHP reaches its database over the socket, like WordPress with DB_HOST localhost.
+xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/db.php' <<'PHP'
+<?php
+$db = new mysqli("localhost", "wp_user", "Test-db-pass_12345", "wp_db");
+$db->query("CREATE TABLE IF NOT EXISTS t (i INT)");
+$db->query("INSERT INTO t VALUES (42)");
+echo "db ", $db->query("SELECT SUM(i) FROM t")->fetch_row()[0];
+try { $db->query("SELECT 1 FROM mysql.user"); echo " open"; } catch (mysqli_sql_exception $e) { echo " jailed"; }
+PHP
+body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/db.php)
+[ "$body" = "db 42 jailed" ] || fail "PHP with database answered '$body'"
+x /usr/local/bin/hostashi db delete wp_db
+[ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User='wp_user'")" ] || fail "database user still there"
 [ "$(api DELETE /api/v1/sites/wp)" = 204 ] || fail "delete PHP site: $(x cat /tmp/api.out)"
 ! x systemctl is-active --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit still running after delete"
 x test ! -e /home/wp || fail "PHP site home still there"

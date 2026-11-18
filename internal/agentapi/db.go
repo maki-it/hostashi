@@ -3,6 +3,7 @@
 package agentapi
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"regexp"
@@ -87,6 +88,36 @@ func ValidateDBPassword(pw string) error {
 	}
 
 	return nil
+}
+
+// GeneratedDBPasswordLen is the length of GenerateDBPassword's passwords:
+// 32 characters from 62 give about 190 bits.
+const GeneratedDBPasswordLen = 32
+
+// GenerateDBPassword returns a random password of letters and digits, which
+// survives every config file format and shell without quoting.
+func GenerateDBPassword() string {
+	return randomAlnum(GeneratedDBPasswordLen)
+}
+
+func randomAlnum(n int) string {
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+	out := make([]byte, 0, n)
+	buf := make([]byte, 64)
+
+	for len(out) < n {
+		_, _ = rand.Read(buf) // never fails (crypto/rand since Go 1.24)
+
+		for _, b := range buf {
+			// 62*4 = 248: rejecting 248..255 keeps the choice uniform.
+			if b < 248 && len(out) < n {
+				out = append(out, alphabet[b%62])
+			}
+		}
+	}
+
+	return string(out)
 }
 
 // DBInfo is what the agent reports about one database.

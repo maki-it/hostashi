@@ -42,6 +42,10 @@ commands:
             manage site accounts through the agent (root on the server)
   web apply read the complete web state as JSON from stdin and make it live,
             e.g. {"sites":[{"user":"blog","domains":["blog.example.com"]}]}
+  db list | db create SITE NAME | db delete NAME
+  db user create DATABASE USER | db user password USER | db user delete USER
+            manage databases through the agent (root on the server); the
+            password is read from stdin, an empty line generates one
   setup-token  print the one-time token for the first login (read as the serve user or root)
   version   print the version
 `
@@ -122,7 +126,7 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		if err == nil {
 			fmt.Fprintf(stdout, "agent %s answered, caller uid %d\n", r.Version, r.CallerUID)
 		}
-	case "site", "web":
+	case "site", "web", "db":
 		if fs.Parse(args) != nil {
 			return 2
 		}

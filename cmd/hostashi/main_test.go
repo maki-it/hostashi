@@ -49,7 +49,18 @@ func TestRun(t *testing.T) {
 }
 
 func TestAdminUsage(t *testing.T) {
-	for _, args := range [][]string{{"site"}, {"site", "bogus"}, {"site", "delete"}, {"web"}, {"web", "apply", "extra"}} {
+	for _, args := range [][]string{
+		{"site"},
+		{"site", "bogus"},
+		{"site", "delete"},
+		{"web"},
+		{"web", "apply", "extra"},
+		{"db"},
+		{"db", "create", "shop"},
+		{"db", "user"},
+		{"db", "user", "create", "shop"},
+		{"db", "list", "x"},
+	} {
 		var out, errOut bytes.Buffer
 		if code := run(t.Context(), args, 0, &out, &errOut); code != 2 {
 			t.Errorf("%v: exit %d, want 2", args, code)
@@ -69,5 +80,29 @@ func TestWebApplyRejectsUnknownFields(t *testing.T) {
 
 	if !strings.Contains(errOut.String(), "unknown field") {
 		t.Fatalf("stderr = %q", errOut.String())
+	}
+}
+
+func TestReadPassword(t *testing.T) {
+	t.Cleanup(func() { stdin = os.Stdin })
+
+	stdin = strings.NewReader("Secret-pass_12345\nignored\n")
+
+	pw, gen, err := readPassword()
+	if err != nil || gen || pw != "Secret-pass_12345" {
+		t.Fatalf("got %q %v %v", pw, gen, err)
+	}
+
+	stdin = strings.NewReader("\n")
+
+	pw, gen, err = readPassword()
+	if err != nil || !gen || len(pw) != 32 {
+		t.Fatalf("generated %q %v %v", pw, gen, err)
+	}
+
+	stdin = strings.NewReader("")
+
+	if _, gen, err := readPassword(); err != nil || !gen {
+		t.Fatalf("empty stdin: %v %v", gen, err)
 	}
 }
