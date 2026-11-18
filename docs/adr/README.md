@@ -17,6 +17,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0020](0020-nginx-package-source-and-brotli.md) | nginx package source and brotli | Accepted |
 | [0021](0021-brute-force-and-intrusion-protection.md) | Brute-force and intrusion protection | Accepted |
 | [0022](0022-metrics-and-tracing.md) | Metrics, logs and tracing | Accepted |
+| [0023](0023-panel-https.md) | HTTPS for the panel | Proposed |
 
 Only the project owner sets a status to `Accepted`.
 

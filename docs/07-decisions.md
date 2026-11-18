@@ -26,6 +26,7 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 | 0020 | nginx-Paketquelle und Brotli | Accepted am 2026-11-18 ([adr/0020](adr/0020-nginx-package-source-and-brotli.md)) | Erledigt |
 | 0021 | Brute-Force- und Einbruchsschutz | Accepted am 2026-11-18 ([adr/0021](adr/0021-brute-force-and-intrusion-protection.md)) | Erledigt |
 | 0022 | Metriken, Logs und Tracing | Accepted am 2026-11-18 ([adr/0022](adr/0022-metrics-and-tracing.md)) | Erledigt |
+| 0023 | HTTPS für das Panel | Proposed ([adr/0023](adr/0023-panel-https.md)), Variante A gewählt (Kim, 2026-11-18) | Offen: HSTS fürs Panel standardmäßig an? |
 
 ---
 
@@ -210,3 +211,7 @@ ashi site add example.com --type php --php 8.4   # gleiches Programm
 ## ADR-0022 Metriken, Logs und Tracing
 
 **Vollständiger Text (Englisch, Status Accepted am 2026-11-18):** [adr/0022](adr/0022-metrics-and-tracing.md). Kurzfassung: Metriken im Prometheus-Format unter `/metrics` mit `client_golang` (aktuell v1.25.0, geprüft am 2026-11-18). OpenTelemetry für Metriken ist verworfen (mehr Abhängigkeiten, beim Abruf dasselbe Ergebnis). Der Endpunkt ist standardmäßig aus und nur auf zwei Wegen erreichbar: mit API-Token mit eigenem Scope `metrics:read` oder über einen eigenen Listener nur auf Loopback, nicht über eine „kommt von localhost“-Prüfung, weil ein lokaler Proxy die sonst aushebelt. Gemessen werden HTTP-Anfragen (nach Route, nicht nach Pfad), Agent-Operationen, Login-Fehler (ohne Benutzer und IP), Zertifikatsablauf, pro Site PHP-FPM und Speicherplatz. Label `site` ist der Systemname, Domains sind nirgends ein Label (Kardinalität und Aufklärung). Daten pro Site liefert der Agent über eine neue lesende Operation `metrics.snapshot`. Tracing kommt nicht in v1; stattdessen eine Request-ID, die das Panel erzeugt und an den Agent weitergibt. Geprüft: Der Agent lehnt unbekannte Felder im Protokoll ab, Panel und Agent müssen das neue Feld also gemeinsam bekommen. Entschieden (Kim, 2026-11-18): Der Endpunkt ist standardmäßig aus. Der Zugang ohne Token läuft über einen eigenen Listener nur auf Loopback (Kim, 2026-11-18). Das Label `site` ist der Systemname der Site (Kim, 2026-11-18). Keine offenen Fragen mehr.
+
+## ADR-0023 HTTPS für das Panel
+
+**Vollständiger Text (Englisch, Status Proposed):** [adr/0023](adr/0023-panel-https.md). Kurzfassung: nginx macht TLS für die Panel-Adresse auf eigenem Port 8443 und leitet an das Panel auf `127.0.0.1:8080` weiter. Das Zertifikat kommt über denselben Weg wie bei den Sites, der Schlüssel bleibt bei root, HTTP/3 und HSTS kommen aus denselben Vorlagen. Das Panel bleibt auf Loopback. Folge: Das Panel übernimmt die Client-IP aus dem Header von nginx, aber nur bei Anfragen von Loopback. Fällt nginx aus, bleibt nur der SSH-Tunnel. Ohne DNS-Namen bleibt es beim SSH-Tunnel. Entschieden (Kim, 2026-11-18): Variante A mit Port 8443. Offen: HSTS fürs Panel standardmäßig an (Empfehlung: ja).
