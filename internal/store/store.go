@@ -12,8 +12,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"time"
 
-	_ "modernc.org/sqlite" // pure Go driver, no cgo (ADR-0003)
+	"modernc.org/sqlite" // pure Go driver, no cgo (ADR-0003)
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // DefaultPath is where the database lives on a production server.
@@ -38,10 +40,14 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	}
 
 	q := url.Values{}
+	// Pragmas run in this order on every new connection. busy_timeout must
+	// come first: switching a fresh file to WAL needs a lock, and without the
+	// timeout a second process opening at the same moment fails at once
+	// with SQLITE_BUSY.
 	for _, p := range []string{
+		"busy_timeout(5000)",
 		"journal_mode(WAL)",
 		"foreign_keys(ON)",
-		"busy_timeout(5000)",
 		"synchronous(NORMAL)",
 	} {
 		q.Add("_pragma", p)
@@ -55,17 +61,44 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	}
 
 	s := &Store{db: db}
-	if err := s.check(ctx); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-
-	if err := migrate(ctx, db, migrations); err != nil {
+	if err := s.prepare(ctx); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 
 	return s, nil
+}
+
+// openAttempts bounds the retries while another process creates the file.
+const openAttempts = 20
+
+// prepare checks the connection and migrates. Switching a new file to WAL
+// takes an exclusive lock, and SQLite answers SQLITE_BUSY at once instead of
+// waiting (deadlock avoidance), so two processes opening a fresh database at
+// the same moment retry here for up to about five seconds.
+func (s *Store) prepare(ctx context.Context) error {
+	for attempt := 1; ; attempt++ {
+		err := s.check(ctx)
+		if err == nil {
+			err = migrate(ctx, s.db, migrations)
+		}
+
+		if err == nil || !isBusy(err) || attempt == openAttempts {
+			return err
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("store: %w", ctx.Err())
+		case <-time.After(time.Duration(attempt) * 25 * time.Millisecond):
+		}
+	}
+}
+
+func isBusy(err error) bool {
+	var e *sqlite.Error
+
+	return errors.As(err, &e) && e.Code()&0xff == sqlite3.SQLITE_BUSY
 }
 
 // prepareFile creates the file with mode 0600 if it does not exist and
