@@ -34,7 +34,7 @@ Option A, with these rules:
 ### Authentication and authorization
 
 - **Browser:** session cookie (`HttpOnly`, `Secure`, `SameSite=Strict`) plus CSRF token, as in `05-sicherheit.md`.
-- **Automation:** bearer API tokens. Each token has an owner, an expiry date (required, maximum lifetime configurable), and scopes. Only a hash is stored, the token is shown once.
+- **Automation:** bearer API tokens. Each token has an owner, scopes, and an expiry date. The default and the maximum for a new token is 365 days. A token without expiry ("unlimited") can be created just as easily, in the same dialog or API call, with a visible warning [V: Kim, thread, 2026-11-18]. Only a hash is stored, the token is shown once.
 - **Scopes** are `resource:action` pairs, for example `sites:read`, `sites:write`, `sites.maintenance:write`, `backups:restore`. A token can optionally be limited to a list of site IDs. A token never grants more than its owner's role allows; each request checks token scope **and** owner RBAC **and** resource ownership.
 - High-risk actions (delete site, restore, user and token management, firewall) need an explicit scope and are never covered by a wildcard [A].
 - Every write is written to the audit log with the actor, the token ID if any, and the diff.
@@ -74,5 +74,5 @@ The shape is illustrative; the final resource names come with the spec.
 Accepting this ADR settles the recommendation. Question 2 is still open and is not decided by the acceptance.
 
 1. ~~Should the API be reachable on a separate address or port, or on the panel's address?~~ Decided by Kim (2026-11-18): same address as the panel, with an optional IP allowlist for token access.
-2. Default maximum token lifetime: suggestion 90 days, with an explicit "no expiry" only for the owner role and a warning [E].
+2. ~~Default maximum token lifetime?~~ Decided by Kim (2026-11-18): default maximum 365 days, unlimited tokens must be easy to create. **Named conflict:** a token that never expires is a long-lived secret, which weakens the usual advice to rotate. Mitigations, all already part of this ADR: only a hash is stored, scopes and optional site limits, the optional IP allowlist, high-risk scopes never covered by a wildcard, audit log entries per use, and one-click revocation. The UI should also show "last used" per token and mark unlimited ones [A].
 3. Outgoing webhooks (events such as "backup failed") belong to notifications (`03-features.md` 3.8) and are not part of this ADR.
