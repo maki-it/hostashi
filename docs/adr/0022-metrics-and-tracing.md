@@ -102,4 +102,6 @@ Decided (Kim, 2026-11-18): the endpoint is off by default, as `03-features.md` s
 
 Decided (Kim, 2026-11-18): the token-free path is a separate listener that binds only loopback, not a "comes from localhost" check on the main listener.
 
-1. Is the site's system name fine as the `site` label, or should it be the numeric site ID, which says even less? Recommendation: system name, because dashboards without names are hard to read.
+Decided (Kim, 2026-11-18): the `site` label is the site's system name, not the numeric site ID.
+
+No open questions remain.
