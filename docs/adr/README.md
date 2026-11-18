@@ -14,6 +14,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0017](0017-cloudpanel-import-and-presets.md) | CloudPanel import as migration, and Hostashi presets | Accepted |
 | [0018](0018-public-rest-api.md) | Public REST API design | Accepted |
 | [0019](0019-php-package-source-and-versions.md) | PHP package source and multiple PHP versions | Accepted |
+| [0020](0020-nginx-package-source-and-brotli.md) | nginx package source and brotli | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 

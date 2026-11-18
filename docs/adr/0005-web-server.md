@@ -37,7 +37,7 @@ Reasons, in order of weight:
 
 ## Consequences
 
-- **Packages:** nginx.org stable repository on Debian 13 and Ubuntu 24.04, because the distribution packages for Ubuntu 24.04 (1.24) have no HTTP/3 [V: S3]. The `.deb` depends on this repository or vendors the signed packages [A, decide in S5].
+- **Packages:** *Replaced by [ADR-0020](0020-nginx-package-source-and-brotli.md) (2026-11-18): nginx comes from the distribution, for brotli.* Original text: nginx.org stable repository on Debian 13 and Ubuntu 24.04, because the distribution packages for Ubuntu 24.04 (1.24) have no HTTP/3 [V: S3]. The `.deb` depends on this repository or vendors the signed packages [A, decide in S5].
 - **Reload verification is mandatory** in the reconciler: `nginx -t`, then reload, then proof that the new generation answers, with eight consecutive matches and a site health check; otherwise rollback. A bind conflict passes `-t` and a reload that exits 0 [V: S2, S3]. Changed in `04-architektur.md` 4.3.
 - **Generator rules:** per-site snippets live in their own include file (an unmatched `}` is rejected per file [V: S2]). Never add `add_header` in a location without repeating the inherited headers. Set the worker user explicitly (the nginx.org package defaults to a user `nginx` that must exist) [V: S3].
 - **HTTPS:** certificates through lego as a library, nginx reads them from files. Renewal triggers a validated reload [A: not built yet].
