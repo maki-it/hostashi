@@ -1,6 +1,6 @@
 # ADR-0021 Brute-force and intrusion protection
 
-**Status:** Proposed. **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0004 (web/agent privilege split), ADR-0005 and ADR-0020 (nginx), ADR-0009 (target platforms), [`05-sicherheit.md`](../05-sicherheit.md) sections 5.2 to 5.4, [`03-features.md`](../03-features.md) (rows "Fail2ban-/CrowdSec-Integration" and "Firewall").
+**Status:** Accepted (2026-11-18, by Kim). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0004 (web/agent privilege split), ADR-0005 and ADR-0020 (nginx), ADR-0009 (target platforms), [`05-sicherheit.md`](../05-sicherheit.md) sections 5.2 to 5.4, [`03-features.md`](../03-features.md) (rows "Fail2ban-/CrowdSec-Integration" and "Firewall").
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -49,7 +49,7 @@ The panel's own rate limit stays. It answers inside the request and works withou
 - **Panel UI and API.** List banned IPs, unban, edit the never-ban list, switch per-site jails. Unbanning and the never-ban list are high-risk actions with their own scope (ADR-0018).
 - **Installer.** Installs `fail2ban` from the distribution archive, writes the Hostashi jail files under `/etc/fail2ban/jail.d/` and filters under `/etc/fail2ban/filter.d/`, and checks the setup with `fail2ban-client -t` [U: test option]. CI runs this on Debian 13 and Ubuntu 26.04 in the systemd container [A].
 - **Panel behind a proxy.** If the panel ever runs behind nginx (option in `05-sicherheit.md` 5.3), the TCP peer is `127.0.0.1` for every client. Then both the in-process limiter and fail2ban see the wrong IP. That setup needs a trusted-proxy setting first [V: `clientIP` uses the TCP peer].
-- `03-features.md`: "Fail2ban-/CrowdSec-Integration" splits into "fail2ban" (P0) and "CrowdSec opt-in" (P2) once this ADR is accepted.
+- `03-features.md`: "Fail2ban-/CrowdSec-Integration" is split into "fail2ban" (P0) and "CrowdSec opt-in" (P2).
 
 ## Risks to name openly
 

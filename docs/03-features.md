@@ -93,7 +93,8 @@
 | API-Tokens mit Scopes, Ablaufdatum | P0 | A | NEU | |
 | Audit-Log (wer, was, wann, Diff) | P0 | A | CP | Unveränderlich (append-only), exportierbar |
 | IP-/Bot-Blocking, Basic Auth je Site | P1 | B | CP | |
-| Fail2ban-/CrowdSec-Integration | P1 | 1 | NEU | |
+| fail2ban (SSH, Panel, recidive) | P0 | A | NEU | Standardmäßig an, ADR-0021 |
+| CrowdSec als Opt-in | P2 | 2+ | NEU | Meldet IPs an externen Dienst, ADR-0021 |
 | Rate-Limiting und Lockout am Panel-Login | P0 | A | NEU | |
 | Malware-Scan (ClamAV/Maldet) | P2 | 2+ | NEU | |
 
