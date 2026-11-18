@@ -16,6 +16,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0019](0019-php-package-source-and-versions.md) | PHP package source and multiple PHP versions | Accepted |
 | [0020](0020-nginx-package-source-and-brotli.md) | nginx package source and brotli | Accepted |
 | [0021](0021-brute-force-and-intrusion-protection.md) | Brute-force and intrusion protection | Accepted |
+| [0022](0022-metrics-and-tracing.md) | Metrics, logs and tracing | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 
