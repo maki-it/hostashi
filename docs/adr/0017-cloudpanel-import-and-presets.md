@@ -64,8 +64,15 @@ First proposal for the defaults (on = active by default, opt = available but off
 | Deny config, backup and dump files (`*.sql`, `*.bak`, `*.env`, editor swap files) | on | on | on | on | – |
 | WordPress hardening (`xmlrpc.php` block, login rate limit) | on | – | – | – | – |
 | TYPO3 hardening (deny internal folders such as `var/`, `vendor/`, config files) [U, to be specified from TYPO3's own docs] | – | on | – | – | – |
+| HTTP/3 (QUIC), see note below | on | on | on | on | on |
+| Compression: brotli with gzip fallback, see note below | on | on | on | on | on (text responses only) |
 | Varnish cache tier | opt | opt | opt | – | opt |
 | Basic auth per path | opt | opt | opt | opt | opt |
+
+Owner input (2026-11-18): HTTP/3 and compression are on by default, and Kim prefers brotli over gzip [V: Kim, thread]. Notes:
+
+- **HTTP/3** is mostly a server-level setting (UDP 443, one QUIC listener shared by all sites, `Alt-Svc` header). The per-site switch only turns the advertisement off. The installer and the firewall rule must open UDP 443, otherwise clients silently fall back to HTTP/2 [A]. nginx.org stable supports it [V: S3].
+- **Compression:** the stock nginx.org package has gzip but no brotli [V: S3]. Default is therefore gzip for now. Brotli needs an extra module (the ngx_brotli module or a package built for the nginx.org version) [U, not checked here]. That is a third-party build on a fresh server and conflicts with the boring-tech rule unless a maintained package exists. Proposal: a short spike (S11) checks whether nginx.org or another maintained repository ships a brotli module for Debian 13 and Ubuntu 24.04, including updates in step with nginx. If yes, brotli becomes the default with gzip as fallback for clients that do not accept `br`; if not, gzip stays the default and brotli is a later option [A]. Pre-compressed static files (`.br`, `.gz`) are an alternative worth testing in the same spike [A].
 
 The values are a starting point [A]; each preset spec confirms or changes them. Nothing here is copied from CloudPanel templates (ADR-0001); the TYPO3 and WordPress rules are written from the projects' own security documentation.
 
@@ -80,9 +87,9 @@ The values are a starting point [A]; each preset spec confirms or changes them. 
 
 ## Open questions
 
-Accepting this ADR settles Parts 1 to 4 in principle. The questions below are still open and are not decided by the acceptance.
+Accepting this ADR settles Parts 1 to 4 in principle. The questions below are still open unless marked as decided.
 
 1. ~~Is a second server during migration acceptable?~~ Decided by Kim (2026-11-18): yes. Kim starts on a fresh server and shuts the old CloudPanel server down after the migration [V: Kim, thread].
-2. ~~Which presets are default-on?~~ Decided in principle: per site type (Part 4). Open: confirm the default matrix.
+2. ~~Which presets are default-on?~~ Decided: per site type (Part 4). Kim confirmed the default matrix on 2026-11-18, including HTTP/3 and compression as defaults.
 3. ~~Do we keep a Varnish option?~~ Decided by Kim: yes, in the same phase as the importer. The Varnish configuration (VCL) and the purge integration must be our own; the CloudPanel WordPress purge plugin is GPLv3 and usable only if ADR-0002 allows it [V: `01-recherche-cloudpanel.md`].
-4. Should the importer offer to keep custom snippets verbatim, or require each one to be rewritten into a preset or dropped before import?
+4. ~~Should the importer keep custom snippets verbatim?~~ Decided by Kim (2026-11-18): yes, after a one-time review by a person; they stay visible as custom snippets (Part 2).
