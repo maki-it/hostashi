@@ -88,7 +88,7 @@
 |---------|------|-------|--------|-----------|
 | Benutzer + Rollen (Admin, Site-Manager, User je Site) | P0 | A | CP | RBAC in der API erzwungen, nicht nur im UI |
 | TOTP-2FA | P0 | A | CP | |
-| Passkeys (WebAuthn) | P1 | B | NEU | |
+| Passkeys (WebAuthn) | P0 | A | NEU | Neben TOTP von Anfang an, Kim 2026-11-18. Phishing-resistent. Wiederherstellung über Recovery-Codes, mehrere Passkeys je Benutzer |
 | OIDC-SSO | P2 | 1 | NEU | |
 | API-Tokens mit Scopes, Ablaufdatum | P0 | A | NEU | |
 | Audit-Log (wer, was, wann, Diff) | P0 | A | CP | Unveränderlich (append-only), exportierbar |
