@@ -34,11 +34,11 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - The agent manages only what it created and recorded in `/var/lib/hostashi-agent/databases.json`. An existing database or user of the same name is a conflict, never adopted or dropped. This also protects the system databases.
 - `db.delete` drops the users of the database first. `site.delete` is refused while the site owns a database.
 - Errors never contain the statement or the server's message, only the step and the error number, because both can contain the password.
-- The panel stores no database password. It shows a generated one once.
+- The panel stores no database password. It shows a generated one once (decided by Kim, 2026-11-19).
 
 ## Consequences
 
-- Panel tables for databases and users, `/api/v1` endpoints and two scopes `databases:read` and `databases:write` (ADR-0018).
+- Panel tables for databases and users, `/api/v1` endpoints and three scopes: `databases:read`, `databases:write` and the high-risk `databases:delete`, because dropping a database destroys data like deleting a site (ADR-0018). Deleting a site drops its databases first.
 - The installer installs `mariadb-server` from the distribution. It keeps the package defaults (listen on `127.0.0.1` only, root via `unix_socket`) [A: Debian default `bind-address = 127.0.0.1`, to be checked in the installer test].
 - A CI job runs the tests as root against the distribution's MariaDB in a Debian 13 container, including the wildcard case.
 - Remote access, read-only users, import/export and SSO into a DB tool are later features and need their own changes.
@@ -46,4 +46,4 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions for Kim
 
-1. Is "the panel stores no database password, it shows a generated one once" right, or should it be kept encrypted so it can be shown again?
+None. ~~Does the panel keep database passwords?~~ Decided by Kim (2026-11-19): no. A generated password is shown once in the response that created it, a lost one is replaced through `PUT /api/v1/databases/{db}/users/{user}/password`.

@@ -29,9 +29,16 @@ type fakeAgent struct {
 
 	createErr, deleteErr, webErr, tlsErr error
 	installed                            int
+
+	dbs     map[string]string // database -> site
+	dbUsers map[string]string // user -> database
+	dbErr   error             // returned by every db call while set
+	userErr error             // returned by DBUserCreate while set
 }
 
-func newFake() *fakeAgent { return &fakeAgent{accounts: map[string]bool{}} }
+func newFake() *fakeAgent {
+	return &fakeAgent{accounts: map[string]bool{}, dbs: map[string]string{}, dbUsers: map[string]string{}}
+}
 
 func (f *fakeAgent) SiteCreate(_ context.Context, req agentapi.SiteCreateRequest) (agentapi.SiteInfo, error) {
 	f.mu.Lock()
@@ -662,4 +669,105 @@ func TestCreateWithTLS(t *testing.T) {
 	if !hsts {
 		t.Fatal("HSTS not sent")
 	}
+}
+
+func (f *fakeAgent) DBCreate(_ context.Context, site, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.dbErr != nil {
+		return f.dbErr
+	}
+
+	if !f.accounts[site] {
+		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site"}
+	}
+
+	if _, ok := f.dbs[name]; ok {
+		return &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "exists"}
+	}
+
+	f.dbs[name] = site
+
+	return nil
+}
+
+func (f *fakeAgent) DBDelete(_ context.Context, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.dbErr != nil {
+		return f.dbErr
+	}
+
+	if _, ok := f.dbs[name]; !ok {
+		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown database"}
+	}
+
+	for u, d := range f.dbUsers {
+		if d == name {
+			delete(f.dbUsers, u)
+		}
+	}
+
+	delete(f.dbs, name)
+
+	return nil
+}
+
+func (f *fakeAgent) DBUserCreate(_ context.Context, database, user, password string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.dbErr != nil {
+		return f.dbErr
+	}
+
+	if f.userErr != nil {
+		return f.userErr
+	}
+
+	if agentapi.ValidateDBPassword(password) != nil {
+		return &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "bad password"}
+	}
+
+	if _, ok := f.dbs[database]; !ok {
+		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown database"}
+	}
+
+	f.dbUsers[user] = database
+
+	return nil
+}
+
+func (f *fakeAgent) DBUserDelete(_ context.Context, user string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.dbErr != nil {
+		return f.dbErr
+	}
+
+	if _, ok := f.dbUsers[user]; !ok {
+		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown user"}
+	}
+
+	delete(f.dbUsers, user)
+
+	return nil
+}
+
+func (f *fakeAgent) DBUserPassword(_ context.Context, user, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.dbErr != nil {
+		return f.dbErr
+	}
+
+	if _, ok := f.dbUsers[user]; !ok {
+		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown user"}
+	}
+
+	return nil
 }

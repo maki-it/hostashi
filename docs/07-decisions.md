@@ -27,7 +27,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0021 | Brute-force and intrusion protection | Accepted on 2026-11-18 ([adr/0021](adr/0021-brute-force-and-intrusion-protection.md)) | Done |
 | 0022 | Metrics, logs and tracing | Accepted on 2026-11-18 ([adr/0022](adr/0022-metrics-and-tracing.md)) | Done |
 | 0023 | HTTPS for the panel | Accepted on 2026-11-18 ([adr/0023](adr/0023-panel-https.md)) | Done |
-| 0024 | MariaDB databases per site | Proposed ([adr/0024](adr/0024-mariadb-databases-per-site.md)) | **Yes** (password storage) |
+| 0024 | MariaDB databases per site | Proposed ([adr/0024](adr/0024-mariadb-databases-per-site.md)) | Yes, acceptance |
 
 ---
 
@@ -219,4 +219,4 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0024 MariaDB databases per site
 
-**Full text (status Proposed):** [adr/0024](adr/0024-mariadb-databases-per-site.md). Summary: the agent talks to the distribution's MariaDB itself, over the Unix socket as root (`unix_socket` authentication, no administrator password), with `go-sql-driver/mysql` v1.10.2. Typed operations `db.create`, `db.delete`, `db.list`, `db.user.create`, `db.user.delete`, `db.user.password`, no SQL interface. Checked in a Debian 13 container: MariaDB takes no placeholder in `CREATE USER`, so names and passwords have strict rules, and `_` in `GRANT` is a wildcard that must be escaped, otherwise a user also reaches a similar database of another site. Each user gets all privileges on exactly one database, only from localhost. The agent manages only what it created itself. Decided (Kim, 2026-11-18): names are free to choose without a site prefix, the agent keeps its own list. Sites get no database automatically. Open: whether the panel keeps database passwords.
+**Full text (status Proposed):** [adr/0024](adr/0024-mariadb-databases-per-site.md). Summary: the agent talks to the distribution's MariaDB itself, over the Unix socket as root (`unix_socket` authentication, no administrator password), with `go-sql-driver/mysql` v1.10.2. Typed operations `db.create`, `db.delete`, `db.list`, `db.user.create`, `db.user.delete`, `db.user.password`, no SQL interface. Checked in a Debian 13 container: MariaDB takes no placeholder in `CREATE USER`, so names and passwords have strict rules, and `_` in `GRANT` is a wildcard that must be escaped, otherwise a user also reaches a similar database of another site. Each user gets all privileges on exactly one database, only from localhost. The agent manages only what it created itself. Decided (Kim, 2026-11-18): names are free to choose without a site prefix, the agent keeps its own list. Sites get no database automatically. The panel stores no database password, it shows a generated one once (Kim, 2026-11-19). Scopes `databases:read`, `databases:write` and the high-risk `databases:delete`. No open questions.
