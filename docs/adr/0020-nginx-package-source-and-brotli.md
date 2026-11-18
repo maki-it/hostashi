@@ -1,6 +1,6 @@
 # ADR-0020 nginx package source and brotli
 
-**Status:** Proposed (not accepted). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0005 (web server, Accepted), ADR-0009 (target platforms), ADR-0017 (presets, compression and HTTP/3 defaults), ADR-0019 (PHP package source). **Evidence:** Spike S11 ([`spike/s11-brotli/REPORT.md`](../../spike/s11-brotli/REPORT.md)).
+**Status:** Accepted (2026-11-18, by Kim). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0005 (web server, Accepted), ADR-0009 (target platforms), ADR-0017 (presets, compression and HTTP/3 defaults), ADR-0019 (PHP package source). **Evidence:** Spike S11 ([`spike/s11-brotli/REPORT.md`](../../spike/s11-brotli/REPORT.md)).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -55,5 +55,4 @@ Ubuntu 24.04 is the open point: its nginx has no HTTP/3. Either it is dropped fo
 
 ## Open questions
 
-1. Drop Ubuntu 24.04 for v1, or support it with nginx.org and gzip only?
-2. Is a version difference between Debian 13 (1.26.3) and Ubuntu 26.04 (1.28.x) acceptable for the template and test matrix?
+None. Kim agreed on 2026-11-18 to the recommendation: Ubuntu 24.04 is dropped for v1, and the nginx version difference between Debian 13 (1.26.3) and Ubuntu 26.04 (1.28.x) is acceptable. Still to do: the S5 installer test on Ubuntu 26.04 and a real HTTP/3 and brotli request on both builds.

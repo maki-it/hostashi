@@ -23,7 +23,7 @@ Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format
 | 0017 | CloudPanel-Import als Migration, Presets | Accepted am 2026-11-18 ([adr/0017](adr/0017-cloudpanel-import-and-presets.md)) | Erledigt |
 | 0018 | Öffentliche REST-API | Accepted am 2026-11-18 ([adr/0018](adr/0018-public-rest-api.md)) | Erledigt |
 | 0019 | PHP-Paketquelle und mehrere PHP-Versionen | Accepted (Kim, 2026-11-18, [adr/0019](adr/0019-php-package-source-and-versions.md)) | **Ja** |
-| 0020 | nginx-Paketquelle und Brotli | Proposed (Entwurf: [adr/0020](adr/0020-nginx-package-source-and-brotli.md)) | **Ja** |
+| 0020 | nginx-Paketquelle und Brotli | Accepted am 2026-11-18 ([adr/0020](adr/0020-nginx-package-source-and-brotli.md)) | Erledigt |
 
 ---
 
@@ -94,7 +94,7 @@ Restic als Engine (Verschlüsselung, Deduplizierung, viele Backends, auch über 
 
 ## ADR-0009 Zielplattformen und Paketierung
 
-Start: **Ubuntu 24.04 und Debian 13** (plus 22.04/Debian 12), **amd64 und arm64**. Ubuntu 26.04 nachziehen, wenn die Abhängigkeiten stabil sind. Keine EOL-Systeme (CloudPanel unterstützt noch Debian 11, das wir bewusst nicht übernehmen). Distribution per signiertem APT-Repo und `.deb`.
+Start: **Debian 13 und Ubuntu 26.04** (Ubuntu 24.04 entfällt für v1 wegen ADR-0020; früher: Ubuntu 24.04 und Debian 13, plus 22.04/Debian 12), **amd64 und arm64**. Ubuntu 26.04 nachziehen, wenn die Abhängigkeiten stabil sind. Keine EOL-Systeme (CloudPanel unterstützt noch Debian 11, das wir bewusst nicht übernehmen). Distribution per signiertem APT-Repo und `.deb`.
 
 **Nur frische Server (Kim, 2026-11-17):** Hostashi wird immer auf einem frisch installierten Server eingerichtet, kein Einbau in gewachsene Systeme. Empfohlenes Image: **Debian 13**, zweite unterstützte Option: **Ubuntu 24.04 LTS**. Ubuntu 26.04 LTS wird nachgezogen, sobald die Abhängigkeiten und Spikes S5 und S8 darauf laufen. Die Ersteinrichtung soll möglichst einfach und automatisiert sein, zum Beispiel ein Einzeiler oder ein cloud-init-Skript beim Bestellen (Spike S5).
 
@@ -199,4 +199,4 @@ ashi site add example.com --type php --php 8.4   # gleiches Programm
 
 ## ADR-0020 nginx-Paketquelle und Brotli
 
-**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0020-nginx-package-source-and-brotli.md](adr/0020-nginx-package-source-and-brotli.md). Kurzfassung: Kim will Brotli und HTTP/3 als Standard. Das nginx.org-Repository hat kein Brotli-Modul, die Brotli-Pakete der Distributionen passen nur zum nginx der jeweiligen Distribution (Spike S11). Geprüft in den Paketlisten und den Build-Regeln: Debian 13 (nginx 1.26.3) und Ubuntu 26.04 (nginx 1.28.3) haben HTTP/3 eingebaut und passende Brotli-Module, Ubuntu 24.04 (nginx 1.24) hat kein HTTP/3. Empfehlung: nginx aus der Distribution samt Brotli-Modulen auf Debian 13 und Ubuntu 26.04, Ubuntu 24.04 für v1 streichen. Das ersetzt die Paketquelle aus ADR-0005 (nginx.org). Ein echter HTTP/3-Test steht noch aus.
+**Vollständiger Text (Englisch, Status Accepted am 2026-11-18):** [adr/0020-nginx-package-source-and-brotli.md](adr/0020-nginx-package-source-and-brotli.md). Kurzfassung: Kim will Brotli und HTTP/3 als Standard. Das nginx.org-Repository hat kein Brotli-Modul, die Brotli-Pakete der Distributionen passen nur zum nginx der jeweiligen Distribution (Spike S11). Geprüft in den Paketlisten und den Build-Regeln: Debian 13 (nginx 1.26.3) und Ubuntu 26.04 (nginx 1.28.3) haben HTTP/3 eingebaut und passende Brotli-Module, Ubuntu 24.04 (nginx 1.24) hat kein HTTP/3. Entschieden (Kim, 2026-11-18): nginx aus der Distribution samt Brotli-Modulen auf Debian 13 und Ubuntu 26.04, Ubuntu 24.04 entfällt für v1, unterschiedliche nginx-Versionen sind in Ordnung. Das ersetzt die Paketquelle aus ADR-0005 (nginx.org). Ein echter HTTP/3-Test und der Installer-Lauf auf Ubuntu 26.04 stehen noch aus.
