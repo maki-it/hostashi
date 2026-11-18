@@ -1,6 +1,6 @@
 # ADR-0008 Backups with restic
 
-**Status:** Proposed. **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0004 (web/agent privilege split), ADR-0010 (v1 scope: Hetzner Storage Box as the only integration at the start), ADR-0016 (storage pools), ADR-0018 (API, scope `backups:restore`), ADR-0022 (metrics), ADR-0024 (MariaDB), [`03-features.md`](../03-features.md) 3.7, [`05-security.md`](../05-security.md) 5.8.
+**Status:** Accepted (Kim, 2026-11-19). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0004 (web/agent privilege split), ADR-0010 (v1 scope: Hetzner Storage Box as the only integration at the start), ADR-0016 (storage pools), ADR-0018 (API, scope `backups:restore`), ADR-0022 (metrics), ADR-0024 (MariaDB), [`03-features.md`](../03-features.md) 3.7, [`05-security.md`](../05-security.md) 5.8.
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 

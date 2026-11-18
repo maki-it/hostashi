@@ -7,7 +7,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0002](0002-license.md) | Project license | Accepted |
 | [0003](0003-language-and-stack.md) | Language and stack | Accepted |
 | [0005](0005-web-server.md) | Web server | Accepted |
-| [0008](0008-backups-with-restic.md) | Backups with restic | Proposed |
+| [0008](0008-backups-with-restic.md) | Backups with restic | Accepted |
 | [0010](0010-target-audience-and-v1-scope.md) | Target audience and v1 scope | Proposed |
 | [0013](0013-business-model-and-governance.md) | Business model and governance | Proposed |
 | [0015](0015-per-site-resource-limits.md) | Per-site resource limits | Proposed |
