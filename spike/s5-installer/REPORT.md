@@ -83,7 +83,7 @@ The first run of this harness had 4 failures that were harness bugs (no `python3
 - **Ubuntu 24.04 in a VM** (quota with `linux-modules-extra`, real initramfs) and **arm64 in a VM** (quota on an arm64 kernel) were not booted. S8 covered Ubuntu 24.04 quota with the same script [V: S8].
 - **Real Hetzner image**: GRUB path, cloud-init rewriting fstab or the kernel command line, the `-cloud` kernel. S8 ran on Kim's real Debian 13 server [V: S8], the full installer did not.
 - **cloud-init / one-liner**: not tested. Proposed shape: cloud-init `runcmd` downloads a release, checks its signature, runs `install.sh apply --yes --reboot` [A].
-- **Packaging**: no `.deb`, no signed Hostashi APT repository, no release signing. The architecture plan (`04-architektur.md` 4.8) stays: `.deb` from a signed repo, a small bootstrap script that only adds the repo.
+- **Packaging**: no `.deb`, no signed Hostashi APT repository, no release signing. The architecture plan (`04-architecture.md` 4.8) stays: `.deb` from a signed repo, a small bootstrap script that only adds the repo.
 - **Firewall** (nftables with lockout protection), panel TLS, first-run token and admin account: not part of this spike.
 - **Uninstall / rollback** of a full install: not built. Only the quota step rolls back (from S8).
 - Interruption in the middle of `apt-get` (power loss) not simulated; dpkg itself recovers with `dpkg --configure -a` [U], the installer does not call it yet.

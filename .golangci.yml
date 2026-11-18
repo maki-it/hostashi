@@ -59,7 +59,7 @@ linters:
             - "!**/internal/phpctl/*.go"
           deny:
             - pkg: os/exec
-              desc: "no process execution in product code (see docs/05-sicherheit.md)"
+              desc: "no process execution in product code (see docs/05-security.md)"
     errcheck:
       exclude-functions:
         # Usage and status output to stdout/stderr; nothing useful to do on failure.

@@ -1,217 +1,217 @@
-# 7. Entscheidungen (ADRs)
+# 7. Decisions (ADRs)
 
-Alle Einträge sind **Vorschläge** (`Proposed`), bis du sie bestätigst. Format: Kontext, Optionen, Empfehlung, Konsequenzen. Bei Annahme wird der Status auf `Accepted` gesetzt und das Datum ergänzt. Spätere Änderungen bekommen eine neue ADR-Nummer statt Überschreiben.
+All entries are **proposals** (`Proposed`) until you confirm them. Format: context, options, recommendation, consequences. On acceptance, the status is set to `Accepted` and the date is added. Later changes get a new ADR number instead of overwriting.
 
-| ADR | Thema | Status | Entscheidung nötig von dir? |
-|-----|-------|--------|-----------------------------|
-| 0001 | Clean-room und Umgang mit Referenz-Repos | Proposed | Nein, rechtliche Mindestregel |
-| 0002 | Lizenz des Projekts | Accepted am 2026-11-18 ([adr/0002](adr/0002-license.md)), AGPL-3.0 + CC-BY-4.0 + DCO | Erledigt |
-| 0003 | Sprache und Stack | Accepted am 2026-11-18 ([adr/0003](adr/0003-language-and-stack.md)) | **Ja** (Team-Know-how) |
-| 0004 | Rechtetrennung Web/Agent | Proposed | Nein |
-| 0005 | Webserver | Accepted am 2026-11-18 ([adr/0005](adr/0005-web-server.md)), nginx | Nein, S3 ist erledigt |
-| 0006 | Zustandsspeicher und Reconciler | Proposed | Nein |
-| 0007 | Isolationsmodell pro Site | Proposed | Nein |
-| 0008 | Backups mit restic | Proposed | Nein |
-| 0009 | Zielplattformen und Paketierung | Proposed | Teilweise |
-| 0010 | Zielgruppe und Scope v1 | Proposed (Entwurf: [adr/0010](adr/0010-target-audience-and-v1-scope.md)) | **Ja** |
-| 0011 | Name und Marke | Accepted (vorbehaltlich Markenrecherche) | Erledigt, Marke offen |
-| 0012 | Sprache von Code und Doku | Proposed | Ja, kurz |
-| 0013 | Geschäftsmodell und Governance | Proposed (Entwurf: [adr/0013](adr/0013-business-model-and-governance.md)) | **Ja** |
-| 0014 | Name des CLI-Werkzeugs | Proposed | Ja, kurz |
-| 0015 | Ressourcenlimits pro Site | Proposed (Entwurf: [adr/0015](adr/0015-per-site-resource-limits.md)) | **Ja** (Priorität Disk-Quota) |
-| 0016 | Speicherort pro Site (Storage-Pools) | Proposed (Entwurf: [adr/0016](adr/0016-per-site-storage-location.md)) | **Ja** |
-| 0017 | CloudPanel-Import als Migration, Presets | Accepted am 2026-11-18 ([adr/0017](adr/0017-cloudpanel-import-and-presets.md)) | Erledigt |
-| 0018 | Öffentliche REST-API | Accepted am 2026-11-18 ([adr/0018](adr/0018-public-rest-api.md)) | Erledigt |
-| 0019 | PHP-Paketquelle und mehrere PHP-Versionen | Accepted (Kim, 2026-11-18, [adr/0019](adr/0019-php-package-source-and-versions.md)) | **Ja** |
-| 0020 | nginx-Paketquelle und Brotli | Accepted am 2026-11-18 ([adr/0020](adr/0020-nginx-package-source-and-brotli.md)) | Erledigt |
-| 0021 | Brute-Force- und Einbruchsschutz | Accepted am 2026-11-18 ([adr/0021](adr/0021-brute-force-and-intrusion-protection.md)) | Erledigt |
-| 0022 | Metriken, Logs und Tracing | Accepted am 2026-11-18 ([adr/0022](adr/0022-metrics-and-tracing.md)) | Erledigt |
-| 0023 | HTTPS für das Panel | Accepted am 2026-11-18 ([adr/0023](adr/0023-panel-https.md)) | Erledigt |
+| ADR | Topic | Status | Decision needed from you? |
+|-----|-------|--------|---------------------------|
+| 0001 | Clean-room and handling of reference repositories | Proposed | No, minimum legal rule |
+| 0002 | Project license | Accepted on 2026-11-18 ([adr/0002](adr/0002-license.md)), AGPL-3.0 + CC-BY-4.0 + DCO | Done |
+| 0003 | Language and stack | Accepted on 2026-11-18 ([adr/0003](adr/0003-language-and-stack.md)) | **Yes** (team know-how) |
+| 0004 | Web/agent privilege separation | Proposed | No |
+| 0005 | Web server | Accepted on 2026-11-18 ([adr/0005](adr/0005-web-server.md)), nginx | No, S3 is done |
+| 0006 | State store and reconciler | Proposed | No |
+| 0007 | Isolation model per site | Proposed | No |
+| 0008 | Backups with restic | Proposed | No |
+| 0009 | Target platforms and packaging | Proposed | Partly |
+| 0010 | Target audience and v1 scope | Proposed (draft: [adr/0010](adr/0010-target-audience-and-v1-scope.md)) | **Yes** |
+| 0011 | Name and trademark | Accepted (subject to trademark search) | Done, trademark open |
+| 0012 | Language of code and documentation | Proposed | Yes, briefly |
+| 0013 | Business model and governance | Proposed (draft: [adr/0013](adr/0013-business-model-and-governance.md)) | **Yes** |
+| 0014 | Name of the CLI tool | Proposed | Yes, briefly |
+| 0015 | Per-site resource limits | Proposed (draft: [adr/0015](adr/0015-per-site-resource-limits.md)) | **Yes** (priority of disk quota) |
+| 0016 | Per-site storage location (storage pools) | Proposed (draft: [adr/0016](adr/0016-per-site-storage-location.md)) | **Yes** |
+| 0017 | CloudPanel import as migration, presets | Accepted on 2026-11-18 ([adr/0017](adr/0017-cloudpanel-import-and-presets.md)) | Done |
+| 0018 | Public REST API | Accepted on 2026-11-18 ([adr/0018](adr/0018-public-rest-api.md)) | Done |
+| 0019 | PHP package source and multiple PHP versions | Accepted (Kim, 2026-11-18, [adr/0019](adr/0019-php-package-source-and-versions.md)) | **Yes** |
+| 0020 | nginx package source and Brotli | Accepted on 2026-11-18 ([adr/0020](adr/0020-nginx-package-source-and-brotli.md)) | Done |
+| 0021 | Brute-force and intrusion protection | Accepted on 2026-11-18 ([adr/0021](adr/0021-brute-force-and-intrusion-protection.md)) | Done |
+| 0022 | Metrics, logs and tracing | Accepted on 2026-11-18 ([adr/0022](adr/0022-metrics-and-tracing.md)) | Done |
+| 0023 | HTTPS for the panel | Accepted on 2026-11-18 ([adr/0023](adr/0023-panel-https.md)) | Done |
 
 ---
 
-## ADR-0001 Clean-room und Umgang mit Referenz-Repos
+## ADR-0001 Clean-room and handling of reference repositories
 
-**Kontext.** `cloudpanel-ce` enthält keinen Quellcode. `vhost-templates` und `docs` haben keine LICENSE-Datei und sind damit urheberrechtlich geschützt. `dploy` ist MIT, `clp-wp-varnish-cache` GPLv3.
+**Context.** `cloudpanel-ce` contains no source code. `vhost-templates` and `docs` have no LICENSE file and are therefore protected by copyright. `dploy` is MIT, `clp-wp-varnish-cache` is GPLv3.
 
-**Entscheidung (Vorschlag).**
+**Decision (proposal).**
 
-- CloudPanel wird als **Funktionsreferenz** genutzt, nicht als Textvorlage. Keine Vhost-Templates, Doku-Texte, Screenshots oder UI-Texte übernehmen.
-- Eigene Templates und Texte schreiben. Wer sie schreibt, sollte nicht 1:1 aus den Referenz-Dateien abschreiben, die Struktur ergibt sich aus der Nginx-Dokumentation und den Anwendungen selbst.
-- MIT-Code (`dploy`) darf mit Lizenzhinweis verwendet werden. GPLv3-Code nur, wenn ADR-0002 das erlaubt.
-- Der Name „CloudPanel“ wird nur nominativ-beschreibend im Vergleich genutzt („Alternative zu CloudPanel“).
-- Rechtsprüfung durch eine Anwältin oder einen Anwalt vor der Veröffentlichung empfohlen. Das hier ist keine Rechtsberatung.
+- CloudPanel is used as a **functional reference**, not as a text template. Do not take over vhost templates, documentation texts, screenshots or UI texts.
+- Write our own templates and texts. Whoever writes them should not copy 1:1 from the reference files, the structure follows from the Nginx documentation and the applications themselves.
+- MIT code (`dploy`) may be used with its license notice. GPLv3 code only if ADR-0002 allows it.
+- The name "CloudPanel" is only used nominatively and descriptively in comparisons ("alternative to CloudPanel").
+- A legal review by a lawyer before publication is recommended. This is not legal advice.
 
-**Konsequenz.** Etwas mehr Aufwand, dafür keine Altlasten.
+**Consequence.** Somewhat more effort, but no legacy burden.
 
-## ADR-0002 Lizenz des Projekts
+## ADR-0002 Project license
 
-**Vollständiger Text (Englisch, Status Accepted am 2026-11-18):** [adr/0002-license.md](adr/0002-license.md). Entschieden: Code unter AGPL-3.0-or-later, Doku und Übersetzungen unter CC-BY-4.0, Beiträge mit DCO statt CLA, kein Open Core. Nächster Schritt: `LICENSE`, Doku-Lizenz und DCO-Hinweis ins Repo. Vor jeder Veröffentlichung bleibt die Eigenprüfung (Lizenzen der Abhängigkeiten, Name und Marke) Pflicht. Keine Rechtsberatung.
+**Full text (status Accepted on 2026-11-18):** [adr/0002-license.md](adr/0002-license.md). Decided: code under AGPL-3.0-or-later, documentation and translations under CC-BY-4.0, contributions with DCO instead of CLA, no open core. Next step: `LICENSE`, documentation license and DCO notice into the repository. Before every publication, the own review (licenses of dependencies, name and trademark) stays mandatory. Not legal advice.
 
-Ursprünglicher Vergleich:
+Original comparison:
 
 | Option | Pro | Contra |
 |--------|-----|--------|
-| **Apache-2.0** | Maximale Verbreitung, Patentklausel, Firmen nutzen es ohne Sorge | Forks dürfen proprietär werden |
-| **AGPL-3.0** | Schützt vor proprietären SaaS-Forks, GPL-kompatibel (Varnish-Plugin nutzbar) | Manche Firmen meiden AGPL, Beitragende zögern |
-| **GPL-3.0** | Klassisch für Panels (HestiaCP), Copyleft | Schützt nicht vor SaaS-Nutzung ohne Quellfreigabe |
-| **Open Core** (z. B. Apache + proprietäre Pro-Module) | Finanzierungsmodell | Braucht CLA, Community-Misstrauen, doppelte Pflege |
+| **Apache-2.0** | Maximum adoption, patent clause, companies use it without worry | Forks may become proprietary |
+| **AGPL-3.0** | Protects against proprietary SaaS forks, GPL-compatible (Varnish plugin usable) | Some companies avoid AGPL, contributors hesitate |
+| **GPL-3.0** | Classic for panels (HestiaCP), copyleft | Does not protect against SaaS use without releasing the source |
+| **Open core** (for example Apache + proprietary pro modules) | Funding model | Needs a CLA, community distrust, double maintenance |
 
-**Empfehlung:** Apache-2.0 für die Verbreitung, wenn das Ziel Community ist. AGPL-3.0, wenn der Schutz vor einem „Hoster klont und verkauft es“ wichtiger ist. Die Entscheidung hängt an ADR-0013. Vor der ersten Zeile veröffentlichtem Code festlegen, nachträgliche Änderung ist mit Beitragenden mühsam. Falls Dual-Licensing denkbar ist, **von Anfang an CLA statt DCO** verwenden.
+**Recommendation:** Apache-2.0 for adoption, if the goal is community. AGPL-3.0, if protection against "a hosting provider clones it and sells it" matters more. The decision depends on ADR-0013. Decide before the first line of published code, changing it later is painful with contributors. If dual licensing is conceivable, use **a CLA instead of DCO from the start**.
 
-## ADR-0003 Sprache und Stack
+## ADR-0003 Language and stack
 
-**Vollständiger Text (Englisch, Status Accepted am 2026-11-18):** [adr/0003-language-and-stack.md](adr/0003-language-and-stack.md). Kurzfassung: Go bestätigt; Spikes S1 und S4 haben nichts widerlegt. S2 und S7 stehen noch aus, ein Scheitern von S2 öffnet die ADR wieder, S7 darf das Frontend-Framework ändern.
+**Full text (status Accepted on 2026-11-18):** [adr/0003-language-and-stack.md](adr/0003-language-and-stack.md). Summary: Go confirmed; spikes S1 and S4 did not disprove anything. S2 and S7 are still pending, a failure of S2 reopens the ADR, S7 may change the frontend framework.
 
-Ursprünglicher Vorschlag:
+Original proposal:
 
-**Vorschlag:** Go für Backend, Agent und CLI. SPA (Svelte oder React) eingebettet. SQLite. Begründung: ein statisches Binary, kleiner Footprint, einfache arm64-Builds, gute Standardbibliothek für Prozesse, Dateien und TLS, speichersicher gegenüber C/C++ und PHP-Fallstricken.
+**Proposal:** Go for backend, agent and CLI. SPA (Svelte or React) embedded. SQLite. Rationale: one static binary, small footprint, easy arm64 builds, good standard library for processes, files and TLS, memory-safe compared with C/C++ and PHP pitfalls.
 
-**Alternativen:** Rust (höhere Sicherheitsgarantien, langsamerer Start, kleinerer Kontributor-Pool), PHP/Symfony (wohl CloudPanels Basis, großer Kontributor-Pool in der Hosting-Szene, aber Laufzeit und Packaging schwerer), Python (viele Systembibliotheken, aber Laufzeitabhängigkeit).
+**Alternatives:** Rust (stronger safety guarantees, slower start, smaller contributor pool), PHP/Symfony (probably CloudPanel's basis, large contributor pool in the hosting scene, but runtime and packaging are heavier), Python (many system libraries, but a runtime dependency).
 
-**Zu entscheiden von dir:** Womit arbeitet dein Team am sichersten? Ein gut beherrschter Stack schlägt den „idealen“. Wenn niemand Go kann, ist das ein echter Kostenpunkt.
+**For you to decide:** What does your team work with most safely? A well-mastered stack beats the "ideal" one. If nobody knows Go, that is a real cost.
 
-## ADR-0004 Rechtetrennung Web/Agent
+## ADR-0004 Web/agent privilege separation
 
-Siehe [Architektur 4.2](04-architektur.md). Zwei Prozesse, typisierte RPC über Unix-Socket, keine Shell, keine allgemeine Exec-Schnittstelle.
+See [architecture 4.2](04-architecture.md). Two processes, typed RPC over a Unix socket, no shell, no general exec interface.
 
-**Konsequenz:** Mehr Anfangsaufwand je Operation (Schema, Validator, Handler). Dafür deutlich kleinere Angriffsfläche. Boilerplate wird durch Codegen aus einem Schema reduziert (Spike S1).
+**Consequence:** More initial effort per operation (schema, validator, handler). In return a much smaller attack surface. Boilerplate is reduced through codegen from a schema (spike S1).
 
-## ADR-0005 Webserver
+## ADR-0005 Web server
 
-**Vollständiger Text (Englisch, Status Accepted am 2026-11-18):** [adr/0005-web-server.md](adr/0005-web-server.md). Kurzfassung: nginx (nginx.org stable) hinter dem `WebServerDriver`-Interface, Kim hat sich nach Spike S3 für nginx entschieden. Gründe: eingebauter FastCGI-Cache, kleinerer Footprint, größte Rezeptbasis. Caddy bleibt als späterer zweiter Treiber möglich, LiteSpeed wird für v1 nicht genommen (proprietär bzw. eigene Konfigurationswelt).
+**Full text (status Accepted on 2026-11-18):** [adr/0005-web-server.md](adr/0005-web-server.md). Summary: nginx (nginx.org stable) behind the `WebServerDriver` interface, Kim decided for nginx after spike S3. Reasons: built-in FastCGI cache, smaller footprint, largest base of recipes. Caddy remains possible as a later second driver, LiteSpeed is not chosen for v1 (proprietary or its own configuration world).
 
-## ADR-0006 Zustandsspeicher und Reconciler
+## ADR-0006 State store and reconciler
 
-SQLite (WAL) als Quelle der Wahrheit, generierte Configs in versionierten Generationen, Validierung vor Umschaltung, Rollback bei Fehler, Drift-Erkennung. Siehe [Architektur 4.3](04-architektur.md).
+SQLite (WAL) as the source of truth, generated configs in versioned generations, validation before switching, rollback on error, drift detection. See [architecture 4.3](04-architecture.md).
 
-**Offen:** Wenn Multi-Server früh kommt, ist PostgreSQL passender. Nach 1.0 neu bewerten, nicht vorher.
+**Open:** If multi-server comes early, PostgreSQL fits better. Re-evaluate after 1.0, not before.
 
-## ADR-0007 Isolationsmodell pro Site
+## ADR-0007 Isolation model per site
 
-Linux-User je Site, FPM-Pool über Unix-Socket, systemd-Sandbox, cgroup-Limits. Container (Podman/Docker) als **optionaler** Site-Typ später. Begründung: gleiche Isolationsstärke wie etablierte Panels, aber ohne Container-Runtime als Pflichtabhängigkeit und mit wenig RAM.
+Linux user per site, FPM pool over a Unix socket, systemd sandbox, cgroup limits. Containers (Podman/Docker) as an **optional** site type later. Rationale: the same isolation strength as established panels, but without a container runtime as a mandatory dependency and with little RAM.
 
-## ADR-0008 Backups mit restic
+## ADR-0008 Backups with restic
 
-Restic als Engine (Verschlüsselung, Deduplizierung, viele Backends, auch über Rclone). Datenbanken über konsistente Dumps (MariaDB: `mariadb-dump --single-transaction` bzw. `mariabackup`, PostgreSQL: `pg_dump`). Restore-Test als Feature. Alternative Borg ist ebenfalls gut, hat aber weniger Backends.
+Restic as the engine (encryption, deduplication, many backends, also through Rclone). Databases through consistent dumps (MariaDB: `mariadb-dump --single-transaction` or `mariabackup`, PostgreSQL: `pg_dump`). Restore test as a feature. The alternative Borg is good too, but has fewer backends.
 
-## ADR-0009 Zielplattformen und Paketierung
+## ADR-0009 Target platforms and packaging
 
-Start: **Debian 13 und Ubuntu 26.04** (Ubuntu 24.04 entfällt für v1 wegen ADR-0020; früher: Ubuntu 24.04 und Debian 13, plus 22.04/Debian 12), **amd64 und arm64**. Ubuntu 26.04 nachziehen, wenn die Abhängigkeiten stabil sind. Keine EOL-Systeme (CloudPanel unterstützt noch Debian 11, das wir bewusst nicht übernehmen). Distribution per signiertem APT-Repo und `.deb`.
+Start: **Debian 13 and Ubuntu 26.04** (Ubuntu 24.04 is dropped for v1 because of ADR-0020; previously: Ubuntu 24.04 and Debian 13, plus 22.04/Debian 12), **amd64 and arm64**. Add Ubuntu 26.04 once the dependencies are stable. No EOL systems (CloudPanel still supports Debian 11, which we deliberately do not take over). Distribution through a signed APT repository and `.deb`.
 
-**Nur frische Server (Kim, 2026-11-17):** Hostashi wird immer auf einem frisch installierten Server eingerichtet, kein Einbau in gewachsene Systeme. Empfohlenes Image: **Debian 13**, zweite unterstützte Option: **Ubuntu 24.04 LTS**. Ubuntu 26.04 LTS wird nachgezogen, sobald die Abhängigkeiten und Spikes S5 und S8 darauf laufen. Die Ersteinrichtung soll möglichst einfach und automatisiert sein, zum Beispiel ein Einzeiler oder ein cloud-init-Skript beim Bestellen (Spike S5).
+**Fresh servers only (Kim, 2026-11-17):** Hostashi is always set up on a freshly installed server, never added to grown systems. Recommended image: **Debian 13**, second supported option: **Ubuntu 24.04 LTS**. Ubuntu 26.04 LTS is added once the dependencies and spikes S5 and S8 run on it. The initial setup should be as simple and automated as possible, for example a one-liner or a cloud-init script when ordering the server (spike S5).
 
-Begründung (Allgemeinwissen, ungeprüft): Debian ist konservativer, hat weniger Umbrüche zwischen Paketversionen und keine zusätzlichen Dienste wie snap oder Werbehinweise des Herstellers. Das passt zu einem Server, der lange unauffällig laufen soll. Ubuntu LTS ist ebenfalls stabil und bei Anbietern weit verbreitet. Gegen Ubuntu 26.04 als erste Wahl spricht nur, dass es neu ist. Mehrere PHP-Versionen brauchen auf beiden Systemen ein zusätzliches Paket-Repository (zu prüfen). Offen: Quota-Module auf den Kernels beider Systeme, wird in Spike S8 geprüft (siehe [ADR-0015](adr/0015-per-site-resource-limits.md)).
+Rationale (general knowledge, unverified): Debian is more conservative, has fewer breaks between package versions and no additional services such as snap or vendor advertising notices. That fits a server that should run unobtrusively for a long time. Ubuntu LTS is stable too and widely used by providers. The only argument against Ubuntu 26.04 as the first choice is that it is new. Multiple PHP versions need an additional package repository on both systems (to be checked). Open: quota modules on the kernels of both systems, checked in spike S8 (see [ADR-0015](adr/0015-per-site-resource-limits.md)).
 
-**Zu entscheiden:** Wie weit zurück sollen wir unterstützen? Jede zusätzliche Version vergrößert die Matrix. Mit der Regel „nur frische Server“ spricht vieles dafür, 22.04 und Debian 12 nicht aufzunehmen.
+**To decide:** How far back should we support? Every additional version enlarges the matrix. With the "fresh servers only" rule, there is a strong case for not including 22.04 and Debian 12.
 
-## ADR-0010 Zielgruppe und Scope v1
+## ADR-0010 Target audience and v1 scope
 
-**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0010-target-audience-and-v1-scope.md](adr/0010-target-audience-and-v1-scope.md). Kurzfassung: Option A (Einzelserver für Entwickler und Agenturen) mit Leitplanken.
+**Full draft (status Proposed):** [adr/0010-target-audience-and-v1-scope.md](adr/0010-target-audience-and-v1-scope.md). Summary: option A (single server for developers and agencies) with guardrails.
 
-Ursprünglicher Vorschlag: Einzelserver für Entwickler und Agenturen. Reseller, Mail, DNS-Server und Multi-Server sind Nicht-Ziele für v1 (siehe [Vision](02-vision-scope.md)).
+Original proposal: single server for developers and agencies. Resellers, mail, DNS server and multi-server are non-goals for v1 (see [vision](02-vision-scope.md)).
 
-## ADR-0011 Name und Marke
+## ADR-0011 Name and trademark
 
-**Entscheidung (17.11.2026):** Das Projekt heißt **Hostashi**, ein Kunstwort aus „Host“ und einem Sushi-Anklang.
+**Decision (2026-11-17):** The project is called **Hostashi**, an invented word from "host" and a hint of sushi.
 
-**Verworfen:**
+**Rejected:**
 
-- *Hostwerk*: Der Name wird bereits häufig genutzt, auch als Marke und als `.io`- und `.de`-Domain.
-- Weitere Kandidaten, die geprüft und nicht gewählt wurden: Maki-Namen, Werft- und Küstenbegriffe, Nautik-Begriffe (Skerry, Keelson …), Hostwarte, Hostwacht, Hostmill, Hostkeep, Bentowerk, Servishi u. a.
+- *Hostwerk*: The name is already widely used, also as a trademark and as a `.io` and `.de` domain.
+- Other candidates that were checked and not chosen: Maki names, shipyard and coastal terms, nautical terms (Skerry, Keelson …), Hostwarte, Hostwacht, Hostmill, Hostkeep, Bentowerk, Servishi and others.
 
-**Stand der Prüfung (17.11.2026):**
+**State of the check (2026-11-17):**
 
-- Domains `hostashi.de`, `.dev`, `.com`, `.io` waren laut RDAP-Abfrage **nicht registriert**.
-- Die Websuche (US, standard) fand keinen Treffer zum Namen, nur Ähnliches (Hisashi als Vorname, Hondashi als Würzmittel). Das ist kein Beweis, die Suche ist unscharf.
+- According to an RDAP query, the domains `hostashi.de`, `.dev`, `.com`, `.io` were **not registered**.
+- The web search (US, standard) found no hit for the name, only similar ones (Hisashi as a first name, Hondashi as a seasoning). That is no proof, the search is fuzzy.
 
-**Noch zu tun, bevor irgendetwas veröffentlicht wird:**
+**Still to do before anything is published:**
 
-1. Domains sichern (`.de`, `.dev`, `.com`, `.io`), solange sie frei sind.
-2. Markenrecherche bei DPMA, EUIPO und USPTO (Klassen 9 und 42), idealerweise mit anwaltlicher Prüfung.
-3. GitHub-Organisation und Paketnamen (apt, npm, Go-Modul) prüfen, das war in der Recherche nicht erreichbar.
-4. Klang und Bedeutung in den wichtigsten Zielsprachen prüfen.
+1. Secure the domains (`.de`, `.dev`, `.com`, `.io`) while they are free.
+2. Trademark search at DPMA, EUIPO and USPTO (classes 9 and 42), ideally with a review by a lawyer.
+3. Check the GitHub organization and package names (apt, npm, Go module), this was not reachable during the research.
+4. Check sound and meaning in the most important target languages.
 
-**Stand 17.11.2026 (Angaben von Kim, nicht von Claude geprüft):**
+**State 2026-11-17 (information from Kim, not checked by Claude):**
 
-- `hostashi.de` ist von Kim registriert. `.dev`, `.com` und `.io` bleiben vorerst unregistriert.
-- Eigene Markenrecherche (Anleitung: `markenrecherche-anleitung.md` im Projektordner): keine Treffer. Das ist kein Beweis und ersetzt keine anwaltliche Prüfung.
-- Das Repo bleibt in der GitHub-Organisation `maki-it`, es gibt keine eigene Organisation für Hostashi.
+- `hostashi.de` is registered by Kim. `.dev`, `.com` and `.io` stay unregistered for now.
+- Own trademark search (guide: `markenrecherche-anleitung.md` in the project folder): no hits. That is no proof and does not replace a review by a lawyer.
+- The repository stays in the GitHub organization `maki-it`, there is no separate organization for Hostashi.
 
-**Risiko:** Klingt der Name an „Hostinger“ oder andere „Host…“-Marken an, kann das im deutschen Markt zu Verwechslungsgefahr führen. Das ist ein Punkt für die Markenrecherche, nicht für diese Entscheidung.
+**Risk:** If the name sounds like "Hostinger" or other "Host…" trademarks, that may cause a likelihood of confusion in the German market. That is a point for the trademark search, not for this decision.
 
-## ADR-0012 Sprache von Code und Doku
+## ADR-0012 Language of code and documentation
 
-Vorschlag: **Englisch** für Code, Kommentare, Issues, öffentliche Doku und UI-Standardsprache. Deutsch als vollständig gepflegte UI-Übersetzung. Diese Planungsdokumente sind deutsch, weil sie intern sind. Für die Veröffentlichung werden sie ins Englische übertragen.
+Proposal: **English** for code, comments, issues, public documentation and the default UI language. German as a fully maintained UI translation. These planning documents were written in German because they were internal. For publication they are translated into English (done on 2026-11-18).
 
-## ADR-0013 Geschäftsmodell und Governance
+## ADR-0013 Business model and governance
 
-**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0013-business-model-and-governance.md](adr/0013-business-model-and-governance.md). Kurzfassung: Hybrid aus eigenem Einsatz, Community-Projekt mit Sponsoring und bezahlten Services, ohne Open Core in v1, DCO statt CLA.
+**Full draft (status Proposed):** [adr/0013-business-model-and-governance.md](adr/0013-business-model-and-governance.md). Summary: a hybrid of own use, a community project with sponsoring and paid services, without open core in v1, DCO instead of CLA.
 
-Ursprüngliche Optionen:
+Original options:
 
-Optionen: (a) reines Community-Projekt mit Spenden/Sponsoring, (b) kostenlos plus bezahlter Support und Hosting-Angebote, (c) Open Core mit Pro-Funktionen (z. B. Multi-Server, Reseller, SSO), (d) internes Werkzeug deiner Firma, das du später öffnest. Das bestimmt Lizenz (ADR-0002), Beitragsregeln (CLA/DCO), Roadmap-Priorität und Finanzierung des Pentests.
+Options: (a) pure community project with donations/sponsoring, (b) free plus paid support and hosting offers, (c) open core with pro features (for example multi-server, reseller, SSO), (d) an internal tool of your company that you open up later. This determines the license (ADR-0002), contribution rules (CLA/DCO), roadmap priority and funding of the pentest.
 
-## ADR-0014 Name des CLI-Werkzeugs
+## ADR-0014 Name of the CLI tool
 
-**Vorschlag:** Binary, Paket und Dienste heißen **`hostashi`**. Kurzform als optionaler Alias (Symlink): **`ashi`**.
+**Proposal:** Binary, package and services are called **`hostashi`**. Short form as an optional alias (symlink): **`ashi`**.
 
 ```bash
 hostashi site add example.com --type php --php 8.4
-ashi site add example.com --type php --php 8.4   # gleiches Programm
+ashi site add example.com --type php --php 8.4   # same program
 ```
 
-**Begründung:** Ein Name für alles (Binary, `.deb`, systemd-Units `hostashi.service` und `hostashi-agent.service`, Konfig unter `/etc/hostashi`) vermeidet Verwirrung. Der Alias spart Tipparbeit. Kein `…ctl`-Suffix wie bei `clpctl`, weil das Tool auch den Server (`hostashi serve`) und den Agent (`hostashi agent`) startet.
+**Rationale:** One name for everything (binary, `.deb`, systemd units `hostashi.service` and `hostashi-agent.service`, config under `/etc/hostashi`) avoids confusion. The alias saves typing. No `…ctl` suffix like `clpctl`, because the tool also starts the server (`hostashi serve`) and the agent (`hostashi agent`).
 
-**Verworfen:** `hostctl` (meines Wissens existiert ein bekanntes Tool gleichen Namens für die hosts-Datei), `hashi` (Verwechslung mit HashiCorp), `hsi` (Xilinx-Werkzeug), `hostashictl` (zu lang).
+**Rejected:** `hostctl` (as far as I know, a well-known tool of the same name exists for the hosts file), `hashi` (confusion with HashiCorp), `hsi` (Xilinx tool), `hostashictl` (too long).
 
-**Offen:** Ob `ashi` oder `hostashi` auf Debian/Ubuntu schon als Paket oder Programm existiert, ist **nicht geprüft** (im Container waren keine Paketlisten verfügbar). Vor dem ersten Release gegen die Paketquellen von Debian und Ubuntu abgleichen.
+**Open:** Whether `ashi` or `hostashi` already exists as a package or program on Debian/Ubuntu is **not checked** (no package lists were available in the container). Check against the Debian and Ubuntu package sources before the first release.
 
-## ADR-0015 Ressourcenlimits pro Site
+## ADR-0015 Per-site resource limits
 
-**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0015-per-site-resource-limits.md](adr/0015-per-site-resource-limits.md). Kurzfassung: Speicherplatz je Site per Dateisystem-Quota (bevorzugt Projekt-Quota auf ext4/XFS), CPU/RAM/Prozesse über ein systemd-Slice je Site mit eigenem PHP-FPM-Master, `pm=ondemand` als Standard, Datenbank nur mit Verbindungslimit und Größenwarnung (MariaDB hat keine Größenquota), Nginx-Rate-Limits optional, Traffic-Kontingente später. Disk-Quota soll von P2 auf P1 hochgestuft werden. Alle Zahlen und Mechanismen sind unverifiziert, Spike S8 (Quota auf dem echten Server, RAM-Messung) klärt das.
+**Full draft (status Proposed):** [adr/0015-per-site-resource-limits.md](adr/0015-per-site-resource-limits.md). Summary: disk space per site through file system quota (preferably project quota on ext4/XFS), CPU/RAM/processes through one systemd slice per site with its own PHP-FPM master, `pm=ondemand` as the default, databases only with a connection limit and a size warning (MariaDB has no size quota), Nginx rate limits optional, traffic allowances later. Disk quota should be raised from P2 to P1. All numbers and mechanisms are unverified, spike S8 (quota on the real server, RAM measurement) clarifies this.
 
-## ADR-0016 Speicherort pro Site (Storage-Pools)
+## ADR-0016 Per-site storage location (storage pools)
 
-**Vollständiger Entwurf (Englisch, Status Proposed):** [adr/0016-per-site-storage-location.md](adr/0016-per-site-storage-location.md). Kurzfassung: Der Speicherort ist wählbar über benannte **Storage-Pools** (zum Beispiel ein zweites Volume), nie über einen freien Pfad aus der API. Der Agent prüft Mountpoint, Marker-Datei und Quota je Pool, damit ein nicht eingehängtes Volume nicht die Root-Platte füllt. Das Home-Verzeichnis der Site liegt direkt im Pool, ohne Symlinks. Hostashi formatiert oder partitioniert keine Platten. Umzug zwischen Pools ist ein späterer, eigener Vorgang. Alle Mechanismen sind unverifiziert, Spike S9 klärt das.
+**Full draft (status Proposed):** [adr/0016-per-site-storage-location.md](adr/0016-per-site-storage-location.md). Summary: the storage location can be chosen through named **storage pools** (for example a second volume), never through a free path from the API. The agent checks mount point, marker file and quota per pool, so that an unmounted volume does not fill the root disk. The site's home directory lives directly in the pool, without symlinks. Hostashi does not format or partition disks. Moving between pools is a later, separate operation. All mechanisms are unverified, spike S9 clarifies this.
 
-## ADR-0017 CloudPanel-Import als Migration, Presets
+## ADR-0017 CloudPanel import as migration, presets
 
-**Vollständiger Text (Englisch, Status Accepted am 2026-11-18):** [adr/0017-cloudpanel-import-and-presets.md](adr/0017-cloudpanel-import-and-presets.md). Kurzfassung: Grundlage ist Spike S6 mit zwei Läufen auf `web2`, Ergebnis 0 % sauber und 90 % übernehmbar. Kim hat entschieden, dass eine Site als übernommen gilt, wenn kein Blocker vorliegt und jede eigene Regel einmal geprüft wird. Der Importer ist ein **Migrationswerkzeug**: Er liest den alten Server nur lesend, und der neue Server zieht die Daten. Die wiederkehrenden Regeln werden **nicht 1:1 übernommen**, sondern als eigene, typisierte Presets neu entworfen. Je Muster ist bewertet, ob es übernommen, verbessert oder weggelassen wird; zum Beispiel werden Security-Header neu gebaut und `if`-Weiterleitungen werden typisierte Redirects. Kims Vorgaben vom 2026-11-18: PageSpeed fällt weg, Varnish bleibt und kommt zusammen mit dem Importer (Release 1.0), Presets sind je Site-Typ aktiv (WordPress, TYPO3, generisches PHP, Static usw.). Entschieden (Kim, 2026-11-18): Der Start erfolgt auf einem frischen Server, der alte CloudPanel-Server wird nach der Migration abgeschaltet. Eigene Snippets werden nach einmaliger Prüfung unverändert übernommen (Kim, 2026-11-18). HTTP/3 und Kompression sind standardmäßig an, Kim bevorzugt Brotli; der nginx.org-Standardbuild hat aber kein Brotli, daher bis zu einem Spike (S11, Vorschlag) zunächst gzip. Kim hat die Standard-Matrix je Site-Typ bestätigt (2026-11-18). Spike S11 (2026-11-18): Für die nginx.org-Builds gibt es kein Brotli-Modul, die Distro-Module passen nur zu Debians und Ubuntus eigenem nginx. Empfehlung: gzip als Standard, Brotli später ([Bericht](../spike/s11-brotli/REPORT.md)). Kim entscheidet.
+**Full text (status Accepted on 2026-11-18):** [adr/0017-cloudpanel-import-and-presets.md](adr/0017-cloudpanel-import-and-presets.md). Summary: the basis is spike S6 with two runs on `web2`, result 0 % clean and 90 % adoptable. Kim decided that a site counts as adopted if there is no blocker and every custom rule is reviewed once. The importer is a **migration tool**: it reads the old server read-only, and the new server pulls the data. The recurring rules are **not taken over 1:1**, but redesigned as our own typed presets. For each pattern it is assessed whether it is taken over, improved or dropped; for example, security headers are rebuilt and `if` redirects become typed redirects. Kim's requirements from 2026-11-18: PageSpeed is dropped, Varnish stays and comes together with the importer (release 1.0), presets are active per site type (WordPress, TYPO3, generic PHP, static and so on). Decided (Kim, 2026-11-18): the start happens on a fresh server, the old CloudPanel server is switched off after the migration. Custom snippets are taken over unchanged after a one-time review (Kim, 2026-11-18). HTTP/3 and compression are on by default, Kim prefers Brotli; the nginx.org default build has no Brotli, however, so gzip comes first until a spike (S11, proposal). Kim confirmed the default matrix per site type (2026-11-18). Spike S11 (2026-11-18): there is no Brotli module for the nginx.org builds, the distribution modules only fit Debian's and Ubuntu's own nginx. Recommendation: gzip as the default, Brotli later ([report](../spike/s11-brotli/REPORT.md)). Kim decides.
 
-## ADR-0018 Öffentliche REST-API
+## ADR-0018 Public REST API
 
-**Vollständiger Text (Englisch, Status Accepted am 2026-11-18):** [adr/0018-public-rest-api.md](adr/0018-public-rest-api.md). Kurzfassung: REST mit OpenAPI 3.1 als Vertrag, **API-first**: Jede Funktion der UI läuft über einen dokumentierten Endpunkt, UI und CLI sind Clients derselben API. Pfad `/api/v1/`, ab 1.0 nur kompatible Änderungen. Ressourcen über feste IDs statt Domains. Schreibzugriffe ändern den Soll-Zustand, lange Vorgänge laufen als Job mit SSE. API-Tokens mit Ablaufdatum und Scopes (`resource:action`, optional auf einzelne Sites begrenzt); jede Anfrage prüft Scope, Rolle und Besitz. Die API läuft im Web-Prozess ohne Root und nutzt nur typisierte Agent-Operationen. Benannter Konflikt: eigene Nginx-Snippets sind Freitext und brauchen deshalb einen eigenen Hochrisiko-Scope. Beispiel im Entwurf: Wartungs- und Parkseiten per API schalten. Entschieden (Kim, 2026-11-18): Die API läuft unter der Adresse des Panels, mit optionaler IP-Freigabeliste für Token-Zugriffe. Entschieden (Kim, 2026-11-18): Tokens sind standardmäßig höchstens 365 Tage gültig, unbegrenzte Tokens sind aber einfach anlegbar. Benannter Konflikt: Ein Token ohne Ablauf ist ein dauerhaftes Geheimnis; abgemildert durch Hash-Speicherung, Scopes, IP-Freigabeliste, Audit-Log, Widerruf per Klick und Anzeige „zuletzt benutzt“.
+**Full text (status Accepted on 2026-11-18):** [adr/0018-public-rest-api.md](adr/0018-public-rest-api.md). Summary: REST with OpenAPI 3.1 as the contract, **API-first**: every UI feature goes through a documented endpoint, UI and CLI are clients of the same API. Path `/api/v1/`, only compatible changes from 1.0 on. Resources through fixed IDs instead of domains. Writes change the desired state, long operations run as a job with SSE. API tokens with expiry date and scopes (`resource:action`, optionally limited to individual sites); every request checks scope, role and ownership. The API runs in the web process without root and only uses typed agent operations. Named conflict: custom Nginx snippets are free text and therefore need their own high-risk scope. Example in the draft: switching maintenance and parking pages through the API. Decided (Kim, 2026-11-18): the API runs under the panel's address, with an optional IP allowlist for token access. Decided (Kim, 2026-11-18): tokens are valid for at most 365 days by default, but unlimited tokens are easy to create. Named conflict: a token without expiry is a permanent secret; mitigated by hash storage, scopes, IP allowlist, audit log, revocation with one click and a "last used" display.
 
 ---
 
-# Offene Fragen an dich
+# Open questions for you
 
-1. **Wofür ist das Projekt gedacht?** Eigener Bedarf (Hosting für eigene Kunden), öffentliches Open-Source-Projekt, kommerzielles Produkt oder eine Mischung? Das entscheidet Lizenz, Geschäftsmodell und Tempo.
-2. **Wie groß ist das Team, und welche Sprachen beherrscht es?** Davon hängt ab, ob Go sinnvoll ist oder ein anderer Stack besser passt.
-3. **Lizenz:** Erledigt, siehe ADR-0002 (AGPL-3.0, CC-BY-4.0 für Doku, DCO).
-4. **Name:** Erledigt, siehe ADR-0011. Offen sind nur Domains und Markenrecherche.
-5. **Scope v1:** Einzelserver-Panel für Devs/Agenturen, oder von Anfang an Reseller/Multi-Server?
-6. **Wo soll das Repo liegen?** GitHub (Sichtbarkeit, Beiträge) oder dein eigener Git-Server (`git.prod.maki-it.de`)? Dort kann ich es auf Wunsch anlegen. Ich habe das noch nicht getan.
-7. **Integrationen:** Sind Hetzner (Cloud, Robot, Storage Box), INWX-DNS und Lexware/Lexoffice-Anbindung für dich Pflicht oder nur nice-to-have? Das beeinflusst die Reihenfolge der Provider-Integrationen.
-8. **Budget:** Gibt es Budget für einen externen Pentest vor 1.0 und für Rechtsprüfung (Marke, Lizenz)?
+1. **What is the project for?** Own needs (hosting for your own clients), a public open source project, a commercial product or a mix? This decides license, business model and pace.
+2. **How large is the team, and which languages does it know?** This determines whether Go makes sense or another stack fits better.
+3. **License:** Done, see ADR-0002 (AGPL-3.0, CC-BY-4.0 for documentation, DCO).
+4. **Name:** Done, see ADR-0011. Only domains and trademark search are open.
+5. **Scope v1:** Single-server panel for developers/agencies, or reseller/multi-server from the start?
+6. **Where should the repository live?** GitHub (visibility, contributions) or your own Git server (`git.prod.maki-it.de`)? I can create it there if you want. I have not done that yet.
+7. **Integrations:** Are Hetzner (Cloud, Robot, Storage Box), INWX DNS and a Lexware/Lexoffice connection mandatory for you or only nice to have? This affects the order of the provider integrations.
+8. **Budget:** Is there a budget for an external pentest before 1.0 and for legal review (trademark, license)?
 
-## ADR-0019 PHP-Paketquelle und mehrere PHP-Versionen
+## ADR-0019 PHP package source and multiple PHP versions
 
-**Vollständiger Text (Englisch, Status Accepted):** [adr/0019-php-package-source-and-versions.md](adr/0019-php-package-source-and-versions.md). Kurzfassung: Kein eigener PHP-Fork (Kims Entscheidung), sondern offizielle Pakete. Weil Distros nur eine Version liefern (Debian 13: 8.4, Ubuntu 24.04: 8.3), die Sites aber unterschiedliche Versionen brauchen, ist die Empfehlung: Standard ist die Distro-Version, weitere Versionen kommen auf ausdrücklichen Wunsch über das Repository von sury.org (geprüft: PHP 5.6 bis 8.5 für amd64 und arm64 auf trixie und noble, im Test liefen 7.4, 8.1 und 8.4 parallel). Benannte Konflikte: Drittquelle mit Root-Installation, und alte Versionen sind unsicher, daher EOL-Warnung und Freigabeliste statt freier Paketnamen. Entschieden (Kim, 2026-11-18, nach Spike S10 angepasst): Standard sind PHP 8.3 bis 8.5, Legacy (nur auf ausdrücklichen Wunsch) 8.2, 8.1 und 7.4, ältere Versionen werden nicht angeboten. Spike S10 (2026-11-18): Mit einem Pin bleibt die Standardversion bei der Distro, weitere Versionen kommen von sury.org (Debian 13 und Ubuntu 24.04 getestet); ohne Pin würde die Standardversion beim nächsten Update still ersetzt. Nach dem offiziellen Release-Plan endet der Support für 8.2 am 2026-12-31, daher wird 8.2 gleich als Legacy geführt.
+**Full text (status Accepted):** [adr/0019-php-package-source-and-versions.md](adr/0019-php-package-source-and-versions.md). Summary: no PHP fork of our own (Kim's decision), but official packages. Because distributions ship only one version (Debian 13: 8.4, Ubuntu 24.04: 8.3), but sites need different versions, the recommendation is: the default is the distribution version, further versions come from the sury.org repository on explicit request (checked: PHP 5.6 to 8.5 for amd64 and arm64 on trixie and noble, in the test 7.4, 8.1 and 8.4 ran in parallel). Named conflicts: a third-party source with root installation, and old versions are insecure, hence an EOL warning and an allowlist instead of free package names. Decided (Kim, 2026-11-18, adjusted after spike S10): the default is PHP 8.3 to 8.5, legacy (only on explicit request) 8.2, 8.1 and 7.4, older versions are not offered. Spike S10 (2026-11-18): with a pin, the default version stays with the distribution, further versions come from sury.org (Debian 13 and Ubuntu 24.04 tested); without a pin, the default version would be replaced silently on the next update. According to the official release plan, support for 8.2 ends on 2026-12-31, so 8.2 is listed as legacy right away.
 
-## ADR-0020 nginx-Paketquelle und Brotli
+## ADR-0020 nginx package source and Brotli
 
-**Vollständiger Text (Englisch, Status Accepted am 2026-11-18):** [adr/0020-nginx-package-source-and-brotli.md](adr/0020-nginx-package-source-and-brotli.md). Kurzfassung: Kim will Brotli und HTTP/3 als Standard. Das nginx.org-Repository hat kein Brotli-Modul, die Brotli-Pakete der Distributionen passen nur zum nginx der jeweiligen Distribution (Spike S11). Geprüft in den Paketlisten und den Build-Regeln: Debian 13 (nginx 1.26.3) und Ubuntu 26.04 (nginx 1.28.3) haben HTTP/3 eingebaut und passende Brotli-Module, Ubuntu 24.04 (nginx 1.24) hat kein HTTP/3. Entschieden (Kim, 2026-11-18): nginx aus der Distribution samt Brotli-Modulen auf Debian 13 und Ubuntu 26.04, Ubuntu 24.04 entfällt für v1, unterschiedliche nginx-Versionen sind in Ordnung. Das ersetzt die Paketquelle aus ADR-0005 (nginx.org). Spike S12 (2026-11-18) hat in frischen Containern echte Anfragen über HTTP/2 und HTTP/3 mit Brotli, gzip und vorkomprimierten `.br`-Dateien auf beiden Distributionen bestätigt. Der Installer-Lauf auf Ubuntu 26.04 steht noch aus.
+**Full text (status Accepted on 2026-11-18):** [adr/0020-nginx-package-source-and-brotli.md](adr/0020-nginx-package-source-and-brotli.md). Summary: Kim wants Brotli and HTTP/3 as the default. The nginx.org repository has no Brotli module, the distributions' Brotli packages only fit the respective distribution's nginx (spike S11). Checked in the package lists and build rules: Debian 13 (nginx 1.26.3) and Ubuntu 26.04 (nginx 1.28.3) have HTTP/3 built in and matching Brotli modules, Ubuntu 24.04 (nginx 1.24) has no HTTP/3. Decided (Kim, 2026-11-18): nginx from the distribution with Brotli modules on Debian 13 and Ubuntu 26.04, Ubuntu 24.04 is dropped for v1, different nginx versions are fine. This replaces the package source from ADR-0005 (nginx.org). Spike S12 (2026-11-18) confirmed real requests over HTTP/2 and HTTP/3 with Brotli, gzip and precompressed `.br` files on both distributions in fresh containers. The installer run on Ubuntu 26.04 is still pending.
 
-## ADR-0021 Brute-Force- und Einbruchsschutz
+## ADR-0021 Brute-force and intrusion protection
 
-**Vollständiger Text (Englisch, Status Accepted am 2026-11-18):** [adr/0021](adr/0021-brute-force-and-intrusion-protection.md). Kurzfassung: Das Panel drosselt Logins schon selbst (geprüft im Code), schützt aber weder SSH noch die Sites und blockt nichts auf Netzebene. Empfehlung: fail2ban aus der Distribution ist in v1 standardmäßig an, mit den Jails `sshd`, `hostashi-panel` und `recidive`, Sperren über nftables, Loopback und die Admin-Freigabeliste werden nie gesperrt. Jails pro Site (etwa WordPress-Login) gibt es, sie sind aber standardmäßig aus. CrowdSec kommt frühestens später als Opt-in, weil es standardmäßig Angreifer-IPs an einen externen Dienst meldet. Folgen: Das Panel schreibt fehlgeschlagene Logins als strukturierte JSON-Zeile mit IP ins Journal (bisher nur ins Audit-Log in SQLite, geprüft), nginx bekommt Logs pro Site in einem Ordner, den die Site nicht beschreiben kann (bisher ein globales Log, geprüft), und der spätere Firewall-Reconciler darf die nftables-Tabelle von fail2ban nicht löschen. Benannter Konflikt: `fail2ban-client` braucht eine zweite `os/exec`-Ausnahme mit festen Argumenten. Entschieden (Kim, 2026-11-18): fail2ban ist standardmäßig an, der Installer fragt nicht. Die Site-Logs liegen unter `/var/log/nginx/sites/<site>/` und gehören root (Kim, 2026-11-18). Der Agent steuert fail2ban über `fail2ban-client` als zweite `os/exec`-Ausnahme mit festen Argumenten (Kim, 2026-11-18), eine eigene Sperr-Engine in Hostashi ist verworfen. Keine offenen Fragen mehr.
+**Full text (status Accepted on 2026-11-18):** [adr/0021](adr/0021-brute-force-and-intrusion-protection.md). Summary: the panel already throttles logins itself (checked in the code), but protects neither SSH nor the sites and blocks nothing at the network level. Recommendation: fail2ban from the distribution is on by default in v1, with the jails `sshd`, `hostashi-panel` and `recidive`, bans through nftables, loopback and the admin allowlist are never banned. Per-site jails (for example the WordPress login) exist, but are off by default. CrowdSec comes later at the earliest, as an opt-in, because by default it reports attacker IPs to an external service. Consequences: the panel writes failed logins as a structured JSON line with the IP to the journal (so far only to the audit log in SQLite, checked), nginx gets per-site logs in a directory the site cannot write to (so far one global log, checked), and the later firewall reconciler must not delete fail2ban's nftables table. Named conflict: `fail2ban-client` needs a second `os/exec` exception with fixed arguments. Decided (Kim, 2026-11-18): fail2ban is on by default, the installer does not ask. The site logs live under `/var/log/nginx/sites/<site>/` and are owned by root (Kim, 2026-11-18). The agent controls fail2ban through `fail2ban-client` as the second `os/exec` exception with fixed arguments (Kim, 2026-11-18), a ban engine of our own in Hostashi is rejected. No open questions left.
 
-## ADR-0022 Metriken, Logs und Tracing
+## ADR-0022 Metrics, logs and tracing
 
-**Vollständiger Text (Englisch, Status Accepted am 2026-11-18):** [adr/0022](adr/0022-metrics-and-tracing.md). Kurzfassung: Metriken im Prometheus-Format unter `/metrics` mit `client_golang` (aktuell v1.25.0, geprüft am 2026-11-18). OpenTelemetry für Metriken ist verworfen (mehr Abhängigkeiten, beim Abruf dasselbe Ergebnis). Der Endpunkt ist standardmäßig aus und nur auf zwei Wegen erreichbar: mit API-Token mit eigenem Scope `metrics:read` oder über einen eigenen Listener nur auf Loopback, nicht über eine „kommt von localhost“-Prüfung, weil ein lokaler Proxy die sonst aushebelt. Gemessen werden HTTP-Anfragen (nach Route, nicht nach Pfad), Agent-Operationen, Login-Fehler (ohne Benutzer und IP), Zertifikatsablauf, pro Site PHP-FPM und Speicherplatz. Label `site` ist der Systemname, Domains sind nirgends ein Label (Kardinalität und Aufklärung). Daten pro Site liefert der Agent über eine neue lesende Operation `metrics.snapshot`. Tracing kommt nicht in v1; stattdessen eine Request-ID, die das Panel erzeugt und an den Agent weitergibt. Geprüft: Der Agent lehnt unbekannte Felder im Protokoll ab, Panel und Agent müssen das neue Feld also gemeinsam bekommen. Entschieden (Kim, 2026-11-18): Der Endpunkt ist standardmäßig aus. Der Zugang ohne Token läuft über einen eigenen Listener nur auf Loopback (Kim, 2026-11-18). Das Label `site` ist der Systemname der Site (Kim, 2026-11-18). Keine offenen Fragen mehr.
+**Full text (status Accepted on 2026-11-18):** [adr/0022](adr/0022-metrics-and-tracing.md). Summary: metrics in Prometheus format under `/metrics` with `client_golang` (currently v1.25.0, checked on 2026-11-18). OpenTelemetry for metrics is rejected (more dependencies, the same result when scraped). The endpoint is off by default and reachable only in two ways: with an API token with its own scope `metrics:read`, or through a separate listener on loopback only, not through a "comes from localhost" check, because a local proxy would defeat that. Measured are HTTP requests (by route, not by path), agent operations, login failures (without user and IP), certificate expiry, and per site PHP-FPM and disk space. The `site` label is the system name, domains are never a label (cardinality and information disclosure). Per-site data is delivered by the agent through a new read-only operation `metrics.snapshot`. Tracing does not come in v1; instead a request ID that the panel generates and passes on to the agent. Checked: the agent rejects unknown fields in the protocol, so panel and agent must get the new field together. Decided (Kim, 2026-11-18): the endpoint is off by default. Access without a token goes through a separate listener on loopback only (Kim, 2026-11-18). The `site` label is the site's system name (Kim, 2026-11-18). No open questions left.
 
-## ADR-0023 HTTPS für das Panel
+## ADR-0023 HTTPS for the panel
 
-**Vollständiger Text (Englisch, Status Accepted am 2026-11-18):** [adr/0023](adr/0023-panel-https.md). Kurzfassung: nginx macht TLS für die Panel-Adresse auf eigenem Port 8443 und leitet an das Panel auf `127.0.0.1:8080` weiter. Das Zertifikat kommt über denselben Weg wie bei den Sites, der Schlüssel bleibt bei root, HTTP/3 und HSTS kommen aus denselben Vorlagen. Das Panel bleibt auf Loopback. Folge: Das Panel übernimmt die Client-IP aus dem Header von nginx, aber nur bei Anfragen von Loopback. Fällt nginx aus, bleibt nur der SSH-Tunnel. Ohne DNS-Namen bleibt es beim SSH-Tunnel. Entschieden (Kim, 2026-11-18): Variante A mit Port 8443, HSTS fürs Panel standardmäßig an. Keine offenen Fragen mehr.
+**Full text (status Accepted on 2026-11-18):** [adr/0023](adr/0023-panel-https.md). Summary: nginx terminates TLS for the panel's address on its own port 8443 and proxies to the panel on `127.0.0.1:8080`. The certificate comes the same way as for sites, so the key stays with root, and HTTP/3 and HSTS come from the same templates. The panel stays on loopback. Consequence: the panel takes the client IP from the header nginx sets, but only for requests from loopback. If nginx is down, only the SSH tunnel is left. Without a DNS name, the panel stays on the SSH tunnel. Decided (Kim, 2026-11-18): option A on port 8443, HSTS on for the panel by default. No open questions.

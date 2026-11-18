@@ -3,7 +3,7 @@
 // Package web turns the desired web server state into nginx configuration
 // "generations": render, validate with nginx -t, switch atomically, reload,
 // prove that the new generation is live, and roll back otherwise
-// (docs/04-architektur.md 4.3, spike S2, ADR-0005).
+// (docs/04-architecture.md 4.3, spike S2, ADR-0005).
 package web
 
 import (

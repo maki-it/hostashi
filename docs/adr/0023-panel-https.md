@@ -1,13 +1,13 @@
 # ADR-0023 HTTPS for the panel
 
-**Status:** Accepted (2026-11-18, by Kim). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0003 (stack, lego), ADR-0004 (web/agent privilege split), ADR-0005 and ADR-0020 (nginx), ADR-0018 (API under the panel address, IP allowlist), ADR-0021 (fail2ban), [`05-sicherheit.md`](../05-sicherheit.md) 5.3.
+**Status:** Accepted (2026-11-18, by Kim). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0003 (stack, lego), ADR-0004 (web/agent privilege split), ADR-0005 and ADR-0020 (nginx), ADR-0018 (API under the panel address, IP allowlist), ADR-0021 (fail2ban), [`05-security.md`](../05-security.md) 5.3.
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
 ## Context
 
 - The panel listens on loopback only (`127.0.0.1:8080`), because it has no TLS. `CheckListen` and the installer refuse other addresses [V: `internal/serve/serve.go`, `packaging/install.sh`]. Today an admin reaches it through an SSH tunnel or their own proxy.
-- `05-sicherheit.md` 5.3 says the panel port is not 443 by default and has its own TLS. Binding to localhost behind nginx is listed as an option [V].
+- `05-security.md` 5.3 says the panel port is not 443 by default and has its own TLS. Binding to localhost behind nginx is listed as an option [V].
 - Sites already get certificates: the agent creates the key (root only) and a CSR, the panel obtains the chain over ACME HTTP-01 with lego, and nginx serves it with HTTP/2, HTTP/3 and optional HSTS [V: PR 55, PR 61, `internal/certs`, `internal/acme`, `internal/web`].
 - Passkeys are bound to the host name in `-public-url`, so the panel needs a stable name. The installer accepts `https://<name>[:port]` [V: `internal/auth/passkeys.go`, `install.sh`].
 - The panel process runs as `hostashi` without root and with a strict systemd sandbox [V: `packaging/systemd/hostashi.service`].

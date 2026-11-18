@@ -1,49 +1,49 @@
-# 2. Vision & Scope
+# 2. Vision & scope
 
 ## 2.1 Vision
 
-Ein Server soll in unter fünf Minuten produktiv sein und danach nicht zur Sicherheitsbaustelle werden. Das Panel nimmt Admins Routinearbeit ab (Sites, TLS, Datenbanken, Backups, Updates), ohne dass sie ihm blind vertrauen müssen. Der Code ist offen, die Rechte sind minimal, der Zustand ist nachvollziehbar.
+A server should be productive in under five minutes and should not turn into a security construction site afterwards. The panel takes routine work off admins' hands (sites, TLS, databases, backups, updates) without them having to trust it blindly. The code is open, privileges are minimal, the state is traceable.
 
-## 2.2 Zielgruppe (Vorschlag)
+## 2.2 Target audience (proposal)
 
-**Primär (v1):** Entwickler, Agenturen und Admins, die auf **einem oder wenigen eigenen Servern** (VPS, Root-Server) mehrere Kundensites betreiben. Das ist CloudPanels Nische.
+**Primary (v1):** Developers, agencies and admins who run several client sites on **one or a few servers of their own** (VPS, dedicated servers). This is CloudPanel's niche.
 
-**Später:** Kleine Hoster mit Reseller-Bedarf (Pakete, Quotas, White-Label), Multi-Server-Betrieb.
+**Later:** Small hosting providers with reseller needs (packages, quotas, white label), multi-server operation.
 
-**Nicht Zielgruppe v1:** Shared-Hosting im Stil von cPanel mit tausenden Accounts.
+**Not the target audience for v1:** cPanel-style shared hosting with thousands of accounts.
 
-Das ist eine Annahme, die du bestätigen musst (ADR-0010).
+This is an assumption you have to confirm (ADR-0010).
 
-## 2.3 Positionierung und Differenzierung
+## 2.3 Positioning and differentiation
 
-| Hebel | Konkret |
-|-------|---------|
-| **Wirklich Open Source** | Gesamter Code inkl. Installer, Templates und Doku unter OSI-Lizenz. Community kann Sicherheitslücken finden und beheben. |
-| **Rechtetrennung** | Web-UI läuft ohne Root. Ein kleiner Agent führt nur typisierte, allowlist-basierte Operationen aus. |
-| **Isolation pro Site** | Eigener Linux-User, eigener FPM-Pool über Unix-Socket, systemd-Sandboxing, cgroup-Limits. |
-| **Deklarativ und nachvollziehbar** | Zustand in DB, generierte Configs, Diff-Vorschau, Rollback, Export als YAML. |
-| **CloudPanel-Import** | Bestehende Server übernehmen („adopt“), ohne Neuaufbau. |
-| **Backups, die man testen kann** | Restic (verschlüsselt, dedupliziert), Restore-Test, Benachrichtigung bei Fehlern. |
-| **Moderne Auth** | Passkeys (WebAuthn), TOTP, OIDC-SSO, API-Tokens mit Scopes. |
-| **API-first** | Alles, was die UI kann, kann die API. CLI und später Terraform-Provider nutzen sie. |
-| **Mehr Runtimes** | PostgreSQL, Docker-Compose-Apps, optional LXC-Betrieb. |
+| Lever | In concrete terms |
+|-------|-------------------|
+| **Truly open source** | All code including installer, templates and documentation under an OSI license. The community can find and fix security vulnerabilities. |
+| **Privilege separation** | The web UI runs without root. A small agent only runs typed, allowlist-based operations. |
+| **Isolation per site** | Own Linux user, own FPM pool over a Unix socket, systemd sandboxing, cgroup limits. |
+| **Declarative and traceable** | State in a DB, generated configs, diff preview, rollback, export as YAML. |
+| **CloudPanel import** | Take over existing servers ("adopt") without rebuilding. |
+| **Backups you can test** | Restic (encrypted, deduplicated), restore test, notification on failure. |
+| **Modern auth** | Passkeys (WebAuthn), TOTP, OIDC SSO, API tokens with scopes. |
+| **API-first** | Everything the UI can do, the API can do. The CLI and later a Terraform provider use it. |
+| **More runtimes** | PostgreSQL, Docker Compose apps, optional LXC operation. |
 
-Nicht jeder Hebel muss in v1. Priorisierung in [Feature-Matrix](03-features.md).
+Not every lever has to be in v1. Prioritization in the [feature matrix](03-features.md).
 
-## 2.4 Nicht-Ziele (v1)
+## 2.4 Non-goals (v1)
 
-- Eigener **Mailserver** (Integration mit Mailcow oder Stalwart später, siehe Phase 4).
-- Eigener **DNS-Server** (stattdessen Provider-Integrationen).
-- **Windows**, BSD, RHEL-Familie.
-- **Shared-Hosting-Massenbetrieb**, Billing, Domain-Registrierung.
+- Own **mail server** (integration with Mailcow or Stalwart later, see Phase 4).
+- Own **DNS server** (provider integrations instead).
+- **Windows**, BSD, RHEL family.
+- **Mass shared hosting**, billing, domain registration.
 - **Kubernetes**.
 
-## 2.5 Leitprinzipien
+## 2.5 Guiding principles
 
-1. **Sicherheit vor Features.** Ein Feature, das Root-Rechte im Web-Prozess braucht, wird anders gebaut oder gar nicht.
-2. **Generiert statt gepatcht.** Wir editieren keine Konfigdateien per Regex. Wir rendern sie aus dem Zustand.
-3. **Nie ohne Rückweg.** Jede Änderung ist validiert und zurückrollbar.
-4. **Boring Tech.** Nginx, PHP-FPM, MariaDB, systemd, restic, ACME: bewährte Bausteine statt Eigenbau.
-5. **Ein Binary, wenig RAM.** Idle-Ziel: unter 100 MB für das Panel inklusive Agent.
-6. **Kein Lock-in.** Sites bleiben normale Linux-User mit normalen Dateien. Wer das Panel entfernt, behält einen laufenden Server.
-7. **Doku und Tests sind Teil des Features.**
+1. **Security before features.** A feature that needs root privileges in the web process is built differently or not at all.
+2. **Generated, not patched.** We do not edit configuration files with regexes. We render them from the state.
+3. **Never without a way back.** Every change is validated and can be rolled back.
+4. **Boring tech.** Nginx, PHP-FPM, MariaDB, systemd, restic, ACME: proven building blocks instead of building our own.
+5. **One binary, little RAM.** Idle target: under 100 MB for the panel including the agent.
+6. **No lock-in.** Sites stay normal Linux users with normal files. Whoever removes the panel keeps a running server.
+7. **Documentation and tests are part of the feature.**

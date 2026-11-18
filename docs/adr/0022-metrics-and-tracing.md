@@ -1,13 +1,13 @@
 # ADR-0022 Metrics, logs and tracing
 
-**Status:** Accepted (2026-11-18, by Kim). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0004 (web/agent privilege split), ADR-0015 (per-site resource limits), ADR-0018 (public REST API and token scopes), ADR-0021 (brute-force protection), [`03-features.md`](../03-features.md) section 3.8, [`04-architektur.md`](../04-architektur.md) section 4.7.
+**Status:** Accepted (2026-11-18, by Kim). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0004 (web/agent privilege split), ADR-0015 (per-site resource limits), ADR-0018 (public REST API and token scopes), ADR-0021 (brute-force protection), [`03-features.md`](../03-features.md) section 3.8, [`04-architecture.md`](../04-architecture.md) section 4.7.
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
 ## Context
 
 - `03-features.md` lists a Prometheus endpoint as P1, "authenticated, off by default" [V].
-- `04-architektur.md` 4.7 plans an in-panel ring buffer for the panel's own graphs and says Prometheus or Influx must not be required [V]. This ADR does not replace that buffer. It adds an optional export for people who already run a monitoring stack.
+- `04-architecture.md` 4.7 plans an in-panel ring buffer for the panel's own graphs and says Prometheus or Influx must not be required [V]. This ADR does not replace that buffer. It adds an optional export for people who already run a monitoring stack.
 - Kim runs an own monitoring server and wants to scrape Hostashi from there [V: Kim, project chat, 2026-11-18].
 - The panel logs JSON through `log/slog` to stderr, which systemd puts into the journal [V: `cmd/hostashi/main.go`, `internal/serve`]. There is no request ID yet, neither in the panel nor in the agent [V: no match for a request ID in `internal/` and `cmd/`].
 - The agent protocol is one JSON object per request with only `op` and `params`, and unknown fields are rejected [V: `internal/agentrpc/protocol.go`, `server.go`]. A request ID would be a new envelope field.
@@ -85,7 +85,7 @@ All names start with `hostashi_`. Labels are closed sets, never free text from r
 - New envelope field `request_id` in `internal/agentrpc`. The agent rejects unknown envelope fields today [V: `DisallowUnknownFields` in `internal/agentrpc/server.go`], so a new panel against an old agent fails every call. Panel and agent ship in one package and are updated together [A], so this is acceptable, but the agent must learn the field first or in the same release.
 - New setting for the metrics endpoint and the loopback listener, both off by default. The setting lives in the database, the listener address in the unit's flags [A].
 - Tokens for monitoring are long-lived on purpose. With ADR-0018's default of 365 days, a scrape breaks silently after a year. The panel should warn 30 days before a token with `metrics:read` expires [E: 30 days].
-- `04-architektur.md` 4.7 stays as it is. A note there should link this ADR.
+- `04-architecture.md` 4.7 stays as it is. A note there should link this ADR.
 - Tracing with OpenTelemetry is out of v1. If it comes later, it is opt-in, and spans must not carry domains or paths by default.
 
 ## Risks to name openly

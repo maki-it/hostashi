@@ -4,7 +4,7 @@
 // systemd unit hostashi-php-<version>@<site>.service on a pool file that
 // this package renders. The master runs as root and drops its workers to
 // the site user; nginx reaches them through a Unix socket that only the
-// site user and the web server group may open (docs/04-architektur.md 4.4).
+// site user and the web server group may open (docs/04-architecture.md 4.4).
 //
 // The pool file does not depend on the PHP version, so switching a site to
 // another version only stops one unit and starts the other.

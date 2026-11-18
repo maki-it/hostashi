@@ -1,17 +1,17 @@
 # ADR-0021 Brute-force and intrusion protection
 
-**Status:** Accepted (2026-11-18, by Kim). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0004 (web/agent privilege split), ADR-0005 and ADR-0020 (nginx), ADR-0009 (target platforms), [`05-sicherheit.md`](../05-sicherheit.md) sections 5.2 to 5.4, [`03-features.md`](../03-features.md) (rows "Fail2ban-/CrowdSec-Integration" and "Firewall").
+**Status:** Accepted (2026-11-18, by Kim). **Date drafted:** 2026-11-18. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0004 (web/agent privilege split), ADR-0005 and ADR-0020 (nginx), ADR-0009 (target platforms), [`05-security.md`](../05-security.md) sections 5.2 to 5.4, [`03-features.md`](../03-features.md) (rows "Fail2ban-/CrowdSec-Integration" and "Firewall").
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
 ## Context
 
-- Internet scanners and bots that brute-force logins are the first attacker group in the threat model [V: `05-sicherheit.md` 5.2].
+- Internet scanners and bots that brute-force logins are the first attacker group in the threat model [V: `05-security.md` 5.2].
 - The panel already throttles logins in process: 10 failures per IP and 20 per user within 15 minutes, 30 unknown API tokens per IP within 15 minutes, answered with HTTP 429 [V: `internal/auth/service.go`, `internal/auth/limiter.go`]. The state is in memory and resets on restart [V: `limiter.go`].
 - The panel takes the client IP from the TCP peer and ignores forwarded headers [V: `internal/serve/auth_api.go`, `clientIP`].
 - Failed logins are written to the audit log in SQLite as `login.failed` with the IP [V: `internal/auth/service.go`]. They are **not** written to the process log or the journal. The process log is JSON on stderr, and it only reports internal errors for auth [V: `cmd/hostashi/main.go`, `internal/serve/auth_api.go`].
 - nginx writes one global `access_log /var/log/nginx/access.log` for all sites, there are no per-site logs yet [V: `internal/agent/agent.go`, `internal/web/nginx.go`].
-- Hostashi does not manage a firewall yet. nftables is planned and owned by the agent's reconciler [V: `04-architektur.md`, `03-features.md`].
+- Hostashi does not manage a firewall yet. nftables is planned and owned by the agent's reconciler [V: `04-architecture.md`, `03-features.md`].
 - The in-process limiter only protects the panel. It does not cover SSH, the sites (for example `wp-login.php`, `xmlrpc.php`) or scanners that hit many sites, and it cannot drop traffic before it reaches a process [A].
 - `03-features.md` lists "Fail2ban-/CrowdSec-Integration" as P1 [V].
 
@@ -35,7 +35,7 @@ Defaults for v1:
 - **Per-site jails** (for example WordPress login and `xmlrpc.php`) are available but off by default, because false positives hit real visitors of a customer site [A]. They need per-site nginx logs (see consequences).
 - **Backend:** the systemd journal for `sshd` and the panel. Debian 12 and later do not install rsyslog by default, so `/var/log/auth.log` may not exist [U].
 - **Ban action:** nftables, in fail2ban's own table [U].
-- **Never banned:** loopback (`127.0.0.0/8`, `::1`) and the panel's admin IP allowlist from ADR-0018 and `05-sicherheit.md` 5.3, so an admin cannot lock themselves out [A].
+- **Never banned:** loopback (`127.0.0.0/8`, `::1`) and the panel's admin IP allowlist from ADR-0018 and `05-security.md` 5.3, so an admin cannot lock themselves out [A].
 - **Ban times:** 1 hour for a first ban, longer through `recidive` [E].
 
 The panel's own rate limit stays. It answers inside the request and works without fail2ban, fail2ban adds the network layer and the services outside the panel [A].
@@ -48,7 +48,7 @@ The panel's own rate limit stays. It answers inside the request and works withou
 - **Typed agent operations, no general exec.** fail2ban runs as its own root daemon from the distribution and runs its ban commands itself [U]. Hostashi does not pass commands to it. The agent only gets typed operations: write the Hostashi jail and filter files from fixed templates with validated values (jail names from a fixed list, numbers in ranges, IPs and CIDRs parsed), list bans, and unban one validated IP. Talking to `fail2ban-client` needs `os/exec` and is a second exception next to `internal/sysuser`, with fixed arguments and no shell [A]. This is a named conflict with "no exec", accepted by Kim on 2026-11-18. The exception lives in one package (for example `internal/fail2ban`), and depguard keeps `os/exec` out of every other package [A: package name open]. Alternative: speak fail2ban's socket protocol directly, which avoids exec but relies on an internal, Python-pickle-based protocol [U], so not recommended.
 - **Panel UI and API.** List banned IPs, unban, edit the never-ban list, switch per-site jails. Unbanning and the never-ban list are high-risk actions with their own scope (ADR-0018).
 - **Installer.** Installs `fail2ban` from the distribution archive, writes the Hostashi jail files under `/etc/fail2ban/jail.d/` and filters under `/etc/fail2ban/filter.d/`, and checks the setup with `fail2ban-client -t` [U: test option]. CI runs this on Debian 13 and Ubuntu 26.04 in the systemd container [A].
-- **Panel behind a proxy.** If the panel ever runs behind nginx (option in `05-sicherheit.md` 5.3), the TCP peer is `127.0.0.1` for every client. Then both the in-process limiter and fail2ban see the wrong IP. That setup needs a trusted-proxy setting first [V: `clientIP` uses the TCP peer].
+- **Panel behind a proxy.** If the panel ever runs behind nginx (option in `05-security.md` 5.3), the TCP peer is `127.0.0.1` for every client. Then both the in-process limiter and fail2ban see the wrong IP. That setup needs a trusted-proxy setting first [V: `clientIP` uses the TCP peer].
 - `03-features.md`: "Fail2ban-/CrowdSec-Integration" is split into "fail2ban" (P0) and "CrowdSec opt-in" (P2).
 
 ## Risks to name openly
@@ -57,7 +57,7 @@ The panel's own rate limit stays. It answers inside the request and works withou
 - **Banning by shared IPs.** Carrier-grade NAT and company networks put many users behind one IP, so a ban can hit innocent visitors. That is the main reason why per-site jails are off by default [A].
 - **Log injection.** fail2ban filters are regexes over text. Fields that attackers control (user agent, URL, username) must not be able to look like an IP in the matched position [U]. Our own filters match fixed JSON fields, the distribution's `sshd` filter is maintained upstream.
 - **CrowdSec data flow.** If CrowdSec comes later, attacker IPs and scenario names go to an external service by default. That needs a short note in the privacy documentation and an explicit opt-in [U].
-- **Not a pentest.** This ADR describes a layer against automated guessing. It does not replace the external review planned in `05-sicherheit.md`.
+- **Not a pentest.** This ADR describes a layer against automated guessing. It does not replace the external review planned in `05-security.md`.
 
 ## Open questions
 
