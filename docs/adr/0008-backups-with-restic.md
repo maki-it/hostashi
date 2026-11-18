@@ -44,7 +44,7 @@ The single administrator holds every key anyway (v1 has no resellers), so B buys
 
 Options **A, A, A**.
 
-1. **What is backed up, per run** (to confirm with Kim):
+1. **What is backed up, per run** (decided by Kim, 2026-11-19):
    - each site's home directory (with `--one-file-system` and `--exclude-caches`), tagged `site:<name>`, `kind:files`;
    - each database of the site, dumped by `mariadb-dump --single-transaction --routines --events --triggers <db>` through `--stdin-from-command`, stored as `/<db>.sql`, tagged `site:<name>`, `kind:db`;
    - the panel: a `VACUUM INTO` copy of the panel database, `/etc/hostashi` and the agent's registries under `/var/lib/hostashi-agent`, tagged `kind:panel`. The restic password and the SSH key are not part of it (see 4).
@@ -67,6 +67,6 @@ Options **A, A, A**.
 
 ## Open questions for Kim
 
-1. What is backed up: site files, database dumps and the panel as in recommendation 1?
+1. ~~What is backed up?~~ Decided by Kim (2026-11-19): site files, database dumps and the panel, as in recommendation 1.
 2. Schedule and retention as in recommendation 3?
 3. restic from the distribution (0.18) or the pinned upstream binary (0.19.1)?
