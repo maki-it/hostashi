@@ -28,7 +28,7 @@ What was checked [V unless marked]:
 - `packages.sury.org/php` has `trixie` and `noble`, each with `amd64` and `arm64`. The package index lists `php5.6-fpm` to `php8.5-fpm` for both architectures on both distributions. A PPA mirror for Ubuntu (`ppa.launchpadcontent.net/ondrej/php`) exists as well, but the single `packages.sury.org` source avoids a second mechanism.
 - In a Debian 13 container, with the repository added: `php8.4-fpm`, `php8.1-fpm` and `php7.4-fpm` installed together. Each has its own binary (`php-fpm7.4`, `php-fpm8.1`, `php-fpm8.4`), its own `/etc/php/<version>/` and passes `php-fpm<version> -t`.
 - The key file contains two keys (`15058500A0235D97F5D10063B188E2B695BD4743`, `45BEA3E529112086C622F8A4B214EAC28059B8AC`). Like for nginx.org, the installer would pin these fingerprints and refuse any other key [A].
-- **Side effect to design for:** once the repository is added, `php8.4-fpm` on Debian 13 was offered from sury.org (`8.4.27-2+0~deb.sury.org.1`) instead of the Debian build. Mixing distribution and sury.org PHP packages could break dependencies between them [U, not tested]. Simplest rule: **after enabling, all PHP packages come from sury.org**, and Hostashi shows the source per version [A]. Whether pinning can keep the default version on the distribution is for a small spike (S10).
+- **Side effect, resolved by Spike S10 [V]:** once the repository is added, the distribution's PHP packages are offered from sury.org as upgrades (23 packages on Debian 13, 13 on Ubuntu 24.04). Installing an extra version also replaces `php-common` with sury.org's. Without a pin this switches the default version silently at the next unattended upgrade. **With a pin, the default version stays on the distribution**: priority 100 for sury.org in general, 600 only for `php-common` and the versioned packages of every version except the distribution default. Tested on Debian 13 and Ubuntu 24.04: install works, `apt` is consistent, no pending PHP upgrades, `php-fpm<version> -t` passes for all versions. A pin that is too strict (100 for everything) breaks the install, because the extra versions need `php-common` from sury.org. See `spike/s10-php-sources/REPORT.md`.
 
 Rules:
 
@@ -51,6 +51,6 @@ Rules:
 
 ## Open questions
 
-1. ~~Which versions are offered?~~ Decided (Kim, 2026-11-18): PHP 8.2, 8.3, 8.4 and 8.5 as standard, 7.4 and 8.1 as legacy on explicit request, 8.0 and older not offered. The support status of each version is still to be checked against the official release schedule before the first release [U].
-2. All PHP from sury.org once enabled, or pin the default version to the distribution (needs Spike S10)?
+1. ~~Which versions are offered?~~ Decided (Kim, 2026-11-18): PHP 8.2, 8.3, 8.4 and 8.5 as standard, 7.4 and 8.1 as legacy on explicit request, 8.0 and older not offered. Checked on 2026-11-18 against `php.net/supported-versions.php` [V] (Spike S10): 8.2 gets security fixes only until 2026-12-31, 8.3 until 2027-12-31, 8.4 until 2028-12-31, 8.5 until 2029-12-31; 8.1 and older are end of life. Suggestion to Kim: list 8.2 as legacy from the start.
+2. ~~All PHP from sury.org once enabled, or pin the default version to the distribution?~~ Answered by Spike S10: pin as above. Open: the distribution PHP running with sury.org's `php-common` is verified at configuration level only, not under real traffic [U].
 3. Is a PHP version also needed for the CLI per site (cron, SSH)? Probably yes, via the site's FPM version [A].
