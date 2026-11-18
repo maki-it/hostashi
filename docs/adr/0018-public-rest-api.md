@@ -5,8 +5,8 @@
 ## Context
 
 - Kim wants a REST API to control the panel, for example to switch a site's maintenance or parking page on and off, "among many other things" [V: Kim, thread, 2026-11-18].
-- The feature matrix already lists a REST API (OpenAPI 3.1) as P0 / Alpha, states that the UI uses the same API, and lists API tokens with scopes and expiry as P0 [V: `03-features.md` 3.6, 3.10]. The architecture names REST + OpenAPI 3.1 with SSE for streaming, and gRPC only internally between `serve` and `agent` [V: `04-architektur.md` 4.9].
-- The security model says: the web process runs without root and can only ask the agent for typed operations; every handler checks role and ownership; tokens are stored as hashes and shown once [V: `04-architektur.md` 4.2, `05-sicherheit.md`].
+- The feature matrix already lists a REST API (OpenAPI 3.1) as P0 / Alpha, states that the UI uses the same API, and lists API tokens with scopes and expiry as P0 [V: `03-features.md` 3.6, 3.10]. The architecture names REST + OpenAPI 3.1 with SSE for streaming, and gRPC only internally between `serve` and `agent` [V: `04-architecture.md` 4.9].
+- The security model says: the web process runs without root and can only ask the agent for typed operations; every handler checks role and ownership; tokens are stored as hashes and shown once [V: `04-architecture.md` 4.2, `05-security.md`].
 - What is not written down yet: versioning, how resources are addressed, how long-running work is reported, how scopes look, and the rule that every UI function must exist in the API. This ADR fills those gaps. No code exists yet.
 
 ## Options
@@ -22,7 +22,7 @@
 
 Option A, with these rules:
 
-1. **API-first.** Every action in the UI goes through a documented public endpoint. No UI-only endpoints. The CLI uses the same API (or the agent directly when run as root on the server, as planned in `04-architektur.md` 4.1).
+1. **API-first.** Every action in the UI goes through a documented public endpoint. No UI-only endpoints. The CLI uses the same API (or the agent directly when run as root on the server, as planned in `04-architecture.md` 4.1).
 2. **Versioned base path** `/api/v1/`. Before release 1.0 breaking changes are allowed with a changelog entry. From 1.0 on, `v1` only changes in compatible ways; removals are announced with a `Deprecation` header for at least one minor release first [A].
 3. **The OpenAPI 3.1 document is the contract** and lives in the repository. CI checks that the implementation and the document match, and the SPA's TypeScript client is generated from it. The exact Go tooling (spec-first generation or code-first with schema export) is chosen in the first API spike [A].
 4. **Stable IDs, never domains, as resource keys.** `GET /api/v1/sites/{siteId}`. A domain is an attribute that can change (see "change a site's domain" in `03-features.md`).
@@ -33,7 +33,7 @@ Option A, with these rules:
 
 ### Authentication and authorization
 
-- **Browser:** session cookie (`HttpOnly`, `Secure`, `SameSite=Strict`) plus CSRF token, as in `05-sicherheit.md`.
+- **Browser:** session cookie (`HttpOnly`, `Secure`, `SameSite=Strict`) plus CSRF token, as in `05-security.md`.
 - **Automation:** bearer API tokens. Each token has an owner, scopes, and an expiry date. The default and the maximum for a new token is 365 days. A token without expiry ("unlimited") can be created just as easily, in the same dialog or API call, with a visible warning [V: Kim, thread, 2026-11-18]. Only a hash is stored, the token is shown once.
 - **Scopes** are `resource:action` pairs, for example `sites:read`, `sites:write`, `sites.maintenance:write`, `backups:restore`. A token can optionally be limited to a list of site IDs. A token never grants more than its owner's role allows; each request checks token scope **and** owner RBAC **and** resource ownership.
 - High-risk actions (delete site, restore, user and token management, firewall) need an explicit scope and are never covered by a wildcard [A].
@@ -64,7 +64,7 @@ The shape is illustrative; the final resource names come with the spec.
 ## Consequences
 
 - Each feature costs a bit more up front: endpoint, schema, scope, RBAC test, audit entry. In return, scripting, the CLI and later integrations (Terraform/OpenTofu, `03-features.md` 3.10) need no extra work.
-- The IDOR test matrix from `05-sicherheit.md` runs over the OpenAPI document: every route, every role, every token scope.
+- The IDOR test matrix from `05-security.md` runs over the OpenAPI document: every route, every role, every token scope.
 - The public API is a compatibility promise from 1.0 on. Internal refactoring must keep `v1` stable.
 - The SPA cannot take shortcuts. If the UI needs data in a new shape, the API gets a new endpoint or field for everyone.
 - Billing integrations such as WHMCS stay out of scope for v1 (non-goal), but could be built by third parties on this API.

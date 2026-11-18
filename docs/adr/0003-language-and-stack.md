@@ -4,10 +4,10 @@
 
 ## Context
 
-- Architecture requires: a rootless web process, a small root agent with typed operations over a Unix socket, no shell strings, a reconciler that renders and validates configs, one binary with three modes, idle target under 100 MB for panel plus agent, amd64 and arm64 [V: `04-architektur.md`, `02-vision-scope.md`].
-- Current stack proposal: Go, embedded SPA (Svelte or React), SQLite (WAL), Nginx behind a `WebServerDriver`, restic, lego for ACME [V: `04-architektur.md` 4.9].
+- Architecture requires: a rootless web process, a small root agent with typed operations over a Unix socket, no shell strings, a reconciler that renders and validates configs, one binary with three modes, idle target under 100 MB for panel plus agent, amd64 and arm64 [V: `04-architecture.md`, `02-vision-scope.md`].
+- Current stack proposal: Go, embedded SPA (Svelte or React), SQLite (WAL), Nginx behind a `WebServerDriver`, restic, lego for ACME [V: `04-architecture.md` 4.9].
 - Team size and skills are unknown. A well-mastered stack beats the ideal one [V: original ADR-0003]. The roadmap assumes two full-time developers, one with Linux systems experience [V: `06-roadmap.md`, itself an estimate].
-- Security rules (typed inputs, no `Exec`, path confinement) must be enforceable by the language and tooling, not only by discipline [V: `05-sicherheit.md`].
+- Security rules (typed inputs, no `Exec`, path confinement) must be enforceable by the language and tooling, not only by discipline [V: `05-security.md`].
 
 ## Owner input (2026-11-17)
 
@@ -40,7 +40,7 @@ Effect: the Go condition below is met. Open risk: one maintainer reviews all sec
 ### Frontend
 
 - Svelte(Kit) or React with Vite and TypeScript, built to static files and embedded with `go:embed`. Decision deferred to spike S7 (bundle size, terminal and live graphs) [V: `06-roadmap.md`].
-- Alternative HTMX plus templ: less JavaScript, weaker for terminal and live graphs [V: `04-architektur.md`]. Keep as fallback if S7 shows the SPA too heavy.
+- Alternative HTMX plus templ: less JavaScript, weaker for terminal and live graphs [V: `04-architecture.md`]. Keep as fallback if S7 shows the SPA too heavy.
 - Recommendation: SPA, framework by S7. Pick the one the team knows better if S7 is a tie.
 
 ### State storage
@@ -59,7 +59,7 @@ Effect: the Go condition below is met. Open risk: one maintainer reviews all sec
 
 ### ACME
 
-- **lego** as a library (Go, avoids a Python dependency from certbot) [V: `04-architektur.md` 4.9]. Check lego's license and maintenance status before relying on it [U].
+- **lego** as a library (Go, avoids a Python dependency from certbot) [V: `04-architecture.md` 4.9]. Check lego's license and maintenance status before relying on it [U].
 
 ## Recommendation
 
@@ -76,14 +76,14 @@ Decision rule:
 
 ## Consequences
 
-- Single static `hostashi` binary for serve, agent and CLI. `.deb` packaging with signed APT repo stays simple [V: `04-architektur.md` 4.8].
+- Single static `hostashi` binary for serve, agent and CLI. `.deb` packaging with signed APT repo stays simple [V: `04-architecture.md` 4.8].
 - Tests: Go tests with golden files, `go test -fuzz` for parsers, VM-based integration tests [V: `06-roadmap.md`].
 - Boilerplate per agent operation (schema, validator, handler) is the main cost of the typed-RPC rule. Spike S1 decides on code generation if boilerplate exceeds 30 percent [V: `06-roadmap.md`].
 - Supply chain: Go modules and npm lockfiles, `govulncheck`, license inventory in CI (see ADR-0002).
 
 ## Risks to name openly
 
-- **Privilege drop in Go:** after `setuid` semantics for all threads were fixed in modern Go [U], dropping root inside the agent for file work is still easy to get wrong because the agent needs root afterwards. Safer pattern to test in S1 and S4: the agent **re-executes the same binary as a helper under the site user** (credentials set at process start) with `openat2`/`RESOLVE_BENEATH` for confined file operations [A, matches `04-architektur.md` 4.2 but is not yet tested].
+- **Privilege drop in Go:** after `setuid` semantics for all threads were fixed in modern Go [U], dropping root inside the agent for file work is still easy to get wrong because the agent needs root afterwards. Safer pattern to test in S1 and S4: the agent **re-executes the same binary as a helper under the site user** (credentials set at process start) with `openat2`/`RESOLVE_BENEATH` for confined file operations [A, matches `04-architecture.md` 4.2 but is not yet tested].
 - Go's memory safety does not stop path traversal, injection or logic errors. The typed-input rule and fuzzing carry that load, not the language.
 - Dependency risk of a root-adjacent process: keep the agent's dependency set minimal and reviewed.
 - Pure-Go SQLite driver maturity and performance under write load are unverified [U]. Needs a small benchmark.

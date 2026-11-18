@@ -2,7 +2,7 @@
 
 **Status:** throwaway prototype, not product code. Nothing here is a decision; any follow-up goes through an ADR (ADR-0003 is Accepted, a failed S2 would have reopened it).
 
-**Question (from [docs/06-roadmap.md](../../docs/06-roadmap.md) S2 and [docs/04-architektur.md](../../docs/04-architektur.md) 4.3):** Are generation switch, `nginx -t`, reload and rollback robust? Abort criterion: with failure injection, a broken vhost must never cause downtime.
+**Question (from [docs/06-roadmap.md](../../docs/06-roadmap.md) S2 and [docs/04-architecture.md](../../docs/04-architecture.md) 4.3):** Are generation switch, `nginx -t`, reload and rollback robust? Abort criterion: with failure injection, a broken vhost must never cause downtime.
 
 Evidence tags as in [docs/adr/README.md](../../docs/adr/README.md): **[V]** verified by test or code in this spike, **[A]** assumption, **[E]** estimate, **[U]** unverified general knowledge.
 

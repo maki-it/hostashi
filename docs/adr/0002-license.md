@@ -6,10 +6,10 @@
 
 ## Context
 
-- CloudPanel's repositories contain no source code for the product itself, and `vhost-templates` and `docs` carry no license file, so all rights are reserved [V: `01-recherche-cloudpanel.md`, per ADR-0001]. We build clean-room and copy nothing from them.
-- `dploy` is MIT (copyright holder named in the file looks like an upstream project, needs checking) and `clp-wp-varnish-cache` is GPLv3 per its `readme.txt` [V: `01-recherche-cloudpanel.md`].
+- CloudPanel's repositories contain no source code for the product itself, and `vhost-templates` and `docs` carry no license file, so all rights are reserved [V: `01-cloudpanel-research.md`, per ADR-0001]. We build clean-room and copy nothing from them.
+- `dploy` is MIT (copyright holder named in the file looks like an upstream project, needs checking) and `clp-wp-varnish-cache` is GPLv3 per its `readme.txt` [V: `01-cloudpanel-research.md`].
 - Positioning is "really open source" with a security focus [V: `02-vision-scope.md`].
-- Planned dependencies include Go, restic, lego (ACME), Nginx, MariaDB, PHP-FPM as **separate programs** [V: `04-architektur.md`]. Their licenses must be checked, but a panel that starts and configures external programs does not link them [A].
+- Planned dependencies include Go, restic, lego (ACME), Nginx, MariaDB, PHP-FPM as **separate programs** [V: `04-architecture.md`]. Their licenses must be checked, but a panel that starts and configures external programs does not link them [A].
 - Dual-licensing or open core would need a CLA from the start [V: ADR-0002 original text].
 
 ## What the license actually protects (and what it does not)

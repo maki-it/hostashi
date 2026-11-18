@@ -1,22 +1,22 @@
-# Claude-Projekt einrichten
+# Setting up the Claude project
 
-Anlegen in claude.ai, ca. 3 Minuten:
+Created in claude.ai, takes about 3 minutes:
 
-1. In claude.ai links **Projects → New project**. Name: `Hostashi`. Beschreibung z. B. „Quelloffenes Hosting-Control-Panel, Alternative zu CloudPanel“.
-2. **Set project instructions**: Inhalt von [`PROJEKTANWEISUNGEN.md`](PROJEKTANWEISUNGEN.md) einfügen.
-3. **Add content → Upload files**: diese acht Dateien hochladen:
+1. In claude.ai, on the left, **Projects → New project**. Name: `Hostashi`. Description for example "Open source hosting control panel, alternative to CloudPanel".
+2. **Set project instructions**: paste the content of [`PROJECT-INSTRUCTIONS.md`](PROJECT-INSTRUCTIONS.md).
+3. **Add content → Upload files**: upload these eight files:
    - `../README.md`
-   - `../docs/01-recherche-cloudpanel.md`
+   - `../docs/01-cloudpanel-research.md`
    - `../docs/02-vision-scope.md`
    - `../docs/03-features.md`
-   - `../docs/04-architektur.md`
-   - `../docs/05-sicherheit.md`
+   - `../docs/04-architecture.md`
+   - `../docs/05-security.md`
    - `../docs/06-roadmap.md`
    - `../docs/07-decisions.md`
-4. In diesem Projekt einen neuen Chat starten, z. B. mit: „Hier sind meine Antworten auf die offenen Fragen aus 07-decisions: …“
+4. Start a new chat in this project, for example with: "Here are my answers to the open questions from 07-decisions: …"
 
-## Pflege
+## Maintenance
 
-Ein Projekt-Chat kann die Wissensdateien nicht selbst ändern. Der Stand bleibt nur erhalten, wenn du geänderte Dateien neu hochlädst. Die Anweisungen sorgen dafür, dass Claude am Ende jeder Sitzung die nötigen Änderungen nennt. Die Originale liegen weiter in diesem Git-Repo, das bleibt die Quelle der Wahrheit.
+A project chat cannot change the knowledge files itself. The state is only kept if you upload changed files again. The instructions make sure that Claude names the necessary changes at the end of every session. The originals stay in this Git repository, which remains the source of truth.
 
-Die Menüführung in claude.ai ändert sich gelegentlich. Wenn die Bezeichnungen abweichen, such nach „Projects“ in der Seitenleiste.
+The menus in claude.ai change from time to time. If the labels differ, look for "Projects" in the sidebar.

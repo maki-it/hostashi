@@ -1,7 +1,7 @@
 {
   // Lint the planning docs and repository-level Markdown files.
   "globs": ["*.md", "docs/**/*.md", "claude-project/**/*.md", ".github/**/*.md"],
-  "ignores": ["node_modules/**", "claude-project/PROJEKTANWEISUNGEN.md"],
+  "ignores": ["node_modules/**", "claude-project/PROJECT-INSTRUCTIONS.md"],
   "config": {
     "default": true,
     // Planning docs use long prose lines and tables.
