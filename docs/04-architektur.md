@@ -44,7 +44,7 @@ Panels dieser Klasse sind Angriffsziel Nummer eins: wer das Panel übernimmt, ha
 
 1. Die DB hält den **Soll-Zustand** (Sites, Domains, DBs, Cron, Firewall, Backup-Policies …).
 2. Der **Reconciler** im Agent berechnet daraus die Zielkonfiguration (Nginx-Vhosts, FPM-Pools, systemd-Units, Cron, nftables).
-3. Er schreibt sie **atomar** in eine neue „Generation“ (`/var/lib/hostashi/generations/<n>/`), validiert (`nginx -t`, `php-fpm -t`, `nft -c`) und schaltet erst dann um und lädt neu.
+3. Er schreibt sie **atomar** in eine neue „Generation“ (`/var/lib/hostashi-agent/web/generations/<n>/`, nur root), validiert (`nginx -t`, `php-fpm -t`, `nft -c`) und schaltet erst dann um und lädt neu.
 4. Schlägt Validierung oder Health-Check fehl, wird die vorherige Generation wiederhergestellt und der Fehler im Job gemeldet.
    Der Health-Check muss **beweisen, dass die neue Generation wirklich live ist** (Generationsnummer über einen Control-Endpunkt, mehrere Treffer in Folge) und erst danach die Sites prüfen. `nginx -t` erkennt z. B. keinen belegten Port, und ein Reload, der still scheitert, behält die alte Konfiguration (Spikes S2 und S3).
 5. **Drift-Erkennung:** Abweichungen von Hand geänderter, generierter Dateien werden im UI gezeigt (Übernehmen oder Überschreiben).
@@ -67,7 +67,7 @@ Runtimes liegen **systemweit und schreibgeschützt** unter `/opt/hostashi/runtim
 
 ## 4.5 Webserver-Abstraktion
 
-Ein Interface `WebServerDriver` (Render, Validate, Reload). Erste Implementierung: **Nginx** (offizielles nginx.org-Repo, HTTP/3). Caddy ist als Alternative zu evaluieren (JSON-API, automatisches HTTPS), siehe ADR-0005. Die Abstraktion soll nicht den kleinsten gemeinsamen Nenner erzwingen. Sie dient dazu, den Treiber später austauschen zu können.
+Ein Interface `WebServerDriver` (Render, Validate, Reload). Erste Implementierung: **Nginx** aus der Distribution mit Brotli-Modulen (ADR-0020), umgesetzt in `internal/web`. Caddy ist als Alternative zu evaluieren (JSON-API, automatisches HTTPS), siehe ADR-0005. Die Abstraktion soll nicht den kleinsten gemeinsamen Nenner erzwingen. Sie dient dazu, den Treiber später austauschen zu können.
 
 ## 4.6 Datenmodell (Auszug)
 

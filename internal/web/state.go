@@ -1,0 +1,73 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+// Package web turns the desired web server state into nginx configuration
+// "generations": render, validate with nginx -t, switch atomically, reload,
+// prove that the new generation is live, and roll back otherwise
+// (docs/04-architektur.md 4.3, spike S2, ADR-0005).
+package web
+
+import (
+	"errors"
+	"fmt"
+	"path"
+	"regexp"
+
+	"github.com/maki-it/hostashi/internal/agentapi"
+)
+
+// Site is the desired state of one virtual host. The agent fills Root from
+// its registry; every field ends up in a config file and is validated
+// positively.
+type Site struct {
+	User    string   `json:"user"`
+	Domains []string `json:"domains"`
+	Root    string   `json:"root"` // absolute document root
+}
+
+// Desired is the complete web server state.
+type Desired struct {
+	Sites []Site `json:"sites"`
+}
+
+// rootRe keeps nginx syntax out of the root path: no spaces, quotes,
+// semicolons, braces or variables.
+var rootRe = regexp.MustCompile(`^/[A-Za-z0-9_./-]+$`)
+
+// Validate checks the desired state. Nothing is written for invalid input.
+func (d Desired) Validate() error {
+	req := agentapi.WebApplyRequest{Sites: make([]agentapi.WebSite, 0, len(d.Sites))}
+	for _, s := range d.Sites {
+		req.Sites = append(req.Sites, agentapi.WebSite{User: s.User, Domains: s.Domains})
+
+		if !rootRe.MatchString(s.Root) || path.Clean(s.Root) != s.Root {
+			return fmt.Errorf("site %q: invalid root %q", s.User, s.Root)
+		}
+	}
+
+	return req.Validate()
+}
+
+// Users returns the site users in d.
+func (d Desired) Users() map[string]bool {
+	out := make(map[string]bool, len(d.Sites))
+	for _, s := range d.Sites {
+		out[s.User] = true
+	}
+
+	return out
+}
+
+// Errors of the reconciler.
+var (
+	ErrInvalidDesired = errors.New("web: invalid desired state")
+	// ErrValidation means nginx rejected the new config; nothing was changed.
+	ErrValidation = errors.New("web: nginx rejected the generated config")
+	// ErrApplyFailed means the new generation did not go live and the
+	// previous one was restored.
+	ErrApplyFailed = errors.New("web: apply failed, previous generation restored")
+	// ErrRollbackFailed means the previous generation could not be restored
+	// either; Recover at the next start tries again.
+	ErrRollbackFailed = errors.New("web: apply failed and rollback failed")
+	// ErrBusy means another process holds the reconciler lock.
+	ErrBusy = errors.New("web: another reconcile run holds the lock")
+)

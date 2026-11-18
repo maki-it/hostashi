@@ -46,11 +46,14 @@ linters:
         # helper or restic wrapper gets a reviewed, narrow exception here.
         # internal/sysuser runs useradd and userdel by absolute path with
         # arguments built from validated names (see its package comment).
+        # internal/webctl runs nginx -t and systemctl reload/restart of the
+        # nginx unit with fixed arguments (see its package comment).
         no-exec:
           files:
             - "$all"
             - "!$test"
             - "!**/internal/sysuser/*.go"
+            - "!**/internal/webctl/*.go"
           deny:
             - pkg: os/exec
               desc: "no process execution in product code (see docs/05-sicherheit.md)"

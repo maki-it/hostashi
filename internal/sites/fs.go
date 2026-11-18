@@ -14,9 +14,15 @@ import (
 // MarkerName is the file that identifies a registered pool (ADR-0016).
 const MarkerName = ".hostashi-pool"
 
-// HomeMode is the mode of a new site home: closed to other site users. How
-// nginx and PHP-FPM reach the web root is decided by the reconciler.
+// HomeMode is the mode of a new site home: closed to other site users. Its
+// group is the web server's group, so nginx can reach the web root.
 const HomeMode = 0o750
+
+// WebRootName is the document root below the home, owned by the site user.
+const WebRootName = "htdocs"
+
+// WebRootMode lets the web server read the document root.
+const WebRootMode = 0o755
 
 const maxRemoveDepth = 128
 
@@ -108,10 +114,11 @@ func checkMarker(poolFD int, p Pool, ownerUID uint32) error {
 }
 
 // createHome makes the home directory user below the pool and gives it to the
-// site. The directory is created root-owned and closed (0700), then handed
-// over on the open fd, so no moment exists where another user could enter it.
-// The name is a validated single path component.
-func createHome(poolFD int, user string, uid, gid uint32) error {
+// site (owner uid, group homeGID), with the web root inside it. Each
+// directory is created root-owned and closed (0700), then handed over on the
+// open fd, so no moment exists where another user could enter it. The name
+// is a validated single path component.
+func createHome(poolFD int, user string, uid, gid, homeGID uint32) error {
 	if err := unix.Mkdirat(poolFD, user, 0o700); err != nil {
 		if errors.Is(err, unix.EEXIST) {
 			return ErrHomeExists
@@ -129,7 +136,7 @@ func createHome(poolFD int, user string, uid, gid uint32) error {
 
 	defer unix.Close(fd)
 
-	if err := unix.Fchown(fd, int(uid), int(gid)); err != nil {
+	if err := unix.Fchown(fd, int(uid), int(homeGID)); err != nil {
 		_ = unix.Unlinkat(poolFD, user, unix.AT_REMOVEDIR)
 
 		return fmt.Errorf("chown home: %w", err)
@@ -141,14 +148,44 @@ func createHome(poolFD int, user string, uid, gid uint32) error {
 		return fmt.Errorf("chmod home: %w", err)
 	}
 
+	if err := createWebRoot(fd, uid, gid); err != nil {
+		_ = unix.Unlinkat(fd, WebRootName, unix.AT_REMOVEDIR)
+		_ = unix.Unlinkat(poolFD, user, unix.AT_REMOVEDIR)
+
+		return err
+	}
+
+	return nil
+}
+
+func createWebRoot(homeFD int, uid, gid uint32) error {
+	if err := unix.Mkdirat(homeFD, WebRootName, 0o700); err != nil {
+		return fmt.Errorf("mkdir web root: %w", err)
+	}
+
+	fd, err := unix.Openat2(homeFD, WebRootName, &unix.OpenHow{Flags: dirFlags, Resolve: noEscape})
+	if err != nil {
+		return fmt.Errorf("%w: open new web root: %w", ErrHomeUnsafe, err)
+	}
+
+	defer unix.Close(fd)
+
+	if err := unix.Fchown(fd, int(uid), int(gid)); err != nil {
+		return fmt.Errorf("chown web root: %w", err)
+	}
+
+	if err := unix.Fchmod(fd, WebRootMode); err != nil {
+		return fmt.Errorf("chmod web root: %w", err)
+	}
+
 	return nil
 }
 
 // removeHome deletes the home of a site completely. It refuses a directory
-// that the registry does not know as owned by the site user, so a wrong
+// that is not owned by the site user and the expected group, so a wrong
 // registry entry or a swapped directory cannot make the agent delete foreign
 // data. A missing home counts as done (retry after a partial delete).
-func removeHome(poolFD int, user string, uid, gid uint32) error {
+func removeHome(poolFD int, user string, uid, gid uint32) error { // gid: the home's group
 	fd, err := unix.Openat2(poolFD, user, &unix.OpenHow{Flags: dirFlags, Resolve: noEscape})
 	if err != nil {
 		if errors.Is(err, unix.ENOENT) {

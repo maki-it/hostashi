@@ -49,7 +49,11 @@ type Options struct {
 	// OwnerUID is the uid that must own pools and the state directory: 0 on a
 	// server, the test user's uid in unprivileged tests.
 	OwnerUID uint32
-	Log      *slog.Logger
+	// WebGID is the group of every site home: the web server's group
+	// (www-data), so nginx can enter the home and read the web root. Zero
+	// keeps the site's own group (tests).
+	WebGID uint32
+	Log    *slog.Logger
 }
 
 // Manager creates and deletes sites. Calls are serialized, because they
@@ -117,7 +121,7 @@ func (m *Manager) Create(ctx context.Context, user, pool string) (Site, error) {
 	// Rollbacks must also run when the request context is already canceled.
 	undo := context.WithoutCancel(ctx)
 
-	if err := createHome(pfd, user, acct.UID, acct.GID); err != nil {
+	if err := createHome(pfd, user, acct.UID, acct.GID, m.homeGID(acct.GID)); err != nil {
 		m.rollbackAccount(undo, user)
 
 		return Site{}, err
@@ -126,7 +130,7 @@ func (m *Manager) Create(ctx context.Context, user, pool string) (Site, error) {
 	site := Site{User: user, UID: acct.UID, GID: acct.GID, Pool: pool}
 
 	if err := m.reg.add(site); err != nil {
-		if rerr := removeHome(pfd, user, acct.UID, acct.GID); rerr != nil {
+		if rerr := removeHome(pfd, user, acct.UID, m.homeGID(acct.GID)); rerr != nil {
 			m.opt.Log.Error("rollback: remove home failed", "user", user, "err", rerr)
 		}
 
@@ -194,7 +198,7 @@ func (m *Manager) Delete(ctx context.Context, user string) error {
 		return fmt.Errorf("delete account %q: %w", user, err)
 	}
 
-	if err := removeHome(pfd, user, site.UID, site.GID); err != nil {
+	if err := removeHome(pfd, user, site.UID, m.homeGID(site.GID)); err != nil {
 		return err
 	}
 
@@ -205,6 +209,32 @@ func (m *Manager) Delete(ctx context.Context, user string) error {
 	m.opt.Log.Info("site deleted", "user", user, "pool", site.Pool)
 
 	return nil
+}
+
+func (m *Manager) homeGID(siteGID uint32) uint32 {
+	if m.opt.WebGID != 0 {
+		return m.opt.WebGID
+	}
+
+	return siteGID
+}
+
+// WebRoot returns the document root of a registered site.
+func (m *Manager) WebRoot(user string) (string, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	site, ok := m.reg.Site(user)
+	if !ok {
+		return "", false
+	}
+
+	p, ok := m.reg.Pool(site.Pool)
+	if !ok {
+		return "", false
+	}
+
+	return p.Path + "/" + user + "/" + WebRootName, true
 }
 
 // List returns all registered sites sorted by user.

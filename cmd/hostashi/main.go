@@ -37,6 +37,10 @@ commands:
   serve     run the web process (never as root)
   agent     run the privileged agent (root only)
   ping      check that the agent answers
+  site create NAME [POOL] | site delete NAME | site list
+            manage site accounts through the agent (root on the server)
+  web apply read the complete web state as JSON from stdin and make it live,
+            e.g. {"sites":[{"user":"blog","domains":["blog.example.com"]}]}
   setup-token  print the one-time token for the first login (read as the serve user or root)
   version   print the version
 `
@@ -105,6 +109,17 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		r, err = agentapi.Ping.Call(ctx, agentrpc.NewClient(*socket), agentapi.PingRequest{})
 		if err == nil {
 			fmt.Fprintf(stdout, "agent %s answered, caller uid %d\n", r.Version, r.CallerUID)
+		}
+	case "site", "web":
+		if fs.Parse(args) != nil {
+			return 2
+		}
+
+		err = adminCmd(ctx, agentrpc.NewClient(*socket), cmd, fs.Args(), stdout)
+		if errors.Is(err, errUsage) {
+			fmt.Fprint(stderr, usage)
+
+			return 2
 		}
 	case "setup-token":
 		dbPath := fs.String("db", store.DefaultPath, "SQLite database path")

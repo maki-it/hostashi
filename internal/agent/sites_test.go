@@ -14,6 +14,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/sites"
+	"github.com/maki-it/hostashi/internal/web"
 )
 
 // memAccounts is an in-memory account database.
@@ -71,6 +72,12 @@ func (m *memAccounts) Delete(_ context.Context, name string) error {
 func startSiteAgent(t *testing.T) (*agentrpc.Client, string) {
 	t.Helper()
 
+	return startSiteAgentWith(t, nil)
+}
+
+func startSiteAgentWith(t *testing.T, w *web.Reconciler) (*agentrpc.Client, string) {
+	t.Helper()
+
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +105,7 @@ func startSiteAgent(t *testing.T) (*agentrpc.Client, string) {
 	mgr := sites.NewManager(reg, &memAccounts{users: map[string]sites.Account{}}, sites.Options{OwnerUID: owner})
 
 	sock := filepath.Join(run, "agent.sock")
-	s := NewServer(Config{Version: "t", Sites: mgr}, owner)
+	s := NewServer(Config{Version: "t", Sites: mgr, Web: w}, owner)
 
 	if err := s.Listen(context.Background(), sock, -1); err != nil {
 		t.Fatal(err)

@@ -31,6 +31,18 @@ func TestCreateAndDelete(t *testing.T) {
 		t.Fatalf("home is %v %v", st.IsDir(), st.Mode())
 	}
 
+	root, ok := e.mgr.WebRoot("blog")
+	if !ok || root != filepath.Join(e.pool, "blog", WebRootName) {
+		t.Fatalf("WebRoot = %q, %v", root, ok)
+	}
+
+	st, err = os.Stat(root)
+	must(t, err)
+
+	if !st.IsDir() || st.Mode().Perm() != WebRootMode {
+		t.Fatalf("web root is %v %v", st.IsDir(), st.Mode())
+	}
+
 	// The registry survives a restart.
 	e.open()
 
@@ -271,7 +283,7 @@ func TestDeleteCanBeRetriedAfterPartialFailure(t *testing.T) {
 
 	// Account and home are already gone, only the registry entry is left.
 	delete(e.acc.users, "blog")
-	must(t, os.Remove(filepath.Join(e.pool, "blog")))
+	must(t, os.RemoveAll(filepath.Join(e.pool, "blog")))
 
 	must(t, e.mgr.Delete(ctx, "blog"))
 
