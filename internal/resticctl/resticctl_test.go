@@ -82,7 +82,7 @@ func TestArgumentChecks(t *testing.T) {
 	_, cases["bad database"] = r.BackupDatabase(ctx, []string{"site:blog"}, "shop; DROP")
 	_, cases["reserved database"] = r.BackupDatabase(ctx, []string{"site:blog"}, "mysql")
 	_, cases["option database"] = r.BackupDatabase(ctx, []string{"site:blog"}, "--all-databases")
-	_, cases["snapshots no tag"] = r.Snapshots(ctx, nil)
+	_, cases["snapshots bad tag"] = r.Snapshots(ctx, []string{"x"})
 	cases["keep no daily"] = r.Forget(ctx, Keep{Daily: 0, Weekly: 4, Monthly: 6})
 	cases["keep negative"] = r.Forget(ctx, Keep{Daily: 7, Weekly: -1})
 	cases["check part zero"] = r.Check(ctx, 0, 12)
@@ -184,6 +184,10 @@ func TestRestic(t *testing.T) {
 			snaps, err := r.Snapshots(ctx, []string{"site:blog", "kind:files"})
 			if err != nil || len(snaps) != 1 || snaps[0].ID != sum.SnapshotID || snaps[0].Hostname != "test-host" {
 				t.Fatalf("snapshots: %+v, %v", snaps, err)
+			}
+
+			if all, err := r.Snapshots(ctx, nil); err != nil || len(all) != 1 {
+				t.Fatalf("all snapshots: %+v, %v", all, err)
 			}
 
 			if s, err := r.Snapshots(ctx, []string{"site:other"}); err != nil || len(s) != 0 {

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/resticctl"
 )
 
@@ -70,9 +71,9 @@ func TestSettingsValidate(t *testing.T) {
 
 	bad := map[string]func(*Settings){
 		"no daily":         func(s *Settings) { s.Retention.Daily = 0 },
-		"daily too many":   func(s *Settings) { s.Retention.Daily = MaxDaily + 1 },
+		"daily too many":   func(s *Settings) { s.Retention.Daily = agentapi.MaxBackupDaily + 1 },
 		"weekly negative":  func(s *Settings) { s.Retention.Weekly = -1 },
-		"monthly too many": func(s *Settings) { s.Retention.Monthly = MaxMonthly + 1 },
+		"monthly too many": func(s *Settings) { s.Retention.Monthly = agentapi.MaxBackupMonthly + 1 },
 		"window reversed":  func(s *Settings) { s.WindowStart, s.WindowEnd = 5, 1 },
 		"window empty":     func(s *Settings) { s.WindowStart, s.WindowEnd = 3, 3 },
 		"window 25":        func(s *Settings) { s.WindowEnd = 25 },
@@ -156,6 +157,20 @@ type fakeRepo struct {
 	partial   string
 	failOpen  error
 	failCheck error
+	snaps     []resticctl.Snapshot
+}
+
+func (f *fakeRepo) Init(context.Context) error {
+	f.calls = append(f.calls, "init")
+	f.failOpen = nil
+
+	return nil
+}
+
+func (f *fakeRepo) Snapshots(context.Context, []string) ([]resticctl.Snapshot, error) {
+	f.calls = append(f.calls, "snapshots")
+
+	return f.snaps, nil
 }
 
 func (f *fakeRepo) Unlock(context.Context) error {
@@ -282,6 +297,7 @@ func TestRunAllGood(t *testing.T) {
 		"forget",
 		"prune",
 		"check 1/12",
+		"snapshots",
 	}
 
 	if !reflect.DeepEqual(repo.calls, want) {
@@ -298,9 +314,9 @@ func TestRunAllGood(t *testing.T) {
 		after time.Duration
 		want  []string
 	}{
-		{24 * time.Hour, nil},
-		{7 * 24 * time.Hour, []string{"prune", "check 0/0"}},
-		{30 * 24 * time.Hour, []string{"prune", "check 2/12"}},
+		{24 * time.Hour, []string{"snapshots"}},
+		{7 * 24 * time.Hour, []string{"prune", "check 0/0", "snapshots"}},
+		{30 * 24 * time.Hour, []string{"prune", "check 2/12", "snapshots"}},
 	} {
 		repo2 := &fakeRepo{}
 		later := now.Add(c.after)
@@ -308,10 +324,6 @@ func TestRunAllGood(t *testing.T) {
 		r2.Run(context.Background(), nil)
 
 		got := repo2.calls[2:] // after unlock and forget
-		if len(got) == 0 {
-			got = nil
-		}
-
 		if !reflect.DeepEqual(got, c.want) {
 			t.Errorf("after %v: got %q, want %q", c.after, got, c.want)
 		}
@@ -383,11 +395,41 @@ func TestRunWithoutTargetOrRepository(t *testing.T) {
 		t.Errorf("no target: %+v", st)
 	}
 
+	// The first run creates the repository.
 	repo := &fakeRepo{failOpen: resticctl.ErrNoRepository}
+	st = (&Runner{Repo: repo, Settings: settingsWithTarget(), Lstat: fakeFS([]string{"/home/a"}, nil)}).Run(context.Background(), Plan([]Site{{Name: "a", Home: "/home/a"}}, nil))
+
+	if !st.OK || !st.Initialized || repo.calls[1] != "init" {
+		t.Errorf("first run: %+v, calls %v", st, repo.calls)
+	}
+
+	// A wrong password never leads to a new repository.
+	repo = &fakeRepo{failOpen: resticctl.ErrWrongPassword}
 	st = (&Runner{Repo: repo, Settings: settingsWithTarget()}).Run(context.Background(), Plan([]Site{{Name: "a", Home: "/home/a"}}, nil))
 
-	if st.OK || !strings.Contains(st.Error, "repository does not exist") || len(repo.calls) != 1 {
-		t.Errorf("missing repository: %+v, calls %v", st, repo.calls)
+	if st.OK || !strings.Contains(st.Error, "wrong repository password") || len(repo.calls) != 1 {
+		t.Errorf("wrong password: %+v, calls %v", st, repo.calls)
+	}
+}
+
+func TestEntries(t *testing.T) {
+	t1 := time.Date(2026, 11, 1, 2, 0, 0, 0, time.UTC)
+	got := entries([]resticctl.Snapshot{
+		{ID: "a", Time: t1, Tags: []string{"site:blog", "kind:files"}},
+		{ID: "b", Time: t1.Add(time.Hour), Tags: []string{"kind:db", "site:blog", "db:wp"}},
+		{ID: "c", Time: t1, Tags: []string{"kind:panel"}},
+		{ID: "d", Time: t1, Tags: []string{"manual"}},
+		{ID: "e", Time: t1, Tags: []string{"kind:db", "site:blog"}},
+	})
+
+	want := []SnapshotEntry{
+		{ID: "b", Time: t1.Add(time.Hour), Kind: KindDB, Site: "blog", Database: "wp"},
+		{ID: "a", Time: t1, Kind: KindFiles, Site: "blog"},
+		{ID: "c", Time: t1, Kind: KindPanel},
+	}
+
+	if len(got) != 3 || got[0] != want[0] {
+		t.Errorf("entries %+v", got)
 	}
 }
 

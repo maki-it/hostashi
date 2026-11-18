@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -50,6 +51,12 @@ commands:
             manage databases through the agent (root on the server); the
             password is read from stdin, an empty line generates one
   backup run   one backup now (root; normally started by hostashi-backup.service)
+  backup get | backup set | backup hostkey | backup start | backup status
+            backup settings through the agent (root on the server); set
+            reads the settings as JSON and hostkey one public key from stdin
+  backup key show
+            print the repository password and the panel key to keep outside
+            the server (root only, never available over the API)
   setup-token  print the one-time token for the first login (read as the serve user or root)
   version   print the version
 `
@@ -143,13 +150,23 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		}
 	case "backup":
 		stateDir := fs.String("state-dir", agent.DefaultStateDir, "the agent's state directory with the site and database registries")
-		if fs.Parse(args) != nil || fs.NArg() != 1 || fs.Arg(0) != "run" {
-			fmt.Fprint(stderr, usage)
-
+		if fs.Parse(args) != nil {
 			return 2
 		}
 
-		err = backup.RunOnce(ctx, backup.RunConfig{StateDir: *stateDir, Log: log})
+		switch strings.Join(fs.Args(), " ") {
+		case "run":
+			err = backup.RunOnce(ctx, backup.RunConfig{StateDir: *stateDir, Log: log})
+		case "key show":
+			err = showBackupKeys(euid, stdout)
+		default:
+			err = backupAgentCmd(ctx, agentrpc.NewClient(*socket), fs.Args(), stdout)
+			if errors.Is(err, errUsage) {
+				fmt.Fprint(stderr, usage)
+
+				return 2
+			}
+		}
 	case "setup-token":
 		dbPath := fs.String("db", store.DefaultPath, "SQLite database path")
 		if fs.Parse(args) != nil || fs.NArg() != 0 {
@@ -180,4 +197,26 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 	}
 
 	return 0
+}
+
+// showBackupKeys prints what an administrator keeps outside the server.
+func showBackupKeys(euid int, w io.Writer) error {
+	if euid != 0 {
+		return errors.New("must run as root")
+	}
+
+	e, err := backup.ExportKeys(backup.ConfigDir, backup.PanelKeyFile)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(w, "Keep these values outside this server, for example in a password manager.\n"+
+		"Without them the backups cannot be read after the server is lost.\n\n"+
+		"repository:      %s\nrestic password: %s\n", e.Repository, e.Password)
+
+	if e.PanelKey != "" {
+		fmt.Fprintf(w, "panel key:       %s\n                 (base64 of %s, needed to restore the panel's stored secrets)\n", e.PanelKey, backup.PanelKeyFile)
+	}
+
+	return nil
 }

@@ -79,6 +79,31 @@ func ReadStatus(dir string, ownerUID uint32) (Status, error) {
 	return s, nil
 }
 
+// ReadSnapshots reads the snapshot list of the last run. A missing file is
+// an empty list.
+func ReadSnapshots(dir string, ownerUID uint32) ([]SnapshotEntry, error) {
+	raw, err := statefile.Read(dir, SnapshotsFile, ownerUID, 32*maxFileSize)
+
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return []SnapshotEntry{}, nil
+	case err != nil:
+		return nil, err
+	}
+
+	var s []SnapshotEntry
+	if err := decodeStrict(raw, &s); err != nil {
+		return nil, fmt.Errorf("backup: snapshots file: %w", err)
+	}
+
+	return s, nil
+}
+
+// WriteSnapshots writes the snapshot list atomically.
+func WriteSnapshots(dir string, s []SnapshotEntry) error {
+	return writeJSON(dir, SnapshotsFile, s)
+}
+
 // WriteStatus writes the status atomically.
 func WriteStatus(dir string, s Status) error {
 	return writeJSON(dir, StatusFile, s)
