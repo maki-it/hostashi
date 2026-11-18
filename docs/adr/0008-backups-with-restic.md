@@ -42,7 +42,7 @@ The single administrator holds every key anyway (v1 has no resellers), so B buys
 
 ## Recommendation
 
-Options **A, A, A**.
+Options **A, A, A** (restic source decided by Kim, 2026-11-19: the distribution's package).
 
 1. **What is backed up, per run** (decided by Kim, 2026-11-19):
    - each site's home directory (with `--one-file-system` and `--exclude-caches`), tagged `site:<name>`, `kind:files`;
@@ -69,4 +69,4 @@ Options **A, A, A**.
 
 1. ~~What is backed up?~~ Decided by Kim (2026-11-19): site files, database dumps and the panel, as in recommendation 1.
 2. ~~Schedule and retention?~~ Decided by Kim (2026-11-19): the defaults of recommendation 3, adjustable in the panel.
-3. restic from the distribution (0.18) or the pinned upstream binary (0.19.1)?
+3. ~~restic from the distribution or upstream?~~ Decided by Kim (2026-11-19): the distribution's package (option A).
