@@ -21,6 +21,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/certs"
+	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
 	"github.com/maki-it/hostashi/internal/sites"
@@ -61,6 +62,10 @@ type Config struct {
 	// PanelPort is the HTTPS port of the panel's own address (ADR-0023);
 	// 0 means DefaultPanelPort.
 	PanelPort int
+
+	// DB manages the sites' MariaDB databases. Run builds it from StateDir;
+	// without it db.* answer failed_precondition.
+	DB *mariadb.Manager
 }
 
 // DefaultPanelPort is the panel's HTTPS port (ADR-0023).
@@ -128,7 +133,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, log: log}
+		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, log: log}
 		h.register(s)
 	}
 
@@ -143,6 +148,7 @@ type siteOps struct {
 	web   *web.Reconciler
 	php   *php.Manager
 	certs *certs.Store
+	db    *mariadb.Manager
 	log   *slog.Logger
 	mu    sync.Mutex
 }
@@ -191,6 +197,12 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			}
 		}
 
+		if h.db != nil && h.db.SiteHasDatabases(req.User) {
+			return agentapi.SiteDeleteResponse{}, &agentrpc.Error{
+				Code: agentrpc.CodePrecondition, Message: "site still has databases, remove them with db.delete first",
+			}
+		}
+
 		if err := m.Delete(ctx, req.User); err != nil {
 			return agentapi.SiteDeleteResponse{}, mapSiteError(err)
 		}
@@ -219,6 +231,8 @@ func (h *siteOps) register(s *agentrpc.Server) {
 	})
 
 	agentrpc.Handle(s, agentapi.WebApply, h.webApply)
+
+	h.registerDB(s)
 
 	agentrpc.Handle(s, agentapi.TLSCSR, h.tlsCSR)
 	agentrpc.Handle(s, agentapi.TLSInstall, h.tlsInstall)
@@ -695,6 +709,13 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 
 		cfg.Certs = &certs.Store{Dir: filepath.Join(dir, "tls")}
+	}
+
+	if cfg.DB == nil {
+		cfg.DB, err = openDB(cfg.StateDir, cfg.Log)
+		if err != nil {
+			return err
+		}
 	}
 
 	if cfg.PHP != nil {

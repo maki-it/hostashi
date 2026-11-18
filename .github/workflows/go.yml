@@ -74,6 +74,34 @@ jobs:
       - name: Site account tests (root, real useradd and bind mount)
         run: sudo env "PATH=$PATH" go test -race -count=1 -run '^TestRoot' -v ./internal/sysuser/
 
+  mariadb:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    name: MariaDB (Debian 13, root over the socket)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build the test binary
+        env:
+          CGO_ENABLED: "0"
+        run: go test -c -o "$RUNNER_TEMP/mariadb.test" ./internal/mariadb/
+      - name: Run against the distribution's MariaDB
+        run: |
+          docker run --rm -v "$RUNNER_TEMP/mariadb.test:/mariadb.test:ro" debian:trixie bash -euc '
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends mariadb-server >/dev/null
+            install -d -o mysql -g mysql /run/mysqld
+            mariadbd-safe >/dev/null 2>&1 &
+            for _ in $(seq 1 30); do [ -S /run/mysqld/mysqld.sock ] && break; sleep 1; done
+            mariadb --version
+            HOSTASHI_TEST_MARIADB_SOCKET=/run/mysqld/mysqld.sock /mariadb.test -test.v -test.count=1'
+
   lint:
     needs: changes
     if: needs.changes.outputs.go == 'true'
