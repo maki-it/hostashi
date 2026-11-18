@@ -34,7 +34,7 @@ Rules:
 
 1. Agent operations are typed: `EnablePhpRepository` and `InstallPhpVersion{version}` with an **allowlist of versions**, never a free package name.
 2. Each site stores its PHP version. Its FPM master runs that version's binary (ADR-0015). Switching a site's version is a normal, reversible site change.
-3. Hostashi **shows end-of-life status** per version and warns before a site is put on an unsupported one. By the published PHP release schedule 8.2 and newer still receive security fixes and 7.4, 8.0 and 8.1 do not [U: from the release schedule, not re-checked]. Old versions are offered under an explicit "legacy" label, because Kim needs them for old applications.
+3. Hostashi **shows end-of-life status** per version and warns before a site is put on an unsupported one. By the PHP release schedule (checked 2026-11-18, Spike S10) 8.2 receives security fixes only until 2026-12-31, 8.3 and newer for longer, and 8.1 and older are end of life [V]. Old versions are offered under an explicit "legacy" label, because Kim needs them for old applications.
 4. Updates: `unattended-upgrades` gets the sury.org origin added, as for nginx.org [A].
 
 ## Named conflicts
@@ -51,6 +51,6 @@ Rules:
 
 ## Open questions
 
-1. ~~Which versions are offered?~~ Decided (Kim, 2026-11-18): PHP 8.2, 8.3, 8.4 and 8.5 as standard, 7.4 and 8.1 as legacy on explicit request, 8.0 and older not offered. Checked on 2026-11-18 against `php.net/supported-versions.php` [V] (Spike S10): 8.2 gets security fixes only until 2026-12-31, 8.3 until 2027-12-31, 8.4 until 2028-12-31, 8.5 until 2029-12-31; 8.1 and older are end of life. Suggestion to Kim: list 8.2 as legacy from the start.
+1. ~~Which versions are offered?~~ Decided (Kim, 2026-11-18, adjusted after Spike S10): PHP 8.3, 8.4 and 8.5 as standard, 8.2 (security support ends 2026-12-31), 8.1 and 7.4 as legacy on explicit request, 8.0 and older not offered. Checked on 2026-11-18 against `php.net/supported-versions.php` [V] (Spike S10): 8.2 gets security fixes only until 2026-12-31, 8.3 until 2027-12-31, 8.4 until 2028-12-31, 8.5 until 2029-12-31; 8.1 and older are end of life. Kim agreed (2026-11-18): 8.2 is legacy from the start.
 2. ~~All PHP from sury.org once enabled, or pin the default version to the distribution?~~ Answered by Spike S10: pin as above. Open: the distribution PHP running with sury.org's `php-common` is verified at configuration level only, not under real traffic [U].
 3. Is a PHP version also needed for the CLI per site (cron, SSH)? Probably yes, via the site's FPM version [A].
