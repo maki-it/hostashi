@@ -22,6 +22,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -29,13 +30,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-acme/lego/v4/certificate"
-	"github.com/go-acme/lego/v4/lego"
-	"github.com/go-acme/lego/v4/registration"
+	"github.com/go-acme/lego/v5/acme"
+	"github.com/go-acme/lego/v5/certificate"
+	"github.com/go-acme/lego/v5/lego"
+	legolog "github.com/go-acme/lego/v5/log"
+	"github.com/go-acme/lego/v5/registration"
 )
 
 // LetsEncrypt is the default directory.
-const LetsEncrypt = lego.LEDirectoryProduction
+const LetsEncrypt = lego.DirectoryURLLetsEncrypt
+
+// SetLogger sends lego's own log lines to l. lego keeps one logger for the
+// whole process, so this is not a field of Client.
+func SetLogger(l *slog.Logger) { legolog.SetDefault(l) }
 
 // KeyStore keeps the sealed account key. The production one is the
 // settings table, sealed with the panel's secret key.
@@ -60,13 +67,13 @@ type Client struct {
 }
 
 type account struct {
-	key crypto.PrivateKey
-	reg *registration.Resource
+	key crypto.Signer
+	reg *acme.ExtendedAccount
 }
 
-func (a *account) GetEmail() string                        { return "" }
-func (a *account) GetRegistration() *registration.Resource { return a.reg }
-func (a *account) GetPrivateKey() crypto.PrivateKey        { return a.key }
+func (a *account) GetEmail() string                       { return "" }
+func (a *account) GetRegistration() *acme.ExtendedAccount { return a.reg }
+func (a *account) GetPrivateKey() crypto.Signer           { return a.key }
 
 // keyName is the settings key of the account key for one directory.
 func (c *Client) keyName() string {
@@ -75,7 +82,7 @@ func (c *Client) keyName() string {
 	return "acme.account." + hex.EncodeToString(sum[:8])
 }
 
-func (c *Client) accountKey(ctx context.Context) (crypto.PrivateKey, error) {
+func (c *Client) accountKey(ctx context.Context) (crypto.Signer, error) {
 	b, ok, err := c.Keys.Load(ctx, c.keyName())
 	if err != nil {
 		return nil, err
@@ -87,7 +94,17 @@ func (c *Client) accountKey(ctx context.Context) (crypto.PrivateKey, error) {
 			return nil, errors.New("acme: stored account key is unreadable")
 		}
 
-		return x509.ParsePKCS8PrivateKey(blk.Bytes)
+		k, err := x509.ParsePKCS8PrivateKey(blk.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("acme: stored account key: %w", err)
+		}
+
+		signer, ok := k.(crypto.Signer)
+		if !ok {
+			return nil, errors.New("acme: stored account key cannot sign")
+		}
+
+		return signer, nil
 	}
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -138,9 +155,9 @@ func (c *Client) client(ctx context.Context) (*lego.Client, error) {
 	}
 
 	// An account exists for the key after the first run; otherwise create it.
-	reg, err := cl.Registration.ResolveAccountByKey()
+	reg, err := cl.Registration.ResolveAccountByKey(ctx)
 	if err != nil {
-		reg, err = cl.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
+		reg, err = cl.Registration.Register(ctx, registration.RegisterOptions{TermsOfServiceAgreed: true})
 		if err != nil {
 			return nil, fmt.Errorf("acme: register account: %w", err)
 		}
@@ -165,7 +182,7 @@ func (c *Client) Obtain(ctx context.Context, csrPEM []byte) ([]byte, error) {
 		return nil, fmt.Errorf("acme: %w", err)
 	}
 
-	// lego has no context; one client at a time keeps the account state simple.
+	// One request at a time keeps the account state simple.
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -174,7 +191,7 @@ func (c *Client) Obtain(ctx context.Context, csrPEM []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	res, err := cl.Certificate.ObtainForCSR(certificate.ObtainForCSRRequest{CSR: csr, Bundle: true})
+	res, err := cl.Certificate.ObtainForCSR(ctx, certificate.ObtainForCSRRequest{CSR: csr, Bundle: true})
 	if err != nil {
 		return nil, fmt.Errorf("acme: %w", err)
 	}
@@ -199,7 +216,7 @@ func (f *files) path(token string) (string, error) {
 // Present writes the key authorization. The file must be readable by nginx
 // (the directory's group); the panel's umask is 0077, so the mode is set
 // explicitly.
-func (f *files) Present(_, token, keyAuth string) error {
+func (f *files) Present(_ context.Context, _, token, keyAuth string) error {
 	p, err := f.path(token)
 	if err != nil {
 		return err
@@ -217,7 +234,7 @@ func (f *files) Present(_, token, keyAuth string) error {
 }
 
 // CleanUp removes the file.
-func (f *files) CleanUp(_, token, _ string) error {
+func (f *files) CleanUp(_ context.Context, _, token, _ string) error {
 	p, err := f.path(token)
 	if err != nil {
 		return err

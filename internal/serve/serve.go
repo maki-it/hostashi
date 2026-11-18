@@ -254,6 +254,10 @@ func newIssuer(cfg Config, st *store.Store, box *secrets.Box) (*acme.Client, err
 		return nil, nil //nolint:nilnil // certificates are off
 	}
 
+	if cfg.Log != nil {
+		acme.SetLogger(cfg.Log.With("component", "acme"))
+	}
+
 	c := &acme.Client{
 		Directory:    cfg.ACMEDirectory,
 		ChallengeDir: cfg.ACMEChallengeDir,

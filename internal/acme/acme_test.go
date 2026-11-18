@@ -21,7 +21,7 @@ func TestChallengeFiles(t *testing.T) {
 	defer syscall.Umask(old)
 
 	token := "abcdefghijklmnop_-0123"
-	if err := f.Present("a.example.com", token, token+".thumb"); err != nil {
+	if err := f.Present(t.Context(), "a.example.com", token, token+".thumb"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -35,7 +35,7 @@ func TestChallengeFiles(t *testing.T) {
 		t.Fatalf("content %q", b)
 	}
 
-	if err := f.CleanUp("a.example.com", token, ""); err != nil {
+	if err := f.CleanUp(t.Context(), "a.example.com", token, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -44,7 +44,7 @@ func TestChallengeFiles(t *testing.T) {
 	}
 
 	for _, bad := range []string{"", "short", "../../../../etc/passwdxxxxx", "abcdefghijklmnop/q", "abcdefghijklmnop q"} {
-		if err := f.Present("a.example.com", bad, "x"); err == nil {
+		if err := f.Present(t.Context(), "a.example.com", bad, "x"); err == nil {
 			t.Errorf("token %q accepted", bad)
 		}
 	}
