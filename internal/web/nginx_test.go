@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/fcgi"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -182,6 +183,13 @@ func (e *env) site(t *testing.T, user, body string, domains ...string) Site {
 func (e *env) fetch(t *testing.T, host string) (int, string) {
 	t.Helper()
 
+	return e.fetchPath(t, host, "/")
+}
+
+// fetchPath requests p with the Host header over TCP.
+func (e *env) fetchPath(t *testing.T, host, p string) (int, string) {
+	t.Helper()
+
 	conn, err := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(e.port), 2*time.Second)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
@@ -190,7 +198,7 @@ func (e *env) fetch(t *testing.T, host string) (int, string) {
 	defer conn.Close()
 
 	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
-	_, _ = fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", host)
+	_, _ = fmt.Fprintf(conn, "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", p, host)
 
 	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
 	if err != nil {
@@ -288,6 +296,10 @@ func TestHiddenFilesAreDenied(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if err := os.WriteFile(filepath.Join(s.Root, "config.php"), []byte("<?php $pw = 'secret';"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := e.r.Recover(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -314,6 +326,11 @@ func TestHiddenFilesAreDenied(t *testing.T) {
 
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("/.env answered %d, want 403", resp.StatusCode)
+	}
+
+	// A site without PHP never hands out PHP source.
+	if code, body := e.fetchPath(t, "alpha.example.com", "/config.php"); code != http.StatusForbidden {
+		t.Fatalf("/config.php answered %d %q, want 403", code, body)
 	}
 }
 
@@ -510,5 +527,105 @@ func TestInvalidDesiredStateWritesNothing(t *testing.T) {
 
 	if _, err := os.Stat(r.Base); !os.IsNotExist(err) {
 		t.Fatalf("something was written: %v", err)
+	}
+}
+
+// fcgiServer answers every FastCGI request with the script nginx asked for,
+// like a PHP-FPM pool would run it.
+func fcgiServer(t *testing.T, sock string) {
+	t.Helper()
+
+	l, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = l.Close() })
+
+	go func() {
+		_ = fcgi.Serve(l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			env := fcgi.ProcessEnv(r)
+			_, _ = fmt.Fprintf(w, "php %s %s", filepath.Base(env["SCRIPT_FILENAME"]), r.URL.RequestURI())
+		}))
+	}()
+}
+
+func TestPHPSiteGoesToItsPool(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+
+	s := e.site(t, "alpha", "static", "alpha.example.com")
+	s.PHPSocket = filepath.Join(e.dir, "php.sock")
+	fcgiServer(t, s.PHPSocket)
+
+	for name, body := range map[string]string{"index.php": "<?php", "info.php": "<?php", "style.css": "body{}"} {
+		if err := os.WriteFile(filepath.Join(s.Root, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := e.r.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{s}}); err != nil {
+		t.Fatal(err)
+	}
+
+	for p, want := range map[string]string{
+		"/":               "php index.php /",
+		"/info.php?a=1":   "php info.php /info.php?a=1",
+		"/blog/post-1":    "php index.php /blog/post-1", // front controller
+		"/style.css":      "body{}",
+		"/missing.php":    "404",
+		"/style.css/.php": "404", // no path info tricks: the script must exist
+	} {
+		code, body := e.fetchPath(t, "alpha.example.com", p)
+
+		got := body
+		if code == http.StatusNotFound {
+			got = "404"
+		} else if code != http.StatusOK {
+			got = strconv.Itoa(code)
+		}
+
+		if got != want {
+			t.Errorf("%s: %d %q, want %q", p, code, body, want)
+		}
+	}
+
+	// The health location is only for the agent's Unix socket.
+	if code, _ := e.fetchPath(t, "alpha.example.com", "/.hostashi/health"); code != http.StatusNotFound {
+		t.Fatalf("health over TCP answered %d, want 404", code)
+	}
+}
+
+func TestBrokenApplicationDoesNotBlockChanges(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+
+	// The pool socket does not exist: every PHP request fails with 502.
+	s := e.site(t, "alpha", "x", "alpha.example.com")
+	s.PHPSocket = filepath.Join(e.dir, "missing.sock")
+
+	if err := os.WriteFile(filepath.Join(s.Root, "index.php"), []byte("<?php"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.r.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{s}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, _ := e.fetch(t, "alpha.example.com"); code != http.StatusBadGateway {
+		t.Fatalf("broken pool answered %d, want 502", code)
+	}
+
+	// Another site can still be added.
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{s, e.site(t, "beta", "b", "beta.example.com")}}); err != nil {
+		t.Fatal(err)
 	}
 }

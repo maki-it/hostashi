@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Template for the PHP-FPM master of one site (ADR-0015, ADR-0019). The
+# installer writes one copy per PHP version as hostashi-php-<version>@.service
+# and replaces @VERSION@; the agent starts hostashi-php-<version>@<site>.
+#
+# The master runs as root only to open the socket for the web server group
+# and to drop its workers to the site user (pool file, rendered by the agent
+# under /var/lib/hostashi-agent/php). The pool file is the same for every
+# version, so a site switches versions by stopping one unit and starting
+# another.
+
+[Unit]
+Description=PHP @VERSION@ FastCGI for Hostashi site %i
+Documentation=https://github.com/maki-it/hostashi
+After=network.target
+ConditionPathExists=/var/lib/hostashi-agent/php/%i.conf
+
+[Service]
+Type=notify
+ExecStart=/usr/sbin/php-fpm@VERSION@ --nodaemonize --fpm-config /var/lib/hostashi-agent/php/%i.conf
+ExecReload=/bin/kill -USR2 $MAINPID
+# /run/hostashi-php/<site>: root 0755; the socket in it is <site>:www-data 0660.
+RuntimeDirectory=hostashi-php/%i
+RuntimeDirectoryMode=0755
+Restart=on-failure
+RestartSec=2s
+
+# A /tmp of its own: uploads, sessions and temp files of one site stay
+# invisible to the others (open_basedir includes /tmp).
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=full
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+# No MemoryDenyWriteExecute=: it breaks the opcache JIT and PCRE's JIT.
+
+[Install]
+WantedBy=multi-user.target

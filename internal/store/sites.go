@@ -29,13 +29,14 @@ type Site struct {
 	Name      string
 	Pool      string
 	State     string
+	PHP       string // PHP version, empty for no PHP
 	Domains   []string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
 // CreateSite stores a new site in state creating together with its domains.
-func (s *Store) CreateSite(ctx context.Context, name, pool string, domains []string, now time.Time) (Site, error) {
+func (s *Store) CreateSite(ctx context.Context, name, pool, php string, domains []string, now time.Time) (Site, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Site{}, fmt.Errorf("store: %w", err)
@@ -53,8 +54,8 @@ func (s *Store) CreateSite(ctx context.Context, name, pool string, domains []str
 	}
 
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO sites (name, pool, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-		name, pool, SiteCreating, now.Unix(), now.Unix())
+		`INSERT INTO sites (name, pool, state, php, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		name, pool, SiteCreating, php, now.Unix(), now.Unix())
 	if err != nil {
 		return Site{}, fmt.Errorf("store: %w", err)
 	}
@@ -74,7 +75,7 @@ func (s *Store) CreateSite(ctx context.Context, name, pool string, domains []str
 
 	t := time.Unix(now.Unix(), 0).UTC()
 
-	return Site{ID: id, Name: name, Pool: pool, State: SiteCreating, Domains: domains, CreatedAt: t, UpdatedAt: t}, nil
+	return Site{ID: id, Name: name, Pool: pool, State: SiteCreating, PHP: php, Domains: domains, CreatedAt: t, UpdatedAt: t}, nil
 }
 
 func insertDomains(ctx context.Context, tx *sql.Tx, siteID int64, domains []string) error {
@@ -112,6 +113,35 @@ func (s *Store) SetSiteState(ctx context.Context, name, state string, now time.T
 	}
 
 	return nil
+}
+
+// SetSitePHP sets the PHP version of a site and returns the previous one.
+func (s *Store) SetSitePHP(ctx context.Context, name, php string, now time.Time) (string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var old string
+	if err := tx.QueryRowContext(ctx, `SELECT php FROM sites WHERE name = ?`, name).Scan(&old); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET php = ?, updated_at = ? WHERE name = ?`, php, now.Unix(), name); err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	return old, nil
 }
 
 // ReplaceSiteDomains sets the domains of a site and returns the previous ones.
@@ -189,7 +219,7 @@ func domainsOf(ctx context.Context, q queryer, siteID int64) ([]string, error) {
 // Sites returns all sites sorted by name, with their domains.
 func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, pool, state, created_at, updated_at FROM sites ORDER BY name`)
+		`SELECT id, name, pool, state, php, created_at, updated_at FROM sites ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("store: %w", err)
 	}
@@ -202,7 +232,7 @@ func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 			cre, upd int64
 		)
 
-		if err := rows.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &cre, &upd); err != nil {
+		if err := rows.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &cre, &upd); err != nil {
 			_ = rows.Close()
 
 			return nil, fmt.Errorf("store: %w", err)
@@ -237,8 +267,8 @@ func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
 	)
 
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, pool, state, created_at, updated_at FROM sites WHERE name = ?`, name).
-		Scan(&st.ID, &st.Name, &st.Pool, &st.State, &cre, &upd)
+		`SELECT id, name, pool, state, php, created_at, updated_at FROM sites WHERE name = ?`, name).
+		Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, ErrNotFound
 	}

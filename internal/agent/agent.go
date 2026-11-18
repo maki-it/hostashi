@@ -19,6 +19,8 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/php"
+	"github.com/maki-it/hostashi/internal/phpctl"
 	"github.com/maki-it/hostashi/internal/sites"
 	"github.com/maki-it/hostashi/internal/sysuser"
 	"github.com/maki-it/hostashi/internal/web"
@@ -45,6 +47,10 @@ type Config struct {
 	// Web serves web.apply. Run builds it from StateDir if nginx is
 	// installed; without it the operation answers failed_precondition.
 	Web *web.Reconciler
+
+	// PHP runs the sites' PHP-FPM pools for web.apply. Run builds it from
+	// StateDir; without it a site with PHP is refused.
+	PHP *php.Manager
 }
 
 // ErrNotRoot is returned when the agent is started without root.
@@ -100,7 +106,12 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	})
 
 	if cfg.Sites != nil {
-		h := &siteOps{m: cfg.Sites, web: cfg.Web}
+		log := cfg.Log
+		if log == nil {
+			log = slog.New(slog.DiscardHandler)
+		}
+
+		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, log: log}
 		h.register(s)
 	}
 
@@ -108,11 +119,13 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 }
 
 // siteOps serves the site and web operations. mu orders site.delete against
-// web.apply, so a site cannot lose its home while a virtual host is being
-// built for it.
+// web.apply, so a site cannot lose its home while a virtual host or a PHP
+// pool is being built for it.
 type siteOps struct {
 	m   *sites.Manager
 	web *web.Reconciler
+	php *php.Manager
+	log *slog.Logger
 	mu  sync.Mutex
 }
 
@@ -147,6 +160,19 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			}
 		}
 
+		if h.php != nil {
+			pools, err := h.php.Current()
+			if err != nil {
+				return agentapi.SiteDeleteResponse{}, err
+			}
+
+			if _, ok := pools[req.User]; ok {
+				return agentapi.SiteDeleteResponse{}, &agentrpc.Error{
+					Code: agentrpc.CodePrecondition, Message: "site still has a PHP pool, remove it with web.apply first",
+				}
+			}
+		}
+
 		if err := m.Delete(ctx, req.User); err != nil {
 			return agentapi.SiteDeleteResponse{}, mapSiteError(err)
 		}
@@ -169,6 +195,14 @@ func (h *siteOps) register(s *agentrpc.Server) {
 	})
 
 	agentrpc.Handle(s, agentapi.WebApply, h.webApply)
+
+	agentrpc.Handle(s, agentapi.PHPVersionsList, func(_ context.Context, _ agentrpc.Caller, _ agentapi.PHPVersionsRequest) (agentapi.PHPVersionsResponse, error) {
+		if h.php == nil || h.php.Installed == nil {
+			return agentapi.PHPVersionsResponse{Installed: []string{}}, nil
+		}
+
+		return agentapi.PHPVersionsResponse{Installed: h.php.Installed()}, nil
+	})
 }
 
 func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.WebApplyRequest) (agentapi.WebApplyResponse, error) {
@@ -180,14 +214,37 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 	defer h.mu.Unlock()
 
 	d := web.Desired{Sites: make([]web.Site, 0, len(req.Sites))}
+	pools := []php.Pool{}
+	keep := map[string]bool{}
 
 	for _, s := range req.Sites {
-		root, ok := h.m.WebRoot(s.User)
+		home, ok := h.m.Home(s.User)
 		if !ok {
 			return agentapi.WebApplyResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site " + s.User}
 		}
 
-		d.Sites = append(d.Sites, web.Site{User: s.User, Domains: s.Domains, Root: root})
+		site := web.Site{User: s.User, Domains: s.Domains, Root: home + "/" + sites.WebRootName}
+
+		if s.PHP != "" {
+			if h.php == nil {
+				return agentapi.WebApplyResponse{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "PHP is not available on this server"}
+			}
+
+			pools = append(pools, php.Pool{User: s.User, Version: s.PHP, Home: home})
+			keep[s.User] = true
+			site.PHPSocket = h.php.Socket(s.User)
+		}
+
+		d.Sites = append(d.Sites, site)
+	}
+
+	// New and changed pools first, so nginx never points at a socket that
+	// does not exist yet; pools of sites without PHP only after nginx no
+	// longer uses them.
+	if h.php != nil {
+		if err := h.php.Ensure(ctx, pools); err != nil {
+			return agentapi.WebApplyResponse{}, mapPHPError(err)
+		}
 	}
 
 	res, err := h.web.Apply(ctx, d)
@@ -195,7 +252,33 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		return agentapi.WebApplyResponse{Generation: res.Generation}, mapWebError(err)
 	}
 
+	if h.php != nil {
+		// The web server change is live; a pool that could not be stopped
+		// is only reported. site.delete refuses while it exists, and the
+		// next web.apply tries again.
+		if err := h.php.Prune(ctx, keep); err != nil {
+			h.log.Error("stop php pools of sites without PHP", "err", err)
+		}
+	}
+
 	return agentapi.WebApplyResponse{Generation: res.Generation, Changed: res.Changed}, nil
+}
+
+// mapPHPError gives the caller a fixed message; the details (php-fpm and
+// systemctl output) stay in the agent log.
+func mapPHPError(err error) error {
+	switch {
+	case errors.Is(err, php.ErrInvalid):
+		return &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "invalid PHP state"}
+	case errors.Is(err, php.ErrNotInstalled):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the requested PHP version is not installed"}
+	case errors.Is(err, php.ErrValidation):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "php-fpm rejected the pool configuration, nothing was changed"}
+	case errors.Is(err, php.ErrStartFailed):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the PHP pool did not start, the previous state was restored"}
+	default:
+		return err
+	}
 }
 
 // mapWebError gives the caller a fixed message; the details (nginx output)
@@ -369,6 +452,35 @@ func ipv6Available() bool {
 	return true
 }
 
+// PHPSocketDir holds one directory per site with its FPM socket, created by
+// the site's unit (RuntimeDirectory=hostashi-php/%i).
+const PHPSocketDir = "/run/hostashi-php"
+
+// openPHP builds the production PHP manager. Without systemctl (not a
+// systemd host) PHP is unavailable.
+func openPHP(stateDir string, log *slog.Logger) *php.Manager {
+	if _, err := os.Stat(phpctl.Systemctl); err != nil {
+		if log != nil {
+			log.Warn("systemctl not found, PHP disabled", "path", phpctl.Systemctl)
+		}
+
+		return nil
+	}
+
+	if stateDir == "" {
+		stateDir = DefaultStateDir
+	}
+
+	return &php.Manager{
+		Dir:       filepath.Join(stateDir, "php"),
+		SocketDir: PHPSocketDir,
+		WebGroup:  WebUser,
+		Ctl:       phpctl.Controller{},
+		Installed: phpctl.Installed,
+		Log:       log,
+	}
+}
+
 // WebControlSocket is where nginx answers the agent's checks. Its directory
 // is the RuntimeDirectory of the nginx unit drop-in (root, 0700).
 const WebControlSocket = "/run/hostashi-web/control.sock"
@@ -389,6 +501,17 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.Web == nil {
 		cfg.Web = openWeb(cfg.StateDir, cfg.Log)
+	}
+
+	if cfg.PHP == nil {
+		cfg.PHP = openPHP(cfg.StateDir, cfg.Log)
+	}
+
+	if cfg.PHP != nil {
+		// Like the web server: a failure is logged, web.apply retries.
+		if err := cfg.PHP.Recover(ctx); err != nil && cfg.Log != nil {
+			cfg.Log.Error("php pool recovery failed", "err", err)
+		}
 	}
 
 	if cfg.Web != nil {

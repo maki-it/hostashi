@@ -49,6 +49,8 @@ func (a *stubAgent) WebApply(_ context.Context, req agentapi.WebApplyRequest) (a
 	return agentapi.WebApplyResponse{Generation: 2, Changed: true}, nil
 }
 
+func (a *stubAgent) PHPVersions(context.Context) ([]string, error) { return []string{"8.4"}, nil }
+
 func TestSiteLifecycleOverHTTP(t *testing.T) {
 	ag := &stubAgent{}
 	e := newAPIWithAgent(t, ag)
@@ -83,6 +85,26 @@ func TestSiteLifecycleOverHTTP(t *testing.T) {
 		t.Fatalf("set domains: %d %s", rec.Code, rec.Body)
 	}
 
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/php", cookie: c, body: `{"php":"8.4"}`})
+	if rec.Code != http.StatusOK || ag.web.Sites[0].PHP != "8.4" {
+		t.Fatalf("set php: %d %s", rec.Code, rec.Body)
+	}
+
+	if err := json.Unmarshal(rec.Body.Bytes(), &site); err != nil || site.PHP != "8.4" {
+		t.Fatalf("site %+v %v", site, err)
+	}
+
+	for body, code := range map[string]int{`{"php":"8.0"}`: http.StatusUnprocessableEntity, `{}`: http.StatusUnprocessableEntity, `{"php":8.4}`: http.StatusBadRequest} {
+		if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/php", cookie: c, body: body}); rec.Code != code {
+			t.Errorf("set php %s: %d %s", body, rec.Code, rec.Body)
+		}
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/php/versions", cookie: c})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"installed":["8.4"]`) || !strings.Contains(rec.Body.String(), `"legacy":["7.4","8.1","8.2"]`) {
+		t.Fatalf("versions: %d %s", rec.Code, rec.Body)
+	}
+
 	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/sites", cookie: c})
 
 	var list struct {
@@ -112,6 +134,7 @@ func TestSiteInputAndAgentErrorsOverHTTP(t *testing.T) {
 		`{"name":"../etc","domains":["a.example.com"]}`,
 		`{"name":"blog","domains":[]}`,
 		`{"name":"blog","domains":["a.example.com;"]}`,
+		`{"name":"blog","php":"5.6","domains":["a.example.com"]}`,
 	} {
 		rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: body})
 		if rec.Code != http.StatusUnprocessableEntity {
@@ -169,6 +192,16 @@ func TestSiteRoutesNeedScopes(t *testing.T) {
 	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", header: bearerHeader(write.Token), body: `{"name":"blog","domains":["a.example.com"]}`})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("write token create: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/php", header: bearerHeader(read.Token), body: `{"php":"8.4"}`})
+	if rec.Code != http.StatusForbidden || errCode(t, rec) != "insufficient_scope" {
+		t.Fatalf("read token set php: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/php/versions", header: bearerHeader(read.Token)})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("read token versions: %d %s", rec.Code, rec.Body)
 	}
 
 	// Deleting needs the high-risk scope by name.

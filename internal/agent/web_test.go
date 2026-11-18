@@ -10,6 +10,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/web"
 )
 
@@ -80,5 +81,55 @@ func TestWebApplyChecksSitesAndInput(t *testing.T) {
 		if _, err := raw.Call(ctx, c, rawRequest(body)); err == nil {
 			t.Errorf("%s accepted", body)
 		}
+	}
+}
+
+func TestPHPSiteNeedsPHP(t *testing.T) {
+	c, _ := startSiteAgentWith(t, &web.Reconciler{Base: filepath.Join(t.TempDir(), "web"), Driver: &web.Nginx{}})
+	ctx := context.Background()
+
+	if _, err := agentapi.SiteCreate.Call(ctx, c, agentapi.SiteCreateRequest{User: "blog"}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := agentapi.WebApply.Call(ctx, c, agentapi.WebApplyRequest{Sites: []agentapi.WebSite{
+		{User: "blog", Domains: []string{"blog.example.com"}, PHP: "8.4"},
+	}})
+	wantCode(t, err, agentrpc.CodePrecondition)
+
+	res, err := agentapi.PHPVersionsList.Call(ctx, c, agentapi.PHPVersionsRequest{})
+	if err != nil || res.Installed == nil || len(res.Installed) != 0 {
+		t.Fatalf("versions %+v %v", res, err)
+	}
+}
+
+func TestSiteWithPHPPoolCannotBeDeleted(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "php")
+	p := &php.Manager{Dir: dir, SocketDir: "/run/hostashi-php", WebGroup: "www-data", Installed: func() []string { return []string{"8.4"} }}
+	c, pool := startSiteAgentPHP(t, nil, p)
+	ctx := context.Background()
+
+	if _, err := agentapi.SiteCreate.Call(ctx, c, agentapi.SiteCreateRequest{User: "blog"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(`{"blog":{"user":"blog","version":"8.4","home":"/x"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := agentapi.SiteDelete.Call(ctx, c, agentapi.SiteDeleteRequest{User: "blog"})
+	wantCode(t, err, agentrpc.CodePrecondition)
+
+	if _, err := os.Stat(filepath.Join(pool, "blog")); err != nil {
+		t.Fatalf("home removed: %v", err)
+	}
+
+	res, err := agentapi.PHPVersionsList.Call(ctx, c, agentapi.PHPVersionsRequest{})
+	if err != nil || len(res.Installed) != 1 || res.Installed[0] != "8.4" {
+		t.Fatalf("versions %+v %v", res, err)
 	}
 }

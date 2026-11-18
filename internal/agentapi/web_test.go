@@ -31,7 +31,7 @@ func TestValidateDomain(t *testing.T) {
 func TestWebApplyRequestValidate(t *testing.T) {
 	ok := WebApplyRequest{Sites: []WebSite{
 		{User: "blog", Domains: []string{"blog.example.com", "www.blog.example.com"}},
-		{User: "shop", Domains: []string{"shop.example.com"}},
+		{User: "shop", Domains: []string{"shop.example.com"}, PHP: "8.4"},
 	}}
 	if err := ok.Validate(); err != nil {
 		t.Fatal(err)
@@ -43,6 +43,8 @@ func TestWebApplyRequestValidate(t *testing.T) {
 		"no domain":        {Sites: []WebSite{{User: "blog"}}},
 		"bad user":         {Sites: []WebSite{{User: "root", Domains: []string{"a.example.com"}}}},
 		"too many domains": {Sites: []WebSite{{User: "blog", Domains: make([]string, MaxDomainsPerSite+1)}}},
+		"unknown php":      {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "8.0"}}},
+		"php path":         {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "../8.4"}}},
 	} {
 		if err := r.Validate(); err == nil {
 			t.Errorf("%s accepted", name)

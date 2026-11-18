@@ -31,11 +31,12 @@ jobs:
           cache: false
       - name: go vet
         run: go vet ./...
-      - name: Install nginx for the web reconciler tests
+      - name: Install nginx and php-fpm for the web and PHP tests
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends nginx
+          sudo apt-get install -y -qq --no-install-recommends nginx php-fpm
           sudo systemctl disable --now nginx
+          for u in /usr/lib/systemd/system/php*-fpm.service; do sudo systemctl disable --now "$(basename "$u")"; done
       - name: Tests (unprivileged)
         run: go test -race ./...
       - name: Cross-user test (root agent, client as uid 65534)

@@ -60,6 +60,9 @@ func validLabel(l string) bool {
 type WebSite struct {
 	User    string   `json:"user"`
 	Domains []string `json:"domains"` // the first one is the primary domain
+	// PHP is the PHP version of the site's FPM pool, empty for a site
+	// without PHP (static files only).
+	PHP string `json:"php,omitempty"`
 }
 
 // WebApplyRequest is the complete desired web server state. Sites that are
@@ -88,6 +91,12 @@ func (r WebApplyRequest) Validate() error {
 
 		users[s.User] = true
 
+		if s.PHP != "" {
+			if err := ValidatePHPVersion(s.PHP); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
+		}
+
 		if len(s.Domains) == 0 || len(s.Domains) > MaxDomainsPerSite {
 			return fmt.Errorf("site %q: between 1 and %d domains required", s.User, MaxDomainsPerSite)
 		}
@@ -114,7 +123,9 @@ type WebApplyResponse struct {
 	Changed    bool `json:"changed"` // false: the state was already live
 }
 
-// WebApply renders the virtual hosts, validates them with nginx -t, switches
-// atomically, reloads and verifies. On any failure the previous generation
-// stays or is restored.
+// WebApply makes the web server state live. First the PHP-FPM pool of every
+// site with PHP is started or changed, then the virtual hosts are rendered,
+// validated with nginx -t, switched atomically, reloaded and verified, and
+// last the pools of sites that lost PHP are stopped. On any failure the
+// previous generation stays or is restored.
 var WebApply = agentrpc.Op[WebApplyRequest, WebApplyResponse]{Name: "web.apply"}

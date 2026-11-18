@@ -60,6 +60,7 @@ docker exec "$NAME" mkdir -p /opt/hostashi
 docker cp "$HERE/." "$NAME:/opt/hostashi/"
 docker cp "$BINARY" "$NAME:/opt/hostashi/hostashi"
 x() { docker exec "$NAME" "$@"; }
+xi() { docker exec -i "$NAME" "$@"; }
 
 step "apply without --yes is refused"
 if x /opt/hostashi/install.sh apply --binary /opt/hostashi/hostashi; then fail "apply ran without --yes"; fi
@@ -165,5 +166,36 @@ body=$(x curl -fsS -H 'Host: www.shop.example.com' http://127.0.0.1/)
 [ "$body" = "hello from shop" ] || fail "new domain answered '$body'"
 [ "$(api DELETE /api/v1/sites/shop)" = 204 ] || fail "delete site: $(x cat /tmp/api.out)"
 x test ! -e /home/shop || fail "API site home still there"
+
+step "a PHP site through the panel API"
+[ "$(api GET /api/v1/php/versions)" = 200 ] || fail "php versions: $(x cat /tmp/api.out)"
+ver=$(x cat /tmp/api.out | sed -n 's/.*"installed":\["\([0-9.]*\)".*/\1/p')
+[ -n "$ver" ] || fail "no PHP version installed: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites "{\"name\":\"wp\",\"php\":\"$ver\",\"domains\":[\"wp.example.com\"]}")" = 201 ] ||
+  fail "create PHP site: $(x cat /tmp/api.out)"
+x systemctl is-active --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit of the site not running"
+x systemctl is-enabled --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit of the site not enabled"
+[ "$(x stat -c '%a %U:%G' /run/hostashi-php/wp/php-fpm.sock)" = "660 wp:www-data" ] || fail "PHP socket has the wrong owner or mode"
+# The worker runs as the site user and cannot read outside its home and /tmp.
+xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/index.php' <<'PHP'
+<?php
+echo "php ", PHP_MAJOR_VERSION, ".", PHP_MINOR_VERSION, " user ", posix_getpwuid(posix_geteuid())["name"];
+echo @file_get_contents("/etc/hostname") === false ? " jailed" : " open";
+PHP
+body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/some/pretty/url)
+[ "$body" = "php $ver user wp jailed" ] || fail "PHP site answered '$body'"
+# PHP off: the pool goes away and PHP source is never sent.
+[ "$(api PUT /api/v1/sites/wp/php '{"php":""}')" = 200 ] || fail "PHP off: $(x cat /tmp/api.out)"
+! x systemctl is-active --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit still running after PHP off"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wp.example.com' http://127.0.0.1/index.php)
+[ "$code" = 403 ] || fail "index.php without PHP answered $code"
+[ "$(api PUT /api/v1/sites/wp/php "{\"php\":\"$ver\"}")" = 200 ] || fail "PHP on again: $(x cat /tmp/api.out)"
+body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/)
+[ "$body" = "php $ver user wp jailed" ] || fail "PHP site answered '$body' after PHP on"
+# The distribution's own FPM service stays off.
+! x systemctl is-active --quiet "php$ver-fpm.service" || fail "distribution php$ver-fpm is running"
+[ "$(api DELETE /api/v1/sites/wp)" = 204 ] || fail "delete PHP site: $(x cat /tmp/api.out)"
+! x systemctl is-active --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit still running after delete"
+x test ! -e /home/wp || fail "PHP site home still there"
 
 echo "PASS: installer test on $IMG"

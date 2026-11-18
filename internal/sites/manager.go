@@ -219,8 +219,8 @@ func (m *Manager) homeGID(siteGID uint32) uint32 {
 	return siteGID
 }
 
-// WebRoot returns the document root of a registered site.
-func (m *Manager) WebRoot(user string) (string, bool) {
+// Home returns the home directory of a registered site.
+func (m *Manager) Home(user string) (string, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -234,7 +234,17 @@ func (m *Manager) WebRoot(user string) (string, bool) {
 		return "", false
 	}
 
-	return p.Path + "/" + user + "/" + WebRootName, true
+	return p.Path + "/" + user, true
+}
+
+// WebRoot returns the document root of a registered site.
+func (m *Manager) WebRoot(user string) (string, bool) {
+	home, ok := m.Home(user)
+	if !ok {
+		return "", false
+	}
+
+	return home + "/" + WebRootName, true
 }
 
 // List returns all registered sites sorted by user.

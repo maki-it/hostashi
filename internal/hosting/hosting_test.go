@@ -93,14 +93,24 @@ func (f *fakeAgent) WebApply(_ context.Context, req agentapi.WebApplyRequest) (a
 	return agentapi.WebApplyResponse{Generation: f.applies, Changed: true}, nil
 }
 
+func (f *fakeAgent) PHPVersions(context.Context) ([]string, error) {
+	return []string{"8.3", "8.4"}, nil
+}
+
 // live returns "user=domain,domain" for every site in the live web state.
 func (f *fakeAgent) live() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	var out []string
+
 	for _, s := range f.web.Sites {
-		out = append(out, fmt.Sprintf("%s=%v", s.User, s.Domains))
+		entry := fmt.Sprintf("%s=%v", s.User, s.Domains)
+		if s.PHP != "" {
+			entry += "+php" + s.PHP
+		}
+
+		out = append(out, entry)
 	}
 
 	sort.Strings(out)
@@ -196,6 +206,7 @@ func TestCreateRejectsBadInputWithoutCallingTheAgent(t *testing.T) {
 		"bad domain":     {Name: "blog", Domains: []string{"a.example.com;"}},
 		"twice":          {Name: "blog", Domains: []string{"a.example.com", "A.example.com"}},
 		"control domain": {Name: "blog", Domains: []string{"_hostashi_control"}},
+		"bad php":        {Name: "blog", PHP: "8.0", Domains: []string{"a.example.com"}},
 	} {
 		if _, err := s.Create(t.Context(), 1, req); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
@@ -312,5 +323,60 @@ func TestDeleteCanBeRepeatedAfterAFailure(t *testing.T) {
 
 	if _, err := s.Get(ctx, "blog"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("row stayed: %v", err)
+	}
+}
+
+func TestPHPVersionChange(t *testing.T) {
+	s, ag, st := newService(t)
+	ctx := t.Context()
+
+	site, err := s.Create(ctx, 1, CreateRequest{Name: "blog", PHP: "8.4", Domains: []string{"blog.example.com"}})
+	if err != nil || site.PHP != "8.4" {
+		t.Fatalf("%+v %v", site, err)
+	}
+
+	if got := ag.live(); got != "[blog=[blog.example.com]+php8.4]" {
+		t.Fatalf("live %s", got)
+	}
+
+	if site, err = s.SetPHP(ctx, 1, "blog", "8.3"); err != nil || site.PHP != "8.3" || ag.live() != "[blog=[blog.example.com]+php8.3]" {
+		t.Fatalf("%+v %v live %s", site, err, ag.live())
+	}
+
+	// The agent refuses: the stored version stays the previous one.
+	ag.webErr = &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the requested PHP version is not installed"}
+
+	if _, err := s.SetPHP(ctx, 1, "blog", "8.5"); !isCode(err, agentrpc.CodePrecondition) {
+		t.Fatalf("err %v", err)
+	}
+
+	if got, _ := s.Get(ctx, "blog"); got.PHP != "8.3" {
+		t.Fatalf("stored %q", got.PHP)
+	}
+
+	ag.webErr = nil
+
+	// "" turns PHP off.
+	if _, err := s.SetPHP(ctx, 1, "blog", ""); err != nil || ag.live() != "[blog=[blog.example.com]]" {
+		t.Fatalf("%v live %s", err, ag.live())
+	}
+
+	for _, v := range []string{"8.0", "8", "../8.4"} {
+		if _, err := s.SetPHP(ctx, 1, "blog", v); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%q: %v", v, err)
+		}
+	}
+
+	if _, err := s.SetPHP(ctx, 1, "nope", "8.4"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown site: %v", err)
+	}
+
+	if v, err := s.PHPVersions(ctx); err != nil || fmt.Sprint(v) != "[8.3 8.4]" {
+		t.Fatalf("versions %v %v", v, err)
+	}
+
+	var n int
+	if err := st.RawCount(ctx, `SELECT count(*) FROM audit_log WHERE action = ?`, "site.php", &n); err != nil || n != 2 {
+		t.Fatalf("audit entries %d %v", n, err)
 	}
 }
