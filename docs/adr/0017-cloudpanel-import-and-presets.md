@@ -82,7 +82,6 @@ The values are a starting point [A]; each preset spec confirms or changes them. 
 
 Accepting this ADR settles Parts 1 to 4 in principle. The questions below are still open and are not decided by the acceptance.
 
-
 1. Is a second server during migration acceptable for Kim's own move (`web2` to a fresh server)? [A: yes, since Hostashi needs a fresh server anyway]
 2. ~~Which presets are default-on?~~ Decided in principle: per site type (Part 4). Open: confirm the default matrix.
 3. ~~Do we keep a Varnish option?~~ Decided by Kim: yes, in the same phase as the importer. The Varnish configuration (VCL) and the purge integration must be our own; the CloudPanel WordPress purge plugin is GPLv3 and usable only if ADR-0002 allows it [V: `01-recherche-cloudpanel.md`].

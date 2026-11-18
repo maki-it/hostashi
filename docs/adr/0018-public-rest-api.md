@@ -73,7 +73,6 @@ The shape is illustrative; the final resource names come with the spec.
 
 Accepting this ADR settles the recommendation. Question 2 is still open and is not decided by the acceptance.
 
-
 1. ~~Should the API be reachable on a separate address or port, or on the panel's address?~~ Decided by Kim (2026-11-18): same address as the panel, with an optional IP allowlist for token access.
 2. Default maximum token lifetime: suggestion 90 days, with an explicit "no expiry" only for the owner role and a warning [E].
 3. Outgoing webhooks (events such as "backup failed") belong to notifications (`03-features.md` 3.8) and are not part of this ADR.
