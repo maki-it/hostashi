@@ -1,6 +1,6 @@
 # ADR-0002 Project license
 
-**Status:** Proposed (not accepted). **Date drafted:** 2026-11-17. **Decides:** Kim. **Depends on:** ADR-0013. **Must be settled before:** the first line of public code or the first outside contribution.
+**Status:** Accepted (2026-11-18, by Kim). **Date drafted:** 2026-11-17. **Decides:** Kim. **Depends on:** ADR-0013. **Must be settled before:** the first line of public code or the first outside contribution.
 
 > This is a planning aid, not legal advice. License choice has long-term legal effects. Have a lawyer review the final choice, the contribution terms and the handling of third-party code before publication.
 
@@ -26,10 +26,10 @@
 - Q2: the team is Kim alone, who masters Go [V: Kim, thread]. Bus factor is 1.
 - Q5: single-server v1, multi-server and reseller maybe much later [V: Kim, thread].
 - Q8: no budget for an external pentest or legal review [V: Kim, thread].
-- License direction: **AGPL-3.0-or-later** [V: Kim, thread, 2026-11-17]. Status stays Proposed until Kim sets Accepted.
+- License direction: **AGPL-3.0-or-later** [V: Kim, thread, 2026-11-17]. Accepted by Kim on 2026-11-18.
 - Publication without a lawyer: Kim agrees to a simple self-check first (automated license check of dependencies, name and trademark search in public registers), lawyer later when budget exists [V: Kim, thread]. This is not legal advice and does not remove the risk.
 - Docs and translations: CC-BY-4.0 [V: Kim, thread].
-- Contributions: DCO for now, no CLA, open core stays off the table for the moment [V: Kim, thread]. Not final: the ADRs are still Proposed.
+- Contributions: DCO for now, no CLA, open core stays off the table for the moment [V: Kim, thread]. Confirmed with the acceptance on 2026-11-18.
 
 Effect: with own use first and no budget for legal review, the license choice should be the simplest one with the fewest later obligations. That favors **no CLA and no relicensing plan**.
 
@@ -59,7 +59,7 @@ Stated plainly, my pick under the current information is **option 1 (AGPL-3.0-or
 
 - A license choice can be widened later (AGPL to Apache requires all copyright holders to agree) but not cheaply [U]. Decide before publishing code.
 - Needed with either choice: `LICENSE` file, SPDX headers or REUSE compliance, a third-party license inventory in CI (Go modules and npm packages for the embedded SPA, fonts, icons), and a rule that no code or text from the CloudPanel reference repos enters the tree (ADR-0001).
-- The repo currently has **no** LICENSE file and must not get one until Kim accepts this ADR. Until then, outside contributions should not be accepted [A].
+- The repo has no LICENSE file yet. With this ADR accepted, adding `LICENSE` (AGPL-3.0-or-later), the docs license (CC-BY-4.0) and the DCO note in `CONTRIBUTING.md` is the next step. Outside contributions should wait until those files are in place [A].
 - Documentation and UI texts need a license too. A common choice is CC-BY-4.0 for docs [U], decide together with this ADR.
 - Name and logo are not covered by the code license. A trademark policy is part of ADR-0013.
 
@@ -72,4 +72,4 @@ Stated plainly, my pick under the current information is **option 1 (AGPL-3.0-or
 
 ## Open questions
 
-None at this level. Remaining before Accepted: Kim sets the status, and the self-check (dependency licenses, name and trademark search) is done before any publication.
+None at this level. Still required before any publication: the self-check (dependency licenses, name and trademark search).

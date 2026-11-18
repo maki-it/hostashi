@@ -24,6 +24,10 @@ Ein modernes, **wirklich quelloffenes** Hosting-Control-Panel für einzelne Linu
 | 6 | [Roadmap](docs/06-roadmap.md) | Phasen, Meilensteine, Abnahmekriterien, Teststrategie, Risiken |
 | 7 | [Entscheidungen](docs/07-decisions.md) | ADRs: offene Entscheidungen mit Empfehlung |
 
+## Lizenz
+
+Code: **AGPL-3.0-or-later** ([`LICENSE`](LICENSE)). Dokumentation: **CC-BY-4.0** ([`LICENSES/CC-BY-4.0.txt`](LICENSES/CC-BY-4.0.txt)). Beiträge mit DCO-Sign-off, kein CLA (siehe [`CONTRIBUTING.md`](CONTRIBUTING.md)). Der Name und das Logo sind von der Code-Lizenz nicht erfasst.
+
 ## Nächster Schritt
 
 Die Fragen in Abschnitt „Offene Fragen“ von [`docs/07-decisions.md`](docs/07-decisions.md) beantworten (Lizenz, Stack, Team, Geschäftsmodell). Danach beginnt Phase 0 mit den Spikes aus der [Roadmap](docs/06-roadmap.md).

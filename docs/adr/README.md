@@ -4,15 +4,15 @@ Full drafts for the decisions that need the project owner's input. The overview 
 
 | ADR | Topic | Status |
 |-----|-------|--------|
-| [0002](0002-license.md) | Project license | Proposed |
+| [0002](0002-license.md) | Project license | Accepted |
 | [0003](0003-language-and-stack.md) | Language and stack | Accepted |
 | [0005](0005-web-server.md) | Web server | Accepted |
 | [0010](0010-target-audience-and-v1-scope.md) | Target audience and v1 scope | Proposed |
 | [0013](0013-business-model-and-governance.md) | Business model and governance | Proposed |
 | [0015](0015-per-site-resource-limits.md) | Per-site resource limits | Proposed |
 | [0016](0016-per-site-storage-location.md) | Per-site storage location (storage pools) | Proposed |
-| [0017](0017-cloudpanel-import-and-presets.md) | CloudPanel import as migration, and Hostashi presets | Proposed |
-| [0018](0018-public-rest-api.md) | Public REST API design | Proposed |
+| [0017](0017-cloudpanel-import-and-presets.md) | CloudPanel import as migration, and Hostashi presets | Accepted |
+| [0018](0018-public-rest-api.md) | Public REST API design | Accepted |
 | [0019](0019-php-package-source-and-versions.md) | PHP package source and multiple PHP versions | Accepted |
 
 Only the project owner sets a status to `Accepted`.
