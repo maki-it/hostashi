@@ -23,6 +23,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/serve"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -72,12 +73,14 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		listen := fs.String("listen", "127.0.0.1:8080", "listen address (loopback only for now)")
 
 		dbPath := fs.String("db", store.DefaultPath, "SQLite database path")
+
+		keyPath := fs.String("key", secrets.DefaultKeyPath, "encryption key file for stored secrets (created on first start)")
 		if fs.Parse(args) != nil || fs.NArg() != 0 {
 			return 2
 		}
 
 		if err = serve.CheckEUID(euid); err == nil {
-			err = serve.Run(ctx, serve.Config{Listen: *listen, Socket: *socket, DBPath: *dbPath, Version: version, Log: log})
+			err = serve.Run(ctx, serve.Config{Listen: *listen, Socket: *socket, DBPath: *dbPath, KeyPath: *keyPath, Version: version, Log: log})
 		}
 	case "agent":
 		serveUser := fs.String("serve-user", "hostashi", "the only unprivileged user allowed to call the agent")

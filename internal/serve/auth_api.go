@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 const (
@@ -38,7 +39,9 @@ type userJSON struct {
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false) // keep & in otpauth URIs readable; the type is application/json
+	_ = enc.Encode(v)
 }
 
 func writeError(w http.ResponseWriter, code int, errCode, msg string) {
@@ -154,6 +157,12 @@ func registerAuth(mux *http.ServeMux, svc *auth.Service, log *slog.Logger) {
 		case errors.Is(err, auth.ErrRateLimited):
 			w.Header().Set("Retry-After", "900")
 			writeError(w, http.StatusTooManyRequests, "rate_limited", "too many attempts, try again later")
+		case errors.Is(err, auth.ErrTOTPRequired):
+			writeError(w, http.StatusUnauthorized, "totp_required", "a one-time code is required")
+		case errors.Is(err, auth.ErrTOTPUnavailable):
+			writeError(w, http.StatusNotImplemented, "totp_unavailable", "two-factor authentication is not configured on this server")
+		case errors.Is(err, auth.ErrTOTPState):
+			writeError(w, http.StatusConflict, "totp_state", "two-factor authentication is not in the right state for this action")
 		case errors.Is(err, auth.ErrInvalidCredentials):
 			writeError(w, http.StatusUnauthorized, "invalid_credentials", "invalid username or password")
 		case errors.Is(err, auth.ErrSetupNotAllowed):
@@ -201,12 +210,13 @@ func registerAuth(mux *http.ServeMux, svc *auth.Service, log *slog.Logger) {
 		var in struct {
 			Username string `json:"username"`
 			Password string `json:"password"`
+			TOTP     string `json:"totp"`
 		}
 		if !decodeJSON(w, r, &in) {
 			return
 		}
 
-		token, u, err := svc.Login(r.Context(), in.Username, in.Password, clientIP(r))
+		token, u, err := svc.Login(r.Context(), in.Username, in.Password, in.TOTP, clientIP(r))
 		if err != nil {
 			fail(w, err, "login")
 
@@ -225,6 +235,86 @@ func registerAuth(mux *http.ServeMux, svc *auth.Service, log *slog.Logger) {
 		}
 
 		setSessionCookie(w, "", -1)
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	// current returns the logged-in user or writes the 401 itself.
+	current := func(w http.ResponseWriter, r *http.Request) (store.User, bool) {
+		u, err := svc.Authenticate(r.Context(), sessionToken(r))
+		if errors.Is(err, auth.ErrUnauthenticated) {
+			writeError(w, http.StatusUnauthorized, "unauthenticated", "not logged in")
+
+			return store.User{}, false
+		}
+
+		if err != nil {
+			fail(w, err, "authenticate")
+
+			return store.User{}, false
+		}
+
+		return u, true
+	}
+
+	mux.HandleFunc("POST /api/v1/auth/totp/enroll", func(w http.ResponseWriter, r *http.Request) {
+		u, ok := current(w, r)
+		if !ok {
+			return
+		}
+
+		secret, uri, err := svc.TOTPEnroll(r.Context(), u.ID)
+		if err != nil {
+			fail(w, err, "totp enroll")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]string{"secret": secret, "uri": uri})
+	})
+
+	mux.HandleFunc("POST /api/v1/auth/totp/confirm", func(w http.ResponseWriter, r *http.Request) {
+		u, ok := current(w, r)
+		if !ok {
+			return
+		}
+
+		var in struct {
+			Code string `json:"code"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		codes, err := svc.TOTPConfirm(r.Context(), u.ID, in.Code)
+		if err != nil {
+			fail(w, err, "totp confirm")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string][]string{"recoveryCodes": codes})
+	})
+
+	mux.HandleFunc("POST /api/v1/auth/totp/disable", func(w http.ResponseWriter, r *http.Request) {
+		u, ok := current(w, r)
+		if !ok {
+			return
+		}
+
+		var in struct {
+			Password string `json:"password"`
+			Code     string `json:"code"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if err := svc.TOTPDisable(r.Context(), u.ID, in.Password, in.Code); err != nil {
+			fail(w, err, "totp disable")
+
+			return
+		}
+
 		w.WriteHeader(http.StatusNoContent)
 	})
 

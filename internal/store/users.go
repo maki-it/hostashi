@@ -16,6 +16,8 @@ var (
 	ErrNotFound = errors.New("store: not found")
 	// ErrSetupDone is returned when the first user already exists.
 	ErrSetupDone = errors.New("store: initial setup already done")
+	// ErrTOTPState is returned when TOTP is in the wrong state for the call.
+	ErrTOTPState = errors.New("store: TOTP is in the wrong state for this action")
 )
 
 // User is a panel account.
@@ -25,6 +27,9 @@ type User struct {
 	Role         string
 	Disabled     bool
 	PasswordHash string
+	TOTPEnabled  bool
+	TOTPSecret   []byte // encrypted, see internal/secrets
+	TOTPLastStep int64
 }
 
 // CountUsers returns the number of accounts.
@@ -77,14 +82,24 @@ func (s *Store) CreateFirstUser(ctx context.Context, username, passwordHash stri
 
 // UserByUsername returns the user or ErrNotFound.
 func (s *Store) UserByUsername(ctx context.Context, username string) (User, error) {
+	return s.userBy(ctx, `username = ?`, username)
+}
+
+// UserByID returns the user or ErrNotFound.
+func (s *Store) UserByID(ctx context.Context, id int64) (User, error) {
+	return s.userBy(ctx, `id = ?`, id)
+}
+
+func (s *Store) userBy(ctx context.Context, where string, arg any) (User, error) {
 	var (
-		u        User
-		disabled int
+		u                User
+		disabled, totpOn int
 	)
 
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, username, role, disabled, password_hash FROM users WHERE username = ?`, username).
-		Scan(&u.ID, &u.Username, &u.Role, &disabled, &u.PasswordHash)
+		`SELECT id, username, role, disabled, password_hash, totp_enabled, totp_secret, totp_last_step
+		   FROM users WHERE `+where, arg).
+		Scan(&u.ID, &u.Username, &u.Role, &disabled, &u.PasswordHash, &totpOn, &u.TOTPSecret, &u.TOTPLastStep)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -94,6 +109,7 @@ func (s *Store) UserByUsername(ctx context.Context, username string) (User, erro
 	}
 
 	u.Disabled = disabled == 1
+	u.TOTPEnabled = totpOn == 1
 
 	return u, nil
 }
@@ -179,6 +195,112 @@ func (s *Store) Audit(ctx context.Context, userID *int64, action, target string,
 		`INSERT INTO audit_log (user_id, action, target, detail) VALUES (?, ?, ?, ?)`,
 		userID, action, target, string(b))
 	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	return nil
+}
+
+// SetPendingTOTP stores a new encrypted seed for enrollment. It replaces an
+// unconfirmed seed and fails with ErrTOTPState if TOTP is already enabled.
+func (s *Store) SetPendingTOTP(ctx context.Context, userID int64, sealed []byte) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE users SET totp_secret = ?, totp_last_step = 0 WHERE id = ? AND totp_enabled = 0`, sealed, userID)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrTOTPState
+	}
+
+	return nil
+}
+
+// EnableTOTP turns on the pending seed, records the accepted step and
+// replaces the recovery codes, in one transaction.
+func (s *Store) EnableTOTP(ctx context.Context, userID, step int64, codeHashes [][]byte) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx,
+		`UPDATE users SET totp_enabled = 1, totp_last_step = ?
+		  WHERE id = ? AND totp_enabled = 0 AND totp_secret IS NOT NULL`, step, userID)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrTOTPState
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM recovery_codes WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	for _, h := range codeHashes {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO recovery_codes (user_id, code_hash) VALUES (?, ?)`, userID, h); err != nil {
+			return fmt.Errorf("store: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	return nil
+}
+
+// AcceptTOTPStep records step as used. It returns false if this step or a
+// later one was already accepted, which blocks replay of a captured code.
+func (s *Store) AcceptTOTPStep(ctx context.Context, userID, step int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE users SET totp_last_step = ? WHERE id = ? AND totp_last_step < ?`, step, userID, step)
+	if err != nil {
+		return false, fmt.Errorf("store: %w", err)
+	}
+
+	n, _ := res.RowsAffected()
+
+	return n == 1, nil
+}
+
+// UseRecoveryCode deletes the code and reports whether it existed.
+func (s *Store) UseRecoveryCode(ctx context.Context, userID int64, codeHash []byte) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM recovery_codes WHERE user_id = ? AND code_hash = ?`, userID, codeHash)
+	if err != nil {
+		return false, fmt.Errorf("store: %w", err)
+	}
+
+	n, _ := res.RowsAffected()
+
+	return n == 1, nil
+}
+
+// DisableTOTP removes the seed and the recovery codes.
+func (s *Store) DisableTOTP(ctx context.Context, userID int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET totp_secret = NULL, totp_enabled = 0, totp_last_step = 0 WHERE id = ?`, userID); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM recovery_codes WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 

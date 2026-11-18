@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,7 +53,7 @@ func TestOpenCreatesDatabase(t *testing.T) {
 	}
 
 	v, err := s.SchemaVersion(ctx)
-	if err != nil || v != 2 {
+	if err != nil || v != 3 {
 		t.Fatalf("version %d, %v", v, err)
 	}
 
@@ -255,24 +256,37 @@ func TestFailedMigrationRollsBack(t *testing.T) {
 	s := open(t, path)
 	ctx := context.Background()
 
-	fsys := fstest.MapFS{
-		"migrations/0001_init.sql": &fstest.MapFile{Data: []byte("SELECT 1;")},
-		"migrations/0002_ok.sql":   &fstest.MapFile{Data: []byte("CREATE TABLE t2 (x INTEGER) STRICT;")},
-		"migrations/0003_bad.sql": &fstest.MapFile{Data: []byte(
-			"CREATE TABLE t3 (x INTEGER) STRICT; INSERT INTO missing VALUES (1);")},
+	base, err := s.SchemaVersion(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	if err := migrate(ctx, s.db, fsys); err == nil || !strings.Contains(err.Error(), "0003_bad.sql") {
-		t.Fatalf("want error naming 0003_bad.sql, got %v", err)
+	// The database is already at the current version, so pad the fake
+	// history with no-op migrations up to it, then add one good and one bad.
+	fsys := fstest.MapFS{}
+	for i := 1; i <= base; i++ {
+		fsys[fmt.Sprintf("migrations/%04d_noop.sql", i)] = &fstest.MapFile{Data: []byte("SELECT 1;")}
+	}
+
+	fsys[fmt.Sprintf("migrations/%04d_ok.sql", base+1)] = &fstest.MapFile{Data: []byte("CREATE TABLE t2 (x INTEGER) STRICT;")}
+	fsys[fmt.Sprintf("migrations/%04d_bad.sql", base+2)] = &fstest.MapFile{Data: []byte(
+		"CREATE TABLE t3 (x INTEGER) STRICT; INSERT INTO missing VALUES (1);")}
+
+	if err := migrate(ctx, s.db, fsys); err == nil || !strings.Contains(err.Error(), "_bad.sql") {
+		t.Fatalf("want error naming the bad migration, got %v", err)
 	}
 
 	v, err := s.SchemaVersion(ctx)
-	if err != nil || v != 2 {
-		t.Fatalf("version %d, %v; want 2", v, err)
+	if err != nil || v != base+1 {
+		t.Fatalf("version %d, %v; want %d", v, err, base+1)
 	}
 
 	var n int
 	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_schema WHERE name = 't3'`).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("partial migration left table t3 (%d, %v)", n, err)
+	}
+
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_schema WHERE name = 't2'`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("good migration was not kept (%d, %v)", n, err)
 	}
 }
