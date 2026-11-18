@@ -26,6 +26,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0020 | nginx package source and Brotli | Accepted on 2026-11-18 ([adr/0020](adr/0020-nginx-package-source-and-brotli.md)) | Done |
 | 0021 | Brute-force and intrusion protection | Accepted on 2026-11-18 ([adr/0021](adr/0021-brute-force-and-intrusion-protection.md)) | Done |
 | 0022 | Metrics, logs and tracing | Accepted on 2026-11-18 ([adr/0022](adr/0022-metrics-and-tracing.md)) | Done |
+| 0023 | HTTPS for the panel | Accepted on 2026-11-18 ([adr/0023](adr/0023-panel-https.md)) | Done |
 
 ---
 
@@ -210,3 +211,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0022 Metrics, logs and tracing
 
 **Full text (status Accepted on 2026-11-18):** [adr/0022](adr/0022-metrics-and-tracing.md). Summary: metrics in Prometheus format under `/metrics` with `client_golang` (currently v1.25.0, checked on 2026-11-18). OpenTelemetry for metrics is rejected (more dependencies, the same result when scraped). The endpoint is off by default and reachable only in two ways: with an API token with its own scope `metrics:read`, or through a separate listener on loopback only, not through a "comes from localhost" check, because a local proxy would defeat that. Measured are HTTP requests (by route, not by path), agent operations, login failures (without user and IP), certificate expiry, and per site PHP-FPM and disk space. The `site` label is the system name, domains are never a label (cardinality and information disclosure). Per-site data is delivered by the agent through a new read-only operation `metrics.snapshot`. Tracing does not come in v1; instead a request ID that the panel generates and passes on to the agent. Checked: the agent rejects unknown fields in the protocol, so panel and agent must get the new field together. Decided (Kim, 2026-11-18): the endpoint is off by default. Access without a token goes through a separate listener on loopback only (Kim, 2026-11-18). The `site` label is the site's system name (Kim, 2026-11-18). No open questions left.
+
+## ADR-0023 HTTPS for the panel
+
+**Full text (status Accepted on 2026-11-18):** [adr/0023](adr/0023-panel-https.md). Summary: nginx terminates TLS for the panel's address on its own port 8443 and proxies to the panel on `127.0.0.1:8080`. The certificate comes the same way as for sites, so the key stays with root, and HTTP/3 and HSTS come from the same templates. The panel stays on loopback. Consequence: the panel takes the client IP from the header nginx sets, but only for requests from loopback. If nginx is down, only the SSH tunnel is left. Without a DNS name, the panel stays on the SSH tunnel. Decided (Kim, 2026-11-18): option A on port 8443, HSTS on for the panel by default. No open questions.
