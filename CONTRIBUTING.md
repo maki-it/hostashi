@@ -13,6 +13,8 @@ One Go module at the repository root, one binary with three modes (see [`docs/04
 - `internal/store`: SQLite (pure Go driver, WAL) with embedded, numbered migrations in `internal/store/migrations/`. Only `serve` opens it. Migrations are append-only: never edit a merged one, add the next number.
 - `internal/auth`: Argon2id passwords, server-side sessions (only the token hash is stored), login rate limits and the one-time setup token (file `setup-token` next to the database, mode 0600, valid 24 hours, shown with `hostashi setup-token`).
 - `internal/secrets`: AES-256-GCM for stored secrets such as TOTP seeds. The key file (`/etc/hostashi/secret.key`, mode 0400) is created on first start and must never be committed or backed up together with the database.
+- `internal/sites`: root-side site accounts. The registry (`sites.json`, in `/var/lib/hostashi-agent`, root-owned, mode 0700, deliberately not below the web process's directory) is the only source of uid, gid and storage pool. Home directories are created and removed with `openat2` on open fds, never with path strings. Deleting a site refuses homes owned by someone else and never crosses mounts or symlinks.
+- `internal/sysuser`: `useradd` and `userdel`, the only place in product code that starts a process (depguard exception in `.golangci.yml`): fixed absolute paths, arguments from validated names, empty environment.
 - `internal/agentapi`: the complete list of agent operations. New operations go here, each with a request type that validates its own input. There is no generic exec operation.
 - `spike/`: throwaway prototypes, separate modules, not product code.
 
@@ -24,6 +26,7 @@ golangci-lint run ./...    # includes staticcheck, gosec and a ban on os/exec
 go vet ./...
 go test -race ./...
 sudo env "PATH=$PATH" go test -race -run '^TestCrossUser$' ./internal/agentrpc/   # needs root
+sudo env "PATH=$PATH" go test -race -run '^TestRoot' ./internal/sysuser/          # needs root, creates and removes real test users
 ```
 
 ## Clean-room rule

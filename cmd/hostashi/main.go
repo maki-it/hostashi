@@ -84,12 +84,14 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		}
 	case "agent":
 		serveUser := fs.String("serve-user", "hostashi", "the only unprivileged user allowed to call the agent")
+
+		stateDir := fs.String("state-dir", agent.DefaultStateDir, "root-owned directory for the agent's site registry")
 		if fs.Parse(args) != nil || fs.NArg() != 0 {
 			return 2
 		}
 
 		if err = agent.CheckEUID(euid); err == nil {
-			err = agent.Run(ctx, agent.Config{Socket: *socket, ServeUser: *serveUser, Version: version, Log: log})
+			err = agent.Run(ctx, agent.Config{Socket: *socket, ServeUser: *serveUser, StateDir: *stateDir, Version: version, Log: log})
 		}
 	case "ping":
 		if fs.Parse(args) != nil || fs.NArg() != 0 {

@@ -44,10 +44,13 @@ linters:
         # Security rule: no shell strings and no general exec interface.
         # Product code must not start processes through os/exec. A future
         # helper or restic wrapper gets a reviewed, narrow exception here.
+        # internal/sysuser runs useradd and userdel by absolute path with
+        # arguments built from validated names (see its package comment).
         no-exec:
           files:
             - "$all"
             - "!$test"
+            - "!**/internal/sysuser/*.go"
           deny:
             - pkg: os/exec
               desc: "no process execution in product code (see docs/05-sicherheit.md)"
