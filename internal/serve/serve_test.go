@@ -8,10 +8,12 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 func TestCheckEUID(t *testing.T) {
@@ -42,45 +44,57 @@ func TestCheckListen(t *testing.T) {
 }
 
 func TestHealth(t *testing.T) {
-	up := func(context.Context) (agentapi.PingResponse, error) { return agentapi.PingResponse{}, nil }
-	down := func(context.Context) (agentapi.PingResponse, error) {
-		return agentapi.PingResponse{}, errors.New("dial unix /run/hostashi/agent.sock: connection refused")
+	up := func(context.Context) error { return nil }
+	agentDown := func(context.Context) error {
+		return errors.New("dial unix /run/hostashi/agent.sock: connection refused")
+	}
+	dbDown := func(context.Context) error {
+		return errors.New("open /var/lib/hostashi/hostashi.db: disk I/O error")
 	}
 
 	cases := []struct {
-		name   string
-		ping   pinger
-		code   int
-		status string
+		name              string
+		deps              Deps
+		code              int
+		status, agent, db string
 	}{
-		{"agent up", up, http.StatusOK, "ok"},
-		{"agent down", down, http.StatusServiceUnavailable, "degraded"},
+		{"all up", Deps{up, up}, http.StatusOK, "ok", "ok", "ok"},
+		{"agent down", Deps{agentDown, up}, http.StatusServiceUnavailable, "degraded", "unavailable", "ok"},
+		{"db down", Deps{up, dbDown}, http.StatusServiceUnavailable, "degraded", "ok", "unavailable"},
+		{"both down", Deps{agentDown, dbDown}, http.StatusServiceUnavailable, "degraded", "unavailable", "unavailable"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			Handler(Config{Version: "dev"}, tc.ping).ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/health", nil))
+			Handler(Config{Version: "dev"}, tc.deps).ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/health", nil))
 
 			if rec.Code != tc.code {
 				t.Fatalf("code %d", rec.Code)
 			}
 
-			if strings.Contains(rec.Body.String(), "/run/") {
+			if strings.Contains(rec.Body.String(), "/run/") || strings.Contains(rec.Body.String(), "/var/") {
 				t.Fatalf("internal detail leaked: %s", rec.Body)
 			}
 
 			var body struct {
 				Status string `json:"status"`
+				Agent  string `json:"agent"`
+				DB     string `json:"db"`
 			}
-			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body.Status != tc.status {
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 				t.Fatalf("body %s, %v", rec.Body, err)
+			}
+
+			if body.Status != tc.status || body.Agent != tc.agent || body.DB != tc.db {
+				t.Fatalf("got %+v", body)
 			}
 		})
 	}
 }
 
 func TestUnknownRoutesAndMethods(t *testing.T) {
-	h := Handler(Config{}, func(context.Context) (agentapi.PingResponse, error) { return agentapi.PingResponse{}, nil })
+	ok := func(context.Context) error { return nil }
+	h := Handler(Config{}, Deps{ok, ok})
 
 	for _, tc := range []struct {
 		method, path string
@@ -102,5 +116,17 @@ func TestUnknownRoutesAndMethods(t *testing.T) {
 func TestRunRejectsPublicAddress(t *testing.T) {
 	if err := Run(context.Background(), Config{Listen: "0.0.0.0:0"}); err == nil {
 		t.Fatal("public address accepted")
+	}
+}
+
+func TestRunRejectsBadDatabase(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Run(context.Background(), Config{Listen: "127.0.0.1:0", DBPath: filepath.Join(dir, "h.db")})
+	if !errors.Is(err, store.ErrInsecurePermissions) {
+		t.Fatalf("want ErrInsecurePermissions, got %v", err)
 	}
 }
