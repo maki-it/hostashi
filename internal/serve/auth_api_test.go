@@ -34,6 +34,7 @@ type apiEnv struct {
 	metrics   *metrics.Metrics
 	settings  Settings
 	st        *store.Store
+	imports   *stubImports
 }
 
 func newAPI(t *testing.T) *apiEnv {
@@ -75,13 +76,19 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath, Box: box})
 
 	deps := Deps{PingAgent: ok, PingDB: ok, Auth: svc, Metrics: metrics.New(), Settings: st}
+	imports := &stubImports{}
+
 	if ag != nil {
 		deps.Sites = hosting.New(st, ag, nil)
 		deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), nil)
+		deps.CloudPanel.Connect(siteCreator(deps.Sites), imports)
 		deps.CloudPanelSource = newStubSource(t)
 	}
 
-	return &apiEnv{h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st}
+	return &apiEnv{
+		h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st,
+		imports: imports,
+	}
 }
 
 type reqOpts struct {

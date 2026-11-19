@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/cloudpanel/plan"
 )
 
 const (
@@ -30,6 +31,8 @@ type apiErrorBody struct {
 	Message string `json:"message"`
 	// RequestID lets a user quote the failed request (ADR-0022).
 	RequestID string `json:"requestId,omitempty"`
+	// Reasons explain a refused CloudPanel import step (the plan's reasons).
+	Reasons []plan.Reason `json:"reasons,omitempty"`
 }
 
 type userJSON struct {

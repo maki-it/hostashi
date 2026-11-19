@@ -2,8 +2,8 @@
 
 // Package cpmigrate keeps uploaded CloudPanel scan reports and shows their
 // migration plan against this server (ADR-0017, ADR-0026). It runs in the
-// unprivileged web process and changes nothing on the server; creating sites
-// and copying data are later steps.
+// unprivileged web process: creating a site goes through the site service,
+// copying data through the agent's import job.
 package cpmigrate
 
 import (
@@ -51,6 +51,9 @@ type Service struct {
 	target TargetFunc
 	log    *slog.Logger
 	now    func() time.Time
+
+	create   SiteCreator
+	importer Importer
 }
 
 // New returns a service. log may be nil.

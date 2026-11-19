@@ -324,6 +324,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
+	deps.CloudPanel.Connect(siteCreator(deps.Sites), RPCCloudPanelImports{C: client})
 	deps.CloudPanelSource = RPCCloudPanelSource{C: client}
 
 	deps.Sites.ObserveApply(m.WebApplied)
