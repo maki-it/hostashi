@@ -40,10 +40,16 @@ type NewSite struct {
 	Name    string
 	PHP     string
 	Domains []string
+	// Cron are the old site's jobs that Hostashi accepts (plan.CronJobs).
+	// They are created paused: they start after the DNS switch, so no job
+	// runs on both servers (ADR-0028).
+	Cron []scan.CronJob
 }
 
-// SiteCreator creates a site on this server (hosting.Service.Create).
-type SiteCreator func(ctx context.Context, actor int64, s NewSite) error
+// SiteCreator creates a site on this server (hosting.Service.Create) and
+// its paused cron jobs. It returns how many jobs it created; a job that
+// fails does not undo the site.
+type SiteCreator func(ctx context.Context, actor int64, s NewSite) (cronCreated int, err error)
 
 // Importer starts and reads imports in the agent (ADR-0026 Part 3).
 type Importer interface {
@@ -78,7 +84,7 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		return plan.Site{}, ErrNoImporter
 	}
 
-	ps, _, err := s.planSite(ctx, reportID, name)
+	ps, site, err := s.planSite(ctx, reportID, name)
 	if err != nil {
 		return plan.Site{}, err
 	}
@@ -108,13 +114,14 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 
 	domains := append(slices.Clone(ps.Domains), ps.RedirectFrom...)
 
-	if err := s.create(ctx, actor, NewSite{Name: ps.Name, PHP: php, Domains: domains}); err != nil {
+	n, err := s.create(ctx, actor, NewSite{Name: ps.Name, PHP: php, Domains: domains, Cron: plan.CronJobs(site)})
+	if err != nil {
 		return ps, err
 	}
 
-	s.audit(ctx, actor, "cloudpanel.site.create", ps.Name, map[string]string{"report": reportID, "php": php})
+	s.audit(ctx, actor, "cloudpanel.site.create", ps.Name, map[string]string{"report": reportID, "php": php, "cron": strconv.Itoa(n)})
 
-	ps.PHP = php
+	ps.PHP, ps.CronImport = php, n
 
 	return ps, nil
 }

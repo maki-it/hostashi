@@ -16,7 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
-	"github.com/maki-it/hostashi/internal/cloudpanel/nginxconf"
+	"github.com/maki-it/hostashi/internal/nginxconf"
 )
 
 // Options for one scan.

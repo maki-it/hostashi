@@ -101,6 +101,10 @@ type Config struct {
 	// CgroupRoot is where cgroup v2 is mounted; empty means
 	// sitestats.DefaultCgroupRoot.
 	CgroupRoot string
+
+	// Quota sets and reads the sites' disk limits (ADR-0015). Nil: the
+	// running kernel (KernelQuota).
+	Quota QuotaFS
 }
 
 // DefaultPanelPort is the panel's HTTPS port (ADR-0023).
@@ -168,7 +172,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, log: log}
+		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, quota: cfg.Quota, log: log}
 		h.register(s)
 
 		disk, root := cfg.Disk, cfg.CgroupRoot
@@ -200,6 +204,7 @@ type siteOps struct {
 	db    *mariadb.Manager
 	pages *pages.Store
 	cron  *cronjobs.Manager
+	quota QuotaFS
 	log   *slog.Logger
 	mu    sync.Mutex
 }
@@ -221,6 +226,8 @@ func (h *siteOps) register(s *agentrpc.Server) {
 	agentrpc.Handle(s, agentapi.SiteDelete, func(ctx context.Context, _ agentrpc.Caller, req agentapi.SiteDeleteRequest) (agentapi.SiteDeleteResponse, error) {
 		h.mu.Lock()
 		defer h.mu.Unlock()
+
+		site, home, siteErr := h.site(req.User)
 
 		if h.web != nil {
 			cur, _, err := h.web.Current()
@@ -256,6 +263,10 @@ func (h *siteOps) register(s *agentrpc.Server) {
 
 		if err := m.Delete(ctx, req.User); err != nil {
 			return agentapi.SiteDeleteResponse{}, mapSiteError(err)
+		}
+
+		if siteErr == nil {
+			h.clearQuota(ctx, poolOf(home), site.UID)
 		}
 
 		if h.cron != nil {
@@ -299,6 +310,8 @@ func (h *siteOps) register(s *agentrpc.Server) {
 	h.registerCron(s)
 
 	h.registerPages(s)
+
+	h.registerQuota(s)
 
 	h.registerDB(s)
 
@@ -359,6 +372,13 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			pools = append(pools, php.Pool{User: s.User, Version: s.PHP, Home: home})
 			keep[s.User] = true
 			site.PHPSocket = h.php.Socket(s.User)
+		}
+
+		// Snippets are checked again by package web (ADR-0029); a disabled
+		// site or one in maintenance does not render them.
+		if sn := s.Snippets; sn != nil && !site.Disabled && site.Maintenance == nil {
+			site.Home = home
+			site.Snippets = web.Snippets{Server: sn.Server, Root: sn.Root}
 		}
 
 		d.Sites = append(d.Sites, site)

@@ -3,7 +3,8 @@
 // Package nginxconf is a small, strict parser for the nginx configuration
 // syntax (directives, blocks, quoting, comments). It does not evaluate
 // anything: no include, no variables, no regex. It exists so that the adopt
-// scanner never has to pattern-match on raw text.
+// scanner and the custom snippet check (package snippet, ADR-0029) never
+// have to pattern-match on raw text.
 package nginxconf
 
 import (

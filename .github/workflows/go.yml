@@ -77,6 +77,47 @@ jobs:
       - name: Site account tests (root, real useradd and bind mount)
         run: sudo env "PATH=$PATH" go test -race -count=1 -run '^TestRoot' -v ./internal/sysuser/
 
+  quota:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    name: Project quota (ext4 on a loop device)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build the test binary
+        env:
+          CGO_ENABLED: "0"
+        run: go test -c -o "$RUNNER_TEMP/quota.test" ./internal/quota/
+      - name: Create an ext4 file system with project quota
+        run: |
+          if ! modinfo quota_v2 >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends "linux-modules-extra-$(uname -r)"
+          fi
+          sudo modprobe quota_v2
+          sudo apt-get install -y -qq --no-install-recommends quota
+          truncate -s 256M "$RUNNER_TEMP/quota.img"
+          mkfs.ext4 -q -O quota,project -E quotatype=prjquota "$RUNNER_TEMP/quota.img"
+          sudo mkdir -p /mnt/quota
+          sudo mount -o loop,prjquota "$RUNNER_TEMP/quota.img" /mnt/quota
+          # Mounting may only count usage; switch on enforcement (spike S8).
+          sudo quotaon -P /mnt/quota || true
+          # quotaon -p exits non-zero for unrelated tmpfs mounts; check the line.
+          state="$(sudo quotaon -Ppv /mnt/quota 2>&1 || true)"
+          echo "$state"
+          grep -q 'quota on /mnt/quota .* is on (enforced)' <<<"$state"
+      - name: Run as root against it
+        # /tmp: the test re-runs the binary as nobody, who cannot enter $RUNNER_TEMP.
+        run: |
+          install -m 0755 "$RUNNER_TEMP/quota.test" /tmp/quota.test
+          sudo env HOSTASHI_QUOTA_TEST_DIR=/mnt/quota /tmp/quota.test -test.v -test.count=1
+
   mariadb:
     needs: changes
     if: needs.changes.outputs.go == 'true'
@@ -229,6 +270,7 @@ jobs:
           go test -run '^$' -fuzz '^FuzzReadFrame$' -fuzztime 20s ./internal/agentrpc/
           go test -run '^$' -fuzz '^FuzzDispatch$' -fuzztime 40s ./internal/agentrpc/
           go test -run '^$' -fuzz '^FuzzParse$' -fuzztime 20s ./internal/statuspage/
+          go test -run '^$' -fuzz '^FuzzCheckRender$' -fuzztime 20s ./internal/snippet/
 
   build:
     needs: changes

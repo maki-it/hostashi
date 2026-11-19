@@ -56,7 +56,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 **Import**
 
-- The migration plan carries the scanned jobs that pass the validator; creating the site creates them paused, and activating the import (ADR-0026) does not start them. The admin starts them after the DNS switch, so a job never runs on both servers at once [A].
+- The migration plan counts the scanned jobs that pass the validator (`cronImport`, at most 50, never the commands themselves); creating the site creates them paused, and activating the import (ADR-0026) does not start them. The admin starts them after the DNS switch, so a job never runs on both servers at once [V: `internal/cloudpanel/plan/cron.go`, `internal/serve/migrations_api.go`]. Jobs that are not accepted (`@reboot`, unknown fields, more than 50) get the review reason `cron_not_carried` and are set up by hand.
 
 ## Consequences
 
@@ -68,4 +68,4 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions
 
-1. Should imported jobs start paused (recommended above) or run as soon as the site is activated?
+None. Decided (Kim, 2026-11-19): imported jobs start paused; Kim starts them after the DNS switch.

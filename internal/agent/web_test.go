@@ -4,8 +4,10 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -132,4 +134,44 @@ func TestSiteWithPHPPoolCannotBeDeleted(t *testing.T) {
 	if err != nil || len(res.Installed) != 1 || res.Installed[0] != "8.4" {
 		t.Fatalf("versions %+v %v", res, err)
 	}
+}
+
+func TestWebApplyChecksSnippets(t *testing.T) {
+	c, _ := startSiteAgentWith(t, &web.Reconciler{Base: filepath.Join(t.TempDir(), "web"), Driver: &web.Nginx{}})
+	ctx := context.Background()
+
+	if _, err := agentapi.SiteCreate.Call(ctx, c, agentapi.SiteCreateRequest{User: "blog"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, sn := range []agentapi.WebSnippets{
+		{Server: "access_log /etc/cron.d/x;"},
+		{Root: "root /etc;"},
+		{Server: "location /x { proxy_pass http://unix:/run/hostashi-panel.sock:; }"},
+	} {
+		_, err := agentapi.WebApply.Call(ctx, c, agentapi.WebApplyRequest{Sites: []agentapi.WebSite{
+			{User: "blog", Domains: []string{"blog.example.com"}, Snippets: &sn},
+		}})
+		wantCode(t, err, agentrpc.CodeInvalidArgument)
+	}
+
+	// A valid snippet passes the check; this driver has no nginx, so the
+	// apply fails later and differently.
+	ok := agentapi.WebSnippets{Server: "add_header X-A b;"}
+
+	_, err := agentapi.WebApply.Call(ctx, c, agentapi.WebApplyRequest{Sites: []agentapi.WebSite{
+		{User: "blog", Domains: []string{"blog.example.com"}, Snippets: &ok},
+	}})
+
+	var re *agentrpc.Error
+	if errors.As(err, &re) && re.Code == agentrpc.CodeInvalidArgument {
+		t.Fatalf("valid snippet rejected: %v", err)
+	}
+
+	big := agentapi.WebSnippets{Server: strings.Repeat("#", agentapi.MaxSnippetBytes+1)}
+
+	_, err = agentapi.WebApply.Call(ctx, c, agentapi.WebApplyRequest{Sites: []agentapi.WebSite{
+		{User: "blog", Domains: []string{"blog.example.com"}, Snippets: &big},
+	}})
+	wantCode(t, err, agentrpc.CodeInvalidArgument)
 }
