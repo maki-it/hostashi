@@ -17,15 +17,17 @@ import (
 )
 
 type siteJSON struct {
-	Name      string    `json:"name"`
-	Pool      string    `json:"pool"`
-	State     string    `json:"state"`
-	PHP       string    `json:"php"`      // PHP version, "" for no PHP
-	Disabled  bool      `json:"disabled"` // answers 503, PHP stopped
-	Domains   []string  `json:"domains"`  // the first one is the primary domain
-	TLS       tlsJSON   `json:"tls"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	Name     string `json:"name"`
+	Pool     string `json:"pool"`
+	State    string `json:"state"`
+	PHP      string `json:"php"`      // PHP version, "" for no PHP
+	Disabled bool   `json:"disabled"` // answers 503, PHP stopped
+	// Maintenance: other addresses get the page with 503 (ADR-0027).
+	Maintenance maintenanceJSON `json:"maintenance"`
+	Domains     []string        `json:"domains"` // the first one is the primary domain
+	TLS         tlsJSON         `json:"tls"`
+	CreatedAt   time.Time       `json:"createdAt"`
+	UpdatedAt   time.Time       `json:"updatedAt"`
 }
 
 // tlsJSON is the HTTPS state of a site: wanted (enabled), served (active),
@@ -73,7 +75,7 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	}
 
 	return siteJSON{
-		Name: s.Name, Pool: s.Pool, State: s.State, PHP: s.PHP, Disabled: s.Disabled, Domains: d,
+		Name: s.Name, Pool: s.Pool, State: s.State, PHP: s.PHP, Disabled: s.Disabled, Domains: d, Maintenance: toMaintenanceJSON(s),
 		TLS: tlsJSON{
 			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),

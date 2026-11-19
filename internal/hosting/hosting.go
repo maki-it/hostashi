@@ -38,6 +38,10 @@ type Agent interface {
 	DBImport(ctx context.Context, database, path string) (agentapi.DBJob, error)
 	DBExport(ctx context.Context, database, path string) (agentapi.DBJob, error)
 	DBJob(ctx context.Context, id string) (agentapi.DBJob, error)
+	PageList(ctx context.Context) ([]agentapi.PageVersion, error)
+	// PageUpload sends a page in chunks and commits it under digest.
+	PageUpload(ctx context.Context, id string, files map[string][]byte, digest string) error
+	PageDelete(ctx context.Context, id string) error
 }
 
 // Issuer turns a certificate signing request into a certificate chain. The
@@ -478,6 +482,11 @@ func (s *Service) applyWeb(ctx context.Context) error {
 	req := agentapi.WebApplyRequest{Sites: []agentapi.WebSite{}}
 	live := []string{}
 
+	onAgent, err := s.agentPages(ctx, sites)
+	if err != nil {
+		return err
+	}
+
 	for _, site := range sites {
 		if site.State == store.SiteActive && len(site.Domains) > 0 {
 			tls := site.TLS && s.certCovers(site, 0)
@@ -490,9 +499,17 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				php = ""
 			}
 
-			req.Sites = append(req.Sites, agentapi.WebSite{
+			ws := agentapi.WebSite{
 				User: site.Name, Domains: site.Domains, PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
-			})
+			}
+
+			if site.Maintenance && !site.Disabled {
+				if ws.Maintenance, err = s.maintenanceWeb(ctx, site, onAgent); err != nil {
+					return err
+				}
+			}
+
+			req.Sites = append(req.Sites, ws)
 		}
 	}
 
