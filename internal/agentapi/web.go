@@ -5,6 +5,7 @@ package agentapi
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"strings"
 
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -72,6 +73,75 @@ type WebSite struct {
 	// Disabled answers every request of the site with 503 instead of
 	// serving its files. ACME challenges and HTTPS stay; PHP must be empty.
 	Disabled bool `json:"disabled,omitempty"`
+	// Maintenance answers requests from addresses outside its allowlist
+	// with its page and status 503 (ADR-0027). Disabled wins over it.
+	Maintenance *WebMaintenance `json:"maintenance,omitempty"`
+}
+
+// WebMaintenance is the maintenance mode of a site: a committed page and
+// the addresses that still see the site.
+type WebMaintenance struct {
+	Page     string   `json:"page"`
+	Digest   string   `json:"digest"`
+	AllowIPs []string `json:"allowIps,omitempty"` // canonical addresses or CIDRs
+}
+
+// Validate checks the page and that every entry is an IP address or CIDR in
+// its canonical form, so it can be written into the nginx configuration.
+func (m WebMaintenance) Validate() error {
+	if err := ValidatePageID(m.Page); err != nil {
+		return err
+	}
+
+	if err := ValidatePageDigest(m.Digest); err != nil {
+		return err
+	}
+
+	if len(m.AllowIPs) > MaxAllowIPs {
+		return fmt.Errorf("at most %d allowed addresses", MaxAllowIPs)
+	}
+
+	for _, ip := range m.AllowIPs {
+		c, err := CanonicalIPOrPrefix(ip)
+		if err != nil {
+			return err
+		}
+
+		if c != ip {
+			return fmt.Errorf("allowed address %q is not canonical (%s)", ip, c)
+		}
+	}
+
+	return nil
+}
+
+// CanonicalIPOrPrefix parses an IP address or CIDR and returns its canonical
+// form: addresses without zone, prefixes masked ("10.1.2.3/8" is refused,
+// "10.0.0.0/8" is fine), IPv4-mapped IPv6 as IPv4.
+func CanonicalIPOrPrefix(s string) (string, error) {
+	if strings.Contains(s, "/") {
+		p, err := netip.ParsePrefix(s)
+		if err != nil {
+			return "", fmt.Errorf("invalid address range %q", s)
+		}
+
+		if p.Masked() != p {
+			return "", fmt.Errorf("address range %q has host bits set, use %s", s, p.Masked())
+		}
+
+		if p.Addr().Is4In6() {
+			return "", fmt.Errorf("use the IPv4 form for %q", s)
+		}
+
+		return p.String(), nil
+	}
+
+	a, err := netip.ParseAddr(s)
+	if err != nil || a.Zone() != "" {
+		return "", fmt.Errorf("invalid address %q", s)
+	}
+
+	return a.Unmap().String(), nil
 }
 
 // WebPanel is the panel's own address (ADR-0023). The agent serves it on
@@ -110,6 +180,12 @@ func (r WebApplyRequest) Validate() error {
 		}
 
 		users[s.User] = true
+
+		if s.Maintenance != nil {
+			if err := s.Maintenance.Validate(); err != nil {
+				return fmt.Errorf("site %q: maintenance: %w", s.User, err)
+			}
+		}
 
 		if s.Disabled && s.PHP != "" {
 			return fmt.Errorf("site %q: a disabled site runs no PHP", s.User)

@@ -24,6 +24,7 @@ import (
 	"github.com/maki-it/hostashi/internal/certs"
 	"github.com/maki-it/hostashi/internal/cpsource"
 	"github.com/maki-it/hostashi/internal/mariadb"
+	"github.com/maki-it/hostashi/internal/pages"
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
 	"github.com/maki-it/hostashi/internal/sites"
@@ -77,6 +78,10 @@ type Config struct {
 	// CloudPanel keeps the migration source (ADR-0026). Run builds it below
 	// StateDir; without it cloudpanel.* answer failed_precondition.
 	CloudPanel *cpsource.Source
+
+	// Pages keeps the maintenance and parking pages (ADR-0027). Run builds
+	// it at PagesDir; without it page.* answer failed_precondition.
+	Pages *pages.Store
 
 	// Disk caches the sites' disk usage for metrics.snapshot; Run fills it
 	// every agentapi.DiskEvery. Nil: an empty cache.
@@ -151,7 +156,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, log: log}
+		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, log: log}
 		h.register(s)
 
 		disk, root := cfg.Disk, cfg.CgroupRoot
@@ -181,6 +186,7 @@ type siteOps struct {
 	php   *php.Manager
 	certs *certs.Store
 	db    *mariadb.Manager
+	pages *pages.Store
 	log   *slog.Logger
 	mu    sync.Mutex
 }
@@ -264,6 +270,8 @@ func (h *siteOps) register(s *agentrpc.Server) {
 
 	agentrpc.Handle(s, agentapi.WebApply, h.webApply)
 
+	h.registerPages(s)
+
 	h.registerDB(s)
 
 	agentrpc.Handle(s, agentapi.TLSCSR, h.tlsCSR)
@@ -304,6 +312,15 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			}
 
 			site.HSTS = s.HSTS
+		}
+
+		if s.Maintenance != nil && !s.Disabled {
+			m, err := h.maintenanceFor(s.Maintenance)
+			if err != nil {
+				return agentapi.WebApplyResponse{}, err
+			}
+
+			site.Maintenance = m
 		}
 
 		if s.PHP != "" {
@@ -348,6 +365,12 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		// next web.apply tries again.
 		if err := h.php.Prune(ctx, keep); err != nil {
 			h.log.ErrorContext(ctx, "stop php pools of sites without PHP", "err", err)
+		}
+	}
+
+	if h.pages != nil {
+		if err := h.pages.Prune(usedPages(d)); err != nil {
+			h.log.ErrorContext(ctx, "prune old page versions", "err", err)
 		}
 	}
 
@@ -752,6 +775,10 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.Backup == nil {
 		cfg.Backup = openBackup()
+	}
+
+	if cfg.Pages == nil {
+		cfg.Pages = &pages.Store{Dir: PagesDir}
 	}
 
 	if cfg.CloudPanel == nil {

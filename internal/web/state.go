@@ -34,6 +34,18 @@ type Site struct {
 	// Disabled answers every request with 503 and never serves Root.
 	// ACME challenges, the health check and the HTTPS redirect stay.
 	Disabled bool `json:"disabled,omitempty"`
+	// Maintenance serves a stored page with 503 to every address outside
+	// its allowlist (ADR-0027). Disabled wins over it.
+	Maintenance *Maintenance `json:"maintenance,omitempty"`
+}
+
+// Maintenance is the maintenance mode of a site. Dir is the committed page
+// directory (package pages); nginx serves it under agentapi.PagePathPrefix.
+type Maintenance struct {
+	Page     string   `json:"page"`
+	Digest   string   `json:"digest"`
+	Dir      string   `json:"dir"`
+	AllowIPs []string `json:"allowIps,omitempty"`
 }
 
 // Desired is the complete web server state.
@@ -60,6 +72,16 @@ func (d Desired) Validate() error {
 	req := agentapi.WebApplyRequest{Sites: make([]agentapi.WebSite, 0, len(d.Sites))}
 	for _, s := range d.Sites {
 		req.Sites = append(req.Sites, agentapi.WebSite{User: s.User, Domains: s.Domains})
+
+		if m := s.Maintenance; m != nil {
+			if err := (agentapi.WebMaintenance{Page: m.Page, Digest: m.Digest, AllowIPs: m.AllowIPs}).Validate(); err != nil {
+				return fmt.Errorf("site %q: maintenance: %w", s.User, err)
+			}
+
+			if !rootRe.MatchString(m.Dir) || path.Clean(m.Dir) != m.Dir {
+				return fmt.Errorf("site %q: invalid page directory %q", s.User, m.Dir)
+			}
+		}
 
 		if !rootRe.MatchString(s.Root) || path.Clean(s.Root) != s.Root {
 			return fmt.Errorf("site %q: invalid root %q", s.User, s.Root)
