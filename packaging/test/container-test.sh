@@ -511,7 +511,8 @@ x test ! -e "$dst/root-file" || fail "root-owned file copied"
 xi runuser -u oldsite -- sh -c 'cat >/home/oldsite/htdocs/example.com/index.php' <<<"<?php echo 'new!';"
 x rm /home/oldsite/htdocs/example.com/wp-content/a.txt
 out=$(cp_import)
-grep -q '"files": 1' <<<"$out" && grep -q '"deleted": 1' <<<"$out" || fail "final sync: $out"
+grep -q '"files": 1' <<<"$out" || fail "final sync copied: $out"
+grep -q '"deleted": 1' <<<"$out" || fail "final sync deleted: $out"
 [ "$(x cat "$dst/index.php")" = "<?php echo 'new!';" ] || fail "synced file content"
 # The old server was only read.
 x test ! -e /home/oldsite/htdocs/example.com/cloudpanel-import || fail "wrote on the old side"
