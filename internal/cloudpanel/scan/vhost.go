@@ -8,7 +8,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/maki-it/hostashi/internal/cloudpanel/nginxconf"
+	"github.com/maki-it/hostashi/internal/nginxconf"
 )
 
 // server is the analyzed form of one nginx server block.
