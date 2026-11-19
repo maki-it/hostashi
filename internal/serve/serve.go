@@ -298,7 +298,7 @@ func Run(ctx context.Context, cfg Config) error {
 
 	m := metrics.New()
 
-	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath, Box: box, Observer: m})
+	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath, Box: box, Observer: m, FailLog: cfg.Log})
 	if err := svc.EnablePasskeys(auth.PasskeyConfig{PublicURL: cfg.PublicURL}); err != nil {
 		return err
 	}

@@ -3,8 +3,14 @@
 package auth
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"regexp"
+	"strings"
 	"testing"
+
+	"github.com/maki-it/hostashi/internal/reqid"
 )
 
 type countObs struct{ fail, throttled map[string]int }
@@ -42,5 +48,63 @@ func TestObserverSeesKindsOnly(t *testing.T) {
 
 	if obs.throttled[KindPassword] != 1 {
 		t.Fatalf("%+v", obs)
+	}
+}
+
+// failLine is the contract with fail2ban's hostashi-panel filter (ADR-0021).
+// Change it only together with packaging's filter.
+var failLine = regexp.MustCompile(`^\{"time":"[^"]+","level":"WARN","msg":"auth\.failed","kind":"(password|totp|passkey|token)","ip":"([0-9a-f.:]+)"(,"request_id":"[0-9a-f]+")?\}$`)
+
+func TestFailedLoginLogLine(t *testing.T) {
+	e := newEnv(t)
+	e.setup(t)
+
+	var buf bytes.Buffer
+
+	e.svc.flog = slog.New(slog.NewJSONHandler(&buf, nil))
+
+	ctx := context.Background()
+
+	_, _, _ = e.svc.Login(ctx, "kim", "wrong password!!", "", "203.0.113.7")
+	// A user name that tries to look like another address field.
+	_, _, _ = e.svc.Login(ctx, `x","ip":"198.51.100.1"}`, "wrong password!!", "", "203.0.113.8")
+	_, _, _ = e.svc.Login(ctx, "kim", "wrong password!!", "", "::ffff:192.0.2.9")
+	_, _, _ = e.svc.Login(ctx, "kim", "wrong password!!", "", "fe80::1%eth0")
+	// No parseable address: counted, but no line fail2ban could act on.
+	_, _, _ = e.svc.Login(ctx, "kim", "wrong password!!", "", "not an ip")
+	_, _, _ = e.svc.Login(ctx, "kim", "wrong password!!", "", "")
+	_, _ = e.svc.AuthenticateToken(ctx, "hst_nothing", "2001:db8::1")
+
+	// Inside a request the logger adds the request ID at the end.
+	e.svc.flog = slog.New(reqid.Handler(slog.NewJSONHandler(&buf, nil)))
+	_, _ = e.svc.AuthenticateToken(reqid.With(ctx, reqid.New()), "hst_nothing", "203.0.113.9")
+
+	if _, _, err := e.svc.Login(ctx, "kim", testPassword, "", "192.0.2.50"); err != nil {
+		t.Fatal(err)
+	}
+
+	want := [][2]string{
+		{"password", "203.0.113.7"},
+		{"password", "203.0.113.8"},
+		{"password", "192.0.2.9"},
+		{"password", "fe80::1"},
+		{"token", "2001:db8::1"},
+		{"token", "203.0.113.9"},
+	}
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if len(lines) != len(want) {
+		t.Fatalf("got %d lines, want %d:\n%s", len(lines), len(want), buf.String())
+	}
+
+	for i, l := range lines {
+		m := failLine.FindStringSubmatch(l)
+		if m == nil || m[1] != want[i][0] || m[2] != want[i][1] {
+			t.Errorf("line %d %q, want kind %s ip %s", i, l, want[i][0], want[i][1])
+		}
+
+		if strings.Contains(l, "kim") || strings.Contains(l, "198.51.100.1") || strings.Contains(l, "hst_") {
+			t.Errorf("line %d leaks a user name or token: %q", i, l)
+		}
 	}
 }

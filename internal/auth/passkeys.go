@@ -331,7 +331,7 @@ func (s *Service) PasskeyLoginFinish(ctx context.Context, ceremonyID string, res
 
 	fail := func(userID *int64, reason string) (string, store.User, error) {
 		s.ipLimit.Fail(ipKey)
-		s.obs.Failure(KindPasskey)
+		s.failed(ctx, KindPasskey, ip)
 		_ = s.st.Audit(ctx, userID, "login.failed", "", map[string]string{"ip": ip, "method": "passkey", "reason": reason})
 
 		return "", store.User{}, ErrPasskeyFailed
