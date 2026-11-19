@@ -25,6 +25,8 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0027](0027-maintenance-and-parking-pages.md) | Maintenance and parking pages | Accepted |
 | [0028](0028-cron-jobs-per-site.md) | Cron jobs per site | Accepted |
 | [0029](0029-custom-nginx-snippets.md) | Custom nginx snippets per site | Accepted |
+| [0030](0030-loading-dumps-with-definers.md) | Loading imported dumps with definers | Accepted |
+| [0031](0031-dns-cut-over-per-site.md) | DNS cut-over per site in the CloudPanel migration | Proposed |
 
 Only the project owner sets a status to `Accepted`.
 
