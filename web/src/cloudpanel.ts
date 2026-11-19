@@ -19,6 +19,7 @@ export type PlanSite = {
   tls: "none" | "reissue" | "copy";
   customSnippets: number;
   cronJobs: number;
+  cronImport: number; // of cronJobs, created paused with the site
   action: PlanAction;
   reasons: PlanReason[];
   source: string;
@@ -129,6 +130,16 @@ export function parseDBMap(text: string): { maps: DBMap[]; problem: string } {
   }
   if (maps.length > 50) return { maps: [], problem: "At most 50 databases per import." };
   return { maps, problem: "" };
+}
+
+// cronLabel says what happens to the old site's cron jobs.
+export function cronLabel(s: Pick<PlanSite, "cronJobs" | "cronImport">): string {
+  const n = s.cronImport ?? 0;
+  const rest = s.cronJobs - n;
+  const parts: string[] = [];
+  if (n > 0) parts.push(`${n} created paused`);
+  if (rest > 0) parts.push(`${rest} to set up by hand`);
+  return `${s.cronJobs}: ${parts.join(", ")}`;
 }
 
 export function formatBytes(n: number): string {
