@@ -263,3 +263,80 @@ var (
 	BackupStatusGet = agentrpc.Op[BackupStatusRequest, BackupStatus]{Name: "backup.status"}
 	BackupSnapshots = agentrpc.Op[BackupSnapshotsRequest, BackupSnapshotsResponse]{Name: "backup.snapshots"}
 )
+
+var (
+	snapshotIDRe = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	restoreIDRe  = regexp.MustCompile(`^[0-9a-f]{16}$`)
+)
+
+// BackupRestoreRequest restores one snapshot of a site (its files or one
+// database dump) into a new directory restore-<time> in the site's home,
+// owned by the site user. Nothing live is overwritten (ADR-0008,
+// recommendation 7).
+type BackupRestoreRequest struct {
+	Site     string `json:"site"`
+	Snapshot string `json:"snapshot"` // the full 64-digit id
+}
+
+// Validate checks the site name and the id's form.
+func (r BackupRestoreRequest) Validate() error {
+	if err := ValidateSiteUser(r.Site); err != nil {
+		return err
+	}
+
+	if !snapshotIDRe.MatchString(r.Snapshot) {
+		return errors.New("snapshot: must be the full id of 64 hex digits")
+	}
+
+	return nil
+}
+
+// States of a restore.
+const (
+	RestoreQueued  = "queued"
+	RestoreRunning = "running"
+	RestoreDone    = "done"
+	RestoreFailed  = "failed"
+)
+
+// BackupRestore is one restore and how it went.
+type BackupRestore struct {
+	ID       string `json:"id"`
+	Site     string `json:"site"`
+	Snapshot string `json:"snapshot"`
+	Kind     string `json:"kind"` // files or db
+	Database string `json:"database,omitempty"`
+	// Dir is the new directory, relative to the site's home.
+	Dir      string    `json:"dir"`
+	State    string    `json:"state"`
+	Created  time.Time `json:"created"`
+	Started  time.Time `json:"started,omitzero"`
+	Finished time.Time `json:"finished,omitzero"`
+	Files    int64     `json:"files"`
+	Bytes    int64     `json:"bytes"`
+	// Skipped counts entries a site directory cannot hold, such as device
+	// files; they are left out.
+	Skipped int64  `json:"skipped,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// BackupRestoreGetRequest asks for one restore.
+type BackupRestoreGetRequest struct {
+	ID string `json:"id"`
+}
+
+// Validate checks the id's form.
+func (r BackupRestoreGetRequest) Validate() error {
+	if !restoreIDRe.MatchString(r.ID) {
+		return errors.New("id: must be 16 hex digits")
+	}
+
+	return nil
+}
+
+// Restore operations. The restore itself runs in hostashi-restore@<id>,
+// because the agent has no network access.
+var (
+	BackupRestoreStart = agentrpc.Op[BackupRestoreRequest, BackupRestore]{Name: "backup.restore"}
+	BackupRestoreGet   = agentrpc.Op[BackupRestoreGetRequest, BackupRestore]{Name: "backup.restore.get"}
+)

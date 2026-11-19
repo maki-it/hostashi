@@ -54,6 +54,11 @@ commands:
   backup get | backup set | backup hostkey | backup start | backup status
             backup settings through the agent (root on the server); set
             reads the settings as JSON and hostkey one public key from stdin
+  backup restore SITE SNAPSHOT | backup restore-status ID
+            restore a snapshot into a new directory restore-<time> in the
+            site's home, through the agent (root on the server)
+  backup restore-run ID
+            one restore (root; started by hostashi-restore@ID.service)
   backup key show
             print the repository password and the panel key to keep outside
             the server (root only, never available over the API)
@@ -154,10 +159,14 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 			return 2
 		}
 
-		switch strings.Join(fs.Args(), " ") {
-		case "run":
+		a := fs.Args()
+
+		switch {
+		case len(a) == 1 && a[0] == "run":
 			err = backup.RunOnce(ctx, backup.RunConfig{StateDir: *stateDir, Log: log})
-		case "key show":
+		case len(a) == 2 && a[0] == "restore-run":
+			err = backup.RestoreOnce(ctx, backup.RunConfig{StateDir: *stateDir, Log: log}, a[1])
+		case strings.Join(a, " ") == "key show":
 			err = showBackupKeys(euid, stdout)
 		default:
 			err = backupAgentCmd(ctx, agentrpc.NewClient(*socket), fs.Args(), stdout)

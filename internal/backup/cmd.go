@@ -48,7 +48,7 @@ func RunOnce(ctx context.Context, cfg RunConfig) error {
 		return fmt.Errorf("status directory: %w", err)
 	}
 
-	unlock, err := lock(filepath.Join(cfg.StatusDir, "run.lock"))
+	unlock, err := lock(filepath.Join(cfg.StatusDir, runLock))
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# One restore (ADR-0008, recommendation 7), started by the agent as
+# hostashi-restore@<id>.service. It reads one snapshot from the repository
+# and writes it into a new directory restore-<time> in the site's home,
+# owned by the site user. Live files are never written.
+#
+# Root is needed to read the secrets, to create the directory in a home
+# that is the site user's and to hand the files over to that user. The
+# sandbox keeps the rest small: the file system is read-only except the
+# status and cache directories and the one home that the agent opens in a
+# drop-in (ReadWritePaths=) for this instance only. The capabilities are
+# those of writing files as another user, nothing more. Every path below
+# the new directory is resolved without following symlinks (openat2), so
+# a symlink in the backup cannot lead the restore out of it.
+
+[Unit]
+Description=Hostashi restore %i
+Documentation=https://github.com/maki-it/hostashi
+After=network-online.target hostashi-agent.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/hostashi backup -state-dir /var/lib/hostashi-agent restore-run %i
+TimeoutStartSec=12h
+StateDirectory=hostashi-agent/backup
+StateDirectoryMode=0700
+CacheDirectory=hostashi-backup
+CacheDirectoryMode=0700
+UMask=0077
+
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_CHOWN CAP_FOWNER
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+# No RestrictSUIDSGID=: it makes openat2() fail with ENOSYS. The restore
+# drops setuid, setgid and sticky bits itself.
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native

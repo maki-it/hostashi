@@ -29,6 +29,11 @@ func (f *fakeUnits) EnableTimer(context.Context) error {
 	return nil
 }
 
+func (f *fakeUnits) StartRestore(_ context.Context, id string) error {
+	f.calls = append(f.calls, "restore "+id)
+	return nil
+}
+
 func (f *fakeUnits) DisableTimer(context.Context) error {
 	f.calls = append(f.calls, "disable")
 	return nil

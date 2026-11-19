@@ -22,10 +22,11 @@ import (
 
 type nopUnits struct{ runs int }
 
-func (u *nopUnits) StartRun(context.Context) error     { u.runs++; return nil }
-func (u *nopUnits) Reload(context.Context) error       { return nil }
-func (u *nopUnits) EnableTimer(context.Context) error  { return nil }
-func (u *nopUnits) DisableTimer(context.Context) error { return nil }
+func (u *nopUnits) StartRun(context.Context) error             { u.runs++; return nil }
+func (u *nopUnits) Reload(context.Context) error               { return nil }
+func (u *nopUnits) EnableTimer(context.Context) error          { return nil }
+func (u *nopUnits) DisableTimer(context.Context) error         { return nil }
+func (u *nopUnits) StartRestore(context.Context, string) error { return nil }
 
 // localBackups is Backups with the real agent side in a temp directory and
 // a fixed host key for the scan.
@@ -54,6 +55,14 @@ func (l *localBackups) Status(context.Context) (agentapi.BackupStatus, error) { 
 
 func (l *localBackups) Snapshots(_ context.Context, site string) ([]agentapi.BackupSnapshot, error) {
 	return l.a.Snapshots(site)
+}
+
+func (l *localBackups) Restore(ctx context.Context, site, snapshot string) (agentapi.BackupRestore, error) {
+	return l.a.StartRestore(ctx, site, snapshot)
+}
+
+func (l *localBackups) GetRestore(_ context.Context, id string) (agentapi.BackupRestore, error) {
+	return l.a.GetRestore(id)
 }
 
 func (l *localBackups) ScanHostKey(context.Context, agentapi.BackupTarget) (ssh.PublicKey, error) {
@@ -187,5 +196,75 @@ func TestBackupScopes(t *testing.T) {
 
 	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/backups"}); rec.Code != http.StatusUnauthorized {
 		t.Errorf("without login: %d", rec.Code)
+	}
+}
+
+func TestRestoreOverHTTP(t *testing.T) {
+	e, lb, _ := newBackupAPI(t)
+	c := e.adminCookie(t)
+
+	state := t.TempDir()
+	if err := os.Chmod(state, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	pool := filepath.Join(state, "pool")
+	_ = os.Mkdir(pool, 0o755)
+
+	reg := `{"version":1,"pools":[{"name":"default","path":"` + pool + `"}],"sites":[{"user":"blog","uid":2000,"gid":2000,"pool":"default"}]}`
+	if err := os.WriteFile(filepath.Join(state, "sites.json"), []byte(reg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	lb.a.StateDir, lb.a.UnitDir = state, t.TempDir()
+
+	settings := `{"version":1,"target":{"user":"u1","host":"u1.your-storagebox.de","port":23,"path":"x"},"retention":{"daily":7},"windowStart":1,"windowEnd":5}`
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/backups/settings", cookie: c, body: settings}); rec.Code != http.StatusOK {
+		t.Fatalf("set: %d %s", rec.Code, rec.Body)
+	}
+
+	key := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(lb.hostKey)))
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/backups/hostkey", cookie: c, body: `{"key":"` + key + `"}`}); rec.Code != http.StatusOK {
+		t.Fatalf("host key: %d %s", rec.Code, rec.Body)
+	}
+
+	snap := strings.Repeat("ab", 32)
+	if err := backup.WriteSnapshots(lb.a.StatusDir, []backup.SnapshotEntry{{ID: snap, Kind: backup.KindDB, Site: "blog", Database: "blog_wp"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, p := range []string{
+		"/api/v1/sites/blog/backups/" + strings.Repeat("cd", 32) + "/restore",
+		"/api/v1/sites/shop/backups/" + snap + "/restore",
+		"/api/v1/sites/blog/backups/abc/restore",
+	} {
+		if rec := e.do(t, reqOpts{method: "POST", path: p, cookie: c}); rec.Code != http.StatusNotFound {
+			t.Errorf("%s: %d %s", p, rec.Code, rec.Body)
+		}
+	}
+
+	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/backups/" + snap + "/restore", cookie: c})
+
+	var r agentapi.BackupRestore
+	if rec.Code != http.StatusAccepted || json.Unmarshal(rec.Body.Bytes(), &r) != nil || r.State != "queued" || r.Database != "blog_wp" {
+		t.Fatalf("restore: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/backups/" + snap + "/restore", cookie: c}); rec.Code != http.StatusConflict {
+		t.Errorf("second restore: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/backups/restores/" + r.ID, cookie: c}); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"dir":"`+r.Dir+`"`) {
+		t.Errorf("get: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/backups/restores/0000000000000000", cookie: c}); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown restore: %d %s", rec.Code, rec.Body)
+	}
+
+	// Only the high-risk scope may restore.
+	write := e.createToken(t, c, `{"name":"w","scopes":["backups:read","backups:write"],"expiresInDays":1}`)
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/backups/" + snap + "/restore", header: bearerHeader(write.Token)}); rec.Code != http.StatusForbidden {
+		t.Errorf("restore with backups:write: %d", rec.Code)
 	}
 }
