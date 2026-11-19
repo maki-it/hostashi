@@ -15,8 +15,8 @@ concurrency:
 
 jobs:
   # Pull requests run the frontend job only when the frontend or the Go code
-  # it embeds into and tests against changed (the e2e test drives the real
-  # server). Push to main and manual runs always run it. A skipped job counts
+  # and migrations it embeds into and tests against changed (the e2e test
+  # drives the real server). Push to main and manual runs always run it. A skipped job counts
   # as passed, so required checks do not block merges.
   changes:
     name: Detect changed paths
@@ -42,7 +42,7 @@ jobs:
           files="$(git diff --name-only "$BASE" HEAD | grep -vE '\.md$' || true)"
           echo "$files"
           match() { if grep -qE "$1" <<<"$files"; then echo true; else echo false; fi; }
-          echo "web=$(match '(^web/|^(cmd|internal)/.*\.go$|^go\.(mod|sum)$|^\.github/workflows/web\.yml$)')" >> "$GITHUB_OUTPUT"
+          echo "web=$(match '(^web/|^(cmd|internal)/|^go\.(mod|sum)$|^\.github/workflows/web\.yml$)')" >> "$GITHUB_OUTPUT"
 
   web:
     needs: changes
