@@ -71,6 +71,40 @@ type CloudPanelSourceInfo struct {
 	// HostKey is the pinned host key's SHA256 fingerprint, empty if none.
 	HostKey string `json:"hostKey"`
 	Ready   bool   `json:"ready"`
+	// DBUser is the read-only database user on the old server, empty until
+	// its password was generated (cloudpanel.source.db).
+	DBUser string `json:"dbUser,omitempty"`
+}
+
+// CloudPanelDBUser is the database user the import reads with on the old
+// server. It connects through the SSH tunnel, so from 127.0.0.1.
+const CloudPanelDBUser = "hostashi_import"
+
+// CloudPanelDBGrant is what the dump user may do on the old server: read,
+// nothing else (ADR-0026 Part 2).
+const CloudPanelDBGrant = "SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES"
+
+// CloudPanelDBRequest generates a new password for the dump user.
+type CloudPanelDBRequest struct{}
+
+// Validate implements agentrpc.Request.
+func (CloudPanelDBRequest) Validate() error { return nil }
+
+// CloudPanelDBCredentials is shown once: the administrator runs SQL on the
+// old server. The agent keeps the password root-only for the import job.
+type CloudPanelDBCredentials struct {
+	User     string `json:"user"`
+	Password string `json:"password"`
+	SQL      string `json:"sql"`
+}
+
+// CloudPanelDBSQL is the statement that creates the dump user on the old
+// server. pw is generated (letters and digits only).
+func CloudPanelDBSQL(pw string) string {
+	acct := "'" + CloudPanelDBUser + "'@'127.0.0.1'"
+
+	return "CREATE OR REPLACE USER " + acct + " IDENTIFIED BY '" + pw + "';\n" +
+		"GRANT " + CloudPanelDBGrant + " ON *.* TO " + acct + ";"
 }
 
 // CloudPanelSourceGetRequest reads the source.
@@ -116,6 +150,7 @@ var (
 	CloudPanelSourceSet    = agentrpc.Op[CloudPanelSourceSetRequest, CloudPanelSourceInfo]{Name: "cloudpanel.source.set"}
 	CloudPanelHostKey      = agentrpc.Op[CloudPanelHostKeyRequest, CloudPanelSourceInfo]{Name: "cloudpanel.source.hostkey"}
 	CloudPanelSourceDelete = agentrpc.Op[CloudPanelSourceDeleteRequest, CloudPanelSourceInfo]{Name: "cloudpanel.source.delete"}
+	CloudPanelSourceDB     = agentrpc.Op[CloudPanelDBRequest, CloudPanelDBCredentials]{Name: "cloudpanel.source.db"}
 )
 
 // ValidateRemoteDocRoot accepts a clean absolute path below /home/<user>/
@@ -137,7 +172,20 @@ type CloudPanelImportRequest struct {
 	Site       string `json:"site"`       // the site on this server
 	RemoteUser string `json:"remoteUser"` // the site user on the old server
 	DocRoot    string `json:"docRoot"`    // below /home/<remoteUser>/ there
+	// Databases are dumped from the old server into the site's home, one
+	// file each, for the import of ADR-0025.
+	Databases []CloudPanelDBMap `json:"databases,omitempty"`
 }
+
+// CloudPanelDBMap names a database on the old server and the site's
+// database here that its dump is meant for.
+type CloudPanelDBMap struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// MaxImportDatabases bounds the databases of one import.
+const MaxImportDatabases = 50
 
 // Validate checks the names and the path.
 func (r CloudPanelImportRequest) Validate() error {
@@ -149,8 +197,38 @@ func (r CloudPanelImportRequest) Validate() error {
 		return fmt.Errorf("remote user: %w", err)
 	}
 
-	return ValidateRemoteDocRoot(r.RemoteUser, r.DocRoot)
+	if err := ValidateRemoteDocRoot(r.RemoteUser, r.DocRoot); err != nil {
+		return err
+	}
+
+	if len(r.Databases) > MaxImportDatabases {
+		return fmt.Errorf("databases: at most %d", MaxImportDatabases)
+	}
+
+	seen := map[string]bool{}
+
+	for _, d := range r.Databases {
+		if err := ValidateDBName(d.From); err != nil {
+			return fmt.Errorf("database on the old server: %w", err)
+		}
+
+		if err := ValidateDBName(d.To); err != nil {
+			return err
+		}
+
+		if seen[d.To] {
+			return fmt.Errorf("database %s: named twice", d.To)
+		}
+
+		seen[d.To] = true
+	}
+
+	return nil
 }
+
+// CloudPanelImportDBDir holds the dumps of an import, relative to the
+// site's home; a dump is named <database>-<time>.sql.
+const CloudPanelImportDBDir = "cloudpanel-import-db"
 
 // CloudPanelImportDir is where an import lands, relative to the site's
 // home. The web root is replaced only in a later step.
@@ -181,8 +259,12 @@ type CloudPanelImport struct {
 	Deleted    int64     `json:"deleted"`
 	Skipped    int64     `json:"skipped"`
 	// SkippedPaths lists the first skipped entries with the reason.
-	SkippedPaths []string `json:"skippedPaths,omitempty"`
-	Error        string   `json:"error,omitempty"`
+	SkippedPaths []string          `json:"skippedPaths,omitempty"`
+	Databases    []CloudPanelDBMap `json:"databases,omitempty"`
+	// Dumps are the written dump files, relative to the site's home, in
+	// the order of Databases: the path for "db import".
+	Dumps []string `json:"dumps,omitempty"`
+	Error string   `json:"error,omitempty"`
 }
 
 // CloudPanelImportGetRequest asks for one import.

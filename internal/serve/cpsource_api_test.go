@@ -51,6 +51,12 @@ func agentErr(err error) error {
 	return err
 }
 
+func (s *stubSource) GenerateDB(context.Context) (agentapi.CloudPanelDBCredentials, error) {
+	c, err := s.s.GenerateDB()
+
+	return c, agentErr(err)
+}
+
 func (s *stubSource) Get(context.Context) (agentapi.CloudPanelSourceInfo, error) {
 	i, err := s.s.Get()
 
@@ -94,6 +100,10 @@ func TestCloudPanelSourceOverHTTP(t *testing.T) {
 		t.Fatalf("scan without source: %d %s", rec.Code, rec.Body)
 	}
 
+	if rec := e.do(t, reqOpts{method: "POST", path: base + "/database", cookie: c}); rec.Code != http.StatusConflict {
+		t.Fatalf("database user without source: %d %s", rec.Code, rec.Body)
+	}
+
 	for _, body := range []string{`{"host":"bad host","port":22}`, `{"host":"203.0.113.7","port":0}`, `{"host":"203.0.113.7"}`} {
 		if rec := e.do(t, reqOpts{method: "PUT", path: base, cookie: c, body: body}); rec.Code != http.StatusUnprocessableEntity {
 			t.Errorf("%s: %d %s", body, rec.Code, rec.Body)
@@ -109,6 +119,20 @@ func TestCloudPanelSourceOverHTTP(t *testing.T) {
 
 	if strings.Contains(rec.Body.String(), "PRIVATE") {
 		t.Fatalf("private key in response: %s", rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "POST", path: base + "/database", cookie: c})
+
+	var cred agentapi.CloudPanelDBCredentials
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &cred) != nil || cred.User != "hostashi_import" ||
+		!strings.Contains(cred.SQL, cred.Password) || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("database user: %d %s", rec.Code, rec.Body)
+	}
+
+	// Reading the source names the user, never the password.
+	rec = e.do(t, reqOpts{method: "GET", path: base, cookie: c})
+	if !strings.Contains(rec.Body.String(), `"dbUser":"hostashi_import"`) || strings.Contains(rec.Body.String(), cred.Password) {
+		t.Fatalf("source after database user: %s", rec.Body)
 	}
 
 	rec = e.do(t, reqOpts{method: "POST", path: base + "/hostkey/scan", cookie: c})
@@ -142,7 +166,7 @@ func TestCloudPanelSourceOverHTTP(t *testing.T) {
 	}
 
 	var n int
-	if err := e.st.RawCount(t.Context(), `SELECT count(*) FROM audit_log WHERE action LIKE ?`, "cloudpanel.source.%", &n); err != nil || n != 3 {
+	if err := e.st.RawCount(t.Context(), `SELECT count(*) FROM audit_log WHERE action LIKE ?`, "cloudpanel.source.%", &n); err != nil || n != 4 {
 		t.Fatalf("audit entries: %d %v", n, err)
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/cloudpanel/scan"
 	"github.com/maki-it/hostashi/internal/cpimport"
 	"github.com/maki-it/hostashi/internal/cpsource"
@@ -122,4 +123,20 @@ func printJSON[T any](out io.Writer) func(T, error) error {
 
 		return enc.Encode(v)
 	}
+}
+
+// dbMaps reads OLD[:NEW] arguments; NEW defaults to the old name.
+func dbMaps(args []string) []agentapi.CloudPanelDBMap {
+	out := make([]agentapi.CloudPanelDBMap, 0, len(args))
+
+	for _, a := range args {
+		from, to, ok := strings.Cut(a, ":")
+		if !ok {
+			to = from
+		}
+
+		out = append(out, agentapi.CloudPanelDBMap{From: from, To: to})
+	}
+
+	return out
 }

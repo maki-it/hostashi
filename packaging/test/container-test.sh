@@ -485,9 +485,28 @@ hk=$(x sed -n 's/.*"key":"\([^"]*\)".*/\1/p' /tmp/api.out)
 [ "$(api PUT /api/v1/migrations/cloudpanel/source/hostkey "{\"key\":\"$hk\"}")" = 200 ] || fail "confirm source host key: $(x cat /tmp/api.out)"
 x grep -q '"ready":true' /tmp/api.out || fail "source not ready: $(x cat /tmp/api.out)"
 expect_mode /var/lib/hostashi-agent/cloudpanel/id_ed25519 "600 root:root"
+# Databases on the "old server" and the read-only dump user, created by
+# the SQL that the panel shows. olddb2 has a view and a trigger; their
+# DEFINER clauses name a user of the old server, which the import of
+# ADR-0025 refuses, so only its dump is checked.
+x mariadb -e "CREATE DATABASE olddb; CREATE TABLE olddb.t (v VARCHAR(20)); INSERT INTO olddb.t VALUES ('from web2');
+  CREATE DATABASE olddb2; CREATE TABLE olddb2.t (v INT); CREATE VIEW olddb2.vt AS SELECT v FROM olddb2.t;
+  CREATE TRIGGER olddb2.tg BEFORE INSERT ON olddb2.t FOR EACH ROW SET NEW.v = NEW.v + 1;"
+for d in cpimp_db cpimp_db2; do
+  [ "$(api POST /api/v1/sites/cpimp/databases "{\"name\":\"$d\"}")" = 201 ] || fail "create $d: $(x cat /tmp/api.out)"
+done
+if xi /usr/local/bin/hostashi cloudpanel import cpimp oldsite /home/oldsite/htdocs/example.com olddb:cpimp_db </dev/null >/dev/null 2>&1; then
+  fail "database import started without the dump user"
+fi
+x sh -c '/usr/local/bin/hostashi cloudpanel database >/tmp/cpdb.sql' || fail "cloudpanel database"
+x grep -q "^CREATE OR REPLACE USER 'hostashi_import'@'127.0.0.1' IDENTIFIED BY '[A-Za-z0-9]\{32\}';$" /tmp/cpdb.sql || fail "dump user SQL: $(x cat /tmp/cpdb.sql)"
+x sh -c 'mariadb </tmp/cpdb.sql && rm /tmp/cpdb.sql' || fail "create the dump user"
+expect_mode /var/lib/hostashi-agent/cloudpanel/db_password "600 root:root"
+[ "$(api GET /api/v1/migrations/cloudpanel/source)" = 200 ] || fail "get source: $(x cat /tmp/api.out)"
+x grep -q '"dbUser":"hostashi_import"' /tmp/api.out || fail "source without dump user: $(x cat /tmp/api.out)"
 cp_import() {
   local id
-  id=$(x /usr/local/bin/hostashi cloudpanel import cpimp oldsite /home/oldsite/htdocs/example.com | sed -n 's/.*"id": "\([0-9a-f]\{16\}\)".*/\1/p')
+  id=$(x /usr/local/bin/hostashi cloudpanel import cpimp oldsite /home/oldsite/htdocs/example.com "$@" | sed -n 's/.*"id": "\([0-9a-f]\{16\}\)".*/\1/p')
   [ -n "$id" ] || fail "import did not start"
   for _ in $(seq 1 90); do
     x /usr/local/bin/hostashi cloudpanel import-status "$id" >/tmp/cp.$$ 2>&1 || true
@@ -498,8 +517,22 @@ cp_import() {
   cat /tmp/cp.$$
   rm -f /tmp/cp.$$
 }
-out=$(cp_import)
+out=$(cp_import olddb:cpimp_db olddb2:cpimp_db2)
 grep -q '"files": 2' <<<"$out" || fail "first import: $out"
+# The dump came through the tunnel and belongs to the site user; the hardened
+# import of ADR-0025 loads it into the site's database.
+dump=$(sed -n 's/.*"\(cloudpanel-import-db\/cpimp_db-[0-9-]*\.sql\)".*/\1/p' <<<"$out")
+[ -n "$dump" ] || fail "no dump in $out"
+expect_mode "/home/cpimp/$dump" "600 cpimp:cpimp"
+expect_mode /home/cpimp/cloudpanel-import-db "700 cpimp:cpimp"
+x /usr/local/bin/hostashi db import cpimp_db "$dump" || fail "db import of the dump"
+[ "$(x mariadb -N -e 'SELECT v FROM cpimp_db.t')" = "from web2" ] || fail "imported content"
+dump2=$(sed -n 's/.*"\(cloudpanel-import-db\/cpimp_db2-[0-9-]*\.sql\)".*/\1/p' <<<"$out")
+x grep -q 'TRIGGER.*tg' "/home/cpimp/$dump2" || fail "trigger not dumped: $(x grep -i 'create\|trigger' "/home/cpimp/$dump2")"
+x grep -q 'VIEW.*vt' "/home/cpimp/$dump2" || fail "view not dumped: $(x grep -i 'create\|view' "/home/cpimp/$dump2")"
+# The dump user can read, not write.
+pw=$(x cat /var/lib/hostashi-agent/cloudpanel/db_password)
+if x mariadb -h 127.0.0.1 -u hostashi_import "-p$pw" -e "INSERT INTO olddb.t VALUES ('x')" 2>/dev/null; then fail "dump user could write"; fi
 grep -q 'root-file: not owned by the site user' <<<"$out" || fail "root-owned file not skipped: $out"
 dst=/home/cpimp/cloudpanel-import
 [ "$(x cat "$dst/index.php")" = "<?php echo 'old';" ] || fail "imported file content"
@@ -519,6 +552,11 @@ x test ! -e /home/oldsite/htdocs/example.com/cloudpanel-import || fail "wrote on
 x systemd-analyze security "hostashi-import@0000000000000000.service" | tail -1
 [ "$(api DELETE /api/v1/migrations/cloudpanel/source)" = 200 ] || fail "delete source: $(x cat /tmp/api.out)"
 x test ! -e /var/lib/hostashi-agent/cloudpanel/id_ed25519 || fail "import key not removed"
+x test ! -e /var/lib/hostashi-agent/cloudpanel/db_password || fail "dump user password not removed"
+x mariadb -e "DROP DATABASE olddb; DROP DATABASE olddb2; DROP USER 'hostashi_import'@'127.0.0.1'"
+for d in cpimp_db cpimp_db2; do
+  [ "$(api DELETE "/api/v1/databases/$d")" = 204 ] || fail "delete $d: $(x cat /tmp/api.out)"
+done
 x pkill -f 'sshd -p 2298' || true
 [ "$(api DELETE /api/v1/sites/cpimp)" = 204 ] || fail "delete site cpimp: $(x cat /tmp/api.out)"
 

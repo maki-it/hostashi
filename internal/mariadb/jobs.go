@@ -487,3 +487,13 @@ func createDump(h SiteHome, rel string) (*os.File, error) {
 
 	return os.NewFile(uintptr(fd), rel), nil
 }
+
+// CreateDumpFile creates rel below the site's home for a dump, as
+// createDump does for an export: never replacing a file, without symlinks,
+// mode 0600 and owned by the site user. The CloudPanel import (ADR-0026)
+// writes the old server's dumps with it.
+func CreateDumpFile(h SiteHome, rel string) (*os.File, error) { return createDump(h, rel) }
+
+// RemoveDumpFile removes a dump that CreateDumpFile made, below the home
+// and without following symlinks.
+func RemoveDumpFile(h SiteHome, rel string) error { return removeDump(h, rel) }

@@ -28,6 +28,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/cpsource"
+	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/sites"
 	"github.com/maki-it/hostashi/internal/statefile"
 )
@@ -48,6 +49,10 @@ var (
 	ErrNoSite   = errors.New("cpimport: no such site on this server")
 	ErrBusy     = errors.New("cpimport: an import is in progress")
 	ErrNotFound = errors.New("cpimport: no such import")
+	// ErrNoDBUser: databases were asked for before the dump user's
+	// password was generated.
+	ErrNoDBUser   = errors.New("cpimport: generate the database user for the old server first")
+	ErrNoDatabase = errors.New("cpimport: not a database of this site")
 )
 
 // Fixed paths.
@@ -117,6 +122,10 @@ func (a *Agent) Start(ctx context.Context, req agentapi.CloudPanelImportRequest)
 		return Import{}, err
 	}
 
+	if err := a.checkDatabases(req); err != nil {
+		return Import{}, err
+	}
+
 	if err := ensureDir(a.Dir); err != nil {
 		return Import{}, err
 	}
@@ -144,7 +153,7 @@ func (a *Agent) Start(ctx context.Context, req agentapi.CloudPanelImportRequest)
 	_, _ = rand.Read(id)
 
 	r := Import{
-		ID: hex.EncodeToString(id), Site: req.Site, RemoteUser: req.RemoteUser, DocRoot: req.DocRoot,
+		ID: hex.EncodeToString(id), Site: req.Site, RemoteUser: req.RemoteUser, DocRoot: req.DocRoot, Databases: req.Databases,
 		Dir: agentapi.CloudPanelImportDir, State: agentapi.ImportQueued, Created: time.Now().UTC(),
 	}
 
@@ -165,6 +174,43 @@ func (a *Agent) Start(ctx context.Context, req agentapi.CloudPanelImportRequest)
 	}
 
 	return r, nil
+}
+
+// checkDatabases: every target is a database of the site here, and the
+// dump user's password exists.
+func (a *Agent) checkDatabases(req agentapi.CloudPanelImportRequest) error {
+	if len(req.Databases) == 0 {
+		return nil
+	}
+
+	if _, err := a.Source.DBPassword(); err != nil {
+		if errors.Is(err, cpsource.ErrNoDB) {
+			return ErrNoDBUser
+		}
+
+		return err
+	}
+
+	dbs, err := mariadb.ReadDatabases(a.StateDir, owner())
+	if err != nil {
+		return fmt.Errorf("database registry: %w", err)
+	}
+
+	ours := map[string]bool{}
+
+	for _, d := range dbs {
+		if d.Site == req.Site {
+			ours[d.Name] = true
+		}
+	}
+
+	for _, d := range req.Databases {
+		if !ours[d.To] {
+			return fmt.Errorf("%w: %s", ErrNoDatabase, d.To)
+		}
+	}
+
+	return nil
 }
 
 // Get returns one import.
