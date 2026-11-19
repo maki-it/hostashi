@@ -9,6 +9,10 @@ import {
   listSites,
   parseDomains,
   phpVersions,
+  setDomains,
+  setHSTS,
+  setPHP,
+  setTLS,
   siteMessage,
   siteNameProblem,
   type PHPVersions,
@@ -30,6 +34,14 @@ export function Sites() {
       setError(siteMessage(err));
     }
   }, []);
+
+  // A certificate comes in the background: look again while one is pending.
+  const pending = sites?.some((s) => s.state === "active" && s.tls.enabled && !s.tls.active && !s.tls.error) ?? false;
+  useEffect(() => {
+    if (!pending) return;
+    const t = setInterval(() => void load(), 10000);
+    return () => clearInterval(t);
+  }, [pending, load]);
 
   useEffect(() => {
     void load();
@@ -61,7 +73,7 @@ export function Sites() {
         ) : (
           <ul className="rows">
             {sites.map((s) => (
-              <SiteRow key={s.name} site={s} onChange={load} />
+              <SiteRow key={s.name} site={s} php={php} onChange={load} />
             ))}
           </ul>
         )}
@@ -71,8 +83,10 @@ export function Sites() {
 }
 
 // PHPOptions lists the installed versions, newest first, legacy ones marked.
-export function PHPOptions({ php }: { php: PHPVersions | null }) {
+// A current version that is no longer installed stays selectable.
+function PHPOptions({ php, current = "" }: { php: PHPVersions | null; current?: string }) {
   const installed = [...(php?.installed ?? [])].reverse();
+  if (current && !installed.includes(current)) installed.unshift(current);
   return (
     <>
       <option value="">No PHP</option>
@@ -80,6 +94,7 @@ export function PHPOptions({ php }: { php: PHPVersions | null }) {
         <option key={v} value={v}>
           PHP {v}
           {php?.legacy.includes(v) ? " (legacy)" : ""}
+          {php && !php.installed.includes(v) ? " (not installed)" : ""}
         </option>
       ))}
     </>
@@ -180,10 +195,11 @@ function CreateCard({ php, onChange }: { php: PHPVersions | null; onChange: () =
   );
 }
 
-function SiteRow({ site, onChange }: { site: Site; onChange: () => Promise<void> }) {
+function SiteRow({ site, php, onChange }: { site: Site; php: PHPVersions | null; onChange: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirming, setConfirming] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [typed, setTyped] = useState("");
 
   async function drop() {
@@ -231,6 +247,15 @@ function SiteRow({ site, onChange }: { site: Site; onChange: () => Promise<void>
       {site.tls.enabled && !site.tls.active && site.tls.error && (
         <p className="muted">Last attempt failed: {site.tls.error}. Hostashi tries again within an hour.</p>
       )}
+      {site.state === "active" &&
+        !confirming &&
+        (editing ? (
+          <SiteSettings site={site} php={php} onChange={onChange} onClose={() => setEditing(false)} />
+        ) : (
+          <button type="button" className="secondary" onClick={() => setEditing(true)}>
+            Change settings
+          </button>
+        ))}
       {confirming && (
         <form
           onSubmit={(e) => {
@@ -264,5 +289,130 @@ function SiteRow({ site, onChange }: { site: Site; onChange: () => Promise<void>
       )}
       {error && <p role="alert">{error}</p>}
     </li>
+  );
+}
+
+// SiteSettings changes domains, PHP version, HTTPS and HSTS of an active
+// site. Each change goes live on its own.
+function SiteSettings({
+  site,
+  php,
+  onChange,
+  onClose,
+}: {
+  site: Site;
+  php: PHPVersions | null;
+  onChange: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const [domains, setDomainsText] = useState(site.domains.join("\n"));
+  const [version, setVersion] = useState(site.php);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState("");
+
+  async function act(f: () => Promise<string>) {
+    setBusy(true);
+    setError("");
+    setDone("");
+    try {
+      const msg = await f();
+      await onChange();
+      setDone(msg);
+    } catch (err) {
+      setError(siteMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function saveDomains(e: FormEvent) {
+    e.preventDefault();
+    const list = parseDomains(domains);
+    const problem = domainsProblem(list);
+    if (problem) {
+      setError(problem);
+      setDone("");
+      return;
+    }
+    void act(async () => {
+      await setDomains(site.name, list);
+      return site.tls.enabled
+        ? "Domains saved. The site is served over HTTP until a certificate for the new domains is there."
+        : "Domains saved.";
+    });
+  }
+
+  function savePHP(e: FormEvent) {
+    e.preventDefault();
+    void act(async () => {
+      await setPHP(site.name, version);
+      return version ? `The site runs on PHP ${version} now.` : "PHP is off for this site now.";
+    });
+  }
+
+  const toggleTLS = (on: boolean) =>
+    act(async () => {
+      const s = await setTLS(site.name, on);
+      if (!on) return "HTTPS is off. The site is served over HTTP.";
+      return s.tls.active ? "HTTPS is on." : "HTTPS is on. The site switches when its certificate is there.";
+    });
+
+  const toggleHSTS = (on: boolean) =>
+    act(async () => {
+      await setHSTS(site.name, on);
+      return on ? "HSTS is on. Browsers keep using HTTPS for this site, even if HTTPS is turned off later." : "HSTS is off.";
+    });
+
+  return (
+    <div className="stack" aria-label={"Settings of " + site.name} role="group">
+      <form onSubmit={saveDomains} noValidate>
+        <label>
+          Domains of {site.name}
+          <small>One per line. The first one is the primary domain.</small>
+          <textarea value={domains} onChange={(e) => setDomainsText(e.target.value)} rows={3} autoComplete="off" spellCheck={false} />
+        </label>
+        <div className="actions">
+          <button type="submit" disabled={busy}>
+            Save domains
+          </button>
+        </div>
+      </form>
+      <form onSubmit={savePHP} noValidate>
+        <label>
+          PHP of {site.name}
+          <select value={version} onChange={(e) => setVersion(e.target.value)}>
+            <PHPOptions php={php} current={site.php} />
+          </select>
+        </label>
+        {php?.legacy.includes(version) && version !== site.php && (
+          <p className="muted">PHP {version} gets no or only security fixes upstream. Use it only for software that needs it.</p>
+        )}
+        <div className="actions">
+          <button type="submit" disabled={busy || version === site.php}>
+            Save PHP version
+          </button>
+        </div>
+      </form>
+      <fieldset>
+        <legend>HTTPS of {site.name}</legend>
+        <label className="check">
+          <input type="checkbox" checked={site.tls.enabled} disabled={busy} onChange={(e) => void toggleTLS(e.target.checked)} />
+          HTTPS with a Let's Encrypt certificate
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={site.tls.hsts} disabled={busy} onChange={(e) => void toggleHSTS(e.target.checked)} />
+          HSTS: browsers use only HTTPS for this site
+        </label>
+        {site.tls.hsts && !site.tls.active && <p className="muted">HSTS is sent only while the site is served over HTTPS.</p>}
+      </fieldset>
+      {error && <p role="alert">{error}</p>}
+      {done && <p role="status">{done}</p>}
+      <div className="actions">
+        <button type="button" className="secondary" disabled={busy} onClick={onClose}>
+          Close settings
+        </button>
+      </div>
+    </div>
   );
 }
