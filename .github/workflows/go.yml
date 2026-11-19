@@ -108,7 +108,10 @@ jobs:
           sudo mount -o loop,prjquota "$RUNNER_TEMP/quota.img" /mnt/quota
           # Mounting may only count usage; switch on enforcement (spike S8).
           sudo quotaon -P /mnt/quota || true
-          sudo quotaon -Ppv /mnt/quota
+          # quotaon -p exits non-zero for unrelated tmpfs mounts; check the line.
+          state="$(sudo quotaon -Ppv /mnt/quota 2>&1 || true)"
+          echo "$state"
+          grep -q 'quota on /mnt/quota .* is on (enforced)' <<<"$state"
       - name: Run as root against it
         run: sudo env HOSTASHI_QUOTA_TEST_DIR=/mnt/quota "$RUNNER_TEMP/quota.test" -test.v -test.count=1
 
