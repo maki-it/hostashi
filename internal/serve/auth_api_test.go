@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/cpmigrate"
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/metrics"
 	"github.com/maki-it/hostashi/internal/secrets"
@@ -32,6 +33,7 @@ type apiEnv struct {
 	tokenPath string
 	metrics   *metrics.Metrics
 	settings  Settings
+	st        *store.Store
 }
 
 func newAPI(t *testing.T) *apiEnv {
@@ -75,9 +77,10 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	deps := Deps{PingAgent: ok, PingDB: ok, Auth: svc, Metrics: metrics.New(), Settings: st}
 	if ag != nil {
 		deps.Sites = hosting.New(st, ag, nil)
+		deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), nil)
 	}
 
-	return &apiEnv{h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st}
+	return &apiEnv{h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st}
 }
 
 type reqOpts struct {

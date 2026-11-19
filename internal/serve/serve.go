@@ -23,6 +23,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/cpmigrate"
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/metrics"
 	"github.com/maki-it/hostashi/internal/reqid"
@@ -102,6 +103,9 @@ type Deps struct {
 	Auth      *auth.Service    // nil disables the auth routes (tests)
 	Sites     *hosting.Service // nil disables the site routes; needs Auth
 	Backups   Backups          // nil disables the backup routes; needs Auth
+	// CloudPanel keeps uploaded scan reports (ADR-0017); nil disables the
+	// migration routes. Needs Auth.
+	CloudPanel *cpmigrate.Service
 	// Metrics counts requests and serves /metrics (ADR-0022); nil turns both
 	// off. The endpoint needs Auth and Settings.
 	Metrics  *metrics.Metrics
@@ -166,6 +170,10 @@ func Handler(cfg Config, deps Deps) http.Handler {
 			}
 
 			registerBackups(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Backups, dbs, log)
+		}
+
+		if deps.CloudPanel != nil {
+			registerMigrations(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.CloudPanel, log)
 		}
 
 		if deps.Metrics != nil && deps.Settings != nil {
@@ -305,6 +313,8 @@ func Run(ctx context.Context, cfg Config) error {
 		Metrics:  m,
 		Settings: st,
 	}
+
+	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
 
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
