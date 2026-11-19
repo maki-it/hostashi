@@ -74,6 +74,29 @@ func (a *stubAgent) DBUserDelete(context.Context, string) error { return nil }
 
 func (a *stubAgent) DBUserPassword(context.Context, string, string) error { return nil }
 
+// stubJob is the one dump job the stub knows.
+const stubJob = "00000000000000aa"
+
+func (a *stubAgent) DBImport(_ context.Context, database, path string) (agentapi.DBJob, error) {
+	return agentapi.DBJob{ID: stubJob, Kind: "import", Database: database, Path: path, State: agentapi.JobRunning}, nil
+}
+
+func (a *stubAgent) DBExport(_ context.Context, database, path string) (agentapi.DBJob, error) {
+	if path == "exists.sql.gz" {
+		return agentapi.DBJob{}, &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "the file exists"}
+	}
+
+	return agentapi.DBJob{ID: stubJob, Kind: "export", Database: database, Path: path, State: agentapi.JobRunning}, nil
+}
+
+func (a *stubAgent) DBJob(_ context.Context, id string) (agentapi.DBJob, error) {
+	if id != stubJob {
+		return agentapi.DBJob{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown job"}
+	}
+
+	return agentapi.DBJob{ID: stubJob, Kind: "import", Database: "shop_wp", Path: "dump.sql", State: agentapi.JobDone}, nil
+}
+
 type stubIssuer struct{}
 
 func (stubIssuer) Obtain(context.Context, []byte) ([]byte, error) { return []byte("chain"), nil }

@@ -32,7 +32,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 4. **Files only inside the site home.** The agent opens the dump file (import) or creates it (export, `O_EXCL`) with `RESOLVE_BENEATH` below the home and refuses symlinks, like the file manager rules in `05-security.md` 5.6. Paths in a request are relative to the home. `.sql` and `.sql.gz` are accepted, gzip is done in Go.
 5. **Fixed argv.** Only the database name is a variable; it is validated by ADR-0024's rule.
 
-Long runs become **agent jobs**: `db.import` and `db.export` start a job and return its ID, `db.job` reports state and a short, fixed error text. One job per database at a time. The CLI waits for the job. The API endpoints follow when the panel has its job queue (`04-architecture.md` 4.7); until then import and export go through the CLI as root on the server.
+Long runs become **agent jobs**: `db.import` and `db.export` start a job and return its ID, `db.job` reports state and a short, fixed error text. One job per database at a time. The CLI waits for the job. The API starts the same jobs (`POST /api/v1/databases/{db}/import` and `/export` with `{"path"}`, answer 202 with the job, scope `databases:write`) and reports them (`GET /api/v1/databases/{db}/jobs/{id}`, `databases:read`, only for the job's own database). The panel does not keep its own queue for this, like the backup import (ADR-0008): a job lives in the agent and is gone after an agent restart. The persistent job queue of `04-architecture.md` 4.7 can take this over later.
 
 ## Consequences
 

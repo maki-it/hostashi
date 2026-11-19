@@ -118,3 +118,54 @@ func TestDatabaseScopes(t *testing.T) {
 		t.Fatalf("delete token: %d %s", rec.Code, rec.Body)
 	}
 }
+
+func TestDatabaseDumpsOverHTTP(t *testing.T) {
+	e := newAPIWithAgent(t, &stubAgent{})
+	c := e.adminCookie(t)
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"shop","domains":["shop.example.com"]}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("create site: %d %s", rec.Code, rec.Body)
+	}
+
+	for _, name := range []string{"shop_wp", "shop_two"} {
+		if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/shop/databases", cookie: c, body: `{"name":"` + name + `"}`}); rec.Code != http.StatusCreated {
+			t.Fatalf("create database: %d %s", rec.Code, rec.Body)
+		}
+	}
+
+	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/databases/shop_wp/import", cookie: c, body: `{"path":"dump.sql"}`})
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"id":"`+stubJob+`"`) || !strings.Contains(rec.Body.String(), `"state":"running"`) {
+		t.Fatalf("import: %d %s", rec.Code, rec.Body)
+	}
+
+	read := bearerHeader(e.createToken(t, c, `{"name":"r","scopes":["databases:read"]}`).Token)
+
+	cases := []struct {
+		method, path, body string
+		header             map[string]string
+		code               int
+	}{
+		{"GET", "/api/v1/databases/shop_wp/jobs/" + stubJob, ``, read, http.StatusOK},
+		{"GET", "/api/v1/databases/shop_two/jobs/" + stubJob, ``, read, http.StatusNotFound},
+		{"GET", "/api/v1/databases/shop_wp/jobs/00000000000000bb", ``, read, http.StatusNotFound},
+		{"GET", "/api/v1/databases/shop_wp/jobs/nothex", ``, read, http.StatusNotFound},
+		{"POST", "/api/v1/databases/shop_wp/import", `{"path":"dump.sql"}`, read, http.StatusForbidden},
+		{"POST", "/api/v1/databases/shop_wp/export", `{"path":"backup.sql.gz"}`, nil, http.StatusAccepted},
+		{"POST", "/api/v1/databases/shop_wp/export", `{"path":"exists.sql.gz"}`, nil, http.StatusConflict},
+		{"POST", "/api/v1/databases/shop_wp/import", `{"path":"../other/dump.sql"}`, nil, http.StatusUnprocessableEntity},
+		{"POST", "/api/v1/databases/shop_wp/import", `{"path":"/etc/shadow.sql"}`, nil, http.StatusUnprocessableEntity},
+		{"POST", "/api/v1/databases/shop_wp/import", `{"path":"dump.zip"}`, nil, http.StatusUnprocessableEntity},
+		{"POST", "/api/v1/databases/shop_wp/import", `{"path":"dump.sql","user":"root"}`, nil, http.StatusBadRequest},
+		{"POST", "/api/v1/databases/nope/import", `{"path":"dump.sql"}`, nil, http.StatusNotFound},
+	}
+	for _, tc := range cases {
+		o := reqOpts{method: tc.method, path: tc.path, header: tc.header, body: tc.body}
+		if tc.header == nil {
+			o.cookie = c
+		}
+
+		if rec := e.do(t, o); rec.Code != tc.code {
+			t.Errorf("%s %s %s: %d, want %d: %s", tc.method, tc.path, tc.body, rec.Code, tc.code, rec.Body)
+		}
+	}
+}

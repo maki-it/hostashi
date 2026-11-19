@@ -35,6 +35,9 @@ type Agent interface {
 	DBUserCreate(ctx context.Context, database, user, password string) error
 	DBUserDelete(ctx context.Context, user string) error
 	DBUserPassword(ctx context.Context, user, password string) error
+	DBImport(ctx context.Context, database, path string) (agentapi.DBJob, error)
+	DBExport(ctx context.Context, database, path string) (agentapi.DBJob, error)
+	DBJob(ctx context.Context, id string) (agentapi.DBJob, error)
 }
 
 // Issuer turns a certificate signing request into a certificate chain. The
