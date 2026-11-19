@@ -19,6 +19,20 @@ type CronJob struct {
 	// cron.DefaultTimeout.
 	TimeoutSec int64 `json:"timeout_sec,omitempty"`
 	Paused     bool  `json:"paused,omitempty"`
+	// Nice is the job's niceness, 0 to 19; nil means DefaultCronNice.
+	Nice *int `json:"nice,omitempty"`
+}
+
+// DefaultCronNice is the niceness of a cron job that sets none (ADR-0015).
+const DefaultCronNice = 10
+
+// Niceness returns the job's niceness, with the default for nil.
+func (j CronJob) Niceness() int {
+	if j.Nice == nil {
+		return DefaultCronNice
+	}
+
+	return *j.Nice
 }
 
 // Timeout returns the job's timeout, with the default for 0.
@@ -30,7 +44,7 @@ func (j CronJob) Timeout() time.Duration {
 	return time.Duration(j.TimeoutSec) * time.Second
 }
 
-// Validate checks the id, schedule, command and timeout.
+// Validate checks the id, schedule, command, timeout and niceness.
 func (j CronJob) Validate() error {
 	if j.ID < 1 {
 		return fmt.Errorf("cron job: id must be positive, not %d", j.ID)
@@ -50,6 +64,10 @@ func (j CronJob) Validate() error {
 
 	if err := cron.ValidateTimeout(j.Timeout()); err != nil {
 		return fmt.Errorf("cron job %d: %w", j.ID, err)
+	}
+
+	if n := j.Niceness(); n < 0 || n > 19 {
+		return fmt.Errorf("cron job %d: nice must be 0 to 19", j.ID)
 	}
 
 	return nil

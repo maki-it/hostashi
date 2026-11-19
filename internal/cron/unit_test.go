@@ -95,8 +95,8 @@ func TestUnits(t *testing.T) {
 		t.Error("slice without one set")
 	}
 
-	u.Slice, u.Nice = "hostashi-site-shop.slice", 10
-	if svc, _ := u.Service(); !strings.Contains(string(svc), "\nSlice=hostashi-site-shop.slice\nNice=10\n") {
+	u.Slice, u.Nice = `hostashi-site-my\x2dshop.slice`, 10
+	if svc, _ := u.Service(); !strings.Contains(string(svc), "\nSlice=hostashi-site-my\\x2dshop.slice\nNice=10\n") {
 		t.Errorf("no slice:\n%s", svc)
 	}
 
@@ -128,6 +128,7 @@ func TestUnitRejects(t *testing.T) {
 		"home root":     func(u *Unit) { u.Home = "/" },
 		"script %":      func(u *Unit) { u.Script = "/var/lib/%h.sh" },
 		"slice":         func(u *Unit) { u.Slice = "x.service" },
+		"slice escape":  func(u *Unit) { u.Slice = `a\x41.slice` },
 		"timeout":       func(u *Unit) { u.Timeout = 0 },
 		"nice":          func(u *Unit) { u.Nice = 20 },
 		"nice negative": func(u *Unit) { u.Nice = -5 },
@@ -155,7 +156,7 @@ func TestUnitsVerify(t *testing.T) {
 	}
 
 	u := testUnit()
-	u.Slice, u.Nice = "hostashi-site-shop.slice", 10
+	u.Slice, u.Nice = `hostashi-site-my\x2dshop.slice`, 10
 	dir := t.TempDir()
 
 	svc, err := u.Service()

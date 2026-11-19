@@ -19,6 +19,11 @@ func TestCronApplyRequestValidate(t *testing.T) {
 		t.Fatalf("empty list: %v", err)
 	}
 
+	zero, twenty, minus := 0, 20, -1
+	if ok.Niceness() != DefaultCronNice || (CronJob{Nice: &zero}).Niceness() != 0 {
+		t.Errorf("niceness %d", ok.Niceness())
+	}
+
 	if ok.Timeout() != time.Hour {
 		t.Errorf("default timeout %s", ok.Timeout())
 	}
@@ -40,6 +45,8 @@ func TestCronApplyRequestValidate(t *testing.T) {
 		"negative": {Site: "shop", Jobs: []CronJob{{ID: 1, Schedule: "@daily", Command: "x", TimeoutSec: -1}}},
 		"huge":     {Site: "shop", Jobs: []CronJob{{ID: 1, Schedule: "@daily", Command: "x", TimeoutSec: 1 << 62}}},
 		"too many": {Site: "shop", Jobs: many},
+		"nice 20":  {Site: "shop", Jobs: []CronJob{{ID: 1, Schedule: "@daily", Command: "x", Nice: &twenty}}},
+		"nice -1":  {Site: "shop", Jobs: []CronJob{{ID: 1, Schedule: "@daily", Command: "x", Nice: &minus}}},
 		"big":      {Site: "shop", Jobs: []CronJob{{ID: 1, Schedule: "@daily", Command: strings.Repeat("x", 4097)}}},
 	} {
 		if r.Validate() == nil {

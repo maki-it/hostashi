@@ -77,8 +77,8 @@ type Unit struct {
 	Home   string // the site's home, absolute
 	Script string // the job's script file, absolute
 	Slice  string // optional, a slice unit name
-	// Nice is the job's niceness, 0 to 19; 0 leaves it unset. ADR-0015
-	// (Proposed) suggests 10 for cron jobs.
+	// Nice is the job's niceness, 0 to 19; 0 leaves it unset (ADR-0015:
+	// 10 by default for cron jobs).
 	Nice    int
 	Timeout time.Duration
 	// OnCalendar are the timer's values, from OnCalendar.
@@ -88,9 +88,11 @@ type Unit struct {
 var (
 	// The same characters as agentapi's site user pattern; checked again
 	// here because the name ends up in unit files.
-	unitSiteRe  = regexp.MustCompile(`^[a-z][a-z0-9_-]{1,31}$`)
-	unitPathRe  = regexp.MustCompile(`^/[A-Za-z0-9_./-]+$`)
-	unitSliceRe = regexp.MustCompile(`^[A-Za-z0-9_-]+\.slice$`)
+	unitSiteRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{1,31}$`)
+	unitPathRe = regexp.MustCompile(`^/[A-Za-z0-9_./-]+$`)
+	// Slice names may carry systemd-escape's \x2d for a "-" in a site user
+	// name (ADR-0015: hostashi-site-<escaped user>.slice).
+	unitSliceRe = regexp.MustCompile(`^(?:[A-Za-z0-9_-]|\\x2d)+\.slice$`)
 	calendarRe  = regexp.MustCompile(`^[0-9A-Za-z*:,. -]+$`)
 )
 
