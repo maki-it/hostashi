@@ -186,9 +186,10 @@ func TestUnitsVerify(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 
-	// Anything but the sandbox's IPv6 note is a warning about our units.
+	// systemd also warns about the host's own units; only lines about
+	// ours count.
 	for l := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
-		if l != "" && !strings.Contains(l, "IPv6") {
+		if strings.Contains(l, dir) || strings.Contains(l, u.Name()) {
 			t.Errorf("systemd-analyze: %s", l)
 		}
 	}
