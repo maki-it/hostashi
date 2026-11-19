@@ -18,18 +18,24 @@
 #   --panel-port PORT    HTTPS port of the panel, default 8443 (TCP and UDP must be open)
 #   --listen ADDR        panel listen address, default 127.0.0.1:8080 (loopback only: SSH tunnel)
 #   --allow-untested     accept an OS release that is not on the supported list
+#   --no-quota           do not enable disk quota (sites then get no disk limit)
 #
 # nginx comes from the distribution with its brotli modules (ADR-0020) and
 # runs on the configuration the agent renders. PHP is the distribution's
 # (ADR-0019); each site gets its own FPM master, so the package's own FPM
 # service stays off. MariaDB is the distribution's (ADR-0024); the agent
-# talks to it as root over its Unix socket. Not yet part of this installer:
-# more PHP versions (sury.org), project quota (spike S5/S8) and a firewall.
+# talks to it as root over its Unix socket. Disk quota per site needs ext4
+# project quota on the root filesystem (ADR-0015); the quota step prepares it
+# and asks for ONE reboot, it never reboots by itself. Not yet part of this
+# installer: more PHP versions (sury.org) and a firewall.
 #
 # Exit codes: 0 ok, 2 refused by preflight (server unchanged), 3 a step
 # failed (re-running is safe), 64 usage.
 #
-# Test hooks (environment): HOSTASHI_OS_RELEASE (file), HOSTASHI_ARCH.
+# Test hooks (environment): HOSTASHI_OS_RELEASE (file), HOSTASHI_ARCH,
+# HOSTASHI_ETC (directory instead of /etc for the quota step),
+# HOSTASHI_STATE_DIR, HOSTASHI_BOOT_ID (file), HOSTASHI_LIB=1 (define the
+# functions only, for packaging/test/quota-test.sh).
 
 # The chk_*/do_* step functions are called by name from run_steps.
 # shellcheck disable=SC2329
@@ -39,14 +45,14 @@ umask 077
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 UNIT_DIR=${HOSTASHI_UNIT_SRC:-$HERE/systemd}
-STATE_DIR=/var/lib/hostashi-installer
+STATE_DIR=${HOSTASHI_STATE_DIR:-/var/lib/hostashi-installer}
 ACME_DIR=/var/lib/hostashi-acme
 STATE_FILE=$STATE_DIR/state
 LOG=/var/log/hostashi-install.log
 OS_RELEASE=${HOSTASHI_OS_RELEASE:-/etc/os-release}
 BIN=/usr/local/bin/hostashi
 
-MODE=plan YES=no BINARY="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no
+MODE=plan YES=no BINARY="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no
 CHANGES=0 BINARY_CHANGED=no CONFIG_CHANGED=no
 
 log()    { echo "install: $*" >&2; }
@@ -160,11 +166,13 @@ preflight() {
 
   [ $problems -eq 0 ] || refuse "$problems preflight problem(s)"
   log "preflight: ok ($OS_ID $OS_VER $ARCH)"
+  quota_detect
+  [ "$QUOTA" != unsupported ] || log "WARNING: disk quota is not available: $QUOTA_WHY. Sites get no disk limit."
 }
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config nginx php mariadb backup units service"
+STEPS="account dirs key binary config nginx php mariadb backup units service quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -372,6 +380,240 @@ do_service() {
   sleep 2
 }
 
+# ------------------------------------------------------------- quota
+# Project quota on the root filesystem (ADR-0015, spike S8). A stock ext4
+# root has neither the "project" nor the "quota" feature, and both can only
+# be set while it is unmounted. So this step prepares the next boot: an
+# initramfs hook runs e2fsck and tune2fs before the root is mounted, fstab and
+# the kernel command line mount it with prjquota, and a unit switches on
+# enforcement after boot (mounting alone may only count usage, S8 finding 3).
+# One reboot; the installer never reboots by itself. Where this is not
+# possible (another filesystem, no quota_v2 module, no initramfs-tools) the
+# step changes nothing and warns: sites then get no disk limit.
+#
+# The initramfs must contain quota_v2 once the feature is set, otherwise the
+# root mount fails (S8 finding 2). The hook adds it for every kernel and
+# fails the initramfs build of a kernel that lacks it, so a kernel update
+# stops with an error instead of producing an unbootable server.
+ETC=${HOSTASHI_ETC:-/etc}
+FSTAB=$ETC/fstab
+QUOTA_HOOK=$ETC/initramfs-tools/hooks/hostashi-quota
+QUOTA_PREMOUNT=$ETC/initramfs-tools/scripts/local-premount/hostashi-quota
+QUOTA_UNIT=$ETC/systemd/system/hostashi-quota-enforce.service
+QUOTA_GRUB=$ETC/default/grub.d/hostashi-quota.cfg
+BOOT_ID_FILE=${HOSTASHI_BOOT_ID:-/proc/sys/kernel/random/boot_id}
+BOOT_DIR=${HOSTASHI_BOOT:-/boot}
+QUOTA_PKGS=(quota)
+# QUOTA: active, pending (prepared, reboot needed), needed, failed (prepared
+# but not active after a reboot), unsupported, off (--no-quota).
+QUOTA="" QUOTA_WHY="" Q_DEV="" Q_FEATURES=no Q_MOUNTED=no Q_FSTAB=no
+
+has_quota_v2() {
+  modinfo -k "$1" quota_v2 >/dev/null 2>&1 || grep -qw quota_v2 "/lib/modules/$1/modules.builtin" 2>/dev/null
+}
+
+quota_detect() {
+  QUOTA="" QUOTA_WHY="" Q_DEV="" Q_FEATURES=no Q_MOUNTED=no Q_FSTAB=no
+  if [ "$NO_QUOTA" = yes ]; then QUOTA=off QUOTA_WHY="switched off with --no-quota"; return 0; fi
+  local src fstype opts head feats inode kver prepared rootopts
+  src=$(findmnt -no SOURCE / 2>/dev/null) fstype=$(findmnt -no FSTYPE / 2>/dev/null) opts=$(findmnt -no OPTIONS / 2>/dev/null)
+  if [ "$fstype" != ext4 ]; then
+    QUOTA=unsupported QUOTA_WHY="the root filesystem is '${fstype:-unknown}', only ext4 is supported"; return 0
+  fi
+  Q_DEV=$(readlink -f "$src" 2>/dev/null || echo "$src")
+  if [ ! -b "$Q_DEV" ]; then QUOTA=unsupported QUOTA_WHY="the root device '$src' is not a block device"; return 0; fi
+  head=$(dumpe2fs -h "$Q_DEV" 2>/dev/null)
+  feats=$(printf '%s\n' "$head" | sed -n 's/^Filesystem features: *//p')
+  inode=$(printf '%s\n' "$head" | sed -n 's/^Inode size: *//p')
+  case " $feats " in *" project "*) case " $feats " in *" quota "*) Q_FEATURES=yes;; esac;; esac
+  case ",$opts," in *,prjquota,*) Q_MOUNTED=yes;; esac
+  rootopts=$(awk '$2 == "/" && $1 !~ /^#/ {print $4}' "$FSTAB" 2>/dev/null)
+  case ",$rootopts," in *,prjquota,*) Q_FSTAB=yes;; esac
+
+  if [ "$Q_FEATURES" = yes ] && [ "$Q_MOUNTED" = yes ] && [ "$Q_FSTAB" = yes ] &&
+    [ -f "$QUOTA_HOOK" ] && [ -f "$QUOTA_UNIT" ] && pkg_installed quota &&
+    [ "$(systemctl is-enabled hostashi-quota-enforce.service 2>/dev/null)" = enabled ]; then
+    QUOTA=active; return 0
+  fi
+  prepared=$(sed -n 's/^quota_prepared_boot=//p' "$STATE_FILE" 2>/dev/null | tail -n 1)
+  if [ -n "$prepared" ]; then
+    if [ "$prepared" = "$(cat "$BOOT_ID_FILE" 2>/dev/null)" ]; then
+      QUOTA=pending QUOTA_WHY="prepared, a reboot activates it"; return 0
+    fi
+    if [ "$Q_FEATURES" = no ] || [ "$Q_MOUNTED" = no ]; then
+      QUOTA=failed QUOTA_WHY="project quota was prepared but is not active after the reboot (features set: $Q_FEATURES, mounted with prjquota: $Q_MOUNTED). Check the boot messages of hostashi-quota (journalctl -b -k), or re-run with --no-quota"
+      return 0
+    fi
+  fi
+
+  kver=$(uname -r)
+  if ! [ "${inode:-0}" -ge 256 ] 2>/dev/null; then
+    QUOTA=unsupported QUOTA_WHY="the inode size of $Q_DEV is ${inode:-unknown}, project quota needs 256"; return 0
+  fi
+  if ! has_quota_v2 "$kver"; then
+    QUOTA=unsupported QUOTA_WHY="kernel $kver has no quota_v2 module (Ubuntu: apt install linux-modules-extra-$kver)"; return 0
+  fi
+  if ! command -v update-initramfs >/dev/null || ! command -v lsinitramfs >/dev/null; then
+    QUOTA=unsupported QUOTA_WHY="initramfs-tools is not installed (other initramfs generators such as dracut are not supported yet)"; return 0
+  fi
+  if [ "$(awk '$2 == "/" && $1 !~ /^#/' "$FSTAB" 2>/dev/null | wc -l)" != 1 ]; then
+    QUOTA=unsupported QUOTA_WHY="expected exactly one entry for / in $FSTAB"; return 0
+  fi
+  QUOTA=needed
+  if [ "$Q_FEATURES" = yes ] && [ "$Q_MOUNTED" = yes ]; then
+    QUOTA_WHY="project quota is on, enforcement and the initramfs hook are not set up"
+  else
+    QUOTA_WHY="enable ext4 project quota on $Q_DEV (needs ONE reboot afterwards)"
+  fi
+}
+
+quota_hook() {
+  cat <<'H'
+#!/bin/sh
+# Managed by the Hostashi installer (ADR-0015). The root filesystem uses the
+# ext4 quota feature and cannot be mounted without quota_v2.
+case "$1" in prereqs) echo ""; exit 0;; esac
+if ! modinfo -k "$version" quota_v2 >/dev/null 2>&1 &&
+  ! grep -qw quota_v2 "/lib/modules/$version/modules.builtin" 2>/dev/null; then
+  echo "hostashi-quota: kernel $version has no quota_v2 module, the root filesystem needs it (Ubuntu: linux-modules-extra-$version)" >&2
+  exit 1
+fi
+. /usr/share/initramfs-tools/hook-functions
+manual_add_modules quota_v2
+copy_exec /sbin/tune2fs
+copy_exec /sbin/e2fsck
+copy_exec /sbin/dumpe2fs
+mkdir -p "$DESTDIR/etc"
+H
+  printf "echo 'DEVICE=%s' >\"\$DESTDIR/etc/hostashi-quota.conf\"\n" "$1"
+}
+
+quota_premount() {
+  cat <<'S'
+#!/bin/sh
+# Managed by the Hostashi installer (ADR-0015). Sets the ext4 project and
+# quota features before the root filesystem is mounted. It never blocks the
+# boot: every problem leaves the filesystem as it was and exits 0.
+case "$1" in prereqs) echo udev; exit 0;; esac
+. /etc/hostashi-quota.conf
+[ -b "$DEVICE" ] || exit 0
+features=$(dumpe2fs -h "$DEVICE" 2>/dev/null | sed -n 's/^Filesystem features: *//p')
+case " $features " in *" project "*) case " $features " in *" quota "*) exit 0;; esac;; esac
+# The module must load before the feature is set, or the root mount fails.
+modprobe quota_v2 2>/dev/null || { echo "hostashi-quota: quota_v2 not loadable, filesystem unchanged" >/dev/kmsg; exit 0; }
+echo "hostashi-quota: enabling project quota on $DEVICE" >/dev/kmsg
+e2fsck -fp "$DEVICE" >/dev/console 2>&1
+rc=$?
+[ "$rc" -le 1 ] || { echo "hostashi-quota: e2fsck exit $rc, filesystem unchanged" >/dev/kmsg; exit 0; }
+if tune2fs -O project,quota "$DEVICE" >/dev/console 2>&1; then
+  echo "hostashi-quota: done" >/dev/kmsg
+else
+  echo "hostashi-quota: tune2fs failed" >/dev/kmsg
+fi
+exit 0
+S
+}
+
+quota_unit() {
+  cat <<'U'
+# Managed by the Hostashi installer (ADR-0015).
+[Unit]
+Description=Hostashi: enforce project quota limits on /
+ConditionPathExists=/usr/sbin/quotaon
+After=local-fs.target
+Before=hostashi-agent.service multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# "-": a non-zero exit with "File exists" means enforcement is already on
+# (seen on the Hetzner Debian 13 cloud kernel, spike S8).
+ExecStart=-/usr/sbin/quotaon -P /
+
+[Install]
+WantedBy=multi-user.target
+U
+}
+
+chk_quota() {
+  quota_detect
+  case "$QUOTA" in
+    active | pending | off | unsupported) return 0;;
+    *) echo "$QUOTA_WHY"; return 1;;
+  esac
+}
+
+do_quota() {
+  quota_detect
+  [ "$QUOTA" = needed ] || { log "quota: $QUOTA_WHY"; return 1; }
+  local backup created=() devref f k ok list
+  quota_rollback() {
+    log "quota: step failed, rolling back"
+    [ -z "${backup:-}" ] || cp -p "$backup" "$FSTAB"
+    systemctl disable hostashi-quota-enforce.service >>"$LOG" 2>&1
+    for f in "${created[@]}"; do rm -f "$f"; done
+    systemctl daemon-reload >>"$LOG" 2>&1
+    [ ! -e "$QUOTA_GRUB" ] && command -v update-grub >/dev/null && update-grub >>"$LOG" 2>&1
+    update-initramfs -u -k all >>"$LOG" 2>&1
+    return 1
+  }
+  apt-get update -qq >>"$LOG" 2>&1 &&
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${QUOTA_PKGS[@]}" >>"$LOG" 2>&1 || return 1
+
+  backup="$STATE_DIR/fstab.$(date -u +%Y%m%dT%H%M%SZ)"
+  cp -p "$FSTAB" "$backup" || { log "quota: cannot back up $FSTAB"; return 1; }
+  note "quota: fstab backup $backup"
+  if [ "$Q_FSTAB" = no ]; then
+    if ! { awk -v OFS='\t' '$2 == "/" && $1 !~ /^#/ { $4 = $4 ",prjquota" } { print }' "$FSTAB" >"$FSTAB.hostashi-new" &&
+      chmod 0644 "$FSTAB.hostashi-new" && mv -f "$FSTAB.hostashi-new" "$FSTAB"; }; then
+      rm -f "$FSTAB.hostashi-new"; quota_rollback; return 1
+    fi
+    findmnt --verify --tab-file "$FSTAB" >>"$LOG" 2>&1 || { log "quota: findmnt --verify rejects the new $FSTAB"; quota_rollback; return 1; }
+  fi
+
+  devref=$(blkid -s UUID -o value "$Q_DEV" 2>/dev/null)
+  if [ -n "$devref" ]; then devref=/dev/disk/by-uuid/$devref; else devref=$Q_DEV; fi
+  install -d -m 0755 "$(dirname "$QUOTA_HOOK")" "$(dirname "$QUOTA_PREMOUNT")" "$(dirname "$QUOTA_UNIT")" || { quota_rollback; return 1; }
+  for f in "$QUOTA_HOOK" "$QUOTA_PREMOUNT" "$QUOTA_UNIT"; do [ -e "$f" ] || created+=("$f"); done
+  quota_hook "$devref" | write_file "$QUOTA_HOOK" 0755 root:root; [ $? -le 1 ] || { quota_rollback; return 1; }
+  quota_premount | write_file "$QUOTA_PREMOUNT" 0755 root:root; [ $? -le 1 ] || { quota_rollback; return 1; }
+  quota_unit | write_file "$QUOTA_UNIT" 0644 root:root; [ $? -le 1 ] || { quota_rollback; return 1; }
+  if ! { systemctl daemon-reload >>"$LOG" 2>&1 && systemctl enable hostashi-quota-enforce.service >>"$LOG" 2>&1; }; then
+    quota_rollback; return 1
+  fi
+
+  if command -v update-grub >/dev/null; then
+    install -d -m 0755 "$(dirname "$QUOTA_GRUB")" || { quota_rollback; return 1; }
+    [ -e "$QUOTA_GRUB" ] || created+=("$QUOTA_GRUB")
+    # shellcheck disable=SC2016 # expanded by GRUB, not here
+    echo 'GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX rootflags=prjquota"' | write_file "$QUOTA_GRUB" 0644 root:root
+    [ $? -le 1 ] || { quota_rollback; return 1; }
+    update-grub >>"$LOG" 2>&1 || { log "quota: update-grub failed"; quota_rollback; return 1; }
+  fi
+
+  update-initramfs -u -k all >>"$LOG" 2>&1 || { log "quota: update-initramfs failed"; quota_rollback; return 1; }
+  # Every initramfs GRUB may boot must carry the module and the hook before
+  # anyone reboots.
+  ok=0
+  for k in "$BOOT_DIR"/initrd.img-*; do
+    [ -e "$k" ] || continue
+    list=$(lsinitramfs "$k" 2>/dev/null)
+    # A built-in quota_v2 (modules.builtin) has no file in the initramfs.
+    if ! { { grep -q '/quota_v2\.ko' <<<"$list" || grep -qw quota_v2 "/lib/modules/${k##*/initrd.img-}/modules.builtin" 2>/dev/null; } &&
+      grep -q 'scripts/local-premount/hostashi-quota$' <<<"$list"; }; then
+      log "quota: $k lacks quota_v2 or the hook"; quota_rollback; return 1
+    fi
+    ok=$((ok + 1))
+  done
+  [ "$ok" -gt 0 ] || { log "quota: no initramfs found in $BOOT_DIR"; quota_rollback; return 1; }
+
+  if [ "$Q_FEATURES" = yes ] && [ "$Q_MOUNTED" = yes ]; then
+    systemctl start hostashi-quota-enforce.service >>"$LOG" 2>&1 || { quota_rollback; return 1; }
+  else
+    printf 'quota_prepared_boot=%s\n' "$(cat "$BOOT_ID_FILE")" >>"$STATE_FILE" || { quota_rollback; return 1; }
+  fi
+}
+
 run_steps() {
   local s why
   for s in $STEPS; do
@@ -405,7 +647,8 @@ main() {
       --public-url) shift; PUBLIC_URL=${1:-};;
       --listen) shift; LISTEN=${1:-};;
       --panel-port) shift; PANEL_PORT=${1:-};;
-      *) echo "usage: $0 [plan | apply --yes] --binary PATH [--public-url URL] [--panel-port PORT] [--listen ADDR] [--allow-untested]" >&2; exit 64;;
+      --no-quota) NO_QUOTA=yes;;
+      *) echo "usage: $0 [plan | apply --yes] --binary PATH [--public-url URL] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota]" >&2; exit 64;;
     esac
     shift
   done
@@ -427,11 +670,17 @@ main() {
   run_steps || exit $?
 
   if [ "$MODE" = plan ]; then
+    [ "$QUOTA" != pending ] || echo "Disk quota is prepared and waits for a reboot."
     if [ $CHANGES -eq 0 ]; then echo "Nothing to do."; else echo "$CHANGES step(s) would change something. Apply with: $0 apply --yes --binary PATH"; fi
     exit 0
   fi
 
   if [ $CHANGES -eq 0 ]; then echo "Nothing to do. (changes=0)"; else echo "Done. changes=$CHANGES"; fi
+  quota_detect
+  case "$QUOTA" in
+    pending) echo "REBOOT REQUIRED: disk quota is prepared and becomes active after one reboot. Re-run the installer afterwards to check it.";;
+    unsupported) echo "WARNING: disk quota is not available ($QUOTA_WHY). Sites get no disk limit.";;
+  esac
   grep -q '^completed=' "$STATE_FILE" 2>/dev/null || printf 'completed=%s\n' "$(date -u +%FT%TZ)" >>"$STATE_FILE"
 
   # The panel writes the setup token on its first start; wait briefly for it.
@@ -448,4 +697,4 @@ main() {
   exit 0
 }
 
-main "$@"
+[ "${HOSTASHI_LIB:-}" = 1 ] || main "$@"
