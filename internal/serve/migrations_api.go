@@ -5,9 +5,11 @@ package serve
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/netip"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -74,6 +76,23 @@ func importFail(log *slog.Logger, w http.ResponseWriter, err error, what string)
 		migrationFail(log, w, err, what)
 	default:
 		siteFail(log, w, err, what)
+	}
+}
+
+// cutoverFail maps the errors of the DNS cut-over.
+func cutoverFail(log *slog.Logger, w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, cpmigrate.ErrBadRequest):
+		writeError(w, http.StatusUnprocessableEntity, "invalid_argument", err.Error())
+	case errors.Is(err, cpmigrate.ErrNoCutover):
+		writeError(w, http.StatusNotFound, "not_found", "the site has no cut-over")
+	case errors.Is(err, cpmigrate.ErrSiteState):
+		writeError(w, http.StatusConflict, "site_state", "the site does not exist or is not active")
+	case errors.Is(err, cpmigrate.ErrCutoverRunning):
+		writeError(w, http.StatusConflict, "cutover_running", "a cut-over of this site is still waiting")
+	default:
+		log.Error("cloudpanel cut-over", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal", "internal error")
 	}
 }
 
@@ -280,6 +299,33 @@ func registerMigrations(mux *http.ServeMux, a authn, svc *cpmigrate.Service, log
 		writeJSON(w, http.StatusOK, map[string][]cpmigrate.DumpLoad{"loads": loads})
 	}))
 
+	// The DNS cut-over (ADR-0031): POST starts watching the site's domains,
+	// HTTPS is turned on once they all point to this server; DELETE stops
+	// a waiting one.
+	cutover := func(scope string, run func(ctx context.Context, actor int64, site string) (cpmigrate.Cutover, error), status int) http.HandlerFunc {
+		return admin(scope, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+			ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+			defer cancel()
+
+			c, err := run(ctx, p.User.ID, r.PathValue("name"))
+			if err != nil {
+				cutoverFail(log, w, err)
+
+				return
+			}
+
+			writeJSON(w, status, c)
+		})
+	}
+
+	const cutoverPath = "/api/v1/migrations/cloudpanel/sites/{name}/cutover"
+
+	mux.HandleFunc("POST "+cutoverPath, cutover("migrations:write", svc.StartCutover, http.StatusAccepted))
+	mux.HandleFunc("GET "+cutoverPath, cutover("migrations:read", func(ctx context.Context, _ int64, site string) (cpmigrate.Cutover, error) {
+		return svc.Cutover(ctx, site)
+	}, http.StatusOK))
+	mux.HandleFunc("DELETE "+cutoverPath, cutover("migrations:write", svc.CancelCutover, http.StatusOK))
+
 	mux.HandleFunc("DELETE "+base+"/{id}", admin("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		if err := svc.Delete(r.Context(), p.User.ID, r.PathValue("id")); err != nil {
 			migrationFail(log, w, err, "delete cloudpanel report")
@@ -376,4 +422,28 @@ func (c RPCCloudPanelImports) Activate(ctx context.Context, site string) (agenta
 // Get implements cpmigrate.Importer.
 func (c RPCCloudPanelImports) Get(ctx context.Context, id string) (agentapi.CloudPanelImport, error) {
 	return agentapi.CloudPanelImportGet.Call(ctx, c.C, agentapi.CloudPanelImportGetRequest{ID: id})
+}
+
+// serverAddrs asks the agent for the server's public addresses: the web
+// process has no netlink socket (ADR-0031).
+func serverAddrs(c *agentrpc.Client) cpmigrate.AddrsFunc {
+	return func(ctx context.Context) ([]netip.Addr, error) {
+		r, err := agentapi.ServerAddrs.Call(ctx, c, agentapi.ServerAddrsRequest{})
+		if err != nil {
+			return nil, err
+		}
+
+		out := make([]netip.Addr, 0, len(r.Addrs))
+
+		for _, s := range r.Addrs {
+			a, err := netip.ParseAddr(s)
+			if err != nil {
+				return nil, fmt.Errorf("server address %q: %w", s, err)
+			}
+
+			out = append(out, a)
+		}
+
+		return out, nil
+	}
 }
