@@ -99,6 +99,10 @@ step "second apply changes nothing"
 out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --public-url https://panel.example.com)
 echo "$out"
 grep -q 'changes=0' <<<"$out" || fail "second run changed something"
+# The container's root is an overlay: the quota step must skip with a
+# warning and leave the system alone (packaging/test/quota-test.sh covers ext4).
+grep -q 'WARNING: disk quota is not available' <<<"$out" || fail "no warning about missing disk quota"
+x test ! -e /etc/systemd/system/hostashi-quota-enforce.service || fail "quota unit installed on an overlay root"
 
 step "services, health and permissions"
 for u in hostashi-agent.service hostashi.service hostashi-panel.socket; do

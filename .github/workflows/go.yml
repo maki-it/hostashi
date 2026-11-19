@@ -272,7 +272,9 @@ jobs:
           CGO_ENABLED: "0"
         run: go build -trimpath -o hostashi ./cmd/hostashi
       - name: shellcheck
-        run: shellcheck packaging/install.sh packaging/test/container-test.sh
+        run: shellcheck -x packaging/install.sh packaging/test/container-test.sh packaging/test/quota-test.sh
+      - name: Quota step (stubbed filesystem and boot tools)
+        run: sudo packaging/test/quota-test.sh
       - name: Build Pebble (local test CA, never the real Let's Encrypt)
         env:
           CGO_ENABLED: "0"
