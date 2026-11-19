@@ -9,6 +9,7 @@ import {
   listSites,
   parseDomains,
   phpVersions,
+  setDisabled,
   setDomains,
   setHSTS,
   setPHP,
@@ -220,6 +221,7 @@ function SiteRow({ site, php, onChange }: { site: Site; php: PHPVersions | null;
     <li>
       <span>
         <strong>{site.name}</strong> <span className="muted">{primary}</span>
+        {site.disabled && <span className="badge">Disabled</span>}
       </span>
       {!confirming && (
         <button type="button" className="secondary danger" disabled={busy} onClick={() => setConfirming(true)}>
@@ -228,9 +230,17 @@ function SiteRow({ site, php, onChange }: { site: Site; php: PHPVersions | null;
       )}
       <dl className="facts" aria-label={"Details of " + site.name}>
         <dt>State</dt>
-        <dd>{site.state === "active" ? "Active" : site.state === "deleting" ? "Being deleted" : "Being created"}</dd>
+        <dd>
+          {site.state === "deleting"
+            ? "Being deleted"
+            : site.state !== "active"
+              ? "Being created"
+              : site.disabled
+                ? "Disabled: visitors get “temporarily unavailable”, PHP is stopped"
+                : "Active"}
+        </dd>
         <dt>PHP</dt>
-        <dd>{site.php ? "PHP " + site.php : "No PHP"}</dd>
+        <dd>{site.php ? "PHP " + site.php + (site.disabled ? " (stopped)" : "") : "No PHP"}</dd>
         <dt>HTTPS</dt>
         <dd>
           {httpsLabel(site.tls)}
@@ -310,6 +320,7 @@ function SiteSettings({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
+  const [confirmDisable, setConfirmDisable] = useState(false);
 
   async function act(f: () => Promise<string>) {
     setBusy(true);
@@ -356,6 +367,13 @@ function SiteSettings({
       const s = await setTLS(site.name, on);
       if (!on) return "HTTPS is off. The site is served over HTTP.";
       return s.tls.active ? "HTTPS is on." : "HTTPS is on. The site switches when its certificate is there.";
+    });
+
+  const toggleDisabled = (on: boolean) =>
+    act(async () => {
+      await setDisabled(site.name, on);
+      setConfirmDisable(false);
+      return on ? `${site.name} is disabled.` : `${site.name} is enabled again.`;
     });
 
   const toggleHSTS = (on: boolean) =>
@@ -405,6 +423,40 @@ function SiteSettings({
           HSTS: browsers use only HTTPS for this site
         </label>
         {site.tls.hsts && !site.tls.active && <p className="muted">HSTS is sent only while the site is served over HTTPS.</p>}
+      </fieldset>
+      <fieldset>
+        <legend>Availability of {site.name}</legend>
+        {site.disabled ? (
+          <>
+            <p className="muted">The site is disabled. Enabling it serves its files and starts PHP again.</p>
+            <div className="actions">
+              <button type="button" disabled={busy} onClick={() => void toggleDisabled(false)}>
+                Enable {site.name}
+              </button>
+            </div>
+          </>
+        ) : confirmDisable ? (
+          <>
+            <p>
+              Visitors get “temporarily unavailable” (HTTP 503) and PHP stops. Files, databases, backups and the certificate stay. You can
+              enable the site again at any time.
+            </p>
+            <div className="actions">
+              <button type="button" className="danger" disabled={busy} onClick={() => void toggleDisabled(true)}>
+                Disable {site.name}
+              </button>
+              <button type="button" className="secondary" disabled={busy} onClick={() => setConfirmDisable(false)}>
+                Cancel
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="actions">
+            <button type="button" className="secondary danger" disabled={busy} onClick={() => setConfirmDisable(true)}>
+              Disable site
+            </button>
+          </div>
+        )}
       </fieldset>
       {error && <p role="alert">{error}</p>}
       {done && <p role="status">{done}</p>}

@@ -21,6 +21,7 @@ export type Site = {
   pool: string;
   state: "creating" | "active" | "deleting" | string;
   php: string; // "" for no PHP
+  disabled: boolean; // answers 503, PHP stopped
   domains: string[]; // the first one is the primary domain
   tls: SiteTLS;
   createdAt: string;
@@ -40,6 +41,7 @@ export const deleteSite = (name: string) => request<void>("DELETE", sitePath(nam
 export const setDomains = (name: string, domains: string[]) => request<Site>("PUT", sitePath(name) + "/domains", { domains });
 export const setPHP = (name: string, php: string) => request<Site>("PUT", sitePath(name) + "/php", { php });
 export const setTLS = (name: string, enabled: boolean) => request<Site>("PUT", sitePath(name) + "/tls", { enabled });
+export const setDisabled = (name: string, disabled: boolean) => request<Site>("PUT", sitePath(name) + "/disabled", { disabled });
 export const setHSTS = (name: string, enabled: boolean) => request<Site>("PUT", sitePath(name) + "/hsts", { enabled });
 
 // Mirrors of the agent's rules (internal/agentapi) so a form can say what is

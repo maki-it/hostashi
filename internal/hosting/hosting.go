@@ -467,7 +467,8 @@ func (s *Service) Sync(ctx context.Context) error {
 }
 
 // applyWeb sends the complete web state: every active site with its domains,
-// PHP version and HTTPS when its certificate covers all its domains.
+// PHP version and HTTPS when its certificate covers all its domains. A
+// disabled site is sent without PHP, so its pool stops.
 func (s *Service) applyWeb(ctx context.Context) error {
 	sites, err := s.st.Sites(ctx)
 	if err != nil {
@@ -484,8 +485,13 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				live = append(live, site.Name)
 			}
 
+			php := site.PHP
+			if site.Disabled {
+				php = ""
+			}
+
 			req.Sites = append(req.Sites, agentapi.WebSite{
-				User: site.Name, Domains: site.Domains, PHP: site.PHP, TLS: tls, HSTS: site.HSTS,
+				User: site.Name, Domains: site.Domains, PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
 			})
 		}
 	}

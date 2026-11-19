@@ -32,19 +32,21 @@ func TestWebApplyRequestValidate(t *testing.T) {
 	ok := WebApplyRequest{Sites: []WebSite{
 		{User: "blog", Domains: []string{"blog.example.com", "www.blog.example.com"}},
 		{User: "shop", Domains: []string{"shop.example.com"}, PHP: "8.4"},
+		{User: "old", Domains: []string{"old.example.com"}, Disabled: true},
 	}}
 	if err := ok.Validate(); err != nil {
 		t.Fatal(err)
 	}
 
 	for name, r := range map[string]WebApplyRequest{
-		"duplicate user":   {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}}, {User: "blog", Domains: []string{"b.example.com"}}}},
-		"duplicate domain": {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}}, {User: "shop", Domains: []string{"a.example.com"}}}},
-		"no domain":        {Sites: []WebSite{{User: "blog"}}},
-		"bad user":         {Sites: []WebSite{{User: "root", Domains: []string{"a.example.com"}}}},
-		"too many domains": {Sites: []WebSite{{User: "blog", Domains: make([]string, MaxDomainsPerSite+1)}}},
-		"unknown php":      {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "8.0"}}},
-		"php path":         {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "../8.4"}}},
+		"duplicate user":    {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}}, {User: "blog", Domains: []string{"b.example.com"}}}},
+		"duplicate domain":  {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}}, {User: "shop", Domains: []string{"a.example.com"}}}},
+		"no domain":         {Sites: []WebSite{{User: "blog"}}},
+		"bad user":          {Sites: []WebSite{{User: "root", Domains: []string{"a.example.com"}}}},
+		"too many domains":  {Sites: []WebSite{{User: "blog", Domains: make([]string, MaxDomainsPerSite+1)}}},
+		"unknown php":       {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "8.0"}}},
+		"php path":          {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "../8.4"}}},
+		"disabled with php": {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "8.4", Disabled: true}}},
 	} {
 		if err := r.Validate(); err == nil {
 			t.Errorf("%s accepted", name)

@@ -389,6 +389,14 @@ server {
     add_header Strict-Transport-Security "max-age=31536000" always;
     {{- end}}
     {{- end}}
+    {{- if .S.Disabled}}
+
+    # Disabled in the panel: nothing of the site is served.
+    location / {
+        default_type text/html;
+        return 503 "<!doctype html><title>Temporarily unavailable</title><h1>Temporarily unavailable</h1><p>This site is not available at the moment. Please try again later.</p>\n";
+    }
+    {{- else}}
     root {{.S.Root}};
     {{- if .S.PHPSocket}}
     index index.php index.html index.htm;
@@ -442,6 +450,7 @@ server {
     location ~ /\.(?!well-known/) {
         deny all;
     }
+    {{- end}}
 }
 `))
 

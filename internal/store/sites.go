@@ -36,6 +36,9 @@ type Site struct {
 	TLS     bool // HTTPS wanted
 	// HSTS sends Strict-Transport-Security while the site is on HTTPS.
 	HSTS bool
+	// Disabled: the web server answers with 503 and PHP is stopped; the
+	// account, files, databases and certificate stay.
+	Disabled bool
 	// TLSLive: the last accepted web state serves the site over HTTPS.
 	TLSLive bool
 	// TLSDomains and TLSNotAfter describe the live certificate (none: empty).
@@ -232,7 +235,7 @@ func domainsOf(ctx context.Context, q queryer, siteID int64) ([]string, error) {
 // Sites returns all sites sorted by name, with their domains.
 func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, pool, state, php, tls, hsts, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at, created_at, updated_at FROM sites ORDER BY name`)
+		`SELECT id, name, pool, state, php, tls, hsts, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at, created_at, updated_at FROM sites ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("store: %w", err)
 	}
@@ -269,7 +272,7 @@ func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 
 // SiteByName returns one site or ErrNotFound.
 func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
-	st, err := scanSite(s.db.QueryRowContext(ctx, `SELECT id, name, pool, state, php, tls, hsts, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at, created_at, updated_at FROM sites WHERE name = ?`, name))
+	st, err := scanSite(s.db.QueryRowContext(ctx, `SELECT id, name, pool, state, php, tls, hsts, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at, created_at, updated_at FROM sites WHERE name = ?`, name))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, ErrNotFound
 	}
@@ -290,12 +293,12 @@ type scanner interface{ Scan(dest ...any) error }
 func scanSite(r scanner) (Site, error) {
 	var (
 		st                         Site
-		tls, hsts, live            int
+		tls, hsts, disabled, live  int
 		tlsDomains                 string
 		notAfter, failed, cre, upd int64
 	)
 
-	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &tls, &hsts, &live, &tlsDomains, &notAfter, &st.TLSError, &failed, &cre, &upd)
+	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &tls, &hsts, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
 	}
@@ -304,7 +307,7 @@ func scanSite(r scanner) (Site, error) {
 		return Site{}, fmt.Errorf("store: %w", err)
 	}
 
-	st.TLS, st.HSTS, st.TLSLive = tls == 1, hsts == 1, live == 1
+	st.TLS, st.HSTS, st.Disabled, st.TLSLive = tls == 1, hsts == 1, disabled == 1, live == 1
 	st.TLSDomains = strings.Fields(tlsDomains)
 	st.TLSNotAfter, st.TLSFailedAt = unixOrZero(notAfter), unixOrZero(failed)
 	st.CreatedAt, st.UpdatedAt = time.Unix(cre, 0).UTC(), time.Unix(upd, 0).UTC()
@@ -374,6 +377,18 @@ func (s *Store) SetSiteCert(ctx context.Context, name string, domains []string, 
 
 // SetSiteHSTS sets whether a site sends HSTS and returns the previous value.
 func (s *Store) SetSiteHSTS(ctx context.Context, name string, on bool, now time.Time) (bool, error) {
+	return s.setSiteFlag(ctx, `SELECT hsts FROM sites WHERE name = ?`, `UPDATE sites SET hsts = ?, updated_at = ? WHERE name = ?`, name, on, now)
+}
+
+// SetSiteDisabled sets whether a site is disabled and returns the previous
+// value.
+func (s *Store) SetSiteDisabled(ctx context.Context, name string, on bool, now time.Time) (bool, error) {
+	return s.setSiteFlag(ctx, `SELECT disabled FROM sites WHERE name = ?`, `UPDATE sites SET disabled = ?, updated_at = ? WHERE name = ?`, name, on, now)
+}
+
+// setSiteFlag sets one 0/1 column of a site and returns its previous value.
+// The statements are constants of the callers, never built from input.
+func (s *Store) setSiteFlag(ctx context.Context, get, set, name string, on bool, now time.Time) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("store: %w", err)
@@ -382,7 +397,7 @@ func (s *Store) SetSiteHSTS(ctx context.Context, name string, on bool, now time.
 	defer func() { _ = tx.Rollback() }()
 
 	var old int
-	if err := tx.QueryRowContext(ctx, `SELECT hsts FROM sites WHERE name = ?`, name).Scan(&old); err != nil {
+	if err := tx.QueryRowContext(ctx, get, name).Scan(&old); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, ErrNotFound
 		}
@@ -395,7 +410,7 @@ func (s *Store) SetSiteHSTS(ctx context.Context, name string, on bool, now time.
 		v = 1
 	}
 
-	if _, err := tx.ExecContext(ctx, `UPDATE sites SET hsts = ?, updated_at = ? WHERE name = ?`, v, now.Unix(), name); err != nil {
+	if _, err := tx.ExecContext(ctx, set, v, now.Unix(), name); err != nil {
 		return false, fmt.Errorf("store: %w", err)
 	}
 

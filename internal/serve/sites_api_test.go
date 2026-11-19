@@ -328,6 +328,36 @@ func TestSiteTLSOverHTTP(t *testing.T) {
 	}
 }
 
+func TestSiteDisableOverHTTP(t *testing.T) {
+	ag := &stubAgent{}
+	e := newAPIWithAgent(t, ag)
+	c := e.adminCookie(t)
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"blog","php":"8.4","domains":["blog.example.org"]}`}); rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"disabled":false`) {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/disabled", cookie: c, body: `{"disabled":true}`})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"php":"8.4","disabled":true`) || !ag.web.Sites[0].Disabled || ag.web.Sites[0].PHP != "" {
+		t.Fatalf("disable: %d %s %+v", rec.Code, rec.Body, ag.web.Sites)
+	}
+
+	for _, body := range []string{`{}`, `{"disabled":"yes"}`} {
+		if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/disabled", cookie: c, body: body}); rec.Code < 400 {
+			t.Errorf("%s: %d", body, rec.Code)
+		}
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/nope/disabled", cookie: c, body: `{"disabled":true}`}); rec.Code != http.StatusNotFound {
+		t.Errorf("missing site: %d", rec.Code)
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/disabled", cookie: c, body: `{"disabled":false}`})
+	if rec.Code != http.StatusOK || ag.web.Sites[0].Disabled || ag.web.Sites[0].PHP != "8.4" {
+		t.Fatalf("enable: %d %s %+v", rec.Code, rec.Body, ag.web.Sites)
+	}
+}
+
 func TestPanelTLSOverHTTP(t *testing.T) {
 	ag := &stubAgent{}
 	e := newAPIWithAgent(t, ag)

@@ -135,6 +135,22 @@ func TestSiteTLSColumns(t *testing.T) {
 		t.Fatalf("hsts of a missing site: %v", err)
 	}
 
+	if old, err := s.SetSiteDisabled(ctx, "blog", true, now); err != nil || old {
+		t.Fatalf("disable: %v %v", old, err)
+	}
+
+	if got, err := s.SiteByName(ctx, "blog"); err != nil || !got.Disabled || !got.HSTS {
+		t.Fatalf("disabled not stored: %+v %v", got, err)
+	}
+
+	if old, err := s.SetSiteDisabled(ctx, "blog", false, now); err != nil || !old {
+		t.Fatalf("enable: %v %v", old, err)
+	}
+
+	if _, err := s.SetSiteDisabled(ctx, "nope", true, now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("disable a missing site: %v", err)
+	}
+
 	if old, err := s.SetSiteTLS(ctx, "blog", false, now); err != nil || !old {
 		t.Fatalf("tls off: %v %v", old, err)
 	}

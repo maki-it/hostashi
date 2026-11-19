@@ -13,6 +13,7 @@ const blog: Site = {
   pool: "default",
   state: "active",
   php: "8.4",
+  disabled: false,
   domains: ["blog.example.com", "www.blog.example.com"],
   tls: { enabled: true, active: true, hsts: true, domains: ["blog.example.com", "www.blog.example.com"], notAfter: "2027-02-01T00:00:00Z" },
   createdAt: "2026-11-19T08:00:00Z",
@@ -287,5 +288,36 @@ describe("Sites", () => {
     render(<Sites />);
     expect(await screen.findByText("Being deleted")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Change settings" })).not.toBeInTheDocument();
+  });
+
+  it("disables a site after a confirmation and enables it again", async () => {
+    const user = userEvent.setup();
+    let cur: Site = blog;
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": () => ({ body: { sites: [cur] } }),
+      "PUT /api/v1/sites/blog/disabled": (b) => {
+        cur = { ...cur, disabled: (b as { disabled: boolean }).disabled };
+        return { body: cur };
+      },
+    });
+    render(<Sites />);
+    await user.click(await screen.findByRole("button", { name: "Change settings" }));
+    const box = within(screen.getByRole("group", { name: "Settings of blog" }));
+    await user.click(box.getByRole("button", { name: "Disable site" }));
+    expect(box.getByText(/Files, databases, backups and the certificate stay/)).toBeInTheDocument();
+    await user.click(box.getByRole("button", { name: "Cancel" }));
+    expect(calls.some((c) => c.method === "PUT")).toBe(false);
+
+    await user.click(box.getByRole("button", { name: "Disable site" }));
+    await user.click(box.getByRole("button", { name: "Disable blog" }));
+    expect(await box.findByRole("status")).toHaveTextContent("blog is disabled.");
+    expect(screen.getByText("Disabled", { selector: ".badge" })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Details of blog")).getByText(/PHP is stopped/)).toBeInTheDocument();
+
+    await user.click(box.getByRole("button", { name: "Enable blog" }));
+    expect(await box.findByText("blog is enabled again.")).toBeInTheDocument();
+    expect(screen.queryByText("Disabled", { selector: ".badge" })).not.toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([{ disabled: true }, { disabled: false }]);
   });
 });

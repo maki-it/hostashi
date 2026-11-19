@@ -156,6 +156,10 @@ func (f *fakeAgent) live() string {
 			entry += "+tls"
 		}
 
+		if s.Disabled {
+			entry += "+disabled"
+		}
+
 		out = append(out, entry)
 	}
 
@@ -423,6 +427,51 @@ func TestPHPVersionChange(t *testing.T) {
 
 	var n int
 	if err := st.RawCount(ctx, `SELECT count(*) FROM audit_log WHERE action = ?`, "site.php", &n); err != nil || n != 2 {
+		t.Fatalf("audit entries %d %v", n, err)
+	}
+}
+
+func TestDisableKeepsTheSiteButStopsPHP(t *testing.T) {
+	s, ag, st := newService(t)
+	ctx := t.Context()
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", PHP: "8.4", Domains: []string{"blog.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	site, err := s.SetDisabled(ctx, 1, "blog", true)
+	if err != nil || !site.Disabled || site.PHP != "8.4" || ag.live() != "[blog=[blog.example.com]+disabled]" {
+		t.Fatalf("%+v %v live %s", site, err, ag.live())
+	}
+
+	// Other changes keep the site disabled and its PHP off.
+	if _, err := s.SetPHP(ctx, 1, "blog", "8.3"); err != nil || ag.live() != "[blog=[blog.example.com]+disabled]" {
+		t.Fatalf("%v live %s", err, ag.live())
+	}
+
+	// The agent refuses: the site stays disabled.
+	ag.webErr = &agentrpc.Error{Code: agentrpc.CodeInternal, Message: "nginx down"}
+
+	if _, err := s.SetDisabled(ctx, 1, "blog", false); err == nil {
+		t.Fatal("enable succeeded although the agent refused")
+	}
+
+	if got, _ := s.Get(ctx, "blog"); !got.Disabled {
+		t.Fatal("failed enable was stored")
+	}
+
+	ag.webErr = nil
+
+	if site, err := s.SetDisabled(ctx, 1, "blog", false); err != nil || site.Disabled || ag.live() != "[blog=[blog.example.com]+php8.3]" {
+		t.Fatalf("%+v %v live %s", site, err, ag.live())
+	}
+
+	if _, err := s.SetDisabled(ctx, 1, "nope", true); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown site: %v", err)
+	}
+
+	var n int
+	if err := st.RawCount(ctx, `SELECT count(*) FROM audit_log WHERE action LIKE ?`, "site.%able", &n); err != nil || n != 2 {
 		t.Fatalf("audit entries %d %v", n, err)
 	}
 }
