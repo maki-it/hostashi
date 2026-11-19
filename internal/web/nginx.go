@@ -163,7 +163,7 @@ const compressTypes = "text/plain text/css text/xml text/javascript application/
 // PageCSP is the Content-Security-Policy of maintenance and parking pages
 // (ADR-0027): the page's own files and inline code, nothing from other hosts.
 const PageCSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
-	"img-src 'self' data:; font-src 'self' data:; form-action 'none'; frame-ancestors 'none'; base-uri 'none'"
+	"img-src 'self' data:; font-src 'self' data:; form-action 'none'; frame-ancestors 'none'; base-uri 'self'"
 
 // pageTypes are the lines of the types block of a page location: the MIME
 // type without parameters (charset adds them) and its extensions.
