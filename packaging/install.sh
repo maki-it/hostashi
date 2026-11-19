@@ -34,7 +34,8 @@
 #
 # Test hooks (environment): HOSTASHI_OS_RELEASE (file), HOSTASHI_ARCH,
 # HOSTASHI_ETC (directory instead of /etc for the quota step),
-# HOSTASHI_STATE_DIR, HOSTASHI_BOOT_ID (file), HOSTASHI_LIB=1 (define the
+# HOSTASHI_STATE_DIR, HOSTASHI_BOOT_ID (file), HOSTASHI_DRACUT_MODULES
+# (directory instead of /usr/lib/dracut/modules.d), HOSTASHI_LIB=1 (define the
 # functions only, for packaging/test/quota-test.sh).
 
 # The chk_*/do_* step functions are called by name from run_steps.
@@ -388,32 +389,72 @@ do_service() {
 # the kernel command line mount it with prjquota, and a unit switches on
 # enforcement after boot (mounting alone may only count usage, S8 finding 3).
 # One reboot; the installer never reboots by itself. Where this is not
-# possible (another filesystem, no quota_v2 module, no initramfs-tools) the
-# step changes nothing and warns: sites then get no disk limit.
+# possible (another filesystem, no quota_v2 module, no known initramfs
+# generator) the step changes nothing and warns: sites then get no disk limit.
+#
+# Two initramfs generators are supported: initramfs-tools (Debian 13) gets a
+# hook and a local-premount script, dracut (the default since Ubuntu 25.10)
+# gets a module whose pre-mount hook runs the same script. The script runs
+# before the root is mounted and never blocks the boot.
 #
 # The initramfs must contain quota_v2 once the feature is set, otherwise the
-# root mount fails (S8 finding 2). The hook adds it for every kernel and
-# fails the initramfs build of a kernel that lacks it, so a kernel update
-# stops with an error instead of producing an unbootable server.
+# root mount fails (S8 finding 2). Both add it for every kernel and fail the
+# initramfs build of a kernel that lacks it, so a kernel update stops with an
+# error instead of producing an unbootable server.
 ETC=${HOSTASHI_ETC:-/etc}
 FSTAB=$ETC/fstab
 QUOTA_HOOK=$ETC/initramfs-tools/hooks/hostashi-quota
 QUOTA_PREMOUNT=$ETC/initramfs-tools/scripts/local-premount/hostashi-quota
 QUOTA_UNIT=$ETC/systemd/system/hostashi-quota-enforce.service
 QUOTA_GRUB=$ETC/default/grub.d/hostashi-quota.cfg
+# dracut reads modules only from its own directory; the device to change is
+# in the configuration under /etc, so the module itself never changes.
+QUOTA_DRACUT_DIR=${HOSTASHI_DRACUT_MODULES:-/usr/lib/dracut/modules.d}/90hostashi-quota
+QUOTA_DRACUT_SETUP=$QUOTA_DRACUT_DIR/module-setup.sh
+QUOTA_DRACUT_HOOK=$QUOTA_DRACUT_DIR/hostashi-quota.sh
+QUOTA_DRACUT_CONF=$ETC/dracut.conf.d/90-hostashi-quota.conf
 BOOT_ID_FILE=${HOSTASHI_BOOT_ID:-/proc/sys/kernel/random/boot_id}
 BOOT_DIR=${HOSTASHI_BOOT:-/boot}
 QUOTA_PKGS=(quota)
 # QUOTA: active, pending (prepared, reboot needed), needed, failed (prepared
 # but not active after a reboot), unsupported, off (--no-quota).
-QUOTA="" QUOTA_WHY="" Q_DEV="" Q_FEATURES=no Q_MOUNTED=no Q_FSTAB=no
+# Q_INITRD: the initramfs generator, initramfs-tools or dracut ("" if none).
+QUOTA="" QUOTA_WHY="" Q_DEV="" Q_FEATURES=no Q_MOUNTED=no Q_FSTAB=no Q_INITRD=""
 
 has_quota_v2() {
   modinfo -k "$1" quota_v2 >/dev/null 2>&1 || grep -qw quota_v2 "/lib/modules/$1/modules.builtin" 2>/dev/null
 }
 
+# dracut conflicts with initramfs-tools, so at most one of them is installed.
+# Ubuntu's dracut package ships an update-initramfs wrapper, which is why
+# initramfs-tools is recognized by lsinitramfs as well.
+quota_initrd() {
+  if command -v dracut >/dev/null && command -v lsinitrd >/dev/null; then
+    Q_INITRD=dracut
+  elif command -v update-initramfs >/dev/null && command -v lsinitramfs >/dev/null; then
+    Q_INITRD=initramfs-tools
+  else
+    Q_INITRD=""
+  fi
+}
+
+# quota_boot_files: the files that make the initramfs set the features.
+quota_boot_files() {
+  case "$Q_INITRD" in
+    dracut) echo "$QUOTA_DRACUT_SETUP" "$QUOTA_DRACUT_HOOK" "$QUOTA_DRACUT_CONF";;
+    initramfs-tools) echo "$QUOTA_HOOK" "$QUOTA_PREMOUNT";;
+  esac
+}
+
+quota_boot_files_present() {
+  local f n=0
+  for f in $(quota_boot_files); do [ -f "$f" ] || return 1; n=$((n + 1)); done
+  [ "$n" -gt 0 ]
+}
+
 quota_detect() {
   QUOTA="" QUOTA_WHY="" Q_DEV="" Q_FEATURES=no Q_MOUNTED=no Q_FSTAB=no
+  quota_initrd
   if [ "$NO_QUOTA" = yes ]; then QUOTA=off QUOTA_WHY="switched off with --no-quota"; return 0; fi
   local src fstype opts head feats inode kver prepared rootopts
   src=$(findmnt -no SOURCE / 2>/dev/null) fstype=$(findmnt -no FSTYPE / 2>/dev/null) opts=$(findmnt -no OPTIONS / 2>/dev/null)
@@ -431,7 +472,7 @@ quota_detect() {
   case ",$rootopts," in *,prjquota,*) Q_FSTAB=yes;; esac
 
   if [ "$Q_FEATURES" = yes ] && [ "$Q_MOUNTED" = yes ] && [ "$Q_FSTAB" = yes ] &&
-    [ -f "$QUOTA_HOOK" ] && [ -f "$QUOTA_UNIT" ] && pkg_installed quota &&
+    quota_boot_files_present && [ -f "$QUOTA_UNIT" ] && pkg_installed quota &&
     [ "$(systemctl is-enabled hostashi-quota-enforce.service 2>/dev/null)" = enabled ]; then
     QUOTA=active; return 0
   fi
@@ -453,8 +494,8 @@ quota_detect() {
   if ! has_quota_v2 "$kver"; then
     QUOTA=unsupported QUOTA_WHY="kernel $kver has no quota_v2 module (Ubuntu: apt install linux-modules-extra-$kver)"; return 0
   fi
-  if ! command -v update-initramfs >/dev/null || ! command -v lsinitramfs >/dev/null; then
-    QUOTA=unsupported QUOTA_WHY="initramfs-tools is not installed (other initramfs generators such as dracut are not supported yet)"; return 0
+  if [ -z "$Q_INITRD" ]; then
+    QUOTA=unsupported QUOTA_WHY="neither initramfs-tools nor dracut is installed"; return 0
   fi
   if [ "$(awk '$2 == "/" && $1 !~ /^#/' "$FSTAB" 2>/dev/null | wc -l)" != 1 ]; then
     QUOTA=unsupported QUOTA_WHY="expected exactly one entry for / in $FSTAB"; return 0
@@ -488,30 +529,105 @@ H
   printf "echo 'DEVICE=%s' >\"\$DESTDIR/etc/hostashi-quota.conf\"\n" "$1"
 }
 
+# quota_premount_body defines hostashi_quota, the part that runs before the
+# root filesystem is mounted. It sets the ext4 project and quota features and
+# never blocks the boot: every problem leaves the filesystem as it was. It
+# returns instead of exiting, because dracut sources its hooks.
+quota_premount_body() {
+  cat <<'S'
+hostashi_quota() {
+  local DEVICE features rc
+  [ -f /etc/hostashi-quota.conf ] || return 0
+  # shellcheck disable=SC1091 # written into the initramfs by the hook or module
+  . /etc/hostashi-quota.conf
+  [ -b "$DEVICE" ] || return 0
+  features=$(dumpe2fs -h "$DEVICE" 2>/dev/null | sed -n 's/^Filesystem features: *//p')
+  case " $features " in *" project "*) case " $features " in *" quota "*) return 0;; esac;; esac
+  # The module must load before the feature is set, or the root mount fails.
+  modprobe quota_v2 2>/dev/null || { echo "hostashi-quota: quota_v2 not loadable, filesystem unchanged" >/dev/kmsg; return 0; }
+  echo "hostashi-quota: enabling project quota on $DEVICE" >/dev/kmsg
+  e2fsck -fp "$DEVICE" >/dev/console 2>&1
+  rc=$?
+  [ "$rc" -le 1 ] || { echo "hostashi-quota: e2fsck exit $rc, filesystem unchanged" >/dev/kmsg; return 0; }
+  if tune2fs -O project,quota "$DEVICE" >/dev/console 2>&1; then
+    echo "hostashi-quota: done" >/dev/kmsg
+  else
+    echo "hostashi-quota: tune2fs failed" >/dev/kmsg
+  fi
+  return 0
+}
+S
+}
+
+# quota_premount: the initramfs-tools local-premount script.
 quota_premount() {
   cat <<'S'
 #!/bin/sh
 # Managed by the Hostashi installer (ADR-0015). Sets the ext4 project and
-# quota features before the root filesystem is mounted. It never blocks the
-# boot: every problem leaves the filesystem as it was and exits 0.
+# quota features before the root filesystem is mounted.
 case "$1" in prereqs) echo udev; exit 0;; esac
-. /etc/hostashi-quota.conf
-[ -b "$DEVICE" ] || exit 0
-features=$(dumpe2fs -h "$DEVICE" 2>/dev/null | sed -n 's/^Filesystem features: *//p')
-case " $features " in *" project "*) case " $features " in *" quota "*) exit 0;; esac;; esac
-# The module must load before the feature is set, or the root mount fails.
-modprobe quota_v2 2>/dev/null || { echo "hostashi-quota: quota_v2 not loadable, filesystem unchanged" >/dev/kmsg; exit 0; }
-echo "hostashi-quota: enabling project quota on $DEVICE" >/dev/kmsg
-e2fsck -fp "$DEVICE" >/dev/console 2>&1
-rc=$?
-[ "$rc" -le 1 ] || { echo "hostashi-quota: e2fsck exit $rc, filesystem unchanged" >/dev/kmsg; exit 0; }
-if tune2fs -O project,quota "$DEVICE" >/dev/console 2>&1; then
-  echo "hostashi-quota: done" >/dev/kmsg
-else
-  echo "hostashi-quota: tune2fs failed" >/dev/kmsg
-fi
-exit 0
 S
+  quota_premount_body
+  echo 'hostashi_quota'
+  echo 'exit 0'
+}
+
+# quota_dracut_hook: the dracut pre-mount hook. dracut sources it, so it
+# must not exit and must not leave anything behind.
+quota_dracut_hook() {
+  cat <<'S'
+#!/bin/sh
+# Managed by the Hostashi installer (ADR-0015). Sets the ext4 project and
+# quota features before the root filesystem is mounted.
+S
+  quota_premount_body
+  echo 'hostashi_quota'
+  echo 'unset -f hostashi_quota'
+}
+
+# quota_dracut_setup: the dracut module. check returns 255, so dracut only
+# includes it when the configuration adds it. installkernel fails the build
+# of a kernel without quota_v2, which dracut treats as fatal.
+quota_dracut_setup() {
+  cat <<'M'
+#!/bin/bash
+# Managed by the Hostashi installer (ADR-0015). The root filesystem uses the
+# ext4 quota feature and cannot be mounted without quota_v2.
+# shellcheck disable=SC2154 # kernel, moddir and initdir come from dracut
+
+check() {
+    return 255
+}
+
+depends() {
+    return 0
+}
+
+installkernel() {
+    # Not host-only: quota_v2 is not loaded before the first reboot.
+    hostonly='' instmods -c quota_v2 && return 0
+    dfatal "hostashi-quota: kernel $kernel has no quota_v2 module, the root filesystem needs it (Ubuntu: linux-modules-extra-$kernel)"
+    return 1
+}
+
+install() {
+    if [[ -z ${hostashi_quota_device-} ]]; then
+        dfatal "hostashi-quota: hostashi_quota_device is not set in /etc/dracut.conf.d"
+        return 1
+    fi
+    inst_multiple tune2fs e2fsck dumpe2fs sed modprobe
+    inst_hook pre-mount 10 "$moddir/hostashi-quota.sh"
+    mkdir -p "$initdir/etc"
+    printf 'DEVICE=%s\n' "$hostashi_quota_device" > "$initdir/etc/hostashi-quota.conf"
+}
+M
+}
+
+# quota_dracut_conf: adds the module to every initramfs dracut builds.
+quota_dracut_conf() {
+  echo '# Managed by the Hostashi installer (ADR-0015).'
+  echo 'add_dracutmodules+=" hostashi-quota "'
+  printf 'hostashi_quota_device="%s"\n' "$1"
 }
 
 quota_unit() {
@@ -543,6 +659,26 @@ chk_quota() {
   esac
 }
 
+quota_rebuild_initrd() {
+  case "$Q_INITRD" in
+    dracut) dracut --force --regenerate-all;;
+    initramfs-tools) update-initramfs -u -k all;;
+    *) return 1;;
+  esac
+}
+
+# quota_initrd_ok checks that an initramfs carries quota_v2 and the hook.
+quota_initrd_ok() {
+  local list hook
+  case "$Q_INITRD" in
+    dracut) list=$(lsinitrd "$1" 2>/dev/null) hook='hooks/pre-mount/[0-9]*-hostashi-quota\.sh$';;
+    *) list=$(lsinitramfs "$1" 2>/dev/null) hook='scripts/local-premount/hostashi-quota$';;
+  esac
+  # A built-in quota_v2 (modules.builtin) has no file in the initramfs.
+  { grep -q '/quota_v2\.ko' <<<"$list" || grep -qw quota_v2 "/lib/modules/${1##*/initrd.img-}/modules.builtin" 2>/dev/null; } &&
+    grep -q "$hook" <<<"$list" && grep -q 'etc/hostashi-quota\.conf$' <<<"$list"
+}
+
 do_quota() {
   quota_detect
   [ "$QUOTA" = needed ] || { log "quota: $QUOTA_WHY"; return 1; }
@@ -552,9 +688,10 @@ do_quota() {
     [ -z "${backup:-}" ] || cp -p "$backup" "$FSTAB"
     systemctl disable hostashi-quota-enforce.service >>"$LOG" 2>&1
     for f in "${created[@]}"; do rm -f "$f"; done
+    rmdir "$QUOTA_DRACUT_DIR" 2>/dev/null
     systemctl daemon-reload >>"$LOG" 2>&1
     [ ! -e "$QUOTA_GRUB" ] && command -v update-grub >/dev/null && update-grub >>"$LOG" 2>&1
-    update-initramfs -u -k all >>"$LOG" 2>&1
+    quota_rebuild_initrd >>"$LOG" 2>&1
     return 1
   }
   apt-get update -qq >>"$LOG" 2>&1 &&
@@ -573,10 +710,18 @@ do_quota() {
 
   devref=$(blkid -s UUID -o value "$Q_DEV" 2>/dev/null)
   if [ -n "$devref" ]; then devref=/dev/disk/by-uuid/$devref; else devref=$Q_DEV; fi
-  install -d -m 0755 "$(dirname "$QUOTA_HOOK")" "$(dirname "$QUOTA_PREMOUNT")" "$(dirname "$QUOTA_UNIT")" || { quota_rollback; return 1; }
-  for f in "$QUOTA_HOOK" "$QUOTA_PREMOUNT" "$QUOTA_UNIT"; do [ -e "$f" ] || created+=("$f"); done
-  quota_hook "$devref" | write_file "$QUOTA_HOOK" 0755 root:root; [ $? -le 1 ] || { quota_rollback; return 1; }
-  quota_premount | write_file "$QUOTA_PREMOUNT" 0755 root:root; [ $? -le 1 ] || { quota_rollback; return 1; }
+  for f in $(quota_boot_files) "$QUOTA_UNIT"; do
+    install -d -m 0755 "$(dirname "$f")" || { quota_rollback; return 1; }
+    [ -e "$f" ] || created+=("$f")
+  done
+  if [ "$Q_INITRD" = dracut ]; then
+    quota_dracut_setup | write_file "$QUOTA_DRACUT_SETUP" 0755 root:root; [ $? -le 1 ] || { quota_rollback; return 1; }
+    quota_dracut_hook | write_file "$QUOTA_DRACUT_HOOK" 0755 root:root; [ $? -le 1 ] || { quota_rollback; return 1; }
+    quota_dracut_conf "$devref" | write_file "$QUOTA_DRACUT_CONF" 0644 root:root; [ $? -le 1 ] || { quota_rollback; return 1; }
+  else
+    quota_hook "$devref" | write_file "$QUOTA_HOOK" 0755 root:root; [ $? -le 1 ] || { quota_rollback; return 1; }
+    quota_premount | write_file "$QUOTA_PREMOUNT" 0755 root:root; [ $? -le 1 ] || { quota_rollback; return 1; }
+  fi
   quota_unit | write_file "$QUOTA_UNIT" 0644 root:root; [ $? -le 1 ] || { quota_rollback; return 1; }
   if ! { systemctl daemon-reload >>"$LOG" 2>&1 && systemctl enable hostashi-quota-enforce.service >>"$LOG" 2>&1; }; then
     quota_rollback; return 1
@@ -591,16 +736,13 @@ do_quota() {
     update-grub >>"$LOG" 2>&1 || { log "quota: update-grub failed"; quota_rollback; return 1; }
   fi
 
-  update-initramfs -u -k all >>"$LOG" 2>&1 || { log "quota: update-initramfs failed"; quota_rollback; return 1; }
+  quota_rebuild_initrd >>"$LOG" 2>&1 || { log "quota: rebuilding the initramfs ($Q_INITRD) failed"; quota_rollback; return 1; }
   # Every initramfs GRUB may boot must carry the module and the hook before
   # anyone reboots.
   ok=0
   for k in "$BOOT_DIR"/initrd.img-*; do
     [ -e "$k" ] || continue
-    list=$(lsinitramfs "$k" 2>/dev/null)
-    # A built-in quota_v2 (modules.builtin) has no file in the initramfs.
-    if ! { { grep -q '/quota_v2\.ko' <<<"$list" || grep -qw quota_v2 "/lib/modules/${k##*/initrd.img-}/modules.builtin" 2>/dev/null; } &&
-      grep -q 'scripts/local-premount/hostashi-quota$' <<<"$list"; }; then
+    if ! quota_initrd_ok "$k"; then
       log "quota: $k lacks quota_v2 or the hook"; quota_rollback; return 1
     fi
     ok=$((ok + 1))
