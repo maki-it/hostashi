@@ -9,6 +9,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/backup"
 	"github.com/maki-it/hostashi/internal/quota"
 )
 
@@ -146,5 +147,43 @@ func TestSiteQuotaUnavailable(t *testing.T) {
 
 	if len(fq.assigned) != 0 || len(fq.limits) != 0 {
 		t.Errorf("touched the file system: %v %v", fq.assigned, fq.limits)
+	}
+}
+
+func TestRestoreSpaceFromQuota(t *testing.T) {
+	ctx := context.Background()
+	fq := newFakeQuota(true)
+	b := &backup.Agent{Units: &countingUnits{}}
+	c, _ := startSiteAgentCfg(t, Config{Quota: fq, Backup: b})
+
+	if b.Space == nil {
+		t.Fatal("the agent did not give the backup side a space check")
+	}
+
+	if _, err := agentapi.SiteCreate.Call(ctx, c, agentapi.SiteCreateRequest{User: "shop"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if sp, err := b.Space("shop"); err != nil || sp.Limited {
+		t.Fatalf("site without limits: %+v %v", sp, err)
+	}
+
+	if _, err := agentapi.SiteQuotaSet.Call(ctx, c, agentapi.SiteQuotaSetRequest{User: "shop", Bytes: 1 << 30, Inodes: 1000}); err != nil {
+		t.Fatal(err)
+	}
+
+	sp, err := b.Space("shop")
+	if err != nil || !sp.Limited || sp.FreeBytes != 1<<30-4096 || sp.FreeInodes != 997 || sp.BytesLimit != 1<<30 {
+		t.Fatalf("limited site: %+v %v", sp, err)
+	}
+
+	if _, err := b.Space("nope"); err == nil {
+		t.Error("unknown site has space")
+	}
+
+	fq.available = false
+
+	if sp, err := b.Space("shop"); err != nil || sp.Limited {
+		t.Errorf("without project quota: %+v %v", sp, err)
 	}
 }

@@ -415,7 +415,7 @@ func TestRunWithoutTargetOrRepository(t *testing.T) {
 func TestEntries(t *testing.T) {
 	t1 := time.Date(2026, 11, 1, 2, 0, 0, 0, time.UTC)
 	got := entries([]resticctl.Snapshot{
-		{ID: "a", Time: t1, Tags: []string{"site:blog", "kind:files"}},
+		{ID: "a", Time: t1, Tags: []string{"site:blog", "kind:files"}, Summary: &resticctl.SnapshotSummary{TotalFilesProcessed: 7, TotalBytesProcessed: 4096}},
 		{ID: "b", Time: t1.Add(time.Hour), Tags: []string{"kind:db", "site:blog", "db:wp"}},
 		{ID: "c", Time: t1, Tags: []string{"kind:panel"}},
 		{ID: "d", Time: t1, Tags: []string{"manual"}},
@@ -428,7 +428,9 @@ func TestEntries(t *testing.T) {
 		{ID: "c", Time: t1, Kind: KindPanel},
 	}
 
-	if len(got) != 3 || got[0] != want[0] {
+	want[1].Bytes, want[1].Files = 4096, 7
+
+	if len(got) != 3 || got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("entries %+v", got)
 	}
 }

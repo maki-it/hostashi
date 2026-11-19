@@ -106,6 +106,15 @@ type Snapshot struct {
 	Paths    []string  `json:"paths"`
 	Hostname string    `json:"hostname"`
 	Tags     []string  `json:"tags"`
+	// Summary is what the backup that made the snapshot read (restic
+	// 0.17 and later); nil for older snapshots.
+	Summary *SnapshotSummary `json:"summary,omitempty"`
+}
+
+// SnapshotSummary is the size of a snapshot's content.
+type SnapshotSummary struct {
+	TotalFilesProcessed int64 `json:"total_files_processed"`
+	TotalBytesProcessed int64 `json:"total_bytes_processed"`
 }
 
 // Keep is a retention policy for forget. Every group (host and tag set) is

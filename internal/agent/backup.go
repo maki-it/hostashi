@@ -120,6 +120,8 @@ func mapBackupError(err error) error {
 		return &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "a restore is in progress"}
 	case errors.Is(err, backup.ErrSnapshotNotFound):
 		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "no such snapshot of this site in the last run's list"}
+	case errors.Is(err, backup.ErrNoSpace):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: err.Error()}
 	case errors.Is(err, backup.ErrRestoreNotFound):
 		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "no such restore"}
 	default:
