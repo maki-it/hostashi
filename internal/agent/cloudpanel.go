@@ -57,6 +57,16 @@ func registerCloudPanel(s *agentrpc.Server, src *cpsource.Source, imp *cpimport.
 		return info, mapCloudPanelError(err)
 	})
 
+	agentrpc.Handle(s, agentapi.CloudPanelSourceDB, func(_ context.Context, _ agentrpc.Caller, _ agentapi.CloudPanelDBRequest) (agentapi.CloudPanelDBCredentials, error) {
+		if src == nil {
+			return agentapi.CloudPanelDBCredentials{}, errNoCloudPanel
+		}
+
+		c, err := src.GenerateDB()
+
+		return c, mapCloudPanelError(err)
+	})
+
 	agentrpc.Handle(s, agentapi.CloudPanelImportStart, func(ctx context.Context, _ agentrpc.Caller, req agentapi.CloudPanelImportRequest) (agentapi.CloudPanelImport, error) {
 		if imp == nil {
 			return agentapi.CloudPanelImport{}, errNoCloudPanel
@@ -86,7 +96,9 @@ func mapImportError(err error) error {
 		return &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: err.Error()}
 	case errors.Is(err, cpimport.ErrNotReady):
 		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "set up the old server and confirm its host key first"}
-	case errors.Is(err, cpimport.ErrNoSite), errors.Is(err, cpimport.ErrNotFound):
+	case errors.Is(err, cpimport.ErrNoDBUser):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: err.Error()}
+	case errors.Is(err, cpimport.ErrNoSite), errors.Is(err, cpimport.ErrNotFound), errors.Is(err, cpimport.ErrNoDatabase):
 		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: err.Error()}
 	case errors.Is(err, cpimport.ErrBusy):
 		return &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "an import is in progress"}

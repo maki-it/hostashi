@@ -28,6 +28,9 @@ type CloudPanelSource interface {
 	Set(ctx context.Context, s agentapi.CloudPanelSource) (agentapi.CloudPanelSourceInfo, error)
 	SetHostKey(ctx context.Context, key string) (agentapi.CloudPanelSourceInfo, error)
 	Delete(ctx context.Context) (agentapi.CloudPanelSourceInfo, error)
+	// GenerateDB makes a new password for the read-only dump user on the
+	// old server and returns it once.
+	GenerateDB(ctx context.Context) (agentapi.CloudPanelDBCredentials, error)
 	// ScanHostKey connects to the old server and returns its host key, for
 	// the administrator to confirm against the old server's own output.
 	ScanHostKey(ctx context.Context, s agentapi.CloudPanelSource) (ssh.PublicKey, error)
@@ -54,6 +57,11 @@ func (c RPCCloudPanelSource) SetHostKey(ctx context.Context, key string) (agenta
 // Delete implements CloudPanelSource.
 func (c RPCCloudPanelSource) Delete(ctx context.Context) (agentapi.CloudPanelSourceInfo, error) {
 	return agentapi.CloudPanelSourceDelete.Call(ctx, c.C, agentapi.CloudPanelSourceDeleteRequest{})
+}
+
+// GenerateDB implements CloudPanelSource.
+func (c RPCCloudPanelSource) GenerateDB(ctx context.Context) (agentapi.CloudPanelDBCredentials, error) {
+	return agentapi.CloudPanelSourceDB.Call(ctx, c.C, agentapi.CloudPanelDBRequest{})
 }
 
 // ScanHostKey implements CloudPanelSource.
@@ -205,5 +213,24 @@ func registerCloudPanelSource(mux *http.ServeMux, a authn, src CloudPanelSource,
 		}
 
 		reply(w, info, err, "delete migration source")
+	}))
+
+	// The password is in this answer only. The panel never stores it; the
+	// agent keeps it root-only for the import job. Asking again replaces
+	// it, so the SQL on the old server must then be run again.
+	mux.HandleFunc("POST "+base+"/database", admin("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		c, err := src.GenerateDB(r.Context())
+		if err == nil {
+			audit(r, p.User.ID, "cloudpanel.source.database", c.User)
+		}
+
+		if err != nil {
+			sourceFail(log, w, err, "generate migration database user")
+
+			return
+		}
+
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, c)
 	}))
 }

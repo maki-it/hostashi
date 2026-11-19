@@ -21,6 +21,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/cloudpanel/transfer"
 	"github.com/maki-it/hostashi/internal/cpsource"
+	"github.com/maki-it/hostashi/internal/mariadbctl"
 	"github.com/maki-it/hostashi/internal/sites"
 )
 
@@ -33,6 +34,16 @@ type RunConfig struct {
 	Log      *slog.Logger
 	// Limits bound the copy; zero takes the transfer defaults.
 	Limits transfer.Limits
+	// Export runs mariadb-dump; nil is mariadbctl.Export.
+	Export ExportFunc
+}
+
+func (c RunConfig) export() ExportFunc {
+	if c.Export == nil {
+		return mariadbctl.Export
+	}
+
+	return c.Export
 }
 
 // ErrFailed is returned after a failed import was recorded.
@@ -86,8 +97,9 @@ func RunOnce(ctx context.Context, cfg RunConfig, id string) error {
 	}
 	defer rec.Close()
 
-	st, err := run(ctx, cfg, r)
+	st, dumps, err := run(ctx, cfg, r)
 
+	r.Dumps = dumps
 	r.Files, r.Bytes, r.Unchanged, r.Deleted, r.Skipped = st.Files, st.Bytes, st.Unchanged, st.Deleted, st.Skipped
 	r.SkippedPaths = st.SkippedPaths
 	r.Finished, r.State = time.Now().UTC(), agentapi.ImportDone
@@ -108,29 +120,29 @@ func RunOnce(ctx context.Context, cfg RunConfig, id string) error {
 	return nil
 }
 
-func run(ctx context.Context, cfg RunConfig, r Import) (transfer.Stats, error) {
+func run(ctx context.Context, cfg RunConfig, r Import) (st transfer.Stats, dumps []string, err error) {
 	home, err := siteHome(cfg.StateDir, r.Site, 0)
 	if err != nil {
-		return transfer.Stats{}, err
+		return st, dumps, err
 	}
 
 	src, sshCfg, err := cfg.Source.ClientConfig()
 	if err != nil {
-		return transfer.Stats{}, fmt.Errorf("migration source: %w", err)
+		return st, dumps, fmt.Errorf("migration source: %w", err)
 	}
 
 	d := net.Dialer{Timeout: sshCfg.Timeout}
 
 	nc, err := d.DialContext(ctx, "tcp", src.Addr())
 	if err != nil {
-		return transfer.Stats{}, fmt.Errorf("connect to %s: %w", src.Addr(), err)
+		return st, dumps, fmt.Errorf("connect to %s: %w", src.Addr(), err)
 	}
 
 	c, chans, reqs, err := ssh.NewClientConn(nc, src.Addr(), sshCfg)
 	if err != nil {
 		_ = nc.Close()
 
-		return transfer.Stats{}, fmt.Errorf("ssh to %s: %w", src.Addr(), err)
+		return st, dumps, fmt.Errorf("ssh to %s: %w", src.Addr(), err)
 	}
 
 	conn := ssh.NewClient(c, chans, reqs)
@@ -142,23 +154,42 @@ func run(ctx context.Context, cfg RunConfig, r Import) (transfer.Stats, error) {
 
 	client, err := sftp.NewClient(conn)
 	if err != nil {
-		return transfer.Stats{}, fmt.Errorf("sftp: %w", err)
+		return st, dumps, fmt.Errorf("sftp: %w", err)
 	}
 	defer client.Close()
 
-	// Everything that needs root is done: the key is read and the session
-	// is open. From here on the job is the site user.
+	// The databases first: mariadb-dump runs as the site user, which
+	// takes root to start, and the dump files are made the same way as an
+	// export's (mariadb.CreateDumpFile).
+	if len(r.Databases) > 0 {
+		pw, err := cfg.Source.DBPassword()
+		if err != nil {
+			return st, dumps, err
+		}
+
+		dumps, err = dumpDatabases(ctx, dumpConfig{
+			Home: home, Databases: r.Databases, Password: pw, Dial: conn.Dial, Export: cfg.export(),
+		})
+		if err != nil {
+			return st, dumps, err
+		}
+	}
+
+	// Everything that needs root is done: the key is read, the session is
+	// open and the dumps are written. From here on the job is the site user.
 	if err := Drop(int(home.UID), int(home.GID)); err != nil {
-		return transfer.Stats{}, err
+		return st, dumps, err
 	}
 
 	dst, err := openTarget(home)
 	if err != nil {
-		return transfer.Stats{}, err
+		return st, dumps, err
 	}
 	defer unix.Close(dst)
 
-	return transfer.Copy(ctx, transfer.SFTP(client), r.DocRoot, dst, cfg.Limits)
+	st, err = transfer.Copy(ctx, transfer.SFTP(client), r.DocRoot, dst, cfg.Limits)
+
+	return st, dumps, err
 }
 
 // Drop makes the whole process uid:gid with no supplementary groups. Go

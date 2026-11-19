@@ -34,6 +34,9 @@ const (
 	SourceFile     = "source.json"
 	KeyFile        = "id_ed25519"
 	KnownHostsFile = "known_hosts"
+	// DBPasswordFile is the password of the read-only dump user on the old
+	// server (ADR-0026 Part 2).
+	DBPasswordFile = "db_password"
 	keyComment     = "hostashi-import"
 )
 
@@ -46,6 +49,7 @@ const SFTPServer = "/usr/lib/openssh/sftp-server"
 var (
 	ErrNotSet     = errors.New("cpsource: no source set")
 	ErrNotReady   = errors.New("cpsource: no source or no confirmed host key")
+	ErrNoDB       = errors.New("cpsource: no database password generated")
 	ErrBadHostKey = backup.ErrBadHostKey
 )
 
@@ -80,7 +84,7 @@ func (s *Source) Get() (agentapi.CloudPanelSourceInfo, error) {
 
 // Set stores host and port. The SSH key is created on first use and never
 // replaced, so the line on the old server stays valid. Another host or port
-// drops the pinned host key.
+// drops the pinned host key, another host also the dump user's password.
 func (s *Source) Set(src agentapi.CloudPanelSource) (agentapi.CloudPanelSourceInfo, error) {
 	if err := src.Validate(); err != nil {
 		return agentapi.CloudPanelSourceInfo{}, err
@@ -108,6 +112,13 @@ func (s *Source) Set(src agentapi.CloudPanelSource) (agentapi.CloudPanelSourceIn
 
 	if old != nil && *old != src {
 		if err := s.remove(KnownHostsFile); err != nil {
+			return agentapi.CloudPanelSourceInfo{}, err
+		}
+	}
+
+	// Another server has its own database users.
+	if old != nil && old.Host != src.Host {
+		if err := s.remove(DBPasswordFile); err != nil {
 			return agentapi.CloudPanelSourceInfo{}, err
 		}
 	}
@@ -148,13 +159,53 @@ func (s *Source) SetHostKey(line string) (agentapi.CloudPanelSourceInfo, error) 
 	return s.info()
 }
 
+// GenerateDB makes a new password for the dump user on the old server and
+// returns it once with the SQL to run there. A source must be set.
+func (s *Source) GenerateDB() (agentapi.CloudPanelDBCredentials, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, err := s.source(); err != nil {
+		return agentapi.CloudPanelDBCredentials{}, err
+	}
+
+	pw := agentapi.GenerateDBPassword()
+	if err := statefile.Write(s.Dir, DBPasswordFile, []byte(pw+"\n")); err != nil {
+		return agentapi.CloudPanelDBCredentials{}, err
+	}
+
+	return agentapi.CloudPanelDBCredentials{User: agentapi.CloudPanelDBUser, Password: pw, SQL: agentapi.CloudPanelDBSQL(pw)}, nil
+}
+
+// DBPassword returns the dump user's password for the import job.
+func (s *Source) DBPassword() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	raw, err := statefile.Read(s.Dir, DBPasswordFile, owner(), 256)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", ErrNoDB
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	pw := strings.TrimSpace(string(raw))
+	if len(pw) != agentapi.GeneratedDBPasswordLen || strings.Trim(pw, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789") != "" {
+		return "", fmt.Errorf("cpsource: %s is damaged", DBPasswordFile)
+	}
+
+	return pw, nil
+}
+
 // Delete removes the source, the SSH key and the pinned host key. The key
 // line on the old server then opens nothing any more.
 func (s *Source) Delete() (agentapi.CloudPanelSourceInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for _, f := range []string{KnownHostsFile, KeyFile, SourceFile} {
+	for _, f := range []string{DBPasswordFile, KnownHostsFile, KeyFile, SourceFile} {
 		if err := s.remove(f); err != nil {
 			return agentapi.CloudPanelSourceInfo{}, err
 		}
@@ -237,6 +288,10 @@ func (s *Source) info() (agentapi.CloudPanelSourceInfo, error) {
 	if key != nil {
 		info.HostKey = ssh.FingerprintSHA256(key)
 		info.Ready = true
+	}
+
+	if _, err := statefile.Read(s.Dir, DBPasswordFile, owner(), 256); err == nil {
+		info.DBUser = agentapi.CloudPanelDBUser
 	}
 
 	return info, nil

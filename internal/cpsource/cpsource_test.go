@@ -172,3 +172,74 @@ func TestLooseDirectoryRefused(t *testing.T) {
 		t.Fatal("directory open to others accepted")
 	}
 }
+
+func TestDBPassword(t *testing.T) {
+	s := newSource(t)
+
+	if _, err := s.GenerateDB(); !errors.Is(err, cpsource.ErrNotSet) {
+		t.Fatalf("without source: %v", err)
+	}
+
+	if _, err := s.Set(agentapi.CloudPanelSource{Host: "203.0.113.7", Port: 22}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.DBPassword(); !errors.Is(err, cpsource.ErrNoDB) {
+		t.Fatalf("before generate: %v", err)
+	}
+
+	c, err := s.GenerateDB()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := "CREATE OR REPLACE USER 'hostashi_import'@'127.0.0.1' IDENTIFIED BY '" + c.Password + "';\n" +
+		"GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES ON *.* TO 'hostashi_import'@'127.0.0.1';"
+	if c.User != agentapi.CloudPanelDBUser || len(c.Password) != agentapi.GeneratedDBPasswordLen || c.SQL != want {
+		t.Fatalf("%+v", c)
+	}
+
+	if pw, err := s.DBPassword(); err != nil || pw != c.Password {
+		t.Fatalf("stored %q %v", pw, err)
+	}
+
+	st, err := os.Stat(filepath.Join(s.Dir, cpsource.DBPasswordFile))
+	if err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("password file: %v %v", st, err)
+	}
+
+	// Get names the user but never shows the password again.
+	info, err := s.Get()
+	if err != nil || info.DBUser != agentapi.CloudPanelDBUser {
+		t.Fatalf("info %+v %v", info, err)
+	}
+
+	// The same server on another port keeps it, another server drops it.
+	if _, err := s.Set(agentapi.CloudPanelSource{Host: "203.0.113.7", Port: 2222}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.DBPassword(); err != nil {
+		t.Fatalf("after port change: %v", err)
+	}
+
+	if _, err := s.Set(agentapi.CloudPanelSource{Host: "203.0.113.8", Port: 2222}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.DBPassword(); !errors.Is(err, cpsource.ErrNoDB) {
+		t.Fatalf("after host change: %v", err)
+	}
+
+	if _, err := s.GenerateDB(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Delete(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(s.Dir, cpsource.DBPasswordFile)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("password kept after delete: %v", err)
+	}
+}

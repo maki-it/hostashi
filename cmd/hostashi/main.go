@@ -67,10 +67,15 @@ commands:
             read a CloudPanel server (root on the old server, or a read-only
             copy of its disk) and show which sites can be imported; changes
             nothing, hides snippets and cron commands unless -full is given
-  cloudpanel import SITE REMOTE_USER DOCROOT | cloudpanel import-status ID
+  cloudpanel database
+            make a new password for the read-only database user on the old
+            server and print the SQL to run there (shown once)
+  cloudpanel import SITE REMOTE_USER DOCROOT [OLD_DB[:NEW_DB] ...] | cloudpanel import-status ID
             copy the files of DOCROOT (below /home/REMOTE_USER/ on the old
-            server) into SITE's home as cloudpanel-import, through the agent
-            (root on the server); run it again for the final sync
+            server) into SITE's home as cloudpanel-import, and dump each old
+            database into cloudpanel-import-db/NEW_DB-<time>.sql for
+            "db import", through the agent (root on the server); run it
+            again for the final sync
   cloudpanel import-run ID
             one import (root; started by hostashi-import@ID.service)
   setup-token  print the one-time token for the first login (read as the serve user or root)
@@ -205,9 +210,15 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		switch {
 		case len(a) == 2 && a[0] == "import-run":
 			err = cloudpanelImportRun(ctx, *stateDir, a[1], log)
-		case len(a) == 4 && a[0] == "import":
+		case len(a) >= 4 && a[0] == "import":
 			err = printJSON[agentapi.CloudPanelImport](stdout)(agentapi.CloudPanelImportStart.Call(ctx, agentrpc.NewClient(*socket),
-				agentapi.CloudPanelImportRequest{Site: a[1], RemoteUser: a[2], DocRoot: a[3]}))
+				agentapi.CloudPanelImportRequest{Site: a[1], RemoteUser: a[2], DocRoot: a[3], Databases: dbMaps(a[4:])}))
+		case len(a) == 1 && a[0] == "database":
+			var c agentapi.CloudPanelDBCredentials
+
+			if c, err = agentapi.CloudPanelSourceDB.Call(ctx, agentrpc.NewClient(*socket), agentapi.CloudPanelDBRequest{}); err == nil {
+				fmt.Fprintf(stdout, "-- Run this as root in MariaDB on the old server:\n%s\n", c.SQL)
+			}
 		case len(a) == 2 && a[0] == "import-status":
 			err = printJSON[agentapi.CloudPanelImport](stdout)(agentapi.CloudPanelImportGet.Call(ctx, agentrpc.NewClient(*socket),
 				agentapi.CloudPanelImportGetRequest{ID: a[1]}))

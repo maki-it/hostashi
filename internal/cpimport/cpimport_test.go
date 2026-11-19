@@ -321,3 +321,43 @@ func TestDropRefusesRoot(t *testing.T) {
 		t.Fatal("dropped to root")
 	}
 }
+
+func TestStartDatabases(t *testing.T) {
+	a, u := newAgent(t, true)
+
+	withDB := req
+	withDB.Databases = []agentapi.CloudPanelDBMap{{From: "oldblog_db", To: "blog_db"}}
+
+	// No dump user yet.
+	if _, err := a.Start(context.Background(), withDB); !errors.Is(err, ErrNoDBUser) {
+		t.Fatalf("without dump user: %v", err)
+	}
+
+	_, err := a.Source.GenerateDB()
+	must(t, err)
+
+	// blog_db belongs to another site; nothing is registered for blog.
+	raw := `{"version":1,"databases":[{"name":"blog_db","site":"shop","users":[]}]}`
+	must(t, os.WriteFile(filepath.Join(a.StateDir, "databases.json"), []byte(raw), 0o600))
+
+	if _, err := a.Start(context.Background(), withDB); !errors.Is(err, ErrNoDatabase) {
+		t.Fatalf("other site's database: %v", err)
+	}
+
+	if len(u.calls) != 0 {
+		t.Fatalf("units called: %v", u.calls)
+	}
+
+	raw = `{"version":1,"databases":[{"name":"blog_db","site":"blog","users":[]}]}`
+	must(t, os.WriteFile(filepath.Join(a.StateDir, "databases.json"), []byte(raw), 0o600))
+
+	r, err := a.Start(context.Background(), withDB)
+	must(t, err)
+
+	got, err := a.Get(r.ID)
+	must(t, err)
+
+	if len(got.Databases) != 1 || got.Databases[0] != withDB.Databases[0] {
+		t.Fatalf("record %+v", got)
+	}
+}

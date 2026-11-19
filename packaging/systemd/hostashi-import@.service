@@ -1,19 +1,22 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # One CloudPanel import (ADR-0026 Part 3), started by the agent as
-# hostashi-import@<id>.service. It copies one site's document root from the
-# old server over SFTP into <home>/cloudpanel-import; a second run is the
-# final sync. The old server is only read: the key there is locked to a
-# read-only sftp-server and one tunnel to MariaDB.
+# hostashi-import@<id>.service. It dumps the site's databases from the old
+# server into <home>/cloudpanel-import-db and copies its document root over
+# SFTP into <home>/cloudpanel-import; a second run is the final sync. The
+# old server is only read: the key there is locked to a read-only
+# sftp-server and one tunnel to MariaDB.
 #
-# Root is needed only to read the SSH key and the migration source in the
-# agent's state directory. The job opens the SSH session as root, then
-# drops to the site's user and group (setresgid, setresuid, no
-# supplementary groups) before it writes a single file, so the site's files
+# Root is needed to read the SSH key and the migration source in the
+# agent's state directory, and for the database step: mariadb-dump runs as
+# the site user (CAP_SETUID, CAP_SETGID) through a tunnel socket in a
+# private directory, and its dump files are created in the home and handed
+# to the site user (CAP_DAC_OVERRIDE, CAP_CHOWN), as for an export. Then
+# the job drops to the site's user and group (setresgid, setresuid, no
+# supplementary groups) before it copies a single file, so the site's files
 # are created by their owner and a hostile tree can at worst damage that
 # one site. The file system is read-only except the import records and the
 # one home that the agent opens in a drop-in (ReadWritePaths=) for this
-# instance only. The capabilities are those of changing the user, nothing
-# more, and they are gone after the drop.
+# instance only. The capabilities are gone after the drop, before the copy.
 
 [Unit]
 Description=Hostashi CloudPanel import %i
@@ -32,7 +35,7 @@ Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
 
-CapabilityBoundingSet=CAP_SETUID CAP_SETGID
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_CHOWN CAP_DAC_OVERRIDE
 AmbientCapabilities=
 NoNewPrivileges=yes
 ProtectSystem=strict
