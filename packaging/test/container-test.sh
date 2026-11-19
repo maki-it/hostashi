@@ -301,11 +301,11 @@ x /usr/local/bin/hostashi backup key show | grep '^restic password: ' >/dev/null
 r() { x env RESTIC_REPOSITORY=sftp://u1@sftp.test:2299/hostashi RESTIC_PASSWORD_FILE=/etc/hostashi-agent/backup/password \
   restic -o 'sftp.args=-F /dev/null -i /etc/hostashi-agent/backup/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/hostashi-agent/backup/known_hosts' --no-cache "$@"; }
 # A site with a file and a database.
-x /usr/local/bin/hostashi site create bk
+[ "$(api POST /api/v1/sites '{"name":"bk","domains":["bk.example.com"]}')" = 201 ] || fail "create site bk: $(x cat /tmp/api.out)"
 xi runuser -u bk -- sh -c 'cat >/home/bk/htdocs/index.html' <<<"backed up"
 # A symlink the site user planted: restored as a link, never followed.
 x runuser -u bk -- ln -s /etc /home/bk/htdocs/etc-link
-x /usr/local/bin/hostashi db create bk bk_db
+[ "$(api POST /api/v1/sites/bk/databases '{"name":"bk_db"}')" = 201 ] || fail "create bk_db: $(x cat /tmp/api.out)"
 x mariadb -e "CREATE TABLE bk_db.t (v VARCHAR(20)); INSERT INTO bk_db.t VALUES ('from the dump');"
 x systemctl start hostashi-backup.service || fail "backup run failed: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 x grep -q '"ok": true' /var/lib/hostashi-agent/backup/status.json || fail "status: $(x cat /var/lib/hostashi-agent/backup/status.json)"
@@ -360,10 +360,25 @@ dir=$(restore "$files_snap")
 sleep 1 # the next directory name has a new second
 dir=$(restore "$db_snap")
 x grep -q "from the dump" "/home/bk/$dir/bk_db.sql" || fail "restored dump"
+restore_id=$(x grep -o '"id":"[0-9a-f]\{16\}"' /tmp/api.out | cut -d'"' -f4)
+# Into the live database: refused. Into a new one of the site: imported.
+[ "$(api POST "/api/v1/backups/restores/$restore_id/import" '{"database":"bk_db"}')" = 409 ] || fail "import over the live database: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/bk/databases '{"name":"bk_restored"}')" = 201 ] || fail "create bk_restored: $(x cat /tmp/api.out)"
+[ "$(api POST "/api/v1/backups/restores/$restore_id/import" '{"database":"bk_restored"}')" = 202 ] || fail "import: $(x cat /tmp/api.out)"
+job=$(x grep -o '"id":"[0-9a-f]\{16\}"' /tmp/api.out | cut -d'"' -f4)
+for _ in $(seq 1 60); do
+  api GET "/api/v1/backups/imports/$job" >/dev/null
+  x grep -q '"state":"\(done\|failed\)"' /tmp/api.out && break
+  sleep 1
+done
+x grep -q '"state":"done"' /tmp/api.out || fail "import job: $(x cat /tmp/api.out)"
+[ "$(x mariadb -N -e 'SELECT v FROM bk_restored.t')" = "from the dump" ] || fail "restored database content"
 # The restore unit is no more exposed than the backup run.
 x systemd-analyze security "hostashi-restore@0000000000000000.service" | tail -1
-x /usr/local/bin/hostashi db delete bk_db
-x /usr/local/bin/hostashi site delete bk
+for d in bk_db bk_restored; do
+  [ "$(api DELETE "/api/v1/databases/$d")" = 204 ] || fail "delete $d: $(x cat /tmp/api.out)"
+done
+[ "$(api DELETE /api/v1/sites/bk)" = 204 ] || fail "delete site bk: $(x cat /tmp/api.out)"
 
 if [ -z "${PEBBLE_DIR:-}" ]; then
   echo "PEBBLE_DIR not set, skipping the certificate test"

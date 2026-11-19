@@ -150,7 +150,12 @@ func Handler(cfg Config, deps Deps) http.Handler {
 		}
 
 		if deps.Backups != nil {
-			registerBackups(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Backups, log)
+			var dbs SiteDatabases
+			if deps.Sites != nil {
+				dbs = deps.Sites.Databases
+			}
+
+			registerBackups(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Backups, dbs, log)
 		}
 	}
 
