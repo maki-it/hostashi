@@ -211,4 +211,81 @@ describe("Sites", () => {
     expect(await screen.findByText("No sites yet.")).toBeInTheDocument();
     expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
   });
+
+  it("changes domains, PHP, HTTPS and HSTS of a site", async () => {
+    const user = userEvent.setup();
+    let cur: Site = { ...blog, domains: ["blog.example.com"] };
+    const put = (f: (b: Record<string, unknown>) => Site) => (b: unknown) => {
+      cur = f(b as Record<string, unknown>);
+      return { body: cur };
+    };
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": () => ({ body: { sites: [cur] } }),
+      "PUT /api/v1/sites/blog/domains": put((b) => ({ ...cur, domains: b.domains as string[] })),
+      "PUT /api/v1/sites/blog/php": put((b) => ({ ...cur, php: b.php as string })),
+      "PUT /api/v1/sites/blog/tls": put((b) => ({ ...cur, tls: { ...cur.tls, enabled: b.enabled as boolean, active: false } })),
+      "PUT /api/v1/sites/blog/hsts": put((b) => ({ ...cur, tls: { ...cur.tls, hsts: b.enabled as boolean } })),
+    });
+    render(<Sites />);
+    await user.click(await screen.findByRole("button", { name: "Change settings" }));
+    const box = within(screen.getByRole("group", { name: "Settings of blog" }));
+
+    await user.type(box.getByLabelText(/^Domains of blog/), "\nWWW.blog.example.com");
+    await user.click(box.getByRole("button", { name: "Save domains" }));
+    expect(await box.findByRole("status")).toHaveTextContent("served over HTTP until a certificate for the new domains");
+    expect(calls.at(-2)?.body).toEqual({ domains: ["blog.example.com", "www.blog.example.com"] });
+
+    expect(box.getByRole("button", { name: "Save PHP version" })).toBeDisabled();
+    await user.selectOptions(box.getByLabelText("PHP of blog"), "");
+    await user.click(box.getByRole("button", { name: "Save PHP version" }));
+    expect(await box.findByText("PHP is off for this site now.")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Details of blog")).getByText("No PHP")).toBeInTheDocument();
+
+    await user.click(box.getByLabelText(/^HSTS/));
+    expect(await box.findByText(/HSTS is off/)).toBeInTheDocument();
+    await user.click(box.getByLabelText(/^HTTPS with/));
+    expect(await box.findByText("HTTPS is off. The site is served over HTTP.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "PUT").map((c) => [c.path, c.body])).toEqual([
+      ["/api/v1/sites/blog/domains", { domains: ["blog.example.com", "www.blog.example.com"] }],
+      ["/api/v1/sites/blog/php", { php: "" }],
+      ["/api/v1/sites/blog/hsts", { enabled: false }],
+      ["/api/v1/sites/blog/tls", { enabled: false }],
+    ]);
+  });
+
+  it("rejects bad domains and shows a refused change", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [blog] } },
+      "PUT /api/v1/sites/blog/tls": { status: 409, body: { error: { code: "tls_unavailable" } } },
+    });
+    render(<Sites />);
+    await user.click(await screen.findByRole("button", { name: "Change settings" }));
+    const box = within(screen.getByRole("group", { name: "Settings of blog" }));
+    await user.clear(box.getByLabelText(/^Domains of blog/));
+    await user.click(box.getByRole("button", { name: "Save domains" }));
+    expect(box.getByRole("alert")).toHaveTextContent("at least one domain");
+    await user.click(box.getByLabelText(/^HTTPS with/));
+    expect(await box.findByRole("alert")).toHaveTextContent("Certificates are not available");
+    expect(calls.filter((c) => c.method === "PUT")).toHaveLength(1);
+  });
+
+  it("keeps a PHP version that is no longer installed selectable", async () => {
+    const user = userEvent.setup();
+    mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [{ ...blog, php: "7.4" }] } } });
+    render(<Sites />);
+    await user.click(await screen.findByRole("button", { name: "Change settings" }));
+    const select = screen.getByLabelText("PHP of blog");
+    await waitFor(() => expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["No PHP", "PHP 7.4 (legacy) (not installed)", "PHP 8.4", "PHP 8.2 (legacy)"]));
+    expect(select).toHaveValue("7.4");
+  });
+
+  it("offers no settings while a site is being deleted", async () => {
+    mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [{ ...blog, state: "deleting" }] } } });
+    render(<Sites />);
+    expect(await screen.findByText("Being deleted")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Change settings" })).not.toBeInTheDocument();
+  });
 });
