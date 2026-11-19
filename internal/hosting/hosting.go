@@ -148,6 +148,9 @@ type CreateRequest struct {
 	// the site is on HTTPS.
 	TLS  bool
 	HSTS bool
+	// Usage is what the site's files take on the old server, for an
+	// import: the site's disk limits are raised to fit it (ImportLimits).
+	Usage *Usage
 }
 
 // checkPHP accepts a version from agentapi.PHPVersions or "" (no PHP).
@@ -270,7 +273,7 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 
 	// Stored before the web state, so the PHP pool starts with the
 	// preset's workers.
-	limits, hasLimits := s.storeDefaultLimits(ctx, created)
+	limits, hasLimits := s.storeDefaultLimits(ctx, created, req.Usage)
 
 	if err := s.applyWeb(ctx); err != nil {
 		s.removeAfterFailure(undo, req.Name)
