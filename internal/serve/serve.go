@@ -24,6 +24,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/metrics"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
 	"github.com/maki-it/hostashi/internal/ui"
@@ -96,6 +97,10 @@ type Deps struct {
 	Auth      *auth.Service    // nil disables the auth routes (tests)
 	Sites     *hosting.Service // nil disables the site routes; needs Auth
 	Backups   Backups          // nil disables the backup routes; needs Auth
+	// Metrics counts requests and serves /metrics (ADR-0022); nil turns both
+	// off. The endpoint needs Auth and Settings.
+	Metrics  *metrics.Metrics
+	Settings Settings
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -157,16 +162,26 @@ func Handler(cfg Config, deps Deps) http.Handler {
 
 			registerBackups(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Backups, dbs, log)
 		}
+
+		if deps.Metrics != nil && deps.Settings != nil {
+			registerMetrics(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Metrics, deps.Settings, log)
+		}
 	}
 
-	return secure(withUI(mux, ui.Handler()))
+	h := secure(withUI(mux, ui.Handler()))
+	if deps.Metrics != nil {
+		h = deps.Metrics.Instrument(h)
+	}
+
+	return h
 }
 
-// withUI sends /api and everything below it to the API routes, so their 404
-// and 405 answers stay as they are, and every other path to the frontend.
+// withUI sends /api and everything below it, and /metrics, to the API
+// routes, so their 404 and 405 answers stay as they are, and every other path
+// to the frontend.
 func withUI(api, web http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == MetricsPath {
 			api.ServeHTTP(w, r)
 
 			return
@@ -253,10 +268,12 @@ func Run(ctx context.Context, cfg Config) error {
 			_, err := agentapi.Ping.Call(ctx, client, agentapi.PingRequest{})
 			return err
 		},
-		PingDB:  st.Ping,
-		Auth:    svc,
-		Sites:   hosting.New(st, hosting.RPCAgent{C: client}, cfg.Log),
-		Backups: RPCBackups{C: client, BeforeRun: panelCopy},
+		PingDB:   st.Ping,
+		Auth:     svc,
+		Sites:    hosting.New(st, hosting.RPCAgent{C: client}, cfg.Log),
+		Backups:  RPCBackups{C: client, BeforeRun: panelCopy},
+		Metrics:  metrics.New(),
+		Settings: st,
 	}
 
 	if iss, err := newIssuer(cfg, st, box); err != nil {

@@ -95,7 +95,7 @@ Secrets (DB passwords, API keys) are stored **encrypted** in the DB (key in `/et
 ## 4.7 Storage and operation
 
 - **SQLite (WAL)** for the panel: no additional service, simple backups (`VACUUM INTO`). See ADR-0006.
-- **Metrics:** ring buffer in the panel (for example 30 days, tiered resolution), Prometheus/Influx not required.
+- **Metrics:** ring buffer in the panel (for example 30 days, tiered resolution), Prometheus/Influx not required. An optional Prometheus endpoint for an existing monitoring stack is described in [ADR-0022](adr/0022-metrics-and-tracing.md).
 - **Jobs:** persistent queue in SQLite, progress and log per job, streaming through SSE/WebSocket.
 - **Panel logs:** structured (JSON) in journald.
 

@@ -18,6 +18,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/metrics"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -29,6 +30,7 @@ type apiEnv struct {
 	svc       *auth.Service
 	sites     *hosting.Service
 	tokenPath string
+	metrics   *metrics.Metrics
 }
 
 func newAPI(t *testing.T) *apiEnv {
@@ -69,12 +71,12 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 
 	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath, Box: box})
 
-	deps := Deps{PingAgent: ok, PingDB: ok, Auth: svc}
+	deps := Deps{PingAgent: ok, PingDB: ok, Auth: svc, Metrics: metrics.New(), Settings: st}
 	if ag != nil {
 		deps.Sites = hosting.New(st, ag, nil)
 	}
 
-	return &apiEnv{h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath}
+	return &apiEnv{h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics}
 }
 
 type reqOpts struct {
