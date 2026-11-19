@@ -81,6 +81,26 @@ func registerBackup(s *agentrpc.Server, b *backup.Agent) {
 
 		return agentapi.BackupSnapshotsResponse{Snapshots: snaps}, mapBackupError(err)
 	})
+
+	agentrpc.Handle(s, agentapi.BackupRestoreStart, func(ctx context.Context, _ agentrpc.Caller, req agentapi.BackupRestoreRequest) (agentapi.BackupRestore, error) {
+		if b == nil {
+			return agentapi.BackupRestore{}, errNoBackup
+		}
+
+		r, err := b.StartRestore(ctx, req.Site, req.Snapshot)
+
+		return r, mapBackupError(err)
+	})
+
+	agentrpc.Handle(s, agentapi.BackupRestoreGet, func(_ context.Context, _ agentrpc.Caller, req agentapi.BackupRestoreGetRequest) (agentapi.BackupRestore, error) {
+		if b == nil {
+			return agentapi.BackupRestore{}, errNoBackup
+		}
+
+		r, err := b.GetRestore(req.ID)
+
+		return r, mapBackupError(err)
+	})
 }
 
 // mapBackupError gives the caller fixed messages; details stay in the log.
@@ -96,6 +116,12 @@ func mapBackupError(err error) error {
 		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "set a backup target and confirm its host key first"}
 	case errors.Is(err, backup.ErrRunning):
 		return &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "a backup run is in progress"}
+	case errors.Is(err, backup.ErrRestoreBusy):
+		return &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "a restore is in progress"}
+	case errors.Is(err, backup.ErrSnapshotNotFound):
+		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "no such snapshot of this site in the last run's list"}
+	case errors.Is(err, backup.ErrRestoreNotFound):
+		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "no such restore"}
 	default:
 		return err
 	}

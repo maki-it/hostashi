@@ -217,33 +217,13 @@ func backupAgentCmd(ctx context.Context, c *agentrpc.Client, args []string, out 
 		err error
 	)
 
-	switch strings.Join(args, " ") {
-	case "get":
-		v, err = agentapi.BackupGet.Call(ctx, c, agentapi.BackupGetRequest{})
-	case "set":
-		var s agentapi.BackupSettings
-
-		dec := json.NewDecoder(io.LimitReader(stdin, 1<<16))
-		dec.DisallowUnknownFields()
-
-		if err := dec.Decode(&s); err != nil {
-			return fmt.Errorf("read backup settings from stdin: %w", err)
-		}
-
-		v, err = agentapi.BackupSet.Call(ctx, c, agentapi.BackupSetRequest{Settings: s})
-	case "hostkey":
-		line, rerr := bufio.NewReader(io.LimitReader(stdin, agentapi.MaxHostKey)).ReadString('\n')
-		if rerr != nil && !errors.Is(rerr, io.EOF) {
-			return fmt.Errorf("read host key from stdin: %w", rerr)
-		}
-
-		v, err = agentapi.BackupHostKey.Call(ctx, c, agentapi.BackupHostKeyRequest{Key: strings.TrimSpace(line)})
-	case "start":
-		v, err = agentapi.BackupRun.Call(ctx, c, agentapi.BackupRunRequest{})
-	case "status":
-		v, err = agentapi.BackupStatusGet.Call(ctx, c, agentapi.BackupStatusRequest{})
+	switch {
+	case len(args) == 3 && args[0] == "restore":
+		v, err = agentapi.BackupRestoreStart.Call(ctx, c, agentapi.BackupRestoreRequest{Site: args[1], Snapshot: args[2]})
+	case len(args) == 2 && args[0] == "restore-status":
+		v, err = agentapi.BackupRestoreGet.Call(ctx, c, agentapi.BackupRestoreGetRequest{ID: args[1]})
 	default:
-		return errUsage
+		v, err = backupSimpleCmd(ctx, c, args)
 	}
 
 	if err != nil {
@@ -254,4 +234,42 @@ func backupAgentCmd(ctx context.Context, c *agentrpc.Client, args []string, out 
 	enc.SetIndent("", "  ")
 
 	return enc.Encode(v)
+}
+
+func backupSimpleCmd(ctx context.Context, c *agentrpc.Client, args []string) (any, error) {
+	var (
+		v   any
+		err error
+	)
+
+	switch strings.Join(args, " ") {
+	case "get":
+		v, err = agentapi.BackupGet.Call(ctx, c, agentapi.BackupGetRequest{})
+	case "set":
+		var s agentapi.BackupSettings
+
+		dec := json.NewDecoder(io.LimitReader(stdin, 1<<16))
+		dec.DisallowUnknownFields()
+
+		if err := dec.Decode(&s); err != nil {
+			return nil, fmt.Errorf("read backup settings from stdin: %w", err)
+		}
+
+		v, err = agentapi.BackupSet.Call(ctx, c, agentapi.BackupSetRequest{Settings: s})
+	case "hostkey":
+		line, rerr := bufio.NewReader(io.LimitReader(stdin, agentapi.MaxHostKey)).ReadString('\n')
+		if rerr != nil && !errors.Is(rerr, io.EOF) {
+			return nil, fmt.Errorf("read host key from stdin: %w", rerr)
+		}
+
+		v, err = agentapi.BackupHostKey.Call(ctx, c, agentapi.BackupHostKeyRequest{Key: strings.TrimSpace(line)})
+	case "start":
+		v, err = agentapi.BackupRun.Call(ctx, c, agentapi.BackupRunRequest{})
+	case "status":
+		v, err = agentapi.BackupStatusGet.Call(ctx, c, agentapi.BackupStatusRequest{})
+	default:
+		return nil, errUsage
+	}
+
+	return v, err
 }

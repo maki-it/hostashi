@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os/exec"
 	"path/filepath"
@@ -370,7 +371,28 @@ func (r *Repo) Check(ctx context.Context, part, total int) error {
 // large server stay far below).
 const maxOutput = 64 << 20
 
+// Dump writes the snapshot's whole tree to w as a tar stream: restic dump
+// --archive tar ID /. Entry names are relative ("home/blog/htdocs/a"). The
+// snapshot must belong to this host; callers find it with Snapshots first.
+func (r *Repo) Dump(ctx context.Context, id string, w io.Writer) error {
+	if !snapshotRe.MatchString(id) {
+		return fmt.Errorf("%w: snapshot id", ErrInvalid)
+	}
+
+	_, err := r.exec(ctx, w, "dump", "--archive", "tar", id, "/")
+
+	return err
+}
+
 func (r *Repo) run(ctx context.Context, args ...string) ([]byte, error) {
+	var stdout bytes.Buffer
+
+	return r.exec(ctx, &limitedWriter{buf: &stdout, max: maxOutput}, args...)
+}
+
+// exec runs restic with stdout going to out. The returned bytes are
+// stdout when out is the buffer of run, for the exit message and callers.
+func (r *Repo) exec(ctx context.Context, out io.Writer, args ...string) ([]byte, error) {
 	if err := r.validate(); err != nil {
 		return nil, err
 	}
@@ -406,7 +428,7 @@ func (r *Repo) run(ctx context.Context, args ...string) ([]byte, error) {
 
 	full = append(full, args[1:]...)
 
-	var stdout, stderr bytes.Buffer
+	var stderr bytes.Buffer
 
 	cmd := exec.CommandContext(ctx, bin, full...)
 	cmd.Env = []string{
@@ -417,18 +439,23 @@ func (r *Repo) run(ctx context.Context, args ...string) ([]byte, error) {
 		"RESTIC_PROGRESS_FPS=0.016",
 	}
 	cmd.Dir = "/"
-	cmd.Stdout = &limitedWriter{buf: &stdout, max: maxOutput}
+	cmd.Stdout = out
 	cmd.Stderr = &limitedWriter{buf: &stderr, max: 16 << 10}
 	cmd.WaitDelay = 30 * time.Second
 
 	err := cmd.Run()
+
+	var stdout []byte
+	if lw, ok := out.(*limitedWriter); ok {
+		stdout = lw.buf.Bytes()
+	}
 
 	if r.Log != nil && stderr.Len() > 0 {
 		r.Log.Info("restic", "command", args[0], "stderr", strings.TrimSpace(stderr.String()))
 	}
 
 	if err == nil {
-		return stdout.Bytes(), nil
+		return stdout, nil
 	}
 
 	var ee *exec.ExitError
@@ -440,11 +467,11 @@ func (r *Repo) run(ctx context.Context, args ...string) ([]byte, error) {
 		return nil, fmt.Errorf("resticctl: %s: %w", args[0], ctx.Err())
 	}
 
-	msg := exitMessage(stdout.Bytes(), stderr.Bytes())
+	msg := exitMessage(stdout, stderr.Bytes())
 
 	switch ee.ExitCode() {
 	case 3:
-		return stdout.Bytes(), ErrPartial
+		return stdout, ErrPartial
 	case 10:
 		return nil, ErrNoRepository
 	case 11:

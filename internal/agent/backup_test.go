@@ -21,10 +21,11 @@ import (
 
 type countingUnits struct{ started int }
 
-func (u *countingUnits) StartRun(context.Context) error     { u.started++; return nil }
-func (u *countingUnits) Reload(context.Context) error       { return nil }
-func (u *countingUnits) EnableTimer(context.Context) error  { return nil }
-func (u *countingUnits) DisableTimer(context.Context) error { return nil }
+func (u *countingUnits) StartRun(context.Context) error             { u.started++; return nil }
+func (u *countingUnits) Reload(context.Context) error               { return nil }
+func (u *countingUnits) EnableTimer(context.Context) error          { return nil }
+func (u *countingUnits) StartRestore(context.Context, string) error { return nil }
+func (u *countingUnits) DisableTimer(context.Context) error         { return nil }
 
 func code(err error) string {
 	var e *agentrpc.Error

@@ -25,6 +25,14 @@ const (
 	KnownHostsFile = "known_hosts"
 	StatusFile     = "status.json"
 	SnapshotsFile  = "snapshots.json"
+
+	// AgentStateDir holds the agent's registries; UnitDir is systemd's
+	// directory for local units and drop-ins.
+	AgentStateDir = "/var/lib/hostashi-agent"
+	UnitDir       = "/etc/systemd/system"
+
+	runLock     = "run.lock"
+	restoreLock = "restore.lock"
 )
 
 // The settings types live in agentapi, which the panel shares.

@@ -48,6 +48,7 @@ func (i Item) Tags() []string {
 type Site struct {
 	Name      string
 	Home      string
+	UID, GID  uint32
 	Databases []string
 }
 

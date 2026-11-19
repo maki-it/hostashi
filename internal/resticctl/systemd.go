@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -20,12 +21,30 @@ const Systemctl = "/usr/bin/systemctl"
 const (
 	RunUnit   = "hostashi-backup.service"
 	TimerUnit = "hostashi-backup.timer"
+	// RestoreUnit is the template of one restore; the instance is the
+	// restore's id.
+	RestoreUnit = "hostashi-restore@"
 )
 
+// restoreIDRe is the only variable part of any argument list here.
+var restoreIDRe = regexp.MustCompile(`^[0-9a-f]{16}$`)
+
+// ValidRestoreID reports whether id can name a restore unit.
+func ValidRestoreID(id string) bool { return restoreIDRe.MatchString(id) }
+
 // Units starts the backup run and switches its timer. It belongs to this
-// package's exception because it only ever starts systemctl with one of
-// four fixed argument lists.
+// package's exception because it only ever starts systemctl with fixed
+// argument lists; the one variable part, a restore id, is 16 hex digits.
 type Units struct{}
+
+// StartRestore starts restore id in its own unit and returns at once.
+func (Units) StartRestore(ctx context.Context, id string) error {
+	if !restoreIDRe.MatchString(id) {
+		return fmt.Errorf("%w: restore id", ErrInvalid)
+	}
+
+	return systemctl(ctx, "start", "--no-block", RestoreUnit+id+".service")
+}
 
 // StartRun starts a run now and returns at once; systemd ignores the
 // request while a run is active.

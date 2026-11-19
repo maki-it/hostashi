@@ -37,6 +37,7 @@ type Units interface {
 	Reload(ctx context.Context) error
 	EnableTimer(ctx context.Context) error
 	DisableTimer(ctx context.Context) error
+	StartRestore(ctx context.Context, id string) error
 }
 
 // Errors of the agent side.
@@ -53,8 +54,12 @@ type Agent struct {
 	ConfigDir string // default ConfigDir
 	StatusDir string // default StatusDir
 	DropIn    string // default TimerDropIn
-	Units     Units
-	Host      string // comment of the public key
+	// StateDir holds the site registry (default AgentStateDir); UnitDir is
+	// where restore drop-ins go (default UnitDir).
+	StateDir string
+	UnitDir  string
+	Units    Units
+	Host     string // comment of the public key
 
 	mu sync.Mutex
 }
@@ -432,8 +437,11 @@ func (a *Agent) pinnedHostKey(t Target) (ssh.PublicKey, error) {
 }
 
 // Running reports whether a run holds the lock in statusDir.
-func Running(statusDir string) bool {
-	fd, err := unix.Open(filepath.Join(statusDir, "run.lock"), unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+func Running(statusDir string) bool { return held(filepath.Join(statusDir, runLock)) }
+
+// held reports whether someone holds the lock file at path.
+func held(path string) bool {
+	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return false
 	}

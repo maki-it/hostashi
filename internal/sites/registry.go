@@ -116,10 +116,16 @@ func OpenRegistry(dir string, ownerUID uint32) (*Registry, error) {
 	return reg, nil
 }
 
-// ReadHomes returns the home directory of every registered site, keyed by
-// user, without writing anything: for readers outside the agent such as the
+// Home is where a registered site lives and whose its files are.
+type Home struct {
+	Path     string
+	UID, GID uint32
+}
+
+// ReadHomes returns the home of every registered site, keyed by user,
+// without writing anything: for readers outside the agent such as the
 // backup run. A missing registry means no sites.
-func ReadHomes(dir string, ownerUID uint32) (map[string]string, error) {
+func ReadHomes(dir string, ownerUID uint32) (map[string]Home, error) {
 	if err := checkStateDir(dir, ownerUID); err != nil {
 		return nil, err
 	}
@@ -130,7 +136,7 @@ func ReadHomes(dir string, ownerUID uint32) (map[string]string, error) {
 
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		return map[string]string{}, nil
+		return map[string]Home{}, nil
 	case err != nil:
 		return nil, err
 	}
@@ -139,7 +145,7 @@ func ReadHomes(dir string, ownerUID uint32) (map[string]string, error) {
 		return nil, err
 	}
 
-	out := make(map[string]string, len(reg.sites))
+	out := make(map[string]Home, len(reg.sites))
 
 	for _, site := range reg.sites {
 		p, ok := reg.pools[site.Pool]
@@ -147,7 +153,7 @@ func ReadHomes(dir string, ownerUID uint32) (map[string]string, error) {
 			return nil, fmt.Errorf("site %q: unknown pool %q", site.User, site.Pool)
 		}
 
-		out[site.User] = p.Path + "/" + site.User
+		out[site.User] = Home{Path: p.Path + "/" + site.User, UID: site.UID, GID: site.GID}
 	}
 
 	return out, nil

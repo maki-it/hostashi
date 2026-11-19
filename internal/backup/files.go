@@ -175,7 +175,7 @@ func Sites(stateDir string, ownerUID uint32) ([]Site, error) {
 
 	out := make([]Site, 0, len(homes))
 	for name, home := range homes {
-		out = append(out, Site{Name: name, Home: home, Databases: bySite[name]})
+		out = append(out, Site{Name: name, Home: home.Path, UID: home.UID, GID: home.GID, Databases: bySite[name]})
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

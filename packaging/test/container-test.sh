@@ -215,7 +215,7 @@ step "a database for the PHP site (MariaDB)"
 [ "$(x mariadb -Nse 'SELECT @@bind_address')" = 127.0.0.1 ] || fail "mariadb listens on more than loopback"
 x /usr/local/bin/hostashi db create wp wp_db
 xi /usr/local/bin/hostashi db user create wp_db wp_user <<<"Test-db-pass_12345"
-x /usr/local/bin/hostashi db list | grep -q '^wp_db	site=wp	users=wp_user$' || fail "db list: $(x /usr/local/bin/hostashi db list)"
+x /usr/local/bin/hostashi db list | grep '^wp_db	site=wp	users=wp_user$' >/dev/null || fail "db list: $(x /usr/local/bin/hostashi db list)"
 expect_mode /var/lib/hostashi-agent/databases.json "600 root:root"
 if xi /usr/local/bin/hostashi db create wp mysql </dev/null; then fail "system database accepted"; fi
 # The site's PHP reaches its database over the socket, like WordPress with DB_HOST localhost.
@@ -297,18 +297,20 @@ x grep -q '"ready":true' /tmp/api.out || fail "not ready after the host key: $(x
 rm -f /tmp/bk.$$
 [ "$(x systemctl is-enabled hostashi-backup.timer)" = enabled ] || fail "backup timer not on after setup"
 x systemctl cat hostashi-backup.timer | grep -q '^OnCalendar=\*-\*-\* 02:00:00$' || fail "timer window not applied"
-x /usr/local/bin/hostashi backup key show | grep -q '^restic password: ' || fail "backup key show"
+x /usr/local/bin/hostashi backup key show | grep '^restic password: ' >/dev/null || fail "backup key show"
 r() { x env RESTIC_REPOSITORY=sftp://u1@sftp.test:2299/hostashi RESTIC_PASSWORD_FILE=/etc/hostashi-agent/backup/password \
   restic -o 'sftp.args=-F /dev/null -i /etc/hostashi-agent/backup/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/hostashi-agent/backup/known_hosts' --no-cache "$@"; }
 # A site with a file and a database.
 x /usr/local/bin/hostashi site create bk
 xi runuser -u bk -- sh -c 'cat >/home/bk/htdocs/index.html' <<<"backed up"
+# A symlink the site user planted: restored as a link, never followed.
+x runuser -u bk -- ln -s /etc /home/bk/htdocs/etc-link
 x /usr/local/bin/hostashi db create bk bk_db
 x mariadb -e "CREATE TABLE bk_db.t (v VARCHAR(20)); INSERT INTO bk_db.t VALUES ('from the dump');"
 x systemctl start hostashi-backup.service || fail "backup run failed: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 x grep -q '"ok": true' /var/lib/hostashi-agent/backup/status.json || fail "status: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 x grep -q '"initialized": true' /var/lib/hostashi-agent/backup/status.json || fail "first run did not create the repository"
-x /usr/local/bin/hostashi backup status | grep -q '"ok": true' || fail "backup status through the agent"
+x /usr/local/bin/hostashi backup status | grep '"ok": true' >/dev/null || fail "backup status through the agent"
 if [ "$(api GET /api/v1/sites/bk/backups)" != 200 ] || ! x grep -q '"kind":"db","database":"bk_db"' /tmp/api.out; then
   fail "site snapshots through the API: $(x cat /tmp/api.out)"
 fi
@@ -332,6 +334,34 @@ x grep -q '"ok": true' /var/lib/hostashi-agent/backup/status.json || fail "secon
 # Retention keeps the newest snapshot per day, and restic also keeps the
 # oldest one while fewer days than the policy exist: two snapshots now.
 [ "$(r snapshots --tag site:bk,kind:files --json | grep -o '"short_id"' | wc -l)" = 2 ] || fail "second run made no snapshot"
+# Restore into a new directory of the home, through the API.
+restore() {
+  [ "$(api POST "/api/v1/sites/bk/backups/$1/restore")" = 202 ] || fail "restore $1: $(x cat /tmp/api.out)"
+  local id
+  id=$(x grep -o '"id":"[0-9a-f]\{16\}"' /tmp/api.out | cut -d'"' -f4)
+  for _ in $(seq 1 90); do
+    api GET "/api/v1/backups/restores/$id" >/dev/null
+    x grep -q '"state":"\(done\|failed\)"' /tmp/api.out && break
+    sleep 1
+  done
+  x grep -q '"state":"done"' /tmp/api.out || fail "restore $1: $(x cat /tmp/api.out; x journalctl -u "hostashi-restore@$id.service" --no-pager | tail -20)"
+  x grep -o '"dir":"restore-[0-9-]*"' /tmp/api.out | cut -d'"' -f4
+}
+[ "$(api GET /api/v1/sites/bk/backups)" = 200 ] || fail "snapshot list"
+files_snap=$(x grep -o '"id":"[0-9a-f]\{64\}","time":"[^"]*","kind":"files"' /tmp/api.out | head -1 | cut -d'"' -f4)
+db_snap=$(x grep -o '"id":"[0-9a-f]\{64\}","time":"[^"]*","kind":"db"' /tmp/api.out | head -1 | cut -d'"' -f4)
+[ -n "$files_snap" ] && [ -n "$db_snap" ] || fail "no snapshot ids in $(x cat /tmp/api.out)"
+dir=$(restore "$files_snap")
+[ "$(x cat "/home/bk/$dir/htdocs/index.html")" = "backed up" ] || fail "restored file"
+[ "$(x stat -c '%U %a' "/home/bk/$dir")" = "bk 700" ] || fail "restore directory: $(x stat -c '%U %a' "/home/bk/$dir")"
+[ "$(x stat -c '%U' "/home/bk/$dir/htdocs/index.html")" = bk ] || fail "restored file owner"
+[ "$(x readlink "/home/bk/$dir/htdocs/etc-link")" = /etc ] || fail "planted symlink not restored as a link"
+[ "$(x cat /home/bk/htdocs/index.html)" = "backed up" ] || fail "live site changed"
+sleep 1 # the next directory name has a new second
+dir=$(restore "$db_snap")
+x grep -q "from the dump" "/home/bk/$dir/bk_db.sql" || fail "restored dump"
+# The restore unit is no more exposed than the backup run.
+x systemd-analyze security "hostashi-restore@0000000000000000.service" | tail -1
 x /usr/local/bin/hostashi db delete bk_db
 x /usr/local/bin/hostashi site delete bk
 

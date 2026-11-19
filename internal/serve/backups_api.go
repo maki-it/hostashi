@@ -30,6 +30,10 @@ type Backups interface {
 	// ScanHostKey connects to the target and returns its host key, for
 	// the administrator to confirm.
 	ScanHostKey(ctx context.Context, t agentapi.BackupTarget) (ssh.PublicKey, error)
+	// Restore starts restoring a snapshot of a site into a new directory
+	// in its home; GetRestore reports how it goes.
+	Restore(ctx context.Context, site, snapshot string) (agentapi.BackupRestore, error)
+	GetRestore(ctx context.Context, id string) (agentapi.BackupRestore, error)
 }
 
 // RPCBackups implements Backups with the agent. BeforeRun, if set, runs
@@ -79,6 +83,16 @@ func (b RPCBackups) Snapshots(ctx context.Context, site string) ([]agentapi.Back
 	return r.Snapshots, err
 }
 
+// Restore implements Backups.
+func (b RPCBackups) Restore(ctx context.Context, site, snapshot string) (agentapi.BackupRestore, error) {
+	return agentapi.BackupRestoreStart.Call(ctx, b.C, agentapi.BackupRestoreRequest{Site: site, Snapshot: snapshot})
+}
+
+// GetRestore implements Backups.
+func (b RPCBackups) GetRestore(ctx context.Context, id string) (agentapi.BackupRestore, error) {
+	return agentapi.BackupRestoreGet.Call(ctx, b.C, agentapi.BackupRestoreGetRequest{ID: id})
+}
+
 // ScanHostKey implements Backups.
 func (RPCBackups) ScanHostKey(ctx context.Context, t agentapi.BackupTarget) (ssh.PublicKey, error) {
 	return backup.FetchHostKey(ctx, t)
@@ -90,7 +104,14 @@ type backupJSON struct {
 }
 
 func backupFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
+	var ae *agentrpc.Error
+
 	switch {
+	case errors.Is(err, backup.ErrSnapshotNotFound), errors.Is(err, backup.ErrRestoreNotFound),
+		errors.As(err, &ae) && ae.Code == agentrpc.CodeNotFound:
+		writeError(w, http.StatusNotFound, "not_found", "no such snapshot or restore")
+	case errors.Is(err, backup.ErrRestoreBusy):
+		writeError(w, http.StatusConflict, "restore_running", "a restore is in progress")
 	case errors.Is(err, agentapi.ErrBackupInvalid):
 		writeError(w, http.StatusUnprocessableEntity, "invalid_argument", err.Error())
 	case errors.Is(err, backup.ErrBadHostKey):
@@ -261,5 +282,45 @@ func registerBackups(mux *http.ServeMux, a authn, b Backups, log *slog.Logger) {
 
 	mux.HandleFunc("GET /api/v1/backups/panel", admin("backups:read", func(w http.ResponseWriter, r *http.Request) {
 		snapshots(w, r, "")
+	}))
+
+	// A restore writes a new directory restore-<time> into the site's
+	// home and never touches live files; it is still high-risk, because
+	// it puts old data back into reach of the site.
+	mux.HandleFunc("POST /api/v1/sites/{name}/backups/{snapshot}/restore", admin("backups:restore", func(w http.ResponseWriter, r *http.Request) {
+		req := agentapi.BackupRestoreRequest{Site: r.PathValue("name"), Snapshot: r.PathValue("snapshot")}
+		if req.Validate() != nil {
+			writeError(w, http.StatusNotFound, "not_found", "no such snapshot or restore")
+
+			return
+		}
+
+		res, err := b.Restore(r.Context(), req.Site, req.Snapshot)
+		if err != nil {
+			backupFail(log, w, err, "start restore")
+
+			return
+		}
+
+		log.Info("restore started", "id", res.ID, "site", res.Site, "snapshot", res.Snapshot, "dir", res.Dir)
+		writeJSON(w, http.StatusAccepted, res)
+	}))
+
+	mux.HandleFunc("GET /api/v1/backups/restores/{id}", admin("backups:read", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if (agentapi.BackupRestoreGetRequest{ID: id}).Validate() != nil {
+			writeError(w, http.StatusNotFound, "not_found", "no such snapshot or restore")
+
+			return
+		}
+
+		res, err := b.GetRestore(r.Context(), id)
+		if err != nil {
+			backupFail(log, w, err, "restore status")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, res)
 	}))
 }
