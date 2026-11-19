@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 
@@ -392,10 +393,49 @@ func (s *Service) SetSiteLimits(ctx context.Context, actor int64, name, preset s
 	return v, applyErr
 }
 
+// Usage is the measured disk use of a site's files.
+type Usage struct {
+	Bytes  uint64 // allocated bytes (st_blocks * 512)
+	Inodes uint64 // files, directories and links
+}
+
+// ImportHeadroom is the share added to the measured use of an imported
+// site, in percent (ADR-0015).
+const ImportHeadroom = 50
+
+// ImportLimits are the limits of an imported site: the default preset's
+// values, with disk space and files raised to the measured use plus
+// ImportHeadroom where that is more (rounded up to whole GiB and thousand
+// files). It reports whether a value was raised: then the site no longer
+// follows the preset.
+func ImportLimits(def store.Limits, u Usage) (store.Limits, bool) {
+	const gib = 1 << 30
+
+	out, raised := def, false
+
+	need := func(used, unit, maxV uint64) int64 {
+		v := used + used*ImportHeadroom/100
+		v = (v + unit - 1) / unit * unit
+
+		return int64(min(v, maxV, math.MaxInt64))
+	}
+
+	if b := need(u.Bytes, gib, agentapi.MaxQuotaBytes); def.DiskBytes != 0 && b > def.DiskBytes {
+		out.DiskBytes, raised = b, true
+	}
+
+	if i := need(u.Inodes, 1000, agentapi.MaxQuotaInodes); def.DiskInodes != 0 && i > def.DiskInodes {
+		out.DiskInodes, raised = i, true
+	}
+
+	return out, raised
+}
+
 // storeDefaultLimits gives a new site the default preset, before its
-// web state is applied. It reports false (and logs why) when the site gets
-// no limits; the site itself stays.
-func (s *Service) storeDefaultLimits(ctx context.Context, site store.Site) (store.Limits, bool) {
+// web state is applied; with usage (an import) the disk limits are raised
+// to fit (ImportLimits). It reports false (and logs why) when the site
+// gets no limits; the site itself stays.
+func (s *Service) storeDefaultLimits(ctx context.Context, site store.Site, usage *Usage) (store.Limits, bool) {
 	if s.limits == nil {
 		return store.Limits{}, false
 	}
@@ -407,13 +447,21 @@ func (s *Service) storeDefaultLimits(ctx context.Context, site store.Site) (stor
 		return store.Limits{}, false
 	}
 
-	if err := s.st.SetSiteLimits(ctx, site.ID, p.ID, p.Limits, s.now()); err != nil {
+	l, presetID := p.Limits, p.ID
+
+	if usage != nil {
+		if raised, ok := ImportLimits(p.Limits, *usage); ok {
+			l, presetID = raised, 0
+		}
+	}
+
+	if err := s.st.SetSiteLimits(ctx, site.ID, presetID, l, s.now()); err != nil {
 		s.log.ErrorContext(ctx, "store limits of a new site", "site", site.Name, "err", err)
 
 		return store.Limits{}, false
 	}
 
-	return p.Limits, true
+	return l, true
 }
 
 // phpWorkers is the worker count to send for a site: its limit, or 0 (the

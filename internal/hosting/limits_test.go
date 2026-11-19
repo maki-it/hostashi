@@ -341,3 +341,61 @@ func TestPHPWorkersReachThePool(t *testing.T) {
 		t.Errorf("static site workers: %d %v", n, ok)
 	}
 }
+
+func TestImportLimits(t *testing.T) {
+	def := store.Limits{DiskBytes: 10 << 30, DiskInodes: 500_000, MemoryBytes: 512 << 20, PHPWorkers: 5, Tasks: 128, CPUPriority: "normal"}
+
+	if l, raised := ImportLimits(def, Usage{Bytes: 2 << 30, Inodes: 1000}); raised || l != def {
+		t.Errorf("small site: %+v %v", l, raised)
+	}
+
+	// 9 GiB * 1.5 = 13.5 GiB -> 14 GiB; 400k * 1.5 = 600k files.
+	l, raised := ImportLimits(def, Usage{Bytes: 9 << 30, Inodes: 400_000})
+	if !raised || l.DiskBytes != 14<<30 || l.DiskInodes != 600_000 || l.MemoryBytes != def.MemoryBytes || l.PHPWorkers != 5 {
+		t.Errorf("large site: %+v %v", l, raised)
+	}
+
+	if l, _ := ImportLimits(def, Usage{Bytes: 1, Inodes: 333_334}); l.DiskBytes != def.DiskBytes || l.DiskInodes != 501_000 {
+		t.Errorf("rounding: %+v", l)
+	}
+
+	if l, _ := ImportLimits(def, Usage{Bytes: 1 << 62}); l.DiskBytes != int64(agentapi.MaxQuotaBytes) {
+		t.Errorf("clamp: %d", l.DiskBytes)
+	}
+
+	open := def
+	open.DiskBytes, open.DiskInodes = 0, 0
+
+	if l, raised := ImportLimits(open, Usage{Bytes: 100 << 30, Inodes: 5_000_000}); raised || l != open {
+		t.Errorf("unlimited stays unlimited: %+v %v", l, raised)
+	}
+}
+
+func TestCreateWithUsage(t *testing.T) {
+	s, _, _ := newService(t)
+	ctx := t.Context()
+	ag := newFakeLimits()
+
+	s.EnableLimits(ag)
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "big", Domains: []string{"big.example.com"}, Usage: &Usage{Bytes: 20 << 30, Inodes: 100}}); err != nil {
+		t.Fatal(err)
+	}
+
+	v, err := s.SiteLimits(ctx, "big")
+	if err != nil || v.Preset != "" || v.Limits.DiskBytes != 30<<30 || v.Limits.DiskInodes != 500_000 || v.Limits.MemoryBytes != 512<<20 {
+		t.Fatalf("imported big site %+v %v", v, err)
+	}
+
+	if ag.quotas["big"] != [2]uint64{30 << 30, 500_000} {
+		t.Errorf("quota %v", ag.quotas["big"])
+	}
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "tiny", Domains: []string{"tiny.example.com"}, Usage: &Usage{Bytes: 1 << 20, Inodes: 10}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if v, _ := s.SiteLimits(ctx, "tiny"); v.Preset != "small" {
+		t.Errorf("small import should follow the default preset: %+v", v)
+	}
+}
