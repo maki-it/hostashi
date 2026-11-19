@@ -1,0 +1,70 @@
+# ADR-0028 Cron jobs per site
+
+**Status:** Proposed. **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0007 (isolation model), ADR-0015 (per-site resource limits, Proposed), ADR-0017 (CloudPanel import), ADR-0026 (migration transfer), [`03-features.md`](../03-features.md) row "Cron jobs per site" (P0).
+
+Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
+
+## Context
+
+- The feature row asks for cron jobs per site with a validator instead of deny lists, systemd timers as an option, and jobs that can be paused and run at once [V: `03-features.md`].
+- Hostashi has no cron support yet. The CloudPanel scanner already reads each site user's crontab and reports schedule, command and line, and flags environment lines, `%` in commands and paths into other homes [V: `internal/cloudpanel/scan/cron.go`]. The migration plan marks such sites "review: cron jobs are not carried over yet" [V: `internal/cloudpanel/plan`].
+- web2 has 22 sites; how many of them have cron jobs is not known to the project [U]. WordPress sites often run `wp-cron.php` from cron instead of on page loads [U].
+- ADR-0015 wants every process of a site, cron included, inside the site's slice so limits apply [V: ADR-0015 section 2]. Classic cron starts jobs outside any per-site cgroup [U].
+- The agent already starts and stops systemd units with fixed arguments through the reviewed `os/exec` exceptions `phpctl` and `resticctl` [V: `.golangci.yml`]. The per-site PHP masters are systemd template units with sandboxing [V: `packaging/systemd/hostashi-php@.service`].
+- A cron command is a shell command line written by the admin. It runs as the site user, who can already run any code through PHP [A]. So the command itself grants no new privilege; the risks are in how it reaches the system (quoting into a unit file, `%` specifiers, a job that runs as root by mistake) [A].
+
+## Options
+
+| Option | Pro | Contra |
+|--------|-----|--------|
+| **A. One systemd timer and service per job, rendered by the agent; the command lives in a script file, the unit runs it as the site user** | Runs inside the site's slice and sandbox like PHP. No overlapping runs (systemd does not start a running service again). Status, last exit code and logs per job from systemd and the journal. "Run now" is a plain start, "pause" stops the timer | Cron's five fields must be translated into `OnCalendar=`; a few cron forms have no exact match (see below). One more unit pair per job |
+| B. Classic cron: write the site user's crontab (`/var/spool/cron/crontabs/<user>`) | Familiar, exact cron semantics, no translation | Jobs run outside the site's cgroup and without sandbox. Overlapping runs, output by mail or lost. Status and "run now" need extra plumbing. Writing the spool file bypasses `crontab`'s own checks [U] |
+| C. A scheduler inside the agent that starts transient units (`systemd-run`) | No unit files on disk | The agent becomes a clock; runs are missed while it restarts. More of our own code for what systemd already does |
+
+## Recommendation
+
+**Option A.**
+
+**Jobs**
+
+- A job belongs to one site and has: an id, a schedule, a command, a timeout (default 1 hour, at most 24 hours), and a paused flag. At most 50 jobs per site [E].
+- The panel database is the desired state, like sites and pages; every change sends the site's complete job list to the agent (one agent op), which renders and reconciles the units [A: same pattern as `web.apply`].
+
+**Schedule: a validator, not free text**
+
+- Accepted: the five cron fields with numbers, ranges, lists and steps (`*/5`, `1-5`, `0,30`), month and weekday names, and the keywords `@hourly`, `@daily`, `@weekly`, `@monthly`, `@yearly`. Not accepted: `@reboot`, and anything the validator does not understand [A].
+- The agent translates the fields into `OnCalendar=` and checks the result with systemd's own parser before it writes the unit [A]. Two cron rules differ: when day-of-month and day-of-week are both restricted, cron runs on either, systemd on both. Such a schedule becomes two `OnCalendar=` lines, which systemd joins with "or" [U]. Steps on ranges (`1-30/5`) are expanded into lists [A].
+- Timezone: the server's timezone, as cron [A]. `RandomizedDelaySec=` stays 0 so jobs keep their exact minute; `AccuracySec=1s` [A].
+- Missed runs while the server was off are not caught up (`Persistent=false`), as cron [A].
+
+**Command**
+
+- The command is stored as given, at most 4 KiB, one line, no NUL [E]. It is written to a root-owned script file `/var/lib/hostashi-agent/cron/<site>/<id>.sh` (`0644`, the site user reads it) that runs it with `/bin/sh -c`; the unit's `ExecStart=` names only that file, so nothing the admin typed passes through systemd's unit syntax or `%` specifiers [A].
+- `%` keeps its shell meaning; cron's "percent becomes newline" is not copied. The importer flags such commands for review (it already does [V: `cron_percent` finding]).
+- No environment from the panel in the first step. `HOME`, `USER`, `PATH` and `SHELL` are set by the unit [A]. Environment lines from CloudPanel crontabs stay a review finding [V].
+
+**Unit**
+
+- `hostashi-cron-<site>-<id>.service`: `User=` and `Group=` the site user, `Slice=` the site's slice once ADR-0015 lands, `WorkingDirectory=` the home, `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=strict` with `ReadWritePaths=` the home, `ProtectHome=` hiding other homes, `TimeoutStartSec=` the job's timeout, `Type=oneshot` [A: same hardening family as the PHP unit].
+- `hostashi-cron-<site>-<id>.timer` with the translated `OnCalendar=` lines. Paused means the timer is stopped and disabled; the service can still be run once [A].
+- The agent refuses a site user of uid 0 and a site that is disabled; disabling a site stops its timers [A].
+- Output goes to the journal with the unit name; the panel shows the last run (start, end, exit status) and the last lines of output through the agent [A]. Mail is not sent.
+
+**API, UI, CLI**
+
+- `/api/v1/sites/{name}/cron` (list, create, change, delete), `.../cron/{id}/run`, scopes `cron:read` and `cron:write` [A: ADR-0018 conventions]. The view belongs to the frontend thread.
+
+**Import**
+
+- The migration plan carries the scanned jobs that pass the validator; creating the site creates them paused, and activating the import (ADR-0026) does not start them. The admin starts them after the DNS switch, so a job never runs on both servers at once [A].
+
+## Consequences
+
+- No new `os/exec` exception: the agent uses the existing `systemctl` calls (daemon-reload, enable/disable, start/stop with fixed arguments and validated unit names) [A: would extend the documented `phpctl` or `resticctl` exception; to be reviewed in the PR].
+- Unit files appear under `/etc/systemd/system`, named `hostashi-cron-*`, and are removed with the job or the site [A].
+- A schedule that cron accepts but the validator does not (for example `@reboot`) must be rewritten by the admin [A].
+- Needs a spike-sized test: translation table with `systemd-analyze calendar` on Debian 13 and Ubuntu 26.04 in CI [A].
+
+## Open questions
+
+1. Should imported jobs start paused (recommended above) or run as soon as the site is activated?
