@@ -144,6 +144,7 @@ describe("Migrate", () => {
       "GET /api/v1/databases": { body: { databases: [{ name: "shop", site: "shop", users: [], createdAt: "" }] } },
       [`GET ${base}/imports?site=shop`]: { body: { imports: [] } },
       [`POST ${base}/reports/r1/sites/shop/import`]: { status: 202, body: job("queued") },
+      [`POST ${base}/sites/shop/activate`]: { body: { site: "shop", previous: "htdocs-before-import-20261119T100500Z" } },
       [`GET ${base}/imports/imp1`]: () => ({ body: job(polls++ === 0 ? "running" : "done") }),
     });
     render(<Migrate />);
@@ -196,6 +197,12 @@ describe("Migrate", () => {
     expect(status.getByText("120 files, 3.0 MiB")).toBeInTheDocument();
     expect(status.getByText("cloudpanel-import-db/shop-20261119T100100Z.sql")).toBeInTheDocument();
     expect(planCard.getByRole("button", { name: "Import shop again" })).toBeInTheDocument();
+
+    // After the final sync the imported files become the web root.
+    await user.click(status.getByRole("button", { name: "Use imported files as web root" }));
+    await user.click(status.getByRole("button", { name: "Use imported files for shop" }));
+    expect(await status.findByText(/kept as htdocs-before-import-20261119T100500Z/)).toBeInTheDocument();
+    expect(calls).toContainEqual({ method: "POST", path: `${base}/sites/shop/activate`, body: undefined });
   });
 
   it("shows the last import of a created site", async () => {
@@ -232,6 +239,8 @@ describe("Migrate", () => {
     expect(await status.findByText(/^Failed/)).toBeInTheDocument();
     expect(status.getByRole("alert")).toHaveTextContent("the old server refused the key");
     expect(screen.getByRole("button", { name: "Import shop again" })).toBeInTheDocument();
+    // A failed import cannot be made the web root.
+    expect(status.queryByRole("button", { name: "Use imported files as web root" })).not.toBeInTheDocument();
   });
 
   it("explains a rejected report", async () => {

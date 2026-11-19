@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  activateImport,
   createFromPlan,
   deleteReport,
   deleteSource,
@@ -776,7 +777,59 @@ function ImportStatus({ id }: { id: string }) {
           </ul>
         </details>
       )}
+      {job.state === "done" && <Activate site={job.site} />}
       {error && <p role="alert">{error}</p>}
     </section>
+  );
+}
+
+// Activate swaps the imported files in as the web root, after the final
+// sync and before the DNS switch. The old web root is kept.
+function Activate({ site }: { site: string }) {
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState("");
+
+  async function activate() {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await activateImport(site);
+      setDone(`The imported files are the web root of ${r.site} now. The old web root is kept as ${r.previous} in its home.`);
+      setConfirm(false);
+    } catch (err) {
+      setError(migrationMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (done) return <p role="status">{done}</p>;
+
+  return (
+    <div className="keybox">
+      {confirm ? (
+        <>
+          <p>
+            Make the imported files the web root of {site}? Do this after the final sync, before the DNS switch. The current web root is kept
+            and nothing is deleted.
+          </p>
+          <div className="actions">
+            <button type="button" disabled={busy} onClick={() => void activate()}>
+              Use imported files for {site}
+            </button>
+            <button type="button" className="secondary" disabled={busy} onClick={() => setConfirm(false)}>
+              Cancel
+            </button>
+          </div>
+        </>
+      ) : (
+        <button type="button" className="secondary" onClick={() => setConfirm(true)}>
+          Use imported files as web root
+        </button>
+      )}
+      {error && <p role="alert">{error}</p>}
+    </div>
   );
 }
