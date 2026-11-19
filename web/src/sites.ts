@@ -22,11 +22,16 @@ export type Site = {
   state: "creating" | "active" | "deleting" | string;
   php: string; // "" for no PHP
   disabled: boolean; // answers 503, PHP stopped
+  maintenance: SiteMaintenance;
   domains: string[]; // the first one is the primary domain
   tls: SiteTLS;
   createdAt: string;
   updatedAt: string;
 };
+
+// SiteMaintenance: while enabled, addresses outside allowIps get the page
+// with 503; the allowed ones see the site. PHP keeps running.
+export type SiteMaintenance = { enabled: boolean; page: string; allowIps: string[] };
 
 export type PHPVersions = { installed: string[]; supported: string[]; legacy: string[] };
 

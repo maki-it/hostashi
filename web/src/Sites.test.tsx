@@ -14,6 +14,7 @@ const blog: Site = {
   state: "active",
   php: "8.4",
   disabled: false,
+  maintenance: { enabled: false, page: "builtin-maintenance", allowIps: [] },
   domains: ["blog.example.com", "www.blog.example.com"],
   tls: { enabled: true, active: true, hsts: true, domains: ["blog.example.com", "www.blog.example.com"], notAfter: "2027-02-01T00:00:00Z" },
   createdAt: "2026-11-19T08:00:00Z",
@@ -319,5 +320,57 @@ describe("Sites", () => {
     expect(await box.findByText("blog is enabled again.")).toBeInTheDocument();
     expect(screen.queryByText("Disabled", { selector: ".badge" })).not.toBeInTheDocument();
     expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([{ disabled: true }, { disabled: false }]);
+  });
+
+  it("starts maintenance with a page and allowed addresses", async () => {
+    const user = userEvent.setup();
+    let cur: Site = blog;
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": () => ({ body: { sites: [cur] } }),
+      "GET /api/v1/status-pages": {
+        body: {
+          pages: [
+            { id: "builtin-maintenance", name: "Built-in maintenance page", kind: "maintenance", builtin: true, sha256: "", files: [], sites: [] },
+            { id: "builtin-parking", name: "Built-in parking page", kind: "parking", builtin: true, sha256: "", files: [], sites: [] },
+            { id: "p1", name: "Summer break", kind: "maintenance", builtin: false, sha256: "", files: [], sites: [] },
+          ],
+        },
+      },
+      "GET /api/v1/auth/me": { body: { username: "kim", role: "admin", clientIp: "198.51.100.7" } },
+      "PUT /api/v1/sites/blog/maintenance": (b) => {
+        cur = { ...cur, maintenance: b as Site["maintenance"] };
+        return { body: cur };
+      },
+    });
+    render(<Sites />);
+    await user.click(await screen.findByRole("button", { name: "Change settings" }));
+    const box = within(screen.getByRole("group", { name: "Settings of blog" }));
+    const select = await box.findByRole("combobox", { name: "Maintenance page" });
+    await waitFor(() => expect(within(select).getAllByRole("option")).toHaveLength(2));
+    expect(within(select).queryByText("Built-in parking page")).not.toBeInTheDocument();
+    await user.selectOptions(select, "p1");
+
+    const allow = box.getByRole("textbox", { name: /Allowed addresses/ });
+    await user.type(allow, "not-an-ip");
+    await user.click(box.getByRole("button", { name: "Start maintenance" }));
+    expect(box.getByRole("alert")).toHaveTextContent('"not-an-ip" is not an IP address');
+    expect(calls.some((c) => c.method === "PUT")).toBe(false);
+
+    await user.clear(allow);
+    await user.type(allow, "10.0.0.0/8");
+    await user.click(box.getByRole("button", { name: "Add my current IP" }));
+    await waitFor(() => expect(allow).toHaveValue("10.0.0.0/8\n198.51.100.7"));
+    await user.click(box.getByRole("button", { name: "Start maintenance" }));
+    expect(await box.findByText("Maintenance is on. The listed addresses still see the site.")).toBeInTheDocument();
+    expect(screen.getByText("Maintenance", { selector: ".badge" })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Details of blog")).getByText(/except 10.0.0.0\/8, 198.51.100.7/)).toBeInTheDocument();
+
+    await user.click(box.getByRole("button", { name: "End maintenance" }));
+    expect(await box.findByText("Maintenance is off. Everybody sees the site again.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([
+      { enabled: true, page: "p1", allowIps: ["10.0.0.0/8", "198.51.100.7"] },
+      { enabled: false, page: "p1", allowIps: ["10.0.0.0/8", "198.51.100.7"] },
+    ]);
   });
 });

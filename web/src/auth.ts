@@ -3,7 +3,7 @@
 import { ApiError, request } from "./api";
 import { getAssertion } from "./webauthn";
 
-export type User = { username: string; role: string };
+export type User = { username: string; role: string; clientIp?: string };
 
 export async function setupRequired(): Promise<boolean> {
   const r = await request<{ required: boolean }>("GET", "/setup");

@@ -6,6 +6,7 @@ import { Backups } from "./Backups";
 import { Databases } from "./Databases";
 import { Home } from "./Home";
 import { Login } from "./Login";
+import { Pages } from "./Pages";
 import { Setup } from "./Setup";
 import { Sites } from "./Sites";
 
@@ -16,12 +17,14 @@ type View =
   | { kind: "home"; user: User }
   | { kind: "error" };
 
-type Page = "home" | "sites" | "databases" | "backups";
+type Page = "home" | "sites" | "pages" | "databases" | "backups";
 
 const pageFromHash = (): Page => {
   switch (window.location.hash) {
     case "#/sites":
       return "sites";
+    case "#/pages":
+      return "pages";
     case "#/databases":
       return "databases";
     case "#/backups":
@@ -71,6 +74,9 @@ export function App() {
             <a href="#/sites" aria-current={page === "sites" ? "page" : undefined}>
               Sites
             </a>
+            <a href="#/pages" aria-current={page === "pages" ? "page" : undefined}>
+              Pages
+            </a>
             <a href="#/databases" aria-current={page === "databases" ? "page" : undefined}>
               Databases
             </a>
@@ -97,6 +103,7 @@ export function App() {
       )}
       {view.kind === "home" && page === "home" && <Home user={view.user} onLogout={() => setView({ kind: "login" })} />}
       {view.kind === "home" && page === "sites" && <Sites />}
+      {view.kind === "home" && page === "pages" && <Pages />}
       {view.kind === "home" && page === "databases" && <Databases />}
       {view.kind === "home" && page === "backups" && <Backups />}
     </main>
