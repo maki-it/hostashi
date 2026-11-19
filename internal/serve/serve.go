@@ -106,6 +106,9 @@ type Deps struct {
 	// CloudPanel keeps uploaded scan reports (ADR-0017); nil disables the
 	// migration routes. Needs Auth.
 	CloudPanel *cpmigrate.Service
+	// CloudPanelSource is the old server of the migration (ADR-0026); nil
+	// disables its routes. Needs Auth and Settings (for the audit log).
+	CloudPanelSource CloudPanelSource
 	// Metrics counts requests and serves /metrics (ADR-0022); nil turns both
 	// off. The endpoint needs Auth and Settings.
 	Metrics  *metrics.Metrics
@@ -174,6 +177,10 @@ func Handler(cfg Config, deps Deps) http.Handler {
 
 		if deps.CloudPanel != nil {
 			registerMigrations(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.CloudPanel, log)
+		}
+
+		if deps.CloudPanelSource != nil && deps.Settings != nil {
+			registerCloudPanelSource(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.CloudPanelSource, deps.Settings, log)
 		}
 
 		if deps.Metrics != nil && deps.Settings != nil {
@@ -315,6 +322,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
+	deps.CloudPanelSource = RPCCloudPanelSource{C: client}
 
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
