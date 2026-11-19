@@ -20,6 +20,16 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 T=$(mktemp -d)
 SHELLCHECK=$(command -v shellcheck)
+# The host's own tools without its initramfs generators: a CI runner may
+# have dracut installed, which would win the detection over the stubs.
+SYS=$T/sys
+mkdir -p "$SYS"
+for d in /bin /usr/bin /sbin /usr/sbin; do
+  for f in "$d"/*; do
+    case "${f##*/}" in dracut | lsinitrd | lsinitramfs | update-initramfs | mkinitramfs) continue;; esac
+    [ -e "$SYS/${f##*/}" ] || ln -s "$f" "$SYS/${f##*/}"
+  done
+done
 trap 'rm -rf "$T"' EXIT
 FAKE=$T/bin
 FAILS=0 PASSES=0
@@ -88,7 +98,7 @@ F
 # load sources the installer's functions with the test paths.
 load() {
   export Q=$T/q E=$T/etc
-  export PATH="$FAKE:/usr/bin:/bin"
+  export PATH="$FAKE:$SYS"
   export HOSTASHI_ETC=$T/etc HOSTASHI_DRACUT_MODULES=$T/dracut HOSTASHI_STATE_DIR=$T/state HOSTASHI_BOOT_ID=$T/q/boot_id HOSTASHI_BOOT=$T/boot HOSTASHI_LIB=1
   # shellcheck source=packaging/install.sh
   . "$HERE/install.sh"
