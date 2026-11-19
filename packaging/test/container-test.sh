@@ -298,7 +298,40 @@ x mariadb -e 'DROP TABLE wp_api.t'
 [ "$(api POST /api/v1/databases/wp_api/import '{"path":"api.sql"}')" = 202 ] || fail "import: $(x cat /tmp/api.out)"
 api_job
 [ "$(x mariadb -Nse 'SELECT i FROM wp_api.t')" = 7 ] || fail "API import did not restore the table"
+
+step "cron jobs of a site (ADR-0028)"
+# The job writes who and where it runs, and whether other homes and /etc
+# are hidden or read-only for it.
+[ "$(api POST /api/v1/sites/wp/cron '{"schedule":"*/5 * * * *","command":"{ id -un; pwd; ls /home; touch /etc/x 2>/dev/null && echo etc-writable; echo 100%; } > cron.out 2>&1"}')" = 201 ] ||
+  fail "create cron job: $(x cat /tmp/api.out)"
+cid=$(x cat /tmp/api.out | sed -n 's/^{"id":\([0-9]*\),.*/\1/p')
+[ -n "$cid" ] || fail "no cron job id: $(x cat /tmp/api.out)"
+cunit="hostashi-cron-wp-$cid"
+x systemctl is-active --quiet "$cunit.timer" || fail "cron timer not running"
+x systemctl is-enabled --quiet "$cunit.timer" || fail "cron timer not enabled"
+[ "$(x stat -c '%a %U:%G' "/var/lib/hostashi-cron/wp/$cid.sh")" = "640 root:wp" ] || fail "cron script has the wrong owner or mode"
+[ "$(x systemctl show -P Nice "$cunit.service")" = 10 ] || fail "cron job does not run with Nice=10"
+[ "$(x systemctl show -P Slice "$cunit.service")" = hostashi-site-wp.slice ] || fail "cron job is not in the site's slice"
+[ "$(api POST "/api/v1/sites/wp/cron/$cid/run")" = 202 ] || fail "run cron job: $(x cat /tmp/api.out)"
+for _ in $(seq 1 30); do x test -s /home/wp/cron.out && ! x systemctl is-active --quiet "$cunit.service" && break; sleep 1; done
+out=$(x cat /home/wp/cron.out)
+[ "$out" = "$(printf 'wp\n/home/wp\nwp\n100%%')" ] || fail "cron job wrote '$out'"
+if [ "$(api GET /api/v1/sites/wp/cron)" != 200 ] || ! x grep -q '"result":"success"' /tmp/api.out || ! x grep -q '"exitStatus":0' /tmp/api.out; then
+  fail "cron status: $(x cat /tmp/api.out)"
+fi
+# Pause, then a disabled site keeps the timer stopped until it is enabled.
+[ "$(api PUT "/api/v1/sites/wp/cron/$cid" '{"schedule":"*/5 * * * *","command":"true","paused":true}')" = 200 ] || fail "pause: $(x cat /tmp/api.out)"
+! x systemctl is-active --quiet "$cunit.timer" || fail "paused cron timer still running"
+[ "$(api PUT "/api/v1/sites/wp/cron/$cid" '{"schedule":"*/5 * * * *","command":"true"}')" = 200 ] || fail "resume: $(x cat /tmp/api.out)"
+x systemctl is-active --quiet "$cunit.timer" || fail "resumed cron timer not running"
+[ "$(api PUT /api/v1/sites/wp/disabled '{"disabled":true}')" = 200 ] || fail "disable site: $(x cat /tmp/api.out)"
+! x systemctl is-active --quiet "$cunit.timer" || fail "cron timer of a disabled site still running"
+[ "$(api POST "/api/v1/sites/wp/cron/$cid/run")" = 409 ] || fail "run on a disabled site: $(x cat /tmp/api.out)"
+[ "$(api PUT /api/v1/sites/wp/disabled '{"disabled":false}')" = 200 ] || fail "enable site: $(x cat /tmp/api.out)"
+x systemctl is-active --quiet "$cunit.timer" || fail "cron timer not back after enabling the site"
 [ "$(api DELETE /api/v1/sites/wp)" = 204 ] || fail "delete PHP site: $(x cat /tmp/api.out)"
+x test ! -e "/etc/systemd/system/$cunit.timer" || fail "cron units of a deleted site still there"
+x test ! -e /var/lib/hostashi-cron/wp || fail "cron scripts of a deleted site still there"
 ! x systemctl is-active --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit still running after delete"
 x test ! -e /home/wp || fail "PHP site home still there"
 [ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User='wp_api'")" ] || fail "database user of a deleted site still there"

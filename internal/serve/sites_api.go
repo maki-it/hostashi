@@ -397,6 +397,11 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 			return
 		}
 
+		// The cron jobs too (ADR-0028); a site that fails is logged.
+		if err := svc.SyncCron(ctx); err != nil {
+			log.WarnContext(ctx, "cron sync", "err", err)
+		}
+
 		w.WriteHeader(http.StatusNoContent)
 	}))
 }
