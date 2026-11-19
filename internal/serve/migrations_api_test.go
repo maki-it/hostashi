@@ -169,6 +169,14 @@ func (s *stubImports) List(_ context.Context, site string) ([]agentapi.CloudPane
 	return out, nil
 }
 
+func (s *stubImports) Activate(_ context.Context, site string) (agentapi.CloudPanelActivated, error) {
+	if site == "empty" {
+		return agentapi.CloudPanelActivated{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "import the site's files first"}
+	}
+
+	return agentapi.CloudPanelActivated{Site: site, Previous: "htdocs-before-import-20261119-120000"}, nil
+}
+
 func (s *stubImports) Get(_ context.Context, id string) (agentapi.CloudPanelImport, error) {
 	if id != "0123456789abcdef" {
 		return agentapi.CloudPanelImport{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "no such import"}
@@ -272,8 +280,22 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 		}
 	}
 
+	const activate = "/api/v1/migrations/cloudpanel/sites/shop/activate"
+
+	if rec := e.do(t, reqOpts{method: "POST", path: activate, header: read}); rec.Code != http.StatusForbidden {
+		t.Fatalf("activate with read token: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: activate, cookie: c}); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"previous":"htdocs-before-import-`) {
+		t.Fatalf("activate: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/migrations/cloudpanel/sites/empty/activate", cookie: c}); rec.Code != http.StatusConflict {
+		t.Fatalf("activate without import: %d %s", rec.Code, rec.Body)
+	}
+
 	var n int
-	if err := e.st.RawCount(t.Context(), `SELECT count(*) FROM audit_log WHERE action LIKE ? AND action <> 'cloudpanel.report.upload'`, "cloudpanel.%", &n); err != nil || n != 2 {
+	if err := e.st.RawCount(t.Context(), `SELECT count(*) FROM audit_log WHERE action LIKE ? AND action <> 'cloudpanel.report.upload'`, "cloudpanel.%", &n); err != nil || n != 3 {
 		t.Fatalf("audit entries: %d %v", n, err)
 	}
 }

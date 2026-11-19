@@ -549,6 +549,16 @@ grep -q '"deleted": 1' <<<"$out" || fail "final sync deleted: $out"
 [ "$(api GET '/api/v1/migrations/cloudpanel/imports?site=cpimp')" = 200 ] || fail "list imports: $(x cat /tmp/api.out)"
 [ "$(x grep -o '"state":"done"' /tmp/api.out | wc -l)" = 2 ] || fail "imports of cpimp: $(x cat /tmp/api.out)"
 [ "$(x cat "$dst/index.php")" = "<?php echo 'new!';" ] || fail "synced file content"
+# Activate: the imported files become the web root, the old one is kept.
+x runuser -u cpimp -- sh -c 'echo before >/home/cpimp/htdocs/before.txt'
+[ "$(api POST /api/v1/migrations/cloudpanel/sites/cpimp/activate)" = 200 ] || fail "activate: $(x cat /tmp/api.out)"
+prev=$(x sed -n 's/.*"previous":"\(htdocs-before-import-[0-9-]*\)".*/\1/p' /tmp/api.out)
+[ -n "$prev" ] || fail "no previous web root in $(x cat /tmp/api.out)"
+[ "$(x cat /home/cpimp/htdocs/index.php)" = "<?php echo 'new!';" ] || fail "web root not swapped"
+[ "$(x cat "/home/cpimp/$prev/before.txt")" = before ] || fail "previous web root not kept"
+expect_mode /home/cpimp/htdocs "755 cpimp:cpimp"
+x test ! -e "$dst" || fail "import directory still there after activate"
+[ "$(api POST /api/v1/migrations/cloudpanel/sites/cpimp/activate)" = 409 ] || fail "second activate: $(x cat /tmp/api.out)"
 # The old server was only read.
 x test ! -e /home/oldsite/htdocs/example.com/cloudpanel-import || fail "wrote on the old side"
 x systemd-analyze security "hostashi-import@0000000000000000.service" | tail -1

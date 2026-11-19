@@ -51,6 +51,8 @@ type Importer interface {
 	Get(ctx context.Context, id string) (agentapi.CloudPanelImport, error)
 	// List returns the kept imports newest first, of one site or all.
 	List(ctx context.Context, site string) ([]agentapi.CloudPanelImport, error)
+	// Activate makes the site's imported files its web root.
+	Activate(ctx context.Context, site string) (agentapi.CloudPanelActivated, error)
 }
 
 // Connect gives the service the site service and the agent. Without them
@@ -181,6 +183,28 @@ func (s *Service) Imports(ctx context.Context, site string) ([]agentapi.CloudPan
 	}
 
 	return s.importer.List(ctx, site)
+}
+
+// Activate makes the imported files of a site its web root, keeping the
+// previous one next to it. Do it after the final sync, before the DNS
+// switch.
+func (s *Service) Activate(ctx context.Context, actor int64, site string) (agentapi.CloudPanelActivated, error) {
+	if s.importer == nil {
+		return agentapi.CloudPanelActivated{}, ErrNoImporter
+	}
+
+	if err := (agentapi.CloudPanelActivateRequest{Site: site}).Validate(); err != nil {
+		return agentapi.CloudPanelActivated{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
+	}
+
+	r, err := s.importer.Activate(ctx, site)
+	if err != nil {
+		return agentapi.CloudPanelActivated{}, err
+	}
+
+	s.audit(ctx, actor, "cloudpanel.import.activate", site, map[string]string{"previous": r.Previous})
+
+	return r, nil
 }
 
 // planSite finds one site of a report by its name, with its plan.

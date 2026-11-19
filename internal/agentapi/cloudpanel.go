@@ -290,7 +290,23 @@ var (
 	CloudPanelImportStart = agentrpc.Op[CloudPanelImportRequest, CloudPanelImport]{Name: "cloudpanel.import"}
 	CloudPanelImportGet   = agentrpc.Op[CloudPanelImportGetRequest, CloudPanelImport]{Name: "cloudpanel.import.get"}
 	CloudPanelImportList  = agentrpc.Op[CloudPanelImportListRequest, CloudPanelImports]{Name: "cloudpanel.import.list"}
+	CloudPanelActivate    = agentrpc.Op[CloudPanelActivateRequest, CloudPanelActivated]{Name: "cloudpanel.import.activate"}
 )
+
+// CloudPanelActivateRequest makes a site's imported files its web root.
+type CloudPanelActivateRequest struct {
+	Site string `json:"site"`
+}
+
+// Validate checks the site name.
+func (r CloudPanelActivateRequest) Validate() error { return ValidateSiteUser(r.Site) }
+
+// CloudPanelActivated names where the previous web root was kept, relative
+// to the site's home.
+type CloudPanelActivated struct {
+	Site     string `json:"site"`
+	Previous string `json:"previous"`
+}
 
 // CloudPanelImportListRequest lists the kept imports, of one site or all.
 type CloudPanelImportListRequest struct {
