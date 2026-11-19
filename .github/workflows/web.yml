@@ -14,7 +14,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Pull requests run the frontend job only when the frontend or the Go code
+  # and migrations it embeds into and tests against changed (the e2e test
+  # drives the real server). Push to main and manual runs always run it. A skipped job counts
+  # as passed, so required checks do not block merges.
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Filter
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "web=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Markdown files never affect the build or the tests.
+          files="$(git diff --name-only "$BASE" HEAD | grep -vE '\.md$' || true)"
+          echo "$files"
+          match() { if grep -qE "$1" <<<"$files"; then echo true; else echo false; fi; }
+          echo "web=$(match '(^web/|^(cmd|internal)/|^go\.(mod|sum)$|^\.github/workflows/web\.yml$)')" >> "$GITHUB_OUTPUT"
+
   web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     name: Frontend (typecheck, test, build, embed, e2e)
     runs-on: ubuntu-latest
     defaults:
