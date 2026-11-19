@@ -15,6 +15,11 @@
 # PEBBLE_DIR (optional): a directory with the pebble and pebble-challtestsrv
 # binaries (v2.10.3). With it, a site gets a certificate from Pebble, a
 # local test CA; the test never talks to the real Let's Encrypt.
+# STORAGEBOX_USER and STORAGEBOX_PASSWORD (optional): a Hetzner Storage Box
+# (sub-)account to back up to instead of a local SFTP server. The host needs
+# ssh, sftp and sshpass. The password installs the agent's key, and the test
+# writes only to a new folder hostashi-ci-<pid>; on exit it removes that
+# folder and puts the account's authorized_keys back as it was.
 set -euo pipefail
 
 IMG=$1
@@ -23,7 +28,12 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 NAME=hostashi-install-test-$$
 BASE=hostashi-test-base-$$
 
-cleanup() { [ -n "${KEEP:-}" ] && return;  docker rm -f "$NAME" "$NAME-prep" >/dev/null 2>&1 || true; docker rmi -f "$BASE" >/dev/null 2>&1 || true; }
+SB_TMP=""
+cleanup() {
+  [ -n "$SB_TMP" ] && sb_cleanup
+  [ -n "${KEEP:-}" ] && return
+  docker rm -f "$NAME" "$NAME-prep" >/dev/null 2>&1 || true; docker rmi -f "$BASE" >/dev/null 2>&1 || true
+}
 trap cleanup EXIT
 
 step() { echo "=== $*"; }
@@ -263,14 +273,40 @@ if x systemctl start hostashi-backup.service; then fail "backup without a target
 x grep -q '"error": "no backup target is set up"' /var/lib/hostashi-agent/backup/status.json ||
   fail "status without a target: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 expect_mode /var/lib/hostashi-agent/backup "700 root:root"
-# A local SFTP server stands in for the Storage Box; the test never talks
-# to a real one. sftp.test resolves to it.
-x sh -c 'DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-server >/dev/null'
-x sh -c 'echo "127.0.0.1 sftp.test" >>/etc/hosts'
-x useradd -m -s /bin/sh u1
+if [ -n "${STORAGEBOX_USER:-}" ]; then
+  # A real Storage Box. Only the test's own folder and the key it adds are
+  # touched, and cleanup takes both away again.
+  : "${STORAGEBOX_PASSWORD:?STORAGEBOX_PASSWORD is needed with STORAGEBOX_USER}"
+  bk_user=$STORAGEBOX_USER bk_host=$STORAGEBOX_USER.your-storagebox.de bk_port=23 bk_path=hostashi-ci-$$
+  SB_TMP=$(mktemp -d)
+  # Commands come on stdin: sftp -b would turn password logins off.
+  sb_sftp() { SSHPASS=$STORAGEBOX_PASSWORD sshpass -e sftp -q -P 23 -o PubkeyAuthentication=no -o PreferredAuthentications=password \
+    -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=$SB_TMP/known_hosts" "$bk_user@$bk_host"; }
+  sb_ssh() { SSHPASS=$STORAGEBOX_PASSWORD sshpass -e ssh -p 23 -o PubkeyAuthentication=no -o PreferredAuthentications=password \
+    -o "UserKnownHostsFile=$SB_TMP/known_hosts" "$bk_user@$bk_host" "$@"; }
+  sb_cleanup() {
+    echo "=== storage box cleanup"
+    sb_ssh rm -r "$bk_path" || echo "WARN: could not remove $bk_path"
+    if [ -s "$SB_TMP/authorized_keys" ]; then
+      printf 'put %s .ssh/authorized_keys\n' "$SB_TMP/authorized_keys" | sb_sftp >/dev/null || echo "WARN: authorized_keys not restored"
+    else
+      printf -- '-rm .ssh/authorized_keys\n' | sb_sftp >/dev/null || echo "WARN: authorized_keys not removed"
+    fi
+    rm -rf "$SB_TMP"
+    SB_TMP=""
+  }
+  printf -- '-get .ssh/authorized_keys %s\n' "$SB_TMP/authorized_keys" | sb_sftp >/dev/null || fail "storage box login"
+  x sh -c 'DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-client >/dev/null'
+else
+  # A local SFTP server stands in for the Storage Box. sftp.test resolves to it.
+  bk_user=u1 bk_host=sftp.test bk_port=2299 bk_path=hostashi
+  x sh -c 'DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-server >/dev/null'
+  x sh -c 'echo "127.0.0.1 sftp.test" >>/etc/hosts'
+  x useradd -m -s /bin/sh u1
+fi
 # The agent creates the password and the SSH key with the target.
-xi /usr/local/bin/hostashi backup set <<'JSON' >/tmp/bk.$$ || fail "backup set"
-{"version":1,"target":{"user":"u1","host":"sftp.test","port":2299,"path":"hostashi"},
+xi /usr/local/bin/hostashi backup set <<JSON >/tmp/bk.$$ || fail "backup set"
+{"version":1,"target":{"user":"$bk_user","host":"$bk_host","port":$bk_port,"path":"$bk_path"},
  "retention":{"daily":7,"weekly":4,"monthly":6},"windowStart":2,"windowEnd":4,"readParts":12}
 JSON
 pub=$(sed -n 's/.*"publicKey": "\(ssh-ed25519 [^"]*\)".*/\1/p' /tmp/bk.$$)
@@ -280,9 +316,14 @@ expect_mode /etc/hostashi-agent/backup "700 root:root"
 expect_mode /etc/hostashi-agent/backup/password "600 root:root"
 expect_mode /etc/hostashi-agent/backup/id_ed25519 "600 root:root"
 if xi /usr/local/bin/hostashi backup start </dev/null; then fail "run started without a host key"; fi
-x install -d -m 0700 -o u1 -g u1 /home/u1/.ssh
-xi sh -c 'cat >/home/u1/.ssh/authorized_keys && chown u1:u1 /home/u1/.ssh/authorized_keys && chmod 600 /home/u1/.ssh/authorized_keys' <<<"$pub"
-x sh -c 'mkdir -p /run/sshd && /usr/sbin/sshd -p 2299 -o ListenAddress=127.0.0.1'
+if [ -n "$SB_TMP" ]; then
+  # What the administrator does in the Hetzner console or with install-ssh-key.
+  sb_ssh install-ssh-key <<<"$pub" || fail "install-ssh-key"
+else
+  x install -d -m 0700 -o u1 -g u1 /home/u1/.ssh
+  xi sh -c 'cat >/home/u1/.ssh/authorized_keys && chown u1:u1 /home/u1/.ssh/authorized_keys && chmod 600 /home/u1/.ssh/authorized_keys' <<<"$pub"
+  x sh -c 'mkdir -p /run/sshd && /usr/sbin/sshd -p 2299 -o ListenAddress=127.0.0.1'
+fi
 # The panel reads the host key; the administrator compares the fingerprint
 # (here with ssh-keyscan) and confirms it.
 code=""
@@ -290,7 +331,7 @@ for _ in $(seq 1 20); do code=$(api POST /api/v1/backups/hostkey/scan) && [ "$co
 [ "$code" = 200 ] || fail "host key scan: $code $(x cat /tmp/api.out)"
 hk=$(x sed -n 's/.*"key":"\([^"]*\)".*/\1/p' /tmp/api.out)
 fp=$(x sed -n 's/.*"fingerprint":"\([^"]*\)".*/\1/p' /tmp/api.out)
-want=$(x sh -c 'ssh-keyscan -p 2299 -t ed25519 sftp.test 2>/dev/null | grep -v "^#" | ssh-keygen -lf - | cut -d" " -f2')
+want=$(x sh -c "ssh-keyscan -p $bk_port -t ed25519 $bk_host 2>/dev/null | grep -v '^#' | ssh-keygen -lf - | cut -d' ' -f2")
 [ -n "$fp" ] && [ "$fp" = "$want" ] || fail "scanned fingerprint '$fp', ssh-keyscan '$want'"
 [ "$(api PUT /api/v1/backups/hostkey "{\"key\":\"$hk\"}")" = 200 ] || fail "confirm host key: $(x cat /tmp/api.out)"
 x grep -q '"ready":true' /tmp/api.out || fail "not ready after the host key: $(x cat /tmp/api.out)"
@@ -298,7 +339,7 @@ rm -f /tmp/bk.$$
 [ "$(x systemctl is-enabled hostashi-backup.timer)" = enabled ] || fail "backup timer not on after setup"
 x systemctl cat hostashi-backup.timer | grep -q '^OnCalendar=\*-\*-\* 02:00:00$' || fail "timer window not applied"
 x /usr/local/bin/hostashi backup key show | grep '^restic password: ' >/dev/null || fail "backup key show"
-r() { x env RESTIC_REPOSITORY=sftp://u1@sftp.test:2299/hostashi RESTIC_PASSWORD_FILE=/etc/hostashi-agent/backup/password \
+r() { x env "RESTIC_REPOSITORY=sftp://$bk_user@$bk_host:$bk_port/$bk_path" RESTIC_PASSWORD_FILE=/etc/hostashi-agent/backup/password \
   restic -o 'sftp.args=-F /dev/null -i /etc/hostashi-agent/backup/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/hostashi-agent/backup/known_hosts' --no-cache "$@"; }
 # A site with a file and a database.
 [ "$(api POST /api/v1/sites '{"name":"bk","domains":["bk.example.com"]}')" = 201 ] || fail "create site bk: $(x cat /tmp/api.out)"
