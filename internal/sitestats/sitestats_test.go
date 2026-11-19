@@ -160,3 +160,34 @@ func TestDiskCacheKeepsOldValueOnFailure(t *testing.T) {
 		t.Fatal(err, c.Get("shop"))
 	}
 }
+
+func TestReadPHPInSlice(t *testing.T) {
+	root := t.TempDir()
+
+	got := PHPSliceCgroup("/sys/fs/cgroup", "8.4", "my-shop")
+	want := `/sys/fs/cgroup/hostashi.slice/hostashi-site.slice/hostashi-site-my\x2dshop.slice/hostashi-php-8.4@my-shop.service`
+
+	if got != want {
+		t.Fatalf("%s\nwant %s", got, want)
+	}
+
+	dir := PHPSliceCgroup(root, "8.4", "shop")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "cgroup.procs"), []byte("7\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "memory.current"), []byte("1024\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A stale cgroup at the old place must not win over the slice.
+	writeCgroup(t, root, "8.4", "shop", "", "0\n")
+
+	if p, err := ReadPHP(root, "8.4", "shop"); err != nil || !p.Up || p.MemoryBytes != 1024 {
+		t.Fatalf("in slice: %+v %v", p, err)
+	}
+}
