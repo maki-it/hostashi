@@ -179,3 +179,36 @@ func (s *Store) SchemaVersion(ctx context.Context) (int, error) {
 func (s *Store) Close() error {
 	return s.db.Close()
 }
+
+// CopyTo writes a consistent copy of the database to path with VACUUM INTO
+// (ADR-0008: the backup reads this copy, never the live file). The copy is
+// made next to path and renamed over it, so a reader sees the old or the
+// new copy, never half of one.
+func (s *Store) CopyTo(ctx context.Context, path string) error {
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("store: copy path %q", path)
+	}
+
+	tmp := path + ".tmp"
+	_ = os.Remove(tmp)
+
+	if _, err := s.db.ExecContext(ctx, "VACUUM INTO ?", tmp); err != nil {
+		_ = os.Remove(tmp)
+
+		return fmt.Errorf("store: copy: %w", err)
+	}
+
+	if err := os.Chmod(tmp, 0o600); err != nil {
+		_ = os.Remove(tmp)
+
+		return fmt.Errorf("store: copy: %w", err)
+	}
+
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+
+		return fmt.Errorf("store: copy: %w", err)
+	}
+
+	return nil
+}

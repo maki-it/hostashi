@@ -283,10 +283,17 @@ if xi /usr/local/bin/hostashi backup start </dev/null; then fail "run started wi
 x install -d -m 0700 -o u1 -g u1 /home/u1/.ssh
 xi sh -c 'cat >/home/u1/.ssh/authorized_keys && chown u1:u1 /home/u1/.ssh/authorized_keys && chmod 600 /home/u1/.ssh/authorized_keys' <<<"$pub"
 x sh -c 'mkdir -p /run/sshd && /usr/sbin/sshd -p 2299 -o ListenAddress=127.0.0.1'
-hk=""
-for _ in $(seq 1 20); do hk=$(x sh -c 'ssh-keyscan -p 2299 -t ed25519 sftp.test 2>/dev/null' | grep -v '^#' | cut -d' ' -f2-) && [ -n "$hk" ] && break; sleep 1; done
-xi /usr/local/bin/hostashi backup hostkey <<<"$hk" >/tmp/bk.$$ || fail "backup hostkey"
-grep -q '"ready": true' /tmp/bk.$$ || fail "not ready after the host key: $(cat /tmp/bk.$$)"
+# The panel reads the host key; the administrator compares the fingerprint
+# (here with ssh-keyscan) and confirms it.
+code=""
+for _ in $(seq 1 20); do code=$(api POST /api/v1/backups/hostkey/scan) && [ "$code" = 200 ] && break; sleep 1; done
+[ "$code" = 200 ] || fail "host key scan: $code $(x cat /tmp/api.out)"
+hk=$(x sed -n 's/.*"key":"\([^"]*\)".*/\1/p' /tmp/api.out)
+fp=$(x sed -n 's/.*"fingerprint":"\([^"]*\)".*/\1/p' /tmp/api.out)
+want=$(x sh -c 'ssh-keyscan -p 2299 -t ed25519 sftp.test 2>/dev/null | grep -v "^#" | ssh-keygen -lf - | cut -d" " -f2')
+[ -n "$fp" ] && [ "$fp" = "$want" ] || fail "scanned fingerprint '$fp', ssh-keyscan '$want'"
+[ "$(api PUT /api/v1/backups/hostkey "{\"key\":\"$hk\"}")" = 200 ] || fail "confirm host key: $(x cat /tmp/api.out)"
+x grep -q '"ready":true' /tmp/api.out || fail "not ready after the host key: $(x cat /tmp/api.out)"
 rm -f /tmp/bk.$$
 [ "$(x systemctl is-enabled hostashi-backup.timer)" = enabled ] || fail "backup timer not on after setup"
 x systemctl cat hostashi-backup.timer | grep -q '^OnCalendar=\*-\*-\* 02:00:00$' || fail "timer window not applied"
@@ -302,15 +309,18 @@ x systemctl start hostashi-backup.service || fail "backup run failed: $(x cat /v
 x grep -q '"ok": true' /var/lib/hostashi-agent/backup/status.json || fail "status: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 x grep -q '"initialized": true' /var/lib/hostashi-agent/backup/status.json || fail "first run did not create the repository"
 x /usr/local/bin/hostashi backup status | grep -q '"ok": true' || fail "backup status through the agent"
-x grep -q '"site": "bk"' /var/lib/hostashi-agent/backup/snapshots.json || fail "snapshot list: $(x cat /var/lib/hostashi-agent/backup/snapshots.json)"
+[ "$(api GET /api/v1/sites/bk/backups)" = 200 ] && x grep -q '"kind":"db","database":"bk_db"' /tmp/api.out ||
+  fail "site snapshots through the API: $(x cat /tmp/api.out)"
+# grep reads the whole listing: an early exit would end restic with SIGPIPE.
+r ls latest --tag kind:panel | grep '^/var/lib/hostashi/backup/panel.db$' >/dev/null || fail "panel database copy not in the backup"
 [ "$(r snapshots --tag site:bk,kind:files --json | grep -o '"short_id"' | wc -l)" = 1 ] || fail "no files snapshot of bk"
 [ "$(r dump latest /home/bk/htdocs/index.html --tag site:bk,kind:files)" = "backed up" ] || fail "site file not in the backup"
-r dump latest bk_db.sql --tag site:bk,kind:db,db:bk_db | grep -q "from the dump" || fail "database dump not in the backup"
-r dump latest /etc/hostashi/hostashi.env --tag kind:panel | grep -q HOSTASHI_PUBLIC_URL || fail "panel state not in the backup"
-if r ls latest --tag kind:panel | grep -q 'secret.key\|/etc/hostashi-agent'; then fail "secrets in the panel backup"; fi
+r dump latest bk_db.sql --tag site:bk,kind:db,db:bk_db | grep "from the dump" >/dev/null || fail "database dump not in the backup"
+r dump latest /etc/hostashi/hostashi.env --tag kind:panel | grep HOSTASHI_PUBLIC_URL >/dev/null || fail "panel state not in the backup"
+if r ls latest --tag kind:panel | grep 'secret.key\|/etc/hostashi-agent' >/dev/null; then fail "secrets in the panel backup"; fi
 # A run on demand through the agent returns at once.
 before=$(x grep '"started"' /var/lib/hostashi-agent/backup/status.json)
-x /usr/local/bin/hostashi backup start >/dev/null || fail "backup start"
+[ "$(api POST /api/v1/backups/run)" = 202 ] || fail "backup run through the API: $(x cat /tmp/api.out)"
 for _ in $(seq 1 90); do
   [ "$(x grep '"started"' /var/lib/hostashi-agent/backup/status.json)" != "$before" ] &&
     [ "$(x systemctl is-active hostashi-backup.service)" = inactive ] && break

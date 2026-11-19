@@ -26,7 +26,8 @@ var scopeCatalog = map[string]ScopeInfo{
 	"databases:read":          {Description: "List databases and their users"},
 	"databases:write":         {Description: "Create databases and users, set passwords, remove users"},
 	"databases:delete":        {Description: "Delete databases and their data", HighRisk: true},
-	"backups:read":            {Description: "List backups"},
+	"backups:read":            {Description: "Read backup settings, status and snapshots"},
+	"backups:write":           {Description: "Change backup settings, confirm the target's host key, start a backup"},
 	"backups:restore":         {Description: "Restore backups over live data", HighRisk: true},
 }
 
