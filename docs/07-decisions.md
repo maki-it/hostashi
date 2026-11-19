@@ -30,6 +30,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0024 | MariaDB databases per site | Accepted ([adr/0024](adr/0024-mariadb-databases-per-site.md)) | No |
 | 0025 | Database import and export | Accepted ([adr/0025](adr/0025-database-import-export.md)) | No |
 | 0026 | Data transfer for the CloudPanel migration | Accepted ([adr/0026](adr/0026-cloudpanel-migration-transfer.md)) | No |
+| 0027 | Maintenance and parking pages | Accepted on 2026-11-19 ([adr/0027](adr/0027-maintenance-and-parking-pages.md)) | Done |
 
 ---
 
@@ -232,3 +233,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0026 Data transfer for the CloudPanel migration
 
 **Full text (status Accepted, 2026-11-19):** [adr/0026](adr/0026-cloudpanel-migration-transfer.md). Summary: the new server pulls files and databases from the old CloudPanel server over SSH (Kim's choice, 2026-11-19); the scan runs on the old server as `hostashi cloudpanel scan`. Files come over SFTP in Go (`github.com/pkg/sftp`), the old side locks the key in `authorized_keys` to `restrict`, a read-only `sftp-server -R` and one port forward to MariaDB. Databases are dumped on the new server with `mariadb-dump` through that tunnel, with a read-only dump user on the old server, and go straight into the ADR-0025 import. One job per site, which drops to the site user before writing files. No new `os/exec` exception. Decided (Kim, 2026-11-19): the locked root key on the old server is acceptable.
+
+## ADR-0027 Maintenance and parking pages
+
+**Full text (status Accepted, 2026-11-19):** [adr/0027](adr/0027-maintenance-and-parking-pages.md). Summary: a page is a single HTML file or a small ZIP (HTML plus CSS, JavaScript, images, fonts; at most 2 MiB) that the panel checks in Go (names, types, sizes, no links), stores in its database and sends to the agent in chunks; the agent unpacks it with `openat2` and swaps it in atomically. nginx serves the files under `/.hostashi/page/<id>/` with a strict Content-Security-Policy (nothing from other hosts; the page's own scripts run, a named conflict), instead of sanitizing. Maintenance per site: 503 with `Retry-After` and the chosen page, up to 20 allowed IPs/CIDRs see the site, PHP keeps running; "disabled" (PR #93) stays separate and wins. Parked domains get their own small vhost with a parking page (200), with HTTPS. Pages and maintenance first, parking second. Decided (Kim, 2026-11-19): pages may have their own files (option B), uploaded as a ZIP or as a single HTML file, their JavaScript may run, and parked domains get HTTPS. No open questions.
