@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 # Link check for Markdown files. Only checks links, no mail addresses.
 exclude_all_private = true
 include_mail = false

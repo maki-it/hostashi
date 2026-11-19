@@ -34,5 +34,15 @@
       "groupName": "npm packages",
       "groupSlug": "npm-packages"
     }
+  ],
+  "customManagers": [
+    {
+      "description": "The reuse tool version in the REUSE workflow",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/reuse\\.yml$/"],
+      "matchStrings": ["REUSE_VERSION: \"(?<currentValue>[^\"]+)\""],
+      "datasourceTemplate": "pypi",
+      "depNameTemplate": "reuse"
+    }
   ]
 }

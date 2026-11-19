@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 name: Feature or decision proposal
 description: Propose a feature, a scope change or a new/changed decision (ADR)
 labels: ["proposal"]
