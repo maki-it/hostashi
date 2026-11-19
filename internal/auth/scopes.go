@@ -29,6 +29,8 @@ var scopeCatalog = map[string]ScopeInfo{
 	"backups:read":            {Description: "Read backup settings, status and snapshots"},
 	"backups:write":           {Description: "Change backup settings, confirm the target's host key, start a backup"},
 	"metrics:read":            {Description: "Read the Prometheus metrics endpoint"},
+	"migrations:read":         {Description: "List uploaded CloudPanel scan reports and read their migration plans"},
+	"migrations:write":        {Description: "Upload and delete CloudPanel scan reports"},
 	"backups:restore":         {Description: "Restore a site's backups into its home", HighRisk: true},
 }
 
