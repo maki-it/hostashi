@@ -10,7 +10,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0008](0008-backups-with-restic.md) | Backups with restic | Accepted |
 | [0010](0010-target-audience-and-v1-scope.md) | Target audience and v1 scope | Proposed |
 | [0013](0013-business-model-and-governance.md) | Business model and governance | Proposed |
-| [0015](0015-per-site-resource-limits.md) | Per-site resource limits | Proposed |
+| [0015](0015-per-site-resource-limits.md) | Per-site resource limits | Accepted |
 | [0016](0016-per-site-storage-location.md) | Per-site storage location (storage pools) | Proposed |
 | [0017](0017-cloudpanel-import-and-presets.md) | CloudPanel import as migration, and Hostashi presets | Accepted |
 | [0018](0018-public-rest-api.md) | Public REST API design | Accepted |

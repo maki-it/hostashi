@@ -41,7 +41,7 @@
 | Vhost editor with `nginx -t` and rollback | P0 | A | CP | Custom snippets in include files |
 | Per-site PHP settings (memory_limit, …) | P0 | A | CP | Through the pool config, not through `PHP_VALUE` in Nginx. PHP version visible in the site overview; unused PHP versions can be switched off |
 | Resource limits per site (CPU, RAM, tasks, I/O) | P1 | B | NEW | systemd/cgroup v2 |
-| Disk quota per site | P1 | B | NEW | Project quota (ext4/XFS), enabled during initial setup, details in [ADR-0015](adr/0015-per-site-resource-limits.md). Phase depends on spike S8. Used space per site (files and DB) is shown in the UI, even without quota |
+| Disk quota per site | P1 | B | NEW | Project quota (ext4/XFS), enabled during initial setup, details in [ADR-0015](adr/0015-per-site-resource-limits.md). Spike S8 done, ADR accepted. Used space per site (files and DB) is shown in the UI, even without quota |
 | HTTP/3 per site | P1 | B | CP | |
 | Docker Compose apps as a site type | P2 | 2+ | NEW | Evaluate rootless Podman as an option |
 | Staging/cloning a site | P1 | 1 | NEW | Files + DB, domain rewrite |

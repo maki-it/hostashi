@@ -18,7 +18,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0012 | Language of code and documentation | Proposed | Yes, briefly |
 | 0013 | Business model and governance | Proposed (draft: [adr/0013](adr/0013-business-model-and-governance.md)) | **Yes** |
 | 0014 | Name of the CLI tool | Proposed | Yes, briefly |
-| 0015 | Per-site resource limits | Proposed (draft: [adr/0015](adr/0015-per-site-resource-limits.md)) | **Yes** (priority of disk quota) |
+| 0015 | Per-site resource limits | Accepted ([adr/0015](adr/0015-per-site-resource-limits.md)) | No |
 | 0016 | Per-site storage location (storage pools) | Proposed (draft: [adr/0016](adr/0016-per-site-storage-location.md)) | **Yes** |
 | 0017 | CloudPanel import as migration, presets | Accepted on 2026-11-18 ([adr/0017](adr/0017-cloudpanel-import-and-presets.md)) | Done |
 | 0018 | Public REST API | Accepted on 2026-11-18 ([adr/0018](adr/0018-public-rest-api.md)) | Done |
@@ -176,7 +176,7 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0015 Per-site resource limits
 
-**Full draft (status Proposed):** [adr/0015-per-site-resource-limits.md](adr/0015-per-site-resource-limits.md). Summary: disk space per site through file system quota (preferably project quota on ext4/XFS), CPU/RAM/processes through one systemd slice per site with its own PHP-FPM master, `pm=ondemand` as the default, databases only with a connection limit and a size warning (MariaDB has no size quota), Nginx rate limits optional, traffic allowances later. Disk quota should be raised from P2 to P1. All numbers and mechanisms are unverified, spike S8 (quota on the real server, RAM measurement) clarifies this.
+**Full text (status Accepted, 2026-11-19):** [adr/0015-per-site-resource-limits.md](adr/0015-per-site-resource-limits.md). Summary: disk space per site through file system quota (preferably project quota on ext4/XFS), CPU/RAM/processes through one systemd slice per site with its own PHP-FPM master, `pm=ondemand` as the default, databases only with a connection limit and a size warning (MariaDB has no size quota), Nginx rate limits optional, traffic allowances later. Disk quota should be raised from P2 to P1. Spike S8 verified project quota on a fresh Hetzner Debian 13 image (one reboot) and measured about 7 to 10 MB per idle FPM master. Presets are editable data, CPU uses priority modes (weights) without a hard limit by default.
 
 ## ADR-0016 Per-site storage location (storage pools)
 
