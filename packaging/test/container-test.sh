@@ -189,6 +189,22 @@ cookie=$(x curl -sS -o /dev/null -D - -H 'Content-Type: application/json' \
   --data "{\"username\":\"kim\",\"password\":\"$pw\"}" http://127.0.0.1:8080/api/v1/auth/login |
   tr -d '\r' | sed -n 's/^[Ss]et-[Cc]ookie: \(hostashi_session=[^;]*\).*/\1/p')
 [ -n "$cookie" ] || fail "login gave no session cookie"
+
+step "fail2ban reads the panel's failed logins"
+for j in sshd hostashi-panel recidive; do
+  x fail2ban-client status "$j" >/dev/null || fail "fail2ban jail $j is not running"
+done
+expect_mode /etc/fail2ban/jail.d/hostashi.conf "644 root:root"
+expect_mode /etc/fail2ban/filter.d/hostashi-panel.conf "644 root:root"
+expect_mode /etc/fail2ban/fail2ban.d/hostashi.conf "644 root:root"
+[ "$(api POST /api/v1/auth/login '{"username":"kim","password":"not-the-password-1"}')" = 401 ] || fail "wrong password: $(x cat /tmp/api.out)"
+sleep 1
+x sh -c 'journalctl -u hostashi.service -o cat --no-pager | grep auth.failed' || fail "no auth.failed line in the journal"
+# The filter must match exactly that line; loopback is matched here and only
+# ignored by the jail (ignoreip), so the regex test sees it.
+f2b=$(x fail2ban-regex systemd-journal hostashi-panel)
+grep -E '^Lines: ' <<<"$f2b"
+grep -Eq '^Lines: [0-9]+ lines, 0 ignored, [1-9][0-9]* matched' <<<"$f2b" || fail "fail2ban filter does not match the panel's line"
 [ "$(api POST /api/v1/sites '{"name":"shop","domains":["shop.example.com"]}')" = 201 ] || fail "create site: $(x cat /tmp/api.out)"
 x sh -c 'echo "hello from shop" >/home/shop/htdocs/index.html'
 body=$(x curl -fsS -H 'Host: shop.example.com' http://127.0.0.1/)

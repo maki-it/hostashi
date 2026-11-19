@@ -26,8 +26,9 @@
 # service stays off. MariaDB is the distribution's (ADR-0024); the agent
 # talks to it as root over its Unix socket. Disk quota per site needs ext4
 # project quota on the root filesystem (ADR-0015); the quota step prepares it
-# and asks for ONE reboot, it never reboots by itself. Not yet part of this
-# installer: more PHP versions (sury.org) and a firewall.
+# and asks for ONE reboot, it never reboots by itself. fail2ban from the
+# distribution guards SSH and the panel logins (ADR-0021). Not yet part of
+# this installer: more PHP versions (sury.org) and a firewall.
 #
 # Exit codes: 0 ok, 2 refused by preflight (server unchanged), 3 a step
 # failed (re-running is safe), 64 usage.
@@ -173,7 +174,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config nginx php mariadb backup units service quota"
+STEPS="account dirs key binary config nginx php mariadb backup units service fail2ban quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -317,6 +318,59 @@ chk_backup() {
 do_backup() {
   apt-get update -qq >>"$LOG" 2>&1 &&
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${BACKUP_PKGS[@]}" >>"$LOG" 2>&1
+}
+
+# fail2ban from the distribution, on by default (ADR-0021): jails sshd,
+# hostashi-panel (the panel's auth.failed lines) and recidive, all reading
+# the journal, banning through nftables. python3-systemd is its journal
+# backend, nftables its ban action; neither is pulled in without recommends.
+F2B_SRC=${HOSTASHI_F2B_SRC:-$HERE/fail2ban}
+F2B_PKGS=(fail2ban python3-systemd nftables)
+F2B_FILES=(
+  "fail2ban-hostashi.conf:/etc/fail2ban/fail2ban.d/hostashi.conf"
+  "hostashi.conf:/etc/fail2ban/jail.d/hostashi.conf"
+  "hostashi-panel.conf:/etc/fail2ban/filter.d/hostashi-panel.conf"
+)
+F2B_JAILS=(sshd hostashi-panel recidive)
+F2B_CHANGED=no
+
+chk_fail2ban() {
+  local p f j jails
+  for p in "${F2B_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
+  for f in "${F2B_FILES[@]}"; do
+    file_matches "${f#*:}" 0644 root:root <"$F2B_SRC/${f%%:*}" || { echo "${f#*:} differs"; return 1; }
+  done
+  [ "$F2B_CHANGED" = no ] || { echo "reload needed after a change"; return 1; }
+  [ "$(systemctl is-enabled fail2ban.service 2>/dev/null)" = enabled ] || { echo "fail2ban not enabled"; return 1; }
+  [ "$(systemctl is-active fail2ban.service 2>/dev/null)" = active ] || { echo "fail2ban not running"; return 1; }
+  jails=$(fail2ban-client status 2>/dev/null | sed -n 's/.*Jail list:[[:space:]]*//p') || { echo "fail2ban does not answer"; return 1; }
+  for j in "${F2B_JAILS[@]}"; do
+    grep -qE "(^|[ ,])$j(,|$)" <<<"$jails" || { echo "jail $j not running"; return 1; }
+  done
+}
+do_fail2ban() {
+  local f rc
+  if ! pkg_installed fail2ban || ! pkg_installed python3-systemd || ! pkg_installed nftables; then
+    apt-get update -qq >>"$LOG" 2>&1 &&
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${F2B_PKGS[@]}" >>"$LOG" 2>&1 || return 1
+  fi
+  for f in "${F2B_FILES[@]}"; do
+    write_file "${f#*:}" 0644 root:root <"$F2B_SRC/${f%%:*}"; rc=$?
+    [ "$rc" -le 1 ] || return 1
+    [ "$rc" = 0 ] && F2B_CHANGED=yes
+  done
+  # A broken file must not take down a running fail2ban.
+  fail2ban-client -t >>"$LOG" 2>&1 || { log "fail2ban configuration test failed"; return 1; }
+  systemctl enable fail2ban.service >>"$LOG" 2>&1 || return 1
+  if [ "$F2B_CHANGED" = yes ] && [ "$(systemctl is-active fail2ban.service 2>/dev/null)" = active ]; then
+    systemctl restart fail2ban.service >>"$LOG" 2>&1 || return 1
+  else
+    systemctl start fail2ban.service >>"$LOG" 2>&1 || return 1
+  fi
+  F2B_CHANGED=no
+  # The server needs a moment before it answers on its socket.
+  local _i
+  for _i in $(seq 1 20); do fail2ban-client ping >/dev/null 2>&1 && break; sleep 0.5; done
 }
 
 php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }
