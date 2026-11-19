@@ -31,7 +31,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0025 | Database import and export | Accepted ([adr/0025](adr/0025-database-import-export.md)) | No |
 | 0026 | Data transfer for the CloudPanel migration | Accepted ([adr/0026](adr/0026-cloudpanel-migration-transfer.md)) | No |
 | 0027 | Maintenance and parking pages | Accepted on 2026-11-19 ([adr/0027](adr/0027-maintenance-and-parking-pages.md)) | Done |
-| 0028 | Cron jobs per site | Proposed ([adr/0028](adr/0028-cron-jobs-per-site.md)) | No |
+| 0028 | Cron jobs per site | Accepted on 2026-11-19 ([adr/0028](adr/0028-cron-jobs-per-site.md)) | No |
 
 ---
 
@@ -241,4 +241,4 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0028 Cron jobs per site
 
-**Full text (status Proposed, 2026-11-19):** [adr/0028](adr/0028-cron-jobs-per-site.md). Summary: one systemd timer and service per job, rendered by the agent from the panel's job list; the service runs a root-owned script as the site user, in the site's slice and sandbox, with a timeout and no overlapping runs. Schedules pass a validator for the five cron fields and the usual keywords (no `@reboot`) and are translated into `OnCalendar=`. Pause, run now and the last run's status come from systemd and the journal. Imported CloudPanel jobs start paused. Open: whether imported jobs start paused.
+**Full text (status Accepted, 2026-11-19):** [adr/0028](adr/0028-cron-jobs-per-site.md). Summary: one systemd timer and service per job, rendered by the agent from the panel's job list; the service runs a root-owned script as the site user, in the site's slice and sandbox, with a timeout and no overlapping runs. Schedules pass a validator for the five cron fields and the usual keywords (no `@reboot`) and are translated into `OnCalendar=`. Pause, run now and the last run's status come from systemd and the journal. Decided (Kim, 2026-11-19): option A. Open: whether imported CloudPanel jobs start paused (recommended).
