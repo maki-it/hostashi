@@ -255,6 +255,54 @@ x test ! -e /home/wp || fail "PHP site home still there"
 [ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User='wp_api'")" ] || fail "database user of a deleted site still there"
 [ -z "$(x mariadb -Nse "SHOW DATABASES LIKE 'wp\_api'")" ] || fail "database of a deleted site still there"
 
+step "backups with restic (ADR-0008)"
+[ "$(x restic version | cut -d' ' -f1)" = restic ] || fail "restic not installed"
+[ "$(x systemctl is-enabled hostashi-backup.timer)" = disabled ] || fail "backup timer on without a target"
+# Without a target the run fails and says why in the status file.
+if x systemctl start hostashi-backup.service; then fail "backup without a target succeeded"; fi
+x grep -q '"error": "no backup target is set up"' /var/lib/hostashi-agent/backup/status.json ||
+  fail "status without a target: $(x cat /var/lib/hostashi-agent/backup/status.json)"
+expect_mode /var/lib/hostashi-agent/backup "700 root:root"
+# A local SFTP server stands in for the Storage Box; the test never talks
+# to a real one. sftp.test resolves to it.
+x sh -c 'DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-server >/dev/null'
+x sh -c 'echo "127.0.0.1 sftp.test" >>/etc/hosts'
+x useradd -m -s /bin/sh u1
+x install -d -m 0700 -o root -g root /etc/hostashi-agent /etc/hostashi-agent/backup
+x ssh-keygen -q -t ed25519 -N '' -C hostashi-backup -f /etc/hostashi-agent/backup/id_ed25519
+x install -d -m 0700 -o u1 -g u1 /home/u1/.ssh
+x install -m 0600 -o u1 -g u1 /etc/hostashi-agent/backup/id_ed25519.pub /home/u1/.ssh/authorized_keys
+x sh -c 'mkdir -p /run/sshd && /usr/sbin/sshd -p 2299 -o ListenAddress=127.0.0.1'
+for _ in $(seq 1 20); do x sh -c 'ssh-keyscan -p 2299 -t ed25519 sftp.test 2>/dev/null' >/tmp/kh.$$ && [ -s /tmp/kh.$$ ] && break; sleep 1; done
+xi sh -c 'umask 077; cat >/etc/hostashi-agent/backup/known_hosts' </tmp/kh.$$
+rm -f /tmp/kh.$$
+x sh -c 'umask 077; head -c 32 /dev/urandom | base64 >/etc/hostashi-agent/backup/password'
+xi sh -c 'umask 077; cat >/etc/hostashi-agent/backup/settings.json' <<'JSON'
+{"version":1,"target":{"user":"u1","host":"sftp.test","port":2299,"path":"hostashi"},
+ "retention":{"daily":7,"weekly":4,"monthly":6},"windowStart":1,"windowEnd":5,"readParts":12}
+JSON
+r() { x env RESTIC_REPOSITORY=sftp://u1@sftp.test:2299/hostashi RESTIC_PASSWORD_FILE=/etc/hostashi-agent/backup/password \
+  restic -o 'sftp.args=-F /dev/null -i /etc/hostashi-agent/backup/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/hostashi-agent/backup/known_hosts' --no-cache "$@"; }
+r init >/dev/null
+# A site with a file and a database.
+x /usr/local/bin/hostashi site create bk
+xi runuser -u bk -- sh -c 'cat >/home/bk/htdocs/index.html' <<<"backed up"
+x /usr/local/bin/hostashi db create bk bk_db
+x mariadb -e "CREATE TABLE bk_db.t (v VARCHAR(20)); INSERT INTO bk_db.t VALUES ('from the dump');"
+x systemctl start hostashi-backup.service || fail "backup run failed: $(x cat /var/lib/hostashi-agent/backup/status.json)"
+x grep -q '"ok": true' /var/lib/hostashi-agent/backup/status.json || fail "status: $(x cat /var/lib/hostashi-agent/backup/status.json)"
+[ "$(r snapshots --tag site:bk,kind:files --json | grep -o '"short_id"' | wc -l)" = 1 ] || fail "no files snapshot of bk"
+[ "$(r dump latest /home/bk/htdocs/index.html --tag site:bk,kind:files)" = "backed up" ] || fail "site file not in the backup"
+r dump latest bk_db.sql --tag site:bk,kind:db,db:bk_db | grep -q "from the dump" || fail "database dump not in the backup"
+r dump latest /etc/hostashi/hostashi.env --tag kind:panel | grep -q HOSTASHI_PUBLIC_URL || fail "panel state not in the backup"
+if r ls latest --tag kind:panel | grep -q 'secret.key\|/etc/hostashi-agent'; then fail "secrets in the panel backup"; fi
+x systemctl start hostashi-backup.service || fail "second backup run failed"
+# Retention keeps the newest snapshot per day, and restic also keeps the
+# oldest one while fewer days than the policy exist: two snapshots now.
+[ "$(r snapshots --tag site:bk,kind:files --json | grep -o '"short_id"' | wc -l)" = 2 ] || fail "second run made no snapshot"
+x /usr/local/bin/hostashi db delete bk_db
+x /usr/local/bin/hostashi site delete bk
+
 if [ -z "${PEBBLE_DIR:-}" ]; then
   echo "PEBBLE_DIR not set, skipping the certificate test"
 else

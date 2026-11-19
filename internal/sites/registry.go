@@ -116,6 +116,43 @@ func OpenRegistry(dir string, ownerUID uint32) (*Registry, error) {
 	return reg, nil
 }
 
+// ReadHomes returns the home directory of every registered site, keyed by
+// user, without writing anything: for readers outside the agent such as the
+// backup run. A missing registry means no sites.
+func ReadHomes(dir string, ownerUID uint32) (map[string]string, error) {
+	if err := checkStateDir(dir, ownerUID); err != nil {
+		return nil, err
+	}
+
+	reg := &Registry{path: filepath.Join(dir, StateFile), pools: map[string]Pool{}, sites: map[string]Site{}}
+
+	raw, err := readStateFile(reg.path, ownerUID)
+
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return map[string]string{}, nil
+	case err != nil:
+		return nil, err
+	}
+
+	if err := reg.load(raw); err != nil {
+		return nil, err
+	}
+
+	out := make(map[string]string, len(reg.sites))
+
+	for _, site := range reg.sites {
+		p, ok := reg.pools[site.Pool]
+		if !ok {
+			return nil, fmt.Errorf("site %q: unknown pool %q", site.User, site.Pool)
+		}
+
+		out[site.User] = p.Path + "/" + site.User
+	}
+
+	return out, nil
+}
+
 func checkStateDir(dir string, ownerUID uint32) error {
 	if !filepath.IsAbs(dir) || filepath.Clean(dir) != dir {
 		return fmt.Errorf("%w: directory must be an absolute clean path", ErrStateUnsafe)

@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# One backup run (ADR-0008): every site's home, a dump of every database and
+# the panel's state into the server's restic repository. Started by
+# hostashi-backup.timer, or by the agent for a run on demand. systemd runs at
+# most one instance at a time; the run takes a lock of its own as well.
+#
+# Root is needed to read every site's files and to dump the databases as
+# root over the MariaDB socket (unix_socket login). The sandbox keeps the
+# rest small: the whole file system is read-only except the status and
+# cache directories, and of root's capabilities only CAP_DAC_READ_SEARCH
+# (read any file) is left. The network is open, because the Storage Box is
+# reached by name.
+
+[Unit]
+Description=Hostashi backup run
+Documentation=https://github.com/maki-it/hostashi
+After=network-online.target mariadb.service hostashi-agent.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/hostashi backup -state-dir /var/lib/hostashi-agent run
+# A run of a large server can take hours; this bounds a hanging one.
+TimeoutStartSec=12h
+StateDirectory=hostashi-agent/backup
+StateDirectoryMode=0700
+CacheDirectory=hostashi-backup
+CacheDirectoryMode=0700
+UMask=0077
+
+Nice=10
+CPUSchedulingPolicy=batch
+IOSchedulingClass=idle
+
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native

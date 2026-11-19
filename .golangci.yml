@@ -42,14 +42,17 @@ linters:
     depguard:
       rules:
         # Security rule: no shell strings and no general exec interface.
-        # Product code must not start processes through os/exec. A future
-        # helper or restic wrapper gets a reviewed, narrow exception here.
+        # Product code must not start processes through os/exec. A new
+        # helper gets a reviewed, narrow exception here.
         # internal/sysuser runs useradd and userdel by absolute path with
         # arguments built from validated names (see its package comment).
         # internal/webctl runs nginx -t and systemctl reload/restart of the
         # nginx unit with fixed arguments (see its package comment).
         # internal/phpctl runs php-fpm<version> -t and systemctl for the
         # per-site PHP units with fixed arguments (see its package comment).
+        # internal/resticctl runs restic by absolute path with fixed
+        # sub-commands and validated arguments; restic itself starts ssh and
+        # mariadb-dump (see its package comment, ADR-0008).
         # internal/mariadbctl runs mariadb and mariadb-dump as the site user
         # with fixed arguments for import and export (ADR-0025).
         no-exec:
@@ -59,6 +62,7 @@ linters:
             - "!**/internal/sysuser/*.go"
             - "!**/internal/webctl/*.go"
             - "!**/internal/phpctl/*.go"
+            - "!**/internal/resticctl/*.go"
             - "!**/internal/mariadbctl/*.go"
           deny:
             - pkg: os/exec

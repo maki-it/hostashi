@@ -57,44 +57,73 @@ func openRegistry(dir string, ownerUID uint32) (*registry, error) {
 		return nil, err
 	}
 
+	if err := reg.load(raw); err != nil {
+		return nil, err
+	}
+
+	return reg, nil
+}
+
+// ReadDatabases returns the registered databases without writing anything:
+// for readers outside the agent such as the backup run. A missing registry
+// means no databases.
+func ReadDatabases(dir string, ownerUID uint32) ([]Database, error) {
+	raw, err := statefile.Read(dir, StateFile, ownerUID, maxStateSize)
+
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return []Database{}, nil
+	case err != nil:
+		return nil, err
+	}
+
+	reg := &registry{dir: dir, dbs: map[string]*Database{}, users: map[string]string{}}
+	if err := reg.load(raw); err != nil {
+		return nil, err
+	}
+
+	return reg.list(), nil
+}
+
+func (r *registry) load(raw []byte) error {
 	var s state
 
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 
 	if err := dec.Decode(&s); err != nil || dec.More() {
-		return nil, fmt.Errorf("%w: not a single valid document", ErrStateInvalid)
+		return fmt.Errorf("%w: not a single valid document", ErrStateInvalid)
 	}
 
 	if s.Version != stateVersion {
-		return nil, fmt.Errorf("%w: unsupported version %d", ErrStateInvalid, s.Version)
+		return fmt.Errorf("%w: unsupported version %d", ErrStateInvalid, s.Version)
 	}
 
 	for _, d := range s.Databases {
 		if err := (agentapi.DBCreateRequest{Site: d.Site, Name: d.Name}).Validate(); err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrStateInvalid, err)
+			return fmt.Errorf("%w: %w", ErrStateInvalid, err)
 		}
 
-		if _, dup := reg.dbs[d.Name]; dup {
-			return nil, fmt.Errorf("%w: duplicate database %q", ErrStateInvalid, d.Name)
+		if _, dup := r.dbs[d.Name]; dup {
+			return fmt.Errorf("%w: duplicate database %q", ErrStateInvalid, d.Name)
 		}
 
 		for _, u := range d.Users {
 			if err := agentapi.ValidateDBUser(u); err != nil {
-				return nil, fmt.Errorf("%w: %w", ErrStateInvalid, err)
+				return fmt.Errorf("%w: %w", ErrStateInvalid, err)
 			}
 
-			if _, dup := reg.users[u]; dup {
-				return nil, fmt.Errorf("%w: duplicate user %q", ErrStateInvalid, u)
+			if _, dup := r.users[u]; dup {
+				return fmt.Errorf("%w: duplicate user %q", ErrStateInvalid, u)
 			}
 
-			reg.users[u] = d.Name
+			r.users[u] = d.Name
 		}
 
-		reg.dbs[d.Name] = &Database{Name: d.Name, Site: d.Site, Users: append([]string{}, d.Users...)}
+		r.dbs[d.Name] = &Database{Name: d.Name, Site: d.Site, Users: append([]string{}, d.Users...)}
 	}
 
-	return reg, nil
+	return nil
 }
 
 func (r *registry) save() error {
