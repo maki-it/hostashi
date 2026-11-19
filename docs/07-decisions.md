@@ -32,6 +32,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0026 | Data transfer for the CloudPanel migration | Accepted ([adr/0026](adr/0026-cloudpanel-migration-transfer.md)) | No |
 | 0027 | Maintenance and parking pages | Accepted on 2026-11-19 ([adr/0027](adr/0027-maintenance-and-parking-pages.md)) | Done |
 | 0028 | Cron jobs per site | Accepted on 2026-11-19 ([adr/0028](adr/0028-cron-jobs-per-site.md)) | No |
+| 0029 | Custom nginx snippets per site | Proposed ([adr/0029](adr/0029-custom-nginx-snippets.md)) | **Yes** |
 
 ---
 
@@ -242,3 +243,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0028 Cron jobs per site
 
 **Full text (status Accepted, 2026-11-19):** [adr/0028](adr/0028-cron-jobs-per-site.md). Summary: one systemd timer and service per job, rendered by the agent from the panel's job list; the service runs a root-owned script as the site user, in the site's slice and sandbox, with a timeout and no overlapping runs. Schedules pass a validator for the five cron fields and the usual keywords (no `@reboot`) and are translated into `OnCalendar=`. Pause, run now and the last run's status come from systemd and the journal. Decided (Kim, 2026-11-19): option A. Open: whether imported CloudPanel jobs start paused (recommended).
+
+## ADR-0029 Custom nginx snippets per site
+
+**Full text (status Proposed, 2026-11-19):** [adr/0029](adr/0029-custom-nginx-snippets.md). Summary: free nginx text in a server block is a path from the panel to root (the nginx master opens log paths as root, verified with `access_log`) and across sites (`fastcgi_pass` to another site's socket, `proxy_pass` to the panel socket, `root`/`alias` into other homes). Recommendation: an allowlist of directives with typed argument checks, checked in the panel and again in the agent, then the usual `nginx -t` candidate generation with rollback. Two slots per site (server block and inside `location /`), not rendered while the site is disabled or in maintenance, own high-risk API scope. The importer turns the scanner's custom directives into a draft that a person reviews once (ADR-0017). Open: option A or B, whether the first list is enough for web2, loopback targets for `proxy_pass`.
