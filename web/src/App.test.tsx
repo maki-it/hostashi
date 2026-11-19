@@ -48,6 +48,20 @@ describe("App start", () => {
     window.location.hash = "";
   });
 
+  it("opens the site page from the navigation", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      ...noSetup,
+      "GET /api/v1/auth/me": { body: { ...admin, auth: "session" } },
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/php/versions": { body: { installed: ["8.4"], supported: ["8.4"], legacy: [] } },
+    });
+    render(<App />);
+    await user.click(await screen.findByRole("link", { name: "Sites" }));
+    expect(await screen.findByText("No sites yet.")).toBeInTheDocument();
+    window.location.hash = "";
+  });
+
   it("opens the database page from the navigation", async () => {
     const user = userEvent.setup();
     mockFetch({
