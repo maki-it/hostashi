@@ -99,13 +99,15 @@ Strongest disk isolation, size is fixed by the volume. Contra: resizing is awkwa
 2. **Prefer project quota** (ext4 or XFS) over user quota, with user quota as a fallback when project quota is unavailable [A]. Block and inode limits per site. Warning thresholds (for example 80 and 95 percent) are panel-side from usage read through the agent, the kernel hard limit is the backstop.
 3. **One systemd slice per site** (`hostashi-site-<name>.slice`) holding that site's FPM master, services, timers and cron jobs. Limits: `MemoryMax`, `MemoryHigh`, `CPUWeight` (optional `CPUQuota`), `TasksMax`, `IOWeight`. Default limits come from **presets** so the UI does not need ten fields. Decided (Kim, 2026-11-19): presets are data, not code. The admin creates, edits and deletes them in the panel and API and marks one as the default for new sites. Every value can be overridden per site. The installer seeds three presets [E: estimates for typical WordPress sites, not measured]:
 
-   | Preset | Disk | Inodes | `MemoryMax` | PHP workers (`pm.max_children`) | `TasksMax` |
-   |--------|------|--------|-------------|----------------------------------|------------|
-   | small (default) | 10 GiB | 500,000 | 512 MiB | 5 | 128 |
-   | medium | 25 GiB | 1,000,000 | 1 GiB | 10 | 256 |
-   | large | 50 GiB | 2,000,000 | 2 GiB | 20 | 512 |
+   | Preset | Disk | Inodes | `MemoryMax` | PHP workers (`pm.max_children`) | `TasksMax` | CPU priority |
+   |--------|------|--------|-------------|----------------------------------|------------|--------------|
+   | small (default) | 10 GiB | 500,000 | 512 MiB | 5 | 128 | normal |
+   | medium | 25 GiB | 1,000,000 | 1 GiB | 10 | 256 | high |
+   | large | 50 GiB | 2,000,000 | 2 GiB | 20 | 512 | high |
 
-   `MemoryHigh` is 90 percent of `MemoryMax`. CPU uses `CPUWeight` only (fair share under contention); a hard `CPUQuota` is an optional per-site value, off in all seeded presets. Changing a preset updates the sites that use it without overrides.
+   `MemoryHigh` is 90 percent of `MemoryMax`. Changing a preset updates the sites that use it without overrides.
+
+   **CPU (Kim, 2026-11-19):** no hard limit by default. Between sites, a "CPU priority" mode low / normal / high maps to `CPUWeight` 50 / 100 / 200; a free `CPUWeight` value (1 to 10000) is possible per site. Inside a site, cron jobs and background services run with `Nice=10` (changeable per job), so the PHP workers serving visitors win over a long script of the same site. Niceness is not used between sites: each site has its own cgroup, so only the weight decides between them [U: standard cgroup v2 scheduler behaviour, not measured on the target]. A hard `CPUQuota` stays an optional per-site value, off in all seeded presets.
 4. **`pm = ondemand` as default**, `dynamic` or `static` for busy sites, `pm.max_children` derived from the preset [A]. Keeping this per-site means a runaway site hits its own ceiling first.
 5. **Database:** connection limit per DB user by default, size shown and warned about, **no automatic enforcement in v1**. Read-only lock is a later opt-in.
 6. **Nginx:** optional per-site `limit_req` and `limit_conn` presets, off by default. No traffic quotas in v1.
