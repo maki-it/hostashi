@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -152,4 +153,37 @@ func TestMaintenanceValidation(t *testing.T) {
 		_, err := raw.Call(context.Background(), c, rawRequest(body))
 		wantCode(t, err, agentrpc.CodeInvalidArgument)
 	}
+}
+
+func TestParkedNeedsPageAndCertificate(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "pages")
+	c, _ := startSiteAgentCfg(t, Config{Web: &web.Reconciler{Base: filepath.Join(t.TempDir(), "web"), Driver: &web.Nginx{}}, Pages: &pages.Store{Dir: dir}})
+	ctx := context.Background()
+
+	_, err := agentapi.WebApply.Call(ctx, c, agentapi.WebApplyRequest{Parked: []agentapi.WebParked{{
+		Name: "_park-1", Domain: "parked.example.net", Page: "builtin-parking", Digest: strings.Repeat("a", 64),
+	}}})
+	wantCode(t, err, agentrpc.CodeNotFound)
+
+	digest := upload(t, c, "builtin-parking", map[string][]byte{"index.html": []byte("soon")})
+
+	_, err = agentapi.WebApply.Call(ctx, c, agentapi.WebApplyRequest{Parked: []agentapi.WebParked{{
+		Name: "_park-1", Domain: "parked.example.net", Page: "builtin-parking", Digest: digest, TLS: true,
+	}}})
+	wantCode(t, err, agentrpc.CodePrecondition)
+
+	raw := agentrpc.Op[rawRequest, rawResponse]{Name: "web.apply"}
+	for _, body := range []string{
+		`{"sites":[],"parked":[{"name":"park-1","domain":"a.example.net","page":"x","digest":"` + digest + `"}]}`,
+		`{"sites":[],"parked":[{"name":"_park-0","domain":"a.example.net","page":"x","digest":"` + digest + `"}]}`,
+		`{"sites":[],"parked":[{"name":"_park-1","domain":"a.example.net;","page":"x","digest":"` + digest + `"}]}`,
+		`{"sites":[],"parked":[{"name":"_park-1","domain":"a.example.net","page":"x","digest":"` + digest + `"},{"name":"_park-2","domain":"a.example.net","page":"x","digest":"` + digest + `"}]}`,
+	} {
+		_, err := raw.Call(ctx, c, rawRequest(body))
+		wantCode(t, err, agentrpc.CodeInvalidArgument)
+	}
+
+	// The certificate operations accept the name of a parked domain.
+	_, err = agentapi.TLSCSR.Call(ctx, c, agentapi.TLSCSRRequest{User: "_park-1", Domains: []string{"parked.example.net"}})
+	wantCode(t, err, agentrpc.CodePrecondition) // no certificate store in this test
 }

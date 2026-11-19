@@ -159,6 +159,21 @@ type WebPanel struct {
 type WebApplyRequest struct {
 	Sites []WebSite `json:"sites"`
 	Panel *WebPanel `json:"panel,omitempty"`
+	// Parked are domains without a site that show a parking page.
+	Parked []WebParked `json:"parked,omitempty"`
+}
+
+// MaxParked bounds the parked domains of a server.
+const MaxParked = 500
+
+// WebParked is a parked domain (ADR-0027): its page with status 200, over
+// HTTPS with the certificate Name when TLS is set.
+type WebParked struct {
+	Name   string `json:"name"` // ParkName, also the certificate name
+	Domain string `json:"domain"`
+	Page   string `json:"page"`
+	Digest string `json:"digest"`
+	TLS    bool   `json:"tls,omitempty"`
 }
 
 // Validate checks names and that no user or domain appears twice.
@@ -221,6 +236,44 @@ func (r WebApplyRequest) Validate() error {
 
 		if domains[r.Panel.Domain] {
 			return errors.New("domain " + r.Panel.Domain + " is the panel's address")
+		}
+
+		domains[r.Panel.Domain] = true
+	}
+
+	if len(r.Parked) > MaxParked {
+		return fmt.Errorf("too many parked domains (max %d)", MaxParked)
+	}
+
+	names := map[string]bool{}
+
+	for _, p := range r.Parked {
+		if err := ValidateParkName(p.Name); err != nil {
+			return err
+		}
+
+		if names[p.Name] {
+			return fmt.Errorf("parked name %q listed twice", p.Name)
+		}
+
+		names[p.Name] = true
+
+		if err := ValidateDomain(p.Domain); err != nil {
+			return fmt.Errorf("parked: %w", err)
+		}
+
+		if domains[p.Domain] {
+			return errors.New("parked domain " + p.Domain + " is used elsewhere")
+		}
+
+		domains[p.Domain] = true
+
+		if err := ValidatePageID(p.Page); err != nil {
+			return fmt.Errorf("parked %s: %w", p.Domain, err)
+		}
+
+		if err := ValidatePageDigest(p.Digest); err != nil {
+			return fmt.Errorf("parked %s: %w", p.Domain, err)
 		}
 	}
 

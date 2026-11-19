@@ -5,6 +5,8 @@ package agentapi
 import (
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -14,9 +16,28 @@ import (
 // The underscore makes it impossible as a site user.
 const PanelCert = "_panel"
 
-// ValidateCertName accepts a site user or PanelCert.
+// ParkPrefix starts the names of parked domains: "_park-<n>" names the
+// config file and the certificate of one (ADR-0027). The underscore makes
+// it impossible as a site user.
+const ParkPrefix = "_park-"
+
+var parkNameRe = regexp.MustCompile(`^_park-[1-9][0-9]{0,9}$`)
+
+// ParkName is the name of parked domain n.
+func ParkName(n int64) string { return ParkPrefix + strconv.FormatInt(n, 10) }
+
+// ValidateParkName accepts "_park-<n>".
+func ValidateParkName(name string) error {
+	if !parkNameRe.MatchString(name) {
+		return fmt.Errorf("parked name %q: must match %s", name, parkNameRe)
+	}
+
+	return nil
+}
+
+// ValidateCertName accepts a site user, PanelCert or a ParkName.
 func ValidateCertName(name string) error {
-	if name == PanelCert {
+	if name == PanelCert || parkNameRe.MatchString(name) {
 		return nil
 	}
 

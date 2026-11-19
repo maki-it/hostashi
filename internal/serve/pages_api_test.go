@@ -142,3 +142,40 @@ func TestStatusPagesOverHTTP(t *testing.T) {
 		t.Errorf("me: %s", rec.Body)
 	}
 }
+
+func TestParkedDomainsOverHTTP(t *testing.T) {
+	ag := &stubAgent{}
+	e := newAPIWithAgent(t, ag)
+	c := e.adminCookie(t)
+
+	// Without an ACME client HTTPS is refused; it is on by default.
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/parked-domains/soon.example.net", cookie: c, body: `{}`}); rec.Code != http.StatusConflict || errCode(t, rec) != "tls_unavailable" {
+		t.Fatalf("default https: %d %s", rec.Code, rec.Body)
+	}
+
+	rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/parked-domains/soon.example.net", cookie: c, body: `{"tls":false}`})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"domain":"soon.example.net","page":"builtin-parking","tls":{"enabled":false,"active":false,"notAfter":null}`) ||
+		len(ag.web.Parked) != 1 {
+		t.Fatalf("park: %d %s %+v", rec.Code, rec.Body, ag.web.Parked)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/parked-domains/bad;domain", cookie: c, body: `{"tls":false}`}); rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("bad domain: %d", rec.Code)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/parked-domains", cookie: c}); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"parkedDomains":[{"domain":"soon.example.net"`) {
+		t.Fatalf("list: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/status-pages/builtin-parking", cookie: c}); !strings.Contains(rec.Body.String(), `"parked":["soon.example.net"]`) {
+		t.Errorf("page: %s", rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "DELETE", path: "/api/v1/parked-domains/soon.example.net", cookie: c}); rec.Code != http.StatusNoContent || len(ag.web.Parked) != 0 {
+		t.Fatalf("delete: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/parked-domains/soon.example.net", cookie: c}); rec.Code != http.StatusNotFound || errCode(t, rec) != "parked_not_found" {
+		t.Errorf("get deleted: %d %s", rec.Code, rec.Body)
+	}
+}

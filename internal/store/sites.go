@@ -112,6 +112,11 @@ func insertDomains(ctx context.Context, tx *sql.Tx, siteID int64, domains []stri
 			return fmt.Errorf("store: %w", err)
 		}
 
+		// A parked domain that becomes part of a site is no longer parked.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM parked_domains WHERE domain = ?`, d); err != nil {
+			return fmt.Errorf("store: %w", err)
+		}
+
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO site_domains (domain, site_id, position) VALUES (?, ?, ?)`, d, siteID, i); err != nil {
 			return fmt.Errorf("store: %w", err)

@@ -1205,3 +1205,96 @@ func TestMaintenanceSite(t *testing.T) {
 		t.Errorf("page served after maintenance: %d", code)
 	}
 }
+
+func TestParkedDomain(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+	tlsPort := freePort(t)
+	e.r.Driver.ListenTLS = []string{"127.0.0.1:" + strconv.Itoa(tlsPort)}
+	e.r.Driver.LegacyHTTP2 = legacyHTTP2(t, e.ctl.bin)
+	e.r.Driver.ACMERoot = filepath.Join(e.dir, "acme")
+
+	challenge := filepath.Join(e.r.Driver.ACMERoot, ".well-known", "acme-challenge")
+	if err := os.MkdirAll(challenge, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(challenge, "tok123"), []byte("tok123.thumb"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := e.page(t, map[string]string{"index.html": "<h1>Coming soon</h1>", "css/a.css": "h1{}"})
+	plain := Parked{Name: "_park-1", Domain: "parked.example.net", Page: m.Page, Digest: m.Digest, Dir: m.Dir}
+	secure := Parked{Name: "_park-2", Domain: "secure.example.net", Page: m.Page, Digest: m.Digest, Dir: m.Dir}
+
+	certDir := filepath.Join(e.dir, "certs")
+	if err := os.MkdirAll(certDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	var pool *x509.CertPool
+
+	secure.Cert, secure.Key, pool = selfSigned(t, certDir, "secure.example.net")
+	site := e.site(t, "alpha", "hello alpha", "alpha.example.com")
+
+	if _, err := e.r.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{site}, Parked: []Parked{plain, secure}}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, p := range []string{"/", "/some/deep/path?x=1", "/index.php"} {
+		code, h, body := e.fetchFull(t, "parked.example.net", p)
+		if code != http.StatusOK || body != "<h1>Coming soon</h1>" || h.Get("Content-Security-Policy") != PageCSP || h.Get("Retry-After") != "" {
+			t.Errorf("parked %s: %d %q %v", p, code, body, h)
+		}
+	}
+
+	if code, h, body := e.fetchFull(t, "parked.example.net", "/.hostashi/page/maint/css/a.css"); code != http.StatusOK || body != "h1{}" || h.Get("Content-Type") != "text/css; charset=utf-8" {
+		t.Errorf("page file: %d %q %v", code, body, h)
+	}
+
+	for _, host := range []string{"parked.example.net", "secure.example.net"} {
+		if code, body := e.fetchPath(t, host, "/.well-known/acme-challenge/tok123"); code != http.StatusOK || body != "tok123.thumb" {
+			t.Errorf("challenge on %s: %d %q", host, code, body)
+		}
+	}
+
+	if code, _ := e.fetch(t, "secure.example.net"); code != http.StatusMovedPermanently {
+		t.Errorf("http on the TLS parked domain: %d", code)
+	}
+
+	if code, body := e.fetch(t, "alpha.example.com"); code != http.StatusOK || body != "hello alpha" {
+		t.Errorf("site: %d %q", code, body)
+	}
+
+	addr := "127.0.0.1:" + strconv.Itoa(tlsPort)
+	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			var d net.Dialer
+
+			return d.DialContext(ctx, network, addr)
+		},
+	}}
+
+	resp, err := client.Get("https://secure.example.net/anything")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK || string(body) != "<h1>Coming soon</h1>" {
+		t.Fatalf("https: %d %q", resp.StatusCode, body)
+	}
+
+	// A parked domain cannot also belong to a site.
+	plain.Domain = "alpha.example.com"
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{site}, Parked: []Parked{plain}}); !errors.Is(err, ErrInvalidDesired) {
+		t.Fatalf("duplicate domain: %v", err)
+	}
+}

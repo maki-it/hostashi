@@ -225,6 +225,7 @@ func (s *Service) RenewDue(ctx context.Context) {
 	}
 
 	s.renewPanel(ctx)
+	s.renewParked(ctx)
 
 	sites, err := s.st.Sites(ctx)
 	if err != nil {

@@ -35,6 +35,7 @@ type Page struct {
 	Digest    string
 	Files     []store.StatusPageFile
 	Sites     []string // sites that name the page
+	Parked    []string // parked domains that show the page
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -78,12 +79,12 @@ func builtinPage(id string) (Page, map[string][]byte, bool) {
 		list = append(list, store.StatusPageFile{Path: p, Size: len(b)})
 	}
 
-	return Page{ID: id, Name: builtinNames[id], Kind: kind, Builtin: true, Digest: agentapi.PageDigest(files), Files: list, Sites: []string{}}, files, true
+	return Page{ID: id, Name: builtinNames[id], Kind: kind, Builtin: true, Digest: agentapi.PageDigest(files), Files: list, Sites: []string{}, Parked: []string{}}, files, true
 }
 
 func fromStored(p store.StatusPage) Page {
 	return Page{
-		ID: pageAgentID(p.ID), Name: p.Name, Kind: p.Kind, Digest: p.Digest, Files: p.Files, Sites: p.Sites,
+		ID: pageAgentID(p.ID), Name: p.Name, Kind: p.Kind, Digest: p.Digest, Files: p.Files, Sites: p.Sites, Parked: p.Parked,
 		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
@@ -100,6 +101,11 @@ func (s *Service) Pages(ctx context.Context) ([]Page, error) {
 		return nil, err
 	}
 
+	parked, err := s.st.ParkedDomains(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	out := make([]Page, 0, len(stored)+2)
 
 	for _, id := range []string{statuspage.BuiltinMaintenance, statuspage.BuiltinParking} {
@@ -108,6 +114,12 @@ func (s *Service) Pages(ctx context.Context) ([]Page, error) {
 		for _, site := range sites {
 			if id == statuspage.BuiltinMaintenance && site.MaintenancePage == 0 && site.Maintenance {
 				p.Sites = append(p.Sites, site.Name)
+			}
+		}
+
+		for _, pd := range parked {
+			if id == statuspage.BuiltinParking && pd.Page == 0 {
+				p.Parked = append(p.Parked, pd.Domain)
 			}
 		}
 
@@ -123,8 +135,17 @@ func (s *Service) Pages(ctx context.Context) ([]Page, error) {
 
 // Page returns one page.
 func (s *Service) Page(ctx context.Context, id string) (Page, error) {
-	if p, _, ok := builtinPage(id); ok {
-		return p, nil
+	if _, _, ok := builtinPage(id); ok {
+		all, err := s.Pages(ctx) // with the sites and domains that use it
+		if err != nil {
+			return Page{}, err
+		}
+
+		for _, p := range all {
+			if p.ID == id {
+				return p, nil
+			}
+		}
 	}
 
 	n, ok := parsePageID(id)
@@ -250,7 +271,7 @@ func (s *Service) UpdatePage(ctx context.Context, actor int64, id, name string, 
 		return Page{}, err
 	}
 
-	if files != nil && digest != old.Digest && len(old.Sites) > 0 {
+	if files != nil && digest != old.Digest && len(old.Sites)+len(old.Parked) > 0 {
 		if err := s.applyWeb(ctx); err != nil {
 			if rerr := s.st.UpdateStatusPage(context.WithoutCancel(ctx), n, old.Name, old.Digest, oldFiles, s.now()); rerr != nil {
 				s.log.ErrorContext(ctx, "restore page after failed change", "page", id, "err", rerr)
@@ -421,6 +442,18 @@ func canonicalAllow(in []string) ([]string, error) {
 func (s *Service) maintenanceWeb(ctx context.Context, site store.Site, onAgent map[string]bool) (*agentapi.WebMaintenance, error) {
 	id := MaintenancePageID(site)
 
+	digest, err := s.pageOnAgent(ctx, id, site.MaintenancePage, onAgent)
+	if err != nil {
+		return nil, err
+	}
+
+	return &agentapi.WebMaintenance{Page: id, Digest: digest, AllowIPs: site.MaintenanceAllow}, nil
+}
+
+// pageOnAgent returns the digest of page id (stored is its database id, 0
+// for a built-in page) and sends it to the agent if the agent lacks that
+// version. Under s.mu.
+func (s *Service) pageOnAgent(ctx context.Context, id string, stored int64, onAgent map[string]bool) (string, error) {
 	var (
 		files  map[string][]byte
 		digest string
@@ -429,36 +462,38 @@ func (s *Service) maintenanceWeb(ctx context.Context, site store.Site, onAgent m
 	if _, f, ok := builtinPage(id); ok {
 		files, digest = f, agentapi.PageDigest(f)
 	} else {
-		p, err := s.st.StatusPageByID(ctx, site.MaintenancePage)
+		p, err := s.st.StatusPageByID(ctx, stored)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 
 		digest = p.Digest
 	}
 
-	if !onAgent[id+"."+digest] {
-		if files == nil {
-			var err error
-			if files, err = s.st.StatusPageFiles(ctx, site.MaintenancePage); err != nil {
-				return nil, err
-			}
-		}
-
-		if err := s.ag.PageUpload(ctx, id, files, digest); err != nil {
-			return nil, err
-		}
-
-		onAgent[id+"."+digest] = true
+	if onAgent[id+"."+digest] {
+		return digest, nil
 	}
 
-	return &agentapi.WebMaintenance{Page: id, Digest: digest, AllowIPs: site.MaintenanceAllow}, nil
+	if files == nil {
+		var err error
+		if files, err = s.st.StatusPageFiles(ctx, stored); err != nil {
+			return "", err
+		}
+	}
+
+	if err := s.ag.PageUpload(ctx, id, files, digest); err != nil {
+		return "", err
+	}
+
+	onAgent[id+"."+digest] = true
+
+	return digest, nil
 }
 
-// agentPages lists the page versions the agent holds, only when a site
-// needs one.
-func (s *Service) agentPages(ctx context.Context, sites []store.Site) (map[string]bool, error) {
-	need := slices.ContainsFunc(sites, func(site store.Site) bool {
+// agentPages lists the page versions the agent holds, only when a site or
+// a parked domain needs one.
+func (s *Service) agentPages(ctx context.Context, sites []store.Site, parked int) (map[string]bool, error) {
+	need := parked > 0 || slices.ContainsFunc(sites, func(site store.Site) bool {
 		return site.State == store.SiteActive && site.Maintenance && !site.Disabled
 	})
 	if !need {

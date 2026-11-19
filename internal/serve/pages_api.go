@@ -30,7 +30,8 @@ type pageJSON struct {
 	Builtin   bool           `json:"builtin"`
 	SHA256    string         `json:"sha256"`
 	Files     []pageFileJSON `json:"files"`
-	Sites     []string       `json:"sites"` // sites that name the page
+	Sites     []string       `json:"sites"`  // sites that name the page
+	Parked    []string       `json:"parked"` // parked domains that show it
 	CreatedAt *time.Time     `json:"createdAt"`
 	UpdatedAt *time.Time     `json:"updatedAt"`
 }
@@ -46,8 +47,14 @@ func toPageJSON(p hosting.Page) pageJSON {
 		sites = []string{}
 	}
 
+	parked := p.Parked
+	if parked == nil {
+		parked = []string{}
+	}
+
 	return pageJSON{
-		ID: p.ID, Name: p.Name, Kind: p.Kind, Builtin: p.Builtin, SHA256: p.Digest, Files: files, Sites: sites,
+		Parked: parked,
+		ID:     p.ID, Name: p.Name, Kind: p.Kind, Builtin: p.Builtin, SHA256: p.Digest, Files: files, Sites: sites,
 		CreatedAt: timeOrNil(p.CreatedAt), UpdatedAt: timeOrNil(p.UpdatedAt),
 	}
 }
@@ -74,7 +81,9 @@ func pageFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 	case errors.Is(err, hosting.ErrPageBuiltin):
 		writeError(w, http.StatusConflict, "page_builtin", "built-in pages cannot be changed or deleted")
 	case errors.Is(err, hosting.ErrPageInUse):
-		writeError(w, http.StatusConflict, "page_in_use", "a site uses this page, choose another page there first")
+		writeError(w, http.StatusConflict, "page_in_use", "a site or parked domain uses this page, choose another page there first")
+	case errors.Is(err, hosting.ErrParkedNotFound):
+		writeError(w, http.StatusNotFound, "parked_not_found", "the domain is not parked")
 	default:
 		siteFail(log, w, err, what)
 	}
@@ -283,5 +292,111 @@ func registerPages(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 		}
 
 		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
+	}))
+}
+
+type parkedJSON struct {
+	Domain    string    `json:"domain"`
+	Page      string    `json:"page"`
+	TLS       parkTLS   `json:"tls"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type parkTLS struct {
+	Enabled  bool       `json:"enabled"`
+	Active   bool       `json:"active"`
+	NotAfter *time.Time `json:"notAfter"`
+	Error    string     `json:"error,omitempty"`
+	FailedAt *time.Time `json:"failedAt,omitempty"`
+}
+
+func toParkedJSON(svc *hosting.Service, p store.Parked) parkedJSON {
+	return parkedJSON{
+		Domain: p.Domain, Page: hosting.ParkedPageID(p), CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+		TLS: parkTLS{
+			Enabled: p.TLS, Active: svc.ParkedTLSActive(p), NotAfter: timeOrNil(p.TLSNotAfter),
+			Error: p.TLSError, FailedAt: timeOrNil(p.TLSFailedAt),
+		},
+	}
+}
+
+// registerParked adds the routes of parked domains (ADR-0027).
+func registerParked(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.Logger) {
+	admin := func(scope string, h func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
+		return a.scoped(scope, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+			if p.User.Role != "admin" {
+				writeError(w, http.StatusForbidden, "forbidden", "only administrators can park domains")
+
+				return
+			}
+
+			h(w, r, p)
+		})
+	}
+
+	mux.HandleFunc("GET /api/v1/parked-domains", admin("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		list, err := svc.ParkedDomains(r.Context())
+		if err != nil {
+			pageFail(log, w, err, "list parked domains")
+
+			return
+		}
+
+		out := make([]parkedJSON, 0, len(list))
+		for _, p := range list {
+			out = append(out, toParkedJSON(svc, p))
+		}
+
+		writeJSON(w, http.StatusOK, map[string][]parkedJSON{"parkedDomains": out})
+	}))
+
+	mux.HandleFunc("GET /api/v1/parked-domains/{domain}", admin("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		p, err := svc.ParkedDomain(r.Context(), r.PathValue("domain"))
+		if err != nil {
+			pageFail(log, w, err, "get parked domain")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toParkedJSON(svc, p))
+	}))
+
+	// Parks a domain or changes its page and HTTPS ("tls" defaults to on).
+	mux.HandleFunc("PUT /api/v1/parked-domains/{domain}", admin("sites.maintenance:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in struct {
+			Page string `json:"page"`
+			TLS  *bool  `json:"tls"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		tls := in.TLS == nil || *in.TLS
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		parked, err := svc.SetParked(ctx, p.User.ID, r.PathValue("domain"), in.Page, tls)
+		if err != nil {
+			pageFail(log, w, err, "park domain")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toParkedJSON(svc, parked))
+	}))
+
+	mux.HandleFunc("DELETE /api/v1/parked-domains/{domain}", admin("sites.maintenance:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		if err := svc.DeleteParked(ctx, p.User.ID, r.PathValue("domain")); err != nil {
+			pageFail(log, w, err, "unpark domain")
+
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
 	}))
 }
