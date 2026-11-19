@@ -44,7 +44,7 @@ Not checked: Debian 13 and Ubuntu 26.04 (newer OpenSSH), sessions in `user-<uid>
 
 - The installer adds the system group `hostashi-sites` and writes `/etc/ssh/sshd_config.d/10-hostashi.conf` with one block, then checks it with `sshd -t` before it reloads sshd:
 
-  ```
+  ```text
   Match Group hostashi-sites
       AuthorizedKeysFile /etc/hostashi-ssh/keys/%u
       AuthorizedKeysCommand none
