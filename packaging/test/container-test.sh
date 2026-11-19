@@ -541,10 +541,12 @@ expect_mode /var/lib/hostashi-agent/cloudpanel/id_ed25519 "600 root:root"
 # Databases on the "old server" and the read-only dump user, created by
 # the SQL that the panel shows. olddb2 has a view and a trigger; their
 # DEFINER clauses name a user of the old server, so the panel loads the
-# dumps as the databases' owner account (ADR-0030).
+# dumps as the databases' owner account (ADR-0030). The trigger is created
+# without a database name: mariadb-dump keeps a name written there, and a
+# trigger on another database's table is refused at the load, as it should.
 x mariadb -e "CREATE DATABASE olddb; CREATE TABLE olddb.t (v VARCHAR(20)); INSERT INTO olddb.t VALUES ('from web2');
   CREATE DATABASE olddb2; CREATE TABLE olddb2.t (v INT); CREATE VIEW olddb2.vt AS SELECT v FROM olddb2.t;
-  CREATE TRIGGER olddb2.tg BEFORE INSERT ON olddb2.t FOR EACH ROW SET NEW.v = NEW.v + 1;"
+  USE olddb2; CREATE TRIGGER tg BEFORE INSERT ON t FOR EACH ROW SET NEW.v = NEW.v + 1;"
 for d in cpimp_db cpimp_db2; do
   [ "$(api POST /api/v1/sites/cpimp/databases "{\"name\":\"$d\"}")" = 201 ] || fail "create $d: $(x cat /tmp/api.out)"
 done
