@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/cloudpanel/plan"
 	"github.com/maki-it/hostashi/internal/cpmigrate"
@@ -42,6 +44,34 @@ func migrationFail(log *slog.Logger, w http.ResponseWriter, err error, what stri
 	default:
 		log.Error(what, "err", err)
 		writeError(w, http.StatusInternalServerError, "internal", "internal error")
+	}
+}
+
+// importFail maps the errors of creating and importing a site. Site
+// service and agent errors keep the mapping of the sites API.
+func importFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
+	var pe *cpmigrate.PlanError
+
+	switch {
+	case errors.As(err, &pe):
+		code := "skipped"
+		if errors.Is(err, cpmigrate.ErrNeedsReview) {
+			code = "needs_review"
+		}
+
+		writeJSON(w, http.StatusConflict, apiError{apiErrorBody{
+			Code: code, Message: pe.Error(), RequestID: w.Header().Get(RequestIDHeader), Reasons: pe.Reasons,
+		}})
+	case errors.Is(err, cpmigrate.ErrNoSite):
+		writeError(w, http.StatusNotFound, "no_site", "the report has no importable site of this name")
+	case errors.Is(err, cpmigrate.ErrBadRequest):
+		writeError(w, http.StatusUnprocessableEntity, "invalid_argument", err.Error())
+	case errors.Is(err, cpmigrate.ErrNoImporter):
+		writeError(w, http.StatusNotImplemented, "unavailable", "importing is not available on this panel")
+	case errors.Is(err, cpmigrate.ErrNotFound), errors.Is(err, cpmigrate.ErrInvalid):
+		migrationFail(log, w, err, what)
+	default:
+		siteFail(log, w, err, what)
 	}
 }
 
@@ -108,6 +138,76 @@ func registerMigrations(mux *http.ServeMux, a authn, svc *cpmigrate.Service, log
 		writeJSON(w, http.StatusOK, toReportJSON(rep))
 	}))
 
+	// Creating a site takes its name, domains and PHP version from the
+	// stored report; the body can only confirm a review or pick another
+	// PHP version. No certificate is requested before the DNS switch.
+	mux.HandleFunc("POST "+base+"/{id}/sites/{name}", admin("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in struct {
+			Reviewed bool   `json:"reviewed"`
+			PHP      string `json:"php"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		site, err := svc.CreateSite(ctx, p.User.ID, r.PathValue("id"), r.PathValue("name"), cpmigrate.CreateOptions{Reviewed: in.Reviewed, PHP: in.PHP})
+		if err != nil {
+			importFail(log, w, err, "create site from cloudpanel report")
+
+			return
+		}
+
+		writeJSON(w, http.StatusCreated, site)
+	}))
+
+	// The import copies from the old server what the report names for the
+	// site; the body only lists the databases. Starting it again is the
+	// final sync.
+	mux.HandleFunc("POST "+base+"/{id}/sites/{name}/import", admin("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in struct {
+			Databases []agentapi.CloudPanelDBMap `json:"databases"`
+		}
+		if !decodeJSONLimit(w, r, &in, 64<<10) {
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		imp, err := svc.StartImport(ctx, p.User.ID, r.PathValue("id"), r.PathValue("name"), in.Databases)
+		if err != nil {
+			importFail(log, w, err, "start cloudpanel import")
+
+			return
+		}
+
+		writeJSON(w, http.StatusAccepted, imp)
+	}))
+
+	mux.HandleFunc("GET /api/v1/migrations/cloudpanel/imports/{id}", admin("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		imp, err := svc.Import(ctx, r.PathValue("id"))
+		if err != nil {
+			var ae *agentrpc.Error
+			if errors.As(err, &ae) && ae.Code == agentrpc.CodeNotFound || errors.Is(err, cpmigrate.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "no such import")
+
+				return
+			}
+
+			importFail(log, w, err, "read cloudpanel import")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, imp)
+	}))
+
 	mux.HandleFunc("DELETE "+base+"/{id}", admin("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		if err := svc.Delete(r.Context(), p.User.ID, r.PathValue("id")); err != nil {
 			migrationFail(log, w, err, "delete cloudpanel report")
@@ -141,4 +241,27 @@ func migrationTarget(sites *hosting.Service) cpmigrate.TargetFunc {
 
 		return t, nil
 	}
+}
+
+// siteCreator creates a migrated site through the site service: no
+// certificate yet, DNS still points to the old server.
+func siteCreator(sites *hosting.Service) cpmigrate.SiteCreator {
+	return func(ctx context.Context, actor int64, s cpmigrate.NewSite) error {
+		_, err := sites.Create(ctx, actor, hosting.CreateRequest{Name: s.Name, PHP: s.PHP, Domains: s.Domains})
+
+		return err
+	}
+}
+
+// RPCCloudPanelImports starts and reads imports in the agent.
+type RPCCloudPanelImports struct{ C *agentrpc.Client }
+
+// Start implements cpmigrate.Importer.
+func (c RPCCloudPanelImports) Start(ctx context.Context, req agentapi.CloudPanelImportRequest) (agentapi.CloudPanelImport, error) {
+	return agentapi.CloudPanelImportStart.Call(ctx, c.C, req)
+}
+
+// Get implements cpmigrate.Importer.
+func (c RPCCloudPanelImports) Get(ctx context.Context, id string) (agentapi.CloudPanelImport, error) {
+	return agentapi.CloudPanelImportGet.Call(ctx, c.C, agentapi.CloudPanelImportGetRequest{ID: id})
 }
