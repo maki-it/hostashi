@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   activateImport,
+  cronLabel,
   createFromPlan,
   deleteReport,
   deleteSource,
@@ -565,7 +566,7 @@ function PlanRow({
         {site.cronJobs > 0 && (
           <>
             <dt>Cron jobs</dt>
-            <dd>{site.cronJobs}, not copied</dd>
+            <dd>{cronLabel(site)}</dd>
           </>
         )}
       </dl>
@@ -577,6 +578,11 @@ function PlanRow({
         </ul>
       )}
       {(site.action === "import" || site.action === "review") && <CreateForm report={report} site={site} php={php} onChange={onChange} />}
+      {created && site.cronImport > 0 && (
+        <p className="muted">
+          {site.cronImport} cron {site.cronImport === 1 ? "job was created paused. Start it" : "jobs were created paused. Start them"} after the DNS switch.
+        </p>
+      )}
       {created && <ImportForm report={report} site={site} ready={ready} />}
     </li>
   );

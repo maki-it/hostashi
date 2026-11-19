@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it } from "vitest";
-import { existsHere, formatBytes, hostProblem, parseDBMap, type PlanSite } from "./cloudpanel";
+import { cronLabel, existsHere, formatBytes, hostProblem, parseDBMap, type PlanSite } from "./cloudpanel";
 
 const site = (action: PlanSite["action"], codes: string[]): PlanSite => ({
   name: "shop",
@@ -13,6 +13,7 @@ const site = (action: PlanSite["action"], codes: string[]): PlanSite => ({
   tls: "reissue",
   customSnippets: 0,
   cronJobs: 0,
+  cronImport: 0,
   action,
   reasons: codes.map((code) => ({ code, msg: code })),
   source: "/etc/nginx/sites-enabled/shop.example.conf",
@@ -75,5 +76,13 @@ describe("formatBytes", () => {
     expect(formatBytes(1023)).toBe("1023 B");
     expect(formatBytes(1536)).toBe("1.5 KiB");
     expect(formatBytes(5 * 1024 ** 3)).toBe("5.0 GiB");
+  });
+});
+
+describe("cronLabel", () => {
+  it("splits carried and manual jobs", () => {
+    expect(cronLabel({ cronJobs: 3, cronImport: 3 })).toBe("3: 3 created paused");
+    expect(cronLabel({ cronJobs: 3, cronImport: 1 })).toBe("3: 1 created paused, 2 to set up by hand");
+    expect(cronLabel({ cronJobs: 2, cronImport: 0 })).toBe("2: 2 to set up by hand");
   });
 });

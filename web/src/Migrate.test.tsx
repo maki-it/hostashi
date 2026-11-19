@@ -26,6 +26,7 @@ const planSite = (name: string, action: PlanSite["action"], reasons: PlanSite["r
   tls: "reissue",
   customSnippets: action === "review" ? 2 : 0,
   cronJobs: 1,
+  cronImport: 1,
   action,
   reasons,
   source: "/etc/nginx/sites-enabled/" + name + ".conf",
@@ -201,6 +202,7 @@ describe("Migrate", () => {
     // After the final sync the imported files become the web root.
     await user.click(status.getByRole("button", { name: "Use imported files as web root" }));
     await user.click(status.getByRole("button", { name: "Use imported files for shop" }));
+    expect(planCard.getByText("1 cron job was created paused. Start it after the DNS switch.")).toBeInTheDocument();
     expect(await status.findByText(/kept as htdocs-before-import-20261119T100500Z/)).toBeInTheDocument();
     expect(calls).toContainEqual({ method: "POST", path: `${base}/sites/shop/activate`, body: undefined });
   });
