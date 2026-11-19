@@ -62,4 +62,4 @@ The final sync compares size and modification time per file and copies only what
 
 ## Open questions
 
-1. Is a root `authorized_keys` line on the old server acceptable when it is locked to read-only SFTP and one port forward? Recommendation: yes, because the alternative (a separate user with read rights on all homes) needs more changes on the old server and still reads the same data [A].
+1. ~~Is a root `authorized_keys` line on the old server acceptable when it is locked to read-only SFTP and one port forward?~~ Decided by Kim (2026-11-19): yes [V: Kim, thread]. A separate user with read rights on all homes would need more changes on the old server and still read the same data [A].
