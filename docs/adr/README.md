@@ -22,6 +22,9 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0024](0024-mariadb-databases-per-site.md) | MariaDB databases per site | Accepted |
 | [0025](0025-database-import-export.md) | Database import and export | Accepted |
 | [0026](0026-cloudpanel-migration-transfer.md) | Data transfer for the CloudPanel migration | Accepted |
+| [0027](0027-maintenance-and-parking-pages.md) | Maintenance and parking pages | Accepted |
+| [0028](0028-cron-jobs-per-site.md) | Cron jobs per site | Accepted |
+| [0029](0029-custom-nginx-snippets.md) | Custom nginx snippets per site | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 
