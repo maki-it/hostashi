@@ -132,6 +132,10 @@ type SnapshotEntry struct {
 	Kind     string    `json:"kind"`
 	Site     string    `json:"site,omitempty"`
 	Database string    `json:"database,omitempty"`
+	// Bytes and Files are the size of the content, 0 when restic did not
+	// record it.
+	Bytes int64 `json:"bytes,omitempty"`
+	Files int64 `json:"files,omitempty"`
 }
 
 // entries decodes the tags Item.Tags writes; snapshots with other tags
@@ -141,6 +145,9 @@ func entries(snaps []resticctl.Snapshot) []SnapshotEntry {
 
 	for _, s := range snaps {
 		e := SnapshotEntry{ID: s.ID, Time: s.Time.UTC()}
+		if s.Summary != nil {
+			e.Bytes, e.Files = s.Summary.TotalBytesProcessed, s.Summary.TotalFilesProcessed
+		}
 
 		for _, t := range s.Tags {
 			k, v, _ := strings.Cut(t, ":")

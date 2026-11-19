@@ -27,7 +27,40 @@ var (
 	ErrSnapshotNotFound = errors.New("backup: no such snapshot of this site")
 	ErrRestoreBusy      = errors.New("backup: a restore is in progress")
 	ErrRestoreNotFound  = errors.New("backup: no such restore")
+	// ErrNoSpace means the snapshot does not fit into what is left under
+	// the site's disk limits (ADR-0015). The restore runs as root, which
+	// the quota does not stop, so it is checked before.
+	ErrNoSpace = errors.New("backup: the snapshot does not fit under the site's disk limits")
 )
+
+// Space is what a site may still write under its disk limits.
+type Space struct {
+	Limited                 bool   // false: no limits, or no project quota
+	FreeBytes               uint64 // under the byte limit; 0 when that is unlimited
+	FreeInodes              uint64 // under the file limit; 0 when that is unlimited
+	BytesLimit, InodesLimit uint64
+}
+
+// SpaceFunc reports the Space of a site.
+type SpaceFunc func(site string) (Space, error)
+
+// fits reports whether a snapshot of bytes and files fits into sp, and if
+// not, why.
+func fits(sp Space, bytes, files int64) (bool, string) {
+	if !sp.Limited {
+		return true, ""
+	}
+
+	if sp.BytesLimit > 0 && bytes > 0 && uint64(bytes) > sp.FreeBytes {
+		return false, fmt.Sprintf("the snapshot holds %d bytes, the site has %d bytes left under its limit", bytes, sp.FreeBytes)
+	}
+
+	if sp.InodesLimit > 0 && files > 0 && uint64(files) > sp.FreeInodes {
+		return false, fmt.Sprintf("the snapshot holds %d files, the site has %d files left under its limit", files, sp.FreeInodes)
+	}
+
+	return true, ""
+}
 
 // RestoreDirPrefix starts the name of every restore directory in a home.
 const RestoreDirPrefix = "restore-"
@@ -105,6 +138,17 @@ func (a *Agent) StartRestore(ctx context.Context, site, snapshot string) (Restor
 	home, err := a.siteHome(site)
 	if err != nil {
 		return Restore{}, err
+	}
+
+	if a.Space != nil {
+		sp, err := a.Space(site)
+		if err != nil {
+			return Restore{}, fmt.Errorf("backup: space of site %s: %w", site, err)
+		}
+
+		if ok, why := fits(sp, snap.Bytes, snap.Files); !ok {
+			return Restore{}, fmt.Errorf("%w: %s", ErrNoSpace, why)
+		}
 	}
 
 	all, err := a.restores()

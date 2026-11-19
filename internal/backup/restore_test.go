@@ -341,3 +341,59 @@ func writeRegistry(t *testing.T, dir string, names ...string) {
 		t.Fatal(err)
 	}
 }
+
+func TestFits(t *testing.T) {
+	limited := Space{Limited: true, BytesLimit: 1000, InodesLimit: 100, FreeBytes: 400, FreeInodes: 10}
+
+	for _, c := range []struct {
+		sp           Space
+		bytes, files int64
+		ok           bool
+	}{
+		{Space{}, 1 << 40, 1 << 30, true}, // no limits
+		{limited, 400, 10, true},          // exactly fits
+		{limited, 401, 1, false},          // too many bytes
+		{limited, 1, 11, false},           // too many files
+		{limited, 0, 0, true},             // size unknown: no check
+		{Space{Limited: true, InodesLimit: 100, FreeInodes: 5}, 1 << 40, 5, true}, // bytes unlimited
+	} {
+		if ok, why := fits(c.sp, c.bytes, c.files); ok != c.ok || (ok == (why != "")) {
+			t.Errorf("fits(%+v, %d, %d) = %v %q", c.sp, c.bytes, c.files, ok, why)
+		}
+	}
+}
+
+func TestStartRestoreChecksSpace(t *testing.T) {
+	ctx := context.Background()
+	a, units := readyAgent(t)
+	id := strings.Repeat("ab", 32)
+
+	if err := WriteSnapshots(a.StatusDir, []SnapshotEntry{{ID: id, Kind: KindFiles, Site: "blog", Bytes: 5000, Files: 20}}); err != nil {
+		t.Fatal(err)
+	}
+
+	var asked string
+
+	a.Space = func(site string) (Space, error) {
+		asked = site
+
+		return Space{Limited: true, BytesLimit: 10000, FreeBytes: 4000}, nil
+	}
+
+	_, err := a.StartRestore(ctx, "blog", id)
+	if !errors.Is(err, ErrNoSpace) || !strings.Contains(err.Error(), "5000 bytes") || asked != "blog" || len(units.calls) != 0 {
+		t.Fatalf("restore over the limit: %v, asked %q, units %v", err, asked, units.calls)
+	}
+
+	a.Space = func(string) (Space, error) { return Space{}, errors.New("quota read failed") }
+
+	if _, err := a.StartRestore(ctx, "blog", id); err == nil || errors.Is(err, ErrNoSpace) {
+		t.Fatalf("failed space check: %v", err)
+	}
+
+	a.Space = func(string) (Space, error) { return Space{Limited: true, BytesLimit: 10000, FreeBytes: 6000}, nil }
+
+	if _, err := a.StartRestore(ctx, "blog", id); err != nil {
+		t.Fatalf("restore that fits: %v", err)
+	}
+}

@@ -60,6 +60,8 @@ type Agent struct {
 	UnitDir  string
 	Units    Units
 	Host     string // comment of the public key
+	// Space checks a restore against the site's disk limits; nil: no check.
+	Space SpaceFunc
 
 	mu sync.Mutex
 }
@@ -272,7 +274,7 @@ func (a *Agent) Snapshots(site string) ([]agentapi.BackupSnapshot, error) {
 
 	for _, s := range all {
 		if s.Site == site {
-			out = append(out, agentapi.BackupSnapshot{ID: s.ID, Time: s.Time, Kind: s.Kind, Database: s.Database})
+			out = append(out, agentapi.BackupSnapshot{ID: s.ID, Time: s.Time, Kind: s.Kind, Database: s.Database, Bytes: s.Bytes, Files: s.Files})
 		}
 	}
 

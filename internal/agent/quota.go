@@ -9,6 +9,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/backup"
 	"github.com/maki-it/hostashi/internal/quota"
 	"github.com/maki-it/hostashi/internal/sites"
 )
@@ -123,6 +124,39 @@ func (h *siteOps) readQuota(home string, id uint32) (agentapi.SiteQuota, error) 
 	return agentapi.SiteQuota{
 		Available: true, Bytes: u.Bytes, Inodes: u.Inodes, BytesLimit: u.BytesLimit, InodesLimit: u.InodesLimit,
 	}, nil
+}
+
+// freeSpace is what a site may still write under its disk limits, for
+// the restore check (backup.SpaceFunc).
+func (h *siteOps) freeSpace(user string) (backup.Space, error) {
+	if h.quota == nil {
+		return backup.Space{}, nil
+	}
+
+	site, home, err := h.site(user)
+	if err != nil {
+		return backup.Space{}, err
+	}
+
+	if ok, err := h.quota.Available(home); err != nil || !ok {
+		return backup.Space{}, err
+	}
+
+	u, err := h.quota.Get(home, site.UID)
+	if err != nil {
+		return backup.Space{}, err
+	}
+
+	sp := backup.Space{Limited: u.BytesLimit > 0 || u.InodesLimit > 0, BytesLimit: u.BytesLimit, InodesLimit: u.InodesLimit}
+	if u.BytesLimit > u.Bytes {
+		sp.FreeBytes = u.BytesLimit - u.Bytes
+	}
+
+	if u.InodesLimit > u.Inodes {
+		sp.FreeInodes = u.InodesLimit - u.Inodes
+	}
+
+	return sp, nil
 }
 
 // clearQuota drops the limits of a deleted site, so a later site that gets

@@ -182,6 +182,10 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, quota: cfg.Quota, slices: cfg.Slices, log: log}
 		h.register(s)
 
+		if cfg.Backup != nil && cfg.Backup.Space == nil {
+			cfg.Backup.Space = h.freeSpace
+		}
+
 		disk, root := cfg.Disk, cfg.CgroupRoot
 		if disk == nil {
 			disk = &sitestats.DiskCache{}

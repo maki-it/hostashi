@@ -245,6 +245,9 @@ type BackupSnapshot struct {
 	Time     time.Time `json:"time"`
 	Kind     string    `json:"kind"`
 	Database string    `json:"database,omitempty"`
+	// Bytes and Files are the size of the content, 0 when unknown.
+	Bytes int64 `json:"bytes,omitempty"`
+	Files int64 `json:"files,omitempty"`
 }
 
 // BackupSnapshotsResponse lists snapshots, newest first.
