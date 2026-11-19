@@ -36,7 +36,10 @@ export async function request<T>(method: "GET" | "POST" | "PUT" | "DELETE", path
     credentials: "same-origin",
     headers: { Accept: "application/json" },
   };
-  if (body !== undefined) {
+  if (body instanceof FormData) {
+    // The browser sets multipart/form-data with its boundary.
+    init.body = body;
+  } else if (body !== undefined) {
     init.headers = { ...init.headers, "Content-Type": "application/json" };
     init.body = JSON.stringify(body);
   }

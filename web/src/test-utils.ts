@@ -11,7 +11,8 @@ export function mockFetch(routes: Record<string, Route | ((body: unknown) => Rou
   const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const method = (init?.method ?? "GET").toUpperCase();
     const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url;
-    const body = typeof init?.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+    const body =
+      typeof init?.body === "string" ? (JSON.parse(init.body) as unknown) : init?.body instanceof FormData ? init.body : undefined;
     calls.push({ method, path, body });
     const entry = routes[method + " " + path];
     if (!entry) throw new Error("unexpected request " + method + " " + path);

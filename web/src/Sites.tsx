@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { allowIpsProblem, clientIp, listPages, pageMessage, parseAllowIps, setMaintenance, type StatusPage } from "./pages";
 import {
   createSite,
   deleteSite,
@@ -222,6 +223,7 @@ function SiteRow({ site, php, onChange }: { site: Site; php: PHPVersions | null;
       <span>
         <strong>{site.name}</strong> <span className="muted">{primary}</span>
         {site.disabled && <span className="badge">Disabled</span>}
+        {site.maintenance.enabled && !site.disabled && <span className="badge">Maintenance</span>}
       </span>
       {!confirming && (
         <button type="button" className="secondary danger" disabled={busy} onClick={() => setConfirming(true)}>
@@ -237,7 +239,10 @@ function SiteRow({ site, php, onChange }: { site: Site; php: PHPVersions | null;
               ? "Being created"
               : site.disabled
                 ? "Disabled: visitors get “temporarily unavailable”, PHP is stopped"
-                : "Active"}
+                : site.maintenance.enabled
+                  ? "Maintenance: visitors get the maintenance page" +
+                    (site.maintenance.allowIps.length > 0 ? ", except " + site.maintenance.allowIps.join(", ") : "")
+                  : "Active"}
         </dd>
         <dt>PHP</dt>
         <dd>{site.php ? "PHP " + site.php + (site.disabled ? " (stopped)" : "") : "No PHP"}</dd>
@@ -424,6 +429,7 @@ function SiteSettings({
         </label>
         {site.tls.hsts && !site.tls.active && <p className="muted">HSTS is sent only while the site is served over HTTPS.</p>}
       </fieldset>
+      <MaintenanceSettings site={site} onChange={onChange} />
       <fieldset>
         <legend>Availability of {site.name}</legend>
         {site.disabled ? (
@@ -466,5 +472,117 @@ function SiteSettings({
         </button>
       </div>
     </div>
+  );
+}
+
+// MaintenanceSettings switches the maintenance page of a site: addresses
+// outside the list get the page with 503, the listed ones see the site.
+function MaintenanceSettings({ site, onChange }: { site: Site; onChange: () => Promise<void> }) {
+  const m = site.maintenance;
+  const [pages, setPages] = useState<StatusPage[] | null>(null);
+  const [page, setPage] = useState(m.page);
+  const [allow, setAllow] = useState(m.allowIps.join("\n"));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState("");
+
+  useEffect(() => {
+    listPages()
+      .then((all) => setPages(all.filter((p) => p.kind === "maintenance")))
+      .catch(() => setPages([]));
+  }, []);
+
+  const choices: { id: string; name: string }[] = [...(pages ?? [])];
+  if (!choices.some((p) => p.id === page)) {
+    choices.unshift({ id: page, name: page === "builtin-maintenance" ? "Built-in maintenance page" : page });
+  }
+
+  async function save(enabled: boolean, e?: FormEvent) {
+    e?.preventDefault();
+    const list = parseAllowIps(allow);
+    const problem = allowIpsProblem(list);
+    if (problem) {
+      setError(problem);
+      setDone("");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setDone("");
+    try {
+      const s = await setMaintenance(site.name, { enabled, page, allowIps: list });
+      setAllow(s.maintenance.allowIps.join("\n"));
+      await onChange();
+      setDone(
+        !enabled
+          ? "Maintenance is off. Everybody sees the site again."
+          : s.maintenance.allowIps.length > 0
+            ? "Maintenance is on. The listed addresses still see the site."
+            : "Maintenance is on. Every visitor gets the maintenance page.",
+      );
+    } catch (err) {
+      setError(pageMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addMine() {
+    setError("");
+    try {
+      const ip = await clientIp();
+      if (!ip) {
+        setError("Your address is not known to the panel.");
+        return;
+      }
+      const list = parseAllowIps(allow);
+      if (!list.includes(ip)) setAllow([...list, ip].join("\n"));
+    } catch (err) {
+      setError(pageMessage(err));
+    }
+  }
+
+  return (
+    <form onSubmit={(e) => void save(m.enabled, e)} noValidate>
+      <fieldset>
+        <legend>Maintenance of {site.name}</legend>
+        <p className="muted">
+          {m.enabled
+            ? "Maintenance is on: visitors get the page with “503 Service Unavailable”. PHP keeps running."
+            : "While maintenance is on, visitors get the page with “503 Service Unavailable”. The allowed addresses see the site as usual, so you can work on it. PHP keeps running."}
+        </p>
+        {site.disabled && <p className="muted">The site is disabled. Disabled wins: visitors get “temporarily unavailable” until it is enabled.</p>}
+        <label>
+          Maintenance page
+          <select value={page} onChange={(e) => setPage(e.target.value)}>
+            {choices.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Allowed addresses
+          <small>IPv4 or IPv6 addresses or ranges like 10.0.0.0/8, one per line, at most 20.</small>
+          <textarea value={allow} onChange={(e) => setAllow(e.target.value)} rows={3} autoComplete="off" spellCheck={false} />
+        </label>
+        <div className="actions">
+          <button type="button" className="secondary" disabled={busy} onClick={() => void addMine()}>
+            Add my current IP
+          </button>
+          {m.enabled && (
+            <button type="submit" disabled={busy}>
+              Save maintenance
+            </button>
+          )}
+          <button type="button" className={m.enabled ? "secondary" : undefined} disabled={busy} onClick={() => void save(!m.enabled)}>
+            {m.enabled ? "End maintenance" : "Start maintenance"}
+          </button>
+        </div>
+        {error && <p role="alert">{error}</p>}
+        {done && <p role="status">{done}</p>}
+      </fieldset>
+    </form>
   );
 }
