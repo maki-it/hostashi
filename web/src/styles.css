@@ -209,6 +209,7 @@ select {
 
 .facts dd {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 code,

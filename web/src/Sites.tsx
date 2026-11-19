@@ -240,7 +240,7 @@ function SiteRow({ site, php, onChange }: { site: Site; php: PHPVersions | null;
                 : "Active"}
         </dd>
         <dt>PHP</dt>
-        <dd>{site.php ? "PHP " + site.php : "No PHP"}</dd>
+        <dd>{site.php ? "PHP " + site.php + (site.disabled ? " (stopped)" : "") : "No PHP"}</dd>
         <dt>HTTPS</dt>
         <dd>
           {httpsLabel(site.tls)}
