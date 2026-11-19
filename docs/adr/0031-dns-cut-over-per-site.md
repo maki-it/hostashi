@@ -1,6 +1,6 @@
 # ADR-0031 DNS cut-over per site in the CloudPanel migration
 
-**Status:** Proposed. **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0017 (CloudPanel import as migration), ADR-0026 (data transfer), ADR-0030 (loading dumps), ADR-0023 (panel HTTPS), [`03-features.md`](../03-features.md) (DNS-01 and DNS record management).
+**Status:** Accepted (2026-11-19, by Kim). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0017 (CloudPanel import as migration), ADR-0026 (data transfer), ADR-0030 (loading dumps), ADR-0023 (panel HTTPS), [`03-features.md`](../03-features.md) (DNS-01 and DNS record management).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -54,5 +54,5 @@ The watch uses the system resolver of the new server. A caching resolver there m
 
 ## Open questions
 
-1. Does Kim change the records by hand with the panel watching (A now, C later), or should Hostashi change them through INWX right away (B)?
-2. Are the zones of all 22 sites at INWX, or are some at customers' providers? This only changes how much option B would cover.
+1. ~~Does Kim change the records by hand with the panel watching (A now, C later), or should Hostashi change them through INWX right away (B)?~~ Decided by Kim (2026-11-19): by hand, the panel watches [V: Kim, thread].
+2. ~~Are the zones of all 22 sites at INWX, or are some at customers' providers?~~ Not needed with option A; it matters again when a provider API comes.

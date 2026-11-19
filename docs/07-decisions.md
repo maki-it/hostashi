@@ -34,7 +34,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0028 | Cron jobs per site | Accepted on 2026-11-19 ([adr/0028](adr/0028-cron-jobs-per-site.md)) | No |
 | 0029 | Custom nginx snippets per site | Accepted on 2026-11-19 ([adr/0029](adr/0029-custom-nginx-snippets.md)) | No |
 | 0030 | Loading imported dumps with definers | Accepted on 2026-11-19 ([adr/0030](adr/0030-loading-dumps-with-definers.md)) | No |
-| 0031 | DNS cut-over per site in the CloudPanel migration | Proposed ([adr/0031](adr/0031-dns-cut-over-per-site.md)) | **Yes** |
+| 0031 | DNS cut-over per site in the CloudPanel migration | Accepted on 2026-11-19 ([adr/0031](adr/0031-dns-cut-over-per-site.md)) | No |
 
 ---
 
@@ -256,4 +256,4 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0031 DNS cut-over per site in the CloudPanel migration
 
-**Full text (status Proposed):** [adr/0031](adr/0031-dns-cut-over-per-site.md). Summary: imported sites have no certificate until their domains point to the new server. Recommended: Kim changes the records at the DNS provider; the panel shows the records to set and the TTL it sees, watches every domain once a minute for up to 48 hours, and turns on HTTPS as soon as all answers name only this server. No DNS credential in Hostashi; a provider API (INWX) can follow with DNS-01. Writes on the old site during the switch: per site, accept the short gap or stop writes there by hand before the final sync. Open: manual or INWX API, and where the 22 zones live.
+**Full text (status Accepted, 2026-11-19, by Kim):** [adr/0031](adr/0031-dns-cut-over-per-site.md). Summary: imported sites have no certificate until their domains point to the new server. Recommended: Kim changes the records at the DNS provider; the panel shows the records to set and the TTL it sees, watches every domain once a minute for up to 48 hours, and turns on HTTPS as soon as all answers name only this server. No DNS credential in Hostashi; a provider API (INWX) can follow with DNS-01. Writes on the old site during the switch: per site, accept the short gap or stop writes there by hand before the final sync. Decided by Kim (2026-11-19): the records are changed by hand and the panel watches.
