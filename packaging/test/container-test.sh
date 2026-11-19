@@ -80,7 +80,10 @@ step "plan"
 x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi
 
 step "apply"
-x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --public-url https://panel.example.com
+x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --public-url https://panel.example.com || {
+  x tail -n 60 /var/log/hostashi-install.log >&2 || true
+  fail "first apply failed"
+}
 
 step "second apply changes nothing"
 out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --public-url https://panel.example.com)
