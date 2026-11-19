@@ -204,6 +204,7 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 	e := newAPIWithAgent(t, &stubAgent{})
 	cr := &stubCron{applied: map[string][]agentapi.CronJob{}}
 	e.sites.EnableCron(cr)
+
 	lim := &stubLimits{slices: map[string]agentapi.SiteLimits{}, quotas: map[string][2]uint64{}}
 	e.sites.EnableLimits(lim)
 
