@@ -1,6 +1,6 @@
 # Spike S6: CloudPanel adopt (read a server from the file system)
 
-**Status:** throwaway prototype, not product code. Nothing here is a decision; any follow-up goes through an ADR.
+**Status:** throwaway prototype, not product code. Nothing here is a decision; any follow-up goes through an ADR. The scanner now lives on as product code in `internal/cloudpanel` (`hostashi cloudpanel scan`, ADR-0017); this module stays as the record of the spike.
 
 **Question (from [docs/06-roadmap.md](../../docs/06-roadmap.md) S6 and [docs/03-features.md](../../docs/03-features.md) 3.11, path 1):** Can a real CloudPanel instance be read through the file system? Abort criterion: if fewer than 80 % of the sites are adopted cleanly, shelve the importer.
 

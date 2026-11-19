@@ -63,6 +63,10 @@ commands:
   backup key show
             print the repository password and the panel key to keep outside
             the server (root only, never available over the API)
+  cloudpanel scan [-root DIR] [-json] [-full]
+            read a CloudPanel server (root on the old server, or a read-only
+            copy of its disk) and show which sites can be imported; changes
+            nothing, hides snippets and cron commands unless -full is given
   setup-token  print the one-time token for the first login (read as the serve user or root)
   version   print the version
 `
@@ -180,6 +184,8 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 				return 2
 			}
 		}
+	case "cloudpanel":
+		return cloudpanelCmd(args, stdout, stderr)
 	case "setup-token":
 		dbPath := fs.String("db", store.DefaultPath, "SQLite database path")
 		if fs.Parse(args) != nil || fs.NArg() != 0 {
