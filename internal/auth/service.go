@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -50,6 +51,7 @@ type Config struct {
 	Issuer         string           // shown in authenticator apps, default "Hostashi"
 	Now            func() time.Time // default time.Now
 	Observer       Observer         // failed and throttled logins; nil: none
+	FailLog        *slog.Logger     // gets the FailedEvent line for fail2ban; nil: none
 }
 
 // Service is the login, session and setup logic.
@@ -60,6 +62,7 @@ type Service struct {
 	issuer    string
 	now       func() time.Time
 	obs       Observer
+	flog      *slog.Logger
 
 	ipLimit    *Limiter
 	userLimit  *Limiter
@@ -89,8 +92,14 @@ func NewService(c Config) *Service {
 		obs = nopObserver{}
 	}
 
+	flog := c.FailLog
+	if flog == nil {
+		flog = slog.New(slog.DiscardHandler)
+	}
+
 	return &Service{
 		obs:       obs,
+		flog:      flog,
 		cer:       &ceremonies{m: map[string]ceremony{}, now: now},
 		st:        c.Store,
 		tokenPath: c.SetupTokenPath,
@@ -210,7 +219,7 @@ func (s *Service) Login(ctx context.Context, username, password, code, ip string
 		s.ipLimit.Fail(ipKey)
 		s.userLimit.Fail(userKey)
 		_ = s.st.Audit(ctx, nil, "login.failed", username, map[string]string{"ip": ip})
-		s.obs.Failure(KindPassword)
+		s.failed(ctx, KindPassword, ip)
 
 		return "", store.User{}, ErrInvalidCredentials
 	}
@@ -224,7 +233,7 @@ func (s *Service) Login(ctx context.Context, username, password, code, ip string
 			s.ipLimit.Fail(ipKey)
 			s.userLimit.Fail(userKey)
 			_ = s.st.Audit(ctx, &u.ID, "login.failed", username, map[string]string{"ip": ip, "reason": "second factor"})
-			s.obs.Failure(KindTOTP)
+			s.failed(ctx, KindTOTP, ip)
 
 			return "", store.User{}, ErrInvalidCredentials
 		}

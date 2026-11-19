@@ -211,7 +211,7 @@ func (s *Service) AuthenticateToken(ctx context.Context, raw, ip string) (Princi
 
 	fail := func() (Principal, error) {
 		s.tokenLimit.Fail(key)
-		s.obs.Failure(KindToken)
+		s.failed(ctx, KindToken, ip)
 
 		return Principal{}, ErrUnauthenticated
 	}
