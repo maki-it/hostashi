@@ -1,6 +1,6 @@
 # ADR-0027 Maintenance and parking pages
 
-**Status:** Proposed. **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0006 (state store and reconciler), ADR-0018 (API, example "maintenance and parking pages"), [`03-features.md`](../03-features.md) row "Disable a site, maintenance and parking pages" (P1), PR #93 (disable a site).
+**Status:** Accepted (2026-11-19, by Kim). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0006 (state store and reconciler), ADR-0018 (API, example "maintenance and parking pages"), [`03-features.md`](../03-features.md) row "Disable a site, maintenance and parking pages" (P1), PR #93 (disable a site).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
