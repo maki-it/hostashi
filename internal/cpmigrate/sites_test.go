@@ -26,6 +26,10 @@ func (f *fakeImporter) Start(_ context.Context, r agentapi.CloudPanelImportReque
 	return agentapi.CloudPanelImport{ID: "0123456789abcdef", Site: r.Site, State: agentapi.ImportQueued}, nil
 }
 
+func (f *fakeImporter) List(_ context.Context, site string) ([]agentapi.CloudPanelImport, error) {
+	return []agentapi.CloudPanelImport{{ID: "0123456789abcdef", Site: site}}, nil
+}
+
 func (f *fakeImporter) Get(_ context.Context, id string) (agentapi.CloudPanelImport, error) {
 	return agentapi.CloudPanelImport{ID: id}, nil
 }
@@ -145,6 +149,14 @@ func TestCreateSiteAndImport(t *testing.T) {
 
 	if _, err := svc.StartImport(t.Context(), 1, rep.ID, "x", nil); !errors.Is(err, cpmigrate.ErrNoSite) {
 		t.Fatalf("blocked site: %v", err)
+	}
+
+	if l, err := svc.Imports(t.Context(), "alpha"); err != nil || len(l) != 1 {
+		t.Fatalf("list: %v %v", l, err)
+	}
+
+	if _, err := svc.Imports(t.Context(), "Bad"); !errors.Is(err, cpmigrate.ErrBadRequest) {
+		t.Fatalf("list bad site: %v", err)
 	}
 
 	if _, err := svc.Import(t.Context(), "nope"); !errors.Is(err, cpmigrate.ErrNotFound) {

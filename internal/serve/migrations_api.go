@@ -187,6 +187,22 @@ func registerMigrations(mux *http.ServeMux, a authn, svc *cpmigrate.Service, log
 		writeJSON(w, http.StatusAccepted, imp)
 	}))
 
+	// ?site=NAME limits the list to one site. The agent keeps the last 50
+	// imports; each entry leaves out the skipped paths.
+	mux.HandleFunc("GET /api/v1/migrations/cloudpanel/imports", admin("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		list, err := svc.Imports(ctx, r.URL.Query().Get("site"))
+		if err != nil {
+			importFail(log, w, err, "list cloudpanel imports")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string][]agentapi.CloudPanelImport{"imports": list})
+	}))
+
 	mux.HandleFunc("GET /api/v1/migrations/cloudpanel/imports/{id}", admin("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
@@ -259,6 +275,13 @@ type RPCCloudPanelImports struct{ C *agentrpc.Client }
 // Start implements cpmigrate.Importer.
 func (c RPCCloudPanelImports) Start(ctx context.Context, req agentapi.CloudPanelImportRequest) (agentapi.CloudPanelImport, error) {
 	return agentapi.CloudPanelImportStart.Call(ctx, c.C, req)
+}
+
+// List implements cpmigrate.Importer.
+func (c RPCCloudPanelImports) List(ctx context.Context, site string) ([]agentapi.CloudPanelImport, error) {
+	l, err := agentapi.CloudPanelImportList.Call(ctx, c.C, agentapi.CloudPanelImportListRequest{Site: site})
+
+	return l.Imports, err
 }
 
 // Get implements cpmigrate.Importer.

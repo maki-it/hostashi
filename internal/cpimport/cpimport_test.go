@@ -361,3 +361,41 @@ func TestStartDatabases(t *testing.T) {
 		t.Fatalf("record %+v", got)
 	}
 }
+
+func TestList(t *testing.T) {
+	a, _ := newAgent(t, true)
+
+	// No records directory yet.
+	got, err := a.List("")
+	must(t, err)
+
+	if len(got) != 0 {
+		t.Fatalf("empty: %v", got)
+	}
+
+	must(t, ensureDir(a.Dir))
+
+	old := time.Now().Add(-time.Hour)
+	for _, r := range []Import{
+		{ID: "000000000000000a", Site: "blog", State: agentapi.ImportDone, Created: old, SkippedPaths: []string{"x"}},
+		{ID: "000000000000000b", Site: "shop", State: agentapi.ImportFailed, Created: old.Add(time.Minute)},
+		{ID: "000000000000000c", Site: "blog", State: agentapi.ImportRunning, Created: old.Add(2 * time.Minute)},
+	} {
+		must(t, writeRecord(a.Dir, r))
+	}
+
+	got, err = a.List("blog")
+	must(t, err)
+
+	if len(got) != 2 || got[0].ID != "000000000000000c" || got[1].ID != "000000000000000a" || got[1].SkippedPaths != nil {
+		t.Fatalf("blog: %+v", got)
+	}
+
+	if got, err = a.List(""); err != nil || len(got) != 3 {
+		t.Fatalf("all: %v %v", got, err)
+	}
+
+	if _, err := a.List("../x"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("bad site: %v", err)
+	}
+}

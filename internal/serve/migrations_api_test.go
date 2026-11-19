@@ -157,6 +157,18 @@ func (s *stubImports) Start(_ context.Context, r agentapi.CloudPanelImportReques
 	return agentapi.CloudPanelImport{ID: "0123456789abcdef", Site: r.Site, State: agentapi.ImportQueued}, nil
 }
 
+func (s *stubImports) List(_ context.Context, site string) ([]agentapi.CloudPanelImport, error) {
+	out := []agentapi.CloudPanelImport{}
+
+	for _, r := range s.got {
+		if site == "" || r.Site == site {
+			out = append(out, agentapi.CloudPanelImport{ID: "0123456789abcdef", Site: r.Site, State: agentapi.ImportQueued})
+		}
+	}
+
+	return out, nil
+}
+
 func (s *stubImports) Get(_ context.Context, id string) (agentapi.CloudPanelImport, error) {
 	if id != "0123456789abcdef" {
 		return agentapi.CloudPanelImport{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "no such import"}
@@ -238,6 +250,20 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/migrations/cloudpanel/imports/0123456789abcdef", header: read}); rec.Code != http.StatusOK ||
 		!strings.Contains(rec.Body.String(), `"state":"done"`) {
 		t.Fatalf("status: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/migrations/cloudpanel/imports?site=shop", header: read}); rec.Code != http.StatusOK ||
+		!strings.Contains(rec.Body.String(), `"site":"shop"`) {
+		t.Fatalf("list: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/migrations/cloudpanel/imports?site=blog", cookie: c}); rec.Code != http.StatusOK ||
+		rec.Body.String() != "{\"imports\":[]}\n" {
+		t.Fatalf("list other site: %d %q", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/migrations/cloudpanel/imports?site=..%2Fx", cookie: c}); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("list bad site: %d %s", rec.Code, rec.Body)
 	}
 
 	for _, id := range []string{"fedcba9876543210", "nope"} {

@@ -289,4 +289,25 @@ func ValidImportID(id string) bool { return restoreIDRe.MatchString(id) }
 var (
 	CloudPanelImportStart = agentrpc.Op[CloudPanelImportRequest, CloudPanelImport]{Name: "cloudpanel.import"}
 	CloudPanelImportGet   = agentrpc.Op[CloudPanelImportGetRequest, CloudPanelImport]{Name: "cloudpanel.import.get"}
+	CloudPanelImportList  = agentrpc.Op[CloudPanelImportListRequest, CloudPanelImports]{Name: "cloudpanel.import.list"}
 )
+
+// CloudPanelImportListRequest lists the kept imports, of one site or all.
+type CloudPanelImportListRequest struct {
+	Site string `json:"site,omitempty"`
+}
+
+// Validate checks the site name, if any.
+func (r CloudPanelImportListRequest) Validate() error {
+	if r.Site == "" {
+		return nil
+	}
+
+	return ValidateSiteUser(r.Site)
+}
+
+// CloudPanelImports holds imports newest first. SkippedPaths is left
+// out; read one import for it.
+type CloudPanelImports struct {
+	Imports []CloudPanelImport `json:"imports"`
+}

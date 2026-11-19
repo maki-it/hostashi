@@ -546,6 +546,8 @@ x rm /home/oldsite/htdocs/example.com/wp-content/a.txt
 out=$(cp_import)
 grep -q '"files": 1' <<<"$out" || fail "final sync copied: $out"
 grep -q '"deleted": 1' <<<"$out" || fail "final sync deleted: $out"
+[ "$(api GET '/api/v1/migrations/cloudpanel/imports?site=cpimp')" = 200 ] || fail "list imports: $(x cat /tmp/api.out)"
+[ "$(x grep -o '"state":"done"' /tmp/api.out | wc -l)" = 2 ] || fail "imports of cpimp: $(x cat /tmp/api.out)"
 [ "$(x cat "$dst/index.php")" = "<?php echo 'new!';" ] || fail "synced file content"
 # The old server was only read.
 x test ! -e /home/oldsite/htdocs/example.com/cloudpanel-import || fail "wrote on the old side"
