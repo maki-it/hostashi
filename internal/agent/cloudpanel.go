@@ -77,6 +77,16 @@ func registerCloudPanel(s *agentrpc.Server, src *cpsource.Source, imp *cpimport.
 		return r, mapImportError(err)
 	})
 
+	agentrpc.Handle(s, agentapi.CloudPanelImportList, func(_ context.Context, _ agentrpc.Caller, req agentapi.CloudPanelImportListRequest) (agentapi.CloudPanelImports, error) {
+		if imp == nil {
+			return agentapi.CloudPanelImports{}, errNoCloudPanel
+		}
+
+		list, err := imp.List(req.Site)
+
+		return agentapi.CloudPanelImports{Imports: list}, mapImportError(err)
+	})
+
 	agentrpc.Handle(s, agentapi.CloudPanelImportGet, func(_ context.Context, _ agentrpc.Caller, req agentapi.CloudPanelImportGetRequest) (agentapi.CloudPanelImport, error) {
 		if imp == nil {
 			return agentapi.CloudPanelImport{}, errNoCloudPanel

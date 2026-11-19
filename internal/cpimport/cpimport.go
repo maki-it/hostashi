@@ -222,6 +222,38 @@ func (a *Agent) Get(id string) (Import, error) {
 	return readRecord(a.Dir, id, owner())
 }
 
+// List returns the kept imports newest first, of one site or of all. A
+// missing records directory means none.
+func (a *Agent) List(site string) ([]Import, error) {
+	if err := (agentapi.CloudPanelImportListRequest{Site: site}).Validate(); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	if _, err := os.Lstat(a.Dir); errors.Is(err, os.ErrNotExist) {
+		return []Import{}, nil
+	}
+
+	if err := statefile.CheckDir(a.Dir, owner()); err != nil {
+		return nil, err
+	}
+
+	all, err := a.imports()
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]Import, 0, len(all))
+
+	for _, r := range all {
+		if site == "" || r.Site == site {
+			r.SkippedPaths = nil
+			out = append(out, r)
+		}
+	}
+
+	return out, nil
+}
+
 // dropIn opens the site's home, and nothing else, for writing to one job.
 func dropIn(home string) string {
 	return "# Written by the Hostashi agent for one CloudPanel import.\n[Service]\nReadWritePaths=" + home + "\n"

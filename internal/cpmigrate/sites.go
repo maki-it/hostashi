@@ -49,6 +49,8 @@ type SiteCreator func(ctx context.Context, actor int64, s NewSite) error
 type Importer interface {
 	Start(ctx context.Context, req agentapi.CloudPanelImportRequest) (agentapi.CloudPanelImport, error)
 	Get(ctx context.Context, id string) (agentapi.CloudPanelImport, error)
+	// List returns the kept imports newest first, of one site or all.
+	List(ctx context.Context, site string) ([]agentapi.CloudPanelImport, error)
 }
 
 // Connect gives the service the site service and the agent. Without them
@@ -166,6 +168,19 @@ func (s *Service) Import(ctx context.Context, id string) (agentapi.CloudPanelImp
 	}
 
 	return s.importer.Get(ctx, id)
+}
+
+// Imports lists the kept imports newest first, of one site or of all.
+func (s *Service) Imports(ctx context.Context, site string) ([]agentapi.CloudPanelImport, error) {
+	if s.importer == nil {
+		return nil, ErrNoImporter
+	}
+
+	if err := (agentapi.CloudPanelImportListRequest{Site: site}).Validate(); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrBadRequest, err)
+	}
+
+	return s.importer.List(ctx, site)
 }
 
 // planSite finds one site of a report by its name, with its plan.
