@@ -1,6 +1,6 @@
 # ADR-0025 Database import and export
 
-**Status:** Proposed. **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0024 (MariaDB per site), ADR-0017 (CloudPanel import), ADR-0004 (web/agent privilege split), [`03-features.md`](../03-features.md) 3.4 (row "Import/export (gzip)", P0), [`05-security.md`](../05-security.md) 5.6.
+**Status:** Accepted (2026-11-19, by Kim). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0024 (MariaDB per site), ADR-0017 (CloudPanel import), ADR-0004 (web/agent privilege split), [`03-features.md`](../03-features.md) 3.4 (row "Import/export (gzip)", P0), [`05-security.md`](../05-security.md) 5.6.
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
