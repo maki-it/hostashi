@@ -20,7 +20,10 @@ const blog: Site = {
   createdAt: "2026-11-19T08:00:00Z",
   updatedAt: "2026-11-19T08:00:00Z",
 };
-const php = { "GET /api/v1/php/versions": { body: { installed: ["8.2", "8.4"], supported: ["7.4", "8.1", "8.2", "8.3", "8.4", "8.5"], legacy: ["7.4", "8.1", "8.2"] } } };
+const php = { "GET /api/v1/php/versions": { body: { installed: ["8.2", "8.4"], supported: ["7.4", "8.1", "8.2", "8.3", "8.4", "8.5"], legacy: ["7.4", "8.1", "8.2"] } },
+  // The settings load the cron jobs of the site (Cron.test.tsx tests them).
+  "GET /api/v1/sites/blog/cron": { body: { jobs: [], statusKnown: true } },
+};
 
 describe("siteNameProblem", () => {
   it.each([
