@@ -41,6 +41,47 @@ func TestRefusesOddInput(t *testing.T) {
 	}
 }
 
+func TestSliceProperties(t *testing.T) {
+	var c Controller
+
+	good := []string{"CPUWeight=100", "CPUQuota=", "MemoryHigh=infinity", "MemoryMax=1073741824", "TasksMax=256"}
+
+	for _, s := range []string{
+		"", "hostashi-site.slice", "system.slice", "hostashi-site-Shop.slice", "hostashi-site-my-shop.slice",
+		"hostashi-site-../x.slice", "hostashi-site-shop.service", `hostashi-site-shop\x2f.slice`, "--all",
+	} {
+		if err := c.SetSliceProperties(t.Context(), s, good); err == nil || !strings.Contains(err.Error(), "refusing") {
+			t.Errorf("slice %q: %v", s, err)
+		}
+	}
+
+	for _, p := range []string{
+		"", "CPUWeight", "MemoryMax=-1", "MemoryMax=1G", "TasksMax=10%", "CPUQuota=50", "Delegate=yes",
+		"ExecStart=/bin/sh", "MemoryMax=1 TasksMax=2", "--no-block", "CPUWeight=1\nDelegate=yes",
+	} {
+		err := c.SetSliceProperties(t.Context(), `hostashi-site-my\x2dshop.slice`, append([]string{"TasksMax=64"}, p))
+		if err == nil || !strings.Contains(err.Error(), "refusing") {
+			t.Errorf("property %q: %v", p, err)
+		}
+	}
+
+	if err := c.SetSliceProperties(t.Context(), "hostashi-site-shop.slice", nil); err == nil {
+		t.Error("empty property list accepted")
+	}
+
+	for _, p := range good {
+		if !slicePropRe.MatchString(p) {
+			t.Errorf("good property %q refused", p)
+		}
+	}
+
+	for _, s := range []string{"hostashi-site-shop.slice", `hostashi-site-my\x2dshop.slice`, "hostashi-site-a_1.slice"} {
+		if !sliceRe.MatchString(s) {
+			t.Errorf("good slice %q refused", s)
+		}
+	}
+}
+
 // TestRealPHPFPM runs the installed php-fpm on a minimal config, if there is one.
 func TestRealPHPFPM(t *testing.T) {
 	versions := Installed()

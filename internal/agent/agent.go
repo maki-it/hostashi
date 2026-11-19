@@ -853,7 +853,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if cfg.Slices == nil {
-		cfg.Slices = &siteslice.Manager{Dir: siteslice.DefaultDir, Ctl: phpctl.Controller{}}
+		cfg.Slices = &siteslice.Manager{Dir: siteslice.DefaultDir, Ctl: phpctl.Controller{}, ControlDir: siteslice.DefaultControlDir}
 	}
 
 	if cfg.Cron == nil {

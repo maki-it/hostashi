@@ -4,6 +4,7 @@ package siteslice
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,9 +13,23 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 )
 
-type countCtl struct{ reloads int }
+type countCtl struct {
+	reloads int
+	sets    []string // slice name, then the properties
+	fail    error
+}
 
 func (c *countCtl) DaemonReload(context.Context) error { c.reloads++; return nil }
+
+func (c *countCtl) SetSliceProperties(_ context.Context, slice string, props []string) error {
+	if c.fail != nil {
+		return c.fail
+	}
+
+	c.sets = append(c.sets, slice+" "+strings.Join(props, " "))
+
+	return nil
+}
 
 func TestName(t *testing.T) {
 	for user, want := range map[string]string{
@@ -104,9 +119,26 @@ func TestManager(t *testing.T) {
 		t.Errorf("reloads after first Set: %d", ctl.reloads)
 	}
 
+	wantSet := `hostashi-site-my\x2dshop.slice CPUWeight=200 CPUQuota=300% MemoryHigh=966367638 MemoryMax=1073741824 TasksMax=256`
+	if len(ctl.sets) != 1 || ctl.sets[0] != wantSet {
+		t.Errorf("applied %q, want %q", ctl.sets, wantSet)
+	}
+
 	if err := m.Set(ctx, "my-shop", want); err != nil || ctl.reloads != 1 {
 		t.Errorf("unchanged Set reloaded systemd (%d) or failed: %v", ctl.reloads, err)
 	}
+
+	if len(ctl.sets) != 2 {
+		t.Errorf("unchanged Set did not apply the limits again: %q", ctl.sets)
+	}
+
+	ctl.fail = errors.New("boom")
+
+	if err := m.Set(ctx, "my-shop", want); err == nil {
+		t.Error("Set hid a failed apply")
+	}
+
+	ctl.fail = nil
 
 	if err := m.Set(ctx, "my-shop", Limits{}); err != nil {
 		t.Fatal(err)
@@ -114,6 +146,11 @@ func TestManager(t *testing.T) {
 
 	if got, _, _ := m.Get("my-shop"); got != (Limits{}) {
 		t.Errorf("after clearing: %+v", got)
+	}
+
+	wantClear := `hostashi-site-my\x2dshop.slice CPUWeight=100 CPUQuota= MemoryHigh=infinity MemoryMax=infinity TasksMax=infinity`
+	if last := ctl.sets[len(ctl.sets)-1]; last != wantClear {
+		t.Errorf("clearing applied %q, want %q", last, wantClear)
 	}
 
 	if err := m.Set(ctx, "my-shop", Limits{TasksMax: 2}); err == nil {
@@ -138,5 +175,40 @@ func TestManager(t *testing.T) {
 
 	if entries, _ := os.ReadDir(m.Dir); len(entries) != 0 {
 		t.Errorf("left files: %v", entries)
+	}
+}
+
+func TestRemoveClearsRuntimeDropIns(t *testing.T) {
+	ctl := &countCtl{}
+	m := &Manager{Dir: t.TempDir(), Ctl: ctl, ControlDir: t.TempDir()}
+
+	if err := m.Set(t.Context(), "my-shop", Limits{TasksMax: 64}); err != nil {
+		t.Fatal(err)
+	}
+
+	dropins := filepath.Join(m.ControlDir, `hostashi-site-my\x2dshop.slice.d`)
+	if err := os.MkdirAll(dropins, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dropins, "50-TasksMax.conf"), []byte("[Slice]\nTasksMax=64\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	other := filepath.Join(m.ControlDir, "hostashi-site-shop.slice.d")
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := m.Remove(t.Context(), "my-shop"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(dropins); !os.IsNotExist(err) {
+		t.Errorf("runtime drop-ins still there: %v", err)
+	}
+
+	if _, err := os.Stat(other); err != nil {
+		t.Errorf("other site's drop-ins removed: %v", err)
 	}
 }

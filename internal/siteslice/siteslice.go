@@ -51,15 +51,27 @@ func (l Limits) API() agentapi.SiteLimits {
 	return agentapi.SiteLimits{MemoryMax: l.MemoryMax, TasksMax: l.TasksMax, CPUWeight: l.CPUWeight, CPUQuotaPercent: l.CPUQuotaPercent}
 }
 
-// Controller makes systemd read changed unit files (phpctl on a server).
+// DefaultControlDir is where systemctl set-property --runtime keeps its
+// drop-ins.
+const DefaultControlDir = "/run/systemd/system.control"
+
+// Controller makes systemd read changed unit files and applies the limits
+// to a running slice (phpctl on a server).
 type Controller interface {
 	DaemonReload(ctx context.Context) error
+	// SetSliceProperties applies properties to the slice now, for this
+	// boot only (systemctl set-property --runtime). A daemon-reload alone
+	// leaves the running cgroup unchanged.
+	SetSliceProperties(ctx context.Context, slice string, props []string) error
 }
 
 // Manager writes and removes the slice units.
 type Manager struct {
 	Dir string
 	Ctl Controller
+	// ControlDir holds the runtime drop-ins of SetSliceProperties, removed
+	// with the slice. Empty: leave them (they vanish on reboot).
+	ControlDir string
 
 	mu sync.Mutex
 }
@@ -82,36 +94,55 @@ func Render(user string, l Limits) ([]byte, error) {
 	fmt.Fprint(&b, "[Unit]\nDescription=Hostashi site "+user+"\n\n[Slice]\n")
 	fmt.Fprint(&b, "MemoryAccounting=yes\nTasksAccounting=yes\n")
 
-	weight := l.CPUWeight
-	if weight == 0 {
-		weight = 100
-	}
+	for _, p := range l.properties() {
+		if p == "CPUQuota=" {
+			continue
+		}
 
-	fmt.Fprint(&b, "CPUWeight="+strconv.FormatUint(weight, 10)+"\n")
-
-	if l.CPUQuotaPercent > 0 {
-		fmt.Fprint(&b, "CPUQuota="+strconv.FormatUint(l.CPUQuotaPercent, 10)+"%\n")
-	}
-
-	if l.MemoryMax > 0 {
-		fmt.Fprint(&b, "MemoryHigh="+strconv.FormatUint(l.MemoryMax/10*9, 10)+"\n")
-		fmt.Fprint(&b, "MemoryMax="+strconv.FormatUint(l.MemoryMax, 10)+"\n")
-	} else {
-		fmt.Fprint(&b, "MemoryHigh=infinity\nMemoryMax=infinity\n")
-	}
-
-	if l.TasksMax > 0 {
-		fmt.Fprint(&b, "TasksMax="+strconv.FormatUint(l.TasksMax, 10)+"\n")
-	} else {
-		fmt.Fprint(&b, "TasksMax=infinity\n")
+		fmt.Fprint(&b, p+"\n")
 	}
 
 	return b.Bytes(), nil
 }
 
-// Set writes the slice of a site and makes systemd read it. systemd applies
-// the new values to a running slice on the reload. An unchanged file is
-// left alone.
+// properties are the limit settings of the slice, the same in the unit
+// file and for SetSliceProperties. "CPUQuota=" (no quota) resets a quota
+// set before.
+func (l Limits) properties() []string {
+	weight := l.CPUWeight
+	if weight == 0 {
+		weight = 100
+	}
+
+	quota := ""
+	if l.CPUQuotaPercent > 0 {
+		quota = strconv.FormatUint(l.CPUQuotaPercent, 10) + "%"
+	}
+
+	memHigh, memMax, tasks := "infinity", "infinity", "infinity"
+	if l.MemoryMax > 0 {
+		memHigh = strconv.FormatUint(l.MemoryMax/10*9, 10)
+		memMax = strconv.FormatUint(l.MemoryMax, 10)
+	}
+
+	if l.TasksMax > 0 {
+		tasks = strconv.FormatUint(l.TasksMax, 10)
+	}
+
+	return []string{
+		"CPUWeight=" + strconv.FormatUint(weight, 10),
+		"CPUQuota=" + quota,
+		"MemoryHigh=" + memHigh,
+		"MemoryMax=" + memMax,
+		"TasksMax=" + tasks,
+	}
+}
+
+// Set writes the slice of a site, makes systemd read it and applies the
+// limits to the running slice: a daemon-reload updates the unit's
+// properties but not the cgroup of a slice that is already running. An
+// unchanged file is not written again, but the limits are applied anyway,
+// so a retry after a failed apply completes it.
 func (m *Manager) Set(ctx context.Context, user string, l Limits) error {
 	content, err := Render(user, l)
 	if err != nil {
@@ -121,15 +152,17 @@ func (m *Manager) Set(ctx context.Context, user string, l Limits) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if old, err := os.ReadFile(m.path(user)); err == nil && bytes.Equal(old, content) {
-		return nil
+	if old, err := os.ReadFile(m.path(user)); err != nil || !bytes.Equal(old, content) {
+		if err := writeAtomic(m.path(user), content); err != nil {
+			return err
+		}
+
+		if err := m.Ctl.DaemonReload(ctx); err != nil {
+			return err
+		}
 	}
 
-	if err := writeAtomic(m.path(user), content); err != nil {
-		return err
-	}
-
-	return m.Ctl.DaemonReload(ctx)
+	return m.Ctl.SetSliceProperties(ctx, Name(user), l.properties())
 }
 
 // Get returns the limits of a site, and false if it has no slice file.
@@ -166,6 +199,12 @@ func (m *Manager) Remove(ctx context.Context, user string) error {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.ControlDir != "" {
+		if err := os.RemoveAll(filepath.Join(m.ControlDir, Name(user)+".d")); err != nil {
+			return fmt.Errorf("siteslice: %w", err)
+		}
+	}
 
 	err := os.Remove(m.path(user))
 	if errors.Is(err, fs.ErrNotExist) {

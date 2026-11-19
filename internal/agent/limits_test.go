@@ -17,6 +17,8 @@ type nopReload struct{}
 
 func (nopReload) DaemonReload(context.Context) error { return nil }
 
+func (nopReload) SetSliceProperties(context.Context, string, []string) error { return nil }
+
 func TestSiteSliceNameMatchesCron(t *testing.T) {
 	for _, u := range []string{"shop", "my-shop", "a-b-c"} {
 		if siteSlice(u) != siteslice.Name(u) {

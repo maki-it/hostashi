@@ -4,7 +4,7 @@
 // on a pool file, and the per-site units through systemd. It also drives the
 // units of the sites' cron jobs (cron.go, ADR-0028), which are per-site
 // units of the same kind, and reloads systemd after the agent changed a
-// site's slice (ADR-0015).
+// site's slice and applies its limits (ADR-0015).
 //
 // Like internal/webctl it is allowed to start processes (depguard rule in
 // .golangci.yml), with the same narrow exception: fixed binaries by absolute
@@ -62,6 +62,11 @@ const commandTimeout = 60 * time.Second
 var (
 	confRe = regexp.MustCompile(`^/[A-Za-z0-9_./-]+\.conf$`)
 	unitRe = regexp.MustCompile(`^hostashi-php-[0-9]\.[0-9]@[a-z][a-z0-9_-]{1,31}\.service$`)
+	// A site slice: the user with "-" escaped as \x2d (siteslice.Name).
+	sliceRe = regexp.MustCompile(`^hostashi-site-[a-z](?:[a-z0-9_]|\\x2d){1,31}\.slice$`)
+	// The slice limits siteslice sets: fixed names, a number, a percentage
+	// for CPUQuota, infinity, or empty to reset.
+	slicePropRe = regexp.MustCompile(`^(?:CPUWeight=[0-9]{1,5}|CPUQuota=(?:[0-9]{1,6}%)?|(?:MemoryHigh|MemoryMax|TasksMax)=(?:[0-9]{1,20}|infinity))$`)
 )
 
 // Controller implements php.Controller.
@@ -101,6 +106,27 @@ func (Controller) Restart(ctx context.Context, unit string) error {
 // sites' slices and the PHP units' slice drop-ins (ADR-0015).
 func (Controller) DaemonReload(ctx context.Context) error {
 	return run(ctx, Systemctl, "daemon-reload")
+}
+
+// SetSliceProperties applies limits to a site's running slice for this
+// boot (systemctl set-property --runtime); the slice file written before
+// keeps them across reboots (ADR-0015).
+func (Controller) SetSliceProperties(ctx context.Context, slice string, props []string) error {
+	if !sliceRe.MatchString(slice) {
+		return fmt.Errorf("phpctl: refusing slice name %q", slice)
+	}
+
+	if len(props) == 0 {
+		return errors.New("phpctl: no slice properties")
+	}
+
+	for _, p := range props {
+		if !slicePropRe.MatchString(p) {
+			return fmt.Errorf("phpctl: refusing slice property %q", p)
+		}
+	}
+
+	return run(ctx, Systemctl, append([]string{"set-property", "--runtime", slice}, props...)...)
 }
 
 // Stop stops the unit now and disables it.
