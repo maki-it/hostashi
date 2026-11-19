@@ -22,6 +22,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/backup"
 	"github.com/maki-it/hostashi/internal/certs"
+	"github.com/maki-it/hostashi/internal/cpsource"
 	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
@@ -72,6 +73,10 @@ type Config struct {
 	// Backup serves backup.*. Run builds it with the fixed paths of a
 	// server; without it the operations answer failed_precondition.
 	Backup *backup.Agent
+
+	// CloudPanel keeps the migration source (ADR-0026). Run builds it below
+	// StateDir; without it cloudpanel.* answer failed_precondition.
+	CloudPanel *cpsource.Source
 
 	// Disk caches the sites' disk usage for metrics.snapshot; Run fills it
 	// every agentapi.DiskEvery. Nil: an empty cache.
@@ -162,6 +167,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	}
 
 	registerBackup(s, cfg.Backup)
+	registerCloudPanel(s, cfg.CloudPanel)
 
 	return s
 }
@@ -746,6 +752,10 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.Backup == nil {
 		cfg.Backup = openBackup()
+	}
+
+	if cfg.CloudPanel == nil {
+		cfg.CloudPanel = &cpsource.Source{Dir: filepath.Join(cfg.StateDir, "cloudpanel")}
 	}
 
 	if cfg.PHP != nil {

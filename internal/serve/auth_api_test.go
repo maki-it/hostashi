@@ -78,6 +78,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	if ag != nil {
 		deps.Sites = hosting.New(st, ag, nil)
 		deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), nil)
+		deps.CloudPanelSource = newStubSource(t)
 	}
 
 	return &apiEnv{h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st}

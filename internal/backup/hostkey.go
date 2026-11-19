@@ -71,3 +71,9 @@ func fetchHostKey(ctx context.Context, addr, user string) (ssh.PublicKey, error)
 
 	return key, nil
 }
+
+// FetchHostKeyAt is FetchHostKey for any SSH server at addr (host:port),
+// for example the old server of a migration (ADR-0026).
+func FetchHostKeyAt(ctx context.Context, addr, user string) (ssh.PublicKey, error) {
+	return fetchHostKey(ctx, addr, user)
+}
