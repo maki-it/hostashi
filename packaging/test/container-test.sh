@@ -251,15 +251,15 @@ dbpw=$(x cat /tmp/api.out | sed -n 's/.*"password":"\([A-Za-z0-9]*\)".*/\1/p')
 ! x grep -q "$dbpw" /tmp/api.out || fail "password returned by a read"
 # Export and import through the API run as jobs; the client polls the job.
 api_job() {
-  local id state i
+  local id state _
   id=$(x cat /tmp/api.out | sed -n 's/.*"id":"\([0-9a-f]*\)".*/\1/p')
-  for i in $(seq 30); do
+  for _ in $(seq 30); do
     [ "$(api GET "/api/v1/databases/wp_api/jobs/$id")" = 200 ] || fail "job status: $(x cat /tmp/api.out)"
     state=$(x cat /tmp/api.out | sed -n 's/.*"state":"\([a-z]*\)".*/\1/p')
     [ "$state" = running ] || break
     sleep 1
   done
-  [ "$state" = done ] || fail "job $id ended as $state: $(x cat /tmp/api.out)"
+  [ "$state" = "done" ] || fail "job $id ended as $state: $(x cat /tmp/api.out)"
 }
 x mariadb -e 'CREATE TABLE wp_api.t (i INT); INSERT INTO wp_api.t VALUES (7)'
 [ "$(api POST /api/v1/databases/wp_api/export '{"path":"api.sql"}')" = 202 ] || fail "export: $(x cat /tmp/api.out)"
