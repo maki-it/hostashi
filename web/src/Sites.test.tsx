@@ -23,6 +23,9 @@ const blog: Site = {
 const php = { "GET /api/v1/php/versions": { body: { installed: ["8.2", "8.4"], supported: ["7.4", "8.1", "8.2", "8.3", "8.4", "8.5"], legacy: ["7.4", "8.1", "8.2"] } },
   // The settings load the cron jobs of the site (Cron.test.tsx tests them).
   "GET /api/v1/sites/blog/cron": { body: { jobs: [], statusKnown: true } },
+  // And its resource limits (Limits.test.tsx tests them).
+  "GET /api/v1/sites/blog/limits": { body: { set: false, preset: "", applyError: "", appliedAt: 0, updatedAt: 0 } },
+  "GET /api/v1/limit-presets": { body: { presets: [] } },
 };
 
 describe("siteNameProblem", () => {
