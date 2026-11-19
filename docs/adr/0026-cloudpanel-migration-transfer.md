@@ -1,6 +1,6 @@
 # ADR-0026 Data transfer for the CloudPanel migration
 
-**Status:** Proposed. **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0017 (CloudPanel import as migration), ADR-0025 (database import and export), ADR-0008 (backups with restic), ADR-0004 (web/agent privilege split), [`05-security.md`](../05-security.md), spike S6 ([`REPORT.md`](../../spike/s6-adopt/REPORT.md)).
+**Status:** Accepted (2026-11-19, by Kim). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0017 (CloudPanel import as migration), ADR-0025 (database import and export), ADR-0008 (backups with restic), ADR-0004 (web/agent privilege split), [`05-security.md`](../05-security.md), spike S6 ([`REPORT.md`](../../spike/s6-adopt/REPORT.md)).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
