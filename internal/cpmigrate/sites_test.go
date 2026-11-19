@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/cloudpanel/plan"
 	"github.com/maki-it/hostashi/internal/cloudpanel/scan"
 	"github.com/maki-it/hostashi/internal/cpmigrate"
@@ -28,6 +29,14 @@ func (f *fakeImporter) Start(_ context.Context, r agentapi.CloudPanelImportReque
 
 func (f *fakeImporter) List(_ context.Context, site string) ([]agentapi.CloudPanelImport, error) {
 	return []agentapi.CloudPanelImport{{ID: "0123456789abcdef", Site: site}}, nil
+}
+
+func (f *fakeImporter) Activate(_ context.Context, site string) (agentapi.CloudPanelActivated, error) {
+	if site == "empty" {
+		return agentapi.CloudPanelActivated{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "import the site's files first"}
+	}
+
+	return agentapi.CloudPanelActivated{Site: site, Previous: "htdocs-before-import-20261119-120000"}, nil
 }
 
 func (f *fakeImporter) Get(_ context.Context, id string) (agentapi.CloudPanelImport, error) {
@@ -157,6 +166,14 @@ func TestCreateSiteAndImport(t *testing.T) {
 
 	if _, err := svc.Imports(t.Context(), "Bad"); !errors.Is(err, cpmigrate.ErrBadRequest) {
 		t.Fatalf("list bad site: %v", err)
+	}
+
+	if r, err := svc.Activate(t.Context(), 1, "alpha"); err != nil || r.Previous == "" {
+		t.Fatalf("activate: %+v %v", r, err)
+	}
+
+	if _, err := svc.Activate(t.Context(), 1, "../x"); !errors.Is(err, cpmigrate.ErrBadRequest) {
+		t.Fatalf("activate bad site: %v", err)
 	}
 
 	if _, err := svc.Import(t.Context(), "nope"); !errors.Is(err, cpmigrate.ErrNotFound) {

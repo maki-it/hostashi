@@ -187,6 +187,22 @@ func registerMigrations(mux *http.ServeMux, a authn, svc *cpmigrate.Service, log
 		writeJSON(w, http.StatusAccepted, imp)
 	}))
 
+	// Activating swaps the imported files in as the web root; the previous
+	// one stays in the home as htdocs-before-import-<time>.
+	mux.HandleFunc("POST /api/v1/migrations/cloudpanel/sites/{name}/activate", admin("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		res, err := svc.Activate(ctx, p.User.ID, r.PathValue("name"))
+		if err != nil {
+			importFail(log, w, err, "activate cloudpanel import")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, res)
+	}))
+
 	// ?site=NAME limits the list to one site. The agent keeps the last 50
 	// imports; each entry leaves out the skipped paths.
 	mux.HandleFunc("GET /api/v1/migrations/cloudpanel/imports", admin("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
@@ -282,6 +298,11 @@ func (c RPCCloudPanelImports) List(ctx context.Context, site string) ([]agentapi
 	l, err := agentapi.CloudPanelImportList.Call(ctx, c.C, agentapi.CloudPanelImportListRequest{Site: site})
 
 	return l.Imports, err
+}
+
+// Activate implements cpmigrate.Importer.
+func (c RPCCloudPanelImports) Activate(ctx context.Context, site string) (agentapi.CloudPanelActivated, error) {
+	return agentapi.CloudPanelActivate.Call(ctx, c.C, agentapi.CloudPanelActivateRequest{Site: site})
 }
 
 // Get implements cpmigrate.Importer.
