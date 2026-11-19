@@ -89,7 +89,9 @@ Mail server, DNS server, billing, reseller features and multi-server are non-goa
 - Code is licensed under **AGPL-3.0-or-later** (see [`LICENSE`](LICENSE)). Documentation and translations are licensed under **CC-BY-4.0** (see [`LICENSES/CC-BY-4.0.txt`](LICENSES/CC-BY-4.0.txt)).
 - There is no CLA. Instead, every commit must carry a `Signed-off-by:` line, which certifies the [Developer Certificate of Origin 1.1](https://developercertificate.org/). Use `git commit -s`.
 - Do not contribute code or text you do not have the right to license under these terms.
+<!-- REUSE-IgnoreStart -->
 - Every new source file starts with an `SPDX-License-Identifier: AGPL-3.0-or-later` comment (for example `// SPDX-License-Identifier: AGPL-3.0-or-later` in Go and TypeScript). Files without a comment syntax (JSON, lockfiles, static assets) are listed in [`REUSE.toml`](REUSE.toml) instead, and Markdown files are CC-BY-4.0 through it. CI runs [`reuse lint`](https://reuse.software) on every pull request.
+<!-- REUSE-IgnoreEnd -->
 
 ## Conduct
 
