@@ -1,6 +1,6 @@
 # ADR-0029 Custom nginx snippets per site
 
-**Status:** Proposed. **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0005 (web server, generator rules), ADR-0017 (CloudPanel import, Part 2: custom snippets), ADR-0018 (API, high-risk scope), ADR-0027 (maintenance pages), [`04-architecture.md`](../04-architecture.md) 4.3, [`03-features.md`](../03-features.md) row "Vhost editor with `nginx -t` and rollback" (P0).
+**Status:** Accepted (2026-11-19, by Kim: option A). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0005 (web server, generator rules), ADR-0017 (CloudPanel import, Part 2: custom snippets), ADR-0018 (API, high-risk scope), ADR-0027 (maintenance pages), [`04-architecture.md`](../04-architecture.md) 4.3, [`03-features.md`](../03-features.md) row "Vhost editor with `nginx -t` and rollback" (P0).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
