@@ -39,13 +39,13 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 **Command**
 
-- The command is stored as given, at most 4 KiB, one line, no NUL [E]. It is written to a root-owned script file `/var/lib/hostashi-agent/cron/<site>/<id>.sh` (`0644`, the site user reads it) that runs it with `/bin/sh -c`; the unit's `ExecStart=` names only that file, so nothing the admin typed passes through systemd's unit syntax or `%` specifiers [A].
+- The command is stored as given, at most 4 KiB, one line, no NUL [E]. It is written to a root-owned script file `/var/lib/hostashi-cron/<site>/<id>.sh` (directory `root:<site>` `0750`, file `0640`, so only the site user reads it; not below the agent's `0700` state directory) that the unit runs with `/bin/sh`; the unit's `ExecStart=` names only that file, so nothing the admin typed passes through systemd's unit syntax or `%` specifiers [A].
 - `%` keeps its shell meaning; cron's "percent becomes newline" is not copied. The importer flags such commands for review (it already does [V: `cron_percent` finding]).
 - No environment from the panel in the first step. `HOME`, `USER`, `PATH` and `SHELL` are set by the unit [A]. Environment lines from CloudPanel crontabs stay a review finding [V].
 
 **Unit**
 
-- `hostashi-cron-<site>-<id>.service`: `User=` and `Group=` the site user, `Slice=` the site's slice once ADR-0015 lands, `WorkingDirectory=` the home, `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=strict` with `ReadWritePaths=` the home, `ProtectHome=` hiding other homes, `TimeoutStartSec=` the job's timeout, `Type=oneshot` [A: same hardening family as the PHP unit].
+- `hostashi-cron-<site>-<id>.service`: `User=` and `Group=` the site user, `Slice=` the site's slice (`hostashi-site-<user>.slice`, `-` escaped as `\x2d`) and `Nice=10` unless the job sets another (ADR-0015), `WorkingDirectory=` the home, `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=strict` with `ReadWritePaths=` the home, `ProtectHome=` hiding other homes, `TimeoutStartSec=` the job's timeout, `Type=oneshot` [A: same hardening family as the PHP unit].
 - `hostashi-cron-<site>-<id>.timer` with the translated `OnCalendar=` lines. Paused means the timer is stopped and disabled; the service can still be run once [A].
 - The agent refuses a site user of uid 0 and a site that is disabled; disabling a site stops its timers [A].
 - Output goes to the journal with the unit name; the panel shows the last run (start, end, exit status) and the last lines of output through the agent [A]. Mail is not sent.
@@ -60,7 +60,8 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Consequences
 
-- No new `os/exec` exception: the agent uses the existing `systemctl` calls (daemon-reload, enable/disable, start/stop with fixed arguments and validated unit names) [A: would extend the documented `phpctl` or `resticctl` exception; to be reviewed in the PR].
+- No new `os/exec` exception: `internal/phpctl` drives the cron units with fixed verbs (daemon-reload, enable/disable `--now` for timers, start `--no-block` for services, show) and unit names that match `hostashi-cron-<site>-<id>.(service|timer)` [V: `internal/phpctl/cron.go`].
+- A disabled site's timers stop after `web.apply` and start again when it is enabled; deleting a site removes its jobs [V: `internal/agent/cron.go`].
 - Unit files appear under `/etc/systemd/system`, named `hostashi-cron-*`, and are removed with the job or the site [A].
 - A schedule that cron accepts but the validator does not (for example `@reboot`) must be rewritten by the admin [A].
 - Needs a spike-sized test: translation table with `systemd-analyze calendar` on Debian 13 and Ubuntu 26.04 in CI [A].

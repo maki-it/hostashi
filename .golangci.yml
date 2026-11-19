@@ -51,7 +51,8 @@ linters:
         # internal/webctl runs nginx -t and systemctl reload/restart of the
         # nginx unit with fixed arguments (see its package comment).
         # internal/phpctl runs php-fpm<version> -t and systemctl for the
-        # per-site PHP units with fixed arguments (see its package comment).
+        # per-site PHP units with fixed arguments (see its package comment),
+        # and systemctl for the cron jobs' units (ADR-0028, cron.go).
         # internal/resticctl runs restic by absolute path with fixed
         # sub-commands and validated arguments; restic itself starts ssh and
         # mariadb-dump (see its package comment, ADR-0008). It also starts
