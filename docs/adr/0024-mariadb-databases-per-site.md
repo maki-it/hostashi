@@ -1,6 +1,6 @@
 # ADR-0024 MariaDB databases per site
 
-**Status:** Proposed. **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0004 (web/agent privilege split), ADR-0017 (CloudPanel import), ADR-0018 (API), [`03-features.md`](../03-features.md) 3.4 (row "MariaDB/MySQL: create/delete DB and user", P0), [`05-security.md`](../05-security.md) 5.6.
+**Status:** Accepted (2026-11-19, by Kim). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0004 (web/agent privilege split), ADR-0017 (CloudPanel import), ADR-0018 (API), [`03-features.md`](../03-features.md) 3.4 (row "MariaDB/MySQL: create/delete DB and user", P0), [`05-security.md`](../05-security.md) 5.6.
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
