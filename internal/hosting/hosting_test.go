@@ -34,10 +34,11 @@ type fakeAgent struct {
 	dbUsers map[string]string // user -> database
 	dbErr   error             // returned by every db call while set
 	userErr error             // returned by DBUserCreate while set
+	jobs    map[string]agentapi.DBJob
 }
 
 func newFake() *fakeAgent {
-	return &fakeAgent{accounts: map[string]bool{}, dbs: map[string]string{}, dbUsers: map[string]string{}}
+	return &fakeAgent{accounts: map[string]bool{}, dbs: map[string]string{}, dbUsers: map[string]string{}, jobs: map[string]agentapi.DBJob{}}
 }
 
 func (f *fakeAgent) SiteCreate(_ context.Context, req agentapi.SiteCreateRequest) (agentapi.SiteInfo, error) {
@@ -770,4 +771,42 @@ func (f *fakeAgent) DBUserPassword(_ context.Context, user, _ string) error {
 	}
 
 	return nil
+}
+
+func (f *fakeAgent) DBImport(_ context.Context, database, path string) (agentapi.DBJob, error) {
+	return f.startJob("import", database, path)
+}
+
+func (f *fakeAgent) DBExport(_ context.Context, database, path string) (agentapi.DBJob, error) {
+	return f.startJob("export", database, path)
+}
+
+func (f *fakeAgent) startJob(kind, database, path string) (agentapi.DBJob, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.dbErr != nil {
+		return agentapi.DBJob{}, f.dbErr
+	}
+
+	if _, ok := f.dbs[database]; !ok {
+		return agentapi.DBJob{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown database"}
+	}
+
+	j := agentapi.DBJob{ID: fmt.Sprintf("%016x", len(f.jobs)+1), Kind: kind, Database: database, Path: path, State: agentapi.JobRunning}
+	f.jobs[j.ID] = j
+
+	return j, nil
+}
+
+func (f *fakeAgent) DBJob(_ context.Context, id string) (agentapi.DBJob, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	j, ok := f.jobs[id]
+	if !ok {
+		return agentapi.DBJob{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown job"}
+	}
+
+	return j, nil
 }

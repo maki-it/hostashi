@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/store"
@@ -35,6 +36,8 @@ func dbFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 	switch {
 	case errors.Is(err, hosting.ErrDatabaseNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "no such database or database user")
+	case errors.Is(err, hosting.ErrJobNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "no such job for this database")
 	case errors.Is(err, hosting.ErrDatabaseExists):
 		writeError(w, http.StatusConflict, "database_exists", "a database or database user with this name exists")
 	default:
@@ -187,5 +190,48 @@ func registerDatabases(mux *http.ServeMux, a authn, svc *hosting.Service, log *s
 		}
 
 		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	// Import and export run as agent jobs (ADR-0025): the answer is 202 with
+	// the job, its state comes from the jobs route. The file is relative to
+	// the site's home; an export never overwrites a file.
+	dump := func(name string, start func(context.Context, int64, string, string) (agentapi.DBJob, error)) func(http.ResponseWriter, *http.Request, auth.Principal) {
+		return func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+			var in struct {
+				Path string `json:"path"`
+			}
+			if !decodeJSON(w, r, &in) {
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+			defer cancel()
+
+			j, err := start(ctx, p.User.ID, r.PathValue("db"), in.Path)
+			if err != nil {
+				dbFail(log, w, err, name+" database")
+
+				return
+			}
+
+			writeJSON(w, http.StatusAccepted, j)
+		}
+	}
+
+	mux.HandleFunc("POST /api/v1/databases/{db}/import", admin("databases:write", dump("import", svc.ImportDatabase)))
+	mux.HandleFunc("POST /api/v1/databases/{db}/export", admin("databases:write", dump("export", svc.ExportDatabase)))
+
+	mux.HandleFunc("GET /api/v1/databases/{db}/jobs/{id}", admin("databases:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		j, err := svc.DatabaseJob(ctx, r.PathValue("db"), r.PathValue("id"))
+		if err != nil {
+			dbFail(log, w, err, "database job")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, j)
 	}))
 }
