@@ -1,6 +1,6 @@
 # ADR-0030 Loading imported dumps with definers
 
-**Status:** Proposed. **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0024 (database passwords), ADR-0025 (database import and export), ADR-0026 (CloudPanel migration transfer, Part 2).
+**Status:** Accepted (2026-11-19, by Kim). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0024 (database passwords), ADR-0025 (database import and export), ADR-0026 (CloudPanel migration transfer, Part 2).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -38,4 +38,4 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions
 
-1. Is a locked owner account per loaded database acceptable (option A)?
+1. ~~Is a locked owner account per loaded database acceptable (option A)?~~ Decided by Kim (2026-11-19): yes [V: Kim, thread].

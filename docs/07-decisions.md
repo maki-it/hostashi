@@ -33,7 +33,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0027 | Maintenance and parking pages | Accepted on 2026-11-19 ([adr/0027](adr/0027-maintenance-and-parking-pages.md)) | Done |
 | 0028 | Cron jobs per site | Accepted on 2026-11-19 ([adr/0028](adr/0028-cron-jobs-per-site.md)) | No |
 | 0029 | Custom nginx snippets per site | Accepted on 2026-11-19 ([adr/0029](adr/0029-custom-nginx-snippets.md)) | No |
-| 0030 | Loading imported dumps with definers | Proposed ([adr/0030](adr/0030-loading-dumps-with-definers.md)) | Yes |
+| 0030 | Loading imported dumps with definers | Accepted on 2026-11-19 ([adr/0030](adr/0030-loading-dumps-with-definers.md)) | No |
 
 ---
 
@@ -251,4 +251,4 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0030 Loading imported dumps with definers
 
-**Full text (status Proposed, 2026-11-19):** [adr/0030](adr/0030-loading-dumps-with-definers.md). Summary: views, triggers and routines in CloudPanel dumps name a definer of the old server, which the hardened import of ADR-0025 cannot create. Recommended: a locked owner account per loaded database (`ALL` on that database only, random password nobody keeps) that becomes the definer, while the agent strips the old `DEFINER` clauses as it streams the dump; after the import job the panel loads each dump on its own. Open: Kim's OK for the owner account.
+**Full text (status Accepted, 2026-11-19, by Kim):** [adr/0030](adr/0030-loading-dumps-with-definers.md). Summary: views, triggers and routines in CloudPanel dumps name a definer of the old server, which the hardened import of ADR-0025 cannot create. Recommended: a locked owner account per loaded database (`ALL` on that database only, random password nobody keeps) that becomes the definer, while the agent strips the old `DEFINER` clauses as it streams the dump; after the import job the panel loads each dump on its own. Kim accepted the owner account on 2026-11-19.
