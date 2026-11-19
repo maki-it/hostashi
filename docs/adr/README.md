@@ -21,6 +21,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0023](0023-panel-https.md) | HTTPS for the panel | Accepted |
 | [0024](0024-mariadb-databases-per-site.md) | MariaDB databases per site | Accepted |
 | [0025](0025-database-import-export.md) | Database import and export | Accepted |
+| [0026](0026-cloudpanel-migration-transfer.md) | Data transfer for the CloudPanel migration | Proposed |
 
 Only the project owner sets a status to `Accepted`.
 
