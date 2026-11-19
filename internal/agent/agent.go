@@ -26,6 +26,7 @@ import (
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
 	"github.com/maki-it/hostashi/internal/sites"
+	"github.com/maki-it/hostashi/internal/sitestats"
 	"github.com/maki-it/hostashi/internal/sysuser"
 	"github.com/maki-it/hostashi/internal/web"
 	"github.com/maki-it/hostashi/internal/webctl"
@@ -71,6 +72,13 @@ type Config struct {
 	// Backup serves backup.*. Run builds it with the fixed paths of a
 	// server; without it the operations answer failed_precondition.
 	Backup *backup.Agent
+
+	// Disk caches the sites' disk usage for metrics.snapshot; Run fills it
+	// every agentapi.DiskEvery. Nil: an empty cache.
+	Disk *sitestats.DiskCache
+	// CgroupRoot is where cgroup v2 is mounted; empty means
+	// sitestats.DefaultCgroupRoot.
+	CgroupRoot string
 }
 
 // DefaultPanelPort is the panel's HTTPS port (ADR-0023).
@@ -140,6 +148,17 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 
 		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, log: log}
 		h.register(s)
+
+		disk, root := cfg.Disk, cfg.CgroupRoot
+		if disk == nil {
+			disk = &sitestats.DiskCache{}
+		}
+
+		if root == "" {
+			root = sitestats.DefaultCgroupRoot
+		}
+
+		(&statsOps{h: h, disk: disk, cgroupRoot: root}).register(s)
 	}
 
 	registerBackup(s, cfg.Backup)
@@ -751,10 +770,16 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
+	if cfg.Disk == nil {
+		cfg.Disk = &sitestats.DiskCache{}
+	}
+
 	s := NewServer(cfg, uid)
 	if err := s.Listen(ctx, cfg.Socket, gid); err != nil {
 		return err
 	}
+
+	go diskLoop(ctx, cfg.Disk, func() map[string]string { return homes(cfg.Sites) }, cfg.Log)
 
 	if cfg.Log != nil {
 		cfg.Log.InfoContext(ctx, "agent listening", "socket", cfg.Socket, "serveUser", cfg.ServeUser, "serveUid", uid)

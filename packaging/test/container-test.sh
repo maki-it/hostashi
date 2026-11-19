@@ -212,6 +212,18 @@ echo @file_get_contents("/etc/hostname") === false ? " jailed" : " open";
 PHP
 body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/some/pretty/url)
 [ "$body" = "php $ver user wp jailed" ] || fail "PHP site answered '$body'"
+# Metrics (ADR-0022): off by default, then on with a metrics:read token.
+# php_up comes from the unit's cgroup, which checks the slice path.
+[ "$(x curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/metrics)" = 404 ] || fail "metrics on by default"
+[ "$(api PUT /api/v1/settings/metrics '{"enabled":true}')" = 200 ] || fail "metrics on: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/tokens '{"name":"prometheus","scopes":["metrics:read"],"expiresInDays":1}')" = 201 ] || fail "metrics token: $(x cat /tmp/api.out)"
+mtok=$(x sed -n 's/.*"token":"\([^"]*\)".*/\1/p' /tmp/api.out)
+metrics=$(x curl -fsS -H "Authorization: Bearer $mtok" http://127.0.0.1:8080/metrics) || fail "scrape failed"
+grep -qx "hostashi_site_php_up{php_version=\"$ver\",site=\"wp\"} 1" <<<"$metrics" ||
+  fail "no php_up for wp: $(grep hostashi_site_ <<<"$metrics" || true)"
+grep -q '^hostashi_agent_ops_total{op="web.apply",result="ok"}' <<<"$metrics" || fail "no agent op series"
+grep '^hostashi_site_php_memory_bytes' <<<"$metrics" || echo "note: no PHP memory series (no memory controller here)"
+[ "$(api PUT /api/v1/settings/metrics '{"enabled":false}')" = 200 ] || fail "metrics off: $(x cat /tmp/api.out)"
 # PHP off: the pool goes away and PHP source is never sent.
 [ "$(api PUT /api/v1/sites/wp/php '{"php":""}')" = 200 ] || fail "PHP off: $(x cat /tmp/api.out)"
 ! x systemctl is-active --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit still running after PHP off"

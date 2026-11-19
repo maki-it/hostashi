@@ -308,6 +308,7 @@ func Run(ctx context.Context, cfg Config) error {
 
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
+	m.RegisterSites(siteStats(client), cfg.Log)
 
 	if iss, err := newIssuer(cfg, st, box); err != nil {
 		return err
@@ -409,6 +410,27 @@ func certList(svc *hosting.Service) func(context.Context) ([]metrics.Cert, error
 		out := make([]metrics.Cert, 0, len(list))
 		for _, c := range list {
 			out = append(out, metrics.Cert{Site: c.Site, Cert: c.Cert, NotAfter: c.NotAfter})
+		}
+
+		return out, nil
+	}
+}
+
+// siteStats feeds the per-site series from the agent (ADR-0022).
+func siteStats(c *agentrpc.Client) func(context.Context) ([]metrics.Site, error) {
+	return func(ctx context.Context) ([]metrics.Site, error) {
+		res, err := agentapi.MetricsSnapshot.Call(ctx, c, agentapi.MetricsSnapshotRequest{})
+		if err != nil {
+			return nil, err
+		}
+
+		out := make([]metrics.Site, 0, len(res.Sites))
+		for _, s := range res.Sites {
+			out = append(out, metrics.Site{
+				Name: s.Name, PHPVersion: s.PHPVersion, PHPUp: s.PHPUp,
+				PHPMemoryBytes: s.PHPMemoryBytes, PHPMemoryKnown: s.PHPMemoryKnown,
+				DiskUsedBytes: s.DiskUsedBytes, DiskMeasuredAt: s.DiskMeasuredAt,
+			})
 		}
 
 		return out, nil
