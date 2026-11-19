@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path"
 	"slices"
 	"strings"
 
@@ -124,14 +123,7 @@ func checkSite(s *scan.Site) error {
 
 // CheckDocRoot accepts a clean absolute path below /home/<user>/ on the old
 // server. The transfer reads only below it (ADR-0026).
-func CheckDocRoot(user, p string) error {
-	home := "/home/" + user + "/"
-	if p != path.Clean(p) || !strings.HasPrefix(p, home) || len(p) == len(home) || strings.ContainsAny(p, "\x00\n\\$") {
-		return fmt.Errorf("document root %q is not a clean path below %s", p, home)
-	}
-
-	return nil
-}
+func CheckDocRoot(user, p string) error { return agentapi.ValidateRemoteDocRoot(user, p) }
 
 // validVersion accepts "<major>.<minor>" with one digit and one or two digits.
 func validVersion(v string) bool {

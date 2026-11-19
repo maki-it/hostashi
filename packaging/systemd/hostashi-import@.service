@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# One CloudPanel import (ADR-0026 Part 3), started by the agent as
+# hostashi-import@<id>.service. It copies one site's document root from the
+# old server over SFTP into <home>/cloudpanel-import; a second run is the
+# final sync. The old server is only read: the key there is locked to a
+# read-only sftp-server and one tunnel to MariaDB.
+#
+# Root is needed only to read the SSH key and the migration source in the
+# agent's state directory. The job opens the SSH session as root, then
+# drops to the site's user and group (setresgid, setresuid, no
+# supplementary groups) before it writes a single file, so the site's files
+# are created by their owner and a hostile tree can at worst damage that
+# one site. The file system is read-only except the import records and the
+# one home that the agent opens in a drop-in (ReadWritePaths=) for this
+# instance only. The capabilities are those of changing the user, nothing
+# more, and they are gone after the drop.
+
+[Unit]
+Description=Hostashi CloudPanel import %i
+Documentation=https://github.com/maki-it/hostashi
+After=network-online.target hostashi-agent.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/hostashi cloudpanel -state-dir /var/lib/hostashi-agent import-run %i
+TimeoutStartSec=24h
+ReadWritePaths=-/var/lib/hostashi-agent/cloudpanel/imports
+UMask=0077
+
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+# No RestrictSUIDSGID=: it makes openat2() fail with ENOSYS. The copy drops
+# setuid, setgid and sticky bits itself.
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
