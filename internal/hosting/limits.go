@@ -31,9 +31,6 @@ var cpuWeights = map[string]uint64{
 	"high":   agentapi.CPUWeightHigh,
 }
 
-// MaxPHPWorkers is the highest number of PHP workers a site may get.
-const MaxPHPWorkers = 500
-
 // presetNameRe: lower-case, used in the API path.
 var presetNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
@@ -82,8 +79,8 @@ func CheckLimits(l store.Limits, isDefault bool) error {
 		return bad("limits must not be negative")
 	}
 
-	if l.PHPWorkers < 1 || l.PHPWorkers > MaxPHPWorkers {
-		return bad("php workers must be between 1 and %d", MaxPHPWorkers)
+	if l.PHPWorkers < 1 || l.PHPWorkers > agentapi.MaxPHPWorkers {
+		return bad("php workers must be between 1 and %d", agentapi.MaxPHPWorkers)
 	}
 
 	if err := (agentapi.SiteQuotaSetRequest{User: "check", Bytes: uint64(l.DiskBytes), Inodes: uint64(l.DiskInodes)}).Validate(); err != nil {
@@ -205,18 +202,25 @@ func (s *Service) UpdateLimitPreset(ctx context.Context, actor int64, name, newN
 		return store.LimitPreset{}, presetErr(err)
 	}
 
+	followers, err := s.st.PresetFollowers(ctx, cur.ID)
+	if err != nil {
+		return store.LimitPreset{}, err
+	}
+
+	// The PHP workers live in the sites' pools, part of the web state.
+	if len(followers) > 0 && cur.Limits.PHPWorkers != l.PHPWorkers {
+		if err := s.applyWeb(ctx); err != nil {
+			s.log.WarnContext(ctx, "apply web state after preset change", "preset", newName, "err", err)
+		}
+	}
+
 	detail := limitsAudit(l)
 	detail["name"] = newName
 	detail["default"] = strconv.FormatBool(def || cur.Default)
 	s.audit(ctx, actor, "limits.preset.update", name, detail)
 
 	if s.limits != nil {
-		names, err := s.st.PresetFollowers(ctx, cur.ID)
-		if err != nil {
-			return store.LimitPreset{}, err
-		}
-
-		for _, n := range names {
+		for _, n := range followers {
 			site, err := s.st.SiteByName(ctx, n)
 			if err != nil {
 				s.log.ErrorContext(ctx, "site of a preset follower", "site", n, "err", err)
@@ -347,6 +351,11 @@ func (s *Service) SetSiteLimits(ctx context.Context, actor int64, name, preset s
 		l        store.Limits
 	)
 
+	before, hadBefore, err := s.st.SiteLimits(ctx, site.ID)
+	if err != nil {
+		return SiteLimitsView{}, err
+	}
+
 	if custom != nil {
 		l = *custom
 	} else {
@@ -368,6 +377,13 @@ func (s *Service) SetSiteLimits(ctx context.Context, actor int64, name, preset s
 
 	applyErr := s.applyLimits(ctx, site, l)
 
+	// The PHP workers live in the site's pool, part of the web state.
+	if site.PHP != "" && !site.Disabled && (!hadBefore || before.Limits.PHPWorkers != l.PHPWorkers) {
+		if err := s.applyWeb(ctx); err != nil && applyErr == nil {
+			applyErr = err
+		}
+	}
+
 	v, err := s.siteLimitsView(ctx, site)
 	if err != nil {
 		return SiteLimitsView{}, err
@@ -376,29 +392,39 @@ func (s *Service) SetSiteLimits(ctx context.Context, actor int64, name, preset s
 	return v, applyErr
 }
 
-// applyDefaultLimits gives a new site the default preset. A failure is
-// logged and recorded on the site; the site itself stays.
-func (s *Service) applyDefaultLimits(ctx context.Context, site store.Site) {
+// storeDefaultLimits gives a new site the default preset, before its
+// web state is applied. It reports false (and logs why) when the site gets
+// no limits; the site itself stays.
+func (s *Service) storeDefaultLimits(ctx context.Context, site store.Site) (store.Limits, bool) {
 	if s.limits == nil {
-		return
+		return store.Limits{}, false
 	}
 
 	p, err := s.st.DefaultLimitPreset(ctx)
 	if err != nil {
 		s.log.ErrorContext(ctx, "default limit preset", "site", site.Name, "err", err)
 
-		return
+		return store.Limits{}, false
 	}
 
 	if err := s.st.SetSiteLimits(ctx, site.ID, p.ID, p.Limits, s.now()); err != nil {
 		s.log.ErrorContext(ctx, "store limits of a new site", "site", site.Name, "err", err)
 
-		return
+		return store.Limits{}, false
 	}
 
-	if err := s.applyLimits(ctx, site, p.Limits); err != nil {
-		s.log.WarnContext(ctx, "apply limits of a new site", "site", site.Name, "err", err)
+	return p.Limits, true
+}
+
+// phpWorkers is the worker count to send for a site: its limit, or 0 (the
+// agent's default) for a site without limits.
+func phpWorkers(workers map[int64]int64, siteID int64) int {
+	n, ok := workers[siteID]
+	if !ok || n < 1 || n > agentapi.MaxPHPWorkers {
+		return 0
 	}
+
+	return int(n)
 }
 
 // applyLimits sends the limits to the agent and records the result. A

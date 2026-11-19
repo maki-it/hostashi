@@ -129,6 +129,25 @@ func TestRender(t *testing.T) {
 			t.Errorf("missing %q in\n%s", want, b)
 		}
 	}
+
+	if !strings.Contains(string(b), "\npm.max_children = 5\n") {
+		t.Errorf("default workers missing in\n%s", b)
+	}
+
+	b, err = m.Render(Pool{User: "blog", Version: "8.4", Home: "/home/blog", Workers: 12})
+	if err != nil || !strings.Contains(string(b), "\npm.max_children = 12\n") {
+		t.Errorf("12 workers: %v\n%s", err, b)
+	}
+
+	for _, n := range []int{-1, 501} {
+		if _, err := m.Render(Pool{User: "blog", Version: "8.4", Home: "/home/blog", Workers: n}); !errors.Is(err, ErrInvalid) {
+			t.Errorf("Render with %d workers: %v", n, err)
+		}
+
+		if err := m.Ensure(t.Context(), []Pool{{User: "blog", Version: "8.4", Home: "/home/blog", Workers: n}}); !errors.Is(err, ErrInvalid) {
+			t.Errorf("Ensure with %d workers: %v", n, err)
+		}
+	}
 }
 
 func TestEnsureLifecycle(t *testing.T) {
@@ -329,5 +348,45 @@ func TestRenderedPoolPassesRealPHPFPM(t *testing.T) {
 
 	if err := (phpctl.Controller{}).Test(t.Context(), versions[0], conf); err != nil {
 		t.Fatal(fmt.Errorf("%w\n%s", err, b))
+	}
+}
+
+func TestEnsureWorkersChange(t *testing.T) {
+	m, ctl := newManager(t)
+	ctx := t.Context()
+
+	blog := Pool{User: "blog", Version: "8.4", Home: "/home/blog"}
+	if err := m.Ensure(ctx, []Pool{blog}); err != nil {
+		t.Fatal(err)
+	}
+
+	ctl.take()
+
+	// Workers 5 is the default: the pool file is the same, nothing reloads.
+	same := blog
+	same.Workers = 5
+
+	if err := m.Ensure(ctx, []Pool{same}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := ctl.take(); strings.Contains(got, "reload") {
+		t.Errorf("explicit default workers reloaded: %s", got)
+	}
+
+	more := blog
+	more.Workers = 9
+
+	if err := m.Ensure(ctx, []Pool{more}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := ctl.take(); !strings.Contains(got, "reload hostashi-php-8.4@blog.service") {
+		t.Errorf("worker change: %s", got)
+	}
+
+	b, err := os.ReadFile(m.conf("blog"))
+	if err != nil || !strings.Contains(string(b), "pm.max_children = 9\n") {
+		t.Errorf("pool file: %v\n%s", err, b)
 	}
 }

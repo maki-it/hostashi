@@ -244,6 +244,19 @@ for f in memory.max=268435456 pids.max=64 cpu.weight=200; do
     echo "note: no ${f%%=*} in the container's cgroup (controller not delegated)"
   fi
 done
+# The panel gave the new site the default preset; custom values through
+# the API reach the slice and the PHP pool.
+[ "$(api GET /api/v1/sites/wp/limits)" = 200 ] || fail "site limits: $(x cat /tmp/api.out)"
+x grep -q '"set":true,"preset":"small"' /tmp/api.out || fail "new site has no default preset: $(x cat /tmp/api.out)"
+x grep -q '"applyError":""' /tmp/api.out || fail "default limits not applied: $(x cat /tmp/api.out)"
+x grep -qx 'pm.max_children = 5' /var/lib/hostashi-agent/php/wp.conf || fail "default workers not in the pool"
+[ "$(api PUT /api/v1/sites/wp/limits '{"custom":{"diskBytes":1073741824,"diskInodes":10000,"memoryBytes":536870912,"phpWorkers":7,"tasks":96,"cpuPriority":"low"}}')" = 200 ] ||
+  fail "custom limits: $(x cat /tmp/api.out)"
+x grep -qx 'pm.max_children = 7' /var/lib/hostashi-agent/php/wp.conf || fail "custom workers not in the pool"
+x systemctl is-active --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit not running after the worker change"
+for p in MemoryMax=536870912 TasksMax=96 CPUWeight=50; do
+  [ "$(x systemctl show -p "${p%%=*}" --value hostashi-site-wp.slice)" = "${p#*=}" ] || fail "slice ${p%%=*} not ${p#*=} after the API change"
+done
 # PHP off: the pool goes away and PHP source is never sent.
 [ "$(api PUT /api/v1/sites/wp/php '{"php":""}')" = 200 ] || fail "PHP off: $(x cat /tmp/api.out)"
 ! x systemctl is-active --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit still running after PHP off"

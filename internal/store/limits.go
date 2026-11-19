@@ -331,6 +331,34 @@ func (s *Store) PresetFollowers(ctx context.Context, presetID int64) ([]string, 
 	return out, nil
 }
 
+// PHPWorkers returns the PHP workers of every site that has limits, by
+// site id.
+func (s *Store) PHPWorkers(ctx context.Context) (map[int64]int64, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT site_id, php_workers FROM site_limits`)
+	if err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+
+	defer rows.Close()
+
+	out := map[int64]int64{}
+
+	for rows.Next() {
+		var id, n int64
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, fmt.Errorf("store: %w", err)
+		}
+
+		out[id] = n
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+
+	return out, nil
+}
+
 // SiteLimits returns the limits of a site, and false if none are set (a
 // site from before ADR-0015).
 func (s *Store) SiteLimits(ctx context.Context, siteID int64) (SiteLimits, bool, error) {

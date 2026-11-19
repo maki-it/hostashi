@@ -231,7 +231,7 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err = s.st.CreateSite(ctx, req.Name, req.Pool, req.PHP, domains, s.now())
+	created, err := s.st.CreateSite(ctx, req.Name, req.Pool, req.PHP, domains, s.now())
 
 	switch {
 	case errors.Is(err, store.ErrSiteExists):
@@ -265,6 +265,10 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, err
 	}
 
+	// Stored before the web state, so the PHP pool starts with the
+	// preset's workers.
+	limits, hasLimits := s.storeDefaultLimits(ctx, created)
+
 	if err := s.applyWeb(ctx); err != nil {
 		s.removeAfterFailure(undo, req.Name)
 
@@ -285,7 +289,11 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, err
 	}
 
-	s.applyDefaultLimits(ctx, site)
+	if hasLimits {
+		if err := s.applyLimits(ctx, site, limits); err != nil {
+			s.log.WarnContext(ctx, "apply limits of a new site", "site", site.Name, "err", err)
+		}
+	}
 
 	return site, nil
 }
@@ -503,6 +511,11 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		return err
 	}
 
+	workers, err := s.st.PHPWorkers(ctx)
+	if err != nil {
+		return err
+	}
+
 	for _, site := range sites {
 		if site.State == store.SiteActive && len(site.Domains) > 0 {
 			tls := site.TLS && s.certCovers(site, 0)
@@ -517,6 +530,10 @@ func (s *Service) applyWeb(ctx context.Context) error {
 
 			ws := agentapi.WebSite{
 				User: site.Name, Domains: site.Domains, PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
+			}
+
+			if php != "" {
+				ws.PHPWorkers = phpWorkers(workers, site.ID)
 			}
 
 			// The agent leaves them out while the site is disabled or in

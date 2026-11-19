@@ -64,6 +64,9 @@ type WebSite struct {
 	// PHP is the PHP version of the site's FPM pool, empty for a site
 	// without PHP (static files only).
 	PHP string `json:"php,omitempty"`
+	// PHPWorkers is the most PHP worker processes of the site's pool
+	// (ADR-0015), 0 for the default (DefaultPHPWorkers).
+	PHPWorkers int `json:"phpWorkers,omitempty"`
 	// TLS serves the site over HTTPS with its live certificate (tls.install)
 	// and redirects HTTP to HTTPS. The certificate must name every domain.
 	TLS bool `json:"tls,omitempty"`
@@ -81,6 +84,12 @@ type WebSite struct {
 	// the site is disabled or in maintenance.
 	Snippets *WebSnippets `json:"snippets,omitempty"`
 }
+
+// PHP workers of a site's pool (pm.max_children, ADR-0015).
+const (
+	DefaultPHPWorkers = 5
+	MaxPHPWorkers     = 500
+)
 
 // MaxSnippetBytes bounds one custom snippet (ADR-0029).
 const MaxSnippetBytes = 64 << 10
@@ -229,6 +238,10 @@ func (r WebApplyRequest) Validate() error {
 			if err := ValidatePHPVersion(s.PHP); err != nil {
 				return fmt.Errorf("site %q: %w", s.User, err)
 			}
+		}
+
+		if s.PHPWorkers < 0 || s.PHPWorkers > MaxPHPWorkers {
+			return fmt.Errorf("site %q: php workers must be 0 (default) or between 1 and %d", s.User, MaxPHPWorkers)
 		}
 
 		if len(s.Domains) == 0 || len(s.Domains) > MaxDomainsPerSite {
