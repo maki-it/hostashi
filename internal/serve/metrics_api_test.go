@@ -4,6 +4,7 @@ package serve
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -110,5 +111,57 @@ func TestMetricsSettingNeedsSession(t *testing.T) {
 		if rec.Code != http.StatusBadRequest && rec.Code != http.StatusUnprocessableEntity {
 			t.Errorf("%s: %d %s", body, rec.Code, rec.Body)
 		}
+	}
+}
+
+func TestCheckMetricsListen(t *testing.T) {
+	ok := []string{"127.0.0.1:9471", "[::1]:9471", "127.0.0.5:1"}
+	bad := []string{"localhost:9471", "0.0.0.0:9471", ":9471", "[::]:9471", "192.0.2.1:9471", "127.0.0.1", "127.0.0.1:", "127.0.0.1:0", ""}
+
+	for _, a := range ok {
+		if err := CheckMetricsListen(a); err != nil {
+			t.Errorf("%q rejected: %v", a, err)
+		}
+	}
+
+	for _, a := range bad {
+		if err := CheckMetricsListen(a); err == nil {
+			t.Errorf("%q accepted", a)
+		}
+	}
+}
+
+func TestLocalMetricsHandler(t *testing.T) {
+	e := newAPI(t)
+	c := e.adminCookie(t)
+	h := LocalMetricsHandler(e.metrics, e.settings, nil)
+
+	get := func(method, path string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
+
+		return rec
+	}
+
+	if rec := get("GET", "/metrics"); rec.Code != http.StatusNotFound {
+		t.Fatalf("off: %d %s", rec.Code, rec.Body)
+	}
+
+	e.setMetrics(t, c, `{"enabled":true}`)
+
+	rec := get("GET", "/metrics")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "go_goroutines") || rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("on: %d %s", rec.Code, rec.Body)
+	}
+
+	// Nothing else is served on this listener, not the API and not the UI.
+	for _, p := range []string{"/", "/api/v1/health", "/api/v1/sites", "/metrics/x"} {
+		if rec := get("GET", p); rec.Code != http.StatusNotFound {
+			t.Errorf("%s: %d", p, rec.Code)
+		}
+	}
+
+	if rec := get("POST", "/metrics"); rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("post: %d", rec.Code)
 	}
 }

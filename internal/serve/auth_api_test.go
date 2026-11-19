@@ -31,6 +31,7 @@ type apiEnv struct {
 	sites     *hosting.Service
 	tokenPath string
 	metrics   *metrics.Metrics
+	settings  Settings
 }
 
 func newAPI(t *testing.T) *apiEnv {
@@ -76,7 +77,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 		deps.Sites = hosting.New(st, ag, nil)
 	}
 
-	return &apiEnv{h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics}
+	return &apiEnv{h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st}
 }
 
 type reqOpts struct {

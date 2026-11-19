@@ -28,6 +28,8 @@ func TestRun(t *testing.T) {
 		{"extra args", []string{"agent", "sh"}, 0, 2, ""},
 		{"serve as root", []string{"serve"}, 0, 1, "must not run as root"},
 		{"serve public", []string{"serve", "-listen", "0.0.0.0:8080"}, 1000, 1, "only loopback"},
+		{"serve public metrics", []string{"serve", "-metrics-listen", "0.0.0.0:9471"}, 1000, 1, "only a loopback IP"},
+		{"serve metrics by name", []string{"serve", "-metrics-listen", "localhost:9471"}, 1000, 1, "only a loopback IP"},
 		{"agent as user", []string{"agent"}, 1000, 1, "must run as root"},
 		{"agent root as serve user", []string{"agent", "-serve-user", "root"}, 0, 1, "dedicated unprivileged user"},
 		{"ping without agent", []string{"ping", "-socket", missing}, 1000, 1, "unavailable"},

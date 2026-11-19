@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 
@@ -165,5 +166,62 @@ func registerMetrics(mux *http.ServeMux, a authn, m *metrics.Metrics, st Setting
 		})
 
 		writeJSON(w, http.StatusOK, metricsSettingJSON{Enabled: on})
+	})
+}
+
+// CheckMetricsListen accepts only a loopback IP literal with a port. Unlike
+// CheckListen it refuses host names such as "localhost", whose address
+// comes from /etc/hosts or DNS, because this listener answers without a
+// token (ADR-0022).
+func CheckMetricsListen(addr string) error {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("metrics listen address %q: %w", addr, err)
+	}
+
+	if port == "" || port == "0" {
+		return fmt.Errorf("metrics listen address %q: missing port", addr)
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return fmt.Errorf("metrics listen address %q: only a loopback IP address such as 127.0.0.1 is allowed", addr)
+	}
+
+	return nil
+}
+
+// LocalMetricsHandler serves only GET /metrics without a token, for a
+// scraper on the same host (ADR-0022). It must only ever run on a listener
+// that CheckMetricsListen accepted. It answers 404 while the metrics
+// setting is off, like the token path.
+func LocalMetricsHandler(m *metrics.Metrics, st Settings, log *slog.Logger) http.Handler {
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET "+MetricsPath, func(w http.ResponseWriter, r *http.Request) {
+		on, err := metricsEnabled(r.Context(), st)
+		if err != nil {
+			log.Error("read metrics setting", "err", err)
+			writeError(w, http.StatusInternalServerError, "internal", "internal error")
+
+			return
+		}
+
+		if !on {
+			writeError(w, http.StatusNotFound, "not_found", "the metrics endpoint is switched off")
+
+			return
+		}
+
+		writeMetrics(w, m, log)
+	})
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Cache-Control", "no-store")
+		mux.ServeHTTP(w, r)
 	})
 }
