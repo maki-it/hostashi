@@ -76,7 +76,8 @@ label small {
   font-weight: 400;
 }
 
-input {
+input,
+textarea {
   font: inherit;
   padding: 0.5rem 0.625rem;
   color: var(--fg);
@@ -86,6 +87,7 @@ input {
 }
 
 input:focus-visible,
+textarea:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -357,6 +359,11 @@ fieldset > p {
 }
 
 input,
-select {
+select,
+textarea {
   min-width: 0;
+}
+
+textarea {
+  resize: vertical;
 }

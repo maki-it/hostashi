@@ -7,6 +7,7 @@ import { Databases } from "./Databases";
 import { Home } from "./Home";
 import { Login } from "./Login";
 import { Setup } from "./Setup";
+import { Sites } from "./Sites";
 
 type View =
   | { kind: "loading" }
@@ -15,10 +16,12 @@ type View =
   | { kind: "home"; user: User }
   | { kind: "error" };
 
-type Page = "home" | "databases" | "backups";
+type Page = "home" | "sites" | "databases" | "backups";
 
 const pageFromHash = (): Page => {
   switch (window.location.hash) {
+    case "#/sites":
+      return "sites";
     case "#/databases":
       return "databases";
     case "#/backups":
@@ -65,6 +68,9 @@ export function App() {
             <a href="#/" aria-current={page === "home" ? "page" : undefined}>
               Overview
             </a>
+            <a href="#/sites" aria-current={page === "sites" ? "page" : undefined}>
+              Sites
+            </a>
             <a href="#/databases" aria-current={page === "databases" ? "page" : undefined}>
               Databases
             </a>
@@ -90,6 +96,7 @@ export function App() {
         <Login {...(view.notice ? { notice: view.notice } : {})} onLogin={(user) => setView({ kind: "home", user })} />
       )}
       {view.kind === "home" && page === "home" && <Home user={view.user} onLogout={() => setView({ kind: "login" })} />}
+      {view.kind === "home" && page === "sites" && <Sites />}
       {view.kind === "home" && page === "databases" && <Databases />}
       {view.kind === "home" && page === "backups" && <Backups />}
     </main>
