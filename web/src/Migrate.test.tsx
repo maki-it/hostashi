@@ -142,6 +142,7 @@ describe("Migrate", () => {
         return { status: 201, body: sites[0] };
       },
       "GET /api/v1/databases": { body: { databases: [{ name: "shop", site: "shop", users: [], createdAt: "" }] } },
+      [`GET ${base}/imports?site=shop`]: { body: { imports: [] } },
       [`POST ${base}/reports/r1/sites/shop/import`]: { status: 202, body: job("queued") },
       [`GET ${base}/imports/imp1`]: () => ({ body: job(polls++ === 0 ? "running" : "done") }),
     });
@@ -195,6 +196,42 @@ describe("Migrate", () => {
     expect(status.getByText("120 files, 3.0 MiB")).toBeInTheDocument();
     expect(status.getByText("cloudpanel-import-db/shop-20261119T100100Z.sql")).toBeInTheDocument();
     expect(planCard.getByRole("button", { name: "Import shop again" })).toBeInTheDocument();
+  });
+
+  it("shows the last import of a created site", async () => {
+    const user = userEvent.setup();
+    const report = { id: "r1", sites: 1, createdAt: "2026-11-19T09:00:00Z" };
+    const done: ImportJob = {
+      id: "imp9",
+      site: "shop",
+      remoteUser: "shop",
+      docRoot: "/home/shop/htdocs/shop.example",
+      dir: "cloudpanel-import",
+      state: "failed",
+      created: "2026-11-19T10:00:00Z",
+      finished: "2026-11-19T10:00:05Z",
+      files: 0,
+      bytes: 0,
+      unchanged: 0,
+      deleted: 0,
+      skipped: 0,
+      error: "the old server refused the key",
+    };
+    mockFetch({
+      [`GET ${base}/source`]: { body: readySource },
+      [`GET ${base}/reports`]: { body: { reports: [report] } },
+      [`GET ${base}/reports/r1`]: { body: { ...report, plan: plan([{ ...planSite("shop", "skip"), reasons: exists }]) } },
+      "GET /api/v1/php/versions": { body: { installed: ["8.3"], supported: ["8.3"], legacy: [] } },
+      "GET /api/v1/databases": { body: { databases: [] } },
+      [`GET ${base}/imports?site=shop`]: { body: { imports: [{ ...done, skippedPaths: undefined }] } },
+      [`GET ${base}/imports/imp9`]: { body: done },
+    });
+    render(<Migrate />);
+    await user.click(await screen.findByRole("button", { name: "Show plan" }));
+    const status = within(await screen.findByRole("region", { name: "Import of shop" }));
+    expect(await status.findByText(/^Failed/)).toBeInTheDocument();
+    expect(status.getByRole("alert")).toHaveTextContent("the old server refused the key");
+    expect(screen.getByRole("button", { name: "Import shop again" })).toBeInTheDocument();
   });
 
   it("explains a rejected report", async () => {
