@@ -18,11 +18,51 @@ const DefaultTimeout = 15 * time.Second
 // it safe for concurrent use and lets it survive agent restarts. The call
 // rate is a handful per minute, so the cost does not matter.
 type Client struct {
-	path string
+	path    string
+	observe func(op, result string, d time.Duration)
 }
 
 // NewClient returns a client for the socket at path. It does not connect.
 func NewClient(path string) *Client { return &Client{path: path} }
+
+// Observe calls fn after every call with the operation name, the result
+// (see Result) and the duration. Set it before the first call.
+func (c *Client) Observe(fn func(op, result string, d time.Duration)) { c.observe = fn }
+
+// Result names the outcome of a call for metrics: "ok", one of the error
+// codes of this package, "unavailable" when the agent could not be reached,
+// or "error" for anything else. The set is closed whatever the agent sends.
+func Result(err error) string {
+	if err == nil {
+		return "ok"
+	}
+
+	var e *Error
+	if errors.As(err, &e) {
+		switch e.Code {
+		case CodeBadRequest, CodeInvalidArgument, CodeUnknownOperation, CodeNotFound, CodeConflict, CodePrecondition, CodeInternal:
+			return e.Code
+		}
+	}
+
+	if errors.Is(err, ErrUnavailable) {
+		return "unavailable"
+	}
+
+	return "error"
+}
+
+func (c *Client) call(ctx context.Context, op string, req any) (json.RawMessage, error) {
+	if c.observe == nil {
+		return c.roundTrip(ctx, op, req)
+	}
+
+	start := time.Now()
+	raw, err := c.roundTrip(ctx, op, req)
+	c.observe(op, Result(err), time.Since(start))
+
+	return raw, err
+}
 
 // ErrUnavailable wraps failures to reach the agent at all.
 var ErrUnavailable = errors.New("agentrpc: agent unavailable")

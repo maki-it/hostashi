@@ -204,11 +204,14 @@ func (s *Service) RevokeToken(ctx context.Context, userID, id int64, ip string) 
 func (s *Service) AuthenticateToken(ctx context.Context, raw, ip string) (Principal, error) {
 	key := "token-ip:" + ip
 	if s.tokenLimit.Blocked(key) {
+		s.obs.Throttled(KindToken)
+
 		return Principal{}, ErrRateLimited
 	}
 
 	fail := func() (Principal, error) {
 		s.tokenLimit.Fail(key)
+		s.obs.Failure(KindToken)
 
 		return Principal{}, ErrUnauthenticated
 	}

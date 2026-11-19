@@ -68,7 +68,7 @@ func (op Op[Req, Resp]) Call(ctx context.Context, c *Client, req Req) (Resp, err
 		return zero, &Error{CodeInvalidArgument, err.Error()}
 	}
 
-	raw, err := c.roundTrip(ctx, op.Name, req)
+	raw, err := c.call(ctx, op.Name, req)
 	if err != nil {
 		return zero, err
 	}

@@ -111,6 +111,8 @@ type Service struct {
 
 	panelDomain string // ADR-0023; empty: nginx serves no panel address
 	panelServed string // panel domain of the last accepted web state; under mu
+
+	onApply func(ok bool, generation int) // nil: nobody listens
 }
 
 // New builds a Service.
@@ -493,6 +495,10 @@ func (s *Service) applyWeb(ctx context.Context) error {
 	}
 
 	res, err := s.ag.WebApply(ctx, req)
+	if s.onApply != nil {
+		s.onApply(err == nil, res.Generation)
+	}
+
 	if err != nil {
 		return err
 	}

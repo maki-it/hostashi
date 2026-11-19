@@ -34,6 +34,7 @@ type Metrics struct {
 
 	httpRequests *prometheus.CounterVec
 	httpDuration *prometheus.HistogramVec
+	s            series
 
 	now func() time.Time
 
@@ -58,6 +59,7 @@ func New() *Metrics {
 			Help:    "Panel HTTP request duration by registered route.",
 			Buckets: []float64{0.005, 0.025, 0.1, 0.25, 1, 2.5, 10},
 		}, []string{"route"}),
+		s:   newSeries(),
 		now: time.Now,
 	}
 
@@ -67,6 +69,7 @@ func New() *Metrics {
 		m.httpRequests,
 		m.httpDuration,
 	)
+	m.reg.MustRegister(m.s.collectors()...)
 
 	return m
 }
