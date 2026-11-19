@@ -35,6 +35,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0029 | Custom nginx snippets per site | Accepted on 2026-11-19 ([adr/0029](adr/0029-custom-nginx-snippets.md)) | No |
 | 0030 | Loading imported dumps with definers | Accepted on 2026-11-19 ([adr/0030](adr/0030-loading-dumps-with-definers.md)) | No |
 | 0031 | DNS cut-over per site in the CloudPanel migration | Accepted on 2026-11-19 ([adr/0031](adr/0031-dns-cut-over-per-site.md)) | No |
+| 0032 | SSH and SFTP access per site | Proposed ([adr/0032](adr/0032-ssh-and-sftp-per-site.md)) | **Yes** |
 
 ---
 
@@ -257,3 +258,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0031 DNS cut-over per site in the CloudPanel migration
 
 **Full text (status Accepted, 2026-11-19, by Kim):** [adr/0031](adr/0031-dns-cut-over-per-site.md). Summary: imported sites have no certificate until their domains point to the new server. Recommended: Kim changes the records at the DNS provider; the panel shows the records to set and the TTL it sees, watches every domain once a minute for up to 48 hours, and turns on HTTPS as soon as all answers name only this server. No DNS credential in Hostashi; a provider API (INWX) can follow with DNS-01. Writes on the old site during the switch: per site, accept the short gap or stop writes there by hand before the final sync. Decided by Kim (2026-11-19): the records are changed by hand and the panel watches.
+
+## ADR-0032 SSH and SFTP access per site
+
+**Full text (status Proposed, 2026-11-19):** [adr/0032](adr/0032-ssh-and-sftp-per-site.md). Summary: the distribution's OpenSSH, site users in the group `hostashi-sites`, one static `Match Group` block in `/etc/ssh/sshd_config.d/` (keys only, no forwarding), and keys in a root-owned file per site that the agent writes from the panel's list, so a site user cannot add keys behind the panel. Each key is SFTP only (`command="internal-sftp"`) or shell; the login shell switches between `nologin` and `bash` with `usermod` in the existing `sysuser` exception. No chroot in v1. Sessions fall under the site's limits through `user-<uid>.slice` (ADR-0015). Checked with OpenSSH 9.6: the `Match` block in the drop-in leaves root untouched, a key in the home is refused, an SFTP-only key refuses commands, passwords are refused. Open: shell at all, keys only, one login per site, chroot.
