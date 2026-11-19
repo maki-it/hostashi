@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { SnippetField } from "./Snippets";
+import { setSnippets, sizeProblem, snippetDraft, snippetMessage, snippetProblems, type DraftItem, type SnippetDraft, type SnippetProblems } from "./snippets";
 import {
   activateImport,
   cronLabel,
@@ -584,6 +586,7 @@ function PlanRow({
         </p>
       )}
       {created && <ImportForm report={report} site={site} ready={ready} />}
+      {created && site.customSnippets > 0 && <SnippetDraftForm report={report} site={site} />}
     </li>
   );
 }
@@ -837,5 +840,90 @@ function Activate({ site }: { site: string }) {
       )}
       {error && <p role="alert">{error}</p>}
     </div>
+  );
+}
+
+const draftActionLabel: Record<DraftItem["action"], string> = { kept: "Kept", rewritten: "Kept, paths changed", dropped: "Left out" };
+
+// SnippetDraftForm reviews the custom nginx directives of an imported site
+// once (ADR-0017): the draft drops what Hostashi does itself, points paths
+// at this server, and the person edits and saves it as the site's snippets.
+function SnippetDraftForm({ report, site }: { report: string; site: PlanSite }) {
+  const [draft, setDraft] = useState<SnippetDraft | null>(null);
+  const [server, setServer] = useState("");
+  const [root, setRoot] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState("");
+  const [problems, setProblems] = useState<SnippetProblems | null>(null);
+
+  async function load() {
+    setBusy(true);
+    setError("");
+    try {
+      const d = await snippetDraft(report, site.name);
+      setDraft(d);
+      setServer(d.server);
+      setRoot(d.root);
+    } catch (err) {
+      setError(snippetMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    const problem = sizeProblem({ server, root });
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setDone("");
+    setProblems(null);
+    try {
+      await setSnippets(site.name, { server, root });
+      setDone("Snippets saved and active on " + site.name + ".");
+    } catch (err) {
+      setProblems(snippetProblems(err));
+      setError(snippetMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!draft) {
+    return (
+      <div className="actions">
+        <button type="button" className="secondary" disabled={busy} onClick={() => void load()}>
+          Review custom nginx
+        </button>
+        {error && <p role="alert">{error}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={(e) => void save(e)} noValidate aria-label={"Custom nginx of " + site.name}>
+      <ul aria-label={"Directives of " + site.name}>
+        {draft.items.map((it, i) => (
+          <li key={String(i)}>
+            <code>{it.context}</code> (line {it.line}): {draftActionLabel[it.action]}
+            {it.reason ? ". " + it.reason.charAt(0).toUpperCase() + it.reason.slice(1) + "." : ""}
+          </li>
+        ))}
+      </ul>
+      <SnippetField label="Inside the server block" hint="Check every line once before you save." value={server} onChange={setServer} problems={problems?.server} />
+      <SnippetField label="Inside location /" hint="From the old site's location /, without its try_files." value={root} onChange={setRoot} problems={problems?.root} />
+      <div className="actions">
+        <button type="submit" disabled={busy}>
+          Save as snippets of {site.name}
+        </button>
+      </div>
+      {error && <p role="alert">{error}</p>}
+      {done && <p role="status">{done}</p>}
+    </form>
   );
 }

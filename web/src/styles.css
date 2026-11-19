@@ -370,6 +370,19 @@ textarea {
   resize: vertical;
 }
 
+textarea.code {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.875em;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+ul.problems {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--danger);
+}
+
 .badge {
   display: inline-block;
   margin-left: 0.5rem;
