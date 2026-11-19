@@ -31,6 +31,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0025 | Database import and export | Accepted ([adr/0025](adr/0025-database-import-export.md)) | No |
 | 0026 | Data transfer for the CloudPanel migration | Accepted ([adr/0026](adr/0026-cloudpanel-migration-transfer.md)) | No |
 | 0027 | Maintenance and parking pages | Accepted on 2026-11-19 ([adr/0027](adr/0027-maintenance-and-parking-pages.md)) | Done |
+| 0028 | Cron jobs per site | Accepted on 2026-11-19 ([adr/0028](adr/0028-cron-jobs-per-site.md)) | No |
 
 ---
 
@@ -237,3 +238,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0027 Maintenance and parking pages
 
 **Full text (status Accepted, 2026-11-19):** [adr/0027](adr/0027-maintenance-and-parking-pages.md). Summary: a page is a single HTML file or a small ZIP (HTML plus CSS, JavaScript, images, fonts; at most 2 MiB) that the panel checks in Go (names, types, sizes, no links), stores in its database and sends to the agent in chunks; the agent unpacks it with `openat2` and swaps it in atomically. nginx serves the files under `/.hostashi/page/<id>/` with a strict Content-Security-Policy (nothing from other hosts; the page's own scripts run, a named conflict), instead of sanitizing. Maintenance per site: 503 with `Retry-After` and the chosen page, up to 20 allowed IPs/CIDRs see the site, PHP keeps running; "disabled" (PR #93) stays separate and wins. Parked domains get their own small vhost with a parking page (200), with HTTPS. Pages and maintenance first, parking second. Decided (Kim, 2026-11-19): pages may have their own files (option B), uploaded as a ZIP or as a single HTML file, their JavaScript may run, and parked domains get HTTPS. No open questions.
+
+## ADR-0028 Cron jobs per site
+
+**Full text (status Accepted, 2026-11-19):** [adr/0028](adr/0028-cron-jobs-per-site.md). Summary: one systemd timer and service per job, rendered by the agent from the panel's job list; the service runs a root-owned script as the site user, in the site's slice and sandbox, with a timeout and no overlapping runs. Schedules pass a validator for the five cron fields and the usual keywords (no `@reboot`) and are translated into `OnCalendar=`. Pause, run now and the last run's status come from systemd and the journal. Decided (Kim, 2026-11-19): option A. Open: whether imported CloudPanel jobs start paused (recommended).
