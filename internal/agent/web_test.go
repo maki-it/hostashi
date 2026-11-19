@@ -197,6 +197,10 @@ func TestSnippetCheck(t *testing.T) {
 		t.Fatalf("valid snippets: %+v %v", res, err)
 	}
 
+	if res.Home != home || res.WebRoot != home+"/htdocs" || res.PHPSocket != "" {
+		t.Fatalf("paths: %+v", res)
+	}
+
 	res, err = agentapi.SnippetCheck.Call(ctx, c, agentapi.SnippetCheckRequest{User: "blog", Snippets: agentapi.WebSnippets{
 		Server: "add_header X-A b;\nroot /etc;\n",
 		Root:   "fastcgi_pass unix:/run/x.sock;",

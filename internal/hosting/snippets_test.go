@@ -51,7 +51,7 @@ func TestSnippets(t *testing.T) {
 	}
 
 	// The site's own PHP socket only for a PHP site.
-	if _, err := s.SetSnippets(ctx, 1, "shop", "location /x { fastcgi_pass unix:/run/hostashi-php/shop.sock; }", ""); !errors.As(err, &se) {
+	if _, err := s.SetSnippets(ctx, 1, "shop", "location /x { fastcgi_pass unix:/run/hostashi-php/shop/php-fpm.sock; }", ""); !errors.As(err, &se) {
 		t.Fatalf("fastcgi on a static site: %v", err)
 	}
 

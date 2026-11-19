@@ -11,6 +11,8 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/cloudpanel/snippetdraft"
+	"github.com/maki-it/hostashi/internal/cpmigrate"
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -102,5 +104,47 @@ func registerSnippets(mux *http.ServeMux, a authn, svc *hosting.Service, log *sl
 		}
 
 		writeJSON(w, http.StatusOK, toSnippetsJSON(sn))
+	}))
+}
+
+// registerSnippetDraft adds the draft of a migrated site's snippets
+// (ADR-0017 Part 2, ADR-0029): the custom directives of the stored scan,
+// pointed at the site of the same name on this server and checked, with
+// what happened to each entry. Nothing is saved; the person reviews the
+// draft and saves it with PUT /api/v1/sites/{name}/snippets. The draft
+// holds snippet text, which may carry credentials, so it is only built for
+// a site that exists here.
+func registerSnippetDraft(mux *http.ServeMux, a authn, mig *cpmigrate.Service, svc *hosting.Service, log *slog.Logger) {
+	mux.HandleFunc("GET /api/v1/migrations/cloudpanel/reports/{id}/sites/{name}/snippets-draft", a.scoped("migrations:read", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		if p.User.Role != "admin" {
+			writeError(w, http.StatusForbidden, "forbidden", "only administrators can import sites")
+
+			return
+		}
+
+		site, err := mig.ReportSite(r.Context(), r.PathValue("id"), r.PathValue("name"))
+		if err != nil {
+			importFail(log, w, err, "snippet draft")
+
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		target, err := svc.SnippetTarget(ctx, site.User)
+		if err != nil {
+			if errors.Is(err, hosting.ErrNotFound) {
+				writeError(w, http.StatusConflict, "site_missing", "create the site on this server first")
+
+				return
+			}
+
+			siteFail(log, w, err, "snippet draft")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, snippetdraft.Draft(site, target))
 	}))
 }

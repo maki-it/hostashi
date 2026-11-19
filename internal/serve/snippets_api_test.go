@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/maki-it/hostashi/internal/cloudpanel/snippetdraft"
 )
 
 func TestSnippetsOverHTTP(t *testing.T) {
@@ -67,5 +69,53 @@ func TestSnippetsOverHTTP(t *testing.T) {
 
 	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/shop/snippets", header: bearerHeader(tok.Token), body: `{"server":"","root":""}`}); rec.Code != http.StatusOK {
 		t.Errorf("write with sites.snippets:write: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestSnippetDraftOverHTTP(t *testing.T) {
+	e := newAPIWithAgent(t, &stubAgent{})
+	c := e.adminCookie(t)
+
+	rec := e.do(t, reqOpts{method: "POST", path: reportsPath, cookie: c, body: scanReportJSON(t)})
+
+	var rep cloudPanelReportJSON
+	if rec.Code != http.StatusCreated || json.Unmarshal(rec.Body.Bytes(), &rep) != nil {
+		t.Fatalf("upload: %d %s", rec.Code, rec.Body)
+	}
+
+	draft := reportsPath + "/" + rep.ID + "/sites/shop/snippets-draft"
+
+	// Not created here yet: no draft, and no snippet text in the answer.
+	rec = e.do(t, reqOpts{method: "GET", path: draft, cookie: c})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "site_missing" || strings.Contains(rec.Body.String(), "s3cr3t") {
+		t.Fatalf("missing site: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: reportsPath + "/" + rep.ID + "/sites/shop", cookie: c, body: `{"reviewed":true}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: draft, cookie: c})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("draft: %d %s", rec.Code, rec.Body)
+	}
+
+	var d snippetdraft.Result
+	if err := json.Unmarshal(rec.Body.Bytes(), &d); err != nil || !strings.Contains(d.Server, `add_header X-Secret s3cr3t-in-snippet;`) || len(d.Items) != 1 || d.Items[0].Action != snippetdraft.Kept {
+		t.Fatalf("draft: %+v %v", d, err)
+	}
+
+	// Nothing was saved.
+	if sn, err := e.sites.Snippets(t.Context(), "shop"); err != nil || !sn.Empty() {
+		t.Fatalf("draft saved: %+v %v", sn, err)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: reportsPath + "/" + rep.ID + "/sites/nobody/snippets-draft", cookie: c}); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown site: %d", rec.Code)
+	}
+
+	tok := e.createToken(t, c, `{"name":"r","scopes":["sites:read"]}`)
+	if rec := e.do(t, reqOpts{method: "GET", path: draft, header: bearerHeader(tok.Token)}); rec.Code != http.StatusForbidden {
+		t.Errorf("without migrations:read: %d", rec.Code)
 	}
 }

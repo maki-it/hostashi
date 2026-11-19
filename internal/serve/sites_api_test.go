@@ -123,7 +123,11 @@ func (a *stubAgent) PageDelete(context.Context, string) error { return nil }
 // SnippetCheck rejects every snippet that contains "listen" on its first
 // line and accepts the rest.
 func (a *stubAgent) SnippetCheck(_ context.Context, req agentapi.SnippetCheckRequest) (agentapi.SnippetCheckResponse, error) {
-	res := agentapi.SnippetCheckResponse{Server: []agentapi.SnippetProblem{}, Root: []agentapi.SnippetProblem{}}
+	res := agentapi.SnippetCheckResponse{Server: []agentapi.SnippetProblem{}, Root: []agentapi.SnippetProblem{}, Home: "/home/" + req.User, WebRoot: "/home/" + req.User + "/htdocs"}
+	if req.PHP {
+		res.PHPSocket = "/run/hostashi-php/" + req.User + "/php-fpm.sock"
+	}
+
 	if strings.HasPrefix(req.Snippets.Server, "listen") {
 		res.Server = append(res.Server, agentapi.SnippetProblem{Line: 1, Msg: `"listen" is not allowed in custom snippets`})
 	}

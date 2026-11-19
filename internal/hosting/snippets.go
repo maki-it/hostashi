@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/cloudpanel/snippetdraft"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -91,6 +92,26 @@ func (s *Service) SetSnippets(ctx context.Context, actor int64, name, server, ro
 	})
 
 	return s.st.SiteSnippets(ctx, site.ID)
+}
+
+// SnippetTarget returns the paths of an active site on this server that
+// snippets may use: home, document root and own PHP socket (ADR-0029).
+func (s *Service) SnippetTarget(ctx context.Context, name string) (snippetdraft.Target, error) {
+	site, err := s.Get(ctx, name)
+	if err != nil {
+		return snippetdraft.Target{}, err
+	}
+
+	if site.State != store.SiteActive {
+		return snippetdraft.Target{}, ErrState
+	}
+
+	res, err := s.ag.SnippetCheck(ctx, agentapi.SnippetCheckRequest{User: site.Name, PHP: site.PHP != ""})
+	if err != nil {
+		return snippetdraft.Target{}, err
+	}
+
+	return snippetdraft.Target{Home: res.Home, WebRoot: res.WebRoot, PHPSocket: res.PHPSocket}, nil
 }
 
 // webSnippets returns the snippets of a site for web.apply, nil for none.
