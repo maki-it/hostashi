@@ -30,6 +30,9 @@ type Database struct {
 	Name  string   `json:"name"`
 	Site  string   `json:"site"`
 	Users []string `json:"users"`
+	// Owner is the locked account that owns objects loaded from other
+	// servers' dumps (ADR-0030), empty until the first such load.
+	Owner string `json:"owner,omitempty"`
 }
 
 type state struct {
@@ -99,7 +102,17 @@ func (r *registry) load(raw []byte) error {
 		return fmt.Errorf("%w: unsupported version %d", ErrStateInvalid, s.Version)
 	}
 
+	owners := map[string]bool{}
+
 	for _, d := range s.Databases {
+		if d.Owner != "" {
+			if owners[d.Owner] {
+				return fmt.Errorf("%w: duplicate owner %q", ErrStateInvalid, d.Owner)
+			}
+
+			owners[d.Owner] = true
+		}
+
 		if err := (agentapi.DBCreateRequest{Site: d.Site, Name: d.Name}).Validate(); err != nil {
 			return fmt.Errorf("%w: %w", ErrStateInvalid, err)
 		}
@@ -120,7 +133,11 @@ func (r *registry) load(raw []byte) error {
 			r.users[u] = d.Name
 		}
 
-		r.dbs[d.Name] = &Database{Name: d.Name, Site: d.Site, Users: append([]string{}, d.Users...)}
+		if d.Owner != "" && !ownerUserRe.MatchString(d.Owner) {
+			return fmt.Errorf("%w: invalid owner of %q", ErrStateInvalid, d.Name)
+		}
+
+		r.dbs[d.Name] = &Database{Name: d.Name, Site: d.Site, Users: append([]string{}, d.Users...), Owner: d.Owner}
 	}
 
 	return nil
@@ -143,7 +160,7 @@ func (r *registry) list() []Database {
 	for _, d := range r.dbs {
 		users := append([]string{}, d.Users...)
 		sort.Strings(users)
-		out = append(out, Database{Name: d.Name, Site: d.Site, Users: users})
+		out = append(out, Database{Name: d.Name, Site: d.Site, Users: users, Owner: d.Owner})
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -159,7 +176,7 @@ func (r *registry) restore(s []Database) {
 	r.users = map[string]string{}
 
 	for _, d := range s {
-		r.dbs[d.Name] = &Database{Name: d.Name, Site: d.Site, Users: append([]string{}, d.Users...)}
+		r.dbs[d.Name] = &Database{Name: d.Name, Site: d.Site, Users: append([]string{}, d.Users...), Owner: d.Owner}
 		for _, u := range d.Users {
 			r.users[u] = d.Name
 		}

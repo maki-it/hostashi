@@ -120,17 +120,19 @@ func (m *Manager) wait(id string) {
 	}
 }
 
-// StartImport checks the request, opens the file and starts the job.
-func (m *Manager) StartImport(database, rel string) (agentapi.DBJob, error) {
-	return m.start("import", database, rel)
+// StartImport checks the request, opens the file and starts the job. With
+// asOwner, the dump is loaded as the database's owner account with its
+// DEFINER clauses stripped (ADR-0030).
+func (m *Manager) StartImport(database, rel string, asOwner bool) (agentapi.DBJob, error) {
+	return m.start("import", database, rel, asOwner)
 }
 
 // StartExport checks the request, creates the file and starts the job.
 func (m *Manager) StartExport(database, rel string) (agentapi.DBJob, error) {
-	return m.start("export", database, rel)
+	return m.start("export", database, rel, false)
 }
 
-func (m *Manager) start(kind, database, rel string) (agentapi.DBJob, error) {
+func (m *Manager) start(kind, database, rel string, asOwner bool) (agentapi.DBJob, error) {
 	if err := (agentapi.DBDumpRequest{Database: database, Path: rel}).Validate(); err != nil {
 		return agentapi.DBJob{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
@@ -172,7 +174,7 @@ func (m *Manager) start(kind, database, rel string) (agentapi.DBJob, error) {
 	}
 
 	id := randomHex(8)
-	job := &agentapi.DBJob{ID: id, Kind: kind, Database: database, Path: rel, State: agentapi.JobRunning, Started: time.Now().UTC()}
+	job := &agentapi.DBJob{ID: id, Kind: kind, Database: database, Path: rel, AsOwner: asOwner, State: agentapi.JobRunning, Started: time.Now().UTC()}
 
 	m.pruneJobs()
 	m.jobs[id] = job
@@ -188,7 +190,12 @@ func (m *Manager) start(kind, database, rel string) (agentapi.DBJob, error) {
 	go func() {
 		defer close(done)
 
-		err := m.runJob(kind, database, home, rel, f)
+		var err error
+		if asOwner {
+			err = m.runOwnerLoad(database, home, rel, f)
+		} else {
+			err = m.runJob(kind, database, home, rel, f)
+		}
 
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -238,20 +245,7 @@ func (m *Manager) runJob(kind, database string, home SiteHome, rel string, f *os
 	gz := strings.HasSuffix(rel, ".gz")
 
 	if kind == "import" {
-		var in io.Reader = f
-
-		if gz {
-			zr, err := gzip.NewReader(f)
-			if err != nil {
-				return fmt.Errorf("%w: not a gzip file", ErrFileUnsafe)
-			}
-
-			defer zr.Close()
-
-			in = zr
-		}
-
-		return m.dumps.Tools.Import(ctx, run, in)
+		return m.importFile(ctx, run, rel, f, false)
 	}
 
 	// Export: a failed or partial file is removed again.
@@ -287,6 +281,54 @@ func (m *Manager) runJob(kind, database string, home SiteHome, rel string, f *os
 
 // jobError is the text a caller sees: fixed, at most a line number and an
 // error code from mariadbctl.
+// runOwnerLoad loads a dump as the database's owner account (ADR-0030). The
+// owner is unlocked only for the load.
+func (m *Manager) runOwnerLoad(database string, home SiteHome, rel string, f *os.File) error {
+	ctx, cancel := context.WithTimeout(m.dumps.Ctx, m.dumps.MaxDuration)
+	defer cancel()
+
+	defer f.Close()
+
+	user, err := m.ensureOwner(ctx, database)
+	if err != nil {
+		return err
+	}
+
+	pw, relock, err := m.unlockOwner(ctx, user)
+	if err != nil {
+		return err
+	}
+
+	defer relock()
+
+	run := mariadbctl.Run{Database: database, UID: home.UID, GID: home.GID, User: user, Password: pw, Socket: m.dumps.Socket}
+
+	return m.importFile(ctx, run, rel, f, true)
+}
+
+// importFile feeds the dump, gunzipped for .gz and optionally without its
+// DEFINER clauses, to the client.
+func (m *Manager) importFile(ctx context.Context, run mariadbctl.Run, rel string, f *os.File, stripDefiners bool) error {
+	var in io.Reader = f
+
+	if strings.HasSuffix(rel, ".gz") {
+		zr, err := gzip.NewReader(f)
+		if err != nil {
+			return fmt.Errorf("%w: not a gzip file", ErrFileUnsafe)
+		}
+
+		defer zr.Close()
+
+		in = zr
+	}
+
+	if stripDefiners {
+		in = StripDefiners(in)
+	}
+
+	return m.dumps.Tools.Import(ctx, run, in)
+}
+
 func jobError(err error) string {
 	switch {
 	case errors.Is(err, mariadbctl.ErrFailed):

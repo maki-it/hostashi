@@ -123,7 +123,7 @@ func TestImportPlainAndGzip(t *testing.T) {
 	for path, want := range map[string]string{"a.sql": "CREATE TABLE t (i int);", "backups/b.sql.gz": "INSERT 1;"} {
 		e.db.stmts = nil
 
-		j, err := e.m.StartImport("shop_wp", path)
+		j, err := e.m.StartImport("shop_wp", path, false)
 		if err != nil || j.State != agentapi.JobRunning || len(j.ID) != 16 {
 			t.Fatalf("%s: %+v %v", path, j, err)
 		}
@@ -170,18 +170,18 @@ func TestImportRefusesUnsafeFiles(t *testing.T) {
 	}
 
 	for _, p := range []string{"missing.sql", "link.sql", "dir.sql", "out/secret.sql"} {
-		if _, err := e.m.StartImport("shop_wp", p); !errors.Is(err, ErrFileUnsafe) {
+		if _, err := e.m.StartImport("shop_wp", p, false); !errors.Is(err, ErrFileUnsafe) {
 			t.Errorf("%s: %v", p, err)
 		}
 	}
 
 	for _, p := range []string{"../secret.sql", "/etc/shadow.sql", "x.txt"} {
-		if _, err := e.m.StartImport("shop_wp", p); !errors.Is(err, ErrInvalid) {
+		if _, err := e.m.StartImport("shop_wp", p, false); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: %v", p, err)
 		}
 	}
 
-	if _, err := e.m.StartImport("other", "a.sql"); !errors.Is(err, ErrNotFound) {
+	if _, err := e.m.StartImport("other", "a.sql", false); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown database: %v", err)
 	}
 
@@ -201,13 +201,13 @@ func TestImportFailureAndBusy(t *testing.T) {
 	e.tools.err = errors.New("mariadbctl: failed: server error 1044 at line 2 of the dump")
 	e.tools.err = &failedError{e.tools.err}
 
-	j, err := e.m.StartImport("shop_wp", "a.sql")
+	j, err := e.m.StartImport("shop_wp", "a.sql", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// One job per database, and the database cannot go away meanwhile.
-	if _, err := e.m.StartImport("shop_wp", "a.sql"); !errors.Is(err, ErrBusy) {
+	if _, err := e.m.StartImport("shop_wp", "a.sql", false); !errors.Is(err, ErrBusy) {
 		t.Fatalf("second job: %v", err)
 	}
 
@@ -301,7 +301,7 @@ func TestDumpsDisabled(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := m.StartImport("shop", "a.sql"); !errors.Is(err, ErrNoDumps) {
+	if _, err := m.StartImport("shop", "a.sql", false); !errors.Is(err, ErrNoDumps) {
 		t.Fatalf("got %v", err)
 	}
 

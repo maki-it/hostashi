@@ -47,6 +47,10 @@ func openDB(ctx context.Context, stateDir string, sm *sites.Manager, log *slog.L
 		if err := m.RemoveJobUsers(rctx, conn); err != nil && log != nil {
 			log.WarnContext(ctx, "remove leftover database job users", "err", err)
 		}
+
+		if err := m.LockOwners(rctx); err != nil && log != nil {
+			log.WarnContext(ctx, "lock database owner accounts", "err", err)
+		}
 	}()
 
 	return m, nil
@@ -143,7 +147,7 @@ func (h *siteOps) registerDB(s *agentrpc.Server) {
 		}
 
 		//nolint:contextcheck // the job outlives the request and runs under the agent context
-		j, err := h.db.StartImport(req.Database, req.Path)
+		j, err := h.db.StartImport(req.Database, req.Path, req.AsOwner)
 
 		return j, mapDBError(err)
 	})
@@ -151,6 +155,10 @@ func (h *siteOps) registerDB(s *agentrpc.Server) {
 	agentrpc.Handle(s, agentapi.DBExport, func(_ context.Context, _ agentrpc.Caller, req agentapi.DBDumpRequest) (agentapi.DBJob, error) {
 		if h.db == nil {
 			return agentapi.DBJob{}, errNoDB
+		}
+
+		if req.AsOwner {
+			return agentapi.DBJob{}, mapDBError(fmt.Errorf("%w: asOwner is only for imports", mariadb.ErrInvalid))
 		}
 
 		//nolint:contextcheck // the job outlives the request and runs under the agent context

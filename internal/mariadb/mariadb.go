@@ -205,6 +205,12 @@ func (m *Manager) Delete(ctx context.Context, name string) error {
 		}
 	}
 
+	if d.Owner != "" {
+		if err := m.exec(ctx, "drop owner", "DROP USER IF EXISTS "+ownerAccount(d.Owner)); err != nil {
+			return err
+		}
+	}
+
 	ident, err := quoteName(name)
 	if err != nil {
 		return err
