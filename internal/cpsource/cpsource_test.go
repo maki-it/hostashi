@@ -56,7 +56,7 @@ func TestLifecycle(t *testing.T) {
 		t.Fatalf("set: %+v %v", info, err)
 	}
 
-	want := `restrict,port-forwarding,permitopen="127.0.0.1:3306",command="/usr/lib/openssh/sftp-server -R" ` + info.PublicKey
+	want := `restrict,port-forwarding,permitopen="127.0.0.1:3306",permitlisten="127.0.0.1:1",command="/usr/lib/openssh/sftp-server -R" ` + info.PublicKey
 	if info.AuthorizedKeysLine != want {
 		t.Fatalf("line %q", info.AuthorizedKeysLine)
 	}
