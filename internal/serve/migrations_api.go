@@ -323,7 +323,14 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 	}
 
 	return func(ctx context.Context, actor int64, s cpmigrate.NewSite) (int, error) {
-		if _, err := sites.Create(ctx, actor, hosting.CreateRequest{Name: s.Name, PHP: s.PHP, Domains: s.Domains}); err != nil {
+		req := hosting.CreateRequest{Name: s.Name, PHP: s.PHP, Domains: s.Domains}
+		if u := s.Usage; u != nil && u.Bytes >= 0 && u.Inodes >= 0 {
+			// Disk limits of at least the old use plus 50 % (ADR-0015), so
+			// the import does not stop at the quota.
+			req.Usage = &hosting.Usage{Bytes: uint64(u.Bytes), Inodes: uint64(u.Inodes)}
+		}
+
+		if _, err := sites.Create(ctx, actor, req); err != nil {
 			return 0, err
 		}
 
