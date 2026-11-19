@@ -175,3 +175,40 @@ func TestWebApplyChecksSnippets(t *testing.T) {
 	}})
 	wantCode(t, err, agentrpc.CodeInvalidArgument)
 }
+
+func TestSnippetCheck(t *testing.T) {
+	c, pool := startSiteAgent(t)
+	ctx := context.Background()
+
+	_, err := agentapi.SnippetCheck.Call(ctx, c, agentapi.SnippetCheckRequest{User: "nosuchsite"})
+	wantCode(t, err, agentrpc.CodeNotFound)
+
+	if _, err := agentapi.SiteCreate.Call(ctx, c, agentapi.SiteCreateRequest{User: "blog"}); err != nil {
+		t.Fatal(err)
+	}
+
+	home := filepath.Join(pool, "blog")
+
+	res, err := agentapi.SnippetCheck.Call(ctx, c, agentapi.SnippetCheckRequest{User: "blog", Snippets: agentapi.WebSnippets{
+		Server: "location /m/ { alias " + home + "/media/; }\nadd_header X-A b;\n",
+		Root:   "expires 1h;",
+	}})
+	if err != nil || !res.OK() {
+		t.Fatalf("valid snippets: %+v %v", res, err)
+	}
+
+	res, err = agentapi.SnippetCheck.Call(ctx, c, agentapi.SnippetCheckRequest{User: "blog", Snippets: agentapi.WebSnippets{
+		Server: "add_header X-A b;\nroot /etc;\n",
+		Root:   "fastcgi_pass unix:/run/x.sock;",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(res.Server) != 1 || res.Server[0].Line != 2 || !strings.Contains(res.Server[0].Msg, "home") || len(res.Root) != 1 || res.OK() {
+		t.Fatalf("problems: %+v", res)
+	}
+
+	_, err = agentapi.SnippetCheck.Call(ctx, c, agentapi.SnippetCheckRequest{User: "blog", Snippets: agentapi.WebSnippets{Root: strings.Repeat("#", agentapi.MaxSnippetBytes+1)}})
+	wantCode(t, err, agentrpc.CodeInvalidArgument)
+}
