@@ -68,4 +68,4 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions
 
-1. Should imported jobs start paused (recommended above) or run as soon as the site is activated?
+None. Decided (Kim, 2026-11-19): imported jobs start paused; Kim starts them after the DNS switch.
