@@ -153,7 +153,8 @@ button.link {
 
 nav {
   display: flex;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
 }
 
 nav a {
@@ -378,4 +379,14 @@ textarea {
   color: var(--danger);
   border: 1px solid var(--danger);
   border-radius: 0.25rem;
+}
+
+.badge.ok {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.badge.warn {
+  color: var(--fg);
+  border-color: var(--muted);
 }

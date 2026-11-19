@@ -15,6 +15,15 @@ export class ApiError extends Error {
   }
 }
 
+// RawJSON is a request body that is JSON text already, like an uploaded
+// file the server checks itself.
+export class RawJSON {
+  readonly text: string;
+  constructor(text: string) {
+    this.text = text;
+  }
+}
+
 type ErrorBody = { error?: { code?: unknown; message?: unknown } };
 
 async function toApiError(res: Response): Promise<ApiError> {
@@ -39,6 +48,9 @@ export async function request<T>(method: "GET" | "POST" | "PUT" | "DELETE", path
   if (body instanceof FormData) {
     // The browser sets multipart/form-data with its boundary.
     init.body = body;
+  } else if (body instanceof RawJSON) {
+    init.headers = { ...init.headers, "Content-Type": "application/json" };
+    init.body = body.text;
   } else if (body !== undefined) {
     init.headers = { ...init.headers, "Content-Type": "application/json" };
     init.body = JSON.stringify(body);

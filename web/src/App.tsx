@@ -6,6 +6,7 @@ import { Backups } from "./Backups";
 import { Databases } from "./Databases";
 import { Home } from "./Home";
 import { Login } from "./Login";
+import { Migrate } from "./Migrate";
 import { Pages } from "./Pages";
 import { Parked } from "./Parked";
 import { Setup } from "./Setup";
@@ -18,7 +19,7 @@ type View =
   | { kind: "home"; user: User }
   | { kind: "error" };
 
-type Page = "home" | "sites" | "pages" | "parked" | "databases" | "backups";
+type Page = "home" | "sites" | "pages" | "parked" | "databases" | "backups" | "import";
 
 const pageFromHash = (): Page => {
   switch (window.location.hash) {
@@ -32,6 +33,8 @@ const pageFromHash = (): Page => {
       return "databases";
     case "#/backups":
       return "backups";
+    case "#/import":
+      return "import";
     default:
       return "home";
   }
@@ -89,6 +92,9 @@ export function App() {
             <a href="#/backups" aria-current={page === "backups" ? "page" : undefined}>
               Backups
             </a>
+            <a href="#/import" aria-current={page === "import" ? "page" : undefined}>
+              CloudPanel import
+            </a>
           </nav>
         )}
       </header>
@@ -113,6 +119,7 @@ export function App() {
       {view.kind === "home" && page === "parked" && <Parked />}
       {view.kind === "home" && page === "databases" && <Databases />}
       {view.kind === "home" && page === "backups" && <Backups />}
+      {view.kind === "home" && page === "import" && <Migrate />}
     </main>
   );
 }
