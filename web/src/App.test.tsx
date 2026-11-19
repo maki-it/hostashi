@@ -27,6 +27,27 @@ describe("App start", () => {
     expect(await screen.findByRole("heading", { name: "Welcome, kim" })).toBeInTheDocument();
   });
 
+  it("opens the backup page from the navigation", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      ...noSetup,
+      "GET /api/v1/auth/me": { body: { ...admin, auth: "session" } },
+      "GET /api/v1/backups": {
+        body: {
+          settings: { version: 1, retention: { daily: 7, weekly: 4, monthly: 6 }, windowStart: 1, windowEnd: 5, readParts: 12 },
+          publicKey: "",
+          hostKey: "",
+          ready: false,
+          status: { running: false, ok: false, items: [], maintenanceOk: true },
+        },
+      },
+    });
+    render(<App />);
+    await user.click(await screen.findByRole("link", { name: "Backups" }));
+    expect(await screen.findByRole("heading", { name: "Target and schedule" })).toBeInTheDocument();
+    window.location.hash = "";
+  });
+
   it("shows the login form without a session", async () => {
     mockFetch({ ...noSetup, ...loggedOut });
     render(<App />);
