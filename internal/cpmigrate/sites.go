@@ -44,6 +44,9 @@ type NewSite struct {
 	// They are created paused: they start after the DNS switch, so no job
 	// runs on both servers (ADR-0028).
 	Cron []scan.CronJob
+	// Usage is what the old home uses, nil if the scan did not measure it.
+	// The site's disk limits start from it (ADR-0015).
+	Usage *scan.Usage
 }
 
 // SiteCreator creates a site on this server (hosting.Service.Create) and
@@ -114,7 +117,7 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 
 	domains := append(slices.Clone(ps.Domains), ps.RedirectFrom...)
 
-	n, err := s.create(ctx, actor, NewSite{Name: ps.Name, PHP: php, Domains: domains, Cron: plan.CronJobs(site)})
+	n, err := s.create(ctx, actor, NewSite{Name: ps.Name, PHP: php, Domains: domains, Cron: plan.CronJobs(site), Usage: site.Usage})
 	if err != nil {
 		return ps, err
 	}

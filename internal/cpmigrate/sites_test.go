@@ -66,6 +66,7 @@ func sitesReport(t *testing.T) []byte {
 	b, err := json.Marshal(scan.Report{Format: scan.Format, Sites: []scan.Site{
 		site("alpha", "php", scan.StatusClean, "8.4", func(s *scan.Site) {
 			s.RedirectFrom = []string{"www.alpha.example.com"}
+			s.Usage = &scan.Usage{Bytes: 12 << 30, Inodes: 700_000}
 			s.Cron = []scan.CronJob{{Schedule: "*/5 * * * *", Command: "php wp-cron.php", Line: 1}, {Schedule: "@reboot", Command: "x", Line: 2}}
 		}),
 		site("beta", "php", scan.StatusClean, "8.1", nil),
@@ -116,6 +117,11 @@ func TestCreateSiteAndImport(t *testing.T) {
 	ps, err := svc.CreateSite(t.Context(), 1, rep.ID, "alpha", cpmigrate.CreateOptions{Reviewed: true})
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// The new site's limits start from the old home's use (ADR-0015).
+	if u := created[0].Usage; u == nil || u.Bytes != 12<<30 || u.Inodes != 700_000 || ps.HomeBytes != 12<<30 || ps.HomeInodes != 700_000 {
+		t.Fatalf("usage %+v, plan %d bytes %d inodes", u, ps.HomeBytes, ps.HomeInodes)
 	}
 
 	if len(created[0].Cron) != 1 || created[0].Cron[0].Line != 1 || ps.CronImport != 1 {

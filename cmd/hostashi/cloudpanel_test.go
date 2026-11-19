@@ -121,3 +121,16 @@ func TestCloudPanelScanErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestHomeSize(t *testing.T) {
+	for want, u := range map[string]*scan.Usage{
+		"-":       nil,
+		"0 MiB":   {Bytes: 4096},
+		"12 MiB":  {Bytes: 12 << 20},
+		"2.5 GiB": {Bytes: 5 << 29},
+	} {
+		if got := homeSize(u); got != want {
+			t.Errorf("homeSize(%+v) = %q, want %q", u, got, want)
+		}
+	}
+}

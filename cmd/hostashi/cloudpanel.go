@@ -35,12 +35,13 @@ func cloudpanelCmd(args []string, stdout, stderr io.Writer) int {
 	asJSON := fs.Bool("json", false, "print the full report as JSON")
 	full := fs.Bool("full", false, "keep custom nginx snippets and cron commands verbatim; they may contain passwords or tokens, so treat the output as secret")
 	strict := fs.Bool("strict", true, "refuse config files that are not root-owned or are writable by others")
+	noUsage := fs.Bool("no-usage", false, "do not measure each site's home (reads every directory below it)")
 
 	if fs.Parse(args[1:]) != nil || fs.NArg() != 0 {
 		return 2
 	}
 
-	rep, err := scan.Run(scan.Options{Root: *root, RequireRootOwned: *strict})
+	rep, err := scan.Run(scan.Options{Root: *root, RequireRootOwned: *strict, SkipUsage: *noUsage})
 	if err != nil {
 		fmt.Fprintln(stderr, "hostashi cloudpanel scan:", err)
 
@@ -70,10 +71,10 @@ func cloudpanelCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func printScan(w io.Writer, rep *scan.Report) {
-	fmt.Fprintf(w, "%-32s %-8s %-10s %s\n", "SITE", "STATUS", "TYPE", "FINDINGS")
+	fmt.Fprintf(w, "%-32s %-8s %-10s %9s %s\n", "SITE", "STATUS", "TYPE", "HOME", "FINDINGS")
 
 	for _, s := range rep.Sites {
-		fmt.Fprintf(w, "%-32s %-8s %-10s %s\n", s.Name, s.Status, s.Type, findingCodes(s.Findings))
+		fmt.Fprintf(w, "%-32s %-8s %-10s %9s %s\n", s.Name, s.Status, s.Type, homeSize(s.Usage), findingCodes(s.Findings))
 	}
 
 	sm := rep.Summary
@@ -84,6 +85,18 @@ func printScan(w io.Writer, rep *scan.Report) {
 		for _, f := range list {
 			fmt.Fprintf(w, "  [%s] %s: %s (%s)\n", f.Severity, f.Code, f.Msg, f.Source)
 		}
+	}
+}
+
+// homeSize prints a measured home in MiB or GiB, "-" if not measured.
+func homeSize(u *scan.Usage) string {
+	switch {
+	case u == nil:
+		return "-"
+	case u.Bytes >= 1<<30:
+		return fmt.Sprintf("%.1f GiB", float64(u.Bytes)/(1<<30))
+	default:
+		return fmt.Sprintf("%.0f MiB", float64(u.Bytes)/(1<<20))
 	}
 }
 

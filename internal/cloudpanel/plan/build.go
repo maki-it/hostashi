@@ -59,7 +59,12 @@ type Site struct {
 	Custom       int       `json:"customSnippets"`
 	Cron         int       `json:"cronJobs"`
 	// CronImport of them are created paused with the site (ADR-0028).
-	CronImport int      `json:"cronImport"`
+	CronImport int `json:"cronImport"`
+	// HomeBytes and HomeInodes are what the home uses on the old server,
+	// zero if the scan did not measure it. The new site's disk limits start
+	// from them (ADR-0015: use plus 50 %).
+	HomeBytes  int64    `json:"homeBytes,omitempty"`
+	HomeInodes int64    `json:"homeInodes,omitempty"`
 	Action     Action   `json:"action"`
 	Reasons    []Reason `json:"reasons"`
 	// Source is the vhost file on the old server, to find the site in the report.
@@ -128,6 +133,10 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 		DocRoot: s.DocRoot, Custom: len(s.Custom), Cron: len(s.Cron), CronImport: len(CronJobs(s)),
 		Reasons: []Reason{}, Source: first(s.Sources),
 	}
+	if s.Usage != nil {
+		ps.HomeBytes, ps.HomeInodes = s.Usage.Bytes, s.Usage.Inodes
+	}
+
 	if s.Pool != nil {
 		ps.PHP = s.Pool.Version
 	}
