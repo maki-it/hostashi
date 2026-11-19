@@ -32,8 +32,11 @@ func scanReportJSON(t *testing.T) string {
 		}
 	}
 
+	shop := site("shop", "shop.example.com")
+	shop.Usage = &scan.Usage{Bytes: 20 << 30, Inodes: 1_000_000}
+
 	b, err := json.Marshal(scan.Report{Format: scan.Format, Sites: []scan.Site{
-		site("shop", "shop.example.com"), site("blog", "blog.example.org"),
+		shop, site("blog", "blog.example.org"),
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -202,6 +205,9 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 	cr := &stubCron{applied: map[string][]agentapi.CronJob{}}
 	e.sites.EnableCron(cr)
 
+	lim := &stubLimits{slices: map[string]agentapi.SiteLimits{}, quotas: map[string][2]uint64{}}
+	e.sites.EnableLimits(lim)
+
 	c := e.adminCookie(t)
 
 	rec := e.do(t, reqOpts{method: "POST", path: reportsPath, cookie: c, body: scanReportJSON(t)})
@@ -236,6 +242,16 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 	s, err := e.sites.Get(t.Context(), "shop")
 	if err != nil || s.PHP != "8.4" || len(s.Domains) != 1 || s.Domains[0] != "shop.example.com" {
 		t.Fatalf("site %+v %v", s, err)
+	}
+
+	// The old home used 20 GiB and a million files: the limits leave 50 %.
+	sl, err := e.sites.SiteLimits(t.Context(), "shop")
+	if err != nil || !sl.Set || sl.Limits.DiskBytes < 30<<30 || sl.Limits.DiskInodes < 1_500_000 {
+		t.Fatalf("limits %+v %v", sl, err)
+	}
+
+	if q := lim.quotas["shop"]; q[0] < 30<<30 || q[1] < 1_500_000 {
+		t.Fatalf("quota sent to the agent %v", q)
 	}
 
 	// Now it exists: the plan skips it.

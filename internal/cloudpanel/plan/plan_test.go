@@ -265,6 +265,22 @@ func TestPlanJSONHasNoSnippets(t *testing.T) {
 	}
 }
 
+func TestHomeUsage(t *testing.T) {
+	s := base()
+	p := plan.Build(&scan.Report{Sites: []scan.Site{s}}, plan.Target{PHP: []string{"8.4"}})
+
+	if ps := p.Sites[0]; ps.HomeBytes != 0 || ps.HomeInodes != 0 {
+		t.Fatalf("unmeasured: %+v", ps)
+	}
+
+	s.Usage = &scan.Usage{Bytes: 3 << 30, Inodes: 42}
+	p = plan.Build(&scan.Report{Sites: []scan.Site{s}}, plan.Target{PHP: []string{"8.4"}})
+
+	if ps := p.Sites[0]; ps.HomeBytes != 3<<30 || ps.HomeInodes != 42 {
+		t.Fatalf("measured: %+v", ps)
+	}
+}
+
 func TestCronJobs(t *testing.T) {
 	s := base()
 	s.Cron = []scan.CronJob{

@@ -98,9 +98,11 @@ type Site struct {
 	Cron          []CronJob `json:"cron,omitempty"`
 	ClientMaxBody string    `json:"client_max_body_size,omitempty"`
 	Custom        []Custom  `json:"custom,omitempty"`
-	Sources       []string  `json:"sources"`
-	Status        Status    `json:"status"`
-	Findings      []Finding `json:"findings,omitempty"`
+	// Usage is what the site user's home occupies; nil if not measured.
+	Usage    *Usage    `json:"usage,omitempty"`
+	Sources  []string  `json:"sources"`
+	Status   Status    `json:"status"`
+	Findings []Finding `json:"findings,omitempty"`
 }
 
 // Summary counts sites by status.

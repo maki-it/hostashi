@@ -29,6 +29,9 @@ type Options struct {
 	RequireRootOwned bool
 	// Now is used for certificate expiry; zero means time.Now().
 	Now time.Time
+	// SkipUsage leaves out measuring each home, which reads every
+	// directory below it.
+	SkipUsage bool
 }
 
 const (
@@ -82,6 +85,10 @@ func Run(o Options) (*Report, error) {
 
 	s.orphans()
 
+	if !o.SkipUsage {
+		s.usage()
+	}
+
 	sort.Slice(rep.Sites, func(i, j int) bool { return rep.Sites[i].Name < rep.Sites[j].Name })
 
 	for i := range rep.Sites {
@@ -105,6 +112,42 @@ func Run(o Options) (*Report, error) {
 	}
 
 	return rep, nil
+}
+
+// usage measures each site user's home once.
+func (s *scanner) usage() {
+	byUser := map[string]*Usage{}
+
+	for i := range s.rep.Sites {
+		st := &s.rep.Sites[i]
+		if st.User == "" {
+			continue
+		}
+
+		u, ok := byUser[st.User]
+		if !ok {
+			home := "/home/" + st.User
+
+			if m, err := s.r.Mode(home); err == nil && m.IsDir() {
+				if got, err := s.r.Usage(home); err == nil {
+					u = &got
+				} else {
+					st.Findings = append(st.Findings, Finding{SevInfo, "usage_unknown", "could not measure the home: " + err.Error(), home, 0})
+				}
+			}
+
+			byUser[st.User] = u
+		}
+
+		if u != nil {
+			c := *u
+			st.Usage = &c
+
+			if c.Partial {
+				st.Findings = append(st.Findings, Finding{SevInfo, "usage_partial", "the home is too deep or too large to count fully; the usage is a lower bound", "/home/" + st.User, 0})
+			}
+		}
+	}
 }
 
 func statusOf(fs []Finding) Status {

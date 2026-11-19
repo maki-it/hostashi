@@ -485,3 +485,34 @@ func TestRedact(t *testing.T) {
 		t.Fatal("schedule must stay")
 	}
 }
+
+func TestSiteUsage(t *testing.T) {
+	dir, _ := build(t)
+
+	measured := 0
+
+	for _, s := range run(t, dir).Sites {
+		if s.Usage != nil {
+			measured++
+
+			if s.Usage.Inodes < 1 || s.Usage.Bytes < 0 {
+				t.Errorf("%s: usage %+v", s.Name, s.Usage)
+			}
+		}
+	}
+
+	if measured == 0 {
+		t.Fatal("no site has a usage")
+	}
+
+	rep, err := scan.Run(scan.Options{Root: dir, RequireRootOwned: os.Geteuid() == 0, Now: now, SkipUsage: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, s := range rep.Sites {
+		if s.Usage != nil {
+			t.Fatalf("%s measured with SkipUsage", s.Name)
+		}
+	}
+}
