@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Checks that every file has copyright and license information (REUSE
+# specification, see REUSE.toml). Runs on every pull request because a new
+# file anywhere can break it, and it takes only seconds.
+
+name: REUSE
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reuse-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Updated by Renovate (customManagers in renovate.json).
+  REUSE_VERSION: "6.3.0"
+
+jobs:
+  reuse:
+    name: REUSE lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: reuse lint
+        run: pipx run "reuse==${REUSE_VERSION}" lint
