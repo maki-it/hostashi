@@ -82,6 +82,10 @@ func (a *stubAgent) DBImport(_ context.Context, database, path string) (agentapi
 	return agentapi.DBJob{ID: stubJob, Kind: "import", Database: database, Path: path, State: agentapi.JobRunning}, nil
 }
 
+func (a *stubAgent) DBLoad(_ context.Context, database, path string) (agentapi.DBJob, error) {
+	return agentapi.DBJob{ID: stubJob, Kind: "import", Database: database, Path: path, AsOwner: true, State: agentapi.JobRunning}, nil
+}
+
 func (a *stubAgent) DBExport(_ context.Context, database, path string) (agentapi.DBJob, error) {
 	if path == "exists.sql.gz" {
 		return agentapi.DBJob{}, &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "the file exists"}

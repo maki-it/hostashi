@@ -33,6 +33,11 @@ func TestDatabaseDumps(t *testing.T) {
 		t.Fatalf("export %+v %v", exp, err)
 	}
 
+	load, err := s.LoadDatabaseDump(ctx, 1, "shop_two", "cloudpanel-import-db/two.sql")
+	if err != nil || load.Kind != "load" || load.Database != "shop_two" {
+		t.Fatalf("load %+v %v", load, err)
+	}
+
 	if j, err := s.DatabaseJob(ctx, "shop_wp", imp.ID); err != nil || j.ID != imp.ID {
 		t.Fatalf("job %+v %v", j, err)
 	}
@@ -63,7 +68,7 @@ func TestDatabaseDumps(t *testing.T) {
 		t.Fatalf("unknown database: %v", err)
 	}
 
-	if len(ag.jobs) != 2 {
+	if len(ag.jobs) != 3 {
 		t.Fatalf("agent got %d jobs, want 2", len(ag.jobs))
 	}
 }

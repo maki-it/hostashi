@@ -840,6 +840,10 @@ func (f *fakeAgent) DBImport(_ context.Context, database, path string) (agentapi
 	return f.startJob("import", database, path)
 }
 
+func (f *fakeAgent) DBLoad(_ context.Context, database, path string) (agentapi.DBJob, error) {
+	return f.startJob("load", database, path)
+}
+
 func (f *fakeAgent) DBExport(_ context.Context, database, path string) (agentapi.DBJob, error) {
 	return f.startJob("export", database, path)
 }

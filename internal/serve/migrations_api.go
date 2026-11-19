@@ -66,6 +66,8 @@ func importFail(log *slog.Logger, w http.ResponseWriter, err error, what string)
 		writeError(w, http.StatusNotFound, "no_site", "the report has no importable site of this name")
 	case errors.Is(err, cpmigrate.ErrBadRequest):
 		writeError(w, http.StatusUnprocessableEntity, "invalid_argument", err.Error())
+	case errors.Is(err, cpmigrate.ErrNotDone):
+		writeError(w, http.StatusConflict, "not_done", "the import has not finished copying")
 	case errors.Is(err, cpmigrate.ErrNoImporter):
 		writeError(w, http.StatusNotImplemented, "unavailable", "importing is not available on this panel")
 	case errors.Is(err, cpmigrate.ErrNotFound), errors.Is(err, cpmigrate.ErrInvalid):
@@ -238,6 +240,44 @@ func registerMigrations(mux *http.ServeMux, a authn, svc *cpmigrate.Service, log
 		}
 
 		writeJSON(w, http.StatusOK, imp)
+	}))
+
+	// The dumps of a finished import are loaded on their own (ADR-0030);
+	// this starts the loads again, for example after a panel restart. A
+	// dump whose load started already is not loaded twice.
+	mux.HandleFunc("POST /api/v1/migrations/cloudpanel/imports/{id}/load", admin("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		loads, err := svc.LoadDumps(ctx, p.User.ID, r.PathValue("id"))
+		if err != nil {
+			var ae *agentrpc.Error
+			if errors.As(err, &ae) && ae.Code == agentrpc.CodeNotFound || errors.Is(err, cpmigrate.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "no such import")
+
+				return
+			}
+
+			importFail(log, w, err, "load cloudpanel dumps")
+
+			return
+		}
+
+		writeJSON(w, http.StatusAccepted, map[string][]cpmigrate.DumpLoad{"loads": loads})
+	}))
+
+	mux.HandleFunc("GET /api/v1/migrations/cloudpanel/imports/{id}/loads", admin("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		loads, err := svc.Loads(ctx, r.PathValue("id"))
+		if err != nil {
+			importFail(log, w, err, "read cloudpanel dump loads")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string][]cpmigrate.DumpLoad{"loads": loads})
 	}))
 
 	mux.HandleFunc("DELETE "+base+"/{id}", admin("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {

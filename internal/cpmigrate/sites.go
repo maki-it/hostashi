@@ -163,6 +163,11 @@ func (s *Service) StartImport(ctx context.Context, actor int64, reportID, name s
 		"report": reportID, "import": imp.ID, "databases": strconv.Itoa(len(dbs)),
 	})
 
+	if s.loads != nil && len(dbs) > 0 {
+		//nolint:contextcheck // the watch outlives the request and runs under the panel context
+		s.watch(actor, imp.ID)
+	}
+
 	return imp, nil
 }
 

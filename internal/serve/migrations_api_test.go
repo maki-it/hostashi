@@ -13,6 +13,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/cloudpanel/plan"
 	"github.com/maki-it/hostashi/internal/cloudpanel/scan"
+	"github.com/maki-it/hostashi/internal/hosting"
 )
 
 const reportsPath = "/api/v1/migrations/cloudpanel/reports"
@@ -183,7 +184,17 @@ func (s *stubImports) Get(_ context.Context, id string) (agentapi.CloudPanelImpo
 		return agentapi.CloudPanelImport{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "no such import"}
 	}
 
-	return agentapi.CloudPanelImport{ID: id, State: agentapi.ImportDone}, nil
+	imp := agentapi.CloudPanelImport{ID: id, State: agentapi.ImportDone}
+	for _, r := range s.got {
+		imp.Site, imp.Databases = r.Site, r.Databases
+		imp.Dumps = nil
+
+		for _, d := range r.Databases {
+			imp.Dumps = append(imp.Dumps, "cloudpanel-import-db/"+d.To+"-20261119T120000Z.sql")
+		}
+	}
+
+	return imp, nil
 }
 
 func TestCloudPanelSitesOverHTTP(t *testing.T) {
@@ -303,8 +314,40 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 		t.Fatalf("activate without import: %d %s", rec.Code, rec.Body)
 	}
 
+	// The dumps of a finished import load as the databases' owner
+	// (ADR-0030); a database that does not exist here is reported.
+	const load = "/api/v1/migrations/cloudpanel/imports/0123456789abcdef/load"
+
+	if rec := e.do(t, reqOpts{method: "POST", path: load, header: read}); rec.Code != http.StatusForbidden {
+		t.Fatalf("load with read token: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "POST", path: load, cookie: c})
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"database":"shop_db"`) || !strings.Contains(rec.Body.String(), `"error":`) {
+		t.Fatalf("load without the database: %d %s", rec.Code, rec.Body)
+	}
+
+	if _, _, err := e.sites.CreateDatabase(t.Context(), 1, hosting.NewDatabase{Site: "shop", Name: "shop_db"}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec = e.do(t, reqOpts{method: "POST", path: load, cookie: c})
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"asOwner":true`) ||
+		!strings.Contains(rec.Body.String(), `"path":"cloudpanel-import-db/shop_db-20261119T120000Z.sql"`) || strings.Contains(rec.Body.String(), `"error":`) {
+		t.Fatalf("load: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/migrations/cloudpanel/imports/0123456789abcdef/loads", header: read}); rec.Code != http.StatusOK ||
+		!strings.Contains(rec.Body.String(), `"id":"`+stubJob+`"`) {
+		t.Fatalf("loads: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/migrations/cloudpanel/imports/fedcba9876543210/load", cookie: c}); rec.Code != http.StatusNotFound {
+		t.Fatalf("load unknown import: %d %s", rec.Code, rec.Body)
+	}
+
 	var n int
-	if err := e.st.RawCount(t.Context(), `SELECT count(*) FROM audit_log WHERE action LIKE ? AND action <> 'cloudpanel.report.upload'`, "cloudpanel.%", &n); err != nil || n != 3 {
+	if err := e.st.RawCount(t.Context(), `SELECT count(*) FROM audit_log WHERE action LIKE ? AND action <> 'cloudpanel.report.upload'`, "cloudpanel.%", &n); err != nil || n != 5 {
 		t.Fatalf("audit entries: %d %v", n, err)
 	}
 }

@@ -36,6 +36,9 @@ type Agent interface {
 	DBUserDelete(ctx context.Context, user string) error
 	DBUserPassword(ctx context.Context, user, password string) error
 	DBImport(ctx context.Context, database, path string) (agentapi.DBJob, error)
+	// DBLoad imports as the database's owner account with the dump's
+	// DEFINER clauses stripped (ADR-0030).
+	DBLoad(ctx context.Context, database, path string) (agentapi.DBJob, error)
 	DBExport(ctx context.Context, database, path string) (agentapi.DBJob, error)
 	DBJob(ctx context.Context, id string) (agentapi.DBJob, error)
 	PageList(ctx context.Context) ([]agentapi.PageVersion, error)
