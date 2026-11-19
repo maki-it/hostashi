@@ -20,6 +20,11 @@ func (a RPCAgent) DBImport(ctx context.Context, database, path string) (agentapi
 	return agentapi.DBImport.Call(ctx, a.C, agentapi.DBDumpRequest{Database: database, Path: path})
 }
 
+// DBLoad calls db.import with asOwner.
+func (a RPCAgent) DBLoad(ctx context.Context, database, path string) (agentapi.DBJob, error) {
+	return agentapi.DBImport.Call(ctx, a.C, agentapi.DBDumpRequest{Database: database, Path: path, AsOwner: true})
+}
+
 // DBExport calls db.export.
 func (a RPCAgent) DBExport(ctx context.Context, database, path string) (agentapi.DBJob, error) {
 	return agentapi.DBExport.Call(ctx, a.C, agentapi.DBDumpRequest{Database: database, Path: path})
@@ -34,6 +39,13 @@ func (a RPCAgent) DBJob(ctx context.Context, id string) (agentapi.DBJob, error) 
 // (ADR-0025). The agent runs the job; DatabaseJob reports how it goes.
 func (s *Service) ImportDatabase(ctx context.Context, actor int64, database, path string) (agentapi.DBJob, error) {
 	return s.startDump(ctx, actor, "database.import", database, path)
+}
+
+// LoadDatabaseDump starts loading a dump from another server, such as one
+// of a CloudPanel import, into database: as the database's owner account,
+// so that its views, triggers and routines keep working (ADR-0030).
+func (s *Service) LoadDatabaseDump(ctx context.Context, actor int64, database, path string) (agentapi.DBJob, error) {
+	return s.startDump(ctx, actor, "database.load", database, path)
 }
 
 // ExportDatabase starts writing database to a new file below the site's
@@ -69,8 +81,12 @@ func (s *Service) startDump(ctx context.Context, actor int64, action, database, 
 	}
 
 	start := s.ag.DBImport
-	if action == "database.export" {
+
+	switch action {
+	case "database.export":
 		start = s.ag.DBExport
+	case "database.load":
+		start = s.ag.DBLoad
 	}
 
 	j, err := start(ctx, database, path)

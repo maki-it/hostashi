@@ -540,11 +540,13 @@ x grep -q '"ready":true' /tmp/api.out || fail "source not ready: $(x cat /tmp/ap
 expect_mode /var/lib/hostashi-agent/cloudpanel/id_ed25519 "600 root:root"
 # Databases on the "old server" and the read-only dump user, created by
 # the SQL that the panel shows. olddb2 has a view and a trigger; their
-# DEFINER clauses name a user of the old server, which the import of
-# ADR-0025 refuses, so only its dump is checked.
+# DEFINER clauses name a user of the old server, so the panel loads the
+# dumps as the databases' owner account (ADR-0030). The trigger is created
+# without a database name: mariadb-dump keeps a name written there, and a
+# trigger on another database's table is refused at the load, as it should.
 x mariadb -e "CREATE DATABASE olddb; CREATE TABLE olddb.t (v VARCHAR(20)); INSERT INTO olddb.t VALUES ('from web2');
   CREATE DATABASE olddb2; CREATE TABLE olddb2.t (v INT); CREATE VIEW olddb2.vt AS SELECT v FROM olddb2.t;
-  CREATE TRIGGER olddb2.tg BEFORE INSERT ON olddb2.t FOR EACH ROW SET NEW.v = NEW.v + 1;"
+  USE olddb2; CREATE TRIGGER tg BEFORE INSERT ON t FOR EACH ROW SET NEW.v = NEW.v + 1;"
 for d in cpimp_db cpimp_db2; do
   [ "$(api POST /api/v1/sites/cpimp/databases "{\"name\":\"$d\"}")" = 201 ] || fail "create $d: $(x cat /tmp/api.out)"
 done
@@ -583,6 +585,23 @@ x /usr/local/bin/hostashi db import cpimp_db "$dump" || fail "db import of the d
 dump2=$(sed -n 's/.*"\(cloudpanel-import-db\/cpimp_db2-[0-9-]*\.sql\)".*/\1/p' <<<"$out")
 x grep -q 'TRIGGER.*tg' "/home/cpimp/$dump2" || fail "trigger not dumped: $(x grep -i 'create\|trigger' "/home/cpimp/$dump2")"
 x grep -q 'VIEW.*vt' "/home/cpimp/$dump2" || fail "view not dumped: $(x grep -i 'create\|view' "/home/cpimp/$dump2")"
+# The panel loads both dumps as the databases' owners; the view and the
+# trigger work afterwards, and the owner account stays locked.
+imp=$(sed -n 's/.*"id": "\([0-9a-f]\{16\}\)".*/\1/p' <<<"$out" | head -1)
+[ "$(api POST "/api/v1/migrations/cloudpanel/imports/$imp/load")" = 202 ] || fail "load dumps: $(x cat /tmp/api.out)"
+for _ in $(seq 1 60); do
+  api GET "/api/v1/migrations/cloudpanel/imports/$imp/loads" >/dev/null
+  [ "$(x grep -o '"state":"done"' /tmp/api.out | wc -l)" = 2 ] && break
+  x grep -q '"state":"failed"\|"error":' /tmp/api.out && break
+  sleep 1
+done
+[ "$(x grep -o '"state":"done"' /tmp/api.out | wc -l)" = 2 ] || fail "loads: $(x cat /tmp/api.out; x journalctl -u hostashi-agent --no-pager | tail -20)"
+x mariadb -e "INSERT INTO cpimp_db2.t VALUES (41)"
+[ "$(x mariadb -N -e 'SELECT v FROM cpimp_db2.vt')" = 42 ] || fail "view or trigger after the load"
+owner=$(x mariadb -N -e "SELECT DEFINER FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA='cpimp_db2'")
+grep -q '^hostashi_own_[0-9a-f]\{16\}@localhost$' <<<"$owner" || fail "trigger definer: $owner"
+locked=$(x mariadb -N -e "SELECT JSON_VALUE(Priv, '\$.account_locked') FROM mysql.global_priv WHERE User='${owner%@localhost}'")
+[ "$locked" = 1 ] || [ "$locked" = true ] || fail "owner not locked: $locked"
 # The dump user can read, not write.
 pw=$(x cat /var/lib/hostashi-agent/cloudpanel/db_password)
 if x mariadb -h 127.0.0.1 -u hostashi_import "-p$pw" -e "INSERT INTO olddb.t VALUES ('x')" 2>/dev/null; then fail "dump user could write"; fi
