@@ -42,6 +42,8 @@ type Agent interface {
 	// PageUpload sends a page in chunks and commits it under digest.
 	PageUpload(ctx context.Context, id string, files map[string][]byte, digest string) error
 	PageDelete(ctx context.Context, id string) error
+	// SnippetCheck checks custom snippets of a site (ADR-0029).
+	SnippetCheck(ctx context.Context, req agentapi.SnippetCheckRequest) (agentapi.SnippetCheckResponse, error)
 }
 
 // Issuer turns a certificate signing request into a certificate chain. The
@@ -493,6 +495,11 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		return err
 	}
 
+	snippets, err := s.st.AllSiteSnippets(ctx)
+	if err != nil {
+		return err
+	}
+
 	for _, site := range sites {
 		if site.State == store.SiteActive && len(site.Domains) > 0 {
 			tls := site.TLS && s.certCovers(site, 0)
@@ -508,6 +515,10 @@ func (s *Service) applyWeb(ctx context.Context) error {
 			ws := agentapi.WebSite{
 				User: site.Name, Domains: site.Domains, PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
 			}
+
+			// The agent leaves them out while the site is disabled or in
+			// maintenance; they are sent anyway so the state stays complete.
+			ws.Snippets = webSnippets(snippets, site)
 
 			if site.Maintenance && !site.Disabled {
 				if ws.Maintenance, err = s.maintenanceWeb(ctx, site, onAgent); err != nil {

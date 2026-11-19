@@ -33,6 +33,7 @@ import (
 	"github.com/maki-it/hostashi/internal/resticctl"
 	"github.com/maki-it/hostashi/internal/sites"
 	"github.com/maki-it/hostashi/internal/sitestats"
+	"github.com/maki-it/hostashi/internal/snippet"
 	"github.com/maki-it/hostashi/internal/sysuser"
 	"github.com/maki-it/hostashi/internal/web"
 	"github.com/maki-it/hostashi/internal/webctl"
@@ -317,6 +318,8 @@ func (h *siteOps) register(s *agentrpc.Server) {
 
 	agentrpc.Handle(s, agentapi.TLSCSR, h.tlsCSR)
 	agentrpc.Handle(s, agentapi.TLSInstall, h.tlsInstall)
+
+	agentrpc.Handle(s, agentapi.SnippetCheck, h.snippetCheck)
 
 	agentrpc.Handle(s, agentapi.PHPVersionsList, func(_ context.Context, _ agentrpc.Caller, _ agentapi.PHPVersionsRequest) (agentapi.PHPVersionsResponse, error) {
 		if h.php == nil || h.php.Installed == nil {
@@ -899,4 +902,45 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	return s.Serve(ctx)
+}
+
+// snippetCheck runs the allowlist check (ADR-0029) with the site's home
+// from the registry and reports the problems per line.
+func (h *siteOps) snippetCheck(_ context.Context, _ agentrpc.Caller, req agentapi.SnippetCheckRequest) (agentapi.SnippetCheckResponse, error) {
+	home, ok := h.m.Home(req.User)
+	if !ok {
+		return agentapi.SnippetCheckResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site " + req.User}
+	}
+
+	site := snippet.Site{Home: home}
+	if req.PHP && h.php != nil {
+		site.PHPSocket = h.php.Socket(req.User)
+	}
+
+	res := agentapi.SnippetCheckResponse{Server: []agentapi.SnippetProblem{}, Root: []agentapi.SnippetProblem{}}
+
+	for _, c := range []struct {
+		src  string
+		slot snippet.Slot
+		out  *[]agentapi.SnippetProblem
+	}{
+		{req.Snippets.Server, snippet.SlotServer, &res.Server},
+		{req.Snippets.Root, snippet.SlotRoot, &res.Root},
+	} {
+		_, err := snippet.Check(c.src, c.slot, site)
+		if err == nil {
+			continue
+		}
+
+		var se *snippet.Error
+		if !errors.As(err, &se) {
+			return agentapi.SnippetCheckResponse{}, err
+		}
+
+		for _, p := range se.Problems {
+			*c.out = append(*c.out, agentapi.SnippetProblem{Line: p.Line, Msg: p.Msg})
+		}
+	}
+
+	return res, nil
 }

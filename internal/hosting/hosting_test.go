@@ -16,6 +16,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/snippet"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -916,4 +917,36 @@ func (f *fakeAgent) PageDelete(_ context.Context, id string) error {
 	f.pageGones = append(f.pageGones, id)
 
 	return nil
+}
+
+// SnippetCheck runs the real allowlist check with a home below /home.
+func (f *fakeAgent) SnippetCheck(_ context.Context, req agentapi.SnippetCheckRequest) (agentapi.SnippetCheckResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if !f.accounts[req.User] {
+		return agentapi.SnippetCheckResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site"}
+	}
+
+	site := snippet.Site{Home: "/home/" + req.User}
+	if req.PHP {
+		site.PHPSocket = "/run/hostashi-php/" + req.User + ".sock"
+	}
+
+	res := agentapi.SnippetCheckResponse{Server: []agentapi.SnippetProblem{}, Root: []agentapi.SnippetProblem{}}
+
+	for _, c := range []struct {
+		src  string
+		slot snippet.Slot
+		out  *[]agentapi.SnippetProblem
+	}{{req.Snippets.Server, snippet.SlotServer, &res.Server}, {req.Snippets.Root, snippet.SlotRoot, &res.Root}} {
+		var se *snippet.Error
+		if _, err := snippet.Check(c.src, c.slot, site); errors.As(err, &se) {
+			for _, p := range se.Problems {
+				*c.out = append(*c.out, agentapi.SnippetProblem{Line: p.Line, Msg: p.Msg})
+			}
+		}
+	}
+
+	return res, nil
 }

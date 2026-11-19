@@ -167,6 +167,7 @@ func Handler(cfg Config, deps Deps) http.Handler {
 			registerPages(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerParked(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerCron(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 		}
 
 		if deps.Backups != nil {
