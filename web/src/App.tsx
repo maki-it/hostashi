@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { currentUser, setupRequired, type User } from "./auth";
+import { Backups } from "./Backups";
 import { Home } from "./Home";
 import { Login } from "./Login";
 import { Setup } from "./Setup";
@@ -13,8 +14,19 @@ type View =
   | { kind: "home"; user: User }
   | { kind: "error" };
 
+type Page = "home" | "backups";
+
+const pageFromHash = (): Page => (window.location.hash === "#/backups" ? "backups" : "home");
+
 export function App() {
   const [view, setView] = useState<View>({ kind: "loading" });
+  const [page, setPage] = useState<Page>(pageFromHash);
+
+  useEffect(() => {
+    const onHash = () => setPage(pageFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   const boot = useCallback(async () => {
     setView({ kind: "loading" });
@@ -35,9 +47,19 @@ export function App() {
   }, [boot]);
 
   return (
-    <main className="shell">
+    <main className={view.kind === "home" ? "shell wide" : "shell"}>
       <header className="brand">
         <h1>Hostashi</h1>
+        {view.kind === "home" && (
+          <nav aria-label="Main">
+            <a href="#/" aria-current={page === "home" ? "page" : undefined}>
+              Overview
+            </a>
+            <a href="#/backups" aria-current={page === "backups" ? "page" : undefined}>
+              Backups
+            </a>
+          </nav>
+        )}
       </header>
       {view.kind === "loading" && <p aria-busy="true">Loading…</p>}
       {view.kind === "error" && (
@@ -54,7 +76,8 @@ export function App() {
       {view.kind === "login" && (
         <Login {...(view.notice ? { notice: view.notice } : {})} onLogin={(user) => setView({ kind: "home", user })} />
       )}
-      {view.kind === "home" && <Home user={view.user} onLogout={() => setView({ kind: "login" })} />}
+      {view.kind === "home" && page === "home" && <Home user={view.user} onLogout={() => setView({ kind: "login" })} />}
+      {view.kind === "home" && page === "backups" && <Backups />}
     </main>
   );
 }

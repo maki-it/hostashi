@@ -30,7 +30,7 @@ async function toApiError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, code, message);
 }
 
-export async function request<T>(method: "GET" | "POST" | "DELETE", path: string, body?: unknown): Promise<T> {
+export async function request<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
   const init: RequestInit = {
     method,
     credentials: "same-origin",
