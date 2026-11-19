@@ -48,6 +48,10 @@ type Config struct {
 	ACMECAFile string
 	// ACMEChallengeDir receives HTTP-01 challenge files for nginx.
 	ACMEChallengeDir string
+
+	// MetricsListen is a loopback IP and port that serves /metrics without
+	// a token (ADR-0022); empty turns that listener off.
+	MetricsListen string
 }
 
 // DefaultChallengeDir is where nginx looks for HTTP-01 challenge files
@@ -229,6 +233,12 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
+	if cfg.MetricsListen != "" {
+		if err := CheckMetricsListen(cfg.MetricsListen); err != nil {
+			return err
+		}
+	}
+
 	st, err := store.Open(ctx, cfg.DBPath)
 	if err != nil {
 		return err
@@ -310,7 +320,18 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.Log.Info("serve listening", "addr", ln.Addr().String(), "agentSocket", cfg.Socket, "db", cfg.DBPath, "setupTokenFile", tokenPath)
 	}
 
-	errc := make(chan error, 2)
+	// The token-free metrics listener (ADR-0022), opened before anything
+	// serves so a failure here leaves nothing running.
+	var mln net.Listener
+	if cfg.MetricsListen != "" {
+		if mln, err = lc.Listen(ctx, "tcp", cfg.MetricsListen); err != nil {
+			_ = ln.Close()
+
+			return err
+		}
+	}
+
+	errc := make(chan error, 3)
 	go func() { errc <- srv.Serve(ln) }()
 
 	servers := []*http.Server{srv}
@@ -324,6 +345,17 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 
 		go func() { errc <- psrv.Serve(proxyLn) }()
+	}
+
+	if mln != nil {
+		msrv := newServer(LocalMetricsHandler(deps.Metrics, deps.Settings, cfg.Log))
+		servers = append(servers, msrv)
+
+		if cfg.Log != nil {
+			cfg.Log.Info("serve listening for local metrics scrapes", "addr", mln.Addr().String())
+		}
+
+		go func() { errc <- msrv.Serve(mln) }()
 	}
 
 	var runErr error

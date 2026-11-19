@@ -10,6 +10,12 @@
 # Site certificates come from HOSTASHI_ACME_DIRECTORY (Let's Encrypt by
 # default; empty turns certificates off). HOSTASHI_ACME_CA names an extra
 # CA file for a test CA such as Pebble.
+#
+# HOSTASHI_METRICS_LISTEN (empty by default) opens a loopback listener that
+# serves /metrics without a token for a scraper on this host, for example
+# 127.0.0.1:9471 (ADR-0022). Every local user can reach it, so leave it
+# empty on hosts with untrusted site users and scrape with a metrics:read
+# token instead. Metrics must also be switched on in the panel settings.
 
 [Unit]
 Description=Hostashi panel (web UI and API, no root)
@@ -25,8 +31,9 @@ User=hostashi
 Group=hostashi
 Environment=HOSTASHI_LISTEN=127.0.0.1:8080 HOSTASHI_PUBLIC_URL=
 Environment=HOSTASHI_ACME_DIRECTORY=https://acme-v02.api.letsencrypt.org/directory HOSTASHI_ACME_CA=
+Environment=HOSTASHI_METRICS_LISTEN=
 EnvironmentFile=-/etc/hostashi/hostashi.env
-ExecStart=/usr/local/bin/hostashi serve "-listen=${HOSTASHI_LISTEN}" "-public-url=${HOSTASHI_PUBLIC_URL}" -db /var/lib/hostashi/hostashi.db -key /etc/hostashi/secret.key -socket /run/hostashi/agent.sock "-acme-directory=${HOSTASHI_ACME_DIRECTORY}" "-acme-ca=${HOSTASHI_ACME_CA}"
+ExecStart=/usr/local/bin/hostashi serve "-listen=${HOSTASHI_LISTEN}" "-public-url=${HOSTASHI_PUBLIC_URL}" -db /var/lib/hostashi/hostashi.db -key /etc/hostashi/secret.key -socket /run/hostashi/agent.sock "-acme-directory=${HOSTASHI_ACME_DIRECTORY}" "-acme-ca=${HOSTASHI_ACME_CA}" "-metrics-listen=${HOSTASHI_METRICS_LISTEN}"
 UMask=0077
 Restart=on-failure
 RestartSec=2s
