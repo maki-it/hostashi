@@ -30,6 +30,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0024 | MariaDB databases per site | Accepted ([adr/0024](adr/0024-mariadb-databases-per-site.md)) | No |
 | 0025 | Database import and export | Accepted ([adr/0025](adr/0025-database-import-export.md)) | No |
 | 0026 | Data transfer for the CloudPanel migration | Accepted ([adr/0026](adr/0026-cloudpanel-migration-transfer.md)) | No |
+| 0027 | Maintenance and parking pages | Proposed ([adr/0027](adr/0027-maintenance-and-parking-pages.md)) | **Yes** (2 questions) |
 
 ---
 
@@ -232,3 +233,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0026 Data transfer for the CloudPanel migration
 
 **Full text (status Accepted, 2026-11-19):** [adr/0026](adr/0026-cloudpanel-migration-transfer.md). Summary: the new server pulls files and databases from the old CloudPanel server over SSH (Kim's choice, 2026-11-19); the scan runs on the old server as `hostashi cloudpanel scan`. Files come over SFTP in Go (`github.com/pkg/sftp`), the old side locks the key in `authorized_keys` to `restrict`, a read-only `sftp-server -R` and one port forward to MariaDB. Databases are dumped on the new server with `mariadb-dump` through that tunnel, with a read-only dump user on the old server, and go straight into the ADR-0025 import. One job per site, which drops to the site user before writing files. No new `os/exec` exception. Decided (Kim, 2026-11-19): the locked root key on the old server is acceptable.
+
+## ADR-0027 Maintenance and parking pages
+
+**Full text (status Proposed, 2026-11-19):** [adr/0027](adr/0027-maintenance-and-parking-pages.md). Summary: pages are single HTML files (at most 48 KiB) stored in the panel, pushed to the agent with a typed `page.put` and served by nginx from a root-owned directory with a strict Content-Security-Policy (no scripts, no external resources), instead of sanitizing the HTML. Maintenance per site: 503 with `Retry-After` and the chosen page, up to 20 allowed IPs/CIDRs see the site, PHP keeps running; "disabled" (PR #93) stays separate and wins. Parked domains get their own small vhost with a parking page (200), optionally with HTTPS. Pages and maintenance first, parking second. Open: no JavaScript in pages, HTTPS for parked domains.
