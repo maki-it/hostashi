@@ -43,7 +43,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 | Access | `allow`, `deny`, `auth_basic`, `auth_basic_user_file`, `satisfy` | User file: literal path below the site's home, no variables |
 | Files | `root`, `alias` | Literal, clean path below the site's home, no variables, no `..` |
 | Compression and limits | `gzip*`, `brotli*`, `client_max_body_size`, `client_body_timeout` | Sizes and times only |
-| Upstreams | `proxy_pass`, `proxy_set_header`, `proxy_hide_header`, `proxy_redirect`, `proxy_*_timeout`, `proxy_buffering`, `proxy_http_version` | `proxy_pass` only `http(s)://` with a literal host or IP and port, never `unix:`, no variables in the host |
+| Upstreams | `proxy_pass`, `proxy_set_header`, `proxy_hide_header`, `proxy_redirect`, `proxy_*_timeout`, `proxy_buffering`, `proxy_http_version` | `proxy_pass` only `http(s)://` with a literal host or IP, never `unix:`, no variables; loopback only with an explicit port |
 | PHP | `fastcgi_param`, `fastcgi_*_timeout`, `fastcgi_buffers`, `fastcgi_buffer_size`, `fastcgi_pass`, `fastcgi_index`, `fastcgi_split_path_info` | `fastcgi_pass` only to the site's own socket |
 | Logging | `access_log off`, `log_not_found` | No log paths |
 
@@ -71,5 +71,5 @@ Everything else is rejected with "not allowed in custom snippets", including `li
 ## Open questions
 
 1. ~~Option A (allowlist checked by the agent) or B (free text for the admin)?~~ Decided by Kim (2026-11-19): option A.
-2. Is the first list enough to start, or should something be added before the web2 migration? Answered best by a dry run against web2's scan.
-3. May `proxy_pass` point at loopback addresses (`127.0.0.1`, `::1`)? Recommendation: yes, for local apps, with the named risk that a snippet can reach local HTTP services.
+2. Is the first list enough to start, or should something be added before the web2 migration? Answered by a dry run of the check against web2's scan; additions come as their own PRs.
+3. ~~May `proxy_pass` point at loopback addresses (`127.0.0.1`, `::1`)?~~ Decided by Kim (2026-11-19): yes, with an explicit port, for local apps. Named risk: a snippet can reach local HTTP services; `unix:` stays forbidden.
