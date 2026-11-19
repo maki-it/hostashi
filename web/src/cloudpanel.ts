@@ -82,6 +82,10 @@ export const startImport = (id: string, name: string, databases: DBMap[]) =>
 // listImports returns a site's imports, newest first, without skippedPaths.
 export const listImports = async (site: string) =>
   (await request<{ imports: ImportJob[] }>("GET", "/migrations/cloudpanel/imports?site=" + encodeURIComponent(site))).imports;
+// activateImport makes the imported files the site's web root; the old
+// web root is kept under the returned name.
+export const activateImport = (site: string) =>
+  request<{ site: string; previous: string }>("POST", "/migrations/cloudpanel/sites/" + encodeURIComponent(site) + "/activate");
 export const getImport = (id: string) => request<ImportJob>("GET", "/migrations/cloudpanel/imports/" + encodeURIComponent(id));
 
 export const getSource = () => request<SourceInfo>("GET", source);
