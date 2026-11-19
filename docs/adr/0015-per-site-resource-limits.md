@@ -1,6 +1,6 @@
 # ADR-0015 Per-site resource limits
 
-**Status:** Proposed (not accepted). **Date drafted:** 2026-11-17. **Decides:** Kim. **Related:** ADR-0007 (isolation model), ADR-0004 (web/agent split), ADR-0005 (web server), ADR-0003 (stack). **Spike:** S8 done, see `spike/s8-quota/REPORT.md` and the section "Spike S8 results" below. **Last updated:** 2026-11-19.
+**Status:** Accepted (2026-11-19, by Kim). **Date drafted:** 2026-11-17. **Decides:** Kim. **Related:** ADR-0007 (isolation model), ADR-0004 (web/agent split), ADR-0005 (web server), ADR-0003 (stack). **Spike:** S8 done, see `spike/s8-quota/REPORT.md` and the section "Spike S8 results" below. **Last updated:** 2026-11-19.
 
 ## Context
 
