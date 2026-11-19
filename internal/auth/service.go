@@ -49,6 +49,7 @@ type Config struct {
 	Box            *secrets.Box     // encrypts TOTP seeds; nil disables TOTP
 	Issuer         string           // shown in authenticator apps, default "Hostashi"
 	Now            func() time.Time // default time.Now
+	Observer       Observer         // failed and throttled logins; nil: none
 }
 
 // Service is the login, session and setup logic.
@@ -58,6 +59,7 @@ type Service struct {
 	box       *secrets.Box
 	issuer    string
 	now       func() time.Time
+	obs       Observer
 
 	ipLimit    *Limiter
 	userLimit  *Limiter
@@ -82,7 +84,13 @@ func NewService(c Config) *Service {
 		issuer = "Hostashi"
 	}
 
+	obs := c.Observer
+	if obs == nil {
+		obs = nopObserver{}
+	}
+
 	return &Service{
+		obs:       obs,
 		cer:       &ceremonies{m: map[string]ceremony{}, now: now},
 		st:        c.Store,
 		tokenPath: c.SetupTokenPath,
@@ -181,6 +189,8 @@ func hashToken(token string) []byte {
 func (s *Service) Login(ctx context.Context, username, password, code, ip string) (string, store.User, error) {
 	ipKey, userKey := "ip:"+ip, "user:"+username
 	if s.ipLimit.Blocked(ipKey) || s.userLimit.Blocked(userKey) {
+		s.obs.Throttled(KindPassword)
+
 		return "", store.User{}, ErrRateLimited
 	}
 
@@ -200,6 +210,7 @@ func (s *Service) Login(ctx context.Context, username, password, code, ip string
 		s.ipLimit.Fail(ipKey)
 		s.userLimit.Fail(userKey)
 		_ = s.st.Audit(ctx, nil, "login.failed", username, map[string]string{"ip": ip})
+		s.obs.Failure(KindPassword)
 
 		return "", store.User{}, ErrInvalidCredentials
 	}
@@ -213,6 +224,7 @@ func (s *Service) Login(ctx context.Context, username, password, code, ip string
 			s.ipLimit.Fail(ipKey)
 			s.userLimit.Fail(userKey)
 			_ = s.st.Audit(ctx, &u.ID, "login.failed", username, map[string]string{"ip": ip, "reason": "second factor"})
+			s.obs.Failure(KindTOTP)
 
 			return "", store.User{}, ErrInvalidCredentials
 		}

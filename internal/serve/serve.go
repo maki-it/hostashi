@@ -256,7 +256,9 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
-	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath, Box: box})
+	m := metrics.New()
+
+	svc := auth.NewService(auth.Config{Store: st, SetupTokenPath: tokenPath, Box: box, Observer: m})
 	if err := svc.EnablePasskeys(auth.PasskeyConfig{PublicURL: cfg.PublicURL}); err != nil {
 		return err
 	}
@@ -273,6 +275,8 @@ func Run(ctx context.Context, cfg Config) error {
 	go copyLoop(ctx, panelCopy, cfg.Log)
 
 	client := agentrpc.NewClient(cfg.Socket)
+	client.Observe(m.AgentOp)
+
 	deps := Deps{
 		PingAgent: func(ctx context.Context) error {
 			_, err := agentapi.Ping.Call(ctx, client, agentapi.PingRequest{})
@@ -282,9 +286,12 @@ func Run(ctx context.Context, cfg Config) error {
 		Auth:     svc,
 		Sites:    hosting.New(st, hosting.RPCAgent{C: client}, cfg.Log),
 		Backups:  RPCBackups{C: client, BeforeRun: panelCopy},
-		Metrics:  metrics.New(),
+		Metrics:  m,
 		Settings: st,
 	}
+
+	deps.Sites.ObserveApply(m.WebApplied)
+	m.RegisterCerts(certList(deps.Sites), cfg.Log)
 
 	if iss, err := newIssuer(cfg, st, box); err != nil {
 		return err
@@ -373,6 +380,23 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	return runErr
+}
+
+// certList feeds the certificate series from the site service.
+func certList(svc *hosting.Service) func(context.Context) ([]metrics.Cert, error) {
+	return func(ctx context.Context) ([]metrics.Cert, error) {
+		list, err := svc.CertExpiries(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		out := make([]metrics.Cert, 0, len(list))
+		for _, c := range list {
+			out = append(out, metrics.Cert{Site: c.Site, Cert: c.Cert, NotAfter: c.NotAfter})
+		}
+
+		return out, nil
+	}
 }
 
 func newServer(h http.Handler) *http.Server {
