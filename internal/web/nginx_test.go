@@ -198,6 +198,15 @@ func (e *env) fetch(t *testing.T, host string) (int, string) {
 func (e *env) fetchPath(t *testing.T, host, p string) (int, string) {
 	t.Helper()
 
+	code, _, body := e.fetchFull(t, host, p)
+
+	return code, body
+}
+
+// fetchFull is fetchPath with the response headers.
+func (e *env) fetchFull(t *testing.T, host, p string) (int, http.Header, string) {
+	t.Helper()
+
 	conn, err := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(e.port), 2*time.Second)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
@@ -210,14 +219,14 @@ func (e *env) fetchPath(t *testing.T, host, p string) (int, string) {
 
 	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
 	if err != nil {
-		return 0, ""
+		return 0, nil, ""
 	}
 
 	defer resp.Body.Close()
 
 	b, _ := io.ReadAll(resp.Body)
 
-	return resp.StatusCode, string(b)
+	return resp.StatusCode, resp.Header, string(b)
 }
 
 func TestRecoverStartsWithEmptyState(t *testing.T) {
@@ -578,6 +587,9 @@ func TestInvalidDesiredStateWritesNothing(t *testing.T) {
 		"no domain":       {User: "alpha", Root: "/srv/a"},
 		"bad user":        {User: "Alpha", Domains: []string{"a.example.com"}, Root: "/srv/a"},
 		"control host":    {User: "alpha", Domains: []string{controlHost}, Root: "/srv/a"},
+		"page dir":        {User: "alpha", Domains: []string{"a.example.com"}, Root: "/srv/a", Maintenance: &Maintenance{Page: "p", Digest: digest64, Dir: "/srv/p;x"}},
+		"page id":         {User: "alpha", Domains: []string{"a.example.com"}, Root: "/srv/a", Maintenance: &Maintenance{Page: "P/..", Digest: digest64, Dir: "/srv/p"}},
+		"allow ip":        {User: "alpha", Domains: []string{"a.example.com"}, Root: "/srv/a", Maintenance: &Maintenance{Page: "p", Digest: digest64, Dir: "/srv/p", AllowIPs: []string{"1.2.3.4; deny"}}},
 	} {
 		if _, err := r.Apply(t.Context(), Desired{Sites: []Site{s}}); !errors.Is(err, ErrInvalidDesired) {
 			t.Errorf("%s: err = %v, want ErrInvalidDesired", name, err)
@@ -1037,5 +1049,159 @@ func TestPanelNeedsListener(t *testing.T) {
 
 	if err := (Desired{Sites: []Site{{User: "alpha", Domains: []string{"panel.example.com"}, Root: "/srv/a"}}, Panel: &Panel{Domain: "panel.example.com"}}).Validate(); err == nil {
 		t.Fatal("site domain equal to the panel's accepted")
+	}
+}
+
+const digest64 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+// page writes a committed page directory for maintenance tests.
+func (e *env) page(t *testing.T, files map[string]string) *Maintenance {
+	t.Helper()
+
+	dir := filepath.Join(e.dir, "pages", "maint."+digest64)
+	for name, body := range files {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	return &Maintenance{Page: "maint", Digest: digest64, Dir: dir}
+}
+
+func TestMaintenanceRender(t *testing.T) {
+	n := &Nginx{
+		Ctl: &testCtl{}, Listen: []string{"80"}, ListenTLS: []string{"443"}, HTTP3: true,
+		ControlSocket: "/run/x.sock", PIDFile: "/run/x.pid", ErrorLog: "/var/log/x", MimeTypes: "/etc/x",
+	}
+
+	m := &Maintenance{Page: "maint", Digest: digest64, Dir: "/var/lib/hostashi-pages/maint." + digest64, AllowIPs: []string{"203.0.113.7", "2001:db8::/32"}}
+
+	f, err := n.Render(Desired{Sites: []Site{
+		{User: "my-site", Domains: []string{"a.example.com"}, Root: "/srv/a", Cert: "/c.pem", Key: "/k.pem", HSTS: true, PHPSocket: "/run/php.sock", Maintenance: m},
+		{User: "off", Domains: []string{"b.example.com"}, Root: "/srv/b", Disabled: true, Maintenance: m},
+	}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conf := string(f.Content["sites/my-site.conf"])
+	for _, want := range []string{
+		"geo $hostashi_open_6d792d73697465 {", "203.0.113.7 1;", "2001:db8::/32 1;",
+		"error_page 503 /.hostashi/page/maint/index.html;",
+		"location ^~ /.hostashi/page/maint/ {", "alias /var/lib/hostashi-pages/maint." + digest64 + "/;",
+		"text/html html;", "image/jpeg jpeg jpg;",
+		`add_header Content-Security-Policy "` + PageCSP + `" always;`,
+		"add_header Strict-Transport-Security", "add_header Alt-Svc",
+	} {
+		if !strings.Contains(conf, want) {
+			t.Errorf("site conf lacks %q", want)
+		}
+	}
+
+	if got := strings.Count(conf, "if ($hostashi_open_6d792d73697465 = 0)"); got != 2 {
+		t.Errorf("%d allowlist checks, want 2 (location / and PHP):\n%s", got, conf)
+	}
+
+	if off := string(f.Content["sites/off.conf"]); strings.Contains(off, "geo ") || strings.Contains(off, "/.hostashi/page/") {
+		t.Errorf("disabled site got the maintenance page:\n%s", off)
+	}
+}
+
+func TestMaintenanceSite(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+
+	e.r.Driver.ACMERoot = filepath.Join(e.dir, "acme")
+
+	challenge := filepath.Join(e.r.Driver.ACMERoot, ".well-known", "acme-challenge")
+	if err := os.MkdirAll(challenge, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(challenge, "tok123"), []byte("tok123.thumb"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := e.site(t, "alpha", "hello alpha", "alpha.example.com")
+	if err := os.WriteFile(filepath.Join(s.Root, "file.txt"), []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s.Maintenance = e.page(t, map[string]string{
+		"index.html":       `<!doctype html><link rel="stylesheet" href="css/site.css"><h1>Back soon</h1>`,
+		"css/site.css":     "h1 { color: teal }",
+		"img/logo.svg":     `<svg xmlns="http://www.w3.org/2000/svg"/>`,
+		"js/countdown.js":  "console.log(1)",
+		"fonts/sans.woff2": "wOF2",
+	})
+	s.Maintenance.AllowIPs = []string{"10.0.0.0/8"}
+
+	if _, err := e.r.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{s}}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, p := range []string{"/", "/file.txt", "/index.html", "/missing"} {
+		code, h, body := e.fetchFull(t, "alpha.example.com", p)
+		if code != http.StatusServiceUnavailable || !strings.Contains(body, "Back soon") || strings.Contains(body, "data") {
+			t.Errorf("maintenance %s: %d %q", p, code, body)
+		}
+
+		if h.Get("Retry-After") != "3600" || h.Get("Content-Security-Policy") != PageCSP || h.Get("Cache-Control") != "no-store" {
+			t.Errorf("maintenance %s headers: %v", p, h)
+		}
+	}
+
+	for p, ct := range map[string]string{
+		"/.hostashi/page/maint/css/site.css":     "text/css; charset=utf-8",
+		"/.hostashi/page/maint/img/logo.svg":     "image/svg+xml; charset=utf-8",
+		"/.hostashi/page/maint/js/countdown.js":  "text/javascript; charset=utf-8",
+		"/.hostashi/page/maint/fonts/sans.woff2": "font/woff2",
+		"/.hostashi/page/maint/":                 "text/html; charset=utf-8",
+	} {
+		code, h, _ := e.fetchFull(t, "alpha.example.com", p)
+		if code != http.StatusOK || h.Get("Content-Type") != ct || h.Get("X-Content-Type-Options") != "nosniff" || h.Get("Retry-After") != "" {
+			t.Errorf("page file %s: %d %v", p, code, h)
+		}
+	}
+
+	if code, _, _ := e.fetchFull(t, "alpha.example.com", "/.hostashi/page/maint/missing.css"); code != http.StatusNotFound {
+		t.Errorf("missing page file: %d", code)
+	}
+
+	if code, body := e.fetchPath(t, "alpha.example.com", "/.well-known/acme-challenge/tok123"); code != http.StatusOK || body != "tok123.thumb" {
+		t.Errorf("challenge during maintenance: %d %q", code, body)
+	}
+
+	// The test client connects from 127.0.0.1.
+	s.Maintenance.AllowIPs = []string{"10.0.0.0/8", "127.0.0.1"}
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{s}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, body := e.fetch(t, "alpha.example.com"); code != http.StatusOK || body != "hello alpha" {
+		t.Errorf("allowed address: %d %q", code, body)
+	}
+
+	if code, body := e.fetchPath(t, "alpha.example.com", "/file.txt"); code != http.StatusOK || body != "data" {
+		t.Errorf("allowed address file: %d %q", code, body)
+	}
+
+	s.Maintenance = nil
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{s}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Hidden paths are denied again.
+	if code, _ := e.fetchPath(t, "alpha.example.com", "/.hostashi/page/maint/css/site.css"); code != http.StatusForbidden {
+		t.Errorf("page served after maintenance: %d", code)
 	}
 }
