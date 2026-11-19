@@ -20,6 +20,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/backup"
 	"github.com/maki-it/hostashi/internal/certs"
 	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/php"
@@ -66,6 +67,10 @@ type Config struct {
 	// DB manages the sites' MariaDB databases. Run builds it from StateDir;
 	// without it db.* answer failed_precondition.
 	DB *mariadb.Manager
+
+	// Backup serves backup.*. Run builds it with the fixed paths of a
+	// server; without it the operations answer failed_precondition.
+	Backup *backup.Agent
 }
 
 // DefaultPanelPort is the panel's HTTPS port (ADR-0023).
@@ -136,6 +141,8 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, log: log}
 		h.register(s)
 	}
+
+	registerBackup(s, cfg.Backup)
 
 	return s
 }
@@ -716,6 +723,10 @@ func Run(ctx context.Context, cfg Config) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	if cfg.Backup == nil {
+		cfg.Backup = openBackup()
 	}
 
 	if cfg.PHP != nil {

@@ -292,13 +292,20 @@ func parseSummary(out []byte) (Summary, error) {
 	return Summary{}, errors.New("resticctl: backup printed no summary")
 }
 
-// Snapshots lists the snapshots that carry all given tags.
+// Snapshots lists this host's snapshots that carry all given tags; no
+// tags lists all of them.
 func (r *Repo) Snapshots(ctx context.Context, tags []string) ([]Snapshot, error) {
-	if err := checkTags(tags); err != nil {
-		return nil, err
+	args := []string{"snapshots"}
+
+	if len(tags) > 0 {
+		if err := checkTags(tags); err != nil {
+			return nil, err
+		}
+
+		args = append(args, "--tag", strings.Join(tags, ","))
 	}
 
-	out, err := r.run(ctx, "snapshots", "--tag", strings.Join(tags, ","))
+	out, err := r.run(ctx, args...)
 	if err != nil {
 		return nil, err
 	}

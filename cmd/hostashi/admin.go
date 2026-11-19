@@ -208,3 +208,50 @@ func dumpCmd(ctx context.Context, c *agentrpc.Client, kind, database, path strin
 
 	return nil
 }
+
+// backupAgentCmd runs the backup operations through the agent: set reads
+// the settings as JSON and hostkey one public key line from stdin.
+func backupAgentCmd(ctx context.Context, c *agentrpc.Client, args []string, out io.Writer) error {
+	var (
+		v   any
+		err error
+	)
+
+	switch strings.Join(args, " ") {
+	case "get":
+		v, err = agentapi.BackupGet.Call(ctx, c, agentapi.BackupGetRequest{})
+	case "set":
+		var s agentapi.BackupSettings
+
+		dec := json.NewDecoder(io.LimitReader(stdin, 1<<16))
+		dec.DisallowUnknownFields()
+
+		if err := dec.Decode(&s); err != nil {
+			return fmt.Errorf("read backup settings from stdin: %w", err)
+		}
+
+		v, err = agentapi.BackupSet.Call(ctx, c, agentapi.BackupSetRequest{Settings: s})
+	case "hostkey":
+		line, rerr := bufio.NewReader(io.LimitReader(stdin, agentapi.MaxHostKey)).ReadString('\n')
+		if rerr != nil && !errors.Is(rerr, io.EOF) {
+			return fmt.Errorf("read host key from stdin: %w", rerr)
+		}
+
+		v, err = agentapi.BackupHostKey.Call(ctx, c, agentapi.BackupHostKeyRequest{Key: strings.TrimSpace(line)})
+	case "start":
+		v, err = agentapi.BackupRun.Call(ctx, c, agentapi.BackupRunRequest{})
+	case "status":
+		v, err = agentapi.BackupStatusGet.Call(ctx, c, agentapi.BackupStatusRequest{})
+	default:
+		return errUsage
+	}
+
+	if err != nil {
+		return err
+	}
+
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+
+	return enc.Encode(v)
+}

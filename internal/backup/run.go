@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -86,7 +87,9 @@ func Plan(sites []Site, panelPaths []string) []Item {
 
 // Repo is the part of resticctl.Repo a run uses.
 type Repo interface {
+	Init(ctx context.Context) error
 	Unlock(ctx context.Context) error
+	Snapshots(ctx context.Context, tags []string) ([]resticctl.Snapshot, error)
 	Backup(ctx context.Context, tags []string, paths ...string) (resticctl.Summary, error)
 	BackupDatabase(ctx context.Context, tags []string, database string) (resticctl.Summary, error)
 	Forget(ctx context.Context, k resticctl.Keep) error
@@ -95,18 +98,7 @@ type Repo interface {
 }
 
 // ItemResult is the outcome of one item.
-type ItemResult struct {
-	Kind       string `json:"kind"`
-	Site       string `json:"site,omitempty"`
-	Database   string `json:"database,omitempty"`
-	SnapshotID string `json:"snapshotId,omitempty"`
-	DataAdded  int64  `json:"dataAdded"`
-	Files      int64  `json:"files"`
-	Bytes      int64  `json:"bytes"`
-	// Partial: saved, but some files could not be read.
-	Partial bool   `json:"partial,omitempty"`
-	Error   string `json:"error,omitempty"`
-}
+type ItemResult = agentapi.BackupItemResult
 
 // Status is the result of the last run, kept in StatusDir.
 type Status struct {
@@ -124,6 +116,55 @@ type Status struct {
 	ReadPart      int       `json:"readPart,omitempty"` // part read by the last data check
 	MaintenanceOK bool      `json:"maintenanceOk"`
 	Maintenance   string    `json:"maintenance,omitempty"` // last maintenance error
+	// Initialized: this run created the repository.
+	Initialized bool `json:"initialized,omitempty"`
+
+	// Snapshots is the repository's list at the end of the run, kept in a
+	// file of its own; nil if it could not be read.
+	Snapshots []SnapshotEntry `json:"-"`
+}
+
+// SnapshotEntry is one snapshot of this server, with its tags decoded.
+type SnapshotEntry struct {
+	ID       string    `json:"id"`
+	Time     time.Time `json:"time"`
+	Kind     string    `json:"kind"`
+	Site     string    `json:"site,omitempty"`
+	Database string    `json:"database,omitempty"`
+}
+
+// entries decodes the tags Item.Tags writes; snapshots with other tags
+// (made by hand) are left out.
+func entries(snaps []resticctl.Snapshot) []SnapshotEntry {
+	out := []SnapshotEntry{}
+
+	for _, s := range snaps {
+		e := SnapshotEntry{ID: s.ID, Time: s.Time.UTC()}
+
+		for _, t := range s.Tags {
+			k, v, _ := strings.Cut(t, ":")
+
+			switch k {
+			case "kind":
+				e.Kind = v
+			case "site":
+				e.Site = v
+			case "db":
+				e.Database = v
+			}
+		}
+
+		valid := (e.Kind == KindPanel && e.Site == "" && e.Database == "") ||
+			(e.Kind == KindFiles && e.Site != "" && e.Database == "") ||
+			(e.Kind == KindDB && e.Site != "" && e.Database != "")
+		if valid {
+			out = append(out, e)
+		}
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].Time.After(out[j].Time) })
+
+	return out
 }
 
 // StatusVersion is the current format of the status file.
@@ -194,7 +235,16 @@ func (r *Runner) Run(ctx context.Context, items []Item) Status {
 		return finish(errors.New("no backup target is set up"))
 	}
 
-	if err := r.Repo.Unlock(ctx); err != nil {
+	err := r.Repo.Unlock(ctx)
+	if errors.Is(err, resticctl.ErrNoRepository) {
+		// The first run after the target was set up creates the repository
+		// with the password the agent generated.
+		if err = r.Repo.Init(ctx); err == nil {
+			st.Initialized = true
+		}
+	}
+
+	if err != nil {
 		return finish(fmt.Errorf("open repository: %w", err))
 	}
 
@@ -206,11 +256,17 @@ func (r *Runner) Run(ctx context.Context, items []Item) Status {
 		st.Items = append(st.Items, r.item(ctx, it, lstat, log))
 	}
 
-	if err := r.Repo.Forget(ctx, r.Settings.Retention.keep()); err != nil {
+	if err := r.Repo.Forget(ctx, keep(r.Settings.Retention)); err != nil {
 		return finish(fmt.Errorf("retention: %w", err))
 	}
 
 	r.maintain(ctx, &st, now)
+
+	if snaps, err := r.Repo.Snapshots(ctx, nil); err != nil {
+		log.Error("list snapshots", "err", err)
+	} else {
+		st.Snapshots = entries(snaps)
+	}
 
 	return finish(nil)
 }

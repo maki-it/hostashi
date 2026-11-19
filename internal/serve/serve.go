@@ -95,6 +95,7 @@ type Deps struct {
 	PingDB    func(ctx context.Context) error
 	Auth      *auth.Service    // nil disables the auth routes (tests)
 	Sites     *hosting.Service // nil disables the site routes; needs Auth
+	Backups   Backups          // nil disables the backup routes; needs Auth
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -147,6 +148,10 @@ func Handler(cfg Config, deps Deps) http.Handler {
 			registerSites(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDatabases(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 		}
+
+		if deps.Backups != nil {
+			registerBackups(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Backups, log)
+		}
 	}
 
 	return secure(withUI(mux, ui.Handler()))
@@ -169,6 +174,33 @@ func withUI(api, web http.Handler) http.Handler {
 // SetupTokenPath is where the one-time setup token lives, next to the database.
 func SetupTokenPath(dbPath string) string {
 	return filepath.Join(filepath.Dir(dbPath), "setup-token")
+}
+
+// PanelCopyPath is where the panel keeps the copy of its database that the
+// backup reads (ADR-0008): /var/lib/hostashi/backup/panel.db on a server.
+func PanelCopyPath(dbPath string) string {
+	return filepath.Join(filepath.Dir(dbPath), "backup", "panel.db")
+}
+
+// copyEvery is how often the panel refreshes its database copy, so a
+// scheduled backup is never more than this behind.
+const copyEvery = time.Hour
+
+func copyLoop(ctx context.Context, copyDB func(context.Context) error, log *slog.Logger) {
+	t := time.NewTicker(copyEvery)
+	defer t.Stop()
+
+	for {
+		if err := copyDB(ctx); err != nil && ctx.Err() == nil && log != nil {
+			log.Error("panel database copy for the backup failed", "err", err)
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }
 
 // Run starts the web process and blocks until ctx is canceled.
@@ -201,15 +233,25 @@ func Run(ctx context.Context, cfg Config) error {
 
 	go cleanupLoop(ctx, svc, cfg.Log)
 
+	copyPath := PanelCopyPath(cfg.DBPath)
+	panelCopy := func(ctx context.Context) error { return st.CopyTo(ctx, copyPath) }
+
+	if err := os.MkdirAll(filepath.Dir(copyPath), 0o700); err != nil {
+		return fmt.Errorf("panel copy directory: %w", err)
+	}
+
+	go copyLoop(ctx, panelCopy, cfg.Log)
+
 	client := agentrpc.NewClient(cfg.Socket)
 	deps := Deps{
 		PingAgent: func(ctx context.Context) error {
 			_, err := agentapi.Ping.Call(ctx, client, agentapi.PingRequest{})
 			return err
 		},
-		PingDB: st.Ping,
-		Auth:   svc,
-		Sites:  hosting.New(st, hosting.RPCAgent{C: client}, cfg.Log),
+		PingDB:  st.Ping,
+		Auth:    svc,
+		Sites:   hosting.New(st, hosting.RPCAgent{C: client}, cfg.Log),
+		Backups: RPCBackups{C: client, BeforeRun: panelCopy},
 	}
 
 	if iss, err := newIssuer(cfg, st, box); err != nil {

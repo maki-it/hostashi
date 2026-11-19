@@ -63,6 +63,12 @@ func RunOnce(ctx context.Context, cfg RunConfig) error {
 
 	st := run(ctx, cfg, prev)
 
+	if st.Snapshots != nil {
+		if err := WriteSnapshots(cfg.StatusDir, st.Snapshots); err != nil {
+			cfg.Log.Error("write snapshot list", "err", err)
+		}
+	}
+
 	if err := WriteStatus(cfg.StatusDir, st); err != nil {
 		return fmt.Errorf("write status: %w", err)
 	}

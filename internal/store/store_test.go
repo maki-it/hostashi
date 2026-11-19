@@ -296,3 +296,42 @@ func TestFailedMigrationRollsBack(t *testing.T) {
 		t.Fatalf("good migration was not kept (%d, %v)", n, err)
 	}
 }
+
+func TestCopyTo(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	st, err := Open(ctx, filepath.Join(dir, "hostashi.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer st.Close()
+
+	dst := filepath.Join(dir, "copy.db")
+	for range 2 { // the second copy replaces the first
+		if err := st.CopyTo(ctx, dst); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	fi, err := os.Stat(dst)
+	if err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("copy: %v %v", fi, err)
+	}
+
+	cp, err := Open(ctx, dst)
+	if err != nil {
+		t.Fatalf("copy does not open: %v", err)
+	}
+
+	defer cp.Close()
+
+	if v, err := cp.SchemaVersion(ctx); err != nil || v < 1 {
+		t.Errorf("copy schema %d, %v", v, err)
+	}
+
+	if err := st.CopyTo(ctx, "relative.db"); err == nil {
+		t.Error("relative path accepted")
+	}
+}

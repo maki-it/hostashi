@@ -268,22 +268,38 @@ expect_mode /var/lib/hostashi-agent/backup "700 root:root"
 x sh -c 'DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-server >/dev/null'
 x sh -c 'echo "127.0.0.1 sftp.test" >>/etc/hosts'
 x useradd -m -s /bin/sh u1
-x install -d -m 0700 -o root -g root /etc/hostashi-agent /etc/hostashi-agent/backup
-x ssh-keygen -q -t ed25519 -N '' -C hostashi-backup -f /etc/hostashi-agent/backup/id_ed25519
-x install -d -m 0700 -o u1 -g u1 /home/u1/.ssh
-x install -m 0600 -o u1 -g u1 /etc/hostashi-agent/backup/id_ed25519.pub /home/u1/.ssh/authorized_keys
-x sh -c 'mkdir -p /run/sshd && /usr/sbin/sshd -p 2299 -o ListenAddress=127.0.0.1'
-for _ in $(seq 1 20); do x sh -c 'ssh-keyscan -p 2299 -t ed25519 sftp.test 2>/dev/null' >/tmp/kh.$$ && [ -s /tmp/kh.$$ ] && break; sleep 1; done
-xi sh -c 'umask 077; cat >/etc/hostashi-agent/backup/known_hosts' </tmp/kh.$$
-rm -f /tmp/kh.$$
-x sh -c 'umask 077; head -c 32 /dev/urandom | base64 >/etc/hostashi-agent/backup/password'
-xi sh -c 'umask 077; cat >/etc/hostashi-agent/backup/settings.json' <<'JSON'
+# The agent creates the password and the SSH key with the target.
+xi /usr/local/bin/hostashi backup set <<'JSON' >/tmp/bk.$$ || fail "backup set"
 {"version":1,"target":{"user":"u1","host":"sftp.test","port":2299,"path":"hostashi"},
- "retention":{"daily":7,"weekly":4,"monthly":6},"windowStart":1,"windowEnd":5,"readParts":12}
+ "retention":{"daily":7,"weekly":4,"monthly":6},"windowStart":2,"windowEnd":4,"readParts":12}
 JSON
+pub=$(sed -n 's/.*"publicKey": "\(ssh-ed25519 [^"]*\)".*/\1/p' /tmp/bk.$$)
+grep -q '"ready": false' /tmp/bk.$$ || fail "ready without a host key: $(cat /tmp/bk.$$)"
+[ -n "$pub" ] || fail "no public key: $(cat /tmp/bk.$$)"
+expect_mode /etc/hostashi-agent/backup "700 root:root"
+expect_mode /etc/hostashi-agent/backup/password "600 root:root"
+expect_mode /etc/hostashi-agent/backup/id_ed25519 "600 root:root"
+if xi /usr/local/bin/hostashi backup start </dev/null; then fail "run started without a host key"; fi
+x install -d -m 0700 -o u1 -g u1 /home/u1/.ssh
+xi sh -c 'cat >/home/u1/.ssh/authorized_keys && chown u1:u1 /home/u1/.ssh/authorized_keys && chmod 600 /home/u1/.ssh/authorized_keys' <<<"$pub"
+x sh -c 'mkdir -p /run/sshd && /usr/sbin/sshd -p 2299 -o ListenAddress=127.0.0.1'
+# The panel reads the host key; the administrator compares the fingerprint
+# (here with ssh-keyscan) and confirms it.
+code=""
+for _ in $(seq 1 20); do code=$(api POST /api/v1/backups/hostkey/scan) && [ "$code" = 200 ] && break; sleep 1; done
+[ "$code" = 200 ] || fail "host key scan: $code $(x cat /tmp/api.out)"
+hk=$(x sed -n 's/.*"key":"\([^"]*\)".*/\1/p' /tmp/api.out)
+fp=$(x sed -n 's/.*"fingerprint":"\([^"]*\)".*/\1/p' /tmp/api.out)
+want=$(x sh -c 'ssh-keyscan -p 2299 -t ed25519 sftp.test 2>/dev/null | grep -v "^#" | ssh-keygen -lf - | cut -d" " -f2')
+[ -n "$fp" ] && [ "$fp" = "$want" ] || fail "scanned fingerprint '$fp', ssh-keyscan '$want'"
+[ "$(api PUT /api/v1/backups/hostkey "{\"key\":\"$hk\"}")" = 200 ] || fail "confirm host key: $(x cat /tmp/api.out)"
+x grep -q '"ready":true' /tmp/api.out || fail "not ready after the host key: $(x cat /tmp/api.out)"
+rm -f /tmp/bk.$$
+[ "$(x systemctl is-enabled hostashi-backup.timer)" = enabled ] || fail "backup timer not on after setup"
+x systemctl cat hostashi-backup.timer | grep -q '^OnCalendar=\*-\*-\* 02:00:00$' || fail "timer window not applied"
+x /usr/local/bin/hostashi backup key show | grep -q '^restic password: ' || fail "backup key show"
 r() { x env RESTIC_REPOSITORY=sftp://u1@sftp.test:2299/hostashi RESTIC_PASSWORD_FILE=/etc/hostashi-agent/backup/password \
   restic -o 'sftp.args=-F /dev/null -i /etc/hostashi-agent/backup/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/hostashi-agent/backup/known_hosts' --no-cache "$@"; }
-r init >/dev/null
 # A site with a file and a database.
 x /usr/local/bin/hostashi site create bk
 xi runuser -u bk -- sh -c 'cat >/home/bk/htdocs/index.html' <<<"backed up"
@@ -291,12 +307,28 @@ x /usr/local/bin/hostashi db create bk bk_db
 x mariadb -e "CREATE TABLE bk_db.t (v VARCHAR(20)); INSERT INTO bk_db.t VALUES ('from the dump');"
 x systemctl start hostashi-backup.service || fail "backup run failed: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 x grep -q '"ok": true' /var/lib/hostashi-agent/backup/status.json || fail "status: $(x cat /var/lib/hostashi-agent/backup/status.json)"
+x grep -q '"initialized": true' /var/lib/hostashi-agent/backup/status.json || fail "first run did not create the repository"
+x /usr/local/bin/hostashi backup status | grep -q '"ok": true' || fail "backup status through the agent"
+if [ "$(api GET /api/v1/sites/bk/backups)" != 200 ] || ! x grep -q '"kind":"db","database":"bk_db"' /tmp/api.out; then
+  fail "site snapshots through the API: $(x cat /tmp/api.out)"
+fi
+# grep reads the whole listing: an early exit would end restic with SIGPIPE.
+r ls latest --tag kind:panel | grep '^/var/lib/hostashi/backup/panel.db$' >/dev/null || fail "panel database copy not in the backup"
 [ "$(r snapshots --tag site:bk,kind:files --json | grep -o '"short_id"' | wc -l)" = 1 ] || fail "no files snapshot of bk"
 [ "$(r dump latest /home/bk/htdocs/index.html --tag site:bk,kind:files)" = "backed up" ] || fail "site file not in the backup"
-r dump latest bk_db.sql --tag site:bk,kind:db,db:bk_db | grep -q "from the dump" || fail "database dump not in the backup"
-r dump latest /etc/hostashi/hostashi.env --tag kind:panel | grep -q HOSTASHI_PUBLIC_URL || fail "panel state not in the backup"
-if r ls latest --tag kind:panel | grep -q 'secret.key\|/etc/hostashi-agent'; then fail "secrets in the panel backup"; fi
-x systemctl start hostashi-backup.service || fail "second backup run failed"
+r dump latest bk_db.sql --tag site:bk,kind:db,db:bk_db | grep "from the dump" >/dev/null || fail "database dump not in the backup"
+r dump latest /etc/hostashi/hostashi.env --tag kind:panel | grep HOSTASHI_PUBLIC_URL >/dev/null || fail "panel state not in the backup"
+if r ls latest --tag kind:panel | grep 'secret.key\|/etc/hostashi-agent' >/dev/null; then fail "secrets in the panel backup"; fi
+# A run on demand through the agent returns at once.
+before=$(x grep '"started"' /var/lib/hostashi-agent/backup/status.json)
+[ "$(api POST /api/v1/backups/run)" = 202 ] || fail "backup run through the API: $(x cat /tmp/api.out)"
+for _ in $(seq 1 90); do
+  [ "$(x grep '"started"' /var/lib/hostashi-agent/backup/status.json)" != "$before" ] &&
+    [ "$(x systemctl is-active hostashi-backup.service)" = inactive ] && break
+  sleep 1
+done
+[ "$(x grep '"started"' /var/lib/hostashi-agent/backup/status.json)" != "$before" ] || fail "backup start did not run"
+x grep -q '"ok": true' /var/lib/hostashi-agent/backup/status.json || fail "second run: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 # Retention keeps the newest snapshot per day, and restic also keeps the
 # oldest one while fewer days than the policy exist: two snapshots now.
 [ "$(r snapshots --tag site:bk,kind:files --json | grep -o '"short_id"' | wc -l)" = 2 ] || fail "second run made no snapshot"
