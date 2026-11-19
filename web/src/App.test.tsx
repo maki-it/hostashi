@@ -48,6 +48,20 @@ describe("App start", () => {
     window.location.hash = "";
   });
 
+  it("opens the database page from the navigation", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      ...noSetup,
+      "GET /api/v1/auth/me": { body: { ...admin, auth: "session" } },
+      "GET /api/v1/databases": { body: { databases: [] } },
+      "GET /api/v1/sites": { body: { sites: [] } },
+    });
+    render(<App />);
+    await user.click(await screen.findByRole("link", { name: "Databases" }));
+    expect(await screen.findByText("No databases yet.")).toBeInTheDocument();
+    window.location.hash = "";
+  });
+
   it("shows the login form without a session", async () => {
     mockFetch({ ...noSetup, ...loggedOut });
     render(<App />);
