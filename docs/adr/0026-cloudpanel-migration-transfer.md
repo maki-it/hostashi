@@ -1,6 +1,6 @@
 # ADR-0026 Data transfer for the CloudPanel migration
 
-**Status:** Accepted (2026-11-19, by Kim); Part 4 Proposed. **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0017 (CloudPanel import as migration), ADR-0025 (database import and export), ADR-0008 (backups with restic), ADR-0004 (web/agent privilege split), [`05-security.md`](../05-security.md), spike S6 ([`REPORT.md`](../../spike/s6-adopt/REPORT.md)).
+**Status:** Accepted (2026-11-19, by Kim). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0017 (CloudPanel import as migration), ADR-0025 (database import and export), ADR-0008 (backups with restic), ADR-0004 (web/agent privilege split), [`05-security.md`](../05-security.md), spike S6 ([`REPORT.md`](../../spike/s6-adopt/REPORT.md)).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -55,19 +55,6 @@ The job dumps before it drops to the site user: it listens on a Unix socket in a
 - Files land in `<home>/cloudpanel-import`; every further run, including the final sync, works on that directory and never on the live web root [V: `hostashi-import@.service` and the installer container test]. Activating the import (agent op `cloudpanel.import.activate`, `POST /api/v1/migrations/cloudpanel/sites/{name}/activate`) exchanges it with `htdocs` in one `renameat2(RENAME_EXCHANGE)`, so the site always has a web root, sets the web root's mode and keeps the previous one as `htdocs-before-import-<UTC time>`. It is refused while an import runs or when the directory is not the site user's or a symlink [V: `cpimport` tests, container test]. A run after activating copies into a new `cloudpanel-import` from scratch [A].
 - The writer refuses device files, FIFOs and sockets, never sets setuid or setgid bits, rewrites ownership to the site user, keeps symlinks as symlinks without following them, and opens every path with `openat2(RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS)` below the target directory [A: same rules as S4].
 - Paths are taken from the scan report only (home and document root), validated again on the new server, and must lie below `/home/<user>/` on the old side [V: the scanner blocks anything else].
-
-## Part 4: loading the dumps (Proposed, 2026-11-19)
-
-Views, triggers, stored routines and events in a dump name a `DEFINER` of the old server, for example `` DEFINER=`shop`@`localhost` ``. The hardened import of ADR-0025 runs as a temporary user that is dropped afterwards, and MariaDB lets a user create an object for another definer only with `SET USER` (or `SUPER`) [U]. Such dumps fail today [V: container test]. How many of the 22 databases on web2 have such objects is not known [U]; WordPress core creates none [A].
-
-| Option | Pro | Contra |
-|--------|-----|--------|
-| **A. An owner account per database; the agent strips `DEFINER` clauses while it streams the dump** | Objects get the owner as definer and keep working after the load. The owner has `ALL` on that one database only, a random password nobody keeps, and is locked (`ACCOUNT LOCK`) after each load, so nobody can log in as it; a lock stops logins, not objects that name the account as definer [U: to be shown by the container test]. No extra privilege for anyone | One more reserved account per imported database (`hostashi_own_<16 hex>`), dropped with the database. A dump parser in Go that only rewrites the `DEFINER=` part of `CREATE` statements and `/*!50013 ... */` / `/*!50017 ... */` comments |
-| B. Strip `DEFINER` and turn views and routines into `SQL SECURITY INVOKER` | No extra account | Triggers always run as their definer; with the temporary user gone they fail at the first insert [U] |
-| C. Give the temporary user `SET USER` | No rewrite | It could create objects that run as root; breaks layer 1 of ADR-0025 |
-| D. Leave it: such databases are loaded by hand as root | Nothing to build | A manual step per database, as root, with a dump from another server |
-
-**Recommendation: A.** Loading runs after the import job: the panel starts the existing `db.import` job for each dump with a flag `owner: true`, so ADR-0025's other layers (client as the site user, `--sandbox`, options from a pipe, files below the home) stay as they are [A]. A container test loads `olddb2` with its view and trigger and checks that the trigger fires after the load [A].
 
 ## Consequences
 
