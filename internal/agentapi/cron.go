@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/cron"
 )
 
@@ -104,4 +105,63 @@ func (r CronApplyRequest) Validate() error {
 	}
 
 	return nil
+}
+
+// Cron operations. cron.apply replaces a site's jobs; cron.run starts one
+// job now; cron.status reports the last and next runs.
+var (
+	CronApply  = agentrpc.Op[CronApplyRequest, CronApplied]{Name: "cron.apply"}
+	CronRun    = agentrpc.Op[CronRunRequest, CronRunResponse]{Name: "cron.run"}
+	CronStatus = agentrpc.Op[CronStatusRequest, CronSiteStatus]{Name: "cron.status"}
+)
+
+// CronApplied answers cron.apply.
+type CronApplied struct{}
+
+// CronRunRequest starts one job of a site now.
+type CronRunRequest struct {
+	Site string `json:"site"`
+	ID   int64  `json:"id"`
+}
+
+// Validate checks the site and the id.
+func (r CronRunRequest) Validate() error {
+	if r.ID < 1 {
+		return fmt.Errorf("cron: job id must be positive, not %d", r.ID)
+	}
+
+	return ValidateSiteUser(r.Site)
+}
+
+// CronRunResponse answers cron.run; the run itself goes on in systemd.
+type CronRunResponse struct{}
+
+// CronStatusRequest asks for the state of a site's jobs.
+type CronStatusRequest struct {
+	Site string `json:"site"`
+}
+
+// Validate checks the site.
+func (r CronStatusRequest) Validate() error { return ValidateSiteUser(r.Site) }
+
+// CronSiteStatus holds the jobs of a site as the agent last applied them.
+// Times are Unix seconds, 0 for none.
+type CronSiteStatus struct {
+	Site     string          `json:"site"`
+	Disabled bool            `json:"disabled,omitempty"`
+	Jobs     []CronJobStatus `json:"jobs"`
+}
+
+// CronJobStatus is the state of one job.
+type CronJobStatus struct {
+	ID      int64 `json:"id"`
+	Paused  bool  `json:"paused,omitempty"`
+	Running bool  `json:"running,omitempty"`
+	// Result is systemd's result of the last run ("success",
+	// "exit-code", "timeout", ...), empty before the first.
+	Result     string `json:"result,omitempty"`
+	ExitStatus *int   `json:"exit_status,omitempty"`
+	LastStart  int64  `json:"last_start,omitempty"`
+	LastEnd    int64  `json:"last_end,omitempty"`
+	Next       int64  `json:"next,omitempty"`
 }

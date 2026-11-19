@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package phpctl runs the distribution's PHP-FPM for package php: php-fpm -t
-// on a pool file, and the per-site units through systemd.
+// on a pool file, and the per-site units through systemd. It also drives the
+// units of the sites' cron jobs (cron.go, ADR-0028), which are per-site
+// units of the same kind.
 //
 // Like internal/webctl it is allowed to start processes (depguard rule in
 // .golangci.yml), with the same narrow exception: fixed binaries by absolute
