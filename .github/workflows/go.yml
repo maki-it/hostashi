@@ -113,7 +113,10 @@ jobs:
           echo "$state"
           grep -q 'quota on /mnt/quota .* is on (enforced)' <<<"$state"
       - name: Run as root against it
-        run: sudo env HOSTASHI_QUOTA_TEST_DIR=/mnt/quota "$RUNNER_TEMP/quota.test" -test.v -test.count=1
+        # /tmp: the test re-runs the binary as nobody, who cannot enter $RUNNER_TEMP.
+        run: |
+          install -m 0755 "$RUNNER_TEMP/quota.test" /tmp/quota.test
+          sudo env HOSTASHI_QUOTA_TEST_DIR=/mnt/quota /tmp/quota.test -test.v -test.count=1
 
   mariadb:
     needs: changes

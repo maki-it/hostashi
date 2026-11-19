@@ -4,9 +4,12 @@ package quota
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"syscall"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -128,14 +131,18 @@ func TestProjectQuota(t *testing.T) {
 		t.Errorf("usage %d bytes, %d inodes does not include the existing files", u.Bytes, u.Inodes)
 	}
 
-	// A new file inherits the project and the limit stops it.
-	err = os.WriteFile(filepath.Join(sub, "big.bin"), make([]byte, 2<<20), 0o644)
-	if err == nil {
-		t.Fatal("writing 2 MiB into a 1 MiB project succeeded")
+	// A new file inherits the project and the limit stops it. Root bypasses
+	// quota (CAP_SYS_RESOURCE), so an unprivileged child writes.
+	if err := os.Chmod(sub, 0o777); err != nil {
+		t.Fatal(err)
 	}
 
-	if !errors.Is(err, unix.EDQUOT) {
-		t.Errorf("write error %v, want EDQUOT", err)
+	switch code := writeAsNobody(t, filepath.Join(sub, "big.bin"), 2<<20); code {
+	case 0:
+		t.Fatal("writing 2 MiB into a 1 MiB project succeeded")
+	case exitEDQUOT:
+	default:
+		t.Errorf("unprivileged write exited %d, want %d (EDQUOT)", code, exitEDQUOT)
 	}
 
 	// The symlink's target was not touched.
@@ -170,4 +177,53 @@ func projectOf(path string) (uint32, error) {
 	}
 
 	return x.Projid, nil
+}
+
+const (
+	writeEnv   = "HOSTASHI_QUOTA_TEST_WRITE"
+	exitEDQUOT = 3
+	nobodyID   = 65534
+)
+
+// TestMain doubles as the unprivileged writer of TestProjectQuota.
+func TestMain(m *testing.M) {
+	if path := os.Getenv(writeEnv); path != "" {
+		size, _ := strconv.Atoi(os.Getenv(writeEnv + "_SIZE"))
+
+		err := os.WriteFile(path, make([]byte, size), 0o644)
+		switch {
+		case err == nil:
+			os.Exit(0)
+		case errors.Is(err, unix.EDQUOT):
+			os.Exit(exitEDQUOT)
+		default:
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+
+	os.Exit(m.Run())
+}
+
+// writeAsNobody runs this test binary as uid/gid 65534 to write size bytes
+// to path and returns its exit code.
+func writeAsNobody(t *testing.T, path string, size int) int {
+	t.Helper()
+
+	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^$")
+	cmd.Env = []string{writeEnv + "=" + path, writeEnv + "_SIZE=" + strconv.Itoa(size)}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: nobodyID, Gid: nobodyID}}
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	if err == nil {
+		return 0
+	}
+
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) {
+		t.Fatalf("run writer: %v", err)
+	}
+
+	return ee.ExitCode()
 }
