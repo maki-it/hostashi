@@ -930,10 +930,13 @@ func (f *fakeAgent) SnippetCheck(_ context.Context, req agentapi.SnippetCheckReq
 
 	site := snippet.Site{Home: "/home/" + req.User}
 	if req.PHP {
-		site.PHPSocket = "/run/hostashi-php/" + req.User + ".sock"
+		site.PHPSocket = "/run/hostashi-php/" + req.User + "/php-fpm.sock"
 	}
 
-	res := agentapi.SnippetCheckResponse{Server: []agentapi.SnippetProblem{}, Root: []agentapi.SnippetProblem{}}
+	res := agentapi.SnippetCheckResponse{
+		Server: []agentapi.SnippetProblem{}, Root: []agentapi.SnippetProblem{},
+		Home: site.Home, WebRoot: site.Home + "/htdocs", PHPSocket: site.PHPSocket,
+	}
 
 	for _, c := range []struct {
 		src  string

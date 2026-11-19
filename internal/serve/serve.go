@@ -181,6 +181,10 @@ func Handler(cfg Config, deps Deps) http.Handler {
 
 		if deps.CloudPanel != nil {
 			registerMigrations(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.CloudPanel, log)
+
+			if deps.Sites != nil {
+				registerSnippetDraft(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.CloudPanel, deps.Sites, log)
+			}
 		}
 
 		if deps.CloudPanelSource != nil && deps.Settings != nil {

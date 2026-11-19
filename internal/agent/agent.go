@@ -917,7 +917,10 @@ func (h *siteOps) snippetCheck(_ context.Context, _ agentrpc.Caller, req agentap
 		site.PHPSocket = h.php.Socket(req.User)
 	}
 
-	res := agentapi.SnippetCheckResponse{Server: []agentapi.SnippetProblem{}, Root: []agentapi.SnippetProblem{}}
+	res := agentapi.SnippetCheckResponse{
+		Server: []agentapi.SnippetProblem{}, Root: []agentapi.SnippetProblem{},
+		Home: home, WebRoot: home + "/" + sites.WebRootName, PHPSocket: site.PHPSocket,
+	}
 
 	for _, c := range []struct {
 		src  string

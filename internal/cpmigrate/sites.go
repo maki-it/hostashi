@@ -214,6 +214,24 @@ func (s *Service) Activate(ctx context.Context, actor int64, site string) (agent
 	return r, nil
 }
 
+// ReportSite returns the scanned site of a report by its name, for the
+// snippet draft (ADR-0029). Like StartImport it refuses blocked sites and a
+// user that appears twice in the report.
+func (s *Service) ReportSite(ctx context.Context, reportID, name string) (scan.Site, error) {
+	ps, site, err := s.planSite(ctx, reportID, name)
+	if err != nil {
+		return scan.Site{}, err
+	}
+
+	for _, r := range ps.Reasons {
+		if r.Code == "user_twice" {
+			return scan.Site{}, &PlanError{Err: ErrSkipped, Reasons: []plan.Reason{r}}
+		}
+	}
+
+	return site, nil
+}
+
 // planSite finds one site of a report by its name, with its plan.
 func (s *Service) planSite(ctx context.Context, reportID, name string) (plan.Site, scan.Site, error) {
 	rep, _, err := s.load(ctx, reportID)

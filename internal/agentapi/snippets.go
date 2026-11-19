@@ -39,10 +39,15 @@ type SnippetProblem struct {
 }
 
 // SnippetCheckResponse lists the problems per slot; both empty means the
-// snippets are accepted.
+// snippets are accepted. Home, WebRoot and PHPSocket are the paths the
+// check used, so the panel can show them and point imported snippets at
+// them (empty PHPSocket: no PHP).
 type SnippetCheckResponse struct {
-	Server []SnippetProblem `json:"server"`
-	Root   []SnippetProblem `json:"root"`
+	Server    []SnippetProblem `json:"server"`
+	Root      []SnippetProblem `json:"root"`
+	Home      string           `json:"home"`
+	WebRoot   string           `json:"webRoot"`
+	PHPSocket string           `json:"phpSocket,omitempty"`
 }
 
 // OK reports whether both snippets passed.
