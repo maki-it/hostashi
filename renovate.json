@@ -43,6 +43,14 @@
       "matchStrings": ["REUSE_VERSION: \"(?<currentValue>[^\"]+)\""],
       "datasourceTemplate": "pypi",
       "depNameTemplate": "reuse"
+    },
+    {
+      "description": "The go-licenses version in the Licenses workflow",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/licenses\\.yml$/"],
+      "matchStrings": ["GO_LICENSES_VERSION: \"(?<currentValue>[^\"]+)\""],
+      "datasourceTemplate": "go",
+      "depNameTemplate": "github.com/google/go-licenses/v2"
     }
   ]
 }
