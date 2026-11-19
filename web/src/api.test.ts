@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it, vi } from "vitest";
-import { ApiError, request } from "./api";
+import { ApiError, RawJSON, request } from "./api";
 import { mockFetch } from "./test-utils";
 
 describe("request", () => {
@@ -9,6 +9,15 @@ describe("request", () => {
     const calls = mockFetch({ "POST /api/v1/x": { body: { ok: true } } });
     await expect(request("POST", "/x", { a: 1 })).resolves.toEqual({ ok: true });
     expect(calls).toEqual([{ method: "POST", path: "/api/v1/x", body: { a: 1 } }]);
+  });
+
+  it("sends JSON text as it is", async () => {
+    const fn = vi.fn(async () => new Response("{}", { status: 201 }));
+    vi.stubGlobal("fetch", fn);
+    await request("POST", "/x", new RawJSON('{"format":"a"}'));
+    const init = (fn.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(init.body).toBe('{"format":"a"}');
+    expect(init.headers).toMatchObject({ "Content-Type": "application/json" });
   });
 
   it("returns undefined for 204", async () => {
