@@ -87,6 +87,16 @@ export const listImports = async (site: string) =>
 // web root is kept under the returned name.
 export const activateImport = (site: string) =>
   request<{ site: string; previous: string }>("POST", "/migrations/cloudpanel/sites/" + encodeURIComponent(site) + "/activate");
+// DumpLoad is the load of one copied dump into its database (ADR-0025).
+export type DumpLoad = {
+  database: string;
+  path: string;
+  job?: { id: string; state: "running" | "done" | "failed"; error?: string; started: string; finished?: string };
+  error?: string; // why the load could not start
+};
+const importPath = (id: string) => "/migrations/cloudpanel/imports/" + encodeURIComponent(id);
+export const listLoads = async (id: string) => (await request<{ loads: DumpLoad[] }>("GET", importPath(id) + "/loads")).loads;
+export const startLoads = async (id: string) => (await request<{ loads: DumpLoad[] }>("POST", importPath(id) + "/load")).loads;
 export const getImport = (id: string) => request<ImportJob>("GET", "/migrations/cloudpanel/imports/" + encodeURIComponent(id));
 
 export const getSource = () => request<SourceInfo>("GET", source);
@@ -164,6 +174,8 @@ export function migrationMessage(err: unknown): string {
         return "At most 20 reports are kept. Delete one first.";
       case "unsupported_media_type":
         return "The report must be a JSON file.";
+      case "not_done":
+        return "The import has not finished copying yet.";
       case "needs_review":
         return "Confirm that you checked this site first.";
       case "skipped":

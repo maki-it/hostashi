@@ -146,6 +146,29 @@ describe("Migrate", () => {
       [`GET ${base}/imports?site=shop`]: { body: { imports: [] } },
       [`POST ${base}/reports/r1/sites/shop/import`]: { status: 202, body: job("queued") },
       [`POST ${base}/sites/shop/activate`]: { body: { site: "shop", previous: "htdocs-before-import-20261119T100500Z" } },
+      [`GET ${base}/imports/imp1/loads`]: {
+        body: {
+          loads: [
+            {
+              database: "shop",
+              path: "cloudpanel-import-db/shop-20261119T100100Z.sql",
+              job: { id: "j1", state: "failed", error: "line 12: ERROR 1227", started: "2026-11-19T10:01:05Z" },
+            },
+          ],
+        },
+      },
+      [`POST ${base}/imports/imp1/load`]: {
+        status: 202,
+        body: {
+          loads: [
+            {
+              database: "shop",
+              path: "cloudpanel-import-db/shop-20261119T100100Z.sql",
+              job: { id: "j2", state: "done", started: "2026-11-19T10:02:00Z", finished: "2026-11-19T10:02:30Z" },
+            },
+          ],
+        },
+      },
       [`GET ${base}/imports/imp1`]: () => ({ body: job(polls++ === 0 ? "running" : "done") }),
     });
     render(<Migrate />);
@@ -196,6 +219,13 @@ describe("Migrate", () => {
     expect(await status.findByText(/^Copying/)).toBeInTheDocument();
     await waitFor(() => expect(status.getByText(/^Done/)).toBeInTheDocument(), { timeout: 5000 });
     expect(status.getByText("120 files, 3.0 MiB")).toBeInTheDocument();
+    const loads = within(status.getByRole("group", { name: "Database loads" }));
+    expect(await loads.findByText("Failed")).toBeInTheDocument();
+    expect(loads.getByText(/line 12: ERROR 1227/)).toBeInTheDocument();
+    await user.click(loads.getByRole("button", { name: "Load the dumps again" }));
+    expect(await loads.findByText(/^Loaded at/)).toBeInTheDocument();
+    expect(loads.queryByRole("button", { name: "Load the dumps again" })).not.toBeInTheDocument();
+    expect(calls).toContainEqual({ method: "POST", path: `${base}/imports/imp1/load`, body: undefined });
     expect(status.getByText("cloudpanel-import-db/shop-20261119T100100Z.sql")).toBeInTheDocument();
     expect(planCard.getByRole("button", { name: "Import shop again" })).toBeInTheDocument();
 
