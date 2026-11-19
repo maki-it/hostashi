@@ -5,6 +5,7 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -22,11 +23,13 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/backup"
 	"github.com/maki-it/hostashi/internal/certs"
+	"github.com/maki-it/hostashi/internal/cpimport"
 	"github.com/maki-it/hostashi/internal/cpsource"
 	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/pages"
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
+	"github.com/maki-it/hostashi/internal/resticctl"
 	"github.com/maki-it/hostashi/internal/sites"
 	"github.com/maki-it/hostashi/internal/sitestats"
 	"github.com/maki-it/hostashi/internal/sysuser"
@@ -78,6 +81,10 @@ type Config struct {
 	// CloudPanel keeps the migration source (ADR-0026). Run builds it below
 	// StateDir; without it cloudpanel.* answer failed_precondition.
 	CloudPanel *cpsource.Source
+	// CloudPanelImport starts the import jobs (ADR-0026). Run builds it
+	// below StateDir with CloudPanel; without it cloudpanel.import answers
+	// failed_precondition.
+	CloudPanelImport *cpimport.Agent
 
 	// Pages keeps the maintenance and parking pages (ADR-0027). Run builds
 	// it at PagesDir; without it page.* answer failed_precondition.
@@ -172,7 +179,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	}
 
 	registerBackup(s, cfg.Backup)
-	registerCloudPanel(s, cfg.CloudPanel)
+	registerCloudPanel(s, cfg.CloudPanel, cfg.CloudPanelImport)
 
 	return s
 }
@@ -781,8 +788,17 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.Pages = &pages.Store{Dir: PagesDir}
 	}
 
+	cpDir := filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "cloudpanel")
+
 	if cfg.CloudPanel == nil {
-		cfg.CloudPanel = &cpsource.Source{Dir: filepath.Join(cfg.StateDir, "cloudpanel")}
+		cfg.CloudPanel = &cpsource.Source{Dir: cpDir}
+	}
+
+	if cfg.CloudPanelImport == nil {
+		cfg.CloudPanelImport = &cpimport.Agent{
+			Dir: filepath.Join(cpDir, "imports"), StateDir: cmp.Or(cfg.StateDir, DefaultStateDir),
+			Source: cfg.CloudPanel, Units: resticctl.Units{},
+		}
 	}
 
 	if cfg.PHP != nil {

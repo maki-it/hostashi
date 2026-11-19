@@ -24,6 +24,10 @@ const (
 	// RestoreUnit is the template of one restore; the instance is the
 	// restore's id.
 	RestoreUnit = "hostashi-restore@"
+	// ImportUnit is the template of one CloudPanel import (ADR-0026); the
+	// instance is the import's id. It sits here because this package
+	// already starts the restore job the same way.
+	ImportUnit = "hostashi-import@"
 )
 
 // restoreIDRe is the only variable part of any argument list here.
@@ -34,7 +38,8 @@ func ValidRestoreID(id string) bool { return restoreIDRe.MatchString(id) }
 
 // Units starts the backup run and switches its timer. It belongs to this
 // package's exception because it only ever starts systemctl with fixed
-// argument lists; the one variable part, a restore id, is 16 hex digits.
+// argument lists; the one variable part, a restore or import id, is 16 hex
+// digits.
 type Units struct{}
 
 // StartRestore starts restore id in its own unit and returns at once.
@@ -44,6 +49,16 @@ func (Units) StartRestore(ctx context.Context, id string) error {
 	}
 
 	return systemctl(ctx, "start", "--no-block", RestoreUnit+id+".service")
+}
+
+// StartImport starts CloudPanel import id in its own unit and returns at
+// once. The id has the same form as a restore id.
+func (Units) StartImport(ctx context.Context, id string) error {
+	if !restoreIDRe.MatchString(id) {
+		return fmt.Errorf("%w: import id", ErrInvalid)
+	}
+
+	return systemctl(ctx, "start", "--no-block", ImportUnit+id+".service")
 }
 
 // StartRun starts a run now and returns at once; systemd ignores the

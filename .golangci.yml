@@ -52,7 +52,9 @@ linters:
         # per-site PHP units with fixed arguments (see its package comment).
         # internal/resticctl runs restic by absolute path with fixed
         # sub-commands and validated arguments; restic itself starts ssh and
-        # mariadb-dump (see its package comment, ADR-0008).
+        # mariadb-dump (see its package comment, ADR-0008). It also starts
+        # the restore and CloudPanel import jobs with systemctl start and a
+        # 16-hex-digit instance (ADR-0026).
         # internal/mariadbctl runs mariadb and mariadb-dump as the site user
         # with fixed arguments for import and export (ADR-0025).
         no-exec:

@@ -3,14 +3,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/maki-it/hostashi/internal/cloudpanel/scan"
+	"github.com/maki-it/hostashi/internal/cpimport"
+	"github.com/maki-it/hostashi/internal/cpsource"
 )
 
 // cloudpanelCmd runs "hostashi cloudpanel scan" (ADR-0017). It is meant to
@@ -94,4 +99,27 @@ func findingCodes(fs []scan.Finding) string {
 	slices.Sort(out)
 
 	return strings.Join(out, ", ")
+}
+
+// cloudpanelImportRun is hostashi cloudpanel import-run ID (ADR-0026).
+func cloudpanelImportRun(ctx context.Context, stateDir, id string, log *slog.Logger) error {
+	dir := filepath.Join(stateDir, "cloudpanel")
+
+	return cpimport.RunOnce(ctx, cpimport.RunConfig{
+		Dir: filepath.Join(dir, "imports"), StateDir: stateDir, Source: &cpsource.Source{Dir: dir}, Log: log,
+	}, id)
+}
+
+// printJSON prints the answer of an agent call, indented.
+func printJSON[T any](out io.Writer) func(T, error) error {
+	return func(v T, err error) error {
+		if err != nil {
+			return err
+		}
+
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+
+		return enc.Encode(v)
+	}
 }

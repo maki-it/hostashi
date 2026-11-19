@@ -456,6 +456,71 @@ for d in bk_db bk_restored; do
 done
 [ "$(api DELETE /api/v1/sites/bk)" = 204 ] || fail "delete site bk: $(x cat /tmp/api.out)"
 
+step "CloudPanel import over the locked SSH key (ADR-0026)"
+# The container stands in for the old server too: a CloudPanel-like site
+# user with a document root, read as root over a second sshd.
+x sh -c 'command -v sshd >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-server >/dev/null'
+x useradd -m -s /bin/sh oldsite
+x install -d -o oldsite -g oldsite /home/oldsite/htdocs /home/oldsite/htdocs/example.com /home/oldsite/htdocs/example.com/wp-content
+xi runuser -u oldsite -- sh -c 'cat >/home/oldsite/htdocs/example.com/index.php' <<<"<?php echo 'old';"
+xi runuser -u oldsite -- sh -c 'cat >/home/oldsite/htdocs/example.com/wp-content/a.txt' <<<"upload"
+x runuser -u oldsite -- sh -c 'chmod 4755 /home/oldsite/htdocs/example.com/wp-content/a.txt'
+x runuser -u oldsite -- ln -s /etc/shadow /home/oldsite/htdocs/example.com/shadow-link
+x sh -c 'echo secret >/home/oldsite/htdocs/example.com/root-file'
+[ "$(api POST /api/v1/sites '{"name":"cpimp","domains":["cpimp.example.com"]}')" = 201 ] || fail "create site cpimp: $(x cat /tmp/api.out)"
+if xi /usr/local/bin/hostashi cloudpanel import cpimp oldsite /home/oldsite/htdocs/example.com </dev/null >/dev/null 2>&1; then
+  fail "import started without a migration source"
+fi
+[ "$(api PUT /api/v1/migrations/cloudpanel/source '{"host":"127.0.0.1","port":2298}')" = 200 ] || fail "set source: $(x cat /tmp/api.out)"
+line=$(x sed -n 's/.*"authorizedKeysLine":"\(\([^"\\]\|\\.\)*\)".*/\1/p' /tmp/api.out | sed 's/\\"/"/g')
+case "$line" in restrict,port-forwarding,*'command="/usr/lib/openssh/sftp-server -R" ssh-ed25519 '*) ;; *) fail "authorized_keys line: $line" ;; esac
+# What the administrator does on the old server: one line for root.
+x install -d -m 0700 /root/.ssh
+xi sh -c 'cat >>/root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys' <<<"$line"
+x sh -c 'mkdir -p /run/sshd && /usr/sbin/sshd -p 2298 -o ListenAddress=127.0.0.1'
+code=""
+for _ in $(seq 1 20); do code=$(api POST /api/v1/migrations/cloudpanel/source/hostkey/scan) && [ "$code" = 200 ] && break; sleep 1; done
+[ "$code" = 200 ] || fail "source host key scan: $code $(x cat /tmp/api.out)"
+hk=$(x sed -n 's/.*"key":"\([^"]*\)".*/\1/p' /tmp/api.out)
+[ "$(api PUT /api/v1/migrations/cloudpanel/source/hostkey "{\"key\":\"$hk\"}")" = 200 ] || fail "confirm source host key: $(x cat /tmp/api.out)"
+x grep -q '"ready":true' /tmp/api.out || fail "source not ready: $(x cat /tmp/api.out)"
+expect_mode /var/lib/hostashi-agent/cloudpanel/id_ed25519 "600 root:root"
+cp_import() {
+  local id
+  id=$(x /usr/local/bin/hostashi cloudpanel import cpimp oldsite /home/oldsite/htdocs/example.com | sed -n 's/.*"id": "\([0-9a-f]\{16\}\)".*/\1/p')
+  [ -n "$id" ] || fail "import did not start"
+  for _ in $(seq 1 90); do
+    x /usr/local/bin/hostashi cloudpanel import-status "$id" >/tmp/cp.$$ 2>&1 || true
+    grep -q '"state": "\(done\|failed\)"' /tmp/cp.$$ && break
+    sleep 1
+  done
+  grep -q '"state": "done"' /tmp/cp.$$ || fail "import: $(cat /tmp/cp.$$; x journalctl -u "hostashi-import@$id.service" --no-pager | tail -20)"
+  cat /tmp/cp.$$
+  rm -f /tmp/cp.$$
+}
+out=$(cp_import)
+grep -q '"files": 2' <<<"$out" || fail "first import: $out"
+grep -q 'root-file: not owned by the site user' <<<"$out" || fail "root-owned file not skipped: $out"
+dst=/home/cpimp/cloudpanel-import
+[ "$(x cat "$dst/index.php")" = "<?php echo 'old';" ] || fail "imported file content"
+expect_mode "$dst/wp-content/a.txt" "755 cpimp:cpimp"
+expect_mode "$dst" "700 cpimp:cpimp"
+[ "$(x readlink "$dst/shadow-link")" = /etc/shadow ] || fail "symlink not kept as a link"
+x test ! -e "$dst/root-file" || fail "root-owned file copied"
+# The final sync: a changed file is copied again, a removed one goes.
+xi runuser -u oldsite -- sh -c 'cat >/home/oldsite/htdocs/example.com/index.php' <<<"<?php echo 'new!';"
+x rm /home/oldsite/htdocs/example.com/wp-content/a.txt
+out=$(cp_import)
+grep -q '"files": 1' <<<"$out" && grep -q '"deleted": 1' <<<"$out" || fail "final sync: $out"
+[ "$(x cat "$dst/index.php")" = "<?php echo 'new!';" ] || fail "synced file content"
+# The old server was only read.
+x test ! -e /home/oldsite/htdocs/example.com/cloudpanel-import || fail "wrote on the old side"
+x systemd-analyze security "hostashi-import@0000000000000000.service" | tail -1
+[ "$(api DELETE /api/v1/migrations/cloudpanel/source)" = 200 ] || fail "delete source: $(x cat /tmp/api.out)"
+x test ! -e /var/lib/hostashi-agent/cloudpanel/id_ed25519 || fail "import key not removed"
+x pkill -f 'sshd -p 2298' || true
+[ "$(api DELETE /api/v1/sites/cpimp)" = 204 ] || fail "delete site cpimp: $(x cat /tmp/api.out)"
+
 if [ -z "${PEBBLE_DIR:-}" ]; then
   echo "PEBBLE_DIR not set, skipping the certificate test"
 else

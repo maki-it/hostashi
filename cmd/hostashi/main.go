@@ -67,6 +67,12 @@ commands:
             read a CloudPanel server (root on the old server, or a read-only
             copy of its disk) and show which sites can be imported; changes
             nothing, hides snippets and cron commands unless -full is given
+  cloudpanel import SITE REMOTE_USER DOCROOT | cloudpanel import-status ID
+            copy the files of DOCROOT (below /home/REMOTE_USER/ on the old
+            server) into SITE's home as cloudpanel-import, through the agent
+            (root on the server); run it again for the final sync
+  cloudpanel import-run ID
+            one import (root; started by hostashi-import@ID.service)
   setup-token  print the one-time token for the first login (read as the serve user or root)
   version   print the version
 `
@@ -185,7 +191,31 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 			}
 		}
 	case "cloudpanel":
-		return cloudpanelCmd(args, stdout, stderr)
+		if len(args) > 0 && args[0] == "scan" {
+			return cloudpanelCmd(args, stdout, stderr)
+		}
+
+		stateDir := fs.String("state-dir", agent.DefaultStateDir, "the agent's state directory")
+		if fs.Parse(args) != nil {
+			return 2
+		}
+
+		a := fs.Args()
+
+		switch {
+		case len(a) == 2 && a[0] == "import-run":
+			err = cloudpanelImportRun(ctx, *stateDir, a[1], log)
+		case len(a) == 4 && a[0] == "import":
+			err = printJSON[agentapi.CloudPanelImport](stdout)(agentapi.CloudPanelImportStart.Call(ctx, agentrpc.NewClient(*socket),
+				agentapi.CloudPanelImportRequest{Site: a[1], RemoteUser: a[2], DocRoot: a[3]}))
+		case len(a) == 2 && a[0] == "import-status":
+			err = printJSON[agentapi.CloudPanelImport](stdout)(agentapi.CloudPanelImportGet.Call(ctx, agentrpc.NewClient(*socket),
+				agentapi.CloudPanelImportGetRequest{ID: a[1]}))
+		default:
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
 	case "setup-token":
 		dbPath := fs.String("db", store.DefaultPath, "SQLite database path")
 		if fs.Parse(args) != nil || fs.NArg() != 0 {
