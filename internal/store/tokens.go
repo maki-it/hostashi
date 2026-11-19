@@ -178,6 +178,35 @@ func (s *Store) ListAPITokens(ctx context.Context, userID int64) ([]APIToken, er
 	return out, nil
 }
 
+// ActiveAPITokens returns the tokens of all users that are neither revoked
+// nor expired at now.
+func (s *Store) ActiveAPITokens(ctx context.Context, now time.Time) ([]APIToken, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+apiColumns+` FROM api_tokens WHERE revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?) ORDER BY id`, now.Unix())
+	if err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = rows.Close() }()
+
+	out := []APIToken{}
+
+	for rows.Next() {
+		t, err := scanToken(rows)
+		if err != nil {
+			return nil, fmt.Errorf("store: %w", err)
+		}
+
+		out = append(out, t)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+
+	return out, nil
+}
+
 // RevokeAPIToken revokes a token of this user. Revoking twice or another
 // user's token returns ErrNotFound, so ids of other users cannot be probed.
 func (s *Store) RevokeAPIToken(ctx context.Context, userID, id int64, now time.Time) (APIToken, error) {

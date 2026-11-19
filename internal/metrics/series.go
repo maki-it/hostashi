@@ -140,3 +140,43 @@ func (c *certCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(certDesc, prometheus.GaugeValue, float64(ct.NotAfter.Unix()), ct.Site, ct.Cert)
 	}
 }
+
+var tokenExpiryDesc = prometheus.NewDesc(
+	"hostashi_metrics_token_expiry_timestamp_seconds",
+	"Earliest end of an active API token with the scope metrics:read, as Unix time. Absent when no such token expires.",
+	nil, nil,
+)
+
+// RegisterTokenExpiry reads the earliest end of a monitoring token on every
+// gather, so the scraper can alert before its own token runs out
+// (ADR-0022). A failure leaves the series out of that scrape and is logged.
+func (m *Metrics) RegisterTokenExpiry(earliest func(ctx context.Context) (time.Time, bool, error), log *slog.Logger) {
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+
+	m.reg.MustRegister(&tokenExpiryCollector{earliest: earliest, log: log})
+}
+
+type tokenExpiryCollector struct {
+	earliest func(ctx context.Context) (time.Time, bool, error)
+	log      *slog.Logger
+}
+
+func (c *tokenExpiryCollector) Describe(ch chan<- *prometheus.Desc) { ch <- tokenExpiryDesc }
+
+func (c *tokenExpiryCollector) Collect(ch chan<- prometheus.Metric) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	end, ok, err := c.earliest(ctx)
+	if err != nil {
+		c.log.ErrorContext(ctx, "metrics: token expiry", "err", err)
+
+		return
+	}
+
+	if ok {
+		ch <- prometheus.MustNewConstMetric(tokenExpiryDesc, prometheus.GaugeValue, float64(end.Unix()))
+	}
+}

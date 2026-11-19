@@ -309,6 +309,7 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
 	m.RegisterSites(siteStats(client), cfg.Log)
+	m.RegisterTokenExpiry(svc.MetricsTokenExpiry, cfg.Log)
 
 	if iss, err := newIssuer(cfg, st, box); err != nil {
 		return err

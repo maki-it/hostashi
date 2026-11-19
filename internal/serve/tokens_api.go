@@ -108,6 +108,9 @@ type tokenJSON struct {
 	LastUsedAt  *time.Time `json:"lastUsedAt"`
 	LastUsedIP  string     `json:"lastUsedIp,omitempty"`
 	RevokedAt   *time.Time `json:"revokedAt,omitempty"`
+	// Warnings are codes such as "expires_soon" for a monitoring token
+	// that ends within 30 days (ADR-0022).
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 func toTokenJSON(t store.APIToken) tokenJSON {
@@ -162,6 +165,10 @@ func registerTokens(mux *http.ServeMux, a authn) {
 			out.Warnings = append(out.Warnings, "never_expires: this token stays valid until it is revoked")
 		}
 
+		if len(a.svc.TokenWarnings(nt.Token)) > 0 {
+			out.Warnings = append(out.Warnings, auth.WarnExpiresSoon+": a scrape with this token stops working within 30 days")
+		}
+
 		for _, s := range nt.Token.Scopes {
 			for _, info := range auth.Scopes() {
 				if info.Name == s && info.HighRisk {
@@ -188,7 +195,9 @@ func registerTokens(mux *http.ServeMux, a authn) {
 
 		out := make([]tokenJSON, 0, len(ts))
 		for _, t := range ts {
-			out = append(out, toTokenJSON(t))
+			j := toTokenJSON(t)
+			j.Warnings = a.svc.TokenWarnings(t)
+			out = append(out, j)
 		}
 
 		writeJSON(w, http.StatusOK, map[string][]tokenJSON{"tokens": out})

@@ -64,3 +64,28 @@ func TestCertFailureKeepsTheRest(t *testing.T) {
 		t.Fatal(string(body))
 	}
 }
+
+func TestTokenExpirySeries(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		fn   func(context.Context) (time.Time, bool, error)
+		want string
+		has  bool
+	}{
+		{"set", func(context.Context) (time.Time, bool, error) { return time.Unix(1800000000, 0), true, nil }, "hostashi_metrics_token_expiry_timestamp_seconds 1.8e+09", true},
+		{"none", func(context.Context) (time.Time, bool, error) { return time.Time{}, false, nil }, "hostashi_metrics_token_expiry", false},
+		{"error", func(context.Context) (time.Time, bool, error) { return time.Time{}, false, errors.New("locked") }, "hostashi_metrics_token_expiry", false},
+	} {
+		m := New()
+		m.RegisterTokenExpiry(c.fn, nil)
+
+		body, err := m.Exposition()
+		if err != nil {
+			t.Fatal(c.name, err)
+		}
+
+		if strings.Contains(string(body), c.want) != c.has {
+			t.Errorf("%s:\n%s", c.name, body)
+		}
+	}
+}
