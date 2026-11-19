@@ -309,8 +309,9 @@ x systemctl start hostashi-backup.service || fail "backup run failed: $(x cat /v
 x grep -q '"ok": true' /var/lib/hostashi-agent/backup/status.json || fail "status: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 x grep -q '"initialized": true' /var/lib/hostashi-agent/backup/status.json || fail "first run did not create the repository"
 x /usr/local/bin/hostashi backup status | grep -q '"ok": true' || fail "backup status through the agent"
-[ "$(api GET /api/v1/sites/bk/backups)" = 200 ] && x grep -q '"kind":"db","database":"bk_db"' /tmp/api.out ||
+if [ "$(api GET /api/v1/sites/bk/backups)" != 200 ] || ! x grep -q '"kind":"db","database":"bk_db"' /tmp/api.out; then
   fail "site snapshots through the API: $(x cat /tmp/api.out)"
+fi
 # grep reads the whole listing: an early exit would end restic with SIGPIPE.
 r ls latest --tag kind:panel | grep '^/var/lib/hostashi/backup/panel.db$' >/dev/null || fail "panel database copy not in the backup"
 [ "$(r snapshots --tag site:bk,kind:files --json | grep -o '"short_id"' | wc -l)" = 1 ] || fail "no files snapshot of bk"
