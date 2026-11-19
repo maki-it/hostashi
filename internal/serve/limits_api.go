@@ -1,0 +1,309 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+package serve
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+
+	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/store"
+)
+
+// limitsJSON are resource limits (ADR-0015). 0 means unlimited, except for
+// phpWorkers; "unlimited" names every limit that is 0, so a client can mark
+// it visibly.
+type limitsJSON struct {
+	DiskBytes       int64    `json:"diskBytes"`
+	DiskInodes      int64    `json:"diskInodes"`
+	MemoryBytes     int64    `json:"memoryBytes"`
+	PHPWorkers      int64    `json:"phpWorkers"`
+	Tasks           int64    `json:"tasks"`
+	CPUPriority     string   `json:"cpuPriority"`     // low, normal, high
+	CPUQuotaPercent int64    `json:"cpuQuotaPercent"` // 0: no hard CPU limit
+	Unlimited       []string `json:"unlimited,omitempty"`
+}
+
+func toLimitsJSON(l store.Limits) limitsJSON {
+	out := limitsJSON{
+		DiskBytes: l.DiskBytes, DiskInodes: l.DiskInodes, MemoryBytes: l.MemoryBytes, PHPWorkers: l.PHPWorkers,
+		Tasks: l.Tasks, CPUPriority: l.CPUPriority, CPUQuotaPercent: l.CPUQuotaPercent, Unlimited: []string{},
+	}
+
+	for _, u := range []struct {
+		name string
+		v    int64
+	}{{"diskBytes", l.DiskBytes}, {"diskInodes", l.DiskInodes}, {"memoryBytes", l.MemoryBytes}, {"tasks", l.Tasks}} {
+		if u.v == 0 {
+			out.Unlimited = append(out.Unlimited, u.name)
+		}
+	}
+
+	return out
+}
+
+func (l limitsJSON) limits() store.Limits {
+	return store.Limits{
+		DiskBytes: l.DiskBytes, DiskInodes: l.DiskInodes, MemoryBytes: l.MemoryBytes, PHPWorkers: l.PHPWorkers,
+		Tasks: l.Tasks, CPUPriority: l.CPUPriority, CPUQuotaPercent: l.CPUQuotaPercent,
+	}
+}
+
+type presetJSON struct {
+	Name      string     `json:"name"`
+	Default   bool       `json:"default"`
+	Limits    limitsJSON `json:"limits"`
+	CreatedAt int64      `json:"createdAt"`
+	UpdatedAt int64      `json:"updatedAt"`
+}
+
+func toPresetJSON(p store.LimitPreset) presetJSON {
+	return presetJSON{Name: p.Name, Default: p.Default, Limits: toLimitsJSON(p.Limits), CreatedAt: p.CreatedAt.Unix(), UpdatedAt: p.UpdatedAt.Unix()}
+}
+
+type presetInputJSON struct {
+	Name    string     `json:"name"`
+	Default bool       `json:"default"`
+	Limits  limitsJSON `json:"limits"`
+}
+
+// Warning levels of the disk use (ADR-0015): from 80 and 95 percent of a
+// limit.
+const (
+	usageWarnPercent     = 80
+	usageCriticalPercent = 95
+)
+
+type usageJSON struct {
+	// Enforced is false when the file system has no project quota: the
+	// disk limits are then not enforced and the numbers are zero.
+	Enforced      bool   `json:"enforced"`
+	Bytes         uint64 `json:"bytes"`
+	Inodes        uint64 `json:"inodes"`
+	BytesPercent  int    `json:"bytesPercent"`  // of the limit; 0 without one
+	InodesPercent int    `json:"inodesPercent"` // of the limit; 0 without one
+	Level         string `json:"level"`         // ok, warning, critical
+}
+
+func percent(used, limit uint64) int {
+	if limit == 0 {
+		return 0
+	}
+
+	return int(min(used*100/limit, 999))
+}
+
+func toUsageJSON(q agentapi.SiteQuota) usageJSON {
+	u := usageJSON{
+		Enforced: q.Available, Bytes: q.Bytes, Inodes: q.Inodes,
+		BytesPercent: percent(q.Bytes, q.BytesLimit), InodesPercent: percent(q.Inodes, q.InodesLimit), Level: "ok",
+	}
+
+	switch top := max(u.BytesPercent, u.InodesPercent); {
+	case top >= usageCriticalPercent:
+		u.Level = "critical"
+	case top >= usageWarnPercent:
+		u.Level = "warning"
+	}
+
+	return u
+}
+
+type siteLimitsJSON struct {
+	// Set is false for a site created before limits existed: it has none.
+	Set        bool       `json:"set"`
+	Preset     string     `json:"preset"` // "": custom values
+	Limits     limitsJSON `json:"limits"`
+	AppliedAt  int64      `json:"appliedAt"`  // 0: not applied
+	ApplyError string     `json:"applyError"` // why the last apply failed
+	UpdatedAt  int64      `json:"updatedAt"`
+	Usage      *usageJSON `json:"usage,omitempty"`
+}
+
+func toSiteLimitsJSON(v hosting.SiteLimitsView) siteLimitsJSON {
+	out := siteLimitsJSON{Set: v.Set, Preset: v.Preset, ApplyError: v.ApplyError}
+	if !v.Set {
+		return out
+	}
+
+	out.Limits = toLimitsJSON(v.Limits)
+	out.UpdatedAt = v.UpdatedAt.Unix()
+
+	if !v.AppliedAt.IsZero() {
+		out.AppliedAt = v.AppliedAt.Unix()
+	}
+
+	return out
+}
+
+// siteLimitsInputJSON names a preset or gives custom values, not both.
+type siteLimitsInputJSON struct {
+	Preset string      `json:"preset"`
+	Custom *limitsJSON `json:"custom"`
+}
+
+func limitsFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
+	switch {
+	case errors.Is(err, hosting.ErrNoLimits):
+		writeError(w, http.StatusServiceUnavailable, "limits_unavailable", "resource limits are not available on this panel")
+	case errors.Is(err, hosting.ErrPresetNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "no such limit preset")
+	case errors.Is(err, hosting.ErrPresetExists):
+		writeError(w, http.StatusConflict, "preset_exists", "a limit preset with this name exists")
+	case errors.Is(err, hosting.ErrPresetDefault):
+		writeError(w, http.StatusConflict, "preset_is_default", "make another preset the default first")
+	default:
+		siteFail(log, w, err, what)
+	}
+}
+
+// registerLimits adds the limit presets and the limits of a site
+// (ADR-0015). Only administrators manage them.
+func registerLimits(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.Logger) {
+	admin := func(scope string, h func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
+		return a.scoped(scope, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+			if p.User.Role != "admin" {
+				writeError(w, http.StatusForbidden, "forbidden", "only administrators can manage resource limits")
+
+				return
+			}
+
+			h(w, r, p)
+		})
+	}
+
+	mux.HandleFunc("GET /api/v1/limit-presets", admin("limits:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		ps, err := svc.LimitPresets(r.Context())
+		if err != nil {
+			limitsFail(log, w, err, "list limit presets")
+
+			return
+		}
+
+		out := make([]presetJSON, 0, len(ps))
+		for _, p := range ps {
+			out = append(out, toPresetJSON(p))
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{"presets": out})
+	}))
+
+	mux.HandleFunc("GET /api/v1/limit-presets/{name}", admin("limits:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		p, err := svc.LimitPreset(r.Context(), r.PathValue("name"))
+		if err != nil {
+			limitsFail(log, w, err, "get limit preset")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toPresetJSON(p))
+	}))
+
+	mux.HandleFunc("POST /api/v1/limit-presets", admin("limits:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in presetInputJSON
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		out, err := svc.CreateLimitPreset(r.Context(), p.User.ID, in.Name, in.Limits.limits(), in.Default)
+		if err != nil {
+			limitsFail(log, w, err, "create limit preset")
+
+			return
+		}
+
+		writeJSON(w, http.StatusCreated, toPresetJSON(out))
+	}))
+
+	// PUT replaces name, values and default flag; the sites that follow the
+	// preset get the new values. "default": false keeps a default preset
+	// the default: another preset takes the flag over.
+	mux.HandleFunc("PUT /api/v1/limit-presets/{name}", admin("limits:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in presetInputJSON
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		out, err := svc.UpdateLimitPreset(ctx, p.User.ID, r.PathValue("name"), in.Name, in.Limits.limits(), in.Default)
+		if err != nil {
+			limitsFail(log, w, err, "change limit preset")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toPresetJSON(out))
+	}))
+
+	mux.HandleFunc("DELETE /api/v1/limit-presets/{name}", admin("limits:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		if err := svc.DeleteLimitPreset(r.Context(), p.User.ID, r.PathValue("name")); err != nil {
+			limitsFail(log, w, err, "delete limit preset")
+
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	// The limits with the disk use as the server reports it. Without an
+	// answer of the agent the limits come without usage.
+	mux.HandleFunc("GET /api/v1/sites/{name}/limits", admin("limits:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		site := r.PathValue("name")
+
+		v, err := svc.SiteLimits(r.Context(), site)
+		if err != nil {
+			limitsFail(log, w, err, "get site limits")
+
+			return
+		}
+
+		out := toSiteLimitsJSON(v)
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		if q, err := svc.SiteUsage(ctx, site); err == nil {
+			u := toUsageJSON(q)
+			out.Usage = &u
+		} else if !errors.Is(err, hosting.ErrNoLimits) {
+			log.WarnContext(r.Context(), "site usage", "site", site, "err", err)
+		}
+
+		writeJSON(w, http.StatusOK, out)
+	}))
+
+	// PUT gives the site a preset or custom values. When the agent fails,
+	// the values stay as the site's desired state with the error recorded;
+	// the answer is the error and the same PUT retries.
+	mux.HandleFunc("PUT /api/v1/sites/{name}/limits", admin("limits:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in siteLimitsInputJSON
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		var custom *store.Limits
+
+		if in.Custom != nil {
+			l := in.Custom.limits()
+			custom = &l
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		v, err := svc.SetSiteLimits(ctx, p.User.ID, r.PathValue("name"), in.Preset, custom)
+		if err != nil {
+			limitsFail(log, w, err, "set site limits")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toSiteLimitsJSON(v))
+	}))
+}

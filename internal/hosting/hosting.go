@@ -114,7 +114,8 @@ type Service struct {
 
 	issuer Issuer
 	kick   chan struct{}
-	cron   CronAgent // nil: no cron jobs
+	cron   CronAgent   // nil: no cron jobs
+	limits LimitsAgent // nil: no resource limits (ADR-0015)
 
 	panelDomain string // ADR-0023; empty: nginx serves no panel address
 	panelServed string // panel domain of the last accepted web state; under mu
@@ -283,6 +284,8 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 	if err != nil {
 		return store.Site{}, err
 	}
+
+	s.applyDefaultLimits(ctx, site)
 
 	return site, nil
 }

@@ -26,6 +26,8 @@ var scopeCatalog = map[string]ScopeInfo{
 	"sites.snippets:write":    {Description: "Change the custom nginx snippets of sites (checked against an allowlist)", HighRisk: true},
 	"cron:read":               {Description: "List the cron jobs of sites with their last and next runs"},
 	"cron:write":              {Description: "Create, change, pause, run and delete cron jobs (they run commands as the site user)", HighRisk: true},
+	"limits:read":             {Description: "Read the limit presets and the resource limits and disk use of sites"},
+	"limits:write":            {Description: "Change the limit presets and the resource limits of sites"},
 	"pages:read":              {Description: "List maintenance and parking pages and their files"},
 	"pages:write":             {Description: "Upload, replace and delete maintenance and parking pages"},
 	"databases:read":          {Description: "List databases and their users"},
