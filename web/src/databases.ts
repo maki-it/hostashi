@@ -73,3 +73,35 @@ export function databaseMessage(err: unknown): string {
   if (err instanceof TypeError) return "The server is not reachable.";
   return "Something went wrong. Try again.";
 }
+
+// DumpJob is an import or export running in the agent (ADR-0025).
+export type DumpJob = {
+  id: string;
+  kind: "import" | "export";
+  database: string;
+  path: string;
+  state: "running" | "done" | "failed";
+  error?: string;
+};
+
+export const startDump = (db: string, kind: "import" | "export", path: string) =>
+  request<DumpJob>("POST", "/databases/" + encodeURIComponent(db) + "/" + kind, { path });
+
+export const getDumpJob = (db: string, id: string) =>
+  request<DumpJob>("GET", "/databases/" + encodeURIComponent(db) + "/jobs/" + encodeURIComponent(id));
+
+// pathProblem mirrors agentapi.ValidateDumpPath: a path relative to the
+// site home, ending in .sql or .sql.gz, without hidden or option-like parts.
+const dumpComponentRe = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
+
+export function pathProblem(p: string): string {
+  if (p === "" || p.length > 255) return "Enter a path of 1 to 255 characters.";
+  if (!p.endsWith(".sql") && !p.endsWith(".sql.gz")) return "The file must end in .sql or .sql.gz.";
+  for (const c of p.split("/")) {
+    if (!dumpComponentRe.test(c)) return "Use a path inside the site's home, like backups/shop.sql.gz, without parts that start with a dot or dash.";
+  }
+  return "";
+}
+
+// defaultDumpPath suggests a new export file name with the date.
+export const defaultDumpPath = (db: string, now = new Date()) => db + "-" + now.toISOString().slice(0, 10) + ".sql.gz";

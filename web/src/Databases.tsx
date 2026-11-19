@@ -7,14 +7,20 @@ import {
   createUser,
   databaseMessage,
   deleteDatabase,
+  defaultDumpPath,
   deleteUser,
+  getDumpJob,
   listDatabases,
   nameProblem,
+  pathProblem,
   resetPassword,
+  startDump,
   suggestUser,
   type Credentials,
   type Database,
+  type DumpJob,
 } from "./databases";
+import { poll } from "./backups";
 
 // Databases is the database page: create a database for a site, manage its
 // users and passwords, and delete it. A generated password is shown once.
@@ -282,6 +288,7 @@ function DatabaseRow({
         </ul>
       )}
       <AddUser db={db.name} onSecret={onSecret} onChange={onChange} />
+      <DumpForm db={db.name} site={db.site} />
       {confirming && (
         <form
           onSubmit={(e) => {
@@ -432,6 +439,97 @@ function AddUser({ db, onSecret, onChange }: { db: string; onSecret: (c: Credent
         </button>
         <button type="button" className="secondary" disabled={busy} onClick={() => setOpen(false)}>
           Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// DumpForm imports a dump file from the site's home into the database or
+// exports the database into a new file there (ADR-0025).
+function DumpForm({ db, site }: { db: string; site: string }) {
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<"export" | "import">("export");
+  const [path, setPath] = useState(() => defaultDumpPath(db));
+  const [job, setJob] = useState<DumpJob | null>(null);
+  const [error, setError] = useState("");
+
+  const running = job?.state === "running";
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    const problem = pathProblem(path);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setError("");
+    setJob(null);
+    try {
+      const started = await startDump(db, kind, path);
+      setJob(started);
+      setJob(await poll(() => getDumpJob(db, started.id), (j) => j.state !== "running"));
+    } catch (err) {
+      setJob(null);
+      setError(databaseMessage(err));
+    }
+  }
+
+  if (!open) {
+    return (
+      <button type="button" className="secondary" onClick={() => setOpen(true)}>
+        Import or export
+      </button>
+    );
+  }
+
+  return (
+    <form onSubmit={(e) => void submit(e)} noValidate>
+      <fieldset>
+        <legend>Import or export {db}</legend>
+        <label className="check">
+          <input type="radio" name={"dump-" + db} checked={kind === "export"} onChange={() => setKind("export")} />
+          Export into a new file
+        </label>
+        <label className="check">
+          <input type="radio" name={"dump-" + db} checked={kind === "import"} onChange={() => setKind("import")} />
+          Import a file
+        </label>
+        <label>
+          File in the home of site {site}
+          <small>
+            {kind === "export"
+              ? "Relative to the home, ending in .sql or .sql.gz. An existing file is never replaced."
+              : "Relative to the home, ending in .sql or .sql.gz. Upload it first, for example over SFTP."}
+          </small>
+          <input value={path} onChange={(e) => setPath(e.target.value.trim())} autoComplete="off" spellCheck={false} />
+        </label>
+        {kind === "import" && (
+          <p className="muted">The statements in the file run in {db}. Import into an empty database: a failed import is not rolled back.</p>
+        )}
+      </fieldset>
+      {running && <p aria-busy="true">{job.kind === "import" ? "Importing…" : "Exporting…"}</p>}
+      {job?.state === "done" && (
+        <p role="status">
+          {job.kind === "import" ? (
+            <>
+              Imported <code>{job.path}</code> into {db}.
+            </>
+          ) : (
+            <>
+              Exported {db} into <code>{job.path}</code>.
+            </>
+          )}
+        </p>
+      )}
+      {job?.state === "failed" && <p role="alert">{(job.kind === "import" ? "Import" : "Export") + " failed: " + (job.error ?? "unknown error")}</p>}
+      {error && <p role="alert">{error}</p>}
+      <div className="actions">
+        <button type="submit" disabled={running}>
+          {kind === "import" ? "Start import" : "Start export"}
+        </button>
+        <button type="button" className="secondary" disabled={running} onClick={() => setOpen(false)}>
+          Close
         </button>
       </div>
     </form>
