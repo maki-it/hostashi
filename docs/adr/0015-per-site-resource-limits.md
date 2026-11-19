@@ -122,6 +122,15 @@ Strongest disk isolation, size is fixed by the volume. Contra: resizing is awkwa
 - Roadmap and feature matrix change if accepted: disk quota and resource limits move up in `03-features.md` and `06-roadmap.md`, a spike is added.
 - Follow-ups if accepted: update ADR-0007 text (per-site FPM master), `03-features.md` (priority and phase), `04-architecture.md` 4.4 (quota mechanism), `05-security.md` (new agent operations in the operation list), and the installer and first-run setup to detect, enable and report quota support (`hostashi doctor`).
 
+## Panel and API (2026-11-19)
+
+- Presets live in the panel database (`limit_presets`), seeded with small (default), medium and large. A site keeps its own copy of the values (`site_limits`) and the preset it follows; a change of a preset is applied to those sites, deleting a preset turns its values into custom ones. The default preset cannot be deleted and must limit disk space, files, memory and processes.
+- 0 means unlimited in every limit except the PHP workers; the API lists such limits under `unlimited` so a client marks them.
+- A new site gets the default preset. Existing sites from before this change have no limits until an admin sets them.
+- The values are the site's desired state. When the agent fails, the error is recorded on the site and the same change retries. A file system without project quota does not fail the change; the disk use then reports `enforced: false`.
+- Disk use comes with a level: `warning` from 80 %, `critical` from 95 % of a limit.
+- Endpoints: `/api/v1/limit-presets[/{name}]` and `/api/v1/sites/{name}/limits`, scopes `limits:read` and `limits:write`, administrators only.
+
 ## Spike S8 (proposed): resource limits on the target server
 
 Time box: 2 to 4 days [E]. Answers, each with a measurement or a test:
