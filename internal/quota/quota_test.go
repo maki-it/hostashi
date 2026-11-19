@@ -1,0 +1,173 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+package quota
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"strconv"
+	"testing"
+
+	"golang.org/x/sys/unix"
+)
+
+func TestQcmd(t *testing.T) {
+	// Values from linux/quota.h: QCMD(Q_GETQUOTA, PRJQUOTA) and so on.
+	cases := map[int]int{qGetInfo: 0x80000502, qGetQuota: 0x80000702, qSetQuota: 0x80000802}
+	for cmd, want := range cases {
+		if got := qcmd(cmd, prjQuota); got != want {
+			t.Errorf("qcmd(%#x) = %#x, want %#x", cmd, got, want)
+		}
+	}
+}
+
+func TestRefusals(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := Assign(dir, 0, false); err == nil {
+		t.Error("Assign accepted project id 0")
+	}
+
+	if err := SetLimits(dir, 0, 1, 1); err == nil {
+		t.Error("SetLimits accepted project id 0")
+	}
+
+	for _, p := range []string{"", "relative/dir"} {
+		if err := Assign(p, 1000, false); err == nil {
+			t.Errorf("Assign accepted path %q", p)
+		}
+
+		if _, err := Get(p, 1000); err == nil {
+			t.Errorf("Get accepted path %q", p)
+		}
+	}
+
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(dir, link); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Assign(link, 1000, false); err == nil {
+		t.Error("Assign followed a symlink as the root")
+	}
+}
+
+// TestNoQuota runs on any file system: without project quota the functions
+// report ErrUnavailable (or Available false) instead of failing obscurely.
+func TestNoQuota(t *testing.T) {
+	if os.Getenv("HOSTASHI_QUOTA_TEST_DIR") != "" {
+		t.Skip("running on a file system with project quota")
+	}
+
+	dir := t.TempDir()
+
+	ok, err := Available(dir)
+	if err != nil {
+		t.Logf("Available: %v (not root or no quotactl_fd)", err)
+	} else if ok {
+		t.Skip("the temp dir has project quota on")
+	}
+
+	if _, err := Get(dir, 1000); err == nil {
+		t.Error("Get succeeded without project quota")
+	}
+}
+
+// TestProjectQuota needs root and a directory on an ext4 (or XFS) file system
+// mounted with prjquota and enforcement on, named by HOSTASHI_QUOTA_TEST_DIR.
+// CI creates one on a loop device (go.yml, job quota).
+func TestProjectQuota(t *testing.T) {
+	base := os.Getenv("HOSTASHI_QUOTA_TEST_DIR")
+	if base == "" {
+		t.Skip("HOSTASHI_QUOTA_TEST_DIR not set")
+	}
+
+	ok, err := Available(base)
+	if err != nil || !ok {
+		t.Fatalf("Available(%s) = %v, %v; want true", base, ok, err)
+	}
+
+	id := uint32(40000 + os.Getpid()%10000)
+	home := filepath.Join(base, "site"+strconv.Itoa(int(id)))
+	sub := filepath.Join(home, "htdocs", "wp-content")
+
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+
+	// Existing content before the assignment, plus things the walk must skip.
+	if err := os.WriteFile(filepath.Join(sub, "old.txt"), make([]byte, 64<<10), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Symlink("/etc/passwd", filepath.Join(sub, "link")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Assign(home, id, false); err != nil {
+		t.Fatalf("Assign: %v", err)
+	}
+
+	if err := SetLimits(home, id, 1<<20, 100); err != nil {
+		t.Fatalf("SetLimits: %v", err)
+	}
+
+	u, err := Get(home, id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+
+	if u.BytesLimit != 1<<20 || u.InodesLimit != 100 {
+		t.Errorf("limits = %d bytes, %d inodes; want %d, 100", u.BytesLimit, u.InodesLimit, 1<<20)
+	}
+
+	if u.Bytes < 64<<10 || u.Inodes < 4 {
+		t.Errorf("usage %d bytes, %d inodes does not include the existing files", u.Bytes, u.Inodes)
+	}
+
+	// A new file inherits the project and the limit stops it.
+	err = os.WriteFile(filepath.Join(sub, "big.bin"), make([]byte, 2<<20), 0o644)
+	if err == nil {
+		t.Fatal("writing 2 MiB into a 1 MiB project succeeded")
+	}
+
+	if !errors.Is(err, unix.EDQUOT) {
+		t.Errorf("write error %v, want EDQUOT", err)
+	}
+
+	// The symlink's target was not touched.
+	if p, err := projectOf("/etc/passwd"); err == nil && p == id {
+		t.Errorf("the walk followed a symlink to /etc/passwd")
+	}
+
+	// Unlimited again, and a second Assign is a no-op.
+	if err := SetLimits(home, id, 0, 0); err != nil {
+		t.Fatalf("SetLimits(0, 0): %v", err)
+	}
+
+	if u, err := Get(home, id); err != nil || u.BytesLimit != 0 || u.InodesLimit != 0 {
+		t.Errorf("after unlimit: %+v, %v", u, err)
+	}
+
+	if err := Assign(home, id, false); err != nil {
+		t.Errorf("second Assign: %v", err)
+	}
+}
+
+func projectOf(path string) (uint32, error) {
+	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	if err != nil {
+		return 0, err
+	}
+	defer unix.Close(fd) // read-only fd, nothing to flush
+
+	var x fsxattr
+	if err := ioctlFsxattr(fd, fsIOCFSGetXattr, &x); err != nil {
+		return 0, err
+	}
+
+	return x.Projid, nil
+}

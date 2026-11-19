@@ -96,6 +96,10 @@ type Config struct {
 	// CgroupRoot is where cgroup v2 is mounted; empty means
 	// sitestats.DefaultCgroupRoot.
 	CgroupRoot string
+
+	// Quota sets and reads the sites' disk limits (ADR-0015). Nil: the
+	// running kernel (KernelQuota).
+	Quota QuotaFS
 }
 
 // DefaultPanelPort is the panel's HTTPS port (ADR-0023).
@@ -163,7 +167,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, log: log}
+		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, quota: cfg.Quota, log: log}
 		h.register(s)
 
 		disk, root := cfg.Disk, cfg.CgroupRoot
@@ -194,6 +198,7 @@ type siteOps struct {
 	certs *certs.Store
 	db    *mariadb.Manager
 	pages *pages.Store
+	quota QuotaFS
 	log   *slog.Logger
 	mu    sync.Mutex
 }
@@ -215,6 +220,8 @@ func (h *siteOps) register(s *agentrpc.Server) {
 	agentrpc.Handle(s, agentapi.SiteDelete, func(ctx context.Context, _ agentrpc.Caller, req agentapi.SiteDeleteRequest) (agentapi.SiteDeleteResponse, error) {
 		h.mu.Lock()
 		defer h.mu.Unlock()
+
+		site, home, siteErr := h.site(req.User)
 
 		if h.web != nil {
 			cur, _, err := h.web.Current()
@@ -252,6 +259,10 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			return agentapi.SiteDeleteResponse{}, mapSiteError(err)
 		}
 
+		if siteErr == nil {
+			h.clearQuota(ctx, poolOf(home), site.UID)
+		}
+
 		if h.certs != nil {
 			if err := h.certs.Remove(req.User); err != nil {
 				h.log.ErrorContext(ctx, "remove certificate of deleted site", "site", req.User, "err", err)
@@ -278,6 +289,8 @@ func (h *siteOps) register(s *agentrpc.Server) {
 	agentrpc.Handle(s, agentapi.WebApply, h.webApply)
 
 	h.registerPages(s)
+
+	h.registerQuota(s)
 
 	h.registerDB(s)
 
