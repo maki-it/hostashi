@@ -15,6 +15,7 @@
 package pages
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -226,6 +227,12 @@ func (s *Store) Commit(id, digest string) error {
 		return ErrDigest
 	}
 
+	// nginx answers any URL of a site in maintenance with index.html, so its
+	// relative links must not depend on that URL.
+	if err := os.WriteFile(filepath.Join(up, agentapi.PageIndex), WithBase(files[agentapi.PageIndex], agentapi.PagePathPrefix+id+"/"), 0o600); err != nil {
+		return fmt.Errorf("pages: %w", err)
+	}
+
 	// The agent may run with a strict umask; nginx workers must read.
 	if err := chmodTree(up); err != nil {
 		return err
@@ -406,4 +413,51 @@ func chmodTree(dir string) error {
 
 		return nil
 	})
+}
+
+// WithBase inserts <base href="href"> at the start of the document head, so
+// relative links of a page resolve below its own path wherever nginx shows
+// it. The tag goes right after <head ...>, after the doctype when there is
+// no head tag, or at the start (a document without either is in quirks mode
+// anyway). href comes from validated ids only.
+func WithBase(doc []byte, href string) []byte {
+	tag := []byte(`<base href="` + href + `">`)
+	at := 0
+
+	lower := bytes.ToLower(doc)
+	if i := headTag(lower); i >= 0 {
+		at = i
+	} else if bytes.HasPrefix(bytes.TrimLeft(lower, " \t\r\n\ufeff"), []byte("<!doctype")) {
+		if end := bytes.IndexByte(lower, '>'); end >= 0 {
+			at = end + 1
+		}
+	}
+
+	out := make([]byte, 0, len(doc)+len(tag))
+	out = append(out, doc[:at]...)
+	out = append(out, tag...)
+
+	return append(out, doc[at:]...)
+}
+
+// headTag returns the index after the ">" of the first <head> start tag,
+// or -1.
+func headTag(lower []byte) int {
+	for off := 0; ; {
+		i := bytes.Index(lower[off:], []byte("<head"))
+		if i < 0 {
+			return -1
+		}
+
+		i += off + len("<head")
+		if i < len(lower) && (lower[i] == '>' || lower[i] == ' ' || lower[i] == '\t' || lower[i] == '\n' || lower[i] == '\r' || lower[i] == '/') {
+			if end := bytes.IndexByte(lower[i:], '>'); end >= 0 {
+				return i + end + 1
+			}
+
+			return -1
+		}
+
+		off = i // "<header" and the like
+	}
 }

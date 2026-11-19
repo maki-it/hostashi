@@ -55,6 +55,10 @@ func TestUploadCommitAndServeLayout(t *testing.T) {
 	for name, want := range files {
 		p := filepath.Join(s.Path("main", d), name)
 
+		if name == "index.html" {
+			want = []byte(`<base href="/.hostashi/page/main/"><h1>back soon</h1>`)
+		}
+
 		got, err := os.ReadFile(p)
 		if err != nil || string(got) != string(want) {
 			t.Fatalf("%s: %v", name, err)
@@ -213,3 +217,21 @@ func TestPruneAndDelete(t *testing.T) {
 }
 
 func testTime(i int) time.Time { return time.Unix(1_700_000_000+int64(i)*60, 0) }
+
+func TestWithBase(t *testing.T) {
+	const tag = `<base href="/.hostashi/page/p1/">`
+
+	for in, want := range map[string]string{
+		"<!doctype html><html><head><title>x</title>": "<!doctype html><html><head>" + tag + "<title>x</title>",
+		"<!DOCTYPE html>\n<HEAD lang=en>\n<title>":    "<!DOCTYPE html>\n<HEAD lang=en>" + tag + "\n<title>",
+		"<!doctype html><header>x</header>":           "<!doctype html>" + tag + "<header>x</header>",
+		"<header>x</header><head>":                    "<header>x</header><head>" + tag,
+		"<h1>x</h1>":                                  tag + "<h1>x</h1>",
+		"":                                            tag,
+		"<head":                                       tag + "<head",
+	} {
+		if got := string(WithBase([]byte(in), "/.hostashi/page/p1/")); got != want {
+			t.Errorf("%q:\n got %q\nwant %q", in, got, want)
+		}
+	}
+}
