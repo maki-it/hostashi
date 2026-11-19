@@ -23,6 +23,8 @@ var scopeCatalog = map[string]ScopeInfo{
 	"sites:write":             {Description: "Create and change sites"},
 	"sites:delete":            {Description: "Delete sites and their files", HighRisk: true},
 	"sites.maintenance:write": {Description: "Switch the maintenance mode of sites and park domains"},
+	"cron:read":               {Description: "List the cron jobs of sites with their last and next runs"},
+	"cron:write":              {Description: "Create, change, pause, run and delete cron jobs (they run commands as the site user)", HighRisk: true},
 	"pages:read":              {Description: "List maintenance and parking pages and their files"},
 	"pages:write":             {Description: "Upload, replace and delete maintenance and parking pages"},
 	"databases:read":          {Description: "List databases and their users"},

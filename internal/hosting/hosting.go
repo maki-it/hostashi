@@ -112,6 +112,7 @@ type Service struct {
 
 	issuer Issuer
 	kick   chan struct{}
+	cron   CronAgent // nil: no cron jobs
 
 	panelDomain string // ADR-0023; empty: nginx serves no panel address
 	panelServed string // panel domain of the last accepted web state; under mu
