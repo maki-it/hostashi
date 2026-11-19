@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"os"
 	"strings"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -120,6 +121,10 @@ func (h *siteOps) pagesInUse() (map[string]bool, error) {
 func usedPages(d web.Desired) map[string]bool {
 	out := map[string]bool{}
 
+	for _, p := range d.Parked {
+		out[p.Page+"."+p.Digest] = true
+	}
+
 	for _, s := range d.Sites {
 		if m := s.Maintenance; m != nil {
 			out[m.Page+"."+m.Digest] = true
@@ -171,4 +176,63 @@ func mapPageError(err error) error {
 	}
 
 	return err
+}
+
+// parkedFor builds the web state of a parked domain; its page version must
+// be stored, and with TLS its certificate must be valid for the domain.
+func (h *siteOps) parkedFor(p agentapi.WebParked) (web.Parked, error) {
+	m, err := h.maintenanceFor(&agentapi.WebMaintenance{Page: p.Page, Digest: p.Digest})
+	if err != nil {
+		return web.Parked{}, err
+	}
+
+	out := web.Parked{Name: p.Name, Domain: p.Domain, Page: m.Page, Digest: m.Digest, Dir: m.Dir}
+	if !p.TLS {
+		return out, nil
+	}
+
+	if h.certs == nil || len(h.web.Driver.ListenTLS) == 0 {
+		return web.Parked{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "HTTPS is not available on this server"}
+	}
+
+	ok, err := h.certs.Covers(p.Name, []string{p.Domain})
+	if err != nil {
+		return web.Parked{}, err
+	}
+
+	if !ok {
+		return web.Parked{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "parked domain " + p.Domain + " has no valid certificate"}
+	}
+
+	out.Cert, out.Key = h.certs.CertPath(p.Name), h.certs.KeyPath(p.Name)
+
+	return out, nil
+}
+
+// pruneParkCerts removes the keys and certificates of parked domains that
+// the live configuration no longer has. Failures are only logged.
+func (h *siteOps) pruneParkCerts(ctx context.Context, d web.Desired) {
+	if h.certs == nil {
+		return
+	}
+
+	entries, err := os.ReadDir(h.certs.Dir)
+	if err != nil {
+		return
+	}
+
+	live := map[string]bool{}
+	for _, p := range d.Parked {
+		live[p.Name] = true
+	}
+
+	for _, e := range entries {
+		if agentapi.ValidateParkName(e.Name()) != nil || live[e.Name()] {
+			continue
+		}
+
+		if err := h.certs.Remove(e.Name()); err != nil {
+			h.log.ErrorContext(ctx, "remove certificate of a parked domain", "name", e.Name(), "err", err)
+		}
+	}
 }

@@ -53,6 +53,20 @@ type Desired struct {
 	Sites []Site `json:"sites"`
 	// Panel is the panel's own address (ADR-0023); nil serves none.
 	Panel *Panel `json:"panel,omitempty"`
+	// Parked are domains without a site that show a page (ADR-0027).
+	Parked []Parked `json:"parked,omitempty"`
+}
+
+// Parked is a parked domain: its page with status 200 on every path. Name
+// is agentapi.ParkName of it and also its config and certificate name.
+type Parked struct {
+	Name   string `json:"name"`
+	Domain string `json:"domain"`
+	Page   string `json:"page"`
+	Digest string `json:"digest"`
+	Dir    string `json:"dir"`
+	Cert   string `json:"cert,omitempty"`
+	Key    string `json:"key,omitempty"`
 }
 
 // Panel is served on the driver's panel port and proxied to its upstream.
@@ -95,6 +109,20 @@ func (d Desired) Validate() error {
 
 		if (s.Cert == "") != (s.Key == "") {
 			return fmt.Errorf("site %q: certificate and key go together", s.User)
+		}
+	}
+
+	for _, p := range d.Parked {
+		req.Parked = append(req.Parked, agentapi.WebParked{Name: p.Name, Domain: p.Domain, Page: p.Page, Digest: p.Digest})
+
+		for name, f := range map[string]string{"page directory": p.Dir, "certificate": p.Cert, "key": p.Key} {
+			if (f != "" || name == "page directory") && (!rootRe.MatchString(f) || path.Clean(f) != f) {
+				return fmt.Errorf("parked %s: invalid %s path %q", p.Domain, name, f)
+			}
+		}
+
+		if (p.Cert == "") != (p.Key == "") {
+			return fmt.Errorf("parked %s: certificate and key go together", p.Domain)
 		}
 	}
 

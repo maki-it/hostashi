@@ -343,6 +343,15 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		d.Sites = append(d.Sites, site)
 	}
 
+	for _, p := range req.Parked {
+		parked, err := h.parkedFor(p)
+		if err != nil {
+			return agentapi.WebApplyResponse{}, err
+		}
+
+		d.Parked = append(d.Parked, parked)
+	}
+
 	if req.Panel != nil {
 		panel, err := h.panelFor(*req.Panel)
 		if err != nil {
@@ -380,6 +389,8 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			h.log.ErrorContext(ctx, "prune old page versions", "err", err)
 		}
 	}
+
+	h.pruneParkCerts(ctx, d)
 
 	return agentapi.WebApplyResponse{Generation: res.Generation, Changed: res.Changed}, nil
 }
@@ -435,9 +446,10 @@ func (h *siteOps) panelFor(p agentapi.WebPanel) (*web.Panel, error) {
 	return panel, nil
 }
 
-// knownCertName accepts the panel's certificate or a registered site.
+// knownCertName accepts the panel's certificate, a parked domain's or a
+// registered site.
 func (h *siteOps) knownCertName(name string) bool {
-	if name == agentapi.PanelCert {
+	if name == agentapi.PanelCert || agentapi.ValidateParkName(name) == nil {
 		return true
 	}
 

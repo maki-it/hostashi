@@ -482,7 +482,12 @@ func (s *Service) applyWeb(ctx context.Context) error {
 	req := agentapi.WebApplyRequest{Sites: []agentapi.WebSite{}}
 	live := []string{}
 
-	onAgent, err := s.agentPages(ctx, sites)
+	parked, err := s.st.ParkedDomains(ctx)
+	if err != nil {
+		return err
+	}
+
+	onAgent, err := s.agentPages(ctx, sites, len(parked))
 	if err != nil {
 		return err
 	}
@@ -513,6 +518,24 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		}
 	}
 
+	liveParked := []int64{}
+
+	for _, p := range parked {
+		id := ParkedPageID(p)
+
+		digest, err := s.pageOnAgent(ctx, id, p.Page, onAgent)
+		if err != nil {
+			return err
+		}
+
+		tls := p.TLS && s.parkCovers(p, 0)
+		if tls {
+			liveParked = append(liveParked, p.ID)
+		}
+
+		req.Parked = append(req.Parked, agentapi.WebParked{Name: agentapi.ParkName(p.ID), Domain: p.Domain, Page: id, Digest: digest, TLS: tls})
+	}
+
 	if req.Panel, err = s.panelWeb(ctx); err != nil {
 		return err
 	}
@@ -532,6 +555,10 @@ func (s *Service) applyWeb(ctx context.Context) error {
 	// record it leaves the API one change behind, nothing more.
 	if err := s.st.SetTLSLive(context.WithoutCancel(ctx), live); err != nil {
 		s.log.ErrorContext(ctx, "record https state", "err", err)
+	}
+
+	if err := s.st.SetParkedTLSLive(context.WithoutCancel(ctx), liveParked); err != nil {
+		s.log.ErrorContext(ctx, "record https state of parked domains", "err", err)
 	}
 
 	if res.Changed {

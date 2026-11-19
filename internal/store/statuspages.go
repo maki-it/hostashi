@@ -24,6 +24,7 @@ type StatusPage struct {
 	Digest    string
 	Files     []StatusPageFile // sorted by path
 	Sites     []string         // sites that name the page, sorted
+	Parked    []string         // parked domains that show the page, sorted
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -126,7 +127,7 @@ func (s *Store) DeleteStatusPage(ctx context.Context, id int64) error {
 	defer func() { _ = tx.Rollback() }()
 
 	var n int
-	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM sites WHERE maintenance_page = ?`, id).Scan(&n); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM sites WHERE maintenance_page = ?) + (SELECT count(*) FROM parked_domains WHERE page = ?)`, id, id).Scan(&n); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 
@@ -237,29 +238,39 @@ func (s *Store) pageDetails(ctx context.Context, p *StatusPage) error {
 
 	_ = rows.Close()
 
-	rows, err = s.db.QueryContext(ctx, `SELECT name FROM sites WHERE maintenance_page = ? ORDER BY name`, p.ID)
+	if p.Sites, err = s.names(ctx, `SELECT name FROM sites WHERE maintenance_page = ? ORDER BY name`, p.ID); err != nil {
+		return err
+	}
+
+	p.Parked, err = s.names(ctx, `SELECT domain FROM parked_domains WHERE page = ? ORDER BY domain`, p.ID)
+
+	return err
+}
+
+func (s *Store) names(ctx context.Context, query string, args ...any) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("store: %w", err)
+		return nil, fmt.Errorf("store: %w", err)
 	}
 
 	defer rows.Close()
 
-	p.Sites = []string{}
+	out := []string{}
 
 	for rows.Next() {
 		var n string
 		if err := rows.Scan(&n); err != nil {
-			return fmt.Errorf("store: %w", err)
+			return nil, fmt.Errorf("store: %w", err)
 		}
 
-		p.Sites = append(p.Sites, n)
+		out = append(out, n)
 	}
 
 	if err := rows.Err(); err != nil {
-		return fmt.Errorf("store: %w", err)
+		return nil, fmt.Errorf("store: %w", err)
 	}
 
-	return nil
+	return out, nil
 }
 
 // StatusPageFiles returns the files of a page with their contents.
