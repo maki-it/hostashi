@@ -224,7 +224,7 @@ func (s *Service) createUser(ctx context.Context, actor int64, database, user, p
 
 	if err := s.ag.DBUserCreate(ctx, database, user, pw); err != nil {
 		if derr := s.st.DeleteDatabaseUser(context.WithoutCancel(ctx), user); derr != nil {
-			s.log.Error("remove database user row after failed create", "user", user, "err", derr)
+			s.log.ErrorContext(ctx, "remove database user row after failed create", "user", user, "err", derr)
 		}
 
 		return err
@@ -313,7 +313,7 @@ func (s *Service) deleteSiteDatabases(ctx context.Context, actor int64, site str
 
 func (s *Service) forgetDatabase(ctx context.Context, name string) {
 	if err := s.st.DeleteDatabase(context.WithoutCancel(ctx), name); err != nil {
-		s.log.Error("remove database row after failed create", "database", name, "err", err)
+		s.log.ErrorContext(ctx, "remove database row after failed create", "database", name, "err", err)
 	}
 }
 

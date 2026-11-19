@@ -451,7 +451,7 @@ func (r *Repo) exec(ctx context.Context, out io.Writer, args ...string) ([]byte,
 	}
 
 	if r.Log != nil && stderr.Len() > 0 {
-		r.Log.Info("restic", "command", args[0], "stderr", strings.TrimSpace(stderr.String()))
+		r.Log.InfoContext(ctx, "restic", "command", args[0], "stderr", strings.TrimSpace(stderr.String()))
 	}
 
 	if err == nil {

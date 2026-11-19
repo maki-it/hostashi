@@ -264,7 +264,7 @@ func (r *Runner) Run(ctx context.Context, items []Item) Status {
 	r.maintain(ctx, &st, now)
 
 	if snaps, err := r.Repo.Snapshots(ctx, nil); err != nil {
-		log.Error("list snapshots", "err", err)
+		log.ErrorContext(ctx, "list snapshots", "err", err)
 	} else {
 		st.Snapshots = entries(snaps)
 	}
@@ -328,7 +328,7 @@ func (r *Runner) item(ctx context.Context, it Item, lstat func(string) (os.FileI
 
 	if err != nil {
 		res.Error = err.Error()
-		log.Error("backup item failed", "kind", it.Kind, "site", it.Site, "database", it.Database, "err", err)
+		log.ErrorContext(ctx, "backup item failed", "kind", it.Kind, "site", it.Site, "database", it.Database, "err", err)
 
 		return res
 	}

@@ -16,6 +16,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/maki-it/hostashi/internal/reqid"
 )
 
 // Caller identifies the peer, as reported by the kernel (SO_PEERCRED).
@@ -189,7 +191,7 @@ func (s *Server) Serve(ctx context.Context) error {
 		case s.sem <- struct{}{}:
 		default:
 			// Too many open connections: drop instead of queueing (finding 5).
-			s.log.Warn("connection limit reached")
+			s.log.WarnContext(ctx, "connection limit reached")
 
 			_ = conn.Close()
 
@@ -239,13 +241,13 @@ func (s *Server) serveConn(ctx context.Context, conn *net.UnixConn) {
 
 	caller, err := PeerCred(conn)
 	if err != nil {
-		s.log.Error("peercred failed", "err", err)
+		s.log.ErrorContext(ctx, "peercred failed", "err", err)
 		return
 	}
 
 	if !s.auth(caller) {
 		// Deliberately no reply: no protocol oracle for unauthorized peers.
-		s.log.Warn("peer rejected", "uid", caller.UID, "gid", caller.GID, "pid", caller.PID)
+		s.log.WarnContext(ctx, "peer rejected", "uid", caller.UID, "gid", caller.GID, "pid", caller.PID)
 		return
 	}
 
@@ -259,7 +261,7 @@ func (s *Server) serveConn(ctx context.Context, conn *net.UnixConn) {
 		body, err := readFrame(conn)
 		if err != nil {
 			if !errors.Is(err, io.EOF) && ctx.Err() == nil {
-				s.log.Warn("read failed", "uid", caller.UID, "err", err)
+				s.log.WarnContext(ctx, "read failed", "uid", caller.UID, "err", err)
 			}
 
 			return
@@ -273,7 +275,7 @@ func (s *Server) serveConn(ctx context.Context, conn *net.UnixConn) {
 		_ = conn.SetWriteDeadline(time.Now().Add(s.requestTimeout))
 		if err := writeFrame(conn, out); err != nil {
 			if errors.Is(err, ErrFrameTooLarge) {
-				s.log.Error("response too large", "uid", caller.UID)
+				s.log.ErrorContext(ctx, "response too large", "uid", caller.UID)
 			}
 
 			return
@@ -291,15 +293,23 @@ func (s *Server) dispatch(ctx context.Context, c Caller, body []byte) (resp resp
 		return failure(&Error{CodeBadRequest, "request is not a single valid request object"})
 	}
 
+	if req.RequestID != "" {
+		if !reqid.Valid(req.RequestID) {
+			return failure(&Error{CodeBadRequest, "request_id must be 32 lowercase hex characters"})
+		}
+
+		ctx = reqid.With(ctx, req.RequestID)
+	}
+
 	h, ok := s.ops[req.Op]
 	if !ok {
-		s.log.Warn("unknown operation", "uid", c.UID, "op", req.Op)
+		s.log.WarnContext(ctx, "unknown operation", "uid", c.UID, "op", req.Op)
 		return failure(&Error{CodeUnknownOperation, "unknown operation"})
 	}
 
 	defer func() {
 		if r := recover(); r != nil {
-			s.log.Error("handler panic", "op", req.Op, "panic", r)
+			s.log.ErrorContext(ctx, "handler panic", "op", req.Op, "panic", r)
 
 			resp = failure(&Error{CodeInternal, "internal error"})
 		}
@@ -312,22 +322,22 @@ func (s *Server) dispatch(ctx context.Context, c Caller, body []byte) (resp resp
 	if err != nil {
 		var e *Error
 		if errors.As(err, &e) {
-			s.log.Info("call failed", "uid", c.UID, "op", req.Op, "code", e.Code)
+			s.log.InfoContext(ctx, "call failed", "uid", c.UID, "op", req.Op, "code", e.Code)
 			return failure(e)
 		}
 		// Never send internal error text to the caller.
-		s.log.Error("call failed", "uid", c.UID, "op", req.Op, "err", err)
+		s.log.ErrorContext(ctx, "call failed", "uid", c.UID, "op", req.Op, "err", err)
 
 		return failure(&Error{CodeInternal, "internal error"})
 	}
 
 	raw, err := json.Marshal(out)
 	if err != nil {
-		s.log.Error("encode failed", "op", req.Op, "err", err)
+		s.log.ErrorContext(ctx, "encode failed", "op", req.Op, "err", err)
 		return failure(&Error{CodeInternal, "internal error"})
 	}
 
-	s.log.Info("call ok", "uid", c.UID, "op", req.Op)
+	s.log.InfoContext(ctx, "call ok", "uid", c.UID, "op", req.Op)
 
 	return response{OK: true, Result: raw}
 }

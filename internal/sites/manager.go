@@ -131,7 +131,7 @@ func (m *Manager) Create(ctx context.Context, user, pool string) (Site, error) {
 
 	if err := m.reg.add(site); err != nil {
 		if rerr := removeHome(pfd, user, acct.UID, m.homeGID(acct.GID)); rerr != nil {
-			m.opt.Log.Error("rollback: remove home failed", "user", user, "err", rerr)
+			m.opt.Log.ErrorContext(ctx, "rollback: remove home failed", "user", user, "err", rerr)
 		}
 
 		m.rollbackAccount(undo, user)
@@ -139,14 +139,14 @@ func (m *Manager) Create(ctx context.Context, user, pool string) (Site, error) {
 		return Site{}, err
 	}
 
-	m.opt.Log.Info("site created", "user", user, "pool", pool, "uid", acct.UID)
+	m.opt.Log.InfoContext(ctx, "site created", "user", user, "pool", pool, "uid", acct.UID)
 
 	return site, nil
 }
 
 func (m *Manager) rollbackAccount(ctx context.Context, user string) {
 	if err := m.acc.Delete(ctx, user); err != nil {
-		m.opt.Log.Error("rollback: remove account failed", "user", user, "err", err)
+		m.opt.Log.ErrorContext(ctx, "rollback: remove account failed", "user", user, "err", err)
 	}
 }
 
@@ -206,7 +206,7 @@ func (m *Manager) Delete(ctx context.Context, user string) error {
 		return err
 	}
 
-	m.opt.Log.Info("site deleted", "user", user, "pool", site.Pool)
+	m.opt.Log.InfoContext(ctx, "site deleted", "user", user, "pool", site.Pool)
 
 	return nil
 }

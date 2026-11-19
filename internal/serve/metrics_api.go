@@ -69,7 +69,7 @@ func registerMetrics(mux *http.ServeMux, a authn, m *metrics.Metrics, st Setting
 	mux.HandleFunc("GET "+MetricsPath, func(w http.ResponseWriter, r *http.Request) {
 		on, err := metricsEnabled(r.Context(), st)
 		if err != nil {
-			log.Error("read metrics setting", "err", err)
+			log.ErrorContext(r.Context(), "read metrics setting", "err", err)
 			writeError(w, http.StatusInternalServerError, "internal", "internal error")
 
 			return
@@ -125,7 +125,7 @@ func registerMetrics(mux *http.ServeMux, a authn, m *metrics.Metrics, st Setting
 
 		on, err := metricsEnabled(r.Context(), st)
 		if err != nil {
-			log.Error("read metrics setting", "err", err)
+			log.ErrorContext(r.Context(), "read metrics setting", "err", err)
 			writeError(w, http.StatusInternalServerError, "internal", "internal error")
 
 			return
@@ -155,7 +155,7 @@ func registerMetrics(mux *http.ServeMux, a authn, m *metrics.Metrics, st Setting
 
 		on := *in.Enabled
 		if err := st.SetSetting(r.Context(), metricsEnabledKey, strconv.FormatBool(on)); err != nil {
-			log.Error("store metrics setting", "err", err)
+			log.ErrorContext(r.Context(), "store metrics setting", "err", err)
 			writeError(w, http.StatusInternalServerError, "internal", "internal error")
 
 			return
@@ -204,7 +204,7 @@ func LocalMetricsHandler(m *metrics.Metrics, st Settings, log *slog.Logger) http
 	mux.HandleFunc("GET "+MetricsPath, func(w http.ResponseWriter, r *http.Request) {
 		on, err := metricsEnabled(r.Context(), st)
 		if err != nil {
-			log.Error("read metrics setting", "err", err)
+			log.ErrorContext(r.Context(), "read metrics setting", "err", err)
 			writeError(w, http.StatusInternalServerError, "internal", "internal error")
 
 			return

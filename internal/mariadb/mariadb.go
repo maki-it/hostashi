@@ -364,7 +364,7 @@ func (m *Manager) exec(ctx context.Context, step, stmt string) error {
 // undo runs a compensating statement and only logs a failure.
 func (m *Manager) undo(ctx context.Context, stmt string) {
 	if err := m.exec(context.WithoutCancel(ctx), "undo", stmt); err != nil {
-		m.log.Error("mariadb: undo failed, the server may keep an object the registry does not list", "err", err)
+		m.log.ErrorContext(ctx, "mariadb: undo failed, the server may keep an object the registry does not list", "err", err)
 	}
 }
 

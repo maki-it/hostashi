@@ -122,7 +122,9 @@ linters:
             - []
     sloglint:
       kv-only: true
-      context: ""
+      # A context in scope must be passed, so the request ID reaches the
+      # log line (ADR-0022).
+      context: scope
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false

@@ -228,7 +228,7 @@ func registerBackups(mux *http.ServeMux, a authn, b Backups, dbs SiteDatabases, 
 				return
 			}
 
-			log.Warn("scan host key", "err", err)
+			log.WarnContext(r.Context(), "scan host key", "err", err)
 			writeError(w, http.StatusBadGateway, "unreachable", "the backup target did not answer over SSH")
 
 			return
@@ -322,7 +322,7 @@ func registerBackups(mux *http.ServeMux, a authn, b Backups, dbs SiteDatabases, 
 			return
 		}
 
-		log.Info("restore started", "id", res.ID, "site", res.Site, "snapshot", res.Snapshot, "dir", res.Dir)
+		log.InfoContext(r.Context(), "restore started", "id", res.ID, "site", res.Site, "snapshot", res.Snapshot, "dir", res.Dir)
 		writeJSON(w, http.StatusAccepted, res)
 	}))
 
@@ -401,7 +401,7 @@ func registerBackups(mux *http.ServeMux, a authn, b Backups, dbs SiteDatabases, 
 			return
 		}
 
-		log.Info("restored dump import started", "restore", res.ID, "database", target.Name, "job", job.ID)
+		log.InfoContext(r.Context(), "restored dump import started", "restore", res.ID, "database", target.Name, "job", job.ID)
 		writeJSON(w, http.StatusAccepted, job)
 	}))
 

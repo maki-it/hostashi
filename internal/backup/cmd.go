@@ -56,7 +56,7 @@ func RunOnce(ctx context.Context, cfg RunConfig) error {
 
 	prev, err := ReadStatus(cfg.StatusDir, 0)
 	if err != nil {
-		cfg.Log.Warn("previous status unreadable, starting fresh", "err", err)
+		cfg.Log.WarnContext(ctx, "previous status unreadable, starting fresh", "err", err)
 
 		prev = Status{}
 	}
@@ -65,7 +65,7 @@ func RunOnce(ctx context.Context, cfg RunConfig) error {
 
 	if st.Snapshots != nil {
 		if err := WriteSnapshots(cfg.StatusDir, st.Snapshots); err != nil {
-			cfg.Log.Error("write snapshot list", "err", err)
+			cfg.Log.ErrorContext(ctx, "write snapshot list", "err", err)
 		}
 	}
 

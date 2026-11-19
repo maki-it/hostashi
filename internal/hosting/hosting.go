@@ -239,7 +239,7 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 
 	if err := s.storeTLSChoice(ctx, req); err != nil {
 		if derr := s.st.DeleteSite(undo, req.Name); derr != nil {
-			s.log.Error("remove site row after failed create", "site", req.Name, "err", derr)
+			s.log.ErrorContext(ctx, "remove site row after failed create", "site", req.Name, "err", derr)
 		}
 
 		return store.Site{}, err
@@ -247,7 +247,7 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 
 	if _, err := s.ag.SiteCreate(ctx, agentapi.SiteCreateRequest{User: req.Name, Pool: req.Pool}); err != nil {
 		if derr := s.st.DeleteSite(undo, req.Name); derr != nil {
-			s.log.Error("remove site row after failed create", "site", req.Name, "err", derr)
+			s.log.ErrorContext(ctx, "remove site row after failed create", "site", req.Name, "err", derr)
 		}
 
 		return store.Site{}, err
@@ -303,19 +303,19 @@ func (s *Service) storeTLSChoice(ctx context.Context, req CreateRequest) error {
 // the job.
 func (s *Service) removeAfterFailure(ctx context.Context, name string) {
 	if err := s.st.SetSiteState(ctx, name, store.SiteDeleting, s.now()); err != nil {
-		s.log.Error("mark site deleting after failed create", "site", name, "err", err)
+		s.log.ErrorContext(ctx, "mark site deleting after failed create", "site", name, "err", err)
 
 		return
 	}
 
 	if err := s.ag.SiteDelete(ctx, agentapi.SiteDeleteRequest{User: name}); err != nil && !isCode(err, agentrpc.CodeNotFound) {
-		s.log.Error("remove site account after failed create", "site", name, "err", err)
+		s.log.ErrorContext(ctx, "remove site account after failed create", "site", name, "err", err)
 
 		return
 	}
 
 	if err := s.st.DeleteSite(ctx, name); err != nil {
-		s.log.Error("remove site row after failed create", "site", name, "err", err)
+		s.log.ErrorContext(ctx, "remove site row after failed create", "site", name, "err", err)
 	}
 }
 
@@ -350,7 +350,7 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 
 	if err := s.applyWeb(ctx); err != nil {
 		if _, rerr := s.st.ReplaceSiteDomains(context.WithoutCancel(ctx), name, old, s.now()); rerr != nil {
-			s.log.Error("restore domains after failed change", "site", name, "err", rerr)
+			s.log.ErrorContext(ctx, "restore domains after failed change", "site", name, "err", rerr)
 		}
 
 		return store.Site{}, err
@@ -395,7 +395,7 @@ func (s *Service) SetPHP(ctx context.Context, actor int64, name, version string)
 
 	if err := s.applyWeb(ctx); err != nil {
 		if _, rerr := s.st.SetSitePHP(context.WithoutCancel(ctx), name, old, s.now()); rerr != nil {
-			s.log.Error("restore php version after failed change", "site", name, "err", rerr)
+			s.log.ErrorContext(ctx, "restore php version after failed change", "site", name, "err", rerr)
 		}
 
 		return store.Site{}, err
@@ -432,7 +432,7 @@ func (s *Service) Delete(ctx context.Context, actor int64, name string) error {
 	if err := s.applyWeb(ctx); err != nil {
 		if site.State == store.SiteActive {
 			if rerr := s.st.SetSiteState(context.WithoutCancel(ctx), name, store.SiteActive, s.now()); rerr != nil {
-				s.log.Error("restore site state after failed delete", "site", name, "err", rerr)
+				s.log.ErrorContext(ctx, "restore site state after failed delete", "site", name, "err", rerr)
 			}
 		}
 
@@ -508,11 +508,11 @@ func (s *Service) applyWeb(ctx context.Context) error {
 	// Only now is the site served over HTTPS (or no longer). A failure to
 	// record it leaves the API one change behind, nothing more.
 	if err := s.st.SetTLSLive(context.WithoutCancel(ctx), live); err != nil {
-		s.log.Error("record https state", "err", err)
+		s.log.ErrorContext(ctx, "record https state", "err", err)
 	}
 
 	if res.Changed {
-		s.log.Info("web server state applied", "generation", res.Generation, "sites", len(req.Sites))
+		s.log.InfoContext(ctx, "web server state applied", "generation", res.Generation, "sites", len(req.Sites))
 	}
 
 	return nil
@@ -520,7 +520,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 
 func (s *Service) audit(ctx context.Context, actor int64, action, target string, detail map[string]string) {
 	if err := s.st.Audit(ctx, &actor, action, target, detail); err != nil {
-		s.log.Error("audit log", "action", action, "err", err)
+		s.log.ErrorContext(ctx, "audit log", "action", action, "err", err)
 	}
 }
 

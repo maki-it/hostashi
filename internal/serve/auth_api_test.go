@@ -251,12 +251,16 @@ func TestLoginErrors(t *testing.T) {
 		t.Fatal("cookie set on a failed login")
 	}
 
-	// The same body for an unknown user.
+	// The same body for an unknown user, apart from the request ID.
 	rec2 := e.do(t, reqOpts{
 		method: "POST", path: "/api/v1/auth/login",
 		body: `{"username":"nobody","password":"wrong password!!"}`,
 	})
-	if rec2.Code != rec.Code || rec2.Body.String() != rec.Body.String() {
+
+	withoutID := func(r *httptest.ResponseRecorder) string {
+		return strings.Replace(r.Body.String(), r.Header().Get(RequestIDHeader), "", 1)
+	}
+	if rec2.Code != rec.Code || withoutID(rec2) != withoutID(rec) {
 		t.Fatalf("login errors differ: %s vs %s", rec.Body, rec2.Body)
 	}
 

@@ -295,7 +295,7 @@ func (m *Manager) ensure(ctx context.Context, st map[string]Pool, p Pool) error 
 	if err := m.Ctl.Test(ctx, p.Version, next); err != nil {
 		_ = os.Remove(next)
 
-		m.log().Error("php-fpm rejected the pool", "site", p.User, "version", p.Version, "err", err)
+		m.log().ErrorContext(ctx, "php-fpm rejected the pool", "site", p.User, "version", p.Version, "err", err)
 
 		return fmt.Errorf("%w: site %s", ErrValidation, p.User)
 	}
@@ -326,12 +326,12 @@ func (m *Manager) ensure(ctx context.Context, st map[string]Pool, p Pool) error 
 	}
 
 	if err == nil {
-		m.log().Info("php pool ready", "site", p.User, "version", p.Version)
+		m.log().InfoContext(ctx, "php pool ready", "site", p.User, "version", p.Version)
 
 		return nil
 	}
 
-	m.log().Error("php pool did not start", "site", p.User, "version", p.Version, "err", err)
+	m.log().ErrorContext(ctx, "php pool did not start", "site", p.User, "version", p.Version, "err", err)
 	m.undo(ctx, st, p, cur, had)
 
 	return fmt.Errorf("%w: site %s", ErrStartFailed, p.User)
@@ -345,7 +345,7 @@ func (m *Manager) undo(ctx context.Context, st map[string]Pool, p, cur Pool, had
 
 	if p.Version != cur.Version || !had {
 		if err := m.Ctl.Stop(undo, Unit(p.Version, p.User)); err != nil {
-			m.log().Error("stop failed pool", "site", p.User, "err", err)
+			m.log().ErrorContext(ctx, "stop failed pool", "site", p.User, "err", err)
 		}
 	}
 
@@ -354,7 +354,7 @@ func (m *Manager) undo(ctx context.Context, st map[string]Pool, p, cur Pool, had
 		_ = os.Remove(m.conf(p.User))
 
 		if err := m.saveState(st); err != nil {
-			m.log().Error("php state after failed start", "site", p.User, "err", err)
+			m.log().ErrorContext(ctx, "php state after failed start", "site", p.User, "err", err)
 		}
 
 		return
@@ -375,7 +375,7 @@ func (m *Manager) undo(ctx context.Context, st map[string]Pool, p, cur Pool, had
 	}
 
 	if err != nil {
-		m.log().Error("restore previous php pool", "site", p.User, "err", err)
+		m.log().ErrorContext(ctx, "restore previous php pool", "site", p.User, "err", err)
 	}
 }
 
@@ -413,7 +413,7 @@ func (m *Manager) Prune(ctx context.Context, keep map[string]bool) error {
 			return err
 		}
 
-		m.log().Info("php pool removed", "site", u)
+		m.log().InfoContext(ctx, "php pool removed", "site", u)
 	}
 
 	return nil
