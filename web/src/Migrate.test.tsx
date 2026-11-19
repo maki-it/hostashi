@@ -245,6 +245,41 @@ describe("Migrate", () => {
     expect(status.queryByRole("button", { name: "Use imported files as web root" })).not.toBeInTheDocument();
   });
 
+  it("reviews the custom nginx of a created site and saves it as snippets", async () => {
+    const user = userEvent.setup();
+    const report = { id: "r1", sites: 1, createdAt: "2026-11-19T09:00:00Z" };
+    const calls = mockFetch({
+      [`GET ${base}/source`]: { body: readySource },
+      [`GET ${base}/reports`]: { body: { reports: [report] } },
+      [`GET ${base}/reports/r1`]: { body: { ...report, plan: plan([{ ...planSite("shop", "skip"), customSnippets: 3, reasons: exists }]) } },
+      "GET /api/v1/php/versions": { body: { installed: ["8.3"], supported: ["8.3"], legacy: [] } },
+      "GET /api/v1/databases": { body: { databases: [] } },
+      [`GET ${base}/imports?site=shop`]: { body: { imports: [] } },
+      [`GET ${base}/reports/r1/sites/shop/snippets-draft`]: {
+        body: {
+          server: "add_header X-Frame-Options SAMEORIGIN;\n",
+          root: "",
+          items: [
+            { context: "server: add_header", source: "/etc/nginx/sites-enabled/shop.conf", line: 10, slot: "server", action: "kept" },
+            { context: "server: pagespeed", source: "/etc/nginx/sites-enabled/shop.conf", line: 12, action: "dropped", reason: "the PageSpeed module is not shipped (ADR-0017)" },
+          ],
+        },
+      },
+      "PUT /api/v1/sites/shop/snippets": (b) => ({ body: b }),
+    });
+    render(<Migrate />);
+    await user.click(await screen.findByRole("button", { name: "Show plan" }));
+    await user.click(await screen.findByRole("button", { name: "Review custom nginx" }));
+
+    const items = within(await screen.findByRole("list", { name: "Directives of shop" }));
+    expect(items.getByText(/Left out\. The PageSpeed module is not shipped/)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /Inside the server block/ })).toHaveValue("add_header X-Frame-Options SAMEORIGIN;\n");
+
+    await user.click(screen.getByRole("button", { name: "Save as snippets of shop" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Snippets saved and active on shop.");
+    expect(calls.at(-1)).toEqual({ method: "PUT", path: "/api/v1/sites/shop/snippets", body: { server: "add_header X-Frame-Options SAMEORIGIN;\n", root: "" } });
+  });
+
   it("explains a rejected report", async () => {
     const user = userEvent.setup();
     mockFetch({

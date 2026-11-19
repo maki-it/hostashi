@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { CronSettings } from "./Cron";
+import { SnippetSettings } from "./Snippets";
 import { allowIpsProblem, clientIp, listPages, pageMessage, parseAllowIps, setMaintenance, type StatusPage } from "./pages";
 import {
   createSite,
@@ -432,6 +433,7 @@ function SiteSettings({
       </fieldset>
       <MaintenanceSettings site={site} onChange={onChange} />
       <CronSettings site={site} />
+      <SnippetSettings site={site} />
       <fieldset>
         <legend>Availability of {site.name}</legend>
         {site.disabled ? (

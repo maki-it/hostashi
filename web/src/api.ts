@@ -6,12 +6,16 @@
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
+  // body is the parsed error response, for errors that carry details such
+  // as the rejected lines of a snippet.
+  readonly body: unknown;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, body?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.body = body;
   }
 }
 
@@ -29,14 +33,16 @@ type ErrorBody = { error?: { code?: unknown; message?: unknown } };
 async function toApiError(res: Response): Promise<ApiError> {
   let code = "http_" + String(res.status);
   let message = res.statusText || "request failed";
+  let raw: unknown;
   try {
-    const body = (await res.json()) as ErrorBody;
+    raw = await res.json();
+    const body = raw as ErrorBody;
     if (typeof body.error?.code === "string") code = body.error.code;
     if (typeof body.error?.message === "string") message = body.error.message;
   } catch {
     // Not JSON (proxy error page, network cut): keep the HTTP status.
   }
-  return new ApiError(res.status, code, message);
+  return new ApiError(res.status, code, message, raw);
 }
 
 export async function request<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
