@@ -42,7 +42,7 @@ const (
 
 // Limits of one snippet [E: ADR-0029].
 const (
-	MaxBytes      = 64 << 10
+	MaxBytes      = 64 << 10 // same as agentapi.MaxSnippetBytes
 	MaxDirectives = 500
 	// MaxDepth is the deepest nesting of blocks inside a snippet.
 	MaxDepth = 4

@@ -76,6 +76,21 @@ type WebSite struct {
 	// Maintenance answers requests from addresses outside its allowlist
 	// with its page and status 503 (ADR-0027). Disabled wins over it.
 	Maintenance *WebMaintenance `json:"maintenance,omitempty"`
+	// Snippets are the site's custom nginx snippets (ADR-0029). The agent
+	// checks them against the allowlist itself; they are not rendered while
+	// the site is disabled or in maintenance.
+	Snippets *WebSnippets `json:"snippets,omitempty"`
+}
+
+// MaxSnippetBytes bounds one custom snippet (ADR-0029).
+const MaxSnippetBytes = 64 << 10
+
+// WebSnippets are the custom snippets of a site, one per slot.
+type WebSnippets struct {
+	// Server goes into the server block that serves the site.
+	Server string `json:"server,omitempty"`
+	// Root goes into the site's "location /".
+	Root string `json:"root,omitempty"`
 }
 
 // WebMaintenance is the maintenance mode of a site: a committed page and
@@ -204,6 +219,10 @@ func (r WebApplyRequest) Validate() error {
 
 		if s.Disabled && s.PHP != "" {
 			return fmt.Errorf("site %q: a disabled site runs no PHP", s.User)
+		}
+
+		if sn := s.Snippets; sn != nil && (len(sn.Server) > MaxSnippetBytes || len(sn.Root) > MaxSnippetBytes) {
+			return fmt.Errorf("site %q: a snippet is larger than %d bytes", s.User, MaxSnippetBytes)
 		}
 
 		if s.PHP != "" {

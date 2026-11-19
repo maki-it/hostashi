@@ -374,6 +374,13 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			site.PHPSocket = h.php.Socket(s.User)
 		}
 
+		// Snippets are checked again by package web (ADR-0029); a disabled
+		// site or one in maintenance does not render them.
+		if sn := s.Snippets; sn != nil && !site.Disabled && site.Maintenance == nil {
+			site.Home = home
+			site.Snippets = web.Snippets{Server: sn.Server, Root: sn.Root}
+		}
+
 		d.Sites = append(d.Sites, site)
 	}
 
