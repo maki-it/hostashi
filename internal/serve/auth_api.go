@@ -28,6 +28,8 @@ type apiError struct {
 type apiErrorBody struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	// RequestID lets a user quote the failed request (ADR-0022).
+	RequestID string `json:"requestId,omitempty"`
 }
 
 type userJSON struct {
@@ -46,7 +48,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 func writeError(w http.ResponseWriter, code int, errCode, msg string) {
-	writeJSON(w, code, apiError{apiErrorBody{Code: errCode, Message: msg}})
+	writeJSON(w, code, apiError{apiErrorBody{Code: errCode, Message: msg, RequestID: w.Header().Get(RequestIDHeader)}})
 }
 
 // decodeJSON reads one JSON object with a size limit. It rejects other

@@ -26,6 +26,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/backup"
+	"github.com/maki-it/hostashi/internal/reqid"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/serve"
 	"github.com/maki-it/hostashi/internal/store"
@@ -85,7 +86,7 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		return 2
 	}
 
-	log := slog.New(slog.NewJSONHandler(stderr, nil))
+	log := slog.New(reqid.Handler(slog.NewJSONHandler(stderr, nil)))
 	cmd, args := args[0], args[1:]
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(stderr)

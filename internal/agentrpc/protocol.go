@@ -35,6 +35,9 @@ const (
 type request struct {
 	Op     string          `json:"op"`
 	Params json.RawMessage `json:"params"`
+	// RequestID ties the agent's log lines to the panel request (ADR-0022).
+	// Optional; when present it must have the form of reqid.New.
+	RequestID string `json:"request_id,omitempty"`
 }
 
 // response is the reply to exactly one request.

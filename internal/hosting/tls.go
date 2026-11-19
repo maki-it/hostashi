@@ -83,7 +83,7 @@ func (s *Service) SetTLS(ctx context.Context, actor int64, name string, on bool)
 
 	if err := s.applyWeb(ctx); err != nil {
 		if _, rerr := s.st.SetSiteTLS(context.WithoutCancel(ctx), name, old, s.now()); rerr != nil {
-			s.log.Error("restore tls setting after failed change", "site", name, "err", rerr)
+			s.log.ErrorContext(ctx, "restore tls setting after failed change", "site", name, "err", rerr)
 		}
 
 		return store.Site{}, err
@@ -123,7 +123,7 @@ func (s *Service) SetHSTS(ctx context.Context, actor int64, name string, on bool
 
 	if err := s.applyWeb(ctx); err != nil {
 		if _, rerr := s.st.SetSiteHSTS(context.WithoutCancel(ctx), name, old, s.now()); rerr != nil {
-			s.log.Error("restore hsts setting after failed change", "site", name, "err", rerr)
+			s.log.ErrorContext(ctx, "restore hsts setting after failed change", "site", name, "err", rerr)
 		}
 
 		return store.Site{}, err
@@ -189,7 +189,7 @@ func (s *Service) RenewDue(ctx context.Context) {
 
 	sites, err := s.st.Sites(ctx)
 	if err != nil {
-		s.log.Error("certificate check", "err", err)
+		s.log.ErrorContext(ctx, "certificate check", "err", err)
 
 		return
 	}
@@ -208,10 +208,10 @@ func (s *Service) RenewDue(ctx context.Context) {
 		}
 
 		if err := s.issue(ctx, site); err != nil {
-			s.log.Warn("certificate failed", "site", site.Name, "err", err)
+			s.log.WarnContext(ctx, "certificate failed", "site", site.Name, "err", err)
 
 			if rerr := s.st.SetSiteTLSError(context.WithoutCancel(ctx), site.Name, err.Error(), s.now()); rerr != nil {
-				s.log.Error("record certificate failure", "site", site.Name, "err", rerr)
+				s.log.ErrorContext(ctx, "record certificate failure", "site", site.Name, "err", rerr)
 			}
 		}
 	}
@@ -232,7 +232,7 @@ func (s *Service) issue(ctx context.Context, site store.Site) error {
 		return err
 	}
 
-	s.log.Info("certificate installed", "site", site.Name, "domains", info.Domains, "notAfter", info.NotAfter)
+	s.log.InfoContext(ctx, "certificate installed", "site", site.Name, "domains", info.Domains, "notAfter", info.NotAfter)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -165,3 +165,24 @@ func TestLocalMetricsHandler(t *testing.T) {
 		t.Errorf("post: %d", rec.Code)
 	}
 }
+
+func TestRequestID(t *testing.T) {
+	e := newAPI(t)
+
+	forged := strings.Repeat("a", 32)
+	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/auth/me", header: map[string]string{RequestIDHeader: forged}})
+
+	id := rec.Header().Get(RequestIDHeader)
+	if len(id) != 32 || id == forged {
+		t.Fatalf("id %q", id)
+	}
+
+	// The error body carries the same ID, so a user can quote it.
+	if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), `"requestId":"`+id+`"`) {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+
+	if again := e.do(t, reqOpts{method: "GET", path: "/api/v1/health"}).Header().Get(RequestIDHeader); again == id || len(again) != 32 {
+		t.Fatalf("not fresh: %q", again)
+	}
+}

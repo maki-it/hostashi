@@ -25,6 +25,7 @@ import (
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/metrics"
+	"github.com/maki-it/hostashi/internal/reqid"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
 	"github.com/maki-it/hostashi/internal/ui"
@@ -131,14 +132,14 @@ func Handler(cfg Config, deps Deps) http.Handler {
 
 		// Details go to the log, not to the client.
 		if err := deps.PingAgent(ctx); err != nil {
-			log.Warn("agent ping failed", "err", err)
+			log.WarnContext(ctx, "agent ping failed", "err", err)
 
 			h.Status, h.Agent = "degraded", "unavailable"
 			code = http.StatusServiceUnavailable
 		}
 
 		if err := deps.PingDB(ctx); err != nil {
-			log.Error("database ping failed", "err", err)
+			log.ErrorContext(ctx, "database ping failed", "err", err)
 
 			h.Status, h.DB = "degraded", "unavailable"
 			code = http.StatusServiceUnavailable
@@ -177,7 +178,22 @@ func Handler(cfg Config, deps Deps) http.Handler {
 		h = deps.Metrics.Instrument(h)
 	}
 
-	return h
+	return withRequestID(h)
+}
+
+// RequestIDHeader names the response header with the request's ID.
+const RequestIDHeader = "X-Request-ID"
+
+// withRequestID gives every request a new random ID (ADR-0022). It goes into
+// the response header, error bodies, log lines and agent calls. An ID sent
+// by the client is ignored, so nobody can make unrelated log lines look
+// connected.
+func withRequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := reqid.New()
+		w.Header().Set(RequestIDHeader, id)
+		next.ServeHTTP(w, r.WithContext(reqid.With(r.Context(), id)))
+	})
 }
 
 // withUI sends /api and everything below it, and /metrics, to the API
@@ -216,7 +232,7 @@ func copyLoop(ctx context.Context, copyDB func(context.Context) error, log *slog
 
 	for {
 		if err := copyDB(ctx); err != nil && ctx.Err() == nil && log != nil {
-			log.Error("panel database copy for the backup failed", "err", err)
+			log.ErrorContext(ctx, "panel database copy for the backup failed", "err", err)
 		}
 
 		select {
@@ -324,7 +340,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if cfg.Log != nil {
-		cfg.Log.Info("serve listening", "addr", ln.Addr().String(), "agentSocket", cfg.Socket, "db", cfg.DBPath, "setupTokenFile", tokenPath)
+		cfg.Log.InfoContext(ctx, "serve listening", "addr", ln.Addr().String(), "agentSocket", cfg.Socket, "db", cfg.DBPath, "setupTokenFile", tokenPath)
 	}
 
 	// The token-free metrics listener (ADR-0022), opened before anything
@@ -348,7 +364,7 @@ func Run(ctx context.Context, cfg Config) error {
 		servers = append(servers, psrv)
 
 		if cfg.Log != nil {
-			cfg.Log.Info("serve listening for nginx", "addr", proxyLn.Addr().String())
+			cfg.Log.InfoContext(ctx, "serve listening for nginx", "addr", proxyLn.Addr().String())
 		}
 
 		go func() { errc <- psrv.Serve(proxyLn) }()
@@ -359,7 +375,7 @@ func Run(ctx context.Context, cfg Config) error {
 		servers = append(servers, msrv)
 
 		if cfg.Log != nil {
-			cfg.Log.Info("serve listening for local metrics scrapes", "addr", mln.Addr().String())
+			cfg.Log.InfoContext(ctx, "serve listening for local metrics scrapes", "addr", mln.Addr().String())
 		}
 
 		go func() { errc <- msrv.Serve(mln) }()
@@ -473,7 +489,7 @@ func cleanupLoop(ctx context.Context, svc *auth.Service, log *slog.Logger) {
 			return
 		case <-t.C:
 			if err := svc.Cleanup(ctx); err != nil && log != nil {
-				log.Warn("session cleanup failed", "err", err)
+				log.WarnContext(ctx, "session cleanup failed", "err", err)
 			}
 		}
 	}

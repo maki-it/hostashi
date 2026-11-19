@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net"
 	"time"
+
+	"github.com/maki-it/hostashi/internal/reqid"
 )
 
 // DefaultTimeout bounds a call whose context has no deadline.
@@ -73,7 +75,7 @@ func (c *Client) roundTrip(ctx context.Context, op string, req any) (json.RawMes
 		return nil, err
 	}
 
-	body, err := json.Marshal(request{Op: op, Params: params})
+	body, err := json.Marshal(request{Op: op, Params: params, RequestID: reqid.From(ctx)})
 	if err != nil {
 		return nil, err
 	}

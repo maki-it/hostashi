@@ -216,7 +216,7 @@ func (h *siteOps) register(s *agentrpc.Server) {
 
 		if h.certs != nil {
 			if err := h.certs.Remove(req.User); err != nil {
-				h.log.Error("remove certificate of deleted site", "site", req.User, "err", err)
+				h.log.ErrorContext(ctx, "remove certificate of deleted site", "site", req.User, "err", err)
 			}
 		}
 
@@ -322,7 +322,7 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		// is only reported. site.delete refuses while it exists, and the
 		// next web.apply tries again.
 		if err := h.php.Prune(ctx, keep); err != nil {
-			h.log.Error("stop php pools of sites without PHP", "err", err)
+			h.log.ErrorContext(ctx, "stop php pools of sites without PHP", "err", err)
 		}
 	}
 
@@ -574,7 +574,7 @@ func webGID(log *slog.Logger) uint32 {
 func openWeb(ctx context.Context, stateDir string, panelPort int, log *slog.Logger) *web.Reconciler {
 	if _, err := os.Stat(webctl.Nginx); err != nil {
 		if log != nil {
-			log.Warn("nginx not installed, web operations disabled", "path", webctl.Nginx)
+			log.WarnContext(ctx, "nginx not installed, web operations disabled", "path", webctl.Nginx)
 		}
 
 		return nil
@@ -599,7 +599,7 @@ func openWeb(ctx context.Context, stateDir string, panelPort int, log *slog.Logg
 	cancel()
 
 	if err != nil && log != nil {
-		log.Warn("cannot tell whether nginx has HTTP/3, leaving it off", "err", err)
+		log.WarnContext(ctx, "cannot tell whether nginx has HTTP/3, leaving it off", "err", err)
 	}
 
 	if panelPort == 0 {
@@ -732,7 +732,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if cfg.PHP != nil {
 		// Like the web server: a failure is logged, web.apply retries.
 		if err := cfg.PHP.Recover(ctx); err != nil && cfg.Log != nil {
-			cfg.Log.Error("php pool recovery failed", "err", err)
+			cfg.Log.ErrorContext(ctx, "php pool recovery failed", "err", err)
 		}
 	}
 
@@ -740,10 +740,10 @@ func Run(ctx context.Context, cfg Config) error {
 		// A failure here must not keep the agent down: web.apply retries.
 		if res, err := cfg.Web.Recover(ctx); err != nil {
 			if cfg.Log != nil {
-				cfg.Log.Error("web server recovery failed", "err", err)
+				cfg.Log.ErrorContext(ctx, "web server recovery failed", "err", err)
 			}
 		} else if cfg.Log != nil {
-			cfg.Log.Info("web server on generation", "generation", res.Generation)
+			cfg.Log.InfoContext(ctx, "web server on generation", "generation", res.Generation)
 		}
 	}
 
@@ -757,7 +757,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if cfg.Log != nil {
-		cfg.Log.Info("agent listening", "socket", cfg.Socket, "serveUser", cfg.ServeUser, "serveUid", uid)
+		cfg.Log.InfoContext(ctx, "agent listening", "socket", cfg.Socket, "serveUser", cfg.ServeUser, "serveUid", uid)
 	}
 
 	return s.Serve(ctx)

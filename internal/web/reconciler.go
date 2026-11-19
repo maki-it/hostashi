@@ -547,7 +547,7 @@ func (r *Reconciler) apply(ctx context.Context, d Desired) (Result, error) {
 	}
 
 	r.prune()
-	r.log().Info("web: generation live", "generation", next, "sites", len(d.Sites))
+	r.log().InfoContext(ctx, "web: generation live", "generation", next, "sites", len(d.Sites))
 
 	return Result{Generation: next, Changed: true}, nil
 }
@@ -555,7 +555,7 @@ func (r *Reconciler) apply(ctx context.Context, d Desired) (Result, error) {
 // rollback restores generation prev after generation bad failed to go live.
 func (r *Reconciler) rollback(ctx context.Context, bad, prev int, hasPrev bool, cause error) error {
 	r.markFailed(bad, cause)
-	r.log().Warn("web: generation failed, rolling back", "generation", bad, "previous", prev, "err", cause)
+	r.log().WarnContext(ctx, "web: generation failed, rolling back", "generation", bad, "previous", prev, "err", cause)
 
 	if !hasPrev {
 		_ = os.Remove(r.currentLink())

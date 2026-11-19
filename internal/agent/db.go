@@ -45,7 +45,7 @@ func openDB(ctx context.Context, stateDir string, sm *sites.Manager, log *slog.L
 		defer cancel()
 
 		if err := m.RemoveJobUsers(rctx, conn); err != nil && log != nil {
-			log.Warn("remove leftover database job users", "err", err)
+			log.WarnContext(ctx, "remove leftover database job users", "err", err)
 		}
 	}()
 

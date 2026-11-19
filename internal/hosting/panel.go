@@ -113,7 +113,7 @@ func (s *Service) panelApplied(ctx context.Context, panel *agentapi.WebPanel) {
 	}
 
 	if err != nil {
-		s.log.Error("record panel https state", "err", err)
+		s.log.ErrorContext(ctx, "record panel https state", "err", err)
 	}
 }
 
@@ -125,7 +125,7 @@ func (s *Service) renewPanel(ctx context.Context) {
 
 	p, err := s.PanelTLS(ctx)
 	if err != nil {
-		s.log.Error("panel certificate check", "err", err)
+		s.log.ErrorContext(ctx, "panel certificate check", "err", err)
 
 		return
 	}
@@ -149,7 +149,7 @@ func (s *Service) renewPanel(ctx context.Context) {
 	if err == nil {
 		p.Domains, p.NotAfter, p.Error, p.FailedAt = info.Domains, info.NotAfter, "", time.Time{}
 		if err = s.savePanelTLS(ctx, p); err == nil {
-			s.log.Info("panel certificate installed", "domain", s.panelDomain, "notAfter", info.NotAfter)
+			s.log.InfoContext(ctx, "panel certificate installed", "domain", s.panelDomain, "notAfter", info.NotAfter)
 
 			s.mu.Lock()
 			err = s.applyWeb(ctx)
@@ -165,7 +165,7 @@ func (s *Service) renewPanel(ctx context.Context) {
 		return
 	}
 
-	s.log.Warn("panel certificate failed", "domain", s.panelDomain, "err", err)
+	s.log.WarnContext(ctx, "panel certificate failed", "domain", s.panelDomain, "err", err)
 
 	p, rerr := s.PanelTLS(context.WithoutCancel(ctx))
 	if rerr == nil {
@@ -179,6 +179,6 @@ func (s *Service) renewPanel(ctx context.Context) {
 	}
 
 	if rerr != nil {
-		s.log.Error("record panel certificate failure", "err", rerr)
+		s.log.ErrorContext(ctx, "record panel certificate failure", "err", rerr)
 	}
 }

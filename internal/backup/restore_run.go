@@ -71,7 +71,7 @@ func RestoreOnce(ctx context.Context, cfg RunConfig, id string) error {
 
 	if err != nil {
 		r.State, r.Error = agentapi.RestoreFailed, err.Error()
-		cfg.Log.Error("restore failed", "id", id, "site", r.Site, "err", err)
+		cfg.Log.ErrorContext(ctx, "restore failed", "id", id, "site", r.Site, "err", err)
 	}
 
 	if werr := writeJSON(cfg.StatusDir, restoreFile(id), r); werr != nil {

@@ -15,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/maki-it/hostashi/internal/reqid"
 )
 
 // Test operations. Echo has a validated field so input errors can be tested.
@@ -50,6 +52,7 @@ var (
 	opSlow  = Op[emptyReq, whoResp]{Name: "slow"}
 	opHuge  = Op[emptyReq, echoResp]{Name: "huge"}
 	opExec  = Op[emptyReq, whoResp]{Name: "exec"} // never registered
+	opReqID = Op[emptyReq, echoResp]{Name: "reqid"}
 )
 
 func socketDir(t *testing.T) string {
@@ -80,6 +83,9 @@ func newTestServer(auth Authorizer, o Options) *Server {
 	Handle(s, opSlow, func(ctx context.Context, _ Caller, _ emptyReq) (whoResp, error) {
 		<-ctx.Done()
 		return whoResp{}, ctx.Err()
+	})
+	Handle(s, opReqID, func(ctx context.Context, _ Caller, _ emptyReq) (echoResp, error) {
+		return echoResp{Text: reqid.From(ctx)}, nil
 	})
 	Handle(s, opHuge, func(context.Context, Caller, emptyReq) (echoResp, error) {
 		return echoResp{Text: strings.Repeat("x", MaxFrame)}, nil
