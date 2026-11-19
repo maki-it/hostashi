@@ -161,7 +161,7 @@ function PageRow({ page, onChange }: { page: StatusPage; onChange: () => Promise
     }
     void act(async () => {
       await updatePage(page.id, { file });
-      return page.sites.length > 0 ? "Files replaced. Sites in maintenance show the new page now." : "Files replaced.";
+      return users.length > 0 ? "Files replaced. Sites and domains that show it use the new page now." : "Files replaced.";
     });
   }
 
@@ -179,6 +179,7 @@ function PageRow({ page, onChange }: { page: StatusPage; onChange: () => Promise
   }
 
   const size = page.files.reduce((n, f) => n + f.size, 0);
+  const users = [...page.sites, ...page.parked];
 
   return (
     <li>
@@ -201,7 +202,7 @@ function PageRow({ page, onChange }: { page: StatusPage; onChange: () => Promise
       )}
       <dl className="facts" aria-label={"Details of " + page.name}>
         <dt>Used by</dt>
-        <dd>{page.sites.length > 0 ? page.sites.join(", ") : "No site"}</dd>
+        <dd>{users.length > 0 ? users.join(", ") : page.kind === "parking" ? "No domain" : "No site"}</dd>
         <dt>Files</dt>
         <dd>
           {page.files.length} ({formatSize(size)})
@@ -262,12 +263,12 @@ function PageRow({ page, onChange }: { page: StatusPage; onChange: () => Promise
       )}
       {mode === "delete" && (
         <div>
-          <p>{page.sites.length > 0 ? `${page.sites.join(", ")} still use this page. Choose another page there first.` : "Delete this page?"}</p>
+          <p>{users.length > 0 ? `${users.join(", ")} still use this page. Choose another page there first.` : "Delete this page?"}</p>
           <div className="actions">
             <button
               type="button"
               className="danger"
-              disabled={busy || page.sites.length > 0}
+              disabled={busy || users.length > 0}
               onClick={() =>
                 void act(async () => {
                   await deletePage(page.id);

@@ -17,7 +17,8 @@ export type StatusPage = {
   builtin: boolean;
   sha256: string;
   files: { path: string; size: number }[];
-  sites: string[];
+  sites: string[]; // sites that name the page
+  parked: string[]; // parked domains that show it
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -98,7 +99,7 @@ export function pageMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case "page_in_use":
-        return "A site uses this page. Choose another page there first.";
+        return "A site or parked domain uses this page. Choose another page there first.";
       case "page_builtin":
         return "Built-in pages cannot be changed or deleted.";
       case "page_not_found":

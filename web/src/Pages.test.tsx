@@ -15,6 +15,7 @@ const builtin: StatusPage = {
   sha256: "a".repeat(64),
   files: [{ path: "index.html", size: 1200 }],
   sites: [],
+  parked: [],
   createdAt: null,
   updatedAt: null,
 };
@@ -29,6 +30,7 @@ const summer: StatusPage = {
     { path: "index.html", size: 2048 },
   ],
   sites: ["blog"],
+  parked: [],
   createdAt: "2026-11-19T08:00:00Z",
   updatedAt: "2026-11-19T08:00:00Z",
 };
