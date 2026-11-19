@@ -131,7 +131,7 @@ func TestServerOwnerLoad(t *testing.T) {
 	}
 
 	var locked string
-	if err := root.QueryRowContext(ctx, "SELECT JSON_VALUE(Priv, '$.account_locked') FROM mysql.global_priv WHERE User=? AND Host='localhost'", owner).Scan(&locked); err != nil || locked != "true" {
+	if err := root.QueryRowContext(ctx, "SELECT JSON_VALUE(Priv, '$.account_locked') FROM mysql.global_priv WHERE User=? AND Host='localhost'", owner).Scan(&locked); err != nil || (locked != "true" && locked != "1") {
 		t.Fatalf("owner locked = %q %v", locked, err)
 	}
 
