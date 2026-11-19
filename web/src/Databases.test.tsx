@@ -4,7 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { Databases } from "./Databases";
-import { nameProblem } from "./databases";
+import { nameProblem, pathProblem } from "./databases";
 import { mockFetch } from "./test-utils";
 
 const sites = { "GET /api/v1/sites": { body: { sites: [{ name: "blog", state: "active" }, { name: "shop", state: "active" }] } } };
@@ -193,5 +193,95 @@ describe("Databases", () => {
     });
     render(<Databases />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Only administrators");
+  });
+});
+
+describe("pathProblem", () => {
+  it.each([
+    ["shop.sql", ""],
+    ["backups/shop-2026.sql.gz", ""],
+    ["", "1 to 255"],
+    ["shop.zip", "end in .sql"],
+    ["../shop.sql", "inside the site's home"],
+    ["/etc/shop.sql", "inside the site's home"],
+    [".hidden.sql", "inside the site's home"],
+    ["-x.sql", "inside the site's home"],
+    ["a//b.sql", "inside the site's home"],
+    ["a".repeat(253) + ".sql", "1 to 255"],
+  ])("%s", (p, want) => {
+    const got = pathProblem(p);
+    if (want === "") expect(got).toBe("");
+    else expect(got).toContain(want);
+  });
+});
+
+describe("Database dumps", () => {
+  const job = { id: "0123456789abcdef", database: "blog_wp", started: "x" };
+
+  it("exports into a new file and waits for the job", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...sites,
+      "GET /api/v1/databases": { body: { databases: [blogWp] } },
+      "POST /api/v1/databases/blog_wp/export": { status: 202, body: { ...job, kind: "export", path: "out.sql.gz", state: "running" } },
+      "GET /api/v1/databases/blog_wp/jobs/0123456789abcdef": { body: { ...job, kind: "export", path: "out.sql.gz", state: "done" } },
+    });
+    render(<Databases />);
+    await user.click(await screen.findByRole("button", { name: "Import or export" }));
+    const path = screen.getByLabelText(/File in the home of site blog/);
+    expect((path as HTMLInputElement).value).toMatch(/^blog_wp-\d{4}-\d{2}-\d{2}\.sql\.gz$/);
+    await user.clear(path);
+    await user.type(path, "out.sql.gz");
+    await user.click(screen.getByRole("button", { name: "Start export" }));
+    expect(await screen.findByText(/Exported blog_wp into/)).toHaveTextContent("out.sql.gz");
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ path: "out.sql.gz" });
+  });
+
+  it("imports a file and shows a failure", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      ...sites,
+      "GET /api/v1/databases": { body: { databases: [blogWp] } },
+      "POST /api/v1/databases/blog_wp/import": { status: 202, body: { ...job, kind: "import", path: "in.sql", state: "running" } },
+      "GET /api/v1/databases/blog_wp/jobs/0123456789abcdef": { body: { ...job, kind: "import", path: "in.sql", state: "failed", error: "SQL error at line 12 (1064)" } },
+    });
+    render(<Databases />);
+    await user.click(await screen.findByRole("button", { name: "Import or export" }));
+    await user.click(screen.getByLabelText("Import a file"));
+    expect(screen.getByText(/Import into an empty database/)).toBeInTheDocument();
+    const path = screen.getByLabelText(/File in the home of site blog/);
+    await user.clear(path);
+    await user.type(path, "in.sql");
+    await user.click(screen.getByRole("button", { name: "Start import" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Import failed: SQL error at line 12 (1064)");
+  });
+
+  it("refuses a path outside the home before asking the server", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({ ...sites, "GET /api/v1/databases": { body: { databases: [blogWp] } } });
+    render(<Databases />);
+    await user.click(await screen.findByRole("button", { name: "Import or export" }));
+    const path = screen.getByLabelText(/File in the home of site blog/);
+    await user.clear(path);
+    await user.type(path, "../../etc/x.sql");
+    await user.click(screen.getByRole("button", { name: "Start export" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("inside the site's home");
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+  });
+
+  it("explains a running job", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      ...sites,
+      "GET /api/v1/databases": { body: { databases: [blogWp] } },
+      "POST /api/v1/databases/blog_wp/export": {
+        status: 409,
+        body: { error: { code: "agent_conflict", message: "another import or export of this database is running" } },
+      },
+    });
+    render(<Databases />);
+    await user.click(await screen.findByRole("button", { name: "Import or export" }));
+    await user.click(screen.getByRole("button", { name: "Start export" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Another import or export of this database is running.");
   });
 });
