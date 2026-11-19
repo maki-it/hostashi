@@ -69,6 +69,9 @@ type WebSite struct {
 	// HSTS adds Strict-Transport-Security to HTTPS responses. Without TLS
 	// it has no effect.
 	HSTS bool `json:"hsts,omitempty"`
+	// Disabled answers every request of the site with 503 instead of
+	// serving its files. ACME challenges and HTTPS stay; PHP must be empty.
+	Disabled bool `json:"disabled,omitempty"`
 }
 
 // WebPanel is the panel's own address (ADR-0023). The agent serves it on
@@ -107,6 +110,10 @@ func (r WebApplyRequest) Validate() error {
 		}
 
 		users[s.User] = true
+
+		if s.Disabled && s.PHP != "" {
+			return fmt.Errorf("site %q: a disabled site runs no PHP", s.User)
+		}
 
 		if s.PHP != "" {
 			if err := ValidatePHPVersion(s.PHP); err != nil {

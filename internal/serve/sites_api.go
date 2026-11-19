@@ -20,8 +20,9 @@ type siteJSON struct {
 	Name      string    `json:"name"`
 	Pool      string    `json:"pool"`
 	State     string    `json:"state"`
-	PHP       string    `json:"php"`     // PHP version, "" for no PHP
-	Domains   []string  `json:"domains"` // the first one is the primary domain
+	PHP       string    `json:"php"`      // PHP version, "" for no PHP
+	Disabled  bool      `json:"disabled"` // answers 503, PHP stopped
+	Domains   []string  `json:"domains"`  // the first one is the primary domain
 	TLS       tlsJSON   `json:"tls"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -72,7 +73,7 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	}
 
 	return siteJSON{
-		Name: s.Name, Pool: s.Pool, State: s.State, PHP: s.PHP, Domains: d,
+		Name: s.Name, Pool: s.Pool, State: s.State, PHP: s.PHP, Disabled: s.Disabled, Domains: d,
 		TLS: tlsJSON{
 			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
@@ -296,6 +297,34 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 		s, err := svc.SetHSTS(ctx, p.User.ID, r.PathValue("name"), *in.Enabled)
 		if err != nil {
 			siteFail(log, w, err, "set hsts")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
+	}))
+
+	// Disabling keeps everything of the site but serves 503 and stops PHP.
+	mux.HandleFunc("PUT /api/v1/sites/{name}/disabled", admin("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in struct {
+			Disabled *bool `json:"disabled"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if in.Disabled == nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", `"disabled" is required`)
+
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		s, err := svc.SetDisabled(ctx, p.User.ID, r.PathValue("name"), *in.Disabled)
+		if err != nil {
+			siteFail(log, w, err, "set disabled")
 
 			return
 		}

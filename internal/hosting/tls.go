@@ -139,6 +139,45 @@ func (s *Service) SetHSTS(ctx context.Context, actor int64, name string, on bool
 	return s.Get(ctx, name)
 }
 
+// SetDisabled disables or enables an active site. A disabled site answers
+// every request with 503 and its PHP pool is stopped; its account, files,
+// databases, certificate and renewal stay.
+func (s *Service) SetDisabled(ctx context.Context, actor int64, name string, on bool) (store.Site, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	site, err := s.Get(ctx, name)
+	if err != nil {
+		return store.Site{}, err
+	}
+
+	if site.State != store.SiteActive {
+		return store.Site{}, ErrState
+	}
+
+	old, err := s.st.SetSiteDisabled(ctx, name, on, s.now())
+	if err != nil {
+		return store.Site{}, err
+	}
+
+	if err := s.applyWeb(ctx); err != nil {
+		if _, rerr := s.st.SetSiteDisabled(context.WithoutCancel(ctx), name, old, s.now()); rerr != nil {
+			s.log.ErrorContext(ctx, "restore disabled setting after failed change", "site", name, "err", rerr)
+		}
+
+		return store.Site{}, err
+	}
+
+	action := "site.enable"
+	if on {
+		action = "site.disable"
+	}
+
+	s.audit(ctx, actor, action, name, nil)
+
+	return s.Get(ctx, name)
+}
+
 // obtain gets a certificate for a site or agentapi.PanelCert: a key and
 // CSR from the agent, the chain from the CA, the pair live through the
 // agent. The web server switch is the caller's.

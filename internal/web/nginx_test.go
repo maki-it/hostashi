@@ -342,6 +342,65 @@ func TestHiddenFilesAreDenied(t *testing.T) {
 	}
 }
 
+// TestDisabledSite checks that a disabled site answers 503 for every path,
+// serves none of its files, still answers ACME challenges and the agent's
+// health check, and comes back when enabled again.
+func TestDisabledSite(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+
+	e.r.Driver.ACMERoot = filepath.Join(e.dir, "acme")
+
+	challenge := filepath.Join(e.r.Driver.ACMERoot, ".well-known", "acme-challenge")
+	if err := os.MkdirAll(challenge, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(challenge, "tok123"), []byte("tok123.thumb"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := e.site(t, "alpha", "hello alpha", "alpha.example.com")
+	if err := os.WriteFile(filepath.Join(s.Root, "file.txt"), []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	other := e.site(t, "beta", "hello beta", "beta.example.com")
+
+	if _, err := e.r.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	s.Disabled = true
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{s, other}}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{"/", "/file.txt", "/index.html", "/missing"} {
+		code, body := e.fetchPath(t, "alpha.example.com", path)
+		if code != http.StatusServiceUnavailable || !strings.Contains(body, "Temporarily unavailable") || strings.Contains(body, "data") {
+			t.Errorf("disabled site %s: %d %q", path, code, body)
+		}
+	}
+
+	if code, body := e.fetchPath(t, "alpha.example.com", "/.well-known/acme-challenge/tok123"); code != http.StatusOK || body != "tok123.thumb" {
+		t.Errorf("challenge on a disabled site: %d %q", code, body)
+	}
+
+	if code, body := e.fetch(t, "beta.example.com"); code != http.StatusOK || body != "hello beta" {
+		t.Errorf("other site: %d %q", code, body)
+	}
+
+	s.Disabled = false
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{s, other}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, body := e.fetch(t, "alpha.example.com"); code != http.StatusOK || body != "hello alpha" {
+		t.Errorf("enabled again: %d %q", code, body)
+	}
+}
+
 func TestRejectedConfigChangesNothing(t *testing.T) {
 	e := newEnv(t)
 	ctx := t.Context()

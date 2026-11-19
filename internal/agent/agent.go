@@ -290,7 +290,7 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			return agentapi.WebApplyResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site " + s.User}
 		}
 
-		site := web.Site{User: s.User, Domains: s.Domains, Root: home + "/" + sites.WebRootName}
+		site := web.Site{User: s.User, Domains: s.Domains, Root: home + "/" + sites.WebRootName, Disabled: s.Disabled}
 
 		if s.TLS {
 			if err := h.tlsFor(&site, s.Domains); err != nil {

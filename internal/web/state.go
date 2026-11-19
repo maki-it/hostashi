@@ -31,6 +31,9 @@ type Site struct {
 	// HSTS adds Strict-Transport-Security to the HTTPS responses (one year,
 	// without includeSubDomains or preload). Ignored without a certificate.
 	HSTS bool `json:"hsts,omitempty"`
+	// Disabled answers every request with 503 and never serves Root.
+	// ACME challenges, the health check and the HTTPS redirect stay.
+	Disabled bool `json:"disabled,omitempty"`
 }
 
 // Desired is the complete web server state.
