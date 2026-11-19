@@ -528,8 +528,8 @@ expect_mode /home/cpimp/cloudpanel-import-db "700 cpimp:cpimp"
 x /usr/local/bin/hostashi db import cpimp_db "$dump" || fail "db import of the dump"
 [ "$(x mariadb -N -e 'SELECT v FROM cpimp_db.t')" = "from web2" ] || fail "imported content"
 dump2=$(sed -n 's/.*"\(cloudpanel-import-db\/cpimp_db2-[0-9-]*\.sql\)".*/\1/p' <<<"$out")
-x grep -q 'TRIGGER `tg`' "/home/cpimp/$dump2" || fail "trigger not dumped"
-x grep -q 'VIEW `vt`' "/home/cpimp/$dump2" || fail "view not dumped"
+x grep -q 'TRIGGER .tg.' "/home/cpimp/$dump2" || fail "trigger not dumped"
+x grep -q 'VIEW .vt.' "/home/cpimp/$dump2" || fail "view not dumped"
 # The dump user can read, not write.
 pw=$(x cat /var/lib/hostashi-agent/cloudpanel/db_password)
 if x mariadb -h 127.0.0.1 -u hostashi_import "-p$pw" -e "INSERT INTO olddb.t VALUES ('x')" 2>/dev/null; then fail "dump user could write"; fi
