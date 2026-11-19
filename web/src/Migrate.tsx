@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { SnippetField } from "./Snippets";
 import { setSnippets, sizeProblem, snippetDraft, snippetMessage, snippetProblems, type DraftItem, type SnippetDraft, type SnippetProblems } from "./snippets";
 import {
@@ -12,6 +12,8 @@ import {
   existsHere,
   formatBytes,
   getImport,
+  listLoads,
+  startLoads,
   getReport,
   getSource,
   listImports,
@@ -26,6 +28,7 @@ import {
   trustSourceHostKey,
   uploadReport,
   type DBCredentials,
+  type DumpLoad,
   type ImportJob,
   type PlanSite,
   type Report,
@@ -770,9 +773,7 @@ function ImportStatus({ id }: { id: string }) {
           </>
         )}
       </dl>
-      {job.dumps && job.dumps.length > 0 && job.state === "done" && (
-        <p className="muted">Load each dump on the Databases page with Import and the path shown.</p>
-      )}
+      {job.dumps && job.dumps.length > 0 && job.state === "done" && <DumpLoads id={job.id} />}
       {job.error && <p role="alert">{job.error}</p>}
       {job.skippedPaths && job.skippedPaths.length > 0 && (
         <details>
@@ -789,6 +790,84 @@ function ImportStatus({ id }: { id: string }) {
       {job.state === "done" && <Activate site={job.site} />}
       {error && <p role="alert">{error}</p>}
     </section>
+  );
+}
+
+function loadLabel(l: DumpLoad): string {
+  if (!l.job) return "Not started";
+  if (l.job.state === "running") return "Loading…";
+  if (l.job.state === "done") return "Loaded" + (l.job.finished ? " at " + new Date(l.job.finished).toLocaleString() : "");
+  return "Failed";
+}
+
+// DumpLoads shows how the copied dumps are loaded into the site's
+// databases. The panel starts the loads by itself once the import is done;
+// the button starts those again that did not run or failed.
+function DumpLoads({ id }: { id: string }) {
+  const [loads, setLoads] = useState<DumpLoad[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      setLoads(await listLoads(id));
+      setError("");
+    } catch (err) {
+      setError(migrationMessage(err));
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const running = loads?.some((l) => l.job?.state === "running") ?? false;
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => void load(), 3000);
+    return () => clearInterval(t);
+  }, [running, load]);
+
+  async function retry() {
+    setBusy(true);
+    setError("");
+    try {
+      setLoads(await startLoads(id));
+    } catch (err) {
+      setError(migrationMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const unfinished = loads?.some((l) => !l.job || l.job.state === "failed") ?? false;
+
+  return (
+    <div className="keybox" aria-label="Database loads" role="group">
+      {loads === null ? (
+        !error && <p aria-busy="true">Loading the database loads…</p>
+      ) : loads.length === 0 ? (
+        <p className="muted">The dumps are loaded into the databases shortly.</p>
+      ) : (
+        <dl className="facts">
+          {loads.map((l) => (
+            <Fragment key={l.database + l.path}>
+              <dt>{l.database}</dt>
+              <dd>
+                {loadLabel(l)}
+                {(l.job?.error ?? l.error) && <span className="muted">: {l.job?.error ?? l.error}</span>}
+              </dd>
+            </Fragment>
+          ))}
+        </dl>
+      )}
+      {error && <p role="alert">{error}</p>}
+      {(unfinished || loads?.length === 0) && (
+        <button type="button" className="secondary" disabled={busy} onClick={() => void retry()}>
+          {busy ? "Starting…" : "Load the dumps again"}
+        </button>
+      )}
+    </div>
   );
 }
 
