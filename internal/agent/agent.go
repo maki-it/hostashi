@@ -25,6 +25,7 @@ import (
 	"github.com/maki-it/hostashi/internal/certs"
 	"github.com/maki-it/hostashi/internal/cpimport"
 	"github.com/maki-it/hostashi/internal/cpsource"
+	"github.com/maki-it/hostashi/internal/cronjobs"
 	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/pages"
 	"github.com/maki-it/hostashi/internal/php"
@@ -89,6 +90,10 @@ type Config struct {
 	// Pages keeps the maintenance and parking pages (ADR-0027). Run builds
 	// it at PagesDir; without it page.* answer failed_precondition.
 	Pages *pages.Store
+
+	// Cron keeps the sites' cron jobs as systemd units (ADR-0028). Run
+	// builds it; without it cron.* answer failed_precondition.
+	Cron *cronjobs.Manager
 
 	// Disk caches the sites' disk usage for metrics.snapshot; Run fills it
 	// every agentapi.DiskEvery. Nil: an empty cache.
@@ -167,7 +172,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, quota: cfg.Quota, log: log}
+		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, quota: cfg.Quota, log: log}
 		h.register(s)
 
 		disk, root := cfg.Disk, cfg.CgroupRoot
@@ -198,6 +203,7 @@ type siteOps struct {
 	certs *certs.Store
 	db    *mariadb.Manager
 	pages *pages.Store
+	cron  *cronjobs.Manager
 	quota QuotaFS
 	log   *slog.Logger
 	mu    sync.Mutex
@@ -263,6 +269,12 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			h.clearQuota(ctx, poolOf(home), site.UID)
 		}
 
+		if h.cron != nil {
+			if err := h.cron.Remove(ctx, req.User); err != nil {
+				h.log.ErrorContext(ctx, "remove cron jobs of deleted site", "site", req.User, "err", err)
+			}
+		}
+
 		if h.certs != nil {
 			if err := h.certs.Remove(req.User); err != nil {
 				h.log.ErrorContext(ctx, "remove certificate of deleted site", "site", req.User, "err", err)
@@ -286,7 +298,16 @@ func (h *siteOps) register(s *agentrpc.Server) {
 		return agentapi.SiteListResponse{Sites: out}, nil
 	})
 
-	agentrpc.Handle(s, agentapi.WebApply, h.webApply)
+	agentrpc.Handle(s, agentapi.WebApply, func(ctx context.Context, c agentrpc.Caller, req agentapi.WebApplyRequest) (agentapi.WebApplyResponse, error) {
+		resp, err := h.webApply(ctx, c, req)
+		if err == nil {
+			h.cronDisabled(ctx, req)
+		}
+
+		return resp, err
+	})
+
+	h.registerCron(s)
 
 	h.registerPages(s)
 
@@ -811,6 +832,13 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.Pages == nil {
 		cfg.Pages = &pages.Store{Dir: PagesDir}
+	}
+
+	if cfg.Cron == nil {
+		cfg.Cron = &cronjobs.Manager{
+			StateFile: filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "cron.json"),
+			Ctl:       phpctl.CronController{}, Log: cfg.Log,
+		}
 	}
 
 	cpDir := filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "cloudpanel")
