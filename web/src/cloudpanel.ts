@@ -79,6 +79,9 @@ export const createFromPlan = (id: string, name: string, reviewed: boolean, php:
   request<PlanSite>("POST", sitePath(id, name), php ? { reviewed, php } : { reviewed });
 export const startImport = (id: string, name: string, databases: DBMap[]) =>
   request<ImportJob>("POST", sitePath(id, name) + "/import", { databases });
+// listImports returns a site's imports, newest first, without skippedPaths.
+export const listImports = async (site: string) =>
+  (await request<{ imports: ImportJob[] }>("GET", "/migrations/cloudpanel/imports?site=" + encodeURIComponent(site))).imports;
 export const getImport = (id: string) => request<ImportJob>("GET", "/migrations/cloudpanel/imports/" + encodeURIComponent(id));
 
 export const getSource = () => request<SourceInfo>("GET", source);
@@ -133,24 +136,6 @@ export function formatBytes(n: number): string {
     i++;
   }
   return (i === 0 ? String(v) : v.toFixed(1)) + " " + units[i];
-}
-
-// The last import of a site, so its status survives a reload. The panel
-// has no list of imports; losing this only hides the old status.
-const importKey = (report: string, site: string) => "hostashi.cpimport." + report + "." + site;
-export function rememberImport(report: string, site: string, id: string) {
-  try {
-    localStorage.setItem(importKey(report, site), id);
-  } catch {
-    // Storage blocked: the status shows until the page is left.
-  }
-}
-export function recalledImport(report: string, site: string): string {
-  try {
-    return localStorage.getItem(importKey(report, site)) ?? "";
-  } catch {
-    return "";
-  }
 }
 
 export function migrationMessage(err: unknown): string {

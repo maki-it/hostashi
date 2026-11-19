@@ -10,13 +10,12 @@ import {
   getImport,
   getReport,
   getSource,
+  listImports,
   hostProblem,
   listReports,
   migrationMessage,
   newDBPassword,
   parseDBMap,
-  recalledImport,
-  rememberImport,
   scanSourceHostKey,
   setSource,
   startImport,
@@ -641,9 +640,15 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
 function ImportForm({ report, site, ready }: { report: string; site: PlanSite; ready: boolean }) {
   const [dbs, setDbs] = useState("");
   const [here, setHere] = useState<string[]>([]);
-  const [job, setJob] = useState(() => recalledImport(report, site.name));
+  const [job, setJob] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    listImports(site.name)
+      .then((list) => setJob((cur) => cur || (list[0]?.id ?? "")))
+      .catch(() => undefined);
+  }, [site.name]);
 
   useEffect(() => {
     listDatabases()
@@ -662,7 +667,6 @@ function ImportForm({ report, site, ready }: { report: string; site: PlanSite; r
     setError("");
     try {
       const j = await startImport(report, site.name, maps);
-      rememberImport(report, site.name, j.id);
       setJob(j.id);
     } catch (err) {
       setError(migrationMessage(err));
