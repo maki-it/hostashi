@@ -44,7 +44,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 **Parking**
 
-- A parked domain is a domain without a site that shows a parking page with status 200. It gets a small vhost of its own, HTTP and, if wanted, HTTPS with a Let's Encrypt certificate under an agent name `_park-<n>` like the panel's own certificate (ADR-0023).
+- A parked domain is a domain without a site that shows a parking page with status 200. It gets a small vhost of its own, HTTP and HTTPS (Kim, 2026-11-19) with a Let's Encrypt certificate under an agent name `_park-<n>` like the panel's own certificate (ADR-0023).
 - A domain is either parked or belongs to a site, never both; turning a parked domain into a site removes the parking.
 - API: `GET/PUT/DELETE /api/v1/parked-domains/{domain}`.
 
@@ -61,5 +61,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions for Kim
 
+None left.
+
 1. ~~May the page's own JavaScript run?~~ Decided (Kim, 2026-11-19): yes, from its files and inline, see the named conflict.
-2. Should parked domains get HTTPS with Let's Encrypt, or is HTTP enough for them? Recommendation: HTTPS. Without a certificate, `https://` on a parked domain hits the catch-all server that refuses the TLS handshake [V: `internal/web/nginx.go`], and browsers try HTTPS first more and more often [U].
+2. ~~Should parked domains get HTTPS with Let's Encrypt?~~ Decided (Kim, 2026-11-19): yes.
