@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { CronSettings } from "./Cron";
 import { allowIpsProblem, clientIp, listPages, pageMessage, parseAllowIps, setMaintenance, type StatusPage } from "./pages";
 import {
   createSite,
@@ -307,8 +308,8 @@ function SiteRow({ site, php, onChange }: { site: Site; php: PHPVersions | null;
   );
 }
 
-// SiteSettings changes domains, PHP version, HTTPS and HSTS of an active
-// site. Each change goes live on its own.
+// SiteSettings changes domains, PHP version, HTTPS, HSTS, maintenance and
+// cron jobs of an active site. Each change goes live on its own.
 function SiteSettings({
   site,
   php,
@@ -430,6 +431,7 @@ function SiteSettings({
         {site.tls.hsts && !site.tls.active && <p className="muted">HSTS is sent only while the site is served over HTTPS.</p>}
       </fieldset>
       <MaintenanceSettings site={site} onChange={onChange} />
+      <CronSettings site={site} />
       <fieldset>
         <legend>Availability of {site.name}</legend>
         {site.disabled ? (
