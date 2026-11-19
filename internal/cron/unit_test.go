@@ -95,8 +95,8 @@ func TestUnits(t *testing.T) {
 		t.Error("slice without one set")
 	}
 
-	u.Slice = "hostashi-site-shop.slice"
-	if svc, _ := u.Service(); !strings.Contains(string(svc), "\nSlice=hostashi-site-shop.slice\n") {
+	u.Slice, u.Nice = "hostashi-site-shop.slice", 10
+	if svc, _ := u.Service(); !strings.Contains(string(svc), "\nSlice=hostashi-site-shop.slice\nNice=10\n") {
 		t.Errorf("no slice:\n%s", svc)
 	}
 
@@ -129,6 +129,8 @@ func TestUnitRejects(t *testing.T) {
 		"script %":      func(u *Unit) { u.Script = "/var/lib/%h.sh" },
 		"slice":         func(u *Unit) { u.Slice = "x.service" },
 		"timeout":       func(u *Unit) { u.Timeout = 0 },
+		"nice":          func(u *Unit) { u.Nice = 20 },
+		"nice negative": func(u *Unit) { u.Nice = -5 },
 		"no calendar":   func(u *Unit) { u.OnCalendar = nil },
 		"calendar":      func(u *Unit) { u.OnCalendar = []string{"daily\nExecStart=/bin/x"} },
 	} {
@@ -153,6 +155,7 @@ func TestUnitsVerify(t *testing.T) {
 	}
 
 	u := testUnit()
+	u.Slice, u.Nice = "hostashi-site-shop.slice", 10
 	dir := t.TempDir()
 
 	svc, err := u.Service()

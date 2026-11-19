@@ -72,11 +72,14 @@ func Script(command string) ([]byte, error) {
 // Unit describes the units of one job. Every field reaches unit syntax, so
 // each is checked against a narrow pattern before rendering.
 type Unit struct {
-	Site    string // site user, also the unit's User= and Group=
-	ID      int64  // job id, > 0
-	Home    string // the site's home, absolute
-	Script  string // the job's script file, absolute
-	Slice   string // optional, a slice unit name
+	Site   string // site user, also the unit's User= and Group=
+	ID     int64  // job id, > 0
+	Home   string // the site's home, absolute
+	Script string // the job's script file, absolute
+	Slice  string // optional, a slice unit name
+	// Nice is the job's niceness, 0 to 19; 0 leaves it unset. ADR-0015
+	// (Proposed) suggests 10 for cron jobs.
+	Nice    int
 	Timeout time.Duration
 	// OnCalendar are the timer's values, from OnCalendar.
 	OnCalendar []string
@@ -111,6 +114,10 @@ func (u Unit) check() error {
 
 	if u.Slice != "" && !unitSliceRe.MatchString(u.Slice) {
 		return fmt.Errorf("cron: slice %q", u.Slice)
+	}
+
+	if u.Nice < 0 || u.Nice > 19 {
+		return fmt.Errorf("cron: nice %d", u.Nice)
 	}
 
 	if err := ValidateTimeout(u.Timeout); err != nil {
@@ -159,6 +166,10 @@ func (u Unit) Service() ([]byte, error) {
 
 	if u.Slice != "" {
 		w("Slice=", u.Slice)
+	}
+
+	if u.Nice > 0 {
+		w("Nice=", strconv.Itoa(u.Nice))
 	}
 
 	w("SyslogIdentifier=", u.Name())
