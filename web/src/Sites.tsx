@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { CronSettings } from "./Cron";
+import { LimitSettings } from "./Limits";
 import { SnippetSettings } from "./Snippets";
 import { allowIpsProblem, clientIp, listPages, pageMessage, parseAllowIps, setMaintenance, type StatusPage } from "./pages";
 import {
@@ -432,6 +433,7 @@ function SiteSettings({
         {site.tls.hsts && !site.tls.active && <p className="muted">HSTS is sent only while the site is served over HTTPS.</p>}
       </fieldset>
       <MaintenanceSettings site={site} onChange={onChange} />
+      <LimitSettings site={site} />
       <CronSettings site={site} />
       <SnippetSettings site={site} />
       <fieldset>

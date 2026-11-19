@@ -5,6 +5,7 @@ import { currentUser, setupRequired, type User } from "./auth";
 import { Backups } from "./Backups";
 import { Databases } from "./Databases";
 import { Home } from "./Home";
+import { Presets } from "./Limits";
 import { Login } from "./Login";
 import { Migrate } from "./Migrate";
 import { Pages } from "./Pages";
@@ -19,12 +20,14 @@ type View =
   | { kind: "home"; user: User }
   | { kind: "error" };
 
-type Page = "home" | "sites" | "pages" | "parked" | "databases" | "backups" | "import";
+type Page = "home" | "sites" | "limits" | "pages" | "parked" | "databases" | "backups" | "import";
 
 const pageFromHash = (): Page => {
   switch (window.location.hash) {
     case "#/sites":
       return "sites";
+    case "#/limits":
+      return "limits";
     case "#/pages":
       return "pages";
     case "#/parked":
@@ -80,6 +83,9 @@ export function App() {
             <a href="#/sites" aria-current={page === "sites" ? "page" : undefined}>
               Sites
             </a>
+            <a href="#/limits" aria-current={page === "limits" ? "page" : undefined}>
+              Limits
+            </a>
             <a href="#/pages" aria-current={page === "pages" ? "page" : undefined}>
               Pages
             </a>
@@ -115,6 +121,7 @@ export function App() {
       )}
       {view.kind === "home" && page === "home" && <Home user={view.user} onLogout={() => setView({ kind: "login" })} />}
       {view.kind === "home" && page === "sites" && <Sites />}
+      {view.kind === "home" && page === "limits" && <Presets />}
       {view.kind === "home" && page === "pages" && <Pages />}
       {view.kind === "home" && page === "parked" && <Parked />}
       {view.kind === "home" && page === "databases" && <Databases />}

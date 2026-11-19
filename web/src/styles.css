@@ -431,3 +431,8 @@ ul.problems {
   background: var(--bg);
   border-radius: 0.25rem;
 }
+
+.limit-row {
+  display: grid;
+  gap: 0.25rem;
+}
