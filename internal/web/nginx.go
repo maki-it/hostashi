@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/nginxconf"
+	"github.com/maki-it/hostashi/internal/snippet"
 )
 
 // Controller runs nginx. The production one (package webctl) uses the
@@ -556,6 +558,9 @@ server {
             return 503;
         }
         {{- end}}
+        {{- with $.SnipRoot}}
+        include {{.}};
+        {{- end}}
         try_files $uri $uri/ /index.php$is_args$args;
     }
 
@@ -600,6 +605,9 @@ server {
             return 503;
         }
         {{- end}}
+        {{- with $.SnipRoot}}
+        include {{.}};
+        {{- end}}
         try_files $uri $uri/ =404;
     }
 
@@ -614,6 +622,11 @@ server {
     location ~ /\.(?!well-known/) {
         deny all;
     }
+    {{- with $.SnipServer}}
+
+    # Custom snippet (ADR-0029), after Hostashi's own locations.
+    include {{.}};
+    {{- end}}
     {{- end}}
 }
 `)
@@ -646,6 +659,26 @@ func (n *Nginx) Render(d Desired, gen int) (Files, error) {
 			data["Open"] = "hostashi_open_" + hex.EncodeToString([]byte(s.User))
 			data["Prefix"] = agentapi.PagePathPrefix
 			data["PL"] = n.pageLoc(s.Maintenance.Page, s.Maintenance.Dir, s.Cert != "", s.HSTS)
+		}
+
+		if !s.Disabled && s.Maintenance == nil {
+			server, root, err := s.checkSnippets()
+			if err != nil {
+				return Files{}, fmt.Errorf("web: site %s: %w", s.User, err)
+			}
+
+			// Snippets live in their own files outside sites/, so the
+			// sites/*.conf glob never picks them up, and a stray brace
+			// cannot leave its block (S2).
+			for slot, ds := range map[string][]nginxconf.Directive{"SnipServer": server, "SnipRoot": root} {
+				if len(ds) == 0 {
+					continue
+				}
+
+				name := "snippets/" + s.User + "-" + strings.ToLower(strings.TrimPrefix(slot, "Snip")) + ".conf"
+				f.Content[name] = []byte("# Custom snippet of site " + s.User + ", checked by hostashi (ADR-0029).\n" + snippet.Render(ds, ""))
+				data[slot] = name
+			}
 		}
 
 		if err := siteTmpl.Execute(&b, data); err != nil {

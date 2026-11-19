@@ -13,6 +13,8 @@ import (
 	"regexp"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/nginxconf"
+	"github.com/maki-it/hostashi/internal/snippet"
 )
 
 // Site is the desired state of one virtual host. The agent fills Root from
@@ -37,6 +39,46 @@ type Site struct {
 	// Maintenance serves a stored page with 503 to every address outside
 	// its allowlist (ADR-0027). Disabled wins over it.
 	Maintenance *Maintenance `json:"maintenance,omitempty"`
+	// Home is the site's home directory; custom snippets may only point
+	// below it. Required when Snippets is set.
+	Home string `json:"home,omitempty"`
+	// Snippets are the site's custom nginx snippets (ADR-0029). They are
+	// checked against the allowlist in Validate and rendered from the
+	// checked directives, and left out while the site is disabled or in
+	// maintenance.
+	Snippets Snippets `json:"snippets,omitzero"`
+}
+
+// Snippets are the custom snippets of a site, one per slot.
+type Snippets struct {
+	// Server goes into the server block that serves the site.
+	Server string `json:"server,omitempty"`
+	// Root goes into the site's "location /".
+	Root string `json:"root,omitempty"`
+}
+
+// IsZero reports whether no snippet is set.
+func (s Snippets) IsZero() bool { return s.Server == "" && s.Root == "" }
+
+// check runs the allowlist check (package snippet) for both slots.
+func (s Site) checkSnippets() (server, root []nginxconf.Directive, err error) {
+	if s.Snippets.IsZero() {
+		return nil, nil, nil
+	}
+
+	ss := snippet.Site{Home: s.Home, PHPSocket: s.PHPSocket}
+
+	server, err = snippet.Check(s.Snippets.Server, snippet.SlotServer, ss)
+	if err != nil {
+		return nil, nil, fmt.Errorf("server snippet: %w", err)
+	}
+
+	root, err = snippet.Check(s.Snippets.Root, snippet.SlotRoot, ss)
+	if err != nil {
+		return nil, nil, fmt.Errorf("location / snippet: %w", err)
+	}
+
+	return server, root, nil
 }
 
 // Maintenance is the maintenance mode of a site. Dir is the committed page
@@ -109,6 +151,10 @@ func (d Desired) Validate() error {
 
 		if (s.Cert == "") != (s.Key == "") {
 			return fmt.Errorf("site %q: certificate and key go together", s.User)
+		}
+
+		if _, _, err := s.checkSnippets(); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
 		}
 	}
 
