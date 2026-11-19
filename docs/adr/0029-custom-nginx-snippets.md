@@ -70,6 +70,6 @@ Everything else is rejected with "not allowed in custom snippets", including `li
 
 ## Open questions
 
-1. Option A (allowlist checked by the agent) or B (free text for the admin)? Recommendation: A.
+1. ~~Option A (allowlist checked by the agent) or B (free text for the admin)?~~ Decided by Kim (2026-11-19): option A.
 2. Is the first list enough to start, or should something be added before the web2 migration? Answered best by a dry run against web2's scan.
 3. May `proxy_pass` point at loopback addresses (`127.0.0.1`, `::1`)? Recommendation: yes, for local apps, with the named risk that a snippet can reach local HTTP services.
