@@ -186,3 +186,21 @@ func TestRequestID(t *testing.T) {
 		t.Fatalf("not fresh: %q", again)
 	}
 }
+
+func TestMetricsTokenExpiryWarning(t *testing.T) {
+	e := newAPI(t)
+	c := e.adminCookie(t)
+
+	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/tokens", body: `{"name":"prom","scopes":["metrics:read"],"expiresInDays":10}`, cookie: c})
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"expires_soon: `) {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	e.createToken(t, c, `{"name":"prom-long","scopes":["metrics:read"]}`)
+	e.createToken(t, c, `{"name":"deploy","scopes":["sites:read"],"expiresInDays":10}`)
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/tokens", cookie: c})
+	if rec.Code != http.StatusOK || strings.Count(rec.Body.String(), `"warnings":["expires_soon"]`) != 1 {
+		t.Fatalf("list: %d %s", rec.Code, rec.Body)
+	}
+}

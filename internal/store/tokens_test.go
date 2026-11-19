@@ -145,3 +145,33 @@ func TestSettings(t *testing.T) {
 		t.Fatal("invalid JSON accepted")
 	}
 }
+
+func TestActiveAPITokens(t *testing.T) {
+	s, u := tokenStore(t)
+	ctx := context.Background()
+	now := time.Unix(2_000_000, 0)
+	past, future := now.Add(-time.Second), now.Add(time.Hour)
+
+	mk := func(name string, exp *time.Time, b byte) APIToken {
+		tok, err := s.CreateAPIToken(ctx, APIToken{UserID: u.ID, Name: name, Prefix: "abcdef", Scopes: []string{"metrics:read"}, CreatedAt: now.Add(-time.Hour), ExpiresAt: exp}, hashOf(b))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return tok
+	}
+
+	mk("expired", &past, 1)
+	live := mk("live", &future, 2)
+	forever := mk("forever", nil, 3)
+	gone := mk("revoked", &future, 4)
+
+	if _, err := s.RevokeAPIToken(ctx, u.ID, gone.ID, now); err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := s.ActiveAPITokens(ctx, now)
+	if err != nil || len(list) != 2 || list[0].ID != live.ID || list[1].ID != forever.ID {
+		t.Fatalf("%+v %v", list, err)
+	}
+}

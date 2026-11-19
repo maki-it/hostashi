@@ -19,7 +19,7 @@ import (
 const MetricsPath = "/metrics"
 
 // metricsScope is the token scope that opens MetricsPath (ADR-0022).
-const metricsScope = "metrics:read"
+const metricsScope = auth.MetricsScope
 
 // metricsEnabledKey is the setting that switches the endpoint on. It is off
 // until an admin turns it on (ADR-0022, 03-features.md).
