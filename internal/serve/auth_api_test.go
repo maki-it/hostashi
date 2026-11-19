@@ -81,7 +81,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	if ag != nil {
 		deps.Sites = hosting.New(st, ag, nil)
 		deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), nil)
-		deps.CloudPanel.Connect(siteCreator(deps.Sites), imports)
+		deps.CloudPanel.Connect(siteCreator(deps.Sites, nil), imports)
 		deps.CloudPanelSource = newStubSource(t)
 	}
 

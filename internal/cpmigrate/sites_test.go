@@ -64,7 +64,10 @@ func sitesReport(t *testing.T) []byte {
 	}
 
 	b, err := json.Marshal(scan.Report{Format: scan.Format, Sites: []scan.Site{
-		site("alpha", "php", scan.StatusClean, "8.4", func(s *scan.Site) { s.RedirectFrom = []string{"www.alpha.example.com"} }),
+		site("alpha", "php", scan.StatusClean, "8.4", func(s *scan.Site) {
+			s.RedirectFrom = []string{"www.alpha.example.com"}
+			s.Cron = []scan.CronJob{{Schedule: "*/5 * * * *", Command: "php wp-cron.php", Line: 1}, {Schedule: "@reboot", Command: "x", Line: 2}}
+		}),
 		site("beta", "php", scan.StatusClean, "8.1", nil),
 		site("gamma", "nodejs", scan.StatusClean, "", nil),
 		{Name: "x", Status: scan.StatusBlocked, Findings: []scan.Finding{{Severity: scan.SevBlocker, Code: "path_escape", Msg: "no"}}},
@@ -97,11 +100,11 @@ func TestCreateSiteAndImport(t *testing.T) {
 	var created []cpmigrate.NewSite
 
 	imp := &fakeImporter{}
-	svc.Connect(func(_ context.Context, _ int64, s cpmigrate.NewSite) error {
+	svc.Connect(func(_ context.Context, _ int64, s cpmigrate.NewSite) (int, error) {
 		created = append(created, s)
 		existing = append(existing, s.Name)
 
-		return nil
+		return len(s.Cron), nil
 	}, imp)
 
 	// The redirect host makes alpha a review site.
@@ -113,6 +116,10 @@ func TestCreateSiteAndImport(t *testing.T) {
 	ps, err := svc.CreateSite(t.Context(), 1, rep.ID, "alpha", cpmigrate.CreateOptions{Reviewed: true})
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	if len(created[0].Cron) != 1 || created[0].Cron[0].Line != 1 || ps.CronImport != 1 {
+		t.Fatalf("cron %+v %d", created[0].Cron, ps.CronImport)
 	}
 
 	if len(created) != 1 || created[0].Name != "alpha" || created[0].PHP != "8.4" ||
@@ -187,7 +194,7 @@ func TestCreateSiteAndImport(t *testing.T) {
 
 func TestImportRefusesTwinUsers(t *testing.T) {
 	svc, _ := newService(t, nil)
-	svc.Connect(func(context.Context, int64, cpmigrate.NewSite) error { return nil }, &fakeImporter{})
+	svc.Connect(func(context.Context, int64, cpmigrate.NewSite) (int, error) { return 0, nil }, &fakeImporter{})
 
 	s := scan.Site{Name: "a", User: "alpha", Type: "static", Status: scan.StatusClean, Domains: []string{"a.example.com"}, DocRoot: "/home/alpha/htdocs/a"}
 	s2 := s

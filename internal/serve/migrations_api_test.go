@@ -27,6 +27,7 @@ func scanReportJSON(t *testing.T) string {
 			Pool: &scan.Pool{Name: user, Version: "8.4", User: user}, TLS: scan.TLS{Kind: "letsencrypt"},
 			Custom:  []scan.Custom{{Context: "server: add_header", Raw: `add_header X-Secret "s3cr3t-in-snippet";`}},
 			Sources: []string{"/etc/nginx/sites-enabled/" + domain + ".conf"},
+			Cron:    []scan.CronJob{{Schedule: "*/10 * * * *", Command: "curl -s https://" + domain + "/cron?key=cr0n-t0ken", Line: 1}},
 		}
 	}
 
@@ -187,6 +188,9 @@ func (s *stubImports) Get(_ context.Context, id string) (agentapi.CloudPanelImpo
 
 func TestCloudPanelSitesOverHTTP(t *testing.T) {
 	e := newAPIWithAgent(t, &stubAgent{})
+	cr := &stubCron{applied: map[string][]agentapi.CronJob{}}
+	e.sites.EnableCron(cr)
+
 	c := e.adminCookie(t)
 
 	rec := e.do(t, reqOpts{method: "POST", path: reportsPath, cookie: c, body: scanReportJSON(t)})
@@ -204,13 +208,18 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 		t.Fatalf("unreviewed: %d %s", rec.Code, rec.Body)
 	}
 
-	if strings.Contains(rec.Body.String(), "s3cr3t") {
-		t.Fatalf("snippet in the refusal: %s", rec.Body)
+	if strings.Contains(rec.Body.String(), "s3cr3t") || strings.Contains(rec.Body.String(), "cr0n-t0ken") {
+		t.Fatalf("snippet or cron command in the refusal: %s", rec.Body)
 	}
 
 	rec = e.do(t, reqOpts{method: "POST", path: sites + "shop", cookie: c, body: `{"reviewed":true}`})
-	if rec.Code != http.StatusCreated {
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"cronImport":1`) || strings.Contains(rec.Body.String(), "cr0n-t0ken") {
 		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	// The old site's cron job arrives paused (ADR-0028).
+	if jobs := cr.applied["shop"]; len(jobs) != 1 || !jobs[0].Paused || !strings.HasSuffix(jobs[0].Command, "key=cr0n-t0ken") {
+		t.Fatalf("cron jobs %+v", jobs)
 	}
 
 	s, err := e.sites.Get(t.Context(), "shop")
