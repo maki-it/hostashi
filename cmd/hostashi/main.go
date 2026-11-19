@@ -43,6 +43,9 @@ commands:
   ping      check that the agent answers
   site create NAME [POOL] | site delete NAME | site list
             manage site accounts through the agent (root on the server)
+  site limits NAME [memory=BYTES] [tasks=N] [cpu-weight=N] [cpu-quota=PERCENT]
+            show or set the CPU, memory and process limits of a site's slice;
+            with values, every one left out means no limit (ADR-0015)
   web apply read the complete web state as JSON from stdin and make it live,
             e.g. {"sites":[{"user":"blog","domains":["blog.example.com"]}]}
   db list | db create SITE NAME | db delete NAME

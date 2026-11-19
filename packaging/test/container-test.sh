@@ -228,6 +228,22 @@ grep -qx "hostashi_site_php_up{php_version=\"$ver\",site=\"wp\"} 1" <<<"$metrics
 grep -q '^hostashi_agent_ops_total{op="web.apply",result="ok"}' <<<"$metrics" || fail "no agent op series"
 grep '^hostashi_site_php_memory_bytes' <<<"$metrics" || echo "note: no PHP memory series (no memory controller here)"
 [ "$(api PUT /api/v1/settings/metrics '{"enabled":false}')" = 200 ] || fail "metrics off: $(x cat /tmp/api.out)"
+# The site's PHP runs in its slice, and the slice takes the limits (ADR-0015).
+phpcg=$(x systemctl show -p ControlGroup --value "hostashi-php-$ver@wp.service")
+[ "$phpcg" = "/hostashi.slice/hostashi-site.slice/hostashi-site-wp.slice/hostashi-php-$ver@wp.service" ] || fail "PHP unit not in the site slice: $phpcg"
+x /usr/local/bin/hostashi site limits wp memory=268435456 tasks=64 cpu-weight=200
+x /usr/local/bin/hostashi site limits wp | grep -qx 'memory=268435456 tasks=64 cpu-weight=200 cpu-quota=0' || fail "limits not read back"
+for p in MemoryMax=268435456 MemoryHigh=241591905 TasksMax=64 CPUWeight=200; do
+  [ "$(x systemctl show -p "${p%%=*}" --value hostashi-site-wp.slice)" = "${p#*=}" ] || fail "slice ${p%%=*} not ${p#*=}"
+done
+sl=/sys/fs/cgroup/hostashi.slice/hostashi-site.slice/hostashi-site-wp.slice
+for f in memory.max=268435456 pids.max=64 cpu.weight=200; do
+  if x test -e "$sl/${f%%=*}"; then
+    [ "$(x cat "$sl/${f%%=*}")" = "${f#*=}" ] || fail "$sl/${f%%=*} is $(x cat "$sl/${f%%=*}"), want ${f#*=}"
+  else
+    echo "note: no ${f%%=*} in the container's cgroup (controller not delegated)"
+  fi
+done
 # PHP off: the pool goes away and PHP source is never sent.
 [ "$(api PUT /api/v1/sites/wp/php '{"php":""}')" = 200 ] || fail "PHP off: $(x cat /tmp/api.out)"
 ! x systemctl is-active --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit still running after PHP off"

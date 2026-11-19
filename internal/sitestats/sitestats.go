@@ -38,6 +38,14 @@ func PHPCgroup(root, version, user string) string {
 	return filepath.Join(root, "system.slice", "system-"+escapeUnitPrefix(prefix)+".slice", prefix+"@"+user+".service")
 }
 
+// PHPSliceCgroup is the cgroup directory of a site's FPM unit inside the
+// site's slice (ADR-0015): hostashi.slice/hostashi-site.slice/<slice>/<unit>.
+func PHPSliceCgroup(root, version, user string) string {
+	slice := "hostashi-site-" + escapeUnitPrefix(user) + ".slice"
+
+	return filepath.Join(root, "hostashi.slice", "hostashi-site.slice", slice, unitPrefix+version+"@"+user+".service")
+}
+
 // PHP is the state of one site's FPM unit.
 type PHP struct {
 	Up          bool
@@ -47,10 +55,17 @@ type PHP struct {
 
 // ReadPHP reads the unit's cgroup. A missing cgroup means the unit does not
 // run, which is not an error.
+// The unit is looked up in the site's slice first, then in systemd's
+// default place for a unit that has not moved yet.
 func ReadPHP(root, version, user string) (PHP, error) {
-	dir := PHPCgroup(root, version, user)
+	dir := PHPSliceCgroup(root, version, user)
 
 	procs, err := os.ReadFile(filepath.Join(dir, "cgroup.procs"))
+	if errors.Is(err, fs.ErrNotExist) {
+		dir = PHPCgroup(root, version, user)
+		procs, err = os.ReadFile(filepath.Join(dir, "cgroup.procs"))
+	}
+
 	if errors.Is(err, fs.ErrNotExist) {
 		return PHP{}, nil
 	}

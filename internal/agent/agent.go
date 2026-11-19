@@ -32,6 +32,7 @@ import (
 	"github.com/maki-it/hostashi/internal/phpctl"
 	"github.com/maki-it/hostashi/internal/resticctl"
 	"github.com/maki-it/hostashi/internal/sites"
+	"github.com/maki-it/hostashi/internal/siteslice"
 	"github.com/maki-it/hostashi/internal/sitestats"
 	"github.com/maki-it/hostashi/internal/sysuser"
 	"github.com/maki-it/hostashi/internal/web"
@@ -94,6 +95,11 @@ type Config struct {
 	// Cron keeps the sites' cron jobs as systemd units (ADR-0028). Run
 	// builds it; without it cron.* answer failed_precondition.
 	Cron *cronjobs.Manager
+
+	// Slices keeps the sites' slices with their limits (ADR-0015). Run
+	// builds it on /etc/systemd/system; without it site.limits.* answer
+	// failed_precondition.
+	Slices *siteslice.Manager
 
 	// Disk caches the sites' disk usage for metrics.snapshot; Run fills it
 	// every agentapi.DiskEvery. Nil: an empty cache.
@@ -172,7 +178,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, quota: cfg.Quota, log: log}
+		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, quota: cfg.Quota, slices: cfg.Slices, log: log}
 		h.register(s)
 
 		disk, root := cfg.Disk, cfg.CgroupRoot
@@ -197,16 +203,17 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 // web.apply, so a site cannot lose its home while a virtual host or a PHP
 // pool is being built for it.
 type siteOps struct {
-	m     *sites.Manager
-	web   *web.Reconciler
-	php   *php.Manager
-	certs *certs.Store
-	db    *mariadb.Manager
-	pages *pages.Store
-	cron  *cronjobs.Manager
-	quota QuotaFS
-	log   *slog.Logger
-	mu    sync.Mutex
+	m      *sites.Manager
+	web    *web.Reconciler
+	php    *php.Manager
+	certs  *certs.Store
+	db     *mariadb.Manager
+	pages  *pages.Store
+	cron   *cronjobs.Manager
+	quota  QuotaFS
+	slices *siteslice.Manager
+	log    *slog.Logger
+	mu     sync.Mutex
 }
 
 // register adds the operations. Only the errors listed in the map functions
@@ -269,6 +276,12 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			h.clearQuota(ctx, poolOf(home), site.UID)
 		}
 
+		if h.slices != nil {
+			if err := h.slices.Remove(ctx, req.User); err != nil {
+				h.log.ErrorContext(ctx, "remove slice of deleted site", "site", req.User, "err", err)
+			}
+		}
+
 		if h.cron != nil {
 			if err := h.cron.Remove(ctx, req.User); err != nil {
 				h.log.ErrorContext(ctx, "remove cron jobs of deleted site", "site", req.User, "err", err)
@@ -312,6 +325,8 @@ func (h *siteOps) register(s *agentrpc.Server) {
 	h.registerPages(s)
 
 	h.registerQuota(s)
+
+	h.registerLimits(s)
 
 	h.registerDB(s)
 
@@ -779,6 +794,9 @@ func openPHP(stateDir string, log *slog.Logger) *php.Manager {
 		SocketDir: PHPSocketDir,
 		WebGroup:  WebUser,
 		Ctl:       phpctl.Controller{},
+		Units:     phpctl.Controller{},
+		UnitDir:   siteslice.DefaultDir,
+		Slice:     siteslice.Name,
 		Installed: phpctl.Installed,
 		Log:       log,
 	}
@@ -832,6 +850,10 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.Pages == nil {
 		cfg.Pages = &pages.Store{Dir: PagesDir}
+	}
+
+	if cfg.Slices == nil {
+		cfg.Slices = &siteslice.Manager{Dir: siteslice.DefaultDir, Ctl: phpctl.Controller{}}
 	}
 
 	if cfg.Cron == nil {

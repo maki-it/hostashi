@@ -3,7 +3,8 @@
 // Package phpctl runs the distribution's PHP-FPM for package php: php-fpm -t
 // on a pool file, and the per-site units through systemd. It also drives the
 // units of the sites' cron jobs (cron.go, ADR-0028), which are per-site
-// units of the same kind.
+// units of the same kind, and reloads systemd after the agent changed a
+// site's slice (ADR-0015).
 //
 // Like internal/webctl it is allowed to start processes (depguard rule in
 // .golangci.yml), with the same narrow exception: fixed binaries by absolute
@@ -89,6 +90,17 @@ func (Controller) Start(ctx context.Context, unit string) error {
 // workers finish their requests) and starts it if it is not running.
 func (Controller) Reload(ctx context.Context, unit string) error {
 	return systemctl(ctx, unit, "reload-or-restart")
+}
+
+// Restart restarts a unit, which moves it into a changed slice (ADR-0015).
+func (Controller) Restart(ctx context.Context, unit string) error {
+	return systemctl(ctx, unit, "restart")
+}
+
+// DaemonReload makes systemd read changed unit files and drop-ins: the
+// sites' slices and the PHP units' slice drop-ins (ADR-0015).
+func (Controller) DaemonReload(ctx context.Context) error {
+	return run(ctx, Systemctl, "daemon-reload")
 }
 
 // Stop stops the unit now and disables it.

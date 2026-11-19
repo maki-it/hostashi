@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,6 +59,8 @@ func adminCmd(ctx context.Context, c *agentrpc.Client, cmd string, args []string
 		for _, s := range r.Sites {
 			fmt.Fprintf(out, "%s\tuid=%d\tpool=%s\n", s.User, s.UID, s.Pool)
 		}
+	case sub == "site limits" && len(args) >= 2:
+		return limitsCmd(ctx, c, args[1], args[2:], out)
 	case sub == "web apply" && len(args) == 1:
 		var req agentapi.WebApplyRequest
 
@@ -272,4 +275,51 @@ func backupSimpleCmd(ctx context.Context, c *agentrpc.Client, args []string) (an
 	}
 
 	return v, err
+}
+
+// limitsCmd shows a site's limits, or sets them from key=value arguments.
+func limitsCmd(ctx context.Context, c *agentrpc.Client, site string, kv []string, out io.Writer) error {
+	var (
+		l   agentapi.SiteLimits
+		err error
+	)
+
+	if len(kv) == 0 {
+		l, err = agentapi.SiteLimitsGet.Call(ctx, c, agentapi.SiteLimitsGetRequest{User: site})
+	} else {
+		for _, a := range kv {
+			k, v, ok := strings.Cut(a, "=")
+			if !ok {
+				return errUsage
+			}
+
+			n, perr := strconv.ParseUint(v, 10, 64)
+			if perr != nil {
+				return fmt.Errorf("%s: %w", k, perr)
+			}
+
+			switch k {
+			case "memory":
+				l.MemoryMax = n
+			case "tasks":
+				l.TasksMax = n
+			case "cpu-weight":
+				l.CPUWeight = n
+			case "cpu-quota":
+				l.CPUQuotaPercent = n
+			default:
+				return errUsage
+			}
+		}
+
+		l, err = agentapi.SiteLimitsSet.Call(ctx, c, agentapi.SiteLimitsSetRequest{User: site, Limits: l})
+	}
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(out, "memory=%d tasks=%d cpu-weight=%d cpu-quota=%d\n", l.MemoryMax, l.TasksMax, l.CPUWeight, l.CPUQuotaPercent)
+
+	return nil
 }
