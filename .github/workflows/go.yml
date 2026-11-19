@@ -271,6 +271,7 @@ jobs:
           go test -run '^$' -fuzz '^FuzzDispatch$' -fuzztime 40s ./internal/agentrpc/
           go test -run '^$' -fuzz '^FuzzParse$' -fuzztime 20s ./internal/statuspage/
           go test -run '^$' -fuzz '^FuzzCheckRender$' -fuzztime 20s ./internal/snippet/
+          go test -run '^$' -fuzz '^FuzzStripDefiners$' -fuzztime 20s ./internal/mariadb/
 
   build:
     needs: changes

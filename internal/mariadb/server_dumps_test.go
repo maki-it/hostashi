@@ -88,7 +88,7 @@ func TestServerDumps(t *testing.T) {
 	write("wp.sql", "CREATE TABLE `wp_posts` (`ID` bigint unsigned NOT NULL AUTO_INCREMENT, `t` text, PRIMARY KEY (`ID`)) "+
 		"ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;\nINSERT INTO `wp_posts` VALUES (1,'hällo');\n")
 
-	if j := run(m.StartImport("dump_target", "wp.sql")); j.State != agentapi.JobDone {
+	if j := run(m.StartImport("dump_target", "wp.sql", false)); j.State != agentapi.JobDone {
 		t.Fatalf("import: %+v", j)
 	}
 
@@ -103,7 +103,7 @@ func TestServerDumps(t *testing.T) {
 	} {
 		write(name, dump)
 
-		if j := run(m.StartImport("dump_target", name)); j.State != agentapi.JobFailed {
+		if j := run(m.StartImport("dump_target", name, false)); j.State != agentapi.JobFailed {
 			t.Errorf("%s: %+v", name, j)
 		}
 	}
@@ -148,7 +148,7 @@ func TestServerDumps(t *testing.T) {
 		t.Fatalf("export content: %.300s", b)
 	}
 
-	if j := run(m.StartImport("dump_other", "out.sql.gz")); j.State != agentapi.JobDone {
+	if j := run(m.StartImport("dump_other", "out.sql.gz", false)); j.State != agentapi.JobDone {
 		t.Fatalf("re-import: %+v", j)
 	}
 

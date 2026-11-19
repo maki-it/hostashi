@@ -54,6 +54,7 @@ type DBJob struct {
 	Kind     string    `json:"kind"` // "import" or "export"
 	Database string    `json:"database"`
 	Path     string    `json:"path"`
+	AsOwner  bool      `json:"asOwner,omitempty"`
 	State    string    `json:"state"`
 	Error    string    `json:"error,omitempty"` // fixed text, at most a line number and an error code
 	Started  time.Time `json:"started"`
@@ -64,6 +65,10 @@ type DBJob struct {
 type DBDumpRequest struct {
 	Database string `json:"database"`
 	Path     string `json:"path"`
+	// AsOwner loads an import as the database's owner account and strips
+	// the dump's DEFINER clauses, so views, triggers and routines from
+	// another server keep working (ADR-0030). Only for db.import.
+	AsOwner bool `json:"asOwner,omitempty"`
 }
 
 // Validate checks the request.
