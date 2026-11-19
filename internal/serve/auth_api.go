@@ -37,6 +37,9 @@ type userJSON struct {
 	Role     string   `json:"role"`
 	Auth     string   `json:"auth,omitempty"`   // "session" or "token", only on /auth/me
 	Scopes   []string `json:"scopes,omitempty"` // token scopes, only on /auth/me
+	// ClientIP is the address the panel sees for this request, only on
+	// /auth/me ("add my current IP" for maintenance, ADR-0027).
+	ClientIP string `json:"clientIp,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -352,7 +355,7 @@ func registerAuth(mux *http.ServeMux, svc *auth.Service, log *slog.Logger) {
 			return
 		}
 
-		out := userJSON{Username: p.User.Username, Role: p.User.Role, Auth: "session"}
+		out := userJSON{Username: p.User.Username, Role: p.User.Role, Auth: "session", ClientIP: clientIP(r)}
 		if p.IsToken() {
 			out.Auth, out.Scopes = "token", p.Scopes
 		}

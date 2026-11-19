@@ -59,6 +59,10 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - The reserved path `/.hostashi/page/` is no longer free for the site's own content. The agent's health check already uses `/.hostashi/` [V: `internal/web/nginx.go`].
 - Not in scope: an editor for pages in the panel (upload only), scheduled maintenance windows, maintenance on the panel itself.
 
+## Implementation notes
+
+- 2026-11-19: switching maintenance uses the scope `sites.maintenance:write`, which the scope catalog already had for this purpose (ADR-0018), instead of `sites:write`. Reading pages has its own scope `pages:read`. Agent chunks are 40 KiB, so a chunk with base64 and the envelope stays below the 64 KiB frame.
+
 ## Open questions for Kim
 
 None left.

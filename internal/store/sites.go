@@ -39,6 +39,11 @@ type Site struct {
 	// Disabled: the web server answers with 503 and PHP is stopped; the
 	// account, files, databases and certificate stay.
 	Disabled bool
+	// Maintenance serves MaintenancePage (0: the built-in page) with 503 to
+	// every address outside MaintenanceAllow (ADR-0027).
+	Maintenance      bool
+	MaintenancePage  int64
+	MaintenanceAllow []string
 	// TLSLive: the last accepted web state serves the site over HTTPS.
 	TLSLive bool
 	// TLSDomains and TLSNotAfter describe the live certificate (none: empty).
@@ -235,7 +240,7 @@ func domainsOf(ctx context.Context, q queryer, siteID int64) ([]string, error) {
 // Sites returns all sites sorted by name, with their domains.
 func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, pool, state, php, tls, hsts, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at, created_at, updated_at FROM sites ORDER BY name`)
+		`SELECT `+siteColumns+` FROM sites ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("store: %w", err)
 	}
@@ -272,7 +277,7 @@ func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 
 // SiteByName returns one site or ErrNotFound.
 func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
-	st, err := scanSite(s.db.QueryRowContext(ctx, `SELECT id, name, pool, state, php, tls, hsts, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at, created_at, updated_at FROM sites WHERE name = ?`, name))
+	st, err := scanSite(s.db.QueryRowContext(ctx, `SELECT `+siteColumns+` FROM sites WHERE name = ?`, name))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, ErrNotFound
 	}
@@ -290,15 +295,20 @@ func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
 
 type scanner interface{ Scan(dest ...any) error }
 
+const siteColumns = `id, name, pool, state, php, tls, hsts, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
+	maintenance, coalesce(maintenance_page, 0), maintenance_allow, created_at, updated_at`
+
 func scanSite(r scanner) (Site, error) {
 	var (
 		st                         Site
 		tls, hsts, disabled, live  int
-		tlsDomains                 string
+		maint                      int
+		tlsDomains, allow          string
 		notAfter, failed, cre, upd int64
 	)
 
-	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &tls, &hsts, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed, &cre, &upd)
+	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &tls, &hsts, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
+		&maint, &st.MaintenancePage, &allow, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
 	}
@@ -308,6 +318,7 @@ func scanSite(r scanner) (Site, error) {
 	}
 
 	st.TLS, st.HSTS, st.Disabled, st.TLSLive = tls == 1, hsts == 1, disabled == 1, live == 1
+	st.Maintenance, st.MaintenanceAllow = maint == 1, strings.Fields(allow)
 	st.TLSDomains = strings.Fields(tlsDomains)
 	st.TLSNotAfter, st.TLSFailedAt = unixOrZero(notAfter), unixOrZero(failed)
 	st.CreatedAt, st.UpdatedAt = time.Unix(cre, 0).UTC(), time.Unix(upd, 0).UTC()

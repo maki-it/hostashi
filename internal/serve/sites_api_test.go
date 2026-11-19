@@ -22,6 +22,7 @@ type stubAgent struct {
 	web     agentapi.WebApplyRequest
 	webErr  error
 	deleted []string
+	pages   []agentapi.PageVersion
 }
 
 func (a *stubAgent) SiteCreate(_ context.Context, req agentapi.SiteCreateRequest) (agentapi.SiteInfo, error) {
@@ -96,6 +97,28 @@ func (a *stubAgent) DBJob(_ context.Context, id string) (agentapi.DBJob, error) 
 
 	return agentapi.DBJob{ID: stubJob, Kind: "import", Database: "shop_wp", Path: "dump.sql", State: agentapi.JobDone}, nil
 }
+
+func (a *stubAgent) PageList(context.Context) ([]agentapi.PageVersion, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	return append([]agentapi.PageVersion{}, a.pages...), nil
+}
+
+func (a *stubAgent) PageUpload(_ context.Context, id string, files map[string][]byte, digest string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if agentapi.PageDigest(files) != digest {
+		return &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "digest"}
+	}
+
+	a.pages = append(a.pages, agentapi.PageVersion{ID: id, Digest: digest})
+
+	return nil
+}
+
+func (a *stubAgent) PageDelete(context.Context, string) error { return nil }
 
 type stubIssuer struct{}
 

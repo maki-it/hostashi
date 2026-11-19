@@ -35,10 +35,15 @@ type fakeAgent struct {
 	dbErr   error             // returned by every db call while set
 	userErr error             // returned by DBUserCreate while set
 	jobs    map[string]agentapi.DBJob
+
+	pages     map[string]map[string][]byte // "<id>.<digest>" -> files
+	uploads   int
+	pageErr   error
+	pageGones []string
 }
 
 func newFake() *fakeAgent {
-	return &fakeAgent{accounts: map[string]bool{}, dbs: map[string]string{}, dbUsers: map[string]string{}, jobs: map[string]agentapi.DBJob{}}
+	return &fakeAgent{accounts: map[string]bool{}, dbs: map[string]string{}, dbUsers: map[string]string{}, jobs: map[string]agentapi.DBJob{}, pages: map[string]map[string][]byte{}}
 }
 
 func (f *fakeAgent) SiteCreate(_ context.Context, req agentapi.SiteCreateRequest) (agentapi.SiteInfo, error) {
@@ -92,6 +97,10 @@ func (f *fakeAgent) WebApply(_ context.Context, req agentapi.WebApplyRequest) (a
 	for _, s := range req.Sites {
 		if !f.accounts[s.User] {
 			return agentapi.WebApplyResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site"}
+		}
+
+		if m := s.Maintenance; m != nil && f.pages[m.Page+"."+m.Digest] == nil {
+			return agentapi.WebApplyResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "page not stored"}
 		}
 	}
 
@@ -158,6 +167,10 @@ func (f *fakeAgent) live() string {
 
 		if s.Disabled {
 			entry += "+disabled"
+		}
+
+		if m := s.Maintenance; m != nil {
+			entry += fmt.Sprintf("+maint(%s%v)", m.Page, m.AllowIPs)
 		}
 
 		out = append(out, entry)
@@ -858,4 +871,49 @@ func (f *fakeAgent) DBJob(_ context.Context, id string) (agentapi.DBJob, error) 
 	}
 
 	return j, nil
+}
+
+func (f *fakeAgent) PageList(context.Context) ([]agentapi.PageVersion, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.pageErr != nil {
+		return nil, f.pageErr
+	}
+
+	out := []agentapi.PageVersion{}
+
+	for k := range f.pages {
+		id, digest, _ := strings.Cut(k, ".")
+		out = append(out, agentapi.PageVersion{ID: id, Digest: digest})
+	}
+
+	return out, nil
+}
+
+func (f *fakeAgent) PageUpload(_ context.Context, id string, files map[string][]byte, digest string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.pageErr != nil {
+		return f.pageErr
+	}
+
+	if agentapi.PageDigest(files) != digest {
+		return &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "digest"}
+	}
+
+	f.uploads++
+	f.pages[id+"."+digest] = files
+
+	return nil
+}
+
+func (f *fakeAgent) PageDelete(_ context.Context, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.pageGones = append(f.pageGones, id)
+
+	return nil
 }
