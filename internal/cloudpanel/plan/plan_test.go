@@ -138,6 +138,9 @@ func TestBuildSite(t *testing.T) {
 		{"custom cert", func(s *scan.Site, _ *plan.Target) { s.TLS.Kind = "custom" }, plan.ActionReview, "tls_copy"},
 		{"snippets", func(s *scan.Site, _ *plan.Target) { s.Custom = []scan.Custom{{Raw: "add_header X-A b;"}} }, plan.ActionReview, "custom_snippets"},
 		{"cron", func(s *scan.Site, _ *plan.Target) { s.Cron = []scan.CronJob{{Schedule: "* * * * *", Command: "true"}} }, plan.ActionReview, "cron"},
+		{"cron not accepted", func(s *scan.Site, _ *plan.Target) {
+			s.Cron = []scan.CronJob{{Schedule: "@reboot", Command: "true"}}
+		}, plan.ActionReview, "cron_not_carried"},
 		{"redirect", func(s *scan.Site, _ *plan.Target) { s.RedirectFrom = []string{"www.shop.example.com"} }, plan.ActionReview, "redirects"},
 		{"scan review finding", func(s *scan.Site, _ *plan.Target) {
 			s.Status = scan.StatusReview
@@ -148,7 +151,7 @@ func TestBuildSite(t *testing.T) {
 			s.Findings = []scan.Finding{{Severity: scan.SevBlocker, Code: "docroot_outside_home", Msg: "x"}}
 		}, plan.ActionSkip, "docroot_outside_home"},
 		{"skip wins over review", func(s *scan.Site, t *plan.Target) {
-			s.Cron = []scan.CronJob{{Command: "true"}}
+			s.Cron = []scan.CronJob{{Schedule: "@daily", Command: "true"}}
 			t.Sites = []string{"shop"}
 		}, plan.ActionSkip, "cron"},
 	}
@@ -259,5 +262,34 @@ func TestPlanJSONHasNoSnippets(t *testing.T) {
 
 	if strings.Contains(string(b), "secret") {
 		t.Fatalf("plan leaks snippet text: %s", b)
+	}
+}
+
+func TestCronJobs(t *testing.T) {
+	s := base()
+	s.Cron = []scan.CronJob{
+		{Schedule: "*/5 * * * *", Command: "php wp-cron.php", Line: 1},
+		{Schedule: "@reboot", Command: "start.sh", Line: 2},
+		{Schedule: "0 3 * * *", Command: "", Line: 3},
+		{Schedule: "@daily", Command: "backup.sh", Line: 4},
+	}
+
+	got := plan.CronJobs(s)
+	if len(got) != 2 || got[0].Line != 1 || got[1].Line != 4 {
+		t.Fatalf("%+v", got)
+	}
+
+	p := plan.Build(&scan.Report{Sites: []scan.Site{s}}, plan.Target{PHP: []string{"8.4"}})
+	if ps := p.Sites[0]; ps.Cron != 4 || ps.CronImport != 2 || !hasCode(ps, "cron") || !hasCode(ps, "cron_not_carried") {
+		t.Fatalf("%+v", ps)
+	}
+
+	many := base()
+	for i := range 60 {
+		many.Cron = append(many.Cron, scan.CronJob{Schedule: "@hourly", Command: "true", Line: i + 1})
+	}
+
+	if n := len(plan.CronJobs(many)); n != 50 {
+		t.Fatalf("limit: %d", n)
 	}
 }

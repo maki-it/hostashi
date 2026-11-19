@@ -277,11 +277,32 @@ func migrationTarget(sites *hosting.Service) cpmigrate.TargetFunc {
 
 // siteCreator creates a migrated site through the site service: no
 // certificate yet, DNS still points to the old server.
-func siteCreator(sites *hosting.Service) cpmigrate.SiteCreator {
-	return func(ctx context.Context, actor int64, s cpmigrate.NewSite) error {
-		_, err := sites.Create(ctx, actor, hosting.CreateRequest{Name: s.Name, PHP: s.PHP, Domains: s.Domains})
+func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator {
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
 
-		return err
+	return func(ctx context.Context, actor int64, s cpmigrate.NewSite) (int, error) {
+		if _, err := sites.Create(ctx, actor, hosting.CreateRequest{Name: s.Name, PHP: s.PHP, Domains: s.Domains}); err != nil {
+			return 0, err
+		}
+
+		n := 0
+
+		for _, j := range s.Cron {
+			_, err := sites.CreateCronJob(ctx, actor, s.Name, hosting.CronInput{Schedule: j.Schedule, Command: j.Command, Paused: true})
+			if err != nil {
+				// The site stands; the plan's review tells the admin to
+				// compare the jobs.
+				log.WarnContext(ctx, "imported cron job not created", "site", s.Name, "line", j.Line, "err", err)
+
+				continue
+			}
+
+			n++
+		}
+
+		return n, nil
 	}
 }
 

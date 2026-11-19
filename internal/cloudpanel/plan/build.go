@@ -8,6 +8,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/cloudpanel/scan"
+	"github.com/maki-it/hostashi/internal/cron"
 )
 
 // Target is what already exists on this server.
@@ -57,8 +58,10 @@ type Site struct {
 	TLS          TLSAction `json:"tls"`
 	Custom       int       `json:"customSnippets"`
 	Cron         int       `json:"cronJobs"`
-	Action       Action    `json:"action"`
-	Reasons      []Reason  `json:"reasons"`
+	// CronImport of them are created paused with the site (ADR-0028).
+	CronImport int      `json:"cronImport"`
+	Action     Action   `json:"action"`
+	Reasons    []Reason `json:"reasons"`
 	// Source is the vhost file on the old server, to find the site in the report.
 	Source string `json:"source"`
 }
@@ -122,7 +125,8 @@ func Build(rep *scan.Report, t Target) Plan {
 func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 	ps := Site{
 		Name: s.User, Type: s.Type, Domains: nonNil(s.Domains), RedirectFrom: nonNil(s.RedirectFrom),
-		DocRoot: s.DocRoot, Custom: len(s.Custom), Cron: len(s.Cron), Reasons: []Reason{}, Source: first(s.Sources),
+		DocRoot: s.DocRoot, Custom: len(s.Custom), Cron: len(s.Cron), CronImport: len(CronJobs(s)),
+		Reasons: []Reason{}, Source: first(s.Sources),
 	}
 	if s.Pool != nil {
 		ps.PHP = s.Pool.Version
@@ -201,8 +205,12 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 		review("custom_snippets", fmt.Sprintf("%d nginx directives need a one-time review (ADR-0017 Part 2)", ps.Custom))
 	}
 
-	if ps.Cron > 0 {
-		review("cron", fmt.Sprintf("%d cron jobs are not carried over yet", ps.Cron))
+	if ps.CronImport > 0 {
+		review("cron", fmt.Sprintf("%d cron jobs are created paused; start them after the DNS switch", ps.CronImport))
+	}
+
+	if n := ps.Cron - ps.CronImport; n > 0 {
+		review("cron_not_carried", fmt.Sprintf("%d cron jobs are not carried over (schedule or command not accepted, or more than %d); set them up by hand", n, cron.MaxJobsPerSite))
 	}
 
 	if len(ps.RedirectFrom) > 0 {
