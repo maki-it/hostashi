@@ -55,6 +55,7 @@ type Service struct {
 	create   SiteCreator
 	importer Importer
 	loads    *loads
+	cutover  *cutover
 }
 
 // New returns a service. log may be nil.

@@ -35,6 +35,7 @@ type apiEnv struct {
 	settings  Settings
 	st        *store.Store
 	imports   *stubImports
+	cp        *cpmigrate.Service
 }
 
 func newAPI(t *testing.T) *apiEnv {
@@ -87,7 +88,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	}
 
 	return &apiEnv{
-		h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st,
+		h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st, cp: deps.CloudPanel,
 		imports: imports,
 	}
 }

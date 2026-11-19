@@ -27,6 +27,7 @@ import (
 	"github.com/maki-it/hostashi/internal/cpsource"
 	"github.com/maki-it/hostashi/internal/cronjobs"
 	"github.com/maki-it/hostashi/internal/mariadb"
+	"github.com/maki-it/hostashi/internal/netaddrs"
 	"github.com/maki-it/hostashi/internal/pages"
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
@@ -171,6 +172,19 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	s := agentrpc.NewServer(agentrpc.AllowUIDs(0, serveUID), agentrpc.Options{Log: cfg.Log})
 	agentrpc.Handle(s, agentapi.Ping, func(_ context.Context, c agentrpc.Caller, _ agentapi.PingRequest) (agentapi.PingResponse, error) {
 		return agentapi.PingResponse{CallerUID: c.UID, Version: cfg.Version}, nil
+	})
+	agentrpc.Handle(s, agentapi.ServerAddrs, func(context.Context, agentrpc.Caller, agentapi.ServerAddrsRequest) (agentapi.ServerAddrsResponse, error) {
+		addrs, err := netaddrs.Public()
+		if err != nil {
+			return agentapi.ServerAddrsResponse{}, err
+		}
+
+		out := agentapi.ServerAddrsResponse{Addrs: make([]string, 0, len(addrs))}
+		for _, a := range addrs {
+			out.Addrs = append(out.Addrs, a.String())
+		}
+
+		return out, nil
 	})
 
 	if cfg.Sites != nil {

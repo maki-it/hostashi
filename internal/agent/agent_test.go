@@ -88,6 +88,11 @@ func TestPingThroughServer(t *testing.T) {
 	if r.Version != "1.2.3" || r.CallerUID != uint32(os.Getuid()) {
 		t.Fatalf("got %+v", r)
 	}
+
+	addrs, err := agentapi.ServerAddrs.Call(ctx, agentrpc.NewClient(sock), agentapi.ServerAddrsRequest{})
+	if err != nil || addrs.Addrs == nil {
+		t.Fatalf("addrs %+v %v", addrs, err)
+	}
 }
 
 func TestRunFailsWithoutServeUser(t *testing.T) {

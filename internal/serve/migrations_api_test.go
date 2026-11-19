@@ -5,7 +5,9 @@ package serve
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"testing"
 
@@ -365,5 +367,83 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 	var n int
 	if err := e.st.RawCount(t.Context(), `SELECT count(*) FROM audit_log WHERE action LIKE ? AND action <> 'cloudpanel.report.upload'`, "cloudpanel.%", &n); err != nil || n != 5 {
 		t.Fatalf("audit entries: %d %v", n, err)
+	}
+}
+
+type cutoverResolver map[string][]netip.Addr
+
+func (r cutoverResolver) LookupNetIP(_ context.Context, _, host string) ([]netip.Addr, error) {
+	if a, ok := r[host]; ok {
+		return a, nil
+	}
+
+	return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+}
+
+func TestCutoverOverHTTP(t *testing.T) {
+	e := newAPIWithAgent(t, &stubAgent{})
+	c := e.adminCookie(t)
+	path := "/api/v1/migrations/cloudpanel/sites/blog/cutover"
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"blog","domains":["blog.example.org"]}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: path, cookie: c}); rec.Code != http.StatusNotFound {
+		t.Fatalf("not enabled: %d %s", rec.Code, rec.Body)
+	}
+
+	here := netip.MustParseAddr("203.0.113.7")
+	res := cutoverResolver{}
+	e.cp.EnableCutover(e.sites, res, func(context.Context) ([]netip.Addr, error) { return []netip.Addr{here}, nil })
+	e.sites.EnableTLS(stubIssuer{})
+
+	rec := e.do(t, reqOpts{method: "POST", path: path, cookie: c})
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"state":"waiting"`) || !strings.Contains(rec.Body.String(), `"server":["203.0.113.7"]`) {
+		t.Fatalf("start: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: path, cookie: c}); rec.Code != http.StatusConflict || errCode(t, rec) != "cutover_running" {
+		t.Fatalf("twice: %d %s", rec.Code, rec.Body)
+	}
+
+	for p, want := range map[string]int{
+		"/api/v1/migrations/cloudpanel/sites/ghost/cutover": http.StatusConflict,
+		"/api/v1/migrations/cloudpanel/sites/Bad/cutover":   http.StatusUnprocessableEntity,
+	} {
+		if rec := e.do(t, reqOpts{method: "POST", path: p, cookie: c}); rec.Code != want {
+			t.Errorf("%s: %d %s", p, rec.Code, rec.Body)
+		}
+	}
+
+	e.cp.CheckCutovers(t.Context())
+
+	rec = e.do(t, reqOpts{method: "GET", path: path, cookie: c})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"domain":"blog.example.org","addrs":[],"here":false,"error":"no such domain or no address"`) {
+		t.Fatalf("waiting: %d %s", rec.Code, rec.Body)
+	}
+
+	res["blog.example.org"] = []netip.Addr{here}
+
+	e.cp.CheckCutovers(t.Context())
+
+	rec = e.do(t, reqOpts{method: "GET", path: path, cookie: c})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"state":"switched"`) {
+		t.Fatalf("switched: %d %s", rec.Code, rec.Body)
+	}
+
+	// HTTPS is wanted now; the renewal loop issues the certificate.
+	if s, err := e.sites.Get(t.Context(), "blog"); err != nil || !s.TLS {
+		t.Fatalf("tls not turned on: %+v %v", s, err)
+	}
+
+	// Canceling a finished cut-over changes nothing.
+	if rec := e.do(t, reqOpts{method: "DELETE", path: path, cookie: c}); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"state":"switched"`) {
+		t.Fatalf("cancel done: %d %s", rec.Code, rec.Body)
+	}
+
+	read := bearerHeader(e.createToken(t, c, `{"name":"cut","scopes":["migrations:read"]}`).Token)
+	if rec := e.do(t, reqOpts{method: "POST", path: path, header: read}); rec.Code != http.StatusForbidden {
+		t.Fatalf("read scope starts: %d %s", rec.Code, rec.Body)
 	}
 }
