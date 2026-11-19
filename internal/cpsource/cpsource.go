@@ -61,8 +61,13 @@ func owner() uint32 { return uint32(os.Geteuid()) } //nolint:gosec // uids fit i
 // AuthorizedKeysLine locks key to a read-only SFTP session and one port
 // forward to MariaDB on the old server: no shell, no other command, no agent
 // or X11 forwarding, no terminal.
+//
+// port-forwarding turns on remote forwarding too, and authorized_keys has no
+// permitlisten="none" (OpenSSH ignores a key with it). So permitlisten names
+// 127.0.0.1:1, where nothing on the old server connects, and every other
+// remote listener is refused (checked against OpenSSH in the container test).
 func AuthorizedKeysLine(publicKey string) string {
-	return `restrict,port-forwarding,permitopen="127.0.0.1:3306",command="` + SFTPServer + ` -R" ` + publicKey
+	return `restrict,port-forwarding,permitopen="127.0.0.1:3306",permitlisten="127.0.0.1:1",command="` + SFTPServer + ` -R" ` + publicKey
 }
 
 // Get returns the source without secrets.

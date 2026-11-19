@@ -26,10 +26,10 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 **Recommendation: A.** The old server is protected by its own configuration, not by our good behaviour: the key that Kim adds on the old server only allows a read-only SFTP session and one port forward (Part 2):
 
 ```text
-restrict,port-forwarding,permitopen="127.0.0.1:3306",command="/usr/lib/openssh/sftp-server -R" ssh-ed25519 AAAA... hostashi-import
+restrict,port-forwarding,permitopen="127.0.0.1:3306",permitlisten="127.0.0.1:1",command="/usr/lib/openssh/sftp-server -R" ssh-ed25519 AAAA... hostashi-import
 ```
 
-`restrict` turns off a shell, agent and X11 forwarding and a terminal; `command=` replaces whatever the client asks to run; `sftp-server -R` refuses every write; `permitopen` limits port forwarding to the database [U: OpenSSH `authorized_keys` and `sftp-server` manual, to be checked on Debian 13 and Ubuntu 26.04 in the container test]. The path of `sftp-server` differs between distributions [U], so the panel shows the line for the path it detects in the scan report (or the person fixes it).
+`restrict` turns off a shell, agent and X11 forwarding and a terminal; `command=` replaces whatever the client asks to run; `sftp-server -R` refuses every write; `permitopen` limits port forwarding to the database [V: `TestLockedKeyAgainstOpenSSH` against the distribution's sshd on Debian 13 and Ubuntu 26.04, 2026-11-19]. `port-forwarding` also allows remote forwarding, a listener on the old server: without `permitlisten` the test could open one. `authorized_keys` has no `permitlisten="none"` (OpenSSH then ignores the whole key [V: same test, OpenSSH 9.6]), so the line permits only `127.0.0.1:1`, a port nothing on the old server connects to, and every other listener is refused [V]. `permitopen` matches the text of the request, so only `127.0.0.1:3306` opens, not `localhost:3306` [V]. The path of `sftp-server` differs between distributions [U], so the panel shows the line for the path it detects in the scan report (or the person fixes it).
 
 The final sync compares size and modification time per file and copies only what changed. Whole-file copies are enough for the expected data [E: web2 has 38 GB in total, most of it in files that do not change between the two runs].
 

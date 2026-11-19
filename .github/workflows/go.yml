@@ -143,6 +143,48 @@ jobs:
             HOSTASHI_TEST_RESTIC_SSH_KEY=/root/id_ed25519 HOSTASHI_TEST_RESTIC_KNOWN_HOSTS=/root/known_hosts \
               /resticctl.test -test.v -test.count=1'
 
+  openssh:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    name: OpenSSH locked key (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:trixie", "ubuntu:26.04"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build the test binary
+        env:
+          CGO_ENABLED: "0"
+        run: go test -c -o "$RUNNER_TEMP/transfer.test" ./internal/cloudpanel/transfer/
+      - name: Check the authorized_keys line of ADR-0026 against the distribution's sshd
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          docker run --rm -v "$RUNNER_TEMP/transfer.test:/transfer.test:ro" "$IMAGE" bash -euo pipefail -c '
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-server >/dev/null
+            ssh -V
+            useradd -m site
+            install -d -o site -g site /home/site/htdocs /home/site/htdocs/sub
+            printf "x\n" | install -o site -g site -m 644 /dev/stdin /home/site/htdocs/index.php
+            printf "page\n" | install -o site -g site -m 644 /dev/stdin /home/site/htdocs/sub/page.html
+            printf "secret\n" | install -o root -g root -m 644 /dev/stdin /home/site/htdocs/root-owned
+            install -d -m 700 /root/.ssh
+            mkdir -p /run/sshd && ssh-keygen -A >/dev/null && /usr/sbin/sshd -p 2222
+            sleep 1
+            HOSTASHI_TEST_SSHD_PORT=2222 HOSTASHI_TEST_SSHD_AUTHORIZED_KEYS=/root/.ssh/authorized_keys \
+            HOSTASHI_TEST_SSHD_HOST_KEY=/etc/ssh/ssh_host_ed25519_key.pub \
+              /transfer.test -test.v -test.count=1 -test.run TestLockedKeyAgainstOpenSSH | tee /tmp/out
+            grep -q "^--- PASS: TestLockedKeyAgainstOpenSSH" /tmp/out'
+
   lint:
     needs: changes
     if: needs.changes.outputs.go == 'true'
