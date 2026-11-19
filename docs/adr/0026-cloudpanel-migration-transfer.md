@@ -55,7 +55,7 @@ The final sync compares size and modification time per file and copies only what
 ## Consequences
 
 - Kim's manual steps on the old server: add one `authorized_keys` line for root, create one read-only database user, copy the scan report to the new server. Nothing else changes on the old server [A].
-- New dependency `github.com/pkg/sftp` (BSD-2-Clause [U]), latest release checked when it is added.
+- New dependency `github.com/pkg/sftp` v1.13.12, the latest release on 2026-11-19 (BSD-2-Clause [V: its LICENSE]), with `github.com/kr/fs` (BSD-3-Clause [V]).
 - No new `os/exec` exception. `internal/mariadbctl` gains a dump source that is a local socket of the tunnel, with the same fixed arguments [A].
 - The new server holds a key that can read every file of the old server, including other sites' secrets and certificate keys, until the line is removed. The panel shows a reminder to remove it after the migration, and the key is deleted when the migration is closed [A].
 - Not covered here: the DNS switch per site, cron, TLS certificates (Let's Encrypt certificates are issued again on the new server [V: S6 finding 6]), custom snippets (ADR-0017 Part 2). They come in their own steps.
