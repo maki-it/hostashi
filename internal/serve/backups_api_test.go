@@ -13,10 +13,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/backup"
 )
 
@@ -35,6 +37,7 @@ type localBackups struct {
 	hostKey ssh.PublicKey
 	scanErr error
 	copies  int
+	imports []string // database and path of each import
 }
 
 func (l *localBackups) Get(context.Context) (agentapi.BackupInfo, error) { return l.a.Get() }
@@ -65,6 +68,20 @@ func (l *localBackups) GetRestore(_ context.Context, id string) (agentapi.Backup
 	return l.a.GetRestore(id)
 }
 
+func (l *localBackups) Import(_ context.Context, database, path string) (agentapi.DBJob, error) {
+	l.imports = append(l.imports, database+" "+path)
+
+	return agentapi.DBJob{ID: "0123456789abcdef", Kind: "import", Database: database, Path: path, State: agentapi.JobRunning}, nil
+}
+
+func (l *localBackups) ImportJob(_ context.Context, id string) (agentapi.DBJob, error) {
+	if id != "0123456789abcdef" {
+		return agentapi.DBJob{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown job"}
+	}
+
+	return agentapi.DBJob{ID: id, State: agentapi.JobDone}, nil
+}
+
 func (l *localBackups) ScanHostKey(context.Context, agentapi.BackupTarget) (ssh.PublicKey, error) {
 	return l.hostKey, l.scanErr
 }
@@ -72,7 +89,7 @@ func (l *localBackups) ScanHostKey(context.Context, agentapi.BackupTarget) (ssh.
 func newBackupAPI(t *testing.T) (*apiEnv, *localBackups, *nopUnits) {
 	t.Helper()
 
-	e := newAPIWithAgent(t, nil)
+	e := newAPIWithAgent(t, &stubAgent{})
 	dir := t.TempDir()
 	status := filepath.Join(dir, "status")
 
@@ -89,7 +106,7 @@ func newBackupAPI(t *testing.T) (*apiEnv, *localBackups, *nopUnits) {
 	}
 
 	ok := func(context.Context) error { return nil }
-	e.h = Handler(Config{}, Deps{PingAgent: ok, PingDB: ok, Auth: e.svc, Backups: lb})
+	e.h = Handler(Config{}, Deps{PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb})
 
 	return e, lb, units
 }
@@ -228,6 +245,22 @@ func TestRestoreOverHTTP(t *testing.T) {
 		t.Fatalf("host key: %d %s", rec.Code, rec.Body)
 	}
 
+	for _, site := range []string{`{"name":"blog","domains":["blog.example.com"]}`, `{"name":"shop","domains":["shop.example.com"]}`} {
+		if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: site}); rec.Code != http.StatusCreated {
+			t.Fatalf("create site: %d %s", rec.Code, rec.Body)
+		}
+	}
+
+	for _, db := range []string{`{"name":"blog_old"}`, `{"name":"shop_db"}`} {
+		site := strings.Split(db, `"`)[3][:4]
+		if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/" + site + "/databases", cookie: c, body: db}); rec.Code != http.StatusCreated {
+			t.Fatalf("create database: %d %s", rec.Code, rec.Body)
+		}
+	}
+
+	// The panel records creation times in seconds.
+	time.Sleep(1100 * time.Millisecond)
+
 	snap := strings.Repeat("ab", 32)
 	if err := backup.WriteSnapshots(lb.a.StatusDir, []backup.SnapshotEntry{{ID: snap, Kind: backup.KindDB, Site: "blog", Database: "blog_wp"}}); err != nil {
 		t.Fatal(err)
@@ -260,6 +293,47 @@ func TestRestoreOverHTTP(t *testing.T) {
 
 	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/backups/restores/0000000000000000", cookie: c}); rec.Code != http.StatusNotFound {
 		t.Errorf("unknown restore: %d %s", rec.Code, rec.Body)
+	}
+
+	// The restored dump goes into a database of the site created after the
+	// restore, never into an older one.
+	importPath := "/api/v1/backups/restores/" + r.ID + "/import"
+	if rec := e.do(t, reqOpts{method: "POST", path: importPath, cookie: c, body: `{"database":"blog_new"}`}); rec.Code != http.StatusConflict {
+		t.Errorf("import before the restore is done: %d %s", rec.Code, rec.Body)
+	}
+
+	r.State = agentapi.RestoreDone
+
+	raw, _ := json.Marshal(r)
+	if err := os.WriteFile(filepath.Join(lb.a.StatusDir, "restore-"+r.ID+".json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/databases", cookie: c, body: `{"name":"blog_new"}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("create database: %d %s", rec.Code, rec.Body)
+	}
+
+	for body, code := range map[string]int{
+		`{"database":"blog_old"}`:  http.StatusConflict,
+		`{"database":"blog_none"}`: http.StatusNotFound,
+		`{"database":"shop_db"}`:   http.StatusNotFound,
+	} {
+		if rec := e.do(t, reqOpts{method: "POST", path: importPath, cookie: c, body: body}); rec.Code != code {
+			t.Errorf("import %s: %d %s", body, rec.Code, rec.Body)
+		}
+	}
+
+	rec = e.do(t, reqOpts{method: "POST", path: importPath, cookie: c, body: `{"database":"blog_new"}`})
+	if rec.Code != http.StatusAccepted || len(lb.imports) != 1 || lb.imports[0] != "blog_new "+r.Dir+"/blog_wp.sql" {
+		t.Fatalf("import: %d %s %v", rec.Code, rec.Body, lb.imports)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/backups/imports/0123456789abcdef", cookie: c}); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"state":"done"`) {
+		t.Errorf("import status: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/backups/imports/fedcba9876543210", cookie: c}); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown import: %d %s", rec.Code, rec.Body)
 	}
 
 	// Only the high-risk scope may restore.

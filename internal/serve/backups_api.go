@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/backup"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 // Backups is what the backup routes need (ADR-0008). The agent keeps the
@@ -34,7 +36,14 @@ type Backups interface {
 	// in its home; GetRestore reports how it goes.
 	Restore(ctx context.Context, site, snapshot string) (agentapi.BackupRestore, error)
 	GetRestore(ctx context.Context, id string) (agentapi.BackupRestore, error)
+	// Import reads a dump below a site's home into a database (the
+	// agent's db.import); ImportJob reports how it goes.
+	Import(ctx context.Context, database, path string) (agentapi.DBJob, error)
+	ImportJob(ctx context.Context, id string) (agentapi.DBJob, error)
 }
+
+// SiteDatabases lists a site's databases as the panel records them.
+type SiteDatabases func(ctx context.Context, site string) ([]store.Database, error)
 
 // RPCBackups implements Backups with the agent. BeforeRun, if set, runs
 // before a run on demand (the panel's database copy).
@@ -93,6 +102,16 @@ func (b RPCBackups) GetRestore(ctx context.Context, id string) (agentapi.BackupR
 	return agentapi.BackupRestoreGet.Call(ctx, b.C, agentapi.BackupRestoreGetRequest{ID: id})
 }
 
+// Import implements Backups.
+func (b RPCBackups) Import(ctx context.Context, database, path string) (agentapi.DBJob, error) {
+	return agentapi.DBImport.Call(ctx, b.C, agentapi.DBDumpRequest{Database: database, Path: path})
+}
+
+// ImportJob implements Backups.
+func (b RPCBackups) ImportJob(ctx context.Context, id string) (agentapi.DBJob, error) {
+	return agentapi.DBJobStatus.Call(ctx, b.C, agentapi.DBJobRequest{ID: id})
+}
+
 // ScanHostKey implements Backups.
 func (RPCBackups) ScanHostKey(ctx context.Context, t agentapi.BackupTarget) (ssh.PublicKey, error) {
 	return backup.FetchHostKey(ctx, t)
@@ -125,9 +144,10 @@ func backupFail(log *slog.Logger, w http.ResponseWriter, err error, what string)
 	}
 }
 
-// registerBackups adds the backup routes. Restores come with their own
-// high-risk scope later; nothing here returns a secret.
-func registerBackups(mux *http.ServeMux, a authn, b Backups, log *slog.Logger) {
+// registerBackups adds the backup routes. Restores need the high-risk
+// scope backups:restore; nothing here returns a secret. dbs is nil when
+// the panel manages no sites; the dump import is then unavailable.
+func registerBackups(mux *http.ServeMux, a authn, b Backups, dbs SiteDatabases, log *slog.Logger) {
 	admin := func(scope string, h func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
 		return a.scoped(scope, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 			if p.User.Role != "admin" {
@@ -304,6 +324,103 @@ func registerBackups(mux *http.ServeMux, a authn, b Backups, log *slog.Logger) {
 
 		log.Info("restore started", "id", res.ID, "site", res.Site, "snapshot", res.Snapshot, "dir", res.Dir)
 		writeJSON(w, http.StatusAccepted, res)
+	}))
+
+	// A restored dump goes into a database of the same site that was
+	// created after the restore was asked for, so a restore never reaches
+	// data that existed before it (ADR-0008, recommendation 7). The import
+	// itself is the agent's db.import, with a job user that holds rights on
+	// that database only.
+	mux.HandleFunc("POST /api/v1/backups/restores/{id}/import", admin("backups:restore", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if (agentapi.BackupRestoreGetRequest{ID: id}).Validate() != nil {
+			writeError(w, http.StatusNotFound, "not_found", "no such snapshot or restore")
+
+			return
+		}
+
+		var in struct {
+			Database string `json:"database"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		res, err := b.GetRestore(r.Context(), id)
+		if err != nil {
+			backupFail(log, w, err, "restore status")
+
+			return
+		}
+
+		switch {
+		case dbs == nil:
+			writeError(w, http.StatusConflict, "unavailable", "databases are not managed by this panel")
+
+			return
+		case res.Kind != "db":
+			writeError(w, http.StatusConflict, "not_a_dump", "this restore holds files, not a database dump")
+
+			return
+		case res.State != agentapi.RestoreDone:
+			writeError(w, http.StatusConflict, "restore_not_done", "the restore has not finished")
+
+			return
+		}
+
+		list, err := dbs(r.Context(), res.Site)
+		if err != nil {
+			siteFail(log, w, err, "list databases")
+
+			return
+		}
+
+		var target *store.Database
+
+		for i := range list {
+			if list[i].Name == in.Database {
+				target = &list[i]
+			}
+		}
+
+		switch {
+		case target == nil:
+			writeError(w, http.StatusNotFound, "not_found", "no such database of this site")
+
+			return
+		case target.CreatedAt.Before(res.Created.Truncate(time.Second)):
+			writeError(w, http.StatusConflict, "database_not_new", "import into a database created after the restore, never over existing data")
+
+			return
+		}
+
+		job, err := b.Import(r.Context(), target.Name, res.Dir+"/"+res.Database+".sql")
+		if err != nil {
+			backupFail(log, w, err, "import restored dump")
+
+			return
+		}
+
+		log.Info("restored dump import started", "restore", res.ID, "database", target.Name, "job", job.ID)
+		writeJSON(w, http.StatusAccepted, job)
+	}))
+
+	mux.HandleFunc("GET /api/v1/backups/imports/{id}", admin("backups:read", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if (agentapi.DBJobRequest{ID: id}).Validate() != nil {
+			writeError(w, http.StatusNotFound, "not_found", "no such import")
+
+			return
+		}
+
+		job, err := b.ImportJob(r.Context(), id)
+		if err != nil {
+			backupFail(log, w, err, "import status")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, job)
 	}))
 
 	mux.HandleFunc("GET /api/v1/backups/restores/{id}", admin("backups:read", func(w http.ResponseWriter, r *http.Request) {
