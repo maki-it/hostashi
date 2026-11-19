@@ -128,6 +128,7 @@ Strongest disk isolation, size is fixed by the volume. Contra: resizing is awkwa
 - 0 means unlimited in every limit except the PHP workers; the API lists such limits under `unlimited` so a client marks them.
 - A new site gets the default preset. Existing sites from before this change have no limits until an admin sets them.
 - The values are the site's desired state. When the agent fails, the error is recorded on the site and the same change retries. A file system without project quota does not fail the change; the disk use then reports `enforced: false`.
+- The PHP workers are `pm.max_children` of the site's pool and go out with the web state (`web.apply`, `phpWorkers`; 0 means the default of 5). A change of the workers reloads the pool gracefully.
 - Disk use comes with a level: `warning` from 80 %, `critical` from 95 % of a limit.
 - Endpoints: `/api/v1/limit-presets[/{name}]` and `/api/v1/sites/{name}/limits`, scopes `limits:read` and `limits:write`, administrators only.
 

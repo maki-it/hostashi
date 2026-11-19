@@ -52,6 +52,8 @@ type Pool struct {
 	User    string `json:"user"`
 	Version string `json:"version"`
 	Home    string `json:"home"` // the site's home directory, the open_basedir
+	// Workers is pm.max_children, 0 for agentapi.DefaultPHPWorkers.
+	Workers int `json:"workers,omitempty"`
 }
 
 // Errors of the manager.
@@ -119,6 +121,10 @@ func (m *Manager) check(p Pool) error {
 		return fmt.Errorf("%w: site %s: home %q", ErrInvalid, p.User, p.Home)
 	}
 
+	if p.Workers < 0 || p.Workers > agentapi.MaxPHPWorkers {
+		return fmt.Errorf("%w: site %s: %d workers", ErrInvalid, p.User, p.Workers)
+	}
+
 	if !homeRe.MatchString(m.SocketDir) || !groupRe.MatchString(m.WebGroup) {
 		return fmt.Errorf("%w: socket directory or web group", ErrInvalid)
 	}
@@ -146,7 +152,7 @@ listen.owner = {{.P.User}}
 listen.group = {{.Group}}
 listen.mode = 0660
 pm = ondemand
-pm.max_children = 5
+pm.max_children = {{.Workers}}
 pm.process_idle_timeout = 10s
 pm.max_requests = 500
 chdir = /
@@ -165,7 +171,17 @@ php_admin_flag[allow_url_include] = off
 // Render returns the pool file of p.
 func (m *Manager) Render(p Pool) ([]byte, error) {
 	var b bytes.Buffer
-	if err := poolTmpl.Execute(&b, map[string]any{"P": p, "Socket": m.Socket(p.User), "Group": m.WebGroup}); err != nil {
+
+	workers := p.Workers
+	if workers == 0 {
+		workers = agentapi.DefaultPHPWorkers
+	}
+
+	if workers < 1 || workers > agentapi.MaxPHPWorkers {
+		return nil, fmt.Errorf("%w: %d workers", ErrInvalid, p.Workers)
+	}
+
+	if err := poolTmpl.Execute(&b, map[string]any{"P": p, "Socket": m.Socket(p.User), "Group": m.WebGroup, "Workers": workers}); err != nil {
 		return nil, fmt.Errorf("php: render pool %s: %w", p.User, err)
 	}
 
@@ -285,6 +301,11 @@ func (m *Manager) Ensure(ctx context.Context, pools []Pool) error {
 }
 
 func (m *Manager) ensure(ctx context.Context, st map[string]Pool, p Pool) error {
+	// The default written out is the same pool as the default left out.
+	if p.Workers == agentapi.DefaultPHPWorkers {
+		p.Workers = 0
+	}
+
 	content, err := m.Render(p)
 	if err != nil {
 		return err

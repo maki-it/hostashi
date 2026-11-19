@@ -31,7 +31,7 @@ func TestValidateDomain(t *testing.T) {
 func TestWebApplyRequestValidate(t *testing.T) {
 	ok := WebApplyRequest{Sites: []WebSite{
 		{User: "blog", Domains: []string{"blog.example.com", "www.blog.example.com"}},
-		{User: "shop", Domains: []string{"shop.example.com"}, PHP: "8.4"},
+		{User: "shop", Domains: []string{"shop.example.com"}, PHP: "8.4", PHPWorkers: MaxPHPWorkers},
 		{User: "old", Domains: []string{"old.example.com"}, Disabled: true},
 	}}
 	if err := ok.Validate(); err != nil {
@@ -46,6 +46,8 @@ func TestWebApplyRequestValidate(t *testing.T) {
 		"too many domains":  {Sites: []WebSite{{User: "blog", Domains: make([]string, MaxDomainsPerSite+1)}}},
 		"unknown php":       {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "8.0"}}},
 		"php path":          {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "../8.4"}}},
+		"negative workers":  {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "8.4", PHPWorkers: -1}}},
+		"too many workers":  {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "8.4", PHPWorkers: MaxPHPWorkers + 1}}},
 		"disabled with php": {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "8.4", Disabled: true}}},
 	} {
 		if err := r.Validate(); err == nil {

@@ -387,7 +387,7 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 				return agentapi.WebApplyResponse{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "PHP is not available on this server"}
 			}
 
-			pools = append(pools, php.Pool{User: s.User, Version: s.PHP, Home: home})
+			pools = append(pools, php.Pool{User: s.User, Version: s.PHP, Home: home, Workers: s.PHPWorkers})
 			keep[s.User] = true
 			site.PHPSocket = h.php.Socket(s.User)
 		}

@@ -67,7 +67,7 @@ func TestCheckLimits(t *testing.T) {
 	for name, mod := range map[string]func(*store.Limits){
 		"priority":     func(l *store.Limits) { l.CPUPriority = "max" },
 		"no workers":   func(l *store.Limits) { l.PHPWorkers = 0 },
-		"many workers": func(l *store.Limits) { l.PHPWorkers = MaxPHPWorkers + 1 },
+		"many workers": func(l *store.Limits) { l.PHPWorkers = agentapi.MaxPHPWorkers + 1 },
 		"tiny disk":    func(l *store.Limits) { l.DiskBytes = 1 << 20 },
 		"few inodes":   func(l *store.Limits) { l.DiskInodes = 10 },
 		"tiny memory":  func(l *store.Limits) { l.MemoryBytes = 1 << 20 },
@@ -255,5 +255,89 @@ func TestSiteLimitsService(t *testing.T) {
 
 	if u, err := s.SiteUsage(ctx, "shop"); err != nil || u.Available {
 		t.Errorf("usage without quota %+v %v", u, err)
+	}
+}
+
+func webWorkers(f *fakeAgent, site string) (int, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for _, ws := range f.web.Sites {
+		if ws.User == site {
+			return ws.PHPWorkers, true
+		}
+	}
+
+	return 0, false
+}
+
+func TestPHPWorkersReachThePool(t *testing.T) {
+	s, ag, _ := newService(t)
+	ctx := t.Context()
+
+	s.EnableLimits(newFakeLimits())
+
+	// The default preset's workers go out with the first web state.
+	medium, err := s.LimitPreset(ctx, "medium")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.UpdateLimitPreset(ctx, 1, "medium", "medium", medium.Limits, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", PHP: "8.4", Domains: []string{"blog.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if n, ok := webWorkers(ag, "blog"); !ok || n != 10 {
+		t.Fatalf("workers of a new site: %d %v", n, ok)
+	}
+
+	custom := medium.Limits
+	custom.PHPWorkers = 3
+
+	applies := ag.applies
+
+	if _, err := s.SetSiteLimits(ctx, 1, "blog", "", &custom); err != nil {
+		t.Fatal(err)
+	}
+
+	if n, _ := webWorkers(ag, "blog"); n != 3 || ag.applies != applies+1 {
+		t.Errorf("custom workers: %d, applies %d -> %d", n, applies, ag.applies)
+	}
+
+	// Same workers: no new web state.
+	custom.MemoryBytes = 2 << 30
+	applies = ag.applies
+
+	if _, err := s.SetSiteLimits(ctx, 1, "blog", "", &custom); err != nil || ag.applies != applies {
+		t.Errorf("unchanged workers sent the web state again (%d -> %d): %v", applies, ag.applies, err)
+	}
+
+	// Back on the preset, then the preset changes its workers.
+	if _, err := s.SetSiteLimits(ctx, 1, "blog", "medium", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	l := medium.Limits
+	l.PHPWorkers = 15
+
+	if _, err := s.UpdateLimitPreset(ctx, 1, "medium", "medium", l, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if n, _ := webWorkers(ag, "blog"); n != 15 {
+		t.Errorf("workers after preset change: %d", n)
+	}
+
+	// A site without PHP sends none.
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "static", Domains: []string{"static.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if n, ok := webWorkers(ag, "static"); !ok || n != 0 {
+		t.Errorf("static site workers: %d %v", n, ok)
 	}
 }
