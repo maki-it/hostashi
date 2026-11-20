@@ -87,7 +87,7 @@ func (s *Store) ParkedDomain(ctx context.Context, domain string) (Parked, error)
 // of a site is refused with ErrDomainTaken; page 0 is the built-in page.
 // It returns the previous state (ok false: it was not parked).
 func (s *Store) PutParked(ctx context.Context, domain string, page int64, tls bool, now time.Time) (old Parked, ok bool, err error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return Parked{}, false, fmt.Errorf("store: %w", err)
 	}
@@ -152,7 +152,7 @@ func (s *Store) RestoreParked(ctx context.Context, domain string, old Parked, ok
 
 // DeleteParked removes a parked domain. A missing one is ErrNotFound.
 func (s *Store) DeleteParked(ctx context.Context, domain string) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM parked_domains WHERE domain = ?`, domain)
+	res, err := s.w.ExecContext(ctx, `DELETE FROM parked_domains WHERE domain = ?`, domain)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
@@ -166,7 +166,7 @@ func (s *Store) DeleteParked(ctx context.Context, domain string) error {
 
 // SetParkedCert records the live certificate of a parked domain.
 func (s *Store) SetParkedCert(ctx context.Context, id int64, notAfter, now time.Time) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE parked_domains SET tls_not_after = ?, tls_error = '', tls_failed_at = 0, updated_at = ? WHERE id = ?`,
+	_, err := s.w.ExecContext(ctx, `UPDATE parked_domains SET tls_not_after = ?, tls_error = '', tls_failed_at = 0, updated_at = ? WHERE id = ?`,
 		notAfter.Unix(), now.Unix(), id)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
@@ -181,7 +181,7 @@ func (s *Store) SetParkedTLSError(ctx context.Context, id int64, msg string, at 
 		msg = strings.ToValidUTF8(msg[:1000], "")
 	}
 
-	if _, err := s.db.ExecContext(ctx, `UPDATE parked_domains SET tls_error = ?, tls_failed_at = ? WHERE id = ?`, msg, at.Unix(), id); err != nil {
+	if _, err := s.w.ExecContext(ctx, `UPDATE parked_domains SET tls_error = ?, tls_failed_at = ? WHERE id = ?`, msg, at.Unix(), id); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 
@@ -196,7 +196,7 @@ func (s *Store) SetParkedTLSLive(ctx context.Context, ids []int64) error {
 		return fmt.Errorf("store: %w", err)
 	}
 
-	if _, err := s.db.ExecContext(ctx, `UPDATE parked_domains SET tls_live = (id IN (SELECT value FROM json_each(?)))`, string(b)); err != nil {
+	if _, err := s.w.ExecContext(ctx, `UPDATE parked_domains SET tls_live = (id IN (SELECT value FROM json_each(?)))`, string(b)); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 

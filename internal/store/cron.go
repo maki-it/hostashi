@@ -105,7 +105,7 @@ func (s *Store) CronJob(ctx context.Context, siteID, id int64) (CronJob, error) 
 
 // InsertCronJob adds a job to a site that has fewer than max jobs.
 func (s *Store) InsertCronJob(ctx context.Context, j CronJob, maxJobs int, now time.Time) (CronJob, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return CronJob{}, fmt.Errorf("store: %w", err)
 	}
@@ -148,7 +148,7 @@ func (s *Store) InsertCronJob(ctx context.Context, j CronJob, maxJobs int, now t
 // UpdateCronJob changes a job's schedule, command, timeout, niceness and
 // paused flag, and returns the job as it was.
 func (s *Store) UpdateCronJob(ctx context.Context, j CronJob, now time.Time) (CronJob, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return CronJob{}, fmt.Errorf("store: %w", err)
 	}
@@ -175,7 +175,7 @@ func (s *Store) UpdateCronJob(ctx context.Context, j CronJob, now time.Time) (Cr
 
 // DeleteCronJob removes a job and returns it.
 func (s *Store) DeleteCronJob(ctx context.Context, siteID, id int64) (CronJob, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return CronJob{}, fmt.Errorf("store: %w", err)
 	}
@@ -201,7 +201,7 @@ func (s *Store) DeleteCronJob(ctx context.Context, siteID, id int64) (CronJob, e
 // RestoreCronJob puts a job back exactly as it was, with its id: after a
 // change the agent refused.
 func (s *Store) RestoreCronJob(ctx context.Context, j CronJob) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.w.ExecContext(ctx,
 		`INSERT INTO cron_jobs (id, site_id, schedule, command, timeout_sec, nice, paused, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (id) DO UPDATE SET schedule = excluded.schedule, command = excluded.command,

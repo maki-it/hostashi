@@ -90,14 +90,14 @@ func (s *Store) SetSiteSnippets(ctx context.Context, sn SiteSnippets, now time.T
 	}
 
 	if sn.Empty() {
-		_, err = s.db.ExecContext(ctx, `DELETE FROM site_snippets WHERE site_id = ?`, sn.SiteID)
+		_, err = s.w.ExecContext(ctx, `DELETE FROM site_snippets WHERE site_id = ?`, sn.SiteID)
 	} else {
 		var by any
 		if sn.UpdatedBy != 0 {
 			by = sn.UpdatedBy
 		}
 
-		_, err = s.db.ExecContext(ctx, `INSERT INTO site_snippets (site_id, server, root, updated_by, updated_at) VALUES (?, ?, ?, ?, ?)
+		_, err = s.w.ExecContext(ctx, `INSERT INTO site_snippets (site_id, server, root, updated_by, updated_at) VALUES (?, ?, ?, ?, ?)
 ON CONFLICT (site_id) DO UPDATE SET server = excluded.server, root = excluded.root, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
 			sn.SiteID, sn.Server, sn.Root, by, now.Unix())
 	}

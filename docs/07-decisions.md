@@ -99,6 +99,8 @@ SQLite (WAL) as the source of truth, generated configs in versioned generations,
 
 **Open:** If multi-server comes early, PostgreSQL fits better. Re-evaluate after 1.0, not before.
 
+**Load check (2026-11-20):** SQLite holds a mixed saturation load at 1000 sites without errors and with writes under 70 ms; the store now uses one write connection and a query-only read pool. See [sqlite-load.md](sqlite-load.md).
+
 ## ADR-0007 Isolation model per site
 
 Linux user per site, FPM pool over a Unix socket, systemd sandbox, cgroup limits. Containers (Podman/Docker) as an **optional** site type later. Rationale: the same isolation strength as established panels, but without a container runtime as a mandatory dependency and with little RAM.

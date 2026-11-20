@@ -27,7 +27,7 @@ type Database struct {
 
 // CreateDatabase records a database for site. A missing site is ErrNotFound.
 func (s *Store) CreateDatabase(ctx context.Context, site, name string, now time.Time) (Database, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return Database{}, fmt.Errorf("store: %w", err)
 	}
@@ -73,7 +73,7 @@ func (s *Store) CreateDatabase(ctx context.Context, site, name string, now time.
 
 // DeleteDatabase removes a database and its users. A missing one is not an error.
 func (s *Store) DeleteDatabase(ctx context.Context, name string) error {
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM databases WHERE name = ?`, name); err != nil {
+	if _, err := s.w.ExecContext(ctx, `DELETE FROM databases WHERE name = ?`, name); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 
@@ -180,7 +180,7 @@ func (s *Store) databaseUsers(ctx context.Context, dbID int64) ([]string, error)
 // CreateDatabaseUser records a user of database. A missing database is
 // ErrNotFound.
 func (s *Store) CreateDatabaseUser(ctx context.Context, database, user string, now time.Time) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
@@ -238,7 +238,7 @@ func (s *Store) DatabaseOfUser(ctx context.Context, user string) (string, error)
 
 // DeleteDatabaseUser removes a user. A missing one is not an error.
 func (s *Store) DeleteDatabaseUser(ctx context.Context, user string) error {
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM database_users WHERE name = ?`, user); err != nil {
+	if _, err := s.w.ExecContext(ctx, `DELETE FROM database_users WHERE name = ?`, user); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 

@@ -36,7 +36,7 @@ func (s *Store) WebAuthnHandle(ctx context.Context, userID int64) ([]byte, error
 		return nil, fmt.Errorf("store: %w", err)
 	}
 
-	if _, err := s.db.ExecContext(ctx,
+	if _, err := s.w.ExecContext(ctx,
 		`INSERT INTO webauthn_handles (user_id, handle) VALUES (?, ?) ON CONFLICT (user_id) DO NOTHING`, userID, h); err != nil {
 		return nil, fmt.Errorf("store: %w", err)
 	}
@@ -67,7 +67,7 @@ func (s *Store) UserByWebAuthnHandle(ctx context.Context, handle []byte) (User, 
 
 // AddPasskey stores a new passkey. It fails with ErrTooManyPasskeys at the limit.
 func (s *Store) AddPasskey(ctx context.Context, p Passkey) (Passkey, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return Passkey{}, fmt.Errorf("store: %w", err)
 	}
@@ -150,7 +150,7 @@ func (s *Store) Passkeys(ctx context.Context, userID int64) ([]Passkey, error) {
 // UpdatePasskeyUse stores the credential after a login (new sign counter and
 // flags) and the time of use.
 func (s *Store) UpdatePasskeyUse(ctx context.Context, id int64, credential string, now time.Time) error {
-	if _, err := s.db.ExecContext(ctx,
+	if _, err := s.w.ExecContext(ctx,
 		`UPDATE passkeys SET credential = ?, last_used_at = ? WHERE id = ?`, credential, now.Unix(), id); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
@@ -170,7 +170,7 @@ func (s *Store) DeletePasskey(ctx context.Context, userID, id int64) (Passkey, e
 		return Passkey{}, fmt.Errorf("store: %w", err)
 	}
 
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM passkeys WHERE id = ? AND user_id = ?`, id, userID); err != nil {
+	if _, err := s.w.ExecContext(ctx, `DELETE FROM passkeys WHERE id = ? AND user_id = ?`, id, userID); err != nil {
 		return Passkey{}, fmt.Errorf("store: %w", err)
 	}
 
