@@ -465,3 +465,11 @@ a.ui-icon-btn {
 a.ui-btn {
   text-decoration: none;
 }
+.ui-flush {
+  margin: 0;
+}
+/* A short note beside the filters, for example what an action does */
+.ui-filters-note {
+  flex: 1 1 260px;
+  align-self: center;
+}

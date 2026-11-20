@@ -8,7 +8,7 @@ Hostashi is an open-source control panel for a single Linux server. It runs your
 
 | You are … | You need | Start with |
 |-----------|----------|------------|
-| **Server admin** | root on the server | Install (coming soon) |
+| **Server admin** | root on the server | [Install](Install.md) |
 | **Panel admin** | the role `admin` in the panel | First steps (coming soon) |
 | **Manager** or **user** | an invitation to the panel | Sites (coming soon) |
 
