@@ -44,6 +44,22 @@ export function IconButton({ label, icon, danger = false, tipBelow = false, type
   );
 }
 
+type IconLinkProps = {
+  label: string;
+  icon: ReactNode;
+  href: string;
+  tipBelow?: boolean;
+};
+
+/** An icon-only link that looks like an IconButton, for row actions that open a page. */
+export function IconLink({ label, icon, href, tipBelow = false }: IconLinkProps) {
+  return (
+    <a className={tipBelow ? "ui-icon-btn ui-tip-below" : "ui-icon-btn"} href={href} aria-label={label} data-tip={label}>
+      {icon}
+    </a>
+  );
+}
+
 /** Groups the icon buttons of one table row. */
 export function RowActions({ children }: { children: ReactNode }) {
   return <div className="ui-row-actions">{children}</div>;

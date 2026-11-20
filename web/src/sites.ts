@@ -142,3 +142,43 @@ export function siteMessage(err: unknown): string {
   if (err instanceof TypeError) return "The server is not reachable.";
   return "Something went wrong. Try again.";
 }
+
+export type SiteStatus = { tone: "ok" | "warn" | "err" | "off"; word: string; key: "active" | "creating" | "deleting" | "disabled" | "maintenance" };
+
+// siteStatus is the state of a site as a badge: a word and a tone.
+export function siteStatus(s: Site): SiteStatus {
+  if (s.state === "deleting") return { tone: "off", word: "Being deleted", key: "deleting" };
+  if (s.state !== "active") return { tone: "warn", word: "Being created", key: "creating" };
+  if (s.disabled) return { tone: "off", word: "Disabled", key: "disabled" };
+  if (s.maintenance.enabled) return { tone: "warn", word: "Maintenance", key: "maintenance" };
+  return { tone: "ok", word: "Active", key: "active" };
+}
+
+// httpsTone is the badge tone for httpsLabel.
+export function httpsTone(t: SiteTLS): "ok" | "warn" | "err" | "off" {
+  if (!t.enabled) return "off";
+  if (t.active) return "ok";
+  return t.error ? "err" : "warn";
+}
+
+// PHPOptionsOrder lists installed versions newest first and keeps a current
+// version that is no longer installed (ADR-0037: newest first).
+export function phpChoices(php: PHPVersions | null, current = ""): string[] {
+  const installed = [...(php?.installed ?? [])].sort(compareVersions).reverse();
+  if (current && !installed.includes(current)) {
+    installed.push(current);
+    installed.sort(compareVersions).reverse();
+  }
+  return installed;
+}
+
+// compareVersions orders "8.4" < "8.10" numerically.
+export function compareVersions(a: string, b: string): number {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
