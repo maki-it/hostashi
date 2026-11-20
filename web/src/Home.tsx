@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { logout, type User } from "./auth";
 
-type Props = { user: User; onLogout: () => void };
+// onLogout is set where the page has no sidebar with a logout button: while
+// the account still has to set up a second factor.
+type Props = { user: User; onLogout?: () => void };
 
 // Home is a placeholder until the dashboard exists.
 export function Home({ user, onLogout }: Props) {
@@ -15,7 +17,7 @@ export function Home({ user, onLogout }: Props) {
     setError("");
     try {
       await logout();
-      onLogout();
+      onLogout?.();
     } catch {
       setError("Logout failed. Try again.");
       setBusy(false);
@@ -31,9 +33,11 @@ export function Home({ user, onLogout }: Props) {
           {error}
         </p>
       )}
-      <button type="button" className="secondary" disabled={busy} onClick={() => void doLogout()}>
-        Log out
-      </button>
+      {onLogout && (
+        <button type="button" className="secondary" disabled={busy} onClick={() => void doLogout()}>
+          Log out
+        </button>
+      )}
     </section>
   );
 }

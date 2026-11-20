@@ -355,6 +355,58 @@ describe("Roles", () => {
   });
 });
 
+describe("Shell", () => {
+  const session = { ...noSetup, "GET /api/v1/auth/me": { body: { ...admin, auth: "session" } } };
+
+  it("groups the navigation and shows the page in the breadcrumbs", async () => {
+    window.location.hash = "#/users";
+    mockFetch({ ...session, "GET /api/v1/users": { body: { users: [] } }, "GET /api/v1/invitations": { body: { invitations: [] } } });
+    render(<App />);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    expect(within(nav).getAllByRole("heading").map((h) => h.textContent)).toEqual(["Hosting", "Server", "Administration"]);
+    expect(within(nav).getByRole("link", { name: "Users" })).toHaveAttribute("aria-current", "page");
+    const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(crumbs).getByText("Administration")).toBeInTheDocument();
+    expect(within(crumbs).getByText("Users")).toHaveAttribute("aria-current", "page");
+    window.location.hash = "";
+  });
+
+  it("opens a site address on the sites page with the site in the breadcrumbs", async () => {
+    window.location.hash = "#/sites/shop/php";
+    mockFetch({
+      ...session,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/php/versions": { body: { installed: ["8.4"], supported: ["8.4"], legacy: [] } },
+    });
+    render(<App />);
+    expect(await screen.findByText("No sites yet.")).toBeInTheDocument();
+    const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(crumbs).getByRole("link", { name: "Sites" })).toHaveAttribute("href", "#/sites");
+    expect(within(crumbs).getByText("shop")).toHaveAttribute("aria-current", "page");
+    window.location.hash = "";
+  });
+
+  it("follows address changes", async () => {
+    mockFetch({ ...session, "GET /api/v1/databases": { body: { databases: [] } }, "GET /api/v1/sites": { body: { sites: [] } } });
+    render(<App />);
+    await screen.findByRole("heading", { name: "Welcome, kim" });
+    window.location.hash = "#/databases";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    expect(await screen.findByText("No databases yet.")).toBeInTheDocument();
+    window.location.hash = "";
+  });
+
+  it("opens and closes the menu for narrow windows", async () => {
+    const user = userEvent.setup();
+    mockFetch(session);
+    render(<App />);
+    const open = await screen.findByRole("button", { name: "Open menu" });
+    expect(open).toHaveAttribute("aria-expanded", "false");
+    await user.click(open);
+    expect(screen.getByRole("button", { name: "Close menu" })).toHaveAttribute("aria-expanded", "true");
+  });
+});
+
 describe("Invitation link", () => {
   it("sets the password and logs in", async () => {
     const user = userEvent.setup();

@@ -60,6 +60,13 @@ async function ok(what) {
 
 const loginButton = () => page.getByRole("button", { name: "Log in", exact: true });
 const welcome = () => page.getByRole("heading", { name: "Welcome, admin" });
+// On a narrow window the sidebar is a menu; open it before using a link or
+// the logout button in it.
+async function openMenu() {
+  await welcome().waitFor();
+  const button = page.getByRole("button", { name: "Open menu" });
+  if (await button.isVisible()) await button.click();
+}
 
 try {
   await page.goto(base + "/");
@@ -100,6 +107,7 @@ try {
   if (codes.length === 0) throw new Error("TOTP enrollment returned no recovery codes");
   await ok("TOTP set up in the panel, recovery codes shown");
   await page.getByRole("button", { name: "Continue" }).click();
+  await openMenu();
   await page.getByRole("link", { name: "Sites" }).waitFor();
 
   const cdp = await context.newCDPSession(page);
@@ -149,6 +157,7 @@ try {
   await welcome().waitFor();
   await ok("second step: wrong code refused, recovery code accepted");
 
+  await openMenu();
   await page.getByRole("button", { name: "Log out" }).click();
   await page.getByRole("button", { name: "Log in with a passkey" }).click();
   await welcome().waitFor();
@@ -156,6 +165,7 @@ try {
 
   // The admin invites a manager; the manager opens the link in another
   // browser, sets a password and must set up a second factor (ADR-0035).
+  await openMenu();
   await page.getByRole("link", { name: "Users" }).click();
   await page.getByLabel(/Username/).fill("mona");
   await page.getByLabel(/Role/).selectOption("manager");
