@@ -39,6 +39,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0033 | System hardening baseline before v1 | Proposed ([adr/0033](adr/0033-system-hardening-baseline.md)) | No |
 | 0034 | Firewall rules in the panel | Accepted on 2026-11-20 ([adr/0034](adr/0034-firewall-rules-in-panel.md)) | Done |
 | 0035 | Users and roles | Proposed ([adr/0035](adr/0035-users-and-roles.md)) | **Yes** |
+| 0036 | Installing PHP versions from the panel | Accepted on 2026-11-20 ([adr/0036](adr/0036-php-versions-from-the-panel.md)) | In progress |
 
 ---
 
@@ -279,3 +280,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0035 Users and roles
 
 **Full text (status Proposed, 2026-11-20):** [adr/0035](adr/0035-users-and-roles.md). Summary: today the panel has exactly one admin, the role column allows only `admin`, and every handler checks it through one of 16 local copies of the same `admin` check, while the API IP allowlist checks no role at all (checked in the code). Recommendation: three fixed roles, `admin` (everything), `manager` (all sites, no server settings, no users) and `user` (only the sites granted to them, day-to-day work there, but no domains, TLS, limits, snippets, disabling or deleting). Sites without a grant are invisible (`404`). One package `internal/authz` with a closed table "action to roles", called by every handler, and a route matrix test that fails for any route without an entry. A token never grants more than its owner, read on every request; tokens can optionally be limited to sites (ADR-0018). Admins invite users through a one-time link, a second factor is required for `admin` and `manager`, the last admin cannot be demoted or removed, `hostashi user recover` as root for a lost last admin, and the audit log keeps the actor's name. Open questions for Kim: the three roles, the second factor rule, the limits of `user`, and invitations instead of admin-set passwords.
+
+## ADR-0036 Installing PHP versions from the panel
+
+**Full text (status Accepted, 2026-11-20, by Kim):** [adr/0036](adr/0036-php-versions-from-the-panel.md). Summary: the panel installs an allowlisted PHP version by starting a fixed root unit `hostashi-php-install@<version>.service` through the existing `phpctl` exception; the unit runs a root-owned script that does what the installer step `phpversions` does (pinned key fingerprints, pin first, fixed packages). No new `os/exec` exception. Admin only, high-risk scope `php:install`, audit log. Newer versions that sury.org offers above the allowlist are shown greyed out; they come with a Hostashi release. End-of-life versions keep running, need a confirmation to install or choose, are marked in the site list and warned about by doctor; Hostashi never switches or removes a version by itself. Removing unused versions comes after v1.
