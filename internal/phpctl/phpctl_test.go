@@ -49,6 +49,7 @@ func TestSliceProperties(t *testing.T) {
 	for _, s := range []string{
 		"", "hostashi-site.slice", "system.slice", "hostashi-site-Shop.slice", "hostashi-site-my-shop.slice",
 		"hostashi-site-../x.slice", "hostashi-site-shop.service", `hostashi-site-shop\x2f.slice`, "--all",
+		"user-0.slice", "user-999.slice", "user-01000.slice", "user.slice", "user-.slice", "user-1000-x.slice", "user-12345678901.slice",
 	} {
 		if err := c.SetSliceProperties(t.Context(), s, good); err == nil || !strings.Contains(err.Error(), "refusing") {
 			t.Errorf("slice %q: %v", s, err)
@@ -75,7 +76,7 @@ func TestSliceProperties(t *testing.T) {
 		}
 	}
 
-	for _, s := range []string{"hostashi-site-shop.slice", `hostashi-site-my\x2dshop.slice`, "hostashi-site-a_1.slice"} {
+	for _, s := range []string{"hostashi-site-shop.slice", `hostashi-site-my\x2dshop.slice`, "hostashi-site-a_1.slice", "user-1000.slice", "user-65534.slice"} {
 		if !sliceRe.MatchString(s) {
 			t.Errorf("good slice %q refused", s)
 		}

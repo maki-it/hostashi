@@ -73,7 +73,7 @@ Not checked: Debian 13 and Ubuntu 26.04 (newer OpenSSH), sessions in `user-<uid>
 **Shell**
 
 - The login shell follows the keys: `/bin/bash` while the site has at least one shell key, `nologin` otherwise. The agent changes it with `usermod --shell` in `internal/sysuser`, the existing `useradd`/`userdel` exception, with fixed arguments [A]. This extends that exception by one binary; no new package.
-- Shell sessions run in `user-<uid>.slice`, which gets the site's CPU and memory limits through a drop-in (ADR-0015) [A: `UsePAM yes` and `pam_systemd`, not checked]. SFTP-only sessions run there as well [U].
+- Shell and SFTP sessions run in `user-<uid>.slice` (through `UsePAM yes` and `pam_systemd`), which gets the site's CPU, memory and task limits through the drop-in `/etc/systemd/system/user-<uid>.slice.d/10-hostashi.conf` plus `systemctl set-property --runtime` (ADR-0015) [V: Debian 13 container, 2026-11-20; the agent never touches the slices of uids below 1000].
 - The CLI of the site's PHP version is reachable as `php` in a shell: out of scope for the first step [A].
 
 **No chroot in v1**

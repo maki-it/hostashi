@@ -304,6 +304,13 @@ x systemctl is-active --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit n
 for p in MemoryMax=536870912 TasksMax=96 CPUWeight=50; do
   [ "$(x systemctl show -p "${p%%=*}" --value hostashi-site-wp.slice)" = "${p#*=}" ] || fail "slice ${p%%=*} not ${p#*=} after the API change"
 done
+# SSH sessions of the site user run in its user slice, which gets the same
+# limits through a drop-in (ADR-0015, ADR-0032).
+wpuid=$(x id -u wp)
+expect_mode "/etc/systemd/system/user-$wpuid.slice.d/10-hostashi.conf" "644 root:root"
+for p in MemoryMax=536870912 TasksMax=96 CPUWeight=50; do
+  [ "$(x systemctl show -p "${p%%=*}" --value "user-$wpuid.slice")" = "${p#*=}" ] || fail "user slice ${p%%=*} not ${p#*=}"
+done
 # PHP off: the pool goes away and PHP source is never sent.
 [ "$(api PUT /api/v1/sites/wp/php '{"php":""}')" = 200 ] || fail "PHP off: $(x cat /tmp/api.out)"
 ! x systemctl is-active --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit still running after PHP off"
@@ -314,6 +321,34 @@ body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/)
 [ "$body" = "php $ver user wp jailed" ] || fail "PHP site answered '$body' after PHP on"
 # The distribution's own FPM service stays off.
 ! x systemctl is-active --quiet "php$ver-fpm.service" || fail "distribution php$ver-fpm is running"
+
+step "SSH keys through the panel API (ADR-0032)"
+x sh -c 'mkdir -p /run/sshd /root/t && rm -f /root/t/k && ssh-keygen -q -t ed25519 -N "" -C kim@laptop -f /root/t/k'
+pub=$(x cat /root/t/k.pub)
+[ "$(api POST /api/v1/sites/wp/ssh-keys "{\"label\":\"laptop\",\"access\":\"shell\",\"public\":\"$pub\"}")" = 201 ] || fail "add SSH key: $(x cat /tmp/api.out)"
+keyid=$(x sed -n 's/^{"id":\([0-9]*\),.*/\1/p' /tmp/api.out)
+expect_mode /etc/hostashi-ssh/keys/wp "644 root:root"
+x grep -q "^restrict,pty $(cut -d' ' -f1,2 <<<"$pub") laptop\$" /etc/hostashi-ssh/keys/wp || fail "key file: $(x cat /etc/hostashi-ssh/keys/wp)"
+[ "$(x getent passwd wp | cut -d: -f7)" = /bin/bash ] || fail "shell key did not give wp a login shell"
+[ "$(api GET /api/v1/ssh/host-keys)" = 200 ] || fail "host keys: $(x cat /tmp/api.out)"
+x grep -q '"type":"ssh-ed25519","fingerprint":"SHA256:' /tmp/api.out || fail "no ed25519 host key: $(x cat /tmp/api.out)"
+x /usr/sbin/sshd -p 2297 -o ListenAddress=127.0.0.1
+sshopt=(-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
+out=$(x ssh "${sshopt[@]}" -p 2297 -i /root/t/k wp@127.0.0.1 'id -un; cat /proc/self/cgroup') || fail "shell login with the panel's key failed"
+grep -qx wp <<<"$out" || fail "shell login ran as someone else: $out"
+grep -q "/user.slice/user-$wpuid.slice/" <<<"$out" || fail "SSH session not in user-$wpuid.slice: $out"
+# Back to SFTP only: no shell, and commands are refused.
+[ "$(api PUT "/api/v1/sites/wp/ssh-keys/$keyid" '{"label":"laptop","access":"sftp"}')" = 200 ] || fail "change SSH key: $(x cat /tmp/api.out)"
+[ "$(x getent passwd wp | cut -d: -f7)" = /usr/sbin/nologin ] || fail "wp kept its login shell without a shell key"
+if x ssh "${sshopt[@]}" -p 2297 -i /root/t/k wp@127.0.0.1 id 2>/dev/null | grep -q uid=; then fail "an SFTP-only key ran a command"; fi
+[ "$(api DELETE "/api/v1/sites/wp/ssh-keys/$keyid")" = 204 ] || fail "delete SSH key: $(x cat /tmp/api.out)"
+x grep -q '^restrict' /etc/hostashi-ssh/keys/wp && fail "deleted key still in the key file"
+if x sftp "${sshopt[@]}" -P 2297 -i /root/t/k -b /dev/null wp@127.0.0.1 >/dev/null 2>&1; then fail "a deleted key still logs in"; fi
+x pkill -f 'sshd -p 2297' || true
+x loginctl terminate-user wp 2>/dev/null || true
+for _ in $(seq 1 30); do x pgrep -u wp >/dev/null || break; sleep 1; done
+x pgrep -u wp >/dev/null && fail "processes of wp left after the SSH logins"
+x rm -rf /root/t
 
 step "a database for the PHP site (MariaDB)"
 [ "$(x systemctl is-active mariadb.service)" = active ] || fail "mariadb is not running"

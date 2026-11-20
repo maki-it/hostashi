@@ -302,7 +302,12 @@ func (h *siteOps) register(s *agentrpc.Server) {
 		}
 
 		if h.slices != nil {
-			if err := h.slices.Remove(ctx, req.User); err != nil {
+			uid := uint32(0) // not known: only the site's slice goes
+			if siteErr == nil {
+				uid = site.UID
+			}
+
+			if err := h.slices.Remove(ctx, req.User, uid); err != nil {
 				h.log.ErrorContext(ctx, "remove slice of deleted site", "site", req.User, "err", err)
 			}
 		}
