@@ -436,6 +436,68 @@ func TestHostileTrees(t *testing.T) {
 			t.Fatalf("symlink: %+v %+v", s.SSHKeys, s.Findings)
 		}
 	})
+	t.Run("additional SSH users of a site", func(t *testing.T) {
+		if os.Geteuid() != 0 {
+			t.Skip("ownership checks need root")
+		}
+
+		dir, _ := build(t)
+
+		st, err := os.Stat(filepath.Join(dir, "home/alpha"))
+		must(t, err)
+
+		sys, ok := st.Sys().(*syscall.Stat_t)
+		if !ok {
+			t.Fatal("no stat_t")
+		}
+
+		gid := int(sys.Gid)
+		dev, ftp := 1950, 1951
+
+		pw := filepath.Join(dir, "etc/passwd")
+		b, err := os.ReadFile(pw)
+		must(t, err)
+
+		b = append(b, fmt.Sprintf("alpha-dev:x:%d:%d::/home/alpha-dev:/bin/bash\nalpha-ftp:x:%d:%d::/home/alpha/htdocs/alpha-shop.de/:/bin/false\n", dev, gid, ftp, gid)...)
+		must(t, os.WriteFile(pw, b, 0o644))
+
+		sshDir := filepath.Join(dir, "home/alpha-dev/.ssh")
+		must(t, os.MkdirAll(sshDir, 0o700))
+		must(t, os.Lchown(filepath.Dir(sshDir), dev, gid))
+		must(t, os.Lchown(sshDir, dev, gid))
+
+		pub, _, err := ed25519.GenerateKey(rand.Reader)
+		must(t, err)
+
+		pk, err := ssh.NewPublicKey(pub)
+		must(t, err)
+
+		line := strings.TrimSuffix(string(ssh.MarshalAuthorizedKey(pk)), "\n")
+		keys := filepath.Join(sshDir, "authorized_keys")
+		must(t, os.WriteFile(keys, []byte(line+" rafael@pc\n"), 0o600))
+		must(t, os.Lchown(keys, dev, gid))
+
+		rep := run(t, dir)
+		s := byVhost(rep)["alpha-shop.de.conf"]
+
+		if len(s.SSHKeys) != 1 || s.SSHKeys[0].Public != line || s.SSHKeys[0].User != "alpha-dev" ||
+			len(s.SSHUsers) != 2 || s.SSHUsers[0] != "alpha-dev" || s.SSHUsers[1] != "alpha-ftp" || !hasCode(s, "ssh_user_no_keys") {
+			t.Fatalf("keys %+v users %v findings %+v", s.SSHKeys, s.SSHUsers, s.Findings)
+		}
+
+		for _, o := range rep.Orphans {
+			if strings.Contains(o.Msg, "alpha-dev") || strings.Contains(o.Msg, "alpha-ftp") {
+				t.Errorf("additional user reported as orphan: %+v", o)
+			}
+		}
+
+		// A key file the additional user does not own is not read.
+		must(t, os.Lchown(keys, 0, 0))
+
+		if s, _ := status(t, dir, "alpha-shop.de.conf"); len(s.SSHKeys) != 0 || !hasCode(s, "ssh_keys_unreadable") {
+			t.Fatalf("root-owned: %+v %+v", s.SSHKeys, s.Findings)
+		}
+	})
 	t.Run("oversized and deeply nested vhosts", func(t *testing.T) {
 		dir, _ := build(t)
 		writeVhost(t, dir, "big.conf", strings.Repeat("#", 2<<20), 0o644)

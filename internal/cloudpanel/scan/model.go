@@ -90,8 +90,11 @@ type SSHKey struct {
 	Public      string `json:"public"`
 	Fingerprint string `json:"fingerprint"`
 	Comment     string `json:"comment,omitempty"`
-	Source      string `json:"source"`
-	Line        int    `json:"line"`
+	// User is the additional SSH user the key belongs to, empty for the
+	// site user.
+	User   string `json:"user,omitempty"`
+	Source string `json:"source"`
+	Line   int    `json:"line"`
 }
 
 // Site is the adopted view of one vhost.
@@ -111,6 +114,9 @@ type Site struct {
 	// SSHKeys are the accepted public keys the site user logs in with
 	// (ADR-0032); the importer carries them over as SFTP only.
 	SSHKeys []SSHKey `json:"ssh_keys,omitempty"`
+	// SSHUsers are the additional SSH users of the site: own passwd entry,
+	// the site user's group as primary group.
+	SSHUsers []string `json:"ssh_users,omitempty"`
 	// Usage is what the site user's home occupies; nil if not measured.
 	Usage    *Usage    `json:"usage,omitempty"`
 	Sources  []string  `json:"sources"`
