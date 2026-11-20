@@ -36,6 +36,7 @@ import (
 	"github.com/maki-it/hostashi/internal/siteslice"
 	"github.com/maki-it/hostashi/internal/sitestats"
 	"github.com/maki-it/hostashi/internal/snippet"
+	"github.com/maki-it/hostashi/internal/sshaccess"
 	"github.com/maki-it/hostashi/internal/sysuser"
 	"github.com/maki-it/hostashi/internal/web"
 	"github.com/maki-it/hostashi/internal/webctl"
@@ -97,6 +98,10 @@ type Config struct {
 	// Cron keeps the sites' cron jobs as systemd units (ADR-0028). Run
 	// builds it; without it cron.* answer failed_precondition.
 	Cron *cronjobs.Manager
+
+	// SSH keeps the sites' SSH keys and login shells (ADR-0032). Run builds
+	// it; without it ssh.apply answers failed_precondition.
+	SSH *sshaccess.Manager
 
 	// Slices keeps the sites' slices with their limits (ADR-0015). Run
 	// builds it on /etc/systemd/system; without it site.limits.* answer
@@ -193,7 +198,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, quota: cfg.Quota, slices: cfg.Slices, log: log}
+		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, log: log}
 		h.register(s)
 
 		if cfg.Backup != nil && cfg.Backup.Space == nil {
@@ -229,6 +234,7 @@ type siteOps struct {
 	db     *mariadb.Manager
 	pages  *pages.Store
 	cron   *cronjobs.Manager
+	ssh    *sshaccess.Manager
 	quota  QuotaFS
 	slices *siteslice.Manager
 	log    *slog.Logger
@@ -307,6 +313,12 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			}
 		}
 
+		if h.ssh != nil {
+			if err := h.ssh.Remove(ctx, req.User); err != nil {
+				h.log.ErrorContext(ctx, "remove ssh keys of deleted site", "site", req.User, "err", err)
+			}
+		}
+
 		if h.certs != nil {
 			if err := h.certs.Remove(req.User); err != nil {
 				h.log.ErrorContext(ctx, "remove certificate of deleted site", "site", req.User, "err", err)
@@ -334,12 +346,15 @@ func (h *siteOps) register(s *agentrpc.Server) {
 		resp, err := h.webApply(ctx, c, req)
 		if err == nil {
 			h.cronDisabled(ctx, req)
+			h.sshDisabled(ctx, req)
 		}
 
 		return resp, err
 	})
 
 	h.registerCron(s)
+
+	h.registerSSH(s)
 
 	h.registerPages(s)
 
@@ -882,6 +897,13 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.Slices == nil {
 		cfg.Slices = &siteslice.Manager{Dir: siteslice.DefaultDir, Ctl: phpctl.Controller{}, ControlDir: siteslice.DefaultControlDir}
+	}
+
+	if cfg.SSH == nil {
+		cfg.SSH = &sshaccess.Manager{
+			StateFile: filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "ssh.json"),
+			Shells:    sysuser.New(cfg.Log), Log: cfg.Log,
+		}
 	}
 
 	if cfg.Cron == nil {

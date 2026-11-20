@@ -46,7 +46,8 @@ linters:
         # Security rule: no shell strings and no general exec interface.
         # Product code must not start processes through os/exec. A new
         # helper gets a reviewed, narrow exception here.
-        # internal/sysuser runs useradd and userdel by absolute path with
+        # internal/sysuser runs useradd, userdel and usermod (login shell only,
+        # ADR-0032) by absolute path with
         # arguments built from validated names (see its package comment).
         # internal/webctl runs nginx -t and systemctl reload/restart of the
         # nginx unit with fixed arguments (see its package comment).
