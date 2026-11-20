@@ -54,5 +54,5 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions
 
-1. Both ways (upload and CSR)?
+1. ~~Both ways (upload and CSR)?~~ **Decided (Kim, 2026-11-20): both ways.**
 2. Parked domains and the panel address: also in v1, or sites first?
