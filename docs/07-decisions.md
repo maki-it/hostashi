@@ -48,6 +48,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0042 | Panel on port 443 under its own host name | Accepted on 2026-11-20 ([adr/0042](adr/0042-panel-on-port-443.md)) | No |
 | 0043 | User documentation in the GitHub wiki | Accepted on 2026-11-20 ([adr/0043](adr/0043-user-documentation.md)) | No |
 | 0044 | Outgoing email through an SMTP relay | Proposed ([adr/0044](adr/0044-outgoing-email.md)) | **Yes** |
+| 0045 | Object cache (Valkey) per site | Proposed ([adr/0045](adr/0045-object-cache-per-site.md)) | **Yes** |
 
 ---
 
@@ -324,3 +325,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0044 Outgoing email through an SMTP relay
 
 **Full text (status Proposed, 2026-11-21):** [adr/0044](adr/0044-outgoing-email.md). Summary: Kim wants Hostashi to send notifications and invitation links by email. This is not a mail server, which stays out of v1: Hostashi only hands messages to an external SMTP relay. Recommended: the panel process sends (the agent stays without network), with `github.com/wneessen/go-mail` v0.8.2 (MIT); STARTTLS or implicit TLS with a verified certificate, the password sealed with the server key; off by default. Optional, confirmed email addresses per user; account emails always on, operations events (backup failures, certificate renewal and expiry, doctor digest, PHP end of life, disk and quota) opt-in per user and limited to what the role can see. An outbox with sealed bodies and retries for 24 hours, rate limits per recipient and server, and no links, tokens or passwords in logs. No new `os/exec` exception. Decided by Kim on 2026-11-21: `go-mail`; no self-service password reset by email for now; the event set as proposed, other channels after v1; encrypted connections only; addresses are used only after confirmation.
+
+## ADR-0045 Object cache (Valkey) per site
+
+**Full text (status Proposed, 2026-11-21):** [adr/0045](adr/0045-object-cache-per-site.md). Summary: sites on web2 use Redis, so v1 gets an opt-in object cache per site. Recommended: Valkey from the distribution (BSD-3; Debian 13 main 8.1, Ubuntu 26.04 universe 9.0), one instance per site as the site user in the site's slice, Unix socket only, cache only without persistence, `maxmemory` with LRU, admin commands disabled. Typed agent operations, no new `os/exec` (one more unit pattern for the existing `systemctl` call). The CloudPanel import detects Redis on web2 and asks per site; contents are not migrated.
