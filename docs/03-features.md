@@ -69,7 +69,7 @@
 | Remote access through IP allowlist | P1 | B | CP | |
 | Multiple DB servers | P2 | 2+ | CP | |
 | PostgreSQL | P1 | 1 | NEW | |
-| Redis (per site, auth, Unix socket) | P1 | B | CP | |
+| Object cache per site (Valkey, Unix socket, ADR-0045) | P1 | B | CP | Needed for the web2 migration |
 
 ## 3.5 Access, files, jobs
 
