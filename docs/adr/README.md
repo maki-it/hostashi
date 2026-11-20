@@ -39,7 +39,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0041](0041-external-database-servers.md) | External database servers | Accepted |
 | [0042](0042-panel-on-port-443.md) | Panel on port 443 under its own host name | Accepted |
 | [0043](0043-user-documentation.md) | User documentation in the GitHub wiki | Accepted |
-| [0044](0044-outgoing-email.md) | Outgoing email through an SMTP relay | Proposed |
+| [0044](0044-outgoing-email.md) | Outgoing email through an SMTP relay | Accepted |
 | [0045](0045-object-cache-per-site.md) | Object cache (Valkey) per site | Proposed |
 
 Only the project owner sets a status to `Accepted`.
