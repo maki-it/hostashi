@@ -438,19 +438,37 @@ do_php() {
 
 # MariaDB from the distribution (ADR-0024). The package defaults stay: it
 # listens on 127.0.0.1 only and root logs in only through the Unix socket
-# (unix_socket), which is how the agent connects. No password is set.
+# (unix_socket), which is how the agent connects. No password is set. One
+# file of ours turns LOAD DATA LOCAL off (ADR-0033); a change to it
+# restarts MariaDB.
 MARIADB_PKGS=(mariadb-server)
+MARIADB_SRC=${HOSTASHI_MARIADB_SRC:-$HERE/mariadb}
+MARIADB_CNF=/etc/mysql/mariadb.conf.d/90-hostashi.cnf
 
 chk_mariadb() {
   local p
   for p in "${MARIADB_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
+  file_matches "$MARIADB_CNF" 0644 root:root <"$MARIADB_SRC/90-hostashi.cnf" || { echo "$MARIADB_CNF differs"; return 1; }
   [ "$(systemctl is-enabled mariadb.service 2>/dev/null)" = enabled ] || { echo "mariadb not enabled"; return 1; }
   [ "$(systemctl is-active mariadb.service 2>/dev/null)" = active ] || { echo "mariadb not running"; return 1; }
 }
 do_mariadb() {
-  apt-get update -qq >>"$LOG" 2>&1 &&
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${MARIADB_PKGS[@]}" >>"$LOG" 2>&1 &&
-  systemctl enable --now mariadb.service >>"$LOG" 2>&1
+  local rc
+  if ! pkg_installed mariadb-server; then
+    apt-get update -qq >>"$LOG" 2>&1 &&
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${MARIADB_PKGS[@]}" >>"$LOG" 2>&1 || return 1
+  fi
+  install -d -m 0755 -o root -g root "${MARIADB_CNF%/*}" || return 1
+  write_file "$MARIADB_CNF" 0644 root:root <"$MARIADB_SRC/90-hostashi.cnf"
+  rc=$?
+  [ "$rc" -le 1 ] || return 1
+  systemctl enable mariadb.service >>"$LOG" 2>&1 || return 1
+  # write_file returns 0 when it changed the file.
+  if [ "$rc" = 0 ]; then
+    systemctl restart mariadb.service >>"$LOG" 2>&1
+  else
+    systemctl start mariadb.service >>"$LOG" 2>&1
+  fi
 }
 
 # restic from the distribution for the backups (ADR-0008), and the ssh

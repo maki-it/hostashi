@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Managed by Hostashi (ADR-0033); the installer overwrites changes. Put your
+# own settings in a file that sorts later in /etc/mysql/mariadb.conf.d/.
+
+[mariadb]
+# LOAD DATA LOCAL lets a client make the server read files from the
+# client's machine, and a rogue server make a client send its files.
+# Hostashi never uses it: imports feed dumps through mariadb --sandbox
+# (ADR-0025).
+local_infile = 0
