@@ -85,6 +85,21 @@ func registerSSH(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.Lo
 		})
 	}
 
+	// The server's host keys, which a user compares at the first login.
+	mux.HandleFunc("GET /api/v1/ssh/host-keys", admin("ssh:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		keys, err := svc.SSHHostKeys(ctx)
+		if err != nil {
+			sshFail(log, w, err, "SSH host keys")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
+	}))
+
 	mux.HandleFunc("GET /api/v1/sites/{name}/ssh-keys", admin("ssh:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		keys, err := svc.SSHKeys(r.Context(), r.PathValue("name"))
 		if err != nil {

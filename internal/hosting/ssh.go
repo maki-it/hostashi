@@ -25,11 +25,19 @@ var (
 // SSHAgent is the part of the agent the SSH keys use (ADR-0032).
 type SSHAgent interface {
 	SSHApply(ctx context.Context, req agentapi.SSHApplyRequest) (agentapi.SSHApplied, error)
+	SSHHostKeys(ctx context.Context) ([]agentapi.SSHHostKey, error)
 }
 
 // SSHApply calls ssh.apply.
 func (a RPCAgent) SSHApply(ctx context.Context, req agentapi.SSHApplyRequest) (agentapi.SSHApplied, error) {
 	return agentapi.SSHApply.Call(ctx, a.C, req)
+}
+
+// SSHHostKeys calls ssh.hostkeys.
+func (a RPCAgent) SSHHostKeys(ctx context.Context) ([]agentapi.SSHHostKey, error) {
+	res, err := agentapi.SSHHostKeys.Call(ctx, a.C, agentapi.SSHHostKeysRequest{})
+
+	return res.Keys, err
 }
 
 // EnableSSH sets the agent for SSH keys. Without it they answer ErrNoSSH.
@@ -251,6 +259,16 @@ func (s *Service) DeleteSSHKey(ctx context.Context, actor int64, site string, id
 	s.audit(ctx, actor, "ssh.key.delete", site, sshAudit(old))
 
 	return nil
+}
+
+// SSHHostKeys returns the fingerprints of the server's SSH host keys, so a
+// user can check them at the first login.
+func (s *Service) SSHHostKeys(ctx context.Context) ([]agentapi.SSHHostKey, error) {
+	if s.ssh == nil {
+		return nil, ErrNoSSH
+	}
+
+	return s.ssh.SSHHostKeys(ctx)
 }
 
 // SyncSSH sends the keys of every active site again, for example after a

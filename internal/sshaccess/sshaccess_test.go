@@ -202,3 +202,40 @@ func TestApplyRefuses(t *testing.T) {
 		t.Fatal("usermod failure not reported")
 	}
 }
+
+func TestHostKeys(t *testing.T) {
+	dir := t.TempDir()
+	ed := newKey(t)
+
+	for name, data := range map[string]string{
+		"ssh_host_ed25519_key.pub": ed + " root@host\n",
+		"ssh_host_rsa_key.pub":     "not a key\n",
+		"ssh_host_ed25519_key":     "private, never read\n",
+		"other.pub":                ed + "\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	pk, _, _, _, err := ssh.ParseAuthorizedKey([]byte(ed))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m := &Manager{HostKeyDir: dir}
+
+	keys, err := m.HostKeys(t.Context())
+	if err != nil || len(keys) != 1 || keys[0].Type != ssh.KeyAlgoED25519 || keys[0].Fingerprint != ssh.FingerprintSHA256(pk) {
+		t.Fatalf("%+v %v", keys, err)
+	}
+
+	big := filepath.Join(dir, "ssh_host_ecdsa_key.pub")
+	if err := os.WriteFile(big, []byte(strings.Repeat("a", maxHostKeyFile+1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if keys, err := m.HostKeys(t.Context()); err != nil || len(keys) != 1 {
+		t.Fatalf("oversized file: %+v %v", keys, err)
+	}
+}

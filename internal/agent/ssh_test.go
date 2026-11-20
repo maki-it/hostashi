@@ -33,6 +33,34 @@ func TestSSHWithoutManager(t *testing.T) {
 
 	_, err := agentapi.SSHApply.Call(context.Background(), c, agentapi.SSHApplyRequest{Site: "blog"})
 	wantCode(t, err, agentrpc.CodePrecondition)
+
+	_, err = agentapi.SSHHostKeys.Call(context.Background(), c, agentapi.SSHHostKeysRequest{})
+	wantCode(t, err, agentrpc.CodePrecondition)
+}
+
+func TestSSHHostKeysOp(t *testing.T) {
+	dir := t.TempDir()
+
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pk, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "ssh_host_ed25519_key.pub"), ssh.MarshalAuthorizedKey(pk), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c, _ := startSiteAgentCfg(t, Config{SSH: &sshaccess.Manager{HostKeyDir: dir}})
+
+	got, err := agentapi.SSHHostKeys.Call(context.Background(), c, agentapi.SSHHostKeysRequest{})
+	if err != nil || len(got.Keys) != 1 || got.Keys[0].Fingerprint != ssh.FingerprintSHA256(pk) {
+		t.Fatalf("%+v %v", got, err)
+	}
 }
 
 func TestSSHOps(t *testing.T) {

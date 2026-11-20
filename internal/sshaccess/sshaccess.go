@@ -12,12 +12,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"syscall"
+
+	"golang.org/x/crypto/ssh"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/sshkeys"
@@ -29,6 +34,9 @@ import (
 // creates it, root 0755.
 const DefaultKeyDir = "/etc/hostashi-ssh/keys"
 
+// DefaultHostKeyDir holds sshd's host keys.
+const DefaultHostKeyDir = "/etc/ssh"
+
 // Shells sets a site user's login shell (sysuser.Accounts on a server).
 type Shells interface {
 	SetShell(ctx context.Context, name, shell string) error
@@ -38,8 +46,11 @@ type Shells interface {
 type Manager struct {
 	StateFile string // root 0600, the last applied lists
 	KeyDir    string // default DefaultKeyDir
-	Shells    Shells
-	Log       *slog.Logger
+	// HostKeyDir is where HostKeys looks for ssh_host_*_key.pub; default
+	// DefaultHostKeyDir.
+	HostKeyDir string
+	Shells     Shells
+	Log        *slog.Logger
 
 	mu sync.Mutex
 	// dirOwner is the uid the key directory must belong to: root, except
@@ -297,4 +308,66 @@ func writeFileMode(name string, data []byte, mode os.FileMode) error {
 	}
 
 	return nil
+}
+
+// maxHostKeyFile bounds what HostKeys reads from one public key file.
+const maxHostKeyFile = 16 << 10
+
+// HostKeys returns the type and SHA256 fingerprint of each public host key
+// (ssh_host_*_key.pub), sorted by type. Files that do not parse are left
+// out and logged.
+func (m *Manager) HostKeys(ctx context.Context) ([]agentapi.SSHHostKey, error) {
+	dir := m.HostKeyDir
+	if dir == "" {
+		dir = DefaultHostKeyDir
+	}
+
+	names, err := filepath.Glob(filepath.Join(dir, "ssh_host_*_key.pub"))
+	if err != nil {
+		return nil, fmt.Errorf("sshaccess: %w", err)
+	}
+
+	out := []agentapi.SSHHostKey{}
+
+	for _, name := range names {
+		k, err := readHostKey(name)
+		if err != nil {
+			m.log().WarnContext(ctx, "ssh host key", "file", name, "err", err)
+
+			continue
+		}
+
+		out = append(out, k)
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].Type < out[j].Type })
+
+	return out, nil
+}
+
+func readHostKey(name string) (agentapi.SSHHostKey, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return agentapi.SSHHostKey{}, err
+	}
+
+	defer f.Close()
+
+	b := make([]byte, maxHostKeyFile+1)
+
+	n, err := io.ReadFull(f, b)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+		return agentapi.SSHHostKey{}, err
+	}
+
+	if n > maxHostKeyFile {
+		return agentapi.SSHHostKey{}, errors.New("file too large")
+	}
+
+	pk, _, _, _, err := ssh.ParseAuthorizedKey([]byte(strings.TrimSpace(string(b[:n]))))
+	if err != nil {
+		return agentapi.SSHHostKey{}, err
+	}
+
+	return agentapi.SSHHostKey{Type: pk.Type(), Fingerprint: ssh.FingerprintSHA256(pk)}, nil
 }

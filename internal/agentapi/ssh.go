@@ -49,3 +49,24 @@ type SSHApplied struct {
 
 // SSHApply writes a site's key file and sets its login shell.
 var SSHApply = agentrpc.Op[SSHApplyRequest, SSHApplied]{Name: "ssh.apply"}
+
+// SSHHostKeysRequest has no parameters.
+type SSHHostKeysRequest struct{}
+
+// Validate accepts the empty request.
+func (SSHHostKeysRequest) Validate() error { return nil }
+
+// SSHHostKey is one of the server's SSH host keys.
+type SSHHostKey struct {
+	Type        string `json:"type"`        // e.g. ssh-ed25519
+	Fingerprint string `json:"fingerprint"` // SHA256:...
+}
+
+// SSHHostKeysResponse lists the host keys, sorted by type.
+type SSHHostKeysResponse struct {
+	Keys []SSHHostKey `json:"keys"`
+}
+
+// SSHHostKeys reads the public host keys of sshd, so the panel can show
+// their fingerprints next to the login line.
+var SSHHostKeys = agentrpc.Op[SSHHostKeysRequest, SSHHostKeysResponse]{Name: "ssh.hostkeys"}
