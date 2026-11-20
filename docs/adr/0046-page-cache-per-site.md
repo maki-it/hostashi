@@ -8,6 +8,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 - WordPress is the main workload, and a page cache is a core hosting feature [V: ADR-0005, S3]. `03-features.md` 3.9 lists "Nginx FastCGI cache with purge" (P1, Beta) and "Varnish integration" (P1, release 1.0) [V].
 - ADR-0017 keeps a Varnish option for release 1.0, decided by Kim on 2026-11-18 together with the importer [V: ADR-0017, "Owner input"]. On 2026-11-20 Kim asked for a comparison and agreed to draft this ADR for the FastCGI cache **instead of** Varnish [V: Kim, project chat, 2026-11-20].
+- Decided by Kim on 2026-11-20: the page cache (this ADR) and the object cache (ADR-0045) both ship in v1 [V: Kim, project chat]. Whether Varnish stays in v1 is open question 1.
 - Spike S3 generated a working FastCGI cache config for nginx, with `X-Cache: MISS` then `HIT`, and about 77,500 requests per second on a cache hit [V: `spike/s3-webserver/REPORT.md`]. It is part of stock nginx; no extra module or service is needed [V: S3].
 - Hostashi renders one `nginx.conf` with an `http` block and one server block per site from Go templates in `internal/web` [V: `internal/web/nginx.go`]. `fastcgi_cache_path` is only valid in the `http` block [U: nginx documentation], so each site's cache zone is rendered there.
 - Every site has its own Linux user and a project quota on its directory tree; project quota counts files by project ID, whatever their owner [V: ADR-0015, `internal/agent/quota.go`].
