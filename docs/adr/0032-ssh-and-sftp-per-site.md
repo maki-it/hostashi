@@ -1,6 +1,6 @@
 # ADR-0032 SSH and SFTP access per site
 
-**Status:** Proposed. **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0007 (isolation model), ADR-0015 (per-site resource limits), ADR-0017 (CloudPanel import), ADR-0018 (API), ADR-0021 (fail2ban), ADR-0028 (cron), [`03-features.md`](../03-features.md) row "SSH keys and SFTP per site user (chroot optional)" (P0).
+**Status:** Accepted (2026-11-20, by Kim: option A, no chroot in v1). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0007 (isolation model), ADR-0015 (per-site resource limits), ADR-0017 (CloudPanel import), ADR-0018 (API), ADR-0021 (fail2ban), ADR-0028 (cron), [`03-features.md`](../03-features.md) row "SSH keys and SFTP per site user (chroot optional)" (P0).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -114,4 +114,4 @@ Two leaks that SSH makes easier to use, closed without a chroot:
 1. ~~Shell access at all in v1, or SFTP only?~~ **Decided (Kim, 2026-11-20):** both, chosen per key, SFTP only by default.
 2. ~~Keys only, or also passwords for site users?~~ **Decided (Kim, 2026-11-20):** keys only.
 3. ~~One login per site, or extra SSH users per site as in CloudPanel?~~ **Decided (Kim, 2026-11-20):** one login per site, the site user with several keys.
-4. No chroot in v1 (option A), or chroot for SFTP (option B)? Recommended: no chroot.
+4. ~~No chroot in v1 (option A), or chroot for SFTP (option B)?~~ **Decided (Kim, 2026-11-20):** no chroot in v1. A chroot can follow as its own ADR if customers need it.
