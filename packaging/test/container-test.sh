@@ -145,6 +145,12 @@ for id in system.os system.pool service.panel service.nginx service.mariadb serv
   grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"
 done
 grep -Eq "^  WARN  system.quota " <<<"$doc" || fail "doctor: no quota warning on an overlay root"
+for id in system.updates system.reboot system.php; do
+  grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"
+done
+# This test passes --no-firewall (the container shares the host's network).
+grep -Eq "^  WARN  system.firewall .*--no-firewall" <<<"$doc" || fail "doctor: no warning for --no-firewall"
+grep -Eq "^  (ok  |WARN)  system.ssh " <<<"$doc" || fail "doctor: no SSH check"
 [ "$rc" = 0 ] || fail "doctor exited $rc"
 x /usr/local/bin/hostashi doctor -json | grep -q '"id": "service.nginx"' || fail "doctor -json"
 

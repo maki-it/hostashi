@@ -110,3 +110,11 @@ func TestRealPHPFPM(t *testing.T) {
 		t.Fatal("bad config accepted")
 	}
 }
+
+func TestUnitActiveRefusesOtherUnits(t *testing.T) {
+	for _, u := range []string{"", "ssh.service", "nftables.service", "hostashi-firewall.service ", "hostashi-agent.service", "--all"} {
+		if _, err := UnitActive(t.Context(), u); err == nil || !strings.Contains(err.Error(), "refusing") {
+			t.Errorf("unit %q: %v", u, err)
+		}
+	}
+}
