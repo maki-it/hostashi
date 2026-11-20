@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# Mirrors docs/wiki/ to the repository's GitHub wiki (ADR-0043). The wiki is
+# a copy: every run replaces its content, so edits made in the wiki's web
+# editor do not survive. Links between pages are written as Page.md so the
+# link checker can follow them in the repository; the copy drops ".md",
+# which is how the wiki links its pages.
+
+name: Wiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/wiki/**"
+      - ".github/workflows/wiki.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Mirror docs/wiki to the wiki
+    runs-on: ubuntu-latest
+    permissions:
+      # The wiki is pushed with the job token; it needs write access.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Push to the wiki
+        env:
+          TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git -c http.extraheader="$auth" clone --depth 1 "https://github.com/$REPO.wiki.git" "$RUNNER_TEMP/wiki"
+          wiki="$RUNNER_TEMP/wiki"
+          find "$wiki" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -R docs/wiki/. "$wiki/"
+          # [text](Page.md) and [text](Page.md#part) -> [text](Page) and [text](Page#part)
+          find "$wiki" -name '*.md' -not -path "$wiki/.git/*" \
+            -exec sed -i -E 's/\]\(([A-Za-z0-9_-]+)\.md(#[^)]*)?\)/](\1\2)/g' {} +
+          cd "$wiki"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "wiki is up to date"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Sync from $REPO@$SHA"
+          git -c http.extraheader="$auth" push origin HEAD
