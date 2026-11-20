@@ -28,7 +28,7 @@ One Go module at the repository root, one binary with three modes (see [`docs/04
 - Panel HTTPS (ADR-0023): `serve` derives the panel name from `-public-url` (a host name, not localhost or an IP) and `hosting` gets its certificate under `agentapi.PanelCert` (`_panel`). The agent's `-panel-port` (default 8443) is where nginx serves it; `web.apply` carries the panel next to the sites. nginx proxies to the socket of `hostashi-panel.socket`, which `serve` takes over from systemd (`LISTEN_FDS`); only requests on that socket take the client address from `X-Real-IP`.
 - `internal/agentapi`: the complete list of agent operations. New operations go here, each with a request type that validates its own input. There is no generic exec operation.
 - `packaging/`: systemd units and `install.sh` for a fresh Debian 13 or Ubuntu 26.04 server (step model of spike S5: `plan`, then `apply --yes`; idempotent). The agent unit must not set `RestrictSUIDSGID`, which makes `openat2` fail with ENOSYS. `packaging/test/container-test.sh IMAGE BINARY` runs the installer in a systemd container; CI runs it for both distros.
-- `spike/`: throwaway prototypes, separate modules, not product code.
+- `spike/`: reports of the planning spikes; the prototype code was removed (see `spike/README.md`).
 
 Run the checks locally:
 
