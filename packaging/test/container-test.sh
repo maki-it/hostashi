@@ -292,6 +292,22 @@ cookie=$(x curl -sS -o /dev/null -D - -H 'Content-Type: application/json' \
   --data "{\"username\":\"kim\",\"password\":\"$pw\"}" http://127.0.0.1:8080/api/v1/auth/login |
   tr -d '\r' | sed -n 's/^[Ss]et-[Cc]ookie: \(hostashi_session=[^;]*\).*/\1/p')
 [ -n "$cookie" ] || fail "login gave no session cookie"
+# An admin needs a second factor before anything else (ADR-0035). The
+# code comes from the host, which has python3.
+totp() {
+  python3 -c 'import base64,hashlib,hmac,struct,sys,time
+s = sys.argv[1]
+k = base64.b32decode(s + "=" * (-len(s) % 8))
+h = hmac.new(k, struct.pack(">Q", int(time.time()) // 30), hashlib.sha1).digest()
+o = h[-1] & 15
+print("%06d" % ((struct.unpack(">I", h[o:o + 4])[0] & 0x7fffffff) % 1000000))' "$1"
+}
+[ "$(api POST /api/v1/sites '{"name":"early","domains":["early.example.com"]}')" = 403 ] || fail "admin without a second factor: $(x cat /tmp/api.out)"
+x grep -q second_factor_required /tmp/api.out || fail "no second_factor_required: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/auth/totp/enroll)" = 200 ] || fail "TOTP enroll: $(x cat /tmp/api.out)"
+secret=$(x cat /tmp/api.out | sed -n 's/.*"secret":"\([A-Z2-7]*\)".*/\1/p')
+[ -n "$secret" ] || fail "no TOTP secret: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/auth/totp/confirm "{\"code\":\"$(totp "$secret")\"}")" = 200 ] || fail "TOTP confirm: $(x cat /tmp/api.out)"
 
 step "fail2ban reads the panel's failed logins"
 for j in sshd hostashi-panel recidive; do
