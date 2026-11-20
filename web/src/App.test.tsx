@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -328,5 +328,64 @@ describe("Second factor", () => {
     render(<App />);
     await fillLogin(user);
     expect(await screen.findByRole("alert")).toHaveTextContent("This account logs in with a passkey.");
+  });
+});
+
+describe("Roles", () => {
+  it("shows a user only the pages of the role", async () => {
+    mockFetch({ ...noSetup, "GET /api/v1/auth/me": { body: { username: "uma", role: "user", secondFactor: false, secondFactorRequired: false } } });
+    render(<App />);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual(["Overview", "Sites", "Databases"]);
+  });
+
+  it("shows admins the users page", async () => {
+    mockFetch({ ...noSetup, "GET /api/v1/auth/me": { body: { ...admin, secondFactor: true, secondFactorRequired: true } } });
+    render(<App />);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    expect(within(nav).getByRole("link", { name: "Users" })).toBeInTheDocument();
+  });
+
+  it("does not open a page the role cannot use", async () => {
+    window.location.hash = "#/firewall";
+    mockFetch({ ...noSetup, "GET /api/v1/auth/me": { body: { username: "uma", role: "user" } } });
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Welcome, uma" })).toBeInTheDocument();
+    window.location.hash = "";
+  });
+});
+
+describe("Invitation link", () => {
+  it("sets the password and logs in", async () => {
+    const user = userEvent.setup();
+    const token = "I".repeat(43);
+    window.location.hash = "#/invite/" + token;
+    const calls = mockFetch({
+      ...noSetup,
+      "POST /api/v1/invitations/check": { body: { username: "mona" } },
+      "POST /api/v1/invitations/accept": { body: { username: "mona", role: "manager", secondFactor: false, secondFactorRequired: true } },
+    });
+    render(<App />);
+    expect(await screen.findByText("mona")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Password"), "a long enough password");
+    await user.type(screen.getByLabelText("Repeat password"), "another password!!");
+    await user.click(screen.getByRole("button", { name: "Set password and log in" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("do not match");
+
+    await user.clear(screen.getByLabelText("Repeat password"));
+    await user.type(screen.getByLabelText("Repeat password"), "a long enough password");
+    await user.click(screen.getByRole("button", { name: "Set password and log in" }));
+    expect(await screen.findByRole("heading", { name: "Set up a second factor" })).toBeInTheDocument();
+    expect(calls.find((c) => c.path === "/api/v1/invitations/accept")?.body).toEqual({ token, password: "a long enough password" });
+    expect(window.location.hash).toBe("#/");
+    window.location.hash = "";
+  });
+
+  it("explains a used link", async () => {
+    window.location.hash = "#/invite/" + "U".repeat(43);
+    mockFetch({ ...noSetup, "POST /api/v1/invitations/check": err(404, "invitation_invalid") });
+    render(<App />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("invalid, used or expired");
+    window.location.hash = "";
   });
 });

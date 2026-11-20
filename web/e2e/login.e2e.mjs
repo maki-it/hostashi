@@ -154,6 +154,33 @@ try {
   await welcome().waitFor();
   await ok("passkey login without password or code");
 
+  // The admin invites a manager; the manager opens the link in another
+  // browser, sets a password and must set up a second factor (ADR-0035).
+  await page.getByRole("link", { name: "Users" }).click();
+  await page.getByLabel(/Username/).fill("mona");
+  await page.getByLabel(/Role/).selectOption("manager");
+  await page.getByRole("button", { name: "Create invitation" }).click();
+  const link = await page.getByLabel("Invitation link").inputValue();
+  if (!link.startsWith(base + "/#/invite/")) throw new Error("invitation link " + link);
+  await ok("the admin invites a manager");
+
+  const other = await browser.newContext({ viewport: { width: 480, height: 720 } });
+  const invited = await other.newPage();
+  invited.on("pageerror", (e) => pageErrors.push(String(e)));
+  await invited.goto(link);
+  await invited.getByText("mona", { exact: true }).waitFor();
+  await invited.getByLabel("Password", { exact: true }).fill(password);
+  await invited.getByLabel("Repeat password").fill(password);
+  await invited.getByRole("button", { name: "Set password and log in" }).click();
+  await invited.getByRole("heading", { name: "Set up a second factor" }).waitFor();
+  if (shots) await invited.screenshot({ path: join(shots, "invited.png") });
+  await other.close();
+  await ok("the manager sets a password through the link and is asked for a second factor");
+
+  await page.reload();
+  await page.getByText("second factor on").or(page.getByText("no second factor")).first().waitFor();
+  await ok("the users page lists both accounts");
+
   if (pageErrors.length > 0) throw new Error("browser errors:\n" + pageErrors.join("\n"));
   await ok("no script errors or CSP violations");
 } finally {
