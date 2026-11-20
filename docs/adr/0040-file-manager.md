@@ -1,6 +1,6 @@
 # ADR-0040 File manager in the panel
 
-**Status:** Proposed. **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0015 (limits and quota per site), ADR-0032 (SSH/SFTP per site), ADR-0033 (hardening), ADR-0035 (roles), ADR-0037 (UI redesign), spike S4 (file access as the site user), [`03-features.md`](../03-features.md) row "File manager in the browser" (P1).
+**Status:** Accepted (Kim, 2026-11-20). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0015 (limits and quota per site), ADR-0032 (SSH/SFTP per site), ADR-0033 (hardening), ADR-0035 (roles), ADR-0037 (UI redesign), spike S4 (file access as the site user), [`03-features.md`](../03-features.md) row "File manager in the browser" (P1).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -64,5 +64,5 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions
 
-1. Own file manager with a per-site helper running as the site user (option A)?
-2. Is a recycle bin needed in v1, or is "ask once, then delete" enough?
+1. ~~Own file manager with a per-site helper running as the site user (option A)?~~ **Decided (Kim, 2026-11-20): yes.**
+2. ~~Is a recycle bin needed in v1?~~ **Decided (Kim, 2026-11-20): no recycle bin; ask once, then delete. Backups are the safety net.**

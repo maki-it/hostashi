@@ -1,6 +1,6 @@
 # ADR-0041 External database servers
 
-**Status:** Proposed. **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups), ADR-0024 (MariaDB per site, no stored passwords), ADR-0025 (import and export), ADR-0033 (hardening), ADR-0035 (roles), ADR-0037 (UI redesign), ADR-0038 (web database tool).
+**Status:** Accepted (Kim, 2026-11-20). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups), ADR-0024 (MariaDB per site, no stored passwords), ADR-0025 (import and export), ADR-0033 (hardening), ADR-0035 (roles), ADR-0037 (UI redesign), ADR-0038 (web database tool).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -62,5 +62,5 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 0. ~~TLS required?~~ **Decided (Kim, 2026-11-20): no, unencrypted connections are allowed with a warning.**
 
-1. MariaDB and MySQL 8.0+, or MariaDB only?
-2. Panel process talks to external servers, agent stays without network (option A)?
+1. ~~MariaDB and MySQL 8.0+, or MariaDB only?~~ **Decided (Kim, 2026-11-20): both.**
+2. ~~Panel process talks to external servers, agent stays without network (option A)?~~ **Decided (Kim, 2026-11-20): yes.**
