@@ -7,6 +7,7 @@ import { Databases } from "./Databases";
 import { Doctor } from "./Doctor";
 import { Firewall } from "./Firewall";
 import { Home } from "./Home";
+import { Invite } from "./Invite";
 import { Presets } from "./Limits";
 import { Login } from "./Login";
 import { Migrate } from "./Migrate";
@@ -16,41 +17,41 @@ import { PHPPage } from "./PHP";
 import { SecondFactor } from "./SecondFactor";
 import { Setup } from "./Setup";
 import { Sites } from "./Sites";
+import { Users } from "./Users";
 
 type View =
   | { kind: "loading" }
   | { kind: "setup" }
   | { kind: "login"; notice?: string }
+  | { kind: "invite"; token: string }
   | { kind: "home"; user: User }
   | { kind: "error" };
 
-type Page = "home" | "health" | "firewall" | "sites" | "php" | "limits" | "pages" | "parked" | "databases" | "backups" | "import";
+type Page = "home" | "health" | "firewall" | "sites" | "php" | "limits" | "pages" | "parked" | "databases" | "backups" | "import" | "users";
 
-const pageFromHash = (): Page => {
-  switch (window.location.hash) {
-    case "#/health":
-      return "health";
-    case "#/firewall":
-      return "firewall";
-    case "#/sites":
-      return "sites";
-    case "#/php":
-      return "php";
-    case "#/limits":
-      return "limits";
-    case "#/pages":
-      return "pages";
-    case "#/parked":
-      return "parked";
-    case "#/databases":
-      return "databases";
-    case "#/backups":
-      return "backups";
-    case "#/import":
-      return "import";
-    default:
-      return "home";
-  }
+// nav lists the pages and the roles that see them (ADR-0035). The server
+// decides; this only hides what a role cannot use.
+const nav: { page: Page; hash: string; label: string; roles: string[] }[] = [
+  { page: "home", hash: "#/", label: "Overview", roles: ["admin", "manager", "user"] },
+  { page: "health", hash: "#/health", label: "Health", roles: ["admin"] },
+  { page: "firewall", hash: "#/firewall", label: "Firewall", roles: ["admin"] },
+  { page: "sites", hash: "#/sites", label: "Sites", roles: ["admin", "manager", "user"] },
+  { page: "php", hash: "#/php", label: "PHP", roles: ["admin"] },
+  { page: "limits", hash: "#/limits", label: "Limits", roles: ["admin", "manager"] },
+  { page: "pages", hash: "#/pages", label: "Pages", roles: ["admin", "manager"] },
+  { page: "parked", hash: "#/parked", label: "Parked domains", roles: ["admin", "manager"] },
+  { page: "databases", hash: "#/databases", label: "Databases", roles: ["admin", "manager", "user"] },
+  { page: "backups", hash: "#/backups", label: "Backups", roles: ["admin"] },
+  { page: "import", hash: "#/import", label: "CloudPanel import", roles: ["admin"] },
+  { page: "users", hash: "#/users", label: "Users", roles: ["admin"] },
+];
+
+const pageFromHash = (): Page => nav.find((n) => n.hash !== "#/" && n.hash === window.location.hash)?.page ?? "home";
+
+// inviteToken returns the token of an invitation link (#/invite/<token>).
+const inviteToken = (): string | null => {
+  const m = /^#\/invite\/([A-Za-z0-9_-]{20,100})$/.exec(window.location.hash);
+  return m ? (m[1] ?? null) : null;
 };
 
 export function App() {
@@ -70,6 +71,11 @@ export function App() {
         setView({ kind: "setup" });
         return;
       }
+      const token = inviteToken();
+      if (token) {
+        setView({ kind: "invite", token });
+        return;
+      }
       const user = await currentUser();
       setView(user ? { kind: "home", user } : { kind: "login" });
     } catch {
@@ -85,6 +91,9 @@ export function App() {
   // refuses every other page until then.
   const locked = view.kind === "home" && needsSecondFactor(view.user);
   const open = view.kind === "home" && !locked;
+  const role = view.kind === "home" ? view.user.role : "";
+  const allowed = (p: Page) => nav.some((n) => n.page === p && n.roles.includes(role));
+  const show = (p: Page) => open && page === p && allowed(p);
 
   return (
     <main className={view.kind === "home" ? "shell wide" : "shell"}>
@@ -92,39 +101,13 @@ export function App() {
         <h1>Hostashi</h1>
         {open && (
           <nav aria-label="Main">
-            <a href="#/" aria-current={page === "home" ? "page" : undefined}>
-              Overview
-            </a>
-            <a href="#/health" aria-current={page === "health" ? "page" : undefined}>
-              Health
-            </a>
-            <a href="#/firewall" aria-current={page === "firewall" ? "page" : undefined}>
-              Firewall
-            </a>
-            <a href="#/sites" aria-current={page === "sites" ? "page" : undefined}>
-              Sites
-            </a>
-            <a href="#/php" aria-current={page === "php" ? "page" : undefined}>
-              PHP
-            </a>
-            <a href="#/limits" aria-current={page === "limits" ? "page" : undefined}>
-              Limits
-            </a>
-            <a href="#/pages" aria-current={page === "pages" ? "page" : undefined}>
-              Pages
-            </a>
-            <a href="#/parked" aria-current={page === "parked" ? "page" : undefined}>
-              Parked domains
-            </a>
-            <a href="#/databases" aria-current={page === "databases" ? "page" : undefined}>
-              Databases
-            </a>
-            <a href="#/backups" aria-current={page === "backups" ? "page" : undefined}>
-              Backups
-            </a>
-            <a href="#/import" aria-current={page === "import" ? "page" : undefined}>
-              CloudPanel import
-            </a>
+            {nav
+              .filter((n) => n.roles.includes(role))
+              .map((n) => (
+                <a key={n.page} href={n.hash} aria-current={page === n.page ? "page" : undefined}>
+                  {n.label}
+                </a>
+              ))}
           </nav>
         )}
       </header>
@@ -140,23 +123,25 @@ export function App() {
       {view.kind === "setup" && (
         <Setup onDone={() => setView({ kind: "login", notice: "Administrator account created. Log in now." })} />
       )}
+      {view.kind === "invite" && <Invite token={view.token} onDone={(user) => setView({ kind: "home", user })} />}
       {view.kind === "login" && (
         <Login {...(view.notice ? { notice: view.notice } : {})} onLogin={(user) => setView({ kind: "home", user })} />
       )}
-      {view.kind === "home" && (locked || page === "home") && <Home user={view.user} onLogout={() => setView({ kind: "login" })} />}
+      {view.kind === "home" && (locked || page === "home" || !allowed(page)) && <Home user={view.user} onLogout={() => setView({ kind: "login" })} />}
       {view.kind === "home" && locked && (
         <SecondFactor onDone={() => setView({ kind: "home", user: { ...view.user, secondFactor: true } })} />
       )}
-      {open && page === "health" && <Doctor />}
-      {open && page === "firewall" && <Firewall />}
-      {open && page === "sites" && <Sites />}
-      {open && page === "php" && <PHPPage />}
-      {open && page === "limits" && <Presets />}
-      {open && page === "pages" && <Pages />}
-      {open && page === "parked" && <Parked />}
-      {open && page === "databases" && <Databases />}
-      {open && page === "backups" && <Backups />}
-      {open && page === "import" && <Migrate />}
+      {show("health") && <Doctor />}
+      {show("firewall") && <Firewall />}
+      {show("sites") && <Sites />}
+      {show("php") && <PHPPage />}
+      {show("limits") && <Presets />}
+      {show("pages") && <Pages />}
+      {show("parked") && <Parked />}
+      {show("databases") && <Databases />}
+      {show("backups") && <Backups />}
+      {show("import") && <Migrate />}
+      {show("users") && view.kind === "home" && <Users me={view.user.username} />}
     </main>
   );
 }
