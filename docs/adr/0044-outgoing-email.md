@@ -1,6 +1,6 @@
 # ADR-0044 Outgoing email through an SMTP relay
 
-**Status:** Proposed. **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups), ADR-0010 (v1 scope, no mail server), ADR-0018 (API, scopes), ADR-0022 (metrics and logs), ADR-0033 (hardening), ADR-0035 (users and roles, invitation links), ADR-0036 (PHP end of life), ADR-0039 (certificate expiry warnings), ADR-0041 (credential sealed with the server key), [`03-features.md`](../03-features.md) row "Notifications: email (SMTP), webhook, Telegram/Slack" (P1).
+**Status:** Accepted (Kim, 2026-11-21). **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups), ADR-0010 (v1 scope, no mail server), ADR-0018 (API, scopes), ADR-0022 (metrics and logs), ADR-0033 (hardening), ADR-0035 (users and roles, invitation links), ADR-0036 (PHP end of life), ADR-0039 (certificate expiry warnings), ADR-0041 (credential sealed with the server key), [`03-features.md`](../03-features.md) row "Notifications: email (SMTP), webhook, Telegram/Slack" (P1).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
