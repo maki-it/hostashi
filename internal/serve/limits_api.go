@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"runtime"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/auth"
@@ -177,7 +178,9 @@ func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 			out = append(out, toPresetJSON(p))
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"presets": out})
+		// The panel shows CPU limits in cores and names how many the
+		// server has (ADR-0037).
+		writeJSON(w, http.StatusOK, map[string]any{"presets": out, "cpus": runtime.NumCPU()})
 	}))
 
 	mux.HandleFunc("GET /api/v1/limit-presets/{name}", a.allow("limits.presets:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {

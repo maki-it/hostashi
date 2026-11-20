@@ -44,7 +44,9 @@ export type SiteLimits = {
 const presetPath = (name?: string) => "/limit-presets" + (name === undefined ? "" : "/" + encodeURIComponent(name));
 const sitePath = (site: string) => "/sites/" + encodeURIComponent(site) + "/limits";
 
-export const listPresets = async () => (await request<{ presets: Preset[] }>("GET", presetPath())).presets;
+// listPresets also says how many CPU cores the server has (ADR-0037), for
+// the CPU limit in cores.
+export const listPresets = () => request<{ presets: Preset[]; cpus?: number }>("GET", presetPath());
 export const createPreset = (name: string, isDefault: boolean, limits: Limits) =>
   request<Preset>("POST", presetPath(), { name, default: isDefault, limits: strip(limits) });
 export const updatePreset = (old: string, name: string, isDefault: boolean, limits: Limits) =>
@@ -86,7 +88,7 @@ export const bounds = {
   memoryMiB: { min: 64, max: 1024 * 1024 },
   tasks: { min: 16, max: 2 ** 20 },
   workers: { min: 1, max: 500 },
-  cpuQuota: { min: 0, max: 100000 },
+  cpuQuota: { min: 0, max: 100000 }, // percent of one core; the form works in cores
 };
 
 export const presetNameProblem = (name: string) =>
@@ -105,7 +107,8 @@ export type LimitFields = {
   tasksUnlimited: boolean;
   workers: string;
   cpuPriority: CPUPriority;
-  cpuQuota: string;
+  /** The hard CPU limit in cores, such as "1.5"; "0" for none. */
+  cpuCores: string;
 };
 
 export function fieldsOf(l: Limits): LimitFields {
@@ -120,7 +123,7 @@ export function fieldsOf(l: Limits): LimitFields {
     tasksUnlimited: l.tasks === 0,
     workers: String(l.phpWorkers || 5),
     cpuPriority: l.cpuPriority,
-    cpuQuota: String(l.cpuQuotaPercent),
+    cpuCores: formatCores(l.cpuQuotaPercent),
   };
 }
 
@@ -129,6 +132,20 @@ function whole(s: string, what: string, min: number, max: number): number | stri
   if (!/^[0-9]+$/.test(t)) return `${what} must be a whole number.`;
   const v = Number(t);
   if (v < min || v > max) return `${what} must be between ${formatCount(min)} and ${formatCount(max)}.`;
+  return v;
+}
+
+// formatCores shows a CPU quota in percent of one core as cores: 150 is
+// "1.5", 0 is "0".
+export const formatCores = (percent: number) => String(Math.round(percent) / 100);
+
+// coresToPercent reads a number of cores with up to two decimals and turns
+// it into percent of one core, or returns the problem.
+export function coresToPercent(s: string): number | string {
+  const t = s.trim().replace(",", ".");
+  if (!/^[0-9]+(\.[0-9]{1,2})?$/.test(t)) return "CPU cores must be a number such as 2 or 0.5, or 0 for no limit.";
+  const v = Math.round(Number(t) * 100);
+  if (v > bounds.cpuQuota.max) return `CPU cores must be at most ${formatCount(bounds.cpuQuota.max / 100)}.`;
   return v;
 }
 
@@ -148,7 +165,7 @@ export function limitsOf(f: LimitFields, isDefault = false): Limits | string {
   if (typeof tasks === "string") return tasks;
   const workers = whole(f.workers, "PHP workers", bounds.workers.min, bounds.workers.max);
   if (typeof workers === "string") return workers;
-  const quota = whole(f.cpuQuota, "The CPU limit", bounds.cpuQuota.min, bounds.cpuQuota.max);
+  const quota = coresToPercent(f.cpuCores);
   if (typeof quota === "string") return quota;
   return {
     diskBytes: disk * GiB,

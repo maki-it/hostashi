@@ -2,6 +2,7 @@
 
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { LimitSettings, Presets } from "./Limits";
 import { fieldsOf, formatBytes, GiB, limitsOf, MiB, type Limits, type Preset, type SiteLimits } from "./limits";
@@ -47,7 +48,13 @@ const onSmall: SiteLimits = {
   usage: { enforced: true, bytes: 9 * GiB, inodes: 1200, bytesPercent: 90, inodesPercent: 0, level: "warning" },
 };
 const base = "/api/v1/sites/blog/limits";
-const list = { "GET /api/v1/limit-presets": { body: { presets } } };
+const list = { "GET /api/v1/limit-presets": { body: { presets, cpus: 4 } } };
+
+// Harness keeps the address query in state, as the app does.
+function Harness({ initial = "" }: { initial?: string }) {
+  const [query, setQuery] = useState(new URLSearchParams(initial));
+  return <Presets query={query} onQuery={setQuery} />;
+}
 
 describe("limits helpers", () => {
   it("formats bytes", () => {
@@ -65,7 +72,12 @@ describe("limits helpers", () => {
     expect(limitsOf({ ...f, tasks: "8" })).toMatch(/Processes must be between 16/);
     expect(limitsOf({ ...f, inodes: "10" })).toMatch(/Files must be between 1,000/);
     expect(limitsOf({ ...f, diskGiB: "1.5" })).toMatch(/whole number/);
-    expect(limitsOf({ ...f, cpuQuota: "-1" })).toMatch(/whole number/);
+    expect(limitsOf({ ...f, cpuCores: "-1" })).toMatch(/CPU cores must be a number/);
+    expect(limitsOf({ ...f, cpuCores: "0.125" })).toMatch(/CPU cores must be a number/);
+    expect(limitsOf({ ...f, cpuCores: "1001" })).toMatch(/at most 1,000/);
+    const half = limitsOf({ ...f, cpuCores: "1,5" });
+    expect(typeof half === "object" && half.cpuQuotaPercent).toBe(150);
+    expect(fieldsOf({ ...small, cpuQuotaPercent: 250 }).cpuCores).toBe("2.5");
     const open = limitsOf({ ...f, diskUnlimited: true, diskGiB: "x" });
     expect(typeof open === "object" && open.diskBytes).toBe(0);
     expect(limitsOf({ ...f, memoryUnlimited: true }, true)).toMatch(/default preset must limit/);
@@ -158,22 +170,49 @@ describe("LimitSettings", () => {
 });
 
 describe("Presets", () => {
-  it("lists presets with the default marked and no delete for it", async () => {
-    mockFetch(list);
-    render(<Presets />);
-    const rows = within(await screen.findByRole("list", { name: "Limit presets" })).getAllByRole("listitem");
-    expect(rows).toHaveLength(2);
-    expect(within(rows[1]!).getByText("Default")).toBeInTheDocument();
-    expect(within(rows[1]!).queryByRole("button", { name: "Delete" })).toBeNull();
-    expect(within(rows[0]!).getByRole("button", { name: "Delete" })).toBeInTheDocument();
-    expect(within(rows[0]!).getByText("25 GiB")).toBeInTheDocument();
+  const rowOf = async (name: string) => {
+    const table = await screen.findByRole("table", { name: "Limit presets" });
+    return within(within(table).getByText(name, { selector: "strong" }).closest("tr")!);
+  };
+
+  it("lists presets in a table with the default marked, CPU in cores and no delete for the default", async () => {
+    mockFetch({ "GET /api/v1/limit-presets": { body: { presets: [presets[0], { ...presets[1]!, limits: { ...small, cpuQuotaPercent: 150 } }], cpus: 4 } } });
+    render(<Harness />);
+    const def = await rowOf("small");
+    expect(def.getByText("Default")).toBeInTheDocument();
+    expect(def.getByRole("cell", { name: "1.5" })).toBeInTheDocument();
+    expect(def.queryByRole("button", { name: "Delete small" })).toBeNull();
+    const med = await rowOf("medium");
+    expect(med.getByText("25 GiB")).toBeInTheDocument();
+    expect(med.getByText("No limit")).toBeInTheDocument();
+    expect(med.getByRole("button", { name: "Delete medium" })).toBeInTheDocument();
+    expect(med.getByRole("link", { name: "Change medium" })).toHaveAttribute("href", "#/limits?edit=medium");
+    expect(screen.getByRole("columnheader", { name: "CPU cores" })).toBeInTheDocument();
+    expect(screen.getByText("This server has 4 CPU cores.")).toBeInTheDocument();
   });
 
-  it("adds a preset and refuses an unlimited default", async () => {
+  it("filters and sorts by a column", async () => {
+    const user = userEvent.setup();
+    mockFetch(list);
+    render(<Harness />);
+    await rowOf("small");
+    const names = () =>
+      screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((r) => r.querySelector("strong")?.textContent);
+    expect(names()).toEqual(["medium", "small"]);
+    await user.click(screen.getByRole("button", { name: "Memory" }));
+    expect(names()).toEqual(["small", "medium"]);
+    await user.type(screen.getByRole("searchbox", { name: "Filter presets" }), "med");
+    expect(names()).toEqual(["medium"]);
+  });
+
+  it("adds a preset with a CPU limit in cores and refuses an unlimited default", async () => {
     const calls = mockFetch({ ...list, "POST /api/v1/limit-presets": { status: 201, body: presets[0] } });
-    render(<Presets />);
-    await userEvent.click(await screen.findByRole("button", { name: "Add preset" }));
-    const form = within(screen.getByRole("form", { name: "New preset" }));
+    render(<Harness initial="new=1" />);
+    const form = within(await screen.findByRole("form", { name: "New preset" }));
+    expect(form.getByText(/This server has 4 cores\./)).toBeInTheDocument();
     await userEvent.type(form.getByRole("textbox", { name: /Name/ }), "Tiny");
     await userEvent.click(form.getByRole("button", { name: "Add preset" }));
     expect(form.getByRole("alert")).toHaveTextContent(/lower-case/);
@@ -188,9 +227,26 @@ describe("Presets", () => {
     expect(form.getByRole("alert")).toHaveTextContent(/default preset must limit/);
 
     await userEvent.click(form.getByRole("checkbox", { name: "Unlimited memory" }));
+    await userEvent.clear(form.getByRole("textbox", { name: /CPU cores/ }));
+    await userEvent.type(form.getByRole("textbox", { name: /CPU cores/ }), "0.5");
     await userEvent.click(form.getByRole("button", { name: "Add preset" }));
     expect(await screen.findByText("Preset tiny added.")).toBeInTheDocument();
-    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ name: "tiny", default: true, limits: { memoryBytes: 512 * MiB } });
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
+      name: "tiny",
+      default: true,
+      limits: { memoryBytes: 512 * MiB, cpuQuotaPercent: 50 },
+    });
+    expect(await screen.findByRole("table", { name: "Limit presets" })).toBeInTheDocument();
+  });
+
+  it("changes a preset from the address", async () => {
+    const calls = mockFetch({ ...list, "PUT /api/v1/limit-presets/medium": { body: presets[0] } });
+    render(<Harness initial="edit=medium" />);
+    const form = within(await screen.findByRole("form", { name: "Change preset medium" }));
+    expect(form.getByRole("textbox", { name: /Name/ })).toHaveValue("medium");
+    await userEvent.click(form.getByRole("button", { name: "Save preset" }));
+    expect(await screen.findByText("Preset medium saved. Sites that use it get the new values.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PUT")?.body).toMatchObject({ name: "medium", limits: { phpWorkers: 10 } });
   });
 
   it("deletes a preset after asking and explains a refused one", async () => {
@@ -198,19 +254,18 @@ describe("Presets", () => {
       ...list,
       "DELETE /api/v1/limit-presets/medium": { status: 409, body: { error: { code: "preset_is_default", message: "" } } },
     });
-    render(<Presets />);
-    const row = within((await screen.findAllByRole("listitem"))[0]!);
-    await userEvent.click(row.getByRole("button", { name: "Delete" }));
-    await userEvent.click(row.getByRole("button", { name: "Delete preset" }));
-    expect(await row.findByRole("alert")).toHaveTextContent("Make another preset the default first.");
+    render(<Harness />);
+    await userEvent.click((await rowOf("medium")).getByRole("button", { name: "Delete medium" }));
+    const dialog = within(screen.getByRole("alertdialog", { name: "Delete the preset medium?" }));
+    await userEvent.click(dialog.getByRole("button", { name: "Delete preset" }));
+    expect(await dialog.findByRole("alert")).toHaveTextContent("Make another preset the default first.");
     expect(calls.some((c) => c.method === "DELETE")).toBe(true);
   });
 
   it("makes a preset the default", async () => {
     const calls = mockFetch({ ...list, "PUT /api/v1/limit-presets/medium": { body: { ...presets[0], default: true } } });
-    render(<Presets />);
-    const row = within((await screen.findAllByRole("listitem"))[0]!);
-    await userEvent.click(row.getByRole("button", { name: "Make default" }));
+    render(<Harness />);
+    await userEvent.click((await rowOf("medium")).getByRole("button", { name: "Make medium the default" }));
     expect(await screen.findByText("New sites now get the preset medium.")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toMatchObject({ name: "medium", default: true });
   });

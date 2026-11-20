@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { ArrowLeft, PencilSimple, Plus, Star, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "./api";
 import {
@@ -8,6 +9,7 @@ import {
   deletePreset,
   fieldsOf,
   formatBytes,
+  formatCores,
   formatCount,
   getSiteLimits,
   limitsMessage,
@@ -25,7 +27,9 @@ import {
   type SiteLimits,
   type Usage,
 } from "./limits";
+import { formatHash } from "./routes";
 import type { Site } from "./sites";
+import { Badge, Button, Card, IconButton, IconLink, Notice, PageHead, RowActions, Table, type Column, type Sort } from "./ui";
 
 const defaultLimits: Limits = {
   diskBytes: 0,
@@ -41,6 +45,11 @@ const defaultLimits: Limits = {
 // sentences.
 const messageOf = (err: unknown) =>
   err instanceof Error && !(err instanceof ApiError) && !(err instanceof TypeError) ? err.message : limitsMessage(err, "preset");
+
+const cpuCoresText = (percent: number) => {
+  const c = formatCores(percent);
+  return c === "1" ? "1 CPU core" : c + " CPU cores";
+};
 
 const Unlimited = () => <span className="badge warn">Unlimited</span>;
 
@@ -62,7 +71,7 @@ export function LimitFacts({ limits, label }: { limits: Limits; label: string })
       <dt>CPU</dt>
       <dd>
         {priorityLabel[limits.cpuPriority]} priority
-        {limits.cpuQuotaPercent > 0 ? `, at most ${String(limits.cpuQuotaPercent)} % of one core` : ", no hard limit"}
+        {limits.cpuQuotaPercent > 0 ? `, at most ${cpuCoresText(limits.cpuQuotaPercent)}` : ", no hard limit"}
       </dd>
     </dl>
   );
@@ -101,7 +110,18 @@ function UsageFacts({ usage, limits }: { usage: Usage; limits: Limits }) {
 
 // LimitInputs edits the fields of a limit set. Unlimited is a separate
 // checkbox per limit, so it is always an explicit choice.
-function LimitInputs({ f, set, allowUnlimited }: { f: LimitFields; set: (f: LimitFields) => void; allowUnlimited: boolean }) {
+function LimitInputs({
+  f,
+  set,
+  allowUnlimited,
+  cpus,
+}: {
+  f: LimitFields;
+  set: (f: LimitFields) => void;
+  allowUnlimited: boolean;
+  /** The server's CPU cores, when known. */
+  cpus?: number | undefined;
+}) {
   const row = (
     label: string,
     unit: string,
@@ -175,9 +195,12 @@ function LimitInputs({ f, set, allowUnlimited }: { f: LimitFields; set: (f: Limi
         </select>
       </label>
       <label>
-        Hard CPU limit
-        <small>Percent of one core, 0 for none (100 = one full core)</small>
-        <input inputMode="numeric" value={f.cpuQuota} onChange={(e) => set({ ...f, cpuQuota: e.target.value })} />
+        CPU cores
+        <small>
+          Hard limit, such as 2 or 0.5; 0 for none.
+          {cpus ? ` This server has ${String(cpus)} ${cpus === 1 ? "core" : "cores"}.` : ""}
+        </small>
+        <input inputMode="decimal" value={f.cpuCores} onChange={(e) => set({ ...f, cpuCores: e.target.value })} />
       </label>
     </>
   );
@@ -195,6 +218,7 @@ const unlimitedWarning = (f: LimitFields) =>
 export function LimitSettings({ site }: { site: Site }) {
   const [state, setState] = useState<SiteLimits | null>(null);
   const [presets, setPresets] = useState<Preset[]>([]);
+  const [cpus, setCPUs] = useState<number | undefined>(undefined);
   const [loadError, setLoadError] = useState("");
   const [choice, setChoice] = useState(""); // a preset name or "" for custom values
   const [fields, setFields] = useState<LimitFields>(fieldsOf(defaultLimits));
@@ -204,9 +228,11 @@ export function LimitSettings({ site }: { site: Site }) {
 
   const load = useCallback(async () => {
     try {
-      const [s, p] = await Promise.all([getSiteLimits(site.name), listPresets()]);
+      const [s, list] = await Promise.all([getSiteLimits(site.name), listPresets()]);
+      const p = list.presets;
       setState(s);
       setPresets(p);
+      setCPUs(list.cpus);
       setChoice(s.set ? s.preset : (p.find((x) => x.default)?.name ?? ""));
       setFields(fieldsOf(s.set ? s.limits : (p.find((x) => x.default)?.limits ?? defaultLimits)));
       setLoadError("");
@@ -284,7 +310,7 @@ export function LimitSettings({ site }: { site: Site }) {
             </label>
             {choice === "" ? (
               <>
-                <LimitInputs f={fields} set={setFields} allowUnlimited />
+                <LimitInputs f={fields} set={setFields} allowUnlimited cpus={cpus} />
                 {unlimitedWarning(fields)}
               </>
             ) : (
@@ -307,16 +333,32 @@ export function LimitSettings({ site }: { site: Site }) {
   );
 }
 
-// Presets is the page of the limit presets.
-export function Presets() {
+type QueryProps = {
+  /** The address query: q, sort, dir; new=1 or edit=<name> for the form. */
+  query?: URLSearchParams;
+  /** Replaces the query in the address without a new history entry. */
+  onQuery?: (q: URLSearchParams) => void;
+};
+
+const limitCell = (v: number, text: (v: number) => string) => (v ? text(v) : <Badge tone="warn">Unlimited</Badge>);
+
+// Presets is the page of the limit presets (ADR-0037): a table that can be
+// sorted and filtered, with the CPU limit in cores, and a form for a new
+// preset (?new=1) or a change (?edit=<name>).
+export function Presets({ query = new URLSearchParams(), onQuery = () => undefined }: QueryProps) {
   const [presets, setPresets] = useState<Preset[] | null>(null);
+  const [cpus, setCPUs] = useState<number | undefined>(undefined);
   const [loadError, setLoadError] = useState("");
-  const [adding, setAdding] = useState(false);
   const [done, setDone] = useState("");
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     try {
-      setPresets(await listPresets());
+      const list = await listPresets();
+      setPresets(list.presets);
+      setCPUs(list.cpus);
       setLoadError("");
     } catch (err) {
       setLoadError(limitsMessage(err, "preset"));
@@ -327,74 +369,29 @@ export function Presets() {
     void load();
   }, [load]);
 
-  const changed = async (msg: string) => {
-    setDone(msg);
-    setAdding(false);
-    await load();
+  const set = (changes: Record<string, string>) => {
+    const next = new URLSearchParams(query);
+    for (const [k, v] of Object.entries(changes)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+    onQuery(next);
   };
 
-  return (
-    <section className="card">
-      <h2>Limit presets</h2>
-      <p className="muted">
-        A new site gets the default preset. Changing a preset changes every site that uses it; a site with custom values stays as it is.
-      </p>
-      {!presets ? (
-        loadError ? (
-          <p role="alert">{loadError}</p>
-        ) : (
-          <p aria-busy="true">Loading presets…</p>
-        )
-      ) : (
-        <>
-          {loadError && <p role="alert">{loadError}</p>}
-          <ul className="jobs" aria-label="Limit presets">
-            {presets.map((p) => (
-              <PresetRow key={p.name} preset={p} onChange={changed} />
-            ))}
-          </ul>
-          {done && <p role="status">{done}</p>}
-          {adding ? (
-            <PresetForm
-              title="New preset"
-              submitLabel="Add preset"
-              onCancel={() => setAdding(false)}
-              onSubmit={async (name, isDefault, limits) => {
-                await createPreset(name, isDefault, limits);
-                await changed(`Preset ${name} added.`);
-              }}
-            />
-          ) : (
-            <div className="actions">
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => {
-                  setDone("");
-                  setAdding(true);
-                }}
-              >
-                Add preset
-              </button>
-            </div>
-          )}
-        </>
-      )}
-    </section>
-  );
-}
-
-function PresetRow({ preset, onChange }: { preset: Preset; onChange: (msg: string) => Promise<void> }) {
-  const [editing, setEditing] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const changed = async (msg: string) => {
+    setDone(msg);
+    set({ new: "", edit: "" });
+    await load();
+  };
 
   async function act(f: () => Promise<string>) {
     setBusy(true);
     setError("");
+    setDone("");
     try {
-      await onChange(await f());
+      const msg = await f();
+      setDeleting(null);
+      await changed(msg);
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -402,82 +399,214 @@ function PresetRow({ preset, onChange }: { preset: Preset; onChange: (msg: strin
     }
   }
 
-  if (editing) {
+  const listLink = (
+    <a className="ui-btn" href={formatHash({ page: "limits" })}>
+      <ArrowLeft size={16} aria-hidden="true" />
+      All presets
+    </a>
+  );
+
+  if (!presets) {
     return (
-      <li>
-        <PresetForm
-          title={"Change preset " + preset.name}
-          submitLabel="Save preset"
-          initial={preset}
-          onCancel={() => setEditing(false)}
-          onSubmit={async (name, isDefault, limits) => {
-            await updatePreset(preset.name, name, isDefault, limits);
-            setEditing(false);
-            await onChange(`Preset ${name} saved. Sites that use it get the new values.`);
-          }}
-        />
-      </li>
+      <>
+        <PageHead title="Limit presets" />
+        {loadError ? <Notice tone="err" title={loadError} /> : <p aria-busy="true">Loading presets…</p>}
+      </>
     );
   }
 
-  return (
-    <li>
-      <div>
-        <strong>{preset.name}</strong>
-        {preset.default && <span className="badge ok">Default</span>}
-      </div>
-      <LimitFacts limits={preset.limits} label={"Values of preset " + preset.name} />
-      {confirming ? (
-        <div className="actions">
-          <span>Delete this preset? Its sites keep the values as custom values.</span>
-          <button
-            type="button"
-            className="danger"
-            disabled={busy}
-            onClick={() =>
-              void act(async () => {
-                await deletePreset(preset.name);
-                return `Preset ${preset.name} deleted.`;
-              })
-            }
-          >
-            Delete preset
-          </button>
-          <button type="button" className="secondary" disabled={busy} onClick={() => setConfirming(false)}>
-            Cancel
-          </button>
+  const editName = query.get("edit");
+  if (query.get("new") === "1" || editName !== null) {
+    const initial = editName !== null ? presets.find((p) => p.name === editName) : undefined;
+    if (editName !== null && !initial) {
+      return (
+        <>
+          <PageHead title="Limit presets" actions={listLink} />
+          <Notice tone="warn" title={`There is no preset named ${editName}.`} />
+        </>
+      );
+    }
+    const title = initial ? "Change preset " + initial.name : "New preset";
+    return (
+      <>
+        <PageHead
+          title={title}
+          description={initial ? "Sites that use this preset get the new values." : "A preset is a named set of limits for sites."}
+          actions={listLink}
+        />
+        <Card>
+          <PresetForm
+            key={editName ?? "new"}
+            title={title}
+            submitLabel={initial ? "Save preset" : "Add preset"}
+            cpus={cpus}
+            onCancel={() => set({ new: "", edit: "" })}
+            {...(initial ? { initial } : {})}
+            onSubmit={async (name, isDefault, limits) => {
+              if (initial) {
+                await updatePreset(initial.name, name, isDefault, limits);
+                await changed(`Preset ${name} saved. Sites that use it get the new values.`);
+              } else {
+                await createPreset(name, isDefault, limits);
+                await changed(`Preset ${name} added.`);
+              }
+            }}
+          />
+        </Card>
+      </>
+    );
+  }
+
+  const columns: Column<Preset>[] = [
+    {
+      key: "name",
+      header: "Preset",
+      sortValue: (p) => p.name,
+      cell: (p) => (
+        <span className="ui-row ui-nowrap">
+          <strong>{p.name}</strong>
+          {p.default && <Badge tone="ok">Default</Badge>}
+        </span>
+      ),
+    },
+    {
+      key: "disk",
+      header: "Disk space",
+      sortValue: (p) => p.limits.diskBytes || Infinity,
+      cell: (p) => (
+        <div className="ui-cell-main">
+          <span className="ui-row">{limitCell(p.limits.diskBytes, formatBytes)}</span>
+          {p.limits.diskInodes ? <span>{formatCount(p.limits.diskInodes)} files</span> : <span>unlimited files</span>}
         </div>
-      ) : (
-        <div className="actions">
-          {!preset.default && (
-            <button
-              type="button"
-              className="secondary"
+      ),
+    },
+    { key: "memory", header: "Memory", sortValue: (p) => p.limits.memoryBytes || Infinity, cell: (p) => limitCell(p.limits.memoryBytes, formatBytes) },
+    { key: "tasks", header: "Processes", sortValue: (p) => p.limits.tasks || Infinity, cell: (p) => limitCell(p.limits.tasks, formatCount) },
+    { key: "workers", header: "PHP workers", sortValue: (p) => p.limits.phpWorkers, cell: (p) => p.limits.phpWorkers },
+    {
+      key: "cpu",
+      header: "CPU cores",
+      sortValue: (p) => p.limits.cpuQuotaPercent || Infinity,
+      cell: (p) => (p.limits.cpuQuotaPercent ? formatCores(p.limits.cpuQuotaPercent) : <span className="muted">No limit</span>),
+    },
+    {
+      key: "priority",
+      header: "CPU priority",
+      sortValue: (p) => ["low", "normal", "high"].indexOf(p.limits.cpuPriority),
+      cell: (p) => priorityLabel[p.limits.cpuPriority],
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      srHeader: true,
+      cell: (p) => (
+        <RowActions>
+          {!p.default && (
+            <IconButton
+              label={`Make ${p.name} the default`}
+              icon={<Star size={16} />}
               disabled={busy}
               onClick={() =>
                 void act(async () => {
-                  const l = limitsOf(fieldsOf(preset.limits), true);
+                  const l = limitsOf(fieldsOf(p.limits), true);
                   if (typeof l === "string") throw new Error(l);
-                  await updatePreset(preset.name, preset.name, true, preset.limits);
-                  return `New sites now get the preset ${preset.name}.`;
+                  await updatePreset(p.name, p.name, true, p.limits);
+                  return `New sites now get the preset ${p.name}.`;
+                })
+              }
+            />
+          )}
+          <IconLink label={`Change ${p.name}`} icon={<PencilSimple size={16} />} href={formatHash({ page: "limits", query: new URLSearchParams({ edit: p.name }) })} />
+          {!p.default && (
+            <IconButton
+              label={`Delete ${p.name}`}
+              icon={<Trash size={16} />}
+              danger
+              disabled={busy}
+              onClick={() => {
+                setError("");
+                setDeleting(p.name);
+              }}
+            />
+          )}
+        </RowActions>
+      ),
+    },
+  ];
+
+  const q = (query.get("q") ?? "").trim().toLowerCase();
+  const shown = presets.filter((p) => !q || p.name.includes(q));
+  const sortKey = query.get("sort");
+  const sort: Sort | undefined = sortKey ? { key: sortKey, dir: query.get("dir") === "desc" ? "desc" : "asc" } : undefined;
+
+  return (
+    <>
+      <PageHead
+        title="Limit presets"
+        description="A new site gets the default preset. Changing a preset changes every site that uses it; a site with custom values stays as it is."
+        actions={
+          <a className="ui-btn ui-btn-primary" href={formatHash({ page: "limits", query: new URLSearchParams({ new: "1" }) })}>
+            <Plus size={16} aria-hidden="true" />
+            New preset
+          </a>
+        }
+      />
+      {loadError && <Notice tone="err" title={loadError} />}
+      {done && <Notice tone="ok" title={done} />}
+      {deleting && (
+        <section className="ui-card ui-card-body ui-stack" role="alertdialog" aria-labelledby="preset-delete-title">
+          <h2 id="preset-delete-title" className="ui-flush">
+            Delete the preset {deleting}?
+          </h2>
+          <p className="ui-flush">Its sites keep the values as custom values.</p>
+          {error && <Notice tone="err" title={error} />}
+          <div className="ui-row">
+            <Button
+              variant="danger"
+              disabled={busy}
+              onClick={() =>
+                void act(async () => {
+                  await deletePreset(deleting);
+                  return `Preset ${deleting} deleted.`;
                 })
               }
             >
-              Make default
-            </button>
-          )}
-          <button type="button" className="secondary" disabled={busy} onClick={() => setEditing(true)}>
-            Change
-          </button>
-          {!preset.default && (
-            <button type="button" className="secondary danger" disabled={busy} onClick={() => setConfirming(true)}>
-              Delete
-            </button>
+              Delete preset
+            </Button>
+            <Button disabled={busy} onClick={() => setDeleting(null)}>
+              Cancel
+            </Button>
+          </div>
+        </section>
+      )}
+      {error && !deleting && <Notice tone="err" title={error} />}
+      <Card padded={false}>
+        <div className="ui-filters">
+          <input
+            className="ui-input"
+            type="search"
+            aria-label="Filter presets"
+            placeholder="Filter by name"
+            value={query.get("q") ?? ""}
+            onChange={(e) => set({ q: e.target.value })}
+          />
+          {cpus !== undefined && (
+            <p className="ui-hint ui-filters-note">
+              This server has {cpus} CPU {cpus === 1 ? "core" : "cores"}.
+            </p>
           )}
         </div>
-      )}
-      {error && <p role="alert">{error}</p>}
-    </li>
+        <Table
+          label="Limit presets"
+          columns={columns}
+          rows={shown}
+          rowKey={(p) => p.name}
+          sort={sort}
+          onSort={(x) => set({ sort: x.key, dir: x.dir })}
+          empty={presets.length === 0 ? "No presets yet." : "No preset matches the filter."}
+        />
+      </Card>
+    </>
   );
 }
 
@@ -485,12 +614,14 @@ function PresetForm({
   title,
   submitLabel,
   initial,
+  cpus,
   onSubmit,
   onCancel,
 }: {
   title: string;
   submitLabel: string;
   initial?: Preset;
+  cpus?: number | undefined;
   onSubmit: (name: string, isDefault: boolean, limits: Limits) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -537,7 +668,6 @@ function PresetForm({
 
   return (
     <form onSubmit={submit} noValidate aria-label={title}>
-      <h3>{title}</h3>
       <label>
         Name
         <small>Lower-case letters, digits and dashes</small>
@@ -549,7 +679,7 @@ function PresetForm({
           Default for new sites
         </label>
       )}
-      <LimitInputs f={fields} set={setFields} allowUnlimited={!isDefault && !initial?.default} />
+      <LimitInputs f={fields} set={setFields} allowUnlimited={!isDefault && !initial?.default} cpus={cpus} />
       {unlimitedWarning(fields)}
       <div className="actions">
         <button type="submit" disabled={busy}>
