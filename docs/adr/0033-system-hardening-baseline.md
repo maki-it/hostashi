@@ -86,7 +86,7 @@ The gaps are independent; the options here are about the overall approach.
 ## Open questions
 
 1. Firewall on by default, with the ports above and `--no-firewall` as the way out? **Decided (Kim, 2026-11-20): yes.** Kim usually runs a provider or hypervisor firewall in front (Hetzner Cloud, Proxmox); both together are fine, `--no-firewall` is for servers that rely on the outer one alone.
-2. `unattended-upgrades` on by default, security only, no automatic reboot? Recommendation: yes.
-3. PHP `disable_functions` with the list above on by default for new sites, with a per-site switch? Recommendation: yes, imported sites start with the switch on.
-4. Doctor only warns about the admin's SSH password logins, the installer never changes them? Recommendation: yes.
-5. Panel-managed firewall rules (extra ports, IP allowlists for SSH and the panel) with a rollback timer: in v1 or later? Recommendation: later, after the redesign, because the static default covers the P0 need [A].
+2. `unattended-upgrades` on by default, security only, no automatic reboot? **Decided (Kim, 2026-11-20): yes.**
+3. PHP `disable_functions` with the list above on by default for new sites, with a per-site switch? **Decided (Kim, 2026-11-20): yes,** imported sites start with the switch on.
+4. Doctor only warns about the admin's SSH password logins, the installer never changes them? **Decided (Kim, 2026-11-20): yes.**
+5. Panel-managed firewall rules (extra ports, IP allowlists for SSH and the panel) with a rollback timer: in v1 or later? Recommendation was later. **Decided (Kim, 2026-11-20): in v1;** the design is [ADR-0034](0034-firewall-rules-in-panel.md).
