@@ -313,4 +313,4 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0042 Panel on port 443 under its own host name
 
-**Full text (status Proposed, 2026-11-20):** [adr/0042](adr/0042-panel-on-port-443.md). Summary: Kim wants the panel under a host name like `https://cp.maki-it.de/` without a port. Recommended and decided in the thread: installer option `--panel-port 443`, 8443 stays the default; on 443 the panel shares the sites' listeners by host name, the name is reserved against sites, and the IP allowlist is enforced by nginx instead of the firewall. `--panel-domain` replaces `--public-url` (to be confirmed).
+**Full text (status Proposed, 2026-11-20):** [adr/0042](adr/0042-panel-on-port-443.md). Summary: Kim wants the panel under a host name like `https://cp.maki-it.de/` without a port. Recommended and decided in the thread: installer option `--panel-port 443`, 8443 stays the default; on 443 the panel shares the sites' listeners by host name, the name is reserved against sites, and the IP allowlist is enforced by nginx instead of the firewall. `--panel-domain` replaces `--public-url` (decided by Kim).
