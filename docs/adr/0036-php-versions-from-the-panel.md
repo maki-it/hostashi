@@ -45,6 +45,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - The installer step `phpversions` is reduced to calling the script; the container test installs one version through the panel API as well.
 - Removing a version that no site uses is a later addition with the same pattern (`hostashi-php-remove@<version>`) [A].
 - Doctor reports a failed installation and a sury.org key that expires within 60 days.
+- PHP 8.6 is the first version added this way (Kim, 2026-11-20): allowlist, dates and container test (installed through the panel API, one site served by it with mysqli, gd and intl, unit exposure as for the other versions) [V: container test].
 
 ## Risks to name openly
 

@@ -22,7 +22,7 @@
 #   --firewall-allow P   also open port P to the internet, as PORT/tcp or PORT/udp (repeatable)
 #   --no-firewall        no Hostashi firewall (only behind a provider firewall); removes it if present
 #   --php-versions LIST  more PHP versions from sury.org next to the distribution's, comma-separated
-#                        from 7.4, 8.1, 8.2, 8.3, 8.4, 8.5 (7.4, 8.1 and 8.2 are legacy). Kept for later runs
+#                        from 7.4, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6 (7.4, 8.1 and 8.2 are legacy). Kept for later runs
 #
 # nginx comes from the distribution with its brotli modules (ADR-0020) and
 # runs on the configuration the agent renders. PHP is the distribution's
@@ -422,7 +422,7 @@ do_nginx() {
 PHP_PKGS=(php-fpm php-cli php-mysql php-curl php-gd php-mbstring php-xml php-zip php-intl php-bcmath)
 # Every version the agent may run a site on (agentapi.PHPVersions); a unit
 # template is installed for each, whether the version is installed or not.
-PHP_VERSIONS=(7.4 8.1 8.2 8.3 8.4 8.5)
+PHP_VERSIONS=(7.4 8.1 8.2 8.3 8.4 8.5 8.6)
 
 # distro_fpm_units prints the package FPM units (php8.4-fpm.service, ...).
 distro_fpm_units() {

@@ -27,7 +27,7 @@
 | Feature | Prio | Phase | Source | Note |
 |---------|------|-------|--------|------|
 | Site type static | P0 | A | CP | |
-| Site type PHP (several versions in parallel, 7.4–8.5) | P0 | A | CP | FPM pool per site, Unix socket |
+| Site type PHP (several versions in parallel, 7.4–8.6) | P0 | A | CP | FPM pool per site, Unix socket |
 | Site type Node.js (systemd service, selectable versions) | P0 | A | CP | |
 | Site type reverse proxy | P0 | A | CP | |
 | Site type redirect (all requests to one target URL) | P1 | B | NEW | Without webroot and without site user |

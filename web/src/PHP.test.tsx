@@ -14,7 +14,7 @@ const versions = {
   securityUntil: { "7.4": "2022-11-28", "8.1": "2025-12-31", "8.2": "2026-12-31", "8.3": "2027-12-31", "8.4": "2028-12-31", "8.5": "2029-12-31" },
   activeUntil: { "8.2": "2024-12-31", "8.3": "2025-12-31", "8.4": "2026-12-31", "8.5": "2027-12-31" },
 };
-const idle = { state: "idle", log: [], repository: true, newer: ["8.6"] };
+const idle = { state: "idle", log: [], repository: true, newer: ["8.7"] };
 const today = "2026-11-20";
 
 describe("support", () => {
@@ -40,8 +40,8 @@ describe("PHPPage", () => {
     expect(row("8.5").getByText("Supported")).toBeInTheDocument();
     expect(row("8.2").getByText("Security fixes end in 41 days. Move its sites to a newer version.")).toBeInTheDocument();
     expect(row("7.4").getByText("End of life")).toBeInTheDocument();
-    expect(row("8.6").getByText(/not yet released for Hostashi/)).toBeInTheDocument();
-    expect(row("8.6").queryByRole("button")).not.toBeInTheDocument();
+    expect(row("8.7").getByText(/not yet released for Hostashi/)).toBeInTheDocument();
+    expect(row("8.7").queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("installs a supported version and follows the log", async () => {
