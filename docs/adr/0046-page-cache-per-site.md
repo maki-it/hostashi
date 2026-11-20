@@ -76,6 +76,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - `web.apply` (the existing reconciler) creates `<pool>/.hostashi-cache/<site>` as `www-data:www-data` `0700` with the site's project ID and inherit flag, on the same pool as the site (ADR-0016). `<pool>/.hostashi-cache` is `root:root` `0711`. When project quota is not available, only `max_size` limits the size and doctor says so.
 - New typed agent operation **`pagecache.purge(site)`**: opens the site's cache directory with `openat2` and `RESOLVE_NO_SYMLINKS`, renames it to a trash name, recreates an empty one with the same owner, mode and project ID, and deletes the trash in the background. nginx treats an entry whose file is gone as a miss [U: to verify in the container test, must not log 5xx]. Pure Go, **no new `os/exec`**, no nginx module.
 - Purge runs automatically when the cache is switched off, on site delete, after a restore (ADR-0008) and when maintenance mode ends.
+- **Purge by API in v1** (decided by Kim on 2026-11-21): `POST /api/v1/sites/{name}/page-cache/purge` calls `pagecache.purge`. A new scope `pagecache:purge` that does nothing else, so a token for a CMS can hold only this scope, limited to one site through the token's site list (ADR-0035). Tokens never grant more than their owner's role. The route is rate limited per site (for example one purge per 10 seconds, extra calls answer `429`) [E], so a save loop in WordPress cannot keep the cache empty or keep the agent busy. The route goes into the route matrix test like every other route. This replaces the CloudPanel purge plugin on the migrated site; until Hostashi has its own WordPress plugin (after v1), any plugin or hook that can send an HTTP request on save can call it [A].
 - Single-URL purge is **not** in v1, but the fixed key makes it possible later in Go: the file name is the MD5 of the key in the `levels=1:2` layout [U]. That is the basis for auto-purge from WordPress after v1.
 
 ### Panel and roles
@@ -115,6 +116,6 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 ## Open questions
 
 1. ~~Should the FastCGI cache **replace** the Varnish option from ADR-0017 in v1?~~ Decided by Kim on 2026-11-21: yes, for now. Varnish possibly after v1 as its own ADR.
-2. ~~Which site on web2 runs behind the cache port `6081`?~~ Answered by Kim on 2026-11-21: one WordPress site, which uses CloudPanel's purge plugin. Open: does v1 need purge on save for it (see below)?
+2. ~~Which site on web2 runs behind the cache port `6081`?~~ Answered by Kim on 2026-11-21: one WordPress site, which uses CloudPanel's purge plugin. Decided by Kim on 2026-11-21: v1 gets a purge API call with a token limited to that one action and site; an own WordPress plugin follows after v1.
 3. Presets, skip rules, cache times and sizes as above?
 4. Roles as above, the same split as for the object cache?
