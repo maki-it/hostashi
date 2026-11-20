@@ -1016,4 +1016,50 @@ UNIT
   if x runuser -u nobody -- test -w /run/hostashi-panel.sock; then fail "another user can write the panel socket"; fi
 fi
 
+step "more PHP versions from sury.org (ADR-0019)"
+inst() { x /opt/hostashi/install.sh "$@" --binary /opt/hostashi/hostashi --no-firewall --public-url https://other.example.com; }
+if inst plan --php-versions 8.0 2>/dev/null; then fail "PHP 8.0 accepted"; fi
+if inst plan --php-versions '8.1;7.4' 2>/dev/null; then fail "a list with ';' accepted"; fi
+# shellcheck disable=SC2016 # a dpkg-query format, not shell
+def=$(x dpkg-query -W -f='${Depends}' php-fpm | sed 's/^php\([0-9.]*\)-fpm.*/\1/')
+out=$(inst apply --yes --php-versions "8.1,7.4,$def") || { x tail -n 60 /var/log/hostashi-install.log >&2 || true; fail "apply with --php-versions failed"; }
+echo "$out"
+grep -q 'apply.*phpversions' <<<"$out" || fail "phpversions step not applied"
+grep -q 'apply.*updates' <<<"$out" || fail "unattended-upgrades not told about sury.org"
+expect_mode /usr/share/keyrings/hostashi-sury-php.gpg "644 root:root"
+expect_mode /etc/apt/preferences.d/hostashi-sury-php "644 root:root"
+# The default version stays on the distribution, the extra ones and
+# php-common come from sury.org (Spike S10).
+origin() { x apt-cache policy "$1" | awk '/\*\*\*/ { getline; print; exit }'; }
+case "$(origin "php$def-fpm")" in *packages.sury.org*) fail "php$def-fpm comes from sury.org";; esac
+for p in php-common php8.1-fpm php7.4-fpm; do
+  case "$(origin "$p")" in *packages.sury.org*) ;; *) fail "$p does not come from sury.org: $(origin "$p")";; esac
+done
+pending=$(x apt-get -s upgrade | grep -c '^Inst php' || true)
+[ "$pending" = 0 ] || fail "$pending PHP packages would be upgraded: $(x apt-get -s upgrade | grep '^Inst php')"
+for v in 8.1 7.4; do
+  ! x systemctl is-enabled --quiet "php$v-fpm.service" || fail "package unit php$v-fpm is enabled"
+  ! x systemctl is-active --quiet "php$v-fpm.service" || fail "package unit php$v-fpm is running"
+done
+origins=$(x unattended-upgrade --dry-run -d 2>&1 | sed -n 's/^Allowed origins are: //p' | head -1)
+grep -qF "origin=deb.sury.org,archive=$codename" <<<"$origins" || fail "sury.org not in unattended-upgrades: $origins"
+out=$(inst apply --yes)
+grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run without --php-versions changed something"; }
+[ "$(api GET /api/v1/php/versions)" = 200 ] || fail "php versions: $(x cat /tmp/api.out)"
+for v in 7.4 8.1 "$def"; do x grep -q "\"$v\"" /tmp/api.out || fail "PHP $v not listed as installed: $(x cat /tmp/api.out)"; done
+# A site on each extra version, then switched between them.
+[ "$(api POST /api/v1/sites '{"name":"legacy","php":"7.4","domains":["legacy.example.com"]}')" = 201 ] || fail "create 7.4 site: $(x cat /tmp/api.out)"
+xi runuser -u legacy -- sh -c 'cat >/home/legacy/htdocs/index.php' <<'PHP'
+<?php
+echo "php ", PHP_MAJOR_VERSION, ".", PHP_MINOR_VERSION, " ", json_encode(["ok" => extension_loaded("mysqli") && extension_loaded("gd") && extension_loaded("intl")]);
+PHP
+for v in 7.4 8.1 "$def"; do
+  [ "$(api PUT /api/v1/sites/legacy/php "{\"php\":\"$v\"}")" = 200 ] || fail "switch to $v: $(x cat /tmp/api.out)"
+  x systemctl is-active --quiet "hostashi-php-$v@legacy.service" || fail "PHP $v unit of the site not running"
+  exposure "hostashi-php-$v@legacy.service" 3.0
+  body=$(x curl -fsS -H 'Host: legacy.example.com' http://127.0.0.1/index.php)
+  [ "$body" = "php $v {\"ok\":true}" ] || fail "PHP $v site answered '$body'"
+done
+[ "$(api DELETE /api/v1/sites/legacy)" = 204 ] || fail "delete legacy site: $(x cat /tmp/api.out)"
+
 echo "PASS: installer test on $IMG"

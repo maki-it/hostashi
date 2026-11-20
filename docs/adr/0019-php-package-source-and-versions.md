@@ -49,6 +49,13 @@ Rules:
 - Several versions installed means more disk and more patch surface. The UI should list versions with no site using them and offer removal.
 - If the sury.org repository disappears or changes its terms, the fallback is option A (one version) plus a documented list of affected sites [A].
 
+## Implementation (2026-11-20)
+
+- The installer option `--php-versions LIST` (for example `8.1,7.4`) runs the step `phpversions`: it fetches `packages.sury.org/php/apt.gpg` with `apt-helper`, accepts it only with exactly the two fingerprints above, and fetches it again when it expires within 60 days. It writes the source (`/etc/apt/sources.list.d/hostashi-sury-php.sources`), the pin of Spike S10 generated from the requested versions (`/etc/apt/preferences.d/hostashi-sury-php`), installs `php<version>-{fpm,cli,mysql,curl,gd,mbstring,xml,zip,intl,bcmath}` and disables the packages' own FPM units. The requested versions are kept in the installer's state, so a later run without the option keeps them. Without the option nothing of this happens.
+- `unattended-upgrades` gets `origin=deb.sury.org,archive=<codename>` only when extra versions are installed. sury.org has no separate security archive, so every update of an extra version is installed; the pin keeps the default PHP on the distribution.
+- Verified in the container test on Debian 13 (2026-11-20) [V]: PHP 7.4 and 8.1 from sury.org next to the distribution's 8.4; `php8.4-fpm` stays on Debian, `php-common` and the extra versions come from sury.org, `apt-get -s upgrade` has no pending PHP package, a second run changes nothing, and one site is served by 7.4, 8.1 and 8.4 in turn with mysqli, gd and intl loaded. This closes the runtime part of open question 2 for a test site; real traffic is still untested [U]. Ubuntu 26.04 runs in CI.
+- Removing a version or the repository is not implemented yet.
+
 ## Open questions
 
 1. ~~Which versions are offered?~~ Decided (Kim, 2026-11-18, adjusted after Spike S10): PHP 8.3, 8.4 and 8.5 as standard, 8.2 (security support ends 2026-12-31), 8.1 and 7.4 as legacy on explicit request, 8.0 and older not offered. Checked on 2026-11-18 against `php.net/supported-versions.php` [V] (Spike S10): 8.2 gets security fixes only until 2026-12-31, 8.3 until 2027-12-31, 8.4 until 2028-12-31, 8.5 until 2029-12-31; 8.1 and older are end of life. Kim agreed (2026-11-18): 8.2 is legacy from the start.
