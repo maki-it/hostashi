@@ -5,6 +5,7 @@ import { currentUser, setupRequired, type User } from "./auth";
 import { Backups } from "./Backups";
 import { Databases } from "./Databases";
 import { Doctor } from "./Doctor";
+import { Firewall } from "./Firewall";
 import { Home } from "./Home";
 import { Presets } from "./Limits";
 import { Login } from "./Login";
@@ -21,12 +22,14 @@ type View =
   | { kind: "home"; user: User }
   | { kind: "error" };
 
-type Page = "home" | "health" | "sites" | "limits" | "pages" | "parked" | "databases" | "backups" | "import";
+type Page = "home" | "health" | "firewall" | "sites" | "limits" | "pages" | "parked" | "databases" | "backups" | "import";
 
 const pageFromHash = (): Page => {
   switch (window.location.hash) {
     case "#/health":
       return "health";
+    case "#/firewall":
+      return "firewall";
     case "#/sites":
       return "sites";
     case "#/limits":
@@ -86,6 +89,9 @@ export function App() {
             <a href="#/health" aria-current={page === "health" ? "page" : undefined}>
               Health
             </a>
+            <a href="#/firewall" aria-current={page === "firewall" ? "page" : undefined}>
+              Firewall
+            </a>
             <a href="#/sites" aria-current={page === "sites" ? "page" : undefined}>
               Sites
             </a>
@@ -127,6 +133,7 @@ export function App() {
       )}
       {view.kind === "home" && page === "home" && <Home user={view.user} onLogout={() => setView({ kind: "login" })} />}
       {view.kind === "home" && page === "health" && <Doctor />}
+      {view.kind === "home" && page === "firewall" && <Firewall />}
       {view.kind === "home" && page === "sites" && <Sites />}
       {view.kind === "home" && page === "limits" && <Presets />}
       {view.kind === "home" && page === "pages" && <Pages />}

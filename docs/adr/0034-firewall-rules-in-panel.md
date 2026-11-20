@@ -52,6 +52,7 @@ Fixed and never editable: established traffic, loopback, the needed ICMP, DHCP r
 ## Risks to name openly
 
 - **Lockout through an allowlist.** A wrong list for SSH and the panel locks the admin out until the timer rolls back. If the admin confirms in the browser but SSH is wrong, only the panel is left to fix it; if both are wrong and confirmed, only the provider's console helps [A].
+- **The confirmation is weaker than it looks.** The browser may send the confirmation over a connection that was open before the change, and the firewall lets established connections through. So a confirmation that arrives does not fully prove that a new connection would. The real protection is the lockout guard (the address of the request must be in the allowlist), and SSH changes wait for the admin to test a new login [E].
 - **Changing addresses.** A home connection with a dynamic IP falls out of the allowlist overnight. The page says so; a VPN or a fixed office address is the better source [A].
 - **Same port, two places.** With a provider firewall in front (Kim's setup), a port must be opened in both [A].
 - **Not a pentest.** Rules are rendered from typed values and checked in tests; the external review is still open.
