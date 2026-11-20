@@ -34,15 +34,18 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
   - upload files and folders (drag and drop) in 8 MiB chunks, so large files and nginx limits are no problem; an upload goes to a temporary name and is renamed at the end;
   - create folder, create empty file, rename;
   - move, copy, delete, change mode: each for one entry or a selection;
-  - edit text files up to 1 MiB in the browser (UTF-8, line endings kept), with a check that the file did not change since it was opened;
+  - edit text files up to 1 MiB in a code editor (see below), with a check that the file did not change since it was opened;
+  - reload the folder listing with a button (no automatic polling);
   - extract a ZIP into a folder.
 - **Limits.**
   - ZIP extraction: at most 100 000 entries and 10 GiB unpacked, entries with absolute paths or `..` are refused, symlink entries are skipped, existing files are not overwritten unless chosen.
   - Mode changes cannot set setuid, setgid or sticky bits; the owner stays the site user.
   - Deleting a selection asks once with the number of entries; there is no recycle bin in v1.
+- **Code editor (Kim, 2026-11-20: a plain text field is too simple).** CodeMirror 6 (`codemirror` 6.0.2, `@codemirror/view` 6.43.15, language packages for PHP, JavaScript, CSS, HTML, JSON, YAML, Markdown and plain text; all MIT [V: npm, 2026-11-20]), loaded only when the editor opens. Line numbers, syntax highlighting, current line, bracket matching, find and replace, line wrapping as a switch, undo history. Shortcuts: Ctrl/Cmd+S saves, Ctrl/Cmd+F finds, Esc closes (asks if there are unsaved changes). Status line with position, encoding, line endings and "unsaved changes". The editor's colours come from the panel's tokens (ADR-0037).
+  - **CSP.** CodeMirror injects its styles at run time. It supports a nonce (`EditorView.cspNonce`) [V: `@codemirror/view` type definitions], and modern browsers use constructed style sheets, which `style-src 'self'` may not cover [U]. The first PR checks this in Chromium, Firefox and WebKit; if a nonce is needed, the panel serves `index.html` with a per-response style nonce instead of loosening `style-src`.
 - **Roles.** New scopes `files:read` and `files:write`. admin and manager on all sites, `user` on granted sites (ADR-0035). API tokens need the scope and a site list as today.
 - **Audit.** Every write (upload, delete, move, mode change, extract, edit) is logged with user, site and paths; downloads are logged as one entry per request.
-- **UI.** New tab "Files" on the site page (ADR-0037), between "Domains & HTTPS" and "PHP": breadcrumb path, toolbar (upload, new folder, new file), table with checkboxes, row actions as icon buttons with tooltips, a bar for the selection (download as ZIP, move, copy, mode, delete), an editor view for text files.
+- **UI.** New tab "Files" on the site page (ADR-0037), between "Domains & HTTPS" and "PHP": breadcrumb path, toolbar (reload, upload, new folder, new file), table with checkboxes, row actions as icon buttons with tooltips, a bar for the selection (download as ZIP, move, copy, mode, delete), an editor dialog for text files (wide, with the editor's own toolbar).
 
 ## Consequences
 

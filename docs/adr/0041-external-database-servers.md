@@ -32,7 +32,8 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 **A and A.**
 
-- **Server list.** Table `db_servers` in the panel store: name, host, port, admin user, sealed password (`secrets.Seal`, purpose `db-server:<id>`), TLS mode (`verify` by default; `verify-ca` with an uploaded CA for private CAs; no plain TCP), `is_default`. `localhost` is a fixed row that cannot be deleted; it is the default until another server is marked.
+- **Server list.** Table `db_servers` in the panel store: name, host, port, admin user, sealed password (`secrets.Seal`, purpose `db-server:<id>`), TLS mode (`verify` by default; `verify-ca` with an uploaded CA for private CAs; `none` for a trusted private network, decided by Kim on 2026-11-20), `is_default`. `localhost` is a fixed row that cannot be deleted; it is the default until another server is marked.
+- **Unencrypted connections.** Allowed on purpose for servers in a private network (vSwitch, cloud network). The dialog warns that passwords and data cross the network in plain text; the server list marks such a server, and doctor reports it as a warning, not an error.
 - **Version.** The list shows engine and version (`SELECT VERSION()`, for example "MariaDB 11.8.6"), read when the server is added and refreshed every 15 minutes and on demand, plus state (reachable, TLS ok, last error).
 - **Default.** Exactly one server is the default; the "New database" dialog preselects it. Changing the default does not move existing databases.
 - **Adding a server.** The dialog tests the connection, TLS and the needed privileges (`CREATE`, `DROP`, `CREATE USER`, `GRANT OPTION` on the databases it will manage) before saving. Hostashi recommends a dedicated admin user, not `root`.
@@ -53,10 +54,13 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 ## Risks to name openly
 
 - **Stored administrator credential.** A compromise of the panel process or of `/etc/hostashi/secret.key` exposes the external server's admin access. Mitigation: a dedicated admin user with rights only for Hostashi's databases, TLS with verification, audit log of every use [A].
+- **Unencrypted connections** expose the admin password and data to anyone on the path; only for private networks.
 - **Network failures.** Site databases on another host make sites depend on that host and the network between.
 - **MySQL differences.** Grant and user syntax differ in details between MariaDB and MySQL [U]; the tests must cover both.
 
 ## Open questions
+
+0. ~~TLS required?~~ **Decided (Kim, 2026-11-20): no, unencrypted connections are allowed with a warning.**
 
 1. MariaDB and MySQL 8.0+, or MariaDB only?
 2. Panel process talks to external servers, agent stays without network (option A)?
