@@ -65,7 +65,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
   - `cache.disable(site)`: stops the unit and removes config and drop-in.
   - `cache.status(site)`: unit state and the unit's `MemoryCurrent` through the existing `systemctl` call.
   - **No new `os/exec`.** The only process call is `systemctl` in `internal/phpctl`; its unit pattern gets one more fixed form, `^hostashi-valkey@<site>\.service$`. The agent never runs `valkey-cli`.
-- **Panel.** A section "Object cache" on the site page (ADR-0037): switch on or off, size, "Flush cache", the state and the connection details to copy: socket path and the lines for `wp-config.php` (`WP_REDIS_SCHEME` `unix`, `WP_REDIS_PATH`) [U: constant names of the Redis Object Cache plugin]. Hostashi does not install or edit WordPress plugins. Roles (ADR-0035): admin and manager on all sites; a `user` on granted sites may flush, and turn it on or off within the site's limits [A: to confirm].
+- **Panel.** A section "Object cache" on the site page (ADR-0037): switch on or off, size, "Flush cache", the state and the connection details to copy: socket path and the lines for `wp-config.php` (`WP_REDIS_SCHEME` `unix`, `WP_REDIS_PATH`) [U: constant names of the Redis Object Cache plugin]. Hostashi does not install or edit WordPress plugins. Roles (ADR-0035): admin and manager on all sites, including the size; a `user` on granted sites may turn it on or off and flush it, with the size set by an admin or manager or the preset (decided, Kim, 2026-11-21).
 - **Presets.** Presets (ADR-0017, ADR-0015) get a field "object cache: off or size", default off.
 - **Doctor and metrics.** doctor checks that `valkey-server.service` is disabled, that every enabled cache unit runs, and that no socket is world-reachable. Metrics (ADR-0022) export cache memory per site from the unit.
 - **Backups.** Nothing to back up: the cache holds no data that is not elsewhere.
@@ -92,6 +92,6 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions
 
-1. Which apps on web2 use Redis, and for what: object cache only, or also sessions or queues? Sessions or queues would need persistence and change the "cache only, no data" design.
-2. Valkey from the distribution, one instance per site as the site user, over a Unix socket only?
-3. May the role `user` switch the cache on and off for granted sites, or only flush it?
+1. ~~Which apps on web2 use Redis, and for what?~~ **Answered (Kim, 2026-11-21): as far as Kim knows, only as an object cache through a WordPress plugin; no sessions or queues.** So the cache-only design holds; the import warning stays as a check [A: not verified on web2].
+2. ~~Valkey from the distribution, one instance per site as the site user, over a Unix socket only?~~ **Decided (Kim, 2026-11-21): yes.**
+3. ~~May the role `user` switch the cache on and off for granted sites, or only flush it?~~ **Decided (Kim, 2026-11-21): `user` may switch it on and off and flush it on granted sites, within the site's limits; only admin and manager change the size.**
