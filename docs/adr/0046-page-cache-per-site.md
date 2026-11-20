@@ -13,7 +13,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - Hostashi renders one `nginx.conf` with an `http` block and one server block per site from Go templates in `internal/web` [V: `internal/web/nginx.go`]. `fastcgi_cache_path` is only valid in the `http` block [U: nginx documentation], so each site's cache zone is rendered there.
 - Every site has its own Linux user and a project quota on its directory tree; project quota counts files by project ID, whatever their owner [V: ADR-0015, `internal/agent/quota.go`].
 - nginx workers run as `www-data`. Site homes belong to the site user with group `www-data` [A: from the reconciler design in `internal/web`, to recheck during implementation].
-- On web2, one site has a cache port (`6081`) between the TLS front block and the PHP backend block, probably Varnish [A: `spike/s6-adopt/REPORT.md`]. The S6 scan does not look at Varnish itself [V: S6 report, "not discovered"]. Which site it is and whether it needs Varnish features is not known.
+- On web2, one site has a cache port (`6081`) between the TLS front block and the PHP backend block, probably Varnish [A: `spike/s6-adopt/REPORT.md`]. The S6 scan does not look at Varnish itself [V: S6 report, "not discovered"]. Kim confirmed on 2026-11-21 that one site runs Varnish and uses CloudPanel's WordPress plugin to purge the cache when content changes [V: Kim, thread]. No other Varnish features are known.
 - The CloudPanel WordPress purge plugin `clp-wp-varnish-cache` is GPLv3; Hostashi does not copy it [V: ADR-0001, ADR-0002].
 
 ## Options
@@ -115,6 +115,6 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 ## Open questions
 
 1. ~~Should the FastCGI cache **replace** the Varnish option from ADR-0017 in v1?~~ Decided by Kim on 2026-11-21: yes, for now. Varnish possibly after v1 as its own ADR.
-2. Which site on web2 runs behind the cache port `6081`, and does it need anything Varnish-specific (custom VCL, purge plugin, ESI)?
+2. ~~Which site on web2 runs behind the cache port `6081`?~~ Answered by Kim on 2026-11-21: one WordPress site, which uses CloudPanel's purge plugin. Open: does v1 need purge on save for it (see below)?
 3. Presets, skip rules, cache times and sizes as above?
 4. Roles as above, the same split as for the object cache?
