@@ -75,7 +75,10 @@ jobs:
       - name: Cross-user test (root agent, client as uid 65534)
         run: sudo env "PATH=$PATH" go test -race -run '^TestCrossUser$' -v ./internal/agentrpc/
       - name: Site account tests (root, real useradd and bind mount)
-        run: sudo env "PATH=$PATH" go test -race -count=1 -run '^TestRoot' -v ./internal/sysuser/
+        run: |
+          # The installer creates the site users' SSH group (ADR-0032).
+          sudo groupadd -f hostashi-sites
+          sudo env "PATH=$PATH" go test -race -count=1 -run '^TestRoot' -v ./internal/sysuser/
 
   quota:
     needs: changes

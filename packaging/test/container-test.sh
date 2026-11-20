@@ -142,6 +142,37 @@ step "a site is served, with brotli"
 x /usr/local/bin/hostashi site create blog
 expect_mode /home/blog "750 blog:www-data"
 expect_mode /home/blog/htdocs "755 blog:blog"
+
+step "site users log in over SSH with keys from the agent's file only"
+x id -nG blog | grep -qw hostashi-sites || fail "site user is not in hostashi-sites"
+expect_mode /etc/hostashi-ssh/keys "755 root:root"
+expect_mode /etc/ssh/sshd_config.d/10-hostashi.conf "644 root:root"
+site_sshd=$(x /usr/sbin/sshd -T -C user=blog,host=client,addr=127.0.0.1)
+root_sshd=$(x /usr/sbin/sshd -T -C user=root,host=client,addr=127.0.0.1)
+grep -qx 'authorizedkeysfile /etc/hostashi-ssh/keys/%u' <<<"$site_sshd" || fail "site user's key file is not the agent's"
+grep -qx 'passwordauthentication no' <<<"$site_sshd" || fail "site user may use a password"
+grep -qx 'allowtcpforwarding no' <<<"$site_sshd" || fail "site user may forward ports"
+grep -q '^authorizedkeysfile .ssh/authorized_keys' <<<"$root_sshd" || fail "the drop-in changed root's settings"
+# A second sshd on its own port reads the same configuration. The key file
+# here is written by hand in the format of internal/sshkeys.
+x sh -c 'mkdir -p /run/sshd /root/t && rm -f /root/t/k /root/t/r && ssh-keygen -q -t ed25519 -N "" -f /root/t/k && ssh-keygen -q -t ed25519 -N "" -f /root/t/r'
+# shellcheck disable=SC2016 # expanded inside the container
+x sh -c 'printf "restrict,command=\"internal-sftp\" %s test\n" "$(cut -d" " -f1,2 /root/t/k.pub)" >/etc/hostashi-ssh/keys/blog && chmod 644 /etc/hostashi-ssh/keys/blog'
+# A key the site user adds to its own home must not work.
+x sh -c 'install -d -o blog -g blog -m 700 /home/blog/.ssh && install -o blog -g blog -m 600 /root/t/r.pub /home/blog/.ssh/authorized_keys'
+x /usr/sbin/sshd -p 2297 -o ListenAddress=127.0.0.1
+sshopt=(-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
+x sh -c 'echo pwd >/root/t/batch'
+x sftp "${sshopt[@]}" -P 2297 -i /root/t/k -b /root/t/batch blog@127.0.0.1 | grep -q '/home/blog' || fail "SFTP with the site's key failed"
+if x ssh "${sshopt[@]}" -p 2297 -i /root/t/k blog@127.0.0.1 id 2>/dev/null | grep -q uid=; then fail "an SFTP-only key ran a command"; fi
+if x sftp "${sshopt[@]}" -P 2297 -i /root/t/r -b /root/t/batch blog@127.0.0.1 >/dev/null 2>&1; then fail "a key from the site's home was accepted"; fi
+x pkill -f 'sshd -p 2297' || true
+# pam_systemd started a user manager for the logins; it would block the
+# site's deletion later, as any process of the site user does.
+x loginctl terminate-user blog 2>/dev/null || true
+for _ in $(seq 1 30); do x pgrep -u blog >/dev/null || break; sleep 1; done
+x pgrep -u blog >/dev/null && fail "processes of blog left after the SSH logins"
+x rm -rf /etc/hostashi-ssh/keys/blog /home/blog/.ssh /root/t
 # shellcheck disable=SC2016 # expanded inside the container
 x sh -c 'echo "hello from blog" >/home/blog/htdocs/index.html; for i in $(seq 1 200); do echo ".c$i { color: red; }"; done >/home/blog/htdocs/app.css; chown blog:blog /home/blog/htdocs/*'
 web_apply() { docker exec -i "$NAME" /usr/local/bin/hostashi web apply <<<"$1"; }

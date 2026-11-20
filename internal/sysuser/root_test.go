@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"syscall"
 	"testing"
@@ -108,6 +109,15 @@ func TestRootSiteLifecycle(t *testing.T) {
 
 	if g, err := user.LookupGroup(name); err != nil || g.Gid != u.Gid {
 		t.Fatalf("group: %v %v", g, err)
+	}
+
+	sshGroup, err := user.LookupGroup(sysuser.SSHGroup)
+	if err != nil {
+		t.Fatalf("group %s (the installer creates it): %v", sysuser.SSHGroup, err)
+	}
+
+	if gids, err := u.GroupIds(); err != nil || !slices.Contains(gids, sshGroup.Gid) {
+		t.Fatalf("site user not in %s: %v %v", sysuser.SSHGroup, gids, err)
 	}
 
 	home := filepath.Join(pool, name)

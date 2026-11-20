@@ -41,6 +41,10 @@ func TestCreateArgs(t *testing.T) {
 		}
 	}
 
+	if g := slices.Index(args, "--groups"); g < 0 || args[g+1] != SSHGroup {
+		t.Errorf("site user is not in %s: %q", SSHGroup, args)
+	}
+
 	i := slices.Index(args, "--shell")
 	if i < 0 || args[i+1] != NoLogin {
 		t.Errorf("shell is not nologin: %q", args)

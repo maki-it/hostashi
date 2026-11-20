@@ -27,7 +27,8 @@
 # talks to it as root over its Unix socket. Disk quota per site needs ext4
 # project quota on the root filesystem (ADR-0015); the quota step prepares it
 # and asks for ONE reboot, it never reboots by itself. fail2ban from the
-# distribution guards SSH and the panel logins (ADR-0021). Not yet part of
+# distribution guards SSH and the panel logins (ADR-0021). Site users log in
+# over SSH and SFTP with keys only (ADR-0032). Not yet part of
 # this installer: more PHP versions (sury.org) and a firewall.
 #
 # Exit codes: 0 ok, 2 refused by preflight (server unchanged), 3 a step
@@ -174,7 +175,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config nginx php mariadb backup units service fail2ban quota"
+STEPS="account dirs key binary config ssh nginx php mariadb backup units service fail2ban quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -241,6 +242,49 @@ env_file() {
 }
 chk_config() { env_file | file_matches /etc/hostashi/hostashi.env 0640 root:hostashi || { echo "settings differ"; return 1; }; }
 do_config() { env_file | write_file /etc/hostashi/hostashi.env 0640 root:hostashi; [ $? -le 1 ] && CONFIG_CHANGED=yes; }
+
+# SSH and SFTP per site (ADR-0032). Every site user is in the group
+# hostashi-sites (internal/sysuser). One static Match block for that group
+# allows only keys from the root-owned file the agent writes per site, no
+# passwords and no forwarding. The block ends with its file, so root and the
+# admin's own sshd settings stay as they are. sshd -t checks the result
+# before sshd is reloaded; a file that fails the test is removed again, so
+# a later reload cannot lock anyone out.
+SSH_GROUP=hostashi-sites
+SSH_KEYS_DIR=/etc/hostashi-ssh/keys
+SSH_DROPIN=/etc/ssh/sshd_config.d/10-hostashi.conf
+SSH_SRC=${HOSTASHI_SSH_SRC:-$HERE/ssh}
+SSH_CHANGED=no
+
+chk_ssh() {
+  pkg_installed openssh-server || { echo "openssh-server not installed"; return 1; }
+  getent group "$SSH_GROUP" >/dev/null || { echo "group $SSH_GROUP missing"; return 1; }
+  dir_ok /etc/hostashi-ssh 755 root:root || { echo "/etc/hostashi-ssh"; return 1; }
+  dir_ok "$SSH_KEYS_DIR" 755 root:root || { echo "$SSH_KEYS_DIR"; return 1; }
+  file_matches "$SSH_DROPIN" 0644 root:root <"$SSH_SRC/10-hostashi.conf" || { echo "sshd drop-in differs"; return 1; }
+  [ "$SSH_CHANGED" = no ] || { echo "sshd reload needed after a change"; return 1; }
+}
+do_ssh() {
+  local rc
+  if ! pkg_installed openssh-server; then
+    apt-get update -qq >>"$LOG" 2>&1 &&
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-server >>"$LOG" 2>&1 || return 1
+  fi
+  getent group "$SSH_GROUP" >/dev/null || groupadd --system "$SSH_GROUP" >>"$LOG" 2>&1 || return 1
+  install -d -m 0755 -o root -g root /etc/hostashi-ssh "$SSH_KEYS_DIR" /etc/ssh/sshd_config.d || return 1
+  write_file "$SSH_DROPIN" 0644 root:root <"$SSH_SRC/10-hostashi.conf"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  [ "$rc" = 0 ] && SSH_CHANGED=yes
+  if ! /usr/sbin/sshd -t >>"$LOG" 2>&1; then
+    rm -f "$SSH_DROPIN"
+    log "sshd configuration test failed, the drop-in was removed"
+    return 1
+  fi
+  if [ "$SSH_CHANGED" = yes ]; then
+    systemctl try-reload-or-restart ssh.service >>"$LOG" 2>&1 || return 1
+  fi
+  SSH_CHANGED=no
+}
 
 # nginx and its brotli modules from the distribution (ADR-0020). The agent
 # renders the whole config; the package's default site is never used.
