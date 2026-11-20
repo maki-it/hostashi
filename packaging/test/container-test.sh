@@ -445,6 +445,8 @@ x rm -rf /root/t
 step "a database for the PHP site (MariaDB)"
 [ "$(x systemctl is-active mariadb.service)" = active ] || fail "mariadb is not running"
 [ "$(x mariadb -Nse 'SELECT @@bind_address')" = 127.0.0.1 ] || fail "mariadb listens on more than loopback"
+[ "$(x mariadb -Nse 'SELECT @@local_infile')" = 0 ] || fail "mariadb allows LOAD DATA LOCAL"
+expect_mode /etc/mysql/mariadb.conf.d/90-hostashi.cnf "644 root:root"
 x /usr/local/bin/hostashi db create wp wp_db
 xi /usr/local/bin/hostashi db user create wp_db wp_user <<<"Test-db-pass_12345"
 x /usr/local/bin/hostashi db list | grep '^wp_db	site=wp	users=wp_user$' >/dev/null || fail "db list: $(x /usr/local/bin/hostashi db list)"
