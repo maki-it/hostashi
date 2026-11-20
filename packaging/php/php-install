@@ -36,7 +36,7 @@ SURY_PIN=/etc/apt/preferences.d/hostashi-sury-php
 SURY_KEY_MIN_DAYS=60
 # The same lists as agentapi.PHPVersions and agentapi.LegacyPHPVersions
 # (checked by a Go test).
-PHP_VERSIONS=(7.4 8.1 8.2 8.3 8.4 8.5)
+PHP_VERSIONS=(7.4 8.1 8.2 8.3 8.4 8.5 8.6)
 LEGACY_PHP_VERSIONS=(7.4 8.1 8.2)
 export DEBIAN_FRONTEND=noninteractive
 # apt waits for the dpkg lock (unattended-upgrades) instead of failing.
