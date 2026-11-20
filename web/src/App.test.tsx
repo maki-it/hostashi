@@ -72,7 +72,7 @@ describe("App start", () => {
     });
     render(<App />);
     await user.click(await screen.findByRole("link", { name: "Databases" }));
-    expect(await screen.findByText("No databases yet.")).toBeInTheDocument();
+    expect(await screen.findByText("Create a site first. Every database belongs to a site.")).toBeInTheDocument();
     window.location.hash = "";
   });
 
@@ -392,7 +392,7 @@ describe("Shell", () => {
     await screen.findByRole("heading", { name: "Welcome, kim" });
     window.location.hash = "#/databases";
     window.dispatchEvent(new HashChangeEvent("hashchange"));
-    expect(await screen.findByText("No databases yet.")).toBeInTheDocument();
+    expect(await screen.findByText("Create a site first. Every database belongs to a site.")).toBeInTheDocument();
     window.location.hash = "";
   });
 

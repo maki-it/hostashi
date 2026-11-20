@@ -98,6 +98,7 @@ export function App() {
           ) : (
             <Sites query={route.query} onQuery={replaceQuery} />
           ))}
+        {show("databases") && <Databases query={route.query} onQuery={replaceQuery} />}
         <div className="app-legacy">
           {show("home") && <Home user={user} />}
           {show("health") && <Doctor />}
@@ -106,7 +107,6 @@ export function App() {
           {show("limits") && <Presets />}
           {show("pages") && <Pages />}
           {show("parked") && <Parked />}
-          {show("databases") && <Databases />}
           {show("backups") && <Backups />}
           {show("import") && <Migrate />}
           {show("users") && <Users me={user.username} />}

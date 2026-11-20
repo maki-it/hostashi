@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { ArrowLeft, Gear, Plus } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { listSites, type Site } from "./backups";
 import {
@@ -21,10 +22,59 @@ import {
   type DumpJob,
 } from "./databases";
 import { poll } from "./backups";
+import { formatHash } from "./routes";
+import { Card, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
 
-// Databases is the database page: create a database for a site, manage its
-// users and passwords, and delete it. A generated password is shown once.
-export function Databases() {
+type QueryProps = {
+  /** The address query: q, site, sort, dir; new=1 for the form; db=<name> for one database. */
+  query: URLSearchParams;
+  /** Replaces the query in the address without a new history entry. */
+  onQuery: (q: URLSearchParams) => void;
+};
+
+const dbHref = (name: string) => formatHash({ page: "databases", query: new URLSearchParams({ db: name }) });
+
+const columns: Column<Database>[] = [
+  {
+    key: "name",
+    header: "Database",
+    sortValue: (d) => d.name,
+    cell: (d) => (
+      <a className="ui-mono" href={dbHref(d.name)}>
+        {d.name}
+      </a>
+    ),
+  },
+  {
+    key: "site",
+    header: "Site",
+    sortValue: (d) => d.site,
+    cell: (d) => <a href={formatHash({ page: "sites", site: { name: d.site } })}>{d.site}</a>,
+  },
+  {
+    key: "users",
+    header: "Users",
+    sortValue: (d) => d.users.length,
+    cell: (d) => (d.users.length === 0 ? <span className="muted">No users</span> : <span className="ui-mono">{d.users.join(", ")}</span>),
+  },
+  { key: "created", header: "Created", sortValue: (d) => d.createdAt, cell: (d) => <RelTime iso={d.createdAt} /> },
+  {
+    key: "actions",
+    header: "Actions",
+    srHeader: true,
+    cell: (d) => (
+      <RowActions>
+        <IconLink label={`Manage ${d.name}`} icon={<Gear size={16} />} href={dbHref(d.name)} />
+      </RowActions>
+    ),
+  },
+];
+
+// Databases is the database page (ADR-0037): a table of all databases that
+// can be sorted and filtered, the form for a new one (?new=1) and the view
+// of one database (?db=<name>) with its users, import/export and delete.
+// A generated password is shown once, above whatever view is open.
+export function Databases({ query, onQuery }: QueryProps) {
   const [dbs, setDbs] = useState<Database[] | null>(null);
   const [sites, setSites] = useState<Site[] | null>(null);
   const [error, setError] = useState("");
@@ -45,34 +95,122 @@ export function Databases() {
     void load();
   }, [load]);
 
+  const set = (changes: Record<string, string>) => {
+    const next = new URLSearchParams(query);
+    for (const [k, v] of Object.entries(changes)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+    onQuery(next);
+  };
+
+  const notice = secret && <PasswordNotice creds={secret} onClose={() => setSecret(null)} />;
+  const listLink = (
+    <a className="ui-btn" href={formatHash({ page: "databases" })}>
+      <ArrowLeft size={16} aria-hidden="true" />
+      All databases
+    </a>
+  );
+
   if (!dbs || !sites) {
-    return error ? (
-      <p role="alert" className="card">
-        {error}
-      </p>
-    ) : (
-      <p aria-busy="true">Loading…</p>
+    return (
+      <>
+        <PageHead title="Databases" />
+        {error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading…</p>}
+      </>
     );
   }
 
-  return (
-    <div className="stack">
-      {secret && <PasswordNotice creds={secret} onClose={() => setSecret(null)} />}
-      <CreateCard sites={sites} onCreated={(c) => (c ? setSecret(c) : undefined)} onChange={load} />
-      <section className="card" aria-labelledby="db-list">
-        <h2 id="db-list">Databases</h2>
-        {error && <p role="alert">{error}</p>}
-        {dbs.length === 0 ? (
-          <p>No databases yet.</p>
+  if (query.get("new") === "1") {
+    return (
+      <>
+        <PageHead title="New database" description="A MariaDB database belongs to one site." actions={listLink} />
+        {notice}
+        <CreateCard
+          sites={sites}
+          onCreated={(c) => {
+            if (c) setSecret(c);
+            set({ new: "" });
+          }}
+          onChange={load}
+        />
+      </>
+    );
+  }
+
+  const one = query.get("db");
+  if (one !== null) {
+    const db = dbs.find((d) => d.name === one);
+    return (
+      <>
+        <PageHead title={one} description={db && <>Database of site <a href={formatHash({ page: "sites", site: { name: db.site } })}>{db.site}</a></>} actions={listLink} />
+        {notice}
+        {error && <Notice tone="err" title={error} />}
+        {db ? (
+          <DatabaseView key={db.name} db={db} onSecret={setSecret} onChange={load} onDeleted={() => set({ db: "" })} />
         ) : (
-          <ul className="rows">
-            {dbs.map((d) => (
-              <DatabaseRow key={d.name} db={d} onSecret={setSecret} onChange={load} />
-            ))}
-          </ul>
+          <Notice tone="warn" title={`There is no database named ${one}.`} />
         )}
-      </section>
-    </div>
+      </>
+    );
+  }
+
+  const q = (query.get("q") ?? "").trim().toLowerCase();
+  const site = query.get("site") ?? "";
+  const sortKey = query.get("sort");
+  const sort: Sort | undefined = sortKey ? { key: sortKey, dir: query.get("dir") === "desc" ? "desc" : "asc" } : undefined;
+  const shown = dbs.filter((d) => (!site || d.site === site) && (!q || d.name.includes(q) || d.users.some((u) => u.includes(q))));
+
+  return (
+    <>
+      <PageHead
+        title="Databases"
+        description="MariaDB databases of your sites. Hostashi stores no database password."
+        actions={
+          sites.length > 0 && (
+            <a className="ui-btn ui-btn-primary" href={formatHash({ page: "databases", query: new URLSearchParams({ new: "1" }) })}>
+              <Plus size={16} aria-hidden="true" />
+              New database
+            </a>
+          )
+        }
+      />
+      {notice}
+      {error && <Notice tone="err" title={error} />}
+      {sites.length === 0 && dbs.length === 0 ? (
+        <Notice tone="info" title="Create a site first. Every database belongs to a site." />
+      ) : (
+        <Card padded={false}>
+          <div className="ui-filters">
+            <input
+              className="ui-input"
+              type="search"
+              aria-label="Filter databases"
+              placeholder="Filter by database or user"
+              value={query.get("q") ?? ""}
+              onChange={(e) => set({ q: e.target.value })}
+            />
+            <select className="ui-select" aria-label="Site" value={site} onChange={(e) => set({ site: e.target.value })}>
+              <option value="">All sites</option>
+              {sites.map((s) => (
+                <option key={s.name} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Table
+            label="Databases"
+            columns={columns}
+            rows={shown}
+            rowKey={(d) => d.name}
+            sort={sort}
+            onSort={(s) => set({ sort: s.key, dir: s.dir })}
+            empty={dbs.length === 0 ? "No databases yet." : "No database matches the filter."}
+          />
+        </Card>
+      )}
+    </>
   );
 }
 
@@ -182,16 +320,12 @@ function CreateCard({
 
   if (sites.length === 0) {
     return (
-      <section className="card" aria-labelledby="db-create">
-        <h2 id="db-create">New database</h2>
-        <p>Create a site first. Every database belongs to a site.</p>
-      </section>
+      <Notice tone="info" title="Create a site first. Every database belongs to a site." />
     );
   }
 
   return (
-    <section className="card" aria-labelledby="db-create">
-      <h2 id="db-create">New database</h2>
+    <Card>
       <form onSubmit={(e) => void submit(e)} noValidate>
         <label>
           Site
@@ -232,64 +366,60 @@ function CreateCard({
           Create database
         </button>
       </form>
-    </section>
+    </Card>
   );
 }
 
-function DatabaseRow({
+// DatabaseView is the page of one database: its users, import and export,
+// and delete.
+function DatabaseView({
   db,
   onSecret,
   onChange,
+  onDeleted,
 }: {
   db: Database;
   onSecret: (c: Credentials) => void;
   onChange: () => Promise<void>;
+  onDeleted: () => void;
 }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const [typed, setTyped] = useState("");
 
-  async function act(f: () => Promise<void>) {
+  async function drop() {
     setBusy(true);
     setError("");
     try {
-      await f();
+      await deleteDatabase(db.name);
+      onDeleted();
+      await onChange();
     } catch (err) {
       setError(databaseMessage(err));
-    } finally {
       setBusy(false);
     }
   }
 
-  const drop = () =>
-    act(async () => {
-      await deleteDatabase(db.name);
-      await onChange();
-    });
-
   return (
-    <li>
-      <span>
-        <strong>{db.name}</strong> <span className="muted">site {db.site}</span>
-      </span>
-      {!confirming && (
-        <button type="button" className="secondary danger" disabled={busy} onClick={() => setConfirming(true)}>
-          Delete
-        </button>
-      )}
-      {db.users.length === 0 ? (
-        <p className="muted">No users.</p>
-      ) : (
-        <ul className="users" aria-label={"Users of " + db.name}>
-          {db.users.map((u) => (
-            <UserRow key={u} db={db.name} user={u} onSecret={onSecret} onChange={onChange} />
-          ))}
-        </ul>
-      )}
-      <AddUser db={db.name} onSecret={onSecret} onChange={onChange} />
-      <DumpForm db={db.name} site={db.site} />
-      {confirming && (
+    <>
+      <Card title="Users">
+        {db.users.length === 0 ? (
+          <p className="muted">No users.</p>
+        ) : (
+          <ul className="users" aria-label={"Users of " + db.name}>
+            {db.users.map((u) => (
+              <UserRow key={u} db={db.name} user={u} onSecret={onSecret} onChange={onChange} />
+            ))}
+          </ul>
+        )}
+        <div className="keybox">
+          <AddUser db={db.name} onSecret={onSecret} onChange={onChange} />
+        </div>
+      </Card>
+      <Card title="Import or export">
+        <DumpForm db={db.name} site={db.site} />
+      </Card>
+      <Card title="Delete database">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -302,25 +432,15 @@ function DatabaseRow({
             </span>
             <input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
           </label>
+          {error && <p role="alert">{error}</p>}
           <div className="actions">
             <button type="submit" className="danger" disabled={busy || typed !== db.name}>
               Delete {db.name}
             </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
-                setConfirming(false);
-                setTyped("");
-              }}
-            >
-              Cancel
-            </button>
           </div>
         </form>
-      )}
-      {error && <p role="alert">{error}</p>}
-    </li>
+      </Card>
+    </>
   );
 }
 
@@ -378,7 +498,7 @@ function UserRow({
               : "The site can no longer log in with this user."}
           </span>
           <button type="button" className={confirm === "delete" ? "danger" : ""} disabled={busy} onClick={() => void run()}>
-            {confirm === "password" ? "Set new password" : "Delete " + user}
+            {confirm === "password" ? "Set new password" : "Delete user " + user}
           </button>
           <button type="button" className="secondary" disabled={busy} onClick={() => setConfirm("")}>
             Cancel
@@ -420,9 +540,11 @@ function AddUser({ db, onSecret, onChange }: { db: string; onSecret: (c: Credent
 
   if (!open) {
     return (
-      <button type="button" className="secondary" onClick={() => setOpen(true)}>
-        Add user
-      </button>
+      <div className="actions">
+        <button type="button" className="secondary" onClick={() => setOpen(true)}>
+          Add user
+        </button>
+      </div>
     );
   }
 
@@ -448,7 +570,6 @@ function AddUser({ db, onSecret, onChange }: { db: string; onSecret: (c: Credent
 // DumpForm imports a dump file from the site's home into the database or
 // exports the database into a new file there (ADR-0025).
 function DumpForm({ db, site }: { db: string; site: string }) {
-  const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<"export" | "import">("export");
   const [path, setPath] = useState(() => defaultDumpPath(db));
   const [job, setJob] = useState<DumpJob | null>(null);
@@ -475,18 +596,10 @@ function DumpForm({ db, site }: { db: string; site: string }) {
     }
   }
 
-  if (!open) {
-    return (
-      <button type="button" className="secondary" onClick={() => setOpen(true)}>
-        Import or export
-      </button>
-    );
-  }
-
   return (
     <form onSubmit={(e) => void submit(e)} noValidate>
       <fieldset>
-        <legend>Import or export {db}</legend>
+        <legend>Direction</legend>
         <label className="check">
           <input type="radio" name={"dump-" + db} checked={kind === "export"} onChange={() => setKind("export")} />
           Export into a new file
@@ -527,9 +640,6 @@ function DumpForm({ db, site }: { db: string; site: string }) {
       <div className="actions">
         <button type="submit" disabled={running}>
           {kind === "import" ? "Start import" : "Start export"}
-        </button>
-        <button type="button" className="secondary" disabled={running} onClick={() => setOpen(false)}>
-          Close
         </button>
       </div>
     </form>

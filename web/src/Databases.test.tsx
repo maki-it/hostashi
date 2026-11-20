@@ -2,6 +2,7 @@
 
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { Databases } from "./Databases";
 import { nameProblem, pathProblem } from "./databases";
@@ -10,6 +11,12 @@ import { mockFetch } from "./test-utils";
 const sites = { "GET /api/v1/sites": { body: { sites: [{ name: "blog", state: "active" }, { name: "shop", state: "active" }] } } };
 const blogWp = { name: "blog_wp", site: "blog", users: ["blog_wp"], createdAt: "2026-11-19T08:00:00Z" };
 const pw = "Zx8!kQ2#mN5$pL7%";
+
+// Harness keeps the address query in state, as the app does.
+function Harness({ initial = "" }: { initial?: string }) {
+  const [query, setQuery] = useState(new URLSearchParams(initial));
+  return <Databases query={query} onQuery={setQuery} />;
+}
 
 describe("nameProblem", () => {
   it.each([
@@ -47,9 +54,8 @@ describe("Databases", () => {
         return { status: 201, body: { name: "shop_db", site: "shop", users: ["shop_db"], createdAt: "x", password: pw } };
       },
     });
-    render(<Databases />);
-    expect(await screen.findByText("No databases yet.")).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Site"), "shop");
+    render(<Harness initial="new=1" />);
+    await user.selectOptions(await screen.findByLabelText("Site"), "shop");
     await user.type(screen.getByLabelText(/Database name/), "shop_db");
     expect(screen.getByLabelText("User name")).toHaveValue("shop_db");
     await user.click(screen.getByRole("button", { name: "Create database" }));
@@ -65,7 +71,7 @@ describe("Databases", () => {
     await user.click(within(notice).getByRole("button", { name: "I have saved it" }));
     expect(screen.queryByRole("region", { name: "Save this password now" })).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue(pw)).not.toBeInTheDocument();
-    expect(await screen.findByText("shop_db", { selector: "strong" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "shop_db" })).toHaveAttribute("href", "#/databases?db=shop_db");
   });
 
   it("creates a database without a user and shows no password", async () => {
@@ -75,11 +81,11 @@ describe("Databases", () => {
       "GET /api/v1/databases": { body: { databases: [] } },
       "POST /api/v1/sites/blog/databases": { status: 201, body: { name: "blog_x", site: "blog", users: [], createdAt: "x" } },
     });
-    render(<Databases />);
+    render(<Harness initial="new=1" />);
     await user.type(await screen.findByLabelText(/Database name/), "blog_x");
     await user.click(screen.getByLabelText(/Create a user/));
     await user.click(screen.getByRole("button", { name: "Create database" }));
-    await screen.findAllByText("No databases yet.");
+    await screen.findByRole("table", { name: "Databases" });
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({ name: "blog_x" });
     expect(screen.queryByRole("region", { name: "Save this password now" })).not.toBeInTheDocument();
   });
@@ -87,7 +93,7 @@ describe("Databases", () => {
   it("checks the name before it asks the server", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({ ...sites, "GET /api/v1/databases": { body: { databases: [] } } });
-    render(<Databases />);
+    render(<Harness initial="new=1" />);
     await user.type(await screen.findByLabelText(/Database name/), "Shop");
     await user.click(screen.getByRole("button", { name: "Create database" }));
     expect(screen.getByRole("alert")).toHaveTextContent("lowercase letters");
@@ -101,7 +107,7 @@ describe("Databases", () => {
       "GET /api/v1/databases": { body: { databases: [] } },
       "POST /api/v1/sites/blog/databases": { status: 409, body: { error: { code: "database_exists", message: "x" } } },
     });
-    render(<Databases />);
+    render(<Harness initial="new=1" />);
     await user.type(await screen.findByLabelText(/Database name/), "blog_wp");
     await user.click(screen.getByRole("button", { name: "Create database" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("exists. Choose another name.");
@@ -109,7 +115,7 @@ describe("Databases", () => {
 
   it("asks for a site first", async () => {
     mockFetch({ "GET /api/v1/sites": { body: { sites: [] } }, "GET /api/v1/databases": { body: { databases: [] } } });
-    render(<Databases />);
+    render(<Harness />);
     expect(await screen.findByText(/Create a site first/)).toBeInTheDocument();
   });
 
@@ -120,7 +126,7 @@ describe("Databases", () => {
       "GET /api/v1/databases": { body: { databases: [blogWp] } },
       "PUT /api/v1/databases/blog_wp/users/blog_wp/password": { body: { user: "blog_wp", password: pw } },
     });
-    render(<Databases />);
+    render(<Harness initial="db=blog_wp" />);
     await user.click(await screen.findByRole("button", { name: "New password" }));
     expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
     await user.click(screen.getByRole("button", { name: "Set new password" }));
@@ -136,7 +142,7 @@ describe("Databases", () => {
       "GET /api/v1/databases": { body: { databases: [blogWp] } },
       "POST /api/v1/databases/blog_wp/users": { status: 201, body: { user: "blog_ro", database: "blog_wp", password: pw } },
     });
-    render(<Databases />);
+    render(<Harness initial="db=blog_wp" />);
     await user.click(await screen.findByRole("button", { name: "Add user" }));
     await user.type(screen.getByLabelText("New user for blog_wp"), "blog_ro");
     await user.click(screen.getByRole("button", { name: "Add user" }));
@@ -156,9 +162,9 @@ describe("Databases", () => {
         return { status: 204 };
       },
     });
-    render(<Databases />);
+    render(<Harness initial="db=blog_wp" />);
     await user.click(await screen.findByRole("button", { name: "Delete user" }));
-    await user.click(screen.getByRole("button", { name: "Delete blog_wp" }));
+    await user.click(screen.getByRole("button", { name: "Delete user blog_wp" }));
     expect(await screen.findByText("No users.")).toBeInTheDocument();
     expect(calls.some((c) => c.method === "DELETE")).toBe(true);
   });
@@ -174,9 +180,8 @@ describe("Databases", () => {
         return { status: 204 };
       },
     });
-    render(<Databases />);
-    await user.click(await screen.findByRole("button", { name: "Delete" }));
-    const confirm = screen.getByRole("button", { name: "Delete blog_wp" });
+    render(<Harness initial="db=blog_wp" />);
+    const confirm = await screen.findByRole("button", { name: "Delete blog_wp" });
     expect(confirm).toBeDisabled();
     await user.type(screen.getByLabelText(/to delete the database/), "blog_w");
     expect(confirm).toBeDisabled();
@@ -191,8 +196,51 @@ describe("Databases", () => {
       ...sites,
       "GET /api/v1/databases": { status: 403, body: { error: { code: "forbidden", message: "x" } } },
     });
-    render(<Databases />);
+    render(<Harness />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Only administrators");
+  });
+});
+
+describe("Database list", () => {
+  const shopDb = { name: "shop_db", site: "shop", users: [], createdAt: "2026-11-01T08:00:00Z" };
+  const rowNames = () =>
+    screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((r) => within(r).getAllByRole("cell")[0]!.textContent);
+
+  it("lists databases with site, users and a link to each", async () => {
+    mockFetch({ ...sites, "GET /api/v1/databases": { body: { databases: [blogWp, shopDb] } } });
+    render(<Harness />);
+    const table = await screen.findByRole("table", { name: "Databases" });
+    const row = within(within(table).getByRole("link", { name: "blog_wp" }).closest("tr")!);
+    expect(row.getByRole("link", { name: "blog" })).toHaveAttribute("href", "#/sites/blog");
+    expect(row.getByText("blog_wp", { selector: ".ui-mono:not(a)" })).toBeInTheDocument();
+    expect(row.getByRole("link", { name: "Manage blog_wp" })).toHaveAttribute("href", "#/databases?db=blog_wp");
+    expect(row.getByText((_, el) => el?.tagName === "TIME")).toHaveAttribute("datetime", blogWp.createdAt);
+    expect(within(within(table).getByRole("link", { name: "shop_db" }).closest("tr")!).getByText("No users")).toBeInTheDocument();
+  });
+
+  it("filters by text and site and sorts, keeping both in the address", async () => {
+    const user = userEvent.setup();
+    mockFetch({ ...sites, "GET /api/v1/databases": { body: { databases: [shopDb, blogWp] } } });
+    render(<Harness initial="sort=name&dir=asc" />);
+    await screen.findByRole("table", { name: "Databases" });
+    expect(rowNames()).toEqual(["blog_wp", "shop_db"]);
+    await user.click(screen.getByRole("button", { name: "Database" }));
+    expect(rowNames()).toEqual(["shop_db", "blog_wp"]);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Site" }), "blog");
+    expect(rowNames()).toEqual(["blog_wp"]);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Site" }), "");
+    await user.type(screen.getByRole("searchbox", { name: "Filter databases" }), "nothing");
+    expect(screen.getByText("No database matches the filter.")).toBeInTheDocument();
+  });
+
+  it("says when a database in the address does not exist", async () => {
+    mockFetch({ ...sites, "GET /api/v1/databases": { body: { databases: [blogWp] } } });
+    render(<Harness initial="db=gone" />);
+    expect(await screen.findByText("There is no database named gone.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "All databases" })).toHaveAttribute("href", "#/databases");
   });
 });
 
@@ -226,9 +274,8 @@ describe("Database dumps", () => {
       "POST /api/v1/databases/blog_wp/export": { status: 202, body: { ...job, kind: "export", path: "out.sql.gz", state: "running" } },
       "GET /api/v1/databases/blog_wp/jobs/0123456789abcdef": { body: { ...job, kind: "export", path: "out.sql.gz", state: "done" } },
     });
-    render(<Databases />);
-    await user.click(await screen.findByRole("button", { name: "Import or export" }));
-    const path = screen.getByLabelText(/File in the home of site blog/);
+    render(<Harness initial="db=blog_wp" />);
+    const path = await screen.findByLabelText(/File in the home of site blog/);
     expect((path as HTMLInputElement).value).toMatch(/^blog_wp-\d{4}-\d{2}-\d{2}\.sql\.gz$/);
     await user.clear(path);
     await user.type(path, "out.sql.gz");
@@ -245,9 +292,8 @@ describe("Database dumps", () => {
       "POST /api/v1/databases/blog_wp/import": { status: 202, body: { ...job, kind: "import", path: "in.sql", state: "running" } },
       "GET /api/v1/databases/blog_wp/jobs/0123456789abcdef": { body: { ...job, kind: "import", path: "in.sql", state: "failed", error: "SQL error at line 12 (1064)" } },
     });
-    render(<Databases />);
-    await user.click(await screen.findByRole("button", { name: "Import or export" }));
-    await user.click(screen.getByLabelText("Import a file"));
+    render(<Harness initial="db=blog_wp" />);
+    await user.click(await screen.findByLabelText("Import a file"));
     expect(screen.getByText(/Import into an empty database/)).toBeInTheDocument();
     const path = screen.getByLabelText(/File in the home of site blog/);
     await user.clear(path);
@@ -259,9 +305,8 @@ describe("Database dumps", () => {
   it("refuses a path outside the home before asking the server", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({ ...sites, "GET /api/v1/databases": { body: { databases: [blogWp] } } });
-    render(<Databases />);
-    await user.click(await screen.findByRole("button", { name: "Import or export" }));
-    const path = screen.getByLabelText(/File in the home of site blog/);
+    render(<Harness initial="db=blog_wp" />);
+    const path = await screen.findByLabelText(/File in the home of site blog/);
     await user.clear(path);
     await user.type(path, "../../etc/x.sql");
     await user.click(screen.getByRole("button", { name: "Start export" }));
@@ -279,9 +324,8 @@ describe("Database dumps", () => {
         body: { error: { code: "agent_conflict", message: "another import or export of this database is running" } },
       },
     });
-    render(<Databases />);
-    await user.click(await screen.findByRole("button", { name: "Import or export" }));
-    await user.click(screen.getByRole("button", { name: "Start export" }));
+    render(<Harness initial="db=blog_wp" />);
+    await user.click(await screen.findByRole("button", { name: "Start export" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Another import or export of this database is running.");
   });
 });
