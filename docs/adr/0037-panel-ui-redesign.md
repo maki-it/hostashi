@@ -88,6 +88,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - **Times** in lists show relative values ("3 hours ago") with the exact time in a tooltip, for example "Last data check" on the backup page.
 - **CPU limit** in limit presets is shown and entered as CPU cores: the column is called "CPU cores" and the values are plain numbers (0.5, 1, 2), instead of "% of one core"; the API keeps its percent field. The form shows how many cores the server has ("This server has 8 cores"). Decided by Kim on 2026-11-20.
 - **Sort indicator**: a neutral up/down icon on sortable columns, an up or down arrow on the active one.
+- **Login** in two steps, as today: username and password first, then the code only if the account has TOTP (Kim, 2026-11-20). The login page does not mention `hostashi user recover`; it says "Forgot your password? Ask an administrator of this panel." The recovery command stays in the docs.
 - **Follow-up features after the redesign, each its own PR:** per-site PHP settings from an allowlist (mockup PHP tab); a disabled site can show one of the status pages (ADR-0027), the built-in page, or no page at all (status 503 with an empty answer); certificate management (ADR-0039); file manager (ADR-0040); external database servers (ADR-0041); panel on port 443 (ADR-0042); web database tool (ADR-0038).
 
 ## Open questions
