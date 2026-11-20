@@ -1,0 +1,47 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+
+/* Layout of the development gallery only (gallery.html). */
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+.gallery {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-height: 100vh;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+}
+.gallery-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.gallery-head h1 {
+  margin: 0;
+  font-family: var(--font-head);
+  font-size: 26px;
+  letter-spacing: var(--head-ls);
+}
+.gallery-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+.gallery-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.gallery-panel {
+  padding-top: var(--space-5);
+}
+.gallery-form {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 440px;
+}

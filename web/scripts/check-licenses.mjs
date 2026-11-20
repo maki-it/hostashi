@@ -22,6 +22,21 @@ export const ALLOWED = new Set([
   "MPL-2.0",
 ]);
 
+// Licenses allowed only for packages under a given scope. Fonts under the
+// SIL Open Font License may be bundled with AGPL software (ADR-0037); the
+// license is not accepted for code.
+export const ALLOWED_FOR_SCOPE = new Map([["@fontsource/", new Set(["OFL-1.1"])]]);
+
+// allowedFor reports whether the license of the named package is allowed,
+// either generally or for the package's scope.
+export function allowedFor(name, license) {
+  if (licenseAllowed(license)) return true;
+  for (const [prefix, extra] of ALLOWED_FOR_SCOPE) {
+    if (name.startsWith(prefix) && typeof license === "string" && extra.has(license.trim())) return true;
+  }
+  return false;
+}
+
 // licenseAllowed accepts a single SPDX identifier or a simple expression
 // with OR / AND and optional parentheses, e.g. "(MIT OR Apache-2.0)". An OR
 // needs one allowed side, an AND needs both. Anything it cannot parse
@@ -51,7 +66,7 @@ export function bundledPackages(lock) {
 // check returns the offending packages as "name: license" strings.
 export function check(lock) {
   return bundledPackages(lock)
-    .filter(([, license]) => !licenseAllowed(license))
+    .filter(([name, license]) => !allowedFor(name, license))
     .map(([name, license]) => `${name}: ${license ?? "(no license field)"}`);
 }
 
@@ -62,7 +77,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   for (const [name, license] of pkgs) console.log(`${name}\t${license}`);
   const bad = check(lock);
   if (bad.length > 0) {
-    console.error(`\nLicenses not on the allowlist (${[...ALLOWED].join(", ")}):`);
+    const scoped = [...ALLOWED_FOR_SCOPE].map(([p, l]) => `${[...l].join(", ")} for ${p}*`).join("; ");
+    console.error(`\nLicenses not on the allowlist (${[...ALLOWED].join(", ")}; ${scoped}):`);
     for (const b of bad) console.error(`  ${b}`);
     console.error("\nCheck compatibility with AGPL-3.0-or-later before adding it to ALLOWED.");
     process.exit(1);

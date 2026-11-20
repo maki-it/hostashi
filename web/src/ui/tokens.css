@@ -1,0 +1,142 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+
+/*
+ * Design tokens (ADR-0037). Components use only these semantic names, never
+ * raw colours; tokens.test.ts checks that and the WCAG AA contrast of the
+ * pairs the components use.
+ *
+ * Theme "default" is the Maki IT look (theme B). Its values are copied from
+ * the Maki IT design system; nothing is loaded from Maki IT at run time.
+ *
+ * The scheme follows the system unless <html data-scheme="light|dark"> sets
+ * it. Another theme is another [data-theme] block with the same names.
+ */
+
+@import "@fontsource/sora/latin-600.css";
+@import "@fontsource/sora/latin-700.css";
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-500.css";
+@import "@fontsource/ibm-plex-sans/latin-600.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+
+:root[data-theme="default"] {
+  color-scheme: light;
+
+  --font-head: "Sora", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --head-ls: -0.04em;
+  --label-font: var(--font-mono);
+  --label-size: 12px;
+  --label-tf: uppercase;
+  --label-ls: 0.08em;
+
+  --radius: 6px;
+  --radius-card: 10px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --control-h: 38px;
+  --side-w: 248px;
+
+  /* light */
+  --bg: #fcfcfa;
+  --surface: #ffffff;
+  --sunken: #eef3ef;
+  --line: #d6dfda;
+  --line-strong: #a7b3ad;
+  --control-border: #6f7c76;
+  --fg: #0d1f1a;
+  --muted: #3b4a44;
+  --accent: #1f6b55;
+  --focus: #1f6b55;
+  --primary: #ff6f61;
+  --on-primary: #0d1f1a;
+  --ok: #0e6f8c;
+  --ok-bg: #e3f1f6;
+  --warn: #a24b00;
+  --warn-bg: #fbece0;
+  --err: #b42318;
+  --err-bg: #fbe9e7;
+  --tip-bg: #0d1f1a;
+  --tip-fg: #fdfcfa;
+
+  --side-bg: #eef3ef;
+  --side-fg: #0d1f1a;
+  --side-muted: #3b4a44;
+  --side-active-bg: #ffffff;
+  --side-active-fg: #0d1f1a;
+  --side-line: #d6dfda;
+  --active-bar: #1f6b55;
+}
+
+/* dark: chosen, or following the system when nothing is chosen */
+:root[data-theme="default"][data-scheme="dark"] {
+  color-scheme: dark;
+  --bg: #0d1f1a;
+  --surface: #1a2c22;
+  --sunken: #0a1814;
+  --line: #2f4337;
+  --line-strong: #4a5f52;
+  --control-border: #6f8470;
+  --fg: #fdfcfa;
+  --muted: #9db3ab;
+  --accent: #5cbc9d;
+  --focus: #5cbc9d;
+  --primary: #ff6f61;
+  --on-primary: #0d1f1a;
+  --ok: #5bc0de;
+  --ok-bg: #0f2c36;
+  --warn: #f0a15a;
+  --warn-bg: #3a2210;
+  --err: #ff8f84;
+  --err-bg: #3b1814;
+  --tip-bg: #fdfcfa;
+  --tip-fg: #0d1f1a;
+
+  --side-bg: #0a1814;
+  --side-fg: #f3f6f4;
+  --side-muted: #9db3ab;
+  --side-active-bg: #1a2c22;
+  --side-active-fg: #ffffff;
+  --side-line: #1a2c22;
+  --active-bar: #ff6f61;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="default"]:not([data-scheme="light"]) {
+    color-scheme: dark;
+    --bg: #0d1f1a;
+    --surface: #1a2c22;
+    --sunken: #0a1814;
+    --line: #2f4337;
+    --line-strong: #4a5f52;
+    --control-border: #6f8470;
+    --fg: #fdfcfa;
+    --muted: #9db3ab;
+    --accent: #5cbc9d;
+    --focus: #5cbc9d;
+    --primary: #ff6f61;
+    --on-primary: #0d1f1a;
+    --ok: #5bc0de;
+    --ok-bg: #0f2c36;
+    --warn: #f0a15a;
+    --warn-bg: #3a2210;
+    --err: #ff8f84;
+    --err-bg: #3b1814;
+    --tip-bg: #fdfcfa;
+    --tip-fg: #0d1f1a;
+
+    --side-bg: #0a1814;
+    --side-fg: #f3f6f4;
+    --side-muted: #9db3ab;
+    --side-active-bg: #1a2c22;
+    --side-active-fg: #ffffff;
+    --side-line: #1a2c22;
+    --active-bar: #ff6f61;
+  }
+}

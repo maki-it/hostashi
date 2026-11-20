@@ -19,6 +19,22 @@ After `npm run build`, rebuild the Go binary to embed the new files. A
 binary built without a frontend build still works and shows a short
 notice instead of the interface.
 
+## Components (redesign, ADR-0037)
+
+The base components live in `src/ui/`: tokens (`tokens.css`, theme
+"default" in light and dark), component styles (`ui.css`, only tokens, no
+raw colours) and React components exported from `src/ui/index.ts`. Icons
+come from Phosphor (`@phosphor-icons/react`, weight "regular"). Tokens apply
+once `<html data-theme="default">` is set; `data-scheme="light|dark"`
+overrides the system scheme.
+
+`npm run dev`, then open `/gallery.html` (add `?scheme=dark` for the dark
+scheme) to see every component. The gallery is not part of the build.
+
+The build writes `third-party-licenses.txt` with the license texts of every
+bundled npm package. Fonts under OFL-1.1 are allowed only for packages under
+`@fontsource/` (`scripts/check-licenses.mjs`).
+
 ## Rules
 
 - Everything is served from the panel itself. No CDN, no inline scripts:
