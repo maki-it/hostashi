@@ -1,6 +1,6 @@
 # ADR-0042 Panel on port 443 under its own host name
 
-**Status:** Proposed. **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0021 (fail2ban), ADR-0023 (panel HTTPS, port 8443; this ADR adds an option and does not change its default), ADR-0034 (firewall), ADR-0018 (optional IP allowlist for the panel).
+**Status:** Accepted (Kim, 2026-11-20). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0021 (fail2ban), ADR-0023 (panel HTTPS, port 8443; this ADR adds an option and does not change its default), ADR-0034 (firewall), ADR-0018 (optional IP allowlist for the panel).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -44,4 +44,4 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions
 
-None; decided by Kim in the thread on 2026-11-20. Status stays Proposed until Kim accepts the text.
+None; decided by Kim in the thread on 2026-11-20.

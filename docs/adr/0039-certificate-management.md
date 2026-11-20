@@ -1,6 +1,6 @@
 # ADR-0039 Certificate management: own certificates, renew and delete
 
-**Status:** Proposed. **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0023 (panel HTTPS), ADR-0033 (hardening), ADR-0035 (roles), ADR-0037 (UI redesign), [`03-features.md`](../03-features.md) row "Import custom certificates" (P0).
+**Status:** Accepted (Kim, 2026-11-20). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0023 (panel HTTPS), ADR-0033 (hardening), ADR-0035 (roles), ADR-0037 (UI redesign), [`03-features.md`](../03-features.md) row "Import custom certificates" (P0).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 

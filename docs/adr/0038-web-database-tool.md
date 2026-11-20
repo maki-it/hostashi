@@ -1,6 +1,6 @@
 # ADR-0038 Web database tool with short-lived access
 
-**Status:** Proposed. **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0023 (panel HTTPS through nginx), ADR-0024 (MariaDB per site, no stored passwords), ADR-0025 (database import and export), ADR-0033 (hardening baseline), ADR-0034 (firewall), ADR-0035 (roles), ADR-0037 (UI redesign).
+**Status:** Accepted (Kim, 2026-11-20). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0023 (panel HTTPS through nginx), ADR-0024 (MariaDB per site, no stored passwords), ADR-0025 (database import and export), ADR-0033 (hardening baseline), ADR-0034 (firewall), ADR-0035 (roles), ADR-0037 (UI redesign).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -63,5 +63,5 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions
 
-1. Adminer as a single pinned file, on its own port 8444, with a temporary user per opening?
-2. May the role `user` open it with write access, or only read-only?
+1. ~~Adminer as a single pinned file, on its own port 8444, with a temporary user per opening?~~ **Decided (Kim, 2026-11-20): yes.**
+2. ~~May the role `user` open it with write access, or only read-only?~~ **Decided (Kim, 2026-11-20): write access, on granted sites.**
