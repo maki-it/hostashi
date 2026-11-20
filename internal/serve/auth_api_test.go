@@ -36,6 +36,7 @@ type apiEnv struct {
 	st        *store.Store
 	imports   *stubImports
 	cp        *cpmigrate.Service
+	doctor    *stubDoctor
 }
 
 func newAPI(t *testing.T) *apiEnv {
@@ -78,6 +79,8 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 
 	deps := Deps{PingAgent: ok, PingDB: ok, Auth: svc, Metrics: metrics.New(), Settings: st}
 	imports := &stubImports{}
+	doc := &stubDoctor{}
+	deps.Doctor = doc.run
 
 	if ag != nil {
 		deps.Sites = hosting.New(st, ag, nil)
@@ -89,7 +92,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 
 	return &apiEnv{
 		h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st, cp: deps.CloudPanel,
-		imports: imports,
+		imports: imports, doctor: doc,
 	}
 }
 

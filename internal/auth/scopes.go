@@ -37,6 +37,7 @@ var scopeCatalog = map[string]ScopeInfo{
 	"databases:delete":        {Description: "Delete databases and their data", HighRisk: true},
 	"backups:read":            {Description: "Read backup settings, status and snapshots"},
 	"backups:write":           {Description: "Change backup settings, confirm the target's host key, start a backup"},
+	"doctor:read":             {Description: "Run the read-only checks of hostashi doctor and read their results"},
 	"metrics:read":            {Description: "Read the Prometheus metrics endpoint"},
 	"migrations:read":         {Description: "List uploaded CloudPanel scan reports and read their migration plans"},
 	"migrations:write":        {Description: "Upload and delete CloudPanel scan reports"},

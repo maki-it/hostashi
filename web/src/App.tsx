@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { currentUser, setupRequired, type User } from "./auth";
 import { Backups } from "./Backups";
 import { Databases } from "./Databases";
+import { Doctor } from "./Doctor";
 import { Home } from "./Home";
 import { Presets } from "./Limits";
 import { Login } from "./Login";
@@ -20,10 +21,12 @@ type View =
   | { kind: "home"; user: User }
   | { kind: "error" };
 
-type Page = "home" | "sites" | "limits" | "pages" | "parked" | "databases" | "backups" | "import";
+type Page = "home" | "health" | "sites" | "limits" | "pages" | "parked" | "databases" | "backups" | "import";
 
 const pageFromHash = (): Page => {
   switch (window.location.hash) {
+    case "#/health":
+      return "health";
     case "#/sites":
       return "sites";
     case "#/limits":
@@ -80,6 +83,9 @@ export function App() {
             <a href="#/" aria-current={page === "home" ? "page" : undefined}>
               Overview
             </a>
+            <a href="#/health" aria-current={page === "health" ? "page" : undefined}>
+              Health
+            </a>
             <a href="#/sites" aria-current={page === "sites" ? "page" : undefined}>
               Sites
             </a>
@@ -120,6 +126,7 @@ export function App() {
         <Login {...(view.notice ? { notice: view.notice } : {})} onLogin={(user) => setView({ kind: "home", user })} />
       )}
       {view.kind === "home" && page === "home" && <Home user={view.user} onLogout={() => setView({ kind: "login" })} />}
+      {view.kind === "home" && page === "health" && <Doctor />}
       {view.kind === "home" && page === "sites" && <Sites />}
       {view.kind === "home" && page === "limits" && <Presets />}
       {view.kind === "home" && page === "pages" && <Pages />}

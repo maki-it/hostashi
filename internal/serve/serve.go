@@ -113,6 +113,9 @@ type Deps struct {
 	// off. The endpoint needs Auth and Settings.
 	Metrics  *metrics.Metrics
 	Settings Settings
+	// Doctor runs the checks of hostashi doctor; nil disables its route.
+	// Needs Auth.
+	Doctor Doctor
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -191,6 +194,10 @@ func Handler(cfg Config, deps Deps) http.Handler {
 
 		if deps.CloudPanelSource != nil && deps.Settings != nil {
 			registerCloudPanelSource(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.CloudPanelSource, deps.Settings, log)
+		}
+
+		if deps.Doctor != nil {
+			registerDoctor(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Doctor, log)
 		}
 
 		if deps.Metrics != nil && deps.Settings != nil {
@@ -329,6 +336,7 @@ func Run(ctx context.Context, cfg Config) error {
 		Backups:  RPCBackups{C: client, BeforeRun: panelCopy},
 		Metrics:  m,
 		Settings: st,
+		Doctor:   RPCDoctor(client),
 	}
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
