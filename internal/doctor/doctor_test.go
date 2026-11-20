@@ -231,7 +231,7 @@ func TestPanel(t *testing.T) {
 	body := map[string]string{"status": "ok", "agent": "ok", "db": "ok", "version": "1.2.3"}
 	p, l := listen(t)
 	srv := &http.Server{ReadHeaderTimeout: time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/health" {
+		if r.URL.Path != "/api/v1/health" || r.Header.Get("X-Real-IP") == "" { // like the panel's fromProxy
 			http.NotFound(w, r)
 
 			return

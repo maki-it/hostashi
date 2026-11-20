@@ -282,6 +282,10 @@ func Panel(ctx context.Context, socket string) Check {
 		return fail(id, "panel: "+err.Error(), hint)
 	}
 
+	// The socket trusts only nginx, which always names the client. This
+	// request comes from the server itself.
+	req.Header.Set("X-Real-IP", "127.0.0.1")
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return fail(id, "the panel does not answer on "+socket+": "+describe(err), hint)
