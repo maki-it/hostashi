@@ -379,3 +379,45 @@ func describe(err error) string {
 
 	return err.Error()
 }
+
+// PHPSoonDays is how many days before a version's end of security fixes
+// its sites get a warning (ADR-0036).
+const PHPSoonDays = 60
+
+// PHPSupport checks the PHP version of a site against the end of its
+// security fixes (agentapi.PHPSecurityUntil). Hostashi never switches the
+// version by itself; the check only tells.
+func PHPSupport(site, version string, now time.Time) Check {
+	const id = "site.php"
+
+	until, ok := agentapi.PHPSecurityUntil[version]
+	end, err := time.Parse(time.DateOnly, until)
+
+	if !ok || err != nil {
+		return Check{ID: id, Site: site, Status: agentapi.DoctorWarn, Summary: "PHP " + version + " has no known support dates", Hint: "Move the site to a supported PHP version."}
+	}
+
+	left := end.Add(24 * time.Hour).Sub(now)
+	days := int(left.Hours() / 24)
+
+	switch {
+	case left <= 0:
+		return Check{
+			ID: id, Site: site, Status: agentapi.DoctorWarn,
+			Summary: "PHP " + version + " gets no security fixes since " + until,
+			Hint:    "Move the site to a supported PHP version in the panel. Hostashi keeps it running and never switches by itself.",
+		}
+	case days <= PHPSoonDays:
+		return Check{
+			ID: id, Site: site, Status: agentapi.DoctorWarn,
+			Summary: fmt.Sprintf("PHP %s gets security fixes only until %s (%d days)", version, until, days),
+			Hint:    "Plan the move to a newer PHP version.",
+		}
+	}
+
+	return siteOK(id, site, "PHP "+version+" gets security fixes until "+until)
+}
+
+func siteOK(id, site, summary string) Check {
+	return Check{ID: id, Site: site, Status: agentapi.DoctorOK, Summary: summary}
+}

@@ -181,6 +181,9 @@ function CreateCard({ php, onChange }: { php: PHPVersions | null; onChange: () =
         {php?.legacy.includes(phpValue) && (
           <p className="muted">PHP {phpValue} gets no or only security fixes upstream. Use it only for software that needs it.</p>
         )}
+        <p className="muted">
+          Only installed versions are listed. <a href="#/php">Install more PHP versions</a>
+        </p>
         <label className="check">
           <input type="checkbox" checked={tls} onChange={(e) => setTls(e.target.checked)} />
           HTTPS with a Let's Encrypt certificate

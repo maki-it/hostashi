@@ -284,3 +284,32 @@ func TestWorst(t *testing.T) {
 		t.Error("want fail")
 	}
 }
+
+func TestPHPSupport(t *testing.T) {
+	day := func(s string) time.Time {
+		d, err := time.Parse(time.DateOnly, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return d.Add(12 * time.Hour)
+	}
+
+	for _, tc := range []struct {
+		version, day string
+		status       string
+		summary      string
+	}{
+		{"8.5", "2026-11-20", agentapi.DoctorOK, "PHP 8.5 gets security fixes until 2029-12-31"},
+		{"8.2", "2026-11-20", agentapi.DoctorWarn, "PHP 8.2 gets security fixes only until 2026-12-31 (41 days)"},
+		{"8.2", "2026-12-31", agentapi.DoctorWarn, "PHP 8.2 gets security fixes only until 2026-12-31 (0 days)"},
+		{"8.2", "2027-01-01", agentapi.DoctorWarn, "PHP 8.2 gets no security fixes since 2026-12-31"},
+		{"7.4", "2026-11-20", agentapi.DoctorWarn, "PHP 7.4 gets no security fixes since 2022-11-28"},
+		{"9.9", "2026-11-20", agentapi.DoctorWarn, "PHP 9.9 has no known support dates"},
+	} {
+		c := PHPSupport("shop", tc.version, day(tc.day))
+		if c.Status != tc.status || c.Summary != tc.summary || c.Site != "shop" || c.ID != "site.php" {
+			t.Errorf("%s on %s: %+v", tc.version, tc.day, c)
+		}
+	}
+}

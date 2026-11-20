@@ -91,6 +91,8 @@ var table = map[Action]Rule{
 	"migrations:read":      server("migrations:read"),
 	"migrations:write":     server("migrations:write"),
 	"panel.tls:read":       server("sites:read"),
+	"php:install":          server("php:install"),
+	"php.install:read":     server("sites:read"),
 	"web:sync":             server("sites:write"),
 
 	// Read-only things everyone needs. The lists of sites and databases

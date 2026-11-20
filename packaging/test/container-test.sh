@@ -1058,7 +1058,7 @@ x grep -qx 'Package: php-common php7.4\* php8.1\* php8.2\*' /etc/apt/preferences
 out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the panel's install changed something"; }
 [ "$(api GET /api/v1/php/versions)" = 200 ] || fail "php versions: $(x cat /tmp/api.out)"
-for v in 7.4 8.1 8.2 "$def"; do x grep -q "\"$v\"" /tmp/api.out || fail "PHP $v not listed as installed: $(x cat /tmp/api.out)"; done
+for v in 7.4 8.1 8.2 "$def"; do x grep -q "\"installed\":\\[[^]]*\"$v\"" /tmp/api.out || fail "PHP $v not listed as installed: $(x cat /tmp/api.out)"; done
 # A site on each extra version, then switched between them.
 [ "$(api POST /api/v1/sites '{"name":"legacy","php":"7.4","domains":["legacy.example.com"]}')" = 201 ] || fail "create 7.4 site: $(x cat /tmp/api.out)"
 xi runuser -u legacy -- sh -c 'cat >/home/legacy/htdocs/index.php' <<'PHP'
@@ -1073,5 +1073,21 @@ for v in 7.4 8.1 "$def"; do
   [ "$body" = "php $v {\"ok\":true}" ] || fail "PHP $v site answered '$body'"
 done
 [ "$(api DELETE /api/v1/sites/legacy)" = 204 ] || fail "delete legacy site: $(x cat /tmp/api.out)"
+# Installing a version from the panel (ADR-0036): the API starts the unit,
+# the status follows it to the script's final line.
+[ "$(api POST /api/v1/php/install '{"version":"8.0"}')" = 422 ] || fail "PHP 8.0 install: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/php/install '{"version":"8.3"}')" = 202 ] || fail "PHP 8.3 install: $(x cat /tmp/api.out)"
+state=""
+for _ in $(seq 1 150); do
+  [ "$(api GET /api/v1/php/install)" = 200 ] || fail "install status: $(x cat /tmp/api.out)"
+  state=$(x sed -n 's/.*"state":"\([a-z]*\)".*/\1/p' /tmp/api.out)
+  [ "$state" = running ] || break
+  sleep 2
+done
+[ "$state" = succeeded ] || fail "PHP 8.3 from the panel: $(x cat /tmp/api.out)"
+x grep -q '"repository":true' /tmp/api.out || fail "sury.org not reported: $(x cat /tmp/api.out)"
+[ "$(api GET /api/v1/php/versions)" = 200 ] || fail "php versions: $(x cat /tmp/api.out)"
+x grep -q '"installed":\[[^]]*"8.3"' /tmp/api.out || fail "PHP 8.3 not installed: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/php/install '{"version":"8.3"}')" = 409 ] || fail "second install of 8.3: $(x cat /tmp/api.out)"
 
 echo "PASS: installer test on $IMG"
