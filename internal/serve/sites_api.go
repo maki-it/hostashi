@@ -402,6 +402,11 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 			log.WarnContext(ctx, "cron sync", "err", err)
 		}
 
+		// And the SSH keys (ADR-0032).
+		if err := svc.SyncSSH(ctx); err != nil {
+			log.WarnContext(ctx, "ssh sync", "err", err)
+		}
+
 		w.WriteHeader(http.StatusNoContent)
 	}))
 }

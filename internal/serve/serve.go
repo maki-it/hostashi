@@ -167,6 +167,7 @@ func Handler(cfg Config, deps Deps) http.Handler {
 			registerPages(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerParked(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerCron(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerSSH(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerLimits(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 		}
@@ -340,6 +341,7 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.CloudPanelSource = RPCCloudPanelSource{C: client}
 
 	deps.Sites.EnableCron(hosting.RPCAgent{C: client})
+	deps.Sites.EnableSSH(hosting.RPCAgent{C: client})
 	deps.Sites.EnableLimits(hosting.RPCAgent{C: client})
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
