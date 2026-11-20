@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Managed by Hostashi (ADR-0033); the installer overwrites changes. To open
+# another port, re-run the installer with --firewall-allow PORT/PROTO.
+#
+# This file replaces the table inet hostashi and nothing else: no
+# "flush ruleset", so fail2ban's table (ADR-0021) and the rules of the
+# admin or a container runtime stay. A packet must pass every table, so a
+# fail2ban ban still drops what this table accepts. Outbound stays open.
+
+table inet hostashi
+delete table inet hostashi
+
+table inet hostashi {
+	chain input {
+		type filter hook input priority filter; policy drop;
+
+		ct state established,related accept
+		ct state invalid drop
+		iif "lo" accept
+
+		meta l4proto icmp icmp type { destination-unreachable, time-exceeded, parameter-problem, echo-request } accept
+		meta l4proto ipv6-icmp icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, mld-listener-query, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
+
+		# DHCP replies for the server's own address (IPv4 and IPv6).
+		udp sport 67 udp dport 68 accept
+		ip6 saddr fe80::/10 udp sport 547 udp dport 546 accept
+
+		# SSH (every port sshd listens on), the web, the panel and --firewall-allow.
+		tcp dport { @TCP@ } accept
+		udp dport { @UDP@ } accept
+	}
+}

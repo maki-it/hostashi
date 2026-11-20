@@ -87,16 +87,19 @@ step "apply without --yes is refused"
 if x /opt/hostashi/install.sh apply --binary /opt/hostashi/hostashi; then fail "apply ran without --yes"; fi
 
 step "plan"
-x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi
+x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall
 
+# The container shares the host's network (--network host), so every run
+# passes --no-firewall: the rules would land on the host. The firewall
+# step is tested in a container of its own (packaging/test/firewall-test.sh).
 step "apply"
-x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --public-url https://panel.example.com || {
+x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --public-url https://panel.example.com || {
   x tail -n 60 /var/log/hostashi-install.log >&2 || true
   fail "first apply failed"
 }
 
 step "second apply changes nothing"
-out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --public-url https://panel.example.com)
+out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --public-url https://panel.example.com)
 echo "$out"
 grep -q 'changes=0' <<<"$out" || fail "second run changed something"
 # The container's root is an overlay: the quota step must skip with a
@@ -105,6 +108,8 @@ grep -q 'WARNING: disk quota is not available' <<<"$out" || fail "no warning abo
 x test ! -e /etc/systemd/system/hostashi-quota-enforce.service || fail "quota unit installed on an overlay root"
 
 step "services, health and permissions"
+if x nft list table inet hostashi >/dev/null 2>&1; then fail "firewall table loaded despite --no-firewall"; fi
+x test ! -e /etc/systemd/system/hostashi-firewall.service || fail "firewall unit installed despite --no-firewall"
 for u in hostashi-agent.service hostashi.service hostashi-panel.socket; do
   [ "$(x systemctl is-active $u)" = active ] || fail "$u is not running"
 done
@@ -213,7 +218,7 @@ score=$(x systemd-analyze security hostashi.service | tail -1 | grep -Eo '[0-9]+
 awk -v s="$score" 'BEGIN { exit !(s <= 2.0) }' || fail "panel unit exposure $score is above 2.0"
 
 step "changed setting is applied and the panel restarts"
-out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --public-url https://other.example.com)
+out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --public-url https://other.example.com)
 echo "$out"
 grep -q 'apply.*config' <<<"$out" || fail "config change not applied"
 [ "$(x systemctl is-active hostashi.service)" = active ] || fail "panel did not come back after the change"
