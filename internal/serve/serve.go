@@ -334,7 +334,7 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
 	deps.CloudPanel.Connect(siteCreator(deps.Sites, cfg.Log), RPCCloudPanelImports{C: client})
 	deps.CloudPanel.EnableLoads(ctx, deps.Sites, 0)
-	deps.CloudPanel.EnableCutover(deps.Sites, net.DefaultResolver, serverAddrs(client))
+	deps.CloudPanel.EnableCutover(deps.Sites, resolvConf("/etc/resolv.conf"), serverAddrs(client))
 
 	go deps.CloudPanel.RunCutover(ctx, 0)
 
