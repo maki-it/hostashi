@@ -51,6 +51,23 @@ RestrictNamespaces=yes
 LockPersonality=yes
 MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
+# The capabilities the agent and the tools it starts need (ADR-0033):
+# - CHOWN, DAC_*, FOWNER, FSETID: homes, configuration files and restores
+#   owned by the sites' users;
+# - SETUID, SETGID: useradd and userdel, files written as a site's user;
+# - KILL: processes of a site that is deleted;
+# - SYS_ADMIN, SYS_RESOURCE: project quotas (quotactl_fd, FS_IOC_FSSETXATTR);
+# - SYS_PTRACE: /proc of the sites' processes, hidden by hidepid=invisible;
+# - AUDIT_WRITE: useradd and userdel write audit records;
+# - NET_BIND_SERVICE: nginx -t opens the listening sockets of ports 80 and
+#   443 to test them (found in the container test).
+# Gone are, among others, network administration, raw I/O, modules, the
+# clock, reboot, mknod, chroot and setting file capabilities.
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER CAP_FSETID
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_KILL CAP_SYS_ADMIN CAP_SYS_RESOURCE CAP_SYS_PTRACE CAP_AUDIT_WRITE CAP_NET_BIND_SERVICE
+# The usual system calls of a service plus the quota calls.
+SystemCallFilter=@system-service quotactl quotactl_fd
+SystemCallErrorNumber=EPERM
 
 [Install]
 WantedBy=multi-user.target

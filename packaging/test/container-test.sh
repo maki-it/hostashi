@@ -4,7 +4,7 @@
 # Runs packaging/install.sh in a container with systemd as PID 1 and checks
 # the result: preflight, first apply, a second apply that changes nothing,
 # both units running, the panel's health check reaching the agent, file
-# owners and modes, and the systemd exposure score of the panel unit.
+# owners and modes, and the systemd exposure scores of the Hostashi units.
 #
 #   container-test.sh IMAGE BINARY      e.g. debian:trixie ./hostashi
 #
@@ -250,8 +250,17 @@ if x /usr/local/bin/hostashi site delete blog; then fail "site with a virtual ho
 step "systemd exposure"
 x systemd-analyze security hostashi.service | tail -1
 x systemd-analyze security hostashi-agent.service | tail -1
-score=$(x systemd-analyze security hostashi.service | tail -1 | grep -Eo '[0-9]+\.[0-9]+' | head -1)
-awk -v s="$score" 'BEGIN { exit !(s <= 2.0) }' || fail "panel unit exposure $score is above 2.0"
+# exposure UNIT MAX fails when the unit's exposure score rises above MAX
+# (ADR-0033): a change that weakens the sandbox shows up here.
+exposure() {
+  local score
+  # "→ Overall exposure level for hostashi-php-8.4@wp.service: 2.4 OK :-)"
+  score=$(x systemd-analyze security "$1" | tail -1 | sed -E 's/.*: ([0-9]+\.[0-9]+) .*/\1/')
+  echo "$1: exposure $score"
+  awk -v s="$score" -v m="$2" 'BEGIN { exit !(s <= m) }' || fail "$1: exposure $score is above $2"
+}
+exposure hostashi.service 2.0
+exposure hostashi-agent.service 4.5
 
 step "changed setting is applied and the panel restarts"
 out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --public-url https://other.example.com)
@@ -317,6 +326,13 @@ ver=$(x cat /tmp/api.out | sed -n 's/.*"installed":\["\([0-9.]*\)".*/\1/p')
 x systemctl is-active --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit of the site not running"
 x systemctl is-enabled --quiet "hostashi-php-$ver@wp.service" || fail "PHP unit of the site not enabled"
 [ "$(x stat -c '%a %U:%G' /run/hostashi-php/wp/php-fpm.sock)" = "660 wp:www-data" ] || fail "PHP socket has the wrong owner or mode"
+# The master sees only its own site's home (ADR-0033); another home on the
+# server stays hidden.
+x install -d -m 0750 /home/probe-other
+homes=$(x sh -c "ls -A /proc/\$(systemctl show -p MainPID --value hostashi-php-$ver@wp.service)/root/home")
+x rmdir /home/probe-other
+[ "$homes" = wp ] || fail "PHP master of wp sees these homes: $homes"
+exposure "hostashi-php-$ver@wp.service" 3.0
 # The worker runs as the site user and cannot read outside its home and /tmp.
 xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/index.php' <<'PHP'
 <?php
