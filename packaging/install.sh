@@ -175,7 +175,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config ssh nginx php mariadb backup units service fail2ban quota"
+STEPS="account dirs key binary config ssh harden nginx php mariadb backup units service fail2ban quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -284,6 +284,55 @@ do_ssh() {
     systemctl try-reload-or-restart ssh.service >>"$LOG" 2>&1 || return 1
   fi
   SSH_CHANGED=no
+}
+
+# Two leaks that SSH logins make easier (ADR-0032), closed without a
+# chroot. The pool of homes is root 0711: a site user reaches its own home
+# by path but cannot list the others. /proc is mounted with
+# hidepid=invisible: every user sees only their own processes; root keeps
+# the full view, and so do the members of the group hostashi-proc (empty,
+# for a monitoring agent that needs all processes). The /proc line in fstab
+# makes systemd-remount-fs apply the options at every boot; the step also
+# remounts /proc now.
+PROC_GROUP=hostashi-proc
+POOL_DIRS=(/home)
+
+proc_opts() { echo "hidepid=invisible,gid=$(getent group "$PROC_GROUP" | cut -d: -f3)"; }
+proc_fstab_line() { printf 'proc\t/proc\tproc\tdefaults,%s\t0\t0\n' "$(proc_opts)"; }
+proc_mounted_ok() {
+  local opts
+  opts=$(findmnt -no OPTIONS /proc 2>/dev/null | tr , '\n')
+  grep -qx 'hidepid=invisible' <<<"$opts" && grep -qx "gid=$(getent group "$PROC_GROUP" | cut -d: -f3)" <<<"$opts"
+}
+
+chk_harden() {
+  local d
+  for d in "${POOL_DIRS[@]}"; do dir_ok "$d" 711 root:root || { echo "$d is not root 0711"; return 1; }; done
+  getent group "$PROC_GROUP" >/dev/null || { echo "group $PROC_GROUP missing"; return 1; }
+  grep -qxF "$(proc_fstab_line)" "$FSTAB" 2>/dev/null || { echo "/proc line in $FSTAB differs"; return 1; }
+  proc_mounted_ok || { echo "/proc is not mounted with hidepid"; return 1; }
+}
+do_harden() {
+  local d backup
+  for d in "${POOL_DIRS[@]}"; do chown root:root "$d" && chmod 0711 "$d" || return 1; done
+  getent group "$PROC_GROUP" >/dev/null || groupadd --system "$PROC_GROUP" >>"$LOG" 2>&1 || return 1
+  if ! grep -qxF "$(proc_fstab_line)" "$FSTAB" 2>/dev/null; then
+    [ -e "$FSTAB" ] || : >"$FSTAB"
+    backup="$STATE_DIR/fstab.$(date -u +%Y%m%dT%H%M%SZ)"
+    cp -p "$FSTAB" "$backup" || { log "harden: cannot back up $FSTAB"; return 1; }
+    note "harden: fstab backup $backup"
+    # Any other /proc line goes; the new one is appended.
+    if ! { awk '!($2 == "/proc" && $1 !~ /^#/)' "$FSTAB" >"$FSTAB.hostashi-new" &&
+      proc_fstab_line >>"$FSTAB.hostashi-new" &&
+      chmod 0644 "$FSTAB.hostashi-new" && mv -f "$FSTAB.hostashi-new" "$FSTAB"; }; then
+      rm -f "$FSTAB.hostashi-new"; return 1
+    fi
+    if ! findmnt --verify --tab-file "$FSTAB" >>"$LOG" 2>&1; then
+      log "harden: findmnt --verify rejects the new $FSTAB, restoring it"
+      cp -p "$backup" "$FSTAB"; return 1
+    fi
+  fi
+  proc_mounted_ok || mount -o "remount,$(proc_opts)" /proc >>"$LOG" 2>&1
 }
 
 # nginx and its brotli modules from the distribution (ADR-0020). The agent
