@@ -49,6 +49,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0043 | User documentation in the GitHub wiki | Accepted on 2026-11-20 ([adr/0043](adr/0043-user-documentation.md)) | No |
 | 0044 | Outgoing email through an SMTP relay | Accepted on 2026-11-21 ([adr/0044](adr/0044-outgoing-email.md)) | No |
 | 0045 | Object cache (Valkey) per site | Accepted on 2026-11-21 ([adr/0045](adr/0045-object-cache-per-site.md)) | No |
+| 0046 | Page cache (nginx FastCGI cache) per site | Accepted on 2026-11-21 ([adr/0046](adr/0046-page-cache-per-site.md)) | No |
 
 ---
 
@@ -329,3 +330,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0045 Object cache (Valkey) per site
 
 **Full text (status Accepted, 2026-11-21):** [adr/0045](adr/0045-object-cache-per-site.md). Summary: sites on web2 use Redis, so v1 gets an opt-in object cache per site. Recommended: Valkey from the distribution (BSD-3; Debian 13 main 8.1, Ubuntu 26.04 universe 9.0), one instance per site as the site user in the site's slice, Unix socket only, cache only without persistence, `maxmemory` with LRU, admin commands disabled. Typed agent operations, no new `os/exec` (one more unit pattern for the existing `systemctl` call). The CloudPanel import detects Redis on web2 and asks per site; contents are not migrated. Decided by Kim: one instance per site as recommended; `user` may switch it on and off and flush it, only admin and manager change the size. web2 uses Redis only as a WordPress object cache, as far as Kim knows.
+
+## ADR-0046 Page cache (nginx FastCGI cache) per site
+
+**Full text (status Accepted, 2026-11-21, by Kim):** [adr/0046](adr/0046-page-cache-per-site.md). Summary: after comparing Varnish and the nginx FastCGI cache, Kim asked for a draft of the FastCGI cache instead of Varnish. Recommended: an opt-in page cache per site, off by default, with a zone and a directory per site outside the site home (owned by `www-data`, tagged with the site's project ID so it counts against the disk quota), a fixed cache key, upstream cache headers honoured, and fixed skip rules for non-GET requests, `Authorization`, logged-in and cart cookies and admin paths. Presets for WordPress, WooCommerce and generic PHP, cache times from 1 to 60 minutes, validated excluded paths, an `X-Cache` header. Purge is a typed agent operation in pure Go, no new `os/exec`. Roles as in ADR-0045. The CloudPanel import pre-selects the cache for sites with a cache tier. Changes in part ADR-0017: decided by Kim on 2026-11-21, the FastCGI cache replaces Varnish for now, and both caches (ADR-0045 and this one) ship in v1.
