@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { Backups } from "./Backups";
 import type { BackupInfo } from "./backups";
@@ -21,6 +22,12 @@ const ready: BackupInfo = {
   status: { ...status, ok: true, started: "2026-11-19T01:12:00Z", finished: "2026-11-19T01:20:00Z" },
 };
 
+// Harness keeps the address query in state, as the app does.
+function Harness({ initial = "" }: { initial?: string }) {
+  const [query, setQuery] = useState(new URLSearchParams(initial));
+  return <Backups query={query} onQuery={setQuery} />;
+}
+
 const snapFiles = "a".repeat(64);
 const snapDB = "b".repeat(64);
 
@@ -31,7 +38,7 @@ describe("Backups", () => {
       "GET /api/v1/backups": { body: fresh },
       "PUT /api/v1/backups/settings": { body: withTarget },
     });
-    render(<Backups />);
+    render(<Harness />);
     expect(await screen.findByText(/Not set up yet/)).toBeInTheDocument();
     await user.type(screen.getByLabelText("User"), "u123456");
     await user.type(screen.getByLabelText("Host"), "U123456.your-storagebox.de ");
@@ -49,7 +56,7 @@ describe("Backups", () => {
       "PUT /api/v1/backups/hostkey": { body: ready },
       "GET /api/v1/sites": { body: { sites: [] } },
     });
-    render(<Backups />);
+    render(<Harness />);
     await user.click(await screen.findByRole("button", { name: "Fetch the host key" }));
     expect(await screen.findByText(/Compare it with the fingerprints/)).toHaveTextContent("SHA256:abc");
     expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
@@ -65,7 +72,7 @@ describe("Backups", () => {
       "GET /api/v1/backups": { body: withTarget },
       "POST /api/v1/backups/hostkey/scan": { status: 502, body: { error: { code: "unreachable", message: "x" } } },
     });
-    render(<Backups />);
+    render(<Harness />);
     await user.click(await screen.findByRole("button", { name: "Fetch the host key" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("did not answer over SSH");
   });
@@ -77,7 +84,7 @@ describe("Backups", () => {
       "POST /api/v1/backups/run": { status: 202 },
       "GET /api/v1/sites": { body: { sites: [] } },
     });
-    render(<Backups />);
+    render(<Harness />);
     expect(await screen.findByText("The last backup succeeded.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Back up now" }));
     expect(await screen.findByText(/Backup started/)).toBeInTheDocument();
@@ -112,14 +119,40 @@ describe("Backups", () => {
       "POST /api/v1/backups/restores/2222222222222222/import": { status: 202, body: { id: "3333333333333333", state: "running" } },
       "GET /api/v1/backups/imports/3333333333333333": { body: { id: "3333333333333333", state: "done" } },
     });
-    render(<Backups />);
-    const buttons = await screen.findAllByRole("button", { name: "Restore" });
-    await user.click(buttons[0]!);
+    render(<Harness />);
+    const table = await screen.findByRole("table", { name: "Snapshots of blog" });
+    // Newest first: the database dump of 01:13, then the files of 01:12.
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(within(rows[0]!).getByText("Database blog_wp")).toBeInTheDocument();
+    await user.click(within(rows[1]!).getByRole("button", { name: /^Restore files of / }));
     expect(await screen.findByText(/Restored 3 files into/)).toHaveTextContent("restore-1");
-    await user.click(screen.getByRole("button", { name: "Restore" }));
+    await user.click(within(rows[0]!).getByRole("button", { name: /^Restore database blog_wp of / }));
     await user.click(await screen.findByRole("button", { name: "Create and import" }));
     expect(await screen.findByText(/The dump is in the new database/)).toHaveTextContent("blog_wp_restored");
     expect(calls.find((c) => c.path === "/api/v1/sites/blog/databases")?.body).toEqual({ name: "blog_wp_restored" });
     expect(calls.find((c) => c.path.endsWith("/import"))?.body).toEqual({ database: "blog_wp_restored" });
+  });
+
+  it("shows a failed backup with its badge and relative times", async () => {
+    const failed: BackupInfo = { ...ready, status: { ...ready.status, ok: false, error: "target full", items: [{ kind: "files", site: "blog", error: "no space left", dataAdded: 0, files: 0, bytes: 0 }] } };
+    mockFetch({ "GET /api/v1/backups": { body: failed }, "GET /api/v1/sites": { body: { sites: [] } } });
+    render(<Harness />);
+    const status = await screen.findByRole("region", { name: "Status" });
+    expect(within(status).getByText("Failed")).toBeInTheDocument();
+    expect(within(status).getByText("The last backup failed: target full")).toBeInTheDocument();
+    expect(within(status).getByText(/no space left/)).toBeInTheDocument();
+    expect(within(status).getAllByText((_, el) => el?.tagName === "TIME")[0]).toHaveAttribute("datetime", "2026-11-19T01:12:00Z");
+  });
+
+  it("lists the snapshots of the site in the address", async () => {
+    const calls = mockFetch({
+      "GET /api/v1/backups": { body: ready },
+      "GET /api/v1/sites": { body: { sites: [{ name: "blog", state: "active" }, { name: "shop", state: "active" }] } },
+      "GET /api/v1/sites/shop/backups": { body: { snapshots: [] } },
+    });
+    render(<Harness initial="site=shop" />);
+    expect(await screen.findByText("No snapshots of this site yet.")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Site" })).toHaveValue("shop");
+    expect(calls.some((c) => c.path === "/api/v1/sites/blog/backups")).toBe(false);
   });
 });

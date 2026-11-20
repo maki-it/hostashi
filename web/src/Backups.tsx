@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { ClockCounterClockwise, CloudArrowUp } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   backupMessage,
@@ -22,14 +23,23 @@ import {
   type Site,
   type Snapshot,
 } from "./backups";
+import { Badge, Button, Card, exactTime, IconButton, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort, type Tone } from "./ui";
 
-const when = (t?: string) => (t ? new Date(t).toLocaleString() : "never");
+type QueryProps = {
+  /** The address query: site (snapshots of that site), sort, dir. */
+  query: URLSearchParams;
+  /** Replaces the query in the address without a new history entry. */
+  onQuery: (q: URLSearchParams) => void;
+};
 
-// Backups is the backup page: status, target, host key, schedule and the
-// snapshots of each site with restore.
-export function Backups() {
+// Backups is the backup page (ADR-0037): status with "Back up now", the
+// snapshots of a site in a table with restore, then target, schedule and
+// host key.
+export function Backups({ query, onQuery }: QueryProps) {
   const [info, setInfo] = useState<BackupInfo | null>(null);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -44,33 +54,6 @@ export function Backups() {
     void load();
   }, [load]);
 
-  if (!info) {
-    return error ? (
-      <p role="alert" className="card">
-        {error}
-      </p>
-    ) : (
-      <p aria-busy="true">Loading…</p>
-    );
-  }
-
-  return (
-    <div className="stack">
-      <StatusCard info={info} onChange={load} />
-      <TargetCard info={info} onSaved={setInfo} />
-      {info.settings.target && <HostKeyCard info={info} onConfirmed={setInfo} />}
-      {info.ready && <SnapshotsCard />}
-    </div>
-  );
-}
-
-function StatusCard({ info, onChange }: { info: BackupInfo; onChange: () => Promise<void> }) {
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState("");
-  const [error, setError] = useState("");
-  const st = info.status;
-  const failed = st.items.filter((i) => i.error);
-
   async function run() {
     setBusy(true);
     setError("");
@@ -78,7 +61,7 @@ function StatusCard({ info, onChange }: { info: BackupInfo; onChange: () => Prom
     try {
       await runBackup();
       setNote("Backup started. It runs in the background; reload this page to see the result.");
-      await onChange();
+      await load();
     } catch (err) {
       setError(backupMessage(err));
     } finally {
@@ -86,47 +69,79 @@ function StatusCard({ info, onChange }: { info: BackupInfo; onChange: () => Prom
     }
   }
 
-  let summary: string;
-  if (!info.ready) summary = "Not set up yet: set a target and confirm its host key.";
-  else if (st.running) summary = "A backup is running.";
-  else if (!st.started) summary = "No backup has run yet.";
-  else if (st.ok) summary = "The last backup succeeded.";
-  else summary = "The last backup failed" + (st.error ? ": " + st.error : ".");
+  return (
+    <>
+      <PageHead
+        title="Backups"
+        description="Daily restic backups of all sites and databases to a Storage Box over SFTP."
+        actions={
+          info?.ready && (
+            <Button variant="primary" icon={<CloudArrowUp size={16} aria-hidden="true" />} disabled={busy || info.status.running} onClick={() => void run()}>
+              Back up now
+            </Button>
+          )
+        }
+      />
+      {error && <Notice tone="err" title={error} />}
+      {note && <Notice tone="info" title={note} />}
+      {!info ? (
+        !error && <p aria-busy="true">Loading…</p>
+      ) : (
+        <>
+          <StatusCard info={info} />
+          {info.ready && <SnapshotsCard query={query} onQuery={onQuery} />}
+          <TargetCard info={info} onSaved={setInfo} />
+          {info.settings.target && <HostKeyCard info={info} onConfirmed={setInfo} />}
+        </>
+      )}
+    </>
+  );
+}
+
+function statusOf(info: BackupInfo): { tone: Tone; word: string; summary: string } {
+  const st = info.status;
+  if (!info.ready) return { tone: "off", word: "Not set up", summary: "Not set up yet: set a target and confirm its host key." };
+  if (st.running) return { tone: "warn", word: "Running", summary: "A backup is running." };
+  if (!st.started) return { tone: "off", word: "No backup yet", summary: "No backup has run yet." };
+  if (st.ok) return { tone: "ok", word: "OK", summary: "The last backup succeeded." };
+  return { tone: "err", word: "Failed", summary: "The last backup failed" + (st.error ? ": " + st.error : ".") };
+}
+
+const timeOrNever = (t?: string) => (t ? <RelTime iso={t} /> : "never");
+
+function StatusCard({ info }: { info: BackupInfo }) {
+  const st = info.status;
+  const failed = st.items.filter((i) => i.error);
+  const s = statusOf(info);
 
   return (
-    <section className="card" aria-labelledby="backup-status">
-      <h2 id="backup-status">Backups</h2>
-      <p>{summary}</p>
-      {st.started && (
-        <dl className="facts">
-          <dt>Last run</dt>
-          <dd>{when(st.started)}</dd>
-          <dt>Finished</dt>
-          <dd>{when(st.finished)}</dd>
-          <dt>Last check</dt>
-          <dd>{when(st.lastCheck)}</dd>
-          <dt>Last data check</dt>
-          <dd>{when(st.lastReadCheck)}</dd>
-        </dl>
-      )}
-      {failed.length > 0 && (
-        <ul className="error">
-          {failed.map((i) => (
-            <li key={i.kind + (i.site ?? "") + (i.database ?? "")}>
-              {i.kind} {i.site ?? ""} {i.database ?? ""}: {i.error}
-            </li>
-          ))}
-        </ul>
-      )}
-      {!st.maintenanceOk && st.maintenance && <p className="error">Maintenance: {st.maintenance}</p>}
-      {note && <p role="status">{note}</p>}
-      {error && <p role="alert">{error}</p>}
-      {info.ready && (
-        <button type="button" disabled={busy || st.running} onClick={() => void run()}>
-          Back up now
-        </button>
-      )}
-    </section>
+    <Card title="Status" actions={<Badge tone={s.tone}>{s.word}</Badge>}>
+      <div className="ui-stack">
+        <p className="ui-flush">{s.summary}</p>
+        {st.started && (
+          <dl className="ui-facts">
+            <dt>Last run</dt>
+            <dd>{timeOrNever(st.started)}</dd>
+            <dt>Finished</dt>
+            <dd>{timeOrNever(st.finished)}</dd>
+            <dt>Last check</dt>
+            <dd>{timeOrNever(st.lastCheck)}</dd>
+            <dt>Last data check</dt>
+            <dd>{timeOrNever(st.lastReadCheck)}</dd>
+          </dl>
+        )}
+        {failed.length > 0 && (
+          <ul className="error">
+            {failed.map((i) => (
+              <li key={i.kind + (i.site ?? "") + (i.database ?? "")}>
+                {i.kind} {i.site ?? ""} {i.database ?? ""}: {i.error}
+              </li>
+            ))}
+          </ul>
+        )}
+        {!st.maintenanceOk && st.maintenance && <p className="error ui-flush">Maintenance: {st.maintenance}</p>}
+      </div>
+    </Card>
   );
 }
 
@@ -175,8 +190,7 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
   }
 
   return (
-    <section className="card" aria-labelledby="backup-target">
-      <h2 id="backup-target">Target and schedule</h2>
+    <Card title="Target and schedule">
       <form onSubmit={(e) => void submit(e)}>
         <fieldset>
           <legend>Storage Box (SFTP)</legend>
@@ -244,7 +258,7 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
           <pre aria-label="Public key">{info.publicKey}</pre>
         </div>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -280,8 +294,7 @@ function HostKeyCard({ info, onConfirmed }: { info: BackupInfo; onConfirmed: (i:
   }
 
   return (
-    <section className="card" aria-labelledby="backup-hostkey">
-      <h2 id="backup-hostkey">Host key</h2>
+    <Card title="Host key">
       {info.hostKey ? (
         <p>
           Trusted: <code>{info.hostKey}</code>
@@ -303,106 +316,130 @@ function HostKeyCard({ info, onConfirmed }: { info: BackupInfo; onConfirmed: (i:
       <button type="button" className="secondary" disabled={busy} onClick={() => void scan()}>
         {info.hostKey ? "Check the host key again" : "Fetch the host key"}
       </button>
-    </section>
+    </Card>
   );
 }
 
-function SnapshotsCard() {
+const snapLabel = (s: Snapshot) => (s.kind === "db" ? "Database " + (s.database ?? "") : "Files");
+
+function SnapshotsCard({ query, onQuery }: QueryProps) {
   const [sites, setSites] = useState<Site[] | null>(null);
-  const [site, setSite] = useState("");
   const [snaps, setSnaps] = useState<Snapshot[] | null>(null);
   const [error, setError] = useState("");
+  const [active, setActive] = useState<{ snap: Snapshot; restore: Restore | null } | null>(null);
+  const [restoreError, setRestoreError] = useState("");
+
+  const site = query.get("site") || sites?.[0]?.name || "";
+  const set = (changes: Record<string, string>) => {
+    const next = new URLSearchParams(query);
+    for (const [k, v] of Object.entries(changes)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+    onQuery(next);
+  };
 
   useEffect(() => {
     listSites()
-      .then((s) => {
-        setSites(s);
-        if (s[0]) setSite(s[0].name);
-      })
+      .then(setSites)
       .catch((err: unknown) => setError(backupMessage(err)));
   }, []);
 
   useEffect(() => {
     if (!site) return;
     setSnaps(null);
+    setActive(null);
     siteSnapshots(site)
       .then(setSnaps)
       .catch((err: unknown) => setError(backupMessage(err)));
   }, [site]);
 
+  async function doRestore(snap: Snapshot) {
+    setActive({ snap, restore: null });
+    setRestoreError("");
+    try {
+      const r = await startRestore(site, snap.id);
+      setActive({ snap, restore: r });
+      const end = await poll(() => getRestore(r.id), (x) => x.state === "done" || x.state === "failed");
+      setActive({ snap, restore: end });
+    } catch (err) {
+      setActive(null);
+      setRestoreError(backupMessage(err));
+    }
+  }
+
+  const restoring = active !== null && active.restore?.state !== "done" && active.restore?.state !== "failed";
+  const columns: Column<Snapshot>[] = [
+    { key: "time", header: "Time", sortValue: (s) => s.time, cell: (s) => <RelTime iso={s.time} /> },
+    { key: "kind", header: "Content", sortValue: snapLabel, cell: snapLabel },
+    {
+      key: "actions",
+      header: "Actions",
+      srHeader: true,
+      cell: (s) => (
+        <RowActions>
+          <IconButton
+            label={`Restore ${snapLabel(s).toLowerCase()} of ${exactTime(new Date(s.time))}`}
+            icon={<ClockCounterClockwise size={16} />}
+            disabled={restoring}
+            onClick={() => void doRestore(s)}
+          />
+        </RowActions>
+      ),
+    },
+  ];
+  const sortKey = query.get("sort");
+  const sort: Sort = sortKey ? { key: sortKey, dir: query.get("dir") === "asc" ? "asc" : "desc" } : { key: "time", dir: "desc" };
+  const r = active?.restore;
+
   return (
-    <section className="card" aria-labelledby="backup-snapshots">
-      <h2 id="backup-snapshots">Snapshots</h2>
-      <p>
-        A restore writes into a new directory <code>restore-&lt;time&gt;</code> in the site&apos;s home and never changes the live site.
-      </p>
-      {error && <p role="alert">{error}</p>}
-      {sites && sites.length === 0 && <p>No sites yet.</p>}
-      {sites && sites.length > 0 && (
-        <label>
-          Site
-          <select value={site} onChange={(e) => setSite(e.target.value)}>
+    <Card title="Snapshots" padded={false}>
+      <div className="ui-filters">
+        {sites && sites.length > 0 && (
+          <select className="ui-select" aria-label="Site" value={site} onChange={(e) => set({ site: e.target.value })}>
             {sites.map((s) => (
               <option key={s.name} value={s.name}>
                 {s.name}
               </option>
             ))}
           </select>
-        </label>
-      )}
-      {snaps && snaps.length === 0 && <p>No snapshots of this site yet.</p>}
-      {snaps && snaps.length > 0 && (
-        <ul className="snapshots">
-          {snaps.map((s) => (
-            <SnapshotRow key={s.id} site={site} snap={s} />
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-function SnapshotRow({ site, snap }: { site: string; snap: Snapshot }) {
-  const [restore, setRestore] = useState<Restore | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function doRestore() {
-    setBusy(true);
-    setError("");
-    try {
-      const r = await startRestore(site, snap.id);
-      setRestore(r);
-      setRestore(await poll(() => getRestore(r.id), (x) => x.state === "done" || x.state === "failed"));
-    } catch (err) {
-      setError(backupMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const label = snap.kind === "db" ? "Database " + (snap.database ?? "") : "Files";
-
-  return (
-    <li>
-      <span>
-        {label}, {when(snap.time)}
-      </span>
-      {!restore && (
-        <button type="button" className="secondary" disabled={busy} onClick={() => void doRestore()}>
-          Restore
-        </button>
-      )}
-      {restore && restore.state !== "done" && restore.state !== "failed" && <p aria-busy="true">Restoring…</p>}
-      {restore?.state === "failed" && <p role="alert">Restore failed: {restore.error}</p>}
-      {restore?.state === "done" && (
-        <p role="status">
-          Restored {restore.files} files into <code>{restore.dir}</code>.
+        )}
+        <p className="ui-hint ui-filters-note">
+          A restore writes into a new directory <code>restore-&lt;time&gt;</code> in the site&apos;s home and never changes the live site.
         </p>
+      </div>
+      {(error || restoreError || active) && (
+        <div className="ui-card-body ui-stack">
+          {error && <Notice tone="err" title={error} />}
+          {restoreError && <Notice tone="err" title={restoreError} />}
+          {active && restoring && <p aria-busy="true">Restoring {snapLabel(active.snap).toLowerCase()}…</p>}
+          {r?.state === "failed" && <Notice tone="err" title={"Restore failed: " + (r.error ?? "unknown error")} />}
+          {r?.state === "done" && (
+            <Notice tone="ok" title="Restored">
+              <p>
+                Restored {r.files} files into <code>{r.dir}</code>.
+              </p>
+            </Notice>
+          )}
+          {r?.state === "done" && r.kind === "db" && <ImportForm key={r.id} site={site} restore={r} />}
+        </div>
       )}
-      {restore?.state === "done" && restore.kind === "db" && <ImportForm site={site} restore={restore} />}
-      {error && <p role="alert">{error}</p>}
-    </li>
+      {sites && sites.length === 0 ? (
+        <p className="ui-empty">No sites yet.</p>
+      ) : !snaps ? (
+        !error && <p className="ui-empty" aria-busy="true">Loading…</p>
+      ) : (
+        <Table
+          label={"Snapshots of " + site}
+          columns={columns}
+          rows={snaps}
+          rowKey={(s) => s.id}
+          sort={sort}
+          onSort={(x) => set({ sort: x.key, dir: x.dir })}
+          empty="No snapshots of this site yet."
+        />
+      )}
+    </Card>
   );
 }
 

@@ -444,3 +444,10 @@ pre {
   display: grid;
   gap: var(--space-1);
 }
+
+/* Inside the new cards, old buttons size to their label like ui-btn. */
+.ui-card form > button,
+.ui-card-body > button {
+  width: auto;
+  justify-self: start;
+}
