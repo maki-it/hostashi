@@ -34,6 +34,10 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0036](0036-php-versions-from-the-panel.md) | Installing PHP versions from the panel | Accepted |
 | [0037](0037-panel-ui-redesign.md) | Panel UI redesign: layout, look and themes | Accepted |
 | [0038](0038-web-database-tool.md) | Web database tool with short-lived access | Proposed |
+| [0039](0039-certificate-management.md) | Certificate management: own certificates, renew and delete | Proposed |
+| [0040](0040-file-manager.md) | File manager in the panel | Proposed |
+| [0041](0041-external-database-servers.md) | External database servers | Proposed |
+| [0042](0042-panel-on-port-443.md) | Panel on port 443 under its own host name | Proposed |
 
 Only the project owner sets a status to `Accepted`.
 

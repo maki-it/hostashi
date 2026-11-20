@@ -81,6 +81,14 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - **Fonts and licenses.** Sora and IBM Plex are under the SIL Open Font License 1.1, which allows bundling with AGPL software; REUSE needs the license text in `LICENSES/` [U: compatibility is common practice, no legal review].
 - **Not a usability study.** The layout follows common patterns and Kim's review, not tests with users.
 
+## Additions (Kim, 2026-11-20, before implementation)
+
+- **Tables** can be sorted by every column and filtered by a text field and, where it helps, by state. The choice is kept in the address, so a link shows the same view.
+- **PHP versions** in every drop-down are sorted by version, newest first; the distribution's version is marked, not put on top.
+- **Times** in lists show relative values ("3 hours ago") with the exact time in a tooltip, for example "Last data check" on the backup page.
+- **CPU limit** in limit presets is shown and entered as CPU cores (0.5, 1, 2) instead of "% of one core"; the API keeps its percent field.
+- **Follow-up features after the redesign, each its own PR:** per-site PHP settings from an allowlist (mockup PHP tab); a disabled site can show one of the status pages (ADR-0027) instead of the fixed 503 page; certificate management (ADR-0039); file manager (ADR-0040); external database servers (ADR-0041); panel on port 443 (ADR-0042); web database tool (ADR-0038).
+
 ## Open questions
 
 1. ~~Layout, components, look~~ **Decided (Kim, 2026-11-20): L1 + T1 + B1, theme B (Maki), Phosphor icons; name and logo stay Hostashi.**
