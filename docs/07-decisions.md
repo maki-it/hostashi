@@ -47,6 +47,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0041 | External database servers | Accepted on 2026-11-20 ([adr/0041](adr/0041-external-database-servers.md)) | No |
 | 0042 | Panel on port 443 under its own host name | Accepted on 2026-11-20 ([adr/0042](adr/0042-panel-on-port-443.md)) | No |
 | 0043 | User documentation in the GitHub wiki | Accepted on 2026-11-20 ([adr/0043](adr/0043-user-documentation.md)) | No |
+| 0044 | Outgoing email through an SMTP relay | Proposed ([adr/0044](adr/0044-outgoing-email.md)) | **Yes** |
 
 ---
 
@@ -319,3 +320,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0043 User documentation in the GitHub wiki
 
 **Full text (status Accepted, 2026-11-20):** [adr/0043](adr/0043-user-documentation.md). Summary: Kim wants proper end-user documentation in the repository's GitHub wiki. Recommended: write the pages in the main repository under `docs/wiki/` so they get PR review, markdownlint, link check and REUSE, and mirror them to the wiki with a small `git`-only workflow after each merge. Task-oriented pages for server admins, panel admins, managers and users, from install to recovery. Screenshots only after the UI redesign, taken with the Playwright e2e setup. Decided by Kim: mirrored from the repository.
+
+## ADR-0044 Outgoing email through an SMTP relay
+
+**Full text (status Proposed, 2026-11-21):** [adr/0044](adr/0044-outgoing-email.md). Summary: Kim wants Hostashi to send notifications and invitation links by email. This is not a mail server, which stays out of v1: Hostashi only hands messages to an external SMTP relay. Recommended: the panel process sends (the agent stays without network), with `github.com/wneessen/go-mail` v0.8.2 (MIT); STARTTLS or implicit TLS with a verified certificate, the password sealed with the server key; off by default. Optional, confirmed email addresses per user; account emails always on, operations events (backup failures, certificate renewal and expiry, doctor digest, PHP end of life, disk and quota) opt-in per user and limited to what the role can see. An outbox with sealed bodies and retries for 24 hours, rate limits per recipient and server, and no links, tokens or passwords in logs. No new `os/exec` exception. Open: self-service password reset, the event set, plain SMTP, address confirmation.
