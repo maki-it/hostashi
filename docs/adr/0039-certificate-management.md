@@ -25,7 +25,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 **Option A.**
 
-- **Sources per site.** `letsencrypt` (today's behaviour), `custom` (uploaded or from a CSR). One active certificate per site. Parked domains and the panel address get the same choice later; v1 does sites only [A].
+- **Sources per site.** `letsencrypt` (today's behaviour), `custom` (uploaded or from a CSR). One active certificate per site. Parked domains (ADR-0027) and the panel address (ADR-0023, ADR-0042) get the same choice in v1 (Kim, 2026-11-20): parked domains in their table row, the panel address on the Health page under "Panel". For the panel, a custom certificate must cover the panel host name; deleting it falls back to Let's Encrypt, never to no certificate.
 - **Upload.** PEM certificate, optional chain, PEM key (RSA ≥ 2048, ECDSA P-256/P-384, Ed25519 not used by browsers). The agent checks before anything goes live:
   - the key matches the certificate;
   - the chain builds up to a root in the system trust store, or the admin confirms "not publicly trusted" (for internal CAs);
@@ -55,4 +55,4 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 ## Open questions
 
 1. ~~Both ways (upload and CSR)?~~ **Decided (Kim, 2026-11-20): both ways.**
-2. Parked domains and the panel address: also in v1, or sites first?
+2. ~~Parked domains and the panel address: also in v1, or sites first?~~ **Decided (Kim, 2026-11-20): also in v1.**
