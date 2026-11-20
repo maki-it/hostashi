@@ -1,6 +1,6 @@
 # ADR-0037 Panel UI redesign: layout, look and themes
 
-**Status:** Proposed. **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0003 (stack: React, Vite, TypeScript), ADR-0023 (panel HTTPS and CSP), ADR-0035 (roles decide which pages a user sees), ADR-0002 (licenses, dependency allowlist).
+**Status:** Accepted (Kim, 2026-11-20). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0003 (stack: React, Vite, TypeScript), ADR-0023 (panel HTTPS and CSP), ADR-0035 (roles decide which pages a user sees), ADR-0002 (licenses, dependency allowlist).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -51,7 +51,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
   - Below 700 px the sidebar becomes a menu above the content; tables scroll inside their box.
 - **Routing.** Keep the hash routing, extended by a small parser for `#/sites/<name>/<tab>` with tests. No router library [A: the app has about 15 routes].
 - **Theme B (Maki), decided by Kim on 2026-11-20.** Colours, fonts, radii and rules from the Maki IT design system: page `#fcfcfa`, cards `#ffffff`, sunken areas and the light sidebar `#eef3ef`, text `#0d1f1a`, links and accents green `#1f6b55`, the primary button coral `#ff6f61` with dark text, status colours teal/orange/red/slate with a tint and always a word. Headings in Sora, text in IBM Plex Sans, labels and technical values in IBM Plex Mono. Radius 6 px for controls, 10 px for cards; flat, no shadows. The dark scheme uses the design system's dark tokens (sidebar dark). Values are copied into Hostashi's own token file; Hostashi does not load anything from Maki IT at run time.
-- **Brand.** The product name and logo stay "Hostashi"; the Maki mascot and the Maki IT logo are not used in the panel [A: to be confirmed by Kim]. Whether an "by Maki IT" note appears is Kim's call.
+- **Brand.** The product name and logo stay "Hostashi"; the Maki mascot and the Maki IT logo are not used in the panel [V: Kim, 2026-11-20]. Whether an "by Maki IT" note appears is Kim's call.
 - **Icons.** Phosphor, weight "regular" only, 16/20 px, colour from the text. Icon-only buttons (row actions) get an `aria-label` and a visible tooltip on hover and keyboard focus.
 - **Tokens.** All colours, radii, spacing and fonts are CSS variables on `:root[data-theme]`. Components use only semantic names (`--surface`, `--fg`, `--accent`, `--ok`, …), never raw values. A test fails when a component stylesheet contains a hex colour.
 - **Colour scheme.** A sun/moon button in the top bar switches between light and dark in one click (Kim, 2026-11-20). The account page also offers "follow system". The choice is stored per user on the server (`users.color_scheme`, `PATCH /api/v1/me`), so it follows the user across browsers. Until the user has set it, the panel follows the system. The login page follows the system.
@@ -83,5 +83,5 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions
 
-1. Layout L1 (sidebar, tables, site page with tabs), components of our own: open. ~~Look~~ **Decided (Kim, 2026-11-20): theme B (Maki) and Phosphor icons.**
+1. ~~Layout, components, look~~ **Decided (Kim, 2026-11-20): L1 + T1 + B1, theme B (Maki), Phosphor icons; name and logo stay Hostashi.**
 2. Further themes (A, C): decide later, after v1? Recommendation: yes, the mechanism is prepared.

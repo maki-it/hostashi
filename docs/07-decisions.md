@@ -40,7 +40,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0034 | Firewall rules in the panel | Accepted on 2026-11-20 ([adr/0034](adr/0034-firewall-rules-in-panel.md)) | Done |
 | 0035 | Users and roles | Accepted on 2026-11-20 ([adr/0035](adr/0035-users-and-roles.md)) | Done |
 | 0036 | Installing PHP versions from the panel | Accepted on 2026-11-20 ([adr/0036](adr/0036-php-versions-from-the-panel.md)) | In progress |
-| 0037 | Panel UI redesign: layout, look and themes | Proposed ([adr/0037](adr/0037-panel-ui-redesign.md)) | No |
+| 0037 | Panel UI redesign: layout, look and themes | Accepted ([adr/0037](adr/0037-panel-ui-redesign.md)) | No |
 | 0038 | Web database tool with short-lived access | Proposed ([adr/0038](adr/0038-web-database-tool.md)) | No |
 
 ---
@@ -289,7 +289,7 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0037 Panel UI redesign: layout, look and themes
 
-**Full text (status Proposed, 2026-11-20):** [adr/0037](adr/0037-panel-ui-redesign.md). Summary: the current panel is one narrow column with 12 links in a top row and one long card per site. After a clickable mockup with three looks, Kim chose a new layout and, on 2026-11-20, the Maki look (B) with Phosphor icons. Recommended: a fixed sidebar with grouped navigation, list pages as tables with one primary action, and a page per site with tabs that are part of the address (`#/sites/<name>/php`); hash routing kept. Own small component set on CSS tokens (no UI library, fits the strict CSP), Phosphor icons (MIT) and Sora, IBM Plex Sans and IBM Plex Mono self-hosted (OFL-1.1, added to the npm allowlist for fonts). Light, dark or "follow system" stored per user on the server; the theme name is stored too, so the looks A (neutral) and C (Konsole) can be added later as themes. WCAG 2.2 AA. Six steps, one PR each.
+**Full text (status Accepted, 2026-11-20):** [adr/0037](adr/0037-panel-ui-redesign.md). Summary: the current panel is one narrow column with 12 links in a top row and one long card per site. After a clickable mockup with three looks, Kim chose a new layout and, on 2026-11-20, the Maki look (B) with Phosphor icons. Recommended: a fixed sidebar with grouped navigation, list pages as tables with one primary action, and a page per site with tabs that are part of the address (`#/sites/<name>/php`); hash routing kept. Own small component set on CSS tokens (no UI library, fits the strict CSP), Phosphor icons (MIT) and Sora, IBM Plex Sans and IBM Plex Mono self-hosted (OFL-1.1, added to the npm allowlist for fonts). Light, dark or "follow system" stored per user on the server; the theme name is stored too, so the looks A (neutral) and C (Konsole) can be added later as themes. WCAG 2.2 AA. Six steps, one PR each.
 
 ## ADR-0038 Web database tool with short-lived access
 
