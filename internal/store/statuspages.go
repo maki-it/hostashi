@@ -37,7 +37,7 @@ type StatusPageFile struct {
 
 // CreateStatusPage stores a new page with its files.
 func (s *Store) CreateStatusPage(ctx context.Context, name, kind, digest string, files map[string][]byte, now time.Time) (int64, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("store: %w", err)
 	}
@@ -83,7 +83,7 @@ func insertPageFiles(ctx context.Context, tx *sql.Tx, id int64, files map[string
 // UpdateStatusPage renames a page (name != "") and replaces its files
 // (files != nil). The kind does not change: sites rely on it.
 func (s *Store) UpdateStatusPage(ctx context.Context, id int64, name, digest string, files map[string][]byte, now time.Time) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
@@ -119,7 +119,7 @@ func (s *Store) UpdateStatusPage(ctx context.Context, id int64, name, digest str
 
 // DeleteStatusPage removes a page that no site names.
 func (s *Store) DeleteStatusPage(ctx context.Context, id int64) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
@@ -319,7 +319,7 @@ func (s *Store) SetSiteMaintenance(ctx context.Context, name string, on bool, pa
 
 	allow = slices.Clone(allow)
 
-	res, err := s.db.ExecContext(ctx, `UPDATE sites SET maintenance = ?, maintenance_page = ?, maintenance_allow = ?, updated_at = ? WHERE name = ?`,
+	res, err := s.w.ExecContext(ctx, `UPDATE sites SET maintenance = ?, maintenance_page = ?, maintenance_allow = ?, updated_at = ? WHERE name = ?`,
 		v, ref, strings.Join(allow, " "), now.Unix(), name)
 	if err != nil {
 		if strings.Contains(err.Error(), "FOREIGN KEY") {

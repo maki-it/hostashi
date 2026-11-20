@@ -7,6 +7,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"net/url"
@@ -27,7 +28,8 @@ var ErrInsecurePermissions = errors.New("store: database file must not be access
 
 // Store wraps the database handle.
 type Store struct {
-	db *sql.DB
+	db *sql.DB // reads
+	w  *sql.DB // writes, one connection
 }
 
 // Open opens or creates the database at path and applies all pending
@@ -39,11 +41,52 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		return nil, err
 	}
 
+	// Writes go through a pool of one connection, so writers queue in Go
+	// (in order, and a canceled request leaves the queue) instead of in
+	// SQLite's busy handler, which polls and lets a late writer overtake an
+	// early one. Reads use their own pool, which WAL lets run beside the
+	// writer. The read pool is query_only, so a write sent there by mistake
+	// fails instead of competing for the lock (docs/sqlite-load.md).
+	w, err := sql.Open("sqlite", dsn(path, false))
+	if err != nil {
+		return nil, fmt.Errorf("store: open: %w", err)
+	}
+
+	w.SetMaxOpenConns(1)
+	w.SetMaxIdleConns(1)
+
+	db, err := sql.Open("sqlite", dsn(path, true))
+	if err != nil {
+		_ = w.Close()
+
+		return nil, fmt.Errorf("store: open: %w", err)
+	}
+
+	// database/sql keeps two idle connections by default and closes the
+	// rest, so a burst of requests opens new ones, each running the pragmas
+	// again. Keep enough for the parallel requests of a busy panel.
+	db.SetMaxIdleConns(readIdle)
+
+	s := &Store{db: db, w: w}
+	if err := s.prepare(ctx); err != nil {
+		_ = s.Close()
+
+		return nil, err
+	}
+
+	return s, nil
+}
+
+// readIdle is how many idle read connections the store keeps.
+const readIdle = 16
+
+// dsn is the connection string. Pragmas run in this order on every new
+// connection. busy_timeout must come first: switching a fresh file to WAL
+// needs a lock, and without the timeout a second process opening at the
+// same moment fails at once with SQLITE_BUSY.
+func dsn(path string, readOnly bool) string {
 	q := url.Values{}
-	// Pragmas run in this order on every new connection. busy_timeout must
-	// come first: switching a fresh file to WAL needs a lock, and without the
-	// timeout a second process opening at the same moment fails at once
-	// with SQLITE_BUSY.
+
 	for _, p := range []string{
 		"busy_timeout(5000)",
 		"journal_mode(WAL)",
@@ -53,20 +96,13 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		q.Add("_pragma", p)
 	}
 
+	if readOnly {
+		q.Add("_pragma", "query_only(1)")
+	}
+
 	q.Set("_txlock", "immediate")
 
-	db, err := sql.Open("sqlite", "file:"+path+"?"+q.Encode())
-	if err != nil {
-		return nil, fmt.Errorf("store: open: %w", err)
-	}
-
-	s := &Store{db: db}
-	if err := s.prepare(ctx); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-
-	return s, nil
+	return "file:" + path + "?" + q.Encode()
 }
 
 // openAttempts bounds the retries while another process creates the file.
@@ -78,9 +114,13 @@ const openAttempts = 20
 // the same moment retry here for up to about five seconds.
 func (s *Store) prepare(ctx context.Context) error {
 	for attempt := 1; ; attempt++ {
-		err := s.check(ctx)
+		err := check(ctx, s.w)
 		if err == nil {
-			err = migrate(ctx, s.db, migrations)
+			err = migrate(ctx, s.w, migrations)
+		}
+
+		if err == nil {
+			err = check(ctx, s.db)
 		}
 
 		if err == nil || !isBusy(err) || attempt == openAttempts {
@@ -143,9 +183,9 @@ func prepareFile(path string) error {
 }
 
 // check verifies that the connection works and the pragmas took effect.
-func (s *Store) check(ctx context.Context) error {
+func check(ctx context.Context, db *sql.DB) error {
 	var mode string
-	if err := s.db.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&mode); err != nil {
+	if err := db.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&mode); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 
@@ -154,7 +194,7 @@ func (s *Store) check(ctx context.Context) error {
 	}
 
 	var fk int
-	if err := s.db.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&fk); err != nil {
+	if err := db.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&fk); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 
@@ -167,7 +207,7 @@ func (s *Store) check(ctx context.Context) error {
 
 // Ping checks that the database answers.
 func (s *Store) Ping(ctx context.Context) error {
-	return s.db.PingContext(ctx)
+	return errors.Join(s.db.PingContext(ctx), s.w.PingContext(ctx))
 }
 
 // SchemaVersion returns the applied schema version.
@@ -177,7 +217,7 @@ func (s *Store) SchemaVersion(ctx context.Context) (int, error) {
 
 // Close closes the database.
 func (s *Store) Close() error {
-	return s.db.Close()
+	return errors.Join(s.db.Close(), s.w.Close())
 }
 
 // CopyTo writes a consistent copy of the database to path with VACUUM INTO
@@ -192,7 +232,7 @@ func (s *Store) CopyTo(ctx context.Context, path string) error {
 	tmp := path + ".tmp"
 	_ = os.Remove(tmp)
 
-	if _, err := s.db.ExecContext(ctx, "VACUUM INTO ?", tmp); err != nil {
+	if err := s.vacuumInto(ctx, tmp); err != nil {
 		_ = os.Remove(tmp)
 
 		return fmt.Errorf("store: copy: %w", err)
@@ -211,4 +251,35 @@ func (s *Store) CopyTo(ctx context.Context, path string) error {
 	}
 
 	return nil
+}
+
+// vacuumInto runs VACUUM INTO on a read connection. VACUUM INTO only reads
+// the live database, but query_only refuses it, so the connection lifts the
+// flag for this one statement and sets it again before it goes back to the
+// pool. Using the write connection instead would hold up every write for
+// the length of the copy.
+func (s *Store) vacuumInto(ctx context.Context, path string) (err error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		// A connection whose flag could not be restored must not serve
+		// further reads: Raw returning driver.ErrBadConn discards it.
+		if _, rerr := conn.ExecContext(context.WithoutCancel(ctx), "PRAGMA query_only = 1"); rerr != nil {
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+			err = errors.Join(err, rerr)
+		}
+
+		err = errors.Join(err, conn.Close())
+	}()
+
+	if _, err := conn.ExecContext(ctx, "PRAGMA query_only = 0"); err != nil {
+		return err
+	}
+
+	_, err = conn.ExecContext(ctx, "VACUUM INTO ?", path)
+
+	return err
 }

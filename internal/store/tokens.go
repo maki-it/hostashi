@@ -54,7 +54,7 @@ func (s *Store) CreateAPIToken(ctx context.Context, t APIToken, tokenHash []byte
 		exp = sql.NullInt64{Int64: t.ExpiresAt.Unix(), Valid: true}
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return APIToken{}, fmt.Errorf("store: %w", err)
 	}
@@ -210,7 +210,7 @@ func (s *Store) ActiveAPITokens(ctx context.Context, now time.Time) ([]APIToken,
 // RevokeAPIToken revokes a token of this user. Revoking twice or another
 // user's token returns ErrNotFound, so ids of other users cannot be probed.
 func (s *Store) RevokeAPIToken(ctx context.Context, userID, id int64, now time.Time) (APIToken, error) {
-	res, err := s.db.ExecContext(ctx,
+	res, err := s.w.ExecContext(ctx,
 		`UPDATE api_tokens SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL`,
 		now.Unix(), id, userID)
 	if err != nil {
@@ -239,7 +239,7 @@ const minTouchInterval = time.Minute
 
 // TouchAPIToken records the last use, at most once per minute per token.
 func (s *Store) TouchAPIToken(ctx context.Context, id int64, now time.Time, ip string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.w.ExecContext(ctx,
 		`UPDATE api_tokens SET last_used_at = ?, last_used_ip = ?
 		  WHERE id = ? AND (last_used_at IS NULL OR last_used_at <= ?)`,
 		now.Unix(), ip, id, now.Add(-minTouchInterval).Unix())
@@ -266,7 +266,7 @@ func (s *Store) Setting(ctx context.Context, key string) (value string, ok bool,
 
 // SetSetting stores the JSON value of a setting.
 func (s *Store) SetSetting(ctx context.Context, key, value string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.w.ExecContext(ctx,
 		`INSERT INTO settings (key, value) VALUES (?, ?)
 		 ON CONFLICT (key) DO UPDATE SET value = excluded.value`, key, value)
 	if err != nil {
