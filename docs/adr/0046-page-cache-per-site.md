@@ -8,7 +8,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 - WordPress is the main workload, and a page cache is a core hosting feature [V: ADR-0005, S3]. `03-features.md` 3.9 lists "Nginx FastCGI cache with purge" (P1, Beta) and "Varnish integration" (P1, release 1.0) [V].
 - ADR-0017 keeps a Varnish option for release 1.0, decided by Kim on 2026-11-18 together with the importer [V: ADR-0017, "Owner input"]. On 2026-11-20 Kim asked for a comparison and agreed to draft this ADR for the FastCGI cache **instead of** Varnish [V: Kim, project chat, 2026-11-20].
-- Decided by Kim on 2026-11-20: the page cache (this ADR) and the object cache (ADR-0045) both ship in v1 [V: Kim, project chat]. Whether Varnish stays in v1 is open question 1.
+- Decided by Kim on 2026-11-20: the page cache (this ADR) and the object cache (ADR-0045) both ship in v1 [V: Kim, project chat]. The FastCGI cache replaces Varnish for now, so Varnish leaves the v1 scope [V: Kim, thread, 2026-11-21].
 - Spike S3 generated a working FastCGI cache config for nginx, with `X-Cache: MISS` then `HIT`, and about 77,500 requests per second on a cache hit [V: `spike/s3-webserver/REPORT.md`]. It is part of stock nginx; no extra module or service is needed [V: S3].
 - Hostashi renders one `nginx.conf` with an `http` block and one server block per site from Go templates in `internal/web` [V: `internal/web/nginx.go`]. `fastcgi_cache_path` is only valid in the `http` block [U: nginx documentation], so each site's cache zone is rendered there.
 - Every site has its own Linux user and a project quota on its directory tree; project quota counts files by project ID, whatever their owner [V: ADR-0015, `internal/agent/quota.go`].
@@ -100,7 +100,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Consequences
 
-- Varnish leaves the v1 scope (if Kim agrees, open question 1); `03-features.md` 3.9 and ADR-0017 get a note. Varnish can come back after v1 as its own ADR if a big shop needs tag purge.
+- Varnish leaves the v1 scope (Kim, 2026-11-21); `03-features.md` 3.9 and ADR-0017 get a note. Varnish can come back after v1 as its own ADR if a big shop needs tag purge.
 - Cached pages count against the site's disk quota, so a large cache leaves less room for files. The panel says so next to the size.
 - One `keys_zone` of 2 MB shared memory per site with the cache on; at 22 sites less than 50 MB [E].
 - The container tests on Debian 13 and Ubuntu 26.04: `MISS` then `HIT`; `BYPASS` for a logged-in WordPress cookie, a POST, `/wp-admin/` and an excluded path; no cache for a `Set-Cookie` response; purge leads to `MISS` without errors; a site user cannot write into or list the cache directory; security headers are still present on cached answers.
@@ -114,7 +114,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions
 
-1. Should the FastCGI cache **replace** the Varnish option from ADR-0017 in v1? Recommendation: yes, Varnish possibly after v1.
+1. ~~Should the FastCGI cache **replace** the Varnish option from ADR-0017 in v1?~~ Decided by Kim on 2026-11-21: yes, for now. Varnish possibly after v1 as its own ADR.
 2. Which site on web2 runs behind the cache port `6081`, and does it need anything Varnish-specific (custom VCL, purge plugin, ESI)?
 3. Presets, skip rules, cache times and sizes as above?
 4. Roles as above, the same split as for the object cache?

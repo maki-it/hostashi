@@ -125,7 +125,7 @@
 | Feature | Prio | Phase | Source | Note |
 |---------|------|-------|--------|------|
 | Nginx FastCGI cache with purge | P1 | B | NEW | Simpler than Varnish, covers 80 %. Design: ADR-0046 (proposed) |
-| Varnish integration | P1 | 1 | CP | Together with the CloudPanel importer (ADR-0017, Kim 2026-11-18). Own VCL and purge; the WP plugin `clp-wp-varnish-cache` is GPLv3, only usable with a compatible license. ADR-0046 (proposed) would replace it in v1 with the FastCGI cache |
+| Varnish integration | P2 | 2+ | CP | Together with the CloudPanel importer (ADR-0017, Kim 2026-11-18). Own VCL and purge; the WP plugin `clp-wp-varnish-cache` is GPLv3, only usable with a compatible license. Replaced in v1 by the FastCGI cache (Kim, 2026-11-21, ADR-0046); possibly after v1 |
 | Brotli/gzip, cache header presets | P1 | B | CP | |
 
 ## 3.10 Interfaces and automation
