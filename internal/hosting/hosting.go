@@ -119,6 +119,7 @@ type Service struct {
 	kick   chan struct{}
 	cron   CronAgent   // nil: no cron jobs
 	limits LimitsAgent // nil: no resource limits (ADR-0015)
+	ssh    SSHAgent    // nil: no SSH keys (ADR-0032)
 
 	panelDomain string // ADR-0023; empty: nginx serves no panel address
 	panelServed string // panel domain of the last accepted web state; under mu
