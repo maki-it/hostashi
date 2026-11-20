@@ -22,7 +22,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Recommendation
 
-**Option A.** Kim chose the repository wiki (thread, 2026-11-20). Writing the pages in the main repository keeps the existing checks and review; the wiki is the published copy.
+**Option A.** Decided by Kim (thread, 2026-11-20): the repository wiki, with pages written here and mirrored by CI. Writing the pages in the main repository keeps the existing checks and review; the wiki is the published copy.
 
 - **Sync.** A workflow `wiki.yml` runs on pushes to `main` that touch `docs/wiki/**`. It clones `<repo>.wiki.git` with the job's `GITHUB_TOKEN` (`contents: write`), replaces its content with `docs/wiki/`, commits as `github-actions[bot]` and pushes. Plain `git`, no third-party action [U: `GITHUB_TOKEN` can push to the wiki of its own repository].
 - **One-way.** The wiki says on every page (footer) that it is generated from `docs/wiki/` and that changes go through a PR. The workflow does a full replace, so stray web edits do not linger.
@@ -60,4 +60,4 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions
 
-1. Pages in the repository and mirrored by CI (recommended), or edited directly in the wiki?
+None. Decided by Kim (thread, 2026-11-20): the GitHub wiki, with pages written in the repository and mirrored by CI.
