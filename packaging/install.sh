@@ -31,7 +31,8 @@
 # and asks for ONE reboot, it never reboots by itself. fail2ban from the
 # distribution guards SSH and the panel logins (ADR-0021). Site users log in
 # over SSH and SFTP with keys only (ADR-0032). An nftables firewall lets in
-# only SSH, the web and the panel (ADR-0033). Not yet part of this
+# only SSH, the web and the panel, and security updates are installed
+# every day without a reboot (ADR-0033). Not yet part of this
 # installer: more PHP versions (sury.org).
 #
 # Exit codes: 0 ok, 2 refused by preflight (server unchanged), 3 a step
@@ -185,7 +186,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config ssh harden nginx php mariadb backup units service fail2ban firewall quota"
+STEPS="account dirs key binary config ssh harden nginx php mariadb backup units service fail2ban firewall updates quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -583,6 +584,63 @@ do_firewall() {
   # A flushed ruleset leaves the unit active without the table.
   nft list table inet hostashi >/dev/null 2>&1 || systemctl restart "$FW_UNIT" >>"$LOG" 2>&1 || return 1
   FW_CHANGED=no
+}
+
+# Security updates, on by default (ADR-0033): unattended-upgrades from the
+# distribution installs updates from the security archive only, every day,
+# and never reboots. The package's own files stay; ours sorts after them and
+# replaces the origin list (see packaging/apt). The per-site PHP masters
+# are not restarted by the PHP package, so a dpkg hook restarts the ones
+# that still run a replaced binary or library.
+APT_SRC=${HOSTASHI_APT_SRC:-$HERE/apt}
+UU_FILE=/etc/apt/apt.conf.d/52hostashi-unattended-upgrades
+PHP_HOOK_FILE=/etc/apt/apt.conf.d/80hostashi-php-restart
+PHP_HOOK_BIN=/usr/local/lib/hostashi/php-restart
+UU_TIMERS=(apt-daily.timer apt-daily-upgrade.timer)
+
+# uu_origins prints the security origins of the running distribution.
+# shellcheck disable=SC2016 # ${distro_codename} is for unattended-upgrades
+uu_origins() {
+  case "$OS_ID" in
+    debian) printf '\t"origin=Debian,codename=${distro_codename}-security,label=Debian-Security";\n';;
+    ubuntu) printf '\t"origin=Ubuntu,archive=${distro_codename}-security";\n'
+            printf '\t"origin=UbuntuESMApps,archive=${distro_codename}-apps-security";\n'
+            printf '\t"origin=UbuntuESM,archive=${distro_codename}-infra-security";\n';;
+    *) return 1;;
+  esac
+}
+uu_render() {
+  local origins
+  origins=$(uu_origins) || return 1
+  awk -v o="$origins" '$0 == "@ORIGINS@" { print o; next } { print }' "$APT_SRC/52hostashi-unattended-upgrades"
+}
+
+chk_updates() {
+  local t
+  pkg_installed unattended-upgrades || { echo "unattended-upgrades not installed"; return 1; }
+  uu_render | file_matches "$UU_FILE" 0644 root:root || { echo "unattended-upgrades settings differ"; return 1; }
+  file_matches "$PHP_HOOK_FILE" 0644 root:root <"$APT_SRC/80hostashi-php-restart" || { echo "PHP restart hook differs"; return 1; }
+  local d=${PHP_HOOK_BIN%/*}
+  dir_ok "$d" 755 root:root || { echo "$d"; return 1; }
+  file_matches "$PHP_HOOK_BIN" 0755 root:root <"$APT_SRC/php-restart" || { echo "PHP restart script differs"; return 1; }
+  for t in "${UU_TIMERS[@]}"; do
+    [ "$(systemctl is-enabled "$t" 2>/dev/null)" = enabled ] || { echo "$t not enabled"; return 1; }
+  done
+}
+do_updates() {
+  local t
+  if ! pkg_installed unattended-upgrades; then
+    apt-get update -qq >>"$LOG" 2>&1 &&
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends unattended-upgrades >>"$LOG" 2>&1 || return 1
+  fi
+  uu_render | write_file "$UU_FILE" 0644 root:root
+  [ $? -le 1 ] || return 1
+  install -d -m 0755 -o root -g root "${PHP_HOOK_BIN%/*}" || return 1
+  write_file "$PHP_HOOK_BIN" 0755 root:root <"$APT_SRC/php-restart"
+  [ $? -le 1 ] || return 1
+  write_file "$PHP_HOOK_FILE" 0644 root:root <"$APT_SRC/80hostashi-php-restart"
+  [ $? -le 1 ] || return 1
+  for t in "${UU_TIMERS[@]}"; do systemctl enable --now "$t" >>"$LOG" 2>&1 || return 1; done
 }
 
 php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }

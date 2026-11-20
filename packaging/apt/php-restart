@@ -1,0 +1,22 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Restarts the PHP-FPM master of every Hostashi site (ADR-0019) that still
+# runs a binary or library under /usr which a package update replaced
+# (ADR-0033). apt runs it after every dpkg run through
+# /etc/apt/apt.conf.d/80hostashi-php-restart. dpkg replaces a file by
+# renaming the new one over it, so the running master keeps the old inode,
+# which /proc/<pid>/maps shows as "(deleted)". The restart is queued
+# (--no-block), so apt does not wait for it. It never fails.
+set -u
+[ -d /run/systemd/system ] || exit 0
+systemctl list-units --type=service --state=running --plain --no-legend 'hostashi-php-*@*.service' 2>/dev/null |
+  while read -r unit _; do
+    pid=$(systemctl show -p MainPID --value "$unit" 2>/dev/null) || continue
+    [ -n "$pid" ] && [ "$pid" != 0 ] || continue
+    if grep -Eq ' /usr/[^ ]+ \(deleted\)$' "/proc/$pid/maps" 2>/dev/null; then
+      echo "hostashi: restarting $unit, its PHP was updated"
+      systemctl restart --no-block "$unit" || true
+    fi
+  done
+exit 0
