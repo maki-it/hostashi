@@ -25,7 +25,8 @@ env:
   # Licenses compatible with AGPL-3.0-or-later. MPL-2.0 only without the
   # "Incompatible With Secondary Licenses" notice (Exhibit B); go-licenses
   # does not see that notice, so check it by hand for a new MPL-2.0 module.
-  # Keep in sync with ALLOWED in web/scripts/check-licenses.mjs.
+  # Keep in sync with ALLOWED in web/scripts/check-licenses.mjs. That script
+  # also allows OFL-1.1, for the font packages under @fontsource/ only.
   ALLOWED: "0BSD,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,MIT,MPL-2.0"
 
 jobs:
