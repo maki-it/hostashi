@@ -101,7 +101,15 @@
   cursor: not-allowed;
   opacity: 0.55;
 }
-.ui-icon-btn::after {
+.ui-time {
+  position: relative;
+  white-space: nowrap;
+  text-decoration: underline dotted var(--line-strong);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.ui-icon-btn::after,
+.ui-time::after {
   content: attr(data-tip);
   position: absolute;
   bottom: calc(100% + 6px);
@@ -125,7 +133,9 @@
   bottom: auto;
 }
 .ui-icon-btn:hover::after,
-.ui-icon-btn:focus-visible::after {
+.ui-icon-btn:focus-visible::after,
+.ui-time:hover::after,
+.ui-time:focus-visible::after {
   opacity: 1;
 }
 .ui-row-actions {

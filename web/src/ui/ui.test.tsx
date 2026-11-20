@@ -5,7 +5,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { Badge, Button, Card, Field, IconButton, Notice, nextSort, sortRows, Table, tabPanelProps, Tabs } from ".";
+import { Badge, Button, Card, Field, IconButton, Notice, nextSort, relativeTime, RelTime, sortRows, Table, tabPanelProps, Tabs } from ".";
 import type { Column, Sort } from ".";
 
 describe("Button", () => {
@@ -215,5 +215,31 @@ describe("Table", () => {
   it("shows the empty text without rows", () => {
     render(<Harness rows={[]} />);
     expect(screen.getByRole("cell", { name: "No sites yet." })).toBeInTheDocument();
+  });
+});
+
+describe("relativeTime", () => {
+  const now = new Date("2026-11-20T12:00:00Z");
+  it.each([
+    ["2026-11-20T11:59:30Z", "just now"],
+    ["2026-11-20T11:55:00Z", "5 minutes ago"],
+    ["2026-11-20T09:00:00Z", "3 hours ago"],
+    ["2026-11-19T10:00:00Z", "yesterday"],
+    ["2026-11-17T12:00:00Z", "3 days ago"],
+    ["2026-11-06T12:00:00Z", "2 weeks ago"],
+    ["2026-08-20T12:00:00Z", "3 months ago"],
+    ["2024-11-20T12:00:00Z", "2 years ago"],
+    ["2026-11-20T14:00:00Z", "in 2 hours"],
+    ["not a date", ""],
+  ])("%s", (iso, want) => {
+    expect(relativeTime(new Date(iso), now)).toBe(want);
+  });
+
+  it("shows the exact time in a tooltip and the label", () => {
+    render(<RelTime iso="2026-11-17T12:00:00Z" now={now} />);
+    const t = screen.getByText("3 days ago");
+    expect(t).toHaveAttribute("datetime", "2026-11-17T12:00:00Z");
+    expect(t.getAttribute("data-tip")).toMatch(/17 Nov 2026/);
+    expect(t).toHaveAccessibleName(/^3 days ago, 17 Nov 2026/);
   });
 });
