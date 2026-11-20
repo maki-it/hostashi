@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Installs PHP %i from sury.org (ADR-0036). The agent starts an instance
+# when an admin installs a version in the panel; the script checks %i
+# against its own allowlist, so the instance name cannot pick a package.
+# It runs apt and the packages' maintainer scripts, so it needs root and a
+# writable system: no ProtectSystem here, unlike the other Hostashi units.
+
+[Unit]
+Description=Install PHP %i for Hostashi
+Documentation=https://github.com/maki-it/hostashi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/hostashi/php-install install %i
+TimeoutStartSec=15min
+# No core dumps (ADR-0033).
+LimitCORE=0
+PrivateTmp=yes
+# The agent reads this log for the panel (php.install.status); the
+# installer creates the directory.
+StandardOutput=truncate:/var/lib/hostashi-agent/php-install/%i.log
+StandardError=inherit

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/maki-it/hostashi/internal/agentapi"
 )
 
 // systemUnits are the units outside the sites whose state the agent may
@@ -39,4 +41,49 @@ const FirewallUnit = "hostashi-firewall.service"
 // rules and makes the call fail.
 func ReloadFirewall(ctx context.Context) error {
 	return run(ctx, Systemctl, "reload-or-restart", FirewallUnit)
+}
+
+// InstallUnits starts and reads hostashi-php-install@<version>.service,
+// the fixed unit that installs more PHP versions (ADR-0036). The version
+// must be one of agentapi.PHPVersions; the script behind the unit checks it
+// again.
+type InstallUnits struct{}
+
+func installUnit(version string) (string, error) {
+	if err := agentapi.ValidatePHPVersion(version); err != nil {
+		return "", err
+	}
+
+	return "hostashi-php-install@" + version + ".service", nil
+}
+
+// Start queues the unit (systemctl start --no-block): apt may run for
+// minutes, the agent does not wait for it.
+func (InstallUnits) Start(ctx context.Context, version string) error {
+	unit, err := installUnit(version)
+	if err != nil {
+		return err
+	}
+
+	return run(ctx, Systemctl, "start", "--no-block", unit)
+}
+
+// Active reports whether the unit is running or about to.
+func (InstallUnits) Active(ctx context.Context, version string) (bool, error) {
+	unit, err := installUnit(version)
+	if err != nil {
+		return false, err
+	}
+
+	out, err := output(ctx, Systemctl, "show", "--property=ActiveState", "--value", unit)
+	if err != nil {
+		return false, err
+	}
+
+	switch strings.TrimSpace(out) {
+	case "active", "activating", "reloading":
+		return true, nil
+	}
+
+	return false, nil
 }

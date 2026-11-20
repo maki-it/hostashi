@@ -450,136 +450,44 @@ do_php() {
   done
 }
 
-# More PHP versions from sury.org (ADR-0019), only on request with
-# --php-versions. The distribution's PHP stays the default and stays on the
-# distribution's packages: a generated pin (Spike S10) gives sury.org
-# priority 100 and 600 only to php-common and the packages of the extra
-# versions. The key is fetched with apt's own helper and accepted only with
-# exactly the pinned fingerprints. Requested versions are kept in the
-# installer's state, so a later run without the option keeps them.
-# Removing a version is not part of the installer yet.
-SURY_URL=https://packages.sury.org/php
-SURY_FPRS="15058500A0235D97F5D10063B188E2B695BD4743 45BEA3E529112086C622F8A4B214EAC28059B8AC"
-SURY_KEYRING=/usr/share/keyrings/hostashi-sury-php.gpg
-SURY_SOURCE=/etc/apt/sources.list.d/hostashi-sury-php.sources
-SURY_PIN=/etc/apt/preferences.d/hostashi-sury-php
-PHP_STATE=$STATE_DIR/php-versions
-# Below this many days before the key expires, the installer fetches it again.
-SURY_KEY_MIN_DAYS=60
-LEGACY_PHP_VERSIONS=(7.4 8.1 8.2)
+# More PHP versions from sury.org (ADR-0019, ADR-0036). The step always
+# installs the script packaging/php/php-install and its unit
+# hostashi-php-install@.service, which the panel starts to install a
+# version; with --php-versions it also runs the script for those versions.
+# The script keeps the requested versions, so a later run without the
+# option keeps them, and pins the distribution's PHP as the default.
+PHP_INSTALL_SRC=${HOSTASHI_PHP_SRC:-$HERE/php}/php-install
+PHP_INSTALL_BIN=/usr/local/lib/hostashi/php-install
+PHP_INSTALL_UNIT=hostashi-php-install@.service
+PHP_INSTALL_LOGS=/var/lib/hostashi-agent/php-install
 
 php_allowed() { local v; for v in "${PHP_VERSIONS[@]}"; do [ "$v" = "$1" ] && return 0; done; return 1; }
-php_legacy() { local v; for v in "${LEGACY_PHP_VERSIONS[@]}"; do [ "$v" = "$1" ] && return 0; done; return 1; }
-
-# php_default prints the distribution's PHP version, from the php-fpm
-# package the php step installed (Debian 13: 8.4, Ubuntu 26.04: 8.5).
-php_default() {
-  local dep
-  dep=$(dpkg-query -W -f='${Depends}' php-fpm 2>/dev/null) || return 1
-  dep=${dep%%[ ,|]*}
-  case "$dep" in php[0-9].[0-9]-fpm) dep=${dep#php}; echo "${dep%-fpm}";; *) return 1;; esac
-}
-
-# php_extra prints the requested versions without the default, in the order
-# of PHP_VERSIONS: the ones from --php-versions plus the ones of earlier runs.
-php_extra() {
-  local def v want
-  def=$(php_default) || { case "$OS_ID-$OS_VER" in debian-13) def=8.4;; ubuntu-26.04) def=8.5;; *) def="";; esac; }
-  want=" $(tr ',\n' '  ' <<<"$PHP_REQUEST") $(cat "$PHP_STATE" 2>/dev/null | tr '\n' ' ') "
-  for v in "${PHP_VERSIONS[@]}"; do
-    [ "$v" != "$def" ] || continue
-    case "$want" in *" $v "*) echo "$v";; esac
-  done
-}
-
-php_ext_pkgs() { local e; for e in fpm cli mysql curl gd mbstring xml zip intl bcmath; do echo "php$1-$e"; done; }
-
-sury_codename() {
-  # shellcheck source=/dev/null
-  (. "$OS_RELEASE" && echo "${VERSION_CODENAME:-}")
-}
-sury_source() {
-  printf '# Managed by the Hostashi installer (ADR-0019): more PHP versions.\n'
-  printf 'Types: deb\nURIs: %s\nSuites: %s\nComponents: main\nSigned-By: %s\n' "$SURY_URL" "$(sury_codename)" "$SURY_KEYRING"
-}
-sury_pin() {
-  local v list="php-common"
-  for v in $(php_extra); do list="$list php$v*"; done
-  printf '# Managed by the Hostashi installer (ADR-0019, Spike S10). The default PHP\n'
-  printf '# stays on the distribution; only the extra versions come from sury.org.\n'
-  printf 'Package: *\nPin: origin packages.sury.org\nPin-Priority: 100\n\n'
-  printf 'Package: %s\nPin: origin packages.sury.org\nPin-Priority: 600\n' "$list"
-}
-
-# sury_key_check FILE prints the problem with a keyring: the fingerprints
-# must be exactly SURY_FPRS and the key must not expire too soon.
-sury_key_check() {
-  local home fprs exp now rc=0
-  command -v gpg >/dev/null || { echo "gpg not installed"; return 1; }
-  home=$(mktemp -d) || return 1
-  fprs=$(GNUPGHOME=$home gpg --batch --with-colons --show-keys "$1" 2>/dev/null | awk -F: '$1 == "fpr" { print $10 }' | sort | tr '\n' ' ')
-  exp=$(GNUPGHOME=$home gpg --batch --with-colons --show-keys "$1" 2>/dev/null | awk -F: '$1 == "pub" { print $7 }' | head -1)
-  rm -rf "$home"
-  if [ "$fprs" != "$(tr ' ' '\n' <<<"$SURY_FPRS" | sort | tr '\n' ' ')" ]; then
-    echo "key has unexpected fingerprints: $fprs"; rc=1
-  elif [ -n "$exp" ]; then
-    now=$(date +%s)
-    [ "$exp" -gt $((now + SURY_KEY_MIN_DAYS * 86400)) ] || { echo "key expires on $(date -u -d "@$exp" +%F)"; rc=1; }
-  fi
-  return "$rc"
-}
+php_requested() { tr ',' ' ' <<<"$PHP_REQUEST"; }
 
 chk_phpversions() {
-  local v p u extra why
-  extra=$(php_extra)
-  [ -n "$extra" ] || return 0
-  [ -f "$SURY_KEYRING" ] && [ ! -L "$SURY_KEYRING" ] && [ "$(stat -c '%a %U:%G' "$SURY_KEYRING")" = "644 root:root" ] ||
-    { echo "sury.org key missing"; return 1; }
-  why=$(sury_key_check "$SURY_KEYRING") || { echo "sury.org $why"; return 1; }
-  sury_source | file_matches "$SURY_SOURCE" 0644 root:root || { echo "sury.org source differs"; return 1; }
-  sury_pin | file_matches "$SURY_PIN" 0644 root:root || { echo "sury.org pin differs"; return 1; }
-  for v in $extra; do
-    for p in $(php_ext_pkgs "$v"); do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
-    grep -qx "$v" "$PHP_STATE" 2>/dev/null || { echo "PHP $v not recorded"; return 1; }
-  done
-  for u in $(distro_fpm_units); do
-    [ "$(systemctl is-enabled "$u" 2>/dev/null)" != enabled ] || { echo "$u is enabled"; return 1; }
-    [ "$(systemctl is-active "$u" 2>/dev/null)" != active ] || { echo "$u is running"; return 1; }
-  done
+  local why d=${PHP_INSTALL_BIN%/*}
+  dir_ok "$d" 755 root:root || { echo "$d"; return 1; }
+  dir_ok "$PHP_INSTALL_LOGS" 700 root:root || { echo "$PHP_INSTALL_LOGS"; return 1; }
+  file_matches "$PHP_INSTALL_BIN" 0755 root:root <"$PHP_INSTALL_SRC" || { echo "php-install differs"; return 1; }
+  file_matches "/etc/systemd/system/$PHP_INSTALL_UNIT" 0644 root:root <"$UNIT_DIR/$PHP_INSTALL_UNIT" || { echo "$PHP_INSTALL_UNIT differs"; return 1; }
+  # shellcheck disable=SC2046 # one version per word
+  why=$(HOSTASHI_STATE_DIR=$STATE_DIR HOSTASHI_OS_RELEASE=$OS_RELEASE "$PHP_INSTALL_SRC" check $(php_requested)) || { echo "$why"; return 1; }
 }
 do_phpversions() {
-  local v u tmp why rc pkgs=() extra
-  extra=$(php_extra)
-  for v in $extra; do
-    ! php_legacy "$v" || log "WARNING: PHP $v gets no or only security fixes upstream (legacy, ADR-0019)"
-  done
-  if ! command -v gpg >/dev/null; then
-    apt-get update -qq >>"$LOG" 2>&1 &&
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends gpg >>"$LOG" 2>&1 || return 1
+  local rc
+  install -d -m 0755 -o root -g root "${PHP_INSTALL_BIN%/*}" || return 1
+  install -d -m 0700 -o root -g root "$PHP_INSTALL_LOGS" || return 1
+  write_file "$PHP_INSTALL_BIN" 0755 root:root <"$PHP_INSTALL_SRC"; [ $? -le 1 ] || return 1
+  write_file "/etc/systemd/system/$PHP_INSTALL_UNIT" 0644 root:root <"$UNIT_DIR/$PHP_INSTALL_UNIT"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  if [ "$rc" = 0 ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
+  # shellcheck disable=SC2046 # one version per word
+  if ! HOSTASHI_STATE_DIR=$STATE_DIR HOSTASHI_OS_RELEASE=$OS_RELEASE "$PHP_INSTALL_BIN" check $(php_requested) >/dev/null; then
+    [ -n "$PHP_REQUEST" ] || set -- $(cat "$STATE_DIR/php-versions" 2>/dev/null)
+    # shellcheck disable=SC2046 # one version per word
+    HOSTASHI_STATE_DIR=$STATE_DIR HOSTASHI_OS_RELEASE=$OS_RELEASE "$PHP_INSTALL_BIN" install $(php_requested) "$@" 2>&1 | tee -a "$LOG" | grep -E 'WARNING|REFUSED|cannot' >&2
+    [ "${PIPESTATUS[0]}" = 0 ] || return 1
   fi
-  if [ ! -f "$SURY_KEYRING" ] || ! sury_key_check "$SURY_KEYRING" >/dev/null; then
-    tmp=$(mktemp) || return 1
-    if ! /usr/lib/apt/apt-helper download-file "$SURY_URL/apt.gpg" "$tmp" >>"$LOG" 2>&1; then
-      rm -f "$tmp"; log "cannot download the sury.org key"; return 1
-    fi
-    if ! why=$(sury_key_check "$tmp"); then
-      rm -f "$tmp"; log "REFUSED the sury.org key: $why"; return 1
-    fi
-    write_file "$SURY_KEYRING" 0644 root:root <"$tmp"; rc=$?
-    rm -f "$tmp"
-    [ "$rc" -le 1 ] || return 1
-  fi
-  # The pin first: without it the next apt run would move the default PHP
-  # to sury.org (Spike S10).
-  sury_pin | write_file "$SURY_PIN" 0644 root:root; [ $? -le 1 ] || return 1
-  sury_source | write_file "$SURY_SOURCE" 0644 root:root; [ $? -le 1 ] || return 1
-  for v in $extra; do mapfile -t -O "${#pkgs[@]}" pkgs < <(php_ext_pkgs "$v"); done
-  apt-get update -qq >>"$LOG" 2>&1 &&
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${pkgs[@]}" >>"$LOG" 2>&1 || return 1
-  for u in $(distro_fpm_units); do
-    systemctl disable --now "$u" >>"$LOG" 2>&1 || return 1
-  done
-  printf '%s\n' "$extra" | write_file "$PHP_STATE" 0600 root:root; [ $? -le 1 ] || return 1
 }
 
 # MariaDB from the distribution (ADR-0024). The package defaults stay: it
@@ -830,11 +738,11 @@ uu_origins() {
             printf '\t"origin=UbuntuESM,archive=${distro_codename}-infra-security";\n';;
     *) return 1;;
   esac
-  # sury.org has no separate security archive: every update of the extra
-  # versions is a fix of that version. The pin keeps the default PHP on
-  # the distribution, also for unattended-upgrades.
-  # shellcheck disable=SC2016
-  [ -z "$(php_extra)" ] || printf '\t"origin=deb.sury.org,archive=${distro_codename}";\n'
+  # More PHP versions come from sury.org (ADR-0019), which has no separate
+  # security archive: every update there is a fix of an installed version.
+  # The pin keeps the default PHP on the distribution, also for
+  # unattended-upgrades. Without the source this origin matches nothing.
+  printf '\t"origin=deb.sury.org,archive=${distro_codename}";\n'
 }
 uu_render() {
   local origins
