@@ -7,11 +7,13 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/doctor"
 )
 
 // PHPInstaller is the agent's part of installing PHP versions (ADR-0036).
@@ -167,6 +169,22 @@ func registerPHPInstall(mux *routeMux, a authn, p PHPInstaller, st Settings, log
 }
 
 // phpVersionInfo is the end-of-life data the version list carries.
+// osReleasePath names the distribution; a variable for tests.
+var osReleasePath = "/etc/os-release"
+
+// distroPHP is the PHP version the server's distribution ships
+// (agentapi.DistroPHP), or "" when the distribution is unknown.
+func distroPHP() string {
+	b, err := os.ReadFile(osReleasePath)
+	if err != nil {
+		return ""
+	}
+
+	vals := doctor.ParseOSRelease(b)
+
+	return agentapi.DistroPHPVersion(vals["ID"], vals["VERSION_ID"])
+}
+
 func phpVersionInfo() (security, active map[string]string) {
 	security, active = map[string]string{}, map[string]string{}
 

@@ -79,3 +79,16 @@ var PHPInstall = agentrpc.Op[PHPInstallRequest, PHPInstallStatus]{Name: "php.ins
 
 // PHPInstallStatusOp reports the last installation (php.install.status).
 var PHPInstallStatusOp = agentrpc.Op[PHPInstallStatusRequest, PHPInstallStatus]{Name: "php.install.status"}
+
+// DistroPHP is the PHP version each supported distribution ships, by
+// os-release ID and VERSION_ID (ADR-0019, ADR-0020). The installer always
+// installs it; the panel marks it in the version list. A new entry in the
+// support matrix needs a line here.
+var DistroPHP = map[string]string{
+	"debian 13":    "8.4",
+	"ubuntu 26.04": "8.5",
+}
+
+// DistroPHPVersion is the PHP version of a distribution from DistroPHP, or
+// "" for one outside the support matrix.
+func DistroPHPVersion(id, versionID string) string { return DistroPHP[id+" "+versionID] }

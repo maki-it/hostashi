@@ -93,15 +93,9 @@ func fail(id, summary, hint string) Check {
 	return Check{ID: id, Status: agentapi.DoctorFail, Summary: summary, Hint: hint}
 }
 
-// OS checks the distribution against the support matrix.
-func (s System) OS() Check {
-	const id = "system.os"
-
-	b, err := os.ReadFile(s.osRelease())
-	if err != nil {
-		return warn(id, "cannot read "+s.osRelease(), "Hostashi supports Debian 13 and Ubuntu 26.04.")
-	}
-
+// ParseOSRelease reads the KEY=value lines of an os-release file, with the
+// quotes around a value removed.
+func ParseOSRelease(b []byte) map[string]string {
 	vals := map[string]string{}
 
 	sc := bufio.NewScanner(bytes.NewReader(b))
@@ -111,6 +105,20 @@ func (s System) OS() Check {
 			vals[k] = strings.Trim(v, `"'`)
 		}
 	}
+
+	return vals
+}
+
+// OS checks the distribution against the support matrix.
+func (s System) OS() Check {
+	const id = "system.os"
+
+	b, err := os.ReadFile(s.osRelease())
+	if err != nil {
+		return warn(id, "cannot read "+s.osRelease(), "Hostashi supports Debian 13 and Ubuntu 26.04.")
+	}
+
+	vals := ParseOSRelease(b)
 
 	name := vals["PRETTY_NAME"]
 	if name == "" {

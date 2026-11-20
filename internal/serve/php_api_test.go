@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 	"testing"
@@ -146,5 +148,34 @@ func TestPHPEOL(t *testing.T) {
 		if got := phpEOL(tc.v, day(tc.day)); got != tc.eol {
 			t.Errorf("%s on %s: %v", tc.v, tc.day, got)
 		}
+	}
+}
+
+func TestDistroPHP(t *testing.T) {
+	dir := t.TempDir()
+	old := osReleasePath
+
+	t.Cleanup(func() { osReleasePath = old })
+
+	for _, tc := range []struct{ release, want string }{
+		{"ID=debian\nVERSION_ID=\"13\"\n", "8.4"},
+		{"NAME=\"Ubuntu\"\nID=ubuntu\nVERSION_ID=\"26.04\"\n", "8.5"},
+		{"ID=ubuntu\nVERSION_ID=\"24.04\"\n", ""},
+		{"", ""},
+	} {
+		osReleasePath = filepath.Join(dir, "os-release")
+		if err := os.WriteFile(osReleasePath, []byte(tc.release), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		if got := distroPHP(); got != tc.want {
+			t.Errorf("%q: got %q, want %q", tc.release, got, tc.want)
+		}
+	}
+
+	osReleasePath = filepath.Join(dir, "missing")
+
+	if got := distroPHP(); got != "" {
+		t.Errorf("missing file: got %q", got)
 	}
 }

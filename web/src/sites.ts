@@ -41,6 +41,8 @@ export type PHPVersions = {
   // End of security fixes and of active support per version (ADR-0036), YYYY-MM-DD.
   securityUntil?: Record<string, string>;
   activeUntil?: Record<string, string>;
+  // The version the distribution ships, "" on an unknown distribution.
+  distro?: string;
 };
 
 export type NewSite = { name: string; php: string; domains: string[]; tls: boolean; hsts: boolean };

@@ -2,6 +2,7 @@
 
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { daysUntil, support } from "./php";
 import { PHPPage } from "./PHP";
@@ -13,7 +14,9 @@ const versions = {
   legacy: ["7.4", "8.1", "8.2"],
   securityUntil: { "7.4": "2022-11-28", "8.1": "2025-12-31", "8.2": "2026-12-31", "8.3": "2027-12-31", "8.4": "2028-12-31", "8.5": "2029-12-31" },
   activeUntil: { "8.2": "2024-12-31", "8.3": "2025-12-31", "8.4": "2026-12-31", "8.5": "2027-12-31" },
+  distro: "8.4",
 };
+const sites = { body: { sites: [{ name: "blog", php: "8.4" }, { name: "shop", php: "8.4" }, { name: "old", php: "7.4" }] } };
 const idle = { state: "idle", log: [], repository: true, newer: ["8.7"] };
 const today = "2026-11-20";
 
@@ -31,17 +34,41 @@ describe("support", () => {
 
 describe("PHPPage", () => {
   it("lists the versions with their support, warns before the end and greys out newer ones", async () => {
-    mockFetch({ "GET /api/v1/php/versions": { body: versions }, "GET /api/v1/php/install": { body: idle } });
+    mockFetch({ "GET /api/v1/php/versions": { body: versions }, "GET /api/v1/php/install": { body: idle }, "GET /api/v1/sites": sites });
     render(<PHPPage today={today} />);
 
-    const row = (v: string) => within(screen.getByRole("row", { name: new RegExp("^PHP " + v.replace(".", "\\.") + " ") }));
+    const row = (v: string) => within(screen.getByRole("row", { name: new RegExp("^PHP " + v.replace(".", "\\.") + "(\\D|$)") }));
     expect(await screen.findByRole("heading", { name: "PHP versions" })).toBeInTheDocument();
+    await screen.findByRole("columnheader", { name: "Sites" });
     expect(row("8.4").getByText("Installed")).toBeInTheDocument();
+    expect(row("8.4").getByText("Distribution")).toBeInTheDocument();
+    expect(row("8.4").getByRole("cell", { name: "2" })).toBeInTheDocument();
+    expect(row("8.5").queryByText("Distribution")).not.toBeInTheDocument();
     expect(row("8.5").getByText("Supported")).toBeInTheDocument();
     expect(row("8.2").getByText("Security fixes end in 41 days. Move its sites to a newer version.")).toBeInTheDocument();
     expect(row("7.4").getByText("End of life")).toBeInTheDocument();
-    expect(row("8.7").getByText(/not yet released for Hostashi/)).toBeInTheDocument();
-    expect(row("8.7").queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByText("Not yet released for Hostashi: PHP 8.7")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Install PHP 8.7" })).not.toBeInTheDocument();
+  });
+
+  it("lists the newest version first and filters to installed ones", async () => {
+    const user = userEvent.setup();
+    mockFetch({ "GET /api/v1/php/versions": { body: versions }, "GET /api/v1/php/install": { body: idle }, "GET /api/v1/sites": sites });
+    function Harness() {
+      const [query, setQuery] = useState(new URLSearchParams());
+      return <PHPPage today={today} query={query} onQuery={setQuery} />;
+    }
+    render(<Harness />);
+    const table = await screen.findByRole("table", { name: "PHP versions" });
+    const names = () =>
+      within(table)
+        .getAllByRole("row")
+        .slice(1)
+        .map((r) => within(r).getAllByRole("cell")[0]!.querySelector("strong")?.textContent);
+    expect(names()).toEqual(["PHP 8.5", "PHP 8.4", "PHP 8.3", "PHP 8.2", "PHP 8.1", "PHP 7.4"]);
+    expect(within(table).getByRole("columnheader", { name: "Version" })).toHaveAttribute("aria-sort", "descending");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Show" }), "installed");
+    expect(names()).toEqual(["PHP 8.4"]);
   });
 
   it("installs a supported version and follows the log", async () => {
