@@ -41,6 +41,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0035 | Users and roles | Accepted on 2026-11-20 ([adr/0035](adr/0035-users-and-roles.md)) | Done |
 | 0036 | Installing PHP versions from the panel | Accepted on 2026-11-20 ([adr/0036](adr/0036-php-versions-from-the-panel.md)) | In progress |
 | 0037 | Panel UI redesign: layout, look and themes | Proposed ([adr/0037](adr/0037-panel-ui-redesign.md)) | No |
+| 0038 | Web database tool with short-lived access | Proposed ([adr/0038](adr/0038-web-database-tool.md)) | No |
 
 ---
 
@@ -289,3 +290,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0037 Panel UI redesign: layout, look and themes
 
 **Full text (status Proposed, 2026-11-20):** [adr/0037](adr/0037-panel-ui-redesign.md). Summary: the current panel is one narrow column with 12 links in a top row and one long card per site. After a clickable mockup with three looks, Kim chose a new layout and the neutral look A for now. Recommended: a fixed sidebar with grouped navigation, list pages as tables with one primary action, and a page per site with tabs that are part of the address (`#/sites/<name>/php`); hash routing kept. Own small component set on CSS tokens (no UI library, fits the strict CSP), Lucide icons (ISC) and Inter self-hosted (OFL-1.1, added to the npm allowlist for fonts). Light, dark or "follow system" stored per user on the server; the theme name is stored too, so the looks B (Maki) and C (Konsole) can be added later as themes. WCAG 2.2 AA. Six steps, one PR each.
+
+## ADR-0038 Web database tool with short-lived access
+
+**Full text (status Proposed, 2026-11-20):** [adr/0038](adr/0038-web-database-tool.md). Summary: Kim wants to browse and edit database contents from the panel in v1. Recommended: Adminer as a pinned MySQL-only single file with a Hostashi wrapper, in its own PHP-FPM pool under its own system user, served by nginx on its own port 8444 so that a bug in Adminer cannot reach the panel's origin. Each opening creates a temporary MariaDB user for one database (30 minutes or 2 hours, optionally read-only), handed over through a one-time ticket on the server, so no password reaches the browser and Hostashi still stores none. No new `os/exec` exception. Open: whether the role `user` may write.
