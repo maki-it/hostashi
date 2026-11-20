@@ -47,6 +47,7 @@ func TestWebApplyRequestValidate(t *testing.T) {
 		"unknown php":       {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "8.0"}}},
 		"php path":          {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "../8.4"}}},
 		"negative workers":  {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "8.4", PHPWorkers: -1}}},
+		"programs, no PHP":  {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHPPrograms: true}}},
 		"too many workers":  {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "8.4", PHPWorkers: MaxPHPWorkers + 1}}},
 		"disabled with php": {Sites: []WebSite{{User: "blog", Domains: []string{"a.example.com"}, PHP: "8.4", Disabled: true}}},
 	} {

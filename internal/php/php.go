@@ -54,7 +54,14 @@ type Pool struct {
 	Home    string `json:"home"` // the site's home directory, the open_basedir
 	// Workers is pm.max_children, 0 for agentapi.DefaultPHPWorkers.
 	Workers int `json:"workers,omitempty"`
+	// Programs lets the site's PHP start programs (exec, system, ...).
+	// Without it those functions are disabled (ADR-0033).
+	Programs bool `json:"programs,omitempty"`
 }
+
+// DisabledFunctions are the PHP functions that start programs. A pool
+// disables them unless the site allows programs (ADR-0033).
+const DisabledFunctions = "exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec"
 
 // Errors of the manager.
 var (
@@ -166,6 +173,12 @@ php_admin_value[upload_tmp_dir] = /tmp
 php_admin_value[sys_temp_dir] = /tmp
 php_admin_value[session.save_path] = /tmp
 php_admin_flag[allow_url_include] = off
+php_admin_flag[session.use_strict_mode] = on
+php_admin_flag[session.cookie_httponly] = on
+{{- if not .P.Programs}}
+; The site may not start programs (ADR-0033); the panel switches this per site.
+php_admin_value[disable_functions] = {{.Disabled}}
+{{- end}}
 `))
 
 // Render returns the pool file of p.
@@ -181,7 +194,7 @@ func (m *Manager) Render(p Pool) ([]byte, error) {
 		return nil, fmt.Errorf("%w: %d workers", ErrInvalid, p.Workers)
 	}
 
-	if err := poolTmpl.Execute(&b, map[string]any{"P": p, "Socket": m.Socket(p.User), "Group": m.WebGroup, "Workers": workers}); err != nil {
+	if err := poolTmpl.Execute(&b, map[string]any{"P": p, "Socket": m.Socket(p.User), "Group": m.WebGroup, "Workers": workers, "Disabled": DisabledFunctions}); err != nil {
 		return nil, fmt.Errorf("php: render pool %s: %w", p.User, err)
 	}
 

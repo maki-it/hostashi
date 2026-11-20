@@ -21,6 +21,7 @@ export type Site = {
   pool: string;
   state: "creating" | "active" | "deleting" | string;
   php: string; // "" for no PHP
+  phpPrograms: boolean; // PHP may start programs (exec, system, ...)
   disabled: boolean; // answers 503, PHP stopped
   maintenance: SiteMaintenance;
   domains: string[]; // the first one is the primary domain
@@ -48,6 +49,8 @@ export const setPHP = (name: string, php: string) => request<Site>("PUT", sitePa
 export const setTLS = (name: string, enabled: boolean) => request<Site>("PUT", sitePath(name) + "/tls", { enabled });
 export const setDisabled = (name: string, disabled: boolean) => request<Site>("PUT", sitePath(name) + "/disabled", { disabled });
 export const setHSTS = (name: string, enabled: boolean) => request<Site>("PUT", sitePath(name) + "/hsts", { enabled });
+export const setPHPPrograms = (name: string, enabled: boolean) =>
+  request<Site>("PUT", sitePath(name) + "/php-programs", { enabled });
 
 // Mirrors of the agent's rules (internal/agentapi) so a form can say what is
 // wrong before a request. The server checks again.

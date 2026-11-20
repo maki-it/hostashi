@@ -134,6 +134,19 @@ func TestRender(t *testing.T) {
 		t.Errorf("default workers missing in\n%s", b)
 	}
 
+	// Programs are off unless the site allows them (ADR-0033).
+	const disabled = "\nphp_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec\n"
+	for _, want := range []string{disabled, "\nphp_admin_flag[session.use_strict_mode] = on\n", "\nphp_admin_flag[session.cookie_httponly] = on\n"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("missing %q in\n%s", want, b)
+		}
+	}
+
+	b, err = m.Render(Pool{User: "blog", Version: "8.4", Home: "/home/blog", Programs: true})
+	if err != nil || strings.Contains(string(b), "disable_functions") || !strings.Contains(string(b), "session.use_strict_mode") {
+		t.Errorf("programs allowed: %v\n%s", err, b)
+	}
+
 	b, err = m.Render(Pool{User: "blog", Version: "8.4", Home: "/home/blog", Workers: 12})
 	if err != nil || !strings.Contains(string(b), "\npm.max_children = 12\n") {
 		t.Errorf("12 workers: %v\n%s", err, b)
@@ -336,18 +349,20 @@ func TestRenderedPoolPassesRealPHPFPM(t *testing.T) {
 	dir := t.TempDir()
 	m := &Manager{Dir: dir, SocketDir: dir, WebGroup: name}
 
-	b, err := m.Render(Pool{User: name, Version: versions[0], Home: dir})
-	if err != nil {
-		t.Fatal(err)
-	}
+	for _, programs := range []bool{false, true} {
+		b, err := m.Render(Pool{User: name, Version: versions[0], Home: dir, Programs: programs})
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	conf := filepath.Join(dir, "pool.conf")
-	if err := os.WriteFile(conf, b, 0o600); err != nil {
-		t.Fatal(err)
-	}
+		conf := filepath.Join(dir, "pool.conf")
+		if err := os.WriteFile(conf, b, 0o600); err != nil {
+			t.Fatal(err)
+		}
 
-	if err := (phpctl.Controller{}).Test(t.Context(), versions[0], conf); err != nil {
-		t.Fatal(fmt.Errorf("%w\n%s", err, b))
+		if err := (phpctl.Controller{}).Test(t.Context(), versions[0], conf); err != nil {
+			t.Fatal(fmt.Errorf("programs %v: %w\n%s", programs, err, b))
+		}
 	}
 }
 

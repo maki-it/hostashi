@@ -139,6 +139,45 @@ func (s *Service) SetHSTS(ctx context.Context, actor int64, name string, on bool
 	return s.Get(ctx, name)
 }
 
+// SetPHPPrograms lets the PHP of an active site start programs (exec,
+// system, ...) or forbids it again (ADR-0033). Allowing it weakens the
+// site's sandbox, so both directions go to the audit log.
+func (s *Service) SetPHPPrograms(ctx context.Context, actor int64, name string, on bool) (store.Site, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	site, err := s.Get(ctx, name)
+	if err != nil {
+		return store.Site{}, err
+	}
+
+	if site.State != store.SiteActive {
+		return store.Site{}, ErrState
+	}
+
+	old, err := s.st.SetSitePHPPrograms(ctx, name, on, s.now())
+	if err != nil {
+		return store.Site{}, err
+	}
+
+	if err := s.applyWeb(ctx); err != nil {
+		if _, rerr := s.st.SetSitePHPPrograms(context.WithoutCancel(ctx), name, old, s.now()); rerr != nil {
+			s.log.ErrorContext(ctx, "restore php programs setting after failed change", "site", name, "err", rerr)
+		}
+
+		return store.Site{}, err
+	}
+
+	action := "site.php_programs.off"
+	if on {
+		action = "site.php_programs.on"
+	}
+
+	s.audit(ctx, actor, action, name, nil)
+
+	return s.Get(ctx, name)
+}
+
 // SetDisabled disables or enables an active site. A disabled site answers
 // every request with 503 and its PHP pool is stopped; its account, files,
 // databases, certificate and renewal stay.

@@ -256,6 +256,11 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 		t.Fatalf("site %+v %v", s, err)
 	}
 
+	// The old site may have called programs from PHP: it keeps that (ADR-0033).
+	if !s.PHPPrograms {
+		t.Fatal("imported PHP site without programs")
+	}
+
 	// The old home used 20 GiB and a million files: the limits leave 50 %.
 	sl, err := e.sites.SiteLimits(t.Context(), "shop")
 	if err != nil || !sl.Set || sl.Limits.DiskBytes < 30<<30 || sl.Limits.DiskInodes < 1_500_000 {

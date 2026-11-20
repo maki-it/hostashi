@@ -13,6 +13,7 @@ const site: Site = {
   pool: "default",
   state: "active",
   php: "8.4",
+  phpPrograms: false,
   disabled: false,
   maintenance: { enabled: false, page: "builtin-maintenance", allowIps: [] },
   domains: ["blog.example.com"],

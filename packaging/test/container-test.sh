@@ -351,6 +351,20 @@ for f in memory.max=268435456 pids.max=64 cpu.weight=200; do
     echo "note: no ${f%%=*} in the container's cgroup (controller not delegated)"
   fi
 done
+# PHP of a new site cannot start programs (ADR-0033); the switch per site
+# allows it and takes it back.
+xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/prog.php' <<'PHP'
+<?php
+echo function_exists("exec") ? "exec on" : "exec off";
+PHP
+prog() { x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/prog.php; }
+# prog_is WANT: the reload of the pool takes a moment to reach new workers.
+prog_is() { local _i; for _i in $(seq 1 10); do [ "$(prog)" = "$1" ] && return 0; sleep 0.5; done; return 1; }
+prog_is "exec off" || fail "new site may start programs: $(prog)"
+[ "$(api PUT /api/v1/sites/wp/php-programs '{"enabled":true}')" = 200 ] || fail "allow programs: $(x cat /tmp/api.out)"
+prog_is "exec on" || fail "programs still off after allowing them: $(prog)"
+[ "$(api PUT /api/v1/sites/wp/php-programs '{"enabled":false}')" = 200 ] || fail "forbid programs: $(x cat /tmp/api.out)"
+prog_is "exec off" || fail "programs still on after forbidding them: $(prog)"
 # The panel gave the new site the default preset; custom values through
 # the API reach the slice and the PHP pool.
 [ "$(api GET /api/v1/sites/wp/limits)" = 200 ] || fail "site limits: $(x cat /tmp/api.out)"

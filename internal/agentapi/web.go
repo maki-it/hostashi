@@ -67,6 +67,9 @@ type WebSite struct {
 	// PHPWorkers is the most PHP worker processes of the site's pool
 	// (ADR-0015), 0 for the default (DefaultPHPWorkers).
 	PHPWorkers int `json:"phpWorkers,omitempty"`
+	// PHPPrograms lets the site's PHP start programs (exec, system, ...);
+	// without it the pool disables those functions (ADR-0033).
+	PHPPrograms bool `json:"phpPrograms,omitempty"`
 	// TLS serves the site over HTTPS with its live certificate (tls.install)
 	// and redirects HTTP to HTTPS. The certificate must name every domain.
 	TLS bool `json:"tls,omitempty"`
@@ -242,6 +245,10 @@ func (r WebApplyRequest) Validate() error {
 
 		if s.PHPWorkers < 0 || s.PHPWorkers > MaxPHPWorkers {
 			return fmt.Errorf("site %q: php workers must be 0 (default) or between 1 and %d", s.User, MaxPHPWorkers)
+		}
+
+		if s.PHPPrograms && s.PHP == "" {
+			return fmt.Errorf("site %q: php programs need a PHP version", s.User)
 		}
 
 		if len(s.Domains) == 0 || len(s.Domains) > MaxDomainsPerSite {

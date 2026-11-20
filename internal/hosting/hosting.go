@@ -149,6 +149,9 @@ type CreateRequest struct {
 	// the site is on HTTPS.
 	TLS  bool
 	HSTS bool
+	// PHPPrograms lets the site's PHP start programs (ADR-0033). Off for
+	// new sites; an import turns it on, so the old site keeps working.
+	PHPPrograms bool
 	// Usage is what the site's files take on the old server, for an
 	// import: the site's disk limits are raised to fit it (ImportLimits).
 	Usage *Usage
@@ -235,6 +238,10 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, ErrNoTLS
 	}
 
+	if req.PHPPrograms && req.PHP == "" {
+		return store.Site{}, fmt.Errorf("%w: programs need a PHP version", ErrInvalid)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -284,7 +291,7 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 
 	s.audit(ctx, actor, "site.create", req.Name, map[string]string{
 		"pool": req.Pool, "php": req.PHP, "domains": strings.Join(domains, " "),
-		"tls": strconv.FormatBool(req.TLS), "hsts": strconv.FormatBool(req.HSTS),
+		"tls": strconv.FormatBool(req.TLS), "hsts": strconv.FormatBool(req.HSTS), "phpPrograms": strconv.FormatBool(req.PHPPrograms),
 	})
 
 	if req.TLS {
@@ -305,8 +312,9 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 	return site, nil
 }
 
-// storeTLSChoice keeps the HTTPS settings of a new site. Before its first
-// certificate they change nothing in the web server state.
+// storeTLSChoice keeps the HTTPS settings and the PHP programs switch of a
+// new site, before its first web state. HTTPS changes nothing there before
+// the first certificate.
 func (s *Service) storeTLSChoice(ctx context.Context, req CreateRequest) error {
 	if req.TLS {
 		if _, err := s.st.SetSiteTLS(ctx, req.Name, true, s.now()); err != nil {
@@ -316,6 +324,12 @@ func (s *Service) storeTLSChoice(ctx context.Context, req CreateRequest) error {
 
 	if req.HSTS {
 		if _, err := s.st.SetSiteHSTS(ctx, req.Name, true, s.now()); err != nil {
+			return err
+		}
+	}
+
+	if req.PHPPrograms {
+		if _, err := s.st.SetSitePHPPrograms(ctx, req.Name, true, s.now()); err != nil {
 			return err
 		}
 	}
@@ -541,6 +555,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 
 			if php != "" {
 				ws.PHPWorkers = phpWorkers(workers, site.ID)
+				ws.PHPPrograms = site.PHPPrograms
 			}
 
 			// The agent leaves them out while the site is disabled or in

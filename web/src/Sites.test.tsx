@@ -13,6 +13,7 @@ const blog: Site = {
   pool: "default",
   state: "active",
   php: "8.4",
+  phpPrograms: false,
   disabled: false,
   maintenance: { enabled: false, page: "builtin-maintenance", allowIps: [] },
   domains: ["blog.example.com", "www.blog.example.com"],
@@ -262,6 +263,43 @@ describe("Sites", () => {
       ["/api/v1/sites/blog/hsts", { enabled: false }],
       ["/api/v1/sites/blog/tls", { enabled: false }],
     ]);
+  });
+
+  it("lets PHP of a site start programs, and forbids it again", async () => {
+    const user = userEvent.setup();
+    let cur: Site = { ...blog };
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": () => ({ body: { sites: [cur] } }),
+      "PUT /api/v1/sites/blog/php-programs": (b: unknown) => {
+        cur = { ...cur, phpPrograms: (b as { enabled: boolean }).enabled };
+        return { body: cur };
+      },
+    });
+    render(<Sites />);
+    await user.click(await screen.findByRole("button", { name: "Change settings" }));
+    const box = within(screen.getByRole("group", { name: "Settings of blog" }));
+
+    const programs = box.getByLabelText(/^Allow PHP to start programs/);
+    expect(programs).not.toBeChecked();
+    await user.click(programs);
+    expect(await box.findByText("PHP of this site may start programs now.")).toBeInTheDocument();
+    expect(box.getByLabelText(/^Allow PHP to start programs/)).toBeChecked();
+    await user.click(box.getByLabelText(/^Allow PHP to start programs/));
+    expect(await box.findByText("PHP of this site can no longer start programs.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "PUT").map((c) => [c.path, c.body])).toEqual([
+      ["/api/v1/sites/blog/php-programs", { enabled: true }],
+      ["/api/v1/sites/blog/php-programs", { enabled: false }],
+    ]);
+  });
+
+  it("has no programs switch for a site without PHP", async () => {
+    const user = userEvent.setup();
+    mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [{ ...blog, php: "" }] } } });
+    render(<Sites />);
+    await user.click(await screen.findByRole("button", { name: "Change settings" }));
+    const box = within(screen.getByRole("group", { name: "Settings of blog" }));
+    expect(box.queryByLabelText(/^Allow PHP to start programs/)).not.toBeInTheDocument();
   });
 
   it("rejects bad domains and shows a refused change", async () => {
