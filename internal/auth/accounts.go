@@ -193,6 +193,46 @@ func (s *Service) ResetAccount(ctx context.Context, actor store.User, id int64, 
 	return out, nil
 }
 
+// RecoverAccount is the way back in for someone with root on the server
+// (ADR-0035): it resets the account like ResetAccount, enables it if it
+// was disabled, and returns a new invitation. No panel account acts, so
+// the audit log names root.
+func (s *Service) RecoverAccount(ctx context.Context, username string) (NewInvitation, store.Account, error) {
+	u, err := s.st.UserByUsername(ctx, username)
+	if err != nil {
+		return NewInvitation{}, store.Account{}, accountErr(err)
+	}
+
+	inv, out, err := s.newInvitation()
+	if err != nil {
+		return NewInvitation{}, store.Account{}, err
+	}
+
+	if err := s.st.ResetAccount(ctx, u.ID, inv); err != nil {
+		return NewInvitation{}, store.Account{}, accountErr(err)
+	}
+
+	detail := map[string]string{"id": idString(u.ID), "by": "root"}
+
+	if u.Disabled {
+		off := false
+		if _, _, err := s.st.UpdateAccount(ctx, u.ID, store.AccountChange{Disabled: &off}); err != nil {
+			return NewInvitation{}, store.Account{}, accountErr(err)
+		}
+
+		detail["disabled"] = "false"
+	}
+
+	_ = s.st.Audit(ctx, nil, "user.recover", u.Username, detail)
+
+	a, err := s.st.AccountByID(ctx, u.ID)
+	if err != nil {
+		return NewInvitation{}, store.Account{}, accountErr(err)
+	}
+
+	return out, a, nil
+}
+
 // SetSiteGrants replaces the sites granted to a user with the role user.
 func (s *Service) SetSiteGrants(ctx context.Context, actor store.User, id int64, sites []string, ip string) ([]string, error) {
 	a, err := s.st.AccountByID(ctx, id)

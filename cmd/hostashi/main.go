@@ -84,6 +84,10 @@ commands:
             again for the final sync
   cloudpanel import-run ID
             one import (root; started by hostashi-import@ID.service)
+  user recover [-public-url URL] NAME
+            reset NAME's password and second factors, enable the account
+            and print a new invitation link (root; the way back in when
+            the last admin is locked out)
   setup-token  print the one-time token for the first login (read as the serve user or root)
   version   print the version
 `
@@ -240,6 +244,17 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 
 			return 2
 		}
+	case "user":
+		dbPath := fs.String("db", store.DefaultPath, "SQLite database path")
+		publicURL := fs.String("public-url", "", "panel address for the link (default: from "+envFile+")")
+
+		if len(args) == 0 || args[0] != "recover" || fs.Parse(args[1:]) != nil || fs.NArg() != 1 {
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+
+		err = userRecover(ctx, euid, *dbPath, *publicURL, fs.Arg(0), stdout)
 	case "setup-token":
 		dbPath := fs.String("db", store.DefaultPath, "SQLite database path")
 		if fs.Parse(args) != nil || fs.NArg() != 0 {

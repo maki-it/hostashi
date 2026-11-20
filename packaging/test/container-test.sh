@@ -1106,4 +1106,17 @@ x grep -q '"repository":true' /tmp/api.out || fail "sury.org not reported: $(x c
 x grep -q '"installed":\[[^]]*"8.3"' /tmp/api.out || fail "PHP 8.3 not installed: $(x cat /tmp/api.out)"
 [ "$(api POST /api/v1/php/install '{"version":"8.3"}')" = 409 ] || fail "second install of 8.3: $(x cat /tmp/api.out)"
 
+step "root gets an account back (ADR-0035)"
+out=$(x /usr/local/bin/hostashi user recover kim) || fail "user recover: $out"
+echo "$out"
+inv=$(sed -n 's|^  https://[^/]*/#/invite/\([A-Za-z0-9_-]*\)$|\1|p' <<<"$out")
+[ -n "$inv" ] || fail "no invitation link with the panel address"
+# The command ran as the database's owner: nothing of the panel's is root's now.
+owners=$(x sh -c 'stat -c %U /var/lib/hostashi/hostashi.db*' | sort -u)
+[ "$owners" = hostashi ] || fail "database files owned by: $owners"
+[ "$(api GET /api/v1/auth/me)" = 401 ] || fail "the old session still works: $(x cat /tmp/api.out)"
+cookie=""
+[ "$(api POST /api/v1/invitations/accept "{\"token\":\"$inv\",\"password\":\"$pw-new\"}")" = 200 ] || fail "accept: $(x cat /tmp/api.out)"
+x grep -q '"secondFactorRequired":true' /tmp/api.out || fail "recovered admin without the second factor demand: $(x cat /tmp/api.out)"
+
 echo "PASS: installer test on $IMG"
