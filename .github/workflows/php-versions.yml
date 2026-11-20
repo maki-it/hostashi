@@ -1,0 +1,113 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Checks php.net and sury.org once a week for a new PHP minor version and
+# for changed support dates (ADR-0036). When it finds one it opens (or
+# updates) a pull request from the branch automation/php-versions that
+# updates the allowlist, the installer, php-install and the support dates.
+# The installer test in the Go workflow then installs the newest version
+# through the panel API and serves a site with it. Nothing is merged
+# automatically: a maintainer reviews and merges the pull request.
+#
+# Pull requests opened with GITHUB_TOKEN start no pull_request workflows,
+# so this workflow starts the checks on the branch itself. Creating the
+# pull request needs "Allow GitHub Actions to create and approve pull
+# requests" in the repository's Actions settings.
+name: PHP versions
+
+on:
+  schedule:
+    # Mondays 05:23 UTC, after Renovate (before 6am Europe/Berlin).
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/phpversions/**"
+      - ".github/workflows/php-versions.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: php-versions-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BRANCH: automation/php-versions
+
+jobs:
+  check:
+    name: Check php.net and sury.org
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Only scheduled and manual runs push; pull requests only report.
+          persist-credentials: ${{ github.event_name != 'pull_request' }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check and update the files
+        run: |
+          go run ./tools/phpversions -write -summary "$RUNNER_TEMP/summary.md"
+          cat "$RUNNER_TEMP/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          git diff --stat
+      - name: Run the tests the change affects
+        run: go test ./internal/agentapi/ ./internal/phpinstall/ ./tools/phpversions/
+      - name: Open or update the pull request
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          if git diff --quiet; then
+            echo "Nothing to change."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git commit -q -s -a -m "php: update PHP versions from php.net and sury.org" \
+            -m "Found by the weekly PHP versions workflow (ADR-0036)."
+          # The same change as on the open branch: do not push again, so the
+          # checks and reviews on it stay.
+          if git fetch -q origin "$BRANCH" 2>/dev/null && git diff --quiet FETCH_HEAD HEAD; then
+            echo "The branch already has this change."
+            exit 0
+          fi
+          git push -f origin "$BRANCH"
+
+          {
+            echo "## What"
+            echo
+            echo "The weekly PHP versions workflow found:"
+            echo
+            cat "$RUNNER_TEMP/summary.md"
+            echo
+            echo "Sources: php.net/releases/active.php, php.net/supported-versions.php and the sury.org package lists, checked $(date -u +%F)."
+            echo
+            echo "## Before merging"
+            echo
+            echo "- [ ] The Go, Web, REUSE and Licenses runs on this branch are green, including both installer tests. The installer test installs the newest version through the panel API, checks the unit exposure and serves a site with mysqli, gd and intl."
+            echo "- [ ] For a new version: add a line to ADR-0019 (decision) and ADR-0036 (consequences) like the one for PHP 8.6."
+            echo
+            echo "This pull request is never merged automatically."
+          } > "$RUNNER_TEMP/body.md"
+
+          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -z "$pr" ]; then
+            gh pr create --repo "$REPO" --base main --head "$BRANCH" \
+              --title "php: update PHP versions from php.net and sury.org" \
+              --body-file "$RUNNER_TEMP/body.md" --label enhancement --assignee kimdre
+          else
+            gh pr edit "$pr" --repo "$REPO" --body-file "$RUNNER_TEMP/body.md"
+          fi
+
+          for wf in go.yml web.yml reuse.yml licenses.yml; do
+            gh workflow run "$wf" --repo "$REPO" --ref "$BRANCH"
+          done

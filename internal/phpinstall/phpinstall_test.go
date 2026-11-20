@@ -66,7 +66,7 @@ func TestStart(t *testing.T) {
 		t.Fatalf("started %v", u.started)
 	}
 
-	for _, v := range []string{"8.0", "8.7", "", "8.1 ", "../8.1", "8.1;reboot"} {
+	for _, v := range []string{"8.0", "9.9", "", "8.1 ", "../8.1", "8.1;reboot"} {
 		if _, err := m.Start(ctx, v); err == nil {
 			t.Errorf("%q accepted", v)
 		}
@@ -146,7 +146,10 @@ func TestStatusTailsLongLogs(t *testing.T) {
 func TestNewer(t *testing.T) {
 	root := t.TempDir()
 	m := &Manager{Root: root}
-	lists := "Package: php8.7-fpm\nVersion: 8.7.0-1\n\nPackage: php8.6-fpm\n\nPackage: php9.0-fpm\n\nPackage: php8.10-fpm\n\nPackage: php8.7-fpm-dbg\n\nPackage: php5.6-fpm\n"
+	// The newest version on the list is not newer; the test does not break
+	// when the weekly workflow adds a version (ADR-0036).
+	newest := agentapi.PHPVersions[len(agentapi.PHPVersions)-1]
+	lists := "Package: php9.8-fpm\nVersion: 9.8.0-1\n\nPackage: php" + newest + "-fpm\n\nPackage: php10.0-fpm\n\nPackage: php9.10-fpm\n\nPackage: php9.8-fpm-dbg\n\nPackage: php5.6-fpm\n"
 	write(t, root, AptLists+"/packages.sury.org_php_dists_trixie_main_binary-amd64_Packages", lists, time.Time{})
 
 	if got := m.Newer(); len(got) != 0 {
@@ -159,7 +162,7 @@ func TestNewer(t *testing.T) {
 		t.Fatal("source not seen")
 	}
 
-	if got, want := m.Newer(), []string{"8.7", "8.10", "9.0"}; !slices.Equal(got, want) {
+	if got, want := m.Newer(), []string{"9.8", "9.10", "10.0"}; !slices.Equal(got, want) {
 		t.Fatalf("newer: %v, want %v", got, want)
 	}
 }

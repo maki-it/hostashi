@@ -1090,9 +1090,13 @@ for v in 7.4 8.1 "$def"; do
 done
 [ "$(api DELETE /api/v1/sites/legacy)" = 204 ] || fail "delete legacy site: $(x cat /tmp/api.out)"
 # Installing a version from the panel (ADR-0036): the API starts the unit,
-# the status follows it to the script's final line.
+# the status follows it to the script's final line. It is the newest version
+# on the list, so a pull request that adds one (the weekly "PHP versions"
+# workflow) tests exactly that version.
+NEWEST=$(sed -n 's/^PHP_VERSIONS=(\(.*\))$/\1/p' "$HERE/install.sh" | awk '{print $NF}')
+[ -n "$NEWEST" ] || fail "no PHP_VERSIONS in install.sh"
 [ "$(api POST /api/v1/php/install '{"version":"8.0"}')" = 422 ] || fail "PHP 8.0 install: $(x cat /tmp/api.out)"
-[ "$(api POST /api/v1/php/install '{"version":"8.6"}')" = 202 ] || fail "PHP 8.6 install: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/php/install "{\"version\":\"$NEWEST\"}")" = 202 ] || fail "PHP $NEWEST install: $(x cat /tmp/api.out)"
 state=""
 for _ in $(seq 1 150); do
   [ "$(api GET /api/v1/php/install)" = 200 ] || fail "install status: $(x cat /tmp/api.out)"
@@ -1100,22 +1104,22 @@ for _ in $(seq 1 150); do
   [ "$state" = running ] || break
   sleep 2
 done
-[ "$state" = succeeded ] || fail "PHP 8.6 from the panel: $(x cat /tmp/api.out)"
+[ "$state" = succeeded ] || fail "PHP $NEWEST from the panel: $(x cat /tmp/api.out)"
 x grep -q '"repository":true' /tmp/api.out || fail "sury.org not reported: $(x cat /tmp/api.out)"
 [ "$(api GET /api/v1/php/versions)" = 200 ] || fail "php versions: $(x cat /tmp/api.out)"
-x grep -q '"installed":\[[^]]*"8.6"' /tmp/api.out || fail "PHP 8.6 not installed: $(x cat /tmp/api.out)"
-[ "$(api POST /api/v1/php/install '{"version":"8.6"}')" = 409 ] || fail "second install of 8.6: $(x cat /tmp/api.out)"
-# 8.6, the newest version, runs a site with the same extensions.
-[ "$(api POST /api/v1/sites '{"name":"next","php":"8.6","domains":["next.example.com"]}')" = 201 ] || fail "create 8.6 site: $(x cat /tmp/api.out)"
+x grep -q "\"installed\":\\[[^]]*\"$NEWEST\"" /tmp/api.out || fail "PHP $NEWEST not installed: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/php/install "{\"version\":\"$NEWEST\"}")" = 409 ] || fail "second install of $NEWEST: $(x cat /tmp/api.out)"
+# The newest version runs a site with the same extensions.
+[ "$(api POST /api/v1/sites "{\"name\":\"next\",\"php\":\"$NEWEST\",\"domains\":[\"next.example.com\"]}")" = 201 ] || fail "create $NEWEST site: $(x cat /tmp/api.out)"
 xi runuser -u next -- sh -c 'cat >/home/next/htdocs/index.php' <<'PHP'
 <?php
 echo "php ", PHP_MAJOR_VERSION, ".", PHP_MINOR_VERSION, " ", json_encode(["ok" => extension_loaded("mysqli") && extension_loaded("gd") && extension_loaded("intl")]);
 PHP
-x systemctl is-active --quiet hostashi-php-8.6@next.service || fail "PHP 8.6 unit of the site not running"
-exposure hostashi-php-8.6@next.service 3.0
+x systemctl is-active --quiet "hostashi-php-$NEWEST@next.service" || fail "PHP $NEWEST unit of the site not running"
+exposure "hostashi-php-$NEWEST@next.service" 3.0
 body=$(x curl -fsS -H 'Host: next.example.com' http://127.0.0.1/index.php)
-[ "$body" = 'php 8.6 {"ok":true}' ] || fail "PHP 8.6 site answered '$body'"
-[ "$(api DELETE /api/v1/sites/next)" = 204 ] || fail "delete 8.6 site: $(x cat /tmp/api.out)"
+[ "$body" = "php $NEWEST {\"ok\":true}" ] || fail "PHP $NEWEST site answered '$body'"
+[ "$(api DELETE /api/v1/sites/next)" = 204 ] || fail "delete $NEWEST site: $(x cat /tmp/api.out)"
 
 step "root gets an account back (ADR-0035)"
 out=$(x /usr/local/bin/hostashi user recover kim) || fail "user recover: $out"
