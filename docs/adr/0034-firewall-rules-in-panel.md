@@ -1,6 +1,6 @@
 # ADR-0034 Firewall rules in the panel
 
-**Status:** Proposed. **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0018 (API, scopes), ADR-0021 (fail2ban), ADR-0023 (panel HTTPS), ADR-0033 (hardening baseline, firewall H1), [`03-features.md`](../03-features.md) row "Firewall (nftables/UFW) with defaults" (P0, "SSH lockout protection (rollback timer)").
+**Status:** Accepted (Kim, 2026-11-20). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0018 (API, scopes), ADR-0021 (fail2ban), ADR-0023 (panel HTTPS), ADR-0033 (hardening baseline, firewall H1), [`03-features.md`](../03-features.md) row "Firewall (nftables/UFW) with defaults" (P0, "SSH lockout protection (rollback timer)").
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -35,7 +35,7 @@ Fixed and never editable: established traffic, loopback, the needed ICMP, DHCP r
 
 - **Files.** The installer's `/etc/hostashi/firewall.nft` stays the base and gains one line: `include "/var/lib/hostashi-agent/firewall/panel.nft"`. The agent writes `panel.nft` (root, `0600`), which only adds to the table `inet hostashi`: two sets per allowlist (IPv4 and IPv6) and a chain `panel` that the base input chain jumps to before its own port rules. The installer writes an empty `panel.nft` once and never touches it again, so re-running the installer keeps the panel's rules [A].
 - **Rule order.** In `panel`: an allowlist for SSH or the panel drops that port for every address outside the list; then the opened ports accept. After `panel` the base rules run as today. So an allowlist narrows the base rules and an opened port adds to them; nothing in `panel` can close 80 or 443 [A].
-- **Typed operation.** `firewall.apply` gets the complete rule list from the panel (desired state in SQLite, as for every other feature) and renders it from a template with checked values only: protocol from a fixed list, ports 1 to 65535 and not 80 or 443, addresses parsed with `net/netip`, at most 50 rules and 256 addresses per list [E]. `firewall.status` returns what is live.
+- **Typed operation.** `firewall.apply` gets the complete rule list from the panel (desired state in SQLite, as for every other feature) and renders it from a template with checked values only: protocol from a fixed list, ports 1 to 65535 and not 80 or 443, addresses parsed with `net/netip`, at most 50 rules and 256 addresses in all, so a request stays well below the agent's 64 KiB frame [E]. `firewall.status` returns what is live.
 - **Rollback timer.** Every change goes live as *pending*. The agent keeps the previous file and restores it, and reloads, unless the panel confirms within **120 seconds** [E]. The browser confirms by itself with a new request right after the change, so the confirmation proves the admin still reaches the panel through the new rules. A pending change survives an agent restart: the agent rolls back on start if the deadline has passed. One change at a time.
 - **Lockout guards before applying.** The panel refuses an allowlist for the panel port or SSH that does not contain the address of the request that sets it, unless the request says so explicitly ("I know, I come in another way") [A]. Loopback is always allowed. The SSH allowlist cannot be confirmed by the browser, so the panel shows a warning to test SSH before the timer runs out [A].
 - **API.** `GET /api/v1/firewall`, `PUT /api/v1/firewall` (whole list, returns the pending change with its deadline), `POST /api/v1/firewall/confirm`. New scopes `firewall:read` and the high-risk `firewall:write`. Every change and every rollback goes to the audit log.
@@ -59,4 +59,4 @@ Fixed and never editable: established traffic, loopback, the needed ICMP, DHCP r
 ## Open questions
 
 1. Rollback after 120 seconds without confirmation? **Decided (Kim, 2026-11-20): yes.**
-2. Allowlists only for SSH and the panel port in v1, opened ports with an optional address list? Recommendation: yes.
+2. Allowlists only for SSH and the panel port in v1, opened ports with an optional address list? **Decided (Kim, 2026-11-20): yes.**

@@ -26,6 +26,7 @@ import (
 	"github.com/maki-it/hostashi/internal/cpimport"
 	"github.com/maki-it/hostashi/internal/cpsource"
 	"github.com/maki-it/hostashi/internal/cronjobs"
+	"github.com/maki-it/hostashi/internal/firewall"
 	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/netaddrs"
 	"github.com/maki-it/hostashi/internal/pages"
@@ -118,6 +119,11 @@ type Config struct {
 	// Quota sets and reads the sites' disk limits (ADR-0015). Nil: the
 	// running kernel (KernelQuota).
 	Quota QuotaFS
+
+	// Firewall keeps the panel's firewall rules (ADR-0034). Run builds it
+	// with the fixed paths; without it firewall.* answer
+	// failed_precondition.
+	Firewall *firewall.Manager
 
 	// Doctor overrides what doctor.run reads, for tests. The zero value
 	// reads the server.
@@ -226,6 +232,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	registerDoctor(s, cfg.Doctor, cfg.StateDir, h)
 	registerBackup(s, cfg.Backup)
 	registerCloudPanel(s, cfg.CloudPanel, cfg.CloudPanelImport)
+	registerFirewall(s, cfg.Firewall)
 
 	return s
 }
@@ -936,6 +943,19 @@ func Run(ctx context.Context, cfg Config) error {
 			Dir: filepath.Join(cpDir, "imports"), StateDir: cmp.Or(cfg.StateDir, DefaultStateDir),
 			Source: cfg.CloudPanel, Units: resticctl.Units{},
 		}
+	}
+
+	if cfg.Firewall == nil {
+		cfg.Firewall = &firewall.Manager{
+			Dir: filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "firewall"), Base: firewall.BaseFile,
+			Reload: phpctl.ReloadFirewall, Log: cfg.Log,
+		}
+	}
+
+	// A pending change whose deadline passed while the agent was down is
+	// rolled back here.
+	if err := cfg.Firewall.Recover(ctx); err != nil && cfg.Log != nil {
+		cfg.Log.ErrorContext(ctx, "firewall recovery failed", "err", err)
 	}
 
 	if cfg.PHP != nil {

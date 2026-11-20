@@ -38,6 +38,7 @@ path = [
   "web/tsconfig.json",
   "web/public/**",
   "internal/statuspage/builtin/*.html",
+  "internal/firewall/testdata/*.nft",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 The Hostashi contributors"

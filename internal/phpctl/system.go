@@ -28,3 +28,15 @@ func UnitActive(ctx context.Context, unit string) (bool, error) {
 
 	return strings.TrimSpace(out) == "active", nil
 }
+
+// FirewallUnit loads Hostashi's nftables table, with the panel's rules
+// (ADR-0034).
+const FirewallUnit = "hostashi-firewall.service"
+
+// ReloadFirewall makes the firewall unit load its files again (systemctl
+// reload-or-restart: a unit that is not running is started). nft loads
+// them in one transaction, so a file that does not load leaves the old
+// rules and makes the call fail.
+func ReloadFirewall(ctx context.Context) error {
+	return run(ctx, Systemctl, "reload-or-restart", FirewallUnit)
+}
