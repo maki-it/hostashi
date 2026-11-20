@@ -38,6 +38,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0040](0040-file-manager.md) | File manager in the panel | Accepted |
 | [0041](0041-external-database-servers.md) | External database servers | Accepted |
 | [0042](0042-panel-on-port-443.md) | Panel on port 443 under its own host name | Accepted |
+| [0043](0043-user-documentation.md) | User documentation in the GitHub wiki | Proposed |
 
 Only the project owner sets a status to `Accepted`.
 

@@ -46,6 +46,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0040 | File manager in the panel | Accepted on 2026-11-20 ([adr/0040](adr/0040-file-manager.md)) | No |
 | 0041 | External database servers | Accepted on 2026-11-20 ([adr/0041](adr/0041-external-database-servers.md)) | No |
 | 0042 | Panel on port 443 under its own host name | Accepted on 2026-11-20 ([adr/0042](adr/0042-panel-on-port-443.md)) | No |
+| 0043 | User documentation in the GitHub wiki | Proposed ([adr/0043](adr/0043-user-documentation.md)) | No |
 
 ---
 
@@ -314,3 +315,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0042 Panel on port 443 under its own host name
 
 **Full text (status Accepted, 2026-11-20):** [adr/0042](adr/0042-panel-on-port-443.md). Summary: Kim wants the panel under a host name like `https://cp.maki-it.de/` without a port. Recommended and decided in the thread: installer option `--panel-port 443`, 8443 stays the default; on 443 the panel shares the sites' listeners by host name, the name is reserved against sites, and the IP allowlist is enforced by nginx instead of the firewall. `--panel-domain` replaces `--public-url`.
+
+## ADR-0043 User documentation in the GitHub wiki
+
+**Full text (status Proposed, 2026-11-20):** [adr/0043](adr/0043-user-documentation.md). Summary: Kim wants proper end-user documentation in the repository's GitHub wiki. Recommended: write the pages in the main repository under `docs/wiki/` so they get PR review, markdownlint, link check and REUSE, and mirror them to the wiki with a small `git`-only workflow after each merge. Task-oriented pages for server admins, panel admins, managers and users, from install to recovery. Screenshots only after the UI redesign, taken with the Playwright e2e setup. Decided by Kim: mirrored from the repository.
