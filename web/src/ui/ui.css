@@ -495,3 +495,9 @@ a.ui-btn {
 .ui-narrow {
   max-width: 400px;
 }
+/* Lines that belong together, such as a title, a value and a hint */
+.ui-stack-tight {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

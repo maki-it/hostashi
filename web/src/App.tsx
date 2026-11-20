@@ -102,10 +102,10 @@ export function App() {
         {show("backups") && <Backups query={route.query} onQuery={replaceQuery} />}
         {show("php") && <PHPPage query={route.query} onQuery={replaceQuery} />}
         {show("limits") && <Presets query={route.query} onQuery={replaceQuery} />}
+        {show("health") && <Doctor query={route.query} onQuery={replaceQuery} />}
         {show("users") && <Users me={user.username} query={route.query} onQuery={replaceQuery} />}
         <div className="app-legacy">
           {show("home") && <Home user={user} />}
-          {show("health") && <Doctor />}
           {show("firewall") && <Firewall />}
           {show("pages") && <Pages />}
           {show("parked") && <Parked />}
