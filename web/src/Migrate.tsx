@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { Cutover } from "./Cutover";
 import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { SnippetField } from "./Snippets";
 import { setSnippets, sizeProblem, snippetDraft, snippetMessage, snippetProblems, type DraftItem, type SnippetDraft, type SnippetProblems } from "./snippets";
@@ -590,6 +591,7 @@ function PlanRow({
       )}
       {created && <ImportForm report={report} site={site} ready={ready} />}
       {created && site.customSnippets > 0 && <SnippetDraftForm report={report} site={site} />}
+      {created && <Cutover site={site.name} />}
     </li>
   );
 }

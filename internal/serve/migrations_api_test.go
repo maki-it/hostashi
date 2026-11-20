@@ -5,16 +5,17 @@ package serve
 import (
 	"context"
 	"encoding/json"
-	"net"
 	"net/http"
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/cloudpanel/plan"
 	"github.com/maki-it/hostashi/internal/cloudpanel/scan"
+	"github.com/maki-it/hostashi/internal/cpmigrate"
 	"github.com/maki-it/hostashi/internal/hosting"
 )
 
@@ -372,12 +373,12 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 
 type cutoverResolver map[string][]netip.Addr
 
-func (r cutoverResolver) LookupNetIP(_ context.Context, _, host string) ([]netip.Addr, error) {
+func (r cutoverResolver) Lookup(_ context.Context, host string) ([]netip.Addr, time.Duration, error) {
 	if a, ok := r[host]; ok {
-		return a, nil
+		return a, time.Hour, nil
 	}
 
-	return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+	return nil, 0, cpmigrate.ErrDomainNotFound
 }
 
 func TestCutoverOverHTTP(t *testing.T) {
@@ -428,7 +429,7 @@ func TestCutoverOverHTTP(t *testing.T) {
 	e.cp.CheckCutovers(t.Context())
 
 	rec = e.do(t, reqOpts{method: "GET", path: path, cookie: c})
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"state":"switched"`) {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"state":"switched"`) || !strings.Contains(rec.Body.String(), `"here":true,"ttl":3600`) {
 		t.Fatalf("switched: %d %s", rec.Code, rec.Body)
 	}
 
