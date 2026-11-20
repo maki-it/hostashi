@@ -1,6 +1,6 @@
 # ADR-0046 Page cache (nginx FastCGI cache) per site
 
-**Status:** Proposed. **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0005 (web server), ADR-0015 (per-site limits and quota), ADR-0016 (storage pools), ADR-0017 (import and presets), ADR-0026 (CloudPanel transfer), ADR-0027 (maintenance pages), ADR-0029 (nginx snippets), ADR-0033 (hardening baseline), ADR-0035 (roles), ADR-0037 (UI redesign), ADR-0045 (object cache per site). **Changes in part:** ADR-0017 (the Varnish option for release 1.0), see open question 1.
+**Status:** Accepted (Kim, 2026-11-21). **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0005 (web server), ADR-0015 (per-site limits and quota), ADR-0016 (storage pools), ADR-0017 (import and presets), ADR-0026 (CloudPanel transfer), ADR-0027 (maintenance pages), ADR-0029 (nginx snippets), ADR-0033 (hardening baseline), ADR-0035 (roles), ADR-0037 (UI redesign), ADR-0045 (object cache per site). **Changes in part:** ADR-0017 (the Varnish option for release 1.0), see open question 1.
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
