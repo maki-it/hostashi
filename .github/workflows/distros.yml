@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Checks once a month whether a Debian stable or Ubuntu LTS release newer
+# than the ones in install.sh's preflight is out (ADR-0020). For each one
+# it opens an issue that says whether sury.org and the distribution's nginx
+# and brotli packages are there yet, with a to-do list. It changes no code:
+# supporting a release is a decision. An issue that exists already, open
+# or closed, is not opened again.
+name: Distributions
+
+on:
+  schedule:
+    # 1st of the month, 05:41 UTC.
+    - cron: "41 5 1 * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/distros/**"
+      - ".github/workflows/distros.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: distros-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check Debian and Ubuntu releases
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check
+        run: |
+          mkdir -p "$RUNNER_TEMP/issues"
+          go run ./tools/distros -out "$RUNNER_TEMP/issues" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Open issues
+        # Pull requests only report.
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          shopt -s nullglob
+          for f in "$RUNNER_TEMP"/issues/*.md; do
+            title=$(head -n 1 "$f")
+            tail -n +2 "$f" > "$f.body"
+            if gh issue list --repo "$REPO" --state all --limit 100 --search "\"$title\" in:title" --json title --jq '.[].title' | grep -Fxq -- "$title"; then
+              echo "Issue exists: $title"
+              continue
+            fi
+            gh issue create --repo "$REPO" --title "$title" --body-file "$f.body" --label enhancement --assignee kimdre
+          done
