@@ -1,6 +1,6 @@
 # ADR-0043 User documentation in the GitHub wiki
 
-**Status:** Proposed. **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0002 (documentation is CC-BY-4.0), ADR-0037 (UI redesign, screens still change); clean-room rule: no CloudPanel texts ([research](../01-cloudpanel-research.md)).
+**Status:** Accepted (Kim, 2026-11-20). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0002 (documentation is CC-BY-4.0), ADR-0037 (UI redesign, screens still change); clean-room rule: no CloudPanel texts ([research](../01-cloudpanel-research.md)).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
