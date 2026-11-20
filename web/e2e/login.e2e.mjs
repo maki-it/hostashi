@@ -167,6 +167,7 @@ try {
   // browser, sets a password and must set up a second factor (ADR-0035).
   await openMenu();
   await page.getByRole("link", { name: "Users" }).click();
+  await page.getByRole("link", { name: "Invite someone" }).click();
   await page.getByLabel(/Username/).fill("mona");
   await page.getByLabel(/Role/).selectOption("manager");
   await page.getByRole("button", { name: "Create invitation" }).click();
