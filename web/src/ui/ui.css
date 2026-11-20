@@ -501,3 +501,63 @@ a.ui-btn {
   flex-direction: column;
   gap: 2px;
 }
+/* A checkbox with its label on one line */
+.ui-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 400;
+}
+.ui-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.ui-textarea {
+  min-height: 0;
+  padding: var(--space-2) 10px;
+  resize: vertical;
+}
+/* A card that needs an answer now, such as a change that rolls back */
+.ui-attention {
+  border: 2px solid var(--accent);
+}
+/* Two allowlists side by side, stacked on a phone */
+.ui-allow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-5);
+}
+/* Rows of form fields, one opened port each */
+.ui-port-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ui-port-row {
+  display: grid;
+  grid-template-columns: 7rem 10rem minmax(10rem, 1fr) minmax(8rem, 1fr) auto;
+  align-items: end;
+  gap: var(--space-3);
+}
+.ui-port-row .ui-input,
+.ui-port-row .ui-select {
+  width: 100%;
+  min-width: 0;
+}
+.ui-port-row + .ui-port-row {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 760px) {
+  .ui-port-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .ui-port-row > .ui-icon-btn {
+    justify-self: start;
+  }
+}
