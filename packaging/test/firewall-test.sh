@@ -69,7 +69,10 @@ x install -d -m 0750 /etc/hostashi
 docker cp "$HERE/." "$NAME:/opt/hostashi/"
 
 # sshd on 22 and 2222; TCP listeners on the web, panel and two other ports.
-x sh -c 'printf "Port 22\nPort 2222\n" >/etc/ssh/sshd_config.d/ports.conf && mkdir -p /run/sshd && systemctl restart ssh.service'
+# Ubuntu 26.04 starts sshd through ssh.socket, whose ports a generator
+# takes from sshd_config at daemon-reload; Debian 13 runs ssh.service.
+x sh -c 'printf "Port 22\nPort 2222\n" >/etc/ssh/sshd_config.d/ports.conf && mkdir -p /run/sshd && systemctl daemon-reload &&
+  if systemctl is-enabled --quiet ssh.socket 2>/dev/null; then systemctl stop ssh.service; systemctl restart ssh.socket; else systemctl restart ssh.service; fi'
 for p in 80 443 8443 3000 5000 2200; do
   x systemd-run --quiet --unit="listen-$p" python3 -m http.server --bind 0.0.0.0 "$p"
 done
@@ -94,7 +97,7 @@ fw() {
 }
 
 step "before the firewall every port answers"
-must_open 22 80 3000 5000
+must_open 22 2222 2200 80 443 8443 3000 5000
 
 step "invalid --firewall-allow values are refused by preflight"
 for bad in 0/tcp 65536/tcp 22/icmp 22 abc/udp; do
