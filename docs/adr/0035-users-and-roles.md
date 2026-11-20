@@ -37,7 +37,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 What counts as a **server setting** (admin only): users and grants, firewall, backup target and settings, panel TLS, API IP allowlist, metrics, limit presets, the CloudPanel migration, doctor, `POST /api/v1/web/sync`.
 
-What a `user` may do on a granted site [A, see open question 3]:
+What a `user` may do on a granted site (decided, open question 3):
 
 | Area | `user` | Why |
 |------|--------|-----|
@@ -70,7 +70,7 @@ A `manager` may also do the "no" rows except snippets, which stay admin-only for
 
 - Only an admin creates, changes and deletes users and grants.
 - **Invitation instead of a password chosen by the admin.** Creating a user returns a one-time link, valid for 24 hours, where the new user sets their own password and second factor. Only the SHA-256 of the link's token is stored, as for sessions [A, see open question 4].
-- **Second factor** (TOTP or passkey) is required for `admin` and `manager`: without one, the account can only enroll one after login and do nothing else [A, see open question 2]. For `user` it is optional, an admin can require it per user.
+- **Second factor** (TOTP or passkey) is required for `admin` and `manager`: without one, the account can only enroll one after login and do nothing else (decided, open question 2). For `user` it is optional, an admin can require it per user.
 - **No lockout of the last admin.** The panel refuses to demote, disable or delete the last enabled admin, decided inside one write transaction. Nobody changes their own role.
 - A role change, a disable or a password reset ends the user's sessions.
 - An admin can reset another user's password and second factor; both return a new invitation link and land in the audit log.
@@ -102,7 +102,7 @@ Custom roles, per-grant permissions, users who create users (reseller, ADR-0010)
 
 ## Open questions
 
-1. Three fixed roles `admin`, `manager`, `user` with site grants (option A)? **Recommendation: yes.**
-2. Second factor required for `admin` and `manager`, optional for `user` (an admin can require it per user)? **Recommendation: yes.**
-3. A `user` may not change domains, TLS, limits or snippets of their site, nor disable or delete it? **Recommendation: yes.**
+1. Three fixed roles `admin`, `manager`, `user` with site grants (option A)? **Decided (Kim, 2026-11-20): yes.**
+2. Second factor required for `admin` and `manager`, optional for `user` (an admin can require it per user)? **Decided (Kim, 2026-11-20): yes.**
+3. A `user` may not change domains, TLS, limits or snippets of their site, nor disable or delete it? **Decided (Kim, 2026-11-20): yes.**
 4. New users come in through a one-time invitation link instead of a password the admin sets? **Recommendation: yes.**

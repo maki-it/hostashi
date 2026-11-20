@@ -192,8 +192,9 @@ func (s *Store) Audit(ctx context.Context, userID *int64, action, target string,
 	}
 
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO audit_log (user_id, action, target, detail) VALUES (?, ?, ?, ?)`,
-		userID, action, target, string(b))
+		`INSERT INTO audit_log (user_id, actor, action, target, detail)
+		 VALUES (?, coalesce((SELECT username FROM users WHERE id = ?), ''), ?, ?, ?)`,
+		userID, userID, action, target, string(b))
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
