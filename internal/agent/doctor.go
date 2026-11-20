@@ -14,6 +14,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/certs"
 	"github.com/maki-it/hostashi/internal/doctor"
+	"github.com/maki-it/hostashi/internal/firewall"
 	"github.com/maki-it/hostashi/internal/phpctl"
 	"github.com/maki-it/hostashi/internal/web"
 )
@@ -37,11 +38,12 @@ type DoctorEnv struct {
 type doctorOps struct {
 	env      DoctorEnv
 	stateDir string
-	h        *siteOps // nil without the site operations
+	h        *siteOps          // nil without the site operations
+	fw       *firewall.Manager // nil without the panel's firewall rules
 }
 
-func registerDoctor(s *agentrpc.Server, env DoctorEnv, stateDir string, h *siteOps) {
-	d := &doctorOps{env: env, stateDir: stateDir, h: h}
+func registerDoctor(s *agentrpc.Server, env DoctorEnv, stateDir string, h *siteOps, fw *firewall.Manager) {
+	d := &doctorOps{env: env, stateDir: stateDir, h: h, fw: fw}
 
 	agentrpc.Handle(s, agentapi.Doctor, func(ctx context.Context, _ agentrpc.Caller, _ agentapi.DoctorRequest) (agentapi.DoctorReport, error) {
 		return d.run(ctx), nil
@@ -113,7 +115,16 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 		hard.Now = d.now
 	}
 
-	out = append(out, hard.Firewall(ctx), hard.Updates(), hard.Reboot(), hard.PHP(), hard.SSH(), hard.Sysctl())
+	out = append(out, hard.Firewall(ctx))
+
+	if d.fw != nil {
+		st, err := d.fw.Status()
+		if c, ok := doctor.FirewallPanel(st, err, d.now()); ok {
+			out = append(out, c)
+		}
+	}
+
+	out = append(out, hard.Updates(), hard.Reboot(), hard.PHP(), hard.SSH(), hard.Sysctl())
 
 	if d.h != nil {
 		out = append(out, d.sites()...)

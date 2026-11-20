@@ -229,7 +229,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 		(&statsOps{h: h, disk: disk, cgroupRoot: root}).register(s)
 	}
 
-	registerDoctor(s, cfg.Doctor, cfg.StateDir, h)
+	registerDoctor(s, cfg.Doctor, cfg.StateDir, h, cfg.Firewall)
 	registerBackup(s, cfg.Backup)
 	registerCloudPanel(s, cfg.CloudPanel, cfg.CloudPanelImport)
 	registerFirewall(s, cfg.Firewall)

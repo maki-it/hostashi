@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/maki-it/hostashi/internal/agentapi"
 )
 
 // The checks of the hardening baseline (ADR-0033): the firewall, the
@@ -530,4 +532,55 @@ func (h Hardening) Sysctl() Check {
 	}
 
 	return ok(id, fmt.Sprintf("%d kernel settings match the baseline", n))
+}
+
+// FirewallPanel reports the panel's firewall rules (ADR-0034): what they
+// open and allow, and a change that waits for its confirmation. ok is false
+// when the firewall is off; the check is then left out, system.firewall
+// already says so.
+func FirewallPanel(st agentapi.FirewallStatus, err error, now time.Time) (Check, bool) {
+	const id = "system.firewall.panel"
+
+	if err != nil {
+		return warn(id, "cannot read the panel's firewall rules: "+err.Error(), ""), true
+	}
+
+	if !st.Enabled {
+		return Check{}, false
+	}
+
+	if st.Pending != nil {
+		left := time.Unix(st.Pending.Deadline, 0).Sub(now).Round(time.Second)
+
+		return warn(id, fmt.Sprintf("a change waits for its confirmation and rolls back in %s", max(left, 0)),
+			"Confirm it in the browser that made it, or let it roll back."), true
+	}
+
+	var parts []string
+
+	if n := len(st.State.Open); n > 0 {
+		parts = append(parts, plural(n, "opened port rule", "opened port rules"))
+	}
+
+	if n := len(st.State.SSHAllow); n > 0 {
+		parts = append(parts, "SSH only from "+plural(n, "address", "addresses"))
+	}
+
+	if n := len(st.State.PanelAllow); n > 0 {
+		parts = append(parts, "the panel only from "+plural(n, "address", "addresses"))
+	}
+
+	if len(parts) == 0 {
+		return ok(id, "no rules from the panel: SSH and the panel are open to everyone"), true
+	}
+
+	return ok(id, "rules from the panel: "+strings.Join(parts, "; ")), true
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+
+	return strconv.Itoa(n) + " " + many
 }

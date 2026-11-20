@@ -116,6 +116,9 @@ type Deps struct {
 	// Doctor runs the checks of hostashi doctor; nil disables its route.
 	// Needs Auth.
 	Doctor Doctor
+	// Firewall is the panel's part of the firewall (ADR-0034); nil
+	// disables its routes. Needs Auth and Settings.
+	Firewall Firewall
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -194,6 +197,10 @@ func Handler(cfg Config, deps Deps) http.Handler {
 
 		if deps.CloudPanelSource != nil && deps.Settings != nil {
 			registerCloudPanelSource(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.CloudPanelSource, deps.Settings, log)
+		}
+
+		if deps.Firewall != nil && deps.Settings != nil {
+			registerFirewall(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Firewall, deps.Settings, log)
 		}
 
 		if deps.Doctor != nil {
@@ -337,6 +344,7 @@ func Run(ctx context.Context, cfg Config) error {
 		Metrics:  m,
 		Settings: st,
 		Doctor:   RPCDoctor(client),
+		Firewall: RPCFirewall{C: client},
 	}
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)

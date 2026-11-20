@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -516,22 +515,4 @@ func Render(s agentapi.FirewallState) string {
 	b.WriteString("\t}\n}\n")
 
 	return b.String()
-}
-
-// Allowed reports whether addr may reach a port whose allowlist is list:
-// an empty list allows everyone, loopback is always allowed.
-func Allowed(list []string, addr netip.Addr) bool {
-	if len(list) == 0 || addr.IsLoopback() {
-		return true
-	}
-
-	addr = addr.Unmap()
-
-	for _, s := range list {
-		if p, err := agentapi.ParsePrefix(s); err == nil && p.Contains(addr) {
-			return true
-		}
-	}
-
-	return false
 }
