@@ -9,4 +9,7 @@ accept = ["200..=299", "429"]
 exclude = [
   # Repository-relative pages that only exist on github.com
   '^https://github\.com/maki-it/hostashi/security/advisories/new$',
+  # The wiki pages point at their own source folder, which a pull request
+  # that adds it has not merged yet
+  '^https://github\.com/maki-it/hostashi/tree/main/docs/wiki$',
 ]
