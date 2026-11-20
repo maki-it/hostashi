@@ -91,23 +91,11 @@ func sourceFail(log *slog.Logger, w http.ResponseWriter, err error, what string)
 // registerCloudPanelSource adds the routes for the old server's address,
 // the generated key and the pinned host key. Responses never carry the
 // private key.
-func registerCloudPanelSource(mux *http.ServeMux, a authn, src CloudPanelSource, aud auditor, log *slog.Logger) {
+func registerCloudPanelSource(mux *routeMux, a authn, src CloudPanelSource, aud auditor, log *slog.Logger) {
 	audit := func(r *http.Request, uid int64, action, target string) {
 		if err := aud.Audit(r.Context(), &uid, action, target, nil); err != nil {
 			log.ErrorContext(r.Context(), "audit log", "action", action, "err", err)
 		}
-	}
-
-	admin := func(scope string, h func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
-		return a.scoped(scope, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-			if p.User.Role != "admin" {
-				writeError(w, http.StatusForbidden, "forbidden", "only administrators can import sites")
-
-				return
-			}
-
-			h(w, r, p)
-		})
 	}
 
 	const base = "/api/v1/migrations/cloudpanel/source"
@@ -122,12 +110,12 @@ func registerCloudPanelSource(mux *http.ServeMux, a authn, src CloudPanelSource,
 		writeJSON(w, http.StatusOK, info)
 	}
 
-	mux.HandleFunc("GET "+base, admin("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET "+base, a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		info, err := src.Get(r.Context())
 		reply(w, info, err, "read migration source")
 	}))
 
-	mux.HandleFunc("PUT "+base, admin("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT "+base, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in agentapi.CloudPanelSource
 		if !decodeJSON(w, r, &in) {
 			return
@@ -150,7 +138,7 @@ func registerCloudPanelSource(mux *http.ServeMux, a authn, src CloudPanelSource,
 	// The scan only shows the key; nothing is pinned until PUT /hostkey
 	// with the key the administrator compared with the old server's own
 	// "ssh-keygen -lf" output.
-	mux.HandleFunc("POST "+base+"/hostkey/scan", admin("migrations:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("POST "+base+"/hostkey/scan", a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		info, err := src.Get(r.Context())
 		if err != nil {
 			sourceFail(log, w, err, "read migration source")
@@ -184,7 +172,7 @@ func registerCloudPanelSource(mux *http.ServeMux, a authn, src CloudPanelSource,
 		})
 	}))
 
-	mux.HandleFunc("PUT "+base+"/hostkey", admin("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT "+base+"/hostkey", a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Key string `json:"key"`
 		}
@@ -206,7 +194,7 @@ func registerCloudPanelSource(mux *http.ServeMux, a authn, src CloudPanelSource,
 		reply(w, info, err, "set migration host key")
 	}))
 
-	mux.HandleFunc("DELETE "+base, admin("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("DELETE "+base, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		info, err := src.Delete(r.Context())
 		if err == nil {
 			audit(r, p.User.ID, "cloudpanel.source.delete", "")
@@ -218,7 +206,7 @@ func registerCloudPanelSource(mux *http.ServeMux, a authn, src CloudPanelSource,
 	// The password is in this answer only. The panel never stores it; the
 	// agent keeps it root-only for the import job. Asking again replaces
 	// it, so the SQL on the old server must then be run again.
-	mux.HandleFunc("POST "+base+"/database", admin("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("POST "+base+"/database", a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		c, err := src.GenerateDB(r.Context())
 		if err == nil {
 			audit(r, p.User.ID, "cloudpanel.source.database", c.User)

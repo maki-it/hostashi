@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/metrics"
 )
 
@@ -65,7 +66,7 @@ func writeMetrics(w http.ResponseWriter, m *metrics.Metrics, log *slog.Logger) {
 // registerMetrics adds the scrape endpoint and its switch. The endpoint
 // takes only an API token with metrics:read; a browser session does not
 // open it, the panel's own graphs use the ring buffer (04-architecture 4.7).
-func registerMetrics(mux *http.ServeMux, a authn, m *metrics.Metrics, st Settings, log *slog.Logger) {
+func registerMetrics(mux *routeMux, a authn, m *metrics.Metrics, st Settings, log *slog.Logger) {
 	mux.HandleFunc("GET "+MetricsPath, func(w http.ResponseWriter, r *http.Request) {
 		on, err := metricsEnabled(r.Context(), st)
 		if err != nil {
@@ -88,13 +89,7 @@ func registerMetrics(mux *http.ServeMux, a authn, m *metrics.Metrics, st Setting
 			return
 		}
 
-		a.scoped(metricsScope, func(w http.ResponseWriter, _ *http.Request, p auth.Principal) {
-			if p.User.Role != "admin" {
-				writeError(w, http.StatusForbidden, "forbidden", "only administrators can read metrics")
-
-				return
-			}
-
+		a.allow(metricsScope, func(w http.ResponseWriter, _ *http.Request, _ auth.Principal) {
 			writeMetrics(w, m, log)
 		})(w, r)
 	})
@@ -103,23 +98,8 @@ func registerMetrics(mux *http.ServeMux, a authn, m *metrics.Metrics, st Setting
 		Enabled bool `json:"enabled"`
 	}
 
-	admin := func(w http.ResponseWriter, r *http.Request) (int64, bool) {
-		u, ok := a.session(w, r)
-		if !ok {
-			return 0, false
-		}
-
-		if u.Role != "admin" {
-			writeError(w, http.StatusForbidden, "forbidden", "only administrators can change this setting")
-
-			return 0, false
-		}
-
-		return u.ID, true
-	}
-
 	mux.HandleFunc("GET /api/v1/settings/metrics", func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := admin(w, r); !ok {
+		if _, ok := a.sessionAllow(w, r, authz.SettingsRead); !ok {
 			return
 		}
 
@@ -135,10 +115,12 @@ func registerMetrics(mux *http.ServeMux, a authn, m *metrics.Metrics, st Setting
 	})
 
 	mux.HandleFunc("PUT /api/v1/settings/metrics", func(w http.ResponseWriter, r *http.Request) {
-		uid, ok := admin(w, r)
+		u, ok := a.sessionAllow(w, r, authz.SettingsWrite)
 		if !ok {
 			return
 		}
+
+		uid := u.ID
 
 		var in struct {
 			Enabled *bool `json:"enabled"`

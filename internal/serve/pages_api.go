@@ -158,20 +158,8 @@ func readPart(p *multipart.Part) ([]byte, error) {
 
 // registerPages adds the routes of the maintenance and parking pages and
 // of a site's maintenance (ADR-0027).
-func registerPages(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	admin := func(scope string, h func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
-		return a.scoped(scope, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-			if p.User.Role != "admin" {
-				writeError(w, http.StatusForbidden, "forbidden", "only administrators can manage pages")
-
-				return
-			}
-
-			h(w, r, p)
-		})
-	}
-
-	mux.HandleFunc("GET /api/v1/status-pages", admin("pages:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+func registerPages(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
+	mux.HandleFunc("GET /api/v1/status-pages", a.allow("pages:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		pages, err := svc.Pages(r.Context())
 		if err != nil {
 			pageFail(log, w, err, "list pages")
@@ -187,7 +175,7 @@ func registerPages(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 		writeJSON(w, http.StatusOK, map[string][]pageJSON{"pages": out})
 	}))
 
-	mux.HandleFunc("GET /api/v1/status-pages/{id}", admin("pages:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/status-pages/{id}", a.allow("pages:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		p, err := svc.Page(r.Context(), r.PathValue("id"))
 		if err != nil {
 			pageFail(log, w, err, "get page")
@@ -198,7 +186,7 @@ func registerPages(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 		writeJSON(w, http.StatusOK, toPageJSON(p))
 	}))
 
-	mux.HandleFunc("POST /api/v1/status-pages", admin("pages:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("POST /api/v1/status-pages", a.allow("pages:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		name, kind, upload, ok := pageForm(w, r)
 		if !ok {
 			return
@@ -221,7 +209,7 @@ func registerPages(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 	}))
 
 	// Renames a page (field name) and/or replaces its files (field file).
-	mux.HandleFunc("PUT /api/v1/status-pages/{id}", admin("pages:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/status-pages/{id}", a.allow("pages:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		name, kind, upload, ok := pageForm(w, r)
 		if !ok {
 			return
@@ -252,7 +240,7 @@ func registerPages(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 		writeJSON(w, http.StatusOK, toPageJSON(page))
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/status-pages/{id}", admin("pages:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("DELETE /api/v1/status-pages/{id}", a.allow("pages:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -265,7 +253,7 @@ func registerPages(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/maintenance", admin("sites.maintenance:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/sites/{name}/maintenance", a.allow("sites.maintenance:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Enabled  *bool    `json:"enabled"`
 			Page     string   `json:"page"`
@@ -322,20 +310,8 @@ func toParkedJSON(svc *hosting.Service, p store.Parked) parkedJSON {
 }
 
 // registerParked adds the routes of parked domains (ADR-0027).
-func registerParked(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	admin := func(scope string, h func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
-		return a.scoped(scope, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-			if p.User.Role != "admin" {
-				writeError(w, http.StatusForbidden, "forbidden", "only administrators can park domains")
-
-				return
-			}
-
-			h(w, r, p)
-		})
-	}
-
-	mux.HandleFunc("GET /api/v1/parked-domains", admin("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+func registerParked(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
+	mux.HandleFunc("GET /api/v1/parked-domains", a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		list, err := svc.ParkedDomains(r.Context())
 		if err != nil {
 			pageFail(log, w, err, "list parked domains")
@@ -351,7 +327,7 @@ func registerParked(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog
 		writeJSON(w, http.StatusOK, map[string][]parkedJSON{"parkedDomains": out})
 	}))
 
-	mux.HandleFunc("GET /api/v1/parked-domains/{domain}", admin("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/parked-domains/{domain}", a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		p, err := svc.ParkedDomain(r.Context(), r.PathValue("domain"))
 		if err != nil {
 			pageFail(log, w, err, "get parked domain")
@@ -363,7 +339,7 @@ func registerParked(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog
 	}))
 
 	// Parks a domain or changes its page and HTTPS ("tls" defaults to on).
-	mux.HandleFunc("PUT /api/v1/parked-domains/{domain}", admin("sites.maintenance:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/parked-domains/{domain}", a.allow("sites.maintenance:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Page string `json:"page"`
 			TLS  *bool  `json:"tls"`
@@ -387,7 +363,7 @@ func registerParked(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog
 		writeJSON(w, http.StatusOK, toParkedJSON(svc, parked))
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/parked-domains/{domain}", admin("sites.maintenance:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("DELETE /api/v1/parked-domains/{domain}", a.allow("sites.maintenance:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 

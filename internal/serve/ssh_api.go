@@ -72,21 +72,9 @@ func sshKeyID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 
 // registerSSH adds the SSH key routes of a site (ADR-0032). Every change
 // sends the site's complete list to the agent; a refused change is undone.
-func registerSSH(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	admin := func(scope string, h func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
-		return a.scoped(scope, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-			if p.User.Role != "admin" {
-				writeError(w, http.StatusForbidden, "forbidden", "only administrators can manage SSH keys")
-
-				return
-			}
-
-			h(w, r, p)
-		})
-	}
-
+func registerSSH(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
 	// The server's host keys, which a user compares at the first login.
-	mux.HandleFunc("GET /api/v1/ssh/host-keys", admin("ssh:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/ssh/host-keys", a.allow("ssh:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -100,7 +88,7 @@ func registerSSH(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.Lo
 		writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
 	}))
 
-	mux.HandleFunc("GET /api/v1/sites/{name}/ssh-keys", admin("ssh:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/sites/{name}/ssh-keys", a.allow("ssh:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		keys, err := svc.SSHKeys(r.Context(), r.PathValue("name"))
 		if err != nil {
 			sshFail(log, w, err, "list SSH keys")
@@ -116,7 +104,7 @@ func registerSSH(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.Lo
 		writeJSON(w, http.StatusOK, map[string]any{"keys": out})
 	}))
 
-	mux.HandleFunc("GET /api/v1/sites/{name}/ssh-keys/{id}", admin("ssh:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/sites/{name}/ssh-keys/{id}", a.allow("ssh:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		id, ok := sshKeyID(w, r)
 		if !ok {
 			return
@@ -132,7 +120,7 @@ func registerSSH(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.Lo
 		writeJSON(w, http.StatusOK, toSSHKeyJSON(k))
 	}))
 
-	mux.HandleFunc("POST /api/v1/sites/{name}/ssh-keys", admin("ssh:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("POST /api/v1/sites/{name}/ssh-keys", a.allow("ssh:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in sshKeyCreateJSON
 		if !decodeJSON(w, r, &in) {
 			return
@@ -154,7 +142,7 @@ func registerSSH(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.Lo
 	}))
 
 	// PUT changes label and access; a different key is a new entry.
-	mux.HandleFunc("PUT /api/v1/sites/{name}/ssh-keys/{id}", admin("ssh:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/sites/{name}/ssh-keys/{id}", a.allow("ssh:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		id, ok := sshKeyID(w, r)
 		if !ok {
 			return
@@ -180,7 +168,7 @@ func registerSSH(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.Lo
 		writeJSON(w, http.StatusOK, toSSHKeyJSON(k))
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/sites/{name}/ssh-keys/{id}", admin("ssh:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("DELETE /api/v1/sites/{name}/ssh-keys/{id}", a.allow("ssh:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		id, ok := sshKeyID(w, r)
 		if !ok {
 			return
