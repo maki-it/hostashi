@@ -215,3 +215,21 @@ var (
 	// FirewallStatusOp reports the live state.
 	FirewallStatusOp = agentrpc.Op[FirewallStatusRequest, FirewallStatus]{Name: "firewall.status"}
 )
+
+// FirewallAllowed reports whether addr may reach a port whose allowlist is list:
+// an empty list allows everyone, loopback is always allowed.
+func FirewallAllowed(list []string, addr netip.Addr) bool {
+	if len(list) == 0 || addr.IsLoopback() {
+		return true
+	}
+
+	addr = addr.Unmap()
+
+	for _, s := range list {
+		if p, err := ParsePrefix(s); err == nil && p.Contains(addr) {
+			return true
+		}
+	}
+
+	return false
+}

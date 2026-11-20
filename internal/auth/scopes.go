@@ -38,6 +38,8 @@ var scopeCatalog = map[string]ScopeInfo{
 	"backups:read":            {Description: "Read backup settings, status and snapshots"},
 	"backups:write":           {Description: "Change backup settings, confirm the target's host key, start a backup"},
 	"doctor:read":             {Description: "Run the read-only checks of hostashi doctor and read their results"},
+	"firewall:read":           {Description: "Read the firewall's opened ports and the allowlists for SSH and the panel"},
+	"firewall:write":          {Description: "Open ports and set the allowlists for SSH and the panel (a wrong list locks out until the rollback)", HighRisk: true},
 	"metrics:read":            {Description: "Read the Prometheus metrics endpoint"},
 	"migrations:read":         {Description: "List uploaded CloudPanel scan reports and read their migration plans"},
 	"migrations:write":        {Description: "Upload and delete CloudPanel scan reports"},

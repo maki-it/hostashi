@@ -136,12 +136,12 @@ func TestAllowed(t *testing.T) {
 		"::1":              true,
 		"::ffff:192.0.2.5": true,
 	} {
-		if got := Allowed(list, netip.MustParseAddr(addr)); got != want {
+		if got := agentapi.FirewallAllowed(list, netip.MustParseAddr(addr)); got != want {
 			t.Errorf("%s: %v", addr, got)
 		}
 	}
 
-	if !Allowed(nil, netip.MustParseAddr("203.0.113.1")) {
+	if !agentapi.FirewallAllowed(nil, netip.MustParseAddr("203.0.113.1")) {
 		t.Error("empty list must allow everyone")
 	}
 }

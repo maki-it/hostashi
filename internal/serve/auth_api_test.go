@@ -37,6 +37,7 @@ type apiEnv struct {
 	imports   *stubImports
 	cp        *cpmigrate.Service
 	doctor    *stubDoctor
+	firewall  *stubFirewall
 }
 
 func newAPI(t *testing.T) *apiEnv {
@@ -81,6 +82,8 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	imports := &stubImports{}
 	doc := &stubDoctor{}
 	deps.Doctor = doc.run
+	fw := &stubFirewall{enabled: true}
+	deps.Firewall = fw
 
 	if ag != nil {
 		deps.Sites = hosting.New(st, ag, nil)
@@ -92,7 +95,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 
 	return &apiEnv{
 		h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st, cp: deps.CloudPanel,
-		imports: imports, doctor: doc,
+		imports: imports, doctor: doc, firewall: fw,
 	}
 }
 
