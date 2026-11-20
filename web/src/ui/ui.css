@@ -654,3 +654,26 @@ a.ui-btn {
   flex: 1;
   border-top: 1px solid var(--line);
 }
+/* A command or a piece of configuration to copy */
+.ui-code {
+  margin: 0;
+  padding: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+/* An address and its port on one line */
+.ui-host-port {
+  display: grid;
+  grid-template-columns: minmax(0, 24rem) 7rem;
+  gap: var(--space-3);
+}
+/* A block inside a card that follows from what is above it */
+.ui-subsection {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
