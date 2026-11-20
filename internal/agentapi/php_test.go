@@ -46,3 +46,20 @@ func TestInstallerKnowsTheSamePHPVersions(t *testing.T) {
 		t.Fatalf("install.sh has %v, agentapi has %v", got, PHPVersions)
 	}
 }
+
+// The installer warns about the same legacy versions as the panel.
+func TestInstallerKnowsTheSameLegacyPHPVersions(t *testing.T) {
+	b, err := os.ReadFile("../../packaging/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m := regexp.MustCompile(`(?m)^LEGACY_PHP_VERSIONS=\(([^)]*)\)$`).FindSubmatch(b)
+	if m == nil {
+		t.Fatal("LEGACY_PHP_VERSIONS not found in install.sh")
+	}
+
+	if got := strings.Fields(string(m[1])); !slices.Equal(got, LegacyPHPVersions) {
+		t.Fatalf("install.sh has %v, agentapi has %v", got, LegacyPHPVersions)
+	}
+}
