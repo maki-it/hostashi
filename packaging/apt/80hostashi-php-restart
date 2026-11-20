@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// Managed by Hostashi (ADR-0033). After every dpkg run, restart the PHP-FPM
+// masters of the sites whose PHP was replaced by the update. The package's
+// own php*-fpm.service is off, so nothing else restarts them. Never fails apt.
+DPkg::Post-Invoke { "if [ -x /usr/local/lib/hostashi/php-restart ]; then /usr/local/lib/hostashi/php-restart || true; fi"; };

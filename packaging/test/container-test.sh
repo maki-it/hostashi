@@ -107,6 +107,24 @@ grep -q 'changes=0' <<<"$out" || fail "second run changed something"
 grep -q 'WARNING: disk quota is not available' <<<"$out" || fail "no warning about missing disk quota"
 x test ! -e /etc/systemd/system/hostashi-quota-enforce.service || fail "quota unit installed on an overlay root"
 
+step "security updates only, never a reboot"
+# shellcheck disable=SC2016 # expanded inside the container
+codename=$(x sh -c '. /etc/os-release && echo "$VERSION_CODENAME"')
+origins=$(x unattended-upgrade --dry-run -d 2>&1 | sed -n 's/^Allowed origins are: //p' | head -1)
+echo "allowed origins: $origins"
+case "$IMG" in
+  debian*) want="origin=Debian,codename=$codename-security,label=Debian-Security";;
+  *) want="origin=Ubuntu,archive=$codename-security";;
+esac
+grep -qF "$want" <<<"$origins" || fail "security origin missing: $origins"
+for o in $origins; do
+  case "$o" in *-security*) ;; *) fail "unattended-upgrades allows a non-security origin: $o";; esac
+done
+[ "$(x apt-config dump --format '%v%n' Unattended-Upgrade::Automatic-Reboot)" = false ] || fail "automatic reboot is on"
+for t in apt-daily.timer apt-daily-upgrade.timer; do
+  x systemctl is-enabled --quiet "$t" || fail "$t not enabled"
+done
+
 step "services, health and permissions"
 if x nft list table inet hostashi >/dev/null 2>&1; then fail "firewall table loaded despite --no-firewall"; fi
 x test ! -e /etc/systemd/system/hostashi-firewall.service || fail "firewall unit installed despite --no-firewall"
@@ -289,6 +307,22 @@ echo @file_get_contents("/etc/hostname") === false ? " jailed" : " open";
 PHP
 body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/some/pretty/url)
 [ "$body" = "php $ver user wp jailed" ] || fail "PHP site answered '$body'"
+# A PHP package update replaces the binary under the running master; the
+# dpkg hook (ADR-0033) restarts the site's unit, the package's own unit
+# stays off.
+pid=$(x systemctl show -p MainPID --value "hostashi-php-$ver@wp.service")
+x env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --reinstall "php$ver-fpm" >/dev/null || fail "reinstall of php$ver-fpm failed"
+new=$pid
+for _ in $(seq 1 30); do
+  new=$(x systemctl show -p MainPID --value "hostashi-php-$ver@wp.service")
+  [ "$new" != "$pid" ] && [ "$new" != 0 ] && x systemctl is-active --quiet "hostashi-php-$ver@wp.service" && break
+  sleep 1
+done
+[ "$new" != "$pid" ] || fail "PHP master of wp not restarted after the update (pid $pid)"
+if x grep -Eq ' /usr/[^ ]+ \(deleted\)$' "/proc/$new/maps"; then fail "restarted PHP master still maps a replaced file"; fi
+if x systemctl is-active --quiet "php$ver-fpm.service"; then fail "package unit php$ver-fpm started by the update"; fi
+body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/some/pretty/url)
+[ "$body" = "php $ver user wp jailed" ] || fail "PHP site answered '$body' after the update"
 # Metrics (ADR-0022): off by default, then on with a metrics:read token.
 # php_up comes from the unit's cgroup, which checks the slice path.
 [ "$(x curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/metrics)" = 404 ] || fail "metrics on by default"
