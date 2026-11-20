@@ -36,6 +36,9 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0030 | Loading imported dumps with definers | Accepted on 2026-11-19 ([adr/0030](adr/0030-loading-dumps-with-definers.md)) | No |
 | 0031 | DNS cut-over per site in the CloudPanel migration | Accepted on 2026-11-19 ([adr/0031](adr/0031-dns-cut-over-per-site.md)) | No |
 | 0032 | SSH and SFTP access per site | Accepted on 2026-11-20 ([adr/0032](adr/0032-ssh-and-sftp-per-site.md)) | **Yes** |
+| 0033 | System hardening baseline before v1 | Proposed ([adr/0033](adr/0033-system-hardening-baseline.md)) | No |
+| 0034 | Firewall rules in the panel | Accepted on 2026-11-20 ([adr/0034](adr/0034-firewall-rules-in-panel.md)) | Done |
+| 0035 | Users and roles | Proposed ([adr/0035](adr/0035-users-and-roles.md)) | **Yes** |
 
 ---
 
@@ -270,3 +273,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0034 Firewall rules in the panel
 
 **Full text (status Accepted, 2026-11-20, by Kim):** [adr/0034](adr/0034-firewall-rules-in-panel.md). Summary: the panel manages opened ports (TCP or UDP, a port or a range, optionally limited to addresses) and allowlists for SSH and the panel port; the web ports, loopback, ICMP, DHCP and fail2ban's table stay fixed. Recommended: the agent renders `/var/lib/hostashi-agent/firewall/panel.nft` from typed values, the installer's base file includes it, and the agent reloads `hostashi-firewall.service` through the existing `systemctl` exception, so there is no new `os/exec` exception. Every change is pending and rolls back after 120 seconds unless the browser confirms; the panel refuses an allowlist that leaves out the address of the request that sets it. Decided by Kim on 2026-11-20: rollback after 120 seconds; v1 manages opened ports (optionally limited to addresses) and allowlists for SSH and the panel port only.
+
+## ADR-0035 Users and roles
+
+**Full text (status Proposed, 2026-11-20):** [adr/0035](adr/0035-users-and-roles.md). Summary: today the panel has exactly one admin, the role column allows only `admin`, and every handler checks it through one of 16 local copies of the same `admin` check, while the API IP allowlist checks no role at all (checked in the code). Recommendation: three fixed roles, `admin` (everything), `manager` (all sites, no server settings, no users) and `user` (only the sites granted to them, day-to-day work there, but no domains, TLS, limits, snippets, disabling or deleting). Sites without a grant are invisible (`404`). One package `internal/authz` with a closed table "action to roles", called by every handler, and a route matrix test that fails for any route without an entry. A token never grants more than its owner, read on every request; tokens can optionally be limited to sites (ADR-0018). Admins invite users through a one-time link, a second factor is required for `admin` and `manager`, the last admin cannot be demoted or removed, `hostashi user recover` as root for a lost last admin, and the audit log keeps the actor's name. Open questions for Kim: the three roles, the second factor rule, the limits of `user`, and invitations instead of admin-set passwords.
