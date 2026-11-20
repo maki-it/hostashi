@@ -34,6 +34,7 @@ const titles: Record<string, string> = {
   "service.mariadb": "MariaDB",
   "service.fail2ban": "Brute-force protection",
   "system.firewall": "Firewall",
+  "system.firewall.panel": "Firewall rules from the panel",
   "system.updates": "Security updates",
   "system.reboot": "Reboot",
   "system.php": "PHP after updates",

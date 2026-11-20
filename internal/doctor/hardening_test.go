@@ -260,3 +260,41 @@ func TestSysctl(t *testing.T) {
 		t.Errorf("no file: %+v", c)
 	}
 }
+
+func TestFirewallPanel(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+
+	if _, shown := FirewallPanel(agentapi.FirewallStatus{}, nil, now); shown {
+		t.Error("a firewall that is off is reported by system.firewall, not here")
+	}
+
+	tests := []struct {
+		name   string
+		st     agentapi.FirewallStatus
+		err    error
+		status string
+		want   string
+	}{
+		{"no rules", agentapi.FirewallStatus{Enabled: true}, nil, agentapi.DoctorOK, "open to everyone"},
+		{"rules", agentapi.FirewallStatus{Enabled: true, State: agentapi.FirewallState{
+			Open:     []agentapi.FirewallRule{{Proto: "tcp", From: 3000}, {Proto: "udp", From: 6000, To: 6010}},
+			SSHAllow: []string{"192.0.2.1"}, PanelAllow: []string{"192.0.2.1", "2001:db8::/32"},
+		}}, nil, agentapi.DoctorOK, "2 opened port rules; SSH only from 1 address; the panel only from 2 addresses"},
+		{
+			"pending",
+			agentapi.FirewallStatus{Enabled: true, Pending: &agentapi.FirewallPending{Deadline: now.Unix() + 90}},
+			nil,
+			agentapi.DoctorWarn, "rolls back in 1m30s",
+		},
+		{"unreadable", agentapi.FirewallStatus{}, errors.New("boom"), agentapi.DoctorWarn, "boom"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, shown := FirewallPanel(tt.st, tt.err, now)
+			if !shown || c.Status != tt.status || !strings.Contains(c.Summary, tt.want) {
+				t.Errorf("got %v %+v, want %s containing %q", shown, c, tt.status, tt.want)
+			}
+		})
+	}
+}
