@@ -44,6 +44,7 @@ const titles: Record<string, string> = {
   "site.disk": "Disk use",
   "site.limits": "Resource limits",
   "site.tls": "Certificate",
+  "site.php": "PHP version",
 };
 
 export const checkTitle = (id: string) => titles[id] ?? id;
