@@ -520,6 +520,64 @@ x mariadb -e 'DROP TABLE wp_api.t'
 api_job
 [ "$(x mariadb -Nse 'SELECT i FROM wp_api.t')" = 7 ] || fail "API import did not restore the table"
 
+step "two sites stay apart (ADR-0033 H8, 05-security 5.5)"
+# A second site with PHP and a database. Everything below runs as wp, the
+# way a site's shell login or its PHP code would, and must not reach shop.
+[ "$(api POST /api/v1/sites "{\"name\":\"shop\",\"php\":\"$ver\",\"domains\":[\"shop.example.com\"]}")" = 201 ] ||
+  fail "create site shop: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/shop/databases '{"name":"shop_db","user":"shop_db"}')" = 201 ] ||
+  fail "create database of shop: $(x cat /tmp/api.out)"
+xi runuser -u shop -- sh -c 'cat >/home/shop/htdocs/index.php' <<'PHP'
+<?php echo "shop secret";
+PHP
+[ "$(x curl -fsS -H 'Host: shop.example.com' http://127.0.0.1/index.php)" = "shop secret" ] || fail "shop does not answer"
+x runuser -u shop -- sh -c 'exec sleep 300' &
+for _ in $(seq 10); do x pgrep -u shop -x sleep >/dev/null && break; sleep 1; done
+as_wp() { x runuser -u wp -- "$@"; }
+# Files: no read of shop's home. The web server's log holds every site's
+# requests, and the journal holds shop's PHP messages: wp reads and writes
+# neither.
+if as_wp cat /home/shop/htdocs/index.php 2>/dev/null; then fail "wp reads shop's files"; fi
+if as_wp ls /home/shop >/dev/null 2>&1; then fail "wp lists shop's home"; fi
+for log in /var/log/nginx/access.log /var/log/nginx/error.log; do
+  x test -f "$log" || fail "no $log"
+  if as_wp cat "$log" >/dev/null 2>&1; then fail "wp reads $log"; fi
+  if as_wp sh -c "echo x >>$log" 2>/dev/null; then fail "wp writes $log"; fi
+done
+[ -z "$(as_wp journalctl -q --no-pager -t hostashi-php-shop 2>/dev/null)" ] || fail "wp reads shop's PHP messages in the journal"
+# Sockets: curl exits with 7 when it cannot connect.
+for sock in /run/hostashi-php/shop/php-fpm.sock /run/hostashi-panel.sock /run/hostashi/agent.sock; do
+  rc=0
+  as_wp curl -sS -m 5 -o /dev/null --unix-socket "$sock" http://x/ 2>/dev/null || rc=$?
+  [ "$rc" = 7 ] || fail "wp connects to $sock (curl exit $rc)"
+done
+# Processes: hidepid hides shop's processes from wp.
+pid=$(x pgrep -u shop -x sleep | head -1)
+[ -n "$pid" ] || fail "no process of shop to look for"
+if as_wp pgrep -u shop >/dev/null; then fail "wp sees shop's processes"; fi
+if as_wp test -e "/proc/$pid"; then fail "wp sees /proc/$pid of shop"; fi
+# Databases: wp's own login reaches only its own database, and the socket
+# does not let the system user wp in.
+if x mariadb -u wp_api "-p$dbpw" -Nse 'SELECT 1' shop_db 2>/dev/null; then fail "wp's database user opens shop_db"; fi
+x mariadb -u wp_api "-p$dbpw" -Nse 'SHOW DATABASES' | grep -qx shop_db && fail "wp's database user lists shop_db"
+if as_wp mariadb -Nse 'SELECT 1' 2>/dev/null; then fail "system user wp logs in to MariaDB over the socket"; fi
+# The same from wp's PHP code.
+xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/iso.php' <<'PHP'
+<?php
+$out = [];
+$out[] = @file_get_contents("/home/shop/htdocs/index.php") === false ? "file:no" : "file:yes";
+foreach (["php" => "/run/hostashi-php/shop/php-fpm.sock", "panel" => "/run/hostashi-panel.sock", "agent" => "/run/hostashi/agent.sock"] as $k => $s) {
+  $c = @stream_socket_client("unix://" . $s, $errno, $errstr, 2);
+  $out[] = $c === false ? "$k:no" : "$k:yes";
+}
+echo implode(" ", $out);
+PHP
+body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/iso.php)
+[ "$body" = "file:no php:no panel:no agent:no" ] || fail "wp's PHP reaches shop or the services: $body"
+x rm -f /home/wp/htdocs/iso.php
+x pkill -u shop -x sleep || true
+[ "$(api DELETE /api/v1/sites/shop)" = 204 ] || fail "delete site shop: $(x cat /tmp/api.out)"
+
 step "cron jobs of a site (ADR-0028)"
 # The job writes who and where it runs, and whether other homes and /etc
 # are hidden or read-only for it.
