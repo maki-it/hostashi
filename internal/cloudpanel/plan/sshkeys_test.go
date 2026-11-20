@@ -50,3 +50,26 @@ func TestSSHKeys(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+func TestSSHKeysOfAdditionalUser(t *testing.T) {
+	t.Parallel()
+
+	pub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pk, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	key := strings.TrimSuffix(string(ssh.MarshalAuthorizedKey(pk)), "\n")
+
+	for comment, want := range map[string]string{"": "dev", "kim@laptop": "dev kim@laptop"} {
+		got := SSHKeys(scan.Site{SSHKeys: []scan.SSHKey{{Public: key, Comment: comment, User: "dev"}}})
+		if len(got) != 1 || got[0].Label != want {
+			t.Fatalf("comment %q: %+v", comment, got)
+		}
+	}
+}

@@ -18,7 +18,8 @@ type SSHKey struct {
 
 // SSHKeys returns the scanned keys of a site that Hostashi accepts, at most
 // sshkeys.MaxKeys and each once. The label comes from the key's comment,
-// reduced to the characters a label may have, or "imported key N".
+// reduced to the characters a label may have, or "imported key N". A key
+// of an additional CloudPanel SSH user starts with the user's name.
 func SSHKeys(s scan.Site) []SSHKey {
 	out := []SSHKey{}
 	seen := map[string]bool{}
@@ -35,7 +36,12 @@ func SSHKeys(s scan.Site) []SSHKey {
 
 		seen[fp] = true
 
-		out = append(out, SSHKey{Label: keyLabel(k.Comment, len(out)+1), Public: public})
+		comment := k.Comment
+		if k.User != "" {
+			comment = strings.TrimSpace(k.User + " " + comment)
+		}
+
+		out = append(out, SSHKey{Label: keyLabel(comment, len(out)+1), Public: public})
 	}
 
 	return out

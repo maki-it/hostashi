@@ -83,6 +83,7 @@ func Run(o Options) (*Report, error) {
 		s.vhostFile(path.Join(sitesEnabled, n))
 	}
 
+	s.extraUsers()
 	s.orphans()
 
 	if !o.SkipUsage {
@@ -175,6 +176,7 @@ type scanner struct {
 	pools  map[string]*poolRef // by listenKey
 	poolsL []*poolRef
 	used   map[string]bool // site users that have a site
+	extra  map[string]bool // additional SSH users of a site
 }
 
 func (s *scanner) global(sev Severity, code, msg, src string) {
@@ -184,6 +186,7 @@ func (s *scanner) global(sev Severity, code, msg, src string) {
 func (s *scanner) loadPasswd() {
 	s.users = map[string]passwdEntry{}
 	s.used = map[string]bool{}
+	s.extra = map[string]bool{}
 
 	b, err := s.r.ReadFile("/etc/passwd", 4<<20)
 	if err != nil {
@@ -727,7 +730,7 @@ func (s *scanner) orphans() {
 
 	for _, n := range names {
 		u := s.users[n]
-		if u.UID < minSiteUID || u.UID == 65534 || s.used[n] || !strings.HasPrefix(u.Home, "/home/") {
+		if u.UID < minSiteUID || u.UID == 65534 || s.used[n] || s.extra[n] || !strings.HasPrefix(u.Home, "/home/") {
 			continue
 		}
 
