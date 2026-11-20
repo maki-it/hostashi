@@ -145,6 +145,6 @@ func registerPasskeys(mux *routeMux, a authn) {
 		}
 
 		setSessionCookie(w, token, int(auth.SessionTTL.Seconds()))
-		writeJSON(w, http.StatusOK, userJSON{Username: u.Username, Role: u.Role})
+		a.writeLoggedIn(w, r, u)
 	})
 }

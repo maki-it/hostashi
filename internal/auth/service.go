@@ -239,6 +239,19 @@ func (s *Service) Login(ctx context.Context, username, password, code, ip string
 		}
 	}
 
+	// A passkey is no second step after a password: an account that must
+	// have a second factor and has only passkeys logs in with one.
+	if !u.TOTPEnabled && SecondFactorRequired(u) {
+		has, err := s.HasSecondFactor(ctx, u)
+		if err != nil {
+			return "", store.User{}, err
+		}
+
+		if has {
+			return "", store.User{}, ErrPasskeyRequired
+		}
+	}
+
 	token, err := s.newSession(ctx, u.ID)
 	if err != nil {
 		return "", store.User{}, err
@@ -459,6 +472,8 @@ func (s *Service) TOTPConfirm(ctx context.Context, userID int64, code string) ([
 
 // TOTPDisable turns TOTP off. It needs the password and a current code or
 // a recovery code, so a stolen session alone cannot remove the second factor.
+// An account that must have a second factor keeps TOTP unless it has a
+// passkey (ErrSecondFactorRequired).
 func (s *Service) TOTPDisable(ctx context.Context, userID int64, password, code string) error {
 	u, err := s.st.UserByID(ctx, userID)
 	if err != nil {
@@ -479,6 +494,10 @@ func (s *Service) TOTPDisable(ctx context.Context, userID int64, password, code 
 		s.userLimit.Fail(key)
 
 		return ErrInvalidCredentials
+	}
+
+	if err := s.keepsSecondFactor(ctx, u, true, 0); err != nil {
+		return err
 	}
 
 	if err := s.st.DisableTOTP(ctx, u.ID); err != nil {

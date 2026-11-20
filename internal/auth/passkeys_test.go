@@ -275,6 +275,15 @@ func TestDeletePasskey(t *testing.T) {
 		t.Fatalf("foreign delete: %v", err)
 	}
 
+	// An admin keeps the last second factor (ADR-0035).
+	if err := e.svc.DeletePasskey(ctx, 1, list[0].ID, ""); !errors.Is(err, ErrSecondFactorRequired) {
+		t.Fatalf("admin deletes the last factor: %v", err)
+	}
+
+	if err := e.st.RawExec(ctx, `UPDATE users SET role = 'user' WHERE id = 1`); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := e.svc.DeletePasskey(ctx, 1, list[0].ID, ""); err != nil {
 		t.Fatal(err)
 	}

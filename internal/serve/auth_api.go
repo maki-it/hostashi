@@ -15,6 +15,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/cloudpanel/plan"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 const (
@@ -43,6 +44,40 @@ type userJSON struct {
 	// ClientIP is the address the panel sees for this request, only on
 	// /auth/me ("add my current IP" for maintenance, ADR-0027).
 	ClientIP string `json:"clientIp,omitempty"`
+}
+
+// meJSON is the answer of /auth/me. An account with secondFactorRequired
+// and without secondFactor gets 403 second_factor_required on every route
+// except the ones that set up TOTP or a passkey (ADR-0035).
+type meJSON struct {
+	userJSON
+
+	SecondFactor         bool `json:"secondFactor"`
+	SecondFactorRequired bool `json:"secondFactorRequired"`
+}
+
+// me returns the second factor state of the account with its name and
+// role. It writes the error answer itself.
+func (a authn) me(w http.ResponseWriter, r *http.Request, u store.User) (meJSON, bool) {
+	has, err := a.svc.HasSecondFactor(r.Context(), u)
+	if err != nil {
+		a.fail(w, err, "check second factor")
+
+		return meJSON{}, false
+	}
+
+	return meJSON{
+		userJSON:     userJSON{Username: u.Username, Role: u.Role},
+		SecondFactor: has, SecondFactorRequired: auth.SecondFactorRequired(u),
+	}, true
+}
+
+// writeLoggedIn answers a request that started a session, so the panel
+// knows at once whether it must ask for a second factor first.
+func (a authn) writeLoggedIn(w http.ResponseWriter, r *http.Request, u store.User) {
+	if out, ok := a.me(w, r, u); ok {
+		writeJSON(w, http.StatusOK, out)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -203,6 +238,10 @@ func newFail(log *slog.Logger) failFunc {
 			writeError(w, http.StatusUnauthorized, "totp_required", "a one-time code is required")
 		case errors.Is(err, auth.ErrTOTPUnavailable):
 			writeError(w, http.StatusNotImplemented, "totp_unavailable", "two-factor authentication is not configured on this server")
+		case errors.Is(err, auth.ErrPasskeyRequired):
+			writeError(w, http.StatusUnauthorized, "passkey_required", "this account logs in with a passkey")
+		case errors.Is(err, auth.ErrSecondFactorRequired):
+			writeError(w, http.StatusConflict, "second_factor_required", "this account must keep a second factor (TOTP or a passkey)")
 		case errors.Is(err, auth.ErrTOTPState):
 			writeError(w, http.StatusConflict, "totp_state", "two-factor authentication is not in the right state for this action")
 		case errors.Is(err, auth.ErrInvalidCredentials):
@@ -272,7 +311,7 @@ func registerAuth(mux *routeMux, svc *auth.Service, log *slog.Logger) {
 		}
 
 		setSessionCookie(w, token, int(auth.SessionTTL.Seconds()))
-		writeJSON(w, http.StatusOK, userJSON{Username: u.Username, Role: u.Role})
+		a.writeLoggedIn(w, r, u)
 	})
 
 	mux.HandleFunc("POST /api/v1/auth/logout", func(w http.ResponseWriter, r *http.Request) {
@@ -358,7 +397,12 @@ func registerAuth(mux *routeMux, svc *auth.Service, log *slog.Logger) {
 			return
 		}
 
-		out := userJSON{Username: p.User.Username, Role: p.User.Role, Auth: "session", ClientIP: clientIP(r)}
+		out, ok := a.me(w, r, p.User)
+		if !ok {
+			return
+		}
+
+		out.Auth, out.ClientIP = "session", clientIP(r)
 		if p.IsToken() {
 			out.Auth, out.Scopes = "token", p.Scopes
 		}

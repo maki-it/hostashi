@@ -147,6 +147,16 @@ func (s *Store) Passkeys(ctx context.Context, userID int64) ([]Passkey, error) {
 	return out, nil
 }
 
+// PasskeyCount returns the number of passkeys of a user.
+func (s *Store) PasskeyCount(ctx context.Context, userID int64) (int, error) {
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM passkeys WHERE user_id = ?`, userID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("store: %w", err)
+	}
+
+	return n, nil
+}
+
 // UpdatePasskeyUse stores the credential after a login (new sign counter and
 // flags) and the time of use.
 func (s *Store) UpdatePasskeyUse(ctx context.Context, id int64, credential string, now time.Time) error {

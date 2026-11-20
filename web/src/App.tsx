@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { currentUser, setupRequired, type User } from "./auth";
+import { currentUser, needsSecondFactor, setupRequired, type User } from "./auth";
 import { Backups } from "./Backups";
 import { Databases } from "./Databases";
 import { Doctor } from "./Doctor";
@@ -13,6 +13,7 @@ import { Migrate } from "./Migrate";
 import { Pages } from "./Pages";
 import { Parked } from "./Parked";
 import { PHPPage } from "./PHP";
+import { SecondFactor } from "./SecondFactor";
 import { Setup } from "./Setup";
 import { Sites } from "./Sites";
 
@@ -80,11 +81,16 @@ export function App() {
     void boot();
   }, [boot]);
 
+  // locked: the account must set up a second factor first, and the server
+  // refuses every other page until then.
+  const locked = view.kind === "home" && needsSecondFactor(view.user);
+  const open = view.kind === "home" && !locked;
+
   return (
     <main className={view.kind === "home" ? "shell wide" : "shell"}>
       <header className="brand">
         <h1>Hostashi</h1>
-        {view.kind === "home" && (
+        {open && (
           <nav aria-label="Main">
             <a href="#/" aria-current={page === "home" ? "page" : undefined}>
               Overview
@@ -137,17 +143,20 @@ export function App() {
       {view.kind === "login" && (
         <Login {...(view.notice ? { notice: view.notice } : {})} onLogin={(user) => setView({ kind: "home", user })} />
       )}
-      {view.kind === "home" && page === "home" && <Home user={view.user} onLogout={() => setView({ kind: "login" })} />}
-      {view.kind === "home" && page === "health" && <Doctor />}
-      {view.kind === "home" && page === "firewall" && <Firewall />}
-      {view.kind === "home" && page === "sites" && <Sites />}
-      {view.kind === "home" && page === "php" && <PHPPage />}
-      {view.kind === "home" && page === "limits" && <Presets />}
-      {view.kind === "home" && page === "pages" && <Pages />}
-      {view.kind === "home" && page === "parked" && <Parked />}
-      {view.kind === "home" && page === "databases" && <Databases />}
-      {view.kind === "home" && page === "backups" && <Backups />}
-      {view.kind === "home" && page === "import" && <Migrate />}
+      {view.kind === "home" && (locked || page === "home") && <Home user={view.user} onLogout={() => setView({ kind: "login" })} />}
+      {view.kind === "home" && locked && (
+        <SecondFactor onDone={() => setView({ kind: "home", user: { ...view.user, secondFactor: true } })} />
+      )}
+      {open && page === "health" && <Doctor />}
+      {open && page === "firewall" && <Firewall />}
+      {open && page === "sites" && <Sites />}
+      {open && page === "php" && <PHPPage />}
+      {open && page === "limits" && <Presets />}
+      {open && page === "pages" && <Pages />}
+      {open && page === "parked" && <Parked />}
+      {open && page === "databases" && <Databases />}
+      {open && page === "backups" && <Backups />}
+      {open && page === "import" && <Migrate />}
     </main>
   );
 }

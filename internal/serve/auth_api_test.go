@@ -413,6 +413,10 @@ func TestTOTPEndpoints(t *testing.T) {
 	rec := e.login(t, `{"username":"kim","password":"`+apiPassword+`"}`)
 	c := sessionCookieOf(t, rec)
 
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/users", cookie: c}); rec.Code != http.StatusForbidden || errCode(t, rec) != "second_factor_required" {
+		t.Fatalf("admin without a second factor: %d %s", rec.Code, rec.Body)
+	}
+
 	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/totp/enroll", cookie: c})
 	if rec.Code != 200 {
 		t.Fatalf("enroll: %d %s", rec.Code, rec.Body)
@@ -451,6 +455,12 @@ func TestTOTPEndpoints(t *testing.T) {
 		t.Fatalf("%s %v", rec.Body, err)
 	}
 
+	// Before TOTP the admin could only set up a factor; now the session
+	// works (ADR-0035).
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/users", cookie: c}); rec.Code != http.StatusOK {
+		t.Fatalf("admin with TOTP: %d %s", rec.Code, rec.Body)
+	}
+
 	// Enrolling again while enabled is a conflict.
 	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/totp/enroll", cookie: c})
 	if rec.Code != http.StatusConflict || errCode(t, rec) != "totp_state" {
@@ -479,16 +489,28 @@ func TestTOTPEndpoints(t *testing.T) {
 		t.Fatalf("disable with wrong password: %d", rec.Code)
 	}
 
+	// An admin must keep a second factor (ADR-0035).
 	rec = e.do(t, reqOpts{
 		method: "POST", path: "/api/v1/auth/totp/disable", cookie: c2,
 		body: `{"password":"` + apiPassword + `","code":"` + conf.RecoveryCodes[1] + `"}`,
+	})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "second_factor_required" {
+		t.Fatalf("disable the last factor: %d %s", rec.Code, rec.Body)
+	}
+
+	e.giveSecondFactor(t, "kim")
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/totp/disable", cookie: c2,
+		body: `{"password":"` + apiPassword + `","code":"` + conf.RecoveryCodes[2] + `"}`,
 	})
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("disable: %d %s", rec.Code, rec.Body)
 	}
 
+	// With only a passkey left, the password alone is not enough.
 	rec = e.login(t, `{"username":"kim","password":"`+apiPassword+`"}`)
-	if rec.Code != 200 {
-		t.Fatalf("login after disable: %d %s", rec.Code, rec.Body)
+	if rec.Code != http.StatusUnauthorized || errCode(t, rec) != "passkey_required" || len(rec.Result().Cookies()) != 0 {
+		t.Fatalf("password login with only a passkey: %d %s", rec.Code, rec.Body)
 	}
 }

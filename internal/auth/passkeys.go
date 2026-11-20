@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -430,8 +431,27 @@ func (s *Service) ListPasskeys(ctx context.Context, userID int64) ([]store.Passk
 	return ps, nil
 }
 
-// DeletePasskey removes one of the user's passkeys.
+// DeletePasskey removes one of the user's passkeys. An account that must
+// have a second factor keeps its last one (ErrSecondFactorRequired).
 func (s *Service) DeletePasskey(ctx context.Context, userID, id int64, ip string) error {
+	u, err := s.st.UserByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
+
+	own, err := s.st.Passkeys(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
+
+	if !slices.ContainsFunc(own, func(p store.Passkey) bool { return p.ID == id }) {
+		return ErrPasskeyNotFound
+	}
+
+	if err := s.keepsSecondFactor(ctx, u, false, 1); err != nil {
+		return err
+	}
+
 	p, err := s.st.DeletePasskey(ctx, userID, id)
 	if errors.Is(err, store.ErrNotFound) {
 		return ErrPasskeyNotFound

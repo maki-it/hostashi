@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // End-to-end check of setup and login against a real "hostashi serve":
-// first-run setup, password login, session after reload, TOTP with a
-// recovery code, passkey registration and login (Chromium's virtual
-// authenticator), logout. The server must be fresh (setup not done) and
+// first-run setup, password login, session after reload, the mandatory
+// second factor (TOTP set up in the panel), TOTP with a recovery code,
+// passkey registration and login (Chromium's virtual authenticator),
+// logout. The server must be fresh (setup not done) and
 // started with -public-url matching HOSTASHI_URL.
 //
 //   HOSTASHI_URL=http://localhost:8080 HOSTASHI_SETUP_TOKEN_FILE=/path/setup-token node e2e/login.e2e.mjs
@@ -83,15 +84,20 @@ try {
   await welcome().waitFor();
   await ok("password login, session survives a reload");
 
-  const { secret } = await page.evaluate(() => fetch("/api/v1/auth/totp/enroll", { method: "POST" }).then((r) => r.json()));
-  const codes = await page.evaluate(
-    (code) =>
-      fetch("/api/v1/auth/totp/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) })
-        .then((r) => r.json())
-        .then((j) => j.recoveryCodes),
-    totp(secret),
-  );
-  if (!Array.isArray(codes) || codes.length === 0) throw new Error("TOTP enrollment returned no recovery codes");
+  // An admin must set up a second factor before anything else (ADR-0035).
+  await page.getByRole("heading", { name: "Set up a second factor" }).waitFor();
+  if (await page.getByRole("link", { name: "Sites" }).count()) throw new Error("navigation shown before the second factor");
+  await ok("an admin without a second factor sees only the setup");
+
+  await page.getByRole("button", { name: "Set up an authenticator app" }).click();
+  const secret = (await page.locator("section code").first().textContent()).trim();
+  await page.getByLabel("One-time code").fill(totp(secret));
+  await page.getByRole("button", { name: "Turn on" }).click();
+  const codes = (await page.getByRole("list", { name: "Recovery codes" }).locator("code").allTextContents()).map((c) => c.trim());
+  if (codes.length === 0) throw new Error("TOTP enrollment returned no recovery codes");
+  await ok("TOTP set up in the panel, recovery codes shown");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("link", { name: "Sites" }).waitFor();
 
   const cdp = await context.newCDPSession(page);
   await cdp.send("WebAuthn.enable");
@@ -121,7 +127,7 @@ try {
     return r.status;
   });
   if (reg !== 201) throw new Error("passkey registration: status " + reg);
-  await ok("TOTP and a passkey enrolled through the API");
+  await ok("a passkey enrolled through the API");
 
   await page.getByRole("button", { name: "Log out" }).click();
   await loginButton().waitFor();

@@ -114,8 +114,9 @@ func (s *Service) CreateAccount(ctx context.Context, actor store.User, username,
 	return a, out, nil
 }
 
-// UpdateAccount changes another account's role or disabled flag. Nobody
-// changes their own; the last enabled admin stays.
+// UpdateAccount changes another account's role, disabled flag or demand
+// for a second factor. Nobody changes their own; the last enabled admin
+// stays.
 func (s *Service) UpdateAccount(ctx context.Context, actor store.User, id int64, c store.AccountChange, ip string) (store.Account, error) {
 	if id == actor.ID {
 		return store.Account{}, ErrSelf
@@ -137,6 +138,10 @@ func (s *Service) UpdateAccount(ctx context.Context, actor store.User, id int64,
 
 	if before.Disabled != after.Disabled {
 		detail["disabled"] = strconv.FormatBool(after.Disabled)
+	}
+
+	if before.RequireSecondFactor != after.RequireSecondFactor {
+		detail["requireSecondFactor"] = strconv.FormatBool(after.RequireSecondFactor)
 	}
 
 	if len(detail) > 2 {

@@ -3,7 +3,17 @@
 import { ApiError, request } from "./api";
 import { getAssertion } from "./webauthn";
 
-export type User = { username: string; role: string; clientIp?: string };
+// secondFactorRequired without secondFactor: the account must set up TOTP
+// or a passkey before the panel answers anything else (ADR-0035).
+export type User = {
+  username: string;
+  role: string;
+  clientIp?: string;
+  secondFactor?: boolean;
+  secondFactorRequired?: boolean;
+};
+
+export const needsSecondFactor = (u: User): boolean => !!u.secondFactorRequired && !u.secondFactor;
 
 export async function setupRequired(): Promise<boolean> {
   const r = await request<{ required: boolean }>("GET", "/setup");
@@ -30,6 +40,15 @@ export function login(username: string, password: string, totp = ""): Promise<Us
   return request<User>("POST", "/auth/login", { username, password, totp });
 }
 
+export function totpEnroll(): Promise<{ secret: string; uri: string }> {
+  return request<{ secret: string; uri: string }>("POST", "/auth/totp/enroll");
+}
+
+export async function totpConfirm(code: string): Promise<string[]> {
+  const r = await request<{ recoveryCodes: string[] }>("POST", "/auth/totp/confirm", { code });
+  return r.recoveryCodes;
+}
+
 export function logout(): Promise<void> {
   return request<void>("POST", "/auth/logout");
 }
@@ -50,6 +69,8 @@ export function message(err: unknown): string {
         return "Wrong username or password.";
       case "rate_limited":
         return "Too many attempts. Wait a few minutes and try again.";
+      case "passkey_required":
+        return "This account logs in with a passkey.";
       case "passkeys_unavailable":
         return "Passkeys are not set up on this server. Log in with your password.";
       case "passkey_failed":

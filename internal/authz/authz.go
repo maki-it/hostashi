@@ -168,6 +168,13 @@ func SeesAllSites(role Role) bool {
 	return role == RoleAdmin || role == RoleManager
 }
 
+// NeedsSecondFactor reports whether every account of the role must have a
+// second factor (ADR-0035, question 2). An admin can require one of a user
+// as well; that is a flag of the account, not of the role.
+func NeedsSecondFactor(role Role) bool {
+	return role == RoleAdmin || role == RoleManager
+}
+
 // ScopeOf returns the token scope of an action; empty for session-only and
 // unknown actions.
 func ScopeOf(a Action) string {
