@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError } from "./api";
 import {
   confirmFirewall,
@@ -123,6 +123,16 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
   const [otherWay, setOtherWay] = useState(false);
   const [waiting, setWaiting] = useState<Waiting | null>(null);
   const [now, setNow] = useState(0);
+  const waitRef = useRef<HTMLHeadingElement>(null);
+
+  // The notice sits at the top of a long page: bring it into view, so the
+  // admin sees what to do before the rules roll back.
+  const waitingID = waiting?.id;
+  useEffect(() => {
+    if (!waitingID) return;
+    waitRef.current?.focus();
+    waitRef.current?.scrollIntoView?.({ block: "start" });
+  }, [waitingID]);
 
   const deadline = waiting?.deadline ?? fw.pending?.deadline;
   useEffect(() => {
@@ -228,7 +238,9 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
 
       {waiting && (
         <section className="card notice" aria-labelledby="fw-wait">
-          <h2 id="fw-wait">Waiting for confirmation</h2>
+          <h2 id="fw-wait" ref={waitRef} tabIndex={-1}>
+            Waiting for confirmation
+          </h2>
           {waiting.ssh ? (
             <>
               <p>
