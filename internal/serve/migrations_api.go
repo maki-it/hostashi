@@ -17,6 +17,7 @@ import (
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/cloudpanel/plan"
 	"github.com/maki-it/hostashi/internal/cpmigrate"
+	"github.com/maki-it/hostashi/internal/dnsq"
 	"github.com/maki-it/hostashi/internal/hosting"
 )
 
@@ -446,4 +447,27 @@ func serverAddrs(c *agentrpc.Client) cpmigrate.AddrsFunc {
 
 		return out, nil
 	}
+}
+
+// resolvConf answers the cut-over's lookups from the server's resolvers,
+// read again for every lookup so that a change is picked up.
+type resolvConf string
+
+// Lookup implements cpmigrate.Resolver.
+func (p resolvConf) Lookup(ctx context.Context, host string) ([]netip.Addr, time.Duration, error) {
+	c, err := dnsq.FromResolvConf(string(p))
+	if err != nil {
+		return nil, 0, err
+	}
+
+	r, err := c.Lookup(ctx, host)
+	if errors.Is(err, dnsq.ErrNotFound) {
+		return nil, 0, cpmigrate.ErrDomainNotFound
+	}
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return r.Addrs, r.TTL, nil
 }

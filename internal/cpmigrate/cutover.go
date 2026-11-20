@@ -29,6 +29,8 @@ var (
 	ErrNoCutover = errors.New("cpmigrate: no cut-over")
 	// ErrCutoverRunning means a cut-over of the site still waits.
 	ErrCutoverRunning = errors.New("cpmigrate: a cut-over of this site is still waiting")
+	// ErrDomainNotFound means a domain does not exist or has no address.
+	ErrDomainNotFound = errors.New("cpmigrate: no such domain or no address")
 	// ErrSiteState means the site does not exist or is not active.
 	ErrSiteState = errors.New("cpmigrate: the site does not exist or is not active")
 )
@@ -39,9 +41,11 @@ type CutoverSites interface {
 	SetTLS(ctx context.Context, actor int64, name string, on bool) (store.Site, error)
 }
 
-// Resolver looks up the addresses of a host name (net.Resolver).
+// Resolver looks up the A and AAAA addresses of a host name and the
+// largest TTL of the records that led to them (dnsq.Client). A name
+// without an address is ErrDomainNotFound.
 type Resolver interface {
-	LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error)
+	Lookup(ctx context.Context, host string) ([]netip.Addr, time.Duration, error)
 }
 
 // AddrsFunc returns the addresses a domain must point to.
@@ -52,7 +56,10 @@ type DomainAnswer struct {
 	Domain string   `json:"domain"`
 	Addrs  []string `json:"addrs"`
 	// Here is true when the domain resolves only to this server.
-	Here  bool   `json:"here"`
+	Here bool `json:"here"`
+	// TTL is the time in seconds a resolver may keep the answer; nil
+	// when the lookup failed. A caching resolver reports what is left.
+	TTL   *int64 `json:"ttl,omitempty"`
 	Error string `json:"error,omitempty"`
 }
 
@@ -292,7 +299,7 @@ func (s *Service) lookup(ctx context.Context, domains []string, server []netip.A
 
 	for _, d := range domains {
 		lctx, cancel := context.WithTimeout(ctx, lookupTimeout)
-		addrs, err := s.cutover.resolver.LookupNetIP(lctx, "ip", d)
+		addrs, ttl, err := s.cutover.resolver.Lookup(lctx, d)
 
 		cancel()
 
@@ -305,7 +312,8 @@ func (s *Service) lookup(ctx context.Context, domains []string, server []netip.A
 			continue
 		}
 
-		a.Here = len(addrs) > 0
+		secs := int64(ttl / time.Second)
+		a.Here, a.TTL = len(addrs) > 0, &secs
 
 		for _, ip := range addrs {
 			ip = ip.Unmap()
@@ -326,12 +334,15 @@ func (s *Service) lookup(ctx context.Context, domains []string, server []netip.A
 
 // lookupError gives a short reason without the resolver's address.
 func lookupError(err error) string {
-	var de *net.DNSError
+	var (
+		de *net.DNSError
+		ne net.Error
+	)
 
 	switch {
-	case errors.As(err, &de) && de.IsNotFound:
+	case errors.Is(err, ErrDomainNotFound), errors.As(err, &de) && de.IsNotFound:
 		return "no such domain or no address"
-	case errors.As(err, &de) && de.IsTimeout, errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &ne) && ne.Timeout():
 		return "lookup timed out"
 	default:
 		return "lookup failed"

@@ -5,7 +5,6 @@ package cpmigrate_test
 import (
 	"context"
 	"errors"
-	"net"
 	"net/netip"
 	"sync"
 	"testing"
@@ -54,16 +53,16 @@ func (f *fakeResolver) set(host string, ips ...string) {
 	f.ips[host] = out
 }
 
-func (f *fakeResolver) LookupNetIP(_ context.Context, _, host string) ([]netip.Addr, error) {
+func (f *fakeResolver) Lookup(_ context.Context, host string) ([]netip.Addr, time.Duration, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	ips, ok := f.ips[host]
 	if !ok {
-		return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+		return nil, 0, cpmigrate.ErrDomainNotFound
 	}
 
-	return ips, nil
+	return ips, 300 * time.Second, nil
 }
 
 func TestCutover(t *testing.T) {
@@ -119,6 +118,7 @@ func TestCutover(t *testing.T) {
 
 	c, _ = svc.Cutover(ctx, "blog")
 	if c.State != store.CutoverWaiting || len(c.Answers) != 2 || c.Answers[0].Here || c.Answers[0].Addrs[0] != "198.51.100.1" ||
+		c.Answers[0].TTL == nil || *c.Answers[0].TTL != 300 || c.Answers[1].TTL != nil ||
 		c.Answers[1].Error != "no such domain or no address" || c.CheckedAt == nil {
 		t.Fatalf("old server %+v", c)
 	}
