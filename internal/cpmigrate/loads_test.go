@@ -92,7 +92,9 @@ func loadService(t *testing.T) (*cpmigrate.Service, *stateImporter, string) {
 	}
 
 	imp := &stateImporter{state: agentapi.ImportRunning}
-	svc.Connect(func(context.Context, int64, cpmigrate.NewSite) (int, error) { return 0, nil }, imp)
+	svc.Connect(func(context.Context, int64, cpmigrate.NewSite) (cpmigrate.Created, error) {
+		return cpmigrate.Created{}, nil
+	}, imp)
 
 	return svc, imp, rep.ID
 }

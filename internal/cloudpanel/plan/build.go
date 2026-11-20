@@ -60,6 +60,10 @@ type Site struct {
 	Cron         int       `json:"cronJobs"`
 	// CronImport of them are created paused with the site (ADR-0028).
 	CronImport int `json:"cronImport"`
+	// SSHKeys is how many of the site user's keys are carried over, as
+	// SFTP only (ADR-0032); SSHImport how many the site got.
+	SSHKeys   int `json:"sshKeys"`
+	SSHImport int `json:"sshImport"`
 	// HomeBytes and HomeInodes are what the home uses on the old server,
 	// zero if the scan did not measure it. The new site's disk limits start
 	// from them (ADR-0015: use plus 50 %).
@@ -131,6 +135,7 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 	ps := Site{
 		Name: s.User, Type: s.Type, Domains: nonNil(s.Domains), RedirectFrom: nonNil(s.RedirectFrom),
 		DocRoot: s.DocRoot, Custom: len(s.Custom), Cron: len(s.Cron), CronImport: len(CronJobs(s)),
+		SSHKeys: len(SSHKeys(s)),
 		Reasons: []Reason{}, Source: first(s.Sources),
 	}
 	if s.Usage != nil {
@@ -220,6 +225,10 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 
 	if n := ps.Cron - ps.CronImport; n > 0 {
 		review("cron_not_carried", fmt.Sprintf("%d cron jobs are not carried over (schedule or command not accepted, or more than %d); set them up by hand", n, cron.MaxJobsPerSite))
+	}
+
+	if ps.SSHKeys > 0 {
+		review("ssh_keys", fmt.Sprintf("%d SSH keys of the site user are carried over as SFTP only; give a key shell access in the site's settings if it needs one", ps.SSHKeys))
 	}
 
 	if len(ps.RedirectFrom) > 0 {

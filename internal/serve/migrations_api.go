@@ -19,6 +19,7 @@ import (
 	"github.com/maki-it/hostashi/internal/cpmigrate"
 	"github.com/maki-it/hostashi/internal/dnsq"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/sshkeys"
 )
 
 type cloudPanelReportJSON struct {
@@ -369,7 +370,7 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return func(ctx context.Context, actor int64, s cpmigrate.NewSite) (int, error) {
+	return func(ctx context.Context, actor int64, s cpmigrate.NewSite) (cpmigrate.Created, error) {
 		req := hosting.CreateRequest{Name: s.Name, PHP: s.PHP, Domains: s.Domains}
 		if u := s.Usage; u != nil && u.Bytes >= 0 && u.Inodes >= 0 {
 			// Disk limits of at least the old use plus 50 % (ADR-0015), so
@@ -378,10 +379,10 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 		}
 
 		if _, err := sites.Create(ctx, actor, req); err != nil {
-			return 0, err
+			return cpmigrate.Created{}, err
 		}
 
-		n := 0
+		var n cpmigrate.Created
 
 		for _, j := range s.Cron {
 			_, err := sites.CreateCronJob(ctx, actor, s.Name, hosting.CronInput{Schedule: j.Schedule, Command: j.Command, Paused: true})
@@ -393,7 +394,26 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 				continue
 			}
 
-			n++
+			n.Cron++
+		}
+
+		// SFTP only: shell access is given per key in the site's settings
+		// (ADR-0032). Without SSH on this panel the keys stay behind.
+		for _, k := range s.SSHKeys {
+			_, err := sites.CreateSSHKey(ctx, actor, s.Name, hosting.SSHKeyInput{Label: k.Label, Access: sshkeys.SFTP, Public: k.Public})
+			if errors.Is(err, hosting.ErrNoSSH) {
+				log.WarnContext(ctx, "imported SSH keys not created: SSH is not available", "site", s.Name, "keys", len(s.SSHKeys))
+
+				break
+			}
+
+			if err != nil {
+				log.WarnContext(ctx, "imported SSH key not created", "site", s.Name, "label", k.Label, "err", err)
+
+				continue
+			}
+
+			n.SSHKeys++
 		}
 
 		return n, nil

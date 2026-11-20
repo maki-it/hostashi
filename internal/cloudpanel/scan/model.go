@@ -84,6 +84,16 @@ type CronJob struct {
 	Line     int    `json:"line"`
 }
 
+// SSHKey is one public key from the site user's authorized_keys. Public
+// is the key in canonical form (type and base64, no options, no comment).
+type SSHKey struct {
+	Public      string `json:"public"`
+	Fingerprint string `json:"fingerprint"`
+	Comment     string `json:"comment,omitempty"`
+	Source      string `json:"source"`
+	Line        int    `json:"line"`
+}
+
 // Site is the adopted view of one vhost.
 type Site struct {
 	Name          string    `json:"name"`
@@ -98,6 +108,9 @@ type Site struct {
 	Cron          []CronJob `json:"cron,omitempty"`
 	ClientMaxBody string    `json:"client_max_body_size,omitempty"`
 	Custom        []Custom  `json:"custom,omitempty"`
+	// SSHKeys are the accepted public keys the site user logs in with
+	// (ADR-0032); the importer carries them over as SFTP only.
+	SSHKeys []SSHKey `json:"ssh_keys,omitempty"`
 	// Usage is what the site user's home occupies; nil if not measured.
 	Usage    *Usage    `json:"usage,omitempty"`
 	Sources  []string  `json:"sources"`

@@ -444,6 +444,7 @@ func (s *scanner) vhostFile(p string) {
 	s.siteType(&site, app, p)
 	s.tls(&site, primary, p)
 	s.cron(&site)
+	s.sshKeys(&site)
 
 	if app.MaxBody != "" {
 		site.ClientMaxBody = app.MaxBody

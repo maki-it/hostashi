@@ -37,6 +37,7 @@ func scanReportJSON(t *testing.T) string {
 
 	shop := site("shop", "shop.example.com")
 	shop.Usage = &scan.Usage{Bytes: 20 << 30, Inodes: 1_000_000}
+	shop.SSHKeys = []scan.SSHKey{{Public: testSSHKey(t), Comment: "kim (laptop)", Source: "/home/shop/.ssh/authorized_keys", Line: 1}}
 
 	b, err := json.Marshal(scan.Report{Format: scan.Format, Sites: []scan.Site{
 		shop, site("blog", "blog.example.org"),
@@ -211,6 +212,9 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 	lim := &stubLimits{slices: map[string]agentapi.SiteLimits{}, quotas: map[string][2]uint64{}}
 	e.sites.EnableLimits(lim)
 
+	sshAg := &stubSSH{applied: map[string][]agentapi.SSHKey{}}
+	e.sites.EnableSSH(sshAg)
+
 	c := e.adminCookie(t)
 
 	rec := e.do(t, reqOpts{method: "POST", path: reportsPath, cookie: c, body: scanReportJSON(t)})
@@ -235,6 +239,11 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 	rec = e.do(t, reqOpts{method: "POST", path: sites + "shop", cookie: c, body: `{"reviewed":true}`})
 	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"cronImport":1`) || strings.Contains(rec.Body.String(), "cr0n-t0ken") {
 		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	// The old site user's key arrives as SFTP only (ADR-0032).
+	if k := sshAg.applied["shop"]; len(k) != 1 || k[0].Access != "sftp" || k[0].Label != "kim laptop" || !strings.Contains(rec.Body.String(), `"sshImport":1`) {
+		t.Fatalf("ssh keys %+v %s", k, rec.Body)
 	}
 
 	// The old site's cron job arrives paused (ADR-0028).

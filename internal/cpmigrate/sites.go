@@ -47,12 +47,20 @@ type NewSite struct {
 	// Usage is what the old home uses, nil if the scan did not measure it.
 	// The site's disk limits start from it (ADR-0015).
 	Usage *scan.Usage
+	// SSHKeys are the site user's keys, added as SFTP only (ADR-0032).
+	SSHKeys []plan.SSHKey
 }
 
-// SiteCreator creates a site on this server (hosting.Service.Create) and
-// its paused cron jobs. It returns how many jobs it created; a job that
-// fails does not undo the site.
-type SiteCreator func(ctx context.Context, actor int64, s NewSite) (cronCreated int, err error)
+// Created counts what came with a new site.
+type Created struct {
+	Cron    int
+	SSHKeys int
+}
+
+// SiteCreator creates a site on this server (hosting.Service.Create), its
+// paused cron jobs and its SSH keys. It returns how many of them it
+// created; a job or key that fails does not undo the site.
+type SiteCreator func(ctx context.Context, actor int64, s NewSite) (Created, error)
 
 // Importer starts and reads imports in the agent (ADR-0026 Part 3).
 type Importer interface {
@@ -117,14 +125,18 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 
 	domains := append(slices.Clone(ps.Domains), ps.RedirectFrom...)
 
-	n, err := s.create(ctx, actor, NewSite{Name: ps.Name, PHP: php, Domains: domains, Cron: plan.CronJobs(site), Usage: site.Usage})
+	n, err := s.create(ctx, actor, NewSite{
+		Name: ps.Name, PHP: php, Domains: domains, Cron: plan.CronJobs(site), Usage: site.Usage, SSHKeys: plan.SSHKeys(site),
+	})
 	if err != nil {
 		return ps, err
 	}
 
-	s.audit(ctx, actor, "cloudpanel.site.create", ps.Name, map[string]string{"report": reportID, "php": php, "cron": strconv.Itoa(n)})
+	s.audit(ctx, actor, "cloudpanel.site.create", ps.Name, map[string]string{
+		"report": reportID, "php": php, "cron": strconv.Itoa(n.Cron), "sshKeys": strconv.Itoa(n.SSHKeys),
+	})
 
-	ps.PHP, ps.CronImport = php, n
+	ps.PHP, ps.CronImport, ps.SSHImport = php, n.Cron, n.SSHKeys
 
 	return ps, nil
 }

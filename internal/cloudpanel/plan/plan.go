@@ -28,6 +28,7 @@ const (
 	maxCustom      = 500
 	maxCron        = 200
 	maxFindings    = 500
+	maxSSHKeys     = 200
 )
 
 // ErrInvalid marks a report that is not usable at all.
@@ -78,7 +79,7 @@ func Parse(r io.Reader) (*scan.Report, error) {
 // checkSite checks the parts of a site that end up in names, paths or
 // commands. A blocked site may lack them; its values are still bounded.
 func checkSite(s *scan.Site) error {
-	if len(s.Custom) > maxCustom || len(s.Cron) > maxCron || len(s.Findings) > maxFindings {
+	if len(s.Custom) > maxCustom || len(s.Cron) > maxCron || len(s.Findings) > maxFindings || len(s.SSHKeys) > maxSSHKeys {
 		return errors.New("too many entries")
 	}
 

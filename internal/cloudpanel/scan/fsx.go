@@ -197,7 +197,18 @@ func (r *reader) ReadDir(abs string, limit int) ([]string, error) {
 // ReadOwned reads a file that belongs to a site user (a crontab). The file
 // must be regular and owned by uid; the content is untrusted data.
 func (r *reader) ReadOwned(abs string, uid int, limit int64) ([]byte, error) {
-	f, err := r.open(abs, unix.O_RDONLY|unix.O_NOCTTY)
+	return r.readOwned(abs, uid, limit, 0)
+}
+
+// ReadUserFile reads a file inside a site user's home (authorized_keys).
+// Unlike ReadOwned it refuses a symlink as the last component and always
+// checks the owner, also without -strict: the user controls the tree.
+func (r *reader) ReadUserFile(abs string, uid int, limit int64) ([]byte, error) {
+	return r.readOwned(abs, uid, limit, unix.O_NOFOLLOW)
+}
+
+func (r *reader) readOwned(abs string, uid int, limit int64, extra int) ([]byte, error) {
+	f, err := r.open(abs, unix.O_RDONLY|unix.O_NOCTTY|extra)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +223,7 @@ func (r *reader) ReadOwned(abs string, uid int, limit int64) ([]byte, error) {
 		return nil, fmt.Errorf("%s: not a regular file", abs)
 	}
 
-	if r.requireRootOwned {
+	if r.requireRootOwned || extra&unix.O_NOFOLLOW != 0 {
 		sys, ok := st.Sys().(*syscall.Stat_t)
 		if !ok || int(sys.Uid) != uid {
 			return nil, fmt.Errorf("%s: not owned by uid %d", abs, uid)
