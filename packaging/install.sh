@@ -537,6 +537,10 @@ FW_SRC=${HOSTASHI_FW_SRC:-$HERE/firewall}
 FW_FILE=/etc/hostashi/firewall.nft
 FW_UNIT=hostashi-firewall.service
 FW_CHANGED=no
+# The panel's rules (ADR-0034): the agent owns this file, the installer only
+# creates it empty once, so a re-run keeps the panel's rules.
+FW_PANEL_DIR=${HOSTASHI_FW_PANEL_DIR:-/var/lib/hostashi-agent/firewall}
+FW_PANEL_FILE=$FW_PANEL_DIR/panel.nft
 
 # fw_valid PORT/PROTO: a port from 1 to 65535 and tcp or udp.
 fw_valid() {
@@ -570,9 +574,18 @@ fw_ports() {
 # fw_render prints the rules file; it fails without an SSH port.
 fw_render() {
   local ssh
-  ssh=$(fw_ssh_ports | grep -E '^[0-9]+$' | head -1)
+  ssh=$(fw_ssh_ports | grep -E '^[0-9]+$' | sort -nu | paste -sd, - | sed 's/,/, /g')
   [ -n "$ssh" ] || { echo "no SSH port found (sshd -T), refusing to lock SSH out" >&2; return 1; }
-  sed -e "s/@TCP@/$(fw_ports tcp)/" -e "s/@UDP@/$(fw_ports udp)/" "$FW_SRC/hostashi.nft"
+  sed -e "s/@TCP@/$(fw_ports tcp)/" -e "s/@UDP@/$(fw_ports udp)/" -e "s/@SSH@/$ssh/" \
+    -e "s/@PANEL@/$PANEL_PORT/" -e "s#@PANEL_FILE@#$FW_PANEL_FILE#" "$FW_SRC/hostashi.nft"
+}
+
+# fw_panel_file creates the panel's rules file if it is missing.
+fw_panel_file() {
+  install -d -m 0700 -o root -g root "$FW_PANEL_DIR" || return 1
+  [ -f "$FW_PANEL_FILE" ] && return 0
+  printf '# Written by the Hostashi agent from the panel (ADR-0034).\n' >"$FW_PANEL_FILE.new" &&
+    chmod 0600 "$FW_PANEL_FILE.new" && mv -f "$FW_PANEL_FILE.new" "$FW_PANEL_FILE"
 }
 
 chk_firewall() {
@@ -585,6 +598,7 @@ chk_firewall() {
   fi
   pkg_installed nftables || { echo "nftables not installed"; return 1; }
   rules=$(fw_render 2>&1) || { echo "$rules"; return 1; }
+  [ -f "$FW_PANEL_FILE" ] || { echo "$FW_PANEL_FILE missing"; return 1; }
   file_matches "/etc/systemd/system/$FW_UNIT" 0644 root:root <"$FW_SRC/$FW_UNIT" || { echo "firewall unit differs"; return 1; }
   printf '%s\n' "$rules" | file_matches "$FW_FILE" 0644 root:root || { echo "firewall rules differ"; return 1; }
   [ "$FW_CHANGED" = no ] || { echo "reload needed after a change"; return 1; }
@@ -607,6 +621,7 @@ do_firewall() {
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends nftables >>"$LOG" 2>&1 || return 1
   fi
   rules=$(fw_render 2>>"$LOG") || { log "no SSH port found, the firewall was not set up"; return 1; }
+  fw_panel_file || return 1
   # nft checks the rules before anything is written or loaded.
   tmp=$(mktemp) || return 1
   printf '%s\n' "$rules" >"$tmp"

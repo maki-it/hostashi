@@ -7,7 +7,8 @@
 # --no-firewall). From the host it checks that SSH, the web and the panel
 # answer and other ports do not, that every sshd port and the port of the
 # installer's own SSH session stay open, that --firewall-allow opens a
-# port, that a fail2ban table survives every apply and restart, that a
+# port, that the panel's rules file (ADR-0034) narrows SSH and the panel and
+# opens ports, and a broken one changes nothing, that a fail2ban table survives every apply and restart, that a
 # second apply changes nothing, that a flushed table comes back, and that
 # --no-firewall removes everything.
 #
@@ -64,8 +65,9 @@ IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}
 echo "container address: $IP"
 
 x mkdir -p /opt/hostashi
-# The installer's dirs step creates it on a real server.
+# The installer's dirs step creates them on a real server.
 x install -d -m 0750 /etc/hostashi
+x install -d -m 0700 /var/lib/hostashi-agent
 docker cp "$HERE/." "$NAME:/opt/hostashi/"
 
 # sshd on 22 and 2222; TCP listeners on the web, panel and two other ports.
@@ -73,7 +75,7 @@ docker cp "$HERE/." "$NAME:/opt/hostashi/"
 # takes from sshd_config at daemon-reload; Debian 13 runs ssh.service.
 x sh -c 'printf "Port 22\nPort 2222\n" >/etc/ssh/sshd_config.d/ports.conf && mkdir -p /run/sshd && systemctl daemon-reload &&
   if systemctl is-enabled --quiet ssh.socket 2>/dev/null; then systemctl stop ssh.service; systemctl restart ssh.socket; else systemctl restart ssh.service; fi'
-for p in 80 443 8443 3000 5000 2200; do
+for p in 80 443 8443 3000 5000 6000 2200; do
   x systemd-run --quiet --unit="listen-$p" python3 -m http.server --bind 0.0.0.0 "$p"
 done
 sleep 2
@@ -139,6 +141,32 @@ must_open 3000
 out=$(fw) || fail "repair failed: $out"
 grep -q '\[apply\]   firewall: table inet hostashi not loaded' <<<"$out" || fail "missing table not noticed: $out"
 must_closed 3000
+
+step "the panel's rules: allowlists narrow SSH and the panel, opened ports add (ADR-0034)"
+[ "$(x stat -c '%a %U:%G' /var/lib/hostashi-agent/firewall/panel.nft)" = "600 root:root" ] || fail "panel file has the wrong owner or mode"
+x grep -q 'jump panel' /etc/hostashi/firewall.nft || fail "base file does not jump to the panel chain"
+x grep -Eq 'elements = \{ 22, 2200, 2222 \}' /etc/hostashi/firewall.nft || fail "ssh_ports: $(x grep -A2 'set ssh_ports' /etc/hostashi/firewall.nft)"
+# The agent renders this file (internal/firewall, TestRenderExample). The
+# host (172.16.0.0/12) is outside the SSH allowlist and inside the panel's.
+docker cp "$HERE/../internal/firewall/testdata/example.nft" "$NAME:/var/lib/hostashi-agent/firewall/panel.nft"
+x systemctl reload hostashi-firewall.service || fail "panel rules do not load"
+must_closed 22 2222 2200 5000
+must_open 80 443 8443 3000 6000
+x nft list table inet f2b-table >/dev/null || fail "fail2ban's table is gone after the panel's rules"
+out=$(fw) || fail "installer run with panel rules failed: $out"
+grep -q '\[ok\]      firewall' <<<"$out" || fail "installer run changed something with panel rules: $out"
+x grep -q 'ssh_allow4' /var/lib/hostashi-agent/firewall/panel.nft || fail "the installer replaced the panel's rules"
+must_closed 22
+
+step "a panel file that does not load changes nothing"
+x sh -c 'printf "table inet hostashi { chain panel { tcp dport 22 bogus } }\n" >/var/lib/hostashi-agent/firewall/panel.nft'
+if x systemctl reload hostashi-firewall.service 2>/dev/null; then fail "a broken panel file loaded"; fi
+must_closed 22 5000
+must_open 80 8443 3000
+x sh -c 'printf "# empty\n" >/var/lib/hostashi-agent/firewall/panel.nft'
+x systemctl reload hostashi-firewall.service || fail "empty panel file does not load"
+must_open 22 2222 2200
+must_closed 3000 5000 6000
 
 step "--firewall-allow opens a port, a run without it closes it again"
 out=$(fw 'FW_ALLOW=(3000/tcp 5353/udp)') || fail "allow failed: $out"

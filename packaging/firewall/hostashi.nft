@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Managed by Hostashi (ADR-0033); the installer overwrites changes. To open
-# another port, re-run the installer with --firewall-allow PORT/PROTO.
+# Managed by Hostashi (ADR-0033); the installer overwrites changes. Open
+# more ports in the panel (Firewall), or re-run the installer with
+# --firewall-allow PORT/PROTO.
 #
 # This file replaces the table inet hostashi and nothing else: no
 # "flush ruleset", so fail2ban's table (ADR-0021) and the rules of the
@@ -10,6 +11,27 @@
 
 table inet hostashi
 delete table inet hostashi
+
+# What the panel's file below needs: the SSH and panel ports for its
+# allowlists, and the chain panel that the input chain jumps to.
+table inet hostashi {
+	set ssh_ports {
+		type inet_service
+		elements = { @SSH@ }
+	}
+	set panel_ports {
+		type inet_service
+		elements = { @PANEL@ }
+	}
+	chain panel {
+	}
+}
+
+# The panel's rules (ADR-0034), written by the agent. They can narrow SSH
+# and the panel to allowlists and open more ports, never close 80 or 443:
+# those are accepted below only if the panel chain did not drop them, and
+# the panel refuses rules for them.
+include "@PANEL_FILE@"
 
 table inet hostashi {
 	chain input {
@@ -25,6 +47,9 @@ table inet hostashi {
 		# DHCP replies for the server's own address (IPv4 and IPv6).
 		udp sport 67 udp dport 68 accept
 		ip6 saddr fe80::/10 udp sport 547 udp dport 546 accept
+
+		# The panel's allowlists and opened ports.
+		jump panel
 
 		# SSH (every port sshd listens on), the web, the panel and --firewall-allow.
 		tcp dport { @TCP@ } accept
