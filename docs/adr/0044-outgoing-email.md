@@ -73,7 +73,8 @@ The license check (MIT on the allowlist) and the REUSE workflow accept B without
 
 ## Open questions
 
-1. Self-service "Forgot password" by email in v1? Recommendation: no. A reset by email would make the mailbox a way into the panel that skips the admin; recovery stays with admins and `hostashi user recover`.
-2. Are the events above the right set for v1?
-3. Only encrypted connections to the relay (`starttls` or `tls`), or also plain SMTP for a relay in a private network, as ADR-0041 allows for databases? Recommendation: encrypted only.
-4. Do addresses need a confirmation link before Hostashi sends to them? Recommendation: yes.
+0. ~~`go-mail` or `net/smtp`?~~ **Decided (Kim, 2026-11-21): `go-mail`.**
+1. ~~Self-service "Forgot password" by email in v1?~~ **Decided (Kim, 2026-11-21): no, not for now.** Recovery stays with admins and `hostashi user recover`.
+2. ~~Are the events above the right set for v1?~~ **Decided (Kim, 2026-11-21): yes, exactly this set; other channels after v1.**
+3. ~~Only encrypted connections to the relay, or also plain SMTP for a private network?~~ **Decided (Kim, 2026-11-21): encrypted only (`starttls` or `tls`).**
+4. ~~Do addresses need a confirmation link before Hostashi sends to them?~~ **Decided (Kim, 2026-11-21): yes.** An address entered with an email invitation counts as confirmed once the invitation is accepted.
