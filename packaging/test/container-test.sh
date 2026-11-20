@@ -166,6 +166,16 @@ x sh -c 'echo pwd >/root/t/batch'
 x sftp "${sshopt[@]}" -P 2297 -i /root/t/k -b /root/t/batch blog@127.0.0.1 | grep -q '/home/blog' || fail "SFTP with the site's key failed"
 if x ssh "${sshopt[@]}" -p 2297 -i /root/t/k blog@127.0.0.1 id 2>/dev/null | grep -q uid=; then fail "an SFTP-only key ran a command"; fi
 if x sftp "${sshopt[@]}" -P 2297 -i /root/t/r -b /root/t/batch blog@127.0.0.1 >/dev/null 2>&1; then fail "a key from the site's home was accepted"; fi
+# Hardening that comes with SSH (ADR-0032): the pool cannot be listed, and
+# /proc shows a site user only its own processes.
+expect_mode /home "711 root:root"
+x findmnt -no OPTIONS /proc | tr , '\n' | grep -qx hidepid=invisible || fail "/proc without hidepid: $(x findmnt -no OPTIONS /proc)"
+x grep -qE '^proc[[:space:]]+/proc[[:space:]]+proc[[:space:]]+defaults,hidepid=invisible,gid=[0-9]+' /etc/fstab || fail "no /proc line in fstab"
+x runuser -u blog -- ls /home >/dev/null 2>&1 && fail "a site user can list /home"
+x runuser -u blog -- test -d /home/blog/htdocs || fail "a site user cannot reach its own home"
+others=$(x runuser -u blog -- ps -eo user= | sort -u | tr '\n' ' ')
+[ "$others" = "blog " ] || fail "a site user sees processes of: $others"
+x systemctl is-system-running --quiet || x systemctl --failed --no-pager
 x pkill -f 'sshd -p 2297' || true
 # pam_systemd started a user manager for the logins; it would block the
 # site's deletion later, as any process of the site user does.
