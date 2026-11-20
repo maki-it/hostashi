@@ -400,6 +400,52 @@ func TestSiteDisableOverHTTP(t *testing.T) {
 	}
 }
 
+func TestSitePHPProgramsOverHTTP(t *testing.T) {
+	ag := &stubAgent{}
+	e := newAPIWithAgent(t, ag)
+	c := e.adminCookie(t)
+
+	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"blog","php":"8.4","domains":["blog.example.org"]}`})
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"phpPrograms":false`) || ag.web.Sites[0].PHPPrograms {
+		t.Fatalf("create: programs must be off by default: %d %s %+v", rec.Code, rec.Body, ag.web.Sites)
+	}
+
+	read := e.createToken(t, c, `{"name":"ro","scopes":["sites:read"]}`)
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/php-programs", header: bearerHeader(read.Token), body: `{"enabled":true}`}); rec.Code != http.StatusForbidden {
+		t.Errorf("read token: %d", rec.Code)
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/php-programs", cookie: c, body: `{"enabled":true}`})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"phpPrograms":true`) || !ag.web.Sites[0].PHPPrograms {
+		t.Fatalf("allow: %d %s %+v", rec.Code, rec.Body, ag.web.Sites)
+	}
+
+	for _, body := range []string{`{}`, `{"enabled":"yes"}`} {
+		if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/php-programs", cookie: c, body: body}); rec.Code < 400 {
+			t.Errorf("%s: %d", body, rec.Code)
+		}
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/nope/php-programs", cookie: c, body: `{"enabled":true}`}); rec.Code != http.StatusNotFound {
+		t.Errorf("missing site: %d", rec.Code)
+	}
+
+	// A disabled site sends no PHP, and with it no programs switch; the
+	// setting comes back with PHP.
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/disabled", cookie: c, body: `{"disabled":true}`}); rec.Code != http.StatusOK || ag.web.Sites[0].PHPPrograms {
+		t.Fatalf("disabled site: %d %+v", rec.Code, ag.web.Sites)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/disabled", cookie: c, body: `{"disabled":false}`}); rec.Code != http.StatusOK || !ag.web.Sites[0].PHPPrograms {
+		t.Fatalf("enabled again: %d %+v", rec.Code, ag.web.Sites)
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/php-programs", cookie: c, body: `{"enabled":false}`})
+	if rec.Code != http.StatusOK || ag.web.Sites[0].PHPPrograms {
+		t.Fatalf("forbid: %d %s %+v", rec.Code, rec.Body, ag.web.Sites)
+	}
+}
+
 func TestPanelTLSOverHTTP(t *testing.T) {
 	ag := &stubAgent{}
 	e := newAPIWithAgent(t, ag)

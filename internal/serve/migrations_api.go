@@ -371,7 +371,9 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 	}
 
 	return func(ctx context.Context, actor int64, s cpmigrate.NewSite) (cpmigrate.Created, error) {
-		req := hosting.CreateRequest{Name: s.Name, PHP: s.PHP, Domains: s.Domains}
+		// The old site may call programs from PHP; it keeps that until the
+		// admin turns it off in the site's settings (ADR-0033).
+		req := hosting.CreateRequest{Name: s.Name, PHP: s.PHP, Domains: s.Domains, PHPPrograms: s.PHP != ""}
 		if u := s.Usage; u != nil && u.Bytes >= 0 && u.Inodes >= 0 {
 			// Disk limits of at least the old use plus 50 % (ADR-0015), so
 			// the import does not stop at the quota.

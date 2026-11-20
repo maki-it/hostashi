@@ -36,6 +36,8 @@ type Site struct {
 	TLS     bool // HTTPS wanted
 	// HSTS sends Strict-Transport-Security while the site is on HTTPS.
 	HSTS bool
+	// PHPPrograms lets the site's PHP start programs (ADR-0033).
+	PHPPrograms bool
 	// Disabled: the web server answers with 503 and PHP is stopped; the
 	// account, files, databases and certificate stay.
 	Disabled bool
@@ -300,19 +302,20 @@ func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
 
 type scanner interface{ Scan(dest ...any) error }
 
-const siteColumns = `id, name, pool, state, php, tls, hsts, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
+const siteColumns = `id, name, pool, state, php, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
 	maintenance, coalesce(maintenance_page, 0), maintenance_allow, created_at, updated_at`
 
 func scanSite(r scanner) (Site, error) {
 	var (
 		st                         Site
-		tls, hsts, disabled, live  int
+		tls, hsts, progs           int
+		disabled, live             int
 		maint                      int
 		tlsDomains, allow          string
 		notAfter, failed, cre, upd int64
 	)
 
-	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &tls, &hsts, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
+	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
 		&maint, &st.MaintenancePage, &allow, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
@@ -323,6 +326,7 @@ func scanSite(r scanner) (Site, error) {
 	}
 
 	st.TLS, st.HSTS, st.Disabled, st.TLSLive = tls == 1, hsts == 1, disabled == 1, live == 1
+	st.PHPPrograms = progs == 1
 	st.Maintenance, st.MaintenanceAllow = maint == 1, strings.Fields(allow)
 	st.TLSDomains = strings.Fields(tlsDomains)
 	st.TLSNotAfter, st.TLSFailedAt = unixOrZero(notAfter), unixOrZero(failed)
@@ -394,6 +398,12 @@ func (s *Store) SetSiteCert(ctx context.Context, name string, domains []string, 
 // SetSiteHSTS sets whether a site sends HSTS and returns the previous value.
 func (s *Store) SetSiteHSTS(ctx context.Context, name string, on bool, now time.Time) (bool, error) {
 	return s.setSiteFlag(ctx, `SELECT hsts FROM sites WHERE name = ?`, `UPDATE sites SET hsts = ?, updated_at = ? WHERE name = ?`, name, on, now)
+}
+
+// SetSitePHPPrograms sets whether a site's PHP may start programs and
+// returns the previous value.
+func (s *Store) SetSitePHPPrograms(ctx context.Context, name string, on bool, now time.Time) (bool, error) {
+	return s.setSiteFlag(ctx, `SELECT php_programs FROM sites WHERE name = ?`, `UPDATE sites SET php_programs = ?, updated_at = ? WHERE name = ?`, name, on, now)
 }
 
 // SetSiteDisabled sets whether a site is disabled and returns the previous

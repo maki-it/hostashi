@@ -17,6 +17,7 @@ import {
   setDisabled,
   setDomains,
   setHSTS,
+  setPHPPrograms,
   setPHP,
   setTLS,
   siteMessage,
@@ -385,6 +386,14 @@ function SiteSettings({
       return on ? `${site.name} is disabled.` : `${site.name} is enabled again.`;
     });
 
+  const togglePrograms = (on: boolean) =>
+    act(async () => {
+      await setPHPPrograms(site.name, on);
+      return on
+        ? "PHP of this site may start programs now."
+        : "PHP of this site can no longer start programs.";
+    });
+
   const toggleHSTS = (on: boolean) =>
     act(async () => {
       await setHSTS(site.name, on);
@@ -421,6 +430,19 @@ function SiteSettings({
           </button>
         </div>
       </form>
+      {site.php && (
+        <fieldset>
+          <legend>Programs from PHP of {site.name}</legend>
+          <label className="check">
+            <input type="checkbox" checked={site.phpPrograms} disabled={busy} onChange={(e) => void togglePrograms(e.target.checked)} />
+            Allow PHP to start programs (exec, system, shell_exec, proc_open, popen)
+          </label>
+          <p className="muted">
+            Off by default: a hacked plugin then cannot run commands on the server. Turn it on only for software that needs it, for
+            example image optimizers or PDF tools. WP-CLI, Composer and cron jobs are not affected.
+          </p>
+        </fieldset>
+      )}
       <fieldset>
         <legend>HTTPS of {site.name}</legend>
         <label className="check">

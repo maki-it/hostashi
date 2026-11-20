@@ -26,8 +26,10 @@ type siteJSON struct {
 	Maintenance maintenanceJSON `json:"maintenance"`
 	Domains     []string        `json:"domains"` // the first one is the primary domain
 	TLS         tlsJSON         `json:"tls"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	UpdatedAt   time.Time       `json:"updatedAt"`
+	// PHPPrograms: the site's PHP may start programs (ADR-0033).
+	PHPPrograms bool      `json:"phpPrograms"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 // tlsJSON is the HTTPS state of a site: wanted (enabled), served (active),
@@ -80,7 +82,8 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
 		},
-		CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
+		PHPPrograms: s.PHPPrograms,
+		CreatedAt:   s.CreatedAt, UpdatedAt: s.UpdatedAt,
 	}
 }
 
@@ -299,6 +302,34 @@ func registerSites(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.
 		s, err := svc.SetHSTS(ctx, p.User.ID, r.PathValue("name"), *in.Enabled)
 		if err != nil {
 			siteFail(log, w, err, "set hsts")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
+	}))
+
+	// Programs from PHP (exec, system, ...) are off unless allowed here.
+	mux.HandleFunc("PUT /api/v1/sites/{name}/php-programs", admin("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if in.Enabled == nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", `"enabled" is required`)
+
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		s, err := svc.SetPHPPrograms(ctx, p.User.ID, r.PathValue("name"), *in.Enabled)
+		if err != nil {
+			siteFail(log, w, err, "set php programs")
 
 			return
 		}
