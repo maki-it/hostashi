@@ -81,7 +81,7 @@ func registerPHPInstall(mux *routeMux, a authn, p PHPInstaller, st Settings, log
 		}
 	}
 
-	mux.HandleFunc("GET /api/v1/php/install", a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/php/install", a.allow("php.install:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 

@@ -311,7 +311,7 @@ func toParkedJSON(svc *hosting.Service, p store.Parked) parkedJSON {
 
 // registerParked adds the routes of parked domains (ADR-0027).
 func registerParked(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/parked-domains", a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/parked-domains", a.allow("parked:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		list, err := svc.ParkedDomains(r.Context())
 		if err != nil {
 			pageFail(log, w, err, "list parked domains")
@@ -327,7 +327,7 @@ func registerParked(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 		writeJSON(w, http.StatusOK, map[string][]parkedJSON{"parkedDomains": out})
 	}))
 
-	mux.HandleFunc("GET /api/v1/parked-domains/{domain}", a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/parked-domains/{domain}", a.allow("parked:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		p, err := svc.ParkedDomain(r.Context(), r.PathValue("domain"))
 		if err != nil {
 			pageFail(log, w, err, "get parked domain")
@@ -339,7 +339,7 @@ func registerParked(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 	}))
 
 	// Parks a domain or changes its page and HTTPS ("tls" defaults to on).
-	mux.HandleFunc("PUT /api/v1/parked-domains/{domain}", a.allow("sites.maintenance:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/parked-domains/{domain}", a.allow("parked:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Page string `json:"page"`
 			TLS  *bool  `json:"tls"`
@@ -363,7 +363,7 @@ func registerParked(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 		writeJSON(w, http.StatusOK, toParkedJSON(svc, parked))
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/parked-domains/{domain}", a.allow("sites.maintenance:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("DELETE /api/v1/parked-domains/{domain}", a.allow("parked:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 

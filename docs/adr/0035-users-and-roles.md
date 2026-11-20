@@ -47,6 +47,7 @@ What a `user` may do on a granted site (decided, open question 3):
 | Restore a backup of the site | yes | Writes only into the site's home (ADR-0008) |
 | Domains and TLS of the site | no | A domain is a claim on a name: a user could take a name another customer needs or trigger ACME rate limits for the whole server [A] |
 | Resource limits | read only | Otherwise a user raises their own quota |
+| Let PHP start programs (`exec`, `system`, ...) | no | It undoes a hardening default of ADR-0033; a manager or admin turns it on per site |
 | Custom nginx snippets | no | nginx runs for all sites; the allowlist reduces, but does not remove, the risk (ADR-0029) |
 | Disable or delete the site | no | |
 

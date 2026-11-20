@@ -70,7 +70,8 @@ func TestParseAccepts(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if strings.Contains(pub, "kim") || strings.ContainsAny(pub, "\r\n") || strings.Count(pub, " ") != 1 {
+			// " kim" with the space: a random key's base64 may contain "kim".
+			if strings.Contains(pub, " kim") || strings.ContainsAny(pub, "\r\n") || strings.Count(pub, " ") != 1 {
 				t.Fatalf("not canonical: %q", pub)
 			}
 

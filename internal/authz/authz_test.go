@@ -3,6 +3,7 @@
 package authz_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/maki-it/hostashi/internal/auth"
@@ -24,7 +25,7 @@ func TestUnknownIsDenied(t *testing.T) {
 	}{
 		{"", "sites:read"},
 		{"Admin", "sites:read"},
-		{"user", "sites:read"},
+		{"root", "sites:read"},
 		{authz.RoleAdmin, ""},
 		{authz.RoleAdmin, "sites:*"},
 		{authz.RoleAdmin, "users:delete"},
@@ -37,33 +38,104 @@ func TestUnknownIsDenied(t *testing.T) {
 	}
 }
 
-// Every token scope must be an action, or a token with the scope could
-// never be used. Every action that is not a scope needs a session.
-func TestTableCoversScopes(t *testing.T) {
-	actions := map[authz.Action]bool{}
-	for _, a := range authz.Actions() {
-		actions[a] = true
+// The decisions of ADR-0035, spelled out so a change of the table shows up
+// here as well.
+func TestDecidedRules(t *testing.T) {
+	never := map[authz.Role][]authz.Action{
+		authz.RoleManager: {
+			authz.UsersRead, authz.UsersWrite, authz.SettingsWrite, "firewall:write", "backups.server:write",
+			"migrations:write", "doctor:read", "sites.snippets:write", "limits.presets:write", "web:sync",
+		},
+		authz.RoleUser: {
+			authz.UsersRead, authz.SettingsRead, "sites:create", "sites:delete", "sites.domains:write",
+			"sites.tls:write", "sites.disabled:write", "sites.programs:write", "limits:write",
+			"sites.snippets:write", "parked:write", "pages:write", "backups.server:read", "firewall:read",
+		},
 	}
 
-	for _, s := range auth.Scopes() {
-		if !actions[authz.Action(s.Name)] {
-			t.Errorf("scope %s has no entry in the authz table", s.Name)
+	for role, actions := range never {
+		for _, a := range actions {
+			if authz.Allowed(role, a) {
+				t.Errorf("%s may %s", role, a)
+			}
 		}
-
-		delete(actions, authz.Action(s.Name))
 	}
 
-	for a := range actions {
-		if !authz.SessionOnly(a) {
-			t.Errorf("action %s is neither a scope nor a session-only action", a)
+	userMay := []authz.Action{
+		"sites:list", "sites:read", "sites.php:write", "sites.maintenance:write", "limits:read",
+		"cron:write", "ssh:write", "databases:write", "databases:delete", "backups:read", "backups:restore",
+	}
+	for _, a := range userMay {
+		if !authz.Allowed(authz.RoleUser, a) {
+			t.Errorf("user may not %s", a)
+		}
+	}
+
+	for _, a := range []authz.Action{"sites:create", "sites.domains:write", "limits:write", "sites:delete"} {
+		if !authz.Allowed(authz.RoleManager, a) {
+			t.Errorf("manager may not %s", a)
 		}
 	}
 }
 
-func TestSessionOnlyIsNoScope(t *testing.T) {
-	for _, s := range auth.Scopes() {
-		if authz.SessionOnly(authz.Action(s.Name)) {
-			t.Errorf("scope %s is marked session-only", s.Name)
+// A user's actions on one site must be site actions, or a grant would not
+// limit them.
+func TestUserActionsAreSiteBound(t *testing.T) {
+	unbound := []authz.Action{"sites:list", "databases:list", "php.versions:read", "ssh.hostkeys:read", "pages:read"}
+
+	for _, a := range authz.Actions() {
+		r, _ := authz.Lookup(a)
+		if authz.Allowed(authz.RoleUser, a) && !r.Site && !slices.Contains(unbound, a) {
+			t.Errorf("user action %s is not bound to a site", a)
 		}
+	}
+}
+
+// Every token scope is needed by an action, and every action names a scope
+// of the catalog or none.
+func TestTableMatchesScopes(t *testing.T) {
+	scopes := map[string]bool{}
+	for _, s := range auth.Scopes() {
+		scopes[s.Name] = false
+	}
+
+	for _, a := range authz.Actions() {
+		s := authz.ScopeOf(a)
+		if s == "" {
+			if !authz.SessionOnly(a) {
+				t.Errorf("action %s without scope is not session-only", a)
+			}
+
+			continue
+		}
+
+		if _, ok := scopes[s]; !ok {
+			t.Errorf("action %s names unknown scope %s", a, s)
+		}
+
+		scopes[s] = true
+	}
+
+	for s, used := range scopes {
+		if !used {
+			t.Errorf("scope %s has no action", s)
+		}
+	}
+}
+
+func TestRoleScopes(t *testing.T) {
+	user := authz.RoleScopes(authz.RoleUser)
+	for _, s := range []string{"firewall:write", "migrations:write", "sites.snippets:write", "doctor:read", "metrics:read"} {
+		if slices.Contains(user, s) {
+			t.Errorf("user offered %s", s)
+		}
+	}
+
+	if !slices.Contains(user, "cron:write") {
+		t.Error("user not offered cron:write")
+	}
+
+	if got := authz.RoleScopes(authz.RoleAdmin); len(got) != len(auth.Scopes()) {
+		t.Errorf("admin offered %d of %d scopes", len(got), len(auth.Scopes()))
 	}
 }
