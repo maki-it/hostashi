@@ -78,8 +78,15 @@ Not checked: Debian 13 and Ubuntu 26.04 (newer OpenSSH), sessions in `user-<uid>
 
 **No chroot in v1**
 
-- SFTP-only and shell users see the server as the site's PHP code does: other homes are closed (`0750`, group `www-data`), the panel socket is `hostashi:www-data 0660` [V], logs under `/var/log/nginx/sites` are root's [V]. They can read world-readable system files and list other users' processes [A]. That is what PHP can do today, so SSH adds no new read path, but it is stated as residual risk in `05-security.md`.
+- SFTP-only and shell users see the server as the site's PHP code does: other homes are closed (`0750`, group `www-data`), the panel socket is `hostashi:www-data 0660` [V], logs under `/var/log/nginx/sites` will be root's [A: decided in ADR-0021, not built yet]. They can read world-readable system files, see the names of other sites (`/home`, `/etc/passwd`) and list other users' processes [A]. That is what PHP can do today, so SSH adds no new read path, but it is stated as residual risk in `05-security.md`.
 - A chroot (option B) can follow as its own ADR if customers need it.
+
+**Hardening that comes with SSH (Kim, 2026-11-20)**
+
+Two leaks that SSH makes easier to use, closed without a chroot:
+
+- **Site names:** the storage pool directories (`/home` and every other pool) become `root:root 0711`. A site user can still enter its own home by path, but can no longer list the pool, so `ls /home` shows nothing [A]. `/etc/passwd` stays world-readable (NSS needs it), so the names of site users stay visible there; the comment `hostashi site` does not add more [U].
+- **Processes:** `/proc` is mounted with `hidepid=invisible`, so every user sees only their own processes. Root and the members of one group (`gid=`, for a monitoring agent that needs all processes) keep the full view [U: proc(5)]. Global `hidepid` has broken parts of systemd and polkit in the past, which is why systemd prefers `ProtectProc=` per unit [U]; SSH sessions run in no unit of ours, so the global option is needed. Must be tested on Debian 13 and Ubuntu 26.04 in CI before it ships, including logins, `systemctl` and the panel's metrics [A].
 
 **Brute force**
 
@@ -100,11 +107,11 @@ Not checked: Debian 13 and Ubuntu 26.04 (newer OpenSSH), sessions in `user-<uid>
 - One more binary (`usermod`) in the `sysuser` exception; the `depguard` rule stays as it is [A].
 - The installer touches sshd: a broken drop-in could lock the admin out. Mitigation: `sshd -t` before reload, the drop-in contains only a `Match Group` block, never global settings [A].
 - Tests: unit tests for key parsing and rendering (options, newlines, NUL, oversized, certificates, weak RSA), a root test for the key file and `usermod`, and a container test with sshd in CI on Debian 13 and Ubuntu 26.04 (SFTP-only refuses commands, shell key works, home key refused, password refused) [A].
-- Order of work: installer block and group, agent `ssh.apply`, panel and API, frontend, slice drop-in together with the limits thread, import.
+- Order of work: installer block and group, pool mode and `hidepid`, agent `ssh.apply`, panel and API, frontend, slice drop-in together with the limits thread, import.
 
 ## Open questions
 
-1. Shell access at all in v1, or SFTP only? Recommended: both, chosen per key, SFTP only by default.
-2. Keys only, or also passwords for site users? Recommended: keys only.
-3. One login per site (the site user with several keys), or extra SSH users per site as in CloudPanel? Recommended: one login per site.
+1. ~~Shell access at all in v1, or SFTP only?~~ **Decided (Kim, 2026-11-20):** both, chosen per key, SFTP only by default.
+2. ~~Keys only, or also passwords for site users?~~ **Decided (Kim, 2026-11-20):** keys only.
+3. ~~One login per site, or extra SSH users per site as in CloudPanel?~~ **Decided (Kim, 2026-11-20):** one login per site, the site user with several keys.
 4. No chroot in v1 (option A), or chroot for SFTP (option B)? Recommended: no chroot.
