@@ -27,7 +27,7 @@ func TestUnknownIsDenied(t *testing.T) {
 		{"user", "sites:read"},
 		{authz.RoleAdmin, ""},
 		{authz.RoleAdmin, "sites:*"},
-		{authz.RoleAdmin, "users:write"},
+		{authz.RoleAdmin, "users:delete"},
 	}
 
 	for _, c := range cases {
@@ -54,8 +54,16 @@ func TestTableCoversScopes(t *testing.T) {
 	}
 
 	for a := range actions {
-		if a != authz.SettingsRead && a != authz.SettingsWrite {
+		if !authz.SessionOnly(a) {
 			t.Errorf("action %s is neither a scope nor a session-only action", a)
+		}
+	}
+}
+
+func TestSessionOnlyIsNoScope(t *testing.T) {
+	for _, s := range auth.Scopes() {
+		if authz.SessionOnly(authz.Action(s.Name)) {
+			t.Errorf("scope %s is marked session-only", s.Name)
 		}
 	}
 }

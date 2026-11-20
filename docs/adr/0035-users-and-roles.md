@@ -71,7 +71,7 @@ A `manager` may also do the "no" rows except snippets, which stay admin-only for
 - Only an admin creates, changes and deletes users and grants.
 - **Invitation instead of a password chosen by the admin.** Creating a user returns a one-time link, valid for 24 hours, where the new user sets their own password and second factor. Only the SHA-256 of the link's token is stored, as for sessions (decided, open question 4).
 - **Second factor** (TOTP or passkey) is required for `admin` and `manager`: without one, the account can only enroll one after login and do nothing else (decided, open question 2). For `user` it is optional, an admin can require it per user.
-- **No lockout of the last admin.** The panel refuses to demote, disable or delete the last enabled admin, decided inside one write transaction. Nobody changes their own role.
+- **No lockout of the last admin.** The panel refuses to demote, disable or delete the last enabled admin, decided inside one write transaction. An admin who has not accepted the invitation yet does not count, because the link may expire unused. Nobody changes their own role.
 - A role change, a disable or a password reset ends the user's sessions.
 - An admin can reset another user's password and second factor; both return a new invitation link and land in the audit log.
 - **Root recovery.** `hostashi user recover <name>` on the server (as root, through the agent socket) prints a new invitation link, for when the last admin has lost every factor [A].

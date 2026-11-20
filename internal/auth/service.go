@@ -301,9 +301,13 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	return nil
 }
 
-// Cleanup removes expired sessions.
+// Cleanup removes expired sessions and invitations.
 func (s *Service) Cleanup(ctx context.Context) error {
 	if _, err := s.st.DeleteExpiredSessions(ctx, s.now()); err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
+
+	if err := s.st.DeleteExpiredInvitations(ctx, s.now()); err != nil {
 		return fmt.Errorf("auth: %w", err)
 	}
 
