@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Hostashi firewall (ADR-0033): loads /etc/hostashi/firewall.nft, which
+# replaces only the nftables table inet hostashi. It runs before the
+# network comes up, so the server is never reachable without it. Stopping
+# the unit removes the table; the installer does that for --no-firewall.
+
+[Unit]
+Description=Hostashi firewall (nftables table inet hostashi)
+Documentation=https://github.com/maki-it/hostashi
+DefaultDependencies=no
+After=local-fs.target
+Before=network-pre.target shutdown.target
+Wants=network-pre.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/hostashi/firewall.nft
+ExecReload=/usr/sbin/nft -f /etc/hostashi/firewall.nft
+ExecStop=-/usr/sbin/nft delete table inet hostashi
+
+CapabilityBoundingSet=CAP_NET_ADMIN
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_NETLINK AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+# No ProtectKernelModules=: nft may need the kernel to load nf_tables
+# expression modules on the first start after boot.
+
+[Install]
+WantedBy=sysinit.target

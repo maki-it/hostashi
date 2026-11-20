@@ -19,6 +19,8 @@
 #   --listen ADDR        panel listen address, default 127.0.0.1:8080 (loopback only: SSH tunnel)
 #   --allow-untested     accept an OS release that is not on the supported list
 #   --no-quota           do not enable disk quota (sites then get no disk limit)
+#   --firewall-allow P   also open port P to the internet, as PORT/tcp or PORT/udp (repeatable)
+#   --no-firewall        no Hostashi firewall (only behind a provider firewall); removes it if present
 #
 # nginx comes from the distribution with its brotli modules (ADR-0020) and
 # runs on the configuration the agent renders. PHP is the distribution's
@@ -28,8 +30,9 @@
 # project quota on the root filesystem (ADR-0015); the quota step prepares it
 # and asks for ONE reboot, it never reboots by itself. fail2ban from the
 # distribution guards SSH and the panel logins (ADR-0021). Site users log in
-# over SSH and SFTP with keys only (ADR-0032). Not yet part of
-# this installer: more PHP versions (sury.org) and a firewall.
+# over SSH and SFTP with keys only (ADR-0032). An nftables firewall lets in
+# only SSH, the web and the panel (ADR-0033). Not yet part of this
+# installer: more PHP versions (sury.org).
 #
 # Exit codes: 0 ok, 2 refused by preflight (server unchanged), 3 a step
 # failed (re-running is safe), 64 usage.
@@ -55,7 +58,8 @@ LOG=/var/log/hostashi-install.log
 OS_RELEASE=${HOSTASHI_OS_RELEASE:-/etc/os-release}
 BIN=/usr/local/bin/hostashi
 
-MODE=plan YES=no BINARY="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no
+MODE=plan YES=no BINARY="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no NO_FIREWALL=no
+FW_ALLOW=()
 CHANGES=0 BINARY_CHANGED=no CONFIG_CHANGED=no
 
 log()    { echo "install: $*" >&2; }
@@ -146,6 +150,12 @@ preflight() {
     fi
   fi
 
+  local a
+  for a in "${FW_ALLOW[@]}"; do
+    fw_valid "$a" || fail "--firewall-allow '$a' must be PORT/tcp or PORT/udp with a port from 1 to 65535"
+  done
+  [ "$NO_FIREWALL" = no ] || [ ${#FW_ALLOW[@]} -eq 0 ] || fail "--firewall-allow and --no-firewall exclude each other"
+
   if [ "$MODE" = apply ]; then
     [ -n "$BINARY" ] || fail "--binary PATH is required for apply"
   fi
@@ -175,7 +185,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config ssh harden nginx php mariadb backup units service fail2ban quota"
+STEPS="account dirs key binary config ssh harden nginx php mariadb backup units service fail2ban firewall quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -464,6 +474,115 @@ do_fail2ban() {
   # The server needs a moment before it answers on its socket.
   local _i
   for _i in $(seq 1 20); do fail2ban-client ping >/dev/null 2>&1 && break; sleep 0.5; done
+}
+
+# nftables firewall, on by default (ADR-0033). Hostashi owns one table,
+# inet hostashi, and touches nothing else (see packaging/firewall). Inbound
+# is dropped except established traffic, loopback, the ICMP that IPv4 and
+# IPv6 need, DHCP replies, every SSH port, the web (TCP 80, TCP and UDP 443)
+# and the panel port (TCP and UDP for HTTP/3). Outbound stays open.
+#
+# Lockout protection: the SSH ports are the ones `sshd -T` names, plus the
+# local port of every SSH session that is open right now (ss) and of the
+# session running this installer (SSH_CONNECTION), so the admin's own
+# session is never cut off. Without any SSH port the step refuses.
+# --firewall-allow opens more ports. Like the other options it has to be
+# given on every run; a run without it closes the port again.
+# --no-firewall removes the table, the rules file and the unit.
+FW_SRC=${HOSTASHI_FW_SRC:-$HERE/firewall}
+FW_FILE=/etc/hostashi/firewall.nft
+FW_UNIT=hostashi-firewall.service
+FW_CHANGED=no
+
+# fw_valid PORT/PROTO: a port from 1 to 65535 and tcp or udp.
+fw_valid() {
+  [[ "$1" =~ ^([1-9][0-9]{0,4})/(tcp|udp)$ ]] && [ "${BASH_REMATCH[1]}" -le 65535 ]
+}
+
+# fw_ssh_ports prints every port SSH must stay reachable on, one per line.
+fw_ssh_ports() {
+  /usr/sbin/sshd -T 2>/dev/null | awk '$1 == "port" { print $2 }'
+  # Local address of each established connection of an sshd process
+  # (sshd-session since OpenSSH 10), e.g. 192.0.2.1:22 or [2001:db8::1]:22.
+  ss -Htnp state established 2>/dev/null | awk '/"sshd/ { n = split($3, a, ":"); print a[n] }'
+  if [ -n "${SSH_CONNECTION:-}" ]; then
+    # shellcheck disable=SC2086 # four fields: client ip, client port, server ip, server port
+    set -- $SSH_CONNECTION
+    [ $# -eq 4 ] && echo "$4"
+  fi
+}
+
+# fw_ports PROTO prints the open ports of PROTO, sorted and comma-separated.
+fw_ports() {
+  local a
+  {
+    if [ "$1" = tcp ]; then fw_ssh_ports; echo 80; fi
+    echo 443
+    echo "$PANEL_PORT"
+    for a in "${FW_ALLOW[@]}"; do [ "${a#*/}" = "$1" ] && echo "${a%/*}"; done
+  } | grep -E '^[0-9]+$' | sort -nu | paste -sd, - | sed 's/,/, /g'
+}
+
+# fw_render prints the rules file; it fails without an SSH port.
+fw_render() {
+  local ssh
+  ssh=$(fw_ssh_ports | grep -E '^[0-9]+$' | head -1)
+  [ -n "$ssh" ] || { echo "no SSH port found (sshd -T), refusing to lock SSH out" >&2; return 1; }
+  sed -e "s/@TCP@/$(fw_ports tcp)/" -e "s/@UDP@/$(fw_ports udp)/" "$FW_SRC/hostashi.nft"
+}
+
+chk_firewall() {
+  local rules
+  if [ "$NO_FIREWALL" = yes ]; then
+    [ ! -e "/etc/systemd/system/$FW_UNIT" ] || { echo "firewall unit installed, --no-firewall given"; return 1; }
+    [ ! -e "$FW_FILE" ] || { echo "firewall rules present, --no-firewall given"; return 1; }
+    ! nft list table inet hostashi >/dev/null 2>&1 || { echo "table inet hostashi loaded, --no-firewall given"; return 1; }
+    return 0
+  fi
+  pkg_installed nftables || { echo "nftables not installed"; return 1; }
+  rules=$(fw_render 2>&1) || { echo "$rules"; return 1; }
+  file_matches "/etc/systemd/system/$FW_UNIT" 0644 root:root <"$FW_SRC/$FW_UNIT" || { echo "firewall unit differs"; return 1; }
+  printf '%s\n' "$rules" | file_matches "$FW_FILE" 0644 root:root || { echo "firewall rules differ"; return 1; }
+  [ "$FW_CHANGED" = no ] || { echo "reload needed after a change"; return 1; }
+  [ "$(systemctl is-enabled "$FW_UNIT" 2>/dev/null)" = enabled ] || { echo "firewall not enabled"; return 1; }
+  [ "$(systemctl is-active "$FW_UNIT" 2>/dev/null)" = active ] || { echo "firewall not running"; return 1; }
+  nft list table inet hostashi >/dev/null 2>&1 || { echo "table inet hostashi not loaded"; return 1; }
+}
+do_firewall() {
+  local rules rc tmp
+  if [ "$NO_FIREWALL" = yes ]; then
+    # Stopping the unit deletes the table (ExecStop).
+    systemctl disable --now "$FW_UNIT" >>"$LOG" 2>&1
+    rm -f "/etc/systemd/system/$FW_UNIT" "$FW_FILE" || return 1
+    systemctl daemon-reload >>"$LOG" 2>&1 || return 1
+    if nft list table inet hostashi >/dev/null 2>&1; then nft delete table inet hostashi >>"$LOG" 2>&1 || return 1; fi
+    return 0
+  fi
+  if ! pkg_installed nftables; then
+    apt-get update -qq >>"$LOG" 2>&1 &&
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends nftables >>"$LOG" 2>&1 || return 1
+  fi
+  rules=$(fw_render 2>>"$LOG") || { log "no SSH port found, the firewall was not set up"; return 1; }
+  # nft checks the rules before anything is written or loaded.
+  tmp=$(mktemp) || return 1
+  printf '%s\n' "$rules" >"$tmp"
+  if ! nft -c -f "$tmp" >>"$LOG" 2>&1; then rm -f "$tmp"; log "firewall rules do not load"; return 1; fi
+  rm -f "$tmp"
+  write_file "/etc/systemd/system/$FW_UNIT" 0644 root:root <"$FW_SRC/$FW_UNIT"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  if [ "$rc" = 0 ]; then FW_CHANGED=yes; systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
+  printf '%s\n' "$rules" | write_file "$FW_FILE" 0644 root:root; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  [ "$rc" = 0 ] && FW_CHANGED=yes
+  systemctl enable "$FW_UNIT" >>"$LOG" 2>&1 || return 1
+  if [ "$FW_CHANGED" = yes ] && [ "$(systemctl is-active "$FW_UNIT" 2>/dev/null)" = active ]; then
+    systemctl reload "$FW_UNIT" >>"$LOG" 2>&1 || return 1
+  else
+    systemctl start "$FW_UNIT" >>"$LOG" 2>&1 || return 1
+  fi
+  # A flushed ruleset leaves the unit active without the table.
+  nft list table inet hostashi >/dev/null 2>&1 || systemctl restart "$FW_UNIT" >>"$LOG" 2>&1 || return 1
+  FW_CHANGED=no
 }
 
 php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }
@@ -937,7 +1056,9 @@ main() {
       --listen) shift; LISTEN=${1:-};;
       --panel-port) shift; PANEL_PORT=${1:-};;
       --no-quota) NO_QUOTA=yes;;
-      *) echo "usage: $0 [plan | apply --yes] --binary PATH [--public-url URL] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota]" >&2; exit 64;;
+      --no-firewall) NO_FIREWALL=yes;;
+      --firewall-allow) shift; FW_ALLOW+=("${1:-}");;
+      *) echo "usage: $0 [plan | apply --yes] --binary PATH [--public-url URL] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall]" >&2; exit 64;;
     esac
     shift
   done
