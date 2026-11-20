@@ -28,6 +28,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0030](0030-loading-dumps-with-definers.md) | Loading imported dumps with definers | Accepted |
 | [0031](0031-dns-cut-over-per-site.md) | DNS cut-over per site in the CloudPanel migration | Accepted |
 | [0032](0032-ssh-and-sftp-per-site.md) | SSH and SFTP access per site | Accepted |
+| [0033](0033-system-hardening-baseline.md) | System hardening baseline before v1 | Proposed |
 
 Only the project owner sets a status to `Accepted`.
 
