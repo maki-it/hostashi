@@ -31,7 +31,15 @@ RestartSec=2s
 # invisible to the others (open_basedir includes /tmp).
 PrivateTmp=yes
 PrivateDevices=yes
-ProtectSystem=full
+# The system is read only and /home is empty: the agent's drop-in
+# (50-hostashi-slice.conf) mounts the site's own home back, writable, so the
+# master never sees another site's home (ADR-0033).
+ProtectSystem=strict
+ProtectHome=tmpfs
+# The master needs root only to drop its workers to the site user, to give
+# the socket to the site user and the web server group, and to stop its
+# workers. Everything else root could do is gone.
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_CHOWN CAP_KILL
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
@@ -45,6 +53,15 @@ RestrictRealtime=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
 SystemCallArchitectures=native
+# The usual system calls of a service: no mount, module, reboot, swap,
+# clock, raw I/O or debugging calls, for the master and the site's code.
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Other users' processes are hidden in /proc. No ProcSubset=pid: PHP reads
+# /proc/loadavg and /proc/meminfo, for example in sys_getloadavg().
+ProtectProc=invisible
+# No UMask=0027: files the site's code writes must stay readable for the
+# web server, which serves uploads directly.
 # No MemoryDenyWriteExecute=: it breaks the opcache JIT and PCRE's JIT.
 
 [Install]

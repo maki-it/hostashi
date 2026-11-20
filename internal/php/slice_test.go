@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -42,7 +43,7 @@ func TestSliceDropIn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if want := "[Service]\nSlice=hostashi-site-shop.slice\n"; string(got[len(got)-len(want):]) != want {
+	if want := "[Service]\nSlice=hostashi-site-shop.slice\nBindPaths=" + home + "\nReadWritePaths=" + home + "\n"; !strings.HasSuffix(string(got), want) {
 		t.Errorf("drop-in:\n%s", got)
 	}
 
