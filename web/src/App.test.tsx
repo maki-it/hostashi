@@ -371,7 +371,7 @@ describe("Shell", () => {
     window.location.hash = "";
   });
 
-  it("opens a site address on the sites page with the site in the breadcrumbs", async () => {
+  it("opens a site address on its own page with the site in the breadcrumbs", async () => {
     window.location.hash = "#/sites/shop/php";
     mockFetch({
       ...session,
@@ -379,7 +379,7 @@ describe("Shell", () => {
       "GET /api/v1/php/versions": { body: { installed: ["8.4"], supported: ["8.4"], legacy: [] } },
     });
     render(<App />);
-    expect(await screen.findByText("No sites yet.")).toBeInTheDocument();
+    expect(await screen.findByText("There is no site named shop.")).toBeInTheDocument();
     const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(within(crumbs).getByRole("link", { name: "Sites" })).toHaveAttribute("href", "#/sites");
     expect(within(crumbs).getByText("shop")).toHaveAttribute("aria-current", "page");

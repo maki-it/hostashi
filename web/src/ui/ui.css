@@ -14,6 +14,19 @@
   background: var(--bg);
 }
 
+/* Zero specificity: any component's own link colour wins. */
+:where(.ui-root a) {
+  color: var(--accent);
+}
+
+/* The old stylesheet gives every button the full width; components set
+   their own size. Remove this with the old stylesheet (ADR-0037 step 6). */
+.ui-btn,
+.ui-tab,
+.ui-sort {
+  width: auto;
+}
+
 .ui-root :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
@@ -281,6 +294,7 @@
 
 /* Table */
 .ui-table-box {
+  position: relative; /* keeps .ui-sr-only headers inside the scroll box */
   overflow-x: auto;
 }
 .ui-table {
@@ -345,4 +359,99 @@
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+}
+
+/* Page head */
+.ui-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-4);
+}
+.ui-page-head h1 {
+  margin: 0;
+  font-family: var(--font-head);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: var(--head-ls);
+}
+.ui-page-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+.ui-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* Filter bar above a table */
+.ui-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--line);
+}
+.ui-filters .ui-input {
+  flex: 1 1 220px;
+  max-width: 320px;
+}
+a.ui-icon-btn {
+  text-decoration: none;
+}
+
+/* Two lines in one cell: a name and a technical value below it */
+.ui-cell-main {
+  display: flex;
+  flex-direction: column;
+}
+.ui-cell-main a {
+  font-weight: 600;
+  color: var(--fg);
+  text-decoration: none;
+}
+.ui-cell-main a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.ui-cell-main span {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* Facts as a two-column list */
+.ui-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+}
+.ui-facts dt {
+  font-family: var(--label-font);
+  font-size: var(--label-size);
+  letter-spacing: var(--label-ls);
+  text-transform: var(--label-tf);
+  color: var(--muted);
+  padding-top: 2px;
+}
+.ui-facts dd {
+  margin: 0;
+}
+.ui-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.ui-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+a.ui-btn {
+  text-decoration: none;
 }

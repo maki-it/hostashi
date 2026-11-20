@@ -208,6 +208,11 @@
   padding: 28px var(--space-6) 48px;
 }
 
+/* Let wide content (tables) scroll inside its box instead of widening the page. */
+.app-content > * {
+  min-width: 0;
+}
+
 /* Pages that have not moved to the new components yet keep their width. */
 .app-legacy {
   max-width: 48rem;

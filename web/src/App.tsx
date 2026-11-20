@@ -18,8 +18,9 @@ import { SecondFactor } from "./SecondFactor";
 import { Setup } from "./Setup";
 import { Sites } from "./Sites";
 import { canSee } from "./nav";
-import { parseHash, type Page } from "./routes";
+import { formatHash, parseHash, type Page } from "./routes";
 import { Shell } from "./Shell";
+import { SitePage } from "./SitePage";
 import { Users } from "./Users";
 
 type View =
@@ -75,13 +76,32 @@ export function App() {
     const user = view.user;
     const page: Page = canSee(user.role, route.page) ? route.page : "home";
     const show = (p: Page) => page === p;
+    // replaceQuery changes the query of the address without a new history
+    // entry, so that typing in a filter does not fill the back button.
+    const replaceQuery = (query: URLSearchParams) => {
+      const next = { ...route, page, query };
+      window.history.replaceState(null, "", formatHash(next));
+      setRoute(next);
+    };
     return (
       <Shell user={user} route={{ ...route, page }} onLogout={() => setView({ kind: "login" })}>
+        {show("sites") &&
+          (route.site ? (
+            <SitePage
+              key={route.site.name}
+              name={route.site.name}
+              tab={route.site.tab}
+              onTab={(tab) => {
+                window.location.hash = formatHash({ page: "sites", site: { name: route.site!.name, tab } });
+              }}
+            />
+          ) : (
+            <Sites query={route.query} onQuery={replaceQuery} />
+          ))}
         <div className="app-legacy">
           {show("home") && <Home user={user} />}
           {show("health") && <Doctor />}
           {show("firewall") && <Firewall />}
-          {show("sites") && <Sites />}
           {show("php") && <PHPPage />}
           {show("limits") && <Presets />}
           {show("pages") && <Pages />}
