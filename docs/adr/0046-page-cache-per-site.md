@@ -118,4 +118,4 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 1. ~~Should the FastCGI cache **replace** the Varnish option from ADR-0017 in v1?~~ Decided by Kim on 2026-11-21: yes, for now. Varnish possibly after v1 as its own ADR.
 2. ~~Which site on web2 runs behind the cache port `6081`?~~ Answered by Kim on 2026-11-21: one WordPress site, which uses CloudPanel's purge plugin. Decided by Kim on 2026-11-21: v1 gets a purge API call with a token limited to that one action and site; an own WordPress plugin follows after v1.
 3. ~~Presets, skip rules, cache times and sizes as above?~~ Confirmed by Kim on 2026-11-21.
-4. Roles as above, the same split as for the object cache?
+4. ~~Roles as above, the same split as for the object cache?~~ Confirmed by Kim on 2026-11-21.
