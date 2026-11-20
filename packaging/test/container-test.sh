@@ -114,6 +114,17 @@ echo "$health"
 grep -q '"agent":"ok"' <<<"$health" || fail "panel cannot reach the agent"
 x /usr/local/bin/hostashi ping
 
+step "hostashi doctor"
+rc=0
+doc=$(x /usr/local/bin/hostashi doctor) || rc=$?
+echo "$doc"
+for id in system.os system.pool service.panel service.nginx service.mariadb service.fail2ban; do
+  grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"
+done
+grep -Eq "^  WARN  system.quota " <<<"$doc" || fail "doctor: no quota warning on an overlay root"
+[ "$rc" = 0 ] || fail "doctor exited $rc"
+x /usr/local/bin/hostashi doctor -json | grep -q '"id": "service.nginx"' || fail "doctor -json"
+
 expect_mode() {
   local got
   got=$(x stat -c '%a %U:%G' "$1")

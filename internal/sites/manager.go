@@ -247,6 +247,14 @@ func (m *Manager) WebRoot(user string) (string, bool) {
 	return home + "/" + WebRootName, true
 }
 
+// Pools returns all registered pools sorted by name.
+func (m *Manager) Pools() []Pool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.reg.Pools()
+}
+
 // List returns all registered sites sorted by user.
 func (m *Manager) List() []Site {
 	m.mu.Lock()

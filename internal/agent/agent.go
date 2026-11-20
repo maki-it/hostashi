@@ -118,6 +118,10 @@ type Config struct {
 	// Quota sets and reads the sites' disk limits (ADR-0015). Nil: the
 	// running kernel (KernelQuota).
 	Quota QuotaFS
+
+	// Doctor overrides what doctor.run reads, for tests. The zero value
+	// reads the server.
+	Doctor DoctorEnv
 }
 
 // DefaultPanelPort is the panel's HTTPS port (ADR-0023).
@@ -192,13 +196,15 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 		return out, nil
 	})
 
+	var h *siteOps
+
 	if cfg.Sites != nil {
 		log := cfg.Log
 		if log == nil {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h := &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, log: log}
 		h.register(s)
 
 		if cfg.Backup != nil && cfg.Backup.Space == nil {
@@ -217,6 +223,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 		(&statsOps{h: h, disk: disk, cgroupRoot: root}).register(s)
 	}
 
+	registerDoctor(s, cfg.Doctor, cfg.StateDir, h)
 	registerBackup(s, cfg.Backup)
 	registerCloudPanel(s, cfg.CloudPanel, cfg.CloudPanelImport)
 
