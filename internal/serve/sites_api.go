@@ -370,8 +370,11 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			installed = []string{}
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]string{
+		security, active := phpVersionInfo()
+		writeJSON(w, http.StatusOK, map[string]any{
 			"installed": installed, "supported": agentapi.PHPVersions, "legacy": agentapi.LegacyPHPVersions,
+			// End of security fixes and of active support per version (ADR-0036).
+			"securityUntil": security, "activeUntil": active,
 		})
 	}))
 

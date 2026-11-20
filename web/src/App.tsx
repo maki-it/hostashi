@@ -12,6 +12,7 @@ import { Login } from "./Login";
 import { Migrate } from "./Migrate";
 import { Pages } from "./Pages";
 import { Parked } from "./Parked";
+import { PHPPage } from "./PHP";
 import { Setup } from "./Setup";
 import { Sites } from "./Sites";
 
@@ -22,7 +23,7 @@ type View =
   | { kind: "home"; user: User }
   | { kind: "error" };
 
-type Page = "home" | "health" | "firewall" | "sites" | "limits" | "pages" | "parked" | "databases" | "backups" | "import";
+type Page = "home" | "health" | "firewall" | "sites" | "php" | "limits" | "pages" | "parked" | "databases" | "backups" | "import";
 
 const pageFromHash = (): Page => {
   switch (window.location.hash) {
@@ -32,6 +33,8 @@ const pageFromHash = (): Page => {
       return "firewall";
     case "#/sites":
       return "sites";
+    case "#/php":
+      return "php";
     case "#/limits":
       return "limits";
     case "#/pages":
@@ -95,6 +98,9 @@ export function App() {
             <a href="#/sites" aria-current={page === "sites" ? "page" : undefined}>
               Sites
             </a>
+            <a href="#/php" aria-current={page === "php" ? "page" : undefined}>
+              PHP
+            </a>
             <a href="#/limits" aria-current={page === "limits" ? "page" : undefined}>
               Limits
             </a>
@@ -135,6 +141,7 @@ export function App() {
       {view.kind === "home" && page === "health" && <Doctor />}
       {view.kind === "home" && page === "firewall" && <Firewall />}
       {view.kind === "home" && page === "sites" && <Sites />}
+      {view.kind === "home" && page === "php" && <PHPPage />}
       {view.kind === "home" && page === "limits" && <Presets />}
       {view.kind === "home" && page === "pages" && <Pages />}
       {view.kind === "home" && page === "parked" && <Parked />}

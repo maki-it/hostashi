@@ -15,6 +15,7 @@ import (
 	"github.com/maki-it/hostashi/internal/certs"
 	"github.com/maki-it/hostashi/internal/doctor"
 	"github.com/maki-it/hostashi/internal/firewall"
+	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
 	"github.com/maki-it/hostashi/internal/web"
 )
@@ -202,7 +203,16 @@ func (d *doctorOps) sites() []agentapi.DoctorCheck {
 
 	count := func(n uint64) string { return strconv.FormatUint(n, 10) }
 
+	var pools map[string]php.Pool
+	if d.h.php != nil {
+		pools, _ = d.h.php.Current()
+	}
+
 	for _, s := range d.h.m.List() {
+		if p, ok := pools[s.User]; ok && p.Version != "" {
+			out = append(out, doctor.PHPSupport(s.User, p.Version, d.now()))
+		}
+
 		home, ok := d.h.m.Home(s.User)
 		if !ok {
 			out = append(out, agentapi.DoctorCheck{ID: "site.home", Site: s.User, Status: agentapi.DoctorFail, Summary: "the site's pool is not registered"})

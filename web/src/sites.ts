@@ -34,7 +34,14 @@ export type Site = {
 // with 503; the allowed ones see the site. PHP keeps running.
 export type SiteMaintenance = { enabled: boolean; page: string; allowIps: string[] };
 
-export type PHPVersions = { installed: string[]; supported: string[]; legacy: string[] };
+export type PHPVersions = {
+  installed: string[];
+  supported: string[];
+  legacy: string[];
+  // End of security fixes and of active support per version (ADR-0036), YYYY-MM-DD.
+  securityUntil?: Record<string, string>;
+  activeUntil?: Record<string, string>;
+};
 
 export type NewSite = { name: string; php: string; domains: string[]; tls: boolean; hsts: boolean };
 

@@ -40,6 +40,7 @@ var scopeCatalog = map[string]ScopeInfo{
 	"doctor:read":             {Description: "Run the read-only checks of hostashi doctor and read their results"},
 	"firewall:read":           {Description: "Read the firewall's opened ports and the allowlists for SSH and the panel"},
 	"firewall:write":          {Description: "Open ports and set the allowlists for SSH and the panel (a wrong list locks out until the rollback)", HighRisk: true},
+	"php:install":             {Description: "Install more PHP versions from sury.org (runs apt as root with a fixed package list)", HighRisk: true},
 	"metrics:read":            {Description: "Read the Prometheus metrics endpoint"},
 	"migrations:read":         {Description: "List uploaded CloudPanel scan reports and read their migration plans"},
 	"migrations:write":        {Description: "Upload and delete CloudPanel scan reports"},
