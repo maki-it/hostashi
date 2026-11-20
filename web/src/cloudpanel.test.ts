@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it } from "vitest";
-import { cronLabel, existsHere, formatBytes, hostProblem, parseDBMap, type PlanSite } from "./cloudpanel";
+import { cronLabel, existsHere, formatBytes, hostProblem, parseDBMap, ttlLabel, type PlanSite } from "./cloudpanel";
 
 const site = (action: PlanSite["action"], codes: string[]): PlanSite => ({
   name: "shop",
@@ -84,5 +84,23 @@ describe("cronLabel", () => {
     expect(cronLabel({ cronJobs: 3, cronImport: 3 })).toBe("3: 3 created paused");
     expect(cronLabel({ cronJobs: 3, cronImport: 1 })).toBe("3: 1 created paused, 2 to set up by hand");
     expect(cronLabel({ cronJobs: 2, cronImport: 0 })).toBe("2: 2 to set up by hand");
+  });
+});
+
+describe("ttlLabel", () => {
+  it("uses the largest whole unit", () => {
+    expect(ttlLabel(0)).toBe("0 s");
+    expect(ttlLabel(59)).toBe("59 s");
+    expect(ttlLabel(90)).toBe("90 s");
+    expect(ttlLabel(300)).toBe("5 min");
+    expect(ttlLabel(5400)).toBe("90 min");
+    expect(ttlLabel(3600)).toBe("1 h");
+    expect(ttlLabel(86400)).toBe("1 d");
+    expect(ttlLabel(90000)).toBe("25 h");
+  });
+
+  it("returns nothing for values that are not a TTL", () => {
+    expect(ttlLabel(-1)).toBe("");
+    expect(ttlLabel(Number.NaN)).toBe("");
   });
 });
