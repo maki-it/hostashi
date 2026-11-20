@@ -1,6 +1,6 @@
 # ADR-0034 Firewall rules in the panel
 
-**Status:** Proposed. **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0018 (API, scopes), ADR-0021 (fail2ban), ADR-0023 (panel HTTPS), ADR-0033 (hardening baseline, firewall H1), [`03-features.md`](../03-features.md) row "Firewall (nftables/UFW) with defaults" (P0, "SSH lockout protection (rollback timer)").
+**Status:** Accepted (Kim, 2026-11-20). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0018 (API, scopes), ADR-0021 (fail2ban), ADR-0023 (panel HTTPS), ADR-0033 (hardening baseline, firewall H1), [`03-features.md`](../03-features.md) row "Firewall (nftables/UFW) with defaults" (P0, "SSH lockout protection (rollback timer)").
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -59,4 +59,4 @@ Fixed and never editable: established traffic, loopback, the needed ICMP, DHCP r
 ## Open questions
 
 1. Rollback after 120 seconds without confirmation? **Decided (Kim, 2026-11-20): yes.**
-2. Allowlists only for SSH and the panel port in v1, opened ports with an optional address list? Recommendation: yes.
+2. Allowlists only for SSH and the panel port in v1, opened ports with an optional address list? **Decided (Kim, 2026-11-20): yes.**

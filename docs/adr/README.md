@@ -29,7 +29,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0031](0031-dns-cut-over-per-site.md) | DNS cut-over per site in the CloudPanel migration | Accepted |
 | [0032](0032-ssh-and-sftp-per-site.md) | SSH and SFTP access per site | Accepted |
 | [0033](0033-system-hardening-baseline.md) | System hardening baseline before v1 | Proposed |
-| [0034](0034-firewall-rules-in-panel.md) | Firewall rules in the panel | Proposed |
+| [0034](0034-firewall-rules-in-panel.md) | Firewall rules in the panel | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 
