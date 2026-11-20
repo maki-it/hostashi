@@ -40,6 +40,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0034 | Firewall rules in the panel | Accepted on 2026-11-20 ([adr/0034](adr/0034-firewall-rules-in-panel.md)) | Done |
 | 0035 | Users and roles | Accepted on 2026-11-20 ([adr/0035](adr/0035-users-and-roles.md)) | Done |
 | 0036 | Installing PHP versions from the panel | Accepted on 2026-11-20 ([adr/0036](adr/0036-php-versions-from-the-panel.md)) | In progress |
+| 0037 | Panel UI redesign: layout, look and themes | Proposed ([adr/0037](adr/0037-panel-ui-redesign.md)) | No |
 
 ---
 
@@ -284,3 +285,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0036 Installing PHP versions from the panel
 
 **Full text (status Accepted, 2026-11-20, by Kim):** [adr/0036](adr/0036-php-versions-from-the-panel.md). Summary: the panel installs an allowlisted PHP version by starting a fixed root unit `hostashi-php-install@<version>.service` through the existing `phpctl` exception; the unit runs a root-owned script that does what the installer step `phpversions` does (pinned key fingerprints, pin first, fixed packages). No new `os/exec` exception. Admin only, high-risk scope `php:install`, audit log. Newer versions that sury.org offers above the allowlist are shown greyed out; they come with a Hostashi release. End-of-life versions keep running, need a confirmation to install or choose, are marked in the site list and warned about by doctor; Hostashi never switches or removes a version by itself. Removing unused versions comes after v1.
+
+## ADR-0037 Panel UI redesign: layout, look and themes
+
+**Full text (status Proposed, 2026-11-20):** [adr/0037](adr/0037-panel-ui-redesign.md). Summary: the current panel is one narrow column with 12 links in a top row and one long card per site. After a clickable mockup with three looks, Kim chose a new layout and the neutral look A for now. Recommended: a fixed sidebar with grouped navigation, list pages as tables with one primary action, and a page per site with tabs that are part of the address (`#/sites/<name>/php`); hash routing kept. Own small component set on CSS tokens (no UI library, fits the strict CSP), Lucide icons (ISC) and Inter self-hosted (OFL-1.1, added to the npm allowlist for fonts). Light, dark or "follow system" stored per user on the server; the theme name is stored too, so the looks B (Maki) and C (Konsole) can be added later as themes. WCAG 2.2 AA. Six steps, one PR each.
