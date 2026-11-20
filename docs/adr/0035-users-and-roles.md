@@ -8,7 +8,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 - The panel has exactly one account. `POST /api/v1/setup` creates it with the role `admin`, and nothing else can create a user [V: `internal/store/users.go` `CreateFirstUser`, `internal/serve/auth_api.go`].
 - The column `users.role` exists, but its `CHECK` allows only `'admin'` [V: `internal/store/migrations/0002_auth.sql`]. `users.disabled` exists; a disabled user's sessions and tokens stop working [V: `SessionUser`, `APITokenByHash`].
-- Of about 100 routes, 7 handlers compare `p.User.Role != "admin"`; all others rely on the fact that every account is an admin [V: `grep` over `internal/serve`]. That is correct today and wrong the moment a second role exists.
+- The routes that a token may call go through a small `admin` wrapper that each file defines for itself, 16 copies of `p.User.Role != "admin"` in all [V: `grep` over `internal/serve`]. The session-only routes check no role: token and passkey management concern the caller's own account, but the API IP allowlist (`PUT /api/v1/settings/api-ip-allowlist`) is a server setting that only works because every account is an admin [V]. With a second role, each copy must be changed by hand and nothing notices a forgotten one [A].
 - API tokens carry scopes, and every route that a token may call already names its scope through `authn.scoped` [V: `internal/serve/tokens_api.go`]. Token management, account security and the IP allowlist need a browser session [V].
 - ADR-0018 promises tokens limited to individual sites; that is not built yet [V].
 - The audit log stores `user_id` with `ON DELETE SET NULL`, so deleting a user would erase who did what [V: `0001_init.sql`].
@@ -84,7 +84,7 @@ A `manager` may also do the "no" rows except snippets, which stay admin-only for
 ## Consequences
 
 - Migration: `CHECK (role IN ('admin', 'manager', 'user'))` (SQLite needs a table rebuild for a changed `CHECK`), `site_grants`, `invitations`, `audit_log.actor`, token site list. The existing account stays `admin`.
-- Every handler moves to `authz.Check`; the 7 existing role checks disappear. Lists (sites, databases, cron, SSH keys, backups) get a filter by grants.
+- Every handler moves to `authz.Check`; the 16 local `admin` wrappers disappear. Lists (sites, databases, cron, SSH keys, backups) get a filter by grants.
 - Panel pages "Users" (admins only), an invitation page, the role in the top bar, menus that hide what the role cannot do (the API still decides).
 - `05-security.md` 5.4 and `03-features.md` row "Users + roles" are covered for v1.
 - Work in small PRs [E]: 1. `internal/authz` and the route matrix test with today's single role, no change in behavior; 2. store: roles, grants, invitations, actor; 3. users API with invitations and last-admin guard; 4. roles and grants enforced in all handlers and lists; 5. token site list and scopes by role; 6. panel pages; 7. `hostashi user recover`.
