@@ -137,7 +137,7 @@ func isUnique(err error) bool {
 
 // CreateLimitPreset adds a preset; with def it becomes the default.
 func (s *Store) CreateLimitPreset(ctx context.Context, name string, l Limits, def bool, now time.Time) (LimitPreset, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return LimitPreset{}, fmt.Errorf("store: %w", err)
 	}
@@ -185,7 +185,7 @@ func (s *Store) CreateLimitPreset(ctx context.Context, name string, l Limits, de
 // takes it over instead). The sites that follow the preset get the new
 // values, with their applied state reset. It returns the preset as it was.
 func (s *Store) UpdateLimitPreset(ctx context.Context, id int64, name string, l Limits, def bool, now time.Time) (LimitPreset, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return LimitPreset{}, fmt.Errorf("store: %w", err)
 	}
@@ -241,7 +241,7 @@ func setFollowers(ctx context.Context, tx *sql.Tx, presetID int64, l Limits, now
 // RestoreLimitPreset puts back a preset returned by UpdateLimitPreset,
 // together with the values of the sites that follow it.
 func (s *Store) RestoreLimitPreset(ctx context.Context, p LimitPreset, now time.Time) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
@@ -276,7 +276,7 @@ func (s *Store) RestoreLimitPreset(ctx context.Context, p LimitPreset, now time.
 // DeleteLimitPreset removes a preset that is not the default. The sites
 // that followed it keep its values as custom values.
 func (s *Store) DeleteLimitPreset(ctx context.Context, id int64) (LimitPreset, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return LimitPreset{}, fmt.Errorf("store: %w", err)
 	}
@@ -404,7 +404,7 @@ func (s *Store) SetSiteLimits(ctx context.Context, siteID, presetID int64, l Lim
 	args := append([]any{siteID, preset}, limitArgs(l)...)
 	args = append(args, now.Unix())
 
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO site_limits (site_id, preset_id, `+limitColumns+`, applied_at, apply_error, updated_at)
+	if _, err := s.w.ExecContext(ctx, `INSERT INTO site_limits (site_id, preset_id, `+limitColumns+`, applied_at, apply_error, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
 		ON CONFLICT (site_id) DO UPDATE SET preset_id = excluded.preset_id, disk_bytes = excluded.disk_bytes,
 			disk_inodes = excluded.disk_inodes, memory_bytes = excluded.memory_bytes, php_workers = excluded.php_workers,
@@ -420,7 +420,7 @@ func (s *Store) SetSiteLimits(ctx context.Context, siteID, presetID int64, l Lim
 // removes them again.
 func (s *Store) RestoreSiteLimits(ctx context.Context, old SiteLimits, ok bool) error {
 	if !ok {
-		if _, err := s.db.ExecContext(ctx, `DELETE FROM site_limits WHERE site_id = ?`, old.SiteID); err != nil {
+		if _, err := s.w.ExecContext(ctx, `DELETE FROM site_limits WHERE site_id = ?`, old.SiteID); err != nil {
 			return fmt.Errorf("store: %w", err)
 		}
 
@@ -446,7 +446,7 @@ func (s *Store) MarkSiteLimits(ctx context.Context, siteID, appliedAt int64, app
 		applyErr = applyErr[:500]
 	}
 
-	if _, err := s.db.ExecContext(ctx, `UPDATE site_limits SET applied_at = ?, apply_error = ? WHERE site_id = ?`,
+	if _, err := s.w.ExecContext(ctx, `UPDATE site_limits SET applied_at = ?, apply_error = ? WHERE site_id = ?`,
 		appliedAt, applyErr, siteID); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}

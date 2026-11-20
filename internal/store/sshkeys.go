@@ -80,7 +80,7 @@ func (s *Store) SSHKey(ctx context.Context, siteID, id int64) (SSHKey, error) {
 
 // InsertSSHKey adds a key to a site that has fewer than maxKeys keys.
 func (s *Store) InsertSSHKey(ctx context.Context, k SSHKey, maxKeys int, now time.Time) (SSHKey, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return SSHKey{}, fmt.Errorf("store: %w", err)
 	}
@@ -127,7 +127,7 @@ func (s *Store) InsertSSHKey(ctx context.Context, k SSHKey, maxKeys int, now tim
 // UpdateSSHKey changes a key's label and access and returns the key as it
 // was. The public key itself never changes; a new key is a new entry.
 func (s *Store) UpdateSSHKey(ctx context.Context, k SSHKey, now time.Time) (SSHKey, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return SSHKey{}, fmt.Errorf("store: %w", err)
 	}
@@ -153,7 +153,7 @@ func (s *Store) UpdateSSHKey(ctx context.Context, k SSHKey, now time.Time) (SSHK
 
 // DeleteSSHKey removes a key and returns it.
 func (s *Store) DeleteSSHKey(ctx context.Context, siteID, id int64) (SSHKey, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return SSHKey{}, fmt.Errorf("store: %w", err)
 	}
@@ -179,7 +179,7 @@ func (s *Store) DeleteSSHKey(ctx context.Context, siteID, id int64) (SSHKey, err
 // RestoreSSHKey puts a key back exactly as it was, with its id: after a
 // change the agent refused.
 func (s *Store) RestoreSSHKey(ctx context.Context, k SSHKey) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.w.ExecContext(ctx,
 		`INSERT INTO ssh_keys (id, site_id, label, access, public_key, fingerprint, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (id) DO UPDATE SET label = excluded.label, access = excluded.access, updated_at = excluded.updated_at`,

@@ -21,7 +21,7 @@ type CloudPanelReport struct {
 
 // CreateCloudPanelReport stores a sealed report.
 func (s *Store) CreateCloudPanelReport(ctx context.Context, r CloudPanelReport) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.w.ExecContext(ctx,
 		`INSERT INTO cloudpanel_reports (id, sites, sealed, created_by, created_at) VALUES (?, ?, ?, ?, ?)`,
 		r.ID, r.Sites, r.Sealed, r.CreatedBy, r.CreatedAt.Unix())
 	if err != nil {
@@ -89,7 +89,7 @@ func (s *Store) CloudPanelReports(ctx context.Context) ([]CloudPanelReport, erro
 
 // DeleteCloudPanelReport removes a report. A missing one is ErrNotFound.
 func (s *Store) DeleteCloudPanelReport(ctx context.Context, id string) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM cloudpanel_reports WHERE id = ?`, id)
+	res, err := s.w.ExecContext(ctx, `DELETE FROM cloudpanel_reports WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}

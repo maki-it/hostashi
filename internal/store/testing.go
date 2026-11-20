@@ -10,7 +10,7 @@ import "context"
 
 // RawExec runs one statement.
 func (s *Store) RawExec(ctx context.Context, query string, args ...any) error {
-	_, err := s.db.ExecContext(ctx, query, args...)
+	_, err := s.w.ExecContext(ctx, query, args...)
 
 	return err
 }

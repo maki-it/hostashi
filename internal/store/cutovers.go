@@ -51,7 +51,7 @@ func (s *Store) StartCutover(ctx context.Context, c Cutover) error {
 		return fmt.Errorf("store: %w", err)
 	}
 
-	res, err := s.db.ExecContext(ctx,
+	res, err := s.w.ExecContext(ctx,
 		`INSERT INTO site_cutovers (site_id, state, started_by, started_at, deadline) VALUES (?, 'waiting', ?, ?, ?)
 		 ON CONFLICT (site_id) DO UPDATE SET state = 'waiting', started_by = excluded.started_by,
 		   started_at = excluded.started_at, deadline = excluded.deadline, checked_at = 0, done_at = 0, answers = '[]', error = ''
@@ -120,7 +120,7 @@ func (s *Store) UpdateCutover(ctx context.Context, c Cutover) (bool, error) {
 		answers = []byte("[]")
 	}
 
-	res, err := s.db.ExecContext(ctx,
+	res, err := s.w.ExecContext(ctx,
 		`UPDATE site_cutovers SET state = ?, checked_at = ?, done_at = ?, answers = ?, error = ?
 		 WHERE state = 'waiting' AND site_id = (SELECT id FROM sites WHERE name = ?)`,
 		c.State, unixOrNull(c.CheckedAt), unixOrNull(c.DoneAt), string(answers), c.Error, c.Site)

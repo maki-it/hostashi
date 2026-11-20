@@ -46,7 +46,7 @@ func (s *Store) CountUsers(ctx context.Context) (int, error) {
 // any user exists, decided inside one write transaction so two setup
 // requests cannot both succeed.
 func (s *Store) CreateFirstUser(ctx context.Context, username, passwordHash string) (User, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return User{}, fmt.Errorf("store: %w", err)
 	}
@@ -116,7 +116,7 @@ func (s *Store) userBy(ctx context.Context, where string, arg any) (User, error)
 
 // CreateSession stores a session by the SHA-256 of its token.
 func (s *Store) CreateSession(ctx context.Context, userID int64, tokenHash []byte, now, expires time.Time) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.w.ExecContext(ctx,
 		`INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
 		tokenHash, userID, now.Unix(), expires.Unix())
 	if err != nil {
@@ -158,7 +158,7 @@ func (s *Store) SessionUser(ctx context.Context, tokenHash []byte, now time.Time
 
 // DeleteSession removes one session. A missing session is not an error.
 func (s *Store) DeleteSession(ctx context.Context, tokenHash []byte) error {
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash = ?`, tokenHash); err != nil {
+	if _, err := s.w.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash = ?`, tokenHash); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 
@@ -167,7 +167,7 @@ func (s *Store) DeleteSession(ctx context.Context, tokenHash []byte) error {
 
 // DeleteExpiredSessions removes sessions that ended before now.
 func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at <= ?`, now.Unix())
+	res, err := s.w.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at <= ?`, now.Unix())
 	if err != nil {
 		return 0, fmt.Errorf("store: %w", err)
 	}
@@ -191,7 +191,7 @@ func (s *Store) Audit(ctx context.Context, userID *int64, action, target string,
 		return fmt.Errorf("store: %w", err)
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	_, err = s.w.ExecContext(ctx,
 		`INSERT INTO audit_log (user_id, actor, action, target, detail)
 		 VALUES (?, coalesce((SELECT username FROM users WHERE id = ?), ''), ?, ?, ?)`,
 		userID, userID, action, target, string(b))
@@ -205,7 +205,7 @@ func (s *Store) Audit(ctx context.Context, userID *int64, action, target string,
 // SetPendingTOTP stores a new encrypted seed for enrollment. It replaces an
 // unconfirmed seed and fails with ErrTOTPState if TOTP is already enabled.
 func (s *Store) SetPendingTOTP(ctx context.Context, userID int64, sealed []byte) error {
-	res, err := s.db.ExecContext(ctx,
+	res, err := s.w.ExecContext(ctx,
 		`UPDATE users SET totp_secret = ?, totp_last_step = 0 WHERE id = ? AND totp_enabled = 0`, sealed, userID)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
@@ -221,7 +221,7 @@ func (s *Store) SetPendingTOTP(ctx context.Context, userID int64, sealed []byte)
 // EnableTOTP turns on the pending seed, records the accepted step and
 // replaces the recovery codes, in one transaction.
 func (s *Store) EnableTOTP(ctx context.Context, userID, step int64, codeHashes [][]byte) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
@@ -259,7 +259,7 @@ func (s *Store) EnableTOTP(ctx context.Context, userID, step int64, codeHashes [
 // AcceptTOTPStep records step as used. It returns false if this step or a
 // later one was already accepted, which blocks replay of a captured code.
 func (s *Store) AcceptTOTPStep(ctx context.Context, userID, step int64) (bool, error) {
-	res, err := s.db.ExecContext(ctx,
+	res, err := s.w.ExecContext(ctx,
 		`UPDATE users SET totp_last_step = ? WHERE id = ? AND totp_last_step < ?`, step, userID, step)
 	if err != nil {
 		return false, fmt.Errorf("store: %w", err)
@@ -272,7 +272,7 @@ func (s *Store) AcceptTOTPStep(ctx context.Context, userID, step int64) (bool, e
 
 // UseRecoveryCode deletes the code and reports whether it existed.
 func (s *Store) UseRecoveryCode(ctx context.Context, userID int64, codeHash []byte) (bool, error) {
-	res, err := s.db.ExecContext(ctx,
+	res, err := s.w.ExecContext(ctx,
 		`DELETE FROM recovery_codes WHERE user_id = ? AND code_hash = ?`, userID, codeHash)
 	if err != nil {
 		return false, fmt.Errorf("store: %w", err)
@@ -285,7 +285,7 @@ func (s *Store) UseRecoveryCode(ctx context.Context, userID int64, codeHash []by
 
 // DisableTOTP removes the seed and the recovery codes.
 func (s *Store) DisableTOTP(ctx context.Context, userID int64) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}

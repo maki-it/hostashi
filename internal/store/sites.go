@@ -60,7 +60,7 @@ type Site struct {
 
 // CreateSite stores a new site in state creating together with its domains.
 func (s *Store) CreateSite(ctx context.Context, name, pool, php string, domains []string, now time.Time) (Site, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return Site{}, fmt.Errorf("store: %w", err)
 	}
@@ -130,7 +130,7 @@ func insertDomains(ctx context.Context, tx *sql.Tx, siteID int64, domains []stri
 
 // SetSiteState changes the state of a site.
 func (s *Store) SetSiteState(ctx context.Context, name, state string, now time.Time) error {
-	res, err := s.db.ExecContext(ctx,
+	res, err := s.w.ExecContext(ctx,
 		`UPDATE sites SET state = ?, updated_at = ? WHERE name = ?`, state, now.Unix(), name)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
@@ -145,7 +145,7 @@ func (s *Store) SetSiteState(ctx context.Context, name, state string, now time.T
 
 // SetSitePHP sets the PHP version of a site and returns the previous one.
 func (s *Store) SetSitePHP(ctx context.Context, name, php string, now time.Time) (string, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return "", fmt.Errorf("store: %w", err)
 	}
@@ -174,7 +174,7 @@ func (s *Store) SetSitePHP(ctx context.Context, name, php string, now time.Time)
 
 // ReplaceSiteDomains sets the domains of a site and returns the previous ones.
 func (s *Store) ReplaceSiteDomains(ctx context.Context, name string, domains []string, now time.Time) ([]string, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("store: %w", err)
 	}
@@ -273,10 +273,50 @@ func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 
 	_ = rows.Close()
 
+	// One query for all domains instead of one per site: the list backs
+	// every metrics scrape, and at a thousand sites the per-site queries
+	// took about 20 ms (docs/sqlite-load.md).
+	domains, err := allDomains(ctx, s.db)
+	if err != nil {
+		return nil, err
+	}
+
 	for i := range out {
-		if out[i].Domains, err = domainsOf(ctx, s.db, out[i].ID); err != nil {
-			return nil, err
+		out[i].Domains = domains[out[i].ID]
+		if out[i].Domains == nil {
+			out[i].Domains = []string{}
 		}
+	}
+
+	return out, nil
+}
+
+// allDomains maps each site ID to its domains, the primary one first.
+func allDomains(ctx context.Context, q queryer) (map[int64][]string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT site_id, domain FROM site_domains ORDER BY site_id, position`)
+	if err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+
+	defer rows.Close()
+
+	out := map[int64][]string{}
+
+	for rows.Next() {
+		var (
+			id int64
+			d  string
+		)
+
+		if err := rows.Scan(&id, &d); err != nil {
+			return nil, fmt.Errorf("store: %w", err)
+		}
+
+		out[id] = append(out[id], d)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: %w", err)
 	}
 
 	return out, nil
@@ -345,7 +385,7 @@ func unixOrZero(v int64) time.Time {
 
 // SetSiteTLS sets whether a site wants HTTPS and returns the previous value.
 func (s *Store) SetSiteTLS(ctx context.Context, name string, on bool, now time.Time) (bool, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("store: %w", err)
 	}
@@ -381,7 +421,7 @@ func (s *Store) SetSiteTLS(ctx context.Context, name string, on bool, now time.T
 
 // SetSiteCert records a newly installed certificate and clears the error.
 func (s *Store) SetSiteCert(ctx context.Context, name string, domains []string, notAfter, now time.Time) error {
-	res, err := s.db.ExecContext(ctx,
+	res, err := s.w.ExecContext(ctx,
 		`UPDATE sites SET tls_domains = ?, tls_not_after = ?, tls_error = '', tls_failed_at = 0, updated_at = ? WHERE name = ?`,
 		strings.Join(domains, " "), notAfter.Unix(), now.Unix(), name)
 	if err != nil {
@@ -415,7 +455,7 @@ func (s *Store) SetSiteDisabled(ctx context.Context, name string, on bool, now t
 // setSiteFlag sets one 0/1 column of a site and returns its previous value.
 // The statements are constants of the callers, never built from input.
 func (s *Store) setSiteFlag(ctx context.Context, get, set, name string, on bool, now time.Time) (bool, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("store: %w", err)
 	}
@@ -455,7 +495,7 @@ func (s *Store) SetTLSLive(ctx context.Context, names []string) error {
 		return fmt.Errorf("store: %w", err)
 	}
 
-	if _, err := s.db.ExecContext(ctx,
+	if _, err := s.w.ExecContext(ctx,
 		`UPDATE sites SET tls_live = (name IN (SELECT value FROM json_each(?)))`, string(b)); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
@@ -469,7 +509,7 @@ func (s *Store) SetSiteTLSError(ctx context.Context, name, msg string, at time.T
 		msg = strings.ToValidUTF8(msg[:1000], "")
 	}
 
-	if _, err := s.db.ExecContext(ctx, `UPDATE sites SET tls_error = ?, tls_failed_at = ? WHERE name = ?`, msg, at.Unix(), name); err != nil {
+	if _, err := s.w.ExecContext(ctx, `UPDATE sites SET tls_error = ?, tls_failed_at = ? WHERE name = ?`, msg, at.Unix(), name); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 
@@ -478,7 +518,7 @@ func (s *Store) SetSiteTLSError(ctx context.Context, name, msg string, at time.T
 
 // DeleteSite removes a site and its domains. A missing site is not an error.
 func (s *Store) DeleteSite(ctx context.Context, name string) error {
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM sites WHERE name = ?`, name); err != nil {
+	if _, err := s.w.ExecContext(ctx, `DELETE FROM sites WHERE name = ?`, name); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 

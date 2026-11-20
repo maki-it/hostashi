@@ -80,7 +80,7 @@ func TestReopenIsIdempotent(t *testing.T) {
 	s := open(t, path)
 	ctx := context.Background()
 
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO users (username) VALUES ('kim')`); err != nil {
+	if _, err := s.w.ExecContext(ctx, `INSERT INTO users (username) VALUES ('kim')`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,7 +126,7 @@ func TestSchemaConstraints(t *testing.T) {
 	s := open(t, dbPath(t))
 	ctx := context.Background()
 
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO users (username) VALUES ('kim')`); err != nil {
+	if _, err := s.w.ExecContext(ctx, `INSERT INTO users (username) VALUES ('kim')`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -141,18 +141,18 @@ func TestSchemaConstraints(t *testing.T) {
 	}
 	for name, q := range bad {
 		t.Run(name, func(t *testing.T) {
-			if _, err := s.db.ExecContext(ctx, q); err == nil {
+			if _, err := s.w.ExecContext(ctx, q); err == nil {
 				t.Fatal("accepted")
 			}
 		})
 	}
 
 	// Deleting a user keeps its audit entries.
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO audit_log (action, user_id) VALUES ('login', 1)`); err != nil {
+	if _, err := s.w.ExecContext(ctx, `INSERT INTO audit_log (action, user_id) VALUES ('login', 1)`); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id = 1`); err != nil {
+	if _, err := s.w.ExecContext(ctx, `DELETE FROM users WHERE id = 1`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -166,7 +166,7 @@ func TestSchemaTooNew(t *testing.T) {
 	path := dbPath(t)
 	s := open(t, path)
 
-	if _, err := s.db.ExecContext(context.Background(), `PRAGMA user_version = 99`); err != nil {
+	if _, err := s.w.ExecContext(context.Background(), `PRAGMA user_version = 99`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -278,7 +278,7 @@ func TestFailedMigrationRollsBack(t *testing.T) {
 	fsys[fmt.Sprintf("migrations/%04d_bad.sql", base+2)] = &fstest.MapFile{Data: []byte(
 		"CREATE TABLE t3 (x INTEGER) STRICT; INSERT INTO missing VALUES (1);")}
 
-	if err := migrate(ctx, s.db, fsys); err == nil || !strings.Contains(err.Error(), "_bad.sql") {
+	if err := migrate(ctx, s.w, fsys); err == nil || !strings.Contains(err.Error(), "_bad.sql") {
 		t.Fatalf("want error naming the bad migration, got %v", err)
 	}
 

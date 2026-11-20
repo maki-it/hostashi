@@ -75,7 +75,7 @@ func (s *Store) SetSiteGrants(ctx context.Context, userID int64, sites []string,
 		return nil, nil, fmt.Errorf("store: at most %d site grants per user", MaxGrantsPerUser)
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("store: %w", err)
 	}
