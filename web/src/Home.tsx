@@ -7,7 +7,8 @@ import { logout, type User } from "./auth";
 // the account still has to set up a second factor.
 type Props = { user: User; onLogout?: () => void };
 
-// Home is a placeholder until the dashboard exists.
+// Home greets an account that still has to set up a second factor; the
+// panel itself starts on the Overview.
 export function Home({ user, onLogout }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");

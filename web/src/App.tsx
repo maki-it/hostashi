@@ -12,6 +12,7 @@ import { Presets } from "./Limits";
 import { Login } from "./Login";
 import { Migrate } from "./Migrate";
 import { Pages } from "./Pages";
+import { Overview } from "./Overview";
 import { Parked } from "./Parked";
 import { PHPPage } from "./PHP";
 import { SecondFactor } from "./SecondFactor";
@@ -85,6 +86,7 @@ export function App() {
     };
     return (
       <Shell user={user} route={{ ...route, page }} onLogout={() => setView({ kind: "login" })}>
+        {show("home") && <Overview user={user} />}
         {show("sites") &&
           (route.site ? (
             <SitePage
@@ -108,7 +110,6 @@ export function App() {
         {show("pages") && <Pages query={route.query} onQuery={replaceQuery} />}
         {show("users") && <Users me={user.username} query={route.query} onQuery={replaceQuery} />}
         <div className="app-legacy">
-          {show("home") && <Home user={user} />}
           {show("import") && <Migrate />}
         </div>
       </Shell>

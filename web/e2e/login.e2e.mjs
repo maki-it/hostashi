@@ -44,8 +44,11 @@ const page = await context.newPage();
 const pageErrors = [];
 page.on("pageerror", (e) => pageErrors.push(String(e)));
 page.on("console", (m) => {
-  // 401s from /auth/me and wrong passwords are expected; CSP violations are not.
-  if (m.type() === "error" && !m.text().includes("status of 401")) pageErrors.push(m.text());
+  // 401s from /auth/me and wrong passwords are expected, and so are 503s:
+  // no agent runs here, so the overview's health and backup cards cannot
+  // load. CSP violations and script errors are not expected.
+  const expected = m.text().includes("status of 401") || m.text().includes("status of 503");
+  if (m.type() === "error" && !expected) pageErrors.push(m.text());
 });
 
 let n = 0;
@@ -59,7 +62,8 @@ async function ok(what) {
 }
 
 const loginButton = () => page.getByRole("button", { name: "Log in", exact: true });
-const welcome = () => page.getByRole("heading", { name: "Welcome, admin" });
+// Before the second factor the panel greets the account; afterwards it opens on the overview.
+const welcome = () => page.getByRole("heading", { name: /^(Welcome, admin|Overview)$/ });
 // On a narrow window the sidebar is a menu; open it before using a link or
 // the logout button in it.
 async function openMenu() {
@@ -93,7 +97,7 @@ try {
 
   // An admin must set up a second factor before anything else (ADR-0035).
   await page.getByRole("heading", { name: "Set up a second factor" }).waitFor();
-  if (await page.getByRole("link", { name: "Sites" }).count()) throw new Error("navigation shown before the second factor");
+  if (await page.getByRole("link", { name: "Sites", exact: true }).count()) throw new Error("navigation shown before the second factor");
   await ok("an admin without a second factor sees only the setup");
 
   await page.getByRole("button", { name: "Set up an authenticator app" }).click();
@@ -108,7 +112,7 @@ try {
   await ok("TOTP set up in the panel, recovery codes shown");
   await page.getByRole("button", { name: "Continue" }).click();
   await openMenu();
-  await page.getByRole("link", { name: "Sites" }).waitFor();
+  await page.getByRole("link", { name: "Sites", exact: true }).waitFor();
 
   const cdp = await context.newCDPSession(page);
   await cdp.send("WebAuthn.enable");
