@@ -47,19 +47,22 @@ func TestInstallerKnowsTheSamePHPVersions(t *testing.T) {
 	}
 }
 
-// The installer warns about the same legacy versions as the panel.
-func TestInstallerKnowsTheSameLegacyPHPVersions(t *testing.T) {
-	b, err := os.ReadFile("../../packaging/install.sh")
+// The script that installs more versions (ADR-0036) knows the same
+// versions and warns about the same legacy ones as the panel.
+func TestPHPInstallKnowsTheSameVersions(t *testing.T) {
+	b, err := os.ReadFile("../../packaging/php/php-install")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	m := regexp.MustCompile(`(?m)^LEGACY_PHP_VERSIONS=\(([^)]*)\)$`).FindSubmatch(b)
-	if m == nil {
-		t.Fatal("LEGACY_PHP_VERSIONS not found in install.sh")
-	}
+	for name, want := range map[string][]string{"PHP_VERSIONS": PHPVersions, "LEGACY_PHP_VERSIONS": LegacyPHPVersions} {
+		m := regexp.MustCompile(`(?m)^` + name + `=\(([^)]*)\)$`).FindSubmatch(b)
+		if m == nil {
+			t.Fatalf("%s not found in php-install", name)
+		}
 
-	if got := strings.Fields(string(m[1])); !slices.Equal(got, LegacyPHPVersions) {
-		t.Fatalf("install.sh has %v, agentapi has %v", got, LegacyPHPVersions)
+		if got := strings.Fields(string(m[1])); !slices.Equal(got, want) {
+			t.Errorf("php-install has %s=%v, agentapi has %v", name, got, want)
+		}
 	}
 }

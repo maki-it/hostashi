@@ -118,7 +118,8 @@ case "$IMG" in
 esac
 grep -qF "$want" <<<"$origins" || fail "security origin missing: $origins"
 for o in $origins; do
-  case "$o" in *-security*) ;; *) fail "unattended-upgrades allows a non-security origin: $o";; esac
+  # sury.org (more PHP versions, ADR-0019) has no security archive of its own.
+  case "$o" in *-security* | "origin=deb.sury.org,archive=$codename") ;; *) fail "unattended-upgrades allows a non-security origin: $o";; esac
 done
 [ "$(x apt-config dump --format '%v%n' Unattended-Upgrade::Automatic-Reboot)" = false ] || fail "automatic reboot is on"
 for t in apt-daily.timer apt-daily-upgrade.timer; do
@@ -1025,7 +1026,6 @@ def=$(x dpkg-query -W -f='${Depends}' php-fpm | sed 's/^php\([0-9.]*\)-fpm.*/\1/
 out=$(inst apply --yes --php-versions "8.1,7.4,$def") || { x tail -n 60 /var/log/hostashi-install.log >&2 || true; fail "apply with --php-versions failed"; }
 echo "$out"
 grep -q 'apply.*phpversions' <<<"$out" || fail "phpversions step not applied"
-grep -q 'apply.*updates' <<<"$out" || fail "unattended-upgrades not told about sury.org"
 expect_mode /usr/share/keyrings/hostashi-sury-php.gpg "644 root:root"
 expect_mode /etc/apt/preferences.d/hostashi-sury-php "644 root:root"
 # The default version stays on the distribution, the extra ones and
@@ -1045,8 +1045,20 @@ origins=$(x unattended-upgrade --dry-run -d 2>&1 | sed -n 's/^Allowed origins ar
 grep -qF "origin=deb.sury.org,archive=$codename" <<<"$origins" || fail "sury.org not in unattended-upgrades: $origins"
 out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run without --php-versions changed something"; }
+# The unit the panel starts (ADR-0036): the script refuses what is not on
+# its list, and installs what is.
+expect_mode /usr/local/lib/hostashi/php-install "755 root:root"
+if x systemctl start hostashi-php-install@8.0.service 2>/dev/null; then fail "the unit installed PHP 8.0"; fi
+x systemctl start hostashi-php-install@8.2.service || { x journalctl -u hostashi-php-install@8.2.service --no-pager -n 30 >&2; fail "the unit did not install PHP 8.2"; }
+x /usr/local/lib/hostashi/php-install check 8.2 || fail "PHP 8.2 not set up after the unit ran"
+# The agent reads this log for the panel (ADR-0036).
+expect_mode /var/lib/hostashi-agent/php-install "700 root:root"
+x tail -n 1 /var/lib/hostashi-agent/php-install/8.2.log | grep -q '^php-install: done:' || fail "no final line in the unit's log: $(x tail -n 5 /var/lib/hostashi-agent/php-install/8.2.log)"
+x grep -qx 'Package: php-common php7.4\* php8.1\* php8.2\*' /etc/apt/preferences.d/hostashi-sury-php || fail "pin does not cover 8.2: $(x cat /etc/apt/preferences.d/hostashi-sury-php)"
+out=$(inst apply --yes)
+grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the panel's install changed something"; }
 [ "$(api GET /api/v1/php/versions)" = 200 ] || fail "php versions: $(x cat /tmp/api.out)"
-for v in 7.4 8.1 "$def"; do x grep -q "\"$v\"" /tmp/api.out || fail "PHP $v not listed as installed: $(x cat /tmp/api.out)"; done
+for v in 7.4 8.1 8.2 "$def"; do x grep -q "\"$v\"" /tmp/api.out || fail "PHP $v not listed as installed: $(x cat /tmp/api.out)"; done
 # A site on each extra version, then switched between them.
 [ "$(api POST /api/v1/sites '{"name":"legacy","php":"7.4","domains":["legacy.example.com"]}')" = 201 ] || fail "create 7.4 site: $(x cat /tmp/api.out)"
 xi runuser -u legacy -- sh -c 'cat >/home/legacy/htdocs/index.php' <<'PHP'

@@ -32,6 +32,7 @@ import (
 	"github.com/maki-it/hostashi/internal/pages"
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
+	"github.com/maki-it/hostashi/internal/phpinstall"
 	"github.com/maki-it/hostashi/internal/resticctl"
 	"github.com/maki-it/hostashi/internal/sites"
 	"github.com/maki-it/hostashi/internal/siteslice"
@@ -125,6 +126,11 @@ type Config struct {
 	// failed_precondition.
 	Firewall *firewall.Manager
 
+	// PHPInstall installs more PHP versions through the fixed install unit
+	// (ADR-0036). Run builds it; without it php.install answers
+	// failed_precondition.
+	PHPInstall *phpinstall.Manager
+
 	// Doctor overrides what doctor.run reads, for tests. The zero value
 	// reads the server.
 	Doctor DoctorEnv
@@ -210,7 +216,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, log: log}
 		h.register(s)
 
 		if cfg.Backup != nil && cfg.Backup.Space == nil {
@@ -233,6 +239,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	registerBackup(s, cfg.Backup)
 	registerCloudPanel(s, cfg.CloudPanel, cfg.CloudPanelImport)
 	registerFirewall(s, cfg.Firewall)
+	registerPHPInstall(s, cfg.PHPInstall)
 
 	return s
 }
@@ -244,6 +251,7 @@ type siteOps struct {
 	m      *sites.Manager
 	web    *web.Reconciler
 	php    *php.Manager
+	phpi   *phpinstall.Manager
 	certs  *certs.Store
 	db     *mariadb.Manager
 	pages  *pages.Store
@@ -390,10 +398,15 @@ func (h *siteOps) register(s *agentrpc.Server) {
 
 	agentrpc.Handle(s, agentapi.PHPVersionsList, func(_ context.Context, _ agentrpc.Caller, _ agentapi.PHPVersionsRequest) (agentapi.PHPVersionsResponse, error) {
 		if h.php == nil || h.php.Installed == nil {
-			return agentapi.PHPVersionsResponse{Installed: []string{}}, nil
+			return agentapi.PHPVersionsResponse{Installed: []string{}, Newer: []string{}}, nil
 		}
 
-		return agentapi.PHPVersionsResponse{Installed: h.php.Installed()}, nil
+		res := agentapi.PHPVersionsResponse{Installed: h.php.Installed(), Newer: []string{}}
+		if h.phpi != nil {
+			res.Repository, res.Newer = h.phpi.Repository(), h.phpi.Newer()
+		}
+
+		return res, nil
 	})
 }
 
@@ -943,6 +956,10 @@ func Run(ctx context.Context, cfg Config) error {
 			Dir: filepath.Join(cpDir, "imports"), StateDir: cmp.Or(cfg.StateDir, DefaultStateDir),
 			Source: cfg.CloudPanel, Units: resticctl.Units{},
 		}
+	}
+
+	if cfg.PHPInstall == nil {
+		cfg.PHPInstall = &phpinstall.Manager{Units: phpctl.InstallUnits{}, Installed: phpctl.Installed}
 	}
 
 	if cfg.Firewall == nil {

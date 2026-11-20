@@ -7,6 +7,8 @@
 // site's slice and applies its limits (ADR-0015). For hostashi doctor it
 // reads whether Hostashi's firewall unit is active (system.go, ADR-0033),
 // and it reloads that unit after the panel changed its rules (ADR-0034).
+// It starts the fixed unit that installs more PHP versions and reads its
+// state (system.go, ADR-0036); apt runs in that unit, never here.
 //
 // Like internal/webctl it is allowed to start processes (depguard rule in
 // .golangci.yml), with the same narrow exception: fixed binaries by absolute

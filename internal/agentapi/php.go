@@ -38,7 +38,64 @@ func (PHPVersionsRequest) Validate() error { return nil }
 // is installed, in the order of PHPVersions.
 type PHPVersionsResponse struct {
 	Installed []string `json:"installed"`
+	// Repository is true when the sury.org source is set up (ADR-0019).
+	Repository bool `json:"repository"`
+	// Newer are the versions sury.org offers above PHPVersions, from apt's
+	// package lists (ADR-0036). Hostashi does not run them yet.
+	Newer []string `json:"newer"`
 }
 
 // PHPVersionsList reports the installed PHP versions.
 var PHPVersionsList = agentrpc.Op[PHPVersionsRequest, PHPVersionsResponse]{Name: "php.versions"}
+
+// PHPSecurityUntil is the last day of security fixes per version, from
+// php.net/supported-versions.php and php.net/eol.php (checked 2026-11-20,
+// ADR-0036). After it a version is end of life.
+var PHPSecurityUntil = map[string]string{
+	"7.4": "2022-11-28", "8.1": "2025-12-31", "8.2": "2026-12-31",
+	"8.3": "2027-12-31", "8.4": "2028-12-31", "8.5": "2029-12-31",
+}
+
+// PHPActiveUntil is the last day of active support (bug fixes) per
+// version, same sources. Between it and PHPSecurityUntil a version gets
+// security fixes only. Versions that are end of life have no entry.
+var PHPActiveUntil = map[string]string{
+	"8.2": "2024-12-31", "8.3": "2025-12-31", "8.4": "2026-12-31", "8.5": "2027-12-31",
+}
+
+// PHPInstallRequest installs a version from PHPVersions (ADR-0036).
+type PHPInstallRequest struct {
+	Version string `json:"version"`
+}
+
+// Validate accepts a version from PHPVersions.
+func (r PHPInstallRequest) Validate() error { return ValidatePHPVersion(r.Version) }
+
+// PHPInstallStatusRequest has no parameters.
+type PHPInstallStatusRequest struct{}
+
+// Validate accepts the empty request.
+func (PHPInstallStatusRequest) Validate() error { return nil }
+
+// The states of the last installation.
+const (
+	PHPInstallIdle      = "idle"      // none has run
+	PHPInstallRunning   = "running"   // the unit is active
+	PHPInstallSucceeded = "succeeded" // the script printed its final line
+	PHPInstallFailed    = "failed"    // it ended without that line
+)
+
+// PHPInstallStatus is the last installation: its version, its state and
+// the last lines of its log (the script's and apt's output).
+type PHPInstallStatus struct {
+	Version string   `json:"version,omitempty"`
+	State   string   `json:"state"`
+	Log     []string `json:"log"`
+}
+
+// PHPInstall starts the installation of a version (php.install); it
+// returns at once, PHPInstallStatusOp follows it.
+var PHPInstall = agentrpc.Op[PHPInstallRequest, PHPInstallStatus]{Name: "php.install"}
+
+// PHPInstallStatusOp reports the last installation (php.install.status).
+var PHPInstallStatusOp = agentrpc.Op[PHPInstallStatusRequest, PHPInstallStatus]{Name: "php.install.status"}
