@@ -84,7 +84,7 @@ func (a authn) session(w http.ResponseWriter, r *http.Request) (store.User, bool
 func (a authn) scoped(scope string, h func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p, ok := a.principal(w, r)
-		if !ok {
+		if !ok || !a.secondFactorOK(w, r, p.User) {
 			return
 		}
 
@@ -96,6 +96,28 @@ func (a authn) scoped(scope string, h func(http.ResponseWriter, *http.Request, a
 
 		h(w, r, p)
 	}
+}
+
+// secondFactorOK refuses an account that must have a second factor and has
+// none (ADR-0035), with 403 second_factor_required. Such an account can
+// still log in and out, read /auth/me and set up TOTP or a passkey, and
+// nothing else; this holds for its API tokens as well. It writes the error
+// answer itself.
+func (a authn) secondFactorOK(w http.ResponseWriter, r *http.Request, u store.User) bool {
+	missing, err := a.svc.SecondFactorMissing(r.Context(), u)
+	if err != nil {
+		a.fail(w, err, "check second factor")
+
+		return false
+	}
+
+	if missing {
+		writeError(w, http.StatusForbidden, "second_factor_required", "set up a second factor (TOTP or a passkey) first")
+
+		return false
+	}
+
+	return true
 }
 
 // siteOfFunc names the site a request concerns, for a site action. ok is
@@ -194,7 +216,7 @@ func (a authn) siteFilter(r *http.Request, p auth.Principal) (func(site string) 
 // the actions no token can carry. It writes the error answer itself.
 func (a authn) sessionAllow(w http.ResponseWriter, r *http.Request, action authz.Action) (store.User, bool) {
 	u, ok := a.session(w, r)
-	if !ok {
+	if !ok || !a.secondFactorOK(w, r, u) {
 		return store.User{}, false
 	}
 
@@ -242,7 +264,7 @@ func registerTokens(mux *routeMux, a authn) {
 
 	mux.HandleFunc("POST /api/v1/tokens", func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
-		if !ok {
+		if !ok || !a.secondFactorOK(w, r, u) {
 			return
 		}
 

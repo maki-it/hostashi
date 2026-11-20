@@ -285,3 +285,48 @@ describe("Passkey login", () => {
     Reflect.deleteProperty(navigator, "credentials");
   });
 });
+
+describe("Second factor", () => {
+  it("makes an admin without one set up TOTP before anything else", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...noSetup,
+      "GET /api/v1/auth/me": { body: { ...admin, auth: "session", secondFactor: false, secondFactorRequired: true } },
+      "POST /api/v1/auth/totp/enroll": { body: { secret: "JBSWY3DPEHPK3PXP", uri: "otpauth://totp/Hostashi:kim?secret=JBSWY3DPEHPK3PXP" } },
+      "POST /api/v1/auth/totp/confirm": (body) =>
+        (body as { code: string }).code === "123456" ? { body: { recoveryCodes: ["aaaa-bbbb", "cccc-dddd"] } } : err(401, "invalid_credentials"),
+    });
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Set up a second factor" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Main" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Set up an authenticator app" }));
+    expect(await screen.findByText("JBSWY3DPEHPK3PXP")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("One-time code"), "000000");
+    await user.click(screen.getByRole("button", { name: "Turn on" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Wrong code");
+
+    await user.type(screen.getByLabelText("One-time code"), "123456");
+    await user.click(screen.getByRole("button", { name: "Turn on" }));
+    expect(await screen.findByRole("list", { name: "Recovery codes" })).toHaveTextContent("aaaa-bbbb");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByRole("navigation", { name: "Main" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Set up a second factor" })).not.toBeInTheDocument();
+    expect(calls.filter((c) => c.path === "/api/v1/auth/totp/confirm")).toHaveLength(2);
+  });
+
+  it("lets a user without the demand in", async () => {
+    mockFetch({ ...noSetup, "GET /api/v1/auth/me": { body: { username: "uma", role: "user", secondFactor: false, secondFactorRequired: false } } });
+    render(<App />);
+    expect(await screen.findByRole("navigation", { name: "Main" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Set up a second factor" })).not.toBeInTheDocument();
+  });
+
+  it("tells a passkey-only account to use the passkey", async () => {
+    const user = userEvent.setup();
+    mockFetch({ ...noSetup, ...loggedOut, "POST /api/v1/auth/login": err(401, "passkey_required") });
+    render(<App />);
+    await fillLogin(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent("This account logs in with a passkey.");
+  });
+});

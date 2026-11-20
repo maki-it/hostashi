@@ -30,6 +30,9 @@ type User struct {
 	TOTPEnabled  bool
 	TOTPSecret   []byte // encrypted, see internal/secrets
 	TOTPLastStep int64
+	// RequireSecondFactor is set by an admin for an account with the role
+	// user (ADR-0035); admins and managers need one regardless.
+	RequireSecondFactor bool
 }
 
 // CountUsers returns the number of accounts.
@@ -92,14 +95,15 @@ func (s *Store) UserByID(ctx context.Context, id int64) (User, error) {
 
 func (s *Store) userBy(ctx context.Context, where string, arg any) (User, error) {
 	var (
-		u                User
-		disabled, totpOn int
+		u                     User
+		disabled, totpOn, req int
 	)
 
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, username, role, disabled, password_hash, totp_enabled, totp_secret, totp_last_step
+		`SELECT id, username, role, disabled, password_hash, totp_enabled, totp_secret, totp_last_step,
+		        require_second_factor
 		   FROM users WHERE `+where, arg).
-		Scan(&u.ID, &u.Username, &u.Role, &disabled, &u.PasswordHash, &totpOn, &u.TOTPSecret, &u.TOTPLastStep)
+		Scan(&u.ID, &u.Username, &u.Role, &disabled, &u.PasswordHash, &totpOn, &u.TOTPSecret, &u.TOTPLastStep, &req)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -110,6 +114,7 @@ func (s *Store) userBy(ctx context.Context, where string, arg any) (User, error)
 
 	u.Disabled = disabled == 1
 	u.TOTPEnabled = totpOn == 1
+	u.RequireSecondFactor = req == 1
 
 	return u, nil
 }
@@ -130,15 +135,15 @@ func (s *Store) CreateSession(ctx context.Context, userID int64, tokenHash []byt
 // is not disabled, or ErrNotFound.
 func (s *Store) SessionUser(ctx context.Context, tokenHash []byte, now time.Time) (User, error) {
 	var (
-		u        User
-		disabled int
+		u                     User
+		disabled, totpOn, req int
 	)
 
 	err := s.db.QueryRowContext(ctx,
-		`SELECT u.id, u.username, u.role, u.disabled
+		`SELECT u.id, u.username, u.role, u.disabled, u.totp_enabled, u.require_second_factor
 		   FROM sessions s JOIN users u ON u.id = s.user_id
 		  WHERE s.token_hash = ? AND s.expires_at > ?`, tokenHash, now.Unix()).
-		Scan(&u.ID, &u.Username, &u.Role, &disabled)
+		Scan(&u.ID, &u.Username, &u.Role, &disabled, &totpOn, &req)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -152,6 +157,8 @@ func (s *Store) SessionUser(ctx context.Context, tokenHash []byte, now time.Time
 	}
 
 	u.Disabled = false
+	u.TOTPEnabled = totpOn == 1
+	u.RequireSecondFactor = req == 1
 
 	return u, nil
 }

@@ -28,7 +28,23 @@ func (e *apiEnv) adminCookie(t *testing.T) *http.Cookie {
 		t.Fatalf("login: %d %s", rec.Code, rec.Body)
 	}
 
+	e.giveSecondFactor(t, "kim")
+
 	return sessionCookieOf(t, rec)
+}
+
+// giveSecondFactor stores a passkey row for the account, so that an admin
+// or manager may work (ADR-0035). Log in with the password first: an
+// account that needs a second factor and has only a passkey must log in
+// with it.
+func (e *apiEnv) giveSecondFactor(t *testing.T, username string) {
+	t.Helper()
+
+	if err := e.st.RawExec(t.Context(),
+		`INSERT INTO passkeys (user_id, credential_id, name, credential, created_at)
+		 SELECT id, randomblob(16), 'test', '{}', 0 FROM users WHERE username = ?`, username); err != nil {
+		t.Fatal(err)
+	}
 }
 
 type createdToken struct {

@@ -545,7 +545,16 @@ func TestTOTPDisable(t *testing.T) {
 		t.Fatalf("wrong code: %v", err)
 	}
 
-	if err := e.svc.TOTPDisable(ctx, u.ID, testPassword, codes[0]); err != nil {
+	// An admin keeps the last second factor (ADR-0035).
+	if err := e.svc.TOTPDisable(ctx, u.ID, testPassword, codes[0]); !errors.Is(err, ErrSecondFactorRequired) {
+		t.Fatalf("admin disables the last factor: %v", err)
+	}
+
+	if err := e.st.RawExec(ctx, `UPDATE users SET role = 'user' WHERE id = ?`, u.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.svc.TOTPDisable(ctx, u.ID, testPassword, codes[1]); err != nil {
 		t.Fatalf("disable with recovery code: %v", err)
 	}
 

@@ -285,6 +285,8 @@ func matrixLogin(t *testing.T, e *apiEnv, admin *http.Cookie, name, role string)
 		t.Fatalf("accept %s: %d %s", name, rec.Code, rec.Body)
 	}
 
+	e.giveSecondFactor(t, name)
+
 	return sessionCookieOf(t, rec), u.User.ID
 }
 

@@ -14,20 +14,23 @@ import (
 )
 
 type accountJSON struct {
-	ID          int64      `json:"id"`
-	Username    string     `json:"username"`
-	Role        string     `json:"role"`
-	Disabled    bool       `json:"disabled"`
-	TOTPEnabled bool       `json:"totpEnabled"`
-	Passkeys    int        `json:"passkeys"`
-	Invited     bool       `json:"invited"`
-	InviteEnd   *time.Time `json:"invitationExpiresAt"`
+	ID          int64  `json:"id"`
+	Username    string `json:"username"`
+	Role        string `json:"role"`
+	Disabled    bool   `json:"disabled"`
+	TOTPEnabled bool   `json:"totpEnabled"`
+	Passkeys    int    `json:"passkeys"`
+	// RequireSecondFactor is the admin's demand for the role user;
+	// admins and managers need a second factor regardless.
+	RequireSecondFactor bool       `json:"requireSecondFactor"`
+	Invited             bool       `json:"invited"`
+	InviteEnd           *time.Time `json:"invitationExpiresAt"`
 }
 
 func toAccountJSON(a store.Account) accountJSON {
 	return accountJSON{
 		ID: a.ID, Username: a.Username, Role: a.Role, Disabled: a.Disabled, TOTPEnabled: a.TOTPEnabled,
-		Passkeys: a.Passkeys, Invited: a.Invited, InviteEnd: a.InviteEnd,
+		Passkeys: a.Passkeys, RequireSecondFactor: a.RequireSecondFactor, Invited: a.Invited, InviteEnd: a.InviteEnd,
 	}
 }
 
@@ -156,20 +159,23 @@ func registerUsers(mux *routeMux, a authn) {
 		}
 
 		var in struct {
-			Role     *string `json:"role"`
-			Disabled *bool   `json:"disabled"`
+			Role                *string `json:"role"`
+			Disabled            *bool   `json:"disabled"`
+			RequireSecondFactor *bool   `json:"requireSecondFactor"`
 		}
 		if !decodeJSON(w, r, &in) {
 			return
 		}
 
-		if in.Role == nil && in.Disabled == nil {
-			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "role or disabled is required")
+		if in.Role == nil && in.Disabled == nil && in.RequireSecondFactor == nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "role, disabled or requireSecondFactor is required")
 
 			return
 		}
 
-		acc, err := a.svc.UpdateAccount(r.Context(), u, id, store.AccountChange{Role: in.Role, Disabled: in.Disabled}, clientIP(r))
+		acc, err := a.svc.UpdateAccount(r.Context(), u, id, store.AccountChange{
+			Role: in.Role, Disabled: in.Disabled, RequireSecondFactor: in.RequireSecondFactor,
+		}, clientIP(r))
 		if err != nil {
 			usersFail(a, w, err, "update user")
 
@@ -317,6 +323,6 @@ func registerUsers(mux *routeMux, a authn) {
 		}
 
 		setSessionCookie(w, token, int(auth.SessionTTL.Seconds()))
-		writeJSON(w, http.StatusOK, userJSON{Username: u.Username, Role: u.Role})
+		a.writeLoggedIn(w, r, u)
 	})
 }

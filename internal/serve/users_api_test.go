@@ -92,6 +92,19 @@ func TestUsersOverHTTP(t *testing.T) {
 		t.Fatalf("second accept: %d %s", rec.Code, rec.Body)
 	}
 
+	// A manager without a second factor can only set one up (ADR-0035).
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/users", cookie: annaCookie})
+	if rec.Code != http.StatusForbidden || errCode(t, rec) != "second_factor_required" {
+		t.Fatalf("manager without second factor: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/auth/me", cookie: annaCookie})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"secondFactor":false,"secondFactorRequired":true`) {
+		t.Fatalf("me without second factor: %d %s", rec.Code, rec.Body)
+	}
+
+	e.giveSecondFactor(t, "anna")
+
 	// A manager cannot manage users.
 	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/users", cookie: annaCookie})
 	if rec.Code != http.StatusForbidden || errCode(t, rec) != "forbidden" {
@@ -163,6 +176,7 @@ func TestLastAdminOverHTTP(t *testing.T) {
 	}
 
 	bobCookie := sessionCookieOf(t, rec)
+	e.giveSecondFactor(t, "bob")
 
 	// Bob demotes Kim; then Kim, now a manager, cannot touch users, and Bob
 	// cannot be removed because he is the last admin.
@@ -175,11 +189,17 @@ func TestLastAdminOverHTTP(t *testing.T) {
 		t.Fatalf("old session: %d %s", rec.Code, rec.Body)
 	}
 
-	// Kim, now a manager, cannot change Bob back.
+	// Kim, now a manager, cannot change Bob back. Kim's test passkey would
+	// refuse the password login, so it goes and comes back after it.
+	if err := e.st.RawExec(t.Context(), `DELETE FROM passkeys WHERE user_id = 1`); err != nil {
+		t.Fatal(err)
+	}
+
 	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/login", body: `{"username":"kim","password":"` + apiPassword + `"}`})
 	kimCookie := sessionCookieOf(t, rec)
+	e.giveSecondFactor(t, "kim")
 
-	if rec := e.do(t, reqOpts{method: "PUT", path: userPath(bob.User.ID, ""), cookie: kimCookie, body: `{"role":"user"}`}); rec.Code != http.StatusForbidden {
+	if rec := e.do(t, reqOpts{method: "PUT", path: userPath(bob.User.ID, ""), cookie: kimCookie, body: `{"role":"user"}`}); rec.Code != http.StatusForbidden || errCode(t, rec) != "forbidden" {
 		t.Fatalf("manager demotes admin: %d %s", rec.Code, rec.Body)
 	}
 

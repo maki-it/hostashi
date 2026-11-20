@@ -26,29 +26,32 @@ type Account struct {
 	Disabled    bool
 	TOTPEnabled bool
 	Passkeys    int
+	// RequireSecondFactor is the admin's demand for the role user.
+	RequireSecondFactor bool
 	// Invited is true while the account has no password yet or was reset.
 	Invited   bool
 	InviteEnd *time.Time // expiry of the open invitation, if any
 }
 
 const accountSelect = `
-SELECT u.id, u.username, u.role, u.disabled, u.totp_enabled,
+SELECT u.id, u.username, u.role, u.disabled, u.totp_enabled, u.require_second_factor,
        (SELECT count(*) FROM passkeys p WHERE p.user_id = u.id),
        u.password_hash = '', i.expires_at
   FROM users u LEFT JOIN invitations i ON i.user_id = u.id`
 
 func scanAccount(sc interface{ Scan(...any) error }) (Account, error) {
 	var (
-		a                    Account
-		disabled, totp, invd int
-		end                  sql.NullInt64
+		a                         Account
+		disabled, totp, req, invd int
+		end                       sql.NullInt64
 	)
 
-	if err := sc.Scan(&a.ID, &a.Username, &a.Role, &disabled, &totp, &a.Passkeys, &invd, &end); err != nil {
+	if err := sc.Scan(&a.ID, &a.Username, &a.Role, &disabled, &totp, &req, &a.Passkeys, &invd, &end); err != nil {
 		return Account{}, err
 	}
 
 	a.Disabled, a.TOTPEnabled, a.Invited = disabled == 1, totp == 1, invd == 1
+	a.RequireSecondFactor = req == 1
 
 	if end.Valid {
 		t := time.Unix(end.Int64, 0).UTC()
@@ -159,10 +162,12 @@ func putInvitation(ctx context.Context, tx *sql.Tx, userID int64, inv Invitation
 	return nil
 }
 
-// AccountChange changes the role or the disabled flag; nil keeps a field.
+// AccountChange changes the role, the disabled flag or the demand for a
+// second factor; nil keeps a field.
 type AccountChange struct {
-	Role     *string
-	Disabled *bool
+	Role                *string
+	Disabled            *bool
+	RequireSecondFactor *bool
 }
 
 // guardLastAdmin fails with ErrLastAdmin if userID is an enabled admin and
@@ -249,6 +254,13 @@ func (s *Store) UpdateAccount(ctx context.Context, id int64, c AccountChange) (b
 
 		if n, _ := res.RowsAffected(); n > 0 && *c.Disabled {
 			endSessions = true
+		}
+	}
+
+	if c.RequireSecondFactor != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET require_second_factor = ? WHERE id = ?`,
+			boolInt(*c.RequireSecondFactor), id); err != nil {
+			return Account{}, Account{}, fmt.Errorf("store: %w", err)
 		}
 	}
 
