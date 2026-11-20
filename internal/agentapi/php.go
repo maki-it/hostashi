@@ -9,11 +9,6 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 )
 
-// PHPVersions are the PHP versions Hostashi can run a site on (ADR-0019):
-// 8.3 to 8.6 as standard, 8.2, 8.1 and 7.4 as legacy. Whether a version is
-// installed is a separate question (PHPVersionsList).
-var PHPVersions = []string{"7.4", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6"}
-
 // LegacyPHPVersions get no or only security fixes upstream; the panel warns
 // before a site is put on one (ADR-0019, rule 3).
 var LegacyPHPVersions = []string{"7.4", "8.1", "8.2"}
@@ -47,23 +42,6 @@ type PHPVersionsResponse struct {
 
 // PHPVersionsList reports the installed PHP versions.
 var PHPVersionsList = agentrpc.Op[PHPVersionsRequest, PHPVersionsResponse]{Name: "php.versions"}
-
-// PHPSecurityUntil is the last day of security fixes per version, from
-// php.net/supported-versions.php and php.net/eol.php (checked 2026-11-20,
-// ADR-0036). After it a version is end of life.
-var PHPSecurityUntil = map[string]string{
-	"7.4": "2022-11-28", "8.1": "2025-12-31", "8.2": "2026-12-31",
-	"8.3": "2027-12-31", "8.4": "2028-12-31", "8.5": "2029-12-31",
-	"8.6": "2030-12-31",
-}
-
-// PHPActiveUntil is the last day of active support (bug fixes) per
-// version, same sources. Between it and PHPSecurityUntil a version gets
-// security fixes only. Versions that are end of life have no entry.
-var PHPActiveUntil = map[string]string{
-	"8.2": "2024-12-31", "8.3": "2025-12-31", "8.4": "2026-12-31", "8.5": "2027-12-31",
-	"8.6": "2028-12-31",
-}
 
 // PHPInstallRequest installs a version from PHPVersions (ADR-0036).
 type PHPInstallRequest struct {

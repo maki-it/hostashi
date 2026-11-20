@@ -23,7 +23,7 @@ type stubPHP struct {
 }
 
 func (s *stubPHP) Versions(context.Context) (agentapi.PHPVersionsResponse, error) {
-	return agentapi.PHPVersionsResponse{Installed: []string{"8.4"}, Repository: true, Newer: []string{"8.7"}}, nil
+	return agentapi.PHPVersionsResponse{Installed: []string{"8.4"}, Repository: true, Newer: []string{"9.9"}}, nil
 }
 
 func (s *stubPHP) Install(_ context.Context, v string) (agentapi.PHPInstallStatus, error) {
@@ -71,11 +71,11 @@ func TestPHPInstallAPI(t *testing.T) {
 
 	var got phpInstallJSON
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || got.State != agentapi.PHPInstallIdle || !got.Repository ||
-		!slices.Equal(got.Newer, []string{"8.7"}) || got.Log == nil {
+		!slices.Equal(got.Newer, []string{"9.9"}) || got.Log == nil {
 		t.Fatalf("status: %+v %v", got, err)
 	}
 
-	for _, body := range []string{`{"version":"8.0"}`, `{"version":"8.7"}`, `{"version":"../8.1"}`, `{}`} {
+	for _, body := range []string{`{"version":"8.0"}`, `{"version":"9.9"}`, `{"version":"../8.1"}`, `{}`} {
 		if code, _ := post(body); code != http.StatusUnprocessableEntity {
 			t.Errorf("%s: %d", body, code)
 		}
