@@ -296,3 +296,13 @@ func (s *Service) AcceptInvitation(ctx context.Context, secret, password, ip str
 
 	return token, u, nil
 }
+
+// HasSiteGrant reports whether the site is granted to the user.
+func (s *Service) HasSiteGrant(ctx context.Context, userID int64, site string) (bool, error) {
+	ok, err := s.st.HasSiteGrant(ctx, userID, site)
+	if err != nil {
+		return false, fmt.Errorf("auth: %w", err)
+	}
+
+	return ok, nil
+}

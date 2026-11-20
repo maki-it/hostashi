@@ -129,10 +129,10 @@ func siteFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 	}
 }
 
-// registerSites adds the site routes. API tokens need the matching scope;
-// every caller must be an admin (the only role so far).
+// registerSites adds the site routes. Who may call which one is in
+// internal/authz (ADR-0035).
 func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/sites", a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/sites", a.allow("sites:list", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		sites, err := svc.List(r.Context())
 		if err != nil {
 			siteFail(log, w, err, "list sites")
@@ -140,9 +140,18 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			return
 		}
 
+		sees, err := a.siteFilter(r, p)
+		if err != nil {
+			a.fail(w, err, "list sites")
+
+			return
+		}
+
 		out := make([]siteJSON, 0, len(sites))
 		for _, s := range sites {
-			out = append(out, toSiteJSON(svc, s))
+			if sees == nil || sees(s.Name) {
+				out = append(out, toSiteJSON(svc, s))
+			}
 		}
 
 		writeJSON(w, http.StatusOK, map[string][]siteJSON{"sites": out})
@@ -159,7 +168,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
 	}))
 
-	mux.HandleFunc("POST /api/v1/sites", a.allow("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("POST /api/v1/sites", a.allow("sites:create", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Name    string   `json:"name"`
 			Pool    string   `json:"pool"`
@@ -187,7 +196,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		writeJSON(w, http.StatusCreated, toSiteJSON(svc, s))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/domains", a.allow("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/sites/{name}/domains", a.allow("sites.domains:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Domains []string `json:"domains"`
 		}
@@ -208,7 +217,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/php", a.allow("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/sites/{name}/php", a.allow("sites.php:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			PHP *string `json:"php"`
 		}
@@ -235,7 +244,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/tls", a.allow("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/sites/{name}/tls", a.allow("sites.tls:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Enabled *bool `json:"enabled"`
 		}
@@ -270,7 +279,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 	}))
 
 	// HSTS can be set before HTTPS is active; it is sent only over HTTPS.
-	mux.HandleFunc("PUT /api/v1/sites/{name}/hsts", a.allow("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/sites/{name}/hsts", a.allow("sites.hsts:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Enabled *bool `json:"enabled"`
 		}
@@ -298,7 +307,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 	}))
 
 	// Programs from PHP (exec, system, ...) are off unless allowed here.
-	mux.HandleFunc("PUT /api/v1/sites/{name}/php-programs", a.allow("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/sites/{name}/php-programs", a.allow("sites.programs:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Enabled *bool `json:"enabled"`
 		}
@@ -326,7 +335,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 	}))
 
 	// Disabling keeps everything of the site but serves 503 and stops PHP.
-	mux.HandleFunc("PUT /api/v1/sites/{name}/disabled", a.allow("sites:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/sites/{name}/disabled", a.allow("sites.disabled:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Disabled *bool `json:"disabled"`
 		}
@@ -355,7 +364,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 
 	// The versions a site can use: installed ones from the agent, plus the
 	// supported list and which of them are legacy (ADR-0019).
-	mux.HandleFunc("GET /api/v1/php/versions", a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/php/versions", a.allow("php.versions:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -390,7 +399,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 
 	// The panel's own HTTPS (ADR-0023). Disabled without a host name in
 	// the public URL; then the panel is reachable through the SSH tunnel only.
-	mux.HandleFunc("GET /api/v1/panel/tls", a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/panel/tls", a.allow("panel.tls:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		p, err := svc.PanelTLS(r.Context())
 		if err != nil {
 			siteFail(log, w, err, "panel tls")
@@ -406,7 +415,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 
 	// Sends the stored state to the web server again, for example after a
 	// change failed while the agent was down.
-	mux.HandleFunc("POST /api/v1/web/sync", a.allow("sites:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("POST /api/v1/web/sync", a.allow("web:sync", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 

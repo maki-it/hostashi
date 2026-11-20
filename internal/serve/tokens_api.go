@@ -98,19 +98,96 @@ func (a authn) scoped(scope string, h func(http.ResponseWriter, *http.Request, a
 	}
 }
 
+// siteOfFunc names the site a request concerns, for a site action. ok is
+// false if the request names no valid site; the request then gets 404.
+type siteOfFunc func(r *http.Request) (site string, ok bool)
+
+// siteFromPath takes the site from the {name} path value.
+func siteFromPath(r *http.Request) (string, bool) {
+	n := r.PathValue("name")
+
+	return n, n != ""
+}
+
 // allow wraps a handler for action (ADR-0035). An API token must carry the
-// scope of the same name, and the caller's role must allow the action. This
-// is the only place that checks a role for a token-capable route.
+// action's scope, and the caller's role must allow the action. For a site
+// action the site comes from the {name} path value, and a user without a
+// grant for it gets the same 404 as for a site that does not exist. This is
+// the only place that checks a role for a token-capable route.
 func (a authn) allow(action authz.Action, h func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
-	return a.scoped(string(action), func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	return a.allowSite(action, siteFromPath, h)
+}
+
+// allowSite is allow with the site named by siteOf, for routes that name a
+// site through another resource, such as a database.
+func (a authn) allowSite(action authz.Action, siteOf siteOfFunc, h func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
+	rule, known := authz.Lookup(action)
+	if !known || rule.Scope == "" {
+		panic("serve: allow needs a known action with a token scope: " + string(action))
+	}
+
+	return a.scoped(rule.Scope, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		if !authz.Allowed(authz.Role(p.User.Role), action) {
 			writeError(w, http.StatusForbidden, "forbidden", "your role does not allow this")
 
 			return
 		}
 
+		// Admins and managers reach every site; the handler answers for
+		// a site or resource that does not exist.
+		if rule.Site && !authz.SeesAllSites(authz.Role(p.User.Role)) {
+			site, ok := siteOf(r)
+			if !ok || !a.reaches(w, r, p, site) {
+				if ok {
+					writeError(w, http.StatusNotFound, "not_found", "no such site")
+				} else {
+					writeError(w, http.StatusNotFound, "not_found", "not found")
+				}
+
+				return
+			}
+		}
+
 		h(w, r, p)
 	})
+}
+
+// reaches reports whether the principal may work on site: admins and
+// managers reach every site, a user only a granted one. An error of the
+// store answers 500 and returns false as well.
+func (a authn) reaches(w http.ResponseWriter, r *http.Request, p auth.Principal, site string) bool {
+	if authz.SeesAllSites(authz.Role(p.User.Role)) {
+		return true
+	}
+
+	ok, err := a.svc.HasSiteGrant(r.Context(), p.User.ID, site)
+	if err != nil {
+		a.fail(w, err, "check site grant")
+
+		return false
+	}
+
+	return ok
+}
+
+// siteFilter returns a function that reports whether the principal sees a
+// site, for filtering lists. nil means every site.
+func (a authn) siteFilter(r *http.Request, p auth.Principal) (func(site string) bool, error) {
+	if authz.SeesAllSites(authz.Role(p.User.Role)) {
+		return nil, nil
+	}
+
+	granted, err := a.svc.SiteGrants(r.Context(), p.User.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	set := make(map[string]bool, len(granted))
+	for _, s := range granted {
+		set[s] = true
+	}
+
+	return func(site string) bool { return set[site] }, nil
 }
 
 // sessionAllow accepts only a browser session whose role allows action, for

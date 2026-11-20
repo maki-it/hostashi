@@ -74,7 +74,7 @@ func sshKeyID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 // sends the site's complete list to the agent; a refused change is undone.
 func registerSSH(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
 	// The server's host keys, which a user compares at the first login.
-	mux.HandleFunc("GET /api/v1/ssh/host-keys", a.allow("ssh:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/ssh/host-keys", a.allow("ssh.hostkeys:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 

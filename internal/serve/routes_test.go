@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"sort"
 	"strconv"
@@ -69,21 +70,21 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/settings/metrics":          authz.SettingsRead,
 	"PUT /api/v1/settings/metrics":          authz.SettingsWrite,
 
-	"GET /api/v1/sites":                     "sites:read",
+	"GET /api/v1/sites":                     "sites:list",
 	"GET /api/v1/sites/{name}":              "sites:read",
-	"POST /api/v1/sites":                    "sites:write",
-	"PUT /api/v1/sites/{name}/domains":      "sites:write",
-	"PUT /api/v1/sites/{name}/php":          "sites:write",
-	"PUT /api/v1/sites/{name}/tls":          "sites:write",
-	"PUT /api/v1/sites/{name}/hsts":         "sites:write",
-	"PUT /api/v1/sites/{name}/php-programs": "sites:write",
-	"PUT /api/v1/sites/{name}/disabled":     "sites:write",
-	"GET /api/v1/php/versions":              "sites:read",
+	"POST /api/v1/sites":                    "sites:create",
+	"PUT /api/v1/sites/{name}/domains":      "sites.domains:write",
+	"PUT /api/v1/sites/{name}/php":          "sites.php:write",
+	"PUT /api/v1/sites/{name}/tls":          "sites.tls:write",
+	"PUT /api/v1/sites/{name}/hsts":         "sites.hsts:write",
+	"PUT /api/v1/sites/{name}/php-programs": "sites.programs:write",
+	"PUT /api/v1/sites/{name}/disabled":     "sites.disabled:write",
+	"GET /api/v1/php/versions":              "php.versions:read",
 	"DELETE /api/v1/sites/{name}":           "sites:delete",
-	"GET /api/v1/panel/tls":                 "sites:read",
-	"POST /api/v1/web/sync":                 "sites:write",
+	"GET /api/v1/panel/tls":                 "panel.tls:read",
+	"POST /api/v1/web/sync":                 "web:sync",
 
-	"GET /api/v1/databases":                            "databases:read",
+	"GET /api/v1/databases":                            "databases:list",
 	"GET /api/v1/sites/{name}/databases":               "databases:read",
 	"GET /api/v1/databases/{db}":                       "databases:read",
 	"POST /api/v1/sites/{name}/databases":              "databases:write",
@@ -101,10 +102,10 @@ var routeAccess = map[string]authz.Action{
 	"PUT /api/v1/status-pages/{id}":          "pages:write",
 	"DELETE /api/v1/status-pages/{id}":       "pages:write",
 	"PUT /api/v1/sites/{name}/maintenance":   "sites.maintenance:write",
-	"GET /api/v1/parked-domains":             "sites:read",
-	"GET /api/v1/parked-domains/{domain}":    "sites:read",
-	"PUT /api/v1/parked-domains/{domain}":    "sites.maintenance:write",
-	"DELETE /api/v1/parked-domains/{domain}": "sites.maintenance:write",
+	"GET /api/v1/parked-domains":             "parked:read",
+	"GET /api/v1/parked-domains/{domain}":    "parked:read",
+	"PUT /api/v1/parked-domains/{domain}":    "parked:write",
+	"DELETE /api/v1/parked-domains/{domain}": "parked:write",
 
 	"GET /api/v1/sites/{name}/cron":           "cron:read",
 	"GET /api/v1/sites/{name}/cron/{id}":      "cron:read",
@@ -113,7 +114,7 @@ var routeAccess = map[string]authz.Action{
 	"DELETE /api/v1/sites/{name}/cron/{id}":   "cron:write",
 	"POST /api/v1/sites/{name}/cron/{id}/run": "cron:write",
 
-	"GET /api/v1/ssh/host-keys":                 "ssh:read",
+	"GET /api/v1/ssh/host-keys":                 "ssh.hostkeys:read",
 	"GET /api/v1/sites/{name}/ssh-keys":         "ssh:read",
 	"GET /api/v1/sites/{name}/ssh-keys/{id}":    "ssh:read",
 	"POST /api/v1/sites/{name}/ssh-keys":        "ssh:write",
@@ -123,21 +124,21 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/sites/{name}/snippets": "sites:read",
 	"PUT /api/v1/sites/{name}/snippets": "sites.snippets:write",
 
-	"GET /api/v1/limit-presets":           "limits:read",
-	"GET /api/v1/limit-presets/{name}":    "limits:read",
-	"POST /api/v1/limit-presets":          "limits:write",
-	"PUT /api/v1/limit-presets/{name}":    "limits:write",
-	"DELETE /api/v1/limit-presets/{name}": "limits:write",
+	"GET /api/v1/limit-presets":           "limits.presets:read",
+	"GET /api/v1/limit-presets/{name}":    "limits.presets:read",
+	"POST /api/v1/limit-presets":          "limits.presets:write",
+	"PUT /api/v1/limit-presets/{name}":    "limits.presets:write",
+	"DELETE /api/v1/limit-presets/{name}": "limits.presets:write",
 	"GET /api/v1/sites/{name}/limits":     "limits:read",
 	"PUT /api/v1/sites/{name}/limits":     "limits:write",
 
-	"GET /api/v1/backups":                                  "backups:read",
-	"PUT /api/v1/backups/settings":                         "backups:write",
-	"POST /api/v1/backups/hostkey/scan":                    "backups:write",
-	"PUT /api/v1/backups/hostkey":                          "backups:write",
-	"POST /api/v1/backups/run":                             "backups:write",
+	"GET /api/v1/backups":                                  "backups.server:read",
+	"PUT /api/v1/backups/settings":                         "backups.server:write",
+	"POST /api/v1/backups/hostkey/scan":                    "backups.server:write",
+	"PUT /api/v1/backups/hostkey":                          "backups.server:write",
+	"POST /api/v1/backups/run":                             "backups.server:write",
 	"GET /api/v1/sites/{name}/backups":                     "backups:read",
-	"GET /api/v1/backups/panel":                            "backups:read",
+	"GET /api/v1/backups/panel":                            "backups.server:read",
 	"POST /api/v1/sites/{name}/backups/{snapshot}/restore": "backups:restore",
 	"POST /api/v1/backups/restores/{id}/import":            "backups:restore",
 	"GET /api/v1/backups/imports/{id}":                     "backups:read",
@@ -231,8 +232,11 @@ func isAction(a authz.Action) bool {
 var pathParam = regexp.MustCompile(`\{[a-z]+\}`)
 
 // matrixPath turns a pattern into a request: method and a concrete path.
-func matrixPath(pattern string) (method, path string) {
+// {name} becomes site, {db} a database of it, every other value "1".
+func matrixPath(pattern, site string) (method, path string) {
 	method, path, _ = strings.Cut(pattern, " ")
+	path = strings.ReplaceAll(path, "{name}", site)
+	path = strings.ReplaceAll(path, "{db}", site+"db")
 
 	return method, pathParam.ReplaceAllString(path, "1")
 }
@@ -245,16 +249,77 @@ func matrixBody(method string) string {
 	return "{}"
 }
 
-// TestRouteMatrix checks every route against the running handler: without
-// a login it answers 401 unless it is public; a token without the route's
-// scope gets 403; an own-account or session-only route refuses a token that
-// carries every scope.
+// deniedByAuthz reports whether the answer is one that authn writes itself
+// when a role or a grant does not allow the request.
+func deniedByAuthz(t *testing.T, rec *httptest.ResponseRecorder) bool {
+	t.Helper()
+
+	switch rec.Code {
+	case http.StatusForbidden:
+		return errCode(t, rec) == "forbidden"
+	case http.StatusNotFound:
+		var e apiError
+
+		_ = json.Unmarshal(rec.Body.Bytes(), &e)
+
+		return e.Error.Code == "not_found" && (e.Error.Message == "no such site" || e.Error.Message == "not found")
+	}
+
+	return false
+}
+
+// matrixLogin creates an account with the role through an invitation and
+// returns its session.
+func matrixLogin(t *testing.T, e *apiEnv, admin *http.Cookie, name, role string) (*http.Cookie, int64) {
+	t.Helper()
+
+	u := e.createUser(t, admin, name, role)
+
+	rec := e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/invitations/accept",
+		body: `{"token":"` + u.Invitation.Token + `","password":"` + apiPassword + `"}`,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("accept %s: %d %s", name, rec.Code, rec.Body)
+	}
+
+	return sessionCookieOf(t, rec), u.User.ID
+}
+
+// TestRouteMatrix checks every route against the running handler
+// (ADR-0035, the IDOR matrix of 05-security.md):
+//
+//   - without a login it answers 401, unless it is public;
+//   - a token without the route's scope gets 403, a token with every scope
+//     passes; a session-only route refuses every token;
+//   - a role the action does not allow gets 403;
+//   - a user without a grant for the route's site gets the same 404 as for
+//     a missing site, a user with a grant passes.
+//
+// Requests that would pass are only sent where they change nothing: GET,
+// or a site that does not exist.
 func TestRouteMatrix(t *testing.T) {
 	e, patterns := newFullAPI(t)
 	c := e.adminCookie(t)
 
 	// The metrics endpoint answers 404 while it is off.
 	e.setMetrics(t, c, `{"enabled":true}`)
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"alpha","domains":["alpha.example"]}`}); rec.Code >= 300 {
+		t.Fatalf("create site: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/alpha/databases", cookie: c, body: `{"name":"alphadb"}`}); rec.Code >= 300 {
+		t.Fatalf("create database: %d %s", rec.Code, rec.Body)
+	}
+
+	manager, _ := matrixLogin(t, e, c, "mona", "manager")
+	granted, gid := matrixLogin(t, e, c, "gina", "user")
+	stranger, _ := matrixLogin(t, e, c, "otto", "user")
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: userPath(gid, "/grants"), cookie: c, body: `{"sites":["alpha"]}`}); rec.Code != http.StatusOK {
+		t.Fatalf("grant: %d %s", rec.Code, rec.Body)
+	}
 
 	all := make([]string, 0, len(auth.Scopes()))
 	for _, s := range auth.Scopes() {
@@ -267,13 +332,15 @@ func TestRouteMatrix(t *testing.T) {
 
 	for _, p := range patterns {
 		access := routeAccess[p]
-		method, path := matrixPath(p)
 
 		t.Run(p, func(t *testing.T) {
-			rec := e.do(t, reqOpts{method: method, path: path, body: matrixBody(method)})
+			// Checks that may reach the handler use a site that does not exist.
+			method, path := matrixPath(p, "nosite")
+			body := matrixBody(method)
 
-			unauth := rec.Code == http.StatusUnauthorized && rec.Header().Get("WWW-Authenticate") != "" ||
-				rec.Code == http.StatusUnauthorized && errCode(t, rec) == "unauthenticated"
+			rec := e.do(t, reqOpts{method: method, path: path, body: body})
+
+			unauth := rec.Code == http.StatusUnauthorized && errCode(t, rec) == "unauthenticated"
 			if access == accessPublic {
 				if unauth {
 					t.Fatalf("public route wants a login: %d %s", rec.Code, rec.Body)
@@ -286,22 +353,28 @@ func TestRouteMatrix(t *testing.T) {
 				t.Fatalf("without login: %d %s, want 401", rec.Code, rec.Body)
 			}
 
-			switch access {
-			case accessAny:
-				rec := e.do(t, reqOpts{method: method, path: path, body: matrixBody(method), header: bearerHeader(fullToken.Token)})
-				if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
+			withToken := func(tok string) *httptest.ResponseRecorder {
+				return e.do(t, reqOpts{method: method, path: path, body: body, header: bearerHeader(tok)})
+			}
+
+			switch {
+			case access == accessAny:
+				if rec := withToken(fullToken.Token); rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
 					t.Fatalf("token refused: %d %s", rec.Code, rec.Body)
 				}
-			case accessSession, authz.SettingsRead, authz.SettingsWrite, authz.UsersRead, authz.UsersWrite:
-				rec := e.do(t, reqOpts{method: method, path: path, body: matrixBody(method), header: bearerHeader(fullToken.Token)})
-				if rec.Code != http.StatusForbidden || errCode(t, rec) != "session_required" {
+
+				return
+			case access == accessSession || authz.SessionOnly(access):
+				if rec := withToken(fullToken.Token); rec.Code != http.StatusForbidden || errCode(t, rec) != "session_required" {
 					t.Fatalf("token with every scope: %d %s, want 403 session_required", rec.Code, rec.Body)
 				}
 			default:
+				scope := authz.ScopeOf(access)
+
 				var others []string
 
 				for _, s := range all {
-					if s != string(access) {
+					if s != scope {
 						others = append(others, s)
 					}
 				}
@@ -309,14 +382,65 @@ func TestRouteMatrix(t *testing.T) {
 				tok := e.createToken(t, c, tokenBody(others))
 				defer e.do(t, reqOpts{method: "DELETE", path: "/api/v1/tokens/" + strconv.FormatInt(tok.ID, 10), cookie: c})
 
-				rec := e.do(t, reqOpts{method: method, path: path, body: matrixBody(method), header: bearerHeader(tok.Token)})
-				if rec.Code != http.StatusForbidden || errCode(t, rec) != "insufficient_scope" {
-					t.Fatalf("token without %s: %d %s, want 403 insufficient_scope", access, rec.Code, rec.Body)
+				if rec := withToken(tok.Token); rec.Code != http.StatusForbidden || errCode(t, rec) != "insufficient_scope" {
+					t.Fatalf("token without %s: %d %s, want 403 insufficient_scope", scope, rec.Code, rec.Body)
 				}
 
-				rec = e.do(t, reqOpts{method: method, path: path, body: matrixBody(method), header: bearerHeader(fullToken.Token)})
-				if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden && errCode(t, rec) != "invalid_argument" {
-					t.Fatalf("token with %s: %d %s", access, rec.Code, rec.Body)
+				// An admin is never stopped by authz; the handler may still
+				// answer 404 for the missing site.
+				if rec := withToken(fullToken.Token); rec.Code == http.StatusUnauthorized ||
+					rec.Code == http.StatusForbidden && (errCode(t, rec) == "insufficient_scope" || errCode(t, rec) == "forbidden") {
+					t.Fatalf("admin token with %s: %d %s", scope, rec.Code, rec.Body)
+				}
+			}
+
+			// The metrics endpoint takes no session; TestMetricsRoles covers it.
+			if access == accessSession || p == "GET /metrics" {
+				return
+			}
+
+			rule, _ := authz.Lookup(access)
+
+			// The role dimension, on the existing site alpha.
+			method, path = matrixPath(p, "alpha")
+			body = matrixBody(method)
+
+			for _, who := range []struct {
+				name   string
+				cookie *http.Cookie
+				role   authz.Role
+				grant  bool
+			}{
+				{"manager", manager, authz.RoleManager, true},
+				{"user with grant", granted, authz.RoleUser, true},
+				{"user without grant", stranger, authz.RoleUser, false},
+			} {
+				mayRole := authz.Allowed(who.role, access)
+				may := mayRole && (!rule.Site || who.grant)
+
+				if may && method != http.MethodGet {
+					continue // would change state; covered by the feature tests
+				}
+
+				rec := e.do(t, reqOpts{method: method, path: path, body: body, cookie: who.cookie})
+
+				switch {
+				case !mayRole:
+					if rec.Code != http.StatusForbidden || errCode(t, rec) != "forbidden" {
+						t.Errorf("%s: %d %s, want 403 forbidden", who.name, rec.Code, rec.Body)
+					}
+				case !may:
+					if rec.Code != http.StatusNotFound || !deniedByAuthz(t, rec) {
+						t.Errorf("%s: %d %s, want the 404 of a missing site", who.name, rec.Code, rec.Body)
+					}
+				default:
+					// A route that names its site through another resource
+					// (a restore, an import job) cannot tell a missing
+					// resource from a missing grant; "1" does not exist.
+					resourceMissing := !strings.Contains(p, "{name}") && !strings.Contains(p, "{db}") && rec.Code == http.StatusNotFound
+					if rec.Code == http.StatusUnauthorized || deniedByAuthz(t, rec) && !resourceMissing {
+						t.Errorf("%s: %d %s, want it to pass", who.name, rec.Code, rec.Body)
+					}
 				}
 			}
 		})
@@ -327,4 +451,25 @@ func tokenBody(scopes []string) string {
 	b, _ := json.Marshal(map[string]any{"name": "matrix", "scopes": scopes, "expiresInDays": 1})
 
 	return string(b)
+}
+
+// A token never grants more than its owner's role: a manager's token with
+// the scope metrics:read still cannot read the metrics.
+func TestMetricsRoles(t *testing.T) {
+	e := newAPI(t)
+	c := e.adminCookie(t)
+	e.setMetrics(t, c, `{"enabled":true}`)
+
+	mona, _ := matrixLogin(t, e, c, "mona", "manager")
+	tok := e.createToken(t, mona, tokenBody([]string{"metrics:read"}))
+
+	rec := e.do(t, reqOpts{method: "GET", path: "/metrics", header: bearerHeader(tok.Token)})
+	if rec.Code != http.StatusForbidden || errCode(t, rec) != "forbidden" {
+		t.Fatalf("manager token: %d %s", rec.Code, rec.Body)
+	}
+
+	admin := e.createToken(t, c, tokenBody([]string{"metrics:read"}))
+	if rec := e.do(t, reqOpts{method: "GET", path: "/metrics", header: bearerHeader(admin.Token)}); rec.Code != http.StatusOK {
+		t.Fatalf("admin token: %d", rec.Code)
+	}
 }

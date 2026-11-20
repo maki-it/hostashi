@@ -164,7 +164,7 @@ func limitsFail(log *slog.Logger, w http.ResponseWriter, err error, what string)
 // registerLimits adds the limit presets and the limits of a site
 // (ADR-0015). Only administrators manage them.
 func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/limit-presets", a.allow("limits:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/limit-presets", a.allow("limits.presets:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ps, err := svc.LimitPresets(r.Context())
 		if err != nil {
 			limitsFail(log, w, err, "list limit presets")
@@ -180,7 +180,7 @@ func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 		writeJSON(w, http.StatusOK, map[string]any{"presets": out})
 	}))
 
-	mux.HandleFunc("GET /api/v1/limit-presets/{name}", a.allow("limits:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/limit-presets/{name}", a.allow("limits.presets:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		p, err := svc.LimitPreset(r.Context(), r.PathValue("name"))
 		if err != nil {
 			limitsFail(log, w, err, "get limit preset")
@@ -191,7 +191,7 @@ func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 		writeJSON(w, http.StatusOK, toPresetJSON(p))
 	}))
 
-	mux.HandleFunc("POST /api/v1/limit-presets", a.allow("limits:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("POST /api/v1/limit-presets", a.allow("limits.presets:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in presetInputJSON
 		if !decodeJSON(w, r, &in) {
 			return
@@ -210,7 +210,7 @@ func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 	// PUT replaces name, values and default flag; the sites that follow the
 	// preset get the new values. "default": false keeps a default preset
 	// the default: another preset takes the flag over.
-	mux.HandleFunc("PUT /api/v1/limit-presets/{name}", a.allow("limits:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/limit-presets/{name}", a.allow("limits.presets:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in presetInputJSON
 		if !decodeJSON(w, r, &in) {
 			return
@@ -229,7 +229,7 @@ func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 		writeJSON(w, http.StatusOK, toPresetJSON(out))
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/limit-presets/{name}", a.allow("limits:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("DELETE /api/v1/limit-presets/{name}", a.allow("limits.presets:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		if err := svc.DeleteLimitPreset(r.Context(), p.User.ID, r.PathValue("name")); err != nil {
 			limitsFail(log, w, err, "delete limit preset")
 

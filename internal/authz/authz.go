@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package authz decides which role may do what (ADR-0035). It holds one
-// closed table from action to roles. Every handler of the panel asks Allowed
-// instead of comparing role names itself, so a new role changes this table
-// and nothing else.
+// closed table from action to rule. Every handler of the panel asks this
+// package instead of comparing role names itself, so a change of who may
+// do what changes this table and nothing else.
 //
-// The action names are the API token scopes (ADR-0018), plus a few actions
-// that no token can carry, such as changing panel settings. A request needs
-// both: the role must allow the action here, and a token must also carry the
-// scope.
+// An action names one thing a route does. Each action has the API token
+// scope a token must carry for it (ADR-0018), or none for the actions that
+// need a browser session. Several actions can share a scope: "sites:write"
+// covers PHP settings, which a user may change on their own site, and the
+// domains, which only managers and admins change.
+//
+// A site action is checked against one site: admins and managers reach
+// every site, a user only the sites granted to them.
 package authz
 
 import "sort"
@@ -16,8 +20,15 @@ import "sort"
 // Role is the role of a panel account, as stored in users.role.
 type Role string
 
-// RoleAdmin may do everything. It is the only role so far.
-const RoleAdmin Role = "admin"
+// The roles of ADR-0035.
+const (
+	// RoleAdmin may do everything, including users and server settings.
+	RoleAdmin Role = "admin"
+	// RoleManager looks after every site, but not the server or the users.
+	RoleManager Role = "manager"
+	// RoleUser works on the sites granted to them.
+	RoleUser Role = "user"
+)
 
 // Action is something a request does, named "resource:action".
 type Action string
@@ -36,65 +47,137 @@ const (
 	UsersWrite Action = "users:write"
 )
 
-// SessionOnly reports whether an action has no token scope and needs a
-// browser session.
-func SessionOnly(a Action) bool {
-	switch a {
-	case SettingsRead, SettingsWrite, UsersRead, UsersWrite:
-		return true
-	}
-
-	return false
+// Rule says who may do an action.
+type Rule struct {
+	// Scope is the token scope the action needs; empty means a browser
+	// session is required.
+	Scope string
+	// Roles may do the action.
+	Roles []Role
+	// Site is true if the action concerns one site; a user then needs a
+	// grant for it.
+	Site bool
 }
 
-// admins is the role list of an action only administrators may do.
-var admins = []Role{RoleAdmin}
+var (
+	admins   = []Role{RoleAdmin}
+	managers = []Role{RoleAdmin, RoleManager}
+	everyone = []Role{RoleAdmin, RoleManager, RoleUser}
+)
+
+func server(scope string) Rule  { return Rule{Scope: scope, Roles: admins} }
+func manage(scope string) Rule  { return Rule{Scope: scope, Roles: managers} }
+func all(scope string) Rule     { return Rule{Scope: scope, Roles: everyone} }
+func ownSite(scope string) Rule { return Rule{Scope: scope, Roles: everyone, Site: true} }
+func mgrSite(scope string) Rule { return Rule{Scope: scope, Roles: managers, Site: true} }
+func admSite(scope string) Rule { return Rule{Scope: scope, Roles: admins, Site: true} }
 
 // table is closed: an action that is missing here is denied to everyone.
-// A feature that adds a scope adds its action here in the same change; a
-// test compares the table with the scope catalog.
-var table = map[Action][]Role{
-	"backups:read":            admins,
-	"backups:restore":         admins,
-	"backups:write":           admins,
-	"cron:read":               admins,
-	"cron:write":              admins,
-	"databases:delete":        admins,
-	"databases:read":          admins,
-	"databases:write":         admins,
-	"doctor:read":             admins,
-	"firewall:read":           admins,
-	"firewall:write":          admins,
-	"limits:read":             admins,
-	"limits:write":            admins,
-	"metrics:read":            admins,
-	"migrations:read":         admins,
-	"migrations:write":        admins,
-	"pages:read":              admins,
-	"pages:write":             admins,
-	"sites:delete":            admins,
-	"sites:read":              admins,
-	"sites:write":             admins,
-	"sites.maintenance:write": admins,
-	"sites.snippets:write":    admins,
-	"ssh:read":                admins,
-	"ssh:write":               admins,
-	SettingsRead:              admins,
-	SettingsWrite:             admins,
-	UsersRead:                 admins,
-	UsersWrite:                admins,
+var table = map[Action]Rule{
+	// Accounts and panel settings: admins, browser session only.
+	SettingsRead:  {Roles: admins},
+	SettingsWrite: {Roles: admins},
+	UsersRead:     {Roles: admins},
+	UsersWrite:    {Roles: admins},
+
+	// Server-wide: admins only.
+	"backups.server:read":  server("backups:read"),
+	"backups.server:write": server("backups:write"),
+	"doctor:read":          server("doctor:read"),
+	"firewall:read":        server("firewall:read"),
+	"firewall:write":       server("firewall:write"),
+	"limits.presets:write": server("limits:write"),
+	"metrics:read":         server("metrics:read"),
+	"migrations:read":      server("migrations:read"),
+	"migrations:write":     server("migrations:write"),
+	"panel.tls:read":       server("sites:read"),
+	"web:sync":             server("sites:write"),
+
+	// Read-only things everyone needs. The lists of sites and databases
+	// are filtered to the sites a user may see.
+	"sites:list":        all("sites:read"),
+	"databases:list":    all("databases:read"),
+	"php.versions:read": all("sites:read"),
+	"ssh.hostkeys:read": all("ssh:read"),
+	"pages:read":        all("pages:read"),
+
+	// What spans all sites or claims names: managers (ADR-0035, question 3).
+	"sites:create":         manage("sites:write"),
+	"limits.presets:read":  manage("limits:read"),
+	"pages:write":          manage("pages:write"),
+	"parked:read":          manage("sites:read"),
+	"parked:write":         manage("sites.maintenance:write"),
+	"sites:delete":         mgrSite("sites:delete"),
+	"sites.domains:write":  mgrSite("sites:write"),
+	"sites.tls:write":      mgrSite("sites:write"),
+	"sites.disabled:write": mgrSite("sites:write"),
+	"limits:write":         mgrSite("limits:write"),
+	// Letting PHP start programs undoes a hardening default (ADR-0033).
+	"sites.programs:write": mgrSite("sites:write"),
+
+	// nginx runs for every site, so snippets stay with admins (ADR-0029).
+	"sites.snippets:write": admSite("sites.snippets:write"),
+
+	// The day-to-day work on one's own site: everyone with a grant. All of
+	// it runs as the site's own Linux user inside its isolation.
+	"sites:read":              ownSite("sites:read"),
+	"sites.php:write":         ownSite("sites:write"),
+	"sites.hsts:write":        ownSite("sites:write"),
+	"sites.maintenance:write": ownSite("sites.maintenance:write"),
+	"limits:read":             ownSite("limits:read"),
+	"cron:read":               ownSite("cron:read"),
+	"cron:write":              ownSite("cron:write"),
+	"ssh:read":                ownSite("ssh:read"),
+	"ssh:write":               ownSite("ssh:write"),
+	"databases:read":          ownSite("databases:read"),
+	"databases:write":         ownSite("databases:write"),
+	"databases:delete":        ownSite("databases:delete"),
+	"backups:read":            ownSite("backups:read"),
+	"backups:restore":         ownSite("backups:restore"),
 }
 
-// Allowed reports whether role may do action. An unknown role or action is
-// never allowed.
+// Lookup returns the rule of an action.
+func Lookup(a Action) (Rule, bool) {
+	r, ok := table[a]
+
+	return r, ok
+}
+
+// Allowed reports whether role may do action at all. For a site action the
+// caller must also check the site. An unknown role or action is never
+// allowed.
 func Allowed(role Role, action Action) bool {
-	for _, r := range table[action] {
-		if r == role {
+	r, ok := table[action]
+	if !ok {
+		return false
+	}
+
+	for _, x := range r.Roles {
+		if x == role {
 			return true
 		}
 	}
 
 	return false
+}
+
+// SeesAllSites reports whether the role reaches every site without grants.
+func SeesAllSites(role Role) bool {
+	return role == RoleAdmin || role == RoleManager
+}
+
+// ScopeOf returns the token scope of an action; empty for session-only and
+// unknown actions.
+func ScopeOf(a Action) string {
+	return table[a].Scope
+}
+
+// SessionOnly reports whether an action has no token scope and needs a
+// browser session.
+func SessionOnly(a Action) bool {
+	r, ok := table[a]
+
+	return ok && r.Scope == ""
 }
 
 // Actions returns every action of the table, sorted.
@@ -105,6 +188,27 @@ func Actions() []Action {
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+
+	return out
+}
+
+// RoleScopes returns the token scopes useful to a role: those of at least
+// one action the role may do.
+func RoleScopes(role Role) []string {
+	seen := map[string]bool{}
+
+	for a, r := range table {
+		if r.Scope != "" && Allowed(role, a) {
+			seen[r.Scope] = true
+		}
+	}
+
+	out := make([]string, 0, len(seen))
+	for s := range seen {
+		out = append(out, s)
+	}
+
+	sort.Strings(out)
 
 	return out
 }
