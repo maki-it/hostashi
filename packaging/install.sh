@@ -186,7 +186,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config ssh harden nginx php mariadb backup units service fail2ban firewall updates quota"
+STEPS="account dirs key binary config ssh harden sysctl nginx php mariadb backup units service fail2ban firewall updates quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -344,6 +344,49 @@ do_harden() {
     fi
   fi
   proc_mounted_ok || mount -o "remount,$(proc_opts)" /proc >>"$LOG" 2>&1
+}
+
+# Kernel settings of the hardening baseline (ADR-0033): see
+# packaging/sysctl. systemd-sysctl loads the file at every boot; the step
+# also applies it now. A key this kernel does not have (no Yama, no IPv6)
+# is skipped, here and in hostashi doctor.
+SYSCTL_SRC=${HOSTASHI_SYSCTL_SRC:-$HERE/sysctl}
+SYSCTL_FILE=/etc/sysctl.d/90-hostashi.conf
+SYSCTL_PROC=${HOSTASHI_SYSCTL_PROC:-/proc/sys}
+
+# sysctl_each CMD runs CMD KEY VALUE FILE for every key of the file that
+# this kernel has (FILE is its path under /proc/sys).
+sysctl_each() {
+  local key val f
+  while IFS='=' read -r key val; do
+    key=$(echo "$key" | tr -d '[:space:]'); val=$(echo "$val" | xargs)
+    case "$key" in ''|'#'*) continue;; esac
+    f="$SYSCTL_PROC/${key//./\/}"
+    [ -e "$f" ] || continue
+    "$@" "$key" "$val" "$f" || return 1
+  done <"$SYSCTL_SRC/90-hostashi.conf"
+}
+sysctl_diff() { local live; live=$(xargs <"$3" 2>/dev/null); [ "$live" = "$2" ] || echo "$1: $live, want $2"; }
+sysctl_set() { echo "$2" >"$3" 2>>"$LOG" || { log "sysctl: cannot set $1"; return 1; }; }
+# sysctl_drift prints "key: live value, want value" for every key whose
+# live value differs from the file.
+sysctl_drift() { sysctl_each sysctl_diff; }
+
+chk_sysctl() {
+  local drift
+  file_matches "$SYSCTL_FILE" 0644 root:root <"$SYSCTL_SRC/90-hostashi.conf" || { echo "$SYSCTL_FILE differs"; return 1; }
+  drift=$(sysctl_drift)
+  [ -z "$drift" ] || { echo "live values differ: ${drift//$'\n'/; }"; return 1; }
+}
+do_sysctl() {
+  local drift
+  install -d -m 0755 -o root -g root "${SYSCTL_FILE%/*}" || return 1
+  write_file "$SYSCTL_FILE" 0644 root:root <"$SYSCTL_SRC/90-hostashi.conf"
+  [ $? -le 1 ] || return 1
+  # Written straight to /proc/sys: the sysctl tool (procps) may be missing.
+  sysctl_each sysctl_set || return 1
+  drift=$(sysctl_drift)
+  [ -z "$drift" ] || { log "sysctl: values did not take: $drift"; return 1; }
 }
 
 # nginx and its brotli modules from the distribution (ADR-0020). The agent

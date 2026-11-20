@@ -113,7 +113,7 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 		hard.Now = d.now
 	}
 
-	out = append(out, hard.Firewall(ctx), hard.Updates(), hard.Reboot(), hard.PHP(), hard.SSH())
+	out = append(out, hard.Firewall(ctx), hard.Updates(), hard.Reboot(), hard.PHP(), hard.SSH(), hard.Sysctl())
 
 	if d.h != nil {
 		out = append(out, d.sites()...)

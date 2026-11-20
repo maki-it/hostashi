@@ -18,7 +18,7 @@ import (
 
 // The checks of the hardening baseline (ADR-0033): the firewall, the
 // security updates, a pending reboot, PHP masters on a replaced binary and
-// the admin's SSH logins. They read files only; the one exception is the
+// the admin's SSH logins, and the kernel settings. They read files only; the one exception is the
 // firewall unit's state, which the caller asks systemd for (Hardening.Active).
 
 // Paths of the baseline, below Hardening.Root.
@@ -29,6 +29,7 @@ const (
 	UpdatesStamp   = "/var/lib/apt/periodic/unattended-upgrades-stamp"
 	RebootRequired = "/run/reboot-required"
 	SSHDConfig     = "/etc/ssh/sshd_config"
+	SysctlFile     = "/etc/sysctl.d/90-hostashi.conf"
 	systemdWants   = "/etc/systemd/system"
 )
 
@@ -477,4 +478,56 @@ func (h Hardening) SSH() Check {
 	}
 
 	return ok(id, "SSH logins outside the sites need a key")
+}
+
+// Sysctl compares the live kernel settings with the installer's file
+// (ADR-0033). A key this kernel does not have is skipped, as the installer
+// does. A file that sorts later may set other values on purpose, so a
+// difference is a warning.
+func (h Hardening) Sysctl() Check {
+	const id = "system.sysctl"
+
+	f, err := os.Open(h.path(SysctlFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return warn(id, "the kernel settings of the baseline are missing", "Run the installer again (step sysctl).")
+	}
+
+	if err != nil {
+		return warn(id, "cannot read "+SysctlFile+": "+describe(err), "")
+	}
+
+	defer f.Close()
+
+	var drift []string
+
+	n := 0
+
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		key, want, found := strings.Cut(sc.Text(), "=")
+		key = strings.TrimSpace(key)
+
+		if !found || key == "" || strings.HasPrefix(key, "#") {
+			continue
+		}
+
+		b, err := os.ReadFile(h.path("/proc/sys/" + strings.ReplaceAll(key, ".", "/")))
+		if err != nil {
+			continue
+		}
+
+		n++
+
+		live := strings.Join(strings.Fields(string(b)), " ")
+		if want = strings.Join(strings.Fields(want), " "); live != want {
+			drift = append(drift, key+" = "+live+" (want "+want+")")
+		}
+	}
+
+	if len(drift) > 0 {
+		return warn(id, "kernel settings differ from the baseline: "+strings.Join(drift, ", "),
+			"A file in /etc/sysctl.d/ that sorts later may set them. Otherwise run the installer again (step sysctl).")
+	}
+
+	return ok(id, fmt.Sprintf("%d kernel settings match the baseline", n))
 }

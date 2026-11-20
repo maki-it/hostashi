@@ -125,6 +125,17 @@ for t in apt-daily.timer apt-daily-upgrade.timer; do
   x systemctl is-enabled --quiet "$t" || fail "$t not enabled"
 done
 
+step "kernel settings and no core dumps"
+expect_file_mode() { [ "$(x stat -c '%a %U:%G' "$1")" = "$2" ] || fail "$1 is not $2"; }
+expect_file_mode /etc/sysctl.d/90-hostashi.conf "644 root:root"
+for kv in fs.suid_dumpable=0 fs.protected_regular=2 kernel.kptr_restrict=2 net.ipv4.conf.all.accept_redirects=0 net.ipv4.tcp_syncookies=1; do
+  k=${kv%%=*}; got=$(x cat "/proc/sys/${k//.//}")
+  [ "$got" = "${kv#*=}" ] || fail "$k is $got, want ${kv#*=}"
+done
+for u in hostashi-agent.service hostashi.service hostashi-backup.service hostashi-restore@.service hostashi-import@.service; do
+  [ "$(x systemctl show -p LimitCORE --value "$u")" = 0 ] || fail "$u allows core dumps"
+done
+
 step "services, health and permissions"
 if x nft list table inet hostashi >/dev/null 2>&1; then fail "firewall table loaded despite --no-firewall"; fi
 x test ! -e /etc/systemd/system/hostashi-firewall.service || fail "firewall unit installed despite --no-firewall"
@@ -145,7 +156,7 @@ for id in system.os system.pool service.panel service.nginx service.mariadb serv
   grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"
 done
 grep -Eq "^  WARN  system.quota " <<<"$doc" || fail "doctor: no quota warning on an overlay root"
-for id in system.updates system.reboot system.php; do
+for id in system.updates system.reboot system.php system.sysctl; do
   grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"
 done
 # This test passes --no-firewall (the container shares the host's network).

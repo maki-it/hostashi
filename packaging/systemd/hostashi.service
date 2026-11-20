@@ -25,6 +25,8 @@ Wants=hostashi-agent.service
 Requires=hostashi-panel.socket
 
 [Service]
+# No core dumps: they would hold keys, passwords and session data (ADR-0033).
+LimitCORE=0
 Type=simple
 Sockets=hostashi-panel.socket
 User=hostashi

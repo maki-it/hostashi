@@ -25,6 +25,8 @@ After=network-online.target hostashi-agent.service
 Wants=network-online.target
 
 [Service]
+# No core dumps: they would hold keys, passwords and session data (ADR-0033).
+LimitCORE=0
 Type=oneshot
 ExecStart=/usr/local/bin/hostashi cloudpanel -state-dir /var/lib/hostashi-agent import-run %i
 TimeoutStartSec=24h
