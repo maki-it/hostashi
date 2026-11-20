@@ -367,5 +367,6 @@ func registerAuth(mux *routeMux, svc *auth.Service, log *slog.Logger) {
 	})
 
 	registerTokens(mux, a)
+	registerUsers(mux, a)
 	registerPasskeys(mux, a)
 }

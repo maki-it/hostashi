@@ -29,7 +29,23 @@ const (
 	// SettingsWrite changes panel settings such as the API IP allowlist and
 	// the metrics endpoint.
 	SettingsWrite Action = "settings:write"
+	// UsersRead lists the panel accounts and their site grants.
+	UsersRead Action = "users:read"
+	// UsersWrite creates, changes, resets and deletes accounts and grants.
+	// No token can carry it: a leaked token must not create admins.
+	UsersWrite Action = "users:write"
 )
+
+// SessionOnly reports whether an action has no token scope and needs a
+// browser session.
+func SessionOnly(a Action) bool {
+	switch a {
+	case SettingsRead, SettingsWrite, UsersRead, UsersWrite:
+		return true
+	}
+
+	return false
+}
 
 // admins is the role list of an action only administrators may do.
 var admins = []Role{RoleAdmin}
@@ -65,6 +81,8 @@ var table = map[Action][]Role{
 	"ssh:write":               admins,
 	SettingsRead:              admins,
 	SettingsWrite:             admins,
+	UsersRead:                 admins,
+	UsersWrite:                admins,
 }
 
 // Allowed reports whether role may do action. An unknown role or action is

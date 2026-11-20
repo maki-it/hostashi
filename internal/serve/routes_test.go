@@ -52,6 +52,18 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/auth/passkeys":                  accessSession,
 	"DELETE /api/v1/auth/passkeys/{id}":          accessSession,
 
+	"POST /api/v1/invitations/check":  accessPublic,
+	"POST /api/v1/invitations/accept": accessPublic,
+
+	"GET /api/v1/users":             authz.UsersRead,
+	"POST /api/v1/users":            authz.UsersWrite,
+	"GET /api/v1/users/{id}":        authz.UsersRead,
+	"PUT /api/v1/users/{id}":        authz.UsersWrite,
+	"DELETE /api/v1/users/{id}":     authz.UsersWrite,
+	"POST /api/v1/users/{id}/reset": authz.UsersWrite,
+	"GET /api/v1/users/{id}/grants": authz.UsersRead,
+	"PUT /api/v1/users/{id}/grants": authz.UsersWrite,
+
 	"GET /api/v1/settings/api-ip-allowlist": authz.SettingsRead,
 	"PUT /api/v1/settings/api-ip-allowlist": authz.SettingsWrite,
 	"GET /api/v1/settings/metrics":          authz.SettingsRead,
@@ -280,7 +292,7 @@ func TestRouteMatrix(t *testing.T) {
 				if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
 					t.Fatalf("token refused: %d %s", rec.Code, rec.Body)
 				}
-			case accessSession, authz.SettingsRead, authz.SettingsWrite:
+			case accessSession, authz.SettingsRead, authz.SettingsWrite, authz.UsersRead, authz.UsersWrite:
 				rec := e.do(t, reqOpts{method: method, path: path, body: matrixBody(method), header: bearerHeader(fullToken.Token)})
 				if rec.Code != http.StatusForbidden || errCode(t, rec) != "session_required" {
 					t.Fatalf("token with every scope: %d %s, want 403 session_required", rec.Code, rec.Body)
