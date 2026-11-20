@@ -32,6 +32,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0034](0034-firewall-rules-in-panel.md) | Firewall rules in the panel | Accepted |
 | [0035](0035-users-and-roles.md) | Users and roles | Accepted |
 | [0036](0036-php-versions-from-the-panel.md) | Installing PHP versions from the panel | Accepted |
+| [0037](0037-panel-ui-redesign.md) | Panel UI redesign: layout, look and themes | Proposed |
 
 Only the project owner sets a status to `Accepted`.
 
