@@ -46,6 +46,7 @@ Ubuntu 24.04 is the open point: its nginx has no HTTP/3. Either it is dropped fo
 - Defaults from ADR-0017 apply as written: HTTP/3 on (UDP 443 opened by installer and firewall) and brotli with gzip as fallback for clients that do not accept `br`.
 - The `nginx-module-acme` module on nginx.org is not available with distribution nginx. ADR-0003 plans lego for ACME, so nothing is lost [V: ADR-0003].
 - The S5 installer must be re-run on Debian 13 and Ubuntu 26.04 with the new source (HTTP/3 request test, brotli response header check). Ubuntu 26.04 was not yet tested in S5 [V: S5 report covers Debian 13 and Ubuntu 24.04].
+- New releases (Kim, 2026-11-20): the monthly workflow `Distributions` (`tools/distros`) compares Debian's `stable` suite and Ubuntu's newest supported LTS from `meta-release-lts` with the preflight pattern in `install.sh`. For a newer release it opens an issue that says whether sury.org and the distribution's nginx and brotli packages are there yet, with a to-do list. It changes no code: adding a release stays a decision in this ADR [V: tests in `tools/distros`].
 
 ## Risks to name openly
 
