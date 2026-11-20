@@ -99,6 +99,65 @@ export const listLoads = async (id: string) => (await request<{ loads: DumpLoad[
 export const startLoads = async (id: string) => (await request<{ loads: DumpLoad[] }>("POST", importPath(id) + "/load")).loads;
 export const getImport = (id: string) => request<ImportJob>("GET", "/migrations/cloudpanel/imports/" + encodeURIComponent(id));
 
+// DNS cut-over of an imported site (ADR-0031): the person points the
+// domains at this server; the panel checks them every minute and turns
+// HTTPS on once all of them resolve only here.
+export type CutoverState = "waiting" | "switched" | "failed" | "canceled";
+export type DomainAnswer = {
+  domain: string;
+  addrs: string[];
+  here: boolean;
+  ttl?: number; // seconds, when the panel reports it
+  error?: string;
+};
+export type Cutover = {
+  site: string;
+  state: CutoverState;
+  startedAt: string;
+  deadline: string;
+  checkedAt?: string;
+  doneAt?: string;
+  server: string[];
+  answers: DomainAnswer[];
+  error?: string;
+};
+const cutoverPath = (site: string) => "/migrations/cloudpanel/sites/" + encodeURIComponent(site) + "/cutover";
+// getCutover returns null when the site has no cut-over yet.
+export async function getCutover(site: string): Promise<Cutover | null> {
+  try {
+    return await request<Cutover>("GET", cutoverPath(site));
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+export const startCutover = (site: string) => request<Cutover>("POST", cutoverPath(site));
+export const cancelCutover = (site: string) => request<Cutover>("DELETE", cutoverPath(site));
+
+// ttlLabel writes a TTL in seconds the short way: 300 is "5 min".
+export function ttlLabel(s: number): string {
+  if (!Number.isFinite(s) || s < 0) return "";
+  if (s < 60 || s % 60 !== 0) return s + " s";
+  if (s < 3600 || s % 3600 !== 0) return s / 60 + " min";
+  if (s < 86400 || s % 86400 !== 0) return s / 3600 + " h";
+  return s / 86400 + " d";
+}
+
+// cutoverMessage explains the errors of the cut-over routes.
+export function cutoverMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    switch (err.code) {
+      case "cutover_running":
+        return "A DNS check of this site is running already. Reload the page.";
+      case "site_state":
+        return "The site does not exist here or is disabled. Enable it first.";
+      case "not_found":
+        return "The DNS check is not available on this panel.";
+    }
+  }
+  return migrationMessage(err);
+}
+
 export const getSource = () => request<SourceInfo>("GET", source);
 export const setSource = (host: string, port: number) => request<SourceInfo>("PUT", source, { host, port });
 export const deleteSource = () => request<SourceInfo>("DELETE", source);

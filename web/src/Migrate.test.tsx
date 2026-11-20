@@ -47,6 +47,8 @@ const exists = [
   { code: "domain_taken", msg: "the domain shop.example belongs to a site on this server" },
 ];
 
+const noCutover = { status: 404, body: { error: { code: "not_found", message: "the site has no cut-over" } } };
+
 describe("Migrate", () => {
   it("connects the old server and confirms its host key", async () => {
     const user = userEvent.setup();
@@ -144,6 +146,7 @@ describe("Migrate", () => {
       },
       "GET /api/v1/databases": { body: { databases: [{ name: "shop", site: "shop", users: [], createdAt: "" }] } },
       [`GET ${base}/imports?site=shop`]: { body: { imports: [] } },
+      [`GET ${base}/sites/shop/cutover`]: noCutover,
       [`POST ${base}/reports/r1/sites/shop/import`]: { status: 202, body: job("queued") },
       [`POST ${base}/sites/shop/activate`]: { body: { site: "shop", previous: "htdocs-before-import-20261119T100500Z" } },
       [`GET ${base}/imports/imp1/loads`]: {
@@ -263,6 +266,7 @@ describe("Migrate", () => {
       "GET /api/v1/php/versions": { body: { installed: ["8.3"], supported: ["8.3"], legacy: [] } },
       "GET /api/v1/databases": { body: { databases: [] } },
       [`GET ${base}/imports?site=shop`]: { body: { imports: [{ ...done, skippedPaths: undefined }] } },
+      [`GET ${base}/sites/shop/cutover`]: noCutover,
       [`GET ${base}/imports/imp9`]: { body: done },
     });
     render(<Migrate />);
@@ -285,6 +289,7 @@ describe("Migrate", () => {
       "GET /api/v1/php/versions": { body: { installed: ["8.3"], supported: ["8.3"], legacy: [] } },
       "GET /api/v1/databases": { body: { databases: [] } },
       [`GET ${base}/imports?site=shop`]: { body: { imports: [] } },
+      [`GET ${base}/sites/shop/cutover`]: noCutover,
       [`GET ${base}/reports/r1/sites/shop/snippets-draft`]: {
         body: {
           server: "add_header X-Frame-Options SAMEORIGIN;\n",
