@@ -2,9 +2,10 @@
 
 // Package sysuser creates and removes Linux users with useradd and userdel.
 //
-// It is the one place in product code allowed to start a process (see the
-// depguard rule in .golangci.yml). The exception is narrow: two fixed binaries
-// by absolute path, argument lists built here from validated names, no shell,
+// It is one of the reviewed places in product code allowed to start a process
+// (see the depguard rule in .golangci.yml). The exception is narrow: three
+// fixed binaries (useradd, userdel, and usermod for the login shell only,
+// ADR-0032) by absolute path, argument lists built here from validated names, no shell,
 // an empty environment apart from PATH and LC_ALL, and no output returned to
 // callers.
 package sysuser
@@ -29,8 +30,12 @@ import (
 const (
 	Useradd = "/usr/sbin/useradd"
 	Userdel = "/usr/sbin/userdel"
-	// NoLogin is the shell of every site user: no interactive login.
+	Usermod = "/usr/sbin/usermod"
+	// NoLogin is the shell of a site user without a shell key: no
+	// interactive login, SFTP only (ADR-0032).
 	NoLogin = "/usr/sbin/nologin"
+	// Bash is the shell of a site user with at least one shell key.
+	Bash = "/bin/bash"
 	// SSHGroup is the supplementary group of every site user. sshd's Match
 	// block for it allows keys from the agent's key file only (ADR-0032).
 	// The installer creates it.
@@ -181,6 +186,37 @@ func (a *Accounts) Create(ctx context.Context, name, home string) (sites.Account
 	}
 
 	return acct, nil
+}
+
+// SetShell sets the login shell of a site user to NoLogin or Bash; any
+// other value is refused. usermod changes nothing else.
+func (a *Accounts) SetShell(ctx context.Context, name, shell string) error {
+	if err := agentapi.ValidateSiteUser(name); err != nil {
+		return err
+	}
+
+	if shell != NoLogin && shell != Bash {
+		return fmt.Errorf("sysuser: shell %q is not allowed", shell)
+	}
+
+	code, out, err := a.run(ctx, Usermod, shellArgs(name, shell))
+	if err != nil {
+		return fmt.Errorf("sysuser: usermod: %w", err)
+	}
+
+	if code == exitUserNotFound {
+		return fmt.Errorf("sysuser: %w: %s", sites.ErrNotFound, name)
+	}
+
+	if code != 0 {
+		return fmt.Errorf("sysuser: usermod exited with %d: %s", code, out)
+	}
+
+	return nil
+}
+
+func shellArgs(name, shell string) []string {
+	return []string{"--shell", shell, "--", name}
 }
 
 // Delete runs userdel. A user that does not exist is not an error.

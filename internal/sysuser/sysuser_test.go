@@ -199,3 +199,50 @@ func TestExecRunLimitsOutput(t *testing.T) {
 		t.Fatalf("output has %d bytes", len(out))
 	}
 }
+
+func TestSetShell(t *testing.T) {
+	t.Parallel()
+
+	var calls []call
+
+	a := &Accounts{run: fakeRunner(0, "", nil, &calls)}
+
+	for _, sh := range []string{NoLogin, Bash} {
+		if err := a.SetShell(context.Background(), "blog", sh); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if len(calls) != 2 || calls[1].path != Usermod || !slices.Equal(calls[1].args, []string{"--shell", Bash, "--", "blog"}) {
+		t.Fatalf("calls %+v", calls)
+	}
+
+	calls = nil
+
+	for _, c := range []struct{ name, shell string }{
+		{"blog", "/bin/sh"},
+		{"blog", "/bin/bash -c id"},
+		{"blog", ""},
+		{"root", Bash},
+		{"-G", Bash},
+		{"", NoLogin},
+	} {
+		if err := a.SetShell(context.Background(), c.name, c.shell); err == nil {
+			t.Errorf("%+v accepted", c)
+		}
+	}
+
+	if len(calls) != 0 {
+		t.Fatalf("process started for invalid input: %v", calls)
+	}
+
+	a = &Accounts{run: fakeRunner(6, "usermod: user 'blog' does not exist", nil, &calls)}
+	if err := a.SetShell(context.Background(), "blog", Bash); !errors.Is(err, sites.ErrNotFound) {
+		t.Fatalf("missing user: %v", err)
+	}
+
+	a = &Accounts{run: fakeRunner(1, "cannot lock /etc/passwd", nil, &calls)}
+	if err := a.SetShell(context.Background(), "blog", Bash); err == nil || !strings.Contains(err.Error(), "exited with 1") {
+		t.Fatalf("lock: %v", err)
+	}
+}

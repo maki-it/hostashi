@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -268,5 +269,59 @@ func TestRootDeleteStaysOutOfMounts(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(outside, "keep")); err != nil {
 		t.Fatalf("data behind the mount was deleted: %v", err)
+	}
+}
+
+func TestRootSetShell(t *testing.T) {
+	m, _, name := rootEnv(t)
+	ctx := context.Background()
+
+	if _, err := m.Create(ctx, name, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	acc := sysuser.New(nil)
+
+	shell := func() string {
+		t.Helper()
+
+		f, err := os.ReadFile("/etc/passwd")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for line := range strings.SplitSeq(string(f), "\n") {
+			if fields := strings.Split(line, ":"); len(fields) == 7 && fields[0] == name {
+				return fields[6]
+			}
+		}
+
+		t.Fatalf("%s not in /etc/passwd", name)
+
+		return ""
+	}
+
+	if got := shell(); got != sysuser.NoLogin {
+		t.Fatalf("new site user has shell %q", got)
+	}
+
+	if err := acc.SetShell(ctx, name, sysuser.Bash); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := shell(); got != sysuser.Bash {
+		t.Fatalf("shell %q after SetShell(Bash)", got)
+	}
+
+	if err := acc.SetShell(ctx, name, sysuser.NoLogin); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := shell(); got != sysuser.NoLogin {
+		t.Fatalf("shell %q after SetShell(NoLogin)", got)
+	}
+
+	if err := acc.SetShell(ctx, name+"x", sysuser.Bash); !errors.Is(err, sites.ErrNotFound) {
+		t.Fatalf("unknown user: %v", err)
 	}
 }
