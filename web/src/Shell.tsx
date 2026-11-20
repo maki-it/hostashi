@@ -1,0 +1,153 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { CaretRight, List, SignOut, X } from "@phosphor-icons/react";
+import { useState, type ReactNode } from "react";
+import { logout, type User } from "./auth";
+import { navFor, navItem } from "./nav";
+import { formatHash, type Route } from "./routes";
+import { IconButton } from "./ui";
+
+type ShellProps = {
+  user: User;
+  route: Route;
+  onLogout: () => void;
+  children: ReactNode;
+};
+
+/** The Hostashi mark: the brand colour with an "H". */
+function Mark() {
+  return (
+    <span className="app-mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="18" height="18">
+        <path d="M9 8v16M23 8v16M9 16h14" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" fill="none" />
+      </svg>
+    </span>
+  );
+}
+
+type Crumb = { label: string; href?: string };
+
+function crumbs(route: Route): Crumb[] {
+  const item = navItem(route.page);
+  if (!item) return [];
+  const out: Crumb[] = [];
+  if (item.group) out.push({ label: item.group });
+  if (route.site) {
+    out.push({ label: item.label, href: formatHash({ page: route.page }) });
+    out.push({ label: route.site.name });
+  } else {
+    out.push({ label: item.label });
+  }
+  return out;
+}
+
+/**
+ * The frame around every page once a user is logged in (ADR-0037): a
+ * sidebar with the grouped navigation and the current user, and a top bar
+ * with breadcrumbs. Below 700 px the sidebar collapses into a menu.
+ */
+export function Shell({ user, route, onLogout, children }: ShellProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const groups = navFor(user.role);
+  const trail = crumbs(route);
+
+  async function doLogout() {
+    setBusy(true);
+    setError("");
+    try {
+      await logout();
+      onLogout();
+    } catch {
+      setError("Logout failed. Try again.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="ui-root app">
+      <aside className="app-side" data-open={menuOpen}>
+        <div className="app-brand">
+          <Mark />
+          <span className="app-brand-name">
+            Hostashi
+            <span className="app-host">{window.location.hostname}</span>
+          </span>
+          <span className="app-menu-btn">
+            <IconButton
+              label={menuOpen ? "Close menu" : "Open menu"}
+              icon={menuOpen ? <X size={20} /> : <List size={20} />}
+              aria-expanded={menuOpen}
+              aria-controls="app-nav"
+              tipBelow
+              onClick={() => setMenuOpen(!menuOpen)}
+            />
+          </span>
+        </div>
+        <nav aria-label="Main" id="app-nav" className="app-nav">
+          {groups.map((g) => (
+            <div className="app-nav-group" key={g.label ?? "top"}>
+              {g.label && <h2 className="app-nav-label">{g.label}</h2>}
+              <ul>
+                {g.items.map((i) => {
+                  const Icon = i.icon;
+                  return (
+                    <li key={i.page}>
+                      <a
+                        className="app-nav-item"
+                        href={formatHash({ page: i.page })}
+                        aria-current={route.page === i.page ? "page" : undefined}
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        <Icon size={20} aria-hidden="true" />
+                        {i.label}
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
+        <div className="app-user">
+          <span className="app-avatar" aria-hidden="true">
+            {user.username.slice(0, 2).toUpperCase()}
+          </span>
+          <span className="app-user-name">
+            {user.username}
+            <small>{user.role}</small>
+          </span>
+          <IconButton label="Log out" icon={<SignOut size={20} />} disabled={busy} onClick={() => void doLogout()} />
+        </div>
+        {error && (
+          <p role="alert" className="app-user-error">
+            {error}
+          </p>
+        )}
+      </aside>
+      <div className="app-main">
+        <header className="app-top">
+          <nav aria-label="Breadcrumb">
+            <ol className="app-crumbs">
+              {trail.map((c, i) => {
+                const last = i === trail.length - 1;
+                return (
+                  <li key={`${i}-${c.label}`}>
+                    {c.href && !last ? (
+                      <a href={c.href}>{c.label}</a>
+                    ) : (
+                      <span aria-current={last ? "page" : undefined}>{c.label}</span>
+                    )}
+                    {!last && <CaretRight size={12} aria-hidden="true" />}
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+        </header>
+        <div className="app-content">{children}</div>
+      </div>
+    </div>
+  );
+}
