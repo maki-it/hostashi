@@ -16,8 +16,8 @@ path = "**"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 The Hostashi contributors"
 
-# Spikes are throwaway research code. Most files predate the SPDX headers
-# and are left untouched.
+# Spike reports from the planning phase. They predate the SPDX headers and
+# are left untouched.
 [[annotations]]
 path = "spike/**"
 precedence = "aggregate"

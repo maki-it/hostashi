@@ -1,9 +1,0 @@
-{
-  "name": "hostashi-spike-s7",
-  "private": true,
-  "workspaces": ["shared", "web-react", "web-svelte"],
-  "scripts": {
-    "build:react": "npm -w web-react run build",
-    "build:svelte": "npm -w web-svelte run build"
-  }
-}

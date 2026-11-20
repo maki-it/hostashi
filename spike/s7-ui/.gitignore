@@ -1,6 +1,0 @@
-node_modules/
-web-*/dist/
-bin/
-server/ui/dist/*
-!server/ui/dist/index.html
-e2e/out/
