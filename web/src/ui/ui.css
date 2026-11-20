@@ -491,3 +491,7 @@ a.ui-btn {
   right: 0;
   transform: none;
 }
+/* A form field that holds a short value, such as a name or a choice */
+.ui-narrow {
+  max-width: 400px;
+}
