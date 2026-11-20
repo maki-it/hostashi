@@ -139,3 +139,22 @@ func TestRoleScopes(t *testing.T) {
 		t.Errorf("admin offered %d of %d scopes", len(got), len(auth.Scopes()))
 	}
 }
+
+func TestForSiteToken(t *testing.T) {
+	for a, want := range map[authz.Action]bool{
+		"sites:read":      true,  // a site action
+		"cron:write":      true,  // a site action
+		"sites:list":      true,  // filtered list
+		"databases:list":  true,  // filtered list
+		"sites:create":    false, // claims a name for all sites
+		"firewall:read":   false, // server
+		"parked:write":    false, // spans all sites
+		authz.UsersWrite:  false, // session only, no scope
+		"unknown:action":  false,
+		"sites.tls:write": true, // a site action of managers
+	} {
+		if got := authz.ForSiteToken(a); got != want {
+			t.Errorf("%s: %v, want %v", a, got, want)
+		}
+	}
+}

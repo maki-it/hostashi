@@ -175,3 +175,60 @@ func TestActiveAPITokens(t *testing.T) {
 		t.Fatalf("%+v %v", list, err)
 	}
 }
+
+func TestAPITokenSites(t *testing.T) {
+	s, u := tokenStore(t)
+	ctx := context.Background()
+	now := time.Unix(2_000_000, 0)
+
+	for _, n := range []string{"alpha", "beta"} {
+		if _, err := s.CreateSite(ctx, n, "default", "8.4", []string{n + ".example"}, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	base := APIToken{UserID: u.ID, Name: "a", Prefix: "abcdef", Scopes: []string{"sites:read"}, CreatedAt: now}
+
+	all := base
+	if _, err := s.CreateAPIToken(ctx, all, hashOf(1)); err != nil {
+		t.Fatal(err)
+	}
+
+	some := base
+	some.Sites = []string{"beta", "alpha", "beta"}
+
+	if _, err := s.CreateAPIToken(ctx, some, hashOf(2)); err != nil {
+		t.Fatal(err)
+	}
+
+	unknown := base
+	unknown.Sites = []string{"alpha", "nope"}
+
+	if _, err := s.CreateAPIToken(ctx, unknown, hashOf(3)); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown site: %v", err)
+	}
+
+	var n int
+	if err := s.RawCount(ctx, `SELECT count(*) FROM api_tokens WHERE user_id = ?`, u.ID, &n); err != nil || n != 2 {
+		t.Fatalf("a failed create left a token: %d %v", n, err)
+	}
+
+	if got, _, _ := s.APITokenByHash(ctx, hashOf(1), now); got.Sites != nil {
+		t.Fatalf("token without a list: %v", got.Sites)
+	}
+
+	if got, _, _ := s.APITokenByHash(ctx, hashOf(2), now); len(got.Sites) != 2 || got.Sites[0] != "alpha" || got.Sites[1] != "beta" {
+		t.Fatalf("token with a list: %v", got.Sites)
+	}
+
+	// Without its sites the token reaches none, never all.
+	for _, n := range []string{"alpha", "beta"} {
+		if err := s.DeleteSite(ctx, n); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if got, _, _ := s.APITokenByHash(ctx, hashOf(2), now); got.Sites == nil || len(got.Sites) != 0 {
+		t.Fatalf("after the sites are gone: %#v", got.Sites)
+	}
+}

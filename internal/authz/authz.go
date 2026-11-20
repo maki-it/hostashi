@@ -175,6 +175,19 @@ func NeedsSecondFactor(role Role) bool {
 	return role == RoleAdmin || role == RoleManager
 }
 
+// ForSiteToken reports whether a token limited to some sites may do the
+// action: site actions (for its sites) and the read-only actions everyone
+// has, whose lists are filtered to its sites. Server and manager actions
+// that span all sites stay with tokens without a site list.
+func ForSiteToken(a Action) bool {
+	r, ok := table[a]
+	if !ok {
+		return false
+	}
+
+	return r.Site || len(r.Roles) == len(everyone)
+}
+
 // ScopeOf returns the token scope of an action; empty for session-only and
 // unknown actions.
 func ScopeOf(a Action) string {

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -29,7 +30,13 @@ type APIToken struct {
 	LastUsedAt *time.Time
 	LastUsedIP string
 	RevokedAt  *time.Time
+	// Sites limits the token to these sites, sorted; nil means every site
+	// the owner reaches. An empty, non-nil list reaches no site.
+	Sites []string
 }
+
+// MaxTokenSites keeps a token's site list small.
+const MaxTokenSites = 100
 
 func unixPtr(v sql.NullInt64) *time.Time {
 	if !v.Valid {
@@ -42,7 +49,8 @@ func unixPtr(v sql.NullInt64) *time.Time {
 }
 
 // CreateAPIToken stores a new token. It fails with ErrTooManyTokens when the
-// user has MaxActiveTokens unrevoked tokens.
+// user has MaxActiveTokens unrevoked tokens, and with ErrNotFound for an
+// unknown site in t.Sites.
 func (s *Store) CreateAPIToken(ctx context.Context, t APIToken, tokenHash []byte) (APIToken, error) {
 	scopes, err := json.Marshal(t.Scopes)
 	if err != nil {
@@ -71,10 +79,20 @@ func (s *Store) CreateAPIToken(ctx context.Context, t APIToken, tokenHash []byte
 		return APIToken{}, ErrTooManyTokens
 	}
 
+	if t.Sites != nil {
+		t.Sites = slices.Clone(t.Sites)
+		slices.Sort(t.Sites)
+		t.Sites = slices.Compact(t.Sites)
+	}
+
+	if len(t.Sites) > MaxTokenSites {
+		return APIToken{}, fmt.Errorf("store: at most %d sites per token", MaxTokenSites)
+	}
+
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO api_tokens (user_id, name, prefix, token_hash, scopes, created_at, expires_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		t.UserID, t.Name, t.Prefix, tokenHash, string(scopes), t.CreatedAt.Unix(), exp)
+		`INSERT INTO api_tokens (user_id, name, prefix, token_hash, scopes, created_at, expires_at, site_limited)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.UserID, t.Name, t.Prefix, tokenHash, string(scopes), t.CreatedAt.Unix(), exp, boolInt(t.Sites != nil))
 	if err != nil {
 		return APIToken{}, fmt.Errorf("store: %w", err)
 	}
@@ -82,6 +100,18 @@ func (s *Store) CreateAPIToken(ctx context.Context, t APIToken, tokenHash []byte
 	id, err := res.LastInsertId()
 	if err != nil {
 		return APIToken{}, fmt.Errorf("store: %w", err)
+	}
+
+	for _, name := range t.Sites {
+		res, err := tx.ExecContext(ctx,
+			`INSERT INTO api_token_sites (token_id, site_id) SELECT ?, id FROM sites WHERE name = ?`, id, name)
+		if err != nil {
+			return APIToken{}, fmt.Errorf("store: %w", err)
+		}
+
+		if n, _ := res.RowsAffected(); n == 0 {
+			return APIToken{}, fmt.Errorf("%w: site %q", ErrNotFound, name)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -93,7 +123,11 @@ func (s *Store) CreateAPIToken(ctx context.Context, t APIToken, tokenHash []byte
 	return t, nil
 }
 
-const apiColumns = `id, user_id, name, prefix, scopes, created_at, expires_at, last_used_at, last_used_ip, revoked_at`
+// apiColumns ends with the site list as a JSON array, or NULL for a token
+// without one.
+const apiColumns = `id, user_id, name, prefix, scopes, created_at, expires_at, last_used_at, last_used_ip, revoked_at,
+	CASE WHEN site_limited = 1 THEN (SELECT json_group_array(s.name) FROM api_token_sites ts
+	  JOIN sites s ON s.id = ts.site_id WHERE ts.token_id = api_tokens.id) END`
 
 type rowScanner interface{ Scan(dest ...any) error }
 
@@ -103,14 +137,24 @@ func scanToken(r rowScanner) (APIToken, error) {
 		scopes               string
 		created              int64
 		exp, lastUsed, revok sql.NullInt64
+		sites                sql.NullString
 	)
 
-	if err := r.Scan(&t.ID, &t.UserID, &t.Name, &t.Prefix, &scopes, &created, &exp, &lastUsed, &t.LastUsedIP, &revok); err != nil {
+	if err := r.Scan(&t.ID, &t.UserID, &t.Name, &t.Prefix, &scopes, &created, &exp, &lastUsed, &t.LastUsedIP, &revok, &sites); err != nil {
 		return APIToken{}, err //nolint:wrapcheck // callers wrap with context
 	}
 
 	if err := json.Unmarshal([]byte(scopes), &t.Scopes); err != nil {
 		return APIToken{}, fmt.Errorf("stored scopes: %w", err)
+	}
+
+	if sites.Valid {
+		t.Sites = []string{}
+		if err := json.Unmarshal([]byte(sites.String), &t.Sites); err != nil {
+			return APIToken{}, fmt.Errorf("stored token sites: %w", err)
+		}
+
+		slices.Sort(t.Sites)
 	}
 
 	t.CreatedAt = time.Unix(created, 0).UTC()
