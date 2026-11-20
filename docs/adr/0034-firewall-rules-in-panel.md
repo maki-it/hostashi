@@ -58,5 +58,5 @@ Fixed and never editable: established traffic, loopback, the needed ICMP, DHCP r
 
 ## Open questions
 
-1. Rollback after 120 seconds without confirmation? Recommendation: yes.
+1. Rollback after 120 seconds without confirmation? **Decided (Kim, 2026-11-20): yes.**
 2. Allowlists only for SSH and the panel port in v1, opened ports with an optional address list? Recommendation: yes.
