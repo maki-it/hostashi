@@ -31,6 +31,10 @@ const (
 	Userdel = "/usr/sbin/userdel"
 	// NoLogin is the shell of every site user: no interactive login.
 	NoLogin = "/usr/sbin/nologin"
+	// SSHGroup is the supplementary group of every site user. sshd's Match
+	// block for it allows keys from the agent's key file only (ADR-0032).
+	// The installer creates it.
+	SSHGroup = "hostashi-sites"
 )
 
 const commandTimeout = 30 * time.Second
@@ -71,6 +75,7 @@ func createArgs(name, home string) []string {
 		"--home-dir", home,
 		"--shell", NoLogin,
 		"--user-group",
+		"--groups", SSHGroup,
 		"--no-log-init",
 		"--comment", "hostashi site",
 		"--",
