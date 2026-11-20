@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { CronSettings } from "./Cron";
 import { LimitSettings } from "./Limits";
 import { SnippetSettings } from "./Snippets";
+import { SSHSettings } from "./SSH";
 import { allowIpsProblem, clientIp, listPages, pageMessage, parseAllowIps, setMaintenance, type StatusPage } from "./pages";
 import {
   createSite,
@@ -435,6 +436,7 @@ function SiteSettings({
       <MaintenanceSettings site={site} onChange={onChange} />
       <LimitSettings site={site} />
       <CronSettings site={site} />
+      <SSHSettings site={site} />
       <SnippetSettings site={site} />
       <fieldset>
         <legend>Availability of {site.name}</legend>

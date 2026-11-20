@@ -11,8 +11,8 @@ import (
 
 var errNoSSH = &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "SSH access is not available on this server"}
 
-// registerSSH serves ssh.apply. It holds h.mu like web.apply, so a site
-// cannot be deleted while its key file is written.
+// registerSSH serves ssh.apply and ssh.hostkeys. ssh.apply holds h.mu like
+// web.apply, so a site cannot be deleted while its key file is written.
 func (h *siteOps) registerSSH(s *agentrpc.Server) {
 	agentrpc.Handle(s, agentapi.SSHApply, func(ctx context.Context, _ agentrpc.Caller, req agentapi.SSHApplyRequest) (agentapi.SSHApplied, error) {
 		if h.ssh == nil {
@@ -29,6 +29,16 @@ func (h *siteOps) registerSSH(s *agentrpc.Server) {
 		shell, err := h.ssh.Apply(ctx, req)
 
 		return agentapi.SSHApplied{Shell: shell}, err
+	})
+
+	agentrpc.Handle(s, agentapi.SSHHostKeys, func(ctx context.Context, _ agentrpc.Caller, _ agentapi.SSHHostKeysRequest) (agentapi.SSHHostKeysResponse, error) {
+		if h.ssh == nil {
+			return agentapi.SSHHostKeysResponse{}, errNoSSH
+		}
+
+		keys, err := h.ssh.HostKeys(ctx)
+
+		return agentapi.SSHHostKeysResponse{Keys: keys}, err
 	})
 }
 

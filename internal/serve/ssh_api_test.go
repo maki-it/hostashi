@@ -26,6 +26,10 @@ func (s *stubSSH) SSHApply(_ context.Context, req agentapi.SSHApplyRequest) (age
 	return agentapi.SSHApplied{}, nil
 }
 
+func (*stubSSH) SSHHostKeys(context.Context) ([]agentapi.SSHHostKey, error) {
+	return []agentapi.SSHHostKey{{Type: "ssh-ed25519", Fingerprint: "SHA256:host"}}, nil
+}
+
 func testSSHKey(t *testing.T) string {
 	t.Helper()
 
@@ -107,6 +111,11 @@ func TestSSHKeysOverHTTP(t *testing.T) {
 
 	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/nope/ssh-keys", cookie: c}); rec.Code != http.StatusNotFound {
 		t.Errorf("unknown site: %d", rec.Code)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/ssh/host-keys", cookie: c})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"fingerprint":"SHA256:host"`) {
+		t.Fatalf("host keys: %d %s", rec.Code, rec.Body)
 	}
 
 	// ssh:read does not write.

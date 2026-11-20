@@ -34,6 +34,10 @@ func (f *fakeSSH) SSHApply(_ context.Context, req agentapi.SSHApplyRequest) (age
 	return agentapi.SSHApplied{Shell: sshkeys.NeedsShell(req.KeyList())}, nil
 }
 
+func (*fakeSSH) SSHHostKeys(context.Context) ([]agentapi.SSHHostKey, error) {
+	return []agentapi.SSHHostKey{{Type: "ssh-ed25519", Fingerprint: "SHA256:host"}}, nil
+}
+
 func newEdKey(t *testing.T) string {
 	t.Helper()
 
@@ -65,8 +69,16 @@ func TestSSHKeys(t *testing.T) {
 		t.Fatalf("without agent: %v", err)
 	}
 
+	if _, err := s.SSHHostKeys(ctx); !errors.Is(err, ErrNoSSH) {
+		t.Fatalf("host keys without agent: %v", err)
+	}
+
 	ag := &fakeSSH{applied: map[string][]agentapi.SSHKey{}}
 	s.EnableSSH(ag)
+
+	if hk, err := s.SSHHostKeys(ctx); err != nil || len(hk) != 1 {
+		t.Fatalf("host keys %+v %v", hk, err)
+	}
 
 	k, err := s.CreateSSHKey(ctx, 1, "shop", in)
 	if err != nil {
