@@ -18,6 +18,8 @@ After=network-online.target mariadb.service hostashi-agent.service
 Wants=network-online.target
 
 [Service]
+# No core dumps: they would hold keys, passwords and session data (ADR-0033).
+LimitCORE=0
 Type=oneshot
 ExecStart=/usr/local/bin/hostashi backup -state-dir /var/lib/hostashi-agent run
 # A run of a large server can take hours; this bounds a hanging one.

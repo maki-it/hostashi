@@ -133,6 +133,7 @@ func TestDoctor(t *testing.T) {
 		"system.reboot":    agentapi.DoctorOK,
 		"system.php":       agentapi.DoctorOK,
 		"system.ssh":       agentapi.DoctorWarn, // no sshd_config
+		"system.sysctl":    agentapi.DoctorWarn, // no sysctl file
 		"shop/site.limits": agentapi.DoctorOK,
 	}
 

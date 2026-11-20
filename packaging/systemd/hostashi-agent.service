@@ -16,6 +16,8 @@ After=local-fs.target
 Before=hostashi.service
 
 [Service]
+# No core dumps: they would hold keys, passwords and session data (ADR-0033).
+LimitCORE=0
 Type=simple
 # HOSTASHI_PANEL_PORT: HTTPS port of the panel's own address (ADR-0023).
 Environment=HOSTASHI_PANEL_PORT=8443

@@ -16,6 +16,8 @@ After=network.target
 ConditionPathExists=/var/lib/hostashi-agent/php/%i.conf
 
 [Service]
+# No core dumps: they would hold keys, passwords and session data (ADR-0033).
+LimitCORE=0
 Type=notify
 ExecStart=/usr/sbin/php-fpm@VERSION@ --nodaemonize --fpm-config /var/lib/hostashi-agent/php/%i.conf
 ExecReload=/bin/kill -USR2 $MAINPID

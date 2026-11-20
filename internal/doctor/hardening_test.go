@@ -232,3 +232,31 @@ func TestSSHDPorts(t *testing.T) {
 		t.Errorf("ports = %v", c.ports)
 	}
 }
+
+func TestSysctl(t *testing.T) {
+	file := "# comment\nkernel.kptr_restrict = 2\nfs.suid_dumpable=0\nkernel.yama.ptrace_scope = 1\nnet.ipv4.conf.all.rp_filter = 2\n"
+
+	// No Yama on this kernel: the key is skipped.
+	root := tree(t, map[string]string{
+		SysctlFile:                              file,
+		"/proc/sys/kernel/kptr_restrict":        "2\n",
+		"/proc/sys/fs/suid_dumpable":            "0\n",
+		"/proc/sys/net/ipv4/conf/all/rp_filter": "2\n",
+	})
+
+	if c := (Hardening{Root: root}).Sysctl(); c.Status != agentapi.DoctorOK || c.Summary != "3 kernel settings match the baseline" {
+		t.Errorf("match: %+v", c)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "proc/sys/fs/suid_dumpable"), []byte("2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if c := (Hardening{Root: root}).Sysctl(); c.Status != agentapi.DoctorWarn || !strings.Contains(c.Summary, "fs.suid_dumpable = 2 (want 0)") {
+		t.Errorf("drift: %+v", c)
+	}
+
+	if c := (Hardening{Root: tree(t, nil)}).Sysctl(); c.Status != agentapi.DoctorWarn || !strings.Contains(c.Hint, "step sysctl") {
+		t.Errorf("no file: %+v", c)
+	}
+}

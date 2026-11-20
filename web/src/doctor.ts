@@ -38,6 +38,7 @@ const titles: Record<string, string> = {
   "system.reboot": "Reboot",
   "system.php": "PHP after updates",
   "system.ssh": "Admin SSH login",
+  "system.sysctl": "Kernel settings",
   "site.home": "Home directory",
   "site.disk": "Disk use",
   "site.limits": "Resource limits",
