@@ -41,7 +41,7 @@ See [architecture 4.4](04-architecture.md). Also mandatory:
 
 - No PHP-FPM on TCP ports. Unix sockets with tight permissions.
 - Configuration only through pool files, **never** `PHP_VALUE`/`PHP_ADMIN_VALUE` from the Nginx vhost.
-- A test per release tries to reach files, sockets and processes of a second site from inside a test site. If it succeeds, the release is blocked.
+- A test per release tries to reach files, sockets and processes of a second site from inside a test site. If it succeeds, the release is blocked. It is the step "two sites stay apart" of `packaging/test/container-test.sh`, which CI runs on both distributions (ADR-0033 H8). As the first site's user and from its PHP code, it tries the second site's files, the shared web server log, the second site's PHP messages in the journal, the PHP, panel and agent sockets, the second site's processes and its database.
 
 ## 5.6 Input, files, processes
 
