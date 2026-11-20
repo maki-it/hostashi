@@ -1,6 +1,6 @@
 # ADR-0045 Object cache (Valkey) per site
 
-**Status:** Proposed. **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0015 (per-site limits and slices), ADR-0017 (import and presets), ADR-0019 (PHP versions), ADR-0026 (CloudPanel transfer), ADR-0033 (hardening baseline), ADR-0035 (roles), ADR-0036 (PHP versions from the panel), ADR-0037 (UI redesign).
+**Status:** Accepted (Kim, 2026-11-21). **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0015 (per-site limits and slices), ADR-0017 (import and presets), ADR-0019 (PHP versions), ADR-0026 (CloudPanel transfer), ADR-0033 (hardening baseline), ADR-0035 (roles), ADR-0036 (PHP versions from the panel), ADR-0037 (UI redesign).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
