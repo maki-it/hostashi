@@ -30,7 +30,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0032](0032-ssh-and-sftp-per-site.md) | SSH and SFTP access per site | Accepted |
 | [0033](0033-system-hardening-baseline.md) | System hardening baseline before v1 | Proposed |
 | [0034](0034-firewall-rules-in-panel.md) | Firewall rules in the panel | Accepted |
-| [0035](0035-users-and-roles.md) | Users and roles | Proposed |
+| [0035](0035-users-and-roles.md) | Users and roles | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 

@@ -1,6 +1,6 @@
 # ADR-0035 Users and roles
 
-**Status:** Proposed. **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0010 (v1 scope, no reseller), ADR-0018 (API, scopes, "a token never grants more than its owner's role"), ADR-0032 (SSH per site), [`03-features.md`](../03-features.md) row "Users + roles (admin, site manager, user per site)" (P0), [`05-security.md`](../05-security.md) 5.4 (RBAC with site grants, IDOR matrix).
+**Status:** Accepted (Kim, 2026-11-20). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0010 (v1 scope, no reseller), ADR-0018 (API, scopes, "a token never grants more than its owner's role"), ADR-0032 (SSH per site), [`03-features.md`](../03-features.md) row "Users + roles (admin, site manager, user per site)" (P0), [`05-security.md`](../05-security.md) 5.4 (RBAC with site grants, IDOR matrix).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
