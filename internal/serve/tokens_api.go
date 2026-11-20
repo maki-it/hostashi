@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -97,6 +98,38 @@ func (a authn) scoped(scope string, h func(http.ResponseWriter, *http.Request, a
 	}
 }
 
+// allow wraps a handler for action (ADR-0035). An API token must carry the
+// scope of the same name, and the caller's role must allow the action. This
+// is the only place that checks a role for a token-capable route.
+func (a authn) allow(action authz.Action, h func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
+	return a.scoped(string(action), func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		if !authz.Allowed(authz.Role(p.User.Role), action) {
+			writeError(w, http.StatusForbidden, "forbidden", "your role does not allow this")
+
+			return
+		}
+
+		h(w, r, p)
+	})
+}
+
+// sessionAllow accepts only a browser session whose role allows action, for
+// the actions no token can carry. It writes the error answer itself.
+func (a authn) sessionAllow(w http.ResponseWriter, r *http.Request, action authz.Action) (store.User, bool) {
+	u, ok := a.session(w, r)
+	if !ok {
+		return store.User{}, false
+	}
+
+	if !authz.Allowed(authz.Role(u.Role), action) {
+		writeError(w, http.StatusForbidden, "forbidden", "your role does not allow this")
+
+		return store.User{}, false
+	}
+
+	return u, true
+}
+
 type tokenJSON struct {
 	ID          int64      `json:"id"`
 	Name        string     `json:"name"`
@@ -121,7 +154,7 @@ func toTokenJSON(t store.APIToken) tokenJSON {
 	}
 }
 
-func registerTokens(mux *http.ServeMux, a authn) {
+func registerTokens(mux *routeMux, a authn) {
 	mux.HandleFunc("GET /api/v1/scopes", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := a.principal(w, r); !ok {
 			return
@@ -226,7 +259,7 @@ func registerTokens(mux *http.ServeMux, a authn) {
 	})
 
 	mux.HandleFunc("GET /api/v1/settings/api-ip-allowlist", func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := a.session(w, r); !ok {
+		if _, ok := a.sessionAllow(w, r, authz.SettingsRead); !ok {
 			return
 		}
 
@@ -241,7 +274,7 @@ func registerTokens(mux *http.ServeMux, a authn) {
 	})
 
 	mux.HandleFunc("PUT /api/v1/settings/api-ip-allowlist", func(w http.ResponseWriter, r *http.Request) {
-		u, ok := a.session(w, r)
+		u, ok := a.sessionAllow(w, r, authz.SettingsWrite)
 		if !ok {
 			return
 		}

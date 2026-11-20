@@ -32,7 +32,7 @@ type ceremonyJSON struct {
 	Options    any    `json:"options"` // pass to navigator.credentials.create or .get
 }
 
-func registerPasskeys(mux *http.ServeMux, a authn) {
+func registerPasskeys(mux *routeMux, a authn) {
 	mux.HandleFunc("POST /api/v1/auth/passkeys/register/begin", func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok {

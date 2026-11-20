@@ -155,19 +155,7 @@ func countDetail(s agentapi.FirewallState) map[string]string {
 
 // registerFirewall adds GET and PUT /api/v1/firewall and POST
 // /api/v1/firewall/confirm (ADR-0034). Only administrators call them.
-func registerFirewall(mux *http.ServeMux, a authn, fw Firewall, st Settings, log *slog.Logger) {
-	admin := func(scope string, h func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
-		return a.scoped(scope, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-			if p.User.Role != "admin" {
-				writeError(w, http.StatusForbidden, "forbidden", "only administrators can change the firewall")
-
-				return
-			}
-
-			h(w, r, p)
-		})
-	}
-
+func registerFirewall(mux *routeMux, a authn, fw Firewall, st Settings, log *slog.Logger) {
 	audit := func(ctx context.Context, uid *int64, action string, detail map[string]string) {
 		if err := st.Audit(ctx, uid, action, "", detail); err != nil {
 			log.ErrorContext(ctx, "audit log", "action", action, "err", err)
@@ -207,7 +195,7 @@ func registerFirewall(mux *http.ServeMux, a authn, fw Firewall, st Settings, log
 		audit(ctx, nil, "firewall.rollback", map[string]string{"at": time.Unix(s.RolledBack, 0).UTC().Format(time.RFC3339)})
 	}
 
-	mux.HandleFunc("GET /api/v1/firewall", admin("firewall:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/firewall", a.allow("firewall:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -223,7 +211,7 @@ func registerFirewall(mux *http.ServeMux, a authn, fw Firewall, st Settings, log
 		writeJSON(w, http.StatusOK, toFirewallJSON(s, r, false))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/firewall", admin("firewall:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/firewall", a.allow("firewall:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in firewallPutJSON
 		if !decodeJSON(w, r, &in) {
 			return
@@ -265,7 +253,7 @@ func registerFirewall(mux *http.ServeMux, a authn, fw Firewall, st Settings, log
 		writeJSON(w, http.StatusOK, toFirewallJSON(s, r, true))
 	}))
 
-	mux.HandleFunc("POST /api/v1/firewall/confirm", admin("firewall:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("POST /api/v1/firewall/confirm", a.allow("firewall:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			ID string `json:"id"`
 		}

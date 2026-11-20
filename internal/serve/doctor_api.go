@@ -33,14 +33,8 @@ type doctorJSON struct {
 
 // registerDoctor adds GET /api/v1/doctor. The report names paths and
 // services of the server, so only administrators read it.
-func registerDoctor(mux *http.ServeMux, a authn, run Doctor, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/doctor", a.scoped("doctor:read", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		if p.User.Role != "admin" {
-			writeError(w, http.StatusForbidden, "forbidden", "only administrators can run the checks")
-
-			return
-		}
-
+func registerDoctor(mux *routeMux, a authn, run Doctor, log *slog.Logger) {
+	mux.HandleFunc("GET /api/v1/doctor", a.allow("doctor:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 

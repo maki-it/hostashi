@@ -43,20 +43,8 @@ type snippetErrorJSON struct {
 // maxSnippetBody fits two snippets of the maximum size with JSON escaping.
 const maxSnippetBody = 4*agentapi.MaxSnippetBytes + 1024
 
-func registerSnippets(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	admin := func(scope string, h func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
-		return a.scoped(scope, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-			if p.User.Role != "admin" {
-				writeError(w, http.StatusForbidden, "forbidden", "only administrators can manage sites")
-
-				return
-			}
-
-			h(w, r, p)
-		})
-	}
-
-	mux.HandleFunc("GET /api/v1/sites/{name}/snippets", admin("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+func registerSnippets(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
+	mux.HandleFunc("GET /api/v1/sites/{name}/snippets", a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		sn, err := svc.Snippets(r.Context(), r.PathValue("name"))
 		if err != nil {
 			siteFail(log, w, err, "read snippets")
@@ -67,7 +55,7 @@ func registerSnippets(mux *http.ServeMux, a authn, svc *hosting.Service, log *sl
 		writeJSON(w, http.StatusOK, toSnippetsJSON(sn))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/snippets", admin("sites.snippets:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/sites/{name}/snippets", a.allow("sites.snippets:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Server *string `json:"server"`
 			Root   *string `json:"root"`
@@ -114,14 +102,8 @@ func registerSnippets(mux *http.ServeMux, a authn, svc *hosting.Service, log *sl
 // draft and saves it with PUT /api/v1/sites/{name}/snippets. The draft
 // holds snippet text, which may carry credentials, so it is only built for
 // a site that exists here.
-func registerSnippetDraft(mux *http.ServeMux, a authn, mig *cpmigrate.Service, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/migrations/cloudpanel/reports/{id}/sites/{name}/snippets-draft", a.scoped("migrations:read", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		if p.User.Role != "admin" {
-			writeError(w, http.StatusForbidden, "forbidden", "only administrators can import sites")
-
-			return
-		}
-
+func registerSnippetDraft(mux *routeMux, a authn, mig *cpmigrate.Service, svc *hosting.Service, log *slog.Logger) {
+	mux.HandleFunc("GET /api/v1/migrations/cloudpanel/reports/{id}/sites/{name}/snippets-draft", a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		site, err := mig.ReportSite(r.Context(), r.PathValue("id"), r.PathValue("name"))
 		if err != nil {
 			importFail(log, w, err, "snippet draft")

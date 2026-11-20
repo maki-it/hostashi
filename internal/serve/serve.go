@@ -123,12 +123,20 @@ type Deps struct {
 
 // Handler returns the HTTP routes of the web process.
 func Handler(cfg Config, deps Deps) http.Handler {
+	h, _ := handler(cfg, deps)
+
+	return h
+}
+
+// handler also returns the registered route patterns, for the route
+// matrix test (ADR-0035).
+func handler(cfg Config, deps Deps) (http.Handler, []string) {
 	log := cfg.Log
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	mux := http.NewServeMux()
+	mux := newRouteMux()
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, r *http.Request) {
 		type health struct {
 			Status  string `json:"status"`
@@ -217,7 +225,7 @@ func Handler(cfg Config, deps Deps) http.Handler {
 		h = deps.Metrics.Instrument(h)
 	}
 
-	return withRequestID(h)
+	return withRequestID(h), mux.patterns
 }
 
 // RequestIDHeader names the response header with the request's ID.

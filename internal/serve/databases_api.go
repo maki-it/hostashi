@@ -47,19 +47,7 @@ func dbFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 
 // registerDatabases adds the database routes (ADR-0024). A password is in a
 // response only when the panel generated it; the panel stores none.
-func registerDatabases(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	admin := func(scope string, h func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
-		return a.scoped(scope, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-			if p.User.Role != "admin" {
-				writeError(w, http.StatusForbidden, "forbidden", "only administrators can manage databases")
-
-				return
-			}
-
-			h(w, r, p)
-		})
-	}
-
+func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
 	list := func(w http.ResponseWriter, r *http.Request, site string) {
 		dbs, err := svc.Databases(r.Context(), site)
 		if err != nil {
@@ -76,15 +64,15 @@ func registerDatabases(mux *http.ServeMux, a authn, svc *hosting.Service, log *s
 		writeJSON(w, http.StatusOK, map[string][]databaseJSON{"databases": out})
 	}
 
-	mux.HandleFunc("GET /api/v1/databases", admin("databases:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/databases", a.allow("databases:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		list(w, r, "")
 	}))
 
-	mux.HandleFunc("GET /api/v1/sites/{name}/databases", admin("databases:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/sites/{name}/databases", a.allow("databases:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		list(w, r, r.PathValue("name"))
 	}))
 
-	mux.HandleFunc("GET /api/v1/databases/{db}", admin("databases:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/databases/{db}", a.allow("databases:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		d, err := svc.Database(r.Context(), r.PathValue("db"))
 		if err != nil {
 			dbFail(log, w, err, "get database")
@@ -95,7 +83,7 @@ func registerDatabases(mux *http.ServeMux, a authn, svc *hosting.Service, log *s
 		writeJSON(w, http.StatusOK, toDatabaseJSON(d))
 	}))
 
-	mux.HandleFunc("POST /api/v1/sites/{name}/databases", admin("databases:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("POST /api/v1/sites/{name}/databases", a.allow("databases:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Name     string `json:"name"`
 			User     string `json:"user"`     // optional first user
@@ -123,7 +111,7 @@ func registerDatabases(mux *http.ServeMux, a authn, svc *hosting.Service, log *s
 		}{toDatabaseJSON(d), pw})
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/databases/{db}", admin("databases:delete", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("DELETE /api/v1/databases/{db}", a.allow("databases:delete", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -136,7 +124,7 @@ func registerDatabases(mux *http.ServeMux, a authn, svc *hosting.Service, log *s
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
-	mux.HandleFunc("POST /api/v1/databases/{db}/users", admin("databases:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("POST /api/v1/databases/{db}/users", a.allow("databases:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			User     string `json:"user"`
 			Password string `json:"password"`
@@ -158,7 +146,7 @@ func registerDatabases(mux *http.ServeMux, a authn, svc *hosting.Service, log *s
 		writeJSON(w, http.StatusCreated, map[string]string{"user": in.User, "database": r.PathValue("db"), "password": pw})
 	}))
 
-	mux.HandleFunc("PUT /api/v1/databases/{db}/users/{user}/password", admin("databases:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/databases/{db}/users/{user}/password", a.allow("databases:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Password string `json:"password"` // empty: generate one
 		}
@@ -179,7 +167,7 @@ func registerDatabases(mux *http.ServeMux, a authn, svc *hosting.Service, log *s
 		writeJSON(w, http.StatusOK, map[string]string{"user": r.PathValue("user"), "password": pw})
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/databases/{db}/users/{user}", admin("databases:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("DELETE /api/v1/databases/{db}/users/{user}", a.allow("databases:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -218,10 +206,10 @@ func registerDatabases(mux *http.ServeMux, a authn, svc *hosting.Service, log *s
 		}
 	}
 
-	mux.HandleFunc("POST /api/v1/databases/{db}/import", admin("databases:write", dump("import", svc.ImportDatabase)))
-	mux.HandleFunc("POST /api/v1/databases/{db}/export", admin("databases:write", dump("export", svc.ExportDatabase)))
+	mux.HandleFunc("POST /api/v1/databases/{db}/import", a.allow("databases:write", dump("import", svc.ImportDatabase)))
+	mux.HandleFunc("POST /api/v1/databases/{db}/export", a.allow("databases:write", dump("export", svc.ExportDatabase)))
 
-	mux.HandleFunc("GET /api/v1/databases/{db}/jobs/{id}", admin("databases:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/databases/{db}/jobs/{id}", a.allow("databases:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 

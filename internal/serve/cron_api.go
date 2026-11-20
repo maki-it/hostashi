@@ -90,22 +90,10 @@ func cronID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 
 // registerCron adds the cron job routes of a site (ADR-0028). Every change
 // sends the site's complete list to the agent; a refused change is undone.
-func registerCron(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	admin := func(scope string, h func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
-		return a.scoped(scope, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-			if p.User.Role != "admin" {
-				writeError(w, http.StatusForbidden, "forbidden", "only administrators can manage cron jobs")
-
-				return
-			}
-
-			h(w, r, p)
-		})
-	}
-
+func registerCron(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
 	// The list carries each job's last and next run. Without an answer of
 	// the agent the jobs come without status.
-	mux.HandleFunc("GET /api/v1/sites/{name}/cron", admin("cron:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/sites/{name}/cron", a.allow("cron:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		site := r.PathValue("name")
 
 		jobs, err := svc.CronJobs(r.Context(), site)
@@ -148,7 +136,7 @@ func registerCron(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.L
 		writeJSON(w, http.StatusOK, map[string]any{"jobs": out, "statusKnown": statusKnown})
 	}))
 
-	mux.HandleFunc("GET /api/v1/sites/{name}/cron/{id}", admin("cron:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/sites/{name}/cron/{id}", a.allow("cron:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		id, ok := cronID(w, r)
 		if !ok {
 			return
@@ -164,7 +152,7 @@ func registerCron(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.L
 		writeJSON(w, http.StatusOK, toCronJSON(j))
 	}))
 
-	mux.HandleFunc("POST /api/v1/sites/{name}/cron", admin("cron:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("POST /api/v1/sites/{name}/cron", a.allow("cron:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in cronInputJSON
 		if !decodeJSON(w, r, &in) {
 			return
@@ -184,7 +172,7 @@ func registerCron(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.L
 	}))
 
 	// PUT replaces all fields of a job; pausing is "paused": true.
-	mux.HandleFunc("PUT /api/v1/sites/{name}/cron/{id}", admin("cron:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/sites/{name}/cron/{id}", a.allow("cron:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		id, ok := cronID(w, r)
 		if !ok {
 			return
@@ -208,7 +196,7 @@ func registerCron(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.L
 		writeJSON(w, http.StatusOK, toCronJSON(j))
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/sites/{name}/cron/{id}", admin("cron:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("DELETE /api/v1/sites/{name}/cron/{id}", a.allow("cron:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		id, ok := cronID(w, r)
 		if !ok {
 			return
@@ -227,7 +215,7 @@ func registerCron(mux *http.ServeMux, a authn, svc *hosting.Service, log *slog.L
 	}))
 
 	// Starts the job now, paused or not; the run goes on in the background.
-	mux.HandleFunc("POST /api/v1/sites/{name}/cron/{id}/run", admin("cron:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("POST /api/v1/sites/{name}/cron/{id}/run", a.allow("cron:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		id, ok := cronID(w, r)
 		if !ok {
 			return
