@@ -62,8 +62,9 @@ const commandTimeout = 60 * time.Second
 var (
 	confRe = regexp.MustCompile(`^/[A-Za-z0-9_./-]+\.conf$`)
 	unitRe = regexp.MustCompile(`^hostashi-php-[0-9]\.[0-9]@[a-z][a-z0-9_-]{1,31}\.service$`)
-	// A site slice: the user with "-" escaped as \x2d (siteslice.Name).
-	sliceRe = regexp.MustCompile(`^hostashi-site-[a-z](?:[a-z0-9_]|\\x2d){1,31}\.slice$`)
+	// A site slice: the user with "-" escaped as \x2d (siteslice.Name), or
+	// the user slice of a site user, uid 1000 and up (siteslice.UserSlice).
+	sliceRe = regexp.MustCompile(`^(?:hostashi-site-[a-z](?:[a-z0-9_]|\\x2d){1,31}|user-[1-9][0-9]{3,9})\.slice$`)
 	// The slice limits siteslice sets: fixed names, a number, a percentage
 	// for CPUQuota, infinity, or empty to reset.
 	slicePropRe = regexp.MustCompile(`^(?:CPUWeight=[0-9]{1,5}|CPUQuota=(?:[0-9]{1,6}%)?|(?:MemoryHigh|MemoryMax|TasksMax)=(?:[0-9]{1,20}|infinity))$`)

@@ -22,12 +22,13 @@ func (h *siteOps) registerLimits(s *agentrpc.Server) {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 
-		if _, _, err := h.site(req.User); err != nil {
+		site, _, err := h.site(req.User)
+		if err != nil {
 			return agentapi.SiteLimits{}, err
 		}
 
 		l := siteslice.FromAPI(req.Limits)
-		if err := h.slices.Set(ctx, req.User, l); err != nil {
+		if err := h.slices.Set(ctx, req.User, site.UID, l); err != nil {
 			return agentapi.SiteLimits{}, err
 		}
 
