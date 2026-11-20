@@ -93,7 +93,10 @@ try {
   const secret = (await page.locator("section code").first().textContent()).trim();
   await page.getByLabel("One-time code").fill(totp(secret));
   await page.getByRole("button", { name: "Turn on" }).click();
-  const codes = (await page.getByRole("list", { name: "Recovery codes" }).locator("code").allTextContents()).map((c) => c.trim());
+  // allTextContents does not wait, so wait for the codes to be rendered first.
+  const codeList = page.getByRole("list", { name: "Recovery codes" });
+  await codeList.locator("code").first().waitFor();
+  const codes = (await codeList.locator("code").allTextContents()).map((c) => c.trim());
   if (codes.length === 0) throw new Error("TOTP enrollment returned no recovery codes");
   await ok("TOTP set up in the panel, recovery codes shown");
   await page.getByRole("button", { name: "Continue" }).click();

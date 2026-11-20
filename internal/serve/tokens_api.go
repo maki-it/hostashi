@@ -4,6 +4,7 @@ package serve
 
 import (
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -155,11 +156,18 @@ func (a authn) allowSite(action authz.Action, siteOf siteOfFunc, h func(http.Res
 			return
 		}
 
+		if p.SiteLimited() && !authz.ForSiteToken(action) {
+			writeError(w, http.StatusForbidden, "forbidden", "this token is limited to some sites")
+
+			return
+		}
+
 		// Admins and managers reach every site; the handler answers for
-		// a site or resource that does not exist.
-		if rule.Site && !authz.SeesAllSites(authz.Role(p.User.Role)) {
+		// a site or resource that does not exist. A token with a site
+		// list is checked against it for every role.
+		if rule.Site && (p.SiteLimited() || !authz.SeesAllSites(authz.Role(p.User.Role))) {
 			site, ok := siteOf(r)
-			if !ok || !a.reaches(w, r, p, site) {
+			if !ok || !p.TokenReaches(site) || !a.reaches(w, r, p, site) {
 				if ok {
 					writeError(w, http.StatusNotFound, "not_found", "no such site")
 				} else {
@@ -193,9 +201,14 @@ func (a authn) reaches(w http.ResponseWriter, r *http.Request, p auth.Principal,
 }
 
 // siteFilter returns a function that reports whether the principal sees a
-// site, for filtering lists. nil means every site.
+// site, for filtering lists: the role's sites, narrowed by a token's site
+// list. nil means every site.
 func (a authn) siteFilter(r *http.Request, p auth.Principal) (func(site string) bool, error) {
 	if authz.SeesAllSites(authz.Role(p.User.Role)) {
+		if p.SiteLimited() {
+			return p.TokenReaches, nil
+		}
+
 		return nil, nil
 	}
 
@@ -209,7 +222,7 @@ func (a authn) siteFilter(r *http.Request, p auth.Principal) (func(site string) 
 		set[s] = true
 	}
 
-	return func(site string) bool { return set[site] }, nil
+	return func(site string) bool { return set[site] && p.TokenReaches(site) }, nil
 }
 
 // sessionAllow accepts only a browser session whose role allows action, for
@@ -240,6 +253,9 @@ type tokenJSON struct {
 	LastUsedAt  *time.Time `json:"lastUsedAt"`
 	LastUsedIP  string     `json:"lastUsedIp,omitempty"`
 	RevokedAt   *time.Time `json:"revokedAt,omitempty"`
+	// Sites limits the token to these sites; null: every site the owner
+	// reaches.
+	Sites []string `json:"sites"`
 	// Warnings are codes such as "expires_soon" for a monitoring token
 	// that ends within 30 days (ADR-0022).
 	Warnings []string `json:"warnings,omitempty"`
@@ -249,17 +265,28 @@ func toTokenJSON(t store.APIToken) tokenJSON {
 	return tokenJSON{
 		ID: t.ID, Name: t.Name, Prefix: auth.TokenPrefix + t.Prefix, Scopes: t.Scopes, CreatedAt: t.CreatedAt,
 		ExpiresAt: t.ExpiresAt, NeverExpire: t.ExpiresAt == nil, LastUsedAt: t.LastUsedAt, LastUsedIP: t.LastUsedIP,
-		RevokedAt: t.RevokedAt,
+		RevokedAt: t.RevokedAt, Sites: t.Sites,
 	}
 }
 
 func registerTokens(mux *routeMux, a authn) {
 	mux.HandleFunc("GET /api/v1/scopes", func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := a.principal(w, r); !ok {
+		p, ok := a.principal(w, r)
+		if !ok {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]auth.ScopeInfo{"scopes": auth.Scopes()})
+		// Only the scopes the caller's role can use (ADR-0035).
+		useful := authz.RoleScopes(authz.Role(p.User.Role))
+		out := []auth.ScopeInfo{}
+
+		for _, sc := range auth.Scopes() {
+			if slices.Contains(useful, sc.Name) {
+				out = append(out, sc)
+			}
+		}
+
+		writeJSON(w, http.StatusOK, map[string][]auth.ScopeInfo{"scopes": out})
 	})
 
 	mux.HandleFunc("POST /api/v1/tokens", func(w http.ResponseWriter, r *http.Request) {
@@ -273,13 +300,14 @@ func registerTokens(mux *routeMux, a authn) {
 			Scopes        []string `json:"scopes"`
 			ExpiresInDays int      `json:"expiresInDays"`
 			Unlimited     bool     `json:"unlimited"`
+			Sites         []string `json:"sites"` // null or missing: every site
 		}
 		if !decodeJSON(w, r, &in) {
 			return
 		}
 
 		nt, err := a.svc.CreateToken(r.Context(), u.ID, auth.TokenRequest{
-			Name: in.Name, Scopes: in.Scopes, Days: in.ExpiresInDays, Unlimited: in.Unlimited,
+			Name: in.Name, Scopes: in.Scopes, Days: in.ExpiresInDays, Unlimited: in.Unlimited, Sites: in.Sites,
 		}, clientIP(r))
 		if err != nil {
 			a.fail(w, err, "create token")

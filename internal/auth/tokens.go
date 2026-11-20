@@ -17,6 +17,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -58,6 +59,19 @@ type Principal struct {
 	User    store.User
 	TokenID int64    // 0 for a browser session
 	Scopes  []string // only for tokens
+	// Sites limits a token to these sites; nil means every site the owner
+	// reaches (ADR-0018, ADR-0035).
+	Sites []string
+}
+
+// SiteLimited reports whether the principal is a token with a site list.
+func (p Principal) SiteLimited() bool { return p.Sites != nil }
+
+// TokenReaches reports whether the token's site list allows site. A
+// session and a token without a list allow every site; the owner's role
+// and grants are checked on top.
+func (p Principal) TokenReaches(site string) bool {
+	return p.Sites == nil || slices.Contains(p.Sites, site)
 }
 
 // IsToken reports whether the request came with an API token.
@@ -82,6 +96,9 @@ type TokenRequest struct {
 	Days int
 	// Unlimited creates a token that never expires. It cannot be combined with Days.
 	Unlimited bool
+	// Sites limits the token to these sites; nil means every site the
+	// owner reaches. Each must be one the owner reaches now.
+	Sites []string
 }
 
 // NewToken is returned once, when a token is created.
@@ -115,6 +132,24 @@ func (s *Service) CreateToken(ctx context.Context, userID int64, req TokenReques
 		return NewToken{}, err
 	}
 
+	owner, err := s.st.UserByID(ctx, userID)
+	if err != nil {
+		return NewToken{}, fmt.Errorf("auth: %w", err)
+	}
+
+	// A token never grants more than its owner (ADR-0035): only the scopes
+	// of the owner's role, only sites the owner reaches.
+	useful := authz.RoleScopes(authz.Role(owner.Role))
+	for _, sc := range scopes {
+		if !slices.Contains(useful, sc) {
+			return NewToken{}, fmt.Errorf("%w: the scope %q is not available to the role %s", ErrInvalidToken, sc, owner.Role)
+		}
+	}
+
+	if err := s.checkTokenSites(ctx, owner, req.Sites); err != nil {
+		return NewToken{}, err
+	}
+
 	if req.Unlimited && req.Days != 0 {
 		return NewToken{}, fmt.Errorf("%w: unlimited cannot be combined with a lifetime", ErrInvalidToken)
 	}
@@ -143,6 +178,7 @@ func (s *Service) CreateToken(ctx context.Context, userID int64, req TokenReques
 		Prefix:    body[:prefixShown],
 		Scopes:    scopes,
 		CreatedAt: now.UTC(),
+		Sites:     req.Sites,
 	}
 
 	if !req.Unlimited {
@@ -153,6 +189,10 @@ func (s *Service) CreateToken(ctx context.Context, userID int64, req TokenReques
 	t, err = s.st.CreateAPIToken(ctx, t, hashToken(secret))
 	if errors.Is(err, store.ErrTooManyTokens) {
 		return NewToken{}, ErrTooManyTokens
+	}
+
+	if errors.Is(err, store.ErrNotFound) {
+		return NewToken{}, fmt.Errorf("%w: no such site", ErrInvalidToken)
 	}
 
 	if err != nil {
@@ -166,9 +206,52 @@ func (s *Service) CreateToken(ctx context.Context, userID int64, req TokenReques
 
 	_ = s.st.Audit(ctx, &userID, "token.create", t.Name, map[string]string{
 		"id": strconv.FormatInt(t.ID, 10), "scopes": strings.Join(t.Scopes, " "), "expires": expires, "ip": ip,
+		"sites": tokenSitesAudit(t.Sites),
 	})
 
 	return NewToken{Secret: secret, Token: t}, nil
+}
+
+// checkTokenSites refuses a site list with a site the owner does not reach,
+// or that is too long. A user's site must be granted; for admins and
+// managers the store refuses a site that does not exist.
+func (s *Service) checkTokenSites(ctx context.Context, owner store.User, sites []string) error {
+	if sites == nil {
+		return nil
+	}
+
+	if len(sites) == 0 {
+		return fmt.Errorf("%w: a site list needs at least one site; leave it out for every site", ErrInvalidToken)
+	}
+
+	if len(sites) > store.MaxTokenSites {
+		return fmt.Errorf("%w: at most %d sites", ErrInvalidToken, store.MaxTokenSites)
+	}
+
+	if authz.SeesAllSites(authz.Role(owner.Role)) {
+		return nil
+	}
+
+	for _, site := range sites {
+		ok, err := s.st.HasSiteGrant(ctx, owner.ID, site)
+		if err != nil {
+			return fmt.Errorf("auth: %w", err)
+		}
+
+		if !ok {
+			return fmt.Errorf("%w: no such site", ErrInvalidToken)
+		}
+	}
+
+	return nil
+}
+
+func tokenSitesAudit(sites []string) string {
+	if sites == nil {
+		return "all"
+	}
+
+	return strings.Join(sites, " ")
 }
 
 // ListTokens returns the user's tokens, revoked ones included.
@@ -246,7 +329,7 @@ func (s *Service) AuthenticateToken(ctx context.Context, raw, ip string) (Princi
 		return Principal{}, fmt.Errorf("auth: %w", err)
 	}
 
-	return Principal{User: u, TokenID: t.ID, Scopes: t.Scopes}, nil
+	return Principal{User: u, TokenID: t.ID, Scopes: t.Scopes, Sites: t.Sites}, nil
 }
 
 // SessionPrincipal returns the principal of a browser session.

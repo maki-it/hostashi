@@ -457,19 +457,35 @@ func tokenBody(scopes []string) string {
 	return string(b)
 }
 
-// A token never grants more than its owner's role: a manager's token with
-// the scope metrics:read still cannot read the metrics.
+// A token never grants more than its owner's role: a manager cannot create
+// a token with the scope metrics:read, and an admin's token with it stops
+// working when the admin becomes a manager.
 func TestMetricsRoles(t *testing.T) {
 	e := newAPI(t)
 	c := e.adminCookie(t)
 	e.setMetrics(t, c, `{"enabled":true}`)
 
 	mona, _ := matrixLogin(t, e, c, "mona", "manager")
-	tok := e.createToken(t, mona, tokenBody([]string{"metrics:read"}))
 
-	rec := e.do(t, reqOpts{method: "GET", path: "/metrics", header: bearerHeader(tok.Token)})
+	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/tokens", cookie: mona, body: tokenBody([]string{"metrics:read"})})
+	if rec.Code != http.StatusUnprocessableEntity || errCode(t, rec) != "invalid_argument" {
+		t.Fatalf("manager creates a metrics token: %d %s", rec.Code, rec.Body)
+	}
+
+	ada, adaID := matrixLogin(t, e, c, "ada", "admin")
+	tok := e.createToken(t, ada, tokenBody([]string{"metrics:read"}))
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/metrics", header: bearerHeader(tok.Token)}); rec.Code != http.StatusOK {
+		t.Fatalf("admin token: %d", rec.Code)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: userPath(adaID, ""), cookie: c, body: `{"role":"manager"}`}); rec.Code != http.StatusOK {
+		t.Fatalf("demote: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/metrics", header: bearerHeader(tok.Token)})
 	if rec.Code != http.StatusForbidden || errCode(t, rec) != "forbidden" {
-		t.Fatalf("manager token: %d %s", rec.Code, rec.Body)
+		t.Fatalf("token of a demoted admin: %d %s", rec.Code, rec.Body)
 	}
 
 	admin := e.createToken(t, c, tokenBody([]string{"metrics:read"}))
