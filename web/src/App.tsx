@@ -100,11 +100,11 @@ export function App() {
           ))}
         {show("databases") && <Databases query={route.query} onQuery={replaceQuery} />}
         {show("backups") && <Backups query={route.query} onQuery={replaceQuery} />}
+        {show("php") && <PHPPage query={route.query} onQuery={replaceQuery} />}
         <div className="app-legacy">
           {show("home") && <Home user={user} />}
           {show("health") && <Doctor />}
           {show("firewall") && <Firewall />}
-          {show("php") && <PHPPage />}
           {show("limits") && <Presets />}
           {show("pages") && <Pages />}
           {show("parked") && <Parked />}

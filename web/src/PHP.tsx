@@ -1,26 +1,40 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { DownloadSimple } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 import { daysUntil, getPHPInstall, installPHP, phpMessage, support, todayUTC, type PHPInstall, type Support } from "./php";
-import { phpVersions, type PHPVersions } from "./sites";
+import { listSites, phpVersions, type PHPVersions, type Site } from "./sites";
+import { Badge, Button, Card, Notice, PageHead, Table, type Column, type Sort, type Tone } from "./ui";
 
 const supportLabel: Record<Support, string> = {
   active: "Supported",
   security: "Security fixes only",
   eol: "End of life",
 };
+const supportTone: Record<Support, Tone> = { active: "ok", security: "warn", eol: "err" };
 
-// Badge shows upstream's support for a version; the date says until when.
-function Badge({ s }: { s: Support }) {
-  return <span className={"badge" + (s === "active" ? " ok" : s === "security" ? " warn" : "")}>{supportLabel[s]}</span>;
-}
+type QueryProps = {
+  /** The address query: show (all or installed), sort, dir. */
+  query?: URLSearchParams;
+  /** Replaces the query in the address without a new history entry. */
+  onQuery?: (q: URLSearchParams) => void;
+};
 
-// PHPPage lists the PHP versions Hostashi can run, installs more of them
-// from sury.org (ADR-0036), and shows newer versions that sury.org already
+type Row = { version: string; support: Support; until: string; installed: boolean; sites: number | null };
+
+// PHPPage lists the PHP versions Hostashi can run, newest first with the
+// distribution's own version marked (ADR-0037), installs more of them from
+// sury.org (ADR-0036), and names newer versions that sury.org already
 // offers but Hostashi does not run yet.
-export function PHPPage({ today = todayUTC(), poll = 3000 }: { today?: string; poll?: number }) {
+export function PHPPage({
+  today = todayUTC(),
+  poll = 3000,
+  query = new URLSearchParams(),
+  onQuery = () => undefined,
+}: { today?: string; poll?: number } & QueryProps) {
   const [versions, setVersions] = useState<PHPVersions | null>(null);
   const [inst, setInst] = useState<PHPInstall | null>(null);
+  const [sites, setSites] = useState<Site[] | null>(null);
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState<string | null>(null);
 
@@ -37,6 +51,10 @@ export function PHPPage({ today = todayUTC(), poll = 3000 }: { today?: string; p
 
   useEffect(() => {
     void load();
+    // The number of sites per version is a help, not a must.
+    listSites()
+      .then(setSites)
+      .catch(() => setSites(null));
   }, [load]);
 
   // While an installation runs, follow it.
@@ -57,117 +75,167 @@ export function PHPPage({ today = todayUTC(), poll = 3000 }: { today?: string; p
     }
   };
 
+  const set = (changes: Record<string, string>) => {
+    const next = new URLSearchParams(query);
+    for (const [k, v] of Object.entries(changes)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+    onQuery(next);
+  };
+
+  const head = (
+    <PageHead
+      title="PHP versions"
+      description="The distribution's PHP is always installed. More versions come from the sury.org repository and get their updates automatically."
+    />
+  );
+
   if (!versions || !inst) {
-    return error ? (
-      <div role="alert" className="card">
-        <p>{error}</p>
-        <button type="button" onClick={() => void load()}>
-          Try again
-        </button>
-      </div>
-    ) : (
-      <p aria-busy="true">Loading…</p>
+    return (
+      <>
+        {head}
+        {error ? (
+          <Notice tone="err" title={error}>
+            <Button onClick={() => void load()}>Try again</Button>
+          </Notice>
+        ) : (
+          <p aria-busy="true">Loading…</p>
+        )}
+      </>
     );
   }
 
-  const list = [...versions.supported].reverse();
+  const rows: Row[] = versions.supported.map((v) => ({
+    version: v,
+    support: support(versions, v, today),
+    until: versions.securityUntil?.[v] ?? "",
+    installed: versions.installed.includes(v),
+    sites: sites ? sites.filter((s) => s.php === v).length : null,
+  }));
+  const onlyInstalled = query.get("show") === "installed";
+  const shown = onlyInstalled ? rows.filter((r) => r.installed) : rows;
+
+  const columns: Column<Row>[] = [
+    {
+      key: "version",
+      header: "Version",
+      sortValue: (r) => r.version,
+      cell: (r) => (
+        <span className="ui-row">
+          <strong>PHP {r.version}</strong>
+          {versions.distro === r.version && <Badge tone="off">Distribution</Badge>}
+        </span>
+      ),
+    },
+    {
+      key: "support",
+      header: "Upstream support",
+      sortValue: (r) => r.until,
+      cell: (r) => {
+        const left = r.until ? daysUntil(r.until, today) : -1;
+        return (
+          <div className="ui-cell-main">
+            <span className="ui-row">
+              <Badge tone={supportTone[r.support]}>{supportLabel[r.support]}</Badge>
+            </span>
+            {r.until && <span>{r.support === "eol" ? "no security fixes since " + r.until : "security fixes until " + r.until}</span>}
+            {r.support !== "eol" && left >= 0 && left <= 60 && (
+              <p className="ui-error">
+                Security fixes end in {left === 1 ? "1 day" : left + " days"}. Move its sites to a newer version.
+              </p>
+            )}
+          </div>
+        );
+      },
+    },
+    ...(sites ? [{ key: "sites", header: "Sites", sortValue: (r: Row) => r.sites ?? 0, cell: (r: Row) => r.sites ?? "" }] : []),
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (r) => (r.installed ? 0 : 1),
+      cell: (r) =>
+        r.installed ? (
+          <Badge tone="ok">Installed</Badge>
+        ) : inst.state === "running" && inst.version === r.version ? (
+          <span aria-busy="true">Installing…</span>
+        ) : (
+          <Button
+            icon={<DownloadSimple size={16} aria-hidden="true" />}
+            disabled={running}
+            onClick={() => (r.support === "eol" ? setConfirm(r.version) : void start(r.version, false))}
+          >
+            Install PHP {r.version}
+          </Button>
+        ),
+    },
+  ];
+  const sortKey = query.get("sort");
+  const sort: Sort = sortKey ? { key: sortKey, dir: query.get("dir") === "asc" ? "asc" : "desc" } : { key: "version", dir: "desc" };
 
   return (
-    <div className="stack">
-      <section className="card" aria-labelledby="php-title">
-        <h2 id="php-title">PHP versions</h2>
-        <p className="muted">
-          The distribution&apos;s PHP is always installed. More versions come from the sury.org repository; installing one
-          sets it up. Installed versions get their updates automatically.
-        </p>
-        {error && <p role="alert">{error}</p>}
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Version</th>
-              <th scope="col">Upstream support</th>
-              <th scope="col">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((v) => {
-              const s = support(versions, v, today);
-              const until = versions.securityUntil?.[v];
-              const installed = versions.installed.includes(v);
-              const left = until ? daysUntil(until, today) : -1;
-              return (
-                <tr key={v}>
-                  <th scope="row">PHP {v}</th>
-                  <td>
-                    <Badge s={s} />{" "}
-                    {until && (
-                      <span className="muted">
-                        {s === "eol" ? "no security fixes since " + until : "security fixes until " + until}
-                      </span>
-                    )}
-                    {s !== "eol" && left >= 0 && left <= 60 && (
-                      <p>Security fixes end in {left === 1 ? "1 day" : left + " days"}. Move its sites to a newer version.</p>
-                    )}
-                  </td>
-                  <td>
-                    {installed ? (
-                      "Installed"
-                    ) : inst.state === "running" && inst.version === v ? (
-                      <span aria-busy="true">Installing…</span>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={running}
-                        onClick={() => (s === "eol" ? setConfirm(v) : void start(v, false))}
-                      >
-                        Install PHP {v}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-            {inst.newer.map((v) => (
-              <tr key={v} className="muted" aria-disabled="true">
-                <th scope="row">PHP {v}</th>
-                <td colSpan={2}>Offered by sury.org, not yet released for Hostashi. It comes with a Hostashi update.</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+    <>
+      {head}
+      {error && <Notice tone="err" title={error} />}
 
       {confirm && (
-        <section className="card" role="alertdialog" aria-labelledby="php-eol-title">
-          <h3 id="php-eol-title">Install PHP {confirm} without security fixes?</h3>
-          <p>
+        <section className="ui-card ui-card-body ui-stack" role="alertdialog" aria-labelledby="php-eol-title">
+          <h2 id="php-eol-title" className="ui-flush">
+            Install PHP {confirm} without security fixes?
+          </h2>
+          <p className="ui-flush">
             PHP {confirm} gets no security fixes from PHP since {versions.securityUntil?.[confirm] ?? "its end of life"}. Install it only
             for an old application that cannot move yet, and plan the move.
           </p>
-          <div className="actions">
-            <button type="button" className="danger" onClick={() => void start(confirm, true)}>
+          <div className="ui-row">
+            <Button variant="danger" onClick={() => void start(confirm, true)}>
               Install anyway
-            </button>
-            <button type="button" className="secondary" onClick={() => setConfirm(null)}>
-              Cancel
-            </button>
+            </Button>
+            <Button onClick={() => setConfirm(null)}>Cancel</Button>
           </div>
         </section>
       )}
 
       {inst.state !== "idle" && inst.version && (
-        <section className="card" aria-labelledby="php-log-title">
-          <h3 id="php-log-title">
-            {inst.state === "running"
+        <Card
+          title={
+            inst.state === "running"
               ? "Installing PHP " + inst.version + "…"
               : inst.state === "succeeded"
                 ? "PHP " + inst.version + " was installed"
-                : "Installing PHP " + inst.version + " failed"}
-          </h3>
-          {inst.state === "failed" && <p role="alert">The installation did not finish. The log shows why; you can try again.</p>}
-          {inst.log.length > 0 && <pre aria-label="Installation log">{inst.log.join("\n")}</pre>}
-        </section>
+                : "Installing PHP " + inst.version + " failed"
+          }
+        >
+          <div className="ui-stack">
+            {inst.state === "failed" && <Notice tone="err" title="The installation did not finish. The log shows why; you can try again." />}
+            {inst.log.length > 0 && <pre aria-label="Installation log">{inst.log.join("\n")}</pre>}
+          </div>
+        </Card>
       )}
-    </div>
+
+      <Card padded={false}>
+        <div className="ui-filters">
+          <select className="ui-select" aria-label="Show" value={onlyInstalled ? "installed" : ""} onChange={(e) => set({ show: e.target.value })}>
+            <option value="">All versions</option>
+            <option value="installed">Installed only</option>
+          </select>
+        </div>
+        <Table
+          label="PHP versions"
+          columns={columns}
+          rows={shown}
+          rowKey={(r) => r.version}
+          sort={sort}
+          onSort={(s) => set({ sort: s.key, dir: s.dir })}
+          empty="No version matches the filter."
+        />
+      </Card>
+
+      {inst.newer.length > 0 && (
+        <Notice tone="info" title={"Not yet released for Hostashi: PHP " + inst.newer.join(", PHP ")}>
+          <p>sury.org offers {inst.newer.length === 1 ? "this version" : "these versions"} already. Support comes with a Hostashi update.</p>
+        </Notice>
+      )}
+    </>
   );
 }

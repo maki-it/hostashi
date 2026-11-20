@@ -384,6 +384,8 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			"installed": installed, "supported": agentapi.PHPVersions, "legacy": agentapi.LegacyPHPVersions,
 			// End of security fixes and of active support per version (ADR-0036).
 			"securityUntil": security, "activeUntil": active,
+			// The distribution's own version, marked in the panel (ADR-0037).
+			"distro": distroPHP(),
 		})
 	}))
 
