@@ -561,3 +561,20 @@ a.ui-btn {
     justify-self: start;
   }
 }
+.ui-file {
+  min-height: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 14px;
+  color: var(--fg);
+}
+.ui-plain-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ui-break {
+  overflow-wrap: anywhere;
+}
