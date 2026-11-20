@@ -56,6 +56,7 @@ var table = map[Action][]Role{
 	"migrations:write":        admins,
 	"pages:read":              admins,
 	"pages:write":             admins,
+	"php:install":             admins,
 	"sites:delete":            admins,
 	"sites:read":              admins,
 	"sites:write":             admins,

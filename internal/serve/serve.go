@@ -119,6 +119,9 @@ type Deps struct {
 	// Firewall is the panel's part of the firewall (ADR-0034); nil
 	// disables its routes. Needs Auth and Settings.
 	Firewall Firewall
+	// PHP installs more PHP versions (ADR-0036); nil disables its routes.
+	// Needs Auth and Settings.
+	PHP PHPInstaller
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -209,6 +212,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 
 		if deps.Firewall != nil && deps.Settings != nil {
 			registerFirewall(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Firewall, deps.Settings, log)
+		}
+
+		if deps.PHP != nil && deps.Settings != nil {
+			registerPHPInstall(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.PHP, deps.Settings, log)
 		}
 
 		if deps.Doctor != nil {
@@ -353,6 +360,7 @@ func Run(ctx context.Context, cfg Config) error {
 		Settings: st,
 		Doctor:   RPCDoctor(client),
 		Firewall: RPCFirewall{C: client},
+		PHP:      RPCPHPInstaller{C: client},
 	}
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
