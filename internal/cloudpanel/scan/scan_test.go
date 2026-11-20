@@ -3,6 +3,8 @@
 package scan_test
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +17,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 
 	"github.com/maki-it/hostashi/internal/cloudpanel/fixture"
 	"github.com/maki-it/hostashi/internal/cloudpanel/scan"
@@ -379,6 +383,57 @@ func TestHostileTrees(t *testing.T) {
 		s, _ := status(t, dir, "alpha-shop.de.conf")
 		if !hasCode(s, "cron_unreadable") || len(s.Cron) != 0 {
 			t.Errorf("want cron_unreadable, got %+v", s.Findings)
+		}
+	})
+	t.Run("authorized_keys of the site user", func(t *testing.T) {
+		if os.Geteuid() != 0 {
+			t.Skip("ownership checks need root")
+		}
+
+		dir, _ := build(t)
+		home := filepath.Join(dir, "home/alpha")
+
+		st, err := os.Stat(home)
+		must(t, err)
+
+		sys, ok := st.Sys().(*syscall.Stat_t)
+		if !ok {
+			t.Fatal("no stat_t")
+		}
+
+		uid := int(sys.Uid)
+
+		must(t, os.Mkdir(filepath.Join(home, ".ssh"), 0o700))
+		must(t, os.Lchown(filepath.Join(home, ".ssh"), uid, uid))
+
+		pub, _, err := ed25519.GenerateKey(rand.Reader)
+		must(t, err)
+
+		pk, err := ssh.NewPublicKey(pub)
+		must(t, err)
+
+		line := strings.TrimSuffix(string(ssh.MarshalAuthorizedKey(pk)), "\n")
+		keys := filepath.Join(home, ".ssh/authorized_keys")
+		must(t, os.WriteFile(keys, []byte("no-pty "+line+" kim@laptop\n"), 0o600))
+		must(t, os.Lchown(keys, uid, uid))
+
+		s, _ := status(t, dir, "alpha-shop.de.conf")
+		if len(s.SSHKeys) != 1 || s.SSHKeys[0].Public != line || s.SSHKeys[0].Comment != "kim@laptop" || !hasCode(s, "ssh_key_options") {
+			t.Fatalf("keys %+v findings %+v", s.SSHKeys, s.Findings)
+		}
+
+		// A key file of another owner, or a symlink, is not read.
+		must(t, os.Lchown(keys, 0, 0))
+
+		if s, _ := status(t, dir, "alpha-shop.de.conf"); len(s.SSHKeys) != 0 || !hasCode(s, "ssh_keys_unreadable") {
+			t.Fatalf("root-owned: %+v %+v", s.SSHKeys, s.Findings)
+		}
+
+		must(t, os.Remove(keys))
+		must(t, os.Symlink("/etc/passwd", keys))
+
+		if s, _ := status(t, dir, "alpha-shop.de.conf"); len(s.SSHKeys) != 0 || !hasCode(s, "ssh_keys_unreadable") {
+			t.Fatalf("symlink: %+v %+v", s.SSHKeys, s.Findings)
 		}
 	})
 	t.Run("oversized and deeply nested vhosts", func(t *testing.T) {

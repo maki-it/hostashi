@@ -5,10 +5,14 @@ package cpmigrate_test
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
+
+	"golang.org/x/crypto/ssh"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -68,6 +72,7 @@ func sitesReport(t *testing.T) []byte {
 			s.RedirectFrom = []string{"www.alpha.example.com"}
 			s.Usage = &scan.Usage{Bytes: 12 << 30, Inodes: 700_000}
 			s.Cron = []scan.CronJob{{Schedule: "*/5 * * * *", Command: "php wp-cron.php", Line: 1}, {Schedule: "@reboot", Command: "x", Line: 2}}
+			s.SSHKeys = []scan.SSHKey{{Public: edKey(t), Comment: "kim@laptop"}, {Public: "ssh-dss AAAA", Comment: "old"}}
 		}),
 		site("beta", "php", scan.StatusClean, "8.1", nil),
 		site("gamma", "nodejs", scan.StatusClean, "", nil),
@@ -101,11 +106,11 @@ func TestCreateSiteAndImport(t *testing.T) {
 	var created []cpmigrate.NewSite
 
 	imp := &fakeImporter{}
-	svc.Connect(func(_ context.Context, _ int64, s cpmigrate.NewSite) (int, error) {
+	svc.Connect(func(_ context.Context, _ int64, s cpmigrate.NewSite) (cpmigrate.Created, error) {
 		created = append(created, s)
 		existing = append(existing, s.Name)
 
-		return len(s.Cron), nil
+		return cpmigrate.Created{Cron: len(s.Cron), SSHKeys: len(s.SSHKeys)}, nil
 	}, imp)
 
 	// The redirect host makes alpha a review site.
@@ -122,6 +127,10 @@ func TestCreateSiteAndImport(t *testing.T) {
 	// The new site's limits start from the old home's use (ADR-0015).
 	if u := created[0].Usage; u == nil || u.Bytes != 12<<30 || u.Inodes != 700_000 || ps.HomeBytes != 12<<30 || ps.HomeInodes != 700_000 {
 		t.Fatalf("usage %+v, plan %d bytes %d inodes", u, ps.HomeBytes, ps.HomeInodes)
+	}
+
+	if len(created[0].SSHKeys) != 1 || created[0].SSHKeys[0].Label != "kim@laptop" || ps.SSHImport != 1 || ps.SSHKeys != 1 {
+		t.Fatalf("ssh keys %+v, plan %d/%d", created[0].SSHKeys, ps.SSHKeys, ps.SSHImport)
 	}
 
 	if len(created[0].Cron) != 1 || created[0].Cron[0].Line != 1 || ps.CronImport != 1 {
@@ -200,7 +209,9 @@ func TestCreateSiteAndImport(t *testing.T) {
 
 func TestImportRefusesTwinUsers(t *testing.T) {
 	svc, _ := newService(t, nil)
-	svc.Connect(func(context.Context, int64, cpmigrate.NewSite) (int, error) { return 0, nil }, &fakeImporter{})
+	svc.Connect(func(context.Context, int64, cpmigrate.NewSite) (cpmigrate.Created, error) {
+		return cpmigrate.Created{}, nil
+	}, &fakeImporter{})
 
 	s := scan.Site{Name: "a", User: "alpha", Type: "static", Status: scan.StatusClean, Domains: []string{"a.example.com"}, DocRoot: "/home/alpha/htdocs/a"}
 	s2 := s
@@ -216,4 +227,20 @@ func TestImportRefusesTwinUsers(t *testing.T) {
 	if _, err := svc.StartImport(t.Context(), 1, rep.ID, "alpha", nil); !errors.Is(err, cpmigrate.ErrSkipped) {
 		t.Fatalf("twin users: %v", err)
 	}
+}
+
+func edKey(t *testing.T) string {
+	t.Helper()
+
+	pub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pk, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return strings.TrimSuffix(string(ssh.MarshalAuthorizedKey(pk)), "\n")
 }
