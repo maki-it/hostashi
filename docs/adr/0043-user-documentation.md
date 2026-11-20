@@ -1,4 +1,4 @@
-# ADR-0043 User documentation: tool, place and structure
+# ADR-0043 User documentation in the GitHub wiki
 
 **Status:** Proposed. **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0002 (documentation is CC-BY-4.0), ADR-0037 (UI redesign, screens still change); clean-room rule: no CloudPanel texts ([research](../01-cloudpanel-research.md)).
 
@@ -16,18 +16,19 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 | Option | Pro | Contra |
 |--------|-----|--------|
-| **A. mdBook 0.5.4** (Rust, single binary, MPL-2.0) | One static binary, no npm or Python tree; plain Markdown with a `SUMMARY.md` as the table of contents; built-in offline search, dark theme, print view; used for the Rust books for years [U] | Plain look; no doc versioning; few plugins (we need none) |
-| B. Starlight 0.43.1 (Astro, npm) | Polished look, i18n, components | Large npm dependency tree for docs; still 0.x with frequent breaking releases [U]; second JS build next to `web/` |
-| C. Zensical (successor of Material for MkDocs) | Familiar MkDocs layout | Young project; Material for MkDocs is in maintenance mode since late 2025 [U] |
-| D. Markdown in the repository only, no generator | Nothing to add | No search, no navigation; hard for end users |
-
-Versions checked on 2026-11-20: mdBook 0.5.4 (crates.io, released 2026-07-06), `@astrojs/starlight` 0.43.1 (npm) [V].
+| **A. GitHub wiki, pages written in the repository under `docs/wiki/` and mirrored by CI** | What Kim wants (the wiki); pages go through PRs with markdownlint, lychee and REUSE; nothing to host; no new tool | Edits made in the wiki web editor are overwritten by the next sync; wiki search is basic [U] |
+| B. GitHub wiki, edited directly | No sync step | No review, no lint, no link check, no SPDX headers; the wiki is a separate git repository that this project's automation cannot reach today [V: push to `maki-it/hostashi.wiki` refused in this session] |
+| C. Static site generator (mdBook 0.5.4, checked on 2026-11-20 [V]) | Offline search, own domain | Needs hosting; Kim prefers the wiki [V: Kim, thread, 2026-11-20] |
 
 ## Recommendation
 
-**Option A, mdBook.** It is the boring choice: one pinned binary, Markdown files that the existing lint, link check and REUSE rules already cover, and nothing that ships in the product.
+**Option A.** Kim chose the repository wiki (thread, 2026-11-20). Writing the pages in the main repository keeps the existing checks and review; the wiki is the published copy.
 
-- **Place.** `docs/manual/` with `book.toml` and `src/`. The planning documents stay where they are; the manual is for people running Hostashi, not for contributors.
+- **Sync.** A workflow `wiki.yml` runs on pushes to `main` that touch `docs/wiki/**`. It clones `<repo>.wiki.git` with the job's `GITHUB_TOKEN` (`contents: write`), replaces its content with `docs/wiki/`, commits as `github-actions[bot]` and pushes. Plain `git`, no third-party action [U: `GITHUB_TOKEN` can push to the wiki of its own repository].
+- **One-way.** The wiki says on every page (footer) that it is generated from `docs/wiki/` and that changes go through a PR. The workflow does a full replace, so stray web edits do not linger.
+- **Wiki conventions.** File names are page titles with hyphens (`Install.md` → "Install"); `_Sidebar.md` is the navigation and `_Footer.md` the footer; links between pages use the page name without `.md` [U: GitHub wiki behaviour]. The link checker gets an exclude rule for these wiki-style links if needed.
+- **Visibility.** While the repository is private, only people with access to it can read the wiki [U]. That is fine until publication.
+- **Place.** `docs/wiki/`. The planning documents stay where they are; the wiki is for people running Hostashi, not for contributors.
 - **Audience.** Each page says who it is for: server admin (shell, installer), panel admin, manager, user (ADR-0035 roles).
 - **Structure** (first version):
   1. Introduction: what Hostashi is and is not (v1 scope).
@@ -44,20 +45,19 @@ Versions checked on 2026-11-20: mdBook 0.5.4 (crates.io, released 2026-07-06), `
   12. Reference: command line, installer options, file locations, ports.
 - **Writing rules.** English, task-oriented ("how do I …"), short steps, one page per task. Every page has an SPDX header (CC-BY-4.0). Written from Hostashi's own behaviour and code; nothing taken from CloudPanel's docs.
 - **Screenshots.** Not before the redesign (ADR-0037) is done. Then taken automatically with the existing Playwright e2e setup, so they can be renewed with one command instead of by hand [A].
-- **CI.** `docs.yml` gets a job that downloads the pinned mdBook release, checks its SHA-256 and runs `mdbook build`; the existing markdownlint and lychee jobs cover `docs/manual/**/*.md` already.
-- **Publishing.** Not part of this ADR. The repository is not public yet; when it is, a separate step (with Kim's approval) puts the built site on GitHub Pages or `docs.hostashi.de` [A].
+- **CI.** The existing markdownlint and lychee jobs already cover `docs/wiki/**/*.md`.
 
 ## Consequences
 
-- New build tool in CI only; no new runtime dependency and no new `os/exec` exception.
-- The license workflow checks Go and npm only; mdBook is MPL-2.0, which is on the allowlist [U]. Its built-in theme ships fonts and scripts into the generated site; their licenses must be listed when the site is published [U].
-- Every user-facing feature PR should update the matching manual page; CONTRIBUTING.md says so.
+- One new workflow with write access to the wiki only; no new tool, no runtime dependency and no new `os/exec` exception.
+- Every user-facing feature PR should update the matching wiki page; CONTRIBUTING.md says so.
 
 ## Risks to name openly
 
 - **Docs drift.** A manual nobody updates is worse than none. Mitigation: the rule in CONTRIBUTING.md and reference pages generated from code later where possible (installer options, CLI) [A].
-- **No versioning.** mdBook builds one version. Fine until the first release; after that the published site follows the latest release [A].
+- **No versioning.** The wiki shows the state of `main`, which can be ahead of the latest release. Pages mark features that are not released yet [A].
+- **Lost web edits.** Someone editing in the wiki web UI loses the change on the next sync. The footer says so.
 
 ## Open questions
 
-1. mdBook as recommended, or a nicer-looking tool with more dependencies (Starlight)?
+1. Pages in the repository and mirrored by CI (recommended), or edited directly in the wiki?
