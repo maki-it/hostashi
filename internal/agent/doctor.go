@@ -14,6 +14,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/certs"
 	"github.com/maki-it/hostashi/internal/doctor"
+	"github.com/maki-it/hostashi/internal/phpctl"
 	"github.com/maki-it/hostashi/internal/web"
 )
 
@@ -27,7 +28,10 @@ type DoctorEnv struct {
 	PanelSocket    string   // default PanelSocket
 	Fail2banSocket string   // default Fail2banSocket
 	Disk           []string // file systems to check besides the pools; default / and the state directories
-	Now            func() time.Time
+	// Hardening reads the files of the hardening baseline (ADR-0033). The
+	// zero value reads the server and asks systemd through phpctl.
+	Hardening doctor.Hardening
+	Now       func() time.Time
 }
 
 type doctorOps struct {
@@ -99,6 +103,17 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	out = append(out, d.mariadb(ctx))
 	out = append(out, doctor.Socket(ctx, "service.fail2ban", "fail2ban", orDefault(d.env.Fail2banSocket, Fail2banSocket),
 		"Logins are not protected against brute force. Check: systemctl status fail2ban."))
+
+	hard := d.env.Hardening
+	if hard.Active == nil {
+		hard.Active = phpctl.UnitActive
+	}
+
+	if hard.Now == nil {
+		hard.Now = d.now
+	}
+
+	out = append(out, hard.Firewall(ctx), hard.Updates(), hard.Reboot(), hard.PHP(), hard.SSH())
 
 	if d.h != nil {
 		out = append(out, d.sites()...)

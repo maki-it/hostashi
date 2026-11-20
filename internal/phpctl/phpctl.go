@@ -4,7 +4,8 @@
 // on a pool file, and the per-site units through systemd. It also drives the
 // units of the sites' cron jobs (cron.go, ADR-0028), which are per-site
 // units of the same kind, and reloads systemd after the agent changed a
-// site's slice and applies its limits (ADR-0015).
+// site's slice and applies its limits (ADR-0015). For hostashi doctor it
+// reads whether Hostashi's firewall unit is active (system.go, ADR-0033).
 //
 // Like internal/webctl it is allowed to start processes (depguard rule in
 // .golangci.yml), with the same narrow exception: fixed binaries by absolute

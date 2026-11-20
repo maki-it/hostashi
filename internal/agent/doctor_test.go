@@ -47,11 +47,21 @@ func doctorEnv(t *testing.T) DoctorEnv {
 
 	t.Cleanup(func() { _ = l.Close() })
 
+	// An empty root for the hardening checks: no firewall, no updates, no
+	// PHP processes, no sshd config.
+	root := filepath.Join(dir, "root")
+	if err := os.MkdirAll(filepath.Join(root, "proc"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
 	return DoctorEnv{
 		System:         doctor.System{OSRelease: osr, MountInfo: mi},
 		PanelSocket:    filepath.Join(sockDir, "panel-missing"),
 		Fail2banSocket: f2b,
 		Disk:           []string{dir},
+		Hardening: doctor.Hardening{Root: root, Active: func(context.Context, string) (bool, error) {
+			return false, errors.New("not asked: there is no rules file")
+		}},
 	}
 }
 
@@ -118,6 +128,11 @@ func TestDoctor(t *testing.T) {
 		"service.nginx":    agentapi.DoctorFail, // no web reconciler
 		"service.mariadb":  agentapi.DoctorWarn, // no database manager
 		"service.fail2ban": agentapi.DoctorOK,
+		"system.firewall":  agentapi.DoctorWarn, // no rules file
+		"system.updates":   agentapi.DoctorWarn,
+		"system.reboot":    agentapi.DoctorOK,
+		"system.php":       agentapi.DoctorOK,
+		"system.ssh":       agentapi.DoctorWarn, // no sshd_config
 		"shop/site.limits": agentapi.DoctorOK,
 	}
 
