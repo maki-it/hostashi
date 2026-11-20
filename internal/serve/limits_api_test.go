@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"runtime"
 	"testing"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -86,9 +87,10 @@ func TestLimitsOverHTTP(t *testing.T) {
 
 	var list struct {
 		Presets []presetJSON `json:"presets"`
+		CPUs    int          `json:"cpus"`
 	}
 
-	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || len(list.Presets) != 3 || list.Presets[0].Name != "large" {
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || len(list.Presets) != 3 || list.Presets[0].Name != "large" || list.CPUs != runtime.NumCPU() {
 		t.Fatalf("presets: %s %v", rec.Body, err)
 	}
 
