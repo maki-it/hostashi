@@ -382,6 +382,18 @@ func (r *Registry) Pool(name string) (Pool, bool) {
 	return p, ok
 }
 
+// Pools returns all registered pools sorted by name.
+func (r *Registry) Pools() []Pool {
+	out := make([]Pool, 0, len(r.pools))
+	for _, p := range r.pools {
+		out = append(out, p)
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+
+	return out
+}
+
 // Site returns the registered site.
 func (r *Registry) Site(user string) (Site, bool) {
 	s, ok := r.sites[user]

@@ -41,6 +41,9 @@ commands:
   serve     run the web process (never as root)
   agent     run the privileged agent (root only)
   ping      check that the agent answers
+  doctor [-json]
+            check the server and every site without changing anything (root
+            on the server); exit code 3 if a check failed, 0 otherwise
   site create NAME [POOL] | site delete NAME | site list
             manage site accounts through the agent (root on the server)
   site limits NAME [memory=BYTES] [tasks=N] [cpu-weight=N] [cpu-quota=PERCENT]
@@ -164,6 +167,13 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		if err == nil {
 			fmt.Fprintf(stdout, "agent %s answered, caller uid %d\n", r.Version, r.CallerUID)
 		}
+	case "doctor":
+		asJSON := fs.Bool("json", false, "print the checks as JSON")
+		if fs.Parse(args) != nil || fs.NArg() != 0 {
+			return 2
+		}
+
+		return doctorCmd(ctx, agentrpc.NewClient(*socket), *asJSON, stdout, stderr)
 	case "site", "web", "db":
 		if fs.Parse(args) != nil {
 			return 2

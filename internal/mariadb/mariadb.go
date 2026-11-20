@@ -356,6 +356,11 @@ func (m *Manager) SetPassword(ctx context.Context, user, password string) error 
 	return m.exec(ctx, "set password", "ALTER USER "+acct+" IDENTIFIED BY "+pw)
 }
 
+// Ping checks that the server answers a statement, for hostashi doctor.
+func (m *Manager) Ping(ctx context.Context) error {
+	return m.exec(ctx, "ping", "DO 1")
+}
+
 // exec runs one statement. The returned error never contains the statement
 // or the server's message, because both can contain a password: only the
 // step and the server's error number reach the log.
