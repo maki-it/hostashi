@@ -11,6 +11,10 @@
 // - Adminer's own login form is gone, and its login accepts only the
 //   ticket's temporary user, for the ticket's database, on the local
 //   MariaDB socket or on the external server the ticket names.
+// - Adminer is the build with all its drivers; only two may run: MySQL's
+//   ("server") and, for an external PostgreSQL server (ADR-0051), "pgsql".
+//   The session's driver is the ticket's; every other driver's parameter
+//   is removed before Adminer reads the request.
 // - The session ends at the ticket's expiry; the agent drops the user then.
 //   The panel can extend or end it (ADR-0038 addendum 1): the agent then
 //   writes the new end into SESSION_DIR, read on every request.
@@ -19,6 +23,11 @@ namespace Hostashi {
 
 const TICKET_DIR = '/run/hostashi-adminer/tickets';
 const SESSION_DIR = '/run/hostashi-adminer/sessions';
+
+// The drivers the tool runs, and the parameter of every driver in
+// adminer.php (Adminer picks its driver by which one the address has).
+const DRIVERS = ['server', 'pgsql'];
+const ALL_DRIVERS = ['server', 'pgsql', 'sqlite', 'mssql', 'oracle', 'elastic', 'mongo', 'clickhouse', 'firebird', 'simpledb', 'imap', 'igdb', 'redis', 'dynamodb'];
 
 /** Sends a short page without Adminer and stops. */
 function stop(int $status, string $message): never
@@ -71,7 +80,14 @@ function take_ticket(string $id): ?array
         return null;
     }
 
-    $login = ['database' => $t['database'], 'user' => $t['user'], 'password' => $t['password'], 'expires' => $expires, 'server' => '', 'tls' => '', 'ca' => ''];
+    // MySQL's driver unless the ticket names PostgreSQL's, which needs an
+    // external server.
+    $driver = $t['driver'] ?? 'server';
+    if (!is_string($driver) || !in_array($driver, DRIVERS, true) || ($driver === 'pgsql' && !isset($t['host']))) {
+        return null;
+    }
+
+    $login = ['database' => $t['database'], 'user' => $t['user'], 'password' => $t['password'], 'expires' => $expires, 'server' => '', 'tls' => '', 'ca' => '', 'driver' => $driver];
 
     // An external server (ADR-0041 addendum 1): the agent took host and
     // port from the panel's server list, the pool reaches only its
@@ -124,8 +140,14 @@ function session_login(): ?array
 
     $s['expires'] = session_end($s['user'] ?? '', $s['expires'] ?? 0);
 
-    // Sessions from before the look (ADR-0038) have no scheme and panel.
-    return $s + ['scheme' => '', 'panel' => ''];
+    // Sessions from before the look (ADR-0038) have no scheme and panel,
+    // from before PostgreSQL no driver: they are MySQL's.
+    $s += ['scheme' => '', 'panel' => '', 'driver' => 'server'];
+    if (!in_array($s['driver'], DRIVERS, true)) {
+        return null;
+    }
+
+    return $s;
 }
 
 /**
@@ -184,8 +206,20 @@ session_cache_limiter('');
 session_name('hostashi_adminer');
 session_start();
 
-// Nobody logs in through Adminer's form or with a login of their own.
-unset($_POST['auth'], $_GET['server'], $_GET['ext']);
+// Nobody logs in through Adminer's form or with a login of their own, and
+// no driver runs but the session's (set again below). An address with
+// another driver or extension is sent to the session's own: Adminer
+// builds its links from the address, not from $_GET.
+unset($_POST['auth']);
+$drivers = [];
+foreach (ALL_DRIVERS as $d) {
+    if (isset($_GET[$d])) {
+        $drivers[$d] = $_GET[$d];
+    }
+    unset($_GET[$d]);
+}
+$ext = isset($_GET['ext']);
+unset($_GET['ext']);
 
 $ticket = $_GET['ticket'] ?? null;
 $ticketLogin = false;
@@ -201,11 +235,11 @@ if (is_string($ticket)) {
     session_regenerate_id(true);
     $_SESSION['hostashi'] = [
         'database' => $t['database'], 'user' => $t['user'], 'expires' => $t['expires'],
-        'server' => $t['server'], 'tls' => $t['tls'], 'ca' => $t['ca'],
+        'server' => $t['server'], 'tls' => $t['tls'], 'ca' => $t['ca'], 'driver' => $t['driver'],
     ] + panel_look();
 
     $_POST['auth'] = [
-        'driver' => 'server', 'server' => '', 'username' => $t['user'],
+        'driver' => $t['driver'], 'server' => '', 'username' => $t['user'],
         'password' => $t['password'], 'db' => $t['database'], 'permanent' => '',
     ];
     $ticketLogin = true;
@@ -232,10 +266,18 @@ if ($login['expires'] < time()) {
 // other request names the ticket's user and database.
 $static = array_diff(array_keys($_GET), ['file', 'version']) === [] && is_string($_GET['file'] ?? null);
 
-// Only the ticket's user, database and the local server.
-if (!$ticketLogin && !$static && (($_GET['username'] ?? null) !== $login['user'] || ($_GET['db'] ?? '') !== $login['database'])) {
-    header('Location: /?username=' . rawurlencode($login['user']) . '&db=' . rawurlencode($login['database']), true, 303);
+// Only the ticket's user and database, with the session's driver. Its
+// server is always the ticket's (Tool::credentials), so the address
+// carries it empty; MySQL's driver is Adminer's default and needs none.
+$own = $login['driver'] === 'server' ? [] : [$login['driver'] => ''];
+if (!$ticketLogin && !$static && ($ext || $drivers !== $own || ($_GET['username'] ?? null) !== $login['user'] || ($_GET['db'] ?? '') !== $login['database'])) {
+    header('Location: /?' . ($login['driver'] === 'server' ? '' : $login['driver'] . '=&') . 'username=' . rawurlencode($login['user'])
+        . '&db=' . rawurlencode($login['database']), true, 303);
     exit;
+}
+
+if (!$ticketLogin && !$static && $login['driver'] !== 'server') {
+    $_GET[$login['driver']] = '';
 }
 
 define('Hostashi\TICKET_LOGIN', $ticketLogin);

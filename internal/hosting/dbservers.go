@@ -30,8 +30,8 @@ var (
 	// ErrDBServerLocalOnly: loading a dump as the owner works only on the
 	// local server (ADR-0041 addendum 1).
 	ErrDBServerLocalOnly = errors.New("hosting: this works only for databases on the local server so far")
-	// ErrPostgreSQLNotYet: backups, import, export and the web database
-	// tool for PostgreSQL databases come with later steps of ADR-0051.
+	// ErrPostgreSQLNotYet: what does not work for PostgreSQL databases
+	// yet comes with later steps of ADR-0051.
 	ErrPostgreSQLNotYet = errors.New("hosting: this does not work for PostgreSQL databases yet")
 	// ErrDBServerCheck wraps why a server failed the connection check.
 	ErrDBServerCheck = errors.New("hosting: the database server failed the check")

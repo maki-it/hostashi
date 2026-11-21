@@ -271,6 +271,10 @@ func (t *dbTool) remote(ctx context.Context, _ agentrpc.Caller, req agentapi.DBT
 		Host:          req.Host, Port: req.Port, TLS: req.TLS,
 	}
 
+	if req.Engine == agentapi.DBToolEnginePostgreSQL {
+		ticket.Driver = agentapi.DBToolDriverPgSQL
+	}
+
 	if req.TLS == "verify-ca" {
 		ticket.CAFile = agentapi.DBToolCAFile(req.ServerID)
 

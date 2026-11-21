@@ -159,6 +159,29 @@ func TestDBToolRemote(t *testing.T) {
 		t.Errorf("ticket %+v", tk)
 	}
 
+	if tk.Driver != "" {
+		t.Errorf("MariaDB ticket with driver %q", tk.Driver)
+	}
+
+	// A PostgreSQL server gets Adminer's pgsql driver (ADR-0051).
+	pg := remoteReq()
+	pg.Port, pg.Engine = 5432, agentapi.DBToolEnginePostgreSQL
+
+	res, err = tool.remote(t.Context(), agentrpc.Caller{}, pg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err = os.ReadFile(filepath.Join(tool.dir, res.Ticket))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tk = agentapi.DBToolTicket{}
+	if err := json.Unmarshal(raw, &tk); err != nil || tk.Driver != agentapi.DBToolDriverPgSQL || tk.Port != 5432 {
+		t.Errorf("PostgreSQL ticket %+v %v", tk, err)
+	}
+
 	// Another host than the list's is refused, so is a server without CA.
 	other := remoteReq()
 	other.Host = "evil.example.net"
@@ -189,6 +212,7 @@ func TestDBToolRemoteValidation(t *testing.T) {
 		"tls":      func(r *agentapi.DBToolRemoteRequest) { r.TLS = "off" },
 		"minutes":  func(r *agentapi.DBToolRemoteRequest) { r.Minutes = 5 },
 		"server":   func(r *agentapi.DBToolRemoteRequest) { r.ServerID = 0 },
+		"engine":   func(r *agentapi.DBToolRemoteRequest) { r.Engine = "sqlite" },
 	} {
 		r := remoteReq()
 		mutate(&r)
