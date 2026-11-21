@@ -34,14 +34,14 @@ func mailCheck(relay MailRelay, hist MailHistory) PanelChecks {
 		}
 
 		if err != nil {
-			return []agentapi.DoctorCheck{{ID: id, Status: agentapi.DoctorFail, Summary: "cannot read the email settings", Hint: "Check the panel's log (journalctl -u hostashi-panel)."}}, nil
+			return []agentapi.DoctorCheck{{ID: id, Status: agentapi.DoctorFail, Summary: "cannot read the email settings", Hint: "Check the panel's log (journalctl -u hostashi-panel)."}}, fmt.Errorf("mail settings: %w", err)
 		}
 
 		relayAddr := net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
 
 		failed, err := hist.FailedMailSince(ctx, now.Add(-24*time.Hour))
 		if err != nil {
-			return []agentapi.DoctorCheck{{ID: id, Status: agentapi.DoctorFail, Summary: "cannot read the outbox", Hint: "Check the panel's log (journalctl -u hostashi-panel)."}}, nil
+			return []agentapi.DoctorCheck{{ID: id, Status: agentapi.DoctorFail, Summary: "cannot read the outbox", Hint: "Check the panel's log (journalctl -u hostashi-panel)."}}, fmt.Errorf("mail outbox: %w", err)
 		}
 
 		if len(failed) == 0 {
@@ -80,6 +80,7 @@ func allPanelChecks(list []PanelChecks) PanelChecks {
 		for _, f := range list {
 			more, err := f(ctx, now)
 			errs = errors.Join(errs, err)
+
 			out = append(out, more...)
 		}
 
