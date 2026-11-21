@@ -7,6 +7,7 @@
 
 - [Command line](Command-line.md)
 - [Ports and files](Ports-and-files.md)
+- [Email notifications](Email-notifications.md)
 
 **Troubleshooting**
 
