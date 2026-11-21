@@ -151,12 +151,13 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 	}))
 
 	// Creating a site takes its name, domains and PHP version from the
-	// stored report; the body can only confirm a review or pick another
-	// PHP version. No certificate is requested before the DNS switch.
+	// stored report; the body can only confirm a review, pick another
+	// PHP version or leave the proposed page cache off. No certificate is requested before the DNS switch.
 	mux.HandleFunc("POST "+base+"/{id}/sites/{name}", a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
-			Reviewed bool   `json:"reviewed"`
-			PHP      string `json:"php"`
+			Reviewed  bool   `json:"reviewed"`
+			PHP       string `json:"php"`
+			PageCache *bool  `json:"pageCache"`
 		}
 		if !decodeJSON(w, r, &in) {
 			return
@@ -165,7 +166,7 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
-		site, err := svc.CreateSite(ctx, p.User.ID, r.PathValue("id"), r.PathValue("name"), cpmigrate.CreateOptions{Reviewed: in.Reviewed, PHP: in.PHP})
+		site, err := svc.CreateSite(ctx, p.User.ID, r.PathValue("id"), r.PathValue("name"), cpmigrate.CreateOptions{Reviewed: in.Reviewed, PHP: in.PHP, PageCache: in.PageCache})
 		if err != nil {
 			importFail(log, w, err, "create site from cloudpanel report")
 
@@ -405,6 +406,19 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 			}
 
 			n.SSHKeys++
+		}
+
+		// A cache in front of the old site becomes the page cache
+		// (ADR-0046). The default size counts against the site's disk.
+		if s.PageCache != "" {
+			_, err := sites.SetPageCache(ctx, actor, s.Name, hosting.PageCacheSettings{
+				Enabled: true, Preset: s.PageCache, Minutes: agentapi.DefaultPageCacheMinutes,
+			})
+			if err != nil {
+				log.WarnContext(ctx, "imported page cache not switched on", "site", s.Name, "err", err)
+			} else {
+				n.PageCache = true
+			}
 		}
 
 		return n, nil

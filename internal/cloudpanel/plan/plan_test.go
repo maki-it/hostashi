@@ -314,3 +314,38 @@ func TestCronJobs(t *testing.T) {
 		t.Fatalf("limit: %d", n)
 	}
 }
+
+func TestBuildProposesPageCache(t *testing.T) {
+	tier := scan.Finding{Severity: scan.SevReview, Code: "vhost_cache_tier", Msg: "cache"}
+	target := plan.Target{PHP: []string{"8.4"}}
+
+	for _, tc := range []struct {
+		typ, want string
+		php       bool
+	}{
+		{"wordpress", "wordpress", true},
+		{"php", "php", true},
+		{"static", "", false},
+	} {
+		s := base()
+		s.Type, s.Status, s.Findings = tc.typ, scan.StatusReview, []scan.Finding{tier}
+
+		if !tc.php {
+			s.Pool = nil
+		}
+
+		got := one(s, target)
+		if got.PageCache != tc.want || got.Action != plan.ActionReview {
+			t.Errorf("%s: page cache %q, action %s, want %q", tc.typ, got.PageCache, got.Action, tc.want)
+		}
+
+		// A site without PHP keeps the scanner's note instead.
+		if code := map[bool]string{true: "page_cache", false: "vhost_cache_tier"}[tc.php]; !hasCode(got, code) {
+			t.Errorf("%s: reasons %v, want %s", tc.typ, got.Reasons, code)
+		}
+	}
+
+	if got := one(base(), target); got.PageCache != "" {
+		t.Errorf("site without a cache tier: %q", got.PageCache)
+	}
+}

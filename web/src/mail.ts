@@ -61,3 +61,39 @@ export function mailMessage(err: unknown): string {
   }
   return "The request failed. Try again.";
 }
+
+export type AccountEmail = {
+  email: string;
+  pending: string;
+  pending_expires?: string;
+  /** False while no relay is set up or the panel has no public address. */
+  mail_enabled: boolean;
+};
+
+export const getAccountEmail = () => request<AccountEmail>("GET", "/account/email");
+
+export const setAccountEmail = (email: string) => request<AccountEmail>("PUT", "/account/email", { email });
+
+export const removeAccountEmail = () => request<void>("DELETE", "/account/email");
+
+export const confirmAccountEmail = (token: string) => request<{ email: string }>("POST", "/account/email/confirm", { token });
+
+export function accountEmailMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    switch (err.code) {
+      case "invalid_argument":
+        return err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
+      case "mail_not_configured":
+        return "An administrator has to set up email first.";
+      case "no_public_url":
+        return "The panel has no public address for links. An administrator has to set one.";
+      case "rate_limited":
+        return "Too many attempts in the last hour. Try again later.";
+      case "link_invalid":
+        return "The link is invalid, used or expired. Enter the address again on your account page to get a new one.";
+      case "mail_failed":
+        return "The confirmation email could not be queued. Try again later.";
+    }
+  }
+  return "The request failed. Try again.";
+}

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ArrowLeft, Database as DatabaseIcon, Gear, Plus } from "@phosphor-icons/react";
+import { ArrowLeft, Database as DatabaseIcon, Gear, Plus, Table as TableIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { listSites, type Site } from "./backups";
 import {
@@ -27,8 +27,10 @@ import {
 } from "./databases";
 import { DBServersView, serversHref } from "./DBServers";
 import { poll } from "./backups";
+import { OpenToolDialog } from "./DBTool";
+import { getDBTool, type DBToolStatus } from "./dbtool";
 import { formatHash } from "./routes";
-import { Button, Card, Field, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
+import { Button, Card, Field, IconButton, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
 
 type QueryProps = {
   /** The role of the logged-in user: admins manage the database servers. */
@@ -48,7 +50,9 @@ const serverColumn: Column<Database> = {
   cell: (d) => <span className="ui-mono">{d.server}</span>,
 };
 
-const baseColumns: Column<Database>[] = [
+// columns builds the table; onOpen is set when the database tool can be
+// opened (ADR-0038). The tool reaches only databases on this machine.
+const columns = (onOpen?: (db: string) => void): Column<Database>[] => [
   {
     key: "name",
     header: "Database",
@@ -78,6 +82,7 @@ const baseColumns: Column<Database>[] = [
     srHeader: true,
     cell: (d) => (
       <RowActions>
+        {onOpen && d.server === LOCAL_SERVER && <IconButton label={`Open ${d.name} in Adminer`} icon={<TableIcon size={16} />} onClick={() => onOpen(d.name)} />}
         <IconLink label={`Manage ${d.name}`} icon={<Gear size={16} />} href={dbHref(d.name)} />
       </RowActions>
     ),
@@ -94,6 +99,13 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
   const [servers, setServers] = useState<DBServer[] | null>(null);
   const [error, setError] = useState("");
   const [secret, setSecret] = useState<Credentials | null>(null);
+  const [tool, setTool] = useState<DBToolStatus | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
+
+  // Without the tool (or without the status) there is no Adminer button.
+  useEffect(() => {
+    getDBTool().then(setTool, () => setTool(null));
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -121,6 +133,9 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
   };
 
   const notice = secret && <PasswordNotice creds={secret} onClose={() => setSecret(null)} />;
+  const toolMinutes = tool?.available ? tool.minutes : null;
+  const onOpen = toolMinutes ? setOpening : undefined;
+  const toolDialog = opening && toolMinutes && <OpenToolDialog key={opening} db={opening} minutes={toolMinutes} onClose={() => setOpening(null)} />;
   const listLink = (
     <a className="ui-btn" href={formatHash({ page: "databases" })}>
       <ArrowLeft size={16} aria-hidden="true" />
@@ -182,9 +197,19 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
               </>
             )
           }
-          actions={listLink}
+          actions={
+            <>
+              {db && onOpen && db.server === LOCAL_SERVER && (
+                <Button icon={<TableIcon size={16} aria-hidden="true" />} onClick={() => onOpen(db.name)}>
+                  Open in Adminer
+                </Button>
+              )}
+              {listLink}
+            </>
+          }
         />
         {notice}
+        {toolDialog}
         {error && <Notice tone="err" title={error} />}
         {db ? (
           <DatabaseView key={db.name} db={db} host={hostOf(db.server)} onSecret={setSecret} onChange={load} onDeleted={() => set({ db: "" })} />
@@ -200,7 +225,8 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
   const sortKey = query.get("sort");
   const sort: Sort | undefined = sortKey ? { key: sortKey, dir: query.get("dir") === "desc" ? "desc" : "asc" } : undefined;
   // The server column only matters once there is more than one server.
-  const columns = servers.length > 1 ? [...baseColumns.slice(0, 2), serverColumn, ...baseColumns.slice(2)] : baseColumns;
+  const base = columns(onOpen);
+  const tableColumns = servers.length > 1 ? [...base.slice(0, 2), serverColumn, ...base.slice(2)] : base;
   const shown = dbs.filter((d) => (!site || d.site === site) && (!q || d.name.includes(q) || d.users.some((u) => u.includes(q))));
 
   return (
@@ -226,6 +252,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
         }
       />
       {notice}
+      {toolDialog}
       {error && <Notice tone="err" title={error} />}
       {sites.length === 0 && dbs.length === 0 ? (
         <Notice tone="info" title="Create a site first. Every database belongs to a site." />
@@ -251,7 +278,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
           </div>
           <Table
             label="Databases"
-            columns={columns}
+            columns={tableColumns}
             rows={shown}
             rowKey={(d) => d.name}
             sort={sort}

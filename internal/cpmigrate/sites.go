@@ -49,12 +49,16 @@ type NewSite struct {
 	Usage *scan.Usage
 	// SSHKeys are the site user's keys, added as SFTP only (ADR-0032).
 	SSHKeys []plan.SSHKey
+	// PageCache is the preset of the page cache switched on with the
+	// site, "" for none (ADR-0046).
+	PageCache string
 }
 
 // Created counts what came with a new site.
 type Created struct {
-	Cron    int
-	SSHKeys int
+	Cron      int
+	SSHKeys   int
+	PageCache bool
 }
 
 // SiteCreator creates a site on this server (hosting.Service.Create), its
@@ -84,6 +88,9 @@ type CreateOptions struct {
 	Reviewed bool
 	// PHP replaces the plan's PHP version, for a site that has PHP.
 	PHP string
+	// PageCache false leaves off the page cache the plan proposes; nil
+	// follows the plan (ADR-0046).
+	PageCache *bool
 }
 
 // CreateSite creates the site of the report that the plan names, with the
@@ -125,8 +132,14 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 
 	domains := append(slices.Clone(ps.Domains), ps.RedirectFrom...)
 
+	cache := ps.PageCache
+	if o.PageCache != nil && !*o.PageCache {
+		cache = ""
+	}
+
 	n, err := s.create(ctx, actor, NewSite{
 		Name: ps.Name, PHP: php, Domains: domains, Cron: plan.CronJobs(site), Usage: site.Usage, SSHKeys: plan.SSHKeys(site),
+		PageCache: cache,
 	})
 	if err != nil {
 		return ps, err
@@ -134,9 +147,13 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 
 	s.audit(ctx, actor, "cloudpanel.site.create", ps.Name, map[string]string{
 		"report": reportID, "php": php, "cron": strconv.Itoa(n.Cron), "sshKeys": strconv.Itoa(n.SSHKeys),
+		"pageCache": strconv.FormatBool(n.PageCache),
 	})
 
 	ps.PHP, ps.CronImport, ps.SSHImport = php, n.Cron, n.SSHKeys
+	if !n.PageCache {
+		ps.PageCache = ""
+	}
 
 	return ps, nil
 }

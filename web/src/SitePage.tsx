@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { CertificateCard } from "./Certificate";
 import { CronSettings } from "./Cron";
+import { FileManager } from "./Files";
 import { LimitSettings } from "./Limits";
 import { allowIpsProblem, clientIp, listPages, pageMessage, parseAllowIps, setMaintenance, type StatusPage } from "./pages";
 import { formatHash, type SiteTab } from "./routes";
@@ -29,11 +30,12 @@ import { SnippetSettings } from "./Snippets";
 import { SSHSettings } from "./SSH";
 import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
 
-// The tabs that exist today (ADR-0037). Files, databases and backups per
-// site come with their features; their addresses show the overview.
+// The tabs that exist today (ADR-0037). Databases and backups per site
+// come with their features; their addresses show the overview.
 const tabs: { id: SiteTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "domains", label: "Domains & HTTPS" },
+  { id: "files", label: "Files" },
   { id: "php", label: "PHP" },
   { id: "cron", label: "Cron" },
   { id: "ssh", label: "SSH & SFTP" },
@@ -48,10 +50,14 @@ type Props = {
   onTab: (tab: SiteTab) => void;
   /** The role of the logged-in account; hides what it cannot change. */
   role?: string;
+  /** The folder of the Files tab (?path=), "" for the home. */
+  path?: string;
+  /** Opens another folder in the Files tab: a new history entry. */
+  onPath?: (path: string) => void;
 };
 
 // SitePage shows one site with its settings in tabs (#/sites/<name>/<tab>).
-export function SitePage({ name, tab, onTab, role = "user" }: Props) {
+export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = () => undefined }: Props) {
   const { sites, php, error, load } = useSites();
   const site = sites?.find((s) => s.name === name);
 
@@ -91,6 +97,7 @@ export function SitePage({ name, tab, onTab, role = "user" }: Props) {
       <div {...(ready ? tabPanelProps(prefix, active) : {})} className="ui-stack">
         {active === "overview" && <Overview site={site} onChange={load} />}
         {active === "domains" && <DomainsTab site={site} onChange={load} />}
+        {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
         {active === "php" && (
           <>
             <PHPTab site={site} php={php} onChange={load} />

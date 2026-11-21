@@ -29,6 +29,7 @@ type DoctorEnv struct {
 	System         doctor.System
 	PanelSocket    string   // default PanelSocket
 	Fail2banSocket string   // default Fail2banSocket
+	DBToolSocket   string   // default DBToolSocket
 	Disk           []string // file systems to check besides the pools; default / and the state directories
 	// Hardening reads the files of the hardening baseline (ADR-0033). The
 	// zero value reads the server and asks systemd through phpctl.
@@ -41,10 +42,11 @@ type doctorOps struct {
 	stateDir string
 	h        *siteOps          // nil without the site operations
 	fw       *firewall.Manager // nil without the panel's firewall rules
+	dbTool   bool              // the web database tool is installed (ADR-0038)
 }
 
-func registerDoctor(s *agentrpc.Server, env DoctorEnv, stateDir string, h *siteOps, fw *firewall.Manager) {
-	d := &doctorOps{env: env, stateDir: stateDir, h: h, fw: fw}
+func registerDoctor(s *agentrpc.Server, env DoctorEnv, stateDir string, h *siteOps, fw *firewall.Manager, dbTool bool) {
+	d := &doctorOps{env: env, stateDir: stateDir, h: h, fw: fw, dbTool: dbTool}
 
 	agentrpc.Handle(s, agentapi.Doctor, func(ctx context.Context, _ agentrpc.Caller, _ agentapi.DoctorRequest) (agentapi.DoctorReport, error) {
 		return d.run(ctx), nil
@@ -106,6 +108,11 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	out = append(out, d.mariadb(ctx))
 	out = append(out, doctor.Socket(ctx, "service.fail2ban", "fail2ban", orDefault(d.env.Fail2banSocket, Fail2banSocket),
 		"Logins are not protected against brute force. Check: systemctl status fail2ban."))
+
+	if d.dbTool {
+		out = append(out, doctor.Socket(ctx, "service.dbtool", "the database tool", orDefault(d.env.DBToolSocket, DBToolSocket),
+			"Databases cannot be opened in Adminer. Check: systemctl status hostashi-adminer."))
+	}
 
 	hard := d.env.Hardening
 	if hard.Active == nil {
