@@ -149,6 +149,11 @@ func (s *Service) SetObjectCache(ctx context.Context, actor int64, name string, 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.setObjectCache(ctx, actor, name, enabled, memoryMB)
+}
+
+// setObjectCache is SetObjectCache with s.mu held.
+func (s *Service) setObjectCache(ctx context.Context, actor int64, name string, enabled bool, memoryMB int) (ObjectCacheView, error) {
 	site, err := s.cacheSite(ctx, name)
 	if err != nil {
 		return ObjectCacheView{}, err
@@ -248,3 +253,45 @@ func (s *Service) FlushObjectCache(ctx context.Context, actor int64, name string
 // CacheSocket is the socket of a site's cache, the same path the agent
 // uses (objcache.Manager.Socket with the default directory).
 func CacheSocket(site string) string { return "/run/hostashi-valkey/" + site + "/valkey.sock" }
+
+// CheckPresetCaches checks the caches of a preset against its own limits:
+// the object cache is off (0) or a valid size within half of the memory
+// limit, as for a site.
+func CheckPresetCaches(c store.PresetCaches, l store.Limits) error {
+	if c.ObjectCacheMB == 0 {
+		return nil
+	}
+
+	return checkCacheSize(int(c.ObjectCacheMB), l.MemoryBytes)
+}
+
+// presetObjectCache gives a site the object cache of the preset it just got
+// (a new site, or one switched to the preset): on with the preset's size,
+// or the size alone for a cache that is already on. A preset without a
+// cache changes nothing. Failures are logged; the site stands without.
+func (s *Service) presetObjectCache(ctx context.Context, actor int64, site store.Site, c store.PresetCaches) {
+	if s.cache == nil || c.ObjectCacheMB == 0 || site.PHP == "" || site.Disabled {
+		return
+	}
+
+	if _, err := s.setObjectCache(ctx, actor, site.Name, true, int(c.ObjectCacheMB)); err != nil {
+		s.log.WarnContext(ctx, "object cache of the preset not applied", "site", site.Name, "err", err)
+	}
+}
+
+// followPresetCache changes the size of a following site's cache after its
+// preset changed. It never turns a cache on or off.
+func (s *Service) followPresetCache(ctx context.Context, actor int64, site store.Site, old, c store.PresetCaches) {
+	if s.cache == nil || c.ObjectCacheMB == 0 || c.ObjectCacheMB == old.ObjectCacheMB {
+		return
+	}
+
+	cur, err := s.st.ObjectCache(ctx, site.ID)
+	if err != nil || !cur.Enabled || int64(cur.MemoryMB) == c.ObjectCacheMB {
+		return
+	}
+
+	if _, err := s.setObjectCache(ctx, actor, site.Name, true, int(c.ObjectCacheMB)); err != nil {
+		s.log.WarnContext(ctx, "object cache size of the preset not applied", "site", site.Name, "err", err)
+	}
+}
