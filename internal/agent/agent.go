@@ -132,6 +132,10 @@ type Config struct {
 	// failed_precondition.
 	Firewall *firewall.Manager
 
+	// panelACL hands the panel allowlist to nginx on port 443 (ADR-0042);
+	// Run sets it up.
+	panelACL *panelACL
+
 	// PHPInstall installs more PHP versions through the fixed install unit
 	// (ADR-0036). Run builds it; without it php.install answers
 	// failed_precondition.
@@ -227,7 +231,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, acl: cfg.panelACL, log: log}
 		h.register(s)
 
 		if cfg.Backup != nil && cfg.Backup.Space == nil {
@@ -278,6 +282,7 @@ type siteOps struct {
 	quota  QuotaFS
 	slices *siteslice.Manager
 	cache  *pagecache.Dirs
+	acl    *panelACL // nil: no panel allowlist in nginx
 	log    *slog.Logger
 	mu     sync.Mutex
 	// sweepMu keeps the background deletes of purged caches apart.
@@ -446,6 +451,11 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	if h.acl != nil {
+		h.acl.mu.Lock()
+		defer h.acl.mu.Unlock()
+	}
+
 	d := web.Desired{Sites: make([]web.Site, 0, len(req.Sites))}
 	pools := []php.Pool{}
 	keep := map[string]bool{}
@@ -517,6 +527,10 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		panel, err := h.panelFor(*req.Panel)
 		if err != nil {
 			return agentapi.WebApplyResponse{}, err
+		}
+
+		if h.acl != nil {
+			h.acl.fill(panel)
 		}
 
 		d.Panel = panel
@@ -1178,6 +1192,13 @@ func Run(ctx context.Context, cfg Config) error {
 		} else if cfg.Log != nil {
 			cfg.Log.InfoContext(ctx, "web server on generation", "generation", res.Generation)
 		}
+	}
+
+	// After both recoveries: nginx gets the firewall's panel allowlist
+	// when the panel is on 443, and every later firewall change with it.
+	cfg.panelACL = &panelACL{web: cfg.Web}
+	if err := cfg.Firewall.SetPanelHook(ctx, cfg.panelACL.set); err != nil && cfg.Log != nil {
+		cfg.Log.ErrorContext(ctx, "panel allowlist in nginx", "err", err)
 	}
 
 	if err := prepareSocketDir(filepath.Dir(cfg.Socket), gid); err != nil {

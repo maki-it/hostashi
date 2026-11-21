@@ -61,6 +61,37 @@ type Manager struct {
 	mu         sync.Mutex
 	timer      *time.Timer
 	rolledBack int64
+	// panel applies the panel allowlist outside the packet filter (nginx
+	// on port 443, ADR-0042); nil for none. See SetPanelHook.
+	panel PanelHook
+}
+
+// PanelHook applies the panel allowlist of a new live state. An error
+// counts like rules that do not load: the change is undone.
+type PanelHook func(ctx context.Context, allow []string) error
+
+// SetPanelHook installs h and calls it once with the live allowlist, so
+// that it starts in step with the firewall.
+func (m *Manager) SetPanelHook(ctx context.Context, h PanelHook) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.panel = h
+	if h == nil {
+		return nil
+	}
+
+	// Without the firewall there is no allowlist.
+	if !m.Enabled() {
+		return h(ctx, nil)
+	}
+
+	st, err := m.load()
+	if err != nil {
+		return err
+	}
+
+	return h(ctx, st.Live.PanelAllow)
 }
 
 // state is StateFile: the live state, and while a change is pending the
@@ -146,13 +177,22 @@ func (m *Manager) save(st state) error {
 	return statefile.Write(m.Dir, StateFile, append(b, '\n'))
 }
 
-// write writes the panel file for s and reloads the firewall.
+// write writes the panel file for s, reloads the firewall and hands the
+// panel allowlist to the panel hook. Called with mu held.
 func (m *Manager) write(ctx context.Context, s agentapi.FirewallState) error {
 	if err := statefile.Write(m.Dir, PanelFile, []byte(Render(s))); err != nil {
 		return err
 	}
 
-	return m.Reload(ctx)
+	if err := m.Reload(ctx); err != nil {
+		return err
+	}
+
+	if m.panel != nil {
+		return m.panel(ctx, s.PanelAllow)
+	}
+
+	return nil
 }
 
 func (m *Manager) status(st state) agentapi.FirewallStatus {

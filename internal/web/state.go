@@ -121,6 +121,11 @@ type Panel struct {
 	Domain string `json:"domain"`
 	Cert   string `json:"cert,omitempty"`
 	Key    string `json:"key,omitempty"`
+	// Allow limits the panel's HTTPS server to these addresses and
+	// prefixes (nginx allow, then deny all); empty allows everyone. The
+	// agent sets it from the firewall's panel allowlist when the panel
+	// shares port 443 with the sites (ADR-0042).
+	Allow []string `json:"allow,omitempty"`
 }
 
 // rootRe keeps nginx syntax out of the root path: no spaces, quotes,
@@ -197,6 +202,16 @@ func (d Desired) Validate() error {
 
 		if (p.Cert == "") != (p.Key == "") {
 			return errors.New("panel: certificate and key go together")
+		}
+
+		// Only the canonical form reaches nginx: no other syntax fits.
+		for _, a := range p.Allow {
+			pfx, err := agentapi.ParsePrefix(a)
+
+			canonical := a == pfx.String() || (pfx.IsSingleIP() && a == pfx.Addr().String())
+			if err != nil || pfx.Bits() == 0 || !canonical {
+				return fmt.Errorf("panel: invalid allowed address %q", a)
+			}
 		}
 	}
 
