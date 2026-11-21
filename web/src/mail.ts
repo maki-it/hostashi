@@ -97,3 +97,18 @@ export function accountEmailMessage(err: unknown): string {
   }
   return "The request failed. Try again.";
 }
+
+export type NotifyCategory = "backups" | "certificates" | "doctor" | "php" | "disk";
+
+export type Notifications = {
+  /** The confirmed address; empty while there is none. */
+  email: string;
+  mail_enabled: boolean;
+  /** Only the categories the account's role may get. */
+  categories: { id: NotifyCategory; enabled: boolean }[];
+};
+
+export const getNotifications = () => request<Notifications>("GET", "/account/notifications");
+
+export const setNotifications = (changes: Partial<Record<NotifyCategory, boolean>>) =>
+  request<Notifications>("PUT", "/account/notifications", changes);

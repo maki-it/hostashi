@@ -53,6 +53,9 @@ type Envelope struct {
 	// DedupKey, when set, sends the message at most once per 24 hours, for
 	// example "backup-failed:shop".
 	DedupKey string
+	// DedupWindow replaces the 24 hours of DedupKey, up to the 30 days the
+	// outbox keeps finished rows.
+	DedupWindow time.Duration
 }
 
 // OutboxStore is the part of the panel store the outbox uses.
@@ -123,7 +126,12 @@ func (o *Outbox) Enqueue(ctx context.Context, m Message, e Envelope) (bool, erro
 	now := o.Now()
 
 	if e.DedupKey != "" {
-		seen, err := o.st.MailDedupSince(ctx, e.DedupKey, now.Add(-dedupWindow))
+		window := dedupWindow
+		if e.DedupWindow > 0 {
+			window = min(e.DedupWindow, keepDone)
+		}
+
+		seen, err := o.st.MailDedupSince(ctx, e.DedupKey, now.Add(-window))
 		if err != nil || seen {
 			return false, err
 		}

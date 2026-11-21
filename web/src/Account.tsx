@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { EmailCard } from "./AccountEmail";
+import { NotificationsCard } from "./Notifications";
 import type { User } from "./auth";
 import { saveColorScheme, type ColorScheme } from "./scheme";
 import { Card, Notice, PageHead } from "./ui";
@@ -58,6 +59,7 @@ export function Account({ user, onScheme }: { user: User; onScheme: (s: ColorSch
         </div>
       </Card>
       <EmailCard />
+      <NotificationsCard />
     </>
   );
 }

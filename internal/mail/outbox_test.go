@@ -290,6 +290,19 @@ func TestOutboxDedup(t *testing.T) {
 	if ok, err := e.o.Enqueue(t.Context(), msg, ev); err != nil || !ok {
 		t.Fatalf("after a day: %v %v", ok, err)
 	}
+
+	// A longer window holds for days.
+	long := Envelope{Template: "cert-expiry", Category: Operations, DedupKey: "cert-expiry:shop:14", DedupWindow: 30 * 24 * time.Hour}
+
+	if ok, err := e.o.Enqueue(t.Context(), msg, long); err != nil || !ok {
+		t.Fatalf("long first: %v %v", ok, err)
+	}
+
+	e.now = e.now.Add(10 * 24 * time.Hour)
+
+	if ok, err := e.o.Enqueue(t.Context(), msg, long); err != nil || ok {
+		t.Fatalf("long again: %v %v", ok, err)
+	}
 }
 
 func TestOutboxRateLimits(t *testing.T) {
