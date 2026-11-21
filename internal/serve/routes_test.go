@@ -83,6 +83,8 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/sites/{name}/files/content": "files:read",
 	"PUT /api/v1/sites/{name}/files/content": "files:write",
 	"POST /api/v1/sites/{name}/files/{call}": "files:write",
+	"GET /api/v1/sites/{name}/files/zip":     "files:read",
+	"PUT /api/v1/sites/{name}/files/upload":  "files:write",
 
 	"POST /api/v1/sites":                          "sites:create",
 	"PUT /api/v1/sites/{name}/domains":            "sites.domains:write",
