@@ -1040,6 +1040,228 @@ func TestPanelProxy(t *testing.T) {
 	}
 }
 
+// TestPanelOnSitesPort serves the panel by host name on the sites' TLS
+// addresses (ADR-0042): the panel and a site answer on the same port, an
+// unknown name still gets no certificate, and port 80 redirects without a
+// port.
+func TestPanelOnSitesPort(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+
+	tlsPort := freePort(t)
+	addr := "127.0.0.1:" + strconv.Itoa(tlsPort)
+	e.r.Driver.ListenTLS = []string{addr}
+	e.r.Driver.PanelListen = []string{addr}
+	e.r.Driver.PanelUpstream = filepath.Join(e.dir, "panel.sock")
+	e.r.Driver.LegacyHTTP2 = legacyHTTP2(t, e.ctl.bin)
+
+	ln, err := net.Listen("unix", e.r.Driver.PanelUpstream)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Chmod(e.r.Driver.PanelUpstream, 0o666); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := &http.Server{ReadHeaderTimeout: time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, "panel host=%s", r.Host)
+	})}
+
+	go func() { _ = srv.Serve(ln) }()
+
+	t.Cleanup(func() { _ = srv.Close() })
+
+	if _, err := e.r.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	certDir := func(name string) string {
+		d := filepath.Join(e.dir, "certs", name)
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+
+		return d
+	}
+
+	site := e.site(t, "alpha", "hello alpha", "alpha.example.com")
+	site.Cert, site.Key, _ = selfSigned(t, certDir("alpha"), "alpha.example.com")
+	panel := &Panel{Domain: "cp.example.com"}
+
+	var pool *x509.CertPool
+
+	panel.Cert, panel.Key, pool = selfSigned(t, certDir("panel"), "cp.example.com")
+
+	sitePEM, err := os.ReadFile(site.Cert)
+	if err != nil || !pool.AppendCertsFromPEM(sitePEM) {
+		t.Fatalf("site certificate: %v", err)
+	}
+
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{site}, Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			var d net.Dialer
+
+			return d.DialContext(ctx, network, addr)
+		},
+	}}
+
+	get := func(host string) string {
+		t.Helper()
+
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+"/", nil)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("%s: %v", host, err)
+		}
+
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+
+		return string(body)
+	}
+
+	if got := get("cp.example.com"); got != "panel host=cp.example.com" {
+		t.Fatalf("panel: %q", got)
+	}
+
+	if got := get("alpha.example.com"); !strings.Contains(got, "hello alpha") {
+		t.Fatalf("site next to the panel: %q", got)
+	}
+
+	if c, err := tls.Dial("tcp", addr, &tls.Config{ServerName: "other.example.com", InsecureSkipVerify: true}); err == nil {
+		_ = c.Close()
+
+		t.Fatal("handshake for an unknown name succeeded")
+	}
+
+	// The panel allowlist in nginx (ADR-0042): others get 403, the site
+	// next to it is not affected.
+	status := func(host string) int {
+		t.Helper()
+
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+"/", nil)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("%s: %v", host, err)
+		}
+
+		_ = resp.Body.Close()
+
+		return resp.StatusCode
+	}
+
+	panel.Allow = []string{"192.0.2.1", "2001:db8::/32"}
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{site}, Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	if code := status("cp.example.com"); code != http.StatusForbidden {
+		t.Fatalf("panel outside the allowlist: %d", code)
+	}
+
+	if code := status("alpha.example.com"); code != http.StatusOK {
+		t.Fatalf("site with a panel allowlist: %d", code)
+	}
+
+	panel.Allow = []string{"127.0.0.0/8"}
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{site}, Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	if code := status("cp.example.com"); code != http.StatusOK {
+		t.Fatalf("panel inside the allowlist: %d", code)
+	}
+
+	panel.Allow = nil
+
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(e.port), 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _ = fmt.Fprintf(conn, "GET /login HTTP/1.1\r\nHost: cp.example.com\r\nConnection: close\r\n\r\n")
+
+	r80, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err == nil {
+		_ = r80.Body.Close()
+	}
+
+	_ = conn.Close()
+
+	if err != nil || r80.StatusCode != http.StatusMovedPermanently || r80.Header.Get("Location") != "https://cp.example.com/login" {
+		t.Fatalf("redirect: %v %v", err, r80)
+	}
+}
+
+func TestPanelSharedRender(t *testing.T) {
+	n := &Nginx{
+		Ctl: &testCtl{}, Listen: []string{"80", "[::]:80"}, ListenTLS: []string{"443", "[::]:443"}, HTTP3: true,
+		PanelListen: []string{"443", "[::]:443"}, PanelUpstream: "/run/hostashi-panel.sock",
+		ControlSocket: "/run/x.sock", PIDFile: "/run/x.pid", ErrorLog: "/var/log/x", MimeTypes: "/etc/x",
+	}
+
+	f, err := n.Render(Desired{Panel: &Panel{Domain: "cp.example.com", Cert: "/c.pem", Key: "/k.pem"}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conf := string(f.Content["sites/_panel.conf"])
+	for _, want := range []string{"return 301 https://$host$request_uri;", "listen 443 ssl;", "listen [::]:443 quic;", `add_header Alt-Svc 'h3=":443"; ma=86400' always;`} {
+		if !strings.Contains(conf, want) {
+			t.Errorf("missing %q in\n%s", want, conf)
+		}
+	}
+
+	// The sites' default server already refuses unknown names; a second
+	// default_server on the same port would not load.
+	if strings.Contains(conf, "default_server") || strings.Contains(conf, "reuseport") {
+		t.Errorf("shared panel renders its own default server:\n%s", conf)
+	}
+
+	// On its own port nothing changes.
+	n.PanelListen = []string{"8443", "[::]:8443"}
+
+	f, err = n.Render(Desired{Panel: &Panel{Domain: "cp.example.com", Cert: "/c.pem", Key: "/k.pem"}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conf = string(f.Content["sites/_panel.conf"])
+	if !strings.Contains(conf, "return 301 https://$host:8443$request_uri;") || !strings.Contains(conf, "listen 8443 ssl default_server;") {
+		t.Errorf("own port:\n%s", conf)
+	}
+
+	for _, bad := range []string{"10.0.0.1; deny", "0.0.0.0/0", "10.1.2.3/8", "fe80::1%eth0", "all"} {
+		if err := (Desired{Panel: &Panel{Domain: "cp.example.com", Allow: []string{bad}}}).Validate(); err == nil {
+			t.Errorf("allowed address %q accepted", bad)
+		}
+	}
+
+	f, err = n.Render(Desired{Panel: &Panel{Domain: "cp.example.com", Cert: "/c.pem", Key: "/k.pem", Allow: []string{"192.0.2.1", "2001:db8::/32"}}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if conf = string(f.Content["sites/_panel.conf"]); !strings.Contains(conf, "allow 192.0.2.1;\n    allow 2001:db8::/32;\n    deny all;") {
+		t.Errorf("allowlist:\n%s", conf)
+	}
+
+	for _, bad := range [][]string{{"443"}, {"80"}, {"443", "[::]:8443"}} {
+		n.PanelListen = bad
+		if _, err := n.Render(Desired{}, 1); err == nil {
+			t.Errorf("panel addresses %v accepted", bad)
+		}
+	}
+}
+
 func TestPanelNeedsListener(t *testing.T) {
 	n := &Nginx{Ctl: &testCtl{}, Listen: []string{"80"}, ControlSocket: "/run/x.sock", PIDFile: "/run/x.pid", ErrorLog: "/var/log/x", MimeTypes: "/etc/x"}
 
@@ -1296,5 +1518,152 @@ func TestParkedDomain(t *testing.T) {
 	plain.Domain = "alpha.example.com"
 	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{site}, Parked: []Parked{plain}}); !errors.Is(err, ErrInvalidDesired) {
 		t.Fatalf("duplicate domain: %v", err)
+	}
+}
+
+func TestDBToolServer(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+
+	toolPort := freePort(t)
+	e.r.Driver.ListenTLS = []string{"127.0.0.1:" + strconv.Itoa(freePort(t))}
+	e.r.Driver.PanelListen = []string{"127.0.0.1:" + strconv.Itoa(freePort(t))}
+	e.r.Driver.PanelUpstream = filepath.Join(e.dir, "panel.sock")
+	e.r.Driver.DBToolListen = []string{"127.0.0.1:" + strconv.Itoa(toolPort)}
+	e.r.Driver.DBToolSocket = filepath.Join(e.dir, "tool.sock")
+	e.r.Driver.DBToolRoot = filepath.Join(e.dir, "adminer")
+	e.r.Driver.LegacyHTTP2 = legacyHTTP2(t, e.ctl.bin)
+
+	if err := os.MkdirAll(e.r.Driver.DBToolRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// The tool's PHP-FPM: echoes what nginx passes on.
+	ln, err := net.Listen("unix", e.r.Driver.DBToolSocket)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Chmod(e.r.Driver.DBToolSocket, 0o666); err != nil {
+		t.Fatal(err)
+	}
+
+	go func() {
+		_ = fcgi.Serve(ln, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			env := fcgi.ProcessEnv(r)
+			_, _ = fmt.Fprintf(w, "script=%s uri=%s https=%t prefix=%q", env["SCRIPT_FILENAME"], r.URL.RequestURI(), r.TLS != nil, r.Header.Get("X-Forwarded-Prefix"))
+		}))
+	}()
+
+	t.Cleanup(func() { _ = ln.Close() })
+
+	if _, err := e.r.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	certDir := filepath.Join(e.dir, "certs")
+	if err := os.MkdirAll(certDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	panel := &Panel{Domain: "panel.example.com"}
+
+	var pool *x509.CertPool
+
+	panel.Cert, panel.Key, pool = selfSigned(t, certDir, "panel.example.com")
+
+	addr := "127.0.0.1:" + strconv.Itoa(toolPort)
+	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			var d net.Dialer
+
+			return d.DialContext(ctx, network, addr)
+		},
+	}}
+	// reply is what the tests read of a response; its body is closed.
+	type reply struct {
+		StatusCode int
+		Header     http.Header
+	}
+
+	get := func(path string, hdr map[string]string) (reply, string, error) {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://panel.example.com:"+strconv.Itoa(toolPort)+path, nil)
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return reply{}, "", err
+		}
+
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+
+		return reply{resp.StatusCode, resp.Header}, string(body), nil
+	}
+
+	// Without DBTool the port stays closed.
+	if _, err := e.r.Apply(ctx, Desired{Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := get("/", nil); err == nil {
+		t.Fatal("tool served without DBTool")
+	}
+
+	panel.DBTool = true
+	if _, err := e.r.Apply(ctx, Desired{Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, body, err := get("/?ticket=abc", map[string]string{"X-Forwarded-Prefix": "/evil"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := fmt.Sprintf(`script=%s/index.php uri=/?ticket=abc https=true prefix=""`, e.r.Driver.DBToolRoot)
+	if resp.StatusCode != http.StatusOK || body != want {
+		t.Fatalf("tool: %d %q", resp.StatusCode, body)
+	}
+
+	for _, h := range []string{"Strict-Transport-Security", "Referrer-Policy", "X-Frame-Options", "X-Content-Type-Options"} {
+		if resp.Header.Get(h) == "" {
+			t.Errorf("header %s missing", h)
+		}
+	}
+
+	// Only "/" reaches PHP.
+	for _, p := range []string{"/adminer.php", "/index.php", "/tool.php", "/x/"} {
+		if resp, _, err := get(p, nil); err != nil || resp.StatusCode != http.StatusNotFound {
+			t.Errorf("%s: %v %v", p, resp, err)
+		}
+	}
+
+	// Another name on the tool port gets no certificate.
+	if c, err := tls.Dial("tcp", addr, &tls.Config{ServerName: "other.example.com", InsecureSkipVerify: true}); err == nil {
+		_ = c.Close()
+
+		t.Fatal("handshake for another name on the tool port succeeded")
+	}
+
+	// The panel allowlist covers the tool too.
+	panel.Allow = []string{"192.0.2.1"}
+	if _, err := e.r.Apply(ctx, Desired{Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	if resp, _, err := get("/", nil); err != nil || resp.StatusCode != http.StatusForbidden {
+		t.Errorf("outside the allowlist: %v %v", resp, err)
+	}
+
+	panel.Allow = []string{"127.0.0.0/8"}
+	if _, err := e.r.Apply(ctx, Desired{Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	if resp, _, err := get("/", nil); err != nil || resp.StatusCode != http.StatusOK {
+		t.Errorf("on the allowlist: %v %v", resp, err)
 	}
 }

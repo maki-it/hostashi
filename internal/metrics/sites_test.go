@@ -17,7 +17,8 @@ func TestSiteSeries(t *testing.T) {
 	m.RegisterSites(func(context.Context) ([]Site, error) {
 		return []Site{
 			{Name: "shop", PHPVersion: "8.4", PHPUp: true, PHPMemoryBytes: 1 << 20, PHPMemoryKnown: true, DiskUsedBytes: 4096, DiskMeasuredAt: at},
-			{Name: "down", PHPVersion: "8.3"},
+			{Name: "down", PHPVersion: "8.3", CacheMB: 64},
+			{Name: "cached", PHPVersion: "8.4", CacheMB: 128, CacheUp: true, CacheMemoryBytes: 3 << 20, CacheMemoryKnown: true},
 			{Name: "static"},
 		}, nil
 	}, nil)
@@ -35,13 +36,17 @@ func TestSiteSeries(t *testing.T) {
 		`hostashi_site_php_up{php_version="8.3",site="down"} 0`,
 		`hostashi_site_disk_used_bytes{site="shop"} 4096`,
 		`hostashi_site_disk_measured_timestamp_seconds{site="shop"} 1.7956e+09`,
+		`hostashi_site_object_cache_up{site="cached"} 1`,
+		`hostashi_site_object_cache_max_bytes{site="cached"} 1.34217728e+08`,
+		`hostashi_site_object_cache_memory_bytes{site="cached"} 3.145728e+06`,
+		`hostashi_site_object_cache_up{site="down"} 0`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("missing %s", want)
 		}
 	}
 
-	for _, not := range []string{`site="static"`, `hostashi_site_php_memory_bytes{php_version="8.3"`, `hostashi_site_disk_used_bytes{site="down"}`} {
+	for _, not := range []string{`site="static"`, `hostashi_site_php_memory_bytes{php_version="8.3"`, `hostashi_site_disk_used_bytes{site="down"}`, `hostashi_site_object_cache_up{site="shop"}`, `hostashi_site_object_cache_memory_bytes{site="down"}`} {
 		if strings.Contains(s, not) {
 			t.Errorf("unexpected %s", not)
 		}

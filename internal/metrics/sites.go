@@ -19,6 +19,11 @@ type Site struct {
 	PHPMemoryKnown bool
 	DiskUsedBytes  uint64
 	DiskMeasuredAt time.Time // zero: not measured yet
+	// CacheMB is the size of the site's object cache, 0 for none (ADR-0045).
+	CacheMB          int
+	CacheUp          bool
+	CacheMemoryBytes uint64
+	CacheMemoryKnown bool
 }
 
 var (
@@ -30,6 +35,12 @@ var (
 		"Disk space the site's home takes, from the last measurement.", []string{"site"}, nil)
 	siteDiskAtDesc = prometheus.NewDesc("hostashi_site_disk_measured_timestamp_seconds",
 		"When the site's disk usage was measured, as Unix time.", []string{"site"}, nil)
+	siteCacheUpDesc = prometheus.NewDesc("hostashi_site_object_cache_up",
+		"1 if the site's object cache (Valkey) runs; only for sites with a cache.", []string{"site"}, nil)
+	siteCacheMemDesc = prometheus.NewDesc("hostashi_site_object_cache_memory_bytes",
+		"Memory of the site's object cache unit from its cgroup.", []string{"site"}, nil)
+	siteCacheMaxDesc = prometheus.NewDesc("hostashi_site_object_cache_max_bytes",
+		"The configured size (maxmemory) of the site's object cache.", []string{"site"}, nil)
 	snapshotUpDesc = prometheus.NewDesc("hostashi_agent_snapshot_up",
 		"1 if the last per-site snapshot from the agent succeeded.", nil, nil)
 )
@@ -51,7 +62,7 @@ type siteCollector struct {
 }
 
 func (c *siteCollector) Describe(ch chan<- *prometheus.Desc) {
-	for _, d := range []*prometheus.Desc{sitePHPUpDesc, sitePHPMemDesc, siteDiskDesc, siteDiskAtDesc, snapshotUpDesc} {
+	for _, d := range []*prometheus.Desc{sitePHPUpDesc, sitePHPMemDesc, siteDiskDesc, siteDiskAtDesc, siteCacheUpDesc, siteCacheMemDesc, siteCacheMaxDesc, snapshotUpDesc} {
 		ch <- d
 	}
 }
@@ -82,6 +93,21 @@ func (c *siteCollector) Collect(ch chan<- prometheus.Metric) {
 
 			if s.PHPMemoryKnown {
 				ch <- prometheus.MustNewConstMetric(sitePHPMemDesc, prometheus.GaugeValue, float64(s.PHPMemoryBytes), s.Name, s.PHPVersion)
+			}
+		}
+
+		if s.CacheMB > 0 {
+			up := 0.0
+			if s.CacheUp {
+				up = 1
+			}
+
+			ch <- prometheus.MustNewConstMetric(siteCacheUpDesc, prometheus.GaugeValue, up, s.Name)
+
+			ch <- prometheus.MustNewConstMetric(siteCacheMaxDesc, prometheus.GaugeValue, float64(s.CacheMB)*(1<<20), s.Name)
+
+			if s.CacheMemoryKnown {
+				ch <- prometheus.MustNewConstMetric(siteCacheMemDesc, prometheus.GaugeValue, float64(s.CacheMemoryBytes), s.Name)
 			}
 		}
 

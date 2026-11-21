@@ -154,7 +154,7 @@ func TestParkedDomainsOverHTTP(t *testing.T) {
 	}
 
 	rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/parked-domains/soon.example.net", cookie: c, body: `{"tls":false}`})
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"domain":"soon.example.net","page":"builtin-parking","tls":{"enabled":false,"active":false,"notAfter":null}`) ||
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"domain":"soon.example.net","page":"builtin-parking","tls":{"enabled":false,"active":false,"notAfter":null,"source":"letsencrypt","certSource":"","trusted":true,"renewPending":false}`) ||
 		len(ag.web.Parked) != 1 {
 		t.Fatalf("park: %d %s %+v", rec.Code, rec.Body, ag.web.Parked)
 	}

@@ -23,7 +23,10 @@ var scopeCatalog = map[string]ScopeInfo{
 	"sites:write":             {Description: "Create and change sites"},
 	"sites:delete":            {Description: "Delete sites and their files", HighRisk: true},
 	"sites.maintenance:write": {Description: "Switch the maintenance mode of sites and park domains"},
+	"pagecache:purge":         {Description: "Empty the page cache of sites, and nothing else (for a CMS that purges on save)"},
 	"sites.snippets:write":    {Description: "Change the custom nginx snippets of sites (checked against an allowlist)", HighRisk: true},
+	"objectcache:read":        {Description: "Read the object cache of sites: size, state and memory use"},
+	"objectcache:write":       {Description: "Turn the object cache of sites on or off, flush it, and (admins and managers) change its size"},
 	"cron:read":               {Description: "List the cron jobs of sites with their last and next runs"},
 	"cron:write":              {Description: "Create, change, pause, run and delete cron jobs (they run commands as the site user)", HighRisk: true},
 	"ssh:read":                {Description: "List the SSH keys of sites with their fingerprints and access"},
@@ -35,6 +38,7 @@ var scopeCatalog = map[string]ScopeInfo{
 	"databases:read":          {Description: "List databases and their users"},
 	"databases:write":         {Description: "Create databases and users, set passwords, remove users"},
 	"databases:delete":        {Description: "Delete databases and their data", HighRisk: true},
+	"db_servers:write":        {Description: "Add, check and remove external database servers (stores their administrator password)", HighRisk: true},
 	"backups:read":            {Description: "Read backup settings, status and snapshots"},
 	"backups:write":           {Description: "Change backup settings, confirm the target's host key, start a backup"},
 	"doctor:read":             {Description: "Run the read-only checks of hostashi doctor and read their results"},
@@ -45,6 +49,8 @@ var scopeCatalog = map[string]ScopeInfo{
 	"migrations:read":         {Description: "List uploaded CloudPanel scan reports and read their migration plans"},
 	"migrations:write":        {Description: "Upload and delete CloudPanel scan reports"},
 	"backups:restore":         {Description: "Restore a site's backups into its home", HighRisk: true},
+	"files:read":              {Description: "List and download the files of sites"},
+	"files:write":             {Description: "Upload, change, move, copy and delete the files of sites (this changes the sites' code)", HighRisk: true},
 }
 
 // Scopes returns the catalog sorted by name.

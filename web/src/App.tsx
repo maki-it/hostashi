@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Account } from "./Account";
+import { ConfirmEmail } from "./ConfirmEmail";
 import { currentUser, needsSecondFactor, setupRequired, type User } from "./auth";
 import { Backups } from "./Backups";
 import { Databases } from "./Databases";
@@ -11,6 +12,7 @@ import { Home } from "./Home";
 import { Invite } from "./Invite";
 import { Presets } from "./Limits";
 import { Login } from "./Login";
+import { Mail } from "./Mail";
 import { Migrate } from "./Migrate";
 import { Pages } from "./Pages";
 import { Overview } from "./Overview";
@@ -32,8 +34,16 @@ type View =
   | { kind: "setup" }
   | { kind: "login"; notice?: string }
   | { kind: "invite"; token: string }
+  | { kind: "confirm-email"; token: string }
   | { kind: "home"; user: User }
   | { kind: "error" };
+
+// confirmToken returns the token of an email confirmation link
+// (#/confirm-email/<token>, ADR-0044).
+const confirmToken = (): string | null => {
+  const m = /^#\/confirm-email\/([A-Za-z0-9_-]{20,100})$/.exec(window.location.hash);
+  return m ? (m[1] ?? null) : null;
+};
 
 // inviteToken returns the token of an invitation link (#/invite/<token>).
 const inviteToken = (): string | null => {
@@ -56,6 +66,11 @@ export function App() {
     try {
       if (await setupRequired()) {
         setView({ kind: "setup" });
+        return;
+      }
+      const confirm = confirmToken();
+      if (confirm) {
+        setView({ kind: "confirm-email", token: confirm });
         return;
       }
       const token = inviteToken();
@@ -102,14 +117,20 @@ export function App() {
               key={route.site.name}
               name={route.site.name}
               tab={route.site.tab}
+              role={user.role}
               onTab={(tab) => {
                 window.location.hash = formatHash({ page: "sites", site: { name: route.site!.name, tab } });
+              }}
+              path={route.query.get("path") ?? ""}
+              onPath={(path) => {
+                const query = new URLSearchParams(path === "" ? {} : { path });
+                window.location.hash = formatHash({ page: "sites", site: { name: route.site!.name, tab: "files" }, query });
               }}
             />
           ) : (
             <Sites query={route.query} onQuery={replaceQuery} />
           ))}
-        {show("databases") && <Databases query={route.query} onQuery={replaceQuery} />}
+        {show("databases") && <Databases role={user.role} query={route.query} onQuery={replaceQuery} />}
         {show("backups") && <Backups query={route.query} onQuery={replaceQuery} />}
         {show("php") && <PHPPage query={route.query} onQuery={replaceQuery} />}
         {show("limits") && <Presets query={route.query} onQuery={replaceQuery} />}
@@ -118,6 +139,7 @@ export function App() {
         {show("parked") && <Parked query={route.query} onQuery={replaceQuery} />}
         {show("pages") && <Pages query={route.query} onQuery={replaceQuery} />}
         {show("users") && <Users me={user.username} query={route.query} onQuery={replaceQuery} />}
+        {show("mail") && <Mail />}
         {show("import") && <Migrate query={route.query} onQuery={replaceQuery} />}
         {show("account") && <Account user={user} onScheme={onScheme} />}
       </Shell>
@@ -142,6 +164,7 @@ export function App() {
       {view.kind === "setup" && (
         <Setup onDone={() => setView({ kind: "login", notice: "Administrator account created. Log in now." })} />
       )}
+      {view.kind === "confirm-email" && <ConfirmEmail token={view.token} onDone={() => void boot()} />}
       {view.kind === "invite" && <Invite token={view.token} onDone={(user) => setView({ kind: "home", user })} />}
       {view.kind === "login" && (
         <Login {...(view.notice ? { notice: view.notice } : {})} onLogin={(user) => setView({ kind: "home", user })} />

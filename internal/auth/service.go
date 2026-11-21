@@ -67,6 +67,8 @@ type Service struct {
 	ipLimit    *Limiter
 	userLimit  *Limiter
 	tokenLimit *Limiter
+	emailLimit *Limiter
+	notifyFn   func(context.Context, AccountEvent)
 
 	wa  *webauthn.WebAuthn // nil: passkeys disabled
 	cer *ceremonies
@@ -110,6 +112,9 @@ func NewService(c Config) *Service {
 		userLimit: NewLimiter(20, 15*time.Minute, now),
 		// Unknown bearer tokens per address; a client with a valid token never counts.
 		tokenLimit: NewLimiter(30, 15*time.Minute, now),
+		// Confirmation emails per account, so nobody floods a stranger's
+		// mailbox through the relay.
+		emailLimit: NewLimiter(emailRequestsPerHour, time.Hour, now),
 	}
 }
 
@@ -324,6 +329,10 @@ func (s *Service) Cleanup(ctx context.Context) error {
 		return fmt.Errorf("auth: %w", err)
 	}
 
+	if err := s.st.DeleteExpiredEmailConfirmations(ctx, s.now()); err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
+
 	return nil
 }
 
@@ -466,6 +475,7 @@ func (s *Service) TOTPConfirm(ctx context.Context, userID int64, code string) ([
 	}
 
 	_ = s.st.Audit(ctx, &u.ID, "totp.enable", u.Username, nil)
+	s.notify(ctx, AccountEvent{UserID: u.ID, Kind: EventTOTPEnabled})
 
 	return codes, nil
 }
@@ -505,6 +515,7 @@ func (s *Service) TOTPDisable(ctx context.Context, userID int64, password, code 
 	}
 
 	_ = s.st.Audit(ctx, &u.ID, "totp.disable", u.Username, nil)
+	s.notify(ctx, AccountEvent{UserID: u.ID, Kind: EventTOTPDisabled})
 
 	return nil
 }

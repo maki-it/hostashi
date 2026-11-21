@@ -2,6 +2,7 @@
 
 import { ArrowClockwise } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
+import { PanelCertificate } from "./Certificate";
 import { checkTitle, doctorMessage, runDoctor, type DoctorCheck, type DoctorReport, type DoctorStatus } from "./doctor";
 import { formatHash } from "./routes";
 import { Badge, Button, Card, Notice, PageHead, RelTime, Table, type Column, type NoticeTone, type Sort, type Tone } from "./ui";
@@ -162,6 +163,7 @@ export function Doctor({ query = new URLSearchParams(), onQuery = () => undefine
           empty={problemsOnly && !q ? "No problems." : "No check matches the filter."}
         />
       </Card>
+      <PanelCertificate />
     </>
   );
 }

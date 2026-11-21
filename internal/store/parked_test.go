@@ -88,3 +88,77 @@ func TestParkedDomains(t *testing.T) {
 		t.Fatalf("%v %v", all, err)
 	}
 }
+
+func TestParkedCertificateSource(t *testing.T) {
+	s := open(t, dbPath(t))
+	ctx := t.Context()
+	now := time.Unix(2_000_000, 0)
+
+	if _, _, err := s.PutParked(ctx, "soon.example.net", 0, false, now); err != nil {
+		t.Fatal(err)
+	}
+
+	p, _ := s.ParkedDomain(ctx, "soon.example.net")
+	if p.TLSSource != TLSLetsEncrypt || p.TLSCertSource != "" || !p.TLSTrusted {
+		t.Fatalf("defaults %+v", p)
+	}
+
+	if err := s.SetParkedCustomCert(ctx, p.ID, now.Add(time.Hour), false, now); err != nil {
+		t.Fatal(err)
+	}
+
+	p, _ = s.ParkedDomain(ctx, "soon.example.net")
+	if !p.TLS || p.TLSSource != TLSCustom || p.TLSCertSource != TLSCustom || p.TLSTrusted {
+		t.Fatalf("custom %+v", p)
+	}
+
+	// Changing the page keeps the certificate source.
+	if _, _, err := s.PutParked(ctx, "soon.example.net", 0, true, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if p, _ = s.ParkedDomain(ctx, "soon.example.net"); p.TLSSource != TLSCustom {
+		t.Fatalf("after put %+v", p)
+	}
+
+	if err := s.SetParkedTLSSource(ctx, p.ID, TLSLetsEncrypt, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.SetParkedTLSSource(ctx, p.ID, "x", now); err == nil {
+		t.Fatal("bad source accepted")
+	}
+
+	if err := s.RequestParkedRenew(ctx, p.ID, 10*time.Minute, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.RequestParkedRenew(ctx, p.ID, 10*time.Minute, now.Add(time.Minute)); !errors.Is(err, ErrTooSoon) {
+		t.Fatalf("again: %v", err)
+	}
+
+	if err := s.RequestParkedRenew(ctx, 999, 10*time.Minute, now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown: %v", err)
+	}
+
+	if err := s.SetParkedCert(ctx, p.ID, now.Add(90*24*time.Hour), now); err != nil {
+		t.Fatal(err)
+	}
+
+	p, _ = s.ParkedDomain(ctx, "soon.example.net")
+	if p.TLSCertSource != TLSLetsEncrypt || p.TLSRenewForced || !p.TLSTrusted {
+		t.Fatalf("after LE %+v", p)
+	}
+
+	if err := s.ClearParkedCert(ctx, p.ID, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if p, _ = s.ParkedDomain(ctx, "soon.example.net"); p.TLSCertSource != "" || !p.TLSNotAfter.IsZero() {
+		t.Fatalf("cleared %+v", p)
+	}
+
+	if err := s.ClearParkedCert(ctx, 999, now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("clear unknown: %v", err)
+	}
+}

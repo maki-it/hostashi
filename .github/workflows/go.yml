@@ -71,7 +71,11 @@ jobs:
           sudo systemctl disable --now nginx
           for u in /usr/lib/systemd/system/php*-fpm.service; do sudo systemctl disable --now "$(basename "$u")"; done
       - name: Tests (unprivileged)
-        run: go test -race ./...
+        # hostashi_fasthash: cheap password hashes in tests only (see
+        # internal/auth/cost_fast.go); the next step checks the real cost.
+        run: go test -race -tags hostashi_fasthash ./...
+      - name: Password hashing with the production cost
+        run: go test -race -count=1 -run '^(TestHashAndVerify|TestProductionCost)$' ./internal/auth/
       - name: Cross-user test (root agent, client as uid 65534)
         run: sudo env "PATH=$PATH" go test -race -run '^TestCrossUser$' -v ./internal/agentrpc/
       - name: Site account tests (root, real useradd and bind mount)
@@ -149,6 +153,68 @@ jobs:
             mariadb --version
             HOSTASHI_TEST_MARIADB_SOCKET=/run/mysqld/mysqld.sock /mariadb.test -test.v -test.count=1'
 
+  dbserver:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    name: External DB server (${{ matrix.image }}, TLS ${{ matrix.tls }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: "mariadb:10.11", tls: verify-ca }
+          - { image: "mariadb:11.8", tls: verify-ca }
+          - { image: "mariadb:12.3", tls: verify-ca }
+          - { image: "mariadb:11.8", tls: none }
+          - { image: "mysql:8.4", tls: verify-ca }
+          - { image: "mysql:9.7", tls: verify-ca }
+          - { image: "mysql:8.4", tls: none }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build the test binary
+        env:
+          CGO_ENABLED: "0"
+        run: go test -c -o "$RUNNER_TEMP/dbserver.test" ./internal/dbserver/
+      - name: Run against the server over TCP
+        env:
+          IMAGE: ${{ matrix.image }}
+          MODE: ${{ matrix.tls }}
+        run: |
+          d="$RUNNER_TEMP/certs"
+          install -d -m 0755 "$d"
+          # A private CA and a server certificate for 127.0.0.1, so verify-ca
+          # checks the chain and the address.
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj /CN=test-ca \
+            -keyout "$d/ca.key" -out "$d/ca.pem" 2>/dev/null
+          openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj /CN=127.0.0.1 \
+            -keyout "$d/server.key" -out "$d/server.csr" 2>/dev/null
+          openssl x509 -req -in "$d/server.csr" -CA "$d/ca.pem" -CAkey "$d/ca.key" -CAcreateserial -days 1 \
+            -extfile <(printf 'subjectAltName=IP:127.0.0.1') -out "$d/server.pem" 2>/dev/null
+          chmod 0644 "$d"/*
+          case "$IMAGE" in
+            mariadb*) env=MARIADB_ROOT_PASSWORD; client=mariadb; plain=--skip-ssl ;;
+            mysql*) env=MYSQL_ROOT_PASSWORD; client=mysql; plain=--get-server-public-key ;;
+          esac
+          tls=()
+          if [ "$MODE" = verify-ca ]; then
+            tls=(--ssl-ca=/certs/ca.pem --ssl-cert=/certs/server.pem --ssl-key=/certs/server.key)
+          fi
+          docker run -d --name db -p 127.0.0.1:3306:3306 -v "$d:/certs:ro" -e "$env=rootpw" "$IMAGE" "${tls[@]}"
+          # Over TCP: the images first run a temporary server for their
+          # setup that listens only on the socket, then restart.
+          for _ in $(seq 1 120); do docker exec db "$client" "$plain" -h127.0.0.1 -P3306 -uroot -prootpw -e 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
+          # A dedicated administrator, as ADR-0041 recommends, not root.
+          docker exec db "$client" "$plain" -h127.0.0.1 -P3306 -uroot -prootpw -e "CREATE USER 'hostashi_admin'@'%' IDENTIFIED BY 'Adm1n-pw'; GRANT ALL PRIVILEGES ON *.* TO 'hostashi_admin'@'%' WITH GRANT OPTION;"
+          HOSTASHI_TEST_DBSERVER=127.0.0.1:3306 HOSTASHI_TEST_DBSERVER_USER=hostashi_admin HOSTASHI_TEST_DBSERVER_PW=Adm1n-pw \
+            HOSTASHI_TEST_DBSERVER_CA="$d/ca.pem" HOSTASHI_TEST_DBSERVER_TLS="$MODE" \
+            "$RUNNER_TEMP/dbserver.test" -test.v -test.count=1
+
   restic:
     needs: changes
     if: needs.changes.outputs.go == 'true'
@@ -177,6 +243,9 @@ jobs:
             mariadbd-safe >/dev/null 2>&1 &
             for _ in $(seq 1 30); do [ -S /run/mysqld/mysqld.sock ] && break; sleep 1; done
             mariadb -e "CREATE DATABASE resticdump; CREATE TABLE resticdump.t (a INT); INSERT INTO resticdump.t VALUES (1);"
+            # An administrator for the dump over TCP (ADR-0041), with a
+            # password with a double quote, a quote, a backslash, # and spaces.
+            mariadb -e "CREATE USER dumpadm@127.0.0.1 IDENTIFIED BY '"'"'a\"b\'"'"'c\\\\d #e f'"'"'; GRANT ALL ON *.* TO dumpadm@127.0.0.1;"
             useradd -m u1
             ssh-keygen -q -t ed25519 -N "" -f /root/id_ed25519
             install -d -m 700 -o u1 -g u1 /home/u1/.ssh
@@ -185,6 +254,7 @@ jobs:
             sleep 1
             ssh-keyscan -p 2222 -t ed25519 127.0.0.1 >/root/known_hosts 2>/dev/null
             HOSTASHI_TEST_RESTIC=1 HOSTASHI_TEST_MARIADB_SOCKET=/run/mysqld/mysqld.sock \
+            HOSTASHI_TEST_REMOTE_DUMP=1 HOSTASHI_TEST_MARIADB_DUMP=1 \
             HOSTASHI_TEST_RESTIC_SFTP=sftp://u1@127.0.0.1:2222/hostashi \
             HOSTASHI_TEST_RESTIC_SSH_KEY=/root/id_ed25519 HOSTASHI_TEST_RESTIC_KNOWN_HOSTS=/root/known_hosts \
               /resticctl.test -test.v -test.count=1'

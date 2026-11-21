@@ -11,7 +11,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - Hostashi never stores database passwords; a new password is shown once (ADR-0024) [V].
 - The agent talks to MariaDB as root over the Unix socket with the Go driver, without a process [V: `internal/agent`, memory of PR 70].
 - The panel is served by nginx on port 8443 and proxies to `127.0.0.1:8080` (ADR-0023) [V]. Its API refuses unsafe requests whose `Sec-Fetch-Site` is not `same-origin`, or whose `Origin` is another host; session cookies are `HttpOnly`, `Secure`, `SameSite=Strict` [V: `internal/serve/auth_api.go`, `secure`, `sameOrigin`].
-- Adminer: latest upstream release 6.3.0, offered as a single PHP file, also as a MySQL-only English build (`adminer-6.3.0-mysql-en.php`) [V: adminer.org, 2026-11-20]. Debian 13 packages 5.2.1, Ubuntu 26.04 packages 5.4.1 [V: sources.debian.org, packages.ubuntu.com, 2026-11-20]. Licensed Apache-2.0 or GPL-2.0 [U: adminer.org].
+- Adminer: latest upstream release 6.3.0 (6.3.1 since 2026-11-20, which Hostashi ships [V: adminer.org, 2026-11-21]), offered as a single PHP file, also as a MySQL-only English build (`adminer-6.3.0-mysql-en.php`) [V: adminer.org, 2026-11-20]. Debian 13 packages 5.2.1, Ubuntu 26.04 packages 5.4.1 [V: sources.debian.org, packages.ubuntu.com, 2026-11-20]. Licensed Apache-2.0 or GPL-2.0 [U: adminer.org].
 - phpMyAdmin is a much larger PHP application with many files and its own configuration storage [U].
 
 ## Options
@@ -38,19 +38,19 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 - **Install.** The installer puts the pinned file under `/usr/share/hostashi/adminer/` (root, read-only) with a small wrapper `index.php` written by Hostashi (AGPL) that extends Adminer through its plugin interface: login only by ticket, the server fixed to the local socket, only the one database of the ticket shown, no permanent login. Turning it off is a setting (`--no-db-tool`, and a switch in the panel).
 - **Process.** Its own PHP-FPM pool and unit under the system user `hostashi-adminer`: no home, no shell, `open_basedir` limited to its own directory and its private `/tmp`, the same `disable_functions` as sites (ADR-0033), the unit sandbox of a site pool, at most 4 workers [E]. It reaches MariaDB only through the socket.
-- **nginx.** A server on port 8444 for the panel host name, same certificate and TLS settings as 8443, same IP allowlist (ADR-0018/0034), strict headers (`frame-ancestors 'none'`, `Referrer-Policy: no-referrer`), fail2ban watches it like the panel (ADR-0021). The firewall opens 8444 only while the tool is on.
+- **nginx.** A server on port 8444 for the panel host name, same certificate and TLS settings as 8443, same IP allowlist (ADR-0018/0034), strict headers (`frame-ancestors 'none'`, `Referrer-Policy: no-referrer`), fail2ban watches it like the panel (ADR-0021). (Implementation: the tool has no login form, only 128-bit one-time tickets, so there are no failed logins for fail2ban to count; no jail is added.) The firewall opens 8444 only while the tool is on.
 - **Access flow.**
   1. In the panel, the user clicks "Open in Adminer" on a database. The panel checks the role (ADR-0035: admin and manager for all sites, user only for granted sites; new action `databases:open`, read-only variant for `user` if Kim wants).
-  2. The agent creates a temporary MariaDB user `hst_t_<random>` with a random password, granted only on that database (`ALL` without `GRANT OPTION`, or `SELECT` for read-only), `MAX_USER_CONNECTIONS 2`, from `localhost` only. No new `os/exec`: plain SQL like the existing database code.
+  2. The agent creates a temporary MariaDB user `hostashi_tool_<random>` with a random password, granted only on that database (`ALL` without `GRANT OPTION`, or `SELECT` for read-only), `MAX_USER_CONNECTIONS 2`, from `localhost` only. No new `os/exec`: plain SQL like the existing database code. (Implementation: the prefix is `hostashi_tool_` instead of the drafted `hst_t_`, because `hostashi` is already reserved for site users, so no migrated account can collide.)
   3. The agent writes a one-time ticket (database, user, password, expiry) into `/run/hostashi-adminer/tickets/<id>` (`0600`, owner `hostashi-adminer`) and returns only the ticket id.
   4. The browser opens `https://<host>:8444/?ticket=<id>` in a new tab. The wrapper reads and deletes the ticket, keeps the credentials in its own PHP session, and logs in. The password never reaches the browser.
-  5. After 30 minutes (or 2 hours, chosen in the dialog) the agent drops the user and kills its connections; the ticket expires after 60 seconds if unused. At start the agent drops every leftover `hst_t_` user.
+  5. After 30 minutes (or 2 hours, chosen in the dialog) the agent drops the user and kills its connections; the ticket expires after 60 seconds if unused. At start the agent drops every leftover `hostashi_tool_` user.
 - **Audit.** Every opening is logged with user, site, database, mode and duration.
 - **UI.** A table icon in every database row (ADR-0037), the dialog from the mockup.
 
 ## Consequences
 
-- One more PHP pool, unit, nginx server and firewall port; doctor checks them and that no `hst_t_` user outlives its expiry.
+- One more PHP pool, unit, nginx server and firewall port; doctor checks them and that no `hostashi_tool_` user outlives its expiry.
 - Hostashi releases carry the Adminer file and its hash; Renovate or a release checklist watches new Adminer releases.
 - Adminer's license (Apache-2.0 or GPL-2.0) is compatible with shipping it next to AGPL code; REUSE needs an entry for the file [U: no legal review].
 

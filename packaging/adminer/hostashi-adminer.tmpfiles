@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Installed as /etc/tmpfiles.d/hostashi-adminer.conf (ADR-0038): the ticket
+# directory of the web database tool. The agent writes tickets into it as
+# root; only the tool's user may read and remove them.
+d /run/hostashi-adminer 0755 root root -
+d /run/hostashi-adminer/tickets 0700 hostashi-adminer hostashi-adminer -

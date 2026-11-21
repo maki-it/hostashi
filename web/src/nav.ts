@@ -6,6 +6,7 @@ import {
   ClockCounterClockwise,
   Code,
   Database,
+  EnvelopeSimple,
   Gauge,
   Globe,
   Heartbeat,
@@ -51,6 +52,7 @@ export const navGroups: readonly NavGroup[] = [
     label: "Administration",
     items: [
       { page: "users", label: "Users", icon: UsersThree, roles: admin },
+      { page: "mail", label: "Email", icon: EnvelopeSimple, roles: admin },
       { page: "import", label: "CloudPanel import", icon: ArrowSquareIn, roles: admin },
     ],
   },

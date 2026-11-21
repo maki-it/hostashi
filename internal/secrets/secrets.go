@@ -50,6 +50,15 @@ func New(key []byte) (*Box, error) {
 	return &Box{aead: aead}, nil
 }
 
+// Load reads an existing key file, with the same checks as LoadOrCreate.
+// Processes that only open secrets the panel sealed, such as the backup,
+// use it, so they never create a key of their own.
+func Load(path string) (*Box, error) {
+	fi, err := os.Lstat(path)
+
+	return load(path, fi, err)
+}
+
 // LoadOrCreate reads the key file. If it does not exist it is created with
 // a random key and mode 0400. A file that group or others can access, or
 // that is not a regular file, is refused.
@@ -63,6 +72,10 @@ func LoadOrCreate(path string) (*Box, error) {
 		fi, err = os.Lstat(path)
 	}
 
+	return load(path, fi, err)
+}
+
+func load(path string, fi os.FileInfo, err error) (*Box, error) {
 	if err != nil {
 		return nil, fmt.Errorf("secrets: %w", err)
 	}

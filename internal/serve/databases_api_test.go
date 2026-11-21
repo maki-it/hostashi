@@ -63,6 +63,11 @@ func TestDatabaseLifecycleOverHTTP(t *testing.T) {
 		{"POST", "/api/v1/databases/nope/users", `{"user":"u1"}`, http.StatusNotFound},
 		{"PUT", "/api/v1/databases/other/users/reader/password", `{}`, http.StatusNotFound},
 		{"DELETE", "/api/v1/databases/shop_wp/users/nobody", ``, http.StatusNotFound},
+		// The database tool is not set up in this panel.
+		{"POST", "/api/v1/databases/shop_wp/tool", `{"minutes":30}`, http.StatusConflict},
+		{"POST", "/api/v1/databases/shop_wp/tool", `{"minutes":5}`, http.StatusUnprocessableEntity},
+		{"POST", "/api/v1/databases/nope/tool", `{"minutes":30}`, http.StatusNotFound},
+		{"GET", "/api/v1/dbtool", ``, http.StatusOK},
 	}
 	for _, tc := range cases {
 		rec := e.do(t, reqOpts{method: tc.method, path: tc.path, cookie: c, body: tc.body})

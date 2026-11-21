@@ -696,3 +696,163 @@ a.ui-btn {
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--line);
 }
+/* Short form fields side by side, stacked on a phone */
+.ui-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-5);
+}
+
+/* File manager (ADR-0040): breadcrumb and toolbar, the selection bar, the
+   drop zone around the table, and names with their icon */
+.ui-files-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--line);
+}
+.ui-files-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-family: var(--font-mono);
+}
+.ui-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.ui-link-btn:hover {
+  text-decoration: underline;
+}
+.ui-link-btn[aria-current="page"] {
+  color: var(--fg);
+  font-weight: 600;
+  cursor: default;
+  text-decoration: none;
+}
+.ui-files-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  background: var(--sunken);
+}
+.ui-files-drop {
+  outline: 2px dashed transparent;
+  outline-offset: -6px;
+}
+.ui-files-drop[data-dragging="true"] {
+  outline-color: var(--accent);
+}
+.ui-files-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 16ch;
+  overflow-wrap: anywhere;
+}
+.ui-files-target {
+  display: block;
+}
+.ui-files-name svg {
+  flex: none;
+  color: var(--muted);
+}
+.ui-link-btn.ui-files-name svg {
+  color: var(--accent);
+}
+
+/* The editor dialog of the file manager (ADR-0040): wide, with the
+   editor filling the space between header and footer */
+.ui-editor {
+  width: min(1200px, calc(100vw - 32px));
+  height: min(860px, calc(100vh - 32px));
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--fg);
+}
+.ui-editor[open] {
+  display: flex;
+  flex-direction: column;
+}
+.ui-editor::backdrop {
+  background: var(--bg);
+  opacity: 0.8;
+}
+.ui-editor-head,
+.ui-editor-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-5);
+}
+.ui-editor-head {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+}
+.ui-editor-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ui-editor-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.ui-editor-host {
+  height: 100%;
+}
+.ui-editor-ask,
+.ui-editor-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--line);
+  background: var(--warn-bg);
+}
+.ui-editor-error {
+  display: block;
+  background: none;
+}
+.ui-editor-foot {
+  border-top: 1px solid var(--line);
+}
+.ui-editor-foot > .ui-row {
+  margin-left: auto;
+}
+.ui-editor-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}

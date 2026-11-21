@@ -29,7 +29,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - **Reserved name.** The panel host name cannot be a domain, alias or parked domain of a site; the API answers `409 domain_reserved`. The installer and doctor check that no existing site already uses it.
 - **IP allowlist.** On 443, `panel_ports` in the firewall does not contain 443. The allowlist is enforced by nginx in the panel's server block (`allow` per address, then `deny all`), generated from the same setting. On 8443 nothing changes: the firewall does it.
 - **fail2ban.** The `hostashi-panel` jail keeps watching panel logins. On 443, a ban also blocks that address from the sites, because the ban works on the port. That is accepted: the address was guessing panel passwords [A].
-- **Changing later.** `hostashi panel port <port>` switches between 8443 and 443 on an installed server (nginx, firewall, public URL) [A: small command, same checks as the installer].
+- **Changing later.** Run the installer again with the other `--panel-port`. It rewrites the settings and the firewall and restarts the agent and the panel; the container test switches from 8443 to 443 and back this way [V: `packaging/test/container-test.sh`]. A separate `hostashi panel port` command was dropped: it would repeat the installer's firewall logic and need its own os/exec exception (decided, Kim, 2026-11-21).
 
 ## Consequences
 

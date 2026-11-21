@@ -1,10 +1,33 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ArrowLeft, Copy, ListChecks, Trash, UploadSimple } from "@phosphor-icons/react";
-import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  ArrowLeft,
+  Copy,
+  ListChecks,
+  Trash,
+  UploadSimple,
+} from "@phosphor-icons/react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { Cutover } from "./Cutover";
 import { SnippetField } from "./Snippets";
-import { setSnippets, sizeProblem, snippetDraft, snippetMessage, snippetProblems, type DraftItem, type SnippetDraft, type SnippetProblems } from "./snippets";
+import {
+  setSnippets,
+  sizeProblem,
+  snippetDraft,
+  snippetMessage,
+  snippetProblems,
+  type DraftItem,
+  type SnippetDraft,
+  type SnippetProblems,
+} from "./snippets";
 import {
   activateImport,
   cronLabel,
@@ -38,6 +61,7 @@ import {
 } from "./cloudpanel";
 import { listDatabases } from "./databases";
 import { formatHash } from "./routes";
+import { presetLabel, type Preset } from "./pagecache";
 import { phpVersions } from "./sites";
 import {
   Badge,
@@ -57,7 +81,8 @@ import {
 } from "./ui";
 
 const scanCommand = "hostashi cloudpanel scan -json -full > hostashi-scan.json";
-const fingerprintCommand = "for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf \"$f\"; done";
+const fingerprintCommand =
+  'for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf "$f"; done';
 
 type QueryProps = {
   /** The address query: report=<id> for a plan, and site=<name> for one site of it; q, status, sort, dir for the plan table. */
@@ -66,14 +91,21 @@ type QueryProps = {
   onQuery?: (q: URLSearchParams) => void;
 };
 
-const importHash = (q?: Record<string, string>) => formatHash({ page: "import", ...(q ? { query: new URLSearchParams(q) } : {}) });
+const importHash = (q?: Record<string, string>) =>
+  formatHash({
+    page: "import",
+    ...(q ? { query: new URLSearchParams(q) } : {}),
+  });
 const siteKey = (s: PlanSite) => s.name || s.source;
 
 // Migrate moves sites from a CloudPanel server to this one: connect the old
 // server, upload its scan report, create the sites the plan proposes and
 // copy their files and databases (ADR-0026). The setup and the reports are
 // one view; a plan (?report=) and one site of it (&site=) are their own.
-export function Migrate({ query = new URLSearchParams(), onQuery = () => undefined }: QueryProps) {
+export function Migrate({
+  query = new URLSearchParams(),
+  onQuery = () => undefined,
+}: QueryProps) {
   const [source, setInfo] = useState<SourceInfo | null>(null);
   const [error, setError] = useState("");
 
@@ -94,14 +126,26 @@ export function Migrate({ query = new URLSearchParams(), onQuery = () => undefin
     return (
       <>
         {head}
-        {error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading…</p>}
+        {error ? (
+          <Notice tone="err" title={error} />
+        ) : (
+          <p aria-busy="true">Loading…</p>
+        )}
       </>
     );
   }
 
   const report = query.get("report");
   if (report) {
-    return <PlanView key={report} report={report} ready={source.ready} query={query} onQuery={onQuery} />;
+    return (
+      <PlanView
+        key={report}
+        report={report}
+        ready={source.ready}
+        query={query}
+        onQuery={onQuery}
+      />
+    );
   }
 
   return (
@@ -136,7 +180,10 @@ function CopyBlock({ label, text }: { label: string; text: string }) {
         {text}
       </pre>
       <div className="ui-row">
-        <Button icon={<Copy size={16} aria-hidden="true" />} onClick={() => void copyText(text).then(setCopied)}>
+        <Button
+          icon={<Copy size={16} aria-hidden="true" />}
+          onClick={() => void copyText(text).then(setCopied)}
+        >
           Copy
         </Button>
         {copied && (
@@ -149,7 +196,13 @@ function CopyBlock({ label, text }: { label: string; text: string }) {
   );
 }
 
-function SourceCard({ info, onChange }: { info: SourceInfo; onChange: (i: SourceInfo) => void }) {
+function SourceCard({
+  info,
+  onChange,
+}: {
+  info: SourceInfo;
+  onChange: (i: SourceInfo) => void;
+}) {
   const [host, setHost] = useState(info.source?.host ?? "");
   const [port, setPort] = useState(String(info.source?.port ?? 22));
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -194,22 +247,44 @@ function SourceCard({ info, onChange }: { info: SourceInfo; onChange: (i: Source
     }
   }
 
-  const state = !info.source ? null : info.ready ? <Badge tone="ok">Ready</Badge> : <Badge tone="warn">Not ready</Badge>;
+  const state = !info.source ? null : info.ready ? (
+    <Badge tone="ok">Ready</Badge>
+  ) : (
+    <Badge tone="warn">Not ready</Badge>
+  );
 
   return (
     <Card title="Old server" {...(state ? { actions: state } : {})}>
       <div className="ui-stack">
         <p className="ui-flush">
-          Hostashi reads the sites over SSH from the CloudPanel server. It only reads there and changes nothing.
-          {info.source && (info.ready ? " The connection is ready." : " The connection is not ready yet: finish the steps below.")}
+          Hostashi reads the sites over SSH from the CloudPanel server. It only
+          reads there and changes nothing.
+          {info.source &&
+            (info.ready
+              ? " The connection is ready."
+              : " The connection is not ready yet: finish the steps below.")}
         </p>
         <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate>
           <div className="ui-host-port">
-            <Field label="Address" hint="Prefer the IP address: DNS names move during the migration.">
-              <input className="ui-input ui-mono" value={host} onChange={(e) => setHost(e.target.value)} autoComplete="off" spellCheck={false} />
+            <Field
+              label="Address"
+              hint="Prefer the IP address: DNS names move during the migration."
+            >
+              <input
+                className="ui-input ui-mono"
+                value={host}
+                onChange={(e) => setHost(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
             </Field>
             <Field label="SSH port">
-              <input className="ui-input" value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" />
+              <input
+                className="ui-input"
+                value={port}
+                onChange={(e) => setPort(e.target.value)}
+                inputMode="numeric"
+              />
             </Field>
           </div>
           {error && <Notice tone="err" title={error} />}
@@ -223,18 +298,33 @@ function SourceCard({ info, onChange }: { info: SourceInfo; onChange: (i: Source
         {info.authorizedKeysLine && (
           <div className="ui-stack-tight">
             <p className="ui-flush">
-              On the old server, add this line to <code>/root/.ssh/authorized_keys</code>. It only allows reading files over SFTP and a tunnel
-              to its database.
+              On the old server, add this line to{" "}
+              <code>/root/.ssh/authorized_keys</code>. It only allows reading
+              files over SFTP and a tunnel to its database.
             </p>
-            <CopyBlock label="authorized_keys line" text={info.authorizedKeysLine} />
+            <CopyBlock
+              label="authorized_keys line"
+              text={info.authorizedKeysLine}
+            />
           </div>
         )}
         {info.source &&
           (confirmRemove ? (
-            <div className="ui-stack-tight" role="alertdialog" aria-label="Forget old server">
-              <p className="ui-flush">Forget the old server? Its key and host key are deleted here. Remove the line from authorized_keys there as well.</p>
+            <div
+              className="ui-stack-tight"
+              role="alertdialog"
+              aria-label="Forget old server"
+            >
+              <p className="ui-flush">
+                Forget the old server? Its key and host key are deleted here.
+                Remove the line from authorized_keys there as well.
+              </p>
               <div className="ui-row">
-                <Button variant="danger" disabled={busy} onClick={() => void remove()}>
+                <Button
+                  variant="danger"
+                  disabled={busy}
+                  onClick={() => void remove()}
+                >
                   Forget old server
                 </Button>
                 <Button disabled={busy} onClick={() => setConfirmRemove(false)}>
@@ -254,8 +344,17 @@ function SourceCard({ info, onChange }: { info: SourceInfo; onChange: (i: Source
   );
 }
 
-function HostKeyCard({ info, onChange }: { info: SourceInfo; onChange: (i: SourceInfo) => void }) {
-  const [scanned, setScanned] = useState<{ key: string; fingerprint: string } | null>(null);
+function HostKeyCard({
+  info,
+  onChange,
+}: {
+  info: SourceInfo;
+  onChange: (i: SourceInfo) => void;
+}) {
+  const [scanned, setScanned] = useState<{
+    key: string;
+    fingerprint: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -272,20 +371,33 @@ function HostKeyCard({ info, onChange }: { info: SourceInfo; onChange: (i: Sourc
   }
 
   return (
-    <Card title="Host key of the old server" actions={info.hostKey ? <Badge tone="ok">Trusted</Badge> : <Badge tone="warn">Not confirmed</Badge>}>
+    <Card
+      title="Host key of the old server"
+      actions={
+        info.hostKey ? (
+          <Badge tone="ok">Trusted</Badge>
+        ) : (
+          <Badge tone="warn">Not confirmed</Badge>
+        )
+      }
+    >
       <div className="ui-stack">
         {info.hostKey ? (
           <p className="ui-flush ui-break">
             Trusted: <code>{info.hostKey}</code>
           </p>
         ) : (
-          <p className="ui-flush">The old server&apos;s SSH host key is not confirmed yet. Nothing is copied until it is.</p>
+          <p className="ui-flush">
+            The old server&apos;s SSH host key is not confirmed yet. Nothing is
+            copied until it is.
+          </p>
         )}
         {scanned && (
           <div className="ui-stack-tight">
             <p className="ui-flush">
-              The old server presents <code>{scanned.fingerprint}</code>. On the old server, run this and trust the key only if one line shows
-              the same fingerprint:
+              The old server presents <code>{scanned.fingerprint}</code>. On the
+              old server, run this and trust the key only if one line shows the
+              same fingerprint:
             </p>
             <pre className="ui-code" aria-label="Fingerprint command">
               {fingerprintCommand}
@@ -308,7 +420,12 @@ function HostKeyCard({ info, onChange }: { info: SourceInfo; onChange: (i: Sourc
         )}
         {error && <Notice tone="err" title={error} />}
         <div className="ui-row">
-          <Button disabled={busy} onClick={() => void run(async () => setScanned(await scanSourceHostKey()))}>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              void run(async () => setScanned(await scanSourceHostKey()))
+            }
+          >
             {info.hostKey ? "Check the host key again" : "Fetch the host key"}
           </Button>
         </div>
@@ -317,7 +434,13 @@ function HostKeyCard({ info, onChange }: { info: SourceInfo; onChange: (i: Sourc
   );
 }
 
-function DumpUserCard({ info, onChange }: { info: SourceInfo; onChange: (i: SourceInfo) => void }) {
+function DumpUserCard({
+  info,
+  onChange,
+}: {
+  info: SourceInfo;
+  onChange: (i: SourceInfo) => void;
+}) {
   const [creds, setCreds] = useState<DBCredentials | null>(null);
   const [confirmNew, setConfirmNew] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -345,13 +468,18 @@ function DumpUserCard({ info, onChange }: { info: SourceInfo; onChange: (i: Sour
 
   if (creds) {
     return (
-      <section className="ui-card ui-card-body ui-stack ui-attention" aria-labelledby="mig-dbsql">
+      <section
+        className="ui-card ui-card-body ui-stack ui-attention"
+        aria-labelledby="mig-dbsql"
+      >
         <h2 id="mig-dbsql" className="ui-flush" ref={heading} tabIndex={-1}>
           Run this SQL on the old server now
         </h2>
         <p className="ui-flush">
-          Run it as the MariaDB administrator there, for example in <code>mysql</code> as root. It creates the user <code>{creds.user}</code>{" "}
-          that may only read. Hostashi shows it only this once.
+          Run it as the MariaDB administrator there, for example in{" "}
+          <code>mysql</code> as root. It creates the user{" "}
+          <code>{creds.user}</code> that may only read. Hostashi shows it only
+          this once.
         </p>
         <CopyBlock label="SQL for the old server" text={creds.sql} />
         <div className="ui-row">
@@ -371,14 +499,24 @@ function DumpUserCard({ info, onChange }: { info: SourceInfo; onChange: (i: Sour
             Databases are read as <code>{info.dbUser}</code> on the old server.
           </p>
         ) : (
-          <p className="ui-flush">To copy databases, Hostashi needs a read-only database user on the old server. Files are copied without it.</p>
+          <p className="ui-flush">
+            To copy databases, Hostashi needs a read-only database user on the
+            old server. Files are copied without it.
+          </p>
         )}
         {error && <Notice tone="err" title={error} />}
         {info.dbUser && confirmNew ? (
           <div className="ui-stack-tight">
-            <p className="ui-flush">A new password replaces the old one. Run the new SQL on the old server, or database copies fail.</p>
+            <p className="ui-flush">
+              A new password replaces the old one. Run the new SQL on the old
+              server, or database copies fail.
+            </p>
             <div className="ui-row">
-              <Button variant="primary" disabled={busy} onClick={() => void generate()}>
+              <Button
+                variant="primary"
+                disabled={busy}
+                onClick={() => void generate()}
+              >
                 Make a new password
               </Button>
               <Button disabled={busy} onClick={() => setConfirmNew(false)}>
@@ -391,7 +529,9 @@ function DumpUserCard({ info, onChange }: { info: SourceInfo; onChange: (i: Sour
             <Button
               variant={info.dbUser ? "secondary" : "primary"}
               disabled={busy}
-              onClick={() => (info.dbUser ? setConfirmNew(true) : void generate())}
+              onClick={() =>
+                info.dbUser ? setConfirmNew(true) : void generate()
+              }
             >
               {info.dbUser ? "Make a new password" : "Create the database user"}
             </Button>
@@ -460,16 +600,36 @@ function ReportsCard({ onOpen }: { onOpen: (id: string) => void }) {
   }
 
   const columns: Column<Report>[] = [
-    { key: "created", header: "Uploaded", sortValue: (r) => r.createdAt, cell: (r) => <RelTime iso={r.createdAt} /> },
-    { key: "sites", header: "Sites", sortValue: (r) => r.sites, cell: (r) => r.sites },
+    {
+      key: "created",
+      header: "Uploaded",
+      sortValue: (r) => r.createdAt,
+      cell: (r) => <RelTime iso={r.createdAt} />,
+    },
+    {
+      key: "sites",
+      header: "Sites",
+      sortValue: (r) => r.sites,
+      cell: (r) => r.sites,
+    },
     {
       key: "actions",
       header: "Actions",
       srHeader: true,
       cell: (r) => (
         <RowActions>
-          <IconLink label="Show plan" icon={<ListChecks size={16} />} href={importHash({ report: r.id })} />
-          <IconButton label="Delete report" icon={<Trash size={16} />} danger disabled={busy} onClick={() => setConfirmDelete(r.id)} />
+          <IconLink
+            label="Show plan"
+            icon={<ListChecks size={16} />}
+            href={importHash({ report: r.id })}
+          />
+          <IconButton
+            label="Delete report"
+            icon={<Trash size={16} />}
+            danger
+            disabled={busy}
+            onClick={() => setConfirmDelete(r.id)}
+          />
         </RowActions>
       ),
     },
@@ -478,26 +638,49 @@ function ReportsCard({ onOpen }: { onOpen: (id: string) => void }) {
   return (
     <Card title="Scan reports" padded={false}>
       <div className="ui-card-body ui-stack">
-        <p className="ui-flush">Run the scan on the old server as root. It only reads the CloudPanel configuration.</p>
+        <p className="ui-flush">
+          Run the scan on the old server as root. It only reads the CloudPanel
+          configuration.
+        </p>
         <pre className="ui-code" aria-label="Scan command">
           {scanCommand}
         </pre>
         <form className="ui-stack" onSubmit={(e) => void upload(e)} noValidate>
           <Field label="Report file">
-            <input className="ui-file" ref={file} type="file" accept="application/json,.json" />
+            <input
+              className="ui-file"
+              ref={file}
+              type="file"
+              accept="application/json,.json"
+            />
           </Field>
           {error && <Notice tone="err" title={error} />}
           <div className="ui-row">
-            <Button type="submit" variant="primary" icon={<UploadSimple size={16} aria-hidden="true" />} disabled={busy}>
+            <Button
+              type="submit"
+              variant="primary"
+              icon={<UploadSimple size={16} aria-hidden="true" />}
+              disabled={busy}
+            >
               {busy ? "Uploading…" : "Upload report"}
             </Button>
           </div>
         </form>
         {confirmDelete && (
-          <div className="ui-stack-tight" role="alertdialog" aria-label="Delete report">
-            <p className="ui-flush">Delete this report? Sites created from it stay.</p>
+          <div
+            className="ui-stack-tight"
+            role="alertdialog"
+            aria-label="Delete report"
+          >
+            <p className="ui-flush">
+              Delete this report? Sites created from it stay.
+            </p>
             <div className="ui-row">
-              <Button variant="danger" disabled={busy} onClick={() => void remove(confirmDelete)}>
+              <Button
+                variant="danger"
+                disabled={busy}
+                onClick={() => void remove(confirmDelete)}
+              >
                 Delete report
               </Button>
               <Button disabled={busy} onClick={() => setConfirmDelete("")}>
@@ -534,15 +717,23 @@ const tlsLabel: Record<PlanSite["tls"], string> = {
 type Status = { word: string; tone: Tone; rank: number; value: string };
 
 function statusOf(s: PlanSite): Status {
-  if (existsHere(s)) return { word: "Created", tone: "ok", rank: 2, value: "created" };
-  if (s.action === "import") return { word: "Ready", tone: "ok", rank: 1, value: "import" };
-  if (s.action === "review") return { word: "Review", tone: "warn", rank: 0, value: "review" };
+  if (existsHere(s))
+    return { word: "Created", tone: "ok", rank: 2, value: "created" };
+  if (s.action === "import")
+    return { word: "Ready", tone: "ok", rank: 1, value: "import" };
+  if (s.action === "review")
+    return { word: "Review", tone: "warn", rank: 0, value: "review" };
   return { word: "Skipped", tone: "off", rank: 3, value: "skip" };
 }
 
 const sentence = (m: string) => m.charAt(0).toUpperCase() + m.slice(1) + ".";
 
-type PlanProps = { report: string; ready: boolean; query: URLSearchParams; onQuery: (q: URLSearchParams) => void };
+type PlanProps = {
+  report: string;
+  ready: boolean;
+  query: URLSearchParams;
+  onQuery: (q: URLSearchParams) => void;
+};
 
 // PlanView shows what the scan report proposes for each site, and one site
 // of it with the steps to move it.
@@ -587,7 +778,11 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
     return (
       <>
         <PageHead title="Plan" actions={back} />
-        {error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading…</p>}
+        {error ? (
+          <Notice tone="err" title={error} />
+        ) : (
+          <p aria-busy="true">Loading…</p>
+        )}
       </>
     );
   }
@@ -609,7 +804,16 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
         </>
       );
     }
-    return <PlanSiteView report={report} site={site} php={php} ready={ready} back={planLink} onChange={load} />;
+    return (
+      <PlanSiteView
+        report={report}
+        site={site}
+        php={php}
+        ready={ready}
+        back={planLink}
+        onChange={load}
+      />
+    );
   }
 
   const s = rep.plan.summary;
@@ -620,13 +824,25 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
       sortValue: siteKey,
       cell: (p) => (
         <div className="ui-cell-main">
-          <a href={importHash({ report, site: siteKey(p) })}>{p.name || p.source}</a>
+          <a href={importHash({ report, site: siteKey(p) })}>
+            {p.name || p.source}
+          </a>
           <span>{p.domains.length ? p.domains.join(", ") : "No domain"}</span>
         </div>
       ),
     },
-    { key: "type", header: "Type", sortValue: (p) => p.type, cell: (p) => p.type },
-    { key: "php", header: "PHP", sortValue: (p) => p.php, cell: (p) => p.php || <span className="ui-hint">None</span> },
+    {
+      key: "type",
+      header: "Type",
+      sortValue: (p) => p.type,
+      cell: (p) => p.type,
+    },
+    {
+      key: "php",
+      header: "PHP",
+      sortValue: (p) => p.php,
+      cell: (p) => p.php || <span className="ui-hint">None</span>,
+    },
     {
       key: "status",
       header: "Status",
@@ -638,7 +854,9 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
             <span className="ui-row">
               <Badge tone={st.tone}>{st.word}</Badge>
             </span>
-            {p.reasons.length > 0 && st.value !== "created" && <p className="ui-hint ui-flush">{sentence(p.reasons[0]!.msg)}</p>}
+            {p.reasons.length > 0 && st.value !== "created" && (
+              <p className="ui-hint ui-flush">{sentence(p.reasons[0]!.msg)}</p>
+            )}
           </div>
         );
       },
@@ -648,10 +866,16 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
   const q = (query.get("q") ?? "").trim().toLowerCase();
   const status = query.get("status") ?? "";
   const shown = rep.plan.sites.filter(
-    (p) => (!q || siteKey(p).toLowerCase().includes(q) || p.domains.some((d) => d.includes(q))) && (!status || statusOf(p).value === status),
+    (p) =>
+      (!q ||
+        siteKey(p).toLowerCase().includes(q) ||
+        p.domains.some((d) => d.includes(q))) &&
+      (!status || statusOf(p).value === status),
   );
   const sortKey = query.get("sort");
-  const sort: Sort = sortKey ? { key: sortKey, dir: query.get("dir") === "desc" ? "desc" : "asc" } : { key: "status", dir: "asc" };
+  const sort: Sort = sortKey
+    ? { key: sortKey, dir: query.get("dir") === "desc" ? "desc" : "asc" }
+    : { key: "status", dir: "asc" };
 
   return (
     <>
@@ -659,14 +883,20 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
         title="Plan"
         description={
           <>
-            From the report uploaded <RelTime iso={rep.createdAt} />. It is worked out again on every view, so sites created here show as
+            From the report uploaded <RelTime iso={rep.createdAt} />. It is
+            worked out again on every view, so sites created here show as
             created.
           </>
         }
         actions={back}
       />
-      <Notice tone="info" title={`${s.sites} sites: ${s.import} ready, ${s.review} to review, ${s.skip} skipped.`}>
-        {!ready ? "Imports can start once the old server and its host key are set up." : "Open a site to create it here and copy it."}
+      <Notice
+        tone="info"
+        title={`${s.sites} sites: ${s.import} ready, ${s.review} to review, ${s.skip} skipped.`}
+      >
+        {!ready
+          ? "Imports can start once the old server and its host key are set up."
+          : "Open a site to create it here and copy it."}
       </Notice>
       {error && <Notice tone="err" title={error} />}
       <Card padded={false}>
@@ -679,7 +909,12 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
             value={query.get("q") ?? ""}
             onChange={(e) => set({ q: e.target.value })}
           />
-          <select className="ui-select" aria-label="Status" value={status} onChange={(e) => set({ status: e.target.value })}>
+          <select
+            className="ui-select"
+            aria-label="Status"
+            value={status}
+            onChange={(e) => set({ status: e.target.value })}
+          >
             <option value="">All sites</option>
             <option value="review">Review</option>
             <option value="import">Ready</option>
@@ -701,9 +936,23 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
   );
 }
 
-type SiteViewProps = { report: string; site: PlanSite; php: string[]; ready: boolean; back: ReactNode; onChange: () => Promise<void> };
+type SiteViewProps = {
+  report: string;
+  site: PlanSite;
+  php: string[];
+  ready: boolean;
+  back: ReactNode;
+  onChange: () => Promise<void>;
+};
 
-function PlanSiteView({ report, site, php, ready, back, onChange }: SiteViewProps) {
+function PlanSiteView({
+  report,
+  site,
+  php,
+  ready,
+  back,
+  onChange,
+}: SiteViewProps) {
   const created = existsHere(site);
   const st = statusOf(site);
   const title = site.name || site.source;
@@ -720,7 +969,10 @@ function PlanSiteView({ report, site, php, ready, back, onChange }: SiteViewProp
         actions={back}
       />
       {site.reasons.length > 0 && !created && (
-        <Notice tone={site.action === "skip" ? "info" : "warn"} title={site.action === "review" ? "Check these points first" : "Why"}>
+        <Notice
+          tone={site.action === "skip" ? "info" : "warn"}
+          title={site.action === "review" ? "Check these points first" : "Why"}
+        >
           <ul className="ui-plain-list" aria-label={"Reasons for " + title}>
             {site.reasons.map((r) => (
               <li key={r.code + r.msg}>{sentence(r.msg)}</li>
@@ -766,7 +1018,12 @@ function PlanSiteView({ report, site, php, ready, back, onChange }: SiteViewProp
       </Card>
       {(site.action === "import" || site.action === "review") && (
         <Card title="Create the site">
-          <CreateForm report={report} site={site} php={php} onChange={onChange} />
+          <CreateForm
+            report={report}
+            site={site}
+            php={php}
+            onChange={onChange}
+          />
         </Card>
       )}
       {created && site.cronImport > 0 && (
@@ -794,13 +1051,25 @@ function PlanSiteView({ report, site, php, ready, back, onChange }: SiteViewProp
   );
 }
 
-function CreateForm({ report, site, php, onChange }: { report: string; site: PlanSite; php: string[]; onChange: () => Promise<void> }) {
+function CreateForm({
+  report,
+  site,
+  php,
+  onChange,
+}: {
+  report: string;
+  site: PlanSite;
+  php: string[];
+  onChange: () => Promise<void>;
+}) {
   const [reviewed, setReviewed] = useState(false);
   const [version, setVersion] = useState(site.php);
+  const [cache, setCache] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const review = site.action === "review";
-  const choices = site.php && !php.includes(site.php) ? [site.php, ...php] : php;
+  const choices =
+    site.php && !php.includes(site.php) ? [site.php, ...php] : php;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -811,7 +1080,13 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
     setBusy(true);
     setError("");
     try {
-      await createFromPlan(report, site.name, reviewed, version !== site.php ? version : "");
+      await createFromPlan(
+        report,
+        site.name,
+        reviewed,
+        version !== site.php ? version : "",
+        site.pageCache ? cache : undefined,
+      );
       await onChange();
     } catch (err) {
       setError(migrationMessage(err));
@@ -822,11 +1097,18 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
 
   return (
     <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
-      <p className="ui-flush">The site gets the old domains without a certificate. HTTPS follows after the DNS switch.</p>
+      <p className="ui-flush">
+        The site gets the old domains without a certificate. HTTPS follows after
+        the DNS switch.
+      </p>
       {site.php && choices.length > 0 && (
         <div className="ui-narrow">
           <Field label={"PHP version for " + site.name}>
-            <select className="ui-select" value={version} onChange={(e) => setVersion(e.target.value)}>
+            <select
+              className="ui-select"
+              value={version}
+              onChange={(e) => setVersion(e.target.value)}
+            >
               {choices.map((v) => (
                 <option key={v} value={v}>
                   {v}
@@ -837,9 +1119,25 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
           </Field>
         </div>
       )}
+      {site.pageCache && (
+        <label className="ui-check">
+          <input
+            type="checkbox"
+            checked={cache}
+            onChange={(e) => setCache(e.target.checked)}
+          />
+          Switch on the page cache (
+          {presetLabel[site.pageCache as Preset] ?? site.pageCache} preset)
+        </label>
+      )}
       {review && (
         <label className="ui-check">
-          <input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} />I checked the points above for {site.name}
+          <input
+            type="checkbox"
+            checked={reviewed}
+            onChange={(e) => setReviewed(e.target.checked)}
+          />
+          I checked the points above for {site.name}
         </label>
       )}
       {error && <Notice tone="err" title={error} />}
@@ -852,7 +1150,15 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
   );
 }
 
-function ImportForm({ report, site, ready }: { report: string; site: PlanSite; ready: boolean }) {
+function ImportForm({
+  report,
+  site,
+  ready,
+}: {
+  report: string;
+  site: PlanSite;
+  ready: boolean;
+}) {
   const [dbs, setDbs] = useState("");
   const [here, setHere] = useState<string[]>([]);
   const [job, setJob] = useState("");
@@ -867,7 +1173,9 @@ function ImportForm({ report, site, ready }: { report: string; site: PlanSite; r
 
   useEffect(() => {
     listDatabases()
-      .then((all) => setHere(all.filter((d) => d.site === site.name).map((d) => d.name)))
+      .then((all) =>
+        setHere(all.filter((d) => d.site === site.name).map((d) => d.name)),
+      )
       .catch(() => setHere([]));
   }, [site.name]);
 
@@ -893,23 +1201,36 @@ function ImportForm({ report, site, ready }: { report: string; site: PlanSite; r
   return (
     <div className="ui-stack">
       <p className="ui-flush">
-        The site exists here. The import copies the old files to <code>cloudpanel-import</code> in its home and leaves the web root as it is.
-        Run it again shortly before the DNS switch for the final sync.
+        The site exists here. The import copies the old files to{" "}
+        <code>cloudpanel-import</code> in its home and leaves the web root as it
+        is. Run it again shortly before the DNS switch for the final sync.
       </p>
       <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
         <Field
           label={"Databases to copy for " + site.name}
           hint={
             "One per line: the database on the old server, a space, the database of this site here. " +
-            (here.length ? "This site has: " + here.join(", ") + "." : "Create the databases on the Databases page first.")
+            (here.length
+              ? "This site has: " + here.join(", ") + "."
+              : "Create the databases on the Databases page first.")
           }
         >
-          <textarea className="ui-input ui-textarea ui-mono" value={dbs} onChange={(e) => setDbs(e.target.value)} rows={2} spellCheck={false} />
+          <textarea
+            className="ui-input ui-textarea ui-mono"
+            value={dbs}
+            onChange={(e) => setDbs(e.target.value)}
+            rows={2}
+            spellCheck={false}
+          />
         </Field>
         {error && <Notice tone="err" title={error} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || !ready}>
-            {busy ? "Starting…" : job ? "Import " + site.name + " again" : "Import " + site.name}
+            {busy
+              ? "Starting…"
+              : job
+                ? "Import " + site.name + " again"
+                : "Import " + site.name}
           </Button>
         </div>
       </form>
@@ -918,7 +1239,12 @@ function ImportForm({ report, site, ready }: { report: string; site: PlanSite; r
   );
 }
 
-const jobTone: Record<ImportJob["state"], Tone> = { queued: "off", running: "warn", done: "ok", failed: "err" };
+const jobTone: Record<ImportJob["state"], Tone> = {
+  queued: "off",
+  running: "warn",
+  done: "ok",
+  failed: "err",
+};
 
 function ImportStatus({ id }: { id: string }) {
   const [job, setJob] = useState<ImportJob | null>(null);
@@ -945,11 +1271,25 @@ function ImportStatus({ id }: { id: string }) {
     return () => clearInterval(t);
   }, [active, load]);
 
-  if (!job) return error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading the import…</p>;
+  if (!job)
+    return error ? (
+      <Notice tone="err" title={error} />
+    ) : (
+      <p aria-busy="true">Loading the import…</p>
+    );
 
-  const state = { queued: "Waiting to start", running: "Copying…", done: "Done", failed: "Failed" }[job.state] ?? job.state;
+  const state =
+    {
+      queued: "Waiting to start",
+      running: "Copying…",
+      done: "Done",
+      failed: "Failed",
+    }[job.state] ?? job.state;
   return (
-    <section className="ui-stack ui-subsection" aria-label={"Import of " + job.site}>
+    <section
+      className="ui-stack ui-subsection"
+      aria-label={"Import of " + job.site}
+    >
       <dl className="ui-facts">
         <dt>Import</dt>
         <dd>
@@ -982,7 +1322,9 @@ function ImportStatus({ id }: { id: string }) {
           </>
         )}
       </dl>
-      {job.dumps && job.dumps.length > 0 && job.state === "done" && <DumpLoads id={job.id} />}
+      {job.dumps && job.dumps.length > 0 && job.state === "done" && (
+        <DumpLoads id={job.id} />
+      )}
       {job.error && <Notice tone="err" title={job.error} />}
       {job.skippedPaths && job.skippedPaths.length > 0 && (
         <details>
@@ -1049,7 +1391,8 @@ function DumpLoads({ id }: { id: string }) {
     }
   }
 
-  const unfinished = loads?.some((l) => !l.job || l.job.state === "failed") ?? false;
+  const unfinished =
+    loads?.some((l) => !l.job || l.job.state === "failed") ?? false;
 
   return (
     <div className="ui-stack-tight" aria-label="Database loads" role="group">
@@ -1057,7 +1400,9 @@ function DumpLoads({ id }: { id: string }) {
       {loads === null ? (
         !error && <p aria-busy="true">Loading the database loads…</p>
       ) : loads.length === 0 ? (
-        <p className="ui-hint ui-flush">The dumps are loaded into the databases shortly.</p>
+        <p className="ui-hint ui-flush">
+          The dumps are loaded into the databases shortly.
+        </p>
       ) : (
         <dl className="ui-facts">
           {loads.map((l) => {
@@ -1069,7 +1414,9 @@ function DumpLoads({ id }: { id: string }) {
                 <dd>
                   <span className="ui-row">
                     <Badge tone={s.tone}>{s.word}</Badge>
-                    {l.job?.state === "done" && l.job.finished && <RelTime iso={l.job.finished} />}
+                    {l.job?.state === "done" && l.job.finished && (
+                      <RelTime iso={l.job.finished} />
+                    )}
                   </span>
                   {why && <p className="ui-hint ui-flush">{why}</p>}
                 </dd>
@@ -1103,7 +1450,9 @@ function Activate({ site }: { site: string }) {
     setError("");
     try {
       const r = await activateImport(site);
-      setDone(`The imported files are the web root of ${r.site} now. The old web root is kept as ${r.previous} in its home.`);
+      setDone(
+        `The imported files are the web root of ${r.site} now. The old web root is kept as ${r.previous} in its home.`,
+      );
       setConfirm(false);
     } catch (err) {
       setError(migrationMessage(err));
@@ -1117,13 +1466,22 @@ function Activate({ site }: { site: string }) {
   return (
     <div className="ui-stack-tight">
       {confirm ? (
-        <div className="ui-stack-tight" role="alertdialog" aria-label={"Use imported files for " + site}>
+        <div
+          className="ui-stack-tight"
+          role="alertdialog"
+          aria-label={"Use imported files for " + site}
+        >
           <p className="ui-flush">
-            Make the imported files the web root of {site}? Do this after the final sync, before the DNS switch. The current web root is kept and
+            Make the imported files the web root of {site}? Do this after the
+            final sync, before the DNS switch. The current web root is kept and
             nothing is deleted.
           </p>
           <div className="ui-row">
-            <Button variant="primary" disabled={busy} onClick={() => void activate()}>
+            <Button
+              variant="primary"
+              disabled={busy}
+              onClick={() => void activate()}
+            >
               Use imported files for {site}
             </Button>
             <Button disabled={busy} onClick={() => setConfirm(false)}>
@@ -1133,7 +1491,9 @@ function Activate({ site }: { site: string }) {
         </div>
       ) : (
         <div className="ui-row">
-          <Button onClick={() => setConfirm(true)}>Use imported files as web root</Button>
+          <Button onClick={() => setConfirm(true)}>
+            Use imported files as web root
+          </Button>
         </div>
       )}
       {error && <Notice tone="err" title={error} />}
@@ -1141,12 +1501,22 @@ function Activate({ site }: { site: string }) {
   );
 }
 
-const draftActionLabel: Record<DraftItem["action"], string> = { kept: "Kept", rewritten: "Kept, paths changed", dropped: "Left out" };
+const draftActionLabel: Record<DraftItem["action"], string> = {
+  kept: "Kept",
+  rewritten: "Kept, paths changed",
+  dropped: "Left out",
+};
 
 // SnippetDraftForm reviews the custom nginx directives of an imported site
 // once (ADR-0017): the draft drops what Hostashi does itself, points paths
 // at this server, and the person edits and saves it as the site's snippets.
-function SnippetDraftForm({ report, site }: { report: string; site: PlanSite }) {
+function SnippetDraftForm({
+  report,
+  site,
+}: {
+  report: string;
+  site: PlanSite;
+}) {
   const [draft, setDraft] = useState<SnippetDraft | null>(null);
   const [server, setServer] = useState("");
   const [root, setRoot] = useState("");
@@ -1196,8 +1566,9 @@ function SnippetDraftForm({ report, site }: { report: string; site: PlanSite }) 
     return (
       <div className="ui-stack">
         <p className="ui-flush">
-          The old site has {site.customSnippets} custom nginx directives. Review them once: the draft leaves out what Hostashi does itself and
-          points paths at this server.
+          The old site has {site.customSnippets} custom nginx directives. Review
+          them once: the draft leaves out what Hostashi does itself and points
+          paths at this server.
         </p>
         <div className="ui-row">
           <Button disabled={busy} onClick={() => void load()}>
@@ -1210,17 +1581,43 @@ function SnippetDraftForm({ report, site }: { report: string; site: PlanSite }) 
   }
 
   return (
-    <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate aria-label={"Custom nginx of " + site.name}>
-      <ul className="ui-plain-list ui-stack-tight" aria-label={"Directives of " + site.name}>
+    <form
+      className="ui-stack"
+      onSubmit={(e) => void save(e)}
+      noValidate
+      aria-label={"Custom nginx of " + site.name}
+    >
+      <ul
+        className="ui-plain-list ui-stack-tight"
+        aria-label={"Directives of " + site.name}
+      >
         {draft.items.map((it, i) => (
           <li key={String(i)}>
-            <code>{it.context}</code> (line {it.line}): {draftActionLabel[it.action]}
-            {it.reason ? ". " + it.reason.charAt(0).toUpperCase() + it.reason.slice(1) + "." : ""}
+            <code>{it.context}</code> (line {it.line}):{" "}
+            {draftActionLabel[it.action]}
+            {it.reason
+              ? ". " +
+                it.reason.charAt(0).toUpperCase() +
+                it.reason.slice(1) +
+                "."
+              : ""}
           </li>
         ))}
       </ul>
-      <SnippetField label="Inside the server block" hint="Check every line once before you save." value={server} onChange={setServer} problems={problems?.server} />
-      <SnippetField label="Inside location /" hint="From the old site's location /, without its try_files." value={root} onChange={setRoot} problems={problems?.root} />
+      <SnippetField
+        label="Inside the server block"
+        hint="Check every line once before you save."
+        value={server}
+        onChange={setServer}
+        problems={problems?.server}
+      />
+      <SnippetField
+        label="Inside location /"
+        hint="From the old site's location /, without its try_files."
+        value={root}
+        onChange={setRoot}
+        problems={problems?.root}
+      />
       {error && <Notice tone="err" title={error} />}
       {done && <Notice tone="ok" title={done} />}
       <div className="ui-row">
