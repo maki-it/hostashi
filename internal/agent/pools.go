@@ -38,7 +38,11 @@ func (h *siteOps) registerPools(s *agentrpc.Server, adminUID uint32) {
 
 		h.refreshUnits(ctx)
 
-		return agentapi.PoolInfo{Name: p.Name, Path: p.Path}, nil
+		if h.quota != nil {
+			h.enforceQuota(p)
+		}
+
+		return agentapi.PoolInfo{Name: p.Name, Path: p.Path, Quota: h.quotaState(p)}, nil
 	})
 
 	agentrpc.Handle(s, agentapi.PoolRemove, func(ctx context.Context, c agentrpc.Caller, req agentapi.PoolRemoveRequest) (agentapi.PoolRemoveResponse, error) {
@@ -67,7 +71,7 @@ func (h *siteOps) poolInfos() []agentapi.PoolInfo {
 
 	out := []agentapi.PoolInfo{}
 	for _, p := range h.m.Pools() {
-		out = append(out, agentapi.PoolInfo{Name: p.Name, Path: p.Path, Sites: count[p.Name]})
+		out = append(out, agentapi.PoolInfo{Name: p.Name, Path: p.Path, Sites: count[p.Name], Quota: h.quotaState(p)})
 	}
 
 	return out

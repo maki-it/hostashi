@@ -227,6 +227,16 @@ type PGClient struct {
 	db Execer
 	// in runs fn on a connection to another database of the server.
 	in func(ctx context.Context, database string, fn func(Execer) error) error
+	// Now is the clock for VALID UNTIL; nil means time.Now.
+	Now func() time.Time
+}
+
+func (c *PGClient) now() time.Time {
+	if c.Now != nil {
+		return c.Now()
+	}
+
+	return time.Now()
 }
 
 // NewPGClient uses db, a connection to the maintenance database, and cfg
@@ -438,17 +448,49 @@ func (c *PGClient) SetPassword(ctx context.Context, user, password string) error
 	return c.exec(ctx, "set password", "ALTER ROLE "+pgIdent(user)+" PASSWORD '"+verifier+"'")
 }
 
-// ErrPostgresNotYet: the temporary users of import and export on
-// PostgreSQL come with a later step of ADR-0051.
+// ErrPostgresNotYet: what PostgreSQL servers do not support yet (ADR-0051).
 var ErrPostgresNotYet = fmt.Errorf("%w: not available for PostgreSQL yet", ErrUnsupported)
 
-// CreateJobUser is not available for PostgreSQL yet.
-func (c *PGClient) CreateJobUser(context.Context, string, string, string) error {
-	return ErrPostgresNotYet
+// JobRoleValidFor is how long the password of a job's temporary role is
+// valid: the job unit ends after 6 hours, the panel drops the role after
+// 6 hours 15 minutes at the latest.
+const JobRoleValidFor = 6*time.Hour + 30*time.Minute
+
+// JobRoleConnections is the connection limit of a job's role: pg_dump and
+// pg_restore use one, psql one.
+const JobRoleConnections = 2
+
+// CreateJobUser creates the temporary role of an import or export
+// (ADR-0051): a member of the database's owner role like CreateUser, with
+// at most JobRoleConnections connections and a password that expires
+// after JobRoleValidFor.
+func (c *PGClient) CreateJobUser(ctx context.Context, database, user, password string) error {
+	if err := ValidatePostgresDBName(database); err != nil {
+		return err
+	}
+
+	if err := agentapi.ValidateRemoteJobUser(user, password); err != nil || password == "" {
+		return fmt.Errorf("%w: job user", ErrInvalid)
+	}
+
+	until := c.now().Add(JobRoleValidFor).UTC().Format("2006-01-02 15:04:05+00")
+
+	return c.createRole(ctx, database, user, password, fmt.Sprintf(" CONNECTION LIMIT %d VALID UNTIL '%s'", JobRoleConnections, until))
 }
 
-// DropJobUser is not available for PostgreSQL yet.
-func (c *PGClient) DropJobUser(context.Context, string) error { return ErrPostgresNotYet }
+// DropJobUser drops the temporary role of a job like DropUser; a missing
+// role is not an error.
+func (c *PGClient) DropJobUser(ctx context.Context, database, user string) error {
+	if err := ValidatePostgresDBName(database); err != nil {
+		return err
+	}
+
+	if err := agentapi.ValidateRemoteJobUser(user, ""); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	return c.dropRole(ctx, database, user)
+}
 
 // CreateToolUser creates the temporary user of a web database tool session
 // (ADR-0051): a member of the database's owner role like any user of it,

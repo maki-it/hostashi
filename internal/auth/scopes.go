@@ -43,6 +43,8 @@ var scopeCatalog = map[string]ScopeInfo{
 	"backups:write":           {Description: "Change backup settings, confirm the target's host key, start a backup"},
 	"audit:read":              {Description: "Read and export the audit log of the panel (every account, site, action and the IP addresses involved)"},
 	"doctor:read":             {Description: "Run the read-only checks of hostashi doctor and read their results"},
+	"services:read":           {Description: "Read the state and restarts of the server's services and the dashboard's CPU, memory, disk and network figures"},
+	"services:write":          {Description: "Start, stop, restart and reload the server's services where the service catalog allows it", HighRisk: true},
 	"firewall:read":           {Description: "Read the firewall's opened ports and the allowlists for SSH and the panel"},
 	"firewall:write":          {Description: "Open ports and set the allowlists for SSH and the panel (a wrong list locks out until the rollback)", HighRisk: true},
 	"php:install":             {Description: "Install more PHP versions from sury.org (runs apt as root with a fixed package list)", HighRisk: true},

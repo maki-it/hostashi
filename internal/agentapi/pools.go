@@ -19,6 +19,10 @@ type PoolInfo struct {
 	Path string `json:"path"`
 	// Sites is the number of sites on the pool.
 	Sites int `json:"sites"`
+	// Quota is the project quota state of the pool's file system: "off",
+	// "counting" (usage only, limits not enforced) or "enforced". Empty when
+	// the volume cannot be checked, for example because it is not mounted.
+	Quota string `json:"quota,omitempty"`
 }
 
 // PoolAddRequest registers a mounted volume as a pool. It carries a path,

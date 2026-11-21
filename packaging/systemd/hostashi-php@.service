@@ -24,6 +24,12 @@ ExecReload=/bin/kill -USR2 $MAINPID
 # /run/hostashi-php/<site>: root 0755; the socket in it is <site>:www-data 0660.
 RuntimeDirectory=hostashi-php/%i
 RuntimeDirectoryMode=0755
+# /var/log/hostashi/php/<site>/error.log: PHP's errors of the site, written
+# by the master as root, read by the panel through the agent (ADR-0053). The
+# site user can neither open nor read it; its code reaches it only through
+# PHP's own error log.
+LogsDirectory=hostashi/php/%i
+LogsDirectoryMode=0750
 Restart=on-failure
 RestartSec=2s
 

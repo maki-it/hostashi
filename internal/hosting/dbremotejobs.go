@@ -99,7 +99,7 @@ func (s *Service) startRemoteDump(ctx context.Context, actor int64, action strin
 
 	j, err := s.ag.DBRemoteStart(ctx, req)
 	if err != nil {
-		s.dropJobUser(ctx, srv, user)
+		s.dropJobUser(ctx, srv, d.Name, user)
 
 		return agentapi.DBJob{}, err
 	}
@@ -231,7 +231,7 @@ func (s *Service) finishRemoteJobs(ctx context.Context, only string) {
 		}
 
 		srv, err := s.st.DBServerByID(ctx, rj.ServerID)
-		if err == nil && !s.dropJobUser(ctx, srv, rj.User) {
+		if err == nil && !s.dropJobUser(ctx, srv, rj.Database, rj.User) {
 			continue
 		}
 
@@ -242,11 +242,11 @@ func (s *Service) finishRemoteJobs(ctx context.Context, only string) {
 }
 
 // dropJobUser drops a temporary user and logs a failure.
-func (s *Service) dropJobUser(ctx context.Context, srv store.DBServer, user string) bool {
+func (s *Service) dropJobUser(ctx context.Context, srv store.DBServer, database, user string) bool {
 	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()
 
-	if err := s.remote(cctx, srv, func(c RemoteDB) error { return c.DropJobUser(cctx, user) }); err != nil {
+	if err := s.remote(cctx, srv, func(c RemoteDB) error { return c.DropJobUser(cctx, database, user) }); err != nil {
 		s.log.ErrorContext(ctx, "drop the temporary user of a database job", "server", srv.Name, "user", user, "err", err)
 
 		return false

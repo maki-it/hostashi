@@ -116,17 +116,18 @@ jobs:
           mkfs.ext4 -q -O quota,project -E quotatype=prjquota "$RUNNER_TEMP/quota.img"
           sudo mkdir -p /mnt/quota
           sudo mount -o loop,prjquota "$RUNNER_TEMP/quota.img" /mnt/quota
-          # Mounting may only count usage; switch on enforcement (spike S8).
-          sudo quotaon -P /mnt/quota || true
-          # quotaon -p exits non-zero for unrelated tmpfs mounts; check the line.
+          # Enforcement is switched on by the tests (quota.Enforce), not quotaon.
           state="$(sudo quotaon -Ppv /mnt/quota 2>&1 || true)"
           echo "$state"
-          grep -q 'quota on /mnt/quota .* is on (enforced)' <<<"$state"
       - name: Run as root against it
         # /tmp: the test re-runs the binary as nobody, who cannot enter $RUNNER_TEMP.
         run: |
           install -m 0755 "$RUNNER_TEMP/quota.test" /tmp/quota.test
           sudo env HOSTASHI_QUOTA_TEST_DIR=/mnt/quota /tmp/quota.test -test.v -test.count=1
+          # quotaon itself must agree that Enforce switched the limits on.
+          state="$(sudo quotaon -Ppv /mnt/quota 2>&1 || true)"
+          echo "$state"
+          grep -q 'quota on /mnt/quota .* is on (enforced)' <<<"$state"
 
   mariadb:
     needs: changes
@@ -594,6 +595,14 @@ jobs:
         run: >-
           go install github.com/letsencrypt/pebble/v2/cmd/pebble@v2.10.3
           github.com/letsencrypt/pebble/v2/cmd/pebble-challtestsrv@v2.10.3
+      - name: Load the quota format module (the container cannot)
+        # The second pool's volume uses project quota (container-test.sh).
+        run: |
+          if ! modinfo quota_v2 >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends "linux-modules-extra-$(uname -r)" || true
+          fi
+          sudo modprobe quota_v2 || true
       - name: Install and check in a systemd container
         env:
           PEBBLE_DIR: ${{ runner.temp }}/pebble

@@ -100,8 +100,8 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 			break
 		}
 
-		ok, err := d.h.quota.Available(p)
-		out = append(out, doctor.Quota(p, ok, err))
+		st, err := d.h.quota.Status(p)
+		out = append(out, doctor.Quota(p, st, err))
 	}
 
 	out = append(out, sys.Proc())

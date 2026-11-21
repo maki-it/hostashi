@@ -398,7 +398,7 @@ func TestJobUserStatements(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := c.DropJobUser(ctx, user); err != nil {
+	if err := c.DropJobUser(ctx, "shop", user); err != nil {
 		t.Fatal(err)
 	}
 
@@ -419,7 +419,7 @@ func TestJobUserStatements(t *testing.T) {
 		"no pw":      c.CreateJobUser(ctx, "shop_wp", user, ""),
 		"short pw":   c.CreateJobUser(ctx, "shop_wp", user, "Abc"),
 		"bad db":     c.CreateJobUser(ctx, "mysql", user, pw),
-		"drop other": c.DropJobUser(ctx, "root"),
+		"drop other": c.DropJobUser(ctx, "shop", "root"),
 	} {
 		if !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: got %v", name, err)

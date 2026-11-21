@@ -475,8 +475,8 @@ func (c *Client) CreateJobUser(ctx context.Context, database, user, password str
 }
 
 // DropJobUser drops the temporary user of a job; a missing one is not an
-// error.
-func (c *Client) DropJobUser(ctx context.Context, user string) error {
+// error. The database is for PostgreSQL; MariaDB accounts have none.
+func (c *Client) DropJobUser(ctx context.Context, _, user string) error {
 	if err := agentapi.ValidateRemoteJobUser(user, ""); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalid, err)
 	}

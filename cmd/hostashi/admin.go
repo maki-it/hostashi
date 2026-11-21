@@ -93,6 +93,11 @@ func adminCmd(ctx context.Context, c *agentrpc.Client, cmd string, args []string
 		}
 
 		fmt.Fprintf(out, "added pool %s at %s; new sites can use it (site create NAME %s)\n", p.Name, p.Path, p.Name)
+
+		if p.Quota != "enforced" {
+			fmt.Fprintf(out, "note: disk limits on %s are not enforced (quota %s); see the wiki page Command-line, storage pools\n",
+				p.Path, orUnknown(p.Quota))
+		}
 	case sub == "pool remove" && len(args) == 2:
 		if _, err := agentapi.PoolRemove.Call(ctx, c, agentapi.PoolRemoveRequest{Name: args[1]}); err != nil {
 			return err
@@ -106,7 +111,7 @@ func adminCmd(ctx context.Context, c *agentrpc.Client, cmd string, args []string
 		}
 
 		for _, p := range r.Pools {
-			fmt.Fprintf(out, "%s\t%s\tsites=%d\n", p.Name, p.Path, p.Sites)
+			fmt.Fprintf(out, "%s\t%s\tsites=%d\tquota=%s\n", p.Name, p.Path, p.Sites, orUnknown(p.Quota))
 		}
 	default:
 		return errUsage
@@ -351,4 +356,13 @@ func limitsCmd(ctx context.Context, c *agentrpc.Client, site string, kv []string
 	fmt.Fprintf(out, "memory=%d tasks=%d cpu-weight=%d cpu-quota=%d\n", l.MemoryMax, l.TasksMax, l.CPUWeight, l.CPUQuotaPercent)
 
 	return nil
+}
+
+// orUnknown names an empty state: the agent could not check the volume.
+func orUnknown(s string) string {
+	if s == "" {
+		return "unknown"
+	}
+
+	return s
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/maki-it/hostashi/internal/mail"
 	"github.com/maki-it/hostashi/internal/metrics"
 	"github.com/maki-it/hostashi/internal/secrets"
+	"github.com/maki-it/hostashi/internal/servermon"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -45,6 +46,8 @@ type apiEnv struct {
 	mailSent  *stubMailSend
 	outbox    *mail.Outbox
 	files     *stubFiles
+	monitor   *servermon.Monitor
+	srvAgent  *stubServerAgent
 }
 
 func newAPI(t *testing.T) *apiEnv {
@@ -105,6 +108,9 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	deps.Files = fm.open
 	deps.NotifyPrefs = st
 	deps.MailHistory = st
+	sa := &stubServerAgent{}
+	mon := &servermon.Monitor{Agent: sa, Store: st}
+	deps.Monitor = mon
 	deps.AuditLog = st
 
 	if ag != nil {
@@ -118,6 +124,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	return &apiEnv{
 		h: Handler(Config{PublicURL: testPublicURL}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st, cp: deps.CloudPanel,
 		imports: imports, doctor: doc, firewall: fw, php: php, pgclient: pgc, mail: deps.Mail, mailSent: sent, outbox: outbox, files: fm,
+		monitor: mon, srvAgent: sa,
 	}
 }
 

@@ -49,7 +49,7 @@ type RemoteDB interface {
 	SetPassword(ctx context.Context, user, password string) error
 	// The temporary user of an import or export (ADR-0041 addendum 1).
 	CreateJobUser(ctx context.Context, database, user, password string) error
-	DropJobUser(ctx context.Context, user string) error
+	DropJobUser(ctx context.Context, database, user string) error
 	// The temporary user of a web database tool session.
 	CreateToolUser(ctx context.Context, database, user, password string) error
 	DropToolUser(ctx context.Context, database, user string) error

@@ -25,9 +25,16 @@ const (
 	fsIOCFSSetXattr           = 0x401c5820 // _IOW('X', 32, struct fsxattr)
 	fsXflagProjInherit        = 0x00000200
 	prjQuota                  = 2
+	qQuotaOn                  = 0x800002
+	qQuotaOff                 = 0x800003
 	qGetInfo                  = 0x800005
 	qGetQuota                 = 0x800007
 	qSetQuota                 = 0x800008
+	qXGetQStatV               = 'X'<<8 + 8 // Q_XGETQSTATV, linux/dqblk_xfs.h
+	qfmtVFSV1                 = 4          // QFMT_VFS_V1
+	qstatvVersion1            = 1          // FS_QSTATV_VERSION1
+	fsQuotaPdqAcct            = 1 << 4     // FS_QUOTA_PDQ_ACCT
+	fsQuotaPdqEnfd            = 1 << 5     // FS_QUOTA_PDQ_ENFD
 	qifBLimits                = 1
 	qifILimits                = 4
 	qifLimits                 = qifBLimits | qifILimits
@@ -39,6 +46,7 @@ const (
 	sizeofFsxattr             = 28
 	sizeofIfDqblk             = 72
 	sizeofIfDqinfo            = 24
+	sizeofQuotaStatv          = 160
 	minProjectID       uint32 = 1
 )
 
@@ -74,6 +82,34 @@ type ifDqinfo struct {
 	Valid  uint32
 }
 
+// qfilestatv is struct fs_qfilestatv.
+type qfilestatv struct {
+	Ino      uint64
+	Nblks    uint64
+	Nextents uint32
+	_        uint32
+}
+
+// quotaStatv is struct fs_quota_statv (version 1).
+type quotaStatv struct {
+	Version      int8
+	_            uint8
+	Flags        uint16
+	Incoredqs    uint32
+	UQuota       qfilestatv
+	GQuota       qfilestatv
+	PQuota       qfilestatv
+	BTimeLimit   int32
+	ITimeLimit   int32
+	RtbTimeLimit int32
+	BWarnLimit   uint16
+	IWarnLimit   uint16
+	RtbWarnLimit uint16
+	_            uint16
+	_            uint32
+	_            [7]uint64
+}
+
 // Compile-time checks of the struct sizes against the kernel ABI.
 var (
 	_ [sizeofFsxattr - unsafe.Sizeof(fsxattr{})]struct{}
@@ -82,6 +118,8 @@ var (
 	_ [unsafe.Sizeof(ifDqblk{}) - sizeofIfDqblk]struct{}
 	_ [sizeofIfDqinfo - unsafe.Sizeof(ifDqinfo{})]struct{}
 	_ [unsafe.Sizeof(ifDqinfo{}) - sizeofIfDqinfo]struct{}
+	_ [sizeofQuotaStatv - unsafe.Sizeof(quotaStatv{})]struct{}
+	_ [unsafe.Sizeof(quotaStatv{}) - sizeofQuotaStatv]struct{}
 )
 
 // Errors.
@@ -120,6 +158,114 @@ func Available(dir string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// State is how far project quota is switched on for a file system.
+type State int
+
+// The states of State.
+const (
+	// Off: no project quota, sites get no disk limit.
+	Off State = iota
+	// Counting: usage is counted, but limits are not enforced. A volume
+	// mounted with prjquota can end up here (spike S8).
+	Counting
+	// Enforced: limits stop writes.
+	Enforced
+)
+
+func (s State) String() string {
+	switch s {
+	case Counting:
+		return "counting"
+	case Enforced:
+		return "enforced"
+	case Off:
+		return "off"
+	default:
+		return "off"
+	}
+}
+
+// Status reports the project quota state of the file system that holds dir.
+// Available only says whether usage is counted; Status tells counting from
+// enforced (spike S8 finding 3).
+func Status(dir string) (State, error) {
+	fd, err := openRoot(dir)
+	if err != nil {
+		return Off, err
+	}
+	defer unix.Close(fd) // read-only fd, nothing to flush
+
+	return status(fd)
+}
+
+func status(fd int) (State, error) {
+	// The padding behind the struct takes a newer, longer layout should a
+	// kernel ever write one for version 1.
+	var buf struct {
+		s quotaStatv
+		_ [64]byte
+	}
+
+	buf.s.Version = qstatvVersion1
+	if err := quotactlFD(fd, qXGetQStatV, 0, unsafe.Pointer(&buf)); err != nil {
+		if isUnavailable(err) {
+			return Off, nil
+		}
+
+		return Off, fmt.Errorf("quota: get state: %w", err)
+	}
+
+	switch f := buf.s.Flags; {
+	case f&fsQuotaPdqEnfd != 0:
+		return Enforced, nil
+	case f&fsQuotaPdqAcct != 0:
+		return Counting, nil
+	default:
+		return Off, nil
+	}
+}
+
+// Enforce switches on the enforcement of project limits on the file system
+// that holds dir, where usage is already counted. It does what
+// "quotaon -P" does, without running it: ext4 with the quota feature and XFS
+// switch it on with Q_QUOTAON and no quota file. It is a no-op when limits
+// are enforced already, and ErrUnavailable when nothing is counted.
+// Enforcement lasts until the file system is unmounted.
+func Enforce(dir string) error {
+	fd, err := openRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(fd) // read-only fd, nothing to flush
+
+	st, err := status(fd)
+	if err != nil {
+		return err
+	}
+
+	switch st {
+	case Enforced:
+		return nil
+	case Off:
+		return ErrUnavailable
+	case Counting: // switched on below
+	}
+
+	if err := quotactlFD(fd, qQuotaOn, qfmtVFSV1, nil); err != nil && !errors.Is(err, unix.EBUSY) {
+		return fmt.Errorf("quota: enforce limits: %w", err)
+	}
+
+	if st, err = status(fd); err != nil {
+		return err
+	}
+
+	if st != Enforced {
+		return fmt.Errorf("quota: limits on %s are still not enforced", dir)
+	}
+
+	return nil
 }
 
 // Assign puts dir and the whole tree below it into project id. It walks

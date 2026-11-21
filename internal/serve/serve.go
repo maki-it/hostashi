@@ -30,6 +30,7 @@ import (
 	"github.com/maki-it/hostashi/internal/notify"
 	"github.com/maki-it/hostashi/internal/reqid"
 	"github.com/maki-it/hostashi/internal/secrets"
+	"github.com/maki-it/hostashi/internal/servermon"
 	"github.com/maki-it/hostashi/internal/store"
 	"github.com/maki-it/hostashi/internal/ui"
 )
@@ -149,6 +150,11 @@ type Deps struct {
 	// MailHistory adds the email check to the doctor report; nil leaves it
 	// out. Needs Mail.
 	MailHistory MailHistory
+
+	// Monitor serves service management and the dashboard (ADR-0052); nil
+	// disables their routes. Needs Auth and Settings (for the audit log).
+	Monitor ServerMonitor
+
 	// AuditLog reads the audit log for its page and export; nil disables
 	// its routes. Needs Auth.
 	AuditLog AuditLog
@@ -294,6 +300,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			}
 
 			registerDoctor(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Doctor, allPanelChecks(panel), log)
+		}
+
+		if deps.Monitor != nil && deps.Settings != nil {
+			registerServices(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Monitor, deps.Settings, log)
 		}
 
 		if deps.AuditLog != nil {
@@ -514,6 +524,12 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	go watcher.Run(ctx)
+
+	// Service management and the dashboard (ADR-0052).
+	mon := &servermon.Monitor{Agent: RPCServerAgent{C: client}, Store: st, Log: cfg.Log}
+	deps.Monitor = mon
+
+	go mon.Run(ctx)
 
 	if iss, err := newIssuer(cfg, st, box); err != nil {
 		return err
