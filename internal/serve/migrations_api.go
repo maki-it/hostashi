@@ -421,6 +421,20 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 			}
 		}
 
+		// The site's own cache with the default size (ADR-0045). The site
+		// stands without it; the plan tells the admin to check.
+		if s.ObjectCache {
+			_, err := sites.SetObjectCache(ctx, actor, s.Name, true, 0)
+			switch {
+			case errors.Is(err, hosting.ErrNoObjectCache):
+				log.WarnContext(ctx, "imported object cache not created: not available", "site", s.Name)
+			case err != nil:
+				log.WarnContext(ctx, "imported object cache not created", "site", s.Name, "err", err)
+			default:
+				n.ObjectCache = true
+			}
+		}
+
 		return n, nil
 	}
 }

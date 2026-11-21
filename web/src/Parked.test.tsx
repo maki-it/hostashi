@@ -91,8 +91,11 @@ describe("Parked", () => {
         list = [];
         return { status: 204 };
       },
+      "GET /api/v1/parked-domains/old.example/tls/certificate": { body: { certificate: null } },
     });
     render(<Harness initial="edit=old.example" />);
+    // The edit view has the certificate card (Certificate.test.tsx tests it).
+    expect(await screen.findByRole("region", { name: "Certificate" })).toBeInTheDocument();
     expect(await screen.findByText(/The last certificate attempt failed: no DNS record/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("checkbox", { name: /HTTPS/ }));

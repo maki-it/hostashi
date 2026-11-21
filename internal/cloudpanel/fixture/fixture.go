@@ -68,6 +68,8 @@ func Build(dir string, now time.Time) ([]Case, error) {
 		"clp:x:1000:1000::/home/clp:/bin/bash",
 	}
 	b.mkdir("/home/clp", 0o750)
+	b.mkdir("/etc/redis", 0o755)
+	b.write("/etc/redis/redis.conf", "port 6379\n", 0o640)
 	b.leCA = b.newCA("Let's Encrypt", "Test R3 (synthetic)")
 	b.otherCA = b.newCA("Example Trust Services", "Example DV CA (synthetic)")
 	b.sites()
@@ -201,6 +203,7 @@ type site struct {
 	upstream             string
 	broken               bool
 	tier                 string // "", "two" (TLS front + backend block), "cache" (front -> cache -> backend)
+	objectCache          bool   // WordPress with wp-content/object-cache.php (ADR-0045)
 	want, wantType, note string
 }
 
@@ -231,6 +234,13 @@ func (b *builder) add(s site) {
 	case "wordpress":
 		b.write(root+"/wp-config.php", "<?php // synthetic\n", 0o640)
 		b.chown(root+"/wp-config.php", uid)
+
+		if s.objectCache {
+			b.mkdir(root+"/wp-content", 0o750)
+			b.chown(root+"/wp-content", uid)
+			b.write(root+"/wp-content/object-cache.php", "<?php // synthetic drop-in\n", 0o640)
+			b.chown(root+"/wp-content/object-cache.php", uid)
+		}
 	case "nodejs":
 		b.write(root+"/package.json", "{}\n", 0o644)
 	}
@@ -352,7 +362,7 @@ func (b *builder) sites() {
 		b.add(site{domain: d, kind: "php", www: i%2 == 0, php: []string{"8.2", "8.4"}[i], tier: []string{"", "two"}[i], want: "clean", wantType: "php", note: "plain PHP; zeta as two-tier vhost (pattern seen on web2)"})
 	}
 
-	b.add(site{domain: "theta-app.de", kind: "wordpress", php: "7.4", tier: "cache", want: "review", wantType: "wordpress", note: "two-tier with a cache port in between"})
+	b.add(site{domain: "theta-app.de", kind: "wordpress", php: "7.4", tier: "cache", objectCache: true, want: "review", wantType: "wordpress", note: "two-tier with a cache port in between, Redis object cache"})
 	b.add(site{domain: "iota-landing.de", kind: "static", want: "clean", wantType: "static", note: "static HTML"})
 	b.add(site{domain: "kappa-portal.de", kind: "proxy", upstream: "https://10.0.0.5:8080", want: "clean", wantType: "proxy", note: "reverse proxy to another host"})
 	b.add(site{domain: "lambda-kunde.de", kind: "php", certIssuer: "other", want: "clean", wantType: "php", note: "purchased certificate, valid"})

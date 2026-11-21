@@ -11,6 +11,11 @@ export type ParkedTLS = {
   notAfter: string | null;
   error?: string;
   failedAt?: string;
+  // As for sites (ADR-0039).
+  source?: "letsencrypt" | "custom";
+  certSource?: "" | "letsencrypt" | "custom";
+  trusted?: boolean;
+  renewPending?: boolean;
 };
 
 export type ParkedDomain = {

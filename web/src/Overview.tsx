@@ -90,6 +90,19 @@ export function attention(d: Data): Item[] {
     }
   }
   for (const p of d.parked ?? []) {
+    const left = p.tls.certSource === "custom" ? daysLeft(p.tls.notAfter) : null;
+    if (left === null || left >= 30) continue;
+    items.push({
+      key: "owncert-park-" + p.domain,
+      tone: left < 7 ? "err" : "warn",
+      word: left < 7 ? "Failed" : "Warning",
+      title: left < 0 ? `The own certificate of ${p.domain} has expired` : `The own certificate of ${p.domain} expires in ${left} days`,
+      detail: "It is not renewed automatically. Upload a new one, or switch the domain to Let's Encrypt.",
+      href: formatHash({ page: "parked", query: new URLSearchParams({ edit: p.domain }) }),
+      link: "Open " + p.domain,
+    });
+  }
+  for (const p of d.parked ?? []) {
     if (!p.tls.enabled || p.tls.active || !p.tls.error) continue;
     items.push({
       key: "parked-" + p.domain,

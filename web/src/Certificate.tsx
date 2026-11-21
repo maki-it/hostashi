@@ -4,6 +4,9 @@ import { ArrowClockwise, Copy, DownloadSimple, FileText, Trash, UploadSimple } f
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import {
   certInfo,
+  panelCertBase,
+  panelTLS,
+  type PanelTLS,
   createCSR,
   daysLeft,
   deleteCert,
@@ -13,19 +16,33 @@ import {
   uploadCert,
   uploadProblem,
   type CertInfo,
+  type CertState,
   type CertUpload,
 } from "./certs";
-import { siteMessage, type Site } from "./sites";
+import { siteMessage } from "./sites";
 import { Badge, Button, Card, Field, IconButton, Notice } from "./ui";
 
-type Props = { site: Site; onChange: () => Promise<void> };
+type Props = {
+  /** The API path of the certificate routes, from certs.ts. */
+  base: string;
+  /** Names the radio group and the CSR download. */
+  name: string;
+  tls: CertState;
+  /** false for the panel: it never goes without a certificate. */
+  deletable?: boolean;
+  /** Says how HTTPS is turned off before a delete. */
+  offHint?: string;
+  title?: string;
+  onChange: () => Promise<void>;
+};
 type Mode = "" | "upload" | "csr" | "delete";
 
 const emptyUpload: CertUpload = { certificate: "", chain: "", key: "", allowUntrusted: false };
 
-// CertificateCard shows the live certificate of a site and its actions
-// (ADR-0039): renew now, upload an own certificate, create a CSR, delete.
-export function CertificateCard({ site, onChange }: Props) {
+// CertificateCard shows the live certificate of a site, a parked domain or
+// the panel and its actions (ADR-0039): renew now, upload an own
+// certificate, create a CSR, delete.
+export function CertificateCard({ base, name, tls, deletable = true, offHint = "turn HTTPS off first", title = "Certificate", onChange }: Props) {
   const [info, setInfo] = useState<CertInfo | null>(null);
   const [loadError, setLoadError] = useState("");
   const [mode, setMode] = useState<Mode>("");
@@ -35,12 +52,12 @@ export function CertificateCard({ site, onChange }: Props) {
 
   const load = useCallback(async () => {
     try {
-      setInfo(await certInfo(site.name));
+      setInfo(await certInfo(base));
       setLoadError("");
     } catch (err) {
       setLoadError(siteMessage(err));
     }
-  }, [site.name]);
+  }, [base]);
 
   useEffect(() => {
     void load();
@@ -69,11 +86,10 @@ export function CertificateCard({ site, onChange }: Props) {
     setMode(mode === m ? "" : m);
   };
 
-  const tls = site.tls;
   const own = tls.source === "custom";
   const cert = info?.certificate ?? null;
   const canRenew = !own && tls.enabled;
-  const canDelete = cert !== null && !tls.enabled && !tls.active;
+  const canDelete = deletable && cert !== null && !tls.enabled && !tls.active;
 
   const chooseSource = (v: string) => {
     if (v === "custom") {
@@ -82,14 +98,14 @@ export function CertificateCard({ site, onChange }: Props) {
       return;
     }
     void act(async () => {
-      await setCertSource(site.name, "letsencrypt");
+      await setCertSource(base, "letsencrypt");
       return "Let's Encrypt is the source again. The own certificate serves until the new one is there.";
     });
   };
 
   return (
     <Card
-      title="Certificate"
+      title={title}
       actions={
         <>
           {canRenew && (
@@ -99,7 +115,7 @@ export function CertificateCard({ site, onChange }: Props) {
               disabled={busy}
               onClick={() =>
                 void act(async () => {
-                  await renewCert(site.name);
+                  await renewCert(base);
                   return "Renewal requested. The new certificate is there in a minute or two.";
                 })
               }
@@ -107,13 +123,15 @@ export function CertificateCard({ site, onChange }: Props) {
           )}
           <IconButton label="Upload certificate" icon={<UploadSimple />} disabled={busy} onClick={() => open("upload")} />
           <IconButton label="Create CSR" icon={<FileText />} disabled={busy} onClick={() => open("csr")} />
-          <IconButton
-            label={canDelete ? "Delete certificate" : "Delete certificate (turn HTTPS off first)"}
-            icon={<Trash />}
-            danger
-            disabled={busy || !canDelete}
-            onClick={() => open("delete")}
-          />
+          {deletable && (
+            <IconButton
+              label={canDelete ? "Delete certificate" : `Delete certificate (${offHint})`}
+              icon={<Trash />}
+              danger
+              disabled={busy || !canDelete}
+              onClick={() => open("delete")}
+            />
+          )}
         </>
       }
     >
@@ -121,36 +139,36 @@ export function CertificateCard({ site, onChange }: Props) {
         <fieldset className="ui-fieldset ui-stack-tight">
           <legend>Source</legend>
           <label className="ui-check">
-            <input type="radio" name={site.name + "-cert-source"} value="letsencrypt" checked={!own} disabled={busy} onChange={(e) => chooseSource(e.target.value)} />
+            <input type="radio" name={name + "-cert-source"} value="letsencrypt" checked={!own} disabled={busy} onChange={(e) => chooseSource(e.target.value)} />
             Let's Encrypt, renewed automatically
           </label>
           <label className="ui-check">
-            <input type="radio" name={site.name + "-cert-source"} value="custom" checked={own} disabled={busy} onChange={(e) => chooseSource(e.target.value)} />
+            <input type="radio" name={name + "-cert-source"} value="custom" checked={own} disabled={busy} onChange={(e) => chooseSource(e.target.value)} />
             Own certificate, you renew it yourself
           </label>
         </fieldset>
 
         {loadError && <Notice tone="err" title={loadError} />}
         {info && !cert && <p className="ui-hint">No certificate yet.</p>}
-        {cert && <CertFacts site={site} cert={cert} />}
+        {cert && <CertFacts own={tls.certSource === "custom"} cert={cert} />}
         {tls.renewPending && <p className="ui-hint">A renewal is on its way.</p>}
 
         {mode === "upload" && (
           <UploadForm busy={busy} withCSR={Boolean(info?.csr)} onCancel={() => setMode("")} onSubmit={(u) =>
             void act(async () => {
-              await uploadCert(site.name, u);
-              return "Certificate installed. The site is served over HTTPS with it.";
+              await uploadCert(base, u);
+              return "Certificate installed and served over HTTPS.";
             })
           } />
         )}
         {mode === "csr" && (
           <CSRPanel
-            name={site.name}
+            name={name}
             csr={info?.csr ?? ""}
             busy={busy}
             onCreate={() =>
               void act(async () => {
-                await createCSR(site.name);
+                await createCSR(base);
                 return "CSR created. Have it signed, then upload the certificate here without a key.";
               }, "csr")
             }
@@ -160,7 +178,7 @@ export function CertificateCard({ site, onChange }: Props) {
         {mode === "delete" && (
           <div className="ui-stack" role="group" aria-label="Confirm delete">
             <Notice tone="warn" title="Delete the certificate and its key?">
-              HTTPS is off, so the site keeps working over HTTP. A pending CSR is deleted too.
+              HTTPS is off, so nothing serves this certificate any more. A pending CSR is deleted too.
             </Notice>
             <div className="ui-row">
               <Button
@@ -168,7 +186,7 @@ export function CertificateCard({ site, onChange }: Props) {
                 disabled={busy}
                 onClick={() =>
                   void act(async () => {
-                    await deleteCert(site.name);
+                    await deleteCert(base);
                     return "Certificate deleted.";
                   })
                 }
@@ -186,9 +204,8 @@ export function CertificateCard({ site, onChange }: Props) {
   );
 }
 
-function CertFacts({ site, cert }: { site: Site; cert: NonNullable<CertInfo["certificate"]> }) {
+function CertFacts({ own, cert }: { own: boolean; cert: NonNullable<CertInfo["certificate"]> }) {
   const left = daysLeft(cert.notAfter);
-  const own = site.tls.certSource === "custom";
   return (
     <dl className="ui-facts" aria-label="Live certificate">
       <dt>From</dt>
@@ -298,7 +315,7 @@ function CSRPanel({ name, csr, busy, onCreate, onUpload }: CSRPanelProps) {
     return (
       <div className="ui-stack">
         <p className="ui-hint">
-          The server creates a key that never leaves it, and a certificate signing request (CSR) for the domains of this site. Have the CSR
+          The server creates a key that never leaves it, and a certificate signing request (CSR) for its domains. Have the CSR
           signed by your CA, then upload the certificate here without a key.
         </p>
         <div className="ui-row">
@@ -330,5 +347,35 @@ function CSRPanel({ name, csr, busy, onCreate, onUpload }: CSRPanelProps) {
         </Button>
       </div>
     </div>
+  );
+}
+
+// PanelCertificate is the certificate of the panel's own address, on the
+// Health page (ADR-0039). Without an address of its own there is none.
+export function PanelCertificate() {
+  const [tls, setTLS] = useState<PanelTLS | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setTLS(await panelTLS());
+    } catch {
+      setTLS(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (!tls?.enabled) return null;
+  return (
+    <CertificateCard
+      base={panelCertBase}
+      name="panel"
+      title={"Panel certificate (" + tls.domain + ")"}
+      tls={{ ...tls, enabled: true }}
+      deletable={false}
+      onChange={load}
+    />
   );
 }

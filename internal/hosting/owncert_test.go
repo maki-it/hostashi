@@ -166,3 +166,165 @@ func TestOwnCertificateFromCSR(t *testing.T) {
 		t.Fatalf("unknown site: %v", err)
 	}
 }
+
+func TestOwnCertificateParked(t *testing.T) {
+	s, ag, _ := newService(t)
+	ctx := t.Context()
+
+	day := func(d int) time.Time { return time.Unix(0, 0).Add(time.Duration(d) * 24 * time.Hour) }
+	now := day(1000)
+	s.now = func() time.Time { return now }
+
+	if _, err := s.SetParked(ctx, 1, "soon.example.net", "", false); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.UploadParkedCert(ctx, 1, "soon.example.net", CertUpload{Chain: "own other.example.net 1365", Key: "key"}); err == nil {
+		t.Fatal("certificate for another name accepted")
+	}
+
+	p, err := s.UploadParkedCert(ctx, 1, "soon.example.net", CertUpload{Chain: "own *.example.net 1365", Key: "key"})
+	if err != nil || !p.TLS || p.TLSSource != store.TLSCustom || !ag.web.Parked[0].TLS {
+		t.Fatalf("upload %+v %v %+v", p, err, ag.web.Parked)
+	}
+
+	// Without an ACME client, HTTPS can be turned on again with the own certificate.
+	if _, err := s.SetParked(ctx, 1, "soon.example.net", "", true); err != nil {
+		t.Fatalf("tls on with own certificate: %v", err)
+	}
+
+	iss := &fakeIssuer{validDays: 1500}
+	s.EnableTLS(iss)
+
+	now = day(1360)
+
+	s.RenewDue(ctx)
+
+	if iss.calls != 0 {
+		t.Fatal("own certificate renewed")
+	}
+
+	if _, err := s.RenewParkedNow(ctx, 1, "soon.example.net"); !errors.Is(err, ErrNotLetsEncrypt) {
+		t.Fatalf("renew custom: %v", err)
+	}
+
+	if _, err := s.SetParkedTLSSource(ctx, 1, "soon.example.net", store.TLSLetsEncrypt); err != nil {
+		t.Fatal(err)
+	}
+
+	s.RenewDue(ctx)
+
+	p, _ = s.ParkedDomain(ctx, "soon.example.net")
+	if iss.calls != 1 || p.TLSCertSource != store.TLSLetsEncrypt {
+		t.Fatalf("after switch: calls %d %+v", iss.calls, p)
+	}
+
+	if _, err := s.RenewParkedNow(ctx, 1, "soon.example.net"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.RenewParkedNow(ctx, 1, "soon.example.net"); !errors.Is(err, ErrTooSoon) {
+		t.Fatalf("renew again: %v", err)
+	}
+
+	s.RenewDue(ctx)
+
+	if iss.calls != 2 {
+		t.Fatalf("forced renewal: %d", iss.calls)
+	}
+
+	if csr, err := s.ParkedCertCSR(ctx, 1, "soon.example.net"); err != nil || !strings.HasPrefix(csr, "owncsr _park-1 ") {
+		t.Fatalf("csr %q %v", csr, err)
+	}
+
+	if _, err := s.DeleteParkedCert(ctx, 1, "soon.example.net"); !errors.Is(err, ErrCertInUse) {
+		t.Fatalf("delete while on: %v", err)
+	}
+
+	if _, err := s.SetParked(ctx, 1, "soon.example.net", "", false); err != nil {
+		t.Fatal(err)
+	}
+
+	if p, err := s.DeleteParkedCert(ctx, 1, "soon.example.net"); err != nil || p.TLSCertSource != "" || ag.certDeletes[0] != "_park-1" {
+		t.Fatalf("delete %+v %v", p, err)
+	}
+
+	if _, err := s.ParkedCertDetails(ctx, "nosuch.example.net"); !errors.Is(err, ErrParkedNotFound) {
+		t.Fatalf("unknown: %v", err)
+	}
+}
+
+func TestOwnCertificatePanel(t *testing.T) {
+	s, ag, _ := newService(t)
+	ctx := t.Context()
+
+	day := func(d int) time.Time { return time.Unix(0, 0).Add(time.Duration(d) * 24 * time.Hour) }
+	now := day(1000)
+	s.now = func() time.Time { return now }
+
+	if _, err := s.UploadPanelCert(ctx, 1, CertUpload{Chain: "own panel.example.com 1365", Key: "key"}); !errors.Is(err, ErrNoPanel) {
+		t.Fatalf("without panel address: %v", err)
+	}
+
+	if err := s.EnablePanel("panel.example.com"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.UploadPanelCert(ctx, 1, CertUpload{Chain: "own shop.example.com 1365", Key: "key"}); err == nil {
+		t.Fatal("certificate for another name accepted")
+	}
+
+	p, err := s.UploadPanelCert(ctx, 1, CertUpload{Chain: "own *.example.com 1365 untrusted", Key: "key", AllowUntrusted: true})
+	if err != nil || p.source() != store.TLSCustom || !p.Untrusted || !p.Live || ag.web.Panel == nil || !ag.web.Panel.TLS {
+		t.Fatalf("upload %+v %v %+v", p, err, ag.web.Panel)
+	}
+
+	iss := &fakeIssuer{validDays: 1500}
+	s.EnableTLS(iss)
+
+	now = day(1360)
+
+	s.RenewDue(ctx)
+
+	if iss.calls != 0 {
+		t.Fatal("own panel certificate renewed")
+	}
+
+	if _, err := s.RenewPanelNow(ctx, 1); !errors.Is(err, ErrNotLetsEncrypt) {
+		t.Fatalf("renew custom: %v", err)
+	}
+
+	// Back to Let's Encrypt: the own certificate serves until the new one is in.
+	if _, err := s.SetPanelTLSSource(ctx, 1, store.TLSLetsEncrypt); err != nil {
+		t.Fatal(err)
+	}
+
+	if !ag.web.Panel.TLS {
+		t.Fatal("panel lost HTTPS while switching")
+	}
+
+	s.RenewDue(ctx)
+
+	p, _ = s.PanelTLS(ctx)
+	if iss.calls != 1 || p.certSource() != store.TLSLetsEncrypt || p.Untrusted || !p.NotAfter.Equal(day(1500)) {
+		t.Fatalf("after switch: calls %d %+v", iss.calls, p)
+	}
+
+	if _, err := s.RenewPanelNow(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.RenewPanelNow(ctx, 1); !errors.Is(err, ErrTooSoon) {
+		t.Fatalf("renew again: %v", err)
+	}
+
+	s.RenewDue(ctx)
+
+	if p, _ = s.PanelTLS(ctx); iss.calls != 2 || p.RenewForced {
+		t.Fatalf("forced renewal: %d %+v", iss.calls, p)
+	}
+
+	if csr, err := s.PanelCertCSR(ctx, 1); err != nil || !strings.HasPrefix(csr, "owncsr _panel panel.example.com") {
+		t.Fatalf("csr %q %v", csr, err)
+	}
+}

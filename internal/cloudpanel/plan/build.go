@@ -67,6 +67,10 @@ type Site struct {
 	// SFTP only (ADR-0032); SSHImport how many the site got.
 	SSHKeys   int `json:"sshKeys"`
 	SSHImport int `json:"sshImport"`
+	// ObjectCache: the old site uses an object cache, so the new one gets
+	// its own (ADR-0045). ObjectCacheOn tells whether it was turned on.
+	ObjectCache   bool `json:"objectCache"`
+	ObjectCacheOn bool `json:"objectCacheOn"`
 	// HomeBytes and HomeInodes are what the home uses on the old server,
 	// zero if the scan did not measure it. The new site's disk limits start
 	// from them (ADR-0015: use plus 50 %).
@@ -142,7 +146,7 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 	ps := Site{
 		Name: s.User, Type: s.Type, Domains: nonNil(s.Domains), RedirectFrom: nonNil(s.RedirectFrom),
 		DocRoot: s.DocRoot, Custom: len(s.Custom), Cron: len(s.Cron), CronImport: len(CronJobs(s)),
-		SSHKeys: len(SSHKeys(s)),
+		SSHKeys: len(SSHKeys(s)), ObjectCache: s.ObjectCache,
 		Reasons: []Reason{}, Source: first(s.Sources),
 	}
 	if s.Usage != nil {
@@ -240,6 +244,10 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 
 	if ps.SSHKeys > 0 {
 		review("ssh_keys", fmt.Sprintf("%d SSH keys of the site user are carried over as SFTP only; give a key shell access in the site's settings if it needs one", ps.SSHKeys))
+	}
+
+	if ps.ObjectCache {
+		review("object_cache", "the site gets its own object cache on a Unix socket; after the import point wp-config.php at /run/hostashi-valkey/"+ps.Name+"/valkey.sock (WP_REDIS_SCHEME unix, WP_REDIS_PATH), the old 127.0.0.1:6379 is not there")
 	}
 
 	if len(ps.RedirectFrom) > 0 {
