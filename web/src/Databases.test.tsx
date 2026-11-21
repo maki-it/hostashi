@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { useEffect, useState } from "react";
 import { describe, expect, it } from "vitest";
 import { Databases } from "./Databases";
-import { nameProblem, pathProblem } from "./databases";
+import { defaultDumpPath, dumpFormats, formatOf, nameProblem, pathProblem, withFormat } from "./databases";
 import { parseHash } from "./routes";
 import { mockFetch } from "./test-utils";
 
@@ -279,8 +279,72 @@ describe("pathProblem", () => {
   });
 });
 
+describe("pathProblem for PostgreSQL", () => {
+  it.each([
+    ["shop.dump", ""],
+    ["shop.sql", ""],
+    ["shop.sql.gz", ""],
+    ["shop.dump.gz", "end in .dump, .sql or .sql.gz"],
+    ["../shop.dump", "inside the site's home"],
+  ])("%s", (p, want) => {
+    const got = pathProblem(p, true);
+    if (want === "") expect(got).toBe("");
+    else expect(got).toContain(want);
+  });
+
+  it("refuses .dump for MariaDB", () => {
+    expect(pathProblem("shop.dump")).toContain("end in .sql");
+  });
+
+  it("switches the format by the file ending", () => {
+    expect(withFormat("a/shop.sql", ".sql.gz")).toBe("a/shop.sql.gz");
+    expect(withFormat("shop.sql.gz", ".sql")).toBe("shop.sql");
+    expect(withFormat("shop.dump", ".sql.gz")).toBe("shop.sql.gz");
+    expect(withFormat("shop", ".dump")).toBe("shop.dump");
+    expect(formatOf("shop.sql.gz")).toBe(".sql.gz");
+    expect(formatOf("shop.txt")).toBe("");
+    expect(dumpFormats(false).map((f) => f.value)).toEqual([".sql.gz", ".sql"]);
+    expect(dumpFormats(true).map((f) => f.value)).toEqual([".dump", ".sql.gz", ".sql"]);
+  });
+
+  it("suggests the custom format", () => {
+    const now = new Date("2026-11-21T12:00:00Z");
+    expect(defaultDumpPath("shop", now, true)).toBe("shop-2026-11-21.dump");
+    expect(defaultDumpPath("shop", now)).toBe("shop-2026-11-21.sql.gz");
+  });
+});
+
 describe("Database dumps", () => {
   const job = { id: "0123456789abcdef", database: "blog_wp", started: "x" };
+
+  it("picks the format of an export, with the custom format for PostgreSQL", async () => {
+    const user = userEvent.setup();
+    const pg1 = { ...localServer, name: "pg1", local: false, default: false, engine: "PostgreSQL", host: "pg.example.net", port: 5432 };
+    mockFetch({
+      ...sites,
+      "GET /api/v1/db-servers": { body: { servers: [localServer, pg1] } },
+      "GET /api/v1/databases": { body: { databases: [{ ...blogWp, name: "shop_pg", server: "pg1" }] } },
+    });
+    render(<Harness initial="db=shop_pg" />);
+    const path = (await screen.findByLabelText(/File in the home of site blog/)) as HTMLInputElement;
+    expect(path.value).toMatch(/^shop_pg-\d{4}-\d{2}-\d{2}\.dump$/);
+    const format = screen.getByLabelText("Format") as HTMLSelectElement;
+    expect(format.value).toBe(".dump");
+    await user.selectOptions(format, ".sql");
+    expect(path.value).toMatch(/\d\.sql$/);
+    await user.selectOptions(format, ".sql.gz");
+    expect(path.value).toMatch(/\.sql\.gz$/);
+    await user.click(screen.getByLabelText("Import a file"));
+    expect(screen.queryByLabelText("Format")).not.toBeInTheDocument();
+  });
+
+  it("offers no custom format for MariaDB", async () => {
+    mockFetch({ ...sites, "GET /api/v1/databases": { body: { databases: [blogWp] } } });
+    render(<Harness initial="db=blog_wp" />);
+    const format = (await screen.findByLabelText("Format")) as HTMLSelectElement;
+    expect(format.value).toBe(".sql.gz");
+    expect([...format.options].map((o) => o.value)).toEqual([".sql.gz", ".sql"]);
+  });
 
   it("exports into a new file and waits for the job", async () => {
     const user = userEvent.setup();
