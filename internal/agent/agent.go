@@ -30,6 +30,7 @@ import (
 	"github.com/maki-it/hostashi/internal/firewall"
 	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/netaddrs"
+	"github.com/maki-it/hostashi/internal/objcache"
 	"github.com/maki-it/hostashi/internal/pagecache"
 	"github.com/maki-it/hostashi/internal/pages"
 	"github.com/maki-it/hostashi/internal/php"
@@ -141,6 +142,9 @@ type Config struct {
 	// builds it for nginx's worker user; without it a page cache is
 	// refused.
 	PageCache *pagecache.Dirs
+	// ObjectCache runs the sites' object caches (ADR-0045). Run builds it below
+	// StateDir; without it cache.* answer failed_precondition.
+	ObjectCache *objcache.Manager
 
 	// Doctor overrides what doctor.run reads, for tests. The zero value
 	// reads the server.
@@ -227,7 +231,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, log: log}
 		h.register(s)
 
 		if cfg.Backup != nil && cfg.Backup.Space == nil {
@@ -278,6 +282,7 @@ type siteOps struct {
 	quota  QuotaFS
 	slices *siteslice.Manager
 	cache  *pagecache.Dirs
+	objc   *objcache.Manager
 	log    *slog.Logger
 	mu     sync.Mutex
 	// sweepMu keeps the background deletes of purged caches apart.
@@ -363,6 +368,12 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			}
 		}
 
+		if h.objc != nil {
+			if err := h.objc.Remove(ctx, req.User); err != nil {
+				h.log.ErrorContext(ctx, "remove object cache of deleted site", "site", req.User, "err", err)
+			}
+		}
+
 		if h.ssh != nil {
 			if err := h.ssh.Remove(ctx, req.User); err != nil {
 				h.log.ErrorContext(ctx, "remove ssh keys of deleted site", "site", req.User, "err", err)
@@ -397,12 +408,15 @@ func (h *siteOps) register(s *agentrpc.Server) {
 		if err == nil {
 			h.cronDisabled(ctx, req)
 			h.sshDisabled(ctx, req)
+			h.cacheDisabled(ctx, req)
 		}
 
 		return resp, err
 	})
 
 	h.registerCron(s)
+
+	h.registerCache(s)
 
 	h.registerSSH(s)
 
@@ -1142,6 +1156,18 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.CloudPanelImport = &cpimport.Agent{
 			Dir: filepath.Join(cpDir, "imports"), StateDir: cmp.Or(cfg.StateDir, DefaultStateDir),
 			Source: cfg.CloudPanel, Units: resticctl.Units{},
+		}
+	}
+
+	if cfg.ObjectCache == nil {
+		cfg.ObjectCache = &objcache.Manager{
+			Dir:   filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "valkey"),
+			Slice: siteslice.Name, Ctl: phpctl.CacheController{}, Log: cfg.Log,
+		}
+
+		// Like PHP: a failure is logged, cache.apply retries.
+		if err := cfg.ObjectCache.Recover(ctx); err != nil && cfg.Log != nil {
+			cfg.Log.ErrorContext(ctx, "object cache recovery failed", "err", err)
 		}
 	}
 
