@@ -324,7 +324,9 @@ jobs:
           if [ "$MODE" = verify-ca ]; then
             tls=(-c ssl=on -c ssl_cert_file=/certs/server.pem -c ssl_key_file=/certs/server.key)
           fi
-          docker run -d --name pg --network host -v "$d:/certs:ro" -e POSTGRES_PASSWORD=rootpw "postgres:$SERVER" "${tls[@]}"
+          # initdb's default trusts TCP from 127.0.0.1; passwords are what is tested.
+          docker run -d --name pg --network host -v "$d:/certs:ro" -e POSTGRES_PASSWORD=rootpw \
+            -e POSTGRES_INITDB_ARGS="--auth-host=scram-sha-256 --auth-local=trust" "postgres:$SERVER" "${tls[@]}"
           for _ in $(seq 1 60); do docker exec pg pg_isready -h 127.0.0.1 -q && break; sleep 1; done
           # The site role owns its databases; a password with : \ ' and a space.
           docker exec pg psql -U postgres -qc "CREATE ROLE site1 LOGIN PASSWORD 'p:w\\x y''z'" \
