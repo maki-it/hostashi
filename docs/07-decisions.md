@@ -50,7 +50,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0044 | Outgoing email through an SMTP relay | Accepted on 2026-11-21 ([adr/0044](adr/0044-outgoing-email.md)) | No |
 | 0045 | Object cache (Valkey) per site | Accepted on 2026-11-21 ([adr/0045](adr/0045-object-cache-per-site.md)) | No |
 | 0046 | Page cache (nginx FastCGI cache) per site | Accepted on 2026-11-21 ([adr/0046](adr/0046-page-cache-per-site.md)) | No |
-| 0048 | Convert a parked domain into a site and back | Proposed ([adr/0048](adr/0048-convert-parked-domain-and-site.md)) | Yes, accept |
+| 0048 | Convert a parked domain into a site and back | Accepted on 2026-11-21 ([adr/0048](adr/0048-convert-parked-domain-and-site.md)) | No |
 | 0049 | PHP settings per site | Proposed ([adr/0049](adr/0049-php-settings-per-site.md)) | No |
 
 ---
@@ -339,7 +339,7 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0048 Convert a parked domain into a site and back
 
-**Full text (status Proposed, 2026-11-21):** [adr/0048](adr/0048-convert-parked-domain-and-site.md). Summary: Kim wants to turn a parked domain into a site and back. Recommended: "Make a site" on a parked domain opens the New site form prefilled (API unchanged), and a failed create now restores the parking; "Delete and park domains" on a site deletes it like delete (typed name, last backup shown) and parks the domains checked in its dialog (all checked by default; Kim, 2026-11-21), with the vhost swap in one `web.apply` so the domains are always answered. Scopes `sites:delete` and `parked:write`. No new agent operation, no new `os/exec`.
+**Full text (status Accepted, 2026-11-21, by Kim):** [adr/0048](adr/0048-convert-parked-domain-and-site.md). Summary: Kim wants to turn a parked domain into a site and back. Recommended: "Make a site" on a parked domain opens the New site form prefilled (API unchanged), and a failed create now restores the parking; "Delete and park domains" on a site deletes it like delete (typed name, last backup shown) and parks the domains checked in its dialog (all checked by default; Kim, 2026-11-21), with the vhost swap in one `web.apply` so the domains are always answered. Scopes `sites:delete` and `parked:write`. No new agent operation, no new `os/exec`.
 
 ## ADR-0049 PHP settings per site
 
