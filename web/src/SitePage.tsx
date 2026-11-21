@@ -29,6 +29,7 @@ import {
   type Site,
 } from "./sites";
 import { PageCacheSettings } from "./PageCache";
+import { PHPSettingsCard } from "./PHPSettings";
 import { SnippetSettings } from "./Snippets";
 import { SSHSettings } from "./SSH";
 import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
@@ -104,6 +105,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
         {active === "php" && (
           <>
             <PHPTab site={site} php={php} onChange={load} />
+            {site.php && <PHPSettingsCard site={site} />}
             {site.php && <ObjectCacheSettings site={site} canSize={role === "admin" || role === "manager"} />}
             {site.php && <PageCacheSettings site={site} canSize={role === "admin" || role === "manager"} />}
           </>
