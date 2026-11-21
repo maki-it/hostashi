@@ -46,6 +46,10 @@ func dbFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "database_exists", "a database or database user with this name exists")
 	case errors.Is(err, hosting.ErrDBServerLocalOnly):
 		writeError(w, http.StatusConflict, "db_server_local_only", "this works only for databases on the local server so far")
+	case errors.Is(err, hosting.ErrDBServerResolve):
+		writeError(w, http.StatusBadGateway, "db_server_unresolved", "the database server's name gives no address the job may connect to")
+	case errors.Is(err, hosting.ErrDBServersOff):
+		writeError(w, http.StatusConflict, "db_server_local_only", "external database servers are not available")
 	case errors.Is(err, hosting.ErrDBServerNotFound):
 		writeError(w, http.StatusUnprocessableEntity, "unknown_db_server", "no such database server")
 	case errors.Is(err, dbserver.ErrUnavailable):

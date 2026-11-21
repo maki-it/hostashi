@@ -37,7 +37,7 @@ cleanup() {
 trap cleanup EXIT
 
 step() { echo "=== $*"; }
-fail() { echo "FAIL: $*" >&2; docker exec "$NAME" journalctl --no-pager -u hostashi-agent -u hostashi -n 50 >&2 || true; exit 1; }
+fail() { echo "FAIL: $*" >&2; docker exec "$NAME" journalctl --no-pager -u hostashi-agent -u hostashi -u 'hostashi-dbjob@*' -n 50 >&2 || true; exit 1; }
 
 step "prepare $IMG with systemd"
 docker run -d --name "$NAME-prep" --network host "$IMG" sleep infinity >/dev/null
@@ -715,10 +715,10 @@ dbpw=$(x cat /tmp/api.out | sed -n 's/.*"password":"\([A-Za-z0-9]*\)".*/\1/p')
 ! x grep -q "$dbpw" /tmp/api.out || fail "password returned by a read"
 # Export and import through the API run as jobs; the client polls the job.
 api_job() {
-  local id state _
+  local db=${1:-wp_api} id state _
   id=$(x cat /tmp/api.out | sed -n 's/.*"id":"\([0-9a-f]*\)".*/\1/p')
-  for _ in $(seq 30); do
-    [ "$(api GET "/api/v1/databases/wp_api/jobs/$id")" = 200 ] || fail "job status: $(x cat /tmp/api.out)"
+  for _ in $(seq 60); do
+    [ "$(api GET "/api/v1/databases/$db/jobs/$id")" = 200 ] || fail "job status: $(x cat /tmp/api.out)"
     state=$(x cat /tmp/api.out | sed -n 's/.*"state":"\([a-z]*\)".*/\1/p')
     [ "$state" = running ] || break
     sleep 1
@@ -733,6 +733,42 @@ x mariadb -e 'DROP TABLE wp_api.t'
 [ "$(api POST /api/v1/databases/wp_api/import '{"path":"api.sql"}')" = 202 ] || fail "import: $(x cat /tmp/api.out)"
 api_job
 [ "$(x mariadb -Nse 'SELECT i FROM wp_api.t')" = 7 ] || fail "API import did not restore the table"
+
+step "import and export on an external database server (ADR-0041 addendum 1)"
+# The local MariaDB stands in for an external server: it listens on the
+# machine's own address too, and the panel adds it by that address with an
+# administrator of its own. The job runs in hostashi-dbjob@<id>, which may
+# reach only that address, with a temporary user the panel drops after.
+ext_ip=$(x sh -c "hostname -I | tr ' ' '\n' | grep -E '^[0-9]+(\.[0-9]+){3}$' | grep -v '^127\.' | head -n1")
+[ -n "$ext_ip" ] || fail "no IPv4 address for the external server test"
+printf '[mariadbd]\nbind-address = 127.0.0.1,%s\n' "$ext_ip" | xi sh -c 'cat >/etc/mysql/mariadb.conf.d/95-test-external.cnf'
+x systemctl restart mariadb.service
+x mariadb -e "CREATE USER 'extadmin'@'$ext_ip' IDENTIFIED BY 'Ext-admin-pw-1234'; GRANT ALL ON *.* TO 'extadmin'@'$ext_ip' WITH GRANT OPTION"
+[ "$(api POST /api/v1/db-servers "{\"name\":\"ext\",\"host\":\"$ext_ip\",\"adminUser\":\"extadmin\",\"adminPassword\":\"Ext-admin-pw-1234\",\"tlsMode\":\"none\"}")" = 201 ] ||
+  fail "add external server: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/wp/databases '{"name":"wp_ext","server":"ext"}')" = 201 ] || fail "create external database: $(x cat /tmp/api.out)"
+x mariadb -e 'CREATE TABLE wp_ext.t (i INT); INSERT INTO wp_ext.t VALUES (11)'
+[ "$(api POST /api/v1/databases/wp_ext/export '{"path":"ext.sql.gz"}')" = 202 ] || fail "external export: $(x cat /tmp/api.out)"
+api_job wp_ext
+expect_mode /home/wp/ext.sql.gz "600 wp:wp"
+# mariadb-dump 11 writes the rows of an INSERT on lines of their own.
+x sh -c 'zcat /home/wp/ext.sql.gz | grep -q "CREATE TABLE .t." && zcat /home/wp/ext.sql.gz | grep -q "(11)"' ||
+  fail "external export lacks the table or its row: $(x sh -c 'zcat /home/wp/ext.sql.gz | grep -v "^/\*" | head -n 40')"
+x mariadb -e 'DROP TABLE wp_ext.t'
+[ "$(api POST /api/v1/databases/wp_ext/import '{"path":"ext.sql.gz"}')" = 202 ] || fail "external import: $(x cat /tmp/api.out)"
+api_job wp_ext
+[ "$(x mariadb -Nse 'SELECT i FROM wp_ext.t')" = 11 ] || fail "external import did not restore the table"
+# The job's record keeps no password, and its user is gone.
+! x sh -c 'grep -rq password /var/lib/hostashi-agent/dbjobs/' || fail "a job record kept the password"
+[ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User LIKE 'hostashi\\_job\\_%'")" ] || fail "temporary job user left behind"
+# The unit reached the server only through its drop-in.
+x sh -c "grep -h '^IPAddressAllow=' /etc/systemd/system/hostashi-dbjob@*.service.d/job.conf | grep -qx 'IPAddressAllow=$ext_ip'" ||
+  fail "job drop-in: $(x sh -c 'cat /etc/systemd/system/hostashi-dbjob@*.service.d/job.conf')"
+[ "$(api DELETE /api/v1/databases/wp_ext)" = 204 ] || fail "delete external database: $(x cat /tmp/api.out)"
+[ "$(api DELETE /api/v1/db-servers/ext)" = 204 ] || fail "remove external server: $(x cat /tmp/api.out)"
+x rm -f /home/wp/ext.sql.gz /etc/mysql/mariadb.conf.d/95-test-external.cnf
+x mariadb -e "DROP USER 'extadmin'@'$ext_ip'"
+x systemctl restart mariadb.service
 
 step "two sites stay apart (ADR-0033 H8, 05-security 5.5)"
 # A second site with PHP and a database. Everything below runs as wp, the

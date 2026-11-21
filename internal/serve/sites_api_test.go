@@ -131,6 +131,14 @@ func (a *stubAgent) DBJob(_ context.Context, id string) (agentapi.DBJob, error) 
 	return agentapi.DBJob{ID: stubJob, Kind: "import", Database: "shop_wp", Path: "dump.sql", State: agentapi.JobDone}, nil
 }
 
+func (a *stubAgent) DBRemoteStart(_ context.Context, req agentapi.DBRemoteJobRequest) (agentapi.DBJob, error) {
+	return agentapi.DBJob{ID: stubJob, Kind: req.Kind, Database: req.Database, Path: req.Path, State: agentapi.JobRunning}, nil
+}
+
+func (a *stubAgent) DBRemoteJob(ctx context.Context, id string) (agentapi.DBJob, error) {
+	return a.DBJob(ctx, id)
+}
+
 func (a *stubAgent) PageList(context.Context) ([]agentapi.PageVersion, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

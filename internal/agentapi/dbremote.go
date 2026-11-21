@@ -65,6 +65,10 @@ func (r DBRemoteJobRequest) Validate() error {
 		return err
 	}
 
+	if r.Password == "" {
+		return errors.New("password: must be 32 letters and digits")
+	}
+
 	if err := validateRemoteHost(r.Host); err != nil {
 		return err
 	}
@@ -90,11 +94,17 @@ func (r DBRemoteJobRequest) Validate() error {
 		return errors.New("tls: must be verify, verify-ca or none")
 	}
 
-	if !remoteJobUserRe.MatchString(r.User) {
+	return ValidateRemoteJobUser(r.User, r.Password)
+}
+
+// ValidateRemoteJobUser checks the temporary user of a remote job and its
+// password. The names start with hostashi, which site users cannot take.
+func ValidateRemoteJobUser(user, password string) error {
+	if !remoteJobUserRe.MatchString(user) {
 		return fmt.Errorf("user: must match %s", remoteJobUserRe)
 	}
 
-	if !remoteJobPassRe.MatchString(r.Password) {
+	if password != "" && !remoteJobPassRe.MatchString(password) {
 		return errors.New("password: must be 32 letters and digits")
 	}
 

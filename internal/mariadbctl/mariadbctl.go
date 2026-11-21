@@ -189,19 +189,23 @@ func remoteOptions(r Remote) (string, error) {
 		return "", fmt.Errorf("%w: host and port are required", ErrFailed)
 	}
 
-	out := "protocol=tcp\nhost=" + r.Host + "\nport=" + strconv.Itoa(r.Port) + "\nconnect-timeout=20\n"
+	out := "protocol=tcp\nhost=" + r.Host + "\nport=" + strconv.Itoa(r.Port) + "\n"
+
+	// mariadb-dump has no connect-timeout and stops with exit code 7
+	// (unknown variable) when [client] has it; only mariadb reads [mysql].
+	const timeout = "[mysql]\nconnect-timeout=20\n"
 
 	switch r.TLS {
 	case "verify":
-		return out + "ssl\nssl-verify-server-cert\nssl-ca=" + SystemCAFile + "\n", nil
+		return out + "ssl\nssl-verify-server-cert\nssl-ca=" + SystemCAFile + "\n" + timeout, nil
 	case "verify-ca":
 		if r.CAFile == "" {
 			return "", fmt.Errorf("%w: CA file is required", ErrFailed)
 		}
 
-		return out + "ssl\nssl-verify-server-cert\nssl-ca=" + r.CAFile + "\n", nil
+		return out + "ssl\nssl-verify-server-cert\nssl-ca=" + r.CAFile + "\n" + timeout, nil
 	case "none":
-		return out + "skip-ssl\n", nil
+		return out + "skip-ssl\n" + timeout, nil
 	default:
 		return "", fmt.Errorf("%w: unknown TLS mode", ErrFailed)
 	}
