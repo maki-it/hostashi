@@ -254,8 +254,8 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 	}))
 
 	// The dumps of a finished import are loaded on their own (ADR-0030);
-	// this starts the loads again, for example after a panel restart. A
-	// dump whose load started already is not loaded twice.
+	// this starts loads whose start failed again. A dump whose load started
+	// already is not loaded twice, also after a panel restart.
 	mux.HandleFunc("POST /api/v1/migrations/cloudpanel/imports/{id}/load", a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
@@ -410,6 +410,15 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 
 		// A cache in front of the old site becomes the page cache
 		// (ADR-0046). The default size counts against the site's disk.
+		// The old pool's PHP settings (ADR-0049), clamped by the plan.
+		if s.PHPSettings != nil {
+			if _, err := sites.SetPHPSettings(ctx, actor, s.Name, *s.PHPSettings); err != nil {
+				log.WarnContext(ctx, "imported PHP settings not set", "site", s.Name, "err", err)
+			} else {
+				n.PHPSettings = true
+			}
+		}
+
 		if s.PageCache != "" {
 			_, err := sites.SetPageCache(ctx, actor, s.Name, hosting.PageCacheSettings{
 				Enabled: true, Preset: s.PageCache, Minutes: agentapi.DefaultPageCacheMinutes,

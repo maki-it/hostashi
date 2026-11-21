@@ -99,7 +99,7 @@ Sandbox of the unit: like `hostashi-import@`, plus `RestrictAddressFamilies=AF_U
 
 - New agent operations `db.job.start_remote` and `dbtool.servers`; new unit `hostashi-dbjob@.service`; installer and container test learn the unit.
 - The CI `dbserver` job gets an import and export test against MariaDB and MySQL with TLS.
-- The `db_server_local_only` refusal is removed for import, export and Adminer.
+- The `db_server_local_only` refusal is removed for import, export and Adminer; it stays for loading a dump as the owner.
 
 ### Risks to name openly
 
@@ -118,3 +118,6 @@ Sandbox of the unit: like `hostashi-import@`, plus `RestrictAddressFamilies=AF_U
 - The temporary user may log in only from the client host the server saw for the panel. The panel therefore passes only IPv4 addresses when that host is an IPv4 address, and only IPv6 addresses for IPv6 [V: `internal/hosting/dbremotejobs.go`].
 - The panel records each job's user in `db_remote_jobs` (migration 0037) and drops it when the job has ended, at the latest 6 h 15 min after the start. The 15-minute server check retries [V: `internal/hosting/dbremotejobs.go`].
 - Tests: the container test runs an export and an import against the local MariaDB added as an external server, with TLS `none` [V: `packaging/test/container-test.sh`]. A test with TLS against MySQL in the `dbserver` CI job is not done yet [A: planned].
+- Adminer (part 3): the operations are `db.tool.servers` and `db.tool.remote` [V: `internal/agentapi/dbtool.go`]. The agent writes the server list, a private hosts file and the CAs below `/etc/hostashi-adminer/servers/`, and the drop-in `hostashi-adminer.service.d/servers.conf`; it restarts the pool only when one of them changed [V: `internal/agent/dbtoolremote.go`]. A restart ends the Adminer sessions open at that moment, local ones too, because sessions live in the pool's private `/tmp` [V: unit file]. The panel sends the list before every session on an external server and after a server is removed; addresses are sorted, so a resolver that rotates its answers does not restart the pool [V: `internal/hosting/dbremotetools.go`].
+- The session's user is `hostashi_tool_<16 hex>` with `MAX_USER_CONNECTIONS 2`. The panel records it in `db_remote_tools` (migration 0040), drops it one minute after the session ends and when the database is deleted; the 15-minute server check retries [V: `internal/hosting/dbremotetools.go`]. On MariaDB the drop also ends the user's connections; MySQL has no `KILL ... USER`, there a running query ends on its own, while Adminer itself refuses the session after its end [V: `packaging/adminer/index.php`].
+- Tests: the container test opens a database on the local MariaDB added as an external server (TLS `none`) and logs in through the tool [V: `packaging/test/container-test.sh`]. TLS `verify-ca` and MySQL 8 with `caching_sha2_password` over mysqlnd are untested [A].

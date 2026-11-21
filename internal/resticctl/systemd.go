@@ -32,6 +32,8 @@ const (
 	// an external server (ADR-0041 addendum 1); the instance is the job's
 	// id.
 	DBJobUnit = "hostashi-dbjob@"
+	// DBToolUnit is the web database tool's pool (ADR-0038).
+	DBToolUnit = "hostashi-adminer.service"
 )
 
 // restoreIDRe is the only variable part of any argument list here.
@@ -73,6 +75,12 @@ func (Units) StartDBJob(ctx context.Context, id string) error {
 	}
 
 	return systemctl(ctx, "start", "--no-block", DBJobUnit+id+".service")
+}
+
+// RestartDBTool restarts the web database tool's pool, so it takes a new
+// drop-in for the external database servers (ADR-0041 addendum 1).
+func (Units) RestartDBTool(ctx context.Context) error {
+	return systemctl(ctx, "restart", DBToolUnit)
 }
 
 // StartRun starts a run now and returns at once; systemd ignores the

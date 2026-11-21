@@ -103,7 +103,7 @@ func TestPageCache(t *testing.T) {
 	}
 
 	// Disabled: no PHP, so no cache either.
-	if _, err := s.SetDisabled(ctx, 1, "blog", true); err != nil {
+	if _, err := s.SetDisabled(ctx, 1, "blog", true, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -111,7 +111,7 @@ func TestPageCache(t *testing.T) {
 		t.Fatalf("cache sent for a disabled site: %+v", ws.PageCache)
 	}
 
-	if _, err := s.SetDisabled(ctx, 1, "blog", false); err != nil {
+	if _, err := s.SetDisabled(ctx, 1, "blog", false, ""); err != nil {
 		t.Fatal(err)
 	}
 

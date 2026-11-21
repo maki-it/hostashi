@@ -79,6 +79,10 @@ PHP_REQUEST_SET=no
 CHANGES=0 BINARY_CHANGED=no CONFIG_CHANGED=no
 
 log()    { echo "install: $*" >&2; }
+# apt_update is apt-get update with php-install's wait for sury.org's CDN
+# (ADR-0019): once --php-versions added the source, every later step's
+# update reads its indexes too.
+apt_update() { HOSTASHI_LIB="" "$PHP_INSTALL_SRC" update; }
 note()   { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" >>"$LOG" 2>/dev/null || true; }
 refuse() { log "REFUSED: $*"; log "server left unchanged"; exit 2; }
 
@@ -106,7 +110,7 @@ apt_install() {
     note "missing package(s) with --no-apt: ${missing[*]}"
     return 1
   fi
-  apt-get update -qq >>"$LOG" 2>&1 &&
+  apt_update >>"$LOG" 2>&1 &&
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${missing[@]}" >>"$LOG" 2>&1
 }
 
@@ -650,7 +654,8 @@ do_dbtool() {
   if [ "$NO_DB_TOOL" = yes ]; then
     systemctl disable --now "$DBTOOL_UNIT" >>"$LOG" 2>&1
     rm -f "/etc/systemd/system/$DBTOOL_UNIT" "$DBTOOL_TMPFILES" "$DBTOOL_CONF" || return 1
-    rm -rf "$DBTOOL_DIR" /run/hostashi-adminer || return 1
+    # The agent's files for external database servers (ADR-0041 addendum 1).
+    rm -rf "$DBTOOL_DIR" /run/hostashi-adminer "${DBTOOL_CONF%/*}/servers" "/etc/systemd/system/$DBTOOL_UNIT.d" || return 1
     rmdir "${DBTOOL_CONF%/*}" 2>/dev/null
     systemctl daemon-reload >>"$LOG" 2>&1
     return 0

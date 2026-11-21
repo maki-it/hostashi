@@ -18,6 +18,7 @@ const site: Site = {
   php: "",
   phpPrograms: false,
   disabled: false,
+  disabledPage: "builtin-maintenance",
   maintenance: { enabled: false, page: "builtin-maintenance", allowIps: [] },
   domains: ["blog.example.com"],
   tls: {

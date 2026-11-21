@@ -165,6 +165,13 @@ type Service struct {
 	dbTool     DBToolAgent // nil: no web database tool (ADR-0038)
 	dbToolPort int
 
+	// The tool's external servers (ADR-0041 addendum 1): the list last
+	// sent to the agent, under remoteToolsMu, and how the end of a
+	// session is scheduled (nil: time.AfterFunc).
+	remoteToolsMu sync.Mutex
+	toolServers   map[int64]agentapi.DBToolServer
+	afterFunc     func(d time.Duration, f func())
+
 	dbManifestDir string     // extdb list for the backup; empty: none
 	manifestMu    sync.Mutex // serializes the manifest writes
 
@@ -663,6 +670,11 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		return err
 	}
 
+	phpSettings, err := s.st.AllSitePHPSettings(ctx)
+	if err != nil {
+		return err
+	}
+
 	workers, err := s.st.PHPWorkers(ctx)
 	if err != nil {
 		return err
@@ -692,6 +704,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 			if php != "" {
 				ws.PHPWorkers = phpWorkers(workers, site.ID)
 				ws.PHPPrograms = site.PHPPrograms
+				ws.PHPSettings = webPHPSettings(phpSettings, site)
 			}
 
 			// Sent in maintenance as well, so the agent keeps the cache's
@@ -704,6 +717,12 @@ func (s *Service) applyWeb(ctx context.Context) error {
 
 			if site.Maintenance && !site.Disabled {
 				if ws.Maintenance, err = s.maintenanceWeb(ctx, site, onAgent); err != nil {
+					return err
+				}
+			}
+
+			if site.Disabled {
+				if ws.DisabledPage, err = s.disabledWeb(ctx, site, onAgent); err != nil {
 					return err
 				}
 			}

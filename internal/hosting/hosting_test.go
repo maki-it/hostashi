@@ -246,6 +246,10 @@ func (f *fakeAgent) live() string {
 			entry += "+disabled"
 		}
 
+		if p := s.DisabledPage; p != nil {
+			entry += "(" + p.Page + ")"
+		}
+
 		if m := s.Maintenance; m != nil {
 			entry += fmt.Sprintf("+maint(%s%v)", m.Page, m.AllowIPs)
 		}
@@ -529,20 +533,20 @@ func TestDisableKeepsTheSiteButStopsPHP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	site, err := s.SetDisabled(ctx, 1, "blog", true)
-	if err != nil || !site.Disabled || site.PHP != "8.4" || ag.live() != "[blog=[blog.example.com]+disabled]" {
+	site, err := s.SetDisabled(ctx, 1, "blog", true, "")
+	if err != nil || !site.Disabled || site.PHP != "8.4" || ag.live() != "[blog=[blog.example.com]+disabled(builtin-maintenance)]" {
 		t.Fatalf("%+v %v live %s", site, err, ag.live())
 	}
 
 	// Other changes keep the site disabled and its PHP off.
-	if _, err := s.SetPHP(ctx, 1, "blog", "8.3"); err != nil || ag.live() != "[blog=[blog.example.com]+disabled]" {
+	if _, err := s.SetPHP(ctx, 1, "blog", "8.3"); err != nil || ag.live() != "[blog=[blog.example.com]+disabled(builtin-maintenance)]" {
 		t.Fatalf("%v live %s", err, ag.live())
 	}
 
 	// The agent refuses: the site stays disabled.
 	ag.webErr = &agentrpc.Error{Code: agentrpc.CodeInternal, Message: "nginx down"}
 
-	if _, err := s.SetDisabled(ctx, 1, "blog", false); err == nil {
+	if _, err := s.SetDisabled(ctx, 1, "blog", false, ""); err == nil {
 		t.Fatal("enable succeeded although the agent refused")
 	}
 
@@ -552,11 +556,11 @@ func TestDisableKeepsTheSiteButStopsPHP(t *testing.T) {
 
 	ag.webErr = nil
 
-	if site, err := s.SetDisabled(ctx, 1, "blog", false); err != nil || site.Disabled || ag.live() != "[blog=[blog.example.com]+php8.3]" {
+	if site, err := s.SetDisabled(ctx, 1, "blog", false, ""); err != nil || site.Disabled || ag.live() != "[blog=[blog.example.com]+php8.3]" {
 		t.Fatalf("%+v %v live %s", site, err, ag.live())
 	}
 
-	if _, err := s.SetDisabled(ctx, 1, "nope", true); !errors.Is(err, ErrNotFound) {
+	if _, err := s.SetDisabled(ctx, 1, "nope", true, ""); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown site: %v", err)
 	}
 

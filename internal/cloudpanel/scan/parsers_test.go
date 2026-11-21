@@ -38,7 +38,7 @@ func TestParseCrontab(t *testing.T) {
 }
 
 func TestParsePools(t *testing.T) {
-	src := "[a]\nuser = u\nlisten = 127.0.0.1:9001\npm.max_children = x\nphp_admin_value[memory_limit] = 1G\nphp_value[xdebug.mode] = debug\nenv[SECRET] = hunter2\nfoo = bar\n[b]\nuser = v\n"
+	src := "[a]\nuser = u\nlisten = 127.0.0.1:9001\npm.max_children = x\nphp_admin_value[memory_limit] = 1G\nphp_value[max_file_uploads] = 50\nphp_value[xdebug.mode] = debug\nenv[SECRET] = hunter2\nfoo = bar\n[b]\nuser = v\n"
 
 	pools, glob := parsePools(src, "f", "8.3")
 	if len(pools) != 2 || len(glob) != 0 {
@@ -61,7 +61,8 @@ func TestParsePools(t *testing.T) {
 		}
 	}
 
-	if a.Settings["php_admin_value[memory_limit]"] != "1G" || len(a.EnvKeys) != 1 {
+	// Both are on the ADR-0049 allowlist.
+	if a.Settings["php_admin_value[memory_limit]"] != "1G" || a.Settings["php_value[max_file_uploads]"] != "50" || len(a.EnvKeys) != 1 {
 		t.Errorf("%+v", a.Pool)
 	}
 

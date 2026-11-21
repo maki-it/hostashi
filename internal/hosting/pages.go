@@ -112,7 +112,7 @@ func (s *Service) Pages(ctx context.Context) ([]Page, error) {
 		p, _, _ := builtinPage(id)
 
 		for _, site := range sites {
-			if id == statuspage.BuiltinMaintenance && site.MaintenancePage == 0 && site.Maintenance {
+			if id == statuspage.BuiltinMaintenance && (site.MaintenancePage == 0 && site.Maintenance || site.DisabledPage == 0 && site.Disabled) {
 				p.Sites = append(p.Sites, site.Name)
 			}
 		}
@@ -336,21 +336,52 @@ type Maintenance struct {
 	AllowIPs []string
 }
 
+// maintenancePage resolves the page id of a maintenance page: 0 for empty
+// or the built-in page, else a stored page of kind maintenance.
+func (s *Service) maintenancePage(ctx context.Context, id string) (int64, error) {
+	if id == "" || id == statuspage.BuiltinMaintenance {
+		return 0, nil
+	}
+
+	n, ok := parsePageID(id)
+	if !ok {
+		return 0, ErrPageNotFound
+	}
+
+	p, err := s.st.StatusPageByID(ctx, n)
+	if errors.Is(err, store.ErrNotFound) {
+		return 0, ErrPageNotFound
+	}
+
+	if err != nil {
+		return 0, err
+	}
+
+	if p.Kind != statuspage.KindMaintenance {
+		return 0, fmt.Errorf("%w: %q is a parking page, choose a maintenance page", ErrInvalid, p.Name)
+	}
+
+	return n, nil
+}
+
+// pageIDString is the API id of a maintenance page (0: the built-in one).
+func pageIDString(page int64) string {
+	if page == 0 {
+		return statuspage.BuiltinMaintenance
+	}
+
+	return pageAgentID(page)
+}
+
 // SetMaintenance changes the maintenance settings of an active site and
 // applies them. Addresses are stored in their canonical form.
 func (s *Service) SetMaintenance(ctx context.Context, actor int64, name string, m Maintenance) (store.Site, error) {
-	page := int64(0)
-
-	switch m.Page {
-	case "", statuspage.BuiltinMaintenance:
+	if m.Page == "" {
 		m.Page = statuspage.BuiltinMaintenance
-	default:
-		n, ok := parsePageID(m.Page)
-		if !ok {
-			return store.Site{}, ErrPageNotFound
-		}
+	}
 
-		page = n
+	if _, ok := parsePageID(m.Page); !ok && m.Page != statuspage.BuiltinMaintenance {
+		return store.Site{}, ErrPageNotFound
 	}
 
 	allow, err := canonicalAllow(m.AllowIPs)
@@ -370,19 +401,9 @@ func (s *Service) SetMaintenance(ctx context.Context, actor int64, name string, 
 		return store.Site{}, ErrState
 	}
 
-	if page != 0 {
-		p, err := s.st.StatusPageByID(ctx, page)
-		if errors.Is(err, store.ErrNotFound) {
-			return store.Site{}, ErrPageNotFound
-		}
-
-		if err != nil {
-			return store.Site{}, err
-		}
-
-		if p.Kind != statuspage.KindMaintenance {
-			return store.Site{}, fmt.Errorf("%w: %q is a parking page, choose a maintenance page", ErrInvalid, p.Name)
-		}
+	page, err := s.maintenancePage(ctx, m.Page)
+	if err != nil {
+		return store.Site{}, err
 	}
 
 	if err := s.st.SetSiteMaintenance(ctx, name, m.Enabled, page, allow, s.now()); err != nil {
@@ -408,12 +429,22 @@ func (s *Service) SetMaintenance(ctx context.Context, actor int64, name string, 
 }
 
 // MaintenancePageID is the page id of a site's maintenance setting.
-func MaintenancePageID(site store.Site) string {
-	if site.MaintenancePage == 0 {
-		return statuspage.BuiltinMaintenance
+func MaintenancePageID(site store.Site) string { return pageIDString(site.MaintenancePage) }
+
+// DisabledPageID is the page id a site shows while disabled (ADR-0047).
+func DisabledPageID(site store.Site) string { return pageIDString(site.DisabledPage) }
+
+// disabledWeb returns the page of a disabled site for web.apply and makes
+// sure the agent holds that page version. Under s.mu.
+func (s *Service) disabledWeb(ctx context.Context, site store.Site, onAgent map[string]bool) (*agentapi.WebPageRef, error) {
+	id := DisabledPageID(site)
+
+	digest, err := s.pageOnAgent(ctx, id, site.DisabledPage, onAgent)
+	if err != nil {
+		return nil, err
 	}
 
-	return pageAgentID(site.MaintenancePage)
+	return &agentapi.WebPageRef{Page: id, Digest: digest}, nil
 }
 
 func canonicalAllow(in []string) ([]string, error) {
@@ -494,7 +525,7 @@ func (s *Service) pageOnAgent(ctx context.Context, id string, stored int64, onAg
 // a parked domain needs one.
 func (s *Service) agentPages(ctx context.Context, sites []store.Site, parked int) (map[string]bool, error) {
 	need := parked > 0 || slices.ContainsFunc(sites, func(site store.Site) bool {
-		return site.State == store.SiteActive && site.Maintenance && !site.Disabled
+		return site.State == store.SiteActive && (site.Maintenance || site.Disabled)
 	})
 	if !need {
 		return nil, nil

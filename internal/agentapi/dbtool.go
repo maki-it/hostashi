@@ -3,6 +3,7 @@
 package agentapi
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -82,4 +83,132 @@ type DBToolTicket struct {
 	Expires  time.Time `json:"expires"`
 	// TicketExpires is when an unused ticket stops being valid.
 	TicketExpires time.Time `json:"ticketExpires"`
+
+	// An external server (ADR-0041 addendum 1); empty for the local socket.
+	Host   string `json:"host,omitempty"`
+	Port   int    `json:"port,omitempty"`
+	TLS    string `json:"tls,omitempty"`    // "verify", "verify-ca" or "none"
+	CAFile string `json:"caFile,omitempty"` // for "verify-ca"
 }
+
+// External servers in the web database tool (ADR-0041 addendum 1). The
+// tool's pool reaches only the addresses of the configured external
+// servers, through a drop-in the agent writes; a private /etc/hosts maps
+// the servers' names, so the pool needs no DNS.
+const (
+	// DBToolServerDir holds the hosts file and the servers' own CAs,
+	// readable by the tool.
+	DBToolServerDir = "/etc/hostashi-adminer/servers"
+	// DBToolUnit is the tool's PHP-FPM unit.
+	DBToolUnit = "hostashi-adminer.service"
+	// MaxDBToolServers bounds the external servers in the drop-in.
+	MaxDBToolServers = 32
+)
+
+// DBToolServer is an external server the tool may reach.
+type DBToolServer struct {
+	ID    int64    `json:"id"`
+	Host  string   `json:"host"`
+	Addrs []string `json:"addrs"`
+	CAPEM string   `json:"caPem,omitempty"` // the server's own CA, for verify-ca
+}
+
+// DBToolServersRequest is the full list of external servers.
+type DBToolServersRequest struct {
+	Servers []DBToolServer `json:"servers"`
+}
+
+// DBToolServersResponse says whether the pool was restarted, which ends
+// the open sessions.
+type DBToolServersResponse struct {
+	Restarted bool `json:"restarted"`
+}
+
+// Validate checks the list.
+func (r DBToolServersRequest) Validate() error {
+	if len(r.Servers) > MaxDBToolServers {
+		return fmt.Errorf("servers: at most %d", MaxDBToolServers)
+	}
+
+	ids := map[int64]bool{}
+
+	for _, srv := range r.Servers {
+		if srv.ID < 1 || ids[srv.ID] {
+			return fmt.Errorf("servers: id %d", srv.ID)
+		}
+
+		ids[srv.ID] = true
+
+		if err := ValidateRemoteHost(srv.Host); err != nil {
+			return err
+		}
+
+		if _, err := ParseRemoteAddrs(srv.Host, srv.Addrs); err != nil {
+			return err
+		}
+
+		if len(srv.CAPEM) > MaxRemoteCAPEMLen {
+			return fmt.Errorf("caPem: at most %d bytes", MaxRemoteCAPEMLen)
+		}
+	}
+
+	return nil
+}
+
+// DBToolCAFile is where the tool finds the CA of server id.
+func DBToolCAFile(id int64) string {
+	return fmt.Sprintf("%s/ca-%d.pem", DBToolServerDir, id)
+}
+
+// DBToolServers writes the drop-in and the hosts file and restarts the pool
+// when they changed.
+var DBToolServers = agentrpc.Op[DBToolServersRequest, DBToolServersResponse]{Name: "db.tool.servers"}
+
+// DBToolRemoteRequest writes a ticket for a database on an external server.
+// The panel created the temporary user there.
+type DBToolRemoteRequest struct {
+	Database string `json:"database"`
+	Minutes  int    `json:"minutes"`
+	ServerID int64  `json:"serverId"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	TLS      string `json:"tls"`
+	User     string `json:"user"`
+	Password string `json:"password"`
+}
+
+// Validate checks the request.
+func (r DBToolRemoteRequest) Validate() error {
+	if err := (DBToolOpenRequest{Database: r.Database, Minutes: r.Minutes}).Validate(); err != nil {
+		return err
+	}
+
+	if r.ServerID < 1 {
+		return errors.New("serverId: must be set")
+	}
+
+	if err := ValidateRemoteHost(r.Host); err != nil {
+		return err
+	}
+
+	if r.Port < 1 || r.Port > 65535 {
+		return errors.New("port: must be 1 to 65535")
+	}
+
+	if r.TLS != "verify" && r.TLS != "verify-ca" && r.TLS != "none" {
+		return errors.New("tls: must be verify, verify-ca or none")
+	}
+
+	if !ValidDBToolUser(r.User) {
+		return fmt.Errorf("user: must match %s", dbToolUserRe)
+	}
+
+	if !ValidRemotePassword(r.Password) {
+		return errors.New("password: must be 32 letters and digits")
+	}
+
+	return nil
+}
+
+// DBToolRemote writes the ticket of an external database.
+var DBToolRemote = agentrpc.Op[DBToolRemoteRequest, DBToolOpenResponse]{Name: "db.tool.remote"}

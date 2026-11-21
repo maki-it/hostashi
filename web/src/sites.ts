@@ -31,6 +31,7 @@ export type Site = {
   php: string; // "" for no PHP
   phpPrograms: boolean; // PHP may start programs (exec, system, ...)
   disabled: boolean; // answers 503, PHP stopped
+  disabledPage: string; // maintenance page shown while disabled (ADR-0047)
   maintenance: SiteMaintenance;
   domains: string[]; // the first one is the primary domain
   tls: SiteTLS;
@@ -72,7 +73,10 @@ export const newSiteHash = (domain: string, tls: boolean) =>
 export const setDomains = (name: string, domains: string[]) => request<Site>("PUT", sitePath(name) + "/domains", { domains });
 export const setPHP = (name: string, php: string) => request<Site>("PUT", sitePath(name) + "/php", { php });
 export const setTLS = (name: string, enabled: boolean) => request<Site>("PUT", sitePath(name) + "/tls", { enabled });
-export const setDisabled = (name: string, disabled: boolean) => request<Site>("PUT", sitePath(name) + "/disabled", { disabled });
+// setDisabled switches a site off or on; page is the maintenance page a
+// disabled site shows (empty: the built-in page), only sent when disabling.
+export const setDisabled = (name: string, disabled: boolean, page?: string) =>
+  request<Site>("PUT", sitePath(name) + "/disabled", disabled && page ? { disabled, page } : { disabled });
 export const setHSTS = (name: string, enabled: boolean) => request<Site>("PUT", sitePath(name) + "/hsts", { enabled });
 export const setPHPPrograms = (name: string, enabled: boolean) =>
   request<Site>("PUT", sitePath(name) + "/php-programs", { enabled });

@@ -25,8 +25,8 @@ var (
 	ErrDBServerExists   = errors.New("hosting: a database server with this name exists")
 	ErrDBServerInUse    = errors.New("hosting: the database server has databases or is the local server")
 	ErrDBServersOff     = errors.New("hosting: external database servers are not available")
-	// ErrDBServerLocalOnly: the web database tool and loading a dump as the
-	// owner work only on the local server so far (ADR-0041 addendum 1).
+	// ErrDBServerLocalOnly: loading a dump as the owner works only on the
+	// local server (ADR-0041 addendum 1).
 	ErrDBServerLocalOnly = errors.New("hosting: this works only for databases on the local server so far")
 	// ErrDBServerCheck wraps why a server failed the connection check.
 	ErrDBServerCheck = errors.New("hosting: the database server failed the check")
@@ -43,6 +43,9 @@ type RemoteDB interface {
 	// The temporary user of an import or export (ADR-0041 addendum 1).
 	CreateJobUser(ctx context.Context, database, user, password string) error
 	DropJobUser(ctx context.Context, user string) error
+	// The temporary user of a web database tool session.
+	CreateToolUser(ctx context.Context, database, user, password string) error
+	DropToolUser(ctx context.Context, user string) error
 }
 
 // DBServers reaches external database servers. The panel process does
@@ -277,6 +280,7 @@ func (s *Service) DeleteDBServer(ctx context.Context, actor int64, name string) 
 	}
 
 	s.dbManifestChanged(ctx)
+	s.removeToolServers(ctx)
 	s.audit(ctx, actor, "db_server.delete", name, nil)
 
 	return nil
@@ -457,6 +461,7 @@ func (s *Service) RefreshDBServers(ctx context.Context) {
 	}
 
 	s.FinishDBRemoteJobs(ctx)
+	s.FinishDBRemoteTools(ctx)
 }
 
 // Days before an external server's certificate ends at which doctor warns

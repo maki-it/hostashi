@@ -87,3 +87,66 @@ func (s *Store) DBServerByID(ctx context.Context, id int64) (DBServer, error) {
 
 	return d, nil
 }
+
+// DBRemoteTool is a session of the web database tool on an external server
+// whose temporary user still exists there (ADR-0041 addendum 1).
+type DBRemoteTool struct {
+	User     string
+	Database string
+	ServerID int64
+	Expires  time.Time
+}
+
+// AddDBRemoteTool records a session and its temporary user.
+func (s *Store) AddDBRemoteTool(ctx context.Context, t DBRemoteTool) error {
+	_, err := s.w.ExecContext(ctx,
+		`INSERT INTO db_remote_tools (db_user, database, server_id, expires_at) VALUES (?, ?, ?, ?)`,
+		t.User, t.Database, t.ServerID, t.Expires.Unix())
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	return nil
+}
+
+// DBRemoteTools returns the recorded sessions, the first to end first.
+func (s *Store) DBRemoteTools(ctx context.Context) ([]DBRemoteTool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT db_user, database, server_id, expires_at FROM db_remote_tools ORDER BY expires_at, db_user`)
+	if err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+
+	defer rows.Close()
+
+	out := []DBRemoteTool{}
+
+	for rows.Next() {
+		var (
+			t       DBRemoteTool
+			expires int64
+		)
+
+		if err := rows.Scan(&t.User, &t.Database, &t.ServerID, &expires); err != nil {
+			return nil, fmt.Errorf("store: %w", err)
+		}
+
+		t.Expires = time.Unix(expires, 0).UTC()
+		out = append(out, t)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+
+	return out, nil
+}
+
+// DeleteDBRemoteTool forgets a session after its user was dropped. A
+// missing row is not an error.
+func (s *Store) DeleteDBRemoteTool(ctx context.Context, user string) error {
+	if _, err := s.w.ExecContext(ctx, `DELETE FROM db_remote_tools WHERE db_user = ?`, user); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	return nil
+}

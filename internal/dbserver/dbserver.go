@@ -472,11 +472,48 @@ func (c *Client) DropJobUser(ctx context.Context, user string) error {
 	return c.exec(ctx, "drop user", "DROP USER IF EXISTS "+c.account(user))
 }
 
+// CreateToolUser creates the temporary user of a web database tool session
+// (ADR-0041 addendum 1): the rights of CreateUser and at most
+// agentapi.DBToolMaxConnections connections, as on the local server.
+func (c *Client) CreateToolUser(ctx context.Context, database, user, password string) error {
+	if err := agentapi.ValidateDBName(database); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	if !agentapi.ValidDBToolUser(user) || !agentapi.ValidRemotePassword(password) {
+		return fmt.Errorf("%w: tool user", ErrInvalid)
+	}
+
+	return c.createUserWith(ctx, database, user, password, fmt.Sprintf(" WITH MAX_USER_CONNECTIONS %d", agentapi.DBToolMaxConnections))
+}
+
+// DropToolUser drops the temporary user of a tool session; a missing one
+// is not an error. On MariaDB its open connections end too; MySQL has no
+// statement for that, there a running query ends on its own.
+func (c *Client) DropToolUser(ctx context.Context, user string) error {
+	if !agentapi.ValidDBToolUser(user) {
+		return fmt.Errorf("%w: tool user", ErrInvalid)
+	}
+
+	if err := c.exec(ctx, "drop user", "DROP USER IF EXISTS "+c.account(user)); err != nil {
+		return err
+	}
+
+	// KILL ... USER is MariaDB only; MySQL refuses it as a syntax error.
+	c.undo(ctx, "KILL HARD CONNECTION USER "+c.account(user))
+
+	return nil
+}
+
 func (c *Client) createUser(ctx context.Context, database, user, password string) error {
+	return c.createUserWith(ctx, database, user, password, "")
+}
+
+func (c *Client) createUserWith(ctx context.Context, database, user, password, with string) error {
 	acct := c.account(user)
 	grantOn := strings.ReplaceAll("`"+database+"`", "_", `\_`)
 
-	if err := c.exec(ctx, "create user", "CREATE USER "+acct+" IDENTIFIED BY '"+password+"'"); err != nil {
+	if err := c.exec(ctx, "create user", "CREATE USER "+acct+" IDENTIFIED BY '"+password+"'"+with); err != nil {
 		return err
 	}
 

@@ -74,6 +74,7 @@ func sitesReport(t *testing.T) []byte {
 			s.Cron = []scan.CronJob{{Schedule: "*/5 * * * *", Command: "php wp-cron.php", Line: 1}, {Schedule: "@reboot", Command: "x", Line: 2}}
 			s.SSHKeys = []scan.SSHKey{{Public: edKey(t), Comment: "kim@laptop"}, {Public: "ssh-dss AAAA", Comment: "old"}}
 			s.ObjectCache = true
+			s.Pool.Settings = map[string]string{"php_admin_value[memory_limit]": "512M", "php_admin_value[open_basedir]": "/home/alpha/"}
 		}),
 		site("beta", "php", scan.StatusClean, "8.1", nil),
 		site("gamma", "nodejs", scan.StatusClean, "", nil),
@@ -111,7 +112,7 @@ func TestCreateSiteAndImport(t *testing.T) {
 		created = append(created, s)
 		existing = append(existing, s.Name)
 
-		return cpmigrate.Created{Cron: len(s.Cron), SSHKeys: len(s.SSHKeys), ObjectCache: s.ObjectCache}, nil
+		return cpmigrate.Created{Cron: len(s.Cron), SSHKeys: len(s.SSHKeys), ObjectCache: s.ObjectCache, PHPSettings: s.PHPSettings != nil}, nil
 	}, imp)
 
 	// The redirect host makes alpha a review site.
@@ -139,6 +140,11 @@ func TestCreateSiteAndImport(t *testing.T) {
 		t.Fatalf("object cache %v, plan %v/%v, reasons %+v", created[0].ObjectCache, ps.ObjectCache, ps.ObjectCacheOn, pe.Reasons)
 	}
 
+	// The pool's allowlisted PHP settings come along (ADR-0049).
+	if p := created[0].PHPSettings; p == nil || p.MemoryLimit != 512<<20 || ps.PHPSettings != 1 || !ps.PHPSettingsOn {
+		t.Fatalf("php settings %+v, plan %d/%v", p, ps.PHPSettings, ps.PHPSettingsOn)
+	}
+
 	if len(created[0].Cron) != 1 || created[0].Cron[0].Line != 1 || ps.CronImport != 1 {
 		t.Fatalf("cron %+v %d", created[0].Cron, ps.CronImport)
 	}
@@ -153,7 +159,7 @@ func TestCreateSiteAndImport(t *testing.T) {
 		t.Fatalf("bad php: %v", err)
 	}
 
-	if _, err := svc.CreateSite(t.Context(), 1, rep.ID, "beta", cpmigrate.CreateOptions{Reviewed: true, PHP: "8.4"}); err != nil || created[1].PHP != "8.4" {
+	if _, err := svc.CreateSite(t.Context(), 1, rep.ID, "beta", cpmigrate.CreateOptions{Reviewed: true, PHP: "8.4"}); err != nil || created[1].PHP != "8.4" || created[1].PHPSettings != nil {
 		t.Fatalf("beta: %v %+v", err, created)
 	}
 

@@ -18,6 +18,7 @@ const blog: Site = {
   php: "8.4",
   phpPrograms: false,
   disabled: false,
+  disabledPage: "builtin-maintenance",
   maintenance: { enabled: false, page: "builtin-maintenance", allowIps: [] },
   domains: ["blog.example.com", "www.blog.example.com"],
   tls: { enabled: true, active: true, hsts: true, domains: ["blog.example.com", "www.blog.example.com"], notAfter: "2027-02-01T00:00:00Z" },
@@ -557,7 +558,50 @@ describe("SitePage", () => {
     await user.click(box.getByRole("button", { name: "Enable blog" }));
     expect(await box.findByText("blog is enabled again.")).toBeInTheDocument();
     expect(screen.queryByText("Disabled", { selector: ".ui-badge" })).not.toBeInTheDocument();
-    expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([{ disabled: true }, { disabled: false }]);
+    expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([{ disabled: true, page: "builtin-maintenance" }, { disabled: false }]);
+  });
+
+  it("disables a site with a chosen maintenance page and changes it", async () => {
+    const user = userEvent.setup();
+    let cur: Site = blog;
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": () => ({ body: { sites: [cur] } }),
+      "GET /api/v1/status-pages": {
+        body: {
+          pages: [
+            { id: "builtin-maintenance", name: "Built-in maintenance page", kind: "maintenance", builtin: true, digest: "", files: [], sites: [], parked: [] },
+            { id: "p3", name: "Contract ended", kind: "maintenance", builtin: false, digest: "", files: [], sites: [], parked: [] },
+            { id: "p4", name: "Parked", kind: "parking", builtin: false, digest: "", files: [], sites: [], parked: [] },
+          ],
+        },
+      },
+      "PUT /api/v1/sites/blog/disabled": (b) => {
+        const body = b as { disabled: boolean; page?: string };
+        cur = { ...cur, disabled: body.disabled, disabledPage: body.page ?? cur.disabledPage };
+        return { body: cur };
+      },
+    });
+    render(<PageHarness />);
+    const box = within(await screen.findByRole("region", { name: "Availability" }));
+    await user.click(box.getByRole("button", { name: "Disable site" }));
+    const select = box.getByRole("combobox", { name: "Page while disabled" });
+    expect(await within(select).findByRole("option", { name: "Contract ended" })).toBeInTheDocument();
+    expect(within(select).queryByRole("option", { name: "Parked" })).not.toBeInTheDocument();
+    await user.selectOptions(select, "p3");
+    await user.click(box.getByRole("button", { name: "Disable blog" }));
+    expect(await box.findByText("blog is disabled.")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Details of blog")).getByText(/chosen maintenance page/)).toBeInTheDocument();
+
+    const change = box.getByRole("button", { name: "Change page" });
+    expect(change).toBeDisabled();
+    await user.selectOptions(box.getByRole("combobox", { name: "Page while disabled" }), "builtin-maintenance");
+    await user.click(change);
+    expect(await box.findByText("The page is changed.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([
+      { disabled: true, page: "p3" },
+      { disabled: true, page: "builtin-maintenance" },
+    ]);
   });
 
   it("starts maintenance with a page and allowed addresses", async () => {

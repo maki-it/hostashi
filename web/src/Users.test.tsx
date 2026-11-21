@@ -12,6 +12,7 @@ const kim = {
   username: "kim",
   role: "admin",
   disabled: false,
+  disabledPage: "builtin-maintenance",
   totpEnabled: true,
   passkeys: 0,
   requireSecondFactor: false,

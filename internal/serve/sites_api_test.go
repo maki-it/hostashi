@@ -421,7 +421,15 @@ func TestSiteDisableOverHTTP(t *testing.T) {
 		t.Fatalf("disable: %d %s %+v", rec.Code, rec.Body, ag.web.Sites)
 	}
 
-	for _, body := range []string{`{}`, `{"disabled":"yes"}`} {
+	if !strings.Contains(rec.Body.String(), `"disabledPage":"builtin-maintenance"`) || ag.web.Sites[0].DisabledPage == nil || ag.web.Sites[0].DisabledPage.Page != "builtin-maintenance" {
+		t.Fatalf("disabled page: %s %+v", rec.Body, ag.web.Sites[0].DisabledPage)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/disabled", cookie: c, body: `{"disabled":true,"page":"p99"}`}); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown page: %d %s", rec.Code, rec.Body)
+	}
+
+	for _, body := range []string{`{}`, `{"disabled":"yes"}`, `{"disabled":true,"page":7}`} {
 		if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/disabled", cookie: c, body: body}); rec.Code < 400 {
 			t.Errorf("%s: %d", body, rec.Code)
 		}

@@ -31,6 +31,7 @@ Hostashi's firewall lets in only these ports, plus what you open in the panel or
 | `/var/log/hostashi-install.log` | the installer's log |
 | `/usr/share/hostashi/adminer/` | the database tool: the pinned Adminer and Hostashi's front for it |
 | `/run/hostashi-adminer/tickets/` | one-time tickets for the database tool; each is removed on first use or after 60 seconds |
+| `/etc/hostashi-adminer/servers/` | the external database servers the database tool may reach: their addresses, a hosts file and their CA certificates, written by the agent |
 
 ### Keys to keep outside the server
 
@@ -49,6 +50,6 @@ sudo hostashi backup key show
 | `hostashi-php-<version>@<site>.service` | the PHP-FPM process of one site |
 | `hostashi-files@<site>.socket`, `hostashi-files@<site>.service` | the file manager of one site: started by its socket when the Files tab is used, runs as the site's user, stops after 5 minutes without requests |
 | `hostashi-backup.timer` | starts the scheduled backups |
-| `hostashi-adminer.service` | the PHP-FPM process of the database tool (runs as `hostashi-adminer`, no network) |
+| `hostashi-adminer.service` | the PHP-FPM process of the database tool (runs as `hostashi-adminer`; network only to the external database servers, through the drop-in `hostashi-adminer.service.d/servers.conf`) |
 
 Check a service with `systemctl status <unit>` and its log with `journalctl -u <unit>`.
