@@ -42,6 +42,7 @@ import (
 	"github.com/maki-it/hostashi/internal/phpctl"
 	"github.com/maki-it/hostashi/internal/phpinstall"
 	"github.com/maki-it/hostashi/internal/resticctl"
+	"github.com/maki-it/hostashi/internal/sitelogs"
 	"github.com/maki-it/hostashi/internal/sites"
 	"github.com/maki-it/hostashi/internal/siteslice"
 	"github.com/maki-it/hostashi/internal/sitestats"
@@ -140,6 +141,11 @@ type Config struct {
 	// CgroupRoot is where cgroup v2 is mounted; empty means
 	// sitestats.DefaultCgroupRoot.
 	CgroupRoot string
+	// Logs reads the sites' logs (ADR-0053); nil: site.logs.read fails.
+	Logs *sitelogs.Reader
+	// LogRotate is the logrotate file that logs.retention.set writes;
+	// empty: the operation fails. LogRotateConfig fills in the paths.
+	LogRotate string
 
 	// Quota sets and reads the sites' disk limits (ADR-0015). Nil: the
 	// running kernel (KernelQuota).
@@ -278,7 +284,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, files: cfg.Files, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, log: log}
 		h.acl = cfg.panelACL
 
 		if cfg.PHP != nil && cfg.PHP.Hidden == nil {
@@ -349,8 +355,11 @@ type siteOps struct {
 	cache  *pagecache.Dirs
 	objc   *objcache.Manager
 	files  *filesunit.Manager
-	log    *slog.Logger
-	mu     sync.Mutex
+	logs   *sitelogs.Reader
+	// logrotate is the file of logs.retention.set (ADR-0053).
+	logrotate string
+	log       *slog.Logger
+	mu        sync.Mutex
 	// acl hands the panel allowlist to nginx on 443; nil for none.
 	acl *panelACL
 	// sweepMu keeps the background deletes of purged caches apart.
@@ -494,6 +503,7 @@ func (h *siteOps) register(s *agentrpc.Server) {
 
 	h.registerCache(s)
 	h.registerFiles(s)
+	h.registerLogs(s)
 
 	h.registerSSH(s)
 
@@ -1240,6 +1250,11 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.Web == nil {
 		cfg.Web = openWeb(ctx, cfg.StateDir, cfg.PanelPort, cfg.DBToolPort, cfg.Log)
+	}
+
+	if cfg.Logs == nil && cfg.Web != nil {
+		cfg.Logs = &sitelogs.Reader{SiteLogDir: SiteLogDir, PHPLogDir: php.LogDir}
+		cfg.LogRotate = logrotate.File
 	}
 
 	if cfg.PHP == nil {
