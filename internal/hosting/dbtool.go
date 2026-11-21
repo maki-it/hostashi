@@ -96,6 +96,10 @@ func (s *Service) OpenDatabaseTool(ctx context.Context, actor int64, database st
 		return DBToolSession{}, err
 	}
 
+	if d.Server != store.LocalDBServer {
+		return DBToolSession{}, ErrDBServerLocalOnly
+	}
+
 	site, err := s.Get(ctx, d.Site)
 	if err != nil {
 		return DBToolSession{}, err

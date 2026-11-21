@@ -27,9 +27,11 @@ import (
 	"github.com/maki-it/hostashi/internal/cpimport"
 	"github.com/maki-it/hostashi/internal/cpsource"
 	"github.com/maki-it/hostashi/internal/cronjobs"
+	"github.com/maki-it/hostashi/internal/filesunit"
 	"github.com/maki-it/hostashi/internal/firewall"
 	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/netaddrs"
+	"github.com/maki-it/hostashi/internal/objcache"
 	"github.com/maki-it/hostashi/internal/pagecache"
 	"github.com/maki-it/hostashi/internal/pages"
 	"github.com/maki-it/hostashi/internal/php"
@@ -132,6 +134,10 @@ type Config struct {
 	// failed_precondition.
 	Firewall *firewall.Manager
 
+	// panelACL hands the panel allowlist to nginx on port 443 (ADR-0042);
+	// Run sets it up.
+	panelACL *panelACL
+
 	// PHPInstall installs more PHP versions through the fixed install unit
 	// (ADR-0036). Run builds it; without it php.install answers
 	// failed_precondition.
@@ -141,6 +147,13 @@ type Config struct {
 	// builds it for nginx's worker user; without it a page cache is
 	// refused.
 	PageCache *pagecache.Dirs
+	// ObjectCache runs the sites' object caches (ADR-0045). Run builds it below
+	// StateDir; without it cache.* answer failed_precondition.
+	ObjectCache *objcache.Manager
+
+	// Files starts the sites' file manager sockets (ADR-0040). Run builds
+	// it; without it files.open answers failed_precondition.
+	Files *filesunit.Manager
 
 	// Doctor overrides what doctor.run reads, for tests. The zero value
 	// reads the server.
@@ -227,7 +240,8 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, files: cfg.Files, log: log}
+		h.acl = cfg.panelACL
 		h.register(s)
 
 		if cfg.Backup != nil && cfg.Backup.Space == nil {
@@ -278,8 +292,12 @@ type siteOps struct {
 	quota  QuotaFS
 	slices *siteslice.Manager
 	cache  *pagecache.Dirs
+	objc   *objcache.Manager
+	files  *filesunit.Manager
 	log    *slog.Logger
 	mu     sync.Mutex
+	// acl hands the panel allowlist to nginx on 443; nil for none.
+	acl *panelACL
 	// sweepMu keeps the background deletes of purged caches apart.
 	sweepMu sync.Mutex
 }
@@ -336,6 +354,14 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			}
 		}
 
+		// The helper runs as the site user; it must be gone before the
+		// user is. Opening the files again starts it anew.
+		if h.files != nil {
+			if err := h.files.Remove(ctx, req.User); err != nil {
+				return agentapi.SiteDeleteResponse{}, fmt.Errorf("stop file manager of site %s: %w", req.User, err)
+			}
+		}
+
 		if err := m.Delete(ctx, req.User); err != nil {
 			return agentapi.SiteDeleteResponse{}, mapSiteError(err)
 		}
@@ -360,6 +386,12 @@ func (h *siteOps) register(s *agentrpc.Server) {
 		if h.cron != nil {
 			if err := h.cron.Remove(ctx, req.User); err != nil {
 				h.log.ErrorContext(ctx, "remove cron jobs of deleted site", "site", req.User, "err", err)
+			}
+		}
+
+		if h.objc != nil {
+			if err := h.objc.Remove(ctx, req.User); err != nil {
+				h.log.ErrorContext(ctx, "remove object cache of deleted site", "site", req.User, "err", err)
 			}
 		}
 
@@ -397,12 +429,16 @@ func (h *siteOps) register(s *agentrpc.Server) {
 		if err == nil {
 			h.cronDisabled(ctx, req)
 			h.sshDisabled(ctx, req)
+			h.cacheDisabled(ctx, req)
 		}
 
 		return resp, err
 	})
 
 	h.registerCron(s)
+
+	h.registerCache(s)
+	h.registerFiles(s)
 
 	h.registerSSH(s)
 
@@ -445,6 +481,11 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	if h.acl != nil {
+		h.acl.mu.Lock()
+		defer h.acl.mu.Unlock()
+	}
 
 	d := web.Desired{Sites: make([]web.Site, 0, len(req.Sites))}
 	pools := []php.Pool{}
@@ -517,6 +558,10 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		panel, err := h.panelFor(*req.Panel)
 		if err != nil {
 			return agentapi.WebApplyResponse{}, err
+		}
+
+		if h.acl != nil {
+			h.acl.fill(panel)
 		}
 
 		d.Panel = panel
@@ -1145,6 +1190,22 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 	}
 
+	if cfg.ObjectCache == nil {
+		cfg.ObjectCache = &objcache.Manager{
+			Dir:   filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "valkey"),
+			Slice: siteslice.Name, Ctl: phpctl.CacheController{}, Log: cfg.Log,
+		}
+
+		// Like PHP: a failure is logged, cache.apply retries.
+		if err := cfg.ObjectCache.Recover(ctx); err != nil && cfg.Log != nil {
+			cfg.Log.ErrorContext(ctx, "object cache recovery failed", "err", err)
+		}
+	}
+
+	if cfg.Files == nil {
+		cfg.Files = &filesunit.Manager{UnitDir: filesunit.DefaultUnitDir, Ctl: phpctl.FilesController{}, Log: cfg.Log}
+	}
+
 	if cfg.PHPInstall == nil {
 		cfg.PHPInstall = &phpinstall.Manager{Units: phpctl.InstallUnits{}, Installed: phpctl.Installed}
 	}
@@ -1178,6 +1239,13 @@ func Run(ctx context.Context, cfg Config) error {
 		} else if cfg.Log != nil {
 			cfg.Log.InfoContext(ctx, "web server on generation", "generation", res.Generation)
 		}
+	}
+
+	// After both recoveries: nginx gets the firewall's panel allowlist
+	// when the panel is on 443, and every later firewall change with it.
+	cfg.panelACL = &panelACL{web: cfg.Web}
+	if err := cfg.Firewall.SetPanelHook(ctx, cfg.panelACL.set); err != nil && cfg.Log != nil {
+		cfg.Log.ErrorContext(ctx, "panel allowlist in nginx", "err", err)
 	}
 
 	if err := prepareSocketDir(filepath.Dir(cfg.Socket), gid); err != nil {

@@ -199,17 +199,19 @@ jobs:
             -extfile <(printf 'subjectAltName=IP:127.0.0.1') -out "$d/server.pem" 2>/dev/null
           chmod 0644 "$d"/*
           case "$IMAGE" in
-            mariadb*) env=MARIADB_ROOT_PASSWORD; client=mariadb ;;
-            mysql*) env=MYSQL_ROOT_PASSWORD; client=mysql ;;
+            mariadb*) env=MARIADB_ROOT_PASSWORD; client=mariadb; plain=--skip-ssl ;;
+            mysql*) env=MYSQL_ROOT_PASSWORD; client=mysql; plain=--get-server-public-key ;;
           esac
           tls=()
           if [ "$MODE" = verify-ca ]; then
             tls=(--ssl-ca=/certs/ca.pem --ssl-cert=/certs/server.pem --ssl-key=/certs/server.key)
           fi
           docker run -d --name db -p 127.0.0.1:3306:3306 -v "$d:/certs:ro" -e "$env=rootpw" "$IMAGE" "${tls[@]}"
-          for _ in $(seq 1 120); do docker exec db "$client" -uroot -prootpw -e 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
+          # Over TCP: the images first run a temporary server for their
+          # setup that listens only on the socket, then restart.
+          for _ in $(seq 1 120); do docker exec db "$client" "$plain" -h127.0.0.1 -P3306 -uroot -prootpw -e 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
           # A dedicated administrator, as ADR-0041 recommends, not root.
-          docker exec db "$client" -uroot -prootpw -e "CREATE USER 'hostashi_admin'@'%' IDENTIFIED BY 'Adm1n-pw'; GRANT ALL PRIVILEGES ON *.* TO 'hostashi_admin'@'%' WITH GRANT OPTION;"
+          docker exec db "$client" "$plain" -h127.0.0.1 -P3306 -uroot -prootpw -e "CREATE USER 'hostashi_admin'@'%' IDENTIFIED BY 'Adm1n-pw'; GRANT ALL PRIVILEGES ON *.* TO 'hostashi_admin'@'%' WITH GRANT OPTION;"
           HOSTASHI_TEST_DBSERVER=127.0.0.1:3306 HOSTASHI_TEST_DBSERVER_USER=hostashi_admin HOSTASHI_TEST_DBSERVER_PW=Adm1n-pw \
             HOSTASHI_TEST_DBSERVER_CA="$d/ca.pem" HOSTASHI_TEST_DBSERVER_TLS="$MODE" \
             "$RUNNER_TEMP/dbserver.test" -test.v -test.count=1

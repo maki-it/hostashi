@@ -11,6 +11,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/dbserver"
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -18,6 +19,7 @@ import (
 type databaseJSON struct {
 	Name      string    `json:"name"`
 	Site      string    `json:"site"`
+	Server    string    `json:"server"`
 	Users     []string  `json:"users"`
 	CreatedAt time.Time `json:"createdAt"`
 }
@@ -28,7 +30,7 @@ func toDatabaseJSON(d store.Database) databaseJSON {
 		u = []string{}
 	}
 
-	return databaseJSON{Name: d.Name, Site: d.Site, Users: u, CreatedAt: d.CreatedAt}
+	return databaseJSON{Name: d.Name, Site: d.Site, Server: d.Server, Users: u, CreatedAt: d.CreatedAt}
 }
 
 // dbFail maps the database errors and hands the rest to siteFail.
@@ -42,6 +44,14 @@ func dbFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "dbtool_unavailable", "the database tool is not available on this server")
 	case errors.Is(err, hosting.ErrDatabaseExists):
 		writeError(w, http.StatusConflict, "database_exists", "a database or database user with this name exists")
+	case errors.Is(err, hosting.ErrDBServerLocalOnly):
+		writeError(w, http.StatusConflict, "db_server_local_only", "this works only for databases on the local server so far")
+	case errors.Is(err, hosting.ErrDBServerNotFound):
+		writeError(w, http.StatusUnprocessableEntity, "unknown_db_server", "no such database server")
+	case errors.Is(err, dbserver.ErrUnavailable):
+		writeError(w, http.StatusBadGateway, "db_server_unavailable", "the database server is not reachable")
+	case errors.Is(err, dbserver.ErrAccess):
+		writeError(w, http.StatusBadGateway, "db_server_denied", "the database server refused the operation")
 	default:
 		siteFail(log, w, err, what)
 	}
@@ -108,6 +118,7 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 	mux.HandleFunc("POST /api/v1/sites/{name}/databases", a.allow("databases:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Name     string `json:"name"`
+			Server   string `json:"server"`   // optional, the default server if empty
 			User     string `json:"user"`     // optional first user
 			Password string `json:"password"` // optional, generated if empty
 		}
@@ -119,7 +130,7 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		defer cancel()
 
 		d, pw, err := svc.CreateDatabase(ctx, p.User.ID, hosting.NewDatabase{
-			Site: r.PathValue("name"), Name: in.Name, User: in.User, Password: in.Password,
+			Site: r.PathValue("name"), Name: in.Name, Server: in.Server, User: in.User, Password: in.Password,
 		})
 		if err != nil {
 			dbFail(log, w, err, "create database")

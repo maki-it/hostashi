@@ -64,6 +64,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
   - `cache.flush(site)`: restarts the unit. With no persistence that empties it; no Valkey client in the agent.
   - `cache.disable(site)`: stops the unit and removes config and drop-in.
   - `cache.status(site)`: unit state and the unit's `MemoryCurrent` through the existing `systemctl` call.
+  - *Implemented as* (2026-11-21): `cache.apply(site, memoryMb)` covers enable, set_memory and disable (0 turns the cache off), like `cron.apply` replaces a site's state in one call; `cache.flush` and `cache.status` as above. A disabled site's cache is stopped and comes back with the site.
   - **No new `os/exec`.** The only process call is `systemctl` in `internal/phpctl`; its unit pattern gets one more fixed form, `^hostashi-valkey@<site>\.service$`. The agent never runs `valkey-cli`.
 - **Panel.** A section "Object cache" on the site page (ADR-0037): switch on or off, size, "Flush cache", the state and the connection details to copy: socket path and the lines for `wp-config.php` (`WP_REDIS_SCHEME` `unix`, `WP_REDIS_PATH`) [U: constant names of the Redis Object Cache plugin]. Hostashi does not install or edit WordPress plugins. Roles (ADR-0035): admin and manager on all sites, including the size; a `user` on granted sites may turn it on or off and flush it, with the size set by an admin or manager or the preset (decided, Kim, 2026-11-21).
 - **Presets.** Presets (ADR-0017, ADR-0015) get a field "object cache: off or size", default off.
