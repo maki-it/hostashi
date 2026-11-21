@@ -41,6 +41,8 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0043](0043-user-documentation.md) | User documentation in the GitHub wiki | Accepted |
 | [0044](0044-outgoing-email.md) | Outgoing email through an SMTP relay | Accepted |
 | [0045](0045-object-cache-per-site.md) | Object cache (Valkey) per site | Accepted |
+| [0046](0046-page-cache-per-site.md) | Page cache (nginx FastCGI cache) per site | Accepted |
+| [0047](0047-status-page-for-disabled-sites.md) | Status page for disabled sites | Accepted |
 | [0049](0049-php-settings-per-site.md) | PHP settings per site | Accepted |
 
 Only the project owner sets a status to `Accepted`.
