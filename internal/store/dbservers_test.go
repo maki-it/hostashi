@@ -16,7 +16,7 @@ func newServer(name string) NewDBServer {
 		Name: name, Host: "db.example.net", Port: 3306, AdminUser: "hostashi_admin", TLSMode: "verify",
 		Status: DBServerStatus{
 			Engine: "MariaDB", Version: "11.8.6", ClientHost: "10.0.0.2", TLSActive: true,
-			CheckedAt: time.Unix(2_000_000, 0),
+			CertExpires: time.Unix(3_000_000, 0), CheckedAt: time.Unix(2_000_000, 0),
 		},
 		Seal: sealID,
 	}
@@ -56,7 +56,7 @@ func TestDBServerLifecycle(t *testing.T) {
 	}
 
 	if d.ID == 1 || d.IsDefault || string(d.SealedPassword) != "sealed-"+strconv.FormatInt(d.ID, 10) ||
-		d.Status.Version != "11.8.6" || !d.Status.TLSActive || d.Status.CheckedAt.Unix() != 2_000_000 {
+		d.Status.Version != "11.8.6" || !d.Status.TLSActive || d.Status.CertExpires.Unix() != 3_000_000 || d.Status.CheckedAt.Unix() != 2_000_000 {
 		t.Fatalf("created: %+v", d)
 	}
 
@@ -110,7 +110,8 @@ func TestDBServerLifecycle(t *testing.T) {
 	}
 
 	got, err := s.DBServerByName(ctx, "db1")
-	if err != nil || got.Status.LastError != "unreachable" || got.Status.Version != "" || got.Status.TLSActive {
+	if err != nil || got.Status.LastError != "unreachable" || got.Status.Version != "" || got.Status.TLSActive ||
+		!got.Status.CertExpires.IsZero() {
 		t.Fatalf("status: %+v %v", got, err)
 	}
 

@@ -34,6 +34,8 @@ type dbServerJSON struct {
 	TLSMode   string     `json:"tlsMode"`
 	TLSActive bool       `json:"tlsActive"`
 	CheckedAt *time.Time `json:"checkedAt,omitempty"`
+	// CertExpires is when the server's TLS certificate ends.
+	CertExpires *time.Time `json:"certExpires,omitempty"`
 
 	// Admins only.
 	Host       string `json:"host,omitempty"`
@@ -64,6 +66,11 @@ func toDBServerJSON(d store.DBServer, details bool) dbServerJSON {
 	if !d.Status.CheckedAt.IsZero() {
 		t := d.Status.CheckedAt
 		out.CheckedAt = &t
+	}
+
+	if !d.Status.CertExpires.IsZero() {
+		t := d.Status.CertExpires
+		out.CertExpires = &t
 	}
 
 	if details && !d.Local() {

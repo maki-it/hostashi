@@ -57,8 +57,11 @@ type DBServerStatus struct {
 	Version    string
 	ClientHost string
 	TLSActive  bool
-	LastError  string
-	CheckedAt  time.Time
+	// CertExpires is when the server's TLS certificate ends; zero
+	// without TLS.
+	CertExpires time.Time
+	LastError   string
+	CheckedAt   time.Time
 }
 
 // NewDBServer is a server to add. Seal is called inside the transaction
@@ -76,7 +79,7 @@ type NewDBServer struct {
 }
 
 const dbServerCols = `s.id, s.name, s.host, s.port, s.admin_user, s.admin_password, s.tls_mode, s.ca_pem,
-	s.client_host, s.engine, s.version, s.tls_active, s.last_error, s.checked_at, s.is_default, s.created_at,
+	s.client_host, s.engine, s.version, s.tls_active, s.cert_expires, s.last_error, s.checked_at, s.is_default, s.created_at,
 	(SELECT count(*) FROM databases d WHERE d.server_id = s.id)`
 
 func scanDBServer(r rowScanner) (DBServer, error) {
@@ -84,10 +87,11 @@ func scanDBServer(r rowScanner) (DBServer, error) {
 		d                  DBServer
 		tlsActive, isDef   int
 		checked, createdAt int64
+		certExpires        int64
 	)
 
 	err := r.Scan(&d.ID, &d.Name, &d.Host, &d.Port, &d.AdminUser, &d.SealedPassword, &d.TLSMode, &d.CAPEM,
-		&d.Status.ClientHost, &d.Status.Engine, &d.Status.Version, &tlsActive, &d.Status.LastError, &checked,
+		&d.Status.ClientHost, &d.Status.Engine, &d.Status.Version, &tlsActive, &certExpires, &d.Status.LastError, &checked,
 		&isDef, &createdAt, &d.Databases)
 	if err != nil {
 		return DBServer{}, err
@@ -99,6 +103,10 @@ func scanDBServer(r rowScanner) (DBServer, error) {
 
 	if checked != 0 {
 		d.Status.CheckedAt = time.Unix(checked, 0).UTC()
+	}
+
+	if certExpires != 0 {
+		d.Status.CertExpires = time.Unix(certExpires, 0).UTC()
 	}
 
 	return d, nil
@@ -181,10 +189,11 @@ func (s *Store) CreateDBServer(ctx context.Context, n NewDBServer, now time.Time
 	// a placeholder password the CHECK accepts, and replace it below.
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO db_servers (name, host, port, admin_user, admin_password, tls_mode, ca_pem,
-			client_host, engine, version, tls_active, last_error, checked_at, created_at)
-		VALUES (?, ?, ?, ?, x'', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			client_host, engine, version, tls_active, cert_expires, last_error, checked_at, created_at)
+		VALUES (?, ?, ?, ?, x'', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		n.Name, n.Host, n.Port, n.AdminUser, n.TLSMode, n.CAPEM,
-		n.Status.ClientHost, n.Status.Engine, n.Status.Version, boolInt(n.Status.TLSActive), n.Status.LastError,
+		n.Status.ClientHost, n.Status.Engine, n.Status.Version, boolInt(n.Status.TLSActive), unixOf(n.Status.CertExpires),
+		n.Status.LastError,
 		unixOf(n.Status.CheckedAt), now.Unix())
 	if err != nil {
 		return DBServer{}, fmt.Errorf("store: %w", err)
@@ -220,9 +229,11 @@ func (s *Store) CreateDBServer(ctx context.Context, n NewDBServer, now time.Time
 // ErrNotFound.
 func (s *Store) SetDBServerStatus(ctx context.Context, name string, st DBServerStatus) error {
 	res, err := s.w.ExecContext(ctx, `
-		UPDATE db_servers SET client_host = ?, engine = ?, version = ?, tls_active = ?, last_error = ?, checked_at = ?
+		UPDATE db_servers SET client_host = ?, engine = ?, version = ?, tls_active = ?, cert_expires = ?, last_error = ?,
+			checked_at = ?
 		WHERE name = ?`,
-		st.ClientHost, st.Engine, st.Version, boolInt(st.TLSActive), st.LastError, unixOf(st.CheckedAt), name)
+		st.ClientHost, st.Engine, st.Version, boolInt(st.TLSActive), unixOf(st.CertExpires), st.LastError,
+		unixOf(st.CheckedAt), name)
 
 	return oneRow(res, err)
 }

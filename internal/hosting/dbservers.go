@@ -4,10 +4,12 @@ package hosting
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/dbserver"
@@ -233,7 +235,8 @@ func (s *Service) dbServer(ctx context.Context, name string) (store.DBServer, er
 // statusOf turns a check into the stored status.
 func statusOf(info dbserver.Info, err error, now time.Time) store.DBServerStatus {
 	st := store.DBServerStatus{
-		Engine: info.Engine, Version: info.Version, ClientHost: info.ClientHost, TLSActive: info.TLS, CheckedAt: now,
+		Engine: info.Engine, Version: info.Version, ClientHost: info.ClientHost, TLSActive: info.TLS,
+		CertExpires: info.CertExpires, CheckedAt: now,
 	}
 
 	if err != nil {
@@ -269,6 +272,17 @@ func dbServerPurpose(id int64) string { return "db-server:" + strconv.FormatInt(
 
 // Check implements DBServers.
 func (r RemoteDBServers) Check(ctx context.Context, cfg dbserver.Config, privileges bool) (dbserver.Info, error) {
+	var (
+		mu       sync.Mutex
+		notAfter time.Time
+	)
+
+	cfg.OnCertificate = func(c *x509.Certificate) {
+		mu.Lock()
+		notAfter = c.NotAfter
+		mu.Unlock()
+	}
+
 	db, err := dbserver.Open(cfg)
 	if err != nil {
 		return dbserver.Info{}, err
@@ -280,6 +294,10 @@ func (r RemoteDBServers) Check(ctx context.Context, cfg dbserver.Config, privile
 	if err != nil {
 		return dbserver.Info{}, err
 	}
+
+	mu.Lock()
+	info.CertExpires = notAfter
+	mu.Unlock()
 
 	if !privileges {
 		return info, nil

@@ -4,7 +4,7 @@
 -- another server is marked. External servers are reached over TCP by the
 -- panel process with an administrator whose password is sealed with the
 -- server key (purpose "db-server:<id>"). engine, version, client_host,
--- tls_active and last_error are what the last check saw.
+-- tls_active, cert_expires and last_error are what the last check saw.
 
 CREATE TABLE db_servers (
     id             INTEGER PRIMARY KEY,
@@ -19,6 +19,7 @@ CREATE TABLE db_servers (
     engine         TEXT    NOT NULL DEFAULT '',
     version        TEXT    NOT NULL DEFAULT '',
     tls_active     INTEGER NOT NULL DEFAULT 0 CHECK (tls_active IN (0, 1)),
+    cert_expires   INTEGER NOT NULL DEFAULT 0,
     last_error     TEXT    NOT NULL DEFAULT '',
     checked_at     INTEGER NOT NULL DEFAULT 0,
     is_default     INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
