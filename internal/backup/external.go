@@ -40,14 +40,6 @@ func AddExternal(sites []Site, m extdb.Manifest, box Opener) ([]Site, error) {
 			continue
 		}
 
-		if dbserver.IsPostgres(s.Engine) {
-			// pg_dump comes with internal/pgctl (ADR-0051); until then
-			// the run shows these databases as failed, not as saved.
-			failed[s.Name] = fmt.Errorf("database server %s: backups of PostgreSQL databases are not available yet", s.Name)
-
-			continue
-		}
-
 		cfg := s.Config(string(pw))
 		servers[s.Name] = &cfg
 	}

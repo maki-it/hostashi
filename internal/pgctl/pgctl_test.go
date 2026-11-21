@@ -333,3 +333,64 @@ func TestPreambleFilter(t *testing.T) {
 		}
 	}
 }
+
+func TestDumpCommand(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, LibDir, "19", "bin")
+
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(bin, "pg_dump"), []byte("#!/bin/false\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	r := Run{
+		Major: "19", Database: "shop", User: "adm", Password: "p:w", Host: "db.example.net", Port: 5432,
+		TLS: "none", TempDir: t.TempDir(), Root: root,
+	}
+
+	argv, env, cleanup, err := DumpCommand(r, "hostashi_db_0123456789abcdef")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{filepath.Join(bin, "pg_dump"), "--format=custom", "--no-password", "--role=hostashi_db_0123456789abcdef"}
+	if strings.Join(argv, " ") != strings.Join(want, " ") {
+		t.Fatalf("argv %q", argv)
+	}
+
+	var pass string
+
+	for _, e := range env {
+		if !strings.HasPrefix(e, "PG") || strings.Contains(e, "p:w") {
+			t.Errorf("env %q", e)
+		}
+
+		if p, ok := strings.CutPrefix(e, "PGPASSFILE="); ok {
+			pass = p
+		}
+	}
+
+	if b, err := os.ReadFile(pass); err != nil || string(b) != "*:*:*:adm:p\\:w\n" {
+		t.Fatalf("passfile %q, %v", b, err)
+	}
+
+	cleanup()
+
+	if _, err := os.Stat(pass); !os.IsNotExist(err) {
+		t.Fatalf("passfile kept: %v", err)
+	}
+
+	for _, bad := range []string{"", "Bad-Role", "x;y"} {
+		if _, _, _, err := DumpCommand(r, bad); err == nil {
+			t.Errorf("role %q accepted", bad)
+		}
+	}
+
+	r.Database = "a`b"
+	if _, _, _, err := DumpCommand(r, "hostashi_db_0123456789abcdef"); err == nil {
+		t.Error("bad database accepted")
+	}
+}

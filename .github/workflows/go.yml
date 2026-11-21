@@ -348,7 +348,7 @@ jobs:
   restic:
     needs: changes
     if: needs.changes.outputs.go == 'true'
-    name: restic (Debian 13, local, SFTP and MariaDB dump)
+    name: restic (Debian 13, local, SFTP, MariaDB and PostgreSQL dump)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -367,8 +367,12 @@ jobs:
           docker run --rm -v "$RUNNER_TEMP/resticctl.test:/resticctl.test:ro" debian:trixie bash -euc '
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-              restic openssh-server openssh-client mariadb-server >/dev/null
+              restic openssh-server openssh-client mariadb-server postgresql >/dev/null
             restic version
+            # PostgreSQL as an external server (ADR-0051), with password
+            # login over TCP and an administrator that is no superuser.
+            pg_ctlcluster "$(ls /usr/lib/postgresql)" main start
+            su postgres -c "psql -qc \"CREATE ROLE pgadm LOGIN CREATEDB CREATEROLE PASSWORD '"'"'pg-adm-pw'"'"'\""
             install -d -o mysql -g mysql /run/mysqld
             mariadbd-safe >/dev/null 2>&1 &
             for _ in $(seq 1 30); do [ -S /run/mysqld/mysqld.sock ] && break; sleep 1; done
@@ -385,6 +389,7 @@ jobs:
             ssh-keyscan -p 2222 -t ed25519 127.0.0.1 >/root/known_hosts 2>/dev/null
             HOSTASHI_TEST_RESTIC=1 HOSTASHI_TEST_MARIADB_SOCKET=/run/mysqld/mysqld.sock \
             HOSTASHI_TEST_REMOTE_DUMP=1 HOSTASHI_TEST_MARIADB_DUMP=1 \
+            HOSTASHI_TEST_RESTIC_PG=127.0.0.1:5432 HOSTASHI_TEST_RESTIC_PG_USER=pgadm HOSTASHI_TEST_RESTIC_PG_PW=pg-adm-pw \
             HOSTASHI_TEST_RESTIC_SFTP=sftp://u1@127.0.0.1:2222/hostashi \
             HOSTASHI_TEST_RESTIC_SSH_KEY=/root/id_ed25519 HOSTASHI_TEST_RESTIC_KNOWN_HOSTS=/root/known_hosts \
               /resticctl.test -test.v -test.count=1'
