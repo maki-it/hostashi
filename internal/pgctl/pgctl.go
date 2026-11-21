@@ -122,6 +122,7 @@ func Restore(ctx context.Context, r Run, role string, in io.Reader) error {
 	go func() {
 		err := run(ctx, r, toolRestore, []string{"--clean", "--if-exists", "--no-owner", "--file=-"}, in, &preambleFilter{w: pw})
 		_ = pw.CloseWithError(err)
+
 		done <- err
 	}()
 

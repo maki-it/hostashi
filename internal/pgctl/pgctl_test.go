@@ -294,6 +294,7 @@ func TestPreambleFilter(t *testing.T) {
 		var out bytes.Buffer
 
 		f := &preambleFilter{w: &out}
+
 		for b := []byte(script); len(b) > 0; {
 			k := min(size, len(b))
 			if n, err := f.Write(b[:k]); err != nil || n != k {
