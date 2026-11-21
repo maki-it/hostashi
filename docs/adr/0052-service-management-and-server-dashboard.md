@@ -93,5 +93,7 @@ The catalog is a fixed table in `internal/agentapi`. The panel never sends a uni
 
 ## Open questions for Kim
 
+None left.
+
 1. ~~Is the catalog right, in particular no stop for nginx, SSH and the firewall, and stop for MariaDB only with a typed confirmation?~~ Decided (Kim, 2026-11-21): yes, as drafted.
-2. Drop-ins with `Restart=on-failure` for the distribution's nginx and MariaDB units: yes?
+2. ~~Drop-ins with `Restart=on-failure` for the distribution's nginx and MariaDB units: yes?~~ Decided (Kim, 2026-11-21): yes.
