@@ -253,7 +253,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config ssh harden sysctl nginx php phpversions valkey mariadb dbtool backup units service fail2ban firewall updates quota"
+STEPS="account dirs key binary config ssh harden sysctl nginx php phpversions pgclient valkey mariadb dbtool backup units service fail2ban firewall updates quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -458,6 +458,9 @@ do_sysctl() {
 # renders the whole config; the package's default site is never used.
 NGINX_PKGS=(nginx libnginx-mod-http-brotli-filter libnginx-mod-http-brotli-static)
 NGINX_DROPIN=/etc/systemd/system/nginx.service.d/hostashi.conf
+# Restart after a failure for the distribution's MariaDB (ADR-0052); the
+# units step installs it with the other units.
+MARIADB_DROPIN=/etc/systemd/system/mariadb.service.d/hostashi.conf
 
 chk_nginx() {
   local p
@@ -546,6 +549,43 @@ do_phpversions() {
     [ -n "$PHP_REQUEST" ] || set -- $(cat "$STATE_DIR/php-versions" 2>/dev/null)
     # shellcheck disable=SC2046 # one version per word
     HOSTASHI_STATE_DIR=$STATE_DIR HOSTASHI_OS_RELEASE=$OS_RELEASE "$PHP_INSTALL_BIN" install $(php_requested) "$@" 2>&1 | tee -a "$LOG" | grep -E 'WARNING|REFUSED|cannot' >&2
+    [ "${PIPESTATUS[0]}" = 0 ] || return 1
+  fi
+}
+
+# PostgreSQL client tools from apt.postgresql.org for external PostgreSQL
+# servers (ADR-0051). The step installs only the script
+# packaging/postgresql/pg-client-install and its unit
+# hostashi-pg-client-install@.service; the panel starts the unit when the
+# first PostgreSQL server is added. A major the script installed earlier is
+# checked (and installed again if missing) on every run.
+PG_CLIENT_SRC=${HOSTASHI_PG_SRC:-$HERE/postgresql}/pg-client-install
+PG_CLIENT_BIN=/usr/local/lib/hostashi/pg-client-install
+PG_CLIENT_UNIT=hostashi-pg-client-install@.service
+PG_CLIENT_LOGS=/var/lib/hostashi-agent/pg-client-install
+
+pg_client() { HOSTASHI_PHP_LIB=$PHP_INSTALL_SRC HOSTASHI_STATE_DIR=$STATE_DIR HOSTASHI_OS_RELEASE=$OS_RELEASE "$@"; }
+
+chk_pgclient() {
+  local why
+  dir_ok "$PG_CLIENT_LOGS" 700 root:root || { echo "$PG_CLIENT_LOGS"; return 1; }
+  file_matches "$PG_CLIENT_BIN" 0755 root:root <"$PG_CLIENT_SRC" || { echo "pg-client-install differs"; return 1; }
+  file_matches "/etc/systemd/system/$PG_CLIENT_UNIT" 0644 root:root <"$UNIT_DIR/$PG_CLIENT_UNIT" || { echo "$PG_CLIENT_UNIT differs"; return 1; }
+  why=$(pg_client "$PG_CLIENT_SRC" check) || { echo "$why"; return 1; }
+}
+do_pgclient() {
+  local rc
+  install -d -m 0755 -o root -g root "${PG_CLIENT_BIN%/*}" || return 1
+  install -d -m 0700 -o root -g root "$PG_CLIENT_LOGS" || return 1
+  write_file "$PG_CLIENT_BIN" 0755 root:root <"$PG_CLIENT_SRC"; [ $? -le 1 ] || return 1
+  write_file "/etc/systemd/system/$PG_CLIENT_UNIT" 0644 root:root <"$UNIT_DIR/$PG_CLIENT_UNIT"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  if [ "$rc" = 0 ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
+  if ! pg_client "$PG_CLIENT_BIN" check >/dev/null; then
+    # shellcheck disable=SC2046 # one major per word
+    set -- $(cat "$STATE_DIR/pg-client-majors" 2>/dev/null)
+    [ $# -gt 0 ] || return 0
+    pg_client "$PG_CLIENT_BIN" install "$@" 2>&1 | tee -a "$LOG" | grep -E 'REFUSED|cannot' >&2
     [ "${PIPESTATUS[0]}" = 0 ] || return 1
   fi
 }
@@ -933,6 +973,9 @@ uu_origins() {
   # The pin keeps the default PHP on the distribution, also for
   # unattended-upgrades. Without the source this origin matches nothing.
   printf '\t"origin=deb.sury.org,archive=${distro_codename}";\n'
+  # The PostgreSQL client tools from apt.postgresql.org (ADR-0051): the same,
+  # and the pin keeps everything but the client packages away.
+  printf '\t"origin=apt.postgresql.org,archive=${distro_codename}-pgdg";\n'
 }
 uu_render() {
   local origins
@@ -974,6 +1017,8 @@ chk_units() {
   done
   dir_ok "$(dirname "$NGINX_DROPIN")" 755 root:root || { echo "nginx drop-in directory"; return 1; }
   file_matches "$NGINX_DROPIN" 0644 root:root <"$UNIT_DIR/nginx-hostashi.conf" || { echo "nginx drop-in differs"; return 1; }
+  dir_ok "$(dirname "$MARIADB_DROPIN")" 755 root:root || { echo "mariadb drop-in directory"; return 1; }
+  file_matches "$MARIADB_DROPIN" 0644 root:root <"$UNIT_DIR/mariadb-hostashi.conf" || { echo "mariadb drop-in differs"; return 1; }
   local v
   for v in "${PHP_VERSIONS[@]}"; do
     php_unit "$v" | file_matches "/etc/systemd/system/hostashi-php-$v@.service" 0644 root:root || { echo "PHP $v unit differs"; return 1; }
@@ -987,6 +1032,9 @@ do_units() {
   done
   install -d -m 0755 -o root -g root "$(dirname "$NGINX_DROPIN")" || return 1
   write_file "$NGINX_DROPIN" 0644 root:root <"$UNIT_DIR/nginx-hostashi.conf"
+  [ $? -le 1 ] || return 1
+  install -d -m 0755 -o root -g root "$(dirname "$MARIADB_DROPIN")" || return 1
+  write_file "$MARIADB_DROPIN" 0644 root:root <"$UNIT_DIR/mariadb-hostashi.conf"
   [ $? -le 1 ] || return 1
   local v
   for v in "${PHP_VERSIONS[@]}"; do

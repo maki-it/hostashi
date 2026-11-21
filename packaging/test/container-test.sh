@@ -178,8 +178,11 @@ case "$IMG" in
 esac
 grep -qF "$want" <<<"$origins" || fail "security origin missing: $origins"
 for o in $origins; do
+  # The list is comma-separated.
+  o=${o%,}
   # sury.org (more PHP versions, ADR-0019) has no security archive of its own.
-  case "$o" in *-security* | "origin=deb.sury.org,archive=$codename") ;; *) fail "unattended-upgrades allows a non-security origin: $o";; esac
+  # Neither has apt.postgresql.org (PostgreSQL client tools, ADR-0051).
+  case "$o" in *-security* | "origin=deb.sury.org,archive=$codename" | "origin=apt.postgresql.org,archive=$codename-pgdg") ;; *) fail "unattended-upgrades allows a non-security origin: $o";; esac
 done
 [ "$(x apt-config dump --format '%v%n' Unattended-Upgrade::Automatic-Reboot)" = false ] || fail "automatic reboot is on"
 for t in apt-daily.timer apt-daily-upgrade.timer; do
@@ -278,6 +281,41 @@ step "nginx runs on the agent's generation"
 x test -L /var/lib/hostashi-agent/web/current || fail "no web generation"
 code=$(x curl -s -o /dev/null -w '%{http_code}' -H 'Host: unknown.example.com' http://127.0.0.1/ || true)
 [ "$code" = 000 ] || fail "unknown host answered $code, want no answer"
+
+step "services and restarts (ADR-0052)"
+svc=$(x /usr/local/bin/hostashi service list)
+echo "$svc"
+for id in nginx mariadb fail2ban panel agent adminer; do
+  grep -Eq "^$id +- +active " <<<"$svc" || fail "service list: $id is not active"
+done
+x /usr/local/bin/hostashi service list -json | grep -q '"unit": "hostashi-agent.service"' || fail "service list -json"
+for u in nginx.service mariadb.service; do
+  [ "$(x systemctl show -p Restart --value $u)" = on-failure ] || fail "$u does not restart after a failure"
+done
+expect_mode /etc/systemd/system/mariadb.service.d/hostashi.conf "644 root:root"
+x /usr/local/bin/hostashi service nginx reload >/dev/null || fail "nginx reload through the agent"
+x /usr/local/bin/hostashi service nginx restart | grep -q '"active": "active"' || fail "nginx restart through the agent"
+x /usr/local/bin/hostashi service mariadb restart | grep -q '"active": "active"' || fail "mariadb restart through the agent"
+for a in "nginx stop" "agent restart" "panel stop" "ssh stop" "firewall stop"; do
+  # shellcheck disable=SC2086 # two words on purpose
+  if x /usr/local/bin/hostashi service $a >/dev/null 2>&1; then fail "service $a was allowed"; fi
+done
+[ "$(x systemctl is-active nginx.service)" = active ] || fail "nginx stopped"
+# A crashed MariaDB comes back by itself and systemd counts the restart.
+before=$(x systemctl show -p NRestarts --value mariadb.service)
+pid=$(x systemctl show -p MainPID --value mariadb.service)
+x kill -KILL "$pid"
+for _ in $(seq 1 60); do
+  now=$(x systemctl show -p MainPID --value mariadb.service)
+  [ "$now" != 0 ] && [ "$now" != "$pid" ] && [ "$(x systemctl is-active mariadb.service)" = active ] && break
+  sleep 1
+done
+[ "$(x systemctl is-active mariadb.service)" = active ] || fail "mariadb did not come back after a crash"
+after=$(x systemctl show -p NRestarts --value mariadb.service)
+[ "$after" -gt "$before" ] || fail "NRestarts did not grow ($before -> $after)"
+x /usr/local/bin/hostashi service list | grep -Eq "^mariadb +- +active \(running\) +$after " || fail "service list does not show the restart"
+curl_ok=$(x curl -fsS http://127.0.0.1:8080/api/v1/health) || fail "panel gone after the service actions"
+grep -q '"agent":"ok"' <<<"$curl_ok" || fail "panel cannot reach the agent after the service actions"
 
 step "a site is served, with brotli"
 x /usr/local/bin/hostashi site create blog
@@ -1584,6 +1622,44 @@ exposure "hostashi-php-$NEWEST@next.service" 3.0
 body=$(x curl -fsS -H 'Host: next.example.com' http://127.0.0.1/index.php)
 [ "$body" = "php $NEWEST {\"ok\":true}" ] || fail "PHP $NEWEST site answered '$body'"
 [ "$(api DELETE /api/v1/sites/next)" = 204 ] || fail "delete $NEWEST site: $(x cat /tmp/api.out)"
+
+step "PostgreSQL client tools from apt.postgresql.org (ADR-0051)"
+# The installer only puts the script and its unit in place; nothing of
+# apt.postgresql.org exists before the panel asks for the client.
+expect_mode /usr/local/lib/hostashi/pg-client-install "755 root:root"
+expect_mode /var/lib/hostashi-agent/pg-client-install "700 root:root"
+! x test -e /etc/apt/sources.list.d/hostashi-pgdg.sources || fail "apt.postgresql.org set up without a request"
+grep -qF "origin=apt.postgresql.org,archive=$codename-pgdg" <<<"$origins" || fail "apt.postgresql.org not in unattended-upgrades: $origins"
+if x systemctl start hostashi-pg-client-install@13.service 2>/dev/null; then fail "the unit installed PostgreSQL client 13"; fi
+PG_NEWEST=$(sed -n 's/^PG_MAJORS=(\(.*\))$/\1/p' "$HERE/postgresql/pg-client-install" | awk '{print $NF}')
+[ -n "$PG_NEWEST" ] || fail "no PG_MAJORS in pg-client-install"
+[ "$(api GET /api/v1/db-servers/postgresql-client)" = 200 ] || fail "pg client status: $(x cat /tmp/api.out)"
+x grep -q '"installed":\[\]' /tmp/api.out || fail "a PostgreSQL client is installed already: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/db-servers/postgresql-client '{"major":"13"}')" = 422 ] || fail "pg client 13: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/db-servers/postgresql-client '{}')" = 202 ] || fail "pg client install: $(x cat /tmp/api.out)"
+state=""
+for _ in $(seq 1 150); do
+  [ "$(api GET /api/v1/db-servers/postgresql-client)" = 200 ] || fail "pg client status: $(x cat /tmp/api.out)"
+  state=$(x sed -n 's/.*"state":"\([a-z]*\)".*/\1/p' /tmp/api.out)
+  [ "$state" = running ] || break
+  sleep 2
+done
+[ "$state" = succeeded ] || fail "PostgreSQL client from the panel: $(x cat /tmp/api.out)"
+x grep -q "\"installed\":\\[\"$PG_NEWEST\"\\]" /tmp/api.out || fail "PostgreSQL client $PG_NEWEST not listed: $(x cat /tmp/api.out)"
+for b in pg_dump pg_restore psql; do
+  x "/usr/lib/postgresql/$PG_NEWEST/bin/$b" --version | grep -q "(PostgreSQL) $PG_NEWEST\." || fail "$b is not from PostgreSQL $PG_NEWEST"
+done
+expect_mode /usr/share/keyrings/hostashi-pgdg.asc "644 root:root"
+expect_mode /etc/apt/preferences.d/hostashi-pgdg "644 root:root"
+# Only the client packages come from apt.postgresql.org.
+for p in "postgresql-client-$PG_NEWEST" libpq5; do
+  case "$(origin "$p")" in *apt.postgresql.org*) ;; *) fail "$p does not come from apt.postgresql.org: $(origin "$p")";; esac
+done
+# shellcheck disable=SC2016 # a dpkg-query format
+! x dpkg-query -W -f='${Status}' "postgresql-$PG_NEWEST" 2>/dev/null | grep -q 'install ok installed' || fail "the PostgreSQL server was installed"
+[ "$(api POST /api/v1/db-servers/postgresql-client '{}')" = 409 ] || fail "second pg client install: $(x cat /tmp/api.out)"
+out=$(inst apply --yes)
+grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the PostgreSQL client install changed something"; }
 
 step "root gets an account back (ADR-0035)"
 out=$(x /usr/local/bin/hostashi user recover kim) || fail "user recover: $out"

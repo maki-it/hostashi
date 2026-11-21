@@ -2,13 +2,14 @@
 
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { describe, expect, it } from "vitest";
 import { Databases } from "./Databases";
 import { nameProblem, pathProblem } from "./databases";
+import { parseHash } from "./routes";
 import { mockFetch } from "./test-utils";
 
-const localServer = { name: "localhost", local: true, default: true, engine: "mariadb", state: "ok", databases: 1, tlsMode: "socket", tlsActive: false };
+const localServer = { name: "localhost", local: true, default: true, engine: "MariaDB", state: "ok", databases: 1, tlsMode: "socket", tlsActive: false };
 const sites = {
   "GET /api/v1/sites": { body: { sites: [{ name: "blog", state: "active" }, { name: "shop", state: "active" }] } },
   "GET /api/v1/db-servers": { body: { servers: [localServer] } },
@@ -20,6 +21,17 @@ const pw = "Zx8!kQ2#mN5$pL7%";
 function Harness({ initial = "", role = "admin" }: { initial?: string; role?: string }) {
   const [query, setQuery] = useState(new URLSearchParams(initial));
   return <Databases role={role} query={query} onQuery={setQuery} />;
+}
+
+// HashHarness follows the address like the app, for flows that navigate.
+function HashHarness({ initial }: { initial: string }) {
+  const [query, setQuery] = useState(new URLSearchParams(initial));
+  useEffect(() => {
+    const on = () => setQuery(parseHash(window.location.hash).query);
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
+  return <Databases role="admin" query={query} onQuery={setQuery} />;
 }
 
 describe("nameProblem", () => {
@@ -338,7 +350,7 @@ const db1 = {
   name: "db1",
   local: false,
   default: false,
-  engine: "mysql",
+  engine: "MySQL",
   version: "8.4.7",
   state: "ok",
   databases: 0,
@@ -465,6 +477,7 @@ describe("Database servers", () => {
     await user.click(screen.getByRole("button", { name: "Add server" }));
     expect(await screen.findByText(/The check failed: the administrator lacks a privilege/)).toBeInTheDocument();
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({
+      engine: "mariadb",
       name: "db1",
       host: "10.0.0.5",
       port: 3307,
@@ -473,6 +486,65 @@ describe("Database servers", () => {
       tlsMode: "verify-ca",
       caCertificate: "-----BEGIN CERTIFICATE-----x",
     });
+  });
+
+  it("adds a PostgreSQL server with its port and shows the warning", async () => {
+    const user = userEvent.setup();
+    const pg1 = { ...db1, name: "pg1", engine: "PostgreSQL", version: "18.1", port: 5432, default: false };
+    const calls = mockFetch({
+      ...sites,
+      "GET /api/v1/db-servers": { body: { servers: [localServer, pg1] } },
+      "GET /api/v1/databases": { body: { databases: [] } },
+      "POST /api/v1/db-servers": { status: 201, body: { ...pg1, warnings: ["the administrator is a PostgreSQL superuser; use a dedicated role"] } },
+    });
+    render(<HashHarness initial="view=servers&new=1" />);
+    await user.click(await screen.findByLabelText("PostgreSQL"));
+    expect(screen.getByLabelText("Port")).toHaveValue(5432);
+    expect(screen.getByText(/pg_hba.conf/)).toBeInTheDocument();
+    expect(screen.getByText(/CREATEDB and CREATEROLE/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Name"), "pg1");
+    await user.type(screen.getByLabelText(/^Host/), "10.0.0.6");
+    await user.type(screen.getByLabelText(/^Administrator$/), "postgres");
+    await user.type(screen.getByLabelText("Administrator password"), "secret");
+    await user.click(screen.getByRole("button", { name: "Add server" }));
+    expect(await screen.findByText("Added pg1 (PostgreSQL 18.1).")).toBeInTheDocument();
+    expect(screen.getByText("The administrator is a PostgreSQL superuser; use a dedicated role.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ engine: "postgresql", port: 5432, adminUser: "postgres" });
+  });
+
+  it("moves an untouched port with the engine", async () => {
+    const user = userEvent.setup();
+    mockFetch({ ...sites, "GET /api/v1/db-servers": { body: { servers: [localServer] } }, "GET /api/v1/databases": { body: { databases: [] } } });
+    render(<Harness initial="view=servers&new=1" />);
+    await user.click(await screen.findByLabelText("PostgreSQL"));
+    await user.click(screen.getByLabelText("MariaDB or MySQL"));
+    expect(screen.getByLabelText("Port")).toHaveValue(3306);
+    await user.clear(screen.getByLabelText("Port"));
+    await user.type(screen.getByLabelText("Port"), "6432");
+    await user.click(screen.getByLabelText("PostgreSQL"));
+    expect(screen.getByLabelText("Port")).toHaveValue(6432);
+  });
+
+  it("names PostgreSQL databases and offers no Adminer for them", async () => {
+    const pg1 = { ...db1, name: "pg1", engine: "PostgreSQL", version: "18.1", host: "pg.example.net", port: 5432, tlsMode: "verify" };
+    mockFetch({
+      ...sites,
+      "GET /api/v1/dbtool": { body: { available: true, minutes: [30, 120] } },
+      "GET /api/v1/db-servers": { body: { servers: [localServer, pg1] } },
+      "GET /api/v1/databases": {
+        body: {
+          databases: [
+            { name: "shop_pg", site: "shop", server: "pg1", users: [], createdAt: "2026-11-21T10:00:00Z" },
+            { name: "shop_wp", site: "shop", server: "localhost", users: [], createdAt: "2026-11-21T10:00:00Z" },
+          ],
+        },
+      },
+    });
+    render(<Harness initial="" />);
+    const table = await screen.findByRole("table", { name: "Databases" });
+    expect(within(table).getByText("PostgreSQL")).toBeInTheDocument();
+    expect(await within(table).findByRole("button", { name: "Open shop_wp in Adminer" })).toBeInTheDocument();
+    expect(within(table).queryByRole("button", { name: "Open shop_pg in Adminer" })).not.toBeInTheDocument();
   });
 
   it("keeps users out of the server list", async () => {
