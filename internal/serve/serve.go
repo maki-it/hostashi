@@ -283,6 +283,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			var panel []PanelChecks
 			if deps.Sites != nil {
 				panel = append(panel, deps.Sites.DBServerDoctor)
+
+				if deps.PGClient != nil {
+					panel = append(panel, pgClientCheck(deps.Sites.DBServerList, deps.PGClient))
+				}
 			}
 
 			if deps.Mail != nil && deps.MailHistory != nil {
