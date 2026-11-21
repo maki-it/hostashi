@@ -73,6 +73,12 @@ type Manager struct {
 	jobs  map[string]*agentapi.DBJob
 	busy  map[string]bool
 	done  map[string]chan struct{}
+
+	// Sessions of the web database tool (tool.go), by temporary user.
+	tools map[string]*toolSession
+	// clock and afterFunc replace time.Now and time.AfterFunc in tests.
+	clock     func() time.Time
+	afterFunc func(d time.Duration, f func()) (stop func() bool)
 }
 
 // Connect opens a pool to the server at socket as root. It does not connect
@@ -190,6 +196,11 @@ func (m *Manager) Delete(ctx context.Context, name string) error {
 
 	if m.busy[name] {
 		return ErrBusy
+	}
+
+	// Open sessions of the database tool end with the database.
+	if err := m.closeToolsOf(ctx, name); err != nil {
+		return err
 	}
 
 	// Users first: they are useless without the database, and IF EXISTS

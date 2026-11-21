@@ -82,6 +82,10 @@ type Config struct {
 	// without it db.* answer failed_precondition.
 	DB *mariadb.Manager
 
+	// DBToolDir is the ticket directory of the web database tool
+	// (ADR-0038); empty means agentapi.DBToolTicketDir.
+	DBToolDir string
+
 	// Backup serves backup.*. Run builds it with the fixed paths of a
 	// server; without it the operations answer failed_precondition.
 	Backup *backup.Agent
@@ -240,6 +244,13 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 
 		(&statsOps{h: h, disk: disk, cgroupRoot: root}).register(s)
 	}
+
+	toolLog := cfg.Log
+	if toolLog == nil {
+		toolLog = slog.New(slog.DiscardHandler)
+	}
+
+	newDBTool(cfg.DB, cfg.DBToolDir, toolLog).register(s)
 
 	registerDoctor(s, cfg.Doctor, cfg.StateDir, h, cfg.Firewall)
 	registerBackup(s, cfg.Backup)
@@ -946,6 +957,11 @@ func Run(ctx context.Context, cfg Config) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	// Tickets of an earlier run name users that openDB drops.
+	if err := clearTickets(cfg.DBToolDir); err != nil && cfg.Log != nil {
+		cfg.Log.WarnContext(ctx, "remove leftover database tool tickets", "err", err)
 	}
 
 	if cfg.Backup == nil {
