@@ -304,6 +304,7 @@ describe("SitePage", () => {
       "Cron",
       "SSH & SFTP",
       "Limits",
+      "Logs",
       "nginx",
     ]);
     await user.click(within(tabs).getByRole("tab", { name: "PHP" }));
