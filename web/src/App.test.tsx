@@ -68,6 +68,7 @@ describe("App start", () => {
       ...noSetup,
       "GET /api/v1/auth/me": { body: { ...admin, auth: "session" } },
       "GET /api/v1/databases": { body: { databases: [] } },
+      "GET /api/v1/db-servers": { body: { servers: [] } },
       "GET /api/v1/sites": { body: { sites: [] } },
     });
     render(<App />);
@@ -390,7 +391,7 @@ describe("Shell", () => {
   });
 
   it("follows address changes", async () => {
-    mockFetch({ ...session, "GET /api/v1/databases": { body: { databases: [] } }, "GET /api/v1/sites": { body: { sites: [] } } });
+    mockFetch({ ...session, "GET /api/v1/databases": { body: { databases: [] } }, "GET /api/v1/db-servers": { body: { servers: [] } }, "GET /api/v1/sites": { body: { sites: [] } } });
     render(<App />);
     await screen.findByRole("heading", { name: "Overview", level: 1 });
     window.location.hash = "#/databases";

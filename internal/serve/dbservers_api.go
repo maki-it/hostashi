@@ -36,10 +36,12 @@ type dbServerJSON struct {
 	CheckedAt *time.Time `json:"checkedAt,omitempty"`
 	// CertExpires is when the server's TLS certificate ends.
 	CertExpires *time.Time `json:"certExpires,omitempty"`
+	// Host and port go into the site's configuration (DB_HOST), so
+	// everyone who sees the server sees them.
+	Host string `json:"host,omitempty"`
+	Port int    `json:"port,omitempty"`
 
 	// Admins only.
-	Host       string `json:"host,omitempty"`
-	Port       int    `json:"port,omitempty"`
 	AdminUser  string `json:"adminUser,omitempty"`
 	ClientHost string `json:"clientHost,omitempty"`
 	LastError  string `json:"lastError,omitempty"`
@@ -73,8 +75,12 @@ func toDBServerJSON(d store.DBServer, details bool) dbServerJSON {
 		out.CertExpires = &t
 	}
 
+	if !d.Local() {
+		out.Host, out.Port = d.Host, d.Port
+	}
+
 	if details && !d.Local() {
-		out.Host, out.Port, out.AdminUser = d.Host, d.Port, d.AdminUser
+		out.AdminUser = d.AdminUser
 		out.ClientHost, out.LastError = d.Status.ClientHost, d.Status.LastError
 	}
 

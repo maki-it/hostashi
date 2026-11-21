@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ArrowLeft, Gear, Plus } from "@phosphor-icons/react";
+import { ArrowLeft, Database as DatabaseIcon, Gear, Plus } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { listSites, type Site } from "./backups";
 import {
@@ -11,22 +11,29 @@ import {
   defaultDumpPath,
   deleteUser,
   getDumpJob,
+  LOCAL_SERVER,
   listDatabases,
+  listServers,
   nameProblem,
+  serverAddress,
   pathProblem,
   resetPassword,
   startDump,
   suggestUser,
   type Credentials,
   type Database,
+  type DBServer,
   type DumpJob,
 } from "./databases";
+import { DBServersView, serversHref } from "./DBServers";
 import { poll } from "./backups";
 import { formatHash } from "./routes";
 import { Button, Card, Field, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
 
 type QueryProps = {
-  /** The address query: q, site, sort, dir; new=1 for the form; db=<name> for one database. */
+  /** The role of the logged-in user: admins manage the database servers. */
+  role?: string;
+  /** The address query: q, site, sort, dir; new=1 for the form; db=<name> for one database; view=servers for the servers. */
   query: URLSearchParams;
   /** Replaces the query in the address without a new history entry. */
   onQuery: (q: URLSearchParams) => void;
@@ -34,7 +41,14 @@ type QueryProps = {
 
 const dbHref = (name: string) => formatHash({ page: "databases", query: new URLSearchParams({ db: name }) });
 
-const columns: Column<Database>[] = [
+const serverColumn: Column<Database> = {
+  key: "server",
+  header: "Server",
+  sortValue: (d) => d.server,
+  cell: (d) => <span className="ui-mono">{d.server}</span>,
+};
+
+const baseColumns: Column<Database>[] = [
   {
     key: "name",
     header: "Database",
@@ -74,17 +88,19 @@ const columns: Column<Database>[] = [
 // can be sorted and filtered, the form for a new one (?new=1) and the view
 // of one database (?db=<name>) with its users, import/export and delete.
 // A generated password is shown once, above whatever view is open.
-export function Databases({ query, onQuery }: QueryProps) {
+export function Databases({ role = "user", query, onQuery }: QueryProps) {
   const [dbs, setDbs] = useState<Database[] | null>(null);
   const [sites, setSites] = useState<Site[] | null>(null);
+  const [servers, setServers] = useState<DBServer[] | null>(null);
   const [error, setError] = useState("");
   const [secret, setSecret] = useState<Credentials | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [d, s] = await Promise.all([listDatabases(), listSites()]);
+      const [d, s, v] = await Promise.all([listDatabases(), listSites(), listServers()]);
       setDbs(d);
       setSites(s);
+      setServers(v);
       setError("");
     } catch (err) {
       setError(databaseMessage(err));
@@ -112,7 +128,7 @@ export function Databases({ query, onQuery }: QueryProps) {
     </a>
   );
 
-  if (!dbs || !sites) {
+  if (!dbs || !sites || !servers) {
     return (
       <>
         <PageHead title="Databases" />
@@ -121,13 +137,21 @@ export function Databases({ query, onQuery }: QueryProps) {
     );
   }
 
+  const admin = role === "admin";
+  const hostOf = (server: string) => serverAddress(servers.find((v) => v.name === server));
+
+  if (admin && query.get("view") === "servers") {
+    return <DBServersView servers={servers} query={query} onChange={load} />;
+  }
+
   if (query.get("new") === "1") {
     return (
       <>
-        <PageHead title="New database" description="A MariaDB database belongs to one site." actions={listLink} />
+        <PageHead title="New database" description="A database belongs to one site." actions={listLink} />
         {notice}
         <CreateCard
           sites={sites}
+          servers={servers}
           onCreated={(c) => {
             if (c) setSecret(c);
             set({ new: "" });
@@ -143,11 +167,27 @@ export function Databases({ query, onQuery }: QueryProps) {
     const db = dbs.find((d) => d.name === one);
     return (
       <>
-        <PageHead title={one} description={db && <>Database of site <a href={formatHash({ page: "sites", site: { name: db.site } })}>{db.site}</a></>} actions={listLink} />
+        <PageHead
+          title={one}
+          description={
+            db && (
+              <>
+                Database of site <a href={formatHash({ page: "sites", site: { name: db.site } })}>{db.site}</a>
+                {db.server !== LOCAL_SERVER && (
+                  <>
+                    {" "}
+                    on server <span className="ui-mono">{db.server}</span> ({hostOf(db.server)})
+                  </>
+                )}
+              </>
+            )
+          }
+          actions={listLink}
+        />
         {notice}
         {error && <Notice tone="err" title={error} />}
         {db ? (
-          <DatabaseView key={db.name} db={db} onSecret={setSecret} onChange={load} onDeleted={() => set({ db: "" })} />
+          <DatabaseView key={db.name} db={db} host={hostOf(db.server)} onSecret={setSecret} onChange={load} onDeleted={() => set({ db: "" })} />
         ) : (
           <Notice tone="warn" title={`There is no database named ${one}.`} />
         )}
@@ -159,20 +199,30 @@ export function Databases({ query, onQuery }: QueryProps) {
   const site = query.get("site") ?? "";
   const sortKey = query.get("sort");
   const sort: Sort | undefined = sortKey ? { key: sortKey, dir: query.get("dir") === "desc" ? "desc" : "asc" } : undefined;
+  // The server column only matters once there is more than one server.
+  const columns = servers.length > 1 ? [...baseColumns.slice(0, 2), serverColumn, ...baseColumns.slice(2)] : baseColumns;
   const shown = dbs.filter((d) => (!site || d.site === site) && (!q || d.name.includes(q) || d.users.some((u) => u.includes(q))));
 
   return (
     <>
       <PageHead
         title="Databases"
-        description="MariaDB databases of your sites. Hostashi stores no database password."
+        description="Databases of your sites. Hostashi stores no database password."
         actions={
-          sites.length > 0 && (
-            <a className="ui-btn ui-btn-primary" href={formatHash({ page: "databases", query: new URLSearchParams({ new: "1" }) })}>
-              <Plus size={16} aria-hidden="true" />
-              New database
-            </a>
-          )
+          <>
+            {admin && (
+              <a className="ui-btn" href={serversHref()}>
+                <DatabaseIcon size={16} aria-hidden="true" />
+                Servers
+              </a>
+            )}
+            {sites.length > 0 && (
+              <a className="ui-btn ui-btn-primary" href={formatHash({ page: "databases", query: new URLSearchParams({ new: "1" }) })}>
+                <Plus size={16} aria-hidden="true" />
+                New database
+              </a>
+            )}
+          </>
         }
       />
       {notice}
@@ -253,7 +303,7 @@ function PasswordNotice({ creds, onClose }: { creds: Credentials; onClose: () =>
         </dd>
         <dt>Host</dt>
         <dd>
-          <code>localhost</code>
+          <code>{creds.host}</code>
         </dd>
       </dl>
       <Field label="Password">
@@ -279,14 +329,17 @@ function PasswordNotice({ creds, onClose }: { creds: Credentials; onClose: () =>
 
 function CreateCard({
   sites,
+  servers,
   onCreated,
   onChange,
 }: {
   sites: Site[];
+  servers: DBServer[];
   onCreated: (c: Credentials | null) => void;
   onChange: () => Promise<void>;
 }) {
   const [site, setSite] = useState(sites[0]?.name ?? "");
+  const [server, setServer] = useState(() => (servers.find((v) => v.default) ?? servers[0])?.name ?? LOCAL_SERVER);
   const [name, setName] = useState("");
   const [withUser, setWithUser] = useState(true);
   const [user, setUser] = useState("");
@@ -306,8 +359,9 @@ function CreateCard({
     setBusy(true);
     setError("");
     try {
-      const d = await createDatabase(site, name, withUser ? userName : "");
-      onCreated(d.password ? { database: d.name, user: userName, password: d.password } : null);
+      const d = await createDatabase(site, name, withUser ? userName : "", servers.length > 1 ? server : "");
+      const host = serverAddress(servers.find((v) => v.name === d.server));
+      onCreated(d.password ? { database: d.name, user: userName, password: d.password, host } : null);
       setName("");
       setUser("");
       setUserTouched(false);
@@ -337,6 +391,17 @@ function CreateCard({
             ))}
           </select>
         </Field>
+        {servers.length > 1 && (
+          <Field label="Server" hint="A database stays on the server it is created on.">
+            <select className="ui-select" value={server} onChange={(e) => setServer(e.target.value)}>
+              {servers.map((v) => (
+                <option key={v.name} value={v.name}>
+                  {v.name + (v.local ? " (this machine)" : " (" + serverAddress(v) + ")") + (v.state === "error" ? ", not reachable" : "")}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
         <Field label="Database name" hint="Lowercase letters, digits and _, starting with a letter.">
           <input className="ui-input" value={name} onChange={(e) => setName(e.target.value.trim())} required autoComplete="off" spellCheck={false} />
         </Field>
@@ -372,11 +437,13 @@ function CreateCard({
 // and delete.
 function DatabaseView({
   db,
+  host,
   onSecret,
   onChange,
   onDeleted,
 }: {
   db: Database;
+  host: string;
   onSecret: (c: Credentials) => void;
   onChange: () => Promise<void>;
   onDeleted: () => void;
@@ -406,14 +473,21 @@ function DatabaseView({
         ) : (
           <ul className="ui-plain-list ui-stack-tight" aria-label={"Users of " + db.name}>
             {db.users.map((u) => (
-              <UserRow key={u} db={db.name} user={u} onSecret={onSecret} onChange={onChange} />
+              <UserRow key={u} db={db.name} host={host} user={u} onSecret={onSecret} onChange={onChange} />
             ))}
           </ul>
         )}
-        <AddUser db={db.name} onSecret={onSecret} onChange={onChange} />
+        <AddUser db={db.name} host={host} onSecret={onSecret} onChange={onChange} />
       </Card>
       <Card title="Import or export">
-        <DumpForm db={db.name} site={db.site} />
+        {db.server === LOCAL_SERVER ? (
+          <DumpForm db={db.name} site={db.site} />
+        ) : (
+          <p className="ui-hint ui-flush">
+            Import and export work only for databases on this machine. For {db.name} on {db.server}, use the server's own tools. Backups include
+            it.
+          </p>
+        )}
       </Card>
       <Card title="Delete database">
         <form
@@ -442,11 +516,13 @@ function DatabaseView({
 
 function UserRow({
   db,
+  host,
   user,
   onSecret,
   onChange,
 }: {
   db: string;
+  host: string;
   user: string;
   onSecret: (c: Credentials) => void;
   onChange: () => Promise<void>;
@@ -461,7 +537,7 @@ function UserRow({
     try {
       if (confirm === "password") {
         const r = await resetPassword(db, user);
-        onSecret({ database: db, user, password: r.password });
+        onSecret({ database: db, user, password: r.password, host });
       } else {
         await deleteUser(db, user);
         await onChange();
@@ -506,7 +582,17 @@ function UserRow({
   );
 }
 
-function AddUser({ db, onSecret, onChange }: { db: string; onSecret: (c: Credentials) => void; onChange: () => Promise<void> }) {
+function AddUser({
+  db,
+  host,
+  onSecret,
+  onChange,
+}: {
+  db: string;
+  host: string;
+  onSecret: (c: Credentials) => void;
+  onChange: () => Promise<void>;
+}) {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState("");
   const [busy, setBusy] = useState(false);
@@ -523,7 +609,7 @@ function AddUser({ db, onSecret, onChange }: { db: string; onSecret: (c: Credent
     setError("");
     try {
       const r = await createUser(db, user);
-      onSecret({ database: db, user, password: r.password });
+      onSecret({ database: db, user, password: r.password, host });
       setUser("");
       setOpen(false);
       await onChange();

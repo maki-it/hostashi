@@ -8,14 +8,18 @@ import { Databases } from "./Databases";
 import { nameProblem, pathProblem } from "./databases";
 import { mockFetch } from "./test-utils";
 
-const sites = { "GET /api/v1/sites": { body: { sites: [{ name: "blog", state: "active" }, { name: "shop", state: "active" }] } } };
-const blogWp = { name: "blog_wp", site: "blog", users: ["blog_wp"], createdAt: "2026-11-19T08:00:00Z" };
+const localServer = { name: "localhost", local: true, default: true, engine: "mariadb", state: "ok", databases: 1, tlsMode: "socket", tlsActive: false };
+const sites = {
+  "GET /api/v1/sites": { body: { sites: [{ name: "blog", state: "active" }, { name: "shop", state: "active" }] } },
+  "GET /api/v1/db-servers": { body: { servers: [localServer] } },
+};
+const blogWp = { name: "blog_wp", site: "blog", server: "localhost", users: ["blog_wp"], createdAt: "2026-11-19T08:00:00Z" };
 const pw = "Zx8!kQ2#mN5$pL7%";
 
 // Harness keeps the address query in state, as the app does.
-function Harness({ initial = "" }: { initial?: string }) {
+function Harness({ initial = "", role = "admin" }: { initial?: string; role?: string }) {
   const [query, setQuery] = useState(new URLSearchParams(initial));
-  return <Databases query={query} onQuery={setQuery} />;
+  return <Databases role={role} query={query} onQuery={setQuery} />;
 }
 
 describe("nameProblem", () => {
@@ -51,7 +55,7 @@ describe("Databases", () => {
       "GET /api/v1/databases": () => ({ body: { databases: created ? [{ ...blogWp, site: "shop", name: "shop_db", users: ["shop_db"] }] : [] } }),
       "POST /api/v1/sites/shop/databases": () => {
         created = true;
-        return { status: 201, body: { name: "shop_db", site: "shop", users: ["shop_db"], createdAt: "x", password: pw } };
+        return { status: 201, body: { name: "shop_db", site: "shop", server: "localhost", users: ["shop_db"], createdAt: "x", password: pw } };
       },
     });
     render(<Harness initial="new=1" />);
@@ -114,7 +118,7 @@ describe("Databases", () => {
   });
 
   it("asks for a site first", async () => {
-    mockFetch({ "GET /api/v1/sites": { body: { sites: [] } }, "GET /api/v1/databases": { body: { databases: [] } } });
+    mockFetch({ "GET /api/v1/sites": { body: { sites: [] } }, "GET /api/v1/db-servers": sites["GET /api/v1/db-servers"], "GET /api/v1/databases": { body: { databases: [] } } });
     render(<Harness />);
     expect(await screen.findByText(/Create a site first/)).toBeInTheDocument();
   });
@@ -327,5 +331,154 @@ describe("Database dumps", () => {
     render(<Harness initial="db=blog_wp" />);
     await user.click(await screen.findByRole("button", { name: "Start export" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Another import or export of this database is running.");
+  });
+});
+
+const db1 = {
+  name: "db1",
+  local: false,
+  default: false,
+  engine: "mysql",
+  version: "8.4.7",
+  state: "ok",
+  databases: 0,
+  tlsMode: "verify-ca",
+  tlsActive: true,
+  checkedAt: "2026-11-21T08:00:00Z",
+  certExpires: "2027-02-01T00:00:00Z",
+  host: "10.0.0.5",
+  port: 3307,
+  adminUser: "hostashi_admin",
+};
+
+describe("Database servers", () => {
+  it("creates a database on an external server and shows its host", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...sites,
+      "GET /api/v1/db-servers": { body: { servers: [localServer, { ...db1, default: true }].map((s, i) => (i === 0 ? { ...s, default: false } : s)) } },
+      "GET /api/v1/databases": { body: { databases: [] } },
+      "POST /api/v1/sites/blog/databases": {
+        status: 201,
+        body: { name: "blog_db", site: "blog", server: "db1", users: ["blog_db"], createdAt: "x", password: pw },
+      },
+    });
+    render(<Harness initial="new=1" role="user" />);
+    expect(await screen.findByLabelText("Server")).toHaveValue("db1");
+    await user.type(screen.getByLabelText(/Database name/), "blog_db");
+    await user.click(screen.getByRole("button", { name: "Create database" }));
+
+    const notice = await screen.findByRole("region", { name: "Save this password now" });
+    expect(within(notice).getByText("10.0.0.5:3307")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ name: "blog_db", user: "blog_db", server: "db1" });
+  });
+
+  it("shows the server column and hides import for external databases", async () => {
+    mockFetch({
+      ...sites,
+      "GET /api/v1/db-servers": { body: { servers: [localServer, db1] } },
+      "GET /api/v1/databases": { body: { databases: [blogWp, { ...blogWp, name: "blog_ext", server: "db1" }] } },
+    });
+    const { unmount } = render(<Harness role="user" />);
+    expect(await screen.findByRole("columnheader", { name: /Server/ })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Servers" })).not.toBeInTheDocument();
+    unmount();
+
+    render(<Harness initial="db=blog_ext" role="user" />);
+    expect(await screen.findByText(/Import and export work only for databases on this machine/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start export" })).not.toBeInTheDocument();
+  });
+
+  it("lists the servers for admins and checks, sets the default and removes one", async () => {
+    const user = userEvent.setup();
+    let def = "localhost";
+    let gone = false;
+    const calls = mockFetch({
+      ...sites,
+      "GET /api/v1/databases": { body: { databases: [blogWp] } },
+      "GET /api/v1/db-servers": () => ({
+        body: { servers: [{ ...localServer, default: def === "localhost" }, ...(gone ? [] : [{ ...db1, default: def === "db1" }])] },
+      }),
+      "POST /api/v1/db-servers/db1/check": { body: db1 },
+      "PUT /api/v1/db-servers/db1/default": () => {
+        def = "db1";
+        return { status: 204 };
+      },
+      "DELETE /api/v1/db-servers/db1": () => {
+        gone = true;
+        return { status: 204 };
+      },
+    });
+    render(<Harness initial="view=servers" />);
+    const table = await screen.findByRole("table", { name: "Database servers" });
+    expect(within(table).getByText("10.0.0.5:3307")).toBeInTheDocument();
+    expect(within(table).getByText("MySQL 8.4.7")).toBeInTheDocument();
+    expect(within(table).getByText("TLS, own CA")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Check db1" }));
+    expect(await screen.findByText("db1 is reachable (MySQL 8.4.7).")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Make db1 the default" }));
+    expect(await screen.findByText("New databases now go to db1.")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Make localhost the default" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Remove db1" }));
+    await user.click(screen.getByRole("button", { name: "Remove server" }));
+    expect(await screen.findByText(/Removed db1/)).toBeInTheDocument();
+    expect(calls.filter((c) => c.method !== "GET").map((c) => c.method + " " + c.path)).toEqual([
+      "POST /api/v1/db-servers/db1/check",
+      "PUT /api/v1/db-servers/db1/default",
+      "DELETE /api/v1/db-servers/db1",
+    ]);
+  });
+
+  it("adds a server with its own CA and shows why a check failed", async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    const calls = mockFetch({
+      ...sites,
+      "GET /api/v1/databases": { body: { databases: [] } },
+      "POST /api/v1/db-servers": () => {
+        if (fail) {
+          fail = false;
+          return {
+            status: 422,
+            body: { error: { code: "db_server_check_failed", message: "the administrator lacks a privilege or the password is wrong: access denied (1045)" } },
+          };
+        }
+        return { status: 201, body: db1 };
+      },
+    });
+    render(<Harness initial="view=servers&new=1" />);
+    await user.type(await screen.findByLabelText("Name"), "db1");
+    await user.type(screen.getByLabelText(/^Host/), "10.0.0.5");
+    await user.clear(screen.getByLabelText("Port"));
+    await user.type(screen.getByLabelText("Port"), "3307");
+    await user.type(screen.getByLabelText(/^Administrator$/), "hostashi_admin");
+    await user.type(screen.getByLabelText("Administrator password"), "secret");
+    await user.click(screen.getByLabelText(/my own CA/));
+    await user.click(screen.getByRole("button", { name: "Add server" }));
+    expect(await screen.findByText("Paste the CA certificate in PEM format.")).toBeInTheDocument();
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+
+    await user.type(screen.getByLabelText("CA certificate"), "-----BEGIN CERTIFICATE-----x");
+    await user.click(screen.getByRole("button", { name: "Add server" }));
+    expect(await screen.findByText(/The check failed: the administrator lacks a privilege/)).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({
+      name: "db1",
+      host: "10.0.0.5",
+      port: 3307,
+      adminUser: "hostashi_admin",
+      adminPassword: "secret",
+      tlsMode: "verify-ca",
+      caCertificate: "-----BEGIN CERTIFICATE-----x",
+    });
+  });
+
+  it("keeps users out of the server list", async () => {
+    mockFetch({ ...sites, "GET /api/v1/databases": { body: { databases: [] } } });
+    render(<Harness initial="view=servers" role="user" />);
+    expect(await screen.findByRole("heading", { name: "Databases" })).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Database servers" })).not.toBeInTheDocument();
   });
 });
