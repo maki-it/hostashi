@@ -43,6 +43,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0045](0045-object-cache-per-site.md) | Object cache (Valkey) per site | Accepted |
 | [0046](0046-page-cache-per-site.md) | Page cache (nginx FastCGI cache) per site | Accepted |
 | [0047](0047-status-page-for-disabled-sites.md) | Status page for disabled sites | Proposed |
+| [0049](0049-php-settings-per-site.md) | PHP settings per site | Proposed |
 
 Only the project owner sets a status to `Accepted`.
 
