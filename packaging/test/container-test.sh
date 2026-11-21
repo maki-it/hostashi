@@ -1560,6 +1560,7 @@ expect_mode /etc/apt/preferences.d/hostashi-pgdg "644 root:root"
 for p in "postgresql-client-$PG_NEWEST" libpq5; do
   case "$(origin "$p")" in *apt.postgresql.org*) ;; *) fail "$p does not come from apt.postgresql.org: $(origin "$p")";; esac
 done
+# shellcheck disable=SC2016 # a dpkg-query format
 ! x dpkg-query -W -f='${Status}' "postgresql-$PG_NEWEST" 2>/dev/null | grep -q 'install ok installed' || fail "the PostgreSQL server was installed"
 [ "$(api POST /api/v1/db-servers/postgresql-client '{}')" = 409 ] || fail "second pg client install: $(x cat /tmp/api.out)"
 out=$(inst apply --yes)
