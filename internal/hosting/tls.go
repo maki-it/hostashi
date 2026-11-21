@@ -5,6 +5,7 @@ package hosting
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -90,7 +91,7 @@ func (s *Service) SetTLS(ctx context.Context, actor int64, name string, on bool)
 		s.Kick()
 	}
 
-	s.audit(ctx, actor, action, name, nil)
+	s.auditChange(ctx, actor, action, name, nil, map[string]string{"tls": strconv.FormatBool(old)}, map[string]string{"tls": strconv.FormatBool(on)})
 
 	return s.Get(ctx, name)
 }
@@ -128,7 +129,8 @@ func (s *Service) SetHSTS(ctx context.Context, actor int64, name string, on bool
 		action = "site.hsts.on"
 	}
 
-	s.audit(ctx, actor, action, name, nil)
+	s.auditChange(ctx, actor, action, name, nil,
+		map[string]string{"hsts": strconv.FormatBool(old)}, map[string]string{"hsts": strconv.FormatBool(on)})
 
 	return s.Get(ctx, name)
 }
@@ -167,7 +169,7 @@ func (s *Service) SetPHPPrograms(ctx context.Context, actor int64, name string, 
 		action = "site.php_programs.on"
 	}
 
-	s.audit(ctx, actor, action, name, nil)
+	s.auditChange(ctx, actor, action, name, nil, map[string]string{"programs": strconv.FormatBool(old)}, map[string]string{"programs": strconv.FormatBool(on)})
 
 	return s.Get(ctx, name)
 }
@@ -236,7 +238,7 @@ func (s *Service) SetDisabled(ctx context.Context, actor int64, name string, on 
 		action, details = "site.disable", map[string]string{"page": pageIDString(pageID)}
 	}
 
-	s.audit(ctx, actor, action, name, details)
+	s.auditChange(ctx, actor, action, name, details, map[string]string{"disabled": strconv.FormatBool(old)}, map[string]string{"disabled": strconv.FormatBool(on)})
 
 	return s.Get(ctx, name)
 }

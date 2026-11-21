@@ -15,6 +15,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/authz"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 // logRetentionKey stores the days rotated logs are kept (ADR-0053).
@@ -193,6 +194,14 @@ func registerLogs(mux *routeMux, a authn, logs SiteLogs, st Settings, log *slog.
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
+		was, err := logRetention(ctx, st)
+		if err != nil {
+			log.ErrorContext(ctx, "read log retention", "err", err)
+			writeError(w, http.StatusInternalServerError, "internal", "internal error")
+
+			return
+		}
+
 		// The agent first: a stored value the server does not use would
 		// promise a retention that does not hold.
 		if err := logs.SetRetention(ctx, days); err != nil {
@@ -208,7 +217,8 @@ func registerLogs(mux *routeMux, a authn, logs SiteLogs, st Settings, log *slog.
 			return
 		}
 
-		_ = st.Audit(ctx, &uid, "settings.logs", "", map[string]string{"retention_days": strconv.Itoa(days), "ip": clientIP(r)})
+		_ = st.AuditChange(ctx, &uid, "settings.logs", "", map[string]string{"retention_days": strconv.Itoa(days), "ip": clientIP(r)},
+			store.DiffOf(map[string]string{"retention_days": strconv.Itoa(was)}, map[string]string{"retention_days": strconv.Itoa(days)}))
 
 		writeJSON(w, http.StatusOK, retentionJSON(days))
 	})

@@ -62,7 +62,8 @@ func (s *Service) SetPHPSettings(ctx context.Context, actor int64, name string, 
 
 	// The values are limits and switches, nothing secret.
 	b, _ := json.Marshal(ps)
-	s.audit(ctx, actor, "site.php_settings.set", name, map[string]string{"settings": string(b)})
+	s.auditChange(ctx, actor, "site.php_settings.set", name, map[string]string{"settings": string(b)},
+		store.FieldsOf(old.Settings), store.FieldsOf(ps))
 
 	return s.st.SitePHPSettings(ctx, site.ID)
 }

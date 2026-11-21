@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -143,7 +144,7 @@ func (s *Service) changeSitePageCache(ctx context.Context, actor int64, site sto
 		return store.PageCache{}, err
 	}
 
-	s.audit(ctx, actor, "site.pagecache.set", name, detail)
+	s.auditChange(ctx, actor, "site.pagecache.set", name, detail, pageCacheFields(old), pageCacheFields(c))
 
 	return s.st.SitePageCache(ctx, site.ID)
 }
@@ -262,5 +263,13 @@ func (s *Service) followPresetPageCache(ctx context.Context, actor int64, site s
 	})
 	if err != nil {
 		s.log.WarnContext(ctx, "page cache size of the preset not applied", "site", site.Name, "err", err)
+	}
+}
+
+// pageCacheFields describes the page cache settings for a diff.
+func pageCacheFields(c store.PageCache) map[string]string {
+	return map[string]string{
+		"enabled": strconv.FormatBool(c.Enabled), "preset": c.Preset, "minutes": strconv.Itoa(c.Minutes),
+		"sizeMb": strconv.Itoa(c.SizeMB), "exclude": strings.Join(c.Exclude, " "),
 	}
 }
