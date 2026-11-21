@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -53,6 +54,9 @@ const MaxCertChain = 32 << 10
 type TLSCSRRequest struct {
 	User    string   `json:"user"`    // a site user or PanelCert
 	Domains []string `json:"domains"` // the first one becomes the common name
+	// Custom keeps the key and the CSR apart from the ACME flow, for a
+	// certificate the admin gets elsewhere and hands in with tls.upload.
+	Custom bool `json:"custom,omitempty"`
 }
 
 // Validate checks the request.
@@ -115,8 +119,118 @@ func (r TLSInstallRequest) Validate() error {
 type TLSCertInfo struct {
 	Domains  []string  `json:"domains"`
 	NotAfter time.Time `json:"notAfter"`
+	// The fields below are filled by tls.upload and tls.info.
+	NotBefore time.Time `json:"notBefore,omitzero"`
+	Issuer    string    `json:"issuer,omitempty"`
+	// Fingerprint is the SHA-256 of the leaf in DER, lower-case hex.
+	Fingerprint string `json:"fingerprint,omitempty"`
+	// Trusted: the chain leads to a root of the system trust store.
+	Trusted bool `json:"trusted,omitempty"`
 }
 
 // TLSInstall checks the chain against the pending key and makes the pair
 // live for the next web.apply.
 var TLSInstall = agentrpc.Op[TLSInstallRequest, TLSCertInfo]{Name: "tls.install"}
+
+// MaxCertKey bounds the PEM private key of tls.upload (an RSA 8192 key in
+// PKCS #8 is about 6.5 KiB). Chain and key together stay below one frame.
+const MaxCertKey = 16 << 10
+
+// TLSUploadRequest makes an own certificate the live pair of a site, a
+// parked domain or the panel (ADR-0039). Key is the PEM private key; empty
+// uses the key of the last custom CSR (TLSCSRRequest.Custom). The agent
+// checks the pair, its validity, the chain and that it covers Domains.
+type TLSUploadRequest struct {
+	User    string   `json:"user"`
+	Chain   string   `json:"chain"`
+	Key     string   `json:"key,omitempty"`
+	Domains []string `json:"domains"`
+	// AllowUntrusted accepts a chain that does not lead to a root of the
+	// system trust store (an internal CA, a self-signed certificate).
+	AllowUntrusted bool `json:"allowUntrusted,omitempty"`
+}
+
+// Validate checks the request; the agent checks the certificate itself.
+func (r TLSUploadRequest) Validate() error {
+	if err := ValidateCertName(r.User); err != nil {
+		return err
+	}
+
+	if r.Chain == "" || len(r.Chain) > MaxCertChain {
+		return fmt.Errorf("chain: between 1 and %d bytes", MaxCertChain)
+	}
+
+	if len(r.Key) > MaxCertKey {
+		return fmt.Errorf("key: at most %d bytes", MaxCertKey)
+	}
+
+	return TLSCSRRequest{User: r.User, Domains: r.Domains}.Validate()
+}
+
+// TLSUpload checks an own certificate and makes it live for the next
+// web.apply. The key is written root 0600 and never returned.
+var TLSUpload = agentrpc.Op[TLSUploadRequest, TLSCertInfo]{Name: "tls.upload"}
+
+// TLSNameRequest names the certificate of a site, a parked domain or the
+// panel.
+type TLSNameRequest struct {
+	User string `json:"user"`
+}
+
+// Validate checks the request.
+func (r TLSNameRequest) Validate() error { return ValidateCertName(r.User) }
+
+// TLSInfoResponse describes the live certificate (nil: none) and the
+// pending custom CSR (empty: none).
+type TLSInfoResponse struct {
+	Cert *TLSCertInfo `json:"cert,omitempty"`
+	CSR  string       `json:"csr,omitempty"`
+}
+
+// TLSInfo reads the live certificate and the pending custom CSR.
+var TLSInfo = agentrpc.Op[TLSNameRequest, TLSInfoResponse]{Name: "tls.info"}
+
+// TLSDeleteResponse is empty.
+type TLSDeleteResponse struct{}
+
+// TLSDelete removes the live pair and a pending custom CSR. It is refused
+// while the last accepted web state serves the name over HTTPS, so nothing
+// is ever served without its certificate.
+var TLSDelete = agentrpc.Op[TLSNameRequest, TLSDeleteResponse]{Name: "tls.delete"}
+
+// CertCovers reports whether a certificate naming names covers domain. A
+// wildcard "*.example.com" covers exactly one more label in front, as
+// browsers check it (RFC 6125 section 6.4.3): "a.example.com", not
+// "example.com" and not "a.b.example.com".
+func CertCovers(names []string, domain string) bool {
+	domain = strings.ToLower(domain)
+
+	for _, n := range names {
+		n = strings.ToLower(n)
+		if n == domain {
+			return true
+		}
+
+		if rest, ok := strings.CutPrefix(n, "*."); ok {
+			label, parent, found := strings.Cut(domain, ".")
+			if found && label != "" && parent == rest {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// MissingNames returns the domains that names does not cover, in order.
+func MissingNames(names, domains []string) []string {
+	out := []string{}
+
+	for _, d := range domains {
+		if !CertCovers(names, d) {
+			out = append(out, d)
+		}
+	}
+
+	return out
+}

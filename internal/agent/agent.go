@@ -14,6 +14,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -415,6 +416,9 @@ func (h *siteOps) register(s *agentrpc.Server) {
 
 	agentrpc.Handle(s, agentapi.TLSCSR, h.tlsCSR)
 	agentrpc.Handle(s, agentapi.TLSInstall, h.tlsInstall)
+	agentrpc.Handle(s, agentapi.TLSUpload, h.tlsUpload)
+	agentrpc.Handle(s, agentapi.TLSInfo, h.tlsInfo)
+	agentrpc.Handle(s, agentapi.TLSDelete, h.tlsDelete)
 
 	agentrpc.Handle(s, agentapi.SnippetCheck, h.snippetCheck)
 
@@ -631,7 +635,12 @@ func (h *siteOps) tlsCSR(_ context.Context, _ agentrpc.Caller, req agentapi.TLSC
 		return agentapi.TLSCSRResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site"}
 	}
 
-	csr, err := h.certs.CSR(req.User, req.Domains)
+	create := h.certs.CSR
+	if req.Custom {
+		create = h.certs.CustomCSR
+	}
+
+	csr, err := create(req.User, req.Domains)
 	if err != nil {
 		return agentapi.TLSCSRResponse{}, mapCertError(err)
 	}
@@ -660,8 +669,136 @@ func (h *siteOps) tlsInstall(_ context.Context, _ agentrpc.Caller, req agentapi.
 	return agentapi.TLSCertInfo{Domains: info.Domains, NotAfter: info.NotAfter}, nil
 }
 
-func mapCertError(err error) error {
+func (h *siteOps) tlsUpload(ctx context.Context, _ agentrpc.Caller, req agentapi.TLSUploadRequest) (agentapi.TLSCertInfo, error) {
+	if h.certs == nil {
+		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "HTTPS is not available on this server"}
+	}
+
+	if !h.knownCertName(req.User) {
+		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site"}
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	info, err := h.certs.Upload(req.User, certs.Upload{
+		Chain: []byte(req.Chain), Key: []byte(req.Key), Domains: req.Domains, AllowUntrusted: req.AllowUntrusted,
+	})
+	if err != nil {
+		return agentapi.TLSCertInfo{}, mapCertError(err)
+	}
+
+	h.log.InfoContext(ctx, "own certificate installed", "name", req.User, "fingerprint", info.Fingerprint, "trusted", info.Trusted)
+
+	return certInfo(info), nil
+}
+
+func (h *siteOps) tlsInfo(_ context.Context, _ agentrpc.Caller, req agentapi.TLSNameRequest) (agentapi.TLSInfoResponse, error) {
+	if h.certs == nil {
+		return agentapi.TLSInfoResponse{}, nil
+	}
+
+	var res agentapi.TLSInfoResponse
+
+	info, err := h.certs.Details(req.User)
+
 	switch {
+	case err == nil:
+		ci := certInfo(info)
+		res.Cert = &ci
+	case !errors.Is(err, certs.ErrNotFound):
+		return agentapi.TLSInfoResponse{}, mapCertError(err)
+	}
+
+	csr, err := h.certs.PendingCSR(req.User)
+	if err != nil {
+		return agentapi.TLSInfoResponse{}, mapCertError(err)
+	}
+
+	res.CSR = string(csr)
+
+	return res, nil
+}
+
+func (h *siteOps) tlsDelete(ctx context.Context, _ agentrpc.Caller, req agentapi.TLSNameRequest) (agentapi.TLSDeleteResponse, error) {
+	if h.certs == nil {
+		return agentapi.TLSDeleteResponse{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "HTTPS is not available on this server"}
+	}
+
+	// web.apply reads the pair under the same lock.
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.web != nil {
+		cur, _, err := h.web.Current()
+		if err != nil {
+			return agentapi.TLSDeleteResponse{}, err
+		}
+
+		if servesTLS(cur, req.User) {
+			return agentapi.TLSDeleteResponse{}, &agentrpc.Error{
+				Code: agentrpc.CodePrecondition, Message: "the certificate is still served, turn HTTPS off with web.apply first",
+			}
+		}
+	}
+
+	if err := h.certs.Delete(req.User); err != nil {
+		if errors.Is(err, certs.ErrNotFound) {
+			return agentapi.TLSDeleteResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "no certificate"}
+		}
+
+		return agentapi.TLSDeleteResponse{}, mapCertError(err)
+	}
+
+	h.log.InfoContext(ctx, "certificate deleted", "name", req.User)
+
+	return agentapi.TLSDeleteResponse{}, nil
+}
+
+// servesTLS reports whether the web state d serves the certificate name.
+func servesTLS(d web.Desired, name string) bool {
+	if name == agentapi.PanelCert {
+		return d.Panel != nil && d.Panel.Cert != ""
+	}
+
+	for _, p := range d.Parked {
+		if p.Name == name && p.Cert != "" {
+			return true
+		}
+	}
+
+	for _, s := range d.Sites {
+		if s.User == name && s.Cert != "" {
+			return true
+		}
+	}
+
+	return false
+}
+
+func certInfo(i certs.Info) agentapi.TLSCertInfo {
+	return agentapi.TLSCertInfo{
+		Domains: i.Domains, NotAfter: i.NotAfter, NotBefore: i.NotBefore,
+		Issuer: i.Issuer, Fingerprint: i.Fingerprint, Trusted: i.Trusted,
+	}
+}
+
+func mapCertError(err error) error {
+	var (
+		missing   *certs.MissingNamesError
+		untrusted *certs.UntrustedError
+	)
+
+	switch {
+	case errors.As(err, &missing):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the certificate does not cover " + strings.Join(missing.Names, ", ")}
+	case errors.As(err, &untrusted):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the chain is not publicly trusted: " + untrusted.Reason}
+	case errors.Is(err, certs.ErrKeyType), errors.Is(err, certs.ErrKeyMismatch), errors.Is(err, certs.ErrEncrypted),
+		errors.Is(err, certs.ErrValidity), errors.Is(err, certs.ErrUsage):
+		return &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: strings.TrimPrefix(err.Error(), "certs: ")}
+	case errors.Is(err, certs.ErrNoCustomKey):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "no key given and no pending CSR"}
 	case errors.Is(err, certs.ErrInvalid):
 		return &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "invalid certificate or request"}
 	case errors.Is(err, certs.ErrNoPendingKey):
