@@ -71,6 +71,11 @@ php_extra() {
 }
 
 php_pkgs() { local e; for e in fpm cli mysql curl gd mbstring xml zip intl bcmath; do echo "php$1-$e"; done; }
+# phpredis for the object cache (ADR-0045) is installed where apt has it:
+# sury.org builds it for a new PHP version only some time after the release
+# (php8.6-redis is missing at the time of writing).
+redis_pkg() { echo "php$1-redis"; }
+has_candidate() { local c; c=$(apt-cache policy "$1" 2>/dev/null | awk '$1 == "Candidate:" { print $2 }'); [ -n "$c" ] && [ "$c" != "(none)" ]; }
 
 sury_source() {
   local code
@@ -145,6 +150,8 @@ check() {
   sury_pin "$@" | matches "$SURY_PIN" 644 || { echo "the sury.org pin differs"; return 1; }
   for v in "$@"; do
     for p in $(php_pkgs "$v"); do pkg_installed "$p" || { echo "$p is not installed"; return 1; }; done
+    p=$(redis_pkg "$v")
+    pkg_installed "$p" || ! has_candidate "$p" || { echo "$p is not installed"; return 1; }
     grep -qx "$v" "$PHP_STATE" 2>/dev/null || { echo "PHP $v is not recorded"; return 1; }
   done
   if [ -d /run/systemd/system ]; then
@@ -183,9 +190,17 @@ install_versions() {
   # to sury.org (Spike S10).
   sury_pin "$@" | put "$SURY_PIN" 0644 || return 1
   sury_source | put "$SURY_SOURCE" 0644 || return 1
-  for v in "$@"; do mapfile -t -O "${#pkgs[@]}" pkgs < <(php_pkgs "$v"); done
+  apt-get -o DPkg::Lock::Timeout=600 update -qq || return 1
+  for v in "$@"; do
+    mapfile -t -O "${#pkgs[@]}" pkgs < <(php_pkgs "$v")
+    if has_candidate "$(redis_pkg "$v")"; then
+      pkgs+=("$(redis_pkg "$v")")
+    else
+      say "NOTE: $(redis_pkg "$v") is not available yet: sites on PHP $v cannot use the object cache"
+    fi
+  done
   say "installing PHP $*"
-  apt-get -o DPkg::Lock::Timeout=600 update -qq && apt-get install "${APT_OPTS[@]}" "${pkgs[@]}" || return 1
+  apt-get install "${APT_OPTS[@]}" "${pkgs[@]}" || return 1
   # Each site has its own FPM master; the package's own service stays off.
   if [ -d /run/systemd/system ]; then
     for u in $(package_units); do systemctl disable --now "$u" || return 1; done
