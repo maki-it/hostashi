@@ -164,7 +164,7 @@ function Overview({ site, onChange, staff }: TabProps & { staff: boolean }) {
               : site.state !== "active"
                 ? "Being created"
                 : site.disabled
-                  ? "Disabled: visitors get “temporarily unavailable”, PHP is stopped"
+                  ? "Disabled: everybody gets the chosen maintenance page, PHP is stopped"
                   : site.maintenance.enabled
                     ? "Maintenance: visitors get the maintenance page" +
                       (site.maintenance.allowIps.length > 0 ? ", except " + site.maintenance.allowIps.join(", ") : "")
@@ -203,15 +203,55 @@ function Overview({ site, onChange, staff }: TabProps & { staff: boolean }) {
   );
 }
 
+// useMaintenancePages lists the maintenance pages to choose from; the current
+// choice stays in the list even when the list could not be loaded.
+function useMaintenancePages(current: string): { id: string; name: string }[] {
+  const [pages, setPages] = useState<StatusPage[] | null>(null);
+
+  useEffect(() => {
+    listPages()
+      .then((all) => setPages(all.filter((p) => p.kind === "maintenance")))
+      .catch(() => setPages([]));
+  }, []);
+
+  const choices: { id: string; name: string }[] = [...(pages ?? [])];
+  if (!choices.some((p) => p.id === current)) {
+    choices.unshift({ id: current, name: current === "builtin-maintenance" ? "Built-in maintenance page" : current });
+  }
+  return choices;
+}
+
+function PageSelect({ label, value, choices, onChange }: { label: string; value: string; choices: { id: string; name: string }[]; onChange: (v: string) => void }) {
+  return (
+    <Field label={label}>
+      <select className="ui-select" value={value} onChange={(e) => onChange(e.target.value)}>
+        {choices.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+}
+
 function Availability({ site, onChange }: TabProps) {
   const { busy, act, result } = useAction(onChange);
   const [confirm, setConfirm] = useState(false);
+  const [page, setPage] = useState(site.disabledPage);
+  const choices = useMaintenancePages(page);
 
   const toggle = (on: boolean) =>
     act(async () => {
-      await setDisabled(site.name, on);
+      await setDisabled(site.name, on, page);
       setConfirm(false);
       return on ? `${site.name} is disabled.` : `${site.name} is enabled again.`;
+    });
+
+  const changePage = () =>
+    act(async () => {
+      await setDisabled(site.name, true, page);
+      return "The page is changed.";
     });
 
   return (
@@ -219,8 +259,14 @@ function Availability({ site, onChange }: TabProps) {
       <div className="ui-stack">
         {site.disabled ? (
           <>
-            <p className="ui-hint">The site is disabled. Enabling it serves its files and starts PHP again.</p>
+            <p className="ui-hint">
+              The site is disabled: visitors get the page below with “503 Service Unavailable”. Enabling it serves its files and starts PHP again.
+            </p>
+            <PageSelect label="Page while disabled" value={page} choices={choices} onChange={setPage} />
             <div className="ui-row">
+              <Button disabled={busy || page === site.disabledPage} onClick={() => void changePage()}>
+                Change page
+              </Button>
               <Button disabled={busy} onClick={() => void toggle(false)}>
                 Enable {site.name}
               </Button>
@@ -229,9 +275,10 @@ function Availability({ site, onChange }: TabProps) {
         ) : confirm ? (
           <>
             <p>
-              Visitors get “temporarily unavailable” (HTTP 503) and PHP stops. Files, databases, backups and the certificate stay. You can
-              enable the site again at any time.
+              Visitors get the chosen maintenance page with “503 Service Unavailable” and PHP stops. There are no allowed addresses. Files,
+              databases, backups and the certificate stay. You can enable the site again at any time.
             </p>
+            <PageSelect label="Page while disabled" value={page} choices={choices} onChange={setPage} />
             <div className="ui-row">
               <Button variant="danger" disabled={busy} onClick={() => void toggle(true)}>
                 Disable {site.name}
@@ -243,7 +290,7 @@ function Availability({ site, onChange }: TabProps) {
           </>
         ) : (
           <>
-            <p className="ui-hint">A disabled site answers “temporarily unavailable” and its PHP is stopped.</p>
+            <p className="ui-hint">A disabled site shows a maintenance page to everybody and its PHP is stopped.</p>
             <div className="ui-row">
               <Button variant="danger" disabled={busy} onClick={() => setConfirm(true)}>
                 Disable site
@@ -507,23 +554,12 @@ function PHPTab({ site, php, onChange }: TabProps & { php: PHPVersions | null })
 // outside the list get the page with 503, the listed ones see the site.
 function MaintenanceSettings({ site, onChange }: { site: Site; onChange: () => Promise<void> }) {
   const m = site.maintenance;
-  const [pages, setPages] = useState<StatusPage[] | null>(null);
   const [page, setPage] = useState(m.page);
+  const choices = useMaintenancePages(page);
   const [allow, setAllow] = useState(m.allowIps.join("\n"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
-
-  useEffect(() => {
-    listPages()
-      .then((all) => setPages(all.filter((p) => p.kind === "maintenance")))
-      .catch(() => setPages([]));
-  }, []);
-
-  const choices: { id: string; name: string }[] = [...(pages ?? [])];
-  if (!choices.some((p) => p.id === page)) {
-    choices.unshift({ id: page, name: page === "builtin-maintenance" ? "Built-in maintenance page" : page });
-  }
 
   async function save(enabled: boolean, e?: FormEvent) {
     e?.preventDefault();
@@ -579,16 +615,8 @@ function MaintenanceSettings({ site, onChange }: { site: Site; onChange: () => P
             ? "Maintenance is on: visitors get the page with “503 Service Unavailable”. PHP keeps running."
             : "While maintenance is on, visitors get the page with “503 Service Unavailable”. The allowed addresses see the site as usual, so you can work on it. PHP keeps running."}
         </p>
-        {site.disabled && <Notice tone="warn" title="The site is disabled. Disabled wins: visitors get “temporarily unavailable” until it is enabled." />}
-        <Field label="Maintenance page">
-          <select className="ui-select" value={page} onChange={(e) => setPage(e.target.value)}>
-            {choices.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+        {site.disabled && <Notice tone="warn" title="The site is disabled. Disabled wins: everybody gets the page chosen under Availability until it is enabled." />}
+        <PageSelect label="Maintenance page" value={page} choices={choices} onChange={setPage} />
         <Field label="Allowed addresses" hint="IPv4 or IPv6 addresses or ranges like 10.0.0.0/8, one per line, at most 20.">
           <textarea className="ui-input ui-textarea" value={allow} onChange={(e) => setAllow(e.target.value)} rows={3} autoComplete="off" spellCheck={false} />
         </Field>
