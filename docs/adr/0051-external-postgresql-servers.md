@@ -77,6 +77,6 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 ## Open questions
 
 1. ~~External PostgreSQL servers in v1?~~ **Decided (Kim, 2026-11-21): yes, directly in v1.** Full feature set (databases, backups, import and export, Adminer) as described?
-2. Client tools from apt.postgresql.org (option A) instead of the distribution's client?
+2. ~~Client tools from apt.postgresql.org (option A) instead of the distribution's client?~~ **Decided (Kim, 2026-11-21): yes, from the official repository.**
 3. Adminer: switch to the full build in one pool (option A)?
-4. The new `os/exec` exception `internal/pgctl` for `pg_dump`, `pg_restore` and `psql`?
+4. ~~The new `os/exec` exception `internal/pgctl` for `pg_dump`, `pg_restore` and `psql`?~~ **Decided (Kim, 2026-11-21): yes.**
