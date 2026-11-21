@@ -56,6 +56,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0050 | Signed releases, install and updates through apt | Accepted on 2026-11-21 ([adr/0050](adr/0050-signed-releases-and-apt-updates.md)) | No |
 | 0051 | External PostgreSQL servers | Accepted on 2026-11-21 ([adr/0051](adr/0051-external-postgresql-servers.md)) | Done |
 | 0052 | Service management and server dashboard | Accepted on 2026-11-21 ([adr/0052](adr/0052-service-management-and-server-dashboard.md)) | No |
+| 0053 | Site logs in the panel | Accepted on 2026-11-21 ([adr/0053](adr/0053-site-logs-in-the-panel.md)) | Done |
 
 ---
 
@@ -378,3 +379,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0052 Service management and server dashboard
 
 **Full text (status Accepted, 2026-11-21, by Kim):** [adr/0052](adr/0052-service-management-and-server-dashboard.md). Summary: a fixed catalog of services (nginx, MariaDB, SSH, fail2ban, firewall, Adminer, panel, agent, per-site PHP and Valkey) with the allowed actions per row, run by new typed agent operations through the existing `internal/phpctl` exception; no stop for nginx, SSH and the firewall, stop of MariaDB only with a typed confirmation; drop-ins with `Restart=on-failure` for nginx and MariaDB; restart events detected by the panel and kept 30 days; a dashboard of CPU, RAM, disk and network from a new read-only agent operation `host.stats`, kept in a three-tier ring buffer in the panel (SQLite for the 5 min and 1 h tiers). Admin only, scopes `services:read` and `services:write`. No new `os/exec` exception.
+
+## ADR-0053 Site logs in the panel
+
+**Full text (status Accepted, 2026-11-21, by Kim):** [adr/0053](adr/0053-site-logs-in-the-panel.md). Summary: build the per-site nginx logs of ADR-0021, move the PHP-FPM error log of each site from the journal into a root-owned file, rotate them with logrotate, retention set by admins in the panel (default 7 days, 1 to 365, Kim 2026-11-21), and read them through a typed agent operation `site.logs.read` (closed set of kinds, path built by the agent, cursor for live follow by polling every 2 s). Action `sites.logs:read` for everyone with a grant for the site, new token scope `logs:read`. No new `os/exec` exception, no migration.
