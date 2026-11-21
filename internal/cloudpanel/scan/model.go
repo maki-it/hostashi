@@ -117,6 +117,10 @@ type Site struct {
 	// SSHUsers are the additional SSH users of the site: own passwd entry,
 	// the site user's group as primary group.
 	SSHUsers []string `json:"ssh_users,omitempty"`
+	// ObjectCache is true for a WordPress site with an object cache drop-in
+	// (wp-content/object-cache.php); the import turns on the site's own
+	// cache (ADR-0045).
+	ObjectCache bool `json:"object_cache,omitempty"`
 	// Usage is what the site user's home occupies; nil if not measured.
 	Usage    *Usage    `json:"usage,omitempty"`
 	Sources  []string  `json:"sources"`
