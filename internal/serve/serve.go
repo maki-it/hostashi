@@ -55,6 +55,10 @@ type Config struct {
 	// MetricsListen is a loopback IP and port that serves /metrics without
 	// a token (ADR-0022); empty turns that listener off.
 	MetricsListen string
+
+	// DBToolPort is the HTTPS port of the web database tool (ADR-0038),
+	// served for the panel's host name; 0 turns the tool off.
+	DBToolPort int
 }
 
 // DefaultChallengeDir is where nginx looks for HTTP-01 challenge files
@@ -192,6 +196,7 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			registerCron(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSSH(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerPageCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerLimits(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 		}
 
@@ -357,6 +362,12 @@ func Run(ctx context.Context, cfg Config) error {
 	client := agentrpc.NewClient(cfg.Socket)
 	client.Observe(m.AgentOp)
 
+	// Outgoing email (ADR-0044): nothing is queued while no relay is set.
+	relay := mail.NewStore(st, box)
+	outbox := mail.NewOutbox(st, relay, box, cfg.Log)
+
+	go outbox.Run(ctx)
+
 	deps := Deps{
 		PingAgent: func(ctx context.Context) error {
 			_, err := agentapi.Ping.Call(ctx, client, agentapi.PingRequest{})
@@ -371,7 +382,7 @@ func Run(ctx context.Context, cfg Config) error {
 		Doctor:   RPCDoctor(client),
 		Firewall: RPCFirewall{C: client},
 		PHP:      RPCPHPInstaller{C: client},
-		Mail:     mail.NewStore(st, box),
+		Mail:     relay,
 		MailSend: func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
 	}
 
@@ -411,6 +422,12 @@ func Run(ctx context.Context, cfg Config) error {
 				cfg.Log.ErrorContext(ctx, "the panel's host name belongs to "+owner+"; nginx does not serve the panel there, choose another --panel-domain", "domain", d)
 			}
 		} else if err := deps.Sites.EnablePanel(d); err != nil {
+			return err
+		}
+	}
+
+	if cfg.DBToolPort != 0 {
+		if err := deps.Sites.EnableDBTool(hosting.RPCAgent{C: client}, cfg.DBToolPort); err != nil {
 			return err
 		}
 	}

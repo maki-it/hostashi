@@ -43,6 +43,9 @@ type fakeAgent struct {
 	uploads   int
 	pageErr   error
 	pageGones []string
+
+	purges   []string
+	purgeErr error
 }
 
 func newFake() *fakeAgent {
@@ -1028,4 +1031,17 @@ func (f *fakeAgent) SnippetCheck(_ context.Context, req agentapi.SnippetCheckReq
 	}
 
 	return res, nil
+}
+
+func (f *fakeAgent) PageCachePurge(_ context.Context, user string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.purgeErr != nil {
+		return f.purgeErr
+	}
+
+	f.purges = append(f.purges, user)
+
+	return nil
 }

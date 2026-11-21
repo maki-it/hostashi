@@ -38,6 +38,8 @@ func dbFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusNotFound, "not_found", "no such database or database user")
 	case errors.Is(err, hosting.ErrJobNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "no such job for this database")
+	case errors.Is(err, hosting.ErrNoDBTool):
+		writeError(w, http.StatusConflict, "dbtool_unavailable", "the database tool is not available on this server")
 	case errors.Is(err, hosting.ErrDatabaseExists):
 		writeError(w, http.StatusConflict, "database_exists", "a database or database user with this name exists")
 	default:
@@ -228,6 +230,41 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 
 	mux.HandleFunc("POST /api/v1/databases/{db}/import", a.allowSite("databases:write", dbSite, dump("import", svc.ImportDatabase)))
 	mux.HandleFunc("POST /api/v1/databases/{db}/export", a.allowSite("databases:write", dbSite, dump("export", svc.ExportDatabase)))
+
+	// The web database tool (ADR-0038): the answer is an address with a
+	// one-time ticket for a new tab. It is never cached.
+	mux.HandleFunc("GET /api/v1/dbtool", a.allow("databases:list", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		st, err := svc.DBTool(r.Context())
+		if err != nil {
+			dbFail(log, w, err, "database tool status")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, st)
+	}))
+
+	mux.HandleFunc("POST /api/v1/databases/{db}/tool", a.allowSite("databases:open", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in struct {
+			Minutes int `json:"minutes"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		s, err := svc.OpenDatabaseTool(ctx, p.User.ID, r.PathValue("db"), in.Minutes)
+		if err != nil {
+			dbFail(log, w, err, "open database tool")
+
+			return
+		}
+
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusCreated, s)
+	}))
 
 	mux.HandleFunc("GET /api/v1/databases/{db}/jobs/{id}", a.allowSite("databases:read", dbSite, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)

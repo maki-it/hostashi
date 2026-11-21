@@ -188,3 +188,53 @@ func TestSiteDeleteRemovesCache(t *testing.T) {
 		t.Fatalf("cache left: %v", err)
 	}
 }
+
+func TestDoctorPageCache(t *testing.T) {
+	ctx := context.Background()
+	base := filepath.Join(t.TempDir(), "web")
+	dirs := testCacheDirs()
+	c, pool := startSiteAgentCfg(t, Config{
+		Web: &web.Reconciler{Base: base, Driver: &web.Nginx{}}, PageCache: dirs, Quota: newFakeQuota(false), Doctor: doctorEnv(t),
+	})
+
+	if _, err := agentapi.SiteCreate.Call(ctx, c, agentapi.SiteCreateRequest{User: "blog"}); err != nil {
+		t.Fatal(err)
+	}
+
+	fakeLiveGeneration(t, base, `{"sites":[{"user":"blog","domains":["blog.example.com"],"root":"/x","phpSocket":"/run/p.sock",
+		"pageCache":{"dir":"`+filepath.Join(pool, pagecache.DirName, "blog")+`","preset":"wordpress","minutes":10,"sizeMB":256}}]}`)
+
+	check := func() map[string][]agentapi.DoctorCheck {
+		t.Helper()
+
+		r, err := agentapi.Doctor.Call(ctx, c, agentapi.DoctorRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return byID(r)
+	}
+
+	// The directory is missing.
+	if got := check()["blog/site.pagecache"]; len(got) != 1 || got[0].Status != agentapi.DoctorFail {
+		t.Fatalf("missing directory: %+v", got)
+	}
+
+	if _, err := dirs.Ensure(pool, "blog", 1001); err != nil {
+		t.Fatal(err)
+	}
+
+	// In order, but without project quota only max_size limits it.
+	if got := check()["blog/site.pagecache"]; len(got) != 1 || got[0].Status != agentapi.DoctorWarn {
+		t.Fatalf("no quota: %+v", got)
+	}
+
+	// A directory without a cache is reported.
+	if _, err := dirs.Ensure(pool, "old", 1002); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := check()["system.pagecache"]; len(got) != 1 || got[0].Status != agentapi.DoctorWarn {
+		t.Fatalf("leftover: %+v", got)
+	}
+}

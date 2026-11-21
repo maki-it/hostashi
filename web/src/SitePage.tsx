@@ -24,6 +24,7 @@ import {
   type PHPVersions,
   type Site,
 } from "./sites";
+import { PageCacheSettings } from "./PageCache";
 import { SnippetSettings } from "./Snippets";
 import { SSHSettings } from "./SSH";
 import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
@@ -45,10 +46,12 @@ type Props = {
   tab: SiteTab;
   /** Opens another tab: a new entry in the browser history. */
   onTab: (tab: SiteTab) => void;
+  /** The role of the logged-in account; hides what it cannot change. */
+  role?: string;
 };
 
 // SitePage shows one site with its settings in tabs (#/sites/<name>/<tab>).
-export function SitePage({ name, tab, onTab }: Props) {
+export function SitePage({ name, tab, onTab, role = "user" }: Props) {
   const { sites, php, error, load } = useSites();
   const site = sites?.find((s) => s.name === name);
 
@@ -88,7 +91,12 @@ export function SitePage({ name, tab, onTab }: Props) {
       <div {...(ready ? tabPanelProps(prefix, active) : {})} className="ui-stack">
         {active === "overview" && <Overview site={site} onChange={load} />}
         {active === "domains" && <DomainsTab site={site} onChange={load} />}
-        {active === "php" && <PHPTab site={site} php={php} onChange={load} />}
+        {active === "php" && (
+          <>
+            <PHPTab site={site} php={php} onChange={load} />
+            {site.php && <PageCacheSettings site={site} canSize={role === "admin" || role === "manager"} />}
+          </>
+        )}
         {active === "cron" && <CronSettings site={site} />}
         {active === "ssh" && <SSHSettings site={site} />}
         {active === "limits" && <LimitSettings site={site} />}

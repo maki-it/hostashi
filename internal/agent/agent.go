@@ -76,7 +76,7 @@ type Config struct {
 	Certs *certs.Store
 
 	// PanelPort is the HTTPS port of the panel's own address (ADR-0023);
-	// 0 means DefaultPanelPort.
+	// 0 means DefaultPanelPort, 443 shares the sites' port (ADR-0042).
 	PanelPort int
 
 	// DB manages the sites' MariaDB databases. Run builds it from StateDir;
@@ -979,6 +979,11 @@ func openWeb(ctx context.Context, stateDir string, panelPort int, log *slog.Logg
 	listen, listenTLS, listenPanel := []string{"80"}, []string{"443"}, []string{pp}
 	if ipv6Available() {
 		listen, listenTLS, listenPanel = append(listen, "[::]:80"), append(listenTLS, "[::]:443"), append(listenPanel, "[::]:"+pp)
+	}
+
+	// On 443 the panel shares the sites' listeners by host name (ADR-0042).
+	if panelPort == 443 {
+		listenPanel = listenTLS
 	}
 
 	return &web.Reconciler{

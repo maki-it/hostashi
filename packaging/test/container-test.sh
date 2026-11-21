@@ -74,6 +74,15 @@ docker cp "$HERE/." "$NAME:/opt/hostashi/"
 docker cp "$BINARY" "$NAME:/opt/hostashi/hostashi"
 x() { docker exec "$NAME" "$@"; }
 xi() { docker exec -i "$NAME" "$@"; }
+# exposure UNIT MAX fails when the unit's exposure score rises above MAX
+# (ADR-0033): a change that weakens the sandbox shows up here.
+exposure() {
+  local score
+  # "→ Overall exposure level for hostashi-php-8.4@wp.service: 2.4 OK :-)"
+  score=$(x systemd-analyze security "$1" | tail -1 | sed -E 's/.*: ([0-9]+\.[0-9]+) .*/\1/')
+  echo "$1: exposure $score"
+  awk -v s="$score" -v m="$2" 'BEGIN { exit !(s <= m) }' || fail "$1: exposure $score is above $2"
+}
 
 # The panel name would otherwise go to the real Let's Encrypt at the first
 # start. The Pebble part below replaces this drop-in.
@@ -248,6 +257,59 @@ x loginctl terminate-user blog 2>/dev/null || true
 for _ in $(seq 1 30); do x pgrep -u blog >/dev/null || break; sleep 1; done
 x pgrep -u blog >/dev/null && fail "processes of blog left after the SSH logins"
 x rm -rf /etc/hostashi-ssh/keys/blog /home/blog/.ssh /root/t
+step "object cache unit of a site (ADR-0045)"
+# The package's own Valkey on 127.0.0.1:6379 must never run.
+[ "$(x systemctl is-enabled valkey-server.service 2>/dev/null)" = masked ] || fail "valkey-server.service is not masked"
+x bash -c 'exec 3<>/dev/tcp/127.0.0.1/6379' 2>/dev/null && fail "something listens on port 6379"
+# The config and drop-in are written by hand here, in the format the agent
+# renders; the agent's own tests cover the rendering.
+x install -d -m 0700 /var/lib/hostashi-agent/valkey
+xi sh -c 'umask 077; cat >/var/lib/hostashi-agent/valkey/blog.conf' <<'CONF'
+port 0
+unixsocket /run/hostashi-valkey/blog/valkey.sock
+unixsocketperm 600
+dir /run/hostashi-valkey/blog
+save ""
+appendonly no
+maxmemory 32mb
+maxmemory-policy allkeys-lru
+enable-protected-configs no
+enable-debug-command no
+enable-module-command no
+user default on nopass ~* &* +@all -@admin
+CONF
+x install -d -m 0755 /etc/systemd/system/hostashi-valkey@blog.service.d
+x sh -c 'printf "[Service]\nSlice=hostashi-site-blog.slice\n" >/etc/systemd/system/hostashi-valkey@blog.service.d/50-hostashi-slice.conf'
+x systemctl daemon-reload
+x systemctl start hostashi-valkey@blog.service || { x journalctl -u hostashi-valkey@blog.service --no-pager -n 30 >&2; fail "cache unit did not start"; }
+[ "$(x systemctl show -P Slice hostashi-valkey@blog.service)" = hostashi-site-blog.slice ] || fail "cache is not in the site's slice"
+[ "$(x stat -c '%U' /proc/"$(x systemctl show -P MainPID hostashi-valkey@blog.service)")" = blog ] || fail "cache does not run as the site user"
+expect_mode /run/hostashi-valkey/blog "700 blog:blog"
+expect_mode /run/hostashi-valkey/blog/valkey.sock "600 blog:blog"
+# cache.php OP: what the site's PHP sees through phpredis.
+xi sh -c 'cat >/tmp/cache.php && chmod 644 /tmp/cache.php' <<'PHP'
+<?php
+$r = new Redis();
+$r->connect('/run/hostashi-valkey/blog/valkey.sock');
+switch ($argv[1]) {
+case 'set': $r->set('k', 'v'); echo $r->get('k'), "\n"; break;
+case 'flush': echo $r->flushAll() ? "flushed\n" : "no\n"; echo $r->dbSize(), "\n"; break;
+case 'config': try { $r->config('SET', 'dir', '/tmp'); echo "config allowed\n"; } catch (RedisException $e) { echo "refused\n"; } break;
+case 'info': echo $r->info('memory')['maxmemory'], "\n"; break;
+}
+PHP
+[ "$(x runuser -u blog -- php /tmp/cache.php set)" = v ] || fail "the site cannot use its cache"
+[ "$(x runuser -u blog -- php /tmp/cache.php info)" = 33554432 ] || fail "cache has the wrong maxmemory"
+[ "$(x runuser -u blog -- php /tmp/cache.php config)" = refused ] || fail "the site may change the cache's config"
+x runuser -u blog -- php /tmp/cache.php flush | head -1 | grep -qx flushed || fail "the site cannot flush its cache"
+x useradd -M -s /usr/sbin/nologin cacheprobe
+x runuser -u cacheprobe -- php /tmp/cache.php set >/dev/null 2>&1 && fail "another user reached the site's cache"
+x userdel cacheprobe
+exposure hostashi-valkey@blog.service 1.0
+x systemctl stop hostashi-valkey@blog.service
+x rm -rf /var/lib/hostashi-agent/valkey/blog.conf /etc/systemd/system/hostashi-valkey@blog.service.d /tmp/cache.php
+x systemctl daemon-reload
+
 # shellcheck disable=SC2016 # expanded inside the container
 x sh -c 'echo "hello from blog" >/home/blog/htdocs/index.html; for i in $(seq 1 200); do echo ".c$i { color: red; }"; done >/home/blog/htdocs/app.css; chown blog:blog /home/blog/htdocs/*'
 web_apply() { docker exec -i "$NAME" /usr/local/bin/hostashi web apply <<<"$1"; }
@@ -263,15 +325,6 @@ if x /usr/local/bin/hostashi site delete blog; then fail "site with a virtual ho
 step "systemd exposure"
 x systemd-analyze security hostashi.service | tail -1
 x systemd-analyze security hostashi-agent.service | tail -1
-# exposure UNIT MAX fails when the unit's exposure score rises above MAX
-# (ADR-0033): a change that weakens the sandbox shows up here.
-exposure() {
-  local score
-  # "→ Overall exposure level for hostashi-php-8.4@wp.service: 2.4 OK :-)"
-  score=$(x systemd-analyze security "$1" | tail -1 | sed -E 's/.*: ([0-9]+\.[0-9]+) .*/\1/')
-  echo "$1: exposure $score"
-  awk -v s="$score" -v m="$2" 'BEGIN { exit !(s <= m) }' || fail "$1: exposure $score is above $2"
-}
 exposure hostashi.service 2.0
 exposure hostashi-agent.service 4.5
 
@@ -1043,6 +1096,41 @@ UNIT
   x grep -q "\"lastUsedIp\":\"$ip\"" /tmp/api.out || fail "panel did not see the client address $ip: $(x cat /tmp/api.out)"
   # Only nginx and the panel may use the socket.
   if x runuser -u nobody -- test -w /run/hostashi-panel.sock; then fail "another user can write the panel socket"; fi
+
+  step "the panel on port 443 next to the sites (ADR-0042)"
+  if x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall --panel-port 443 >/dev/null 2>&1; then
+    fail "--panel-port 443 accepted without --panel-domain"
+  fi
+  if x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com --panel-port 80 >/dev/null 2>&1; then
+    fail "--panel-port 80 accepted"
+  fi
+  out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com --panel-port 443) || {
+    x tail -n 60 /var/log/hostashi-install.log >&2 || true
+    fail "apply with --panel-port 443 failed"
+  }
+  x grep -qx 'HOSTASHI_PUBLIC_URL=https://other.example.com' /etc/hostashi/hostashi.env || fail "public URL on 443 has a port"
+  [ "$(api POST /api/v1/sites '{"name":"next","domains":["next.example.com"]}')" = 201 ] || fail "site next to the panel: $(x cat /tmp/api.out)"
+  x sh -c 'echo "hello next" >/home/next/htdocs/index.html'
+  [ "$(api PUT /api/v1/sites/next/tls '{"enabled":true}')" = 202 ] || fail "TLS on for next: $(x cat /tmp/api.out)"
+  p443() { x curl -sSk --resolve other.example.com:443:127.0.0.1 --resolve next.example.com:443:127.0.0.1 "$@"; }
+  for _ in $(seq 1 60); do
+    p443 -f -o /dev/null https://other.example.com/api/v1/health 2>/dev/null && p443 -f -o /dev/null https://next.example.com/ 2>/dev/null && break
+    sleep 2
+  done
+  health=$(p443 -f https://other.example.com/api/v1/health) || fail "panel not served on 443"
+  grep -q '"agent":"ok"' <<<"$health" || fail "panel on 443: $health"
+  [ "$(p443 -f https://next.example.com/)" = "hello next" ] || fail "site not served next to the panel on 443"
+  loc=$(x curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' -H 'Host: other.example.com' http://127.0.0.1/login)
+  [ "$loc" = "301 https://other.example.com/login" ] || fail "panel HTTP redirect on 443: '$loc'"
+  if x curl -sSk -o /dev/null --resolve other.example.com:8443:127.0.0.1 https://other.example.com:8443/ 2>/dev/null; then
+    fail "the panel still answers on 8443"
+  fi
+  if x curl -sSk -o /dev/null --resolve unknown.example.com:443:127.0.0.1 https://unknown.example.com/ 2>/dev/null; then
+    fail "port 443 answered an unknown name"
+  fi
+  [ "$(api POST /api/v1/sites '{"name":"steal","domains":["other.example.com"]}')" = 409 ] || fail "site on the panel's name: $(x cat /tmp/api.out)"
+  x grep -q '"domain_reserved"' /tmp/api.out || fail "no domain_reserved: $(x cat /tmp/api.out)"
+  [ "$(api DELETE /api/v1/sites/next)" = 204 ] || fail "delete site next: $(x cat /tmp/api.out)"
 fi
 
 step "more PHP versions from sury.org (ADR-0019)"

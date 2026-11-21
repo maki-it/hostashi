@@ -129,6 +129,7 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 
 	if d.h != nil {
 		out = append(out, d.sites()...)
+		out = append(out, d.h.pageCacheChecks()...)
 	}
 
 	return agentapi.DoctorReport{Checks: out}
