@@ -144,6 +144,10 @@ type Deps struct {
 	// disables the file routes. Needs Auth, Sites and Settings.
 	Files FilesOpener
 
+	// Logs reads the sites' logs and sets their retention (ADR-0053); nil
+	// disables the log routes. Needs Auth and Settings.
+	Logs SiteLogs
+
 	// NotifyPrefs keeps the operations email switches; nil disables their
 	// routes. Needs Auth and Mail.
 	NotifyPrefs NotifyPrefs
@@ -238,6 +242,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			if deps.Files != nil && deps.Settings != nil {
 				registerFiles(mux, authn{svc: deps.Auth, fail: newFail(log)}, newFilesProxy(deps.Files, deps.Sites, deps.Settings, log))
 			}
+		}
+
+		if deps.Logs != nil && deps.Settings != nil {
+			registerLogs(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Logs, deps.Settings, log)
 		}
 
 		if deps.Backups != nil {
@@ -481,7 +489,10 @@ func Run(ctx context.Context, cfg Config) error {
 		MailSend:    func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
 		Files:       RPCFilesOpener(client),
 		AuditLog:    st,
+		Logs:        RPCSiteLogs{C: client},
 	}
+
+	go SyncLogRetention(ctx, deps.Logs, st, 30, 10*time.Second, cfg.Log)
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
 	deps.CloudPanel.Connect(siteCreator(deps.Sites, cfg.Log), RPCCloudPanelImports{C: client})
