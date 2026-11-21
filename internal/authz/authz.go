@@ -85,6 +85,7 @@ var table = map[Action]Rule{
 	"backups.server:write": server("backups:write"),
 	"db_servers:write":     server("db_servers:write"),
 	"doctor:read":          server("doctor:read"),
+	"audit:read":           server("audit:read"),
 	"firewall:read":        server("firewall:read"),
 	"firewall:write":       server("firewall:write"),
 	"limits.presets:write": server("limits:write"),
