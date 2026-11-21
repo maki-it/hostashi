@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/maki-it/hostashi/internal/agentapi"
 )
 
 func TestPHPSettingsOverHTTP(t *testing.T) {
@@ -111,5 +113,38 @@ func TestPHPSettingsOverHTTP(t *testing.T) {
 	tok := e.createToken(t, c, `{"name":"read","scopes":["sites:read"]}`)
 	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/php/settings", header: bearerHeader(tok.Token), body: `{}`}); rec.Code != http.StatusForbidden {
 		t.Errorf("write with sites:read: %d", rec.Code)
+	}
+}
+
+// The answer carries the site's memory limit and PHP workers for the
+// form's warning (ADR-0049).
+func TestPHPSettingsCarryLimits(t *testing.T) {
+	e := newAPIWithAgent(t, &stubAgent{})
+	e.sites.EnableLimits(&stubLimits{slices: map[string]agentapi.SiteLimits{}, quotas: map[string][2]uint64{}})
+
+	c := e.adminCookie(t)
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"shop","php":"8.4","domains":["shop.example.com"]}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("site: %d %s", rec.Code, rec.Body)
+	}
+
+	rec := e.do(t, reqOpts{
+		method: "PUT", path: "/api/v1/sites/shop/limits", cookie: c,
+		body: `{"custom":{"diskBytes":0,"diskInodes":0,"memoryBytes":1073741824,"phpWorkers":8,"tasks":256,"cpuPriority":"high"}}`,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("limits: %d %s", rec.Code, rec.Body)
+	}
+
+	var got phpSettingsJSON
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/shop/php/settings", cookie: c})
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &got) != nil || got.MemoryLimitBytes != 1<<30 || got.PHPWorkers != 8 {
+		t.Fatalf("get: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/shop/php/settings", cookie: c, body: `{"memoryLimit":268435456}`})
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &got) != nil || got.MemoryLimitBytes != 1<<30 || got.PHPWorkers != 8 {
+		t.Fatalf("put: %d %s", rec.Code, rec.Body)
 	}
 }
