@@ -439,7 +439,7 @@ func TestToolUserStatements(t *testing.T) {
 
 	for name, err := range map[string]error{
 		"site user": c.CreateToolUser(ctx, "shop_wp", "shop_user", pw),
-		"job user":  c.DropToolUser(ctx, "hostashi_job_0123456789abcdef"),
+		"job user":  c.DropToolUser(ctx, "shop_wp", "hostashi_job_0123456789abcdef"),
 		"short pw":  c.CreateToolUser(ctx, "shop_wp", user, "Abcdefghijklmnop1234"),
 		"no pw":     c.CreateToolUser(ctx, "shop_wp", user, ""),
 		"db":        c.CreateToolUser(ctx, "mysql", user, pw),
@@ -457,7 +457,7 @@ func TestToolUserStatements(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := c.DropToolUser(ctx, user); err != nil {
+	if err := c.DropToolUser(ctx, "shop_wp", user); err != nil {
 		t.Fatal(err)
 	}
 

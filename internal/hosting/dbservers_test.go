@@ -165,8 +165,8 @@ func (r fakeRemote) CreateToolUser(ctx context.Context, database, user, password
 	return r.CreateUser(ctx, database, user, password)
 }
 
-func (r fakeRemote) DropToolUser(ctx context.Context, user string) error {
-	return r.DropUser(ctx, "", user)
+func (r fakeRemote) DropToolUser(ctx context.Context, database, user string) error {
+	return r.DropUser(ctx, database, user)
 }
 
 func (r fakeRemote) SetPassword(_ context.Context, user, _ string) error {

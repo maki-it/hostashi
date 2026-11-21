@@ -438,8 +438,8 @@ func (c *PGClient) SetPassword(ctx context.Context, user, password string) error
 	return c.exec(ctx, "set password", "ALTER ROLE "+pgIdent(user)+" PASSWORD '"+verifier+"'")
 }
 
-// ErrPostgresNotYet: the temporary users of import, export and the web
-// database tool on PostgreSQL come with later steps of ADR-0051.
+// ErrPostgresNotYet: the temporary users of import and export on
+// PostgreSQL come with a later step of ADR-0051.
 var ErrPostgresNotYet = fmt.Errorf("%w: not available for PostgreSQL yet", ErrUnsupported)
 
 // CreateJobUser is not available for PostgreSQL yet.
@@ -450,13 +450,34 @@ func (c *PGClient) CreateJobUser(context.Context, string, string, string) error 
 // DropJobUser is not available for PostgreSQL yet.
 func (c *PGClient) DropJobUser(context.Context, string) error { return ErrPostgresNotYet }
 
-// CreateToolUser is not available for PostgreSQL yet.
-func (c *PGClient) CreateToolUser(context.Context, string, string, string) error {
-	return ErrPostgresNotYet
+// CreateToolUser creates the temporary user of a web database tool session
+// (ADR-0051): a member of the database's owner role like any user of it,
+// with at most agentapi.DBToolMaxConnections connections.
+func (c *PGClient) CreateToolUser(ctx context.Context, database, user, password string) error {
+	if err := ValidatePostgresDBName(database); err != nil {
+		return err
+	}
+
+	if !agentapi.ValidDBToolUser(user) || !agentapi.ValidRemotePassword(password) {
+		return fmt.Errorf("%w: tool user", ErrInvalid)
+	}
+
+	return c.createRole(ctx, database, user, password, fmt.Sprintf(" CONNECTION LIMIT %d", agentapi.DBToolMaxConnections))
 }
 
-// DropToolUser is not available for PostgreSQL yet.
-func (c *PGClient) DropToolUser(context.Context, string) error { return ErrPostgresNotYet }
+// DropToolUser ends the sessions of a tool session's user and drops it
+// like DropUser; a missing one is not an error.
+func (c *PGClient) DropToolUser(ctx context.Context, database, user string) error {
+	if err := ValidatePostgresDBName(database); err != nil {
+		return err
+	}
+
+	if !agentapi.ValidDBToolUser(user) {
+		return fmt.Errorf("%w: tool user", ErrInvalid)
+	}
+
+	return c.dropRole(ctx, database, user)
+}
 
 func (c *PGClient) exec(ctx context.Context, step, stmt string) error {
 	if _, err := c.db.ExecContext(ctx, stmt); err != nil {
