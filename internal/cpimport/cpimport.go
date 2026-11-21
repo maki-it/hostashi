@@ -256,7 +256,7 @@ func (a *Agent) List(site string) ([]Import, error) {
 
 // dropIn opens the site's home, and nothing else, for writing to one job.
 func dropIn(home string) string {
-	return "# Written by the Hostashi agent for one CloudPanel import.\n[Service]\nReadWritePaths=" + home + "\n"
+	return "# Written by the Hostashi agent for one CloudPanel import.\n[Unit]\nRequiresMountsFor=" + home + "\n[Service]\nReadWritePaths=" + home + "\n"
 }
 
 // siteHome looks the site up in the registry.

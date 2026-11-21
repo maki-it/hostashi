@@ -84,7 +84,7 @@ func TestUnits(t *testing.T) {
 		"\nExecStart=/bin/sh /var/lib/hostashi-cron/shop/3.sh\n",
 		"\nWorkingDirectory=/home/shop\n", "\nTimeoutStartSec=3600s\n",
 		"\nProtectSystem=strict\n", "\nReadWritePaths=/home/shop\n", "\nNoNewPrivileges=yes\n",
-		"\nSyslogIdentifier=hostashi-cron-shop-3\n",
+		"\nSyslogIdentifier=hostashi-cron-shop-3\n", "\nRequiresMountsFor=/home/shop\n",
 	} {
 		if !strings.Contains(string(svc), want) {
 			t.Errorf("service lacks %q:\n%s", want, svc)
@@ -94,6 +94,18 @@ func TestUnits(t *testing.T) {
 	if strings.Contains(string(svc), "Slice=") {
 		t.Error("slice without one set")
 	}
+
+	if strings.Contains(string(svc), "TemporaryFileSystem=") {
+		t.Error("hides a pool without one set")
+	}
+
+	// Pools outside /home are hidden too (ADR-0016, spike S9).
+	u.Hidden = []string{"/srv/vol1"}
+	if svc, _ := u.Service(); !strings.Contains(string(svc), "\nProtectHome=tmpfs\nTemporaryFileSystem=/srv/vol1:ro\nBindPaths=/home/shop\n") {
+		t.Errorf("other pool not hidden:\n%s", svc)
+	}
+
+	u.Hidden = nil
 
 	u.Slice, u.Nice = `hostashi-site-my\x2dshop.slice`, 10
 	if svc, _ := u.Service(); !strings.Contains(string(svc), "\nSlice=hostashi-site-my\\x2dshop.slice\nNice=10\n") {
@@ -127,6 +139,9 @@ func TestUnitRejects(t *testing.T) {
 		"home dots":     func(u *Unit) { u.Home = "/home/../etc" },
 		"home root":     func(u *Unit) { u.Home = "/" },
 		"script %":      func(u *Unit) { u.Script = "/var/lib/%h.sh" },
+		"hidden space":  func(u *Unit) { u.Hidden = []string{"/srv/vol 1"} },
+		"hidden dots":   func(u *Unit) { u.Hidden = []string{"/srv/../etc"} },
+		"hidden root":   func(u *Unit) { u.Hidden = []string{"/"} },
 		"slice":         func(u *Unit) { u.Slice = "x.service" },
 		"slice escape":  func(u *Unit) { u.Slice = `a\x41.slice` },
 		"timeout":       func(u *Unit) { u.Timeout = 0 },

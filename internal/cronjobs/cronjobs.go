@@ -59,7 +59,8 @@ type Site struct {
 	Name     string
 	Home     string
 	UID, GID uint32
-	Slice    string // the site's slice (ADR-0015), or "" for none
+	Slice    string   // the site's slice (ADR-0015), or "" for none
+	Hidden   []string // pool roots the jobs must not see (ADR-0016)
 }
 
 // Manager applies the job lists. Its zero value is not usable; set at least
@@ -140,7 +141,7 @@ func (m *Manager) Apply(ctx context.Context, s Site, jobs []agentapi.CronJob) er
 
 		u := cron.Unit{
 			Site: s.Name, ID: j.ID, Home: s.Home, Timeout: j.Timeout(), OnCalendar: cal,
-			Slice: s.Slice, Nice: j.Niceness(),
+			Slice: s.Slice, Nice: j.Niceness(), Hidden: s.Hidden,
 			Script: filepath.Join(dir, strconv.FormatInt(j.ID, 10)+".sh"),
 		}
 

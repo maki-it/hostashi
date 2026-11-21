@@ -215,7 +215,8 @@ func dropIn(home, hostsPath string, addrs []netip.Addr) string {
 		list = append(list, ad.String())
 	}
 
-	return "# Written by the Hostashi agent for one database import or export.\n[Service]\n" +
+	return "# Written by the Hostashi agent for one database import or export.\n" +
+		"[Unit]\nRequiresMountsFor=" + home + "\n[Service]\n" +
 		"ReadWritePaths=" + home + "\n" +
 		"IPAddressAllow=" + strings.Join(list, " ") + "\n" +
 		"BindReadOnlyPaths=" + hostsPath + ":/etc/hosts\n"
