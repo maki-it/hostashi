@@ -185,6 +185,7 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 
 		if deps.Sites != nil {
 			registerSites(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerCerts(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDatabases(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPages(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerParked(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)

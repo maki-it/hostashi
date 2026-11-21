@@ -30,6 +30,8 @@ type fakeAgent struct {
 
 	createErr, deleteErr, webErr, tlsErr error
 	installed                            int
+	ownCSR                               map[string]bool // custom CSR pending
+	certDeletes                          []string
 
 	dbs     map[string]string // database -> site
 	dbUsers map[string]string // user -> database
@@ -137,6 +139,76 @@ func (f *fakeAgent) TLSInstall(_ context.Context, user, chain string) (agentapi.
 	f.installed++
 
 	return agentapi.TLSCertInfo{Domains: strings.Split(parts[2], ","), NotAfter: time.Unix(0, 0).Add(parseDays(parts[3]))}, nil
+}
+
+// TLSCustomCSR remembers a pending custom key.
+func (f *fakeAgent) TLSCustomCSR(_ context.Context, user string, domains []string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.ownCSR == nil {
+		f.ownCSR = map[string]bool{}
+	}
+
+	f.ownCSR[user] = true
+
+	return "owncsr " + user + " " + strings.Join(domains, ","), nil
+}
+
+// TLSUpload accepts "own <names> <day> [untrusted]" with key "key", or
+// without a key after TLSCustomCSR, and checks the names like the agent.
+func (f *fakeAgent) TLSUpload(_ context.Context, req agentapi.TLSUploadRequest) (agentapi.TLSCertInfo, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	parts := strings.Fields(req.Chain)
+	if len(parts) < 3 || parts[0] != "own" {
+		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "bad chain"}
+	}
+
+	switch {
+	case req.Key == "" && !f.ownCSR[req.User]:
+		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "no key given and no pending CSR"}
+	case req.Key != "" && req.Key != "key":
+		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "the key does not belong to the certificate"}
+	}
+
+	names := strings.Split(parts[1], ",")
+	if m := agentapi.MissingNames(names, req.Domains); len(m) > 0 {
+		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the certificate does not cover " + strings.Join(m, ", ")}
+	}
+
+	trusted := len(parts) < 4
+	if !trusted && !req.AllowUntrusted {
+		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the chain is not publicly trusted"}
+	}
+
+	if req.Key == "" {
+		delete(f.ownCSR, req.User)
+	}
+
+	return agentapi.TLSCertInfo{Domains: names, NotAfter: time.Unix(0, 0).Add(parseDays(parts[2])), Issuer: "Test CA", Fingerprint: "ab12", Trusted: trusted}, nil
+}
+
+func (f *fakeAgent) TLSInfo(_ context.Context, user string) (agentapi.TLSInfoResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	res := agentapi.TLSInfoResponse{}
+	if f.ownCSR[user] {
+		res.CSR = "owncsr " + user
+	}
+
+	return res, nil
+}
+
+func (f *fakeAgent) TLSDelete(_ context.Context, user string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.certDeletes = append(f.certDeletes, user)
+
+	return nil
 }
 
 func parseDays(s string) time.Duration {

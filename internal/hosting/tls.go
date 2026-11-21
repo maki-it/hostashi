@@ -5,7 +5,6 @@ package hosting
 import (
 	"context"
 	"errors"
-	"slices"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -34,13 +33,7 @@ func (s *Service) certCovers(site store.Site, margin time.Duration) bool {
 		return false
 	}
 
-	for _, d := range site.Domains {
-		if !slices.Contains(site.TLSDomains, d) {
-			return false
-		}
-	}
-
-	return true
+	return len(agentapi.MissingNames(site.TLSDomains, site.Domains)) == 0
 }
 
 // TLSActive reports whether site is served over HTTPS now: the last web
@@ -60,16 +53,17 @@ func (s *Service) Kick() {
 // once: the certificate is obtained in the background (RunTLS), and the site
 // switches to HTTPS when it is there. Turning it off goes live immediately.
 func (s *Service) SetTLS(ctx context.Context, actor int64, name string, on bool) (store.Site, error) {
-	if on && s.issuer == nil {
-		return store.Site{}, ErrNoTLS
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	site, err := s.Get(ctx, name)
 	if err != nil {
 		return store.Site{}, err
+	}
+
+	// An own certificate needs no ACME client.
+	if on && s.issuer == nil && site.TLSSource != store.TLSCustom {
+		return store.Site{}, ErrNoTLS
 	}
 
 	if site.State != store.SiteActive {
@@ -255,9 +249,11 @@ func (s *Service) RunTLS(ctx context.Context) {
 	}
 }
 
-// RenewDue obtains a certificate for every active site that wants HTTPS and
-// has none that covers its domains for RenewBefore, unless its last attempt
-// failed less than RetryAfter ago. Sites are handled one after the other.
+// RenewDue obtains a Let's Encrypt certificate for every active site that
+// wants HTTPS from there and has none that covers its domains for
+// RenewBefore, unless its last attempt failed less than RetryAfter ago, or
+// asked for "renew now". Sites with an own certificate are skipped. Sites
+// are handled one after the other.
 func (s *Service) RenewDue(ctx context.Context) {
 	if s.issuer == nil {
 		return
@@ -278,11 +274,7 @@ func (s *Service) RenewDue(ctx context.Context) {
 			return
 		}
 
-		if site.State != store.SiteActive || !site.TLS || s.certCovers(site, RenewBefore) {
-			continue
-		}
-
-		if !site.TLSFailedAt.IsZero() && s.now().Before(site.TLSFailedAt.Add(RetryAfter)) {
+		if !s.renewDue(site) {
 			continue
 		}
 
