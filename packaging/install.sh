@@ -103,6 +103,7 @@ apt_install() {
   [ ${#missing[@]} -gt 0 ] || return 0
   if [ "$NO_APT" = yes ]; then
     log "missing package(s) with --no-apt: ${missing[*]} (install them with apt-get install ${missing[*]})"
+    note "missing package(s) with --no-apt: ${missing[*]}"
     return 1
   fi
   apt-get update -qq >>"$LOG" 2>&1 &&

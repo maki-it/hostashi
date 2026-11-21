@@ -132,10 +132,11 @@ step "--no-apt installs nothing and names a missing package (ADR-0050)"
 out=$(x /opt/hostashi/install.sh apply --yes --no-apt --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com)
 grep -q 'changes=0' <<<"$out" || fail "--no-apt run on a set-up server changed something: $out"
 x env DEBIAN_FRONTEND=noninteractive apt-get remove -y -qq restic >/dev/null
-if x /opt/hostashi/install.sh apply --yes --no-apt --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com >/dev/null 2>&1; then
+if out=$(x /opt/hostashi/install.sh apply --yes --no-apt --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com 2>&1); then
   fail "--no-apt succeeded with restic missing"
 fi
-x grep -q 'missing package(s) with --no-apt: restic' /var/log/hostashi-install.log || fail "--no-apt did not name restic"
+grep -q 'missing package(s) with --no-apt: restic' <<<"$out" || fail "--no-apt did not name restic: $out"
+x grep -q 'missing package(s) with --no-apt: restic' /var/log/hostashi-install.log || fail "--no-apt did not log restic"
 x dpkg-query -W -f "\${Status}" restic 2>/dev/null | grep -q 'install ok installed' && fail "--no-apt installed restic"
 x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com >/dev/null || fail "apply did not bring restic back"
 x dpkg-query -W -f "\${Status}" restic | grep -q 'install ok installed' || fail "restic not reinstalled"
