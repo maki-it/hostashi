@@ -297,6 +297,12 @@ type parkTLS struct {
 	NotAfter *time.Time `json:"notAfter"`
 	Error    string     `json:"error,omitempty"`
 	FailedAt *time.Time `json:"failedAt,omitempty"`
+	// As for sites (ADR-0039).
+	Source       string     `json:"source"`
+	CertSource   string     `json:"certSource"`
+	Trusted      bool       `json:"trusted"`
+	RenewAt      *time.Time `json:"renewAt,omitempty"`
+	RenewPending bool       `json:"renewPending"`
 }
 
 func toParkedJSON(svc *hosting.Service, p store.Parked) parkedJSON {
@@ -305,6 +311,8 @@ func toParkedJSON(svc *hosting.Service, p store.Parked) parkedJSON {
 		TLS: parkTLS{
 			Enabled: p.TLS, Active: svc.ParkedTLSActive(p), NotAfter: timeOrNil(p.TLSNotAfter),
 			Error: p.TLSError, FailedAt: timeOrNil(p.TLSFailedAt),
+			Source: p.TLSSource, CertSource: p.TLSCertSource, Trusted: p.TLSTrusted,
+			RenewAt: timeOrNil(p.TLSRenewAt), RenewPending: p.TLSRenewForced,
 		},
 	}
 }

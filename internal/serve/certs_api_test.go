@@ -101,3 +101,49 @@ func TestOwnCertificateOverHTTP(t *testing.T) {
 		t.Fatalf("delete: %d %s", rec.Code, rec.Body)
 	}
 }
+
+func TestOwnCertificateParkedAndPanelOverHTTP(t *testing.T) {
+	ag := &stubAgent{}
+	e := newAPIWithAgent(t, ag)
+	c := e.adminCookie(t)
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/parked-domains/soon.example.net", cookie: c, body: `{"tls":false}`}); rec.Code != http.StatusOK {
+		t.Fatalf("park: %d %s", rec.Code, rec.Body)
+	}
+
+	rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/parked-domains/soon.example.net/tls/certificate", cookie: c, body: `{"certificate":"good","key":"k"}`})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"source":"custom"`) {
+		t.Fatalf("parked upload: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/parked-domains/other.example.net/tls/certificate", cookie: c})
+	if rec.Code != http.StatusNotFound || errCode(t, rec) != "parked_not_found" {
+		t.Fatalf("unknown parked: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "DELETE", path: "/api/v1/parked-domains/soon.example.net/tls/certificate", cookie: c})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "certificate_in_use" {
+		t.Fatalf("parked delete with https on: %d %s", rec.Code, rec.Body)
+	}
+
+	// The panel needs its own address first.
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/panel/tls/csr", cookie: c})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "panel_address_missing" {
+		t.Fatalf("panel csr without address: %d %s", rec.Code, rec.Body)
+	}
+
+	if err := e.sites.EnablePanel("panel.example.org"); err != nil {
+		t.Fatal(err)
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/panel/tls/certificate", cookie: c, body: `{"certificate":"good","key":"k"}`})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"active":true`) || !strings.Contains(rec.Body.String(), `"source":"custom","certSource":"custom"`) {
+		t.Fatalf("panel upload: %d %s", rec.Code, rec.Body)
+	}
+
+	// No delete for the panel: it never goes without a certificate.
+	rec = e.do(t, reqOpts{method: "DELETE", path: "/api/v1/panel/tls/certificate", cookie: c})
+	if rec.Code != http.StatusMethodNotAllowed && rec.Code != http.StatusNotFound {
+		t.Fatalf("panel delete: %d %s", rec.Code, rec.Body)
+	}
+}

@@ -64,6 +64,21 @@ type panelTLSJSON struct {
 	NotAfter *time.Time `json:"notAfter"`
 	Error    string     `json:"error,omitempty"`
 	FailedAt *time.Time `json:"failedAt,omitempty"`
+	// As for sites (ADR-0039).
+	Source       string     `json:"source"`
+	CertSource   string     `json:"certSource"`
+	Trusted      bool       `json:"trusted"`
+	RenewAt      *time.Time `json:"renewAt,omitempty"`
+	RenewPending bool       `json:"renewPending"`
+}
+
+func toPanelTLSJSON(p hosting.PanelTLS) panelTLSJSON {
+	return panelTLSJSON{
+		Enabled: p.Domain != "", Domain: p.Domain, Active: p.Live, Domains: p.Domains,
+		NotAfter: timeOrNil(p.NotAfter), Error: p.Error, FailedAt: timeOrNil(p.FailedAt),
+		Source: p.WantedSource(), CertSource: p.LiveSource(), Trusted: !p.Untrusted,
+		RenewAt: timeOrNil(p.RenewAt), RenewPending: p.RenewForced,
+	}
 }
 
 func timeOrNil(t time.Time) *time.Time {
@@ -119,6 +134,8 @@ func siteFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "domain_reserved", "this domain is the panel's own address")
 	case errors.Is(err, hosting.ErrNoTLS):
 		writeError(w, http.StatusConflict, "tls_unavailable", "certificates are not available on this panel")
+	case errors.Is(err, hosting.ErrNoPanel):
+		writeError(w, http.StatusConflict, "panel_address_missing", "the panel has no address of its own")
 	case errors.Is(err, hosting.ErrTooSoon):
 		writeError(w, http.StatusTooManyRequests, "renew_too_soon", "renewed less than 10 minutes ago, try again later")
 	case errors.Is(err, hosting.ErrCertInUse):
@@ -431,10 +448,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			return
 		}
 
-		writeJSON(w, http.StatusOK, panelTLSJSON{
-			Enabled: p.Domain != "", Domain: p.Domain, Active: p.Live, Domains: p.Domains,
-			NotAfter: timeOrNil(p.NotAfter), Error: p.Error, FailedAt: timeOrNil(p.FailedAt),
-		})
+		writeJSON(w, http.StatusOK, toPanelTLSJSON(p))
 	}))
 
 	// Sends the stored state to the web server again, for example after a

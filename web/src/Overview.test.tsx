@@ -71,6 +71,12 @@ describe("attention for own certificates", () => {
     expect(items[1]?.title).toContain("expires in 20 days");
   });
 
+  it("covers parked domains too", () => {
+    const parked = { domain: "soon.example", page: "builtin-parking", createdAt: "", updatedAt: "",
+      tls: { enabled: true, active: true, notAfter: inDays(5), source: "custom" as const, certSource: "custom" as const } };
+    expect(attention({ parked: [parked] }).map((i) => [i.key, i.tone])).toEqual([["owncert-park-soon.example", "err"]]);
+  });
+
   it("says when it has expired", () => {
     expect(attention({ sites: [own("shop", -2)] })[0]?.title).toContain("has expired");
   });

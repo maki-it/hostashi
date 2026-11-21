@@ -481,7 +481,7 @@ func TestPanelTLSOverHTTP(t *testing.T) {
 	c := e.adminCookie(t)
 
 	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/panel/tls", cookie: c})
-	if rec.Code != http.StatusOK || rec.Body.String() != `{"enabled":false,"domain":"","active":false,"domains":[],"notAfter":null}`+"\n" {
+	if rec.Code != http.StatusOK || rec.Body.String() != `{"enabled":false,"domain":"","active":false,"domains":[],"notAfter":null,"source":"letsencrypt","certSource":"","trusted":true,"renewPending":false}`+"\n" {
 		t.Fatalf("without a panel name: %d %s", rec.Code, rec.Body)
 	}
 
