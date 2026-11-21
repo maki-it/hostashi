@@ -93,6 +93,9 @@ type Config struct {
 	// DBToolDir is the ticket directory of the web database tool
 	// (ADR-0038); empty means agentapi.DBToolTicketDir.
 	DBToolDir string
+	// DBToolUnits restarts the tool's pool for the external database
+	// servers; nil: none (ADR-0041 addendum 1).
+	DBToolUnits DBToolUnits
 
 	// Backup serves backup.*. Run builds it with the fixed paths of a
 	// server; without it the operations answer failed_precondition.
@@ -282,7 +285,9 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 		toolLog = slog.New(slog.DiscardHandler)
 	}
 
-	newDBTool(cfg.DB, cfg.DBToolDir, toolLog).register(s)
+	tool := newDBTool(cfg.DB, cfg.DBToolDir, toolLog)
+	tool.units = cfg.DBToolUnits
+	tool.register(s)
 
 	registerDoctor(s, cfg.Doctor, cfg.StateDir, h, cfg.Firewall, cfg.DBToolPort > 0)
 	registerBackup(s, cfg.Backup)
@@ -1244,6 +1249,10 @@ func Run(ctx context.Context, cfg Config) error {
 			Dir: filepath.Join(cpDir, "imports"), StateDir: cmp.Or(cfg.StateDir, DefaultStateDir),
 			Source: cfg.CloudPanel, Units: resticctl.Units{},
 		}
+	}
+
+	if cfg.DBToolUnits == nil && cfg.DBToolPort > 0 {
+		cfg.DBToolUnits = resticctl.Units{}
 	}
 
 	if cfg.DBJobs == nil {

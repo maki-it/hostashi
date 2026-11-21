@@ -111,18 +111,24 @@ func ValidateRemoteJobUser(user, password string) error {
 	return nil
 }
 
-// Addresses parses Addrs: 1 to MaxRemoteAddrs unicast addresses, no
-// loopback (the local server has its socket) and no duplicates. When Host
-// is an IP address, it must be the only address.
+// Addresses parses Addrs with ParseRemoteAddrs.
 func (r DBRemoteJobRequest) Addresses() ([]netip.Addr, error) {
-	if len(r.Addrs) == 0 || len(r.Addrs) > MaxRemoteAddrs {
+	return ParseRemoteAddrs(r.Host, r.Addrs)
+}
+
+// ParseRemoteAddrs parses the resolved addresses of host: 1 to
+// MaxRemoteAddrs unicast addresses, no loopback (the local server has its
+// socket) and no duplicates. When host is an IP address, it must be the
+// only address.
+func ParseRemoteAddrs(host string, addrs []string) ([]netip.Addr, error) {
+	if len(addrs) == 0 || len(addrs) > MaxRemoteAddrs {
 		return nil, fmt.Errorf("addrs: must have 1 to %d addresses", MaxRemoteAddrs)
 	}
 
 	seen := map[netip.Addr]bool{}
-	out := make([]netip.Addr, 0, len(r.Addrs))
+	out := make([]netip.Addr, 0, len(addrs))
 
-	for _, s := range r.Addrs {
+	for _, s := range addrs {
 		a, err := netip.ParseAddr(s)
 		if err != nil || a.Zone() != "" || a.String() != s {
 			return nil, fmt.Errorf("addrs: %q is not an IP address in canonical form", s)
@@ -140,12 +146,16 @@ func (r DBRemoteJobRequest) Addresses() ([]netip.Addr, error) {
 		out = append(out, a)
 	}
 
-	if ip, err := netip.ParseAddr(r.Host); err == nil && (len(out) != 1 || out[0] != ip) {
+	if ip, err := netip.ParseAddr(host); err == nil && (len(out) != 1 || out[0] != ip) {
 		return nil, errors.New("addrs: must be the host's own address")
 	}
 
 	return out, nil
 }
+
+// ValidateRemoteHost accepts a lower-case DNS name or an IP address in
+// canonical form.
+func ValidateRemoteHost(h string) error { return validateRemoteHost(h) }
 
 func validateRemoteHost(h string) error {
 	if h == "" || len(h) > MaxRemoteHostLen {
