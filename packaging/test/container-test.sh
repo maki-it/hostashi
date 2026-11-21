@@ -178,6 +178,8 @@ case "$IMG" in
 esac
 grep -qF "$want" <<<"$origins" || fail "security origin missing: $origins"
 for o in $origins; do
+  # The list is comma-separated.
+  o=${o%,}
   # sury.org (more PHP versions, ADR-0019) has no security archive of its own.
   # Neither has apt.postgresql.org (PostgreSQL client tools, ADR-0051).
   case "$o" in *-security* | "origin=deb.sury.org,archive=$codename" | "origin=apt.postgresql.org,archive=$codename-pgdg") ;; *) fail "unattended-upgrades allows a non-security origin: $o";; esac
