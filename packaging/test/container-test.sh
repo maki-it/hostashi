@@ -835,8 +835,9 @@ as_wp() { x runuser -u wp -- "$@"; }
 # and writes none of them.
 if as_wp cat /home/shop/htdocs/index.php 2>/dev/null; then fail "wp reads shop's files"; fi
 if as_wp ls /home/shop >/dev/null 2>&1; then fail "wp lists shop's home"; fi
-x grep -q 'GET /index.php' /var/log/nginx/sites/shop/access.log || fail "shop's request is not in its own access log"
-if x grep -q 'GET /index.php' /var/log/nginx/sites/wp/access.log 2>/dev/null; then fail "shop's request in wp's access log"; fi
+x curl -fsS -o /dev/null -H 'Host: shop.example.com' 'http://127.0.0.1/index.php?hostashi-log-probe=shop' || fail "shop does not answer the log probe"
+x grep -q 'hostashi-log-probe=shop' /var/log/nginx/sites/shop/access.log || fail "shop's request is not in its own access log"
+if x grep -q 'hostashi-log-probe=shop' /var/log/nginx/sites/wp/access.log 2>/dev/null; then fail "shop's request in wp's access log"; fi
 [ "$(x stat -c '%U:%G %a' /var/log/nginx/sites/shop)" = "root:root 750" ] || fail "shop's log directory: $(x stat -c '%U:%G %a' /var/log/nginx/sites/shop)"
 if x runuser -u shop -- sh -c 'echo x >>/var/log/nginx/sites/shop/access.log' 2>/dev/null; then fail "shop writes its own access log"; fi
 x logrotate --debug /etc/logrotate.d/hostashi >/tmp/logrotate.out 2>&1 || fail "logrotate rejects its file: $(x cat /tmp/logrotate.out)"
