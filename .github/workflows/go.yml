@@ -437,7 +437,9 @@ jobs:
           CGO_ENABLED: "0"
         run: go build -trimpath -o hostashi ./cmd/hostashi
       - name: shellcheck
-        run: shellcheck -x packaging/install.sh packaging/php/php-install packaging/test/container-test.sh packaging/test/quota-test.sh packaging/test/dracut-test.sh packaging/test/firewall-test.sh
+        run: shellcheck -x packaging/install.sh packaging/php/php-install packaging/test/container-test.sh packaging/test/quota-test.sh packaging/test/dracut-test.sh packaging/test/firewall-test.sh packaging/test/apt-update-test.sh
+      - name: apt-get update waits out an out-of-sync mirror (stubbed apt)
+        run: packaging/test/apt-update-test.sh
       - name: Quota step (stubbed filesystem and boot tools)
         run: sudo packaging/test/quota-test.sh
       - name: Firewall step (systemd container with its own network)

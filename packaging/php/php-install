@@ -10,6 +10,8 @@
 #                                    every recorded one) are set up, else 1
 #                                    with the reason on stdout
 #   php-install install VERSION...   set up sury.org and install the versions
+#   php-install update               apt-get update, waiting out sury.org's
+#                                    CDN (also used by install.sh)
 #
 # The distribution's PHP stays the default and stays on the distribution's
 # packages: the pin of Spike S10 gives sury.org priority 100, and 600 only
@@ -20,7 +22,8 @@
 # so the pin keeps covering them. Removing a version is not supported yet.
 #
 # Exit codes: 0 ok, 1 not set up (check) or failed (install), 64 usage.
-# Test hooks (environment): HOSTASHI_STATE_DIR, HOSTASHI_OS_RELEASE.
+# Test hooks (environment): HOSTASHI_STATE_DIR, HOSTASHI_OS_RELEASE,
+# HOSTASHI_APT_SYNC_WAIT and HOSTASHI_APT_SYNC_PAUSE (seconds).
 set -u
 set -o pipefail
 umask 022
@@ -44,13 +47,43 @@ APT_OPTS=(-o DPkg::Lock::Timeout=600 -y -qq --no-install-recommends)
 
 say() { echo "php-install: $*"; }
 
-# apt_update retries: sury.org's mirrors briefly serve mismatched indexes
-# while they sync ("File has unexpected size ... Mirror sync in progress?").
+# apt_update runs apt-get update and waits out sury.org's CDN. The CDN
+# caches every index file on its own for up to an hour, while sury.org
+# publishes several times an hour. InRelease and Packages then often do not
+# match ("File has unexpected size ... Mirror sync in progress?"), for a
+# long time, and apt does not fall back to another compression on its own.
+# On that error alone it tries again for up to APT_SYNC_WAIT seconds,
+# switching between Packages.xz and Packages.gz: the CDN caches the two
+# apart, so one of them often matches. Any other error fails at once. The
+# wait stays below the unit's TimeoutStartSec (15 min).
+APT_SYNC_WAIT=${HOSTASHI_APT_SYNC_WAIT:-600}
+APT_SYNC_PAUSE=${HOSTASHI_APT_SYNC_PAUSE:-30}
 apt_update() {
+  local dir out rc try=0 types=(xz gz) start=$SECONDS
+  dir=$(mktemp -d) || return 1
+  printf '#clear Acquire::CompressionTypes::Order;\nAcquire::CompressionTypes::Order:: "%s";\n' xz >"$dir/xz.conf"
+  printf '#clear Acquire::CompressionTypes::Order;\nAcquire::CompressionTypes::Order:: "%s";\n' gz >"$dir/gz.conf"
+  while :; do
+    out=$(apt-get -c "$dir/${types[try % 2]}.conf" -o DPkg::Lock::Timeout=600 update -qq 2>&1); rc=$?
+    [ -z "$out" ] || printf '%s\n' "$out"
+    [ "$rc" != 0 ] || { rm -rf "$dir"; return 0; }
+    try=$((try + 1))
+    if ! grep -qE 'Mirror sync in progress|Hash Sum mismatch' <<<"$out" ||
+      [ $((SECONDS - start + APT_SYNC_PAUSE)) -ge "$APT_SYNC_WAIT" ]; then
+      rm -rf "$dir"; say "apt-get update failed"; return 1
+    fi
+    say "apt-get update: the package mirror is out of sync, trying again in $APT_SYNC_PAUSE s (${types[try % 2]} indexes)"
+    sleep "$APT_SYNC_PAUSE"
+  done
+}
+
+# download URL FILE fetches with apt's own helper, three times at most: the
+# same CDN sometimes drops a request.
+download() {
   local i
-  for i in 1 2 3 4; do
-    apt-get -o DPkg::Lock::Timeout=600 update -qq && return 0
-    [ "$i" = 4 ] || { say "apt-get update failed, trying again in $((i * 15)) s"; sleep $((i * 15)); }
+  for i in 1 2 3; do
+    /usr/lib/apt/apt-helper download-file "$1" "$2" && return 0
+    [ "$i" = 3 ] || { say "download of $1 failed, trying again in $APT_SYNC_PAUSE s"; sleep "$APT_SYNC_PAUSE"; }
   done
   return 1
 }
@@ -188,7 +221,7 @@ install_versions() {
   if [ ! -f "$SURY_KEYRING" ] || ! key_check "$SURY_KEYRING" >/dev/null; then
     say "fetching the sury.org key"
     tmp=$(mktemp) || return 1
-    if ! /usr/lib/apt/apt-helper download-file "$SURY_URL/apt.gpg" "$tmp"; then
+    if ! download "$SURY_URL/apt.gpg" "$tmp"; then
       rm -f "$tmp"; say "cannot download the sury.org key"; return 1
     fi
     if ! why=$(key_check "$tmp"); then
@@ -221,7 +254,7 @@ install_versions() {
   say "done: PHP $* installed"
 }
 
-usage() { echo "usage: $0 check [VERSION...] | install VERSION..." >&2; exit 64; }
+usage() { echo "usage: $0 check [VERSION...] | install VERSION... | update" >&2; exit 64; }
 
 main() {
   local cmd=${1:-} v
@@ -233,6 +266,9 @@ main() {
       [ $# -gt 0 ] || usage
       [ "$(id -u)" = 0 ] || { echo "php-install: must run as root" >&2; exit 1; }
       install_versions "$@";;
+    update)
+      [ $# = 0 ] || usage
+      apt_update;;
     *) usage;;
   esac
 }

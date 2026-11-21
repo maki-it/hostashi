@@ -77,6 +77,10 @@ PHP_REQUEST_SET=no
 CHANGES=0 BINARY_CHANGED=no CONFIG_CHANGED=no
 
 log()    { echo "install: $*" >&2; }
+# apt_update is apt-get update with php-install's wait for sury.org's CDN
+# (ADR-0019): once --php-versions added the source, every later step's
+# update reads its indexes too.
+apt_update() { HOSTASHI_LIB="" "$PHP_INSTALL_SRC" update; }
 note()   { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" >>"$LOG" 2>/dev/null || true; }
 refuse() { log "REFUSED: $*"; log "server left unchanged"; exit 2; }
 
@@ -314,7 +318,7 @@ chk_ssh() {
 do_ssh() {
   local rc
   if ! pkg_installed openssh-server; then
-    apt-get update -qq >>"$LOG" 2>&1 &&
+    apt_update >>"$LOG" 2>&1 &&
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-server >>"$LOG" 2>&1 || return 1
   fi
   getent group "$SSH_GROUP" >/dev/null || groupadd --system "$SSH_GROUP" >>"$LOG" 2>&1 || return 1
@@ -435,7 +439,7 @@ chk_nginx() {
   for p in "${NGINX_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
 }
 do_nginx() {
-  apt-get update -qq >>"$LOG" 2>&1 &&
+  apt_update >>"$LOG" 2>&1 &&
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${NGINX_PKGS[@]}" >>"$LOG" 2>&1
 }
 
@@ -475,7 +479,7 @@ chk_php() {
   done
 }
 do_php() {
-  apt-get update -qq >>"$LOG" 2>&1 &&
+  apt_update >>"$LOG" 2>&1 &&
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${PHP_PKGS[@]}" >>"$LOG" 2>&1 || return 1
   local u r
   r=$(distro_php_redis) || return 1
@@ -540,7 +544,7 @@ chk_valkey() {
   [ "$(systemctl is-active "$VALKEY_DEFAULT_UNIT" 2>/dev/null)" != active ] || { echo "$VALKEY_DEFAULT_UNIT is running"; return 1; }
 }
 do_valkey() {
-  apt-get update -qq >>"$LOG" 2>&1 &&
+  apt_update >>"$LOG" 2>&1 &&
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${VALKEY_PKGS[@]}" >>"$LOG" 2>&1 || return 1
   systemctl disable --now "$VALKEY_DEFAULT_UNIT" >>"$LOG" 2>&1 || return 1
   systemctl mask "$VALKEY_DEFAULT_UNIT" >>"$LOG" 2>&1
@@ -565,7 +569,7 @@ chk_mariadb() {
 do_mariadb() {
   local rc
   if ! pkg_installed mariadb-server; then
-    apt-get update -qq >>"$LOG" 2>&1 &&
+    apt_update >>"$LOG" 2>&1 &&
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${MARIADB_PKGS[@]}" >>"$LOG" 2>&1 || return 1
   fi
   install -d -m 0755 -o root -g root "${MARIADB_CNF%/*}" || return 1
@@ -688,7 +692,7 @@ chk_backup() {
   for p in "${BACKUP_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
 }
 do_backup() {
-  apt-get update -qq >>"$LOG" 2>&1 &&
+  apt_update >>"$LOG" 2>&1 &&
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${BACKUP_PKGS[@]}" >>"$LOG" 2>&1
 }
 
@@ -723,7 +727,7 @@ chk_fail2ban() {
 do_fail2ban() {
   local f rc
   if ! pkg_installed fail2ban || ! pkg_installed python3-systemd || ! pkg_installed nftables; then
-    apt-get update -qq >>"$LOG" 2>&1 &&
+    apt_update >>"$LOG" 2>&1 &&
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${F2B_PKGS[@]}" >>"$LOG" 2>&1 || return 1
   fi
   for f in "${F2B_FILES[@]}"; do
@@ -859,7 +863,7 @@ do_firewall() {
     return 0
   fi
   if ! pkg_installed nftables; then
-    apt-get update -qq >>"$LOG" 2>&1 &&
+    apt_update >>"$LOG" 2>&1 &&
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends nftables >>"$LOG" 2>&1 || return 1
   fi
   rules=$(fw_render 2>>"$LOG") || { log "no SSH port found, the firewall was not set up"; return 1; }
@@ -935,7 +939,7 @@ chk_updates() {
 do_updates() {
   local t
   if ! pkg_installed unattended-upgrades; then
-    apt-get update -qq >>"$LOG" 2>&1 &&
+    apt_update >>"$LOG" 2>&1 &&
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends unattended-upgrades >>"$LOG" 2>&1 || return 1
   fi
   uu_render | write_file "$UU_FILE" 0644 root:root
@@ -1323,7 +1327,7 @@ do_quota() {
     quota_rebuild_initrd >>"$LOG" 2>&1
     return 1
   }
-  apt-get update -qq >>"$LOG" 2>&1 &&
+  apt_update >>"$LOG" 2>&1 &&
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${QUOTA_PKGS[@]}" >>"$LOG" 2>&1 || return 1
 
   backup="$STATE_DIR/fstab.$(date -u +%Y%m%dT%H%M%SZ)"
