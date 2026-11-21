@@ -285,6 +285,7 @@ func (s *Service) PasskeyRegisterFinish(ctx context.Context, userID int64, cerem
 	}
 
 	_ = s.st.Audit(ctx, &userID, "passkey.register", name, map[string]string{"id": strconv.FormatInt(p.ID, 10), "ip": ip})
+	s.notify(ctx, AccountEvent{UserID: userID, Kind: EventPasskeyAdded, Name: name, IP: ip})
 
 	return p, nil
 }
@@ -462,6 +463,7 @@ func (s *Service) DeletePasskey(ctx context.Context, userID, id int64, ip string
 	}
 
 	_ = s.st.Audit(ctx, &userID, "passkey.delete", p.Name, map[string]string{"id": strconv.FormatInt(p.ID, 10), "ip": ip})
+	s.notify(ctx, AccountEvent{UserID: userID, Kind: EventPasskeyRemoved, Name: p.Name, IP: ip})
 
 	return nil
 }

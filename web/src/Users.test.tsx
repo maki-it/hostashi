@@ -65,6 +65,28 @@ describe("Users", () => {
     expect(calls.filter((c) => c.method === "POST").at(-1)?.body).toEqual({ username: "mona", role: "manager" });
   });
 
+  it("emails the invitation when an address is given", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      "GET /api/v1/users": { body: { users: [kim] } },
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "POST /api/v1/users": {
+        status: 201,
+        body: {
+          user: { ...uma, username: "anna", invited: true },
+          invitation: { token: "T".repeat(43), expiresAt: "2026-11-21T12:00:00Z", emailedTo: "anna@example.com" },
+        },
+      },
+    });
+    render(<Harness initial="new=1" />);
+    await user.type(await screen.findByLabelText("Username"), "anna");
+    await user.type(screen.getByLabelText("Email (optional)"), "anna@example.com");
+    await user.click(screen.getByRole("button", { name: "Create invitation" }));
+    expect(await screen.findByText("The link was emailed to anna@example.com.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Invitation link")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ username: "anna", role: "user", email: "anna@example.com" });
+  });
+
   it("lists accounts with filters in the address and no actions on the own account", async () => {
     const user = userEvent.setup();
     mockFetch({ "GET /api/v1/users": { body: { users: [kim, uma] } }, "GET /api/v1/sites": { body: { sites: [] } } });

@@ -68,6 +68,7 @@ type Service struct {
 	userLimit  *Limiter
 	tokenLimit *Limiter
 	emailLimit *Limiter
+	notifyFn   func(context.Context, AccountEvent)
 
 	wa  *webauthn.WebAuthn // nil: passkeys disabled
 	cer *ceremonies
@@ -474,6 +475,7 @@ func (s *Service) TOTPConfirm(ctx context.Context, userID int64, code string) ([
 	}
 
 	_ = s.st.Audit(ctx, &u.ID, "totp.enable", u.Username, nil)
+	s.notify(ctx, AccountEvent{UserID: u.ID, Kind: EventTOTPEnabled})
 
 	return codes, nil
 }
@@ -513,6 +515,7 @@ func (s *Service) TOTPDisable(ctx context.Context, userID int64, password, code 
 	}
 
 	_ = s.st.Audit(ctx, &u.ID, "totp.disable", u.Username, nil)
+	s.notify(ctx, AccountEvent{UserID: u.ID, Kind: EventTOTPDisabled})
 
 	return nil
 }

@@ -40,6 +40,17 @@ func toAccountJSON(a store.Account) accountJSON {
 type invitationJSON struct {
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expiresAt"`
+	// EmailedTo is the address the link was queued for; empty when it is
+	// only shown (ADR-0044).
+	EmailedTo string `json:"emailedTo,omitempty"`
+}
+
+func emailedTo(emailed bool, inv auth.NewInvitation) string {
+	if emailed {
+		return inv.Email
+	}
+
+	return ""
 }
 
 // usersFail writes the answer for an error of the account functions.
@@ -57,7 +68,7 @@ func usersFail(a authn, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "not_grantee", "only users with the role user get site grants; admins and managers reach every site")
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "unknown site")
-	case errors.Is(err, auth.ErrInvalidRole):
+	case errors.Is(err, auth.ErrInvalidRole), errors.Is(err, auth.ErrEmailInvalid):
 		writeError(w, http.StatusUnprocessableEntity, "invalid_argument", err.Error())
 	case errors.Is(err, auth.ErrInvitationInvalid):
 		writeError(w, http.StatusNotFound, "invitation_invalid", "the invitation link is invalid or expired")
@@ -79,7 +90,7 @@ func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 
 // registerUsers adds account management (admins, browser session only) and
 // the public invitation routes (ADR-0035).
-func registerUsers(mux *routeMux, a authn) {
+func registerUsers(mux *routeMux, a authn, m *mailer) {
 	mux.HandleFunc("GET /api/v1/users", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := a.sessionAllow(w, r, authz.UsersRead); !ok {
 			return
@@ -109,21 +120,35 @@ func registerUsers(mux *routeMux, a authn) {
 		var in struct {
 			Username string `json:"username"`
 			Role     string `json:"role"`
+			// Email is optional: the invitation goes there (ADR-0044).
+			Email string `json:"email"`
 		}
 		if !decodeJSON(w, r, &in) {
 			return
 		}
 
-		acc, inv, err := a.svc.CreateAccount(r.Context(), u, in.Username, in.Role, clientIP(r))
+		if in.Email != "" && !m.ready(r.Context()) {
+			writeError(w, http.StatusConflict, "mail_not_configured", "email is not set up; leave the address empty and pass the link on yourself")
+
+			return
+		}
+
+		acc, inv, err := a.svc.CreateAccount(r.Context(), u, in.Username, in.Role, in.Email, clientIP(r))
 		if err != nil {
 			usersFail(a, w, err, "create user")
 
 			return
 		}
 
+		emailed := m.invitation(r.Context(), u.Username, acc.Username, acc.Role, false, inv)
+		if inv.Email != "" && !emailed {
+			// Not sent: accepting the shown link must not confirm the address.
+			_ = a.svc.ForgetInvitationEmail(r.Context(), acc.ID)
+		}
+
 		writeJSON(w, http.StatusCreated, map[string]any{
 			"user":       toAccountJSON(acc),
-			"invitation": invitationJSON{Token: inv.Secret, ExpiresAt: inv.Expires},
+			"invitation": invitationJSON{Token: inv.Secret, ExpiresAt: inv.Expires, EmailedTo: emailedTo(emailed, inv)},
 		})
 	})
 
@@ -223,7 +248,16 @@ func registerUsers(mux *routeMux, a authn) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]invitationJSON{"invitation": {Token: inv.Secret, ExpiresAt: inv.Expires}})
+		acc, err := a.svc.Account(r.Context(), id)
+		if err != nil {
+			usersFail(a, w, err, "read user")
+
+			return
+		}
+
+		emailed := m.invitation(r.Context(), u.Username, acc.Username, acc.Role, true, inv)
+
+		writeJSON(w, http.StatusOK, map[string]invitationJSON{"invitation": {Token: inv.Secret, ExpiresAt: inv.Expires, EmailedTo: emailedTo(emailed, inv)}})
 	})
 
 	mux.HandleFunc("GET /api/v1/users/{id}/grants", func(w http.ResponseWriter, r *http.Request) {
