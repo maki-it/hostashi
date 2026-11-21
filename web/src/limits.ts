@@ -21,10 +21,14 @@ export type Limits = {
 };
 
 // PresetCaches are starting values for a site that gets the preset
-// (ADR-0045), not limits: the site can change them afterwards.
-export type PresetCaches = { objectCacheMb: number }; // 0: off
+// (ADR-0045, ADR-0046), not limits: the site can change them afterwards.
+// 0 means off.
+export type PresetCaches = { objectCacheMb: number; pageCacheMb?: number };
 
-export const noCaches: PresetCaches = { objectCacheMb: 0 };
+export const noCaches: PresetCaches = { objectCacheMb: 0, pageCacheMb: 0 };
+
+// The page cache sizes a preset may give (agentapi.PageCacheSizesMB).
+export const pageCacheSizes = [64, 128, 256, 512, 1024, 2048, 4096];
 
 export type Preset = { name: string; default: boolean; limits: Limits; caches?: PresetCaches; createdAt: number; updatedAt: number };
 
