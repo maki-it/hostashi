@@ -212,6 +212,7 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPageCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerLimits(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerObjectCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 
 			if deps.Files != nil && deps.Settings != nil {
 				registerFiles(mux, authn{svc: deps.Auth, fail: newFail(log)}, newFilesProxy(deps.Files, deps.Sites, deps.Settings, log))
@@ -453,6 +454,7 @@ func Run(ctx context.Context, cfg Config) error {
 	go dbServerLoop(ctx, deps.Sites)
 
 	deps.Sites.EnableLimits(hosting.RPCAgent{C: client})
+	deps.Sites.EnableObjectCache(hosting.RPCAgent{C: client})
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
 	m.RegisterSites(siteStats(client), cfg.Log)

@@ -121,6 +121,11 @@ export function App() {
               onTab={(tab) => {
                 window.location.hash = formatHash({ page: "sites", site: { name: route.site!.name, tab } });
               }}
+              path={route.query.get("path") ?? ""}
+              onPath={(path) => {
+                const query = new URLSearchParams(path === "" ? {} : { path });
+                window.location.hash = formatHash({ page: "sites", site: { name: route.site!.name, tab: "files" }, query });
+              }}
             />
           ) : (
             <Sites query={route.query} onQuery={replaceQuery} />
