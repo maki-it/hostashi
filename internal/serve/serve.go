@@ -197,6 +197,7 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPageCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerLimits(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerObjectCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 		}
 
 		if deps.Backups != nil {
@@ -397,6 +398,7 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.Sites.EnableCron(hosting.RPCAgent{C: client})
 	deps.Sites.EnableSSH(hosting.RPCAgent{C: client})
 	deps.Sites.EnableLimits(hosting.RPCAgent{C: client})
+	deps.Sites.EnableObjectCache(hosting.RPCAgent{C: client})
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
 	m.RegisterSites(siteStats(client), cfg.Log)
