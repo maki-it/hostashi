@@ -279,6 +279,69 @@ jobs:
             HOSTASHI_TEST_PGSERVER_CA="$d/ca.pem" HOSTASHI_TEST_PGSERVER_TLS="$MODE" \
             "$RUNNER_TEMP/dbserver.test" -test.v -test.count=1 -test.run 'PG'
 
+  pgctl:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    name: PostgreSQL client (server ${{ matrix.server }}, TLS ${{ matrix.tls }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { server: "14", tls: verify-ca }
+          - { server: "17", tls: verify-ca }
+          - { server: "19", tls: verify-ca }
+          - { server: "19", tls: none }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build the test binary
+        env:
+          CGO_ENABLED: "0"
+        run: go test -c -o "$RUNNER_TEMP/pgctl.test" ./internal/pgctl/
+      - name: Run the client from apt.postgresql.org against the server
+        env:
+          SERVER: ${{ matrix.server }}
+          MODE: ${{ matrix.tls }}
+        run: |
+          d="$RUNNER_TEMP/certs"
+          install -d -m 0755 "$d"
+          # A private CA and a server certificate, so verify-ca checks the chain.
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj /CN=test-ca \
+            -keyout "$d/ca.key" -out "$d/ca.pem" 2>/dev/null
+          openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj /CN=127.0.0.1 \
+            -keyout "$d/server.key" -out "$d/server.csr" 2>/dev/null
+          openssl x509 -req -in "$d/server.csr" -CA "$d/ca.pem" -CAkey "$d/ca.key" -CAcreateserial -days 1 \
+            -extfile <(printf 'subjectAltName=IP:127.0.0.1') -out "$d/server.pem" 2>/dev/null
+          # The postgres image runs as uid 999 and wants its key private.
+          sudo chown 999:999 "$d/server.key" && sudo chmod 0600 "$d/server.key" && chmod 0644 "$d/ca.pem" "$d/server.pem"
+          tls=()
+          if [ "$MODE" = verify-ca ]; then
+            tls=(-c ssl=on -c ssl_cert_file=/certs/server.pem -c ssl_key_file=/certs/server.key)
+          fi
+          docker run -d --name pg --network host -v "$d:/certs:ro" -e POSTGRES_PASSWORD=rootpw "postgres:$SERVER" "${tls[@]}"
+          for _ in $(seq 1 60); do docker exec pg pg_isready -h 127.0.0.1 -q && break; sleep 1; done
+          # The site role owns its databases; a password with : \ ' and a space.
+          docker exec pg psql -U postgres -qc "CREATE ROLE site1 LOGIN PASSWORD 'p:w\\x y''z'" \
+            -c 'CREATE DATABASE shop OWNER site1' -c 'CREATE DATABASE shopcopy OWNER site1'
+          # The client as a server gets it: pg-client-install on Debian 13.
+          docker run --rm --network host -v "$PWD/packaging:/packaging:ro" -v "$RUNNER_TEMP:/t:ro" debian:trixie bash -euc '
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates gpg >/dev/null
+            export HOSTASHI_PHP_LIB=/packaging/php/php-install
+            /packaging/postgresql/pg-client-install install 19
+            /packaging/postgresql/pg-client-install check 19
+            install -m 0644 /t/certs/ca.pem /etc/test-ca.pem
+            useradd -m u1
+            HOSTASHI_TEST_PG=127.0.0.1:5432 HOSTASHI_TEST_PG_UID=$(id -u u1) HOSTASHI_TEST_PG_MAJOR=19 \
+              HOSTASHI_TEST_PG_PW="p:w\\x y'"'"'z" HOSTASHI_TEST_PG_TLS='"$MODE"' HOSTASHI_TEST_PG_CA=/etc/test-ca.pem \
+              /t/pgctl.test -test.v -test.count=1'
+
   restic:
     needs: changes
     if: needs.changes.outputs.go == 'true'

@@ -61,6 +61,10 @@ linters:
         # 16-hex-digit instance (ADR-0026).
         # internal/mariadbctl runs mariadb and mariadb-dump as the site user
         # with fixed arguments for import and export (ADR-0025).
+        # internal/pgctl runs pg_dump, pg_restore and psql of one installed
+        # PostgreSQL major by absolute path, never as root, with fixed
+        # arguments, the connection in libpq's environment and the password
+        # only in a 0600 passfile (ADR-0051).
         no-exec:
           files:
             - "$all"
@@ -70,6 +74,7 @@ linters:
             - "!**/internal/phpctl/*.go"
             - "!**/internal/resticctl/*.go"
             - "!**/internal/mariadbctl/*.go"
+            - "!**/internal/pgctl/*.go"
           deny:
             - pkg: os/exec
               desc: "no process execution in product code (see docs/05-security.md)"
