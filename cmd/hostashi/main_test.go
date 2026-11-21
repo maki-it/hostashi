@@ -70,6 +70,11 @@ func TestAdminUsage(t *testing.T) {
 		{"db", "user"},
 		{"db", "user", "create", "shop"},
 		{"db", "list", "x"},
+		{"pool"},
+		{"pool", "add", "vol1"},
+		{"pool", "add", "vol1", "/srv/vol1", "x"},
+		{"pool", "remove"},
+		{"pool", "list", "x"},
 	} {
 		var out, errOut bytes.Buffer
 		if code := run(t.Context(), args, 0, &out, &errOut); code != 2 {

@@ -86,6 +86,28 @@ func adminCmd(ctx context.Context, c *agentrpc.Client, cmd string, args []string
 		fmt.Fprintf(out, "generation %d live (changed: %v)\n", r.Generation, r.Changed)
 	case cmd == "db":
 		return dbCmd(ctx, c, args, out)
+	case sub == "pool add" && len(args) == 3:
+		p, err := agentapi.PoolAdd.Call(ctx, c, agentapi.PoolAddRequest{Name: args[1], Path: args[2]})
+		if err != nil {
+			return err
+		}
+
+		fmt.Fprintf(out, "added pool %s at %s; new sites can use it (site create NAME %s)\n", p.Name, p.Path, p.Name)
+	case sub == "pool remove" && len(args) == 2:
+		if _, err := agentapi.PoolRemove.Call(ctx, c, agentapi.PoolRemoveRequest{Name: args[1]}); err != nil {
+			return err
+		}
+
+		fmt.Fprintf(out, "removed pool %s; the volume can be unmounted\n", args[1])
+	case sub == "pool list" && len(args) == 1:
+		r, err := agentapi.PoolList.Call(ctx, c, agentapi.PoolListRequest{})
+		if err != nil {
+			return err
+		}
+
+		for _, p := range r.Pools {
+			fmt.Fprintf(out, "%s\t%s\tsites=%d\n", p.Name, p.Path, p.Sites)
+		}
 	default:
 		return errUsage
 	}

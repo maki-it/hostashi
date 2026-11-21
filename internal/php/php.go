@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"sort"
 	"sync"
 	"text/template"
 
@@ -645,4 +646,23 @@ func (m *Manager) removeDropIn(ctx context.Context, version, user string) {
 	if err := os.Remove(dir); err != nil && !errors.Is(err, os.ErrNotExist) {
 		m.log().InfoContext(ctx, "php drop-in directory not empty, kept", "site", user, "dir", dir)
 	}
+}
+
+// Refresh writes the drop-ins of all pools again and restarts the units
+// whose drop-in changed, after the set of storage pools changed (ADR-0016):
+// every unit has to hide the new pool.
+func (m *Manager) Refresh(ctx context.Context) error {
+	st, err := m.Current()
+	if err != nil {
+		return err
+	}
+
+	pools := make([]Pool, 0, len(st))
+	for _, p := range st {
+		pools = append(pools, p)
+	}
+
+	sort.Slice(pools, func(i, j int) bool { return pools[i].User < pools[j].User })
+
+	return m.Ensure(ctx, pools)
 }
