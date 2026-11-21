@@ -67,7 +67,7 @@
 | Import/export (gzip) | P0 | A | CP | |
 | Web DB tool with SSO (Adminer or phpMyAdmin) | P1 | B | CP | Only short-lived tokens, never master credentials in the browser. Adminer with one-time tickets, implemented ([ADR-0038](adr/0038-web-database-tool.md)) |
 | Remote access through IP allowlist | P1 | B | CP | |
-| Multiple DB servers | P2 | 2+ | CP | Built early for v1: external MariaDB/MySQL servers ([ADR-0041](adr/0041-external-database-servers.md)) |
+| Multiple DB servers | P1 | B | CP | Built early for v1: external MariaDB/MySQL servers ([ADR-0041](adr/0041-external-database-servers.md)) |
 | PostgreSQL | P1 | 1 | NEW | |
 | Object cache per site (Valkey, Unix socket, ADR-0045) | P1 | B | CP | Needed for the web2 migration |
 
