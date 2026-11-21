@@ -60,9 +60,8 @@ const serverColumn = (servers: DBServer[]): Column<Database> => ({
 });
 
 // columns builds the table; onOpen is set when the database tool can be
-// opened (ADR-0038), and toolable says for which databases: the tool has no
-// PostgreSQL support yet (ADR-0051).
-const columns = (onOpen?: (db: string) => void, toolable: (d: Database) => boolean = () => true): Column<Database>[] => [
+// opened (ADR-0038), for every database, PostgreSQL ones too (ADR-0051).
+const columns = (onOpen?: (db: string) => void): Column<Database>[] => [
   {
     key: "name",
     header: "Database",
@@ -92,7 +91,7 @@ const columns = (onOpen?: (db: string) => void, toolable: (d: Database) => boole
     srHeader: true,
     cell: (d) => (
       <RowActions>
-        {onOpen && toolable(d) && <IconButton label={`Open ${d.name} in Adminer`} icon={<TableIcon size={16} />} onClick={() => onOpen(d.name)} />}
+        {onOpen && <IconButton label={`Open ${d.name} in Adminer`} icon={<TableIcon size={16} />} onClick={() => onOpen(d.name)} />}
         <IconLink label={`Manage ${d.name}`} icon={<Gear size={16} />} href={dbHref(d.name)} />
       </RowActions>
     ),
@@ -215,7 +214,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
           }
           actions={
             <>
-              {db && onOpen && !isPostgres(serverOf(db.name)) && (
+              {db && onOpen && (
                 <Button icon={<TableIcon size={16} aria-hidden="true" />} onClick={() => onOpen(db.name)}>
                   Open in Adminer
                 </Button>
@@ -242,7 +241,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
   const sortKey = query.get("sort");
   const sort: Sort | undefined = sortKey ? { key: sortKey, dir: query.get("dir") === "desc" ? "desc" : "asc" } : undefined;
   // The server column only matters once there is more than one server.
-  const base = columns(onOpen, (d) => !isPostgres(servers.find((v) => v.name === d.server)));
+  const base = columns(onOpen);
   const tableColumns = servers.length > 1 ? [...base.slice(0, 2), serverColumn(servers), ...base.slice(2)] : base;
   const shown = dbs.filter((d) => (!site || d.site === site) && (!q || d.name.includes(q) || d.users.some((u) => u.includes(q))));
 

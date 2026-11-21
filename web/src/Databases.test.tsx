@@ -525,7 +525,7 @@ describe("Database servers", () => {
     expect(screen.getByLabelText("Port")).toHaveValue(6432);
   });
 
-  it("names PostgreSQL databases and offers no Adminer for them", async () => {
+  it("names PostgreSQL databases and offers Adminer for them too", async () => {
     const pg1 = { ...db1, name: "pg1", engine: "PostgreSQL", version: "18.1", host: "pg.example.net", port: 5432, tlsMode: "verify" };
     mockFetch({
       ...sites,
@@ -544,7 +544,7 @@ describe("Database servers", () => {
     const table = await screen.findByRole("table", { name: "Databases" });
     expect(within(table).getByText("PostgreSQL")).toBeInTheDocument();
     expect(await within(table).findByRole("button", { name: "Open shop_wp in Adminer" })).toBeInTheDocument();
-    expect(within(table).queryByRole("button", { name: "Open shop_pg in Adminer" })).not.toBeInTheDocument();
+    expect(within(table).getByRole("button", { name: "Open shop_pg in Adminer" })).toBeInTheDocument();
   });
 
   it("keeps users out of the server list", async () => {
