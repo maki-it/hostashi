@@ -53,9 +53,13 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/auth/passkeys":                  accessSession,
 	"DELETE /api/v1/auth/passkeys/{id}":          accessSession,
 	"PATCH /api/v1/me":                           accessSession,
+	"GET /api/v1/account/email":                  accessSession,
+	"PUT /api/v1/account/email":                  accessSession,
+	"DELETE /api/v1/account/email":               accessSession,
 
-	"POST /api/v1/invitations/check":  accessPublic,
-	"POST /api/v1/invitations/accept": accessPublic,
+	"POST /api/v1/invitations/check":     accessPublic,
+	"POST /api/v1/invitations/accept":    accessPublic,
+	"POST /api/v1/account/email/confirm": accessPublic,
 
 	"GET /api/v1/users":             authz.UsersRead,
 	"POST /api/v1/users":            authz.UsersWrite,
@@ -189,10 +193,10 @@ func newFullAPI(t *testing.T) (*apiEnv, []string) {
 
 	var patterns []string
 
-	e.h, patterns = handler(Config{}, Deps{
+	e.h, patterns = handler(Config{PublicURL: testPublicURL}, Deps{
 		PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb,
 		CloudPanel: e.cp, CloudPanelSource: newStubSource(t), Metrics: e.metrics, Settings: e.settings,
-		Doctor: e.doctor.run, Firewall: e.firewall, PHP: e.php, Mail: e.mail, MailSend: e.mailSent.send,
+		Doctor: e.doctor.run, Firewall: e.firewall, PHP: e.php, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox,
 	})
 
 	return e, patterns

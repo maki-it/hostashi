@@ -127,6 +127,9 @@ type Deps struct {
 	// Auth, Settings and MailSend.
 	Mail     MailRelay
 	MailSend MailSender
+	// Outbox queues email; nil disables the account address routes. Needs
+	// Auth and Mail.
+	Outbox MailOutbox
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -225,6 +228,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 
 		if deps.Mail != nil && deps.MailSend != nil && deps.Settings != nil {
 			registerMail(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Mail, deps.MailSend, deps.Settings, log)
+		}
+
+		if deps.Mail != nil && deps.Outbox != nil {
+			registerAccountEmail(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Mail, deps.Outbox, cfg.PublicURL, log)
 		}
 
 		if deps.Doctor != nil {
@@ -377,6 +384,7 @@ func Run(ctx context.Context, cfg Config) error {
 		Firewall: RPCFirewall{C: client},
 		PHP:      RPCPHPInstaller{C: client},
 		Mail:     relay,
+		Outbox:   outbox,
 		MailSend: func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
 	}
 
