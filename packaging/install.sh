@@ -16,7 +16,8 @@
 #                        passkeys). nginx serves the panel there over HTTPS on the panel port with
 #                        a Let's Encrypt certificate (ADR-0023, ADR-0042). Without it, the panel is
 #                        reachable only through an SSH tunnel to --listen.
-#   --panel-port PORT    HTTPS port of the panel, default 8443 (TCP and UDP must be open)
+#   --panel-port PORT    HTTPS port of the panel, default 8443 (TCP and UDP must be open). 443
+#                        shares the sites' port by host name and needs --panel-domain (ADR-0042)
 #   --listen ADDR        panel listen address, default 127.0.0.1:8080 (loopback only: SSH tunnel)
 #   --allow-untested     accept an OS release that is not on the supported list
 #   --no-quota           do not enable disk quota (sites then get no disk limit)
@@ -151,7 +152,7 @@ preflight() {
     *) fail "--listen '$LISTEN' must be a loopback address (nginx serves the panel over HTTPS)";;
   esac
   case "$PANEL_PORT" in
-    80 | 443) fail "--panel-port $PANEL_PORT is taken by the sites";;
+    80) fail "--panel-port 80 is taken by the sites";;
     [1-9] | [1-9][0-9] | [1-9][0-9][0-9] | [1-9][0-9][0-9][0-9] | [1-9][0-9][0-9][0-9][0-9]) ;;
     *) fail "--panel-port '$PANEL_PORT' is not a port";;
   esac
@@ -160,8 +161,12 @@ preflight() {
     PANEL_DOMAIN=$(printf '%s' "$PANEL_DOMAIN" | tr '[:upper:]' '[:lower:]')
     valid_domain "$PANEL_DOMAIN" ||
       fail "--panel-domain '$PANEL_DOMAIN' must be a host name like panel.example.com (no scheme, port or path)"
-    PUBLIC_URL=https://$PANEL_DOMAIN:$PANEL_PORT
+    PUBLIC_URL=https://$PANEL_DOMAIN
+    [ "$PANEL_PORT" = 443 ] || PUBLIC_URL=$PUBLIC_URL:$PANEL_PORT
     log "the panel is served at $PUBLIC_URL"
+  elif [ "$PANEL_PORT" = 443 ]; then
+    # nginx tells the panel from the sites on 443 by its name only.
+    fail "--panel-port 443 needs --panel-domain"
   fi
 
   local a
@@ -656,8 +661,13 @@ fw_render() {
   local ssh
   ssh=$(fw_ssh_ports | grep -E '^[0-9]+$' | sort -nu | paste -sd, - | sed 's/,/, /g')
   [ -n "$ssh" ] || { echo "no SSH port found (sshd -T), refusing to lock SSH out" >&2; return 1; }
+  # On 443 the panel shares the sites' port: the packet filter cannot tell
+  # them apart, so panel_ports stays empty and nginx enforces the panel
+  # allowlist (ADR-0042).
+  local panel=(-e "s/@PANEL@/$PANEL_PORT/")
+  [ "$PANEL_PORT" != 443 ] || panel=(-e "/@PANEL@/d")
   sed -e "s/@TCP@/$(fw_ports tcp)/" -e "s/@UDP@/$(fw_ports udp)/" -e "s/@SSH@/$ssh/" \
-    -e "s/@PANEL@/$PANEL_PORT/" -e "s#@PANEL_FILE@#$FW_PANEL_FILE#" "$FW_SRC/hostashi.nft"
+    "${panel[@]}" -e "s#@PANEL_FILE@#$FW_PANEL_FILE#" "$FW_SRC/hostashi.nft"
 }
 
 # fw_panel_file creates the panel's rules file if it is missing.

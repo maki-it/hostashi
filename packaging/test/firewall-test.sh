@@ -177,6 +177,23 @@ must_closed 5000
 fw >/dev/null || fail "run without --firewall-allow failed"
 must_closed 3000
 
+step "the panel on 443 leaves 443 out of panel_ports (ADR-0042)"
+# A panel file that drops every panel port: on 8443 it closes the panel,
+# on 443 it must not close the sites.
+x sh -c 'printf "table inet hostashi { chain panel { meta l4proto { tcp, udp } th dport @panel_ports drop; }; }\n" >/var/lib/hostashi-agent/firewall/panel.nft'
+x systemctl reload hostashi-firewall.service || fail "drop-all panel file does not load"
+must_closed 8443
+must_open 80 443
+out=$(fw 'PANEL_PORT=443') || fail "firewall step with the panel on 443 failed: $out"
+x grep -q 'tcp dport { 22, 80, 443, 2200, 2222 } accept' /etc/hostashi/firewall.nft || fail "TCP ports on 443: $(x grep 'tcp dport' /etc/hostashi/firewall.nft)"
+x grep -q 'udp dport { 443 } accept' /etc/hostashi/firewall.nft || fail "UDP ports on 443: $(x grep 'udp dport' /etc/hostashi/firewall.nft)"
+if x grep -A3 'set panel_ports' /etc/hostashi/firewall.nft | grep -q elements; then fail "panel_ports is not empty on 443"; fi
+must_open 22 80 443
+must_closed 8443
+x sh -c 'printf "# empty\n" >/var/lib/hostashi-agent/firewall/panel.nft'
+fw >/dev/null || fail "back to 8443 failed"
+must_open 8443
+
 step "without any SSH port the step refuses and changes nothing"
 x sh -c 'mv /usr/sbin/sshd /usr/sbin/sshd.off'
 # shellcheck disable=SC2016 # expanded inside the container

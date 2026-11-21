@@ -62,13 +62,27 @@ Open the panel address (for example `https://panel.example.com:8443`), enter the
 sudo hostashi setup-token
 ```
 
+## Panel without a port
+
+To open the panel as `https://cp.example.com/` instead of `https://cp.example.com:8443/`, install with port 443:
+
+```sh
+sudo ./packaging/install.sh apply --yes --binary ./hostashi --panel-domain cp.example.com --panel-port 443
+```
+
+Before that, create a DNS record for the name that points to the server (`A`, and `AAAA` for IPv6), so that Let's Encrypt can check it. nginx then serves the panel on port 443 next to the sites and tells them apart by the host name. That name cannot be used for a site or a parked domain afterwards.
+
+Things to know:
+
+- If fail2ban bans an address for wrong panel logins, it cannot reach the sites on this server either while the ban lasts. That also happens on 8443.
+
 ## Installer options
 
 | Option | Meaning |
 |--------|---------|
 | `--binary PATH` | The `hostashi` binary to install. Required for `apply`. |
 | `--panel-domain NAME` | The host name users open the panel at, such as `panel.example.com`, without `https://` or a port. nginx serves the panel there over HTTPS on the panel port with a Let's Encrypt certificate, so the name needs a DNS record pointing to the server. Needed for passkeys. Without it, the panel is reachable only through an SSH tunnel. |
-| `--panel-port PORT` | HTTPS port of the panel, default `8443`. TCP and UDP must be open. |
+| `--panel-port PORT` | HTTPS port of the panel, default `8443`. TCP and UDP must be open. `443` serves the panel on the sites' port under its own host name and needs `--panel-domain`. See [Panel without a port](#panel-without-a-port). |
 | `--listen ADDR` | Where the panel process itself listens, default `127.0.0.1:8080`. |
 | `--php-versions LIST` | More PHP versions from sury.org next to the distribution's, comma-separated, such as `8.3,7.4`. 7.4, 8.1 and 8.2 are legacy versions. |
 | `--firewall-allow PORT/PROTO` | Also open this port to the internet, such as `3000/tcp`. Can be given more than once. |
