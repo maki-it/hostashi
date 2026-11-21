@@ -70,7 +70,7 @@ php_extra() {
   done
 }
 
-php_pkgs() { local e; for e in fpm cli mysql curl gd mbstring xml zip intl bcmath; do echo "php$1-$e"; done; }
+php_pkgs() { local e; for e in fpm cli mysql curl gd mbstring xml zip intl bcmath redis; do echo "php$1-$e"; done; }
 
 sury_source() {
   local code

@@ -200,7 +200,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config ssh harden sysctl nginx php phpversions mariadb backup units service fail2ban firewall updates quota"
+STEPS="account dirs key binary config ssh harden sysctl nginx php phpversions valkey mariadb backup units service fail2ban firewall updates quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -418,8 +418,9 @@ do_nginx() {
 }
 
 # PHP from the distribution (Debian 13: 8.4, Ubuntu 26.04: 8.5) with the
-# extensions of spike S5. The agent runs one FPM master per site.
-PHP_PKGS=(php-fpm php-cli php-mysql php-curl php-gd php-mbstring php-xml php-zip php-intl php-bcmath)
+# extensions of spike S5, and phpredis for the object cache (ADR-0045). The
+# agent runs one FPM master per site.
+PHP_PKGS=(php-fpm php-cli php-mysql php-curl php-gd php-mbstring php-xml php-zip php-intl php-bcmath php-redis)
 # Every version the agent may run a site on (agentapi.PHPVersions); a unit
 # template is installed for each, whether the version is installed or not.
 PHP_VERSIONS=(7.4 8.1 8.2 8.3 8.4 8.5 8.6)
@@ -488,6 +489,27 @@ do_phpversions() {
     HOSTASHI_STATE_DIR=$STATE_DIR HOSTASHI_OS_RELEASE=$OS_RELEASE "$PHP_INSTALL_BIN" install $(php_requested) "$@" 2>&1 | tee -a "$LOG" | grep -E 'WARNING|REFUSED|cannot' >&2
     [ "${PIPESTATUS[0]}" = 0 ] || return 1
   fi
+}
+
+# Valkey from the distribution for the sites' object caches (ADR-0045). The
+# agent runs one instance per site that turns the cache on, through the
+# template hostashi-valkey@.service (step units). The package's own service
+# would listen on 127.0.0.1:6379 for everyone: it is stopped and masked, so
+# a package update cannot start it again.
+VALKEY_PKGS=(valkey-server)
+VALKEY_DEFAULT_UNIT=valkey-server.service
+
+chk_valkey() {
+  local p
+  for p in "${VALKEY_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
+  [ "$(systemctl is-enabled "$VALKEY_DEFAULT_UNIT" 2>/dev/null)" = masked ] || { echo "$VALKEY_DEFAULT_UNIT is not masked"; return 1; }
+  [ "$(systemctl is-active "$VALKEY_DEFAULT_UNIT" 2>/dev/null)" != active ] || { echo "$VALKEY_DEFAULT_UNIT is running"; return 1; }
+}
+do_valkey() {
+  apt-get update -qq >>"$LOG" 2>&1 &&
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${VALKEY_PKGS[@]}" >>"$LOG" 2>&1 || return 1
+  systemctl disable --now "$VALKEY_DEFAULT_UNIT" >>"$LOG" 2>&1 || return 1
+  systemctl mask "$VALKEY_DEFAULT_UNIT" >>"$LOG" 2>&1
 }
 
 # MariaDB from the distribution (ADR-0024). The package defaults stay: it
@@ -782,7 +804,7 @@ php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }
 
 chk_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-valkey@.service; do
     file_matches "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u" || { echo "$u differs"; return 1; }
   done
   dir_ok "$(dirname "$NGINX_DROPIN")" 755 root:root || { echo "nginx drop-in directory"; return 1; }
@@ -794,7 +816,7 @@ chk_units() {
 }
 do_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-valkey@.service; do
     write_file "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u"
     [ $? -le 1 ] || return 1
   done
