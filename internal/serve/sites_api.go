@@ -22,6 +22,8 @@ type siteJSON struct {
 	State    string `json:"state"`
 	PHP      string `json:"php"`      // PHP version, "" for no PHP
 	Disabled bool   `json:"disabled"` // answers 503, PHP stopped
+	// DisabledPage is the maintenance page shown while disabled (ADR-0047).
+	DisabledPage string `json:"disabledPage"`
 	// Maintenance: other addresses get the page with 503 (ADR-0027).
 	Maintenance maintenanceJSON `json:"maintenance"`
 	Domains     []string        `json:"domains"` // the first one is the primary domain
@@ -101,7 +103,7 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	}
 
 	return siteJSON{
-		Name: s.Name, Pool: s.Pool, State: s.State, PHP: s.PHP, Disabled: s.Disabled, Domains: d, Maintenance: toMaintenanceJSON(s),
+		Name: s.Name, Pool: s.Pool, State: s.State, PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, Maintenance: toMaintenanceJSON(s),
 		TLS: tlsJSON{
 			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
@@ -126,6 +128,8 @@ func siteFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusUnprocessableEntity, "invalid_argument", err.Error())
 	case errors.Is(err, hosting.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "no such site")
+	case errors.Is(err, hosting.ErrPageNotFound):
+		writeError(w, http.StatusNotFound, "page_not_found", "no such page")
 	case errors.Is(err, hosting.ErrExists):
 		writeError(w, http.StatusConflict, "site_exists", "a site with this name exists")
 	case errors.Is(err, hosting.ErrDomainTaken):
@@ -374,6 +378,9 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 	mux.HandleFunc("PUT /api/v1/sites/{name}/disabled", a.allow("sites.disabled:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Disabled *bool `json:"disabled"`
+			// Page is the maintenance page shown while disabled
+			// (ADR-0047); empty: the built-in page.
+			Page string `json:"page"`
 		}
 		if !decodeJSON(w, r, &in) {
 			return
@@ -388,7 +395,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
-		s, err := svc.SetDisabled(ctx, p.User.ID, r.PathValue("name"), *in.Disabled)
+		s, err := svc.SetDisabled(ctx, p.User.ID, r.PathValue("name"), *in.Disabled, in.Page)
 		if err != nil {
 			siteFail(log, w, err, "set disabled")
 

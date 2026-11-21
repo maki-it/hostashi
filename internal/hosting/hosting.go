@@ -637,6 +637,12 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				}
 			}
 
+			if site.Disabled {
+				if ws.DisabledPage, err = s.disabledWeb(ctx, site, onAgent); err != nil {
+					return err
+				}
+			}
+
 			req.Sites = append(req.Sites, ws)
 		}
 	}

@@ -41,6 +41,9 @@ type Site struct {
 	// Disabled: the web server answers with 503 and PHP is stopped; the
 	// account, files, databases and certificate stay.
 	Disabled bool
+	// DisabledPage is the maintenance page a disabled site shows (0: the
+	// built-in page, ADR-0047). It is kept while the site is enabled.
+	DisabledPage int64
 	// Maintenance serves MaintenancePage (0: the built-in page) with 503 to
 	// every address outside MaintenanceAllow (ADR-0027).
 	Maintenance      bool
@@ -360,7 +363,7 @@ func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
 type scanner interface{ Scan(dest ...any) error }
 
 const siteColumns = `id, name, pool, state, php, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
-	maintenance, coalesce(maintenance_page, 0), maintenance_allow, tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
+	maintenance, coalesce(maintenance_page, 0), maintenance_allow, coalesce(disabled_page, 0), tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
 	created_at, updated_at`
 
 func scanSite(r scanner) (Site, error) {
@@ -375,7 +378,7 @@ func scanSite(r scanner) (Site, error) {
 	)
 
 	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
-		&maint, &st.MaintenancePage, &allow, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced, &cre, &upd)
+		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
 	}
