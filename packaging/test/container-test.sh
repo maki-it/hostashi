@@ -924,11 +924,23 @@ step "a second storage pool on its own volume (ADR-0016, spike S9)"
 # a provider volume. Hostashi never formats or mounts: the admin does.
 x truncate -s 256M /var/tmp/vol1.img
 loopdev=$(x losetup -f --show /var/tmp/vol1.img)
-x mkfs.ext4 -q "$loopdev"
 x install -d -m 0755 /srv/vol1 /srv/plain
+# With project quota where the host kernel has the quota format module, as
+# the wiki tells admins; without it the pool must still work, unlimited.
+volopts=nosuid,nodev
+volquota=off
+if x mkfs.ext4 -q -O quota,project -E quotatype=prjquota "$loopdev" &&
+  x mount -o nosuid,nodev,prjquota "$loopdev" /srv/vol1 2>/dev/null; then
+  x umount /srv/vol1
+  volopts=nosuid,nodev,prjquota
+  volquota=enforced
+else
+  echo "no project quota on the loop volume (host lacks quota_v2), pool without disk limits"
+  x mkfs.ext4 -q -F "$loopdev"
+fi
 if out=$(x /usr/local/bin/hostashi pool add vol1 /srv/vol1 2>&1); then fail "an unmounted directory became a pool: $out"; fi
 grep -q 'not a mount point' <<<"$out" || fail "unmounted directory refused without the reason: $out"
-x mount -o nosuid,nodev "$loopdev" /srv/vol1
+x mount -o "$volopts" "$loopdev" /srv/vol1
 # The container's root mount is private, so a new mount does not reach the
 # agent's own mount namespace as it would on a server (shared /); a restart
 # gives the agent a fresh view.
@@ -936,7 +948,7 @@ x systemctl restart hostashi-agent.service
 for _ in $(seq 1 30); do x /usr/local/bin/hostashi ping >/dev/null 2>&1 && break; sleep 1; done
 if out=$(x /usr/local/bin/hostashi pool add vol1 /srv/vol1 2>&1); then fail "a volume without fstab entry became a pool: $out"; fi
 grep -q 'no entry in /etc/fstab' <<<"$out" || fail "missing fstab entry refused without the reason: $out"
-x sh -c "echo '$loopdev /srv/vol1 ext4 nosuid,nodev,nofail 0 2' >>/etc/fstab"
+x sh -c "echo '$loopdev /srv/vol1 ext4 $volopts,nofail 0 2' >>/etc/fstab"
 x systemctl daemon-reload
 for p in /etc/vol1 /srv/plain /srv; do
   if x /usr/local/bin/hostashi pool add bad "$p" >/dev/null 2>&1; then fail "$p became a pool"; fi
@@ -944,7 +956,7 @@ done
 x /usr/local/bin/hostashi pool add vol1 /srv/vol1 || fail "pool add"
 expect_mode /srv/vol1 "711 root:root"
 expect_mode /srv/vol1/.hostashi-pool "644 root:root"
-x /usr/local/bin/hostashi pool list | grep -q "^vol1	/srv/vol1	sites=0$" || fail "pool list: $(x /usr/local/bin/hostashi pool list)"
+x /usr/local/bin/hostashi pool list | grep -q "^vol1	/srv/vol1	sites=0	quota=$volquota$" || fail "pool list: $(x /usr/local/bin/hostashi pool list)"
 # The running PHP master of wp got the new pool hidden right away.
 wpunit="hostashi-php-$ver@wp.service"
 x grep -qx 'TemporaryFileSystem=/srv/vol1:ro' "/etc/systemd/system/$wpunit.d/50-hostashi-slice.conf" || fail "wp's drop-in does not hide vol1"
