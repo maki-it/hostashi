@@ -478,6 +478,16 @@ echo @file_get_contents("/etc/hostname") === false ? " jailed" : " open";
 PHP
 body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/some/pretty/url)
 [ "$body" = "php $ver user wp jailed" ] || fail "PHP site answered '$body'"
+# PHP settings (ADR-0049): the pool's defaults reach PHP, nginx follows
+# post_max_size, and a 2 MiB upload (above nginx's 1 MiB default) arrives.
+xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/ini.php' <<'PHP'
+<?php
+echo ini_get("memory_limit"), " ", ini_get("upload_max_filesize"), " ", ini_get("date.timezone"), " ", strlen(file_get_contents("php://input"));
+PHP
+x sh -c 'head -c 2097152 /dev/zero >/tmp/upload.bin'
+body=$(x curl -fsS -H 'Host: wp.example.com' -H 'Content-Type: application/octet-stream' --data-binary @/tmp/upload.bin http://127.0.0.1/ini.php)
+[ "$body" = "256M 64M UTC 2097152" ] || fail "PHP settings or upload: '$body'"
+x rm -f /home/wp/htdocs/ini.php /tmp/upload.bin
 # The file manager through the panel (ADR-0040): the panel, without root
 # and in its own user namespace, reaches the helper's socket, and the
 # helper writes as the site user.
