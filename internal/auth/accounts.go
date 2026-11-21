@@ -179,7 +179,8 @@ func (s *Service) UpdateAccount(ctx context.Context, actor store.User, id int64,
 	}
 
 	if len(detail) > 2 {
-		_ = s.st.Audit(ctx, &actor.ID, "user.update", after.Username, detail)
+		_ = s.st.AuditChange(ctx, &actor.ID, "user.update", after.Username, detail,
+			store.DiffOf(accountFields(before), accountFields(after)))
 	}
 
 	return after, nil
@@ -275,11 +276,23 @@ func (s *Service) RecoverAccount(ctx context.Context, username string) (NewInvit
 	return out, a, nil
 }
 
+// accountFields describes the changeable fields of an account for a diff.
+func accountFields(a store.Account) map[string]string {
+	return map[string]string{
+		"role": a.Role, "disabled": strconv.FormatBool(a.Disabled), "requireSecondFactor": strconv.FormatBool(a.RequireSecondFactor),
+	}
+}
+
 // SetSiteGrants replaces the sites granted to a user with the role user.
 func (s *Service) SetSiteGrants(ctx context.Context, actor store.User, id int64, sites []string, ip string) ([]string, error) {
 	a, err := s.st.AccountByID(ctx, id)
 	if err != nil {
 		return nil, accountErr(err)
+	}
+
+	was, err := s.st.SiteGrants(ctx, id)
+	if err != nil {
+		return nil, err
 	}
 
 	added, removed, err := s.st.SetSiteGrants(ctx, id, sites, s.now())
@@ -288,9 +301,16 @@ func (s *Service) SetSiteGrants(ctx context.Context, actor store.User, id int64,
 	}
 
 	if len(added)+len(removed) > 0 {
-		_ = s.st.Audit(ctx, &actor.ID, "user.grants", a.Username, map[string]string{
+		now, err := s.st.SiteGrants(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+
+		_ = s.st.AuditChange(ctx, &actor.ID, "user.grants", a.Username, map[string]string{
 			"id": idString(id), "added": fmt.Sprint(added), "removed": fmt.Sprint(removed), "ip": ip,
-		})
+		}, store.DiffOf(map[string]string{"sites": strings.Join(was, " ")}, map[string]string{"sites": strings.Join(now, " ")}))
+
+		return now, nil
 	}
 
 	return s.st.SiteGrants(ctx, id)

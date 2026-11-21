@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 func (e *apiEnv) auditPage(t *testing.T, c *http.Cookie, query string) auditPageJSON {
@@ -251,4 +253,89 @@ func TestCSVCell(t *testing.T) {
 			t.Errorf("%q: %q, want %q", in, got, want)
 		}
 	}
+}
+
+// lastAuditDiff returns the diff of the newest entry of an action.
+func (e *apiEnv) lastAuditDiff(t *testing.T, c *http.Cookie, action string) map[string]store.Change {
+	t.Helper()
+
+	p := e.auditPage(t, c, "limit=1&action="+action)
+	if len(p.Entries) != 1 || p.Entries[0].Action != action {
+		t.Fatalf("%s: %+v", action, p.Entries)
+	}
+
+	var d map[string]store.Change
+	if err := json.Unmarshal(p.Entries[0].Diff, &d); err != nil {
+		t.Fatal(err)
+	}
+
+	return d
+}
+
+func TestAuditDiffsOverHTTP(t *testing.T) {
+	e := newAPI(t)
+	c := e.adminCookie(t)
+
+	// Email relay: the password is never in the diff, only that it changed.
+	e.putMail(t, c, mailBody)
+
+	if d := e.lastAuditDiff(t, c, "settings.mail"); d["host"].New == nil || *d["host"].New != "smtp.example.com" || d["host"].Old != nil {
+		t.Errorf("first mail: %+v", d)
+	}
+
+	e.putMail(t, c, strings.Replace(strings.Replace(mailBody, "587", "465", 1), `"starttls"`, `"tls"`, 1))
+
+	d := e.lastAuditDiff(t, c, "settings.mail")
+	if !changeIs(d["port"], "587", "465") || !changeIs(d["tls"], "starttls", "tls") || !changeIs(d["password"], "kept", "changed") {
+		t.Errorf("mail: %+v", d)
+	}
+
+	if p := e.auditPage(t, c, "action=settings.mail"); strings.Contains(string(mustJSON(t, p)), "relay password") {
+		t.Error("the relay password reached the audit log")
+	}
+
+	// Firewall: the rules before and after.
+	rec := e.do(t, reqOpts{
+		method: "PUT", path: "/api/v1/firewall", cookie: c,
+		body: `{"state":{"open":[{"proto":"tcp","from":8080,"sources":["198.51.100.0/24"]}],"sshAllow":[],"panelAllow":[]}}`,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("firewall: %d %s", rec.Code, rec.Body)
+	}
+
+	if d := e.lastAuditDiff(t, c, "firewall.change"); !changeIs(d["open"], "", "tcp/8080 from 198.51.100.0/24") || len(d) != 1 {
+		t.Errorf("firewall: %+v", d)
+	}
+
+	// Accounts: the role before and after.
+	anna := e.createUser(t, c, "anna", "manager")
+	if rec := e.do(t, reqOpts{method: "PUT", path: userPath(anna.User.ID, ""), cookie: c, body: `{"role":"user"}`}); rec.Code != http.StatusOK {
+		t.Fatalf("update user: %d %s", rec.Code, rec.Body)
+	}
+
+	if d := e.lastAuditDiff(t, c, "user.update"); !changeIs(d["role"], "manager", "user") || len(d) != 1 {
+		t.Errorf("user: %+v", d)
+	}
+
+	// Metrics switch.
+	e.setMetrics(t, c, `{"enabled":true}`)
+
+	if d := e.lastAuditDiff(t, c, "settings.metrics"); !changeIs(d["enabled"], "false", "true") {
+		t.Errorf("metrics: %+v", d)
+	}
+}
+
+func changeIs(c store.Change, old, now string) bool {
+	return c.Old != nil && *c.Old == old && c.New != nil && *c.New == now
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return b
 }

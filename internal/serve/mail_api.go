@@ -13,6 +13,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/mail"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 // MailRelay is the panel's SMTP relay settings (ADR-0044).
@@ -182,10 +183,22 @@ func registerMail(mux *routeMux, a authn, relay MailRelay, send MailSender, st S
 		}
 
 		uid := u.ID
-		_ = st.Audit(r.Context(), &uid, "settings.mail", saved.Host, map[string]string{
+
+		var was map[string]string
+		if configured {
+			was = mailFields(old)
+		}
+
+		now := mailFields(saved)
+		if pw != "kept" {
+			// The password itself never reaches the log, only that it changed.
+			now["password"] = pw
+		}
+
+		_ = st.AuditChange(r.Context(), &uid, "settings.mail", saved.Host, map[string]string{
 			"port": strconv.Itoa(saved.Port), "tls": string(saved.TLS), "username": saved.Username,
 			"password": pw, "from": saved.From, "ip": clientIP(r),
-		})
+		}, store.DiffOf(was, now))
 
 		writeJSON(w, http.StatusOK, mailSettingsOut(saved))
 	})
@@ -273,4 +286,17 @@ func registerMail(mux *routeMux, a authn, relay MailRelay, send MailSender, st S
 
 		writeJSON(w, http.StatusOK, map[string]bool{"sent": true})
 	})
+}
+
+// mailFields describes the relay settings for a diff, without the password.
+func mailFields(c mail.Config) map[string]string {
+	ca := "none"
+	if c.CAPEM != "" {
+		ca = "set"
+	}
+
+	return map[string]string{
+		"host": c.Host, "port": strconv.Itoa(c.Port), "tls": string(c.TLS), "username": c.Username,
+		"from": c.From, "fromName": c.FromName, "replyTo": c.ReplyTo, "caCertificate": ca, "password": "kept",
+	}
 }

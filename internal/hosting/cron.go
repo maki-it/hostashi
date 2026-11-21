@@ -132,6 +132,19 @@ func (s *Service) CronJob(ctx context.Context, site string, id int64) (store.Cro
 	return j, err
 }
 
+// cronFields describes a job for a diff, without its command.
+func cronFields(j store.CronJob) map[string]string {
+	d := cronAudit(j)
+	d["timeoutSec"] = strconv.FormatInt(j.TimeoutSec, 10)
+	d["nice"] = "default"
+
+	if j.Nice != nil {
+		d["nice"] = strconv.Itoa(*j.Nice)
+	}
+
+	return d
+}
+
 func cronAudit(j store.CronJob) map[string]string {
 	// The command is left out: it may carry a token or password.
 	return map[string]string{"id": strconv.FormatInt(j.ID, 10), "schedule": j.Schedule, "paused": strconv.FormatBool(j.Paused)}
@@ -213,7 +226,13 @@ func (s *Service) UpdateCronJob(ctx context.Context, actor int64, site string, i
 		return store.CronJob{}, err
 	}
 
-	s.audit(ctx, actor, "cron.update", site, cronAudit(j))
+	was, now := cronFields(old), cronFields(j)
+	if old.Command != j.Command {
+		// The commands themselves stay out of the log; only the change is noted.
+		was["command"], now["command"] = "(not logged)", "(changed, not logged)"
+	}
+
+	s.auditChange(ctx, actor, "cron.update", site, cronAudit(j), was, now)
 
 	return j, nil
 }

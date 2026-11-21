@@ -225,12 +225,9 @@ func (s *Service) UpdateLimitPreset(ctx context.Context, actor int64, name, newN
 		}
 	}
 
-	detail := limitsAudit(l)
-	detail["objectCacheMb"] = strconv.FormatInt(c.ObjectCacheMB, 10)
-	detail["pageCacheMb"] = strconv.FormatInt(c.PageCacheMB, 10)
-	detail["name"] = newName
-	detail["default"] = strconv.FormatBool(def || cur.Default)
-	s.audit(ctx, actor, "limits.preset.update", name, detail)
+	detail := presetAudit(newName, l, c, def || cur.Default)
+	s.auditChange(ctx, actor, "limits.preset.update", name, detail,
+		presetAudit(cur.Name, cur.Limits, cur.Caches, cur.Default), detail)
 
 	if s.limits != nil {
 		for _, n := range followers {
@@ -389,7 +386,13 @@ func (s *Service) SetSiteLimits(ctx context.Context, actor int64, name, preset s
 
 	detail := limitsAudit(l)
 	detail["preset"] = preset
-	s.audit(ctx, actor, "site.limits", site.Name, detail)
+
+	var was map[string]string
+	if hadBefore {
+		was = siteLimitsAudit(before.Limits, before.PresetID)
+	}
+
+	s.auditChange(ctx, actor, "site.limits", site.Name, detail, was, siteLimitsAudit(l, presetID))
 
 	applyErr := s.applyLimits(ctx, site, l)
 
@@ -528,4 +531,28 @@ func (s *Service) applyLimits(ctx context.Context, site store.Site, l store.Limi
 	}
 
 	return nil
+}
+
+// presetAudit describes a limit preset for the audit log.
+func presetAudit(name string, l store.Limits, c store.PresetCaches, def bool) map[string]string {
+	d := limitsAudit(l)
+	d["objectCacheMb"] = strconv.FormatInt(c.ObjectCacheMB, 10)
+	d["pageCacheMb"] = strconv.FormatInt(c.PageCacheMB, 10)
+	d["name"] = name
+	d["default"] = strconv.FormatBool(def)
+
+	return d
+}
+
+// siteLimitsAudit describes a site's limits for a diff: the values and the
+// preset they follow ("custom" for none).
+func siteLimitsAudit(l store.Limits, presetID int64) map[string]string {
+	d := limitsAudit(l)
+	d["presetId"] = "custom"
+
+	if presetID != 0 {
+		d["presetId"] = strconv.FormatInt(presetID, 10)
+	}
+
+	return d
 }

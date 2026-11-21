@@ -224,7 +224,7 @@ func (s *Service) UpdateSSHKey(ctx context.Context, actor int64, site string, id
 		return store.SSHKey{}, err
 	}
 
-	s.audit(ctx, actor, "ssh.key.update", site, sshAudit(k))
+	s.auditChange(ctx, actor, "ssh.key.update", site, sshAudit(k), sshAudit(old), sshAudit(k))
 
 	return k, nil
 }

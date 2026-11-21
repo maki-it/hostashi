@@ -528,7 +528,8 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 		return store.Site{}, err
 	}
 
-	s.audit(ctx, actor, "site.domains", name, map[string]string{"domains": strings.Join(domains, " ")})
+	s.auditChange(ctx, actor, "site.domains", name, map[string]string{"domains": strings.Join(domains, " ")},
+		map[string]string{"domains": strings.Join(old, " ")}, map[string]string{"domains": strings.Join(domains, " ")})
 
 	site.Domains = domains
 
@@ -573,7 +574,8 @@ func (s *Service) SetPHP(ctx context.Context, actor int64, name, version string)
 		return store.Site{}, err
 	}
 
-	s.audit(ctx, actor, "site.php", name, map[string]string{"php": version, "previous": old})
+	s.auditChange(ctx, actor, "site.php", name, map[string]string{"php": version, "previous": old},
+		map[string]string{"php": old}, map[string]string{"php": version})
 
 	site.PHP = version
 
@@ -783,7 +785,13 @@ func (s *Service) applyWeb(ctx context.Context) error {
 }
 
 func (s *Service) audit(ctx context.Context, actor int64, action, target string, detail map[string]string) {
-	if err := s.st.Audit(ctx, &actor, action, target, detail); err != nil {
+	s.auditChange(ctx, actor, action, target, detail, nil, nil)
+}
+
+// auditChange writes an entry for an update with the fields that differ
+// between before and after (store.DiffOf). Neither may hold secrets.
+func (s *Service) auditChange(ctx context.Context, actor int64, action, target string, detail, before, after map[string]string) {
+	if err := s.st.AuditChange(ctx, &actor, action, target, detail, store.DiffOf(before, after)); err != nil {
 		s.log.ErrorContext(ctx, "audit log", "action", action, "err", err)
 	}
 }

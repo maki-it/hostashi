@@ -4,6 +4,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"net/netip"
 	"sort"
 )
@@ -82,4 +83,32 @@ func DiffOf(before, after map[string]string) Diff {
 	}
 
 	return d
+}
+
+// FieldsOf describes a value for a diff by the fields of its JSON form:
+// strings as they are, everything else as JSON. A value that does not encode
+// to an object gives no fields. Only for values without secrets.
+func FieldsOf(v any) map[string]string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+
+	var m map[string]json.RawMessage
+	if json.Unmarshal(b, &m) != nil {
+		return nil
+	}
+
+	out := make(map[string]string, len(m))
+
+	for k, raw := range m {
+		var s string
+		if json.Unmarshal(raw, &s) == nil {
+			out[k] = s
+		} else {
+			out[k] = string(raw)
+		}
+	}
+
+	return out
 }
