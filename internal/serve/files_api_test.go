@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -214,5 +215,71 @@ func TestFilesAgentFailures(t *testing.T) {
 	e.files.err = errors.New("agent gone")
 	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/shop/files", cookie: c}); rec.Code != http.StatusBadGateway {
 		t.Errorf("agent gone: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestFilesZipUploadExtract(t *testing.T) {
+	e := newAPIWithAgent(t, &stubAgent{})
+	c := e.adminCookie(t)
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"shop","domains":["shop.example.com"]}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("site: %d %s", rec.Code, rec.Body)
+	}
+
+	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/shop/files/zip?path=htdocs", cookie: c})
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/zip" || !strings.HasPrefix(rec.Body.String(), "PK") {
+		t.Fatalf("zip: %d %v", rec.Code, rec.Header())
+	}
+
+	zipBody := rec.Body.String()
+
+	for _, q := range []string{"", "?path=../x", "?path=/"} {
+		if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/shop/files/zip" + q, cookie: c}); rec.Code != http.StatusUnprocessableEntity {
+			t.Errorf("zip %q: %d", q, rec.Code)
+		}
+	}
+
+	// Upload the archive back in two chunks, then extract it.
+	size := strconv.Itoa(len(zipBody))
+
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/shop/files/upload-start", cookie: c, body: `{"path":"in/s.zip","size":` + size + `,"parents":true}`})
+
+	var u files.Upload
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &u) != nil || u.ID == "" {
+		t.Fatalf("start: %d %s", rec.Code, rec.Body)
+	}
+
+	half := len(zipBody) / 2
+	base := "/api/v1/sites/shop/files/upload?path=in/s.zip&id=" + u.ID + "&size=" + size
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: base + "&offset=0", cookie: c, body: zipBody[:half]}); rec.Code != http.StatusOK {
+		t.Fatalf("chunk 1: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: base + "&offset=0", cookie: c, body: zipBody[half:]})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "files_changed" || rec.Header().Get("X-Hostashi-Received") != strconv.Itoa(half) {
+		t.Fatalf("resend at the wrong offset: %d %s %v", rec.Code, rec.Body, rec.Header())
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: base + "&offset=" + strconv.Itoa(half), cookie: c, body: zipBody[half:]})
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &u) != nil || !u.Done {
+		t.Fatalf("chunk 2: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/shop/files/extract", cookie: c, body: `{"path":"in/s.zip","to":"in"}`})
+	if rec.Code != http.StatusOK || rec.Header().Get("X-Accel-Buffering") != "no" || !strings.Contains(rec.Body.String(), `"done":true`) ||
+		strings.Contains(rec.Body.String(), `"error"`) {
+		t.Fatalf("extract: %d %s %v", rec.Code, rec.Body, rec.Header())
+	}
+
+	if b, _ := os.ReadFile(filepath.Join(e.files.home, "in", "htdocs", "index.php")); string(b) != "<?php echo 1;" {
+		t.Fatalf("extracted %q", b)
+	}
+
+	for action, want := range map[string]int{"files.download": 1, "files.upload": 1, "files.extract": 1} {
+		var n int
+		if err := e.st.RawCount(t.Context(), `SELECT count(*) FROM audit_log WHERE action = ?`, action, &n); err != nil || n != want {
+			t.Errorf("%s: %d audit entries, want %d", action, n, want)
+		}
 	}
 }
