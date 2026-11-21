@@ -290,7 +290,7 @@ func (s *Service) endRemoteTool(ctx context.Context, d store.Database, user stri
 	s.remoteToolsMu.Lock()
 	defer s.remoteToolsMu.Unlock()
 
-	if err := s.remote(ctx, srv, func(c RemoteDB) error { return c.DropToolUser(ctx, user) }); err != nil {
+	if err := s.remote(ctx, srv, func(c RemoteDB) error { return c.DropToolUser(ctx, d.Name, user) }); err != nil {
 		return err
 	}
 

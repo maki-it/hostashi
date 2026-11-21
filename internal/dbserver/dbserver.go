@@ -501,8 +501,9 @@ func (c *Client) CreateToolUser(ctx context.Context, database, user, password st
 
 // DropToolUser drops the temporary user of a tool session; a missing one
 // is not an error. On MariaDB its open connections end too; MySQL has no
-// statement for that, there a running query ends on its own.
-func (c *Client) DropToolUser(ctx context.Context, user string) error {
+// statement for that, there a running query ends on its own. database is
+// for PostgreSQL; an account here has no objects of its own.
+func (c *Client) DropToolUser(ctx context.Context, _, user string) error {
 	if !agentapi.ValidDBToolUser(user) {
 		return fmt.Errorf("%w: tool user", ErrInvalid)
 	}
