@@ -36,7 +36,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0038](0038-web-database-tool.md) | Web database tool with short-lived access | Accepted |
 | [0039](0039-certificate-management.md) | Certificate management: own certificates, renew and delete | Accepted |
 | [0040](0040-file-manager.md) | File manager in the panel | Accepted |
-| [0041](0041-external-database-servers.md) | External database servers | Accepted |
+| [0041](0041-external-database-servers.md) | External database servers | Accepted; Addendum 1 Proposed |
 | [0042](0042-panel-on-port-443.md) | Panel on port 443 under its own host name | Accepted |
 | [0043](0043-user-documentation.md) | User documentation in the GitHub wiki | Accepted |
 | [0044](0044-outgoing-email.md) | Outgoing email through an SMTP relay | Accepted |
