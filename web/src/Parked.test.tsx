@@ -2,6 +2,7 @@
 
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { Parked } from "./Parked";
 import type { ParkedDomain } from "./parked";
@@ -34,6 +35,12 @@ const parkedDomain = (domain: string, tls: ParkedDomain["tls"]): ParkedDomain =>
   updatedAt: "2026-11-19T08:00:00Z",
 });
 
+// Harness keeps the address query in state, as the app does.
+function Harness({ initial = "" }: { initial?: string }) {
+  const [query, setQuery] = useState(new URLSearchParams(initial));
+  return <Parked query={query} onQuery={setQuery} />;
+}
+
 describe("Parked", () => {
   it("parks a domain with HTTPS and offers only parking pages", async () => {
     const user = userEvent.setup();
@@ -47,28 +54,26 @@ describe("Parked", () => {
         return { body: list[0] };
       },
     });
-    render(<Parked />);
-    expect(await screen.findByText("No domain is parked.")).toBeInTheDocument();
-
-    const form = within(screen.getByRole("region", { name: "Park a domain" }));
+    render(<Harness initial="new=1" />);
+    const form = within(await screen.findByRole("form", { name: "Park a domain" }));
     const select = form.getByRole("combobox", { name: "Page" });
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["Built-in parking page", "For sale"]);
 
-    await user.type(form.getByRole("textbox", { name: /^Domain/ }), "localhost");
+    await user.type(form.getByRole("textbox", { name: "Domain" }), "localhost");
     await user.click(form.getByRole("button", { name: "Park domain" }));
     expect(form.getByRole("alert")).toHaveTextContent("needs at least two parts");
 
-    await user.clear(form.getByRole("textbox", { name: /^Domain/ }));
-    await user.type(form.getByRole("textbox", { name: /^Domain/ }), "Old.Example");
+    await user.clear(form.getByRole("textbox", { name: "Domain" }));
+    await user.type(form.getByRole("textbox", { name: "Domain" }), "Old.Example");
     await user.selectOptions(select, "p2");
     await user.click(form.getByRole("button", { name: "Park domain" }));
-    expect(await form.findByRole("status")).toHaveTextContent("old.example is parked. It is served over HTTP until its certificate is there.");
+    expect(await screen.findByText("old.example is parked. It is served over HTTP until its certificate is there.")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ page: "p2", tls: true });
 
-    const row = within(await screen.findByRole("region", { name: "Parked domains" }));
-    expect(row.getByText("old.example")).toBeInTheDocument();
-    expect(row.getByText("For sale")).toBeInTheDocument();
-    expect(row.getByText("Waiting for the certificate")).toBeInTheDocument();
+    const table = within(screen.getByRole("table", { name: "Parked domains" }));
+    expect(table.getByRole("link", { name: "old.example" })).toBeInTheDocument();
+    expect(table.getByText("For sale")).toBeInTheDocument();
+    expect(table.getByText("Waiting for the certificate")).toBeInTheDocument();
   });
 
   it("shows a failed certificate, changes and unparks a domain", async () => {
@@ -87,19 +92,18 @@ describe("Parked", () => {
         return { status: 204 };
       },
     });
-    render(<Parked />);
-    expect(await screen.findByText(/Last attempt failed: no DNS record/)).toBeInTheDocument();
-    expect(screen.getByText("Waiting: the last attempt failed")).toBeInTheDocument();
+    render(<Harness initial="edit=old.example" />);
+    expect(await screen.findByText(/The last certificate attempt failed: no DNS record/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Change" }));
-    await user.click(screen.getByRole("checkbox", { name: "HTTPS for old.example" }));
+    await user.click(screen.getByRole("checkbox", { name: /HTTPS/ }));
     await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Saved.");
+    expect(await screen.findByText("old.example saved.")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ page: "builtin-parking", tls: false });
-    expect(await screen.findByText("Off")).toBeInTheDocument();
+    const table = within(screen.getByRole("table", { name: "Parked domains" }));
+    expect(table.getByText("Off")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Unpark" }));
-    await user.click(screen.getByRole("button", { name: "Unpark old.example" }));
+    await user.click(table.getByRole("button", { name: "Unpark old.example" }));
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Unpark old.example" }));
     expect(await screen.findByText("No domain is parked.")).toBeInTheDocument();
   });
 
@@ -110,9 +114,9 @@ describe("Parked", () => {
       "GET /api/v1/status-pages": { body: { pages } },
       "PUT /api/v1/parked-domains/blog.example": { status: 409, body: { error: { code: "domain_taken", message: "taken" } } },
     });
-    render(<Parked />);
-    const form = within(await screen.findByRole("region", { name: "Park a domain" }));
-    await user.type(form.getByRole("textbox", { name: /^Domain/ }), "blog.example");
+    render(<Harness initial="new=1" />);
+    const form = within(await screen.findByRole("form", { name: "Park a domain" }));
+    await user.type(form.getByRole("textbox", { name: "Domain" }), "blog.example");
     await user.click(form.getByRole("button", { name: "Park domain" }));
     expect(await form.findByRole("alert")).toHaveTextContent("A site or the panel already uses this domain.");
   });
