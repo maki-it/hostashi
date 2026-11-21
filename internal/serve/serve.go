@@ -27,6 +27,7 @@ import (
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/mail"
 	"github.com/maki-it/hostashi/internal/metrics"
+	"github.com/maki-it/hostashi/internal/notify"
 	"github.com/maki-it/hostashi/internal/reqid"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
@@ -138,6 +139,13 @@ type Deps struct {
 	// Files starts the sites' file manager sockets (ADR-0040); nil
 	// disables the file routes. Needs Auth, Sites and Settings.
 	Files FilesOpener
+
+	// NotifyPrefs keeps the operations email switches; nil disables their
+	// routes. Needs Auth and Mail.
+	NotifyPrefs NotifyPrefs
+	// MailHistory adds the email check to the doctor report; nil leaves it
+	// out. Needs Mail.
+	MailHistory MailHistory
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -256,13 +264,21 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			registerAccountEmail(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Mail, deps.Outbox, cfg.PublicURL, log)
 		}
 
+		if deps.Mail != nil && deps.NotifyPrefs != nil {
+			registerNotifications(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Mail, deps.NotifyPrefs)
+		}
+
 		if deps.Doctor != nil {
-			var panel PanelChecks
+			var panel []PanelChecks
 			if deps.Sites != nil {
-				panel = deps.Sites.DBServerDoctor
+				panel = append(panel, deps.Sites.DBServerDoctor)
 			}
 
-			registerDoctor(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Doctor, panel, log)
+			if deps.Mail != nil && deps.MailHistory != nil {
+				panel = append(panel, mailCheck(deps.Mail, deps.MailHistory))
+			}
+
+			registerDoctor(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Doctor, allPanelChecks(panel), log)
 		}
 
 		if deps.Metrics != nil && deps.Settings != nil {
@@ -419,19 +435,21 @@ func Run(ctx context.Context, cfg Config) error {
 			_, err := agentapi.Ping.Call(ctx, client, agentapi.PingRequest{})
 			return err
 		},
-		PingDB:   st.Ping,
-		Auth:     svc,
-		Sites:    hosting.New(st, hosting.RPCAgent{C: client}, cfg.Log),
-		Backups:  RPCBackups{C: client, BeforeRun: panelCopy},
-		Metrics:  m,
-		Settings: st,
-		Doctor:   RPCDoctor(client),
-		Firewall: RPCFirewall{C: client},
-		PHP:      RPCPHPInstaller{C: client},
-		Mail:     relay,
-		Outbox:   outbox,
-		MailSend: func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
-		Files:    RPCFilesOpener(client),
+		PingDB:      st.Ping,
+		Auth:        svc,
+		Sites:       hosting.New(st, hosting.RPCAgent{C: client}, cfg.Log),
+		Backups:     RPCBackups{C: client, BeforeRun: panelCopy},
+		Metrics:     m,
+		Settings:    st,
+		Doctor:      RPCDoctor(client),
+		Firewall:    RPCFirewall{C: client},
+		PHP:         RPCPHPInstaller{C: client},
+		Mail:        relay,
+		Outbox:      outbox,
+		NotifyPrefs: st,
+		MailHistory: st,
+		MailSend:    func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
+		Files:       RPCFilesOpener(client),
 	}
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
@@ -459,6 +477,21 @@ func Run(ctx context.Context, cfg Config) error {
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
 	m.RegisterSites(siteStats(client), cfg.Log)
 	m.RegisterTokenExpiry(svc.MetricsTokenExpiry, cfg.Log)
+
+	// Operations emails (ADR-0044) for the accounts that switched them on.
+	watcher := &notify.Watcher{
+		Notifier: &notify.Notifier{
+			St: st, Outbox: outbox, Host: panelHost(cfg.PublicURL), Log: cfg.Log,
+			Link: func(f string) string { return panelLink(cfg.PublicURL, f) },
+		},
+		Backups: deps.Backups.Status,
+		Certs:   notifyCerts(st, deps.Sites, PanelDomain(cfg.PublicURL)),
+		Doctor:  deps.Doctor,
+		Now:     time.Now,
+		Log:     cfg.Log,
+	}
+
+	go watcher.Run(ctx)
 
 	if iss, err := newIssuer(cfg, st, box); err != nil {
 		return err
@@ -575,6 +608,36 @@ func certList(svc *hosting.Service) func(context.Context) ([]metrics.Cert, error
 		out := make([]metrics.Cert, 0, len(list))
 		for _, c := range list {
 			out = append(out, metrics.Cert{Site: c.Site, Cert: c.Cert, NotAfter: c.NotAfter})
+		}
+
+		return out, nil
+	}
+}
+
+// notifyCerts lists the certificates of sites with TLS and of the panel's
+// own address for the operations emails.
+func notifyCerts(st *store.Store, svc *hosting.Service, panelDomain string) func(context.Context) ([]notify.Cert, error) {
+	return func(ctx context.Context) ([]notify.Cert, error) {
+		sites, err := st.Sites(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		out := []notify.Cert{}
+
+		for _, s := range sites {
+			if s.TLS && !s.Disabled {
+				out = append(out, notify.Cert{Site: s.Name, Name: s.Name, NotAfter: s.TLSNotAfter, Error: s.TLSError, FailedAt: s.TLSFailedAt})
+			}
+		}
+
+		if panelDomain != "" {
+			p, err := svc.PanelTLS(ctx)
+			if err != nil {
+				return out, err
+			}
+
+			out = append(out, notify.Cert{Name: panelDomain, NotAfter: p.NotAfter, Error: p.Error, FailedAt: p.FailedAt})
 		}
 
 		return out, nil

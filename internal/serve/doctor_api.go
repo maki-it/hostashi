@@ -60,9 +60,9 @@ func registerDoctor(mux *routeMux, a authn, run Doctor, panel PanelChecks, log *
 			if err != nil {
 				log.WarnContext(r.Context(), "doctor: panel checks", "err", err)
 
-				more = []agentapi.DoctorCheck{{
-					ID: "panel.checks", Status: agentapi.DoctorWarn, Summary: "the panel's own checks could not run",
-				}}
+				more = append(more, agentapi.DoctorCheck{
+					ID: "panel.checks", Status: agentapi.DoctorWarn, Summary: "some of the panel's own checks could not run",
+				})
 			}
 
 			rep.Checks = append(rep.Checks, more...)

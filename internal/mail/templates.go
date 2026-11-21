@@ -123,3 +123,36 @@ func AccountSecurity(to, username, kind, name, ip, panel string, at time.Time) (
 	return Message{To: to, Subject: "Security change in your Hostashi account", Body: withFooter(body, panel)},
 		Envelope{Template: kind, Category: Account}, true
 }
+
+// OpsEvent is an operations notification before it has a recipient: a
+// fixed subject and a few lines built from panel values.
+type OpsEvent struct {
+	Template string
+	Subject  string
+	Lines    []string
+}
+
+const opsFooter = "\n-- \nSent by the Hostashi panel at %s. You get this email because notifications about %s are on in your account. You can turn them off under Account, Notifications.\n"
+
+// OperationsMail addresses an operations event to one recipient. link, when
+// set, points to the page in the panel that shows the problem.
+func OperationsMail(to, username, category string, ev OpsEvent, link, panel string) (Message, Envelope) {
+	var b strings.Builder
+
+	b.WriteString("Hello " + clean(username, 64) + ",\n\n")
+
+	for _, l := range ev.Lines {
+		b.WriteString(clean(l, 300) + "\n")
+	}
+
+	if link != "" {
+		b.WriteString("\nDetails in the panel: " + link + "\n")
+	}
+
+	f := strings.Replace(opsFooter, "%s", clean(panel, 253), 1)
+	f = strings.Replace(f, "%s", clean(category, 32), 1)
+	b.WriteString(f)
+
+	return Message{To: to, Subject: clean(ev.Subject, 120), Body: b.String()},
+		Envelope{Template: ev.Template, Category: Operations}
+}

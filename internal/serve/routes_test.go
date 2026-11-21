@@ -56,6 +56,8 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/account/email":                  accessSession,
 	"PUT /api/v1/account/email":                  accessSession,
 	"DELETE /api/v1/account/email":               accessSession,
+	"GET /api/v1/account/notifications":          accessSession,
+	"PUT /api/v1/account/notifications":          accessSession,
 
 	"POST /api/v1/invitations/check":     accessPublic,
 	"POST /api/v1/invitations/accept":    accessPublic,
@@ -238,7 +240,7 @@ func newFullAPI(t *testing.T) (*apiEnv, []string) {
 	e.h, patterns = handler(Config{PublicURL: testPublicURL}, Deps{
 		PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb,
 		CloudPanel: e.cp, CloudPanelSource: newStubSource(t), Metrics: e.metrics, Settings: e.settings,
-		Doctor: e.doctor.run, Firewall: e.firewall, PHP: e.php, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open,
+		Doctor: e.doctor.run, Firewall: e.firewall, PHP: e.php, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open, NotifyPrefs: e.st,
 	})
 
 	return e, patterns
