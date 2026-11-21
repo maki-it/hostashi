@@ -696,3 +696,9 @@ a.ui-btn {
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--line);
 }
+/* Short form fields side by side, stacked on a phone */
+.ui-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-5);
+}

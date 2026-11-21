@@ -17,13 +17,22 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// Argon2id parameters: 64 MiB, 3 passes, 1 lane (above the OWASP minimum).
+// argonCost is the memory and the number of passes of an Argon2id hash.
+type argonCost struct {
+	memoryKiB uint32
+	time      uint32
+}
+
+// productionCost is 64 MiB and 3 passes with 1 lane (above the OWASP
+// minimum). Every build uses it; only test binaries built with the
+// hostashi_fasthash tag hash with less (cost_fast.go).
+var productionCost = argonCost{memoryKiB: 64 * 1024, time: 3}
+
+// Argon2id parameters that do not depend on the build.
 const (
-	argonMemoryKiB = 64 * 1024
-	argonTime      = 3
-	argonThreads   = 1
-	argonKeyLen    = 32
-	argonSaltLen   = 16
+	argonThreads = 1
+	argonKeyLen  = 32
+	argonSaltLen = 16
 
 	// Upper bounds when parsing a stored hash, so a corrupted value cannot
 	// make the server allocate gigabytes.
@@ -75,11 +84,11 @@ func HashPassword(password string) (string, error) {
 		return "", fmt.Errorf("auth: %w", err)
 	}
 
-	key := argon2.IDKey([]byte(password), salt, argonTime, argonMemoryKiB, argonThreads, argonKeyLen)
+	key := argon2.IDKey([]byte(password), salt, hashCost.time, hashCost.memoryKiB, argonThreads, argonKeyLen)
 	enc := base64.RawStdEncoding
 
 	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
-		argon2.Version, argonMemoryKiB, argonTime, argonThreads, enc.EncodeToString(salt), enc.EncodeToString(key)), nil
+		argon2.Version, hashCost.memoryKiB, hashCost.time, argonThreads, enc.EncodeToString(salt), enc.EncodeToString(key)), nil
 }
 
 // ErrBadHash is returned when a stored hash cannot be parsed.

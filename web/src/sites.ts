@@ -125,6 +125,8 @@ export function siteMessage(err: unknown): string {
         return "A site with this name exists. Choose another name.";
       case "domain_taken":
         return "A domain belongs to another site. Remove it there first.";
+      case "domain_reserved":
+        return "A domain is the panel's own address. Choose another domain.";
       case "tls_unavailable":
         return "Certificates are not available on this panel. Start it with a public address to use Let's Encrypt.";
       case "site_busy":

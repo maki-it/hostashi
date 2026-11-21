@@ -47,6 +47,10 @@ type Site struct {
 	// checked directives, and left out while the site is disabled or in
 	// maintenance.
 	Snippets Snippets `json:"snippets,omitzero"`
+	// PageCache caches the answers of the site's PHP (ADR-0046). It needs
+	// PHPSocket and is left out while the site is disabled or in
+	// maintenance.
+	PageCache *PageCache `json:"pageCache,omitempty"`
 }
 
 // Snippets are the custom snippets of a site, one per slot.
@@ -155,6 +159,16 @@ func (d Desired) Validate() error {
 
 		if _, _, err := s.checkSnippets(); err != nil {
 			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if c := s.PageCache; c != nil {
+			if s.PHPSocket == "" {
+				return fmt.Errorf("site %q: the page cache needs PHP", s.User)
+			}
+
+			if err := c.validate(); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
 		}
 	}
 

@@ -77,7 +77,7 @@ jobs:
           cache: true
       - name: Go tests with the built frontend embedded
         working-directory: .
-        run: go test -race -count=1 ./internal/ui/ ./internal/serve/
+        run: go test -race -count=1 -tags hostashi_fasthash ./internal/ui/ ./internal/serve/
       - name: Build the binary with the frontend
         working-directory: .
         env:

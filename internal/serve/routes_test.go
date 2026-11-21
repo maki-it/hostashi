@@ -70,6 +70,10 @@ var routeAccess = map[string]authz.Action{
 	"PUT /api/v1/settings/api-ip-allowlist": authz.SettingsWrite,
 	"GET /api/v1/settings/metrics":          authz.SettingsRead,
 	"PUT /api/v1/settings/metrics":          authz.SettingsWrite,
+	"GET /api/v1/settings/mail":             authz.SettingsRead,
+	"PUT /api/v1/settings/mail":             authz.SettingsWrite,
+	"DELETE /api/v1/settings/mail":          authz.SettingsWrite,
+	"POST /api/v1/settings/mail/test":       authz.SettingsWrite,
 
 	"GET /api/v1/sites":                     "sites:list",
 	"GET /api/v1/sites/{name}":              "sites:read",
@@ -188,7 +192,7 @@ func newFullAPI(t *testing.T) (*apiEnv, []string) {
 	e.h, patterns = handler(Config{}, Deps{
 		PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb,
 		CloudPanel: e.cp, CloudPanelSource: newStubSource(t), Metrics: e.metrics, Settings: e.settings,
-		Doctor: e.doctor.run, Firewall: e.firewall, PHP: e.php,
+		Doctor: e.doctor.run, Firewall: e.firewall, PHP: e.php, Mail: e.mail, MailSend: e.mailSent.send,
 	})
 
 	return e, patterns

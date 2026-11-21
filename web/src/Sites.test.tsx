@@ -254,6 +254,20 @@ describe("Sites", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("belongs to another site");
   });
 
+  it("explains the panel's reserved domain", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "POST /api/v1/sites": { status: 409, body: { error: { code: "domain_reserved" } } },
+    });
+    render(<ListHarness initial="new=1" />);
+    await user.type(screen.getByLabelText(/^Name/), "blog");
+    await user.type(screen.getByLabelText(/^Domains/), "blog.example.com");
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("the panel's own address");
+  });
+
   it("offers no PHP when the versions cannot be read", async () => {
     mockFetch({ "GET /api/v1/sites": { body: { sites: [] } }, "GET /api/v1/php/versions": { status: 503, body: { error: { code: "agent_unavailable" } } } });
     render(<ListHarness initial="new=1" />);

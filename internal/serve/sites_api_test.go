@@ -472,4 +472,41 @@ func TestPanelTLSOverHTTP(t *testing.T) {
 	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/panel/tls"}); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("without login: %d", rec.Code)
 	}
+
+	// The panel's name is reserved (ADR-0042).
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"blog","domains":["panel.example.org"]}`})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "domain_reserved" {
+		t.Fatalf("site on the panel's name: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/parked-domains/panel.example.org", cookie: c, body: `{}`})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "domain_reserved" {
+		t.Fatalf("parked panel name: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestPanelNameOwner(t *testing.T) {
+	e := newAPIWithAgent(t, &stubAgent{})
+	c := e.adminCookie(t)
+	ctx := t.Context()
+
+	if owner, err := panelNameOwner(ctx, e.sites, "cp.example.org"); err != nil || owner != "" {
+		t.Fatalf("no sites: %q %v", owner, err)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"blog","domains":["blog.example.org","cp.example.org"]}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	if owner, err := panelNameOwner(ctx, e.sites, "cp.example.org"); err != nil || owner != "site blog" {
+		t.Fatalf("site: %q %v", owner, err)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/parked-domains/old.example.org", cookie: c, body: `{"tls":false}`}); rec.Code != http.StatusOK {
+		t.Fatalf("park: %d %s", rec.Code, rec.Body)
+	}
+
+	if owner, err := panelNameOwner(ctx, e.sites, "old.example.org"); err != nil || owner != "the parked domain old.example.org" {
+		t.Fatalf("parked: %q %v", owner, err)
+	}
 }

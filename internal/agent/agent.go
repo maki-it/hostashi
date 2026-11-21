@@ -29,6 +29,7 @@ import (
 	"github.com/maki-it/hostashi/internal/firewall"
 	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/netaddrs"
+	"github.com/maki-it/hostashi/internal/pagecache"
 	"github.com/maki-it/hostashi/internal/pages"
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
@@ -81,6 +82,10 @@ type Config struct {
 	// without it db.* answer failed_precondition.
 	DB *mariadb.Manager
 
+	// DBToolDir is the ticket directory of the web database tool
+	// (ADR-0038); empty means agentapi.DBToolTicketDir.
+	DBToolDir string
+
 	// Backup serves backup.*. Run builds it with the fixed paths of a
 	// server; without it the operations answer failed_precondition.
 	Backup *backup.Agent
@@ -130,6 +135,11 @@ type Config struct {
 	// (ADR-0036). Run builds it; without it php.install answers
 	// failed_precondition.
 	PHPInstall *phpinstall.Manager
+
+	// PageCache keeps the sites' page cache directories (ADR-0046). Run
+	// builds it for nginx's worker user; without it a page cache is
+	// refused.
+	PageCache *pagecache.Dirs
 
 	// Doctor overrides what doctor.run reads, for tests. The zero value
 	// reads the server.
@@ -216,7 +226,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, log: log}
 		h.register(s)
 
 		if cfg.Backup != nil && cfg.Backup.Space == nil {
@@ -234,6 +244,13 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 
 		(&statsOps{h: h, disk: disk, cgroupRoot: root}).register(s)
 	}
+
+	toolLog := cfg.Log
+	if toolLog == nil {
+		toolLog = slog.New(slog.DiscardHandler)
+	}
+
+	newDBTool(cfg.DB, cfg.DBToolDir, toolLog).register(s)
 
 	registerDoctor(s, cfg.Doctor, cfg.StateDir, h, cfg.Firewall)
 	registerBackup(s, cfg.Backup)
@@ -259,8 +276,11 @@ type siteOps struct {
 	ssh    *sshaccess.Manager
 	quota  QuotaFS
 	slices *siteslice.Manager
+	cache  *pagecache.Dirs
 	log    *slog.Logger
 	mu     sync.Mutex
+	// sweepMu keeps the background deletes of purged caches apart.
+	sweepMu sync.Mutex
 }
 
 // register adds the operations. Only the errors listed in the map functions
@@ -322,6 +342,8 @@ func (h *siteOps) register(s *agentrpc.Server) {
 		if siteErr == nil {
 			h.clearQuota(ctx, poolOf(home), site.UID)
 		}
+
+		h.removeCache(ctx, req.User)
 
 		if h.slices != nil {
 			uid := uint32(0) // not known: only the site's slice goes
@@ -396,6 +418,8 @@ func (h *siteOps) register(s *agentrpc.Server) {
 
 	agentrpc.Handle(s, agentapi.SnippetCheck, h.snippetCheck)
 
+	agentrpc.Handle(s, agentapi.PageCachePurge, h.pageCachePurge)
+
 	agentrpc.Handle(s, agentapi.PHPVersionsList, func(_ context.Context, _ agentrpc.Caller, _ agentapi.PHPVersionsRequest) (agentapi.PHPVersionsResponse, error) {
 		if h.php == nil || h.php.Installed == nil {
 			return agentapi.PHPVersionsResponse{Installed: []string{}, Newer: []string{}}, nil
@@ -457,6 +481,15 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			site.PHPSocket = h.php.Socket(s.User)
 		}
 
+		if s.PageCache != nil {
+			c, err := h.pageCacheFor(s.User, home, *s.PageCache)
+			if err != nil {
+				return agentapi.WebApplyResponse{}, err
+			}
+
+			site.PageCache = c
+		}
+
 		// Snippets are checked again by package web (ADR-0029); a disabled
 		// site or one in maintenance does not render them.
 		if sn := s.Snippets; sn != nil && !site.Disabled && site.Maintenance == nil {
@@ -494,10 +527,17 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		}
 	}
 
+	prev, _, err := h.web.Current()
+	if err != nil {
+		return agentapi.WebApplyResponse{}, err
+	}
+
 	res, err := h.web.Apply(ctx, d)
 	if err != nil {
 		return agentapi.WebApplyResponse{Generation: res.Generation}, mapWebError(err)
 	}
+
+	h.applyCacheChanges(ctx, prev, d)
 
 	if h.php != nil {
 		// The web server change is live; a pool that could not be stopped
@@ -919,6 +959,11 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 	}
 
+	// Tickets of an earlier run name users that openDB drops.
+	if err := clearTickets(cfg.DBToolDir); err != nil && cfg.Log != nil {
+		cfg.Log.WarnContext(ctx, "remove leftover database tool tickets", "err", err)
+	}
+
 	if cfg.Backup == nil {
 		cfg.Backup = openBackup()
 	}
@@ -999,6 +1044,10 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.Disk == nil {
 		cfg.Disk = &sitestats.DiskCache{}
+	}
+
+	if cfg.PageCache == nil {
+		cfg.PageCache = openPageCache()
 	}
 
 	s := NewServer(cfg, uid)

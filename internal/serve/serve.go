@@ -25,6 +25,7 @@ import (
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/cpmigrate"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/mail"
 	"github.com/maki-it/hostashi/internal/metrics"
 	"github.com/maki-it/hostashi/internal/reqid"
 	"github.com/maki-it/hostashi/internal/secrets"
@@ -122,6 +123,10 @@ type Deps struct {
 	// PHP installs more PHP versions (ADR-0036); nil disables its routes.
 	// Needs Auth and Settings.
 	PHP PHPInstaller
+	// Mail is the SMTP relay (ADR-0044); nil disables its routes. Needs
+	// Auth, Settings and MailSend.
+	Mail     MailRelay
+	MailSend MailSender
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -216,6 +221,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 
 		if deps.PHP != nil && deps.Settings != nil {
 			registerPHPInstall(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.PHP, deps.Settings, log)
+		}
+
+		if deps.Mail != nil && deps.MailSend != nil && deps.Settings != nil {
+			registerMail(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Mail, deps.MailSend, deps.Settings, log)
 		}
 
 		if deps.Doctor != nil {
@@ -361,6 +370,8 @@ func Run(ctx context.Context, cfg Config) error {
 		Doctor:   RPCDoctor(client),
 		Firewall: RPCFirewall{C: client},
 		PHP:      RPCPHPInstaller{C: client},
+		Mail:     mail.NewStore(st, box),
+		MailSend: func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
 	}
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
@@ -389,7 +400,16 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if d := PanelDomain(cfg.PublicURL); d != "" {
-		if err := deps.Sites.EnablePanel(d); err != nil {
+		// A site or parked domain that already has the name keeps it, and
+		// nginx serves no panel there: the agent would refuse every web
+		// state with both (ADR-0042). The admin picks another name.
+		if owner, err := panelNameOwner(ctx, deps.Sites, d); err != nil {
+			return err
+		} else if owner != "" {
+			if cfg.Log != nil {
+				cfg.Log.ErrorContext(ctx, "the panel's host name belongs to "+owner+"; nginx does not serve the panel there, choose another --panel-domain", "domain", d)
+			}
+		} else if err := deps.Sites.EnablePanel(d); err != nil {
 			return err
 		}
 	}

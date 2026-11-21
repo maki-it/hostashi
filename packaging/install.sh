@@ -12,9 +12,10 @@
 #
 # Options:
 #   --binary PATH        the hostashi binary to install (required for apply)
-#   --public-url URL     address users open the panel at, e.g. https://panel.example.com:8443
-#                        (enables passkeys). With a host name, nginx serves the panel there over
-#                        HTTPS with a Let's Encrypt certificate (ADR-0023); the port is the panel port.
+#   --panel-domain NAME  host name users open the panel at, e.g. panel.example.com (enables
+#                        passkeys). nginx serves the panel there over HTTPS on the panel port with
+#                        a Let's Encrypt certificate (ADR-0023, ADR-0042). Without it, the panel is
+#                        reachable only through an SSH tunnel to --listen.
 #   --panel-port PORT    HTTPS port of the panel, default 8443 (TCP and UDP must be open)
 #   --listen ADDR        panel listen address, default 127.0.0.1:8080 (loopback only: SSH tunnel)
 #   --allow-untested     accept an OS release that is not on the supported list
@@ -63,7 +64,7 @@ OS_RELEASE=${HOSTASHI_OS_RELEASE:-/etc/os-release}
 BIN=/usr/local/bin/hostashi
 
 PHP_REQUEST=""
-MODE=plan YES=no BINARY="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no NO_FIREWALL=no
+MODE=plan YES=no BINARY="" PANEL_DOMAIN="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no NO_FIREWALL=no
 FW_ALLOW=()
 PHP_REQUEST_SET=no
 CHANGES=0 BINARY_CHANGED=no CONFIG_CHANGED=no
@@ -110,6 +111,24 @@ file_matches() {
 dir_ok() { [ -d "$1" ] && [ ! -L "$1" ] && [ "$(stat -c '%a %U:%G' "$1")" = "$2 $3" ]; }
 
 # ------------------------------------------------------------- preflight
+# valid_domain NAME: a host name as agentapi.ValidateDomain accepts it, in
+# lower case: at least two labels of letters, digits and inner hyphens,
+# at most 253 characters, and a top-level label that is not all digits.
+valid_domain() {
+  local d=$1 l
+  [ ${#d} -ge 3 ] && [ ${#d} -le 253 ] || return 1
+  [[ "$d" == *.* ]] || return 1
+  [[ "$d" =~ ^[a-z0-9.-]+$ ]] || return 1
+  local IFS=.
+  # shellcheck disable=SC2086 # split on dots on purpose
+  set -- $d
+  [ "${d: -1}" != . ] || return 1
+  for l in "$@"; do
+    [[ "$l" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] || return 1
+  done
+  ! [[ "${!#}" =~ ^[0-9]+$ ]]
+}
+
 preflight() {
   local problems=0
   fail() { log "preflight: FAIL: $*"; problems=$((problems + 1)); }
@@ -137,23 +156,12 @@ preflight() {
     *) fail "--panel-port '$PANEL_PORT' is not a port";;
   esac
   [ "$PANEL_PORT" -le 65535 ] || fail "--panel-port '$PANEL_PORT' is not a port"
-  if [ -n "$PUBLIC_URL" ]; then
-    printf '%s' "$PUBLIC_URL" | grep -Eq '^(https://[A-Za-z0-9.-]+(:[0-9]+)?|http://localhost(:[0-9]+)?)/?$' ||
-      fail "--public-url '$PUBLIC_URL' must look like https://panel.example.com:$PANEL_PORT"
-    PUBLIC_URL=${PUBLIC_URL%/}
-    # A host name (not localhost, not an IP) is served by nginx on the panel port.
-    local host=${PUBLIC_URL#https://} port=""
-    host=${host%%:*}
-    case "$PUBLIC_URL" in https://*:*) port=${PUBLIC_URL##*:};; esac
-    if [ "${PUBLIC_URL#https://}" != "$PUBLIC_URL" ] && [ "$host" != localhost ] &&
-      ! printf '%s' "$host" | grep -Eq '^[0-9.]+$'; then
-      if [ -z "$port" ]; then
-        PUBLIC_URL="$PUBLIC_URL:$PANEL_PORT"
-        log "the panel is served on port $PANEL_PORT: public URL is $PUBLIC_URL"
-      elif [ "$port" != "$PANEL_PORT" ]; then
-        fail "--public-url port $port differs from --panel-port $PANEL_PORT"
-      fi
-    fi
+  if [ -n "$PANEL_DOMAIN" ]; then
+    PANEL_DOMAIN=$(printf '%s' "$PANEL_DOMAIN" | tr '[:upper:]' '[:lower:]')
+    valid_domain "$PANEL_DOMAIN" ||
+      fail "--panel-domain '$PANEL_DOMAIN' must be a host name like panel.example.com (no scheme, port or path)"
+    PUBLIC_URL=https://$PANEL_DOMAIN:$PANEL_PORT
+    log "the panel is served at $PUBLIC_URL"
   fi
 
   local a
@@ -1279,14 +1287,14 @@ main() {
       --yes) YES=yes;;
       --allow-untested) ALLOW_UNTESTED=yes;;
       --binary) shift; BINARY=${1:-};;
-      --public-url) shift; PUBLIC_URL=${1:-};;
+      --panel-domain) shift; PANEL_DOMAIN=${1:-};;
       --listen) shift; LISTEN=${1:-};;
       --panel-port) shift; PANEL_PORT=${1:-};;
       --no-quota) NO_QUOTA=yes;;
       --no-firewall) NO_FIREWALL=yes;;
       --firewall-allow) shift; FW_ALLOW+=("${1:-}");;
       --php-versions) shift; PHP_REQUEST=${1:-}; PHP_REQUEST_SET=yes;;
-      *) echo "usage: $0 [plan | apply --yes] --binary PATH [--public-url URL] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall] [--php-versions LIST]" >&2; exit 64;;
+      *) echo "usage: $0 [plan | apply --yes] --binary PATH [--panel-domain NAME] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall] [--php-versions LIST]" >&2; exit 64;;
     esac
     shift
   done

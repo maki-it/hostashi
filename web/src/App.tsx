@@ -11,6 +11,7 @@ import { Home } from "./Home";
 import { Invite } from "./Invite";
 import { Presets } from "./Limits";
 import { Login } from "./Login";
+import { Mail } from "./Mail";
 import { Migrate } from "./Migrate";
 import { Pages } from "./Pages";
 import { Overview } from "./Overview";
@@ -118,6 +119,7 @@ export function App() {
         {show("parked") && <Parked query={route.query} onQuery={replaceQuery} />}
         {show("pages") && <Pages query={route.query} onQuery={replaceQuery} />}
         {show("users") && <Users me={user.username} query={route.query} onQuery={replaceQuery} />}
+        {show("mail") && <Mail />}
         {show("import") && <Migrate query={route.query} onQuery={replaceQuery} />}
         {show("account") && <Account user={user} onScheme={onScheme} />}
       </Shell>

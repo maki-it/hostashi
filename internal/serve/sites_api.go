@@ -104,6 +104,8 @@ func siteFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "site_exists", "a site with this name exists")
 	case errors.Is(err, hosting.ErrDomainTaken):
 		writeError(w, http.StatusConflict, "domain_taken", err.Error())
+	case errors.Is(err, hosting.ErrDomainReserved):
+		writeError(w, http.StatusConflict, "domain_reserved", "this domain is the panel's own address")
 	case errors.Is(err, hosting.ErrNoTLS):
 		writeError(w, http.StatusConflict, "tls_unavailable", "certificates are not available on this panel")
 	case errors.Is(err, hosting.ErrState):

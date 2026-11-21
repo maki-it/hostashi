@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -36,6 +37,21 @@ func (s *Service) EnablePanel(domain string) error {
 	}
 
 	s.panelDomain = domain
+
+	return nil
+}
+
+// PanelDomain is the panel's own host name, or "" if nginx serves none.
+func (s *Service) PanelDomain() string { return s.panelDomain }
+
+// checkReserved refuses the panel's own host name as a domain of a site
+// or a parked domain (ADR-0042): nginx would serve two things under it.
+// panelDomain is set before the service handles requests and never
+// changes, so no lock is needed.
+func (s *Service) checkReserved(domains []string) error {
+	if s.panelDomain != "" && slices.Contains(domains, s.panelDomain) {
+		return fmt.Errorf("%w: %s", ErrDomainReserved, s.panelDomain)
+	}
 
 	return nil
 }
