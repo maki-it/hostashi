@@ -344,7 +344,7 @@ func Cert(site string, notAfter, now time.Time) Check {
 	left := notAfter.Sub(now)
 	days := int(left.Hours() / 24)
 	c := Check{ID: id, Site: site, Status: agentapi.DoctorOK, Summary: fmt.Sprintf("certificate valid until %s (%d days)", notAfter.UTC().Format("2006-01-02"), days)}
-	hint := "The renewal did not work. Check the site's domains in the panel and the panel's log (journalctl -u hostashi-panel)."
+	hint := "For Let's Encrypt the renewal did not work: check the site's domains in the panel and the panel's log (journalctl -u hostashi-panel). An own certificate is never renewed automatically: upload a new one."
 
 	switch {
 	case left <= 0:
