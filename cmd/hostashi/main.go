@@ -139,6 +139,8 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 
 		acmeChallenges := fs.String("acme-challenges", serve.DefaultChallengeDir, "directory for HTTP-01 challenge files, served by nginx")
 
+		dbToolPort := fs.Int("db-tool-port", 0, "HTTPS port of the web database tool (Adminer), 0: off")
+
 		metricsListen := fs.String("metrics-listen", "", "loopback IP and port that serves /metrics without a token, e.g. 127.0.0.1:9471 (empty: off)")
 		if fs.Parse(args) != nil || fs.NArg() != 0 {
 			return 2
@@ -148,7 +150,7 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 			err = serve.Run(ctx, serve.Config{
 				Listen: *listen, Socket: *socket, DBPath: *dbPath, KeyPath: *keyPath, PublicURL: *publicURL, Version: version, Log: log,
 				ACMEDirectory: *acmeDir, ACMECAFile: *acmeCA, ACMEChallengeDir: *acmeChallenges,
-				MetricsListen: *metricsListen,
+				MetricsListen: *metricsListen, DBToolPort: *dbToolPort,
 			})
 		}
 	case "agent":

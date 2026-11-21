@@ -102,6 +102,8 @@ var routeAccess = map[string]authz.Action{
 	"POST /api/v1/databases/{db}/import":               "databases:write",
 	"POST /api/v1/databases/{db}/export":               "databases:write",
 	"GET /api/v1/databases/{db}/jobs/{id}":             "databases:read",
+	"GET /api/v1/dbtool":                               "databases:list",
+	"POST /api/v1/databases/{db}/tool":                 "databases:open",
 
 	"GET /api/v1/status-pages":               "pages:read",
 	"GET /api/v1/status-pages/{id}":          "pages:read",
