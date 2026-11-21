@@ -26,6 +26,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/backup"
+	"github.com/maki-it/hostashi/internal/files"
 	"github.com/maki-it/hostashi/internal/reqid"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/serve"
@@ -88,6 +89,9 @@ commands:
             reset NAME's password and second factors, enable the account
             and print a new invitation link (root; the way back in when
             the last admin is locked out)
+  files-helper -home DIR [-idle DURATION]
+            the file manager's helper for one site (the site user; started
+            by hostashi-files@SITE.socket, ADR-0040)
   setup-token  print the one-time token for the first login (read as the serve user or root)
   version   print the version
 `
@@ -255,6 +259,15 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		}
 
 		err = userRecover(ctx, euid, *dbPath, *publicURL, fs.Arg(0), stdout)
+	case "files-helper":
+		home := fs.String("home", "", "the site's home directory")
+		idle := fs.Duration("idle", files.DefaultIdle, "exit after this long without a request")
+
+		if fs.Parse(args) != nil || fs.NArg() != 0 || *home == "" || *idle <= 0 {
+			return 2
+		}
+
+		err = filesHelper(ctx, euid, *home, *idle, log)
 	case "setup-token":
 		dbPath := fs.String("db", store.DefaultPath, "SQLite database path")
 		if fs.Parse(args) != nil || fs.NArg() != 0 {
@@ -307,4 +320,26 @@ func showBackupKeys(euid int, w io.Writer) error {
 	}
 
 	return nil
+}
+
+// filesHelper serves one site's files on the socket systemd passed
+// (ADR-0040). It refuses root: every write must be the site user's.
+func filesHelper(ctx context.Context, euid int, home string, idle time.Duration, log *slog.Logger) error {
+	if euid == 0 {
+		return errors.New("must not run as root (it runs as the site user)")
+	}
+
+	root, err := files.Open(home)
+	if err != nil {
+		return err
+	}
+
+	defer func() { _ = root.Close() }()
+
+	ln, err := files.SystemdListener()
+	if err != nil {
+		return err
+	}
+
+	return files.Serve(ctx, ln, &files.Handler{Root: root, Log: log}, idle, log)
 }
