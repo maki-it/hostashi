@@ -95,6 +95,8 @@ var routeAccess = map[string]authz.Action{
 	"POST /api/v1/sites":                                     "sites:create",
 	"PUT /api/v1/sites/{name}/domains":                       "sites.domains:write",
 	"PUT /api/v1/sites/{name}/php":                           "sites.php:write",
+	"GET /api/v1/sites/{name}/php/settings":                  "sites:read",
+	"PUT /api/v1/sites/{name}/php/settings":                  "sites.php:write",
 	"PUT /api/v1/sites/{name}/tls":                           "sites.tls:write",
 	"GET /api/v1/sites/{name}/tls/certificate":               "sites:read",
 	"PUT /api/v1/sites/{name}/tls/certificate":               "sites.tls:write",
