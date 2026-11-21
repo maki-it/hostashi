@@ -34,8 +34,10 @@ Group=hostashi
 Environment=HOSTASHI_LISTEN=127.0.0.1:8080 HOSTASHI_PUBLIC_URL=
 Environment=HOSTASHI_ACME_DIRECTORY=https://acme-v02.api.letsencrypt.org/directory HOSTASHI_ACME_CA=
 Environment=HOSTASHI_METRICS_LISTEN=
+# The web database tool (ADR-0038); the installer sets 8444, 0 is off.
+Environment=HOSTASHI_DB_TOOL_PORT=0
 EnvironmentFile=-/etc/hostashi/hostashi.env
-ExecStart=/usr/local/bin/hostashi serve "-listen=${HOSTASHI_LISTEN}" "-public-url=${HOSTASHI_PUBLIC_URL}" -db /var/lib/hostashi/hostashi.db -key /etc/hostashi/secret.key -socket /run/hostashi/agent.sock "-acme-directory=${HOSTASHI_ACME_DIRECTORY}" "-acme-ca=${HOSTASHI_ACME_CA}" "-metrics-listen=${HOSTASHI_METRICS_LISTEN}"
+ExecStart=/usr/local/bin/hostashi serve "-listen=${HOSTASHI_LISTEN}" "-public-url=${HOSTASHI_PUBLIC_URL}" -db /var/lib/hostashi/hostashi.db -key /etc/hostashi/secret.key -socket /run/hostashi/agent.sock "-acme-directory=${HOSTASHI_ACME_DIRECTORY}" "-acme-ca=${HOSTASHI_ACME_CA}" "-metrics-listen=${HOSTASHI_METRICS_LISTEN}" "-db-tool-port=${HOSTASHI_DB_TOOL_PORT}"
 UMask=0077
 Restart=on-failure
 RestartSec=2s

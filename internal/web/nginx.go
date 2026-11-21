@@ -97,6 +97,15 @@ type Nginx struct {
 	// PanelUpstream is the panel's Unix socket that nginx proxies to.
 	PanelUpstream string
 
+	// DBToolListen are the HTTPS addresses of the web database tool
+	// (ADR-0038), served for the panel's name with its certificate; empty
+	// serves no tool.
+	DBToolListen []string
+	// DBToolSocket is the FastCGI socket of the tool's PHP-FPM.
+	DBToolSocket string
+	// DBToolRoot holds the tool's index.php.
+	DBToolRoot string
+
 	VerifyTimeout time.Duration
 }
 
@@ -110,7 +119,7 @@ func (n *Nginx) check() error {
 		return errors.New("web: nginx driver needs a controller and listen addresses")
 	}
 
-	for _, l := range slices.Concat(n.Listen, n.ListenTLS, n.PanelListen) {
+	for _, l := range slices.Concat(n.Listen, n.ListenTLS, n.PanelListen, n.DBToolListen) {
 		if !listenRe.MatchString(l) {
 			return fmt.Errorf("web: invalid listen address %q", l)
 		}
@@ -124,6 +133,10 @@ func (n *Nginx) check() error {
 
 	if len(n.PanelListen) > 0 && !confPathRe.MatchString(n.PanelUpstream) {
 		return fmt.Errorf("web: invalid panel upstream %q", n.PanelUpstream)
+	}
+
+	if len(n.DBToolListen) > 0 && (!confPathRe.MatchString(n.DBToolSocket) || !confPathRe.MatchString(n.DBToolRoot)) {
+		return fmt.Errorf("web: invalid database tool socket %q or root %q", n.DBToolSocket, n.DBToolRoot)
 	}
 
 	for _, p := range []string{n.AccessLog, n.TempDir, n.Modules, n.ACMERoot} {
@@ -157,6 +170,9 @@ func (n *Nginx) check() error {
 
 // TLSPort is the port of the first HTTPS address, for Alt-Svc.
 func (n *Nginx) TLSPort() string { return firstPort(n.ListenTLS) }
+
+// DBToolPort is the port of the first database tool address.
+func (n *Nginx) DBToolPort() string { return firstPort(n.DBToolListen) }
 
 // PanelPort is the port of the first panel address.
 func (n *Nginx) PanelPort() string { return firstPort(n.PanelListen) }
@@ -397,6 +413,69 @@ server {
         proxy_read_timeout 60s;
     }
 }
+{{- if and .P.DBTool .N.DBToolListen}}
+
+# The web database tool (ADR-0038): Adminer on a port of its own, so it is
+# another origin than the panel, with the panel's name and certificate.
+# Only "/" exists; index.php takes a one-time ticket or its own session.
+server {
+    {{- range .N.DBToolListen}}
+    listen {{.}} ssl default_server;
+    {{- end}}
+    server_name _;
+    ssl_reject_handshake on;
+}
+
+server {
+    {{- range .N.DBToolListen}}
+    listen {{.}} ssl{{if $.N.LegacyHTTP2}} http2{{end}};
+    {{- end}}
+    {{- if not .N.LegacyHTTP2}}
+    http2 on;
+    {{- end}}
+    server_name {{.P.Domain}};
+    ssl_certificate {{.P.Cert}};
+    ssl_certificate_key {{.P.Key}};
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header Referrer-Policy no-referrer always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    client_max_body_size 64m;
+
+    location = / {
+        root {{.N.DBToolRoot}};
+        fastcgi_pass unix:{{.N.DBToolSocket}};
+        fastcgi_param SCRIPT_FILENAME $realpath_root/index.php;
+        fastcgi_param DOCUMENT_ROOT $realpath_root;
+        fastcgi_param SCRIPT_NAME /index.php;
+        fastcgi_param QUERY_STRING $query_string;
+        fastcgi_param REQUEST_METHOD $request_method;
+        fastcgi_param CONTENT_TYPE $content_type;
+        fastcgi_param CONTENT_LENGTH $content_length;
+        fastcgi_param REQUEST_URI $request_uri;
+        fastcgi_param DOCUMENT_URI /index.php;
+        fastcgi_param SERVER_PROTOCOL $server_protocol;
+        fastcgi_param REQUEST_SCHEME https;
+        fastcgi_param HTTPS on;
+        fastcgi_param GATEWAY_INTERFACE CGI/1.1;
+        fastcgi_param SERVER_SOFTWARE nginx;
+        fastcgi_param REMOTE_ADDR $remote_addr;
+        fastcgi_param REMOTE_PORT $remote_port;
+        fastcgi_param SERVER_ADDR $server_addr;
+        fastcgi_param SERVER_PORT $server_port;
+        fastcgi_param SERVER_NAME $server_name;
+        fastcgi_param REDIRECT_STATUS 200;
+        # Headers that would change what PHP sees as the request.
+        fastcgi_param HTTP_PROXY "";
+        fastcgi_param HTTP_X_FORWARDED_PREFIX "";
+        fastcgi_read_timeout 300s;
+    }
+
+    location / {
+        return 404;
+    }
+}
+{{- end}}
 {{- end}}
 `))
 

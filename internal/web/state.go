@@ -121,6 +121,9 @@ type Panel struct {
 	Domain string `json:"domain"`
 	Cert   string `json:"cert,omitempty"`
 	Key    string `json:"key,omitempty"`
+	// DBTool serves the web database tool (ADR-0038) on the driver's tool
+	// port, with the panel's certificate. Without one it is not served.
+	DBTool bool `json:"dbTool,omitempty"`
 }
 
 // rootRe keeps nginx syntax out of the root path: no spaces, quotes,
