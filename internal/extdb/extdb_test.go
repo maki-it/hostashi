@@ -67,6 +67,7 @@ func TestValidate(t *testing.T) {
 		"duplicate db":   func(m *Manifest) { m.Databases = append(m.Databases, m.Databases[0]) },
 		"site":           func(m *Manifest) { m.Databases[0].Site = "../x" },
 		"unknown server": func(m *Manifest) { m.Databases[0].Server = "db9" },
+		"engine":         func(m *Manifest) { m.Servers[0].Engine = "MariaDB" },
 	}
 
 	for name, f := range bad {
@@ -84,5 +85,10 @@ func TestValidate(t *testing.T) {
 
 	if err := m.Validate(); err != nil {
 		t.Fatal(err)
+	}
+
+	m.Servers[0].Engine, m.Servers[0].Port = "PostgreSQL", 5432
+	if err := m.Validate(); err != nil || m.Servers[0].Config("pw").Engine != "PostgreSQL" {
+		t.Fatalf("PostgreSQL server: %v", err)
 	}
 }

@@ -199,7 +199,7 @@ func TestToolServersKeepOthers(t *testing.T) {
 	r := &hostResolver{fakeResolver: fakeResolver{addrs: addrs("10.0.0.9")}, down: map[string]bool{}}
 	s.SetResolver(r)
 
-	other, err := s.AddDBServer(ctx, 1, NewDBServer{Name: "db2", Host: "db2.example.net", AdminUser: "hostashi_admin", AdminPassword: "Admin-pw-1"})
+	other, _, err := s.AddDBServer(ctx, 1, NewDBServer{Name: "db2", Host: "db2.example.net", AdminUser: "hostashi_admin", AdminPassword: "Admin-pw-1"})
 	if err != nil {
 		t.Fatal(err)
 	}

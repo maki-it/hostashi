@@ -268,6 +268,11 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 
 		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, files: cfg.Files, log: log}
 		h.acl = cfg.panelACL
+
+		if cfg.PHP != nil && cfg.PHP.Hidden == nil {
+			cfg.PHP.Hidden = cfg.Sites.HiddenPaths
+		}
+
 		h.register(s)
 
 		if cfg.Backup != nil && cfg.Backup.Space == nil {

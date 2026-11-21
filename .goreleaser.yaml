@@ -108,6 +108,12 @@ nfpms:
         dst: /usr/share/hostashi/install.sh
         file_info:
           mode: 0755
+      # The apt signing key (ADR-0050, section 3). The source of the
+      # repository points Signed-By here, so updates bring key renewals.
+      - src: packaging/keyring/hostashi-archive-keyring.asc
+        dst: /usr/share/keyrings/hostashi-archive-keyring.asc
+        file_info:
+          mode: 0644
       - src: packaging/deb/hostashi-rollback
         dst: /usr/sbin/hostashi-rollback
         file_info:
