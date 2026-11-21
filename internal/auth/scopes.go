@@ -41,6 +41,7 @@ var scopeCatalog = map[string]ScopeInfo{
 	"db_servers:write":        {Description: "Add, check and remove external database servers (stores their administrator password)", HighRisk: true},
 	"backups:read":            {Description: "Read backup settings, status and snapshots"},
 	"backups:write":           {Description: "Change backup settings, confirm the target's host key, start a backup"},
+	"audit:read":              {Description: "Read and export the audit log of the panel (every account, site, action and the IP addresses involved)"},
 	"doctor:read":             {Description: "Run the read-only checks of hostashi doctor and read their results"},
 	"firewall:read":           {Description: "Read the firewall's opened ports and the allowlists for SSH and the panel"},
 	"firewall:write":          {Description: "Open ports and set the allowlists for SSH and the panel (a wrong list locks out until the rollback)", HighRisk: true},
@@ -67,8 +68,9 @@ func Scopes() []ScopeInfo {
 	return out
 }
 
-// maxScopesPerToken keeps a token description small.
-const maxScopesPerToken = 32
+// maxScopesPerToken keeps a token description small. A token with every
+// scope of the catalog must still fit (TestScopeCatalogFitsOneToken).
+const maxScopesPerToken = 64
 
 // normalizeScopes checks a requested scope list against the catalog and
 // returns it sorted without duplicates. An empty list, an unknown scope or a

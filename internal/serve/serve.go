@@ -149,6 +149,9 @@ type Deps struct {
 	// MailHistory adds the email check to the doctor report; nil leaves it
 	// out. Needs Mail.
 	MailHistory MailHistory
+	// AuditLog reads the audit log for its page and export; nil disables
+	// its routes. Needs Auth.
+	AuditLog AuditLog
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -287,6 +290,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			}
 
 			registerDoctor(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Doctor, allPanelChecks(panel), log)
+		}
+
+		if deps.AuditLog != nil {
+			registerAudit(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.AuditLog, log)
 		}
 
 		if deps.Metrics != nil && deps.Settings != nil {
@@ -459,6 +466,7 @@ func Run(ctx context.Context, cfg Config) error {
 		MailHistory: st,
 		MailSend:    func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
 		Files:       RPCFilesOpener(client),
+		AuditLog:    st,
 	}
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
