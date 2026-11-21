@@ -134,8 +134,11 @@ var table = map[Action]Rule{
 	"databases:read":          ownSite("databases:read"),
 	"databases:write":         ownSite("databases:write"),
 	"databases:delete":        ownSite("databases:delete"),
-	"backups:read":            ownSite("backups:read"),
-	"backups:restore":         ownSite("backups:restore"),
+	// The web database tool (ADR-0038) gives what a new database user
+	// with a known password gives, so it shares databases:write.
+	"databases:open":  ownSite("databases:write"),
+	"backups:read":    ownSite("backups:read"),
+	"backups:restore": ownSite("backups:restore"),
 }
 
 // Lookup returns the rule of an action.

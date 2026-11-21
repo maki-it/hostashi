@@ -123,6 +123,9 @@ type Service struct {
 	limits LimitsAgent // nil: no resource limits (ADR-0015)
 	ssh    SSHAgent    // nil: no SSH keys (ADR-0032)
 
+	dbTool     DBToolAgent // nil: no web database tool (ADR-0038)
+	dbToolPort int
+
 	panelDomain string // ADR-0023; empty: nginx serves no panel address
 	panelServed string // panel domain of the last accepted web state; under mu
 
