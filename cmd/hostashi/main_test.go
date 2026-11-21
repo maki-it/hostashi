@@ -59,6 +59,8 @@ func TestAdminUsage(t *testing.T) {
 		{"site"},
 		{"site", "bogus"},
 		{"site", "delete"},
+		{"site", "files"},
+		{"site", "files", "a", "b"},
 		{"web"},
 		{"web", "apply", "extra"},
 		{"db"},
