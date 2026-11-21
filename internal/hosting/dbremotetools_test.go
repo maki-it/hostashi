@@ -280,8 +280,11 @@ func storeServer(mode, ca string) store.DBServer {
 // (ADR-0051): the same temporary user and ticket as for MariaDB, with the
 // engine for Adminer's pgsql driver.
 func TestRemoteDatabaseToolPostgres(t *testing.T) {
-	s, tool, f, _, _ := remoteToolSetup(t)
+	s, tool, f, _, now := remoteToolSetup(t)
 	ctx := t.Context()
+
+	// The fake tool answers with the real clock.
+	*now = time.Now()
 
 	s.afterFunc = func(time.Duration, func()) {}
 
@@ -310,6 +313,20 @@ func TestRemoteDatabaseToolPostgres(t *testing.T) {
 
 	if users := toolUsers(f); len(users) != 1 || users[0] != req.User {
 		t.Fatalf("tool users %v, request user %s", users, req.User)
+	}
+
+	// The role's password ends with the session, and moves with it.
+	if got, want := f.until[req.User], now.Add(30*time.Minute+remoteToolMargin); !got.Equal(want) {
+		t.Fatalf("valid until %v, want %v", got, want)
+	}
+
+	view, err := s.ExtendDBToolSession(ctx, 1, "shop_pg", req.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := f.until[req.User], view.Expires.Add(remoteToolMargin); !got.Equal(want) || !got.After(now.Add(55*time.Minute)) {
+		t.Fatalf("extended until %v, want %v", got, want)
 	}
 
 	// Ending the session drops the user, by its database.

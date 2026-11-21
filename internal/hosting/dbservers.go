@@ -51,7 +51,10 @@ type RemoteDB interface {
 	CreateJobUser(ctx context.Context, database, user, password string) error
 	DropJobUser(ctx context.Context, database, user string) error
 	// The temporary user of a web database tool session.
-	CreateToolUser(ctx context.Context, database, user, password string) error
+	CreateToolUser(ctx context.Context, database, user, password string, until time.Time) error
+	// ExtendToolUser moves the end of a tool user's password (PostgreSQL);
+	// a no-op on MariaDB and MySQL.
+	ExtendToolUser(ctx context.Context, user string, until time.Time) error
 	DropToolUser(ctx context.Context, database, user string) error
 }
 
