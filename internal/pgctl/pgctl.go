@@ -103,16 +103,108 @@ func Dump(ctx context.Context, r Run, out io.Writer) error {
 
 // Restore loads a custom-format dump from in. Objects are created as
 // role (the site's role), existing ones are replaced, ownership in the
-// dump is ignored, and the first error stops the restore.
+// dump is ignored, and the first error stops and rolls back the restore.
+//
+// pg_restore turns the archive into SQL (script mode, no connection) and
+// psql runs it like Exec: pg_restore's own --single-transaction cannot
+// skip the "SET transaction_timeout = 0" that pg_restore 17 and newer put
+// in the preamble, which a server before 17 refuses [V: pg_restore 19.0
+// against PostgreSQL 14]. preambleFilter drops that one line; the
+// setting's default is 0 anyway.
 func Restore(ctx context.Context, r Run, role string, in io.Reader) error {
 	if !roleRe.MatchString(role) {
 		return fmt.Errorf("%w: invalid role", ErrFailed)
 	}
 
-	return run(ctx, r, toolRestore, []string{
-		"--no-password", "--clean", "--if-exists", "--no-owner", "--exit-on-error", "--single-transaction",
-		"--role=" + role, "--dbname=" + r.Database,
-	}, in, io.Discard)
+	pr, pw := io.Pipe()
+	done := make(chan error, 1)
+
+	go func() {
+		err := run(ctx, r, toolRestore, []string{"--clean", "--if-exists", "--no-owner", "--file=-"}, in, &preambleFilter{w: pw})
+		_ = pw.CloseWithError(err)
+		done <- err
+	}()
+
+	err := Exec(ctx, r, role, pr)
+	// psql may stop early; pg_restore then fails on its next write.
+	_ = pr.CloseWithError(errors.New("pgctl: psql stopped"))
+	rerr := <-done
+
+	if err != nil {
+		return err
+	}
+
+	return rerr
+}
+
+// preambleFilter passes a pg_restore script on and drops the line
+// "SET transaction_timeout = 0;" while it is still in the preamble (SET
+// lines, set_config calls, the \restrict line that bars psql
+// meta-commands for the rest of the script, comments and empty lines
+// before the first object).
+type preambleFilter struct {
+	w    io.Writer
+	line []byte
+	body bool
+}
+
+func (f *preambleFilter) Write(p []byte) (int, error) {
+	n := len(p)
+
+	for !f.body && len(p) > 0 {
+		i := bytes.IndexByte(p, '\n')
+		if i < 0 {
+			f.line = append(f.line, p...)
+			if len(f.line) > 4096 {
+				f.body = true
+
+				break
+			}
+
+			return n, nil
+		}
+
+		f.line = append(f.line, p[:i+1]...)
+		p = p[i+1:]
+
+		l := string(bytes.TrimRight(f.line, "\r\n"))
+
+		switch {
+		case l == "SET transaction_timeout = 0;":
+			// dropped
+		case l == "" || strings.HasPrefix(l, "--") || strings.HasPrefix(l, "SET ") || strings.HasPrefix(l, "SELECT pg_catalog.set_config(") ||
+			strings.HasPrefix(l, `\restrict `):
+			if _, err := f.w.Write(f.line); err != nil {
+				return 0, err
+			}
+		default:
+			f.body = true
+
+			if _, err := f.w.Write(f.line); err != nil {
+				return 0, err
+			}
+		}
+
+		f.line = f.line[:0]
+	}
+
+	if f.body {
+		if len(f.line) > 0 {
+			if _, err := f.w.Write(f.line); err != nil {
+				return 0, err
+			}
+
+			f.line = nil
+		}
+
+		if len(p) > 0 {
+			if _, err := f.w.Write(p); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	return n, nil
 }
 
 // Exec runs the plain SQL file from in with psql, in one transaction, as

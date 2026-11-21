@@ -285,3 +285,26 @@ func TestAgainstServer(t *testing.T) {
 		t.Fatalf("passfiles left: %v", left)
 	}
 }
+
+func TestPreambleFilter(t *testing.T) {
+	script := "--\n-- PostgreSQL database dump\n--\n\n\\restrict abc123\n\nSET statement_timeout = 0;\nSET transaction_timeout = 0;\nSELECT pg_catalog.set_config('search_path', '', false);\n\nCREATE TABLE public.t (s text);\nSET transaction_timeout = 0;\n"
+	want := strings.Replace(script, "SET transaction_timeout = 0;\n", "", 1)
+
+	for _, size := range []int{1, 3, 7, 64, 4096} {
+		var out bytes.Buffer
+
+		f := &preambleFilter{w: &out}
+		for b := []byte(script); len(b) > 0; {
+			k := min(size, len(b))
+			if n, err := f.Write(b[:k]); err != nil || n != k {
+				t.Fatalf("write: %d %v", n, err)
+			}
+
+			b = b[k:]
+		}
+
+		if out.String() != want {
+			t.Errorf("chunks of %d: %q", size, out.String())
+		}
+	}
+}
