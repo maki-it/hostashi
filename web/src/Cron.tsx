@@ -25,6 +25,7 @@ import {
   type CronList,
 } from "./cron";
 import type { Site } from "./sites";
+import { Badge, Button, Card, Field, Notice } from "./ui";
 
 // CronSettings lists the cron jobs of a site and adds, changes, pauses,
 // runs and deletes them. Jobs run as the site user in its home.
@@ -62,65 +63,64 @@ export function CronSettings({ site }: { site: Site }) {
   };
 
   return (
-    <fieldset>
-      <legend>Cron jobs of {site.name}</legend>
-      <p className="muted">
-        Each job runs one command line as the user {site.name} in its home directory, with lower priority than the site. A “%” is passed to
-        the shell as written, unlike in a crontab.
-      </p>
-      {site.disabled && <p className="muted">The site is disabled: its cron jobs do not run until it is enabled.</p>}
-      {!list ? (
-        loadError ? (
-          <p role="alert">{loadError}</p>
+    <Card title="Cron jobs">
+      <div className="ui-stack">
+        <p className="ui-flush">
+          Each job runs one command line as the user {site.name} in its home directory, with lower priority than the site. A “%” is passed to
+          the shell as written, unlike in a crontab.
+        </p>
+        {site.disabled && <Notice tone="warn" title="The site is disabled: its cron jobs do not run until it is enabled." />}
+        {!list ? (
+          loadError ? (
+            <Notice tone="err" title={loadError} />
+          ) : (
+            <p aria-busy="true">Loading cron jobs…</p>
+          )
         ) : (
-          <p aria-busy="true">Loading cron jobs…</p>
-        )
-      ) : (
-        <>
-          {loadError && <p role="alert">{loadError}</p>}
-          {list.jobs.length === 0 ? (
-            <p>No cron jobs yet.</p>
-          ) : (
-            <>
-              {!list.statusKnown && <p className="muted">Last and next runs are not known right now: the server did not answer.</p>}
-              <ul className="jobs" aria-label={"Cron jobs of " + site.name}>
-                {list.jobs.map((j) => (
-                  <JobRow key={j.id} site={site} job={j} onChange={changed} />
-                ))}
-              </ul>
-            </>
-          )}
-          {done && <p role="status">{done}</p>}
-          {list.jobs.length >= maxCronJobs ? (
-            <p className="muted">A site has at most {maxCronJobs} cron jobs.</p>
-          ) : adding ? (
-            <JobForm
-              title="New cron job"
-              submitLabel="Add cron job"
-              onCancel={() => setAdding(false)}
-              onSubmit={async (input) => {
-                await createCron(site.name, input);
-                setAdding(false);
-                await changed(input.paused ? "Cron job added, paused." : "Cron job added.");
-              }}
-            />
-          ) : (
-            <div className="actions">
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => {
-                  setDone("");
-                  setAdding(true);
+          <>
+            {loadError && <Notice tone="err" title={loadError} />}
+            {list.jobs.length === 0 ? (
+              <p className="ui-hint ui-flush">No cron jobs yet.</p>
+            ) : (
+              <>
+                {!list.statusKnown && <p className="ui-hint ui-flush">Last and next runs are not known right now: the server did not answer.</p>}
+                <ul className="ui-plain-list ui-stack" aria-label={"Cron jobs of " + site.name}>
+                  {list.jobs.map((j) => (
+                    <JobRow key={j.id} site={site} job={j} onChange={changed} />
+                  ))}
+                </ul>
+              </>
+            )}
+            {done && <Notice tone="ok" title={done} />}
+            {list.jobs.length >= maxCronJobs ? (
+              <p className="ui-hint ui-flush">A site has at most {maxCronJobs} cron jobs.</p>
+            ) : adding ? (
+              <JobForm
+                title="New cron job"
+                submitLabel="Add cron job"
+                onCancel={() => setAdding(false)}
+                onSubmit={async (input) => {
+                  await createCron(site.name, input);
+                  setAdding(false);
+                  await changed(input.paused ? "Cron job added, paused." : "Cron job added.");
                 }}
-              >
-                Add cron job
-              </button>
-            </div>
-          )}
-        </>
-      )}
-    </fieldset>
+              />
+            ) : (
+              <div className="ui-row">
+                <Button
+                  onClick={() => {
+                    setDone("");
+                    setAdding(true);
+                  }}
+                >
+                  Add cron job
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -148,7 +148,7 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
 
   if (editing) {
     return (
-      <li>
+      <li className="ui-subsection">
         <JobForm
           title={"Change cron job " + String(job.id)}
           submitLabel="Save cron job"
@@ -165,14 +165,14 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
   }
 
   return (
-    <li>
-      <div>
+    <li className="ui-subsection ui-stack-tight">
+      <div className="ui-row">
         <code>{job.schedule}</code>
-        {words && <span className="muted"> {words}</span>}
-        {job.paused && <span className="badge warn">Paused</span>}
+        {words && <span className="ui-hint">{words}</span>}
+        {job.paused && <Badge tone="warn">Paused</Badge>}
       </div>
-      <pre className="command">{job.command}</pre>
-      <dl className="facts" aria-label={"Details of cron job " + String(job.id)}>
+      <pre className="ui-code">{job.command}</pre>
+      <dl className="ui-facts" aria-label={"Details of cron job " + String(job.id)}>
         <dt>Last run</dt>
         <dd>{st ? lastRun(st) : "Unknown"}</dd>
         <dt>Next run</dt>
@@ -183,11 +183,10 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
         </dd>
       </dl>
       {confirming ? (
-        <div className="actions">
+        <div className="ui-row" role="alertdialog" aria-label={"Delete cron job " + String(job.id)}>
           <span>Delete this cron job?</span>
-          <button
-            type="button"
-            className="danger"
+          <Button
+            variant="danger"
             disabled={busy}
             onClick={() =>
               void act(async () => {
@@ -197,16 +196,14 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
             }
           >
             Delete cron job
-          </button>
-          <button type="button" className="secondary" disabled={busy} onClick={() => setConfirming(false)}>
+          </Button>
+          <Button disabled={busy} onClick={() => setConfirming(false)}>
             Cancel
-          </button>
+          </Button>
         </div>
       ) : (
-        <div className="actions">
-          <button
-            type="button"
-            className="secondary"
+        <div className="ui-row">
+          <Button
             disabled={busy || site.disabled || st?.running === true}
             onClick={() =>
               void act(async () => {
@@ -216,10 +213,8 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
             }
           >
             Run now
-          </button>
-          <button
-            type="button"
-            className="secondary"
+          </Button>
+          <Button
             disabled={busy}
             onClick={() =>
               void act(async () => {
@@ -229,16 +224,16 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
             }
           >
             {job.paused ? "Resume" : "Pause"}
-          </button>
-          <button type="button" className="secondary" disabled={busy} onClick={() => setEditing(true)}>
+          </Button>
+          <Button disabled={busy} onClick={() => setEditing(true)}>
             Change
-          </button>
-          <button type="button" className="secondary danger" disabled={busy} onClick={() => setConfirming(true)}>
+          </Button>
+          <Button variant="danger" disabled={busy} onClick={() => setConfirming(true)}>
             Delete
-          </button>
+          </Button>
         </div>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && <Notice tone="err" title={error} />}
     </li>
   );
 }
@@ -296,40 +291,38 @@ function JobForm({
   }
 
   return (
-    <form onSubmit={(e) => void submit(e)} noValidate aria-label={title}>
-      <label>
-        Schedule
-        <small>Five cron fields (minute hour day-of-month month day-of-week), like */15 * * * *, or @hourly, @daily, @weekly, @monthly.</small>
-        <input value={schedule} onChange={(e) => setSchedule(e.target.value)} autoComplete="off" spellCheck={false} className="mono" />
-      </label>
-      {words && <p className="muted">Runs {words}, in the server's time zone.</p>}
-      <label>
-        Command
-        <small>One line, run by the shell. For example: php htdocs/wp-cron.php</small>
-        <input value={command} onChange={(e) => setCommand(e.target.value)} autoComplete="off" spellCheck={false} className="mono" />
-      </label>
-      <label>
-        Time limit in minutes
-        <small>A run that takes longer is stopped. 1 to {maxTimeoutMin}.</small>
-        <input type="number" min={1} max={maxTimeoutMin} value={timeout} onChange={(e) => setTimeoutMin(e.target.value)} />
-      </label>
-      <label>
-        Priority (nice)
-        <small>0 to 19; higher numbers leave more CPU to the site.</small>
-        <input type="number" min={0} max={19} value={nice} onChange={(e) => setNice(e.target.value)} />
-      </label>
-      <label className="check">
+    <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate aria-label={title}>
+      <strong>{title}</strong>
+      <Field
+        label="Schedule"
+        hint="Five cron fields (minute hour day-of-month month day-of-week), like */15 * * * *, or @hourly, @daily, @weekly, @monthly."
+      >
+        <input className="ui-input ui-mono" value={schedule} onChange={(e) => setSchedule(e.target.value)} autoComplete="off" spellCheck={false} />
+      </Field>
+      {words && <p className="ui-hint ui-flush">Runs {words}, in the server's time zone.</p>}
+      <Field label="Command" hint="One line, run by the shell. For example: php htdocs/wp-cron.php">
+        <input className="ui-input ui-mono" value={command} onChange={(e) => setCommand(e.target.value)} autoComplete="off" spellCheck={false} />
+      </Field>
+      <div className="ui-narrow ui-stack">
+        <Field label="Time limit in minutes" hint={`A run that takes longer is stopped. 1 to ${maxTimeoutMin}.`}>
+          <input className="ui-input" type="number" min={1} max={maxTimeoutMin} value={timeout} onChange={(e) => setTimeoutMin(e.target.value)} />
+        </Field>
+        <Field label="Priority (nice)" hint="0 to 19; higher numbers leave more CPU to the site.">
+          <input className="ui-input" type="number" min={0} max={19} value={nice} onChange={(e) => setNice(e.target.value)} />
+        </Field>
+      </div>
+      <label className="ui-check">
         <input type="checkbox" checked={paused} onChange={(e) => setPaused(e.target.checked)} />
         Paused: runs only when started by hand
       </label>
-      {error && <p role="alert">{error}</p>}
-      <div className="actions">
-        <button type="submit" disabled={busy}>
+      {error && <Notice tone="err" title={error} />}
+      <div className="ui-row">
+        <Button type="submit" variant="primary" disabled={busy}>
           {busy ? "Saving…" : submitLabel}
-        </button>
-        <button type="button" className="secondary" disabled={busy} onClick={onCancel}>
+        </Button>
+        <Button disabled={busy} onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   );

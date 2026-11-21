@@ -29,7 +29,7 @@ import {
 } from "./limits";
 import { formatHash } from "./routes";
 import type { Site } from "./sites";
-import { Badge, Button, Card, IconButton, IconLink, Notice, PageHead, RowActions, Table, type Column, type Sort } from "./ui";
+import { Badge, Button, Card, Field, IconButton, IconLink, Notice, PageHead, RowActions, Table, type Column, type Sort } from "./ui";
 
 const defaultLimits: Limits = {
   diskBytes: 0,
@@ -51,13 +51,13 @@ const cpuCoresText = (percent: number) => {
   return c === "1" ? "1 CPU core" : c + " CPU cores";
 };
 
-const Unlimited = () => <span className="badge warn">Unlimited</span>;
+const Unlimited = () => <Badge tone="warn">Unlimited</Badge>;
 
 // LimitFacts lists limits; an unlimited one is marked, so it is never
 // mistaken for a small number.
 export function LimitFacts({ limits, label }: { limits: Limits; label: string }) {
   return (
-    <dl className="facts" aria-label={label}>
+    <dl className="ui-facts" aria-label={label}>
       <dt>Disk space</dt>
       <dd>{limits.diskBytes ? formatBytes(limits.diskBytes) : <Unlimited />}</dd>
       <dt>Files</dt>
@@ -79,17 +79,17 @@ export function LimitFacts({ limits, label }: { limits: Limits; label: string })
 
 function UsageFacts({ usage, limits }: { usage: Usage; limits: Limits }) {
   if (!usage.enforced) {
-    return <p className="muted">Disk limits are not enforced on this server: its file system has no project quota.</p>;
+    return <p className="ui-hint ui-flush">Disk limits are not enforced on this server: its file system has no project quota.</p>;
   }
   const badge =
     usage.level === "critical" ? (
-      <span className="badge warn">Almost full</span>
+      <Badge tone="warn">Almost full</Badge>
     ) : usage.level === "warning" ? (
-      <span className="badge warn">Filling up</span>
+      <Badge tone="warn">Filling up</Badge>
     ) : null;
   return (
     <>
-      <dl className="facts" aria-label="Disk use">
+      <dl className="ui-facts" aria-label="Disk use">
         <dt>Disk use</dt>
         <dd>
           {formatBytes(usage.bytes)}
@@ -102,7 +102,7 @@ function UsageFacts({ usage, limits }: { usage: Usage; limits: Limits }) {
         </dd>
       </dl>
       {usage.level === "critical" && (
-        <p role="alert">The site has used 95 % or more of a disk limit. When it is full, writing new files fails.</p>
+        <Notice tone="err" title="The site has used 95 % or more of a disk limit. When it is full, writing new files fails." />
       )}
     </>
   );
@@ -130,14 +130,12 @@ function LimitInputs({
     unlimited: boolean,
     onUnlimited: (v: boolean) => void,
   ) => (
-    <div className="limit-row">
-      <label>
-        {label}
-        {unit && <small>{unit}</small>}
-        <input inputMode="numeric" value={unlimited ? "" : value} disabled={unlimited} onChange={(e) => onValue(e.target.value)} />
-      </label>
+    <div className="ui-stack-tight">
+      <Field label={label} {...(unit ? { hint: unit } : {})}>
+        <input className="ui-input" inputMode="numeric" value={unlimited ? "" : value} disabled={unlimited} onChange={(e) => onValue(e.target.value)} />
+      </Field>
       {(allowUnlimited || unlimited) && (
-        <label className="check">
+        <label className="ui-check">
           <input type="checkbox" checked={unlimited} onChange={(e) => onUnlimited(e.target.checked)} />
           Unlimited {label.toLowerCase()}
         </label>
@@ -178,37 +176,26 @@ function LimitInputs({
         f.tasksUnlimited,
         (v) => set({ ...f, tasksUnlimited: v }),
       )}
-      <label>
-        PHP workers
-        <small>
-          Requests the site's PHP handles at the same time, {bounds.workers.min} to {bounds.workers.max}
-        </small>
-        <input inputMode="numeric" value={f.workers} onChange={(e) => set({ ...f, workers: e.target.value })} />
-      </label>
-      <label>
-        CPU priority
-        <small>The share of the CPU the site gets when the server is busy</small>
-        <select value={f.cpuPriority} onChange={(e) => set({ ...f, cpuPriority: e.target.value as CPUPriority })}>
+      <Field label="PHP workers" hint={`Requests the site's PHP handles at the same time, ${String(bounds.workers.min)} to ${String(bounds.workers.max)}`}>
+        <input className="ui-input" inputMode="numeric" value={f.workers} onChange={(e) => set({ ...f, workers: e.target.value })} />
+      </Field>
+      <Field label="CPU priority" hint="The share of the CPU the site gets when the server is busy">
+        <select className="ui-select" value={f.cpuPriority} onChange={(e) => set({ ...f, cpuPriority: e.target.value as CPUPriority })}>
           <option value="low">Low</option>
           <option value="normal">Normal</option>
           <option value="high">High</option>
         </select>
-      </label>
-      <label>
-        CPU cores
-        <small>
-          Hard limit, such as 2 or 0.5; 0 for none.
-          {cpus ? ` This server has ${String(cpus)} ${cpus === 1 ? "core" : "cores"}.` : ""}
-        </small>
-        <input inputMode="decimal" value={f.cpuCores} onChange={(e) => set({ ...f, cpuCores: e.target.value })} />
-      </label>
+      </Field>
+      <Field label="CPU cores" hint={"Hard limit, such as 2 or 0.5; 0 for none." + (cpus ? ` This server has ${String(cpus)} ${cpus === 1 ? "core" : "cores"}.` : "")}>
+        <input className="ui-input" inputMode="decimal" value={f.cpuCores} onChange={(e) => set({ ...f, cpuCores: e.target.value })} />
+      </Field>
     </>
   );
 }
 
 const unlimitedWarning = (f: LimitFields) =>
   f.diskUnlimited || f.inodesUnlimited || f.memoryUnlimited || f.tasksUnlimited ? (
-    <p className="muted">
+    <p className="ui-hint ui-flush">
       An unlimited value lets this site fill the disk or take the memory of the whole server. Use it only for a site you trust.
     </p>
   ) : null;
@@ -273,63 +260,63 @@ export function LimitSettings({ site }: { site: Site }) {
   }
 
   return (
-    <fieldset>
-      <legend>Resource limits of {site.name}</legend>
-      {!state ? (
-        loadError ? (
-          <p role="alert">{loadError}</p>
-        ) : (
-          <p aria-busy="true">Loading limits…</p>
-        )
-      ) : (
-        <>
-          {state.usage && <UsageFacts usage={state.usage} limits={state.set ? state.limits : defaultLimits} />}
-          {state.set ? (
-            <>
-              <p>{state.preset ? `Preset: ${state.preset}` : "Custom values"}</p>
-              <LimitFacts limits={state.limits} label={"Limits of " + site.name} />
-              {state.applyError && (
-                <p role="alert">The limits are saved but could not be applied on the server: {state.applyError}. Save again to retry.</p>
-              )}
-            </>
+    <Card title="Resource limits">
+      <div className="ui-stack">
+        {!state ? (
+          loadError ? (
+            <Notice tone="err" title={loadError} />
           ) : (
-            <p className="muted">This site has no limits yet: it was created before limits existed. Choose a preset to limit it.</p>
-          )}
-          <form onSubmit={save} noValidate>
-            <label>
-              Limits
-              <select value={choice} onChange={(e) => setChoice(e.target.value)}>
-                {presets.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    Preset {p.name}
-                    {p.default ? " (default)" : ""}
-                  </option>
-                ))}
-                <option value="">Custom values</option>
-              </select>
-            </label>
-            {choice === "" ? (
+            <p aria-busy="true">Loading limits…</p>
+          )
+        ) : (
+          <>
+            {state.usage && <UsageFacts usage={state.usage} limits={state.set ? state.limits : defaultLimits} />}
+            {state.set ? (
               <>
-                <LimitInputs f={fields} set={setFields} allowUnlimited cpus={cpus} />
-                {unlimitedWarning(fields)}
+                <p className="ui-flush">{state.preset ? `Preset: ${state.preset}` : "Custom values"}</p>
+                <LimitFacts limits={state.limits} label={"Limits of " + site.name} />
+                {state.applyError && (
+                  <Notice tone="err" title={`The limits are saved but could not be applied on the server: ${state.applyError}. Save again to retry.`} />
+                )}
               </>
             ) : (
-              // The values of the current preset are shown above already.
-              presets
-                .filter((p) => p.name === choice && !(state.set && state.preset === choice))
-                .map((p) => <LimitFacts key={p.name} limits={p.limits} label={"Values of preset " + p.name} />)
+              <p className="ui-hint ui-flush">This site has no limits yet: it was created before limits existed. Choose a preset to limit it.</p>
             )}
-            <div className="actions">
-              <button type="submit" disabled={busy}>
-                Save limits
-              </button>
-            </div>
-          </form>
-          {done && <p role="status">{done}</p>}
-          {error && <p role="alert">{error}</p>}
-        </>
-      )}
-    </fieldset>
+            <form className="ui-stack" onSubmit={save} noValidate>
+              <Field label="Limits">
+                <select className="ui-select" value={choice} onChange={(e) => setChoice(e.target.value)}>
+                  {presets.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      Preset {p.name}
+                      {p.default ? " (default)" : ""}
+                    </option>
+                  ))}
+                  <option value="">Custom values</option>
+                </select>
+              </Field>
+              {choice === "" ? (
+                <>
+                  <LimitInputs f={fields} set={setFields} allowUnlimited cpus={cpus} />
+                  {unlimitedWarning(fields)}
+                </>
+              ) : (
+                // The values of the current preset are shown above already.
+                presets
+                  .filter((p) => p.name === choice && !(state.set && state.preset === choice))
+                  .map((p) => <LimitFacts key={p.name} limits={p.limits} label={"Values of preset " + p.name} />)
+              )}
+              <div className="ui-row">
+                <Button variant="primary" type="submit" disabled={busy}>
+                  Save limits
+                </Button>
+              </div>
+            </form>
+            {done && <Notice tone="ok" title={done} />}
+            {error && <Notice tone="err" title={error} />}
+          </>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -487,7 +474,7 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
       key: "cpu",
       header: "CPU cores",
       sortValue: (p) => p.limits.cpuQuotaPercent || Infinity,
-      cell: (p) => (p.limits.cpuQuotaPercent ? formatCores(p.limits.cpuQuotaPercent) : <span className="muted">No limit</span>),
+      cell: (p) => (p.limits.cpuQuotaPercent ? formatCores(p.limits.cpuQuotaPercent) : <span className="ui-hint">No limit</span>),
     },
     {
       key: "priority",
@@ -667,29 +654,27 @@ function PresetForm({
   }
 
   return (
-    <form onSubmit={submit} noValidate aria-label={title}>
-      <label>
-        Name
-        <small>Lower-case letters, digits and dashes</small>
-        <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" spellCheck={false} />
-      </label>
+    <form className="ui-stack" onSubmit={submit} noValidate aria-label={title}>
+      <Field label="Name" hint="Lower-case letters, digits and dashes">
+        <input className="ui-input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" spellCheck={false} />
+      </Field>
       {!initial?.default && (
-        <label className="check">
+        <label className="ui-check">
           <input type="checkbox" checked={isDefault} onChange={(e) => setDefault(e.target.checked)} />
           Default for new sites
         </label>
       )}
       <LimitInputs f={fields} set={setFields} allowUnlimited={!isDefault && !initial?.default} cpus={cpus} />
       {unlimitedWarning(fields)}
-      <div className="actions">
-        <button type="submit" disabled={busy}>
+      <div className="ui-row">
+        <Button variant="primary" type="submit" disabled={busy}>
           {submitLabel}
-        </button>
-        <button type="button" className="secondary" disabled={busy} onClick={onCancel}>
+        </Button>
+        <Button disabled={busy} onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </div>
-      {error && <p role="alert">{error}</p>}
+      {error && <Notice tone="err" title={error} />}
     </form>
   );
 }

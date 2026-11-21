@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { logout, type User } from "./auth";
+import { Button, Card, Notice } from "./ui";
 
 // onLogout is set where the page has no sidebar with a logout button: while
 // the account still has to set up a second factor.
@@ -26,19 +27,16 @@ export function Home({ user, onLogout }: Props) {
   }
 
   return (
-    <section className="card" aria-labelledby="home-title">
-      <h2 id="home-title">Welcome, {user.username}</h2>
-      <p>You are logged in as {user.role}.</p>
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
-      {onLogout && (
-        <button type="button" className="secondary" disabled={busy} onClick={() => void doLogout()}>
-          Log out
-        </button>
-      )}
-    </section>
+    <Card title={`Welcome, ${user.username}`}>
+      <div className="ui-stack">
+        <p className="ui-flush">You are logged in as {user.role}.</p>
+        {error && <Notice tone="err" title={error} />}
+        {onLogout && (
+          <Button disabled={busy} onClick={() => void doLogout()}>
+            Log out
+          </Button>
+        )}
+      </div>
+    </Card>
   );
 }

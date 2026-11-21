@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { ApiError } from "./api";
 import { message, totpConfirm, totpEnroll } from "./auth";
+import { Button, Card, Field, Notice } from "./ui";
 
 type Props = { onDone: () => void };
 
@@ -42,58 +43,55 @@ export function SecondFactor({ onDone }: Props) {
   }
 
   return (
-    <section className="card" aria-labelledby="second-factor-title">
-      <h2 id="second-factor-title">Set up a second factor</h2>
-      {codes ? (
-        <>
-          <p role="status">Two-factor authentication is on. Keep these recovery codes somewhere safe; each one works once.</p>
-          <ul aria-label="Recovery codes">
-            {codes.map((c) => (
-              <li key={c}>
-                <code>{c}</code>
-              </li>
-            ))}
-          </ul>
-          <button type="button" onClick={onDone}>
-            Continue
-          </button>
-        </>
-      ) : enrolment ? (
-        <form onSubmit={(e) => void confirm(e)} noValidate>
-          <p>
-            Add this key to your authenticator app, then enter the code it shows. Key: <code>{enrolment.secret}</code>
-          </p>
-          <p>
-            <a href={enrolment.uri}>Open in an authenticator app</a>
-          </p>
-          <label>
-            One-time code
-            <input
-              name="code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              required
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-            />
-          </label>
-          <button type="submit" disabled={busy || code.trim() === ""}>
-            Turn on
-          </button>
-        </form>
-      ) : (
-        <>
-          <p>Your role needs a second factor. Set up an authenticator app (TOTP) before you continue.</p>
-          <button type="button" disabled={busy} onClick={() => void start()}>
-            Set up an authenticator app
-          </button>
-        </>
-      )}
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
-    </section>
+    <Card title="Set up a second factor">
+      <div className="ui-stack">
+        {codes ? (
+          <>
+            <Notice tone="ok" title="Two-factor authentication is on. Keep these recovery codes somewhere safe; each one works once." />
+            <ul aria-label="Recovery codes">
+              {codes.map((c) => (
+                <li key={c}>
+                  <code>{c}</code>
+                </li>
+              ))}
+            </ul>
+            <Button variant="primary" onClick={onDone}>
+              Continue
+            </Button>
+          </>
+        ) : enrolment ? (
+          <form className="ui-stack" onSubmit={(e) => void confirm(e)} noValidate>
+            <p className="ui-flush">
+              Add this key to your authenticator app, then enter the code it shows. Key: <code>{enrolment.secret}</code>
+            </p>
+            <p className="ui-flush">
+              <a href={enrolment.uri}>Open in an authenticator app</a>
+            </p>
+            <Field label="One-time code">
+              <input
+                className="ui-input"
+                name="code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                required
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </Field>
+            <Button variant="primary" type="submit" disabled={busy || code.trim() === ""}>
+              Turn on
+            </Button>
+          </form>
+        ) : (
+          <>
+            <p className="ui-flush">Your role needs a second factor. Set up an authenticator app (TOTP) before you continue.</p>
+            <Button variant="primary" disabled={busy} onClick={() => void start()}>
+              Set up an authenticator app
+            </Button>
+          </>
+        )}
+        {error && <Notice tone="err" title={error} />}
+      </div>
+    </Card>
   );
 }

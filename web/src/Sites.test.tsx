@@ -318,9 +318,9 @@ describe("SitePage", () => {
     await user.click(await screen.findByRole("button", { name: "Delete" }));
     const confirm = screen.getByRole("button", { name: "Delete blog" });
     expect(confirm).toBeDisabled();
-    await user.type(screen.getByLabelText(/Type blog to delete/), "blo");
+    await user.type(screen.getByLabelText(/Type blog to confirm/), "blo");
     expect(confirm).toBeDisabled();
-    await user.type(screen.getByLabelText(/Type blog to delete/), "g");
+    await user.type(screen.getByLabelText(/Type blog to confirm/), "g");
     await user.click(confirm);
     await waitFor(() => expect(window.location.hash).toBe("#/sites"));
     expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);

@@ -1,0 +1,37 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+
+/*
+ * Page-wide rules (ADR-0037): box sizing, the page background and the
+ * heading font. Everything else is a ui- class in ui.css or shell.css.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-head);
+  letter-spacing: var(--head-ls);
+}
+
+/* Login, setup, invitation and the second factor: one narrow column. */
+.ui-auth {
+  display: grid;
+  gap: var(--space-5);
+  max-width: 26rem;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+}

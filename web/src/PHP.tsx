@@ -208,7 +208,7 @@ export function PHPPage({
         >
           <div className="ui-stack">
             {inst.state === "failed" && <Notice tone="err" title="The installation did not finish. The log shows why; you can try again." />}
-            {inst.log.length > 0 && <pre aria-label="Installation log">{inst.log.join("\n")}</pre>}
+            {inst.log.length > 0 && <pre className="ui-code" aria-label="Installation log">{inst.log.join("\n")}</pre>}
           </div>
         </Card>
       )}

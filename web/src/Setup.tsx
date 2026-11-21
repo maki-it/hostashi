@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { message, setup } from "./auth";
+import { Button, Card, Field, Notice } from "./ui";
 
 type Props = { onDone: () => void };
 
@@ -34,65 +35,64 @@ export function Setup({ onDone }: Props) {
   }
 
   return (
-    <section className="card" aria-labelledby="setup-title">
-      <h2 id="setup-title">First-time setup</h2>
-      <p>Create the administrator account. You need the setup token from the server.</p>
-      <form onSubmit={(e) => void submit(e)} noValidate>
-        <label>
-          Setup token
-          <input
-            name="token"
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            required
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-          />
-        </label>
-        <label>
-          Username
-          <input
-            name="username"
-            autoComplete="username"
-            autoCapitalize="none"
-            spellCheck={false}
-            required
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          />
-        </label>
-        <label>
-          Password
-          <input
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
-        <label>
-          Repeat password
-          <input
-            name="repeat"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={repeat}
-            onChange={(e) => setRepeat(e.target.value)}
-          />
-        </label>
-        {error && (
-          <p role="alert" className="error">
-            {error}
-          </p>
-        )}
-        <button type="submit" disabled={busy || !token.trim() || !username || !password || !repeat}>
-          Create account
-        </button>
-      </form>
-    </section>
+    <Card title="First-time setup">
+      <div className="ui-stack">
+        <p className="ui-flush">Create the administrator account. You need the setup token from the server.</p>
+        <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
+          <Field label="Setup token">
+            <input
+              className="ui-input"
+              name="token"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              required
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+            />
+          </Field>
+          <Field label="Username">
+            <input
+              className="ui-input"
+              name="username"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              required
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+          </Field>
+          <Field label="Password">
+            <input
+              className="ui-input"
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </Field>
+          <Field label="Repeat password">
+            <input
+              className="ui-input"
+              name="repeat"
+              type="password"
+              autoComplete="new-password"
+              required
+              value={repeat}
+              onChange={(e) => setRepeat(e.target.value)}
+            />
+          </Field>
+          {error && <Notice tone="err" title={error} />}
+          <div className="ui-auth-actions">
+            <Button variant="primary" type="submit" disabled={busy || !token.trim() || !username || !password || !repeat}>
+              Create account
+            </Button>
+          </div>
+        </form>
+      </div>
+    </Card>
   );
 }

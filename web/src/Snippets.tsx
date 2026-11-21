@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import type { Site } from "./sites";
+import { Button, Card, Field, Notice } from "./ui";
 import {
   getSnippets,
   setSnippets,
@@ -64,41 +65,42 @@ export function SnippetSettings({ site }: { site: Site }) {
   }
 
   return (
-    <fieldset>
-      <legend>Custom nginx snippets of {site.name}</legend>
-      <p className="muted">
-        For rules Hostashi has no setting for yet: headers, redirects, extra locations. Only allowed directives pass; paths must stay inside the
-        site's home. Snippets are not used while the site is disabled or in maintenance.
-      </p>
-      {!open ? (
-        <div className="actions">
-          <button type="button" className="secondary" disabled={busy} onClick={() => void load()}>
-            Edit snippets
-          </button>
-        </div>
-      ) : (
-        <form onSubmit={(e) => void save(e)} noValidate>
-          <SnippetField label="Inside the server block" hint="After Hostashi's own locations." value={server} onChange={setServer} problems={problems?.server} />
-          <SnippetField
-            label="Inside location /"
-            hint="Before Hostashi's try_files, for every request that no other location takes."
-            value={root}
-            onChange={setRoot}
-            problems={problems?.root}
-          />
-          <div className="actions">
-            <button type="submit" disabled={busy}>
-              Save snippets
-            </button>
-            <button type="button" className="secondary" disabled={busy} onClick={() => setOpen(false)}>
-              Close snippets
-            </button>
+    <Card title="Custom nginx snippets">
+      <div className="ui-stack">
+        <p className="ui-flush">
+          For rules Hostashi has no setting for yet: headers, redirects, extra locations. Only allowed directives pass; paths must stay inside the
+          site's home. Snippets are not used while the site is disabled or in maintenance.
+        </p>
+        {!open ? (
+          <div className="ui-row">
+            <Button disabled={busy} onClick={() => void load()}>
+              Edit snippets
+            </Button>
           </div>
-        </form>
-      )}
-      {error && <p role="alert">{error}</p>}
-      {done && <p role="status">{done}</p>}
-    </fieldset>
+        ) : (
+          <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate>
+            <SnippetField label="Inside the server block" hint="After Hostashi's own locations." value={server} onChange={setServer} problems={problems?.server} />
+            <SnippetField
+              label="Inside location /"
+              hint="Before Hostashi's try_files, for every request that no other location takes."
+              value={root}
+              onChange={setRoot}
+              problems={problems?.root}
+            />
+            <div className="ui-row">
+              <Button variant="primary" type="submit" disabled={busy}>
+                Save snippets
+              </Button>
+              <Button disabled={busy} onClick={() => setOpen(false)}>
+                Close snippets
+              </Button>
+            </div>
+          </form>
+        )}
+        {error && <Notice tone="err" title={error} />}
+        {done && <Notice tone="ok" title={done} />}
+      </div>
+    </Card>
   );
 }
 
@@ -115,28 +117,17 @@ export function SnippetField({
   onChange: (v: string) => void;
   problems?: SnippetProblem[] | undefined;
 }) {
+  const lines = problems && problems.length > 0 ? problems.map((p) => `Line ${p.line}: ${p.msg}.`).join(" ") : undefined;
   return (
-    <label>
-      {label}
-      <small>{hint}</small>
+    <Field label={label} hint={hint} {...(lines ? { error: lines } : {})}>
       <textarea
+        className="ui-input ui-textarea ui-mono"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={Math.min(16, Math.max(4, value.split("\n").length + 1))}
         autoComplete="off"
         spellCheck={false}
-        className="code"
-        aria-invalid={problems && problems.length > 0 ? true : undefined}
       />
-      {problems && problems.length > 0 && (
-        <ul className="problems">
-          {problems.map((p, i) => (
-            <li key={i}>
-              Line {p.line}: {p.msg}
-            </li>
-          ))}
-        </ul>
-      )}
-    </label>
+    </Field>
   );
 }

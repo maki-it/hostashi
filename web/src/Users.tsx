@@ -468,9 +468,9 @@ function AccountView({ account: a, self, sites, back, onChange, onLink, onDelete
                 });
               }}
             >
-              <fieldset>
+              <fieldset className="ui-fieldset ui-stack-tight">
                 <legend>Sites {a.username} may work on</legend>
-                {sites.length === 0 && <p className="muted">There are no sites yet.</p>}
+                {sites.length === 0 && <p className="ui-hint ui-flush">There are no sites yet.</p>}
                 {sites.map((s) => (
                   <label key={s} className="ui-check">
                     <input type="checkbox" checked={grants.includes(s)} onChange={(e) => toggle(s, e.target.checked)} />

@@ -24,6 +24,7 @@ import { formatHash, parseHash, type Page } from "./routes";
 import { Mark, Shell } from "./Shell";
 import { SitePage } from "./SitePage";
 import { Users } from "./Users";
+import { Button, Notice } from "./ui";
 import { applyScheme, type ColorScheme } from "./scheme";
 
 type View =
@@ -124,7 +125,7 @@ export function App() {
   }
 
   return (
-    <main className="shell">
+    <main className="ui-root ui-auth">
       <header className="app-brand ui-auth-brand">
         <Mark />
         <span className="app-brand-name">
@@ -134,12 +135,9 @@ export function App() {
       </header>
       {view.kind === "loading" && <p aria-busy="true">Loading…</p>}
       {view.kind === "error" && (
-        <div role="alert" className="card">
-          <p>The server is not reachable.</p>
-          <button type="button" onClick={() => void boot()}>
-            Try again
-          </button>
-        </div>
+        <Notice tone="err" title="The server is not reachable.">
+          <Button onClick={() => void boot()}>Try again</Button>
+        </Notice>
       )}
       {view.kind === "setup" && (
         <Setup onDone={() => setView({ kind: "login", notice: "Administrator account created. Log in now." })} />

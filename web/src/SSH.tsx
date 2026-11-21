@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useState, type FormEvent } from "react";
 import type { Site } from "./sites";
+import { Badge, Button, Card, Field, Notice } from "./ui";
 import {
   accessName,
   addSSHKey,
@@ -50,63 +51,62 @@ export function SSHSettings({ site, host = window.location.hostname }: { site: S
   const shell = keys?.some((k) => k.access === "shell") ?? false;
 
   return (
-    <fieldset>
-      <legend>SSH and SFTP of {site.name}</legend>
-      <p className="muted">
-        Log in as the user {site.name} with a key, never with a password. A key is for SFTP only unless you allow a shell; a shell can run any
-        command as the site user. Logins see the server as the site's PHP code does.
-      </p>
-      {site.disabled && <p className="muted">The site is disabled: nobody can log in until it is enabled. The keys are kept.</p>}
-      {!keys ? (
-        loadError ? (
-          <p role="alert">{loadError}</p>
+    <Card title="SSH and SFTP">
+      <div className="ui-stack">
+        <p className="ui-flush">
+          Log in as the user {site.name} with a key, never with a password. A key is for SFTP only unless you allow a shell; a shell can run any
+          command as the site user. Logins see the server as the site's PHP code does.
+        </p>
+        {site.disabled && <Notice tone="warn" title="The site is disabled: nobody can log in until it is enabled. The keys are kept." />}
+        {!keys ? (
+          loadError ? (
+            <Notice tone="err" title={loadError} />
+          ) : (
+            <p aria-busy="true">Loading SSH keys…</p>
+          )
         ) : (
-          <p aria-busy="true">Loading SSH keys…</p>
-        )
-      ) : (
-        <>
-          {loadError && <p role="alert">{loadError}</p>}
-          {keys.length === 0 ? (
-            <p>No keys yet: nobody can log in.</p>
-          ) : (
-            <>
-              <LoginInfo site={site} host={host} shell={shell} />
-              <ul className="jobs" aria-label={"SSH keys of " + site.name}>
-                {keys.map((k) => (
-                  <KeyRow key={k.id} site={site} sshKey={k} onChange={changed} />
-                ))}
-              </ul>
-            </>
-          )}
-          {done && <p role="status">{done}</p>}
-          {keys.length >= maxSSHKeys ? (
-            <p className="muted">A site has at most {maxSSHKeys} keys.</p>
-          ) : adding ? (
-            <AddKeyForm
-              onCancel={() => setAdding(false)}
-              onSubmit={async (k) => {
-                await addSSHKey(site.name, k);
-                setAdding(false);
-                await changed(k.access === "shell" ? "Key added with shell access." : "Key added for SFTP.");
-              }}
-            />
-          ) : (
-            <div className="actions">
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => {
-                  setDone("");
-                  setAdding(true);
+          <>
+            {loadError && <Notice tone="err" title={loadError} />}
+            {keys.length === 0 ? (
+              <p className="ui-hint ui-flush">No keys yet: nobody can log in.</p>
+            ) : (
+              <>
+                <LoginInfo site={site} host={host} shell={shell} />
+                <ul className="ui-plain-list ui-stack" aria-label={"SSH keys of " + site.name}>
+                  {keys.map((k) => (
+                    <KeyRow key={k.id} site={site} sshKey={k} onChange={changed} />
+                  ))}
+                </ul>
+              </>
+            )}
+            {done && <Notice tone="ok" title={done} />}
+            {keys.length >= maxSSHKeys ? (
+              <p className="ui-hint ui-flush">A site has at most {maxSSHKeys} keys.</p>
+            ) : adding ? (
+              <AddKeyForm
+                onCancel={() => setAdding(false)}
+                onSubmit={async (k) => {
+                  await addSSHKey(site.name, k);
+                  setAdding(false);
+                  await changed(k.access === "shell" ? "Key added with shell access." : "Key added for SFTP.");
                 }}
-              >
-                Add SSH key
-              </button>
-            </div>
-          )}
-        </>
-      )}
-    </fieldset>
+              />
+            ) : (
+              <div className="ui-row">
+                <Button
+                  onClick={() => {
+                    setDone("");
+                    setAdding(true);
+                  }}
+                >
+                  Add SSH key
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -127,8 +127,8 @@ function LoginInfo({ site, host, shell }: { site: Site; host: string; shell: boo
   }, []);
 
   return (
-    <div aria-label={"Login of " + site.name}>
-      <p>
+    <div className="ui-stack-tight" role="group" aria-label={"Login of " + site.name}>
+      <p className="ui-flush">
         Log in with <code>sftp {site.name + "@" + host}</code>
         {shell && (
           <>
@@ -140,8 +140,8 @@ function LoginInfo({ site, host, shell }: { site: Site; host: string; shell: boo
       </p>
       {keys && keys.length > 0 && (
         <>
-          <p className="muted">At the first login, check that the server shows one of these fingerprints:</p>
-          <dl className="facts" aria-label="Host key fingerprints">
+          <p className="ui-hint ui-flush">At the first login, check that the server shows one of these fingerprints:</p>
+          <dl className="ui-facts" aria-label="Host key fingerprints">
             {keys.map((k) => (
               <Fragment key={k.type}>
                 <dt>{k.type}</dt>
@@ -153,7 +153,7 @@ function LoginInfo({ site, host, shell }: { site: Site; host: string; shell: boo
           </dl>
         </>
       )}
-      {failed && <p className="muted">The server's host key fingerprints could not be read right now.</p>}
+      {failed && <p className="ui-hint ui-flush">The server's host key fingerprints could not be read right now.</p>}
     </div>
   );
 }
@@ -194,21 +194,20 @@ function KeyRow({ site, sshKey, onChange }: { site: Site; sshKey: SSHKey; onChan
 
   if (editing) {
     return (
-      <li>
-        <form onSubmit={(e) => void save(e)} noValidate aria-label={"Change key " + sshKey.label}>
-          <label>
-            Label
-            <input value={label} onChange={(e) => setLabel(e.target.value)} autoComplete="off" maxLength={64} />
-          </label>
+      <li className="ui-subsection">
+        <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate aria-label={"Change key " + sshKey.label}>
+          <Field label="Label">
+            <input className="ui-input" value={label} onChange={(e) => setLabel(e.target.value)} autoComplete="off" maxLength={64} />
+          </Field>
           <AccessChoice value={access} onChange={setAccess} />
-          {error && <p role="alert">{error}</p>}
-          <div className="actions">
-            <button type="submit" disabled={busy}>
+          {error && <Notice tone="err" title={error} />}
+          <div className="ui-row">
+            <Button variant="primary" type="submit" disabled={busy}>
               Save key
-            </button>
-            <button type="button" className="secondary" disabled={busy} onClick={() => setEditing(false)}>
+            </Button>
+            <Button disabled={busy} onClick={() => setEditing(false)}>
               Cancel
-            </button>
+            </Button>
           </div>
         </form>
       </li>
@@ -216,11 +215,11 @@ function KeyRow({ site, sshKey, onChange }: { site: Site; sshKey: SSHKey; onChan
   }
 
   return (
-    <li>
-      <div>
-        <strong>{sshKey.label}</strong> {sshKey.access === "shell" ? <span className="badge warn">Shell</span> : <span className="badge">SFTP only</span>}
+    <li className="ui-subsection ui-stack-tight">
+      <div className="ui-row">
+        <strong>{sshKey.label}</strong> {sshKey.access === "shell" ? <Badge tone="warn">Shell</Badge> : <Badge tone="off">SFTP only</Badge>}
       </div>
-      <dl className="facts" aria-label={"Details of key " + sshKey.label}>
+      <dl className="ui-facts" aria-label={"Details of key " + sshKey.label}>
         <dt>Fingerprint</dt>
         <dd>
           <code>{sshKey.fingerprint}</code>
@@ -231,11 +230,10 @@ function KeyRow({ site, sshKey, onChange }: { site: Site; sshKey: SSHKey; onChan
         <dd>{formatDate(sshKey.createdAt)}</dd>
       </dl>
       {confirming ? (
-        <div className="actions">
+        <div className="ui-row" role="alertdialog" aria-label={"Delete key " + sshKey.label}>
           <span>Delete this key? Sessions that are open now keep running.</span>
-          <button
-            type="button"
-            className="danger"
+          <Button
+            variant="danger"
             disabled={busy}
             onClick={() =>
               void act(async () => {
@@ -245,16 +243,14 @@ function KeyRow({ site, sshKey, onChange }: { site: Site; sshKey: SSHKey; onChan
             }
           >
             Delete key
-          </button>
-          <button type="button" className="secondary" disabled={busy} onClick={() => setConfirming(false)}>
+          </Button>
+          <Button disabled={busy} onClick={() => setConfirming(false)}>
             Cancel
-          </button>
+          </Button>
         </div>
       ) : (
-        <div className="actions">
-          <button
-            type="button"
-            className="secondary"
+        <div className="ui-row">
+          <Button
             disabled={busy}
             onClick={() => {
               setLabel(sshKey.label);
@@ -264,26 +260,26 @@ function KeyRow({ site, sshKey, onChange }: { site: Site; sshKey: SSHKey; onChan
             }}
           >
             Change
-          </button>
-          <button type="button" className="secondary danger" disabled={busy} onClick={() => setConfirming(true)}>
+          </Button>
+          <Button variant="danger" disabled={busy} onClick={() => setConfirming(true)}>
             Delete
-          </button>
+          </Button>
         </div>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && <Notice tone="err" title={error} />}
     </li>
   );
 }
 
 function AccessChoice({ value, onChange }: { value: SSHAccess; onChange: (a: SSHAccess) => void }) {
   return (
-    <fieldset>
+    <fieldset className="ui-fieldset ui-stack-tight">
       <legend>Access</legend>
-      <label className="check">
+      <label className="ui-check">
         <input type="radio" name="access" checked={value === "sftp"} onChange={() => onChange("sftp")} />
         {accessName("sftp")}: upload and download files, no commands
       </label>
-      <label className="check">
+      <label className="ui-check">
         <input type="radio" name="access" checked={value === "shell"} onChange={() => onChange("shell")} />
         {accessName("shell")}: also a terminal, for wp-cli, composer or git
       </label>
@@ -323,10 +319,9 @@ function AddKeyForm({
   }
 
   return (
-    <form onSubmit={(e) => void submit(e)} noValidate aria-label="New SSH key">
-      <label>
-        Public key
-        <small>The contents of a .pub file, for example ~/.ssh/id_ed25519.pub. Ed25519, ECDSA or RSA with at least 3072 bits.</small>
+    <form className="ui-stack ui-subsection" onSubmit={(e) => void submit(e)} noValidate aria-label="New SSH key">
+      <strong>New SSH key</strong>
+      <Field label="Public key" hint="The contents of a .pub file, for example ~/.ssh/id_ed25519.pub. Ed25519, ECDSA or RSA with at least 3072 bits.">
         <textarea
           value={key}
           onChange={(e) => {
@@ -336,13 +331,12 @@ function AddKeyForm({
           rows={3}
           autoComplete="off"
           spellCheck={false}
-          className="code"
+          className="ui-input ui-textarea ui-mono"
         />
-      </label>
-      <label>
-        Label
-        <small>Shown in the list, so you know whose key it is.</small>
+      </Field>
+      <Field label="Label" hint="Shown in the list, so you know whose key it is.">
         <input
+          className="ui-input"
           value={label}
           onChange={(e) => {
             setLabel(e.target.value);
@@ -351,16 +345,16 @@ function AddKeyForm({
           autoComplete="off"
           maxLength={64}
         />
-      </label>
+      </Field>
       <AccessChoice value={access} onChange={setAccess} />
-      {error && <p role="alert">{error}</p>}
-      <div className="actions">
-        <button type="submit" disabled={busy}>
+      {error && <Notice tone="err" title={error} />}
+      <div className="ui-row">
+        <Button variant="primary" type="submit" disabled={busy}>
           {busy ? "Adding…" : "Add key"}
-        </button>
-        <button type="button" className="secondary" disabled={busy} onClick={onCancel}>
+        </Button>
+        <Button disabled={busy} onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   );

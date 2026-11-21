@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import type { User } from "./auth";
+import { Button, Card, Field, Notice } from "./ui";
 import { acceptInvitation, checkInvitation, usersMessage } from "./users";
 
 type Props = { token: string; onDone: (user: User) => void };
@@ -46,54 +47,51 @@ export function Invite({ token, onDone }: Props) {
   }
 
   return (
-    <section className="card" aria-labelledby="invite-title">
-      <h2 id="invite-title">Set your password</h2>
-      {username === null ? (
-        error ? (
-          <p role="alert" className="error">
-            {error}
-          </p>
+    <Card title="Set your password">
+      <div className="ui-stack">
+        {username === null ? (
+          error ? (
+            <Notice tone="err" title={error} />
+          ) : (
+            <p aria-busy="true">Checking the link…</p>
+          )
         ) : (
-          <p aria-busy="true">Checking the link…</p>
-        )
-      ) : (
-        <form onSubmit={(e) => void submit(e)} noValidate>
-          <p>
-            You were invited as <strong>{username}</strong>. Choose a password of at least 12 characters.
-          </p>
-          <input type="text" name="username" autoComplete="username" value={username} readOnly hidden />
-          <label>
-            Password
-            <input
-              type="password"
-              name="password"
-              autoComplete="new-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
-          <label>
-            Repeat password
-            <input
-              type="password"
-              name="repeat"
-              autoComplete="new-password"
-              required
-              value={repeat}
-              onChange={(e) => setRepeat(e.target.value)}
-            />
-          </label>
-          {error && (
-            <p role="alert" className="error">
-              {error}
+          <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
+            <p className="ui-flush">
+              You were invited as <strong>{username}</strong>. Choose a password of at least 12 characters.
             </p>
-          )}
-          <button type="submit" disabled={busy || password === ""}>
-            {busy ? "Saving…" : "Set password and log in"}
-          </button>
-        </form>
-      )}
-    </section>
+            <input className="ui-input" type="text" name="username" autoComplete="username" value={username} readOnly hidden />
+            <Field label="Password">
+              <input
+                className="ui-input"
+                type="password"
+                name="password"
+                autoComplete="new-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </Field>
+            <Field label="Repeat password">
+              <input
+                className="ui-input"
+                type="password"
+                name="repeat"
+                autoComplete="new-password"
+                required
+                value={repeat}
+                onChange={(e) => setRepeat(e.target.value)}
+              />
+            </Field>
+            {error && <Notice tone="err" title={error} />}
+            <div className="ui-auth-actions">
+              <Button variant="primary" type="submit" disabled={busy || password === ""}>
+                {busy ? "Saving…" : "Set password and log in"}
+              </Button>
+            </div>
+          </form>
+        )}
+      </div>
+    </Card>
   );
 }
