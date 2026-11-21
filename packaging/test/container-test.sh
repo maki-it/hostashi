@@ -48,6 +48,10 @@ if [ -n "${HOSTASHI_TEST_CA:-}" ]; then
     printf "Acquire::https::Proxy \"%s\";\nAcquire::https::CAInfo \"/etc/ssl/certs/ca-certificates.crt\";\n" "$HTTPS_PROXY" >/etc/apt/apt.conf.d/99test-proxy
     sed -i "s#http://#https://#g" /etc/apt/sources.list.d/*.sources'
 fi
+# The image keeps apt's indexes as gz only (docker-gzip-indexes); a real
+# server fetches xz first. Like a real server, so apt_update's switch
+# between xz and gz (php-install) is what the test sees.
+docker exec "$NAME-prep" rm -f /etc/apt/apt.conf.d/docker-gzip-indexes
 docker exec "$NAME-prep" bash -c 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq systemd systemd-sysv adduser curl >/dev/null'
 docker commit "$NAME-prep" "$BASE" >/dev/null
 docker rm -f "$NAME-prep" >/dev/null
