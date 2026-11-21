@@ -9,6 +9,8 @@
 #
 #   install.sh [plan] [options]          read-only: preflight and the steps that would change
 #   install.sh apply --yes [options]     apply
+#   install.sh upgrade [--binary PATH]   apply again with the options of the last apply, installing
+#                                        no packages (--no-apt); for the hostashi package (ADR-0050)
 #
 # Options:
 #   --binary PATH        the hostashi binary to install (required for apply)
@@ -47,6 +49,10 @@
 # in a PHP-FPM pool of its own under the system user hostashi-adminer;
 # nginx serves it on port 8444 for the panel's host name (ADR-0038).
 #
+# Every successful apply saves its options (not --binary, --yes, --no-apt)
+# to /etc/hostashi/install.options, one per line, which upgrade reads back.
+# The file must be owned by root and writable by root only.
+#
 # Exit codes: 0 ok, 2 refused by preflight (server unchanged), 3 a step
 # failed (re-running is safe), 64 usage.
 #
@@ -70,6 +76,9 @@ STATE_FILE=$STATE_DIR/state
 LOG=/var/log/hostashi-install.log
 OS_RELEASE=${HOSTASHI_OS_RELEASE:-/etc/os-release}
 BIN=/usr/local/bin/hostashi
+OPTIONS_FILE=${HOSTASHI_OPTIONS_FILE:-/etc/hostashi/install.options}
+# The binary of the hostashi package, the default for upgrade.
+PKG_BIN=${HOSTASHI_PKG_BIN:-/usr/bin/hostashi}
 
 PHP_REQUEST=""
 MODE=plan YES=no BINARY="" PANEL_DOMAIN="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no NO_FIREWALL=no
@@ -1412,11 +1421,14 @@ run_steps() {
   done
 }
 
-main() {
+# parse_args sets the option variables. Mode words only come from the
+# command line; the options file holds options only.
+parse_args() {
   while [ $# -gt 0 ]; do
     case "$1" in
       plan) MODE=plan;;
       apply) MODE=apply;;
+      upgrade) MODE=upgrade;;
       --yes) YES=yes;;
       --allow-untested) ALLOW_UNTESTED=yes;;
       --binary) shift; BINARY=${1:-};;
@@ -1429,10 +1441,71 @@ main() {
       --no-db-tool) NO_DB_TOOL=yes;;
       --no-apt) NO_APT=yes;;
       --php-versions) shift; PHP_REQUEST=${1:-}; PHP_REQUEST_SET=yes;;
-      *) echo "usage: $0 [plan | apply --yes] --binary PATH [--no-apt] [--panel-domain NAME] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall] [--no-db-tool] [--php-versions LIST]" >&2; exit 64;;
+      *) echo "usage: $0 [plan | apply --yes | upgrade] --binary PATH [--no-apt] [--panel-domain NAME] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall] [--no-db-tool] [--php-versions LIST]" >&2; exit 64;;
     esac
     shift
   done
+}
+
+# saved_options prints the options of this run for OPTIONS_FILE: one
+# option per line, a value after one space. Values never hold spaces
+# (preflight checks host names, ports, addresses and lists).
+saved_options() {
+  local a
+  echo "# Written by the Hostashi installer after each successful apply (ADR-0050)."
+  echo "# 'install.sh upgrade' reads it back. Re-run the installer to change it."
+  echo "--listen $LISTEN"
+  echo "--panel-port $PANEL_PORT"
+  [ -z "$PANEL_DOMAIN" ] || echo "--panel-domain $PANEL_DOMAIN"
+  [ "$ALLOW_UNTESTED" = no ] || echo "--allow-untested"
+  [ "$NO_QUOTA" = no ] || echo "--no-quota"
+  [ "$NO_FIREWALL" = no ] || echo "--no-firewall"
+  for a in "${FW_ALLOW[@]}"; do echo "--firewall-allow $a"; done
+  [ "$NO_DB_TOOL" = no ] || echo "--no-db-tool"
+  [ "$PHP_REQUEST_SET" = no ] || echo "--php-versions $PHP_REQUEST"
+}
+
+# load_options reads OPTIONS_FILE into SAVED_ARGS. It refuses a file that
+# someone other than root could have written, and any line that is not a
+# known option: upgrade runs as root from the package's maintainer scripts.
+SAVED_ARGS=()
+load_options() {
+  local line opt val
+  [ -f "$OPTIONS_FILE" ] && [ ! -L "$OPTIONS_FILE" ] ||
+    { log "REFUSED: $OPTIONS_FILE is missing: set the server up with 'install.sh apply --yes' first"; exit 2; }
+  case "$(stat -c '%U:%G %a' "$OPTIONS_FILE")" in
+    root:root\ 600|root:root\ 640|root:root\ 644) ;;
+    *) log "REFUSED: $OPTIONS_FILE must be owned by root:root and writable by root only"; exit 2;;
+  esac
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|'#'*) continue;; esac
+    opt=${line%% *}
+    val=""
+    [ "$opt" = "$line" ] || val=${line#* }
+    case "$opt" in
+      --allow-untested|--no-quota|--no-firewall|--no-db-tool)
+        [ -z "$val" ] || { log "REFUSED: $OPTIONS_FILE: '$opt' takes no value"; exit 2; }
+        SAVED_ARGS+=("$opt");;
+      --listen|--panel-port|--panel-domain|--firewall-allow|--php-versions)
+        [ -n "$val" ] && [ "${val#* }" = "$val" ] || { log "REFUSED: $OPTIONS_FILE: '$opt' needs one value"; exit 2; }
+        SAVED_ARGS+=("$opt" "$val");;
+      *) log "REFUSED: $OPTIONS_FILE: unknown line '$line'"; exit 2;;
+    esac
+  done <"$OPTIONS_FILE"
+}
+
+main() {
+  if [ "${1:-}" = upgrade ]; then
+    shift
+    load_options
+    parse_args "${SAVED_ARGS[@]}"
+    parse_args "$@"
+    MODE=apply YES=yes NO_APT=yes
+    [ -n "$BINARY" ] || BINARY=$PKG_BIN
+  else
+    parse_args "$@"
+    [ "$MODE" != upgrade ] || { echo "usage: upgrade comes first: $0 upgrade [--binary PATH]" >&2; exit 64; }
+  fi
   if [ "$MODE" = apply ] && [ "$YES" != yes ]; then
     log "refusing to change anything without --yes (run 'plan' first)"
     exit 2
@@ -1463,6 +1536,9 @@ main() {
     unsupported) echo "WARNING: disk quota is not available ($QUOTA_WHY). Sites get no disk limit.";;
   esac
   grep -q '^completed=' "$STATE_FILE" 2>/dev/null || printf 'completed=%s\n' "$(date -u +%FT%TZ)" >>"$STATE_FILE"
+  # The directory exists after the dirs step; write_file leaves its mode alone.
+  saved_options | write_file "$OPTIONS_FILE" 0600 root:root
+  [ $? -le 1 ] || log "WARNING: could not save the options to $OPTIONS_FILE; 'install.sh upgrade' needs them"
 
   # The panel writes the setup token on its first start; wait briefly for it.
   local tok=""

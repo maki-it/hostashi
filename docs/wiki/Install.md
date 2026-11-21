@@ -96,6 +96,12 @@ Things to know:
 | `--allow-untested` | Accept an operating system release that is not on the supported list. |
 | `--no-apt` | Install no packages. A step that needs a missing package fails and names it. Meant for runs from the `hostashi` package, which brings its dependencies. |
 
+### Saved options and `upgrade`
+
+After each successful `apply` the installer saves its options (all of the above except `--binary` and `--no-apt`) to `/etc/hostashi/install.options`, one per line, owned by root with mode `0600`. `install.sh upgrade` runs `apply --yes --no-apt` again with these options and the binary of the `hostashi` package (`/usr/bin/hostashi`, or `--binary PATH`). To change an option, run `apply` again with the new options; the file follows.
+
+The installer refuses an options file that anyone but root could have written, or that holds anything but the options above.
+
 ## Exit codes
 
 | Code | Meaning |

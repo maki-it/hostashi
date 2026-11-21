@@ -145,6 +145,28 @@ x dpkg-query -W -f "\${Status}" restic 2>/dev/null | grep -q 'install ok install
 x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com >/dev/null || fail "apply did not bring restic back"
 x dpkg-query -W -f "\${Status}" restic | grep -q 'install ok installed' || fail "restic not reinstalled"
 
+step "apply saves its options, upgrade reuses them (ADR-0050)"
+[ "$(x stat -c '%a %U:%G' /etc/hostashi/install.options)" = "600 root:root" ] || fail "install.options owner or mode"
+opts=$(x grep -v '^#' /etc/hostashi/install.options)
+[ "$opts" = "$(printf -- '--listen 127.0.0.1:8080\n--panel-port 8443\n--panel-domain panel.example.com\n--no-firewall')" ] ||
+  fail "unexpected saved options: $opts"
+out=$(x /opt/hostashi/install.sh upgrade --binary /opt/hostashi/hostashi)
+grep -q 'changes=0' <<<"$out" || fail "upgrade with the saved options changed something: $out"
+# A file others could have written, an unknown line, a missing file: refused, nothing runs.
+x chmod 0666 /etc/hostashi/install.options
+rc=0; out=$(x /opt/hostashi/install.sh upgrade --binary /opt/hostashi/hostashi 2>&1) || rc=$?
+{ [ "$rc" = 2 ] && grep -q 'writable by root only' <<<"$out"; } || fail "world-writable install.options not refused (rc $rc): $out"
+x chmod 0600 /etc/hostashi/install.options
+x cp -p /etc/hostashi/install.options /tmp/install.options.bak
+x sh -c 'echo "--binary /tmp/evil" >>/etc/hostashi/install.options'
+rc=0; out=$(x /opt/hostashi/install.sh upgrade --binary /opt/hostashi/hostashi 2>&1) || rc=$?
+{ [ "$rc" = 2 ] && grep -q "unknown line '--binary /tmp/evil'" <<<"$out"; } || fail "--binary in install.options not refused (rc $rc): $out"
+x cp -p /tmp/install.options.bak /etc/hostashi/install.options
+rc=0; out=$(x env HOSTASHI_OPTIONS_FILE=/nonexistent /opt/hostashi/install.sh upgrade --binary /opt/hostashi/hostashi 2>&1) || rc=$?
+{ [ "$rc" = 2 ] && grep -q 'is missing' <<<"$out"; } || fail "upgrade without saved options not refused (rc $rc): $out"
+rc=0; x /opt/hostashi/install.sh apply upgrade >/dev/null 2>&1 || rc=$?
+[ "$rc" = 64 ] || fail "upgrade after another mode word not a usage error (rc $rc)"
+
 step "security updates only, never a reboot"
 # shellcheck disable=SC2016 # expanded inside the container
 codename=$(x sh -c '. /etc/os-release && echo "$VERSION_CODENAME"')
