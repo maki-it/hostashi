@@ -127,13 +127,13 @@ func TestServer(t *testing.T) {
 		t.Fatalf("second create: %v", err)
 	}
 
-	_ = c.DropUser(ctx, "shop_user")
+	_ = c.DropUser(ctx, "shop_wp", "shop_user")
 
 	if err := c.CreateUser(ctx, "shop_wp", "shop_user", pw); err != nil {
 		t.Fatal(err)
 	}
 
-	t.Cleanup(func() { _ = c.DropUser(ctx, "shop_user") })
+	t.Cleanup(func() { _ = c.DropUser(ctx, "shop_wp", "shop_user") })
 
 	if err := c.CreateUser(ctx, "shop_wp", "shop_user", pw); !errors.Is(err, ErrExists) {
 		t.Fatalf("second user: %v", err)
@@ -167,11 +167,11 @@ func TestServer(t *testing.T) {
 		t.Fatalf("new password: %v", err)
 	}
 
-	if err := c.DropUser(ctx, "shop_user"); err != nil {
+	if err := c.DropUser(ctx, "shop_wp", "shop_user"); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := c.DropUser(ctx, "shop_user"); err != nil {
+	if err := c.DropUser(ctx, "shop_wp", "shop_user"); err != nil {
 		t.Fatalf("second drop: %v", err)
 	}
 }

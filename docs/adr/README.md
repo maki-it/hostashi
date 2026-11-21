@@ -46,6 +46,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0049](0049-php-settings-per-site.md) | PHP settings per site | Accepted |
 | [0050](0050-signed-releases-and-apt-updates.md) | Signed releases, install and updates through apt | Accepted |
 | [0051](0051-external-postgresql-servers.md) | External PostgreSQL servers | Accepted |
+| [0052](0052-service-management-and-server-dashboard.md) | Service management and server dashboard | Accepted |
 | [0053](0053-site-logs-in-the-panel.md) | Site logs in the panel | Accepted |
 
 Only the project owner sets a status to `Accepted`.

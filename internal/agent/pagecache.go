@@ -48,6 +48,12 @@ func (h *siteOps) pageCacheFor(user, home string, c agentapi.WebPageCache) (*web
 		return nil, err
 	}
 
+	// The cache sits below the pool root, outside the home: without this
+	// check a missing volume would put it on the root disk (spike S9).
+	if err := h.m.CheckPool(site.Pool); err != nil {
+		return nil, mapSiteError(err)
+	}
+
 	dir, err := h.cache.Ensure(poolOf(home), user, site.UID)
 	if err != nil {
 		return nil, fmt.Errorf("page cache of %s: %w", user, err)
@@ -177,6 +183,10 @@ func (h *siteOps) purgeCache(user string) error {
 	site, home, err := h.site(user)
 	if err != nil {
 		return err
+	}
+
+	if err := h.m.CheckPool(site.Pool); err != nil {
+		return mapSiteError(err)
 	}
 
 	if err := h.cache.Purge(poolOf(home), user, site.UID); err != nil {

@@ -199,7 +199,7 @@ func (a *Agent) StartRestore(ctx context.Context, site, snapshot string) (Restor
 }
 
 func restoreDropIn(home string) string {
-	return "# Written by the Hostashi agent for one restore.\n[Service]\nReadWritePaths=" + home + "\n"
+	return "# Written by the Hostashi agent for one restore.\n[Unit]\nRequiresMountsFor=" + home + "\n[Service]\nReadWritePaths=" + home + "\n"
 }
 
 // GetRestore returns one restore.

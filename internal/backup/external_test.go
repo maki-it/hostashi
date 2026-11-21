@@ -65,7 +65,20 @@ func TestAddExternal(t *testing.T) {
 		t.Fatal("AddExternal changed its input")
 	}
 
+	// A PostgreSQL server's databases fail until pg_dump is there.
 	m := manifest()
+	m.Servers[0].Engine = dbserver.EnginePostgreSQL
+
+	got, err = AddExternal(sites, m, fakeBox{"db-server:2": "pw1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if e := got[0].External[0]; e.Server != nil || e.Err == nil || !strings.Contains(e.Err.Error(), "PostgreSQL") {
+		t.Fatalf("PostgreSQL: %+v", e)
+	}
+
+	m = manifest()
 	m.Databases = append(m.Databases, extdb.Database{Name: "gone_db", Site: "gone", Server: "db1"})
 
 	if _, err := AddExternal(sites, m, fakeBox{}); err == nil || !strings.Contains(err.Error(), "gone_db") {

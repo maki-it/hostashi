@@ -39,6 +39,7 @@ path = [
   "web/public/**",
   "internal/statuspage/builtin/*.html",
   "internal/firewall/testdata/*.nft",
+  "packaging/keyring/*.asc",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 The Hostashi contributors"

@@ -57,7 +57,7 @@ func TestOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, l := range []string{"Slice=hostashi-site-blog.slice", "BindPaths=/home/blog", "ReadWritePaths=/home/blog", "Environment=HOSTASHI_FILES_HOME=/home/blog"} {
+	for _, l := range []string{"[Unit]\nRequiresMountsFor=/home/blog", "Slice=hostashi-site-blog.slice", "BindPaths=/home/blog", "ReadWritePaths=/home/blog", "Environment=HOSTASHI_FILES_HOME=/home/blog"} {
 		if !strings.Contains(string(b), l+"\n") {
 			t.Errorf("drop-in lacks %q:\n%s", l, b)
 		}
@@ -100,6 +100,9 @@ func TestOpenRefusesOddSites(t *testing.T) {
 		{Name: "blog", Home: "/home/my blog", Slice: blog.Slice},
 		{Name: "blog", Home: "/home/blog", Slice: "system.slice"},
 		{Name: "blog", Home: "/home/blog", Slice: "hostashi-site-blog.slice\nUser=root"},
+		{Name: "blog", Home: "/home/blog", Slice: blog.Slice, Hidden: []string{"/srv/vol 1"}},
+		{Name: "blog", Home: "/home/blog", Slice: blog.Slice, Hidden: []string{"/srv/../etc"}},
+		{Name: "blog", Home: "/home/blog", Slice: blog.Slice, Hidden: []string{"/"}},
 	} {
 		if _, err := m.Open(context.Background(), s); !errors.Is(err, ErrInvalid) {
 			t.Errorf("Open(%+v) = %v, want ErrInvalid", s, err)
@@ -147,5 +150,24 @@ func TestRemove(t *testing.T) {
 
 	if err := m.Remove(ctx, "../x"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("odd name: %v", err)
+	}
+}
+
+func TestOpenHidesOtherPools(t *testing.T) {
+	m := &Manager{UnitDir: t.TempDir(), Ctl: &fakeCtl{}}
+	s := blog
+	s.Hidden = []string{"/srv/vol1"}
+
+	if _, err := m.Open(context.Background(), s); err != nil {
+		t.Fatal(err)
+	}
+
+	b, err := os.ReadFile(filepath.Join(m.UnitDir, "hostashi-files@blog.service.d", DropInName))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.HasSuffix(string(b), "\nTemporaryFileSystem=/srv/vol1:ro\n") {
+		t.Errorf("other pool not hidden:\n%s", b)
 	}
 }

@@ -218,6 +218,67 @@ jobs:
             HOSTASHI_TEST_DBSERVER_CA="$d/ca.pem" HOSTASHI_TEST_DBSERVER_TLS="$MODE" \
             "$RUNNER_TEMP/dbserver.test" -test.v -test.count=1
 
+  pgserver:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    name: External DB server (${{ matrix.image }}, TLS ${{ matrix.tls }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: "postgres:14", tls: verify-ca }
+          - { image: "postgres:15", tls: verify-ca }
+          - { image: "postgres:16", tls: verify-ca }
+          - { image: "postgres:17", tls: verify-ca }
+          - { image: "postgres:18", tls: verify-ca }
+          - { image: "postgres:19", tls: verify-ca }
+          - { image: "postgres:18", tls: none }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build the test binary
+        env:
+          CGO_ENABLED: "0"
+        run: go test -c -o "$RUNNER_TEMP/dbserver.test" ./internal/dbserver/
+      - name: Run against the server over TCP
+        env:
+          IMAGE: ${{ matrix.image }}
+          MODE: ${{ matrix.tls }}
+        run: |
+          d="$RUNNER_TEMP/certs"
+          install -d -m 0755 "$d"
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj /CN=test-ca \
+            -keyout "$d/ca.key" -out "$d/ca.pem" 2>/dev/null
+          openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj /CN=127.0.0.1 \
+            -keyout "$d/server.key" -out "$d/server.csr" 2>/dev/null
+          openssl x509 -req -in "$d/server.csr" -CA "$d/ca.pem" -CAkey "$d/ca.key" -CAcreateserial -days 1 \
+            -extfile <(printf 'subjectAltName=IP:127.0.0.1') -out "$d/server.pem" 2>/dev/null
+          chmod 0644 "$d"/*
+          # PostgreSQL takes a key only if its own user (999 in the image)
+          # owns it with mode 0600.
+          sudo chown 999:999 "$d/server.key"
+          sudo chmod 0600 "$d/server.key"
+          args=()
+          if [ "$MODE" = verify-ca ]; then
+            args=(-c ssl=on -c ssl_cert_file=/certs/server.pem -c ssl_key_file=/certs/server.key)
+          fi
+          docker run -d --name db -p 127.0.0.1:5432:5432 -v "$d:/certs:ro" -e POSTGRES_PASSWORD=rootpw "$IMAGE" postgres "${args[@]}"
+          # Over TCP: the image first runs a temporary server for its setup
+          # that listens only on the socket, then restarts.
+          for _ in $(seq 1 120); do docker exec db pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 && break; sleep 1; done
+          # A dedicated administrator, as ADR-0051 recommends, not a superuser.
+          docker exec -e PGPASSWORD=rootpw db psql -U postgres -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE hostashi_admin LOGIN CREATEDB CREATEROLE PASSWORD 'Adm1n-pw'"
+          HOSTASHI_TEST_PGSERVER=127.0.0.1:5432 HOSTASHI_TEST_PGSERVER_USER=hostashi_admin HOSTASHI_TEST_PGSERVER_PW=Adm1n-pw \
+            HOSTASHI_TEST_PGSERVER_CA="$d/ca.pem" HOSTASHI_TEST_PGSERVER_TLS="$MODE" \
+            "$RUNNER_TEMP/dbserver.test" -test.v -test.count=1 -test.run 'PG'
+
   restic:
     needs: changes
     if: needs.changes.outputs.go == 'true'
@@ -406,6 +467,11 @@ jobs:
           for img in debian:trixie ubuntu:26.04; do
             docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/src:ro" "$img" /src/packaging/test/apt-repo-test.sh /dist
           done
+      - name: Install script for hostashi.com (local repository over HTTP)
+        run: |
+          for img in debian:trixie ubuntu:26.04; do
+            docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/src:ro" "$img" /src/packaging/test/get-test.sh /dist
+          done
       - name: Upgrade a set-up server with the package (systemd container)
         run: |
           for img in debian:trixie ubuntu:26.04; do
@@ -447,7 +513,9 @@ jobs:
           CGO_ENABLED: "0"
         run: go build -trimpath -o hostashi ./cmd/hostashi
       - name: shellcheck
-        run: shellcheck -x packaging/install.sh packaging/php/php-install packaging/test/container-test.sh packaging/test/deb-test.sh packaging/test/quota-test.sh packaging/test/dracut-test.sh packaging/test/firewall-test.sh packaging/test/apt-update-test.sh packaging/test/upgrade-test.sh packaging/deb/preinst packaging/deb/postinst packaging/deb/prerm packaging/deb/hostashi-rollback tools/release-key/new.sh packaging/apt-repo/build.sh packaging/test/apt-repo-test.sh
+        run: shellcheck -x packaging/install.sh packaging/php/php-install packaging/test/container-test.sh packaging/test/deb-test.sh packaging/test/quota-test.sh packaging/test/dracut-test.sh packaging/test/firewall-test.sh packaging/test/apt-update-test.sh packaging/test/upgrade-test.sh packaging/deb/preinst packaging/deb/postinst packaging/deb/prerm packaging/deb/hostashi-rollback tools/release-key/new.sh packaging/apt-repo/build.sh packaging/test/apt-repo-test.sh packaging/get/install.sh packaging/test/get-test.sh packaging/test/key-test.sh
+      - name: The apt key is the same everywhere and not about to expire
+        run: packaging/test/key-test.sh
       - name: apt-get update waits out an out-of-sync mirror (stubbed apt)
         run: packaging/test/apt-update-test.sh
       - name: Quota step (stubbed filesystem and boot tools)
