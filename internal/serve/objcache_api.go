@@ -66,7 +66,7 @@ func cacheFail(log *slog.Logger, w http.ResponseWriter, err error, what string) 
 // route of its own for admins and managers, because the cache's memory
 // counts against the site's limit.
 func registerObjectCache(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/sites/{name}/object-cache", a.allow("cache:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("GET /api/v1/sites/{name}/object-cache", a.allow("sites.objectcache:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -82,7 +82,7 @@ func registerObjectCache(mux *routeMux, a authn, svc *hosting.Service, log *slog
 		writeJSON(w, http.StatusOK, toObjectCacheJSON(site, v))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/object-cache", a.allow("cache:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/sites/{name}/object-cache", a.allow("sites.objectcache:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			Enabled *bool `json:"enabled"`
 		}
@@ -111,7 +111,7 @@ func registerObjectCache(mux *routeMux, a authn, svc *hosting.Service, log *slog
 		writeJSON(w, http.StatusOK, toObjectCacheJSON(site, v))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/object-cache/size", a.allow("cache.size:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("PUT /api/v1/sites/{name}/object-cache/size", a.allow("sites.objectcache.size:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
 			MemoryMB *int `json:"memoryMb"`
 		}
@@ -148,7 +148,7 @@ func registerObjectCache(mux *routeMux, a authn, svc *hosting.Service, log *slog
 	}))
 
 	// A flush restarts the cache: it is empty afterwards.
-	mux.HandleFunc("POST /api/v1/sites/{name}/object-cache/flush", a.allow("cache:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.HandleFunc("POST /api/v1/sites/{name}/object-cache/flush", a.allow("sites.objectcache:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 

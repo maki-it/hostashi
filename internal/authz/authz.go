@@ -117,7 +117,7 @@ var table = map[Action]Rule{
 	// The page cache size counts against the site's disk limit (ADR-0046).
 	"sites.pagecache.size:write": mgrSite("sites:write"),
 	// The cache's memory counts against the site's limit (ADR-0045).
-	"cache.size:write": mgrSite("cache:write"),
+	"sites.objectcache.size:write": mgrSite("objectcache:write"),
 	// Letting PHP start programs undoes a hardening default (ADR-0033).
 	"sites.programs:write": mgrSite("sites:write"),
 
@@ -133,8 +133,8 @@ var table = map[Action]Rule{
 	"sites.pagecache:write":   ownSite("sites:write"),
 	"sites.pagecache:purge":   ownSite("pagecache:purge"),
 	"limits:read":             ownSite("limits:read"),
-	"cache:read":              ownSite("cache:read"),
-	"cache:write":             ownSite("cache:write"),
+	"sites.objectcache:read":  ownSite("objectcache:read"),
+	"sites.objectcache:write": ownSite("objectcache:write"),
 	"cron:read":               ownSite("cron:read"),
 	"cron:write":              ownSite("cron:write"),
 	"ssh:read":                ownSite("ssh:read"),
