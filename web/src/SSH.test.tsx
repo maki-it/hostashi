@@ -46,7 +46,7 @@ describe("SSHSettings", () => {
     expect(one.getByText("SHA256:abc")).toBeInTheDocument();
     expect(one.getByText("ssh-ed25519")).toBeInTheDocument();
     expect(screen.getByText("SFTP only")).toBeInTheDocument();
-    expect(screen.getByText("Shell", { selector: ".badge" })).toBeInTheDocument();
+    expect(screen.getByText("Shell", { selector: ".ui-badge" })).toBeInTheDocument();
     expect(screen.getByText("sftp blog@web.example.com")).toBeInTheDocument();
     expect(screen.getByText("ssh blog@web.example.com")).toBeInTheDocument();
     expect(await screen.findByText("SHA256:host")).toBeInTheDocument();

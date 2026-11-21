@@ -66,7 +66,7 @@ describe("CronSettings", () => {
     const three = within(screen.getByLabelText("Details of cron job 3"));
     expect(three.getByText("Not run yet")).toBeInTheDocument();
     expect(three.getAllByText("Paused")).toHaveLength(1);
-    expect(screen.getByText("Paused", { selector: ".badge" })).toBeInTheDocument();
+    expect(screen.getByText("Paused", { selector: ".ui-badge" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument();
   });
 
@@ -191,7 +191,7 @@ describe("CronSettings", () => {
     render(<CronSettings site={site} />);
     await user.click(await screen.findByRole("button", { name: "Pause" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Cron job paused.");
-    expect(await screen.findByText("Paused", { selector: ".badge" })).toBeInTheDocument();
+    expect(await screen.findByText("Paused", { selector: ".ui-badge" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Resume" }));
     expect(await screen.findByText("Cron job resumed.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Run now" }));

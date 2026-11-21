@@ -2,8 +2,7 @@
 
 /*
  * Base components (ADR-0037). Only tokens from tokens.css, no raw colours
- * (tokens.test.ts fails on a hex value here). Class names start with "ui-"
- * so that they do not collide with the old stylesheet while pages move over.
+ * (tokens.test.ts fails on a hex value here). Class names start with "ui-".
  */
 
 .ui-root {
@@ -17,14 +16,6 @@
 /* Zero specificity: any component's own link colour wins. */
 :where(.ui-root a) {
   color: var(--accent);
-}
-
-/* The old stylesheet gives every button the full width; components set
-   their own size. Remove this with the old stylesheet (ADR-0037 step 6). */
-.ui-btn,
-.ui-tab,
-.ui-sort {
-  width: auto;
 }
 
 .ui-root :focus-visible {
@@ -687,4 +678,21 @@ a.ui-btn {
 .ui-subsection {
   padding-top: var(--space-4);
   border-top: 1px solid var(--line);
+}
+
+/* A lone button in a column keeps its own width. */
+.ui-stack > .ui-btn,
+.ui-stack-tight > .ui-btn {
+  align-self: flex-start;
+}
+
+/* One entry of a short list with its actions on the right */
+.ui-list-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--line);
 }

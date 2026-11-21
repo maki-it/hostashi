@@ -25,7 +25,7 @@ import {
 } from "./sites";
 import { SnippetSettings } from "./Snippets";
 import { SSHSettings } from "./SSH";
-import { Badge, Button, Card, Notice, tabPanelProps, Tabs } from "./ui";
+import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
 
 // The tabs that exist today (ADR-0037). Files, databases and backups per
 // site come with their features; their addresses show the overview.
@@ -267,12 +267,11 @@ function DeleteSite({ site }: { site: Site }) {
         </div>
       ) : (
         <form className="ui-stack" onSubmit={(e) => void drop(e)}>
-          <label>
-            <span>
-              Type <code>{site.name}</code> to delete the site with its files and its databases. This cannot be undone.
-            </span>
-            <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
-          </label>
+          <div className="ui-narrow">
+            <Field label={`Type ${site.name} to confirm`} hint="The site is deleted with its files and its databases. This cannot be undone.">
+              <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
+            </Field>
+          </div>
           <div className="ui-row">
             <Button type="submit" variant="danger" disabled={busy || typed !== site.name}>
               Delete {site.name}
@@ -333,11 +332,9 @@ function DomainsTab({ site, onChange }: TabProps) {
     <>
       <Card title="Domains">
         <form className="ui-stack" onSubmit={saveDomains} noValidate>
-          <label>
-            Domains of {site.name}
-            <small>One per line. The first one is the primary domain.</small>
-            <textarea value={domains} onChange={(e) => setDomainsText(e.target.value)} rows={4} autoComplete="off" spellCheck={false} />
-          </label>
+          <Field label={`Domains of ${site.name}`} hint="One per line. The first one is the primary domain.">
+            <textarea className="ui-input ui-textarea" value={domains} onChange={(e) => setDomainsText(e.target.value)} rows={4} autoComplete="off" spellCheck={false} />
+          </Field>
           {d.result}
           <div className="ui-row">
             <Button type="submit" variant="primary" disabled={d.busy}>
@@ -348,11 +345,11 @@ function DomainsTab({ site, onChange }: TabProps) {
       </Card>
       <Card title="HTTPS">
         <div className="ui-stack">
-          <label className="check">
+          <label className="ui-check">
             <input type="checkbox" checked={site.tls.enabled} disabled={h.busy} onChange={(e) => void toggleTLS(e.target.checked)} />
             HTTPS with a Let's Encrypt certificate
           </label>
-          <label className="check">
+          <label className="ui-check">
             <input type="checkbox" checked={site.tls.hsts} disabled={h.busy} onChange={(e) => void toggleHSTS(e.target.checked)} />
             HSTS: browsers use only HTTPS for this site
           </label>
@@ -390,12 +387,11 @@ function PHPTab({ site, php, onChange }: TabProps & { php: PHPVersions | null })
     <>
       <Card title="PHP version">
         <form className="ui-stack" onSubmit={savePHP} noValidate>
-          <label>
-            PHP of {site.name}
-            <select value={version} onChange={(e) => setVersion(e.target.value)}>
+          <Field label={`PHP of ${site.name}`}>
+            <select className="ui-select" value={version} onChange={(e) => setVersion(e.target.value)}>
               <PHPOptions php={php} current={site.php} />
             </select>
-          </label>
+          </Field>
           {php?.legacy.includes(version) && version !== site.php && (
             <p className="ui-hint">PHP {version} gets no or only security fixes upstream. Use it only for software that needs it.</p>
           )}
@@ -413,7 +409,7 @@ function PHPTab({ site, php, onChange }: TabProps & { php: PHPVersions | null })
       {site.php && (
         <Card title="Programs from PHP">
           <div className="ui-stack">
-            <label className="check">
+            <label className="ui-check">
               <input type="checkbox" checked={site.phpPrograms} disabled={p.busy} onChange={(e) => void togglePrograms(e.target.checked)} />
               Allow PHP to start programs (exec, system, shell_exec, proc_open, popen)
             </label>
@@ -497,45 +493,42 @@ function MaintenanceSettings({ site, onChange }: { site: Site; onChange: () => P
   }
 
   return (
-    <form onSubmit={(e) => void save(m.enabled, e)} noValidate>
-      <fieldset>
+    <form className="ui-stack" onSubmit={(e) => void save(m.enabled, e)} noValidate>
+      <fieldset className="ui-fieldset ui-stack">
         <legend className="ui-sr-only">Maintenance of {site.name}</legend>
-        <p className="muted">
+        <p className="ui-hint ui-flush">
           {m.enabled
             ? "Maintenance is on: visitors get the page with “503 Service Unavailable”. PHP keeps running."
             : "While maintenance is on, visitors get the page with “503 Service Unavailable”. The allowed addresses see the site as usual, so you can work on it. PHP keeps running."}
         </p>
-        {site.disabled && <p className="muted">The site is disabled. Disabled wins: visitors get “temporarily unavailable” until it is enabled.</p>}
-        <label>
-          Maintenance page
-          <select value={page} onChange={(e) => setPage(e.target.value)}>
+        {site.disabled && <Notice tone="warn" title="The site is disabled. Disabled wins: visitors get “temporarily unavailable” until it is enabled." />}
+        <Field label="Maintenance page">
+          <select className="ui-select" value={page} onChange={(e) => setPage(e.target.value)}>
             {choices.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
           </select>
-        </label>
-        <label>
-          Allowed addresses
-          <small>IPv4 or IPv6 addresses or ranges like 10.0.0.0/8, one per line, at most 20.</small>
-          <textarea value={allow} onChange={(e) => setAllow(e.target.value)} rows={3} autoComplete="off" spellCheck={false} />
-        </label>
-        <div className="actions">
-          <button type="button" className="secondary" disabled={busy} onClick={() => void addMine()}>
+        </Field>
+        <Field label="Allowed addresses" hint="IPv4 or IPv6 addresses or ranges like 10.0.0.0/8, one per line, at most 20.">
+          <textarea className="ui-input ui-textarea" value={allow} onChange={(e) => setAllow(e.target.value)} rows={3} autoComplete="off" spellCheck={false} />
+        </Field>
+        <div className="ui-row">
+          <Button disabled={busy} onClick={() => void addMine()}>
             Add my current IP
-          </button>
+          </Button>
           {m.enabled && (
-            <button type="submit" disabled={busy}>
+            <Button variant="primary" type="submit" disabled={busy}>
               Save maintenance
-            </button>
+            </Button>
           )}
-          <button type="button" className={m.enabled ? "secondary" : undefined} disabled={busy} onClick={() => void save(!m.enabled)}>
+          <Button variant={m.enabled ? "secondary" : "primary"} disabled={busy} onClick={() => void save(!m.enabled)}>
             {m.enabled ? "End maintenance" : "Start maintenance"}
-          </button>
+          </Button>
         </div>
-        {error && <p role="alert">{error}</p>}
-        {done && <p role="status">{done}</p>}
+        {error && <Notice tone="err" title={error} />}
+        {done && <Notice tone="ok" title={done} />}
       </fieldset>
     </form>
   );

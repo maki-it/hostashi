@@ -18,7 +18,7 @@ import {
   type PHPVersions,
   type Site,
 } from "./sites";
-import { Badge, Button, Card, IconLink, Notice, PageHead, RowActions, Table, type Column, type Sort } from "./ui";
+import { Badge, Button, Card, Field, IconLink, Notice, PageHead, RowActions, Table, type Column, type Sort } from "./ui";
 
 type QueryProps = {
   /** The address query: q (text filter), state, sort, dir, new. */
@@ -263,16 +263,13 @@ function CreateForm({ php, onChange }: { php: PHPVersions | null; onChange: () =
 
   return (
     <Card>
-      <form className="ui-legacy-form" onSubmit={(e) => void submit(e)} noValidate>
-        <label>
-          Name
-          <small>Becomes the Linux user of the site. 2 to 32 characters: lowercase letters, digits, _ and -.</small>
-          <input value={name} onChange={(e) => setName(e.target.value.trim())} required autoComplete="off" spellCheck={false} />
-        </label>
-        <label>
-          Domains
-          <small>One per line. The first one is the primary domain.</small>
+      <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
+        <Field label="Name" hint="Becomes the Linux user of the site. 2 to 32 characters: lowercase letters, digits, _ and -.">
+          <input className="ui-input" value={name} onChange={(e) => setName(e.target.value.trim())} required autoComplete="off" spellCheck={false} />
+        </Field>
+        <Field label="Domains" hint="One per line. The first one is the primary domain.">
           <textarea
+            className="ui-input ui-textarea"
             value={domains}
             onChange={(e) => setDomainsText(e.target.value)}
             rows={3}
@@ -280,30 +277,29 @@ function CreateForm({ php, onChange }: { php: PHPVersions | null; onChange: () =
             autoComplete="off"
             spellCheck={false}
           />
-        </label>
-        <label>
-          PHP
-          <select value={phpValue} onChange={(e) => setVersion(e.target.value)}>
+        </Field>
+        <Field label="PHP">
+          <select className="ui-select" value={phpValue} onChange={(e) => setVersion(e.target.value)}>
             <PHPOptions php={php} />
           </select>
-        </label>
+        </Field>
         {php?.legacy.includes(phpValue) && (
-          <p className="muted">PHP {phpValue} gets no or only security fixes upstream. Use it only for software that needs it.</p>
+          <p className="ui-hint ui-flush">PHP {phpValue} gets no or only security fixes upstream. Use it only for software that needs it.</p>
         )}
-        <p className="muted">
+        <p className="ui-hint ui-flush">
           Only installed versions are listed. <a href="#/php">Install more PHP versions</a>
         </p>
-        <label className="check">
+        <label className="ui-check">
           <input type="checkbox" checked={tls} onChange={(e) => setTls(e.target.checked)} />
           HTTPS with a Let's Encrypt certificate
         </label>
         {tls && (
-          <label className="check">
+          <label className="ui-check">
             <input type="checkbox" checked={hsts} onChange={(e) => setHsts(e.target.checked)} />
             HSTS: browsers use only HTTPS for this site
           </label>
         )}
-        {tls && <p className="muted">The domains must point to this server, or the certificate cannot be issued.</p>}
+        {tls && <p className="ui-hint ui-flush">The domains must point to this server, or the certificate cannot be issued.</p>}
         {error && <Notice tone="err" title={error} />}
         {done && (
           <Notice tone="ok" title={done}>

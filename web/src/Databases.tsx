@@ -23,7 +23,7 @@ import {
 } from "./databases";
 import { poll } from "./backups";
 import { formatHash } from "./routes";
-import { Card, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
+import { Button, Card, Field, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
 
 type QueryProps = {
   /** The address query: q, site, sort, dir; new=1 for the form; db=<name> for one database. */
@@ -55,7 +55,7 @@ const columns: Column<Database>[] = [
     key: "users",
     header: "Users",
     sortValue: (d) => d.users.length,
-    cell: (d) => (d.users.length === 0 ? <span className="muted">No users</span> : <span className="ui-mono">{d.users.join(", ")}</span>),
+    cell: (d) => (d.users.length === 0 ? <span className="ui-hint">No users</span> : <span className="ui-mono">{d.users.join(", ")}</span>),
   },
   { key: "created", header: "Created", sortValue: (d) => d.createdAt, cell: (d) => <RelTime iso={d.createdAt} /> },
   {
@@ -237,10 +237,12 @@ function PasswordNotice({ creds, onClose }: { creds: Credentials; onClose: () =>
   }
 
   return (
-    <section className="card notice" aria-labelledby="db-secret">
-      <h2 id="db-secret" ref={heading} tabIndex={-1}>Save this password now</h2>
-      <p>Hostashi does not store it and cannot show it again. If it is lost, set a new one.</p>
-      <dl className="facts">
+    <section className="ui-card ui-card-body ui-stack ui-attention" aria-labelledby="db-secret">
+      <h2 id="db-secret" ref={heading} tabIndex={-1}>
+        Save this password now
+      </h2>
+      <p className="ui-flush">Hostashi does not store it and cannot show it again. If it is lost, set a new one.</p>
+      <dl className="ui-facts">
         <dt>Database</dt>
         <dd>
           <code>{creds.database}</code>
@@ -254,24 +256,23 @@ function PasswordNotice({ creds, onClose }: { creds: Credentials; onClose: () =>
           <code>localhost</code>
         </dd>
       </dl>
-      <label>
-        Password
+      <Field label="Password">
         <input
           readOnly
           value={creds.password}
           onFocus={(e) => e.currentTarget.select()}
           autoComplete="off"
           spellCheck={false}
-          className="mono"
+          className="ui-input ui-mono"
         />
-      </label>
-      <button type="button" className="secondary" onClick={() => void copy()}>
-        Copy password
-      </button>
-      {copied && <p role="status">{copied}</p>}
-      <button type="button" onClick={onClose}>
-        I have saved it
-      </button>
+      </Field>
+      <div className="ui-row">
+        <Button onClick={() => void copy()}>Copy password</Button>
+        <Button variant="primary" onClick={onClose}>
+          I have saved it
+        </Button>
+      </div>
+      {copied && <Notice tone="ok" title={copied} />}
     </section>
   );
 }
@@ -326,30 +327,27 @@ function CreateCard({
 
   return (
     <Card>
-      <form onSubmit={(e) => void submit(e)} noValidate>
-        <label>
-          Site
-          <select value={site} onChange={(e) => setSite(e.target.value)}>
+      <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
+        <Field label="Site">
+          <select className="ui-select" value={site} onChange={(e) => setSite(e.target.value)}>
             {sites.map((s) => (
               <option key={s.name} value={s.name}>
                 {s.name}
               </option>
             ))}
           </select>
-        </label>
-        <label>
-          Database name
-          <small>Lowercase letters, digits and _, starting with a letter.</small>
-          <input value={name} onChange={(e) => setName(e.target.value.trim())} required autoComplete="off" spellCheck={false} />
-        </label>
-        <label className="check">
+        </Field>
+        <Field label="Database name" hint="Lowercase letters, digits and _, starting with a letter.">
+          <input className="ui-input" value={name} onChange={(e) => setName(e.target.value.trim())} required autoComplete="off" spellCheck={false} />
+        </Field>
+        <label className="ui-check">
           <input type="checkbox" checked={withUser} onChange={(e) => setWithUser(e.target.checked)} />
           Create a user for it with a generated password
         </label>
         {withUser && (
-          <label>
-            User name
+          <Field label="User name">
             <input
+              className="ui-input"
               value={userName}
               onChange={(e) => {
                 setUserTouched(true);
@@ -359,12 +357,12 @@ function CreateCard({
               autoComplete="off"
               spellCheck={false}
             />
-          </label>
+          </Field>
         )}
-        {error && <p role="alert">{error}</p>}
-        <button type="submit" disabled={busy}>
+        {error && <Notice tone="err" title={error} />}
+        <Button variant="primary" type="submit" disabled={busy}>
           Create database
-        </button>
+        </Button>
       </form>
     </Card>
   );
@@ -404,39 +402,37 @@ function DatabaseView({
     <>
       <Card title="Users">
         {db.users.length === 0 ? (
-          <p className="muted">No users.</p>
+          <p className="ui-hint ui-flush">No users.</p>
         ) : (
-          <ul className="users" aria-label={"Users of " + db.name}>
+          <ul className="ui-plain-list ui-stack-tight" aria-label={"Users of " + db.name}>
             {db.users.map((u) => (
               <UserRow key={u} db={db.name} user={u} onSecret={onSecret} onChange={onChange} />
             ))}
           </ul>
         )}
-        <div className="keybox">
-          <AddUser db={db.name} onSecret={onSecret} onChange={onChange} />
-        </div>
+        <AddUser db={db.name} onSecret={onSecret} onChange={onChange} />
       </Card>
       <Card title="Import or export">
         <DumpForm db={db.name} site={db.site} />
       </Card>
       <Card title="Delete database">
         <form
+          className="ui-stack"
           onSubmit={(e) => {
             e.preventDefault();
             void drop();
           }}
         >
-          <label>
-            <span>
-              Type <code>{db.name}</code> to delete the database and its users. This cannot be undone.
-            </span>
-            <input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
-          </label>
-          {error && <p role="alert">{error}</p>}
-          <div className="actions">
-            <button type="submit" className="danger" disabled={busy || typed !== db.name}>
+          <div className="ui-narrow">
+            <Field label={`Type ${db.name} to confirm`} hint="The database is deleted with its users. This cannot be undone.">
+              <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
+            </Field>
+          </div>
+          {error && <Notice tone="err" title={error} />}
+          <div className="ui-row">
+            <Button variant="danger" type="submit" disabled={busy || typed !== db.name}>
               Delete {db.name}
-            </button>
+            </Button>
           </div>
         </form>
       </Card>
@@ -479,33 +475,33 @@ function UserRow({
   }
 
   return (
-    <li>
+    <li className="ui-list-row">
       <code>{user}</code>
       {confirm === "" ? (
-        <div className="actions">
-          <button type="button" className="secondary" disabled={busy} onClick={() => setConfirm("password")}>
+        <div className="ui-row">
+          <Button disabled={busy} onClick={() => setConfirm("password")}>
             New password
-          </button>
-          <button type="button" className="secondary danger" disabled={busy} onClick={() => setConfirm("delete")}>
+          </Button>
+          <Button variant="danger" disabled={busy} onClick={() => setConfirm("delete")}>
             Delete user
-          </button>
+          </Button>
         </div>
       ) : (
-        <div className="actions">
+        <div className="ui-row">
           <span>
             {confirm === "password"
               ? "The old password stops working at once. Update the site's configuration afterwards."
               : "The site can no longer log in with this user."}
           </span>
-          <button type="button" className={confirm === "delete" ? "danger" : ""} disabled={busy} onClick={() => void run()}>
+          <Button variant={confirm === "delete" ? "danger" : "primary"} disabled={busy} onClick={() => void run()}>
             {confirm === "password" ? "Set new password" : "Delete user " + user}
-          </button>
-          <button type="button" className="secondary" disabled={busy} onClick={() => setConfirm("")}>
+          </Button>
+          <Button disabled={busy} onClick={() => setConfirm("")}>
             Cancel
-          </button>
+          </Button>
         </div>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && <Notice tone="err" title={error} />}
     </li>
   );
 }
@@ -540,28 +536,27 @@ function AddUser({ db, onSecret, onChange }: { db: string; onSecret: (c: Credent
 
   if (!open) {
     return (
-      <div className="actions">
-        <button type="button" className="secondary" onClick={() => setOpen(true)}>
+      <div className="ui-row">
+        <Button onClick={() => setOpen(true)}>
           Add user
-        </button>
+        </Button>
       </div>
     );
   }
 
   return (
-    <form onSubmit={(e) => void submit(e)} noValidate>
-      <label>
-        New user for {db}
-        <input value={user} onChange={(e) => setUser(e.target.value.trim())} required autoComplete="off" spellCheck={false} />
-      </label>
-      {error && <p role="alert">{error}</p>}
-      <div className="actions">
-        <button type="submit" disabled={busy}>
+    <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
+      <Field label={`New user for ${db}`}>
+        <input className="ui-input" value={user} onChange={(e) => setUser(e.target.value.trim())} required autoComplete="off" spellCheck={false} />
+      </Field>
+      {error && <Notice tone="err" title={error} />}
+      <div className="ui-row">
+        <Button variant="primary" type="submit" disabled={busy}>
           Add user
-        </button>
-        <button type="button" className="secondary" disabled={busy} onClick={() => setOpen(false)}>
+        </Button>
+        <Button disabled={busy} onClick={() => setOpen(false)}>
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -597,50 +592,41 @@ function DumpForm({ db, site }: { db: string; site: string }) {
   }
 
   return (
-    <form onSubmit={(e) => void submit(e)} noValidate>
-      <fieldset>
+    <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
+      <fieldset className="ui-fieldset ui-stack-tight">
         <legend>Direction</legend>
-        <label className="check">
+        <label className="ui-check">
           <input type="radio" name={"dump-" + db} checked={kind === "export"} onChange={() => setKind("export")} />
           Export into a new file
         </label>
-        <label className="check">
+        <label className="ui-check">
           <input type="radio" name={"dump-" + db} checked={kind === "import"} onChange={() => setKind("import")} />
           Import a file
         </label>
-        <label>
-          File in the home of site {site}
-          <small>
-            {kind === "export"
-              ? "Relative to the home, ending in .sql or .sql.gz. An existing file is never replaced."
-              : "Relative to the home, ending in .sql or .sql.gz. Upload it first, for example over SFTP."}
-          </small>
-          <input value={path} onChange={(e) => setPath(e.target.value.trim())} autoComplete="off" spellCheck={false} />
-        </label>
-        {kind === "import" && (
-          <p className="muted">The statements in the file run in {db}. Import into an empty database: a failed import is not rolled back.</p>
-        )}
       </fieldset>
+      <Field
+        label={`File in the home of site ${site}`}
+        hint={
+          kind === "export"
+            ? "Relative to the home, ending in .sql or .sql.gz. An existing file is never replaced."
+            : "Relative to the home, ending in .sql or .sql.gz. Upload it first, for example over SFTP."
+        }
+      >
+        <input className="ui-input ui-mono" value={path} onChange={(e) => setPath(e.target.value.trim())} autoComplete="off" spellCheck={false} />
+      </Field>
+      {kind === "import" && (
+        <Notice tone="warn" title={`The statements in the file run in ${db}. Import into an empty database: a failed import is not rolled back.`} />
+      )}
       {running && <p aria-busy="true">{job.kind === "import" ? "Importing…" : "Exporting…"}</p>}
       {job?.state === "done" && (
-        <p role="status">
-          {job.kind === "import" ? (
-            <>
-              Imported <code>{job.path}</code> into {db}.
-            </>
-          ) : (
-            <>
-              Exported {db} into <code>{job.path}</code>.
-            </>
-          )}
-        </p>
+        <Notice tone="ok" title={job.kind === "import" ? `Imported ${job.path} into ${db}.` : `Exported ${db} into ${job.path}.`} />
       )}
-      {job?.state === "failed" && <p role="alert">{(job.kind === "import" ? "Import" : "Export") + " failed: " + (job.error ?? "unknown error")}</p>}
-      {error && <p role="alert">{error}</p>}
-      <div className="actions">
-        <button type="submit" disabled={running}>
+      {job?.state === "failed" && <Notice tone="err" title={(job.kind === "import" ? "Import" : "Export") + " failed: " + (job.error ?? "unknown error")} />}
+      {error && <Notice tone="err" title={error} />}
+      <div className="ui-row">
+        <Button variant="primary" type="submit" disabled={running}>
           {kind === "import" ? "Start import" : "Start export"}
-        </button>
+        </Button>
       </div>
     </form>
   );

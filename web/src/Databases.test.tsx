@@ -183,9 +183,9 @@ describe("Databases", () => {
     render(<Harness initial="db=blog_wp" />);
     const confirm = await screen.findByRole("button", { name: "Delete blog_wp" });
     expect(confirm).toBeDisabled();
-    await user.type(screen.getByLabelText(/to delete the database/), "blog_w");
+    await user.type(screen.getByLabelText(/to confirm/), "blog_w");
     expect(confirm).toBeDisabled();
-    await user.type(screen.getByLabelText(/to delete the database/), "p");
+    await user.type(screen.getByLabelText(/to confirm/), "p");
     await user.click(confirm);
     expect(await screen.findByText("No databases yet.")).toBeInTheDocument();
     expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);

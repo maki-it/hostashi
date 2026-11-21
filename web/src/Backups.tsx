@@ -23,7 +23,7 @@ import {
   type Site,
   type Snapshot,
 } from "./backups";
-import { Badge, Button, Card, exactTime, IconButton, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort, type Tone } from "./ui";
+import { Badge, Button, Card, exactTime, Field, IconButton, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort, type Tone } from "./ui";
 
 type QueryProps = {
   /** The address query: site (snapshots of that site), sort, dir. */
@@ -131,7 +131,7 @@ function StatusCard({ info }: { info: BackupInfo }) {
           </dl>
         )}
         {failed.length > 0 && (
-          <ul className="error">
+          <ul className="ui-error ui-flush">
             {failed.map((i) => (
               <li key={i.kind + (i.site ?? "") + (i.database ?? "")}>
                 {i.kind} {i.site ?? ""} {i.database ?? ""}: {i.error}
@@ -139,7 +139,7 @@ function StatusCard({ info }: { info: BackupInfo }) {
             ))}
           </ul>
         )}
-        {!st.maintenanceOk && st.maintenance && <p className="error ui-flush">Maintenance: {st.maintenance}</p>}
+        {!st.maintenanceOk && st.maintenance && <p className="ui-error ui-flush">Maintenance: {st.maintenance}</p>}
       </div>
     </Card>
   );
@@ -191,73 +191,64 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
 
   return (
     <Card title="Target and schedule">
-      <form onSubmit={(e) => void submit(e)}>
-        <fieldset>
+      <form className="ui-stack" onSubmit={(e) => void submit(e)}>
+        <fieldset className="ui-fieldset ui-stack">
           <legend>Storage Box (SFTP)</legend>
-          <label>
-            User
-            <input value={user} onChange={(e) => setUser(e.target.value)} required placeholder="u123456" autoComplete="off" />
-          </label>
-          <label>
-            Host
-            <input value={host} onChange={(e) => setHost(e.target.value)} required placeholder="u123456.your-storagebox.de" autoComplete="off" />
-          </label>
-          <label>
-            Port
-            <input value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" required />
-          </label>
-          <label>
-            Directory
-            <small>Below the login directory; created on the first run.</small>
-            <input value={path} onChange={(e) => setPath(e.target.value)} required />
-          </label>
+          <Field label="User">
+            <input className="ui-input" value={user} onChange={(e) => setUser(e.target.value)} required placeholder="u123456" autoComplete="off" />
+          </Field>
+          <Field label="Host">
+            <input className="ui-input" value={host} onChange={(e) => setHost(e.target.value)} required placeholder="u123456.your-storagebox.de" autoComplete="off" />
+          </Field>
+          <Field label="Port">
+            <input className="ui-input" value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" required />
+          </Field>
+          <Field label="Directory" hint="Below the login directory; created on the first run.">
+            <input className="ui-input" value={path} onChange={(e) => setPath(e.target.value)} required />
+          </Field>
         </fieldset>
-        <fieldset>
+        <fieldset className="ui-fieldset ui-stack">
           <legend>Keep</legend>
-          <label>
-            Daily snapshots
-            <input value={daily} onChange={(e) => setDaily(e.target.value)} inputMode="numeric" required />
-          </label>
-          <label>
-            Weekly snapshots
-            <input value={weekly} onChange={(e) => setWeekly(e.target.value)} inputMode="numeric" required />
-          </label>
-          <label>
-            Monthly snapshots
-            <input value={monthly} onChange={(e) => setMonthly(e.target.value)} inputMode="numeric" required />
-          </label>
+          <Field label="Daily snapshots">
+            <input className="ui-input" value={daily} onChange={(e) => setDaily(e.target.value)} inputMode="numeric" required />
+          </Field>
+          <Field label="Weekly snapshots">
+            <input className="ui-input" value={weekly} onChange={(e) => setWeekly(e.target.value)} inputMode="numeric" required />
+          </Field>
+          <Field label="Monthly snapshots">
+            <input className="ui-input" value={monthly} onChange={(e) => setMonthly(e.target.value)} inputMode="numeric" required />
+          </Field>
         </fieldset>
-        <fieldset>
+        <fieldset className="ui-fieldset ui-stack">
           <legend>Schedule</legend>
-          <label>
-            Start between (hour)
-            <small>The daily backup starts at a random time in this window, server time.</small>
-            <input value={start} onChange={(e) => setStart(e.target.value)} inputMode="numeric" required />
-          </label>
-          <label>
-            And (hour)
-            <input value={end} onChange={(e) => setEnd(e.target.value)} inputMode="numeric" required />
-          </label>
-          <label>
-            Monthly data check reads 1 of
-            <small>parts of all data, a different part each month. 0 turns it off.</small>
-            <input value={parts} onChange={(e) => setParts(e.target.value)} inputMode="numeric" required />
-          </label>
+          <Field label="Start between (hour)" hint="The daily backup starts at a random time in this window, server time.">
+            <input className="ui-input" value={start} onChange={(e) => setStart(e.target.value)} inputMode="numeric" required />
+          </Field>
+          <Field label="And (hour)">
+            <input className="ui-input" value={end} onChange={(e) => setEnd(e.target.value)} inputMode="numeric" required />
+          </Field>
+          <Field label="Monthly data check reads 1 of" hint="parts of all data, a different part each month. 0 turns it off.">
+            <input className="ui-input" value={parts} onChange={(e) => setParts(e.target.value)} inputMode="numeric" required />
+          </Field>
         </fieldset>
-        {error && <p role="alert">{error}</p>}
-        {saved && <p role="status">Saved.</p>}
-        <button type="submit" disabled={busy}>
-          Save
-        </button>
-      </form>
-      {info.publicKey && (
-        <div className="keybox">
-          <p>
-            Add this key to the Storage Box: in Hetzner&apos;s console under SSH keys, or to <code>.ssh/authorized_keys</code> of the account.
-          </p>
-          <pre aria-label="Public key">{info.publicKey}</pre>
+        {error && <Notice tone="err" title={error} />}
+        {saved && <Notice tone="ok" title="Saved." />}
+        <div className="ui-row">
+          <Button variant="primary" type="submit" disabled={busy}>
+            Save
+          </Button>
         </div>
-      )}
+        {info.publicKey && (
+          <div className="ui-stack-tight">
+            <p className="ui-flush">
+              Add this key to the Storage Box: in Hetzner&apos;s console under SSH keys, or to <code>.ssh/authorized_keys</code> of the account.
+            </p>
+            <pre className="ui-code" aria-label="Public key">
+              {info.publicKey}
+            </pre>
+          </div>
+        )}
+      </form>
     </Card>
   );
 }
@@ -307,15 +298,15 @@ function HostKeyCard({ info, onConfirmed }: { info: BackupInfo; onConfirmed: (i:
           <p>
             The target presents <code>{scanned.fingerprint}</code>. Compare it with the fingerprints Hetzner publishes for Storage Boxes. Trust it only if it matches.
           </p>
-          <button type="button" disabled={busy} onClick={() => void confirm()}>
+          <Button variant="primary" disabled={busy} onClick={() => void confirm()}>
             Trust this key
-          </button>
+          </Button>
         </>
       )}
-      {error && <p role="alert">{error}</p>}
-      <button type="button" className="secondary" disabled={busy} onClick={() => void scan()}>
+      {error && <Notice tone="err" title={error} />}
+      <Button disabled={busy} onClick={() => void scan()}>
         {info.hostKey ? "Check the host key again" : "Fetch the host key"}
-      </button>
+      </Button>
     </Card>
   );
 }
@@ -466,22 +457,19 @@ function ImportForm({ site, restore }: { site: string; restore: Restore }) {
 
   if (state === "done") {
     return (
-      <p role="status">
-        The dump is in the new database <code>{name}</code>. Point the site to it when you have checked it.
-      </p>
+      <Notice tone="ok" title={`The dump is in the new database ${name}. Point the site to it when you have checked it.`} />
     );
   }
 
   return (
-    <form onSubmit={(e) => void submit(e)}>
-      <label>
-        Import into a new database
-        <input value={name} onChange={(e) => setName(e.target.value)} required />
-      </label>
-      {error && <p role="alert">{error}</p>}
-      <button type="submit" disabled={state === "busy"}>
+    <form className="ui-stack" onSubmit={(e) => void submit(e)}>
+      <Field label="Import into a new database">
+        <input className="ui-input" value={name} onChange={(e) => setName(e.target.value)} required />
+      </Field>
+      {error && <Notice tone="err" title={error} />}
+      <Button variant="primary" type="submit" disabled={state === "busy"}>
         Create and import
-      </button>
+      </Button>
     </form>
   );
 }
