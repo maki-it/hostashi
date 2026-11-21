@@ -59,9 +59,11 @@ func (r stubRemote) DropDatabase(_ context.Context, name string) error {
 	return nil
 }
 
-func (stubRemote) CreateUser(context.Context, string, string, string) error { return nil }
-func (stubRemote) DropUser(context.Context, string) error                   { return nil }
-func (stubRemote) SetPassword(context.Context, string, string) error        { return nil }
+func (stubRemote) CreateUser(context.Context, string, string, string) error    { return nil }
+func (stubRemote) DropUser(context.Context, string) error                      { return nil }
+func (stubRemote) SetPassword(context.Context, string, string) error           { return nil }
+func (stubRemote) CreateJobUser(context.Context, string, string, string) error { return nil }
+func (stubRemote) DropJobUser(context.Context, string) error                   { return nil }
 
 func TestDBServersOverHTTP(t *testing.T) {
 	e := newAPIWithAgent(t, &stubAgent{})

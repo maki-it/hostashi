@@ -61,6 +61,14 @@ export const listSites = async () => (await request<{ sites: Site[] }>("GET", "/
 export const phpVersions = () => request<PHPVersions>("GET", "/php/versions");
 export const createSite = (s: NewSite) => request<Site>("POST", "/sites", s);
 export const deleteSite = (name: string) => request<void>("DELETE", sitePath(name));
+
+/** Deletes the site and parks the chosen domains of it (ADR-0048). */
+export type ParkSite = { domains: string[]; page: string; tls: boolean; confirm: string };
+export const deleteAndPark = (name: string, p: ParkSite) => request<void>("POST", sitePath(name) + "/park", p);
+
+/** The address of the New site form, filled in with a parked domain (ADR-0048). */
+export const newSiteHash = (domain: string, tls: boolean) =>
+  "#/sites?" + new URLSearchParams({ new: "1", domain, tls: tls ? "1" : "0" }).toString();
 export const setDomains = (name: string, domains: string[]) => request<Site>("PUT", sitePath(name) + "/domains", { domains });
 export const setPHP = (name: string, php: string) => request<Site>("PUT", sitePath(name) + "/php", { php });
 export const setTLS = (name: string, enabled: boolean) => request<Site>("PUT", sitePath(name) + "/tls", { enabled });

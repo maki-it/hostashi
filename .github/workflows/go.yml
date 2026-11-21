@@ -28,6 +28,7 @@ jobs:
     outputs:
       go: ${{ steps.filter.outputs.go }}
       installer: ${{ steps.filter.outputs.installer }}
+      package: ${{ steps.filter.outputs.package }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,6 +43,7 @@ jobs:
           if [ "$EVENT" != "pull_request" ]; then
             echo "go=true" >> "$GITHUB_OUTPUT"
             echo "installer=true" >> "$GITHUB_OUTPUT"
+            echo "package=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # Markdown files never affect Go code, tests or the installer.
@@ -50,6 +52,7 @@ jobs:
           match() { if grep -qE "$1" <<<"$files"; then echo true; else echo false; fi; }
           echo "go=$(match '(\.go$|^go\.(mod|sum)$|^\.golangci\.yml$|^(cmd|internal|packaging)/|^\.github/workflows/go\.yml$)')" >> "$GITHUB_OUTPUT"
           echo "installer=$(match '(^go\.(mod|sum)$|^(cmd|internal|packaging)/|^\.github/workflows/go\.yml$)')" >> "$GITHUB_OUTPUT"
+          echo "package=$(match '(^\.goreleaser\.yaml$|^go\.(mod|sum)$|^(cmd|internal|packaging|web)/|^\.github/workflows/go\.yml$)')" >> "$GITHUB_OUTPUT"
 
   test:
     needs: changes
@@ -366,6 +369,38 @@ jobs:
         run: |
           GOARCH=amd64 go build -trimpath -o /dev/null ./cmd/hostashi
           GOARCH=arm64 go build -trimpath -o /dev/null ./cmd/hostashi
+
+  package:
+    needs: changes
+    if: needs.changes.outputs.package == 'true'
+    name: Debian package (build with GoReleaser, install on Debian 13 and Ubuntu 26.04)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # GoReleaser reads tags and the commit time.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build a snapshot (publishes nothing)
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          distribution: goreleaser
+          version: v2.20.3
+          args: release --snapshot --clean
+      - name: Install and remove the package
+        run: |
+          for img in debian:trixie ubuntu:26.04; do
+            docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/src:ro" "$img" /src/packaging/test/deb-test.sh /dist
+          done
 
   dracut:
     needs: changes

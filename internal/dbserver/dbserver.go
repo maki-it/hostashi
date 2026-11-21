@@ -445,6 +445,34 @@ func (c *Client) CreateUser(ctx context.Context, database, user, password string
 		return fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 
+	return c.createUser(ctx, database, user, password)
+}
+
+// CreateJobUser creates the temporary user of an import or export
+// (ADR-0041 addendum 1), with the same rights as CreateUser.
+func (c *Client) CreateJobUser(ctx context.Context, database, user, password string) error {
+	if err := agentapi.ValidateDBName(database); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	if err := agentapi.ValidateRemoteJobUser(user, password); err != nil || password == "" {
+		return fmt.Errorf("%w: job user", ErrInvalid)
+	}
+
+	return c.createUser(ctx, database, user, password)
+}
+
+// DropJobUser drops the temporary user of a job; a missing one is not an
+// error.
+func (c *Client) DropJobUser(ctx context.Context, user string) error {
+	if err := agentapi.ValidateRemoteJobUser(user, ""); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	return c.exec(ctx, "drop user", "DROP USER IF EXISTS "+c.account(user))
+}
+
+func (c *Client) createUser(ctx context.Context, database, user, password string) error {
 	acct := c.account(user)
 	grantOn := strings.ReplaceAll("`"+database+"`", "_", `\_`)
 

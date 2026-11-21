@@ -63,14 +63,14 @@ func TestDefaultsRemote(t *testing.T) {
 		{
 			"verify",
 			Remote{Host: "db.example.net", Port: 3306, TLS: "verify"},
-			"protocol=tcp\nhost=db.example.net\nport=3306\nconnect-timeout=20\nssl\nssl-verify-server-cert\nssl-ca=/etc/ssl/certs/ca-certificates.crt\n",
+			"protocol=tcp\nhost=db.example.net\nport=3306\nssl\nssl-verify-server-cert\nssl-ca=/etc/ssl/certs/ca-certificates.crt\n[mysql]\nconnect-timeout=20\n",
 		},
 		{
 			"verify-ca",
 			Remote{Host: "10.0.0.5", Port: 3307, TLS: "verify-ca", CAFile: "/tmp/x/ca.pem"},
-			"protocol=tcp\nhost=10.0.0.5\nport=3307\nconnect-timeout=20\nssl\nssl-verify-server-cert\nssl-ca=/tmp/x/ca.pem\n",
+			"protocol=tcp\nhost=10.0.0.5\nport=3307\nssl\nssl-verify-server-cert\nssl-ca=/tmp/x/ca.pem\n[mysql]\nconnect-timeout=20\n",
 		},
-		{"none", Remote{Host: "db1", Port: 3306, TLS: "none"}, "protocol=tcp\nhost=db1\nport=3306\nconnect-timeout=20\nskip-ssl\n"},
+		{"none", Remote{Host: "db1", Port: 3306, TLS: "none"}, "protocol=tcp\nhost=db1\nport=3306\nskip-ssl\n[mysql]\nconnect-timeout=20\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := base
