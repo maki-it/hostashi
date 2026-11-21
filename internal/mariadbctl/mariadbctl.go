@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"syscall"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -45,7 +46,23 @@ type Run struct {
 	User     string // temporary database user
 	Password string
 	Socket   string // server socket, empty for the default
+
+	// Remote is set for a database on an external server (ADR-0041
+	// addendum 1); Socket is then ignored.
+	Remote *Remote
 }
+
+// Remote is how the client reaches an external server.
+type Remote struct {
+	Host string // as the admin entered it; the job's /etc/hosts maps it
+	Port int
+	// TLS is "verify" (system CAs), "verify-ca" (CAFile) or "none".
+	TLS    string
+	CAFile string // for "verify-ca"
+}
+
+// SystemCAFile is the distribution's CA bundle.
+const SystemCAFile = "/etc/ssl/certs/ca-certificates.crt"
 
 // ErrFailed carries a short, fixed description. The client's output stays
 // in the log, it may contain parts of the dump.
@@ -127,7 +144,12 @@ func run(ctx context.Context, r Run, bin string, args []string, in io.Reader, ou
 // defaults is the option file. Names and password passed the validators, so
 // none of them can break the file format.
 func defaults(r Run) ([]byte, error) {
-	for _, v := range []string{r.User, r.Password, r.Socket} {
+	values := []string{r.User, r.Password, r.Socket}
+	if r.Remote != nil {
+		values = append(values, r.Remote.Host, r.Remote.CAFile)
+	}
+
+	for _, v := range values {
 		for i := range len(v) {
 			if c := v[i]; c < 0x21 || c > 0x7e || c == '"' || c == '\'' || c == '\\' || c == '#' || c == ';' {
 				return nil, fmt.Errorf("%w: invalid character in options", ErrFailed)
@@ -142,11 +164,47 @@ func defaults(r Run) ([]byte, error) {
 	// mariadb-dump reads [mysqldump] and [mariadb-dump], the client
 	// [mysql] and [mariadb]; [client] covers both.
 	out := "[client]\nuser=" + r.User + "\npassword=" + r.Password + "\n"
+
+	if r.Remote != nil {
+		remote, err := remoteOptions(*r.Remote)
+		if err != nil {
+			return nil, err
+		}
+
+		return []byte(out + remote), nil
+	}
+
 	if r.Socket != "" {
 		out += "socket=" + r.Socket + "\n"
 	}
 
 	return []byte(out), nil
+}
+
+// remoteOptions are the connection lines for an external server: TCP to
+// host and port, and TLS that checks the certificate and the host name
+// unless the admin turned TLS off.
+func remoteOptions(r Remote) (string, error) {
+	if r.Host == "" || r.Port < 1 || r.Port > 65535 {
+		return "", fmt.Errorf("%w: host and port are required", ErrFailed)
+	}
+
+	out := "protocol=tcp\nhost=" + r.Host + "\nport=" + strconv.Itoa(r.Port) + "\nconnect-timeout=20\n"
+
+	switch r.TLS {
+	case "verify":
+		return out + "ssl\nssl-verify-server-cert\nssl-ca=" + SystemCAFile + "\n", nil
+	case "verify-ca":
+		if r.CAFile == "" {
+			return "", fmt.Errorf("%w: CA file is required", ErrFailed)
+		}
+
+		return out + "ssl\nssl-verify-server-cert\nssl-ca=" + r.CAFile + "\n", nil
+	case "none":
+		return out + "skip-ssl\n", nil
+	default:
+		return "", fmt.Errorf("%w: unknown TLS mode", ErrFailed)
+	}
 }
 
 var errLineRe = regexp.MustCompile(`ERROR (\d{4,5}) \([0-9A-Z]{5}\) at line (\d{1,12})`)

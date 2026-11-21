@@ -536,6 +536,10 @@ func createDump(h SiteHome, rel string) (*os.File, error) {
 // writes the old server's dumps with it.
 func CreateDumpFile(h SiteHome, rel string) (*os.File, error) { return createDump(h, rel) }
 
+// OpenDumpFile opens an existing dump below the home for reading, as an
+// import does: a regular file of the site user, without following links.
+func OpenDumpFile(h SiteHome, rel string) (*os.File, error) { return openDump(h, rel) }
+
 // RemoveDumpFile removes a dump that CreateDumpFile made, below the home
 // and without following symlinks.
 func RemoveDumpFile(h SiteHome, rel string) error { return removeDump(h, rel) }

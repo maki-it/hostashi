@@ -28,6 +28,10 @@ const (
 	// instance is the import's id. It sits here because this package
 	// already starts the restore job the same way.
 	ImportUnit = "hostashi-import@"
+	// DBJobUnit is the template of one import or export of a database on
+	// an external server (ADR-0041 addendum 1); the instance is the job's
+	// id.
+	DBJobUnit = "hostashi-dbjob@"
 )
 
 // restoreIDRe is the only variable part of any argument list here.
@@ -59,6 +63,16 @@ func (Units) StartImport(ctx context.Context, id string) error {
 	}
 
 	return systemctl(ctx, "start", "--no-block", ImportUnit+id+".service")
+}
+
+// StartDBJob starts remote database job id in its own unit and returns at
+// once. The id has the same form as a restore id.
+func (Units) StartDBJob(ctx context.Context, id string) error {
+	if !restoreIDRe.MatchString(id) {
+		return fmt.Errorf("%w: job id", ErrInvalid)
+	}
+
+	return systemctl(ctx, "start", "--no-block", DBJobUnit+id+".service")
 }
 
 // StartRun starts a run now and returns at once; systemd ignores the
