@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# The file manager's socket of one site (ADR-0040). The agent starts
+# hostashi-files@<site>.socket when the panel first opens the site's files;
+# systemd starts hostashi-files@<site>.service on a connection. Only root
+# and the panel (group hostashi) may connect; the helper trusts this socket
+# and nothing else, and the panel checks roles and grants before every
+# request.
+
+[Unit]
+Description=Hostashi file manager socket for site %i
+Documentation=https://github.com/maki-it/hostashi
+
+[Socket]
+ListenStream=/run/hostashi-files/%i.sock
+SocketUser=root
+SocketGroup=hostashi
+SocketMode=0660
+DirectoryMode=0755
+RemoveOnStop=yes
+Service=hostashi-files@%i.service
