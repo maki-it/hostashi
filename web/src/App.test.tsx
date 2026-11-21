@@ -80,6 +80,9 @@ describe("App start", () => {
     mockFetch({ ...noSetup, ...loggedOut });
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
+    // ADR-0037: no recovery command on the login page, only who to ask.
+    expect(screen.getByText("Forgot your password? Ask an administrator of this panel.")).toBeInTheDocument();
+    expect(screen.queryByText(/hostashi user recover/)).not.toBeInTheDocument();
   });
 
   it("offers a retry when the server is not reachable", async () => {

@@ -20,7 +20,7 @@ import { Setup } from "./Setup";
 import { Sites } from "./Sites";
 import { canSee } from "./nav";
 import { formatHash, parseHash, type Page } from "./routes";
-import { Shell } from "./Shell";
+import { Mark, Shell } from "./Shell";
 import { SitePage } from "./SitePage";
 import { Users } from "./Users";
 
@@ -118,8 +118,12 @@ export function App() {
 
   return (
     <main className="shell">
-      <header className="brand">
-        <h1>Hostashi</h1>
+      <header className="app-brand ui-auth-brand">
+        <Mark />
+        <span className="app-brand-name">
+          Hostashi
+          <span className="app-host">{window.location.hostname}</span>
+        </span>
       </header>
       {view.kind === "loading" && <p aria-busy="true">Loading…</p>}
       {view.kind === "error" && (

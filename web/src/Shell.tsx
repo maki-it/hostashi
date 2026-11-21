@@ -15,7 +15,7 @@ type ShellProps = {
 };
 
 /** The Hostashi mark: the brand colour with an "H". */
-function Mark() {
+export function Mark() {
   return (
     <span className="app-mark" aria-hidden="true">
       <svg viewBox="0 0 32 32" width="18" height="18">
