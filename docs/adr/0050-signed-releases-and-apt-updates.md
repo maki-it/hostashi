@@ -172,7 +172,7 @@ Decided by Kim (2026-11-21) as below.
 | **B. Off by default; installer option `--auto-update` adds the Hostashi origin to the existing unattended-upgrades file; the panel shows "update available" from the apt cache** | `apt upgrade` stays one command; who wants it automatic gets it with one flag; security updates of the distro stay automatic as today | Servers without the flag can fall behind; the panel notice and the email notification (ADR-0044) remind the admin |
 | C. A self-updater inside the panel (download, verify, replace binary) | Works without apt | Duplicates apt, needs root in or for the panel, conflicts with the package manager |
 
-**Recommendation: B.** The panel reads the candidate version from the apt lists (file read, no `apt` call) and shows it on Health and in the doctor digest. An "update now" button in the panel would need a new root unit (like `hostashi-php-install@`) and is left for later.
+**Recommendation: B** (decided by Kim, 2026-11-21). The panel reads the candidate version from the apt lists (file read, no `apt` call) and shows it on Health and in the doctor digest. An "update now" button in the panel would need a new root unit (like `hostashi-php-install@`) and is left for later.
 
 ## 7. Release channels
 
@@ -192,5 +192,5 @@ Decided by Kim (2026-11-21) as below.
 2. ~~Apt repository~~ Decided (Kim, 2026-11-21): GitHub Pages of `maki-it/hostashi` on `hostashi.com`, apt under `/apt`.
 3. ~~Signing~~ Decided (Kim, 2026-11-21): one key with expiry in the `release` environment, renewed by a workflow after Kim's approval, no manual `gpg`.
 4. ~~Upgrade~~ Decided (Kim, 2026-11-21): snapshot, configure steps with the saved options, restart, wait for the health check.
-5. Automatic Hostashi updates off by default with `--auto-update` (recommended)?
+5. ~~Automatic updates~~ Decided (Kim, 2026-11-21): off by default, `--auto-update` opts in; the panel shows available updates.
 6. Only a `stable` channel for v1 (recommended)?
