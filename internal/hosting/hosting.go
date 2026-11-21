@@ -46,6 +46,9 @@ type Agent interface {
 	DBLoad(ctx context.Context, database, path string) (agentapi.DBJob, error)
 	DBExport(ctx context.Context, database, path string) (agentapi.DBJob, error)
 	DBJob(ctx context.Context, id string) (agentapi.DBJob, error)
+	// Jobs on external servers (ADR-0041 addendum 1).
+	DBRemoteStart(ctx context.Context, req agentapi.DBRemoteJobRequest) (agentapi.DBJob, error)
+	DBRemoteJob(ctx context.Context, id string) (agentapi.DBJob, error)
 	PageList(ctx context.Context) ([]agentapi.PageVersion, error)
 	// PageUpload sends a page in chunks and commits it under digest.
 	PageUpload(ctx context.Context, id string, files map[string][]byte, digest string) error
@@ -155,6 +158,9 @@ type Service struct {
 	ssh    SSHAgent    // nil: no SSH keys (ADR-0032)
 	cache  CacheAgent  // nil: no object caches (ADR-0045)
 	dbs    DBServers   // nil: only the local database server (ADR-0041)
+
+	resolver     Resolver   // nil: net.DefaultResolver
+	remoteJobsMu sync.Mutex // serializes dropping the users of remote jobs
 
 	dbTool     DBToolAgent // nil: no web database tool (ADR-0038)
 	dbToolPort int

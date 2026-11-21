@@ -144,6 +144,12 @@ func (r fakeRemote) DropUser(_ context.Context, user string) error {
 	return nil
 }
 
+func (r fakeRemote) CreateJobUser(ctx context.Context, database, user, password string) error {
+	return r.CreateUser(ctx, database, user, password)
+}
+
+func (r fakeRemote) DropJobUser(ctx context.Context, user string) error { return r.DropUser(ctx, user) }
+
 func (r fakeRemote) SetPassword(_ context.Context, user, _ string) error {
 	r.f.mu.Lock()
 	defer r.f.mu.Unlock()
@@ -312,14 +318,9 @@ func TestDatabasesOnExternalServer(t *testing.T) {
 		t.Fatalf("row kept: %v", err)
 	}
 
-	// Import, export and the database tool run in the agent, which has no
-	// network: refused for an external database.
-	if _, err := s.ImportDatabase(ctx, 1, "shop_wp", "dumps/old.sql"); !errors.Is(err, ErrDBServerLocalOnly) {
-		t.Fatalf("import: %v", err)
-	}
-
-	if _, err := s.ExportDatabase(ctx, 1, "shop_wp", "dumps/new.sql"); !errors.Is(err, ErrDBServerLocalOnly) {
-		t.Fatalf("export: %v", err)
+	// Loading a dump as the owner works only on the local server.
+	if _, err := s.LoadDatabaseDump(ctx, 1, "shop_wp", "dumps/old.sql"); !errors.Is(err, ErrDBServerLocalOnly) {
+		t.Fatalf("load: %v", err)
 	}
 
 	// Users and passwords go to the database's server.
