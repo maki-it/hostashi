@@ -229,12 +229,14 @@ describe("Presets", () => {
     await userEvent.click(form.getByRole("checkbox", { name: "Unlimited memory" }));
     await userEvent.clear(form.getByRole("textbox", { name: /CPU cores/ }));
     await userEvent.type(form.getByRole("textbox", { name: /CPU cores/ }), "0.5");
+    await userEvent.selectOptions(form.getByRole("combobox", { name: /Page cache/ }), "512 MB");
     await userEvent.click(form.getByRole("button", { name: "Add preset" }));
     expect(await screen.findByText("Preset tiny added.")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
       name: "tiny",
       default: true,
       limits: { memoryBytes: 512 * MiB, cpuQuotaPercent: 50 },
+      caches: { objectCacheMb: 0, pageCacheMb: 512 },
     });
     expect(await screen.findByRole("table", { name: "Limit presets" })).toBeInTheDocument();
   });

@@ -11,8 +11,8 @@ Everything here is a draft that the spikes in Phase 0 confirm or reject.
 ┌──────────────────────────────────────┐
 │ hostashi serve        (User: hostashi) │  no root, listens on the panel port
 │  • REST API + embedded SPA            │
-│  • AuthN/AuthZ, audit, job queue      │
-│  • SQLite (state, audit, jobs)        │
+│  • AuthN/AuthZ, audit, job status     │
+│  • SQLite (state, audit, mail outbox) │
 └──────────────┬───────────────────────┘
                │ Unix socket, SO_PEERCRED, typed RPC
                ▼
@@ -96,7 +96,7 @@ Secrets (DB passwords, API keys) are stored **encrypted** in the DB (key in `/et
 
 - **SQLite (WAL)** for the panel: no additional service, simple backups (`VACUUM INTO`). See ADR-0006.
 - **Metrics:** ring buffer in the panel (for example 30 days, tiered resolution), Prometheus/Influx not required. An optional Prometheus endpoint for an existing monitoring stack is described in [ADR-0022](adr/0022-metrics-and-tracing.md).
-- **Jobs:** persistent queue in SQLite, progress and log per job, streaming through SSE/WebSocket.
+- **Jobs:** there is no shared job queue. The panel has no root and the agent has no network, so the panel could only track long runs, not run them. Each long run is a job of the agent: restores, CloudPanel imports, jobs on external database servers, PHP installations and the file manager run in their own `hostashi-*@<id>` systemd unit and keep a JSON record in the agent's state directory; import and export of local databases run in the agent and keep their records in `database-jobs.json`. A job survives a restart of the panel, and a restart of the agent either leaves the unit running or reports the job as failed (`interrupted by an agent restart`). The panel polls a job's state. Outgoing email is the one queue in SQLite (`mail_outbox`, ADR-0044). Reviewed on 2026-11-21: a shared queue would only add a second copy of the agent's state, so it is not planned for v1.
 - **Panel logs:** structured (JSON) in journald.
 
 ## 4.8 Packaging, installation and updates

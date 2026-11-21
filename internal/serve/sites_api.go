@@ -12,6 +12,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -438,6 +439,45 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 
 		if err := svc.Delete(ctx, p.User.ID, r.PathValue("name")); err != nil {
 			siteFail(log, w, err, "delete site")
+
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	// Deletes the site and parks the chosen domains of it (ADR-0048). It
+	// deletes like DELETE and parks like PUT parked-domains, so it needs
+	// both permissions.
+	mux.HandleFunc("POST /api/v1/sites/{name}/park", a.allow("sites:park", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		if !p.Allows(authz.ScopeOf("parked:write")) {
+			writeError(w, http.StatusForbidden, "insufficient_scope", "the token lacks the scope "+authz.ScopeOf("parked:write"))
+
+			return
+		}
+
+		if !authz.Allowed(authz.Role(p.User.Role), "parked:write") {
+			writeError(w, http.StatusForbidden, "forbidden", "your role does not allow this")
+
+			return
+		}
+
+		var in struct {
+			Domains []string `json:"domains"`
+			Page    string   `json:"page"`
+			TLS     *bool    `json:"tls"`
+			Confirm string   `json:"confirm"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		req := hosting.ParkRequest{Domains: in.Domains, Page: in.Page, TLS: in.TLS == nil || *in.TLS, Confirm: in.Confirm}
+		if err := svc.DeleteAndPark(ctx, p.User.ID, r.PathValue("name"), req); err != nil {
+			pageFail(log, w, err, "delete and park site")
 
 			return
 		}

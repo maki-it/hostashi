@@ -44,6 +44,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0046](0046-page-cache-per-site.md) | Page cache (nginx FastCGI cache) per site | Accepted |
 | [0047](0047-status-page-for-disabled-sites.md) | Status page for disabled sites | Accepted |
 | [0049](0049-php-settings-per-site.md) | PHP settings per site | Accepted |
+| [0050](0050-signed-releases-and-apt-updates.md) | Signed releases, install and updates through apt | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 

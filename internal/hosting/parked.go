@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -67,20 +69,6 @@ func (s *Service) SetParked(ctx context.Context, actor int64, domain, page strin
 		}
 	}
 
-	ref := int64(0)
-
-	switch page {
-	case "", statuspage.BuiltinParking:
-		page = statuspage.BuiltinParking
-	default:
-		n, ok := parsePageID(page)
-		if !ok {
-			return store.Parked{}, ErrPageNotFound
-		}
-
-		ref = n
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -88,19 +76,9 @@ func (s *Service) SetParked(ctx context.Context, actor int64, domain, page strin
 		return store.Parked{}, err
 	}
 
-	if ref != 0 {
-		p, err := s.st.StatusPageByID(ctx, ref)
-		if errors.Is(err, store.ErrNotFound) {
-			return store.Parked{}, ErrPageNotFound
-		}
-
-		if err != nil {
-			return store.Parked{}, err
-		}
-
-		if p.Kind != statuspage.KindParking {
-			return store.Parked{}, fmt.Errorf("%w: %q is a maintenance page, choose a parking page", ErrInvalid, p.Name)
-		}
+	ref, page, err := s.parkingPage(ctx, page)
+	if err != nil {
+		return store.Parked{}, err
 	}
 
 	old, existed, err := s.st.PutParked(ctx, domain, ref, tls, s.now())
@@ -129,6 +107,35 @@ func (s *Service) SetParked(ctx context.Context, actor int64, domain, page strin
 	}
 
 	return s.st.ParkedDomain(ctx, domain)
+}
+
+// parkingPage resolves the page of a parked domain: "" or the built-in id
+// is 0, anything else must be a stored parking page. It returns the store
+// reference and the page id for the audit log.
+func (s *Service) parkingPage(ctx context.Context, page string) (int64, string, error) {
+	if page == "" || page == statuspage.BuiltinParking {
+		return 0, statuspage.BuiltinParking, nil
+	}
+
+	ref, ok := parsePageID(page)
+	if !ok {
+		return 0, "", ErrPageNotFound
+	}
+
+	p, err := s.st.StatusPageByID(ctx, ref)
+	if errors.Is(err, store.ErrNotFound) {
+		return 0, "", ErrPageNotFound
+	}
+
+	if err != nil {
+		return 0, "", err
+	}
+
+	if p.Kind != statuspage.KindParking {
+		return 0, "", fmt.Errorf("%w: %q is a maintenance page, choose a parking page", ErrInvalid, p.Name)
+	}
+
+	return ref, page, nil
 }
 
 // DeleteParked ends the parking of a domain.
@@ -216,4 +223,117 @@ func (s *Service) issueParked(ctx context.Context, p store.Parked) error {
 	}
 
 	return nil
+}
+
+// ParkRequest says which domains of a site to park when the site is
+// deleted (ADR-0048), and how.
+type ParkRequest struct {
+	Domains []string // at least one, all of them the site's
+	Page    string   // "" is the built-in parking page
+	TLS     bool
+	Confirm string // the site's name, typed again
+}
+
+// DeleteAndPark deletes an active site and parks the chosen domains of it
+// (ADR-0048). The site's vhost and the parked domains swap in one web
+// state, so the domains are answered all the time. If that web state fails,
+// nothing changed. If removing the site stops halfway, the site stays in
+// state deleting with its domains parked, and Delete finishes the job.
+func (s *Service) DeleteAndPark(ctx context.Context, actor int64, name string, req ParkRequest) error {
+	if req.Confirm != name {
+		return fmt.Errorf("%w: type the site's name to confirm", ErrInvalid)
+	}
+
+	if len(req.Domains) == 0 {
+		return fmt.Errorf("%w: choose at least one domain to park", ErrInvalid)
+	}
+
+	if req.TLS && s.issuer == nil {
+		return ErrNoTLS
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	site, err := s.Get(ctx, name)
+	if err != nil {
+		return err
+	}
+
+	if site.State != store.SiteActive {
+		return ErrState
+	}
+
+	domains, err := chosenDomains(site, req.Domains)
+	if err != nil {
+		return err
+	}
+
+	ref, page, err := s.parkingPage(ctx, req.Page)
+	if err != nil {
+		return err
+	}
+
+	err = s.st.ParkSiteDomains(ctx, name, domains, ref, req.TLS, s.now())
+
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return ErrPageNotFound
+	case err != nil:
+		return err
+	}
+
+	if err := s.applyWeb(ctx); err != nil {
+		if rerr := s.st.UnparkSiteDomains(context.WithoutCancel(ctx), name, domains, s.now()); rerr != nil {
+			s.log.ErrorContext(ctx, "undo parking after failed delete", "site", name, "err", rerr)
+		}
+
+		return err
+	}
+
+	s.audit(ctx, actor, "site.park", name, map[string]string{
+		"domains": strings.Join(domains, " "), "page": page, "tls": strconv.FormatBool(req.TLS),
+	})
+
+	if req.TLS {
+		s.Kick()
+	}
+
+	if err := s.removeOfflineSite(ctx, actor, name); err != nil {
+		return err
+	}
+
+	s.audit(ctx, actor, "site.delete", name, nil)
+
+	return nil
+}
+
+// chosenDomains checks that every chosen domain is one of the site's, once,
+// and returns them in the site's order.
+func chosenDomains(site store.Site, in []string) ([]string, error) {
+	want := make(map[string]bool, len(in))
+
+	for _, d := range in {
+		d = strings.ToLower(strings.TrimSpace(d))
+		if want[d] {
+			return nil, fmt.Errorf("%w: %s is chosen twice", ErrInvalid, d)
+		}
+
+		want[d] = true
+	}
+
+	out := make([]string, 0, len(want))
+
+	for _, d := range site.Domains {
+		if want[d] {
+			out = append(out, d)
+			delete(want, d)
+		}
+	}
+
+	if len(want) > 0 {
+		return nil, fmt.Errorf("%w: %s is not a domain of %s", ErrInvalid, slices.Sorted(maps.Keys(want))[0], site.Name)
+	}
+
+	return out, nil
 }

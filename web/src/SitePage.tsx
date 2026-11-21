@@ -11,6 +11,7 @@ import { allowIpsProblem, clientIp, listPages, pageMessage, parseAllowIps, setMa
 import { formatHash, type SiteTab } from "./routes";
 import { PHPOptions, useSites } from "./Sites";
 import {
+  deleteAndPark,
   deleteSite,
   domainsProblem,
   httpsLabel,
@@ -97,7 +98,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
       )}
       {ready && <Tabs label={site.name} tabs={tabs} active={active} onChange={(t) => onTab(t as SiteTab)} idPrefix={prefix} />}
       <div {...(ready ? tabPanelProps(prefix, active) : {})} className="ui-stack">
-        {active === "overview" && <Overview site={site} onChange={load} />}
+        {active === "overview" && <Overview site={site} onChange={load} staff={role === "admin" || role === "manager"} />}
         {active === "domains" && <DomainsTab site={site} onChange={load} />}
         {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
         {active === "php" && (
@@ -148,7 +149,7 @@ function useAction(onChange: () => Promise<void>) {
 
 type TabProps = { site: Site; onChange: () => Promise<void> };
 
-function Overview({ site, onChange }: TabProps) {
+function Overview({ site, onChange, staff }: TabProps & { staff: boolean }) {
   const [primary, ...aliases] = site.domains;
   return (
     <>
@@ -193,7 +194,7 @@ function Overview({ site, onChange }: TabProps) {
             <MaintenanceSettings site={site} onChange={onChange} />
           </Card>
           <Availability site={site} onChange={onChange} />
-          <DeleteSite site={site} />
+          <DeleteSite site={site} canPark={staff} />
         </>
       )}
     </>
@@ -254,54 +255,112 @@ function Availability({ site, onChange }: TabProps) {
   );
 }
 
-function DeleteSite({ site }: { site: Site }) {
-  const [confirming, setConfirming] = useState(false);
+function DeleteSite({ site, canPark }: { site: Site; canPark: boolean }) {
+  const [mode, setMode] = useState<"" | "delete" | "park">("");
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Delete and park (ADR-0048): every domain is checked at first.
+  const [chosen, setChosen] = useState<string[]>(site.domains);
+  const [pages, setPages] = useState<StatusPage[]>([]);
+  const [page, setPage] = useState("");
+  const [tls, setTls] = useState(site.tls.enabled);
+
+  useEffect(() => {
+    if (mode !== "park") return;
+    listPages()
+      .then((all) => setPages(all.filter((p) => p.kind === "parking")))
+      .catch(() => setPages([]));
+  }, [mode]);
 
   async function drop(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError("");
     try {
-      await deleteSite(site.name);
-      window.location.hash = formatHash({ page: "sites" });
+      if (mode === "park") {
+        await deleteAndPark(site.name, { domains: chosen, page, tls, confirm: typed });
+        window.location.hash = formatHash({ page: "parked" });
+      } else {
+        await deleteSite(site.name);
+        window.location.hash = formatHash({ page: "sites" });
+      }
     } catch (err) {
       setError(siteMessage(err));
       setBusy(false);
     }
   }
 
+  function cancel() {
+    setMode("");
+    setTyped("");
+    setError("");
+    setChosen(site.domains);
+  }
+
+  const toggle = (d: string, on: boolean) => setChosen((c) => (on ? site.domains.filter((x) => x === d || c.includes(x)) : c.filter((x) => x !== d)));
+
   return (
     <Card title="Delete site">
-      {!confirming ? (
+      {mode === "" ? (
         <div className="ui-stack">
           <p className="ui-hint">Deletes the site with its files and its databases. Backups stay until they expire.</p>
+          {canPark && <p className="ui-hint ui-flush">To keep the domains answering, delete the site and park its domains in one step.</p>}
           <div className="ui-row">
-            <Button variant="danger" onClick={() => setConfirming(true)}>
+            <Button variant="danger" onClick={() => setMode("delete")}>
               Delete
             </Button>
+            {canPark && (
+              <Button variant="danger" onClick={() => setMode("park")}>
+                Delete and park domains
+              </Button>
+            )}
           </div>
         </div>
       ) : (
         <form className="ui-stack" onSubmit={(e) => void drop(e)}>
+          {mode === "park" && (
+            <>
+              <fieldset className="ui-fieldset ui-stack-tight">
+                <legend>Domains to park</legend>
+                {site.domains.map((d) => (
+                  <label key={d} className="ui-check">
+                    <input type="checkbox" checked={chosen.includes(d)} onChange={(e) => toggle(d, e.target.checked)} />
+                    {d}
+                  </label>
+                ))}
+                <p className="ui-hint ui-flush">Domains you leave out are free afterwards.</p>
+              </fieldset>
+              <div className="ui-narrow">
+                <Field label="Parking page">
+                  <select className="ui-select" value={page} onChange={(e) => setPage(e.target.value)}>
+                    <option value="">Built-in parking page</option>
+                    {pages
+                      .filter((p) => !p.builtin)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+              </div>
+              <label className="ui-check">
+                <input type="checkbox" checked={tls} onChange={(e) => setTls(e.target.checked)} />
+                HTTPS with a Let's Encrypt certificate
+              </label>
+            </>
+          )}
           <div className="ui-narrow">
             <Field label={`Type ${site.name} to confirm`} hint="The site is deleted with its files and its databases. This cannot be undone.">
               <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
             </Field>
           </div>
           <div className="ui-row">
-            <Button type="submit" variant="danger" disabled={busy || typed !== site.name}>
-              Delete {site.name}
+            <Button type="submit" variant="danger" disabled={busy || typed !== site.name || (mode === "park" && chosen.length === 0)}>
+              {mode === "park" ? `Delete ${site.name} and park` : `Delete ${site.name}`}
             </Button>
-            <Button
-              disabled={busy}
-              onClick={() => {
-                setConfirming(false);
-                setTyped("");
-              }}
-            >
+            <Button disabled={busy} onClick={cancel}>
               Cancel
             </Button>
           </div>

@@ -111,3 +111,10 @@ Sandbox of the unit: like `hostashi-import@`, plus `RestrictAddressFamilies=AF_U
 
 1. ~~Is Adminer for external databases part of v1 as described, or only import and export first?~~ **Decided (Kim, 2026-11-21): both in v1, import and export first.**
 2. ~~Resolve the server name in the panel (as proposed) or allow DNS in the unit?~~ **Decided (Kim, 2026-11-21): in the panel; the unit needs no resolver.**
+
+### Implementation notes
+
+- Import and export (PR #284 and the panel PR after it): the operations are `db.remote.start` and `db.remote.job` [V: `internal/agentapi/dbremote.go`]. The job passes the server's name as `host` and the unit binds a private `/etc/hosts` that maps the name to the resolved addresses, so certificate checks use the name the admin entered [V: `internal/dbjob/dbjob.go`]. The temporary user is `hostashi_job_<16 hex>`.
+- The temporary user may log in only from the client host the server saw for the panel. The panel therefore passes only IPv4 addresses when that host is an IPv4 address, and only IPv6 addresses for IPv6 [V: `internal/hosting/dbremotejobs.go`].
+- The panel records each job's user in `db_remote_jobs` (migration 0037) and drops it when the job has ended, at the latest 6 h 15 min after the start. The 15-minute server check retries [V: `internal/hosting/dbremotejobs.go`].
+- Tests: the container test runs an export and an import against the local MariaDB added as an external server, with TLS `none` [V: `packaging/test/container-test.sh`]. A test with TLS against MySQL in the `dbserver` CI job is not done yet [A: planned].

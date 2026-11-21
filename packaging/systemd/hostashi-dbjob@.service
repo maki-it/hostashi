@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# One import or export of a database on an external server (ADR-0041
+# addendum 1), started by the agent as hostashi-dbjob@<id>.service. The
+# agent has no network; this job may reach only the database server.
+#
+# The agent writes a drop-in for each instance (hostashi-dbjob@<id>.service.d)
+# with three lines: IPAddressAllow= the server's addresses, which the panel
+# resolved, so the job needs no DNS; BindReadOnlyPaths= a hosts file that
+# maps the server's name to them, so TLS still checks that name; and
+# ReadWritePaths= the one site home the dump file is in.
+#
+# Root is needed to read the job record in the agent's state directory and
+# to open or create the dump file in the home for the site user
+# (CAP_DAC_OVERRIDE, CAP_CHOWN). mariadb and mariadb-dump run as the site
+# user (CAP_SETUID, CAP_SETGID) with a temporary database user that the
+# panel created for this job only; the job removes that password from its
+# record before it connects.
+
+[Unit]
+Description=Hostashi database job %i
+Documentation=https://github.com/maki-it/hostashi
+After=network-online.target hostashi-agent.service
+Wants=network-online.target
+
+[Service]
+# No core dumps: they would hold the job's password and data (ADR-0033).
+LimitCORE=0
+Type=oneshot
+ExecStart=/usr/local/bin/hostashi dbjob -state-dir /var/lib/hostashi-agent run %i
+# Marks a job failed that ended without writing its outcome, and removes a
+# password that is still in its record.
+ExecStopPost=/usr/local/bin/hostashi dbjob -state-dir /var/lib/hostashi-agent finish %i
+TimeoutStartSec=6h
+ReadWritePaths=-/var/lib/hostashi-agent/dbjobs
+UMask=0077
+
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+# No network until the drop-in allows the server's addresses.
+IPAddressDeny=any
+
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_CHOWN CAP_DAC_OVERRIDE
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+# No RestrictSUIDSGID=: it makes openat2() fail with ENOSYS.
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+RemoveIPC=yes
+PrivateIPC=yes

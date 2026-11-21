@@ -53,6 +53,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0047 | Status page for disabled sites | Accepted on 2026-11-21 ([adr/0047](adr/0047-status-page-for-disabled-sites.md)) | No |
 | 0048 | Convert a parked domain into a site and back | Accepted on 2026-11-21 ([adr/0048](adr/0048-convert-parked-domain-and-site.md)) | No |
 | 0049 | PHP settings per site | Accepted on 2026-11-21 ([adr/0049](adr/0049-php-settings-per-site.md)) | No |
+| 0050 | Signed releases, install and updates through apt | Accepted on 2026-11-21 ([adr/0050](adr/0050-signed-releases-and-apt-updates.md)) | No |
 
 ---
 
@@ -349,3 +350,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0049 PHP settings per site
 
 **Full text (status Accepted, 2026-11-21, by Kim):** [adr/0049](adr/0049-php-settings-per-site.md). Summary: Kim wants more PHP ini settings per site, from an allowlist only. Recommended: a closed, typed allowlist (memory, upload and post size, execution and input time, input vars, file uploads, time zone, error display and reporting presets, session lifetime, short tags) rendered as `php_value` defaults that the site's `.user.ini` and `ini_set()` may still change; the hard limits stay in the slice and in nginx, whose `client_max_body_size` and `fastcgi_read_timeout` now follow the PHP values (today the site vhost has nginx's 1 MB default). Security-relevant settings stay fixed `php_admin_*` values. No new `os/exec`. Decided by Kim on 2026-11-21: defaults (`php_value`), the twelve settings as listed, and `user` may change all of them for its own site.
+
+## ADR-0050 Signed releases, install and updates through apt
+
+**Full text (status Accepted, 2026-11-21, by Kim):** [adr/0050](adr/0050-signed-releases-and-apt-updates.md). Summary: Kim wants signed GitHub releases and install and update through apt. Recommended: GoReleaser builds a `hostashi` `.deb` per architecture with SBOM, cosign signatures and attestations; a static apt repository on the GitHub Pages site of this repo under `hostashi.com/apt`, signed by one expiring key held only in a `release` environment behind Kim's approval and renewed by a workflow (no manual `gpg`); the install script installs through apt and runs `hostashi setup`; `postinst` re-runs the installer's configure steps on upgrade after a database snapshot; `hostashi-rollback`; automatic Hostashi updates opt-in; one `stable` channel. No new `os/exec` exception in panel or agent.

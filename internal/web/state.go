@@ -54,6 +54,36 @@ type Site struct {
 	// PHPSocket and is left out while the site is disabled or in
 	// maintenance.
 	PageCache *PageCache `json:"pageCache,omitempty"`
+	// BodyMax is the site's client_max_body_size in bytes, a whole number
+	// of MiB, and FastCGIReadTimeout its fastcgi_read_timeout in seconds;
+	// both follow the site's PHP settings (ADR-0049) and need PHPSocket.
+	// 0 keeps nginx's default (1 MiB, 60 s). A server snippet that sets
+	// the same directive wins.
+	BodyMax            uint64 `json:"bodyMax,omitempty"`
+	FastCGIReadTimeout int    `json:"fastcgiReadTimeout,omitempty"`
+}
+
+// Bounds of BodyMax and FastCGIReadTimeout (ADR-0049).
+const (
+	MaxBodyMax            uint64 = 2 << 30
+	MinFastCGIReadTimeout        = 60
+	MaxFastCGIReadTimeout        = 3700
+)
+
+func (s Site) checkPHPLimits() error {
+	if (s.BodyMax != 0 || s.FastCGIReadTimeout != 0) && s.PHPSocket == "" {
+		return errors.New("body size and read timeout need PHP")
+	}
+
+	if s.BodyMax%(1<<20) != 0 || s.BodyMax > MaxBodyMax {
+		return fmt.Errorf("body size %d: must be whole MiB up to %d", s.BodyMax, MaxBodyMax)
+	}
+
+	if t := s.FastCGIReadTimeout; t != 0 && (t < MinFastCGIReadTimeout || t > MaxFastCGIReadTimeout) {
+		return fmt.Errorf("read timeout %d: must be between %d and %d seconds", t, MinFastCGIReadTimeout, MaxFastCGIReadTimeout)
+	}
+
+	return nil
 }
 
 // Snippets are the custom snippets of a site, one per slot.
@@ -190,6 +220,10 @@ func (d Desired) Validate() error {
 		}
 
 		if _, _, err := s.checkSnippets(); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if err := s.checkPHPLimits(); err != nil {
 			return fmt.Errorf("site %q: %w", s.User, err)
 		}
 

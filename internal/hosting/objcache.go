@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -258,11 +259,29 @@ func CacheSocket(site string) string { return "/run/hostashi-valkey/" + site + "
 // the object cache is off (0) or a valid size within half of the memory
 // limit, as for a site.
 func CheckPresetCaches(c store.PresetCaches, l store.Limits) error {
+	if c.PageCacheMB != 0 && !slices.Contains(agentapi.PageCacheSizesMB, int(c.PageCacheMB)) {
+		return fmt.Errorf("%w: page cache size must be one of %v MB", ErrInvalid, agentapi.PageCacheSizesMB)
+	}
+
 	if c.ObjectCacheMB == 0 {
 		return nil
 	}
 
 	return checkCacheSize(int(c.ObjectCacheMB), l.MemoryBytes)
+}
+
+// presetCaches gives a site the caches of the preset it just got. The
+// caller holds s.mu.
+func (s *Service) presetCaches(ctx context.Context, actor int64, site store.Site, c store.PresetCaches) {
+	s.presetObjectCache(ctx, actor, site, c)
+	s.presetPageCache(ctx, actor, site, c)
+}
+
+// followPresetCaches changes the cache sizes of a following site after its
+// preset changed. The caller holds s.mu.
+func (s *Service) followPresetCaches(ctx context.Context, actor int64, site store.Site, old, c store.PresetCaches) {
+	s.followPresetCache(ctx, actor, site, old, c)
+	s.followPresetPageCache(ctx, actor, site, old, c)
 }
 
 // presetObjectCache gives a site the object cache of the preset it just got

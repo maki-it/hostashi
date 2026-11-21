@@ -71,10 +71,6 @@ func (s *Service) startDump(ctx context.Context, actor int64, action, database, 
 		return agentapi.DBJob{}, err
 	}
 
-	if d.Server != store.LocalDBServer {
-		return agentapi.DBJob{}, ErrDBServerLocalOnly
-	}
-
 	site, err := s.Get(ctx, d.Site)
 	if err != nil {
 		return agentapi.DBJob{}, err
@@ -82,6 +78,10 @@ func (s *Service) startDump(ctx context.Context, actor int64, action, database, 
 
 	if site.State != store.SiteActive {
 		return agentapi.DBJob{}, ErrState
+	}
+
+	if d.Server != store.LocalDBServer {
+		return s.startRemoteDump(ctx, actor, action, d, d.Site, path)
 	}
 
 	start := s.ag.DBImport
@@ -110,8 +110,13 @@ func (s *Service) DatabaseJob(ctx context.Context, database, id string) (agentap
 		return agentapi.DBJob{}, ErrJobNotFound
 	}
 
-	if _, err := s.Database(ctx, database); err != nil {
+	d, err := s.Database(ctx, database)
+	if err != nil {
 		return agentapi.DBJob{}, err
+	}
+
+	if d.Server != store.LocalDBServer {
+		return s.remoteDatabaseJob(ctx, database, id)
 	}
 
 	j, err := s.ag.DBJob(ctx, id)

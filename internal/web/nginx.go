@@ -693,6 +693,10 @@ server {
     add_header X-Cache $upstream_cache_status always;
     {{- end}}
     root {{.S.Root}};
+    {{- with $.Body}}
+    # Follows the site's post_max_size (ADR-0049).
+    client_max_body_size {{.}};
+    {{- end}}
     {{- with .M}}
 
     # Maintenance (ADR-0027): the page's files for everyone, and the page
@@ -747,6 +751,10 @@ server {
         fastcgi_param REDIRECT_STATUS 200;
         # httpoxy: never pass a client's Proxy header on as HTTP_PROXY.
         fastcgi_param HTTP_PROXY "";
+        {{- with $.ReadTimeout}}
+        # Follows the site's max_execution_time (ADR-0049).
+        fastcgi_read_timeout {{.}};
+        {{- end}}
         {{- with $.C}}
         {{- template "cacheloc" .}}
         {{- end}}
@@ -785,6 +793,34 @@ server {
     {{- end}}
 }
 `).Parse(cacheSrc))
+
+// phpLimits sets the site's body size and read timeout (ADR-0049) unless
+// its server snippet, which is rendered at the server level, sets the same
+// directive: nginx refuses a duplicate, and the snippet is the site's own
+// choice.
+func phpLimits(data map[string]any, s Site) {
+	if s.PHPSocket == "" || s.Disabled {
+		return
+	}
+
+	set := map[string]bool{}
+
+	if s.Maintenance == nil {
+		if server, _, err := s.checkSnippets(); err == nil {
+			for _, d := range server {
+				set[d.Name] = true
+			}
+		}
+	}
+
+	if s.BodyMax != 0 && !set["client_max_body_size"] {
+		data["Body"] = strconv.FormatUint(s.BodyMax>>20, 10) + "m"
+	}
+
+	if s.FastCGIReadTimeout != 0 && !set["fastcgi_read_timeout"] {
+		data["ReadTimeout"] = strconv.Itoa(s.FastCGIReadTimeout) + "s"
+	}
+}
 
 // Render turns desired state into the files of generation gen.
 func (n *Nginx) Render(d Desired, gen int) (Files, error) {
@@ -854,6 +890,8 @@ func (n *Nginx) Render(d Desired, gen int) (Files, error) {
 				data[slot] = name
 			}
 		}
+
+		phpLimits(data, s)
 
 		if err := siteTmpl.Execute(&b, data); err != nil {
 			return Files{}, fmt.Errorf("web: render site %s: %w", s.User, err)

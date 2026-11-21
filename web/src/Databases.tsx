@@ -507,14 +507,7 @@ function DatabaseView({
         <AddUser db={db.name} host={host} onSecret={onSecret} onChange={onChange} />
       </Card>
       <Card title="Import or export">
-        {db.server === LOCAL_SERVER ? (
-          <DumpForm db={db.name} site={db.site} />
-        ) : (
-          <p className="ui-hint ui-flush">
-            Import and export work only for databases on this machine. For {db.name} on {db.server}, use the server's own tools. Backups include
-            it.
-          </p>
-        )}
+        <DumpForm db={db.name} site={db.site} server={db.server} />
       </Card>
       <Card title="Delete database">
         <form
@@ -677,7 +670,9 @@ function AddUser({
 
 // DumpForm imports a dump file from the site's home into the database or
 // exports the database into a new file there (ADR-0025).
-function DumpForm({ db, site }: { db: string; site: string }) {
+// For a database on an external server, the job connects to that server
+// with a temporary user (ADR-0041 addendum 1).
+function DumpForm({ db, site, server }: { db: string; site: string; server: string }) {
   const [kind, setKind] = useState<"export" | "import">("export");
   const [path, setPath] = useState(() => defaultDumpPath(db));
   const [job, setJob] = useState<DumpJob | null>(null);
@@ -727,6 +722,11 @@ function DumpForm({ db, site }: { db: string; site: string }) {
       >
         <input className="ui-input ui-mono" value={path} onChange={(e) => setPath(e.target.value.trim())} autoComplete="off" spellCheck={false} />
       </Field>
+      {server !== LOCAL_SERVER && (
+        <p className="ui-hint ui-flush">
+          The data goes between this machine and {server} with a temporary database user that the panel removes after the job.
+        </p>
+      )}
       {kind === "import" && (
         <Notice tone="warn" title={`The statements in the file run in ${db}. Import into an empty database: a failed import is not rolled back.`} />
       )}

@@ -46,6 +46,9 @@ type Agent interface {
 	DBLoad(ctx context.Context, database, path string) (agentapi.DBJob, error)
 	DBExport(ctx context.Context, database, path string) (agentapi.DBJob, error)
 	DBJob(ctx context.Context, id string) (agentapi.DBJob, error)
+	// Jobs on external servers (ADR-0041 addendum 1).
+	DBRemoteStart(ctx context.Context, req agentapi.DBRemoteJobRequest) (agentapi.DBJob, error)
+	DBRemoteJob(ctx context.Context, id string) (agentapi.DBJob, error)
 	PageList(ctx context.Context) ([]agentapi.PageVersion, error)
 	// PageUpload sends a page in chunks and commits it under digest.
 	PageUpload(ctx context.Context, id string, files map[string][]byte, digest string) error
@@ -155,6 +158,9 @@ type Service struct {
 	ssh    SSHAgent    // nil: no SSH keys (ADR-0032)
 	cache  CacheAgent  // nil: no object caches (ADR-0045)
 	dbs    DBServers   // nil: only the local database server (ADR-0041)
+
+	resolver     Resolver   // nil: net.DefaultResolver
+	remoteJobsMu sync.Mutex // serializes dropping the users of remote jobs
 
 	dbTool     DBToolAgent // nil: no web database tool (ADR-0038)
 	dbToolPort int
@@ -294,6 +300,13 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// A parked domain becomes part of the site; it is parked again if the
+	// site does not come up (ADR-0048).
+	parked, err := s.parkedAmong(ctx, domains)
+	if err != nil {
+		return store.Site{}, err
+	}
+
 	created, err := s.st.CreateSite(ctx, req.Name, req.Pool, req.PHP, domains, s.now())
 
 	switch {
@@ -313,6 +326,8 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 			s.log.ErrorContext(ctx, "remove site row after failed create", "site", req.Name, "err", derr)
 		}
 
+		s.parkAgain(undo, actor, req.Name, parked)
+
 		return store.Site{}, err
 	}
 
@@ -320,6 +335,8 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		if derr := s.st.DeleteSite(undo, req.Name); derr != nil {
 			s.log.ErrorContext(ctx, "remove site row after failed create", "site", req.Name, "err", derr)
 		}
+
+		s.parkAgain(undo, actor, req.Name, parked)
 
 		return store.Site{}, err
 	}
@@ -334,6 +351,7 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 
 	if err := s.applyWeb(ctx); err != nil {
 		s.removeAfterFailure(undo, req.Name)
+		s.parkAgain(undo, actor, req.Name, parked)
 
 		return store.Site{}, err
 	}
@@ -358,7 +376,7 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		}
 
 		// After the limits, so the cache starts inside the site's slice.
-		s.presetObjectCache(ctx, actor, site, caches)
+		s.presetCaches(ctx, actor, site, caches)
 	}
 
 	return site, nil
@@ -387,6 +405,46 @@ func (s *Service) storeTLSChoice(ctx context.Context, req CreateRequest) error {
 	}
 
 	return nil
+}
+
+// parkedAmong returns the parked domains among domains.
+func (s *Service) parkedAmong(ctx context.Context, domains []string) ([]store.Parked, error) {
+	var out []store.Parked
+
+	for _, d := range domains {
+		p, err := s.st.ParkedDomain(ctx, d)
+
+		switch {
+		case err == nil:
+			out = append(out, p)
+		case !errors.Is(err, store.ErrNotFound):
+			return nil, err
+		}
+	}
+
+	return out, nil
+}
+
+// parkAgain parks domains again that a failed site change had taken over,
+// with their ids, pages and certificates (ADR-0048). The agent still serves
+// them from the last accepted web state, so no new web state is needed.
+func (s *Service) parkAgain(ctx context.Context, actor int64, site string, parked []store.Parked) {
+	if len(parked) == 0 {
+		return
+	}
+
+	domains := make([]string, len(parked))
+	for i, p := range parked {
+		domains[i] = p.Domain
+	}
+
+	if err := s.st.ReinsertParked(ctx, parked); err != nil {
+		s.log.ErrorContext(ctx, "park domains again after a failed site change", "site", site, "domains", domains, "err", err)
+
+		return
+	}
+
+	s.audit(ctx, actor, "parked.restore", site, map[string]string{"domains": strings.Join(domains, " ")})
 }
 
 // removeAfterFailure takes a just created site away again. If the account
@@ -438,6 +496,11 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 		return store.Site{}, err
 	}
 
+	parked, err := s.parkedAmong(ctx, domains)
+	if err != nil {
+		return store.Site{}, err
+	}
+
 	old, err := s.st.ReplaceSiteDomains(ctx, name, domains, s.now())
 	if errors.Is(err, store.ErrDomainTaken) {
 		return store.Site{}, fmt.Errorf("%w: %w", ErrDomainTaken, err)
@@ -450,6 +513,8 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 	if err := s.applyWeb(ctx); err != nil {
 		if _, rerr := s.st.ReplaceSiteDomains(context.WithoutCancel(ctx), name, old, s.now()); rerr != nil {
 			s.log.ErrorContext(ctx, "restore domains after failed change", "site", name, "err", rerr)
+		} else {
+			s.parkAgain(context.WithoutCancel(ctx), actor, name, parked)
 		}
 
 		return store.Site{}, err
@@ -538,7 +603,19 @@ func (s *Service) Delete(ctx context.Context, actor int64, name string) error {
 		return err
 	}
 
-	// The site is offline now; its databases go before the account.
+	if err := s.removeOfflineSite(ctx, actor, name); err != nil {
+		return err
+	}
+
+	s.audit(ctx, actor, "site.delete", name, nil)
+
+	return nil
+}
+
+// removeOfflineSite removes the databases, the account with its files and
+// the row of a site that the web server no longer serves.
+func (s *Service) removeOfflineSite(ctx context.Context, actor int64, name string) error {
+	// Its databases go before the account.
 	if err := s.deleteSiteDatabases(ctx, actor, name); err != nil {
 		return err
 	}
@@ -547,13 +624,7 @@ func (s *Service) Delete(ctx context.Context, actor int64, name string) error {
 		return err
 	}
 
-	if err := s.st.DeleteSite(ctx, name); err != nil {
-		return err
-	}
-
-	s.audit(ctx, actor, "site.delete", name, nil)
-
-	return nil
+	return s.st.DeleteSite(ctx, name)
 }
 
 // Sync sends the current web state to the agent again, for example after a
@@ -592,6 +663,11 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		return err
 	}
 
+	phpSettings, err := s.st.AllSitePHPSettings(ctx)
+	if err != nil {
+		return err
+	}
+
 	workers, err := s.st.PHPWorkers(ctx)
 	if err != nil {
 		return err
@@ -621,6 +697,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 			if php != "" {
 				ws.PHPWorkers = phpWorkers(workers, site.ID)
 				ws.PHPPrograms = site.PHPPrograms
+				ws.PHPSettings = webPHPSettings(phpSettings, site)
 			}
 
 			// Sent in maintenance as well, so the agent keeps the cache's

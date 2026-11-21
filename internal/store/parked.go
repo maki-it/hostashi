@@ -301,3 +301,138 @@ func (s *Store) RequestParkedRenew(ctx context.Context, id int64, gap time.Durat
 
 	return ErrTooSoon
 }
+
+// ReinsertParked puts back parked domains exactly as they were, with their
+// ids, so their agent names and certificates fit again (ADR-0048). It is for
+// undoing a site change that took the domains over. A domain that belongs
+// to a site now is refused with ErrDomainTaken and nothing is stored.
+func (s *Store) ReinsertParked(ctx context.Context, rows []Parked) error {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	for _, p := range rows {
+		var n int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM site_domains WHERE domain = ?`, p.Domain).Scan(&n); err != nil {
+			return fmt.Errorf("store: %w", err)
+		}
+
+		if n > 0 {
+			return fmt.Errorf("%w: %s", ErrDomainTaken, p.Domain)
+		}
+
+		var ref any
+		if p.Page != 0 {
+			ref = p.Page
+		}
+
+		if _, err := tx.ExecContext(ctx, `INSERT INTO parked_domains (id, domain, page, tls, tls_live, tls_not_after, tls_error, tls_failed_at,
+			tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			p.ID, p.Domain, ref, boolInt(p.TLS), boolInt(p.TLSLive), unixOf(p.TLSNotAfter), p.TLSError, unixOf(p.TLSFailedAt),
+			p.TLSSource, p.TLSCertSource, boolInt(p.TLSTrusted), unixOf(p.TLSRenewAt), boolInt(p.TLSRenewForced),
+			p.CreatedAt.Unix(), p.UpdatedAt.Unix()); err != nil {
+			return fmt.Errorf("store: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	return nil
+}
+
+// ParkSiteDomains puts a site into state deleting and parks the given
+// domains of it, in one transaction (ADR-0048). The domains stay in the
+// site's list until the site row is deleted; a site in state deleting is
+// not served, so the parked domains take over with the next web state.
+// The site must exist (ErrNotFound) and own every domain (ErrDomainTaken).
+func (s *Store) ParkSiteDomains(ctx context.Context, site string, domains []string, page int64, tls bool, now time.Time) error {
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var id int64
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM sites WHERE name = ?`, site).Scan(&id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+
+		return fmt.Errorf("store: %w", err)
+	}
+
+	var ref any
+	if page != 0 {
+		ref = page
+	}
+
+	for _, d := range domains {
+		var owner int64
+
+		err := tx.QueryRowContext(ctx, `SELECT site_id FROM site_domains WHERE domain = ?`, d).Scan(&owner)
+
+		switch {
+		case errors.Is(err, sql.ErrNoRows) || (err == nil && owner != id):
+			return fmt.Errorf("%w: %s is not a domain of %s", ErrDomainTaken, d, site)
+		case err != nil:
+			return fmt.Errorf("store: %w", err)
+		}
+
+		if _, err := tx.ExecContext(ctx, `INSERT INTO parked_domains (domain, page, tls, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+			d, ref, boolInt(tls), now.Unix(), now.Unix()); err != nil {
+			if strings.Contains(err.Error(), "FOREIGN KEY") {
+				return ErrNotFound
+			}
+
+			return fmt.Errorf("store: %w", err)
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET state = ?, updated_at = ? WHERE id = ?`, SiteDeleting, now.Unix(), id); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	return nil
+}
+
+// UnparkSiteDomains undoes ParkSiteDomains: the domains are no longer
+// parked and the site is active again.
+func (s *Store) UnparkSiteDomains(ctx context.Context, site string, domains []string, now time.Time) error {
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	for _, d := range domains {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM parked_domains WHERE domain = ?`, d); err != nil {
+			return fmt.Errorf("store: %w", err)
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET state = ?, updated_at = ? WHERE name = ?`, SiteActive, now.Unix(), site); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	return nil
+}

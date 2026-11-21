@@ -51,3 +51,56 @@ func TestDescribe(t *testing.T) {
 		t.Fatal("stderr leaked")
 	}
 }
+
+func TestDefaultsRemote(t *testing.T) {
+	base := Run{User: "hostashi_job_0123456789abcdef", Password: "Secret-pass_12345", Socket: "/run/mysqld/mysqld.sock"}
+
+	for _, tc := range []struct {
+		name string
+		r    Remote
+		want string
+	}{
+		{
+			"verify",
+			Remote{Host: "db.example.net", Port: 3306, TLS: "verify"},
+			"protocol=tcp\nhost=db.example.net\nport=3306\nssl\nssl-verify-server-cert\nssl-ca=/etc/ssl/certs/ca-certificates.crt\n[mysql]\nconnect-timeout=20\n",
+		},
+		{
+			"verify-ca",
+			Remote{Host: "10.0.0.5", Port: 3307, TLS: "verify-ca", CAFile: "/tmp/x/ca.pem"},
+			"protocol=tcp\nhost=10.0.0.5\nport=3307\nssl\nssl-verify-server-cert\nssl-ca=/tmp/x/ca.pem\n[mysql]\nconnect-timeout=20\n",
+		},
+		{"none", Remote{Host: "db1", Port: 3306, TLS: "none"}, "protocol=tcp\nhost=db1\nport=3306\nskip-ssl\n[mysql]\nconnect-timeout=20\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := base
+			r.Remote = &tc.r
+
+			got, err := defaults(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			want := "[client]\nuser=" + base.User + "\npassword=" + base.Password + "\n" + tc.want
+			if string(got) != want {
+				t.Fatalf("got\n%s\nwant\n%s", got, want)
+			}
+		})
+	}
+
+	for _, bad := range []Remote{
+		{Host: "", Port: 3306, TLS: "none"},
+		{Host: "db1", Port: 0, TLS: "none"},
+		{Host: "db1", Port: 3306, TLS: "maybe"},
+		{Host: "db1", Port: 3306, TLS: "verify-ca"},
+		{Host: "db1\nsocket=/x", Port: 3306, TLS: "none"},
+		{Host: "db1", Port: 3306, TLS: "verify-ca", CAFile: "/tmp/a b"},
+	} {
+		r := base
+		r.Remote = &bad
+
+		if _, err := defaults(r); !errors.Is(err, ErrFailed) {
+			t.Errorf("%+v: err = %v", bad, err)
+		}
+	}
+}

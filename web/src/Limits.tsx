@@ -16,6 +16,7 @@ import {
   limitsOf,
   listPresets,
   noCaches,
+  pageCacheSizes,
   presetCacheProblem,
   presetNameProblem,
   priorityLabel,
@@ -31,6 +32,7 @@ import {
   type Usage,
 } from "./limits";
 import { cacheSizes } from "./objcache";
+import { formatSize } from "./pagecache";
 import { formatHash } from "./routes";
 import type { Site } from "./sites";
 import { Badge, Button, Card, Field, IconButton, IconLink, Notice, PageHead, RowActions, Table, type Column, type Sort } from "./ui";
@@ -487,6 +489,12 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
       cell: (p) => (p.caches?.objectCacheMb ? `${String(p.caches.objectCacheMb)} MiB` : <span className="ui-hint">Off</span>),
     },
     {
+      key: "pageCache",
+      header: "Page cache",
+      sortValue: (p) => p.caches?.pageCacheMb ?? 0,
+      cell: (p) => (p.caches?.pageCacheMb ? formatSize(p.caches.pageCacheMb) : <span className="ui-hint">Off</span>),
+    },
+    {
       key: "priority",
       header: "CPU priority",
       sortValue: (p) => ["low", "normal", "high"].indexOf(p.limits.cpuPriority),
@@ -624,6 +632,7 @@ function PresetForm({
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [objectCacheMb, setObjectCacheMb] = useState(initial?.caches?.objectCacheMb ?? 0);
+  const [pageCacheMb, setPageCacheMb] = useState(initial?.caches?.pageCacheMb ?? 0);
   const [isDefault, setDefault] = useState(initial?.default ?? false);
   const [fields, setFields] = useState<LimitFields>(
     fieldsOf(
@@ -653,7 +662,7 @@ function PresetForm({
       setError(l);
       return;
     }
-    const caches = { objectCacheMb };
+    const caches = { objectCacheMb, pageCacheMb };
     const cacheProblem = presetCacheProblem(caches, l.memoryBytes);
     if (cacheProblem) {
       setError(cacheProblem);
@@ -695,6 +704,19 @@ function PresetForm({
             {cacheSizes.map((n) => (
               <option key={n} value={n}>
                 {n} MiB
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field
+          label="Page cache"
+          hint="nginx keeps whole PHP pages, with the strict preset for any application. Cached pages count against the disk limit."
+        >
+          <select className="ui-select" value={pageCacheMb} onChange={(e) => setPageCacheMb(Number(e.target.value))}>
+            <option value={0}>Off</option>
+            {pageCacheSizes.map((n) => (
+              <option key={n} value={n}>
+                {formatSize(n)}
               </option>
             ))}
           </select>

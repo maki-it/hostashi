@@ -38,6 +38,7 @@ type fakeAgent struct {
 	dbErr   error             // returned by every db call while set
 	userErr error             // returned by DBUserCreate while set
 	jobs    map[string]agentapi.DBJob
+	remote  []agentapi.DBRemoteJobRequest // db.remote.start requests
 
 	pages     map[string]map[string][]byte // "<id>.<digest>" -> files
 	uploads   int
@@ -955,6 +956,29 @@ func (f *fakeAgent) DBJob(_ context.Context, id string) (agentapi.DBJob, error) 
 	}
 
 	return j, nil
+}
+
+func (f *fakeAgent) DBRemoteStart(_ context.Context, req agentapi.DBRemoteJobRequest) (agentapi.DBJob, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.dbErr != nil {
+		return agentapi.DBJob{}, f.dbErr
+	}
+
+	if err := req.Validate(); err != nil {
+		return agentapi.DBJob{}, &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: err.Error()}
+	}
+
+	f.remote = append(f.remote, req)
+	j := agentapi.DBJob{ID: fmt.Sprintf("%016x", len(f.jobs)+1), Kind: req.Kind, Database: req.Database, Path: req.Path, State: agentapi.JobRunning}
+	f.jobs[j.ID] = j
+
+	return j, nil
+}
+
+func (f *fakeAgent) DBRemoteJob(ctx context.Context, id string) (agentapi.DBJob, error) {
+	return f.DBJob(ctx, id)
 }
 
 func (f *fakeAgent) PageList(context.Context) ([]agentapi.PageVersion, error) {

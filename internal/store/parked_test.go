@@ -162,3 +162,133 @@ func TestParkedCertificateSource(t *testing.T) {
 		t.Fatalf("clear unknown: %v", err)
 	}
 }
+
+func TestReinsertParked(t *testing.T) {
+	s := open(t, dbPath(t))
+	ctx := t.Context()
+	now := time.Unix(2_000_000, 0)
+
+	if _, _, err := s.PutParked(ctx, "soon.example.net", 0, true, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.SetParkedCert(ctx, 1, now.Add(90*24*time.Hour), now); err != nil {
+		t.Fatal(err)
+	}
+
+	before, err := s.ParkedDomain(ctx, "soon.example.net")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A site takes the domain over, which ends the parking.
+	if _, err := s.CreateSite(ctx, "blog", "default", "", []string{"soon.example.net"}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.ParkedDomain(ctx, "soon.example.net"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("still parked: %v", err)
+	}
+
+	// While the site owns it, it cannot be parked again.
+	if err := s.ReinsertParked(ctx, []Parked{before}); !errors.Is(err, ErrDomainTaken) {
+		t.Fatalf("taken: %v", err)
+	}
+
+	if err := s.DeleteSite(ctx, "blog"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.ReinsertParked(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.ReinsertParked(ctx, []Parked{before}); err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := s.ParkedDomain(ctx, "soon.example.net")
+	if err != nil || after != before {
+		t.Fatalf("after %+v\nbefore %+v\n%v", after, before, err)
+	}
+
+	// Twice is a conflict, and nothing of the batch is stored.
+	if err := s.ReinsertParked(ctx, []Parked{{ID: 7, Domain: "new.example.net", TLSSource: TLSLetsEncrypt, CreatedAt: now, UpdatedAt: now}, before}); err == nil {
+		t.Fatal("duplicate accepted")
+	}
+
+	if _, err := s.ParkedDomain(ctx, "new.example.net"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("partial batch stored: %v", err)
+	}
+}
+
+func TestParkSiteDomains(t *testing.T) {
+	s := open(t, dbPath(t))
+	ctx := t.Context()
+	now := time.Unix(2_000_000, 0)
+
+	if _, err := s.CreateSite(ctx, "blog", "default", "", []string{"blog.example.com", "www.blog.example.com"}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.CreateSite(ctx, "shop", "default", "", []string{"shop.example.com"}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.ParkSiteDomains(ctx, "nope", []string{"blog.example.com"}, 0, false, now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown site: %v", err)
+	}
+
+	for _, d := range []string{"shop.example.com", "free.example.com"} {
+		if err := s.ParkSiteDomains(ctx, "blog", []string{"blog.example.com", d}, 0, false, now); !errors.Is(err, ErrDomainTaken) {
+			t.Fatalf("%s: %v", d, err)
+		}
+	}
+
+	if err := s.ParkSiteDomains(ctx, "blog", []string{"blog.example.com"}, 99, false, now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown page: %v", err)
+	}
+
+	// Refused calls left nothing behind.
+	if p, _ := s.ParkedDomains(ctx); len(p) != 0 {
+		t.Fatalf("parked %+v", p)
+	}
+
+	if err := s.ParkSiteDomains(ctx, "blog", []string{"blog.example.com"}, 0, true, now); err != nil {
+		t.Fatal(err)
+	}
+
+	site, err := s.SiteByName(ctx, "blog")
+	if err != nil || site.State != SiteDeleting {
+		t.Fatalf("%+v %v", site, err)
+	}
+
+	if p, err := s.ParkedDomain(ctx, "blog.example.com"); err != nil || !p.TLS {
+		t.Fatalf("%+v %v", p, err)
+	}
+
+	if err := s.UnparkSiteDomains(ctx, "blog", []string{"blog.example.com"}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if site, _ := s.SiteByName(ctx, "blog"); site.State != SiteActive {
+		t.Fatalf("state %s", site.State)
+	}
+
+	if _, err := s.ParkedDomain(ctx, "blog.example.com"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("still parked: %v", err)
+	}
+
+	// After the site row is gone, the parked domain stays.
+	if err := s.ParkSiteDomains(ctx, "blog", []string{"www.blog.example.com"}, 0, false, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.DeleteSite(ctx, "blog"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.ParkedDomain(ctx, "www.blog.example.com"); err != nil {
+		t.Fatal(err)
+	}
+}
