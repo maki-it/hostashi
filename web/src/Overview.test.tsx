@@ -56,6 +56,26 @@ describe("attention", () => {
   });
 });
 
+describe("attention for own certificates", () => {
+  const inDays = (n: number) => new Date(Date.now() + n * 86_400_000 + 3_600_000).toISOString();
+  const own = (name: string, days: number) =>
+    site(name, { tls: { enabled: true, active: true, hsts: false, domains: [], notAfter: inDays(days), source: "custom", certSource: "custom" } });
+
+  it("warns 30 days before and fails 7 days before, instead of the doctor", () => {
+    const report: DoctorReport = { ...doctor, checks: [{ id: "site.tls", site: "shop", status: "warn", summary: "valid until soon" }] };
+    const items = attention({ sites: [own("shop", 20), own("blog", 3), own("calm", 60), site("le")], doctor: report });
+    expect(items.map((i) => [i.key, i.tone])).toEqual([
+      ["owncert-blog", "err"],
+      ["owncert-shop", "warn"],
+    ]);
+    expect(items[1]?.title).toContain("expires in 20 days");
+  });
+
+  it("says when it has expired", () => {
+    expect(attention({ sites: [own("shop", -2)] })[0]?.title).toContain("has expired");
+  });
+});
+
 describe("Overview", () => {
   it("shows what needs attention and the state at a glance", async () => {
     mockFetch({

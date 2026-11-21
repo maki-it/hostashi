@@ -325,7 +325,8 @@ PHP
 [ "$(x runuser -u blog -- php /tmp/cache.php set)" = v ] || fail "the site cannot use its cache"
 [ "$(x runuser -u blog -- php /tmp/cache.php info)" = 33554432 ] || fail "cache has the wrong maxmemory"
 [ "$(x runuser -u blog -- php /tmp/cache.php config)" = refused ] || fail "the site may change the cache's config"
-x runuser -u blog -- php /tmp/cache.php flush | head -1 | grep -qx flushed || fail "the site cannot flush its cache"
+# Not "| head -1": with pipefail, php's SIGPIPE on the second line would fail it.
+[ "$(x runuser -u blog -- php /tmp/cache.php flush)" = "$(printf 'flushed\n0')" ] || fail "the site cannot flush its cache"
 x useradd -M -s /usr/sbin/nologin cacheprobe
 x runuser -u cacheprobe -- php /tmp/cache.php set >/dev/null 2>&1 && fail "another user reached the site's cache"
 x userdel cacheprobe
@@ -346,11 +347,39 @@ out=$(web_apply '{"sites":[{"user":"blog","domains":["blog.example.com","www.blo
 grep -q 'changed: false' <<<"$out" || fail "same web state applied again: $out"
 if x /usr/local/bin/hostashi site delete blog; then fail "site with a virtual host was deleted"; fi
 
+step "file manager helper runs as the site user (ADR-0040)"
+sock=$(x /usr/local/bin/hostashi site files blog)
+[ "$sock" = /run/hostashi-files/blog.sock ] || fail "file manager socket is '$sock'"
+expect_mode "$sock" "660 root:hostashi"
+expect_mode /etc/systemd/system/hostashi-files@blog.service.d/50-hostashi-site.conf "644 root:root"
+fm() { x curl -fsS --unix-socket "$sock" "http://files$1" "${@:2}"; }
+fm '/v1/list?path=htdocs' | grep -q '"name":"index.html"' || fail "helper does not list the web root"
+[ "$(fm '/v1/file?path=htdocs/index.html')" = "hello from blog" ] || fail "helper download differs"
+fm /v1/mkdir -X POST -d '{"path":"htdocs/fm"}' >/dev/null || fail "helper mkdir failed"
+fm '/v1/file?path=htdocs/fm/new.txt' -X PUT --data-binary 'from the panel' >/dev/null || fail "helper write failed"
+expect_mode /home/blog/htdocs/fm "755 blog:blog"
+expect_mode /home/blog/htdocs/fm/new.txt "644 blog:blog"
+# fchmodat2 must pass the unit's system call filter.
+fm /v1/chmod -X POST -d '{"paths":["htdocs/fm/new.txt"],"mode":"0600"}' >/dev/null || fail "helper chmod failed"
+expect_mode /home/blog/htdocs/fm/new.txt "600 blog:blog"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' --unix-socket "$sock" 'http://files/v1/file?path=../../etc/passwd')
+[ "$code" = 400 ] || fail "helper path outside the home answered $code"
+x ln -s /etc /home/blog/htdocs/fm/etc
+code=$(x curl -sS -o /dev/null -w '%{http_code}' --unix-socket "$sock" 'http://files/v1/file?path=htdocs/fm/etc/hostname')
+[ "$code" = 400 ] || fail "helper followed a symlink ($code)"
+[ "$(x systemctl show -p User --value hostashi-files@blog.service)" = blog ] || fail "helper does not run as blog"
+[ "$(x systemctl show -p Slice --value hostashi-files@blog.service)" = hostashi-site-blog.slice ] || fail "helper not in the site's slice"
+x pgrep -u blog -f 'hostashi files-helper' >/dev/null || fail "no helper process of blog"
+fm /v1/delete -X POST -d '{"paths":["htdocs/fm"]}' >/dev/null || fail "helper delete failed"
+x test ! -e /home/blog/htdocs/fm || fail "helper delete left the folder"
+x test -e /etc/hostname || fail "delete followed the symlink"
+
 step "systemd exposure"
 x systemd-analyze security hostashi.service | tail -1
 x systemd-analyze security hostashi-agent.service | tail -1
 exposure hostashi.service 2.0
 exposure hostashi-agent.service 4.5
+exposure hostashi-files@blog.service 1.0
 
 step "changed setting is applied and the panel restarts"
 out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com)
@@ -366,6 +395,8 @@ step "remove the site"
 web_apply '{"sites":[]}'
 x /usr/local/bin/hostashi site delete blog
 x test ! -e /home/blog || fail "site home still there"
+x test ! -e /etc/systemd/system/hostashi-files@blog.service.d || fail "file manager drop-in left"
+x test ! -e /run/hostashi-files/blog.sock || fail "file manager socket left"
 
 step "a site through the panel API"
 tok=$(x /usr/local/bin/hostashi setup-token -db /var/lib/hostashi/hostashi.db)

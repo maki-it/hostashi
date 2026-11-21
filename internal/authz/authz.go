@@ -83,6 +83,7 @@ var table = map[Action]Rule{
 	// Server-wide: admins only.
 	"backups.server:read":  server("backups:read"),
 	"backups.server:write": server("backups:write"),
+	"db_servers:write":     server("db_servers:write"),
 	"doctor:read":          server("doctor:read"),
 	"firewall:read":        server("firewall:read"),
 	"firewall:write":       server("firewall:write"),
@@ -99,6 +100,7 @@ var table = map[Action]Rule{
 	// are filtered to the sites a user may see.
 	"sites:list":        all("sites:read"),
 	"databases:list":    all("databases:read"),
+	"db_servers:list":   all("databases:read"),
 	"php.versions:read": all("sites:read"),
 	"ssh.hostkeys:read": all("ssh:read"),
 	"pages:read":        all("pages:read"),

@@ -1141,6 +1141,47 @@ func TestPanelOnSitesPort(t *testing.T) {
 		t.Fatal("handshake for an unknown name succeeded")
 	}
 
+	// The panel allowlist in nginx (ADR-0042): others get 403, the site
+	// next to it is not affected.
+	status := func(host string) int {
+		t.Helper()
+
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+"/", nil)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("%s: %v", host, err)
+		}
+
+		_ = resp.Body.Close()
+
+		return resp.StatusCode
+	}
+
+	panel.Allow = []string{"192.0.2.1", "2001:db8::/32"}
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{site}, Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	if code := status("cp.example.com"); code != http.StatusForbidden {
+		t.Fatalf("panel outside the allowlist: %d", code)
+	}
+
+	if code := status("alpha.example.com"); code != http.StatusOK {
+		t.Fatalf("site with a panel allowlist: %d", code)
+	}
+
+	panel.Allow = []string{"127.0.0.0/8"}
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{site}, Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	if code := status("cp.example.com"); code != http.StatusOK {
+		t.Fatalf("panel inside the allowlist: %d", code)
+	}
+
+	panel.Allow = nil
+
 	conn, err := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(e.port), 2*time.Second)
 	if err != nil {
 		t.Fatal(err)
@@ -1196,6 +1237,21 @@ func TestPanelSharedRender(t *testing.T) {
 	conf = string(f.Content["sites/_panel.conf"])
 	if !strings.Contains(conf, "return 301 https://$host:8443$request_uri;") || !strings.Contains(conf, "listen 8443 ssl default_server;") {
 		t.Errorf("own port:\n%s", conf)
+	}
+
+	for _, bad := range []string{"10.0.0.1; deny", "0.0.0.0/0", "10.1.2.3/8", "fe80::1%eth0", "all"} {
+		if err := (Desired{Panel: &Panel{Domain: "cp.example.com", Allow: []string{bad}}}).Validate(); err == nil {
+			t.Errorf("allowed address %q accepted", bad)
+		}
+	}
+
+	f, err = n.Render(Desired{Panel: &Panel{Domain: "cp.example.com", Cert: "/c.pem", Key: "/k.pem", Allow: []string{"192.0.2.1", "2001:db8::/32"}}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if conf = string(f.Content["sites/_panel.conf"]); !strings.Contains(conf, "allow 192.0.2.1;\n    allow 2001:db8::/32;\n    deny all;") {
+		t.Errorf("allowlist:\n%s", conf)
 	}
 
 	for _, bad := range [][]string{{"443"}, {"80"}, {"443", "[::]:8443"}} {
@@ -1590,5 +1646,24 @@ func TestDBToolServer(t *testing.T) {
 		_ = c.Close()
 
 		t.Fatal("handshake for another name on the tool port succeeded")
+	}
+
+	// The panel allowlist covers the tool too.
+	panel.Allow = []string{"192.0.2.1"}
+	if _, err := e.r.Apply(ctx, Desired{Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	if resp, _, err := get("/", nil); err != nil || resp.StatusCode != http.StatusForbidden {
+		t.Errorf("outside the allowlist: %v %v", resp, err)
+	}
+
+	panel.Allow = []string{"127.0.0.0/8"}
+	if _, err := e.r.Apply(ctx, Desired{Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	if resp, _, err := get("/", nil); err != nil || resp.StatusCode != http.StatusOK {
+		t.Errorf("on the allowlist: %v %v", resp, err)
 	}
 }

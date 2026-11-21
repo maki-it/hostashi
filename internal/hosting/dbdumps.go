@@ -71,6 +71,10 @@ func (s *Service) startDump(ctx context.Context, actor int64, action, database, 
 		return agentapi.DBJob{}, err
 	}
 
+	if d.Server != store.LocalDBServer {
+		return agentapi.DBJob{}, ErrDBServerLocalOnly
+	}
+
 	site, err := s.Get(ctx, d.Site)
 	if err != nil {
 		return agentapi.DBJob{}, err

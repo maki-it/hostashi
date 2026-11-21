@@ -18,15 +18,24 @@ var (
 
 // Database is a stored MariaDB database with its users, sorted by name.
 type Database struct {
-	ID        int64
-	Name      string
-	Site      string
+	ID   int64
+	Name string
+	Site string
+	// Server is the database server's name, LocalDBServer by default.
+	Server    string
 	Users     []string
 	CreatedAt time.Time
 }
 
-// CreateDatabase records a database for site. A missing site is ErrNotFound.
+// CreateDatabase records a database for site on the local server. A
+// missing site is ErrNotFound.
 func (s *Store) CreateDatabase(ctx context.Context, site, name string, now time.Time) (Database, error) {
+	return s.CreateDatabaseOn(ctx, site, name, LocalDBServer, now)
+}
+
+// CreateDatabaseOn records a database for site on server. A missing site
+// or server is ErrNotFound.
+func (s *Store) CreateDatabaseOn(ctx context.Context, site, name, server string, now time.Time) (Database, error) {
 	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return Database{}, fmt.Errorf("store: %w", err)
@@ -45,6 +54,17 @@ func (s *Store) CreateDatabase(ctx context.Context, site, name string, now time.
 		return Database{}, fmt.Errorf("store: %w", err)
 	}
 
+	var serverID int64
+
+	err = tx.QueryRowContext(ctx, `SELECT id FROM db_servers WHERE name = ?`, server).Scan(&serverID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Database{}, ErrNotFound
+	}
+
+	if err != nil {
+		return Database{}, fmt.Errorf("store: %w", err)
+	}
+
 	var n int
 	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM databases WHERE name = ?`, name).Scan(&n); err != nil {
 		return Database{}, fmt.Errorf("store: %w", err)
@@ -54,7 +74,8 @@ func (s *Store) CreateDatabase(ctx context.Context, site, name string, now time.
 		return Database{}, ErrDatabaseExists
 	}
 
-	res, err := tx.ExecContext(ctx, `INSERT INTO databases (name, site_id, created_at) VALUES (?, ?, ?)`, name, siteID, now.Unix())
+	res, err := tx.ExecContext(ctx, `INSERT INTO databases (name, site_id, server_id, created_at) VALUES (?, ?, ?, ?)`,
+		name, siteID, serverID, now.Unix())
 	if err != nil {
 		return Database{}, fmt.Errorf("store: %w", err)
 	}
@@ -68,7 +89,7 @@ func (s *Store) CreateDatabase(ctx context.Context, site, name string, now time.
 		return Database{}, fmt.Errorf("store: %w", err)
 	}
 
-	return Database{ID: id, Name: name, Site: site, Users: []string{}, CreatedAt: time.Unix(now.Unix(), 0).UTC()}, nil
+	return Database{ID: id, Name: name, Site: site, Server: server, Users: []string{}, CreatedAt: time.Unix(now.Unix(), 0).UTC()}, nil
 }
 
 // DeleteDatabase removes a database and its users. A missing one is not an error.
@@ -83,7 +104,8 @@ func (s *Store) DeleteDatabase(ctx context.Context, name string) error {
 // Databases lists databases sorted by name; site "" means all sites.
 func (s *Store) Databases(ctx context.Context, site string) ([]Database, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT d.id, d.name, s.name, d.created_at FROM databases d JOIN sites s ON s.id = d.site_id
+		SELECT d.id, d.name, s.name, v.name, d.created_at FROM databases d JOIN sites s ON s.id = d.site_id
+		JOIN db_servers v ON v.id = d.server_id
 		WHERE ? = '' OR s.name = ? ORDER BY d.name`, site, site)
 	if err != nil {
 		return nil, fmt.Errorf("store: %w", err)
@@ -97,7 +119,7 @@ func (s *Store) Databases(ctx context.Context, site string) ([]Database, error) 
 			created int64
 		)
 
-		if err := rows.Scan(&d.ID, &d.Name, &d.Site, &created); err != nil {
+		if err := rows.Scan(&d.ID, &d.Name, &d.Site, &d.Server, &created); err != nil {
 			_ = rows.Close()
 
 			return nil, fmt.Errorf("store: %w", err)
@@ -132,8 +154,9 @@ func (s *Store) DatabaseByName(ctx context.Context, name string) (Database, erro
 	)
 
 	err := s.db.QueryRowContext(ctx, `
-		SELECT d.id, d.name, s.name, d.created_at FROM databases d JOIN sites s ON s.id = d.site_id
-		WHERE d.name = ?`, name).Scan(&d.ID, &d.Name, &d.Site, &created)
+		SELECT d.id, d.name, s.name, v.name, d.created_at FROM databases d JOIN sites s ON s.id = d.site_id
+		JOIN db_servers v ON v.id = d.server_id
+		WHERE d.name = ?`, name).Scan(&d.ID, &d.Name, &d.Site, &d.Server, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Database{}, ErrNotFound
 	}

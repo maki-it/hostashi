@@ -159,3 +159,80 @@ func TestSiteTLSColumns(t *testing.T) {
 		t.Fatalf("unknown: %v", err)
 	}
 }
+
+func TestSiteCertificateSource(t *testing.T) {
+	s := open(t, dbPath(t))
+	ctx := t.Context()
+	now := time.Unix(2_000_000, 0)
+
+	if _, err := s.CreateSite(ctx, "blog", "default", "", []string{"blog.example.com"}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := s.SiteByName(ctx, "blog")
+	if got.TLSSource != TLSLetsEncrypt || got.TLSCertSource != "" || !got.TLSTrusted {
+		t.Fatalf("defaults %+v", got)
+	}
+
+	if err := s.SetSiteCert(ctx, "blog", []string{"blog.example.com"}, now.Add(90*24*time.Hour), now); err != nil {
+		t.Fatal(err)
+	}
+
+	// Renew now: once, then not again within the pause.
+	if err := s.RequestSiteRenew(ctx, "blog", 10*time.Minute, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.RequestSiteRenew(ctx, "blog", 10*time.Minute, now.Add(9*time.Minute)); !errors.Is(err, ErrTooSoon) {
+		t.Fatalf("again: %v", err)
+	}
+
+	if err := s.RequestSiteRenew(ctx, "nosuch", 10*time.Minute, now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown site: %v", err)
+	}
+
+	got, _ = s.SiteByName(ctx, "blog")
+	if !got.TLSRenewForced || !got.TLSRenewAt.Equal(now) || got.TLSCertSource != TLSLetsEncrypt {
+		t.Fatalf("after renew request %+v", got)
+	}
+
+	// A failure ends the forced renewal; the pause stays.
+	if err := s.SetSiteTLSError(ctx, "blog", "boom", now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, _ = s.SiteByName(ctx, "blog"); got.TLSRenewForced {
+		t.Fatal("still forced after failure")
+	}
+
+	if err := s.SetSiteCustomCert(ctx, "blog", []string{"*.example.com", "example.com"}, now.Add(365*24*time.Hour), false, now); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ = s.SiteByName(ctx, "blog")
+	if !got.TLS || got.TLSSource != TLSCustom || got.TLSCertSource != TLSCustom || got.TLSTrusted || fmt.Sprint(got.TLSDomains) != "[*.example.com example.com]" {
+		t.Fatalf("custom %+v", got)
+	}
+
+	if old, err := s.SetSiteTLSSource(ctx, "blog", TLSLetsEncrypt, now); err != nil || old != TLSCustom {
+		t.Fatalf("source %q %v", old, err)
+	}
+
+	got, _ = s.SiteByName(ctx, "blog")
+	if got.TLSSource != TLSLetsEncrypt || got.TLSCertSource != TLSCustom || got.TLSNotAfter.IsZero() {
+		t.Fatalf("the live certificate must stay: %+v", got)
+	}
+
+	if _, err := s.SetSiteTLSSource(ctx, "blog", "other", now); err == nil {
+		t.Fatal("unknown source accepted")
+	}
+
+	if err := s.ClearSiteCert(ctx, "blog", now); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ = s.SiteByName(ctx, "blog")
+	if got.TLSCertSource != "" || len(got.TLSDomains) != 0 || !got.TLSNotAfter.IsZero() || got.TLSSource != TLSLetsEncrypt || !got.TLSTrusted {
+		t.Fatalf("cleared %+v", got)
+	}
+}

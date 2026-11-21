@@ -401,6 +401,15 @@ server {
     {{- end}}
     add_header Strict-Transport-Security "max-age=31536000" always;
     client_max_body_size 16m;
+    {{- if .P.Allow}}
+
+    # The panel allowlist (ADR-0042): on the sites' port the firewall
+    # cannot apply it.
+    {{- range .P.Allow}}
+    allow {{.}};
+    {{- end}}
+    deny all;
+    {{- end}}
 
     location / {
         proxy_pass http://unix:{{.N.PanelUpstream}}:;
@@ -441,6 +450,15 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header X-Frame-Options DENY always;
     client_max_body_size 64m;
+    {{- if .P.Allow}}
+
+    # The panel allowlist also covers the tool; the firewall applies it
+    # to the tool port as well.
+    {{- range .P.Allow}}
+    allow {{.}};
+    {{- end}}
+    deny all;
+    {{- end}}
 
     location = / {
         root {{.N.DBToolRoot}};
