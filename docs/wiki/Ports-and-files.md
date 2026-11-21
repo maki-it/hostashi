@@ -24,6 +24,7 @@ Hostashi's firewall lets in only these ports, plus what you open in the panel or
 | `/etc/hostashi/secret.key` | the panel's secret key. **Back it up outside the server**; see below. |
 | `/var/lib/hostashi/hostashi.db` | the panel database: sites, users, settings |
 | `/home/<site>/htdocs` | the web root of a site; `/home/<site>` is the home of the site's Linux user |
+| `/home/.hostashi-cache/<site>` | the page cache of a site, if it is on. Only the web server can read it; it counts against the site's disk limit and is not backed up. |
 | `/var/log/nginx/sites/<site>/` | access and error logs of a site |
 | `/var/log/hostashi-install.log` | the installer's log |
 

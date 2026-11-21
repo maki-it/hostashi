@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Account } from "./Account";
+import { ConfirmEmail } from "./ConfirmEmail";
 import { currentUser, needsSecondFactor, setupRequired, type User } from "./auth";
 import { Backups } from "./Backups";
 import { Databases } from "./Databases";
@@ -33,8 +34,16 @@ type View =
   | { kind: "setup" }
   | { kind: "login"; notice?: string }
   | { kind: "invite"; token: string }
+  | { kind: "confirm-email"; token: string }
   | { kind: "home"; user: User }
   | { kind: "error" };
+
+// confirmToken returns the token of an email confirmation link
+// (#/confirm-email/<token>, ADR-0044).
+const confirmToken = (): string | null => {
+  const m = /^#\/confirm-email\/([A-Za-z0-9_-]{20,100})$/.exec(window.location.hash);
+  return m ? (m[1] ?? null) : null;
+};
 
 // inviteToken returns the token of an invitation link (#/invite/<token>).
 const inviteToken = (): string | null => {
@@ -57,6 +66,11 @@ export function App() {
     try {
       if (await setupRequired()) {
         setView({ kind: "setup" });
+        return;
+      }
+      const confirm = confirmToken();
+      if (confirm) {
+        setView({ kind: "confirm-email", token: confirm });
         return;
       }
       const token = inviteToken();
@@ -145,6 +159,7 @@ export function App() {
       {view.kind === "setup" && (
         <Setup onDone={() => setView({ kind: "login", notice: "Administrator account created. Log in now." })} />
       )}
+      {view.kind === "confirm-email" && <ConfirmEmail token={view.token} onDone={() => void boot()} />}
       {view.kind === "invite" && <Invite token={view.token} onDone={(user) => setView({ kind: "home", user })} />}
       {view.kind === "login" && (
         <Login {...(view.notice ? { notice: view.notice } : {})} onLogin={(user) => setView({ kind: "home", user })} />

@@ -5,12 +5,17 @@ package hosting
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/maki-it/hostashi/internal/dbserver"
+	"github.com/maki-it/hostashi/internal/extdb"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -175,7 +180,7 @@ func TestDBServersOffWithoutEnable(t *testing.T) {
 func TestAddDBServer(t *testing.T) {
 	s, _, st := newService(t)
 	f := newFakeDBServers()
-	s.EnableDBServers(f)
+	s.EnableDBServers(f, "")
 
 	ctx := t.Context()
 
@@ -243,7 +248,13 @@ func TestAddDBServer(t *testing.T) {
 func TestDatabasesOnExternalServer(t *testing.T) {
 	s, ag, st := newService(t)
 	f := newFakeDBServers()
-	s.EnableDBServers(f)
+	manifest := filepath.Join(t.TempDir(), "backup")
+
+	if err := os.Mkdir(manifest, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	s.EnableDBServers(f, manifest)
 
 	ctx := t.Context()
 
@@ -273,6 +284,13 @@ func TestDatabasesOnExternalServer(t *testing.T) {
 
 	if d, _, err := s.CreateDatabase(ctx, 1, NewDatabase{Site: "shop", Name: "shop_two"}); err != nil || d.Server != "db1" || !f.dbs["shop_two"] {
 		t.Fatalf("default db1: %+v %v", d, err)
+	}
+
+	// The backup's list has the external databases only.
+	m, err := extdb.Read(manifest, uint32(os.Getuid()))
+	if err != nil || len(m.Servers) != 1 || m.Servers[0].Name != "db1" || string(m.Servers[0].SealedPassword) == "" ||
+		len(m.Databases) != 2 || m.Databases[0].Name != "shop_two" || m.Databases[1].Name != "shop_wp" {
+		t.Fatalf("manifest %+v %v", m, err)
 	}
 
 	if err := s.SetDefaultDBServer(ctx, 1, "nope"); !errors.Is(err, ErrDBServerNotFound) {
@@ -354,5 +372,103 @@ func TestDatabasesOnExternalServer(t *testing.T) {
 
 	if def, err := st.DefaultDBServer(ctx); err != nil || def.Name != "localhost" {
 		t.Fatalf("default after delete: %+v %v", def, err)
+	}
+
+	if m, err := extdb.Read(manifest, uint32(os.Getuid())); err != nil || len(m.Servers) != 0 || len(m.Databases) != 0 {
+		t.Fatalf("manifest after delete %+v %v", m, err)
+	}
+}
+
+func TestDBServerDoctorChecks(t *testing.T) {
+	now := time.Date(2026, 11, 21, 3, 0, 0, 0, time.UTC)
+	ok := store.DBServerStatus{Engine: "MariaDB", Version: "11.8.6", CheckedAt: now.Add(-time.Minute)}
+
+	cases := []struct {
+		name string
+		srv  store.DBServer
+		want map[string]string // id -> status
+	}{
+		{
+			"fine",
+			store.DBServer{ID: 2, Name: "db1", TLSMode: "verify", Status: withCert(ok, now.Add(60*24*time.Hour))},
+			map[string]string{"dbserver.reachable": "ok"},
+		},
+		{
+			"unchecked",
+			store.DBServer{ID: 2, Name: "db1", TLSMode: "verify"},
+			map[string]string{"dbserver.reachable": "warn"},
+		},
+		{
+			"down",
+			store.DBServer{ID: 2, Name: "db1", TLSMode: "verify", Status: withErr(ok, "dbserver: server not reachable (probe)")},
+			map[string]string{"dbserver.reachable": "fail"},
+		},
+		{
+			"plain",
+			store.DBServer{ID: 2, Name: "db1", TLSMode: "none", Status: ok},
+			map[string]string{"dbserver.reachable": "ok", "dbserver.tls": "warn"},
+		},
+		{
+			"cert soon",
+			store.DBServer{ID: 2, Name: "db1", TLSMode: "verify", Status: withCert(ok, now.Add(10*24*time.Hour))},
+			map[string]string{"dbserver.reachable": "ok", "dbserver.cert": "warn"},
+		},
+		{
+			"cert ending",
+			store.DBServer{ID: 2, Name: "db1", TLSMode: "verify", Status: withCert(ok, now.Add(2*24*time.Hour))},
+			map[string]string{"dbserver.reachable": "ok", "dbserver.cert": "fail"},
+		},
+		{
+			"stale",
+			store.DBServer{ID: 2, Name: "db1", TLSMode: "verify", Status: withChecked(ok, now.Add(-2*time.Hour))},
+			map[string]string{"dbserver.reachable": "ok", "dbserver.checked": "warn"},
+		},
+	}
+
+	for _, c := range cases {
+		got := map[string]string{}
+		for _, ch := range dbServerChecks(c.srv, now) {
+			got[ch.ID] = ch.Status
+
+			if !strings.Contains(ch.Summary, "db1") {
+				t.Errorf("%s: summary without the server: %q", c.name, ch.Summary)
+			}
+		}
+
+		if !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func withCert(st store.DBServerStatus, t time.Time) store.DBServerStatus {
+	st.CertExpires = t
+	return st
+}
+func withErr(st store.DBServerStatus, e string) store.DBServerStatus { st.LastError = e; return st }
+func withChecked(st store.DBServerStatus, t time.Time) store.DBServerStatus {
+	st.CheckedAt = t
+
+	return st
+}
+
+func TestRefreshDBServers(t *testing.T) {
+	s, _, st := newService(t)
+	f := newFakeDBServers()
+	s.EnableDBServers(f, "")
+	addServer(t, s, "db1")
+
+	f.checkErr = dbserver.ErrUnavailable
+
+	s.RefreshDBServers(t.Context())
+
+	got, err := st.DBServerByName(t.Context(), "db1")
+	if err != nil || got.Status.LastError == "" {
+		t.Fatalf("%+v %v", got.Status, err)
+	}
+
+	checks, err := s.DBServerDoctor(t.Context(), time.Now())
+	if err != nil || len(checks) != 1 || checks[0].Status != "fail" {
+		t.Fatalf("%+v %v", checks, err)
 	}
 }

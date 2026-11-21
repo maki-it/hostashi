@@ -31,9 +31,13 @@ type doctorJSON struct {
 	Counts    map[string]int         `json:"counts"`
 }
 
+// PanelChecks are checks the panel process runs itself, such as those of
+// the external database servers it reaches and the agent cannot.
+type PanelChecks func(ctx context.Context, now time.Time) ([]agentapi.DoctorCheck, error)
+
 // registerDoctor adds GET /api/v1/doctor. The report names paths and
-// services of the server, so only administrators read it.
-func registerDoctor(mux *routeMux, a authn, run Doctor, log *slog.Logger) {
+// services of the server, so only administrators read it. panel may be nil.
+func registerDoctor(mux *routeMux, a authn, run Doctor, panel PanelChecks, log *slog.Logger) {
 	mux.HandleFunc("GET /api/v1/doctor", a.allow("doctor:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
@@ -49,6 +53,19 @@ func registerDoctor(mux *routeMux, a authn, run Doctor, log *slog.Logger) {
 			}
 
 			return
+		}
+
+		if panel != nil {
+			more, err := panel(ctx, time.Now())
+			if err != nil {
+				log.WarnContext(r.Context(), "doctor: panel checks", "err", err)
+
+				more = []agentapi.DoctorCheck{{
+					ID: "panel.checks", Status: agentapi.DoctorWarn, Summary: "the panel's own checks could not run",
+				}}
+			}
+
+			rep.Checks = append(rep.Checks, more...)
 		}
 
 		out := doctorJSON{

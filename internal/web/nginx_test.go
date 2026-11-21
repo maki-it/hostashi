@@ -1520,3 +1520,150 @@ func TestParkedDomain(t *testing.T) {
 		t.Fatalf("duplicate domain: %v", err)
 	}
 }
+
+func TestDBToolServer(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+
+	toolPort := freePort(t)
+	e.r.Driver.ListenTLS = []string{"127.0.0.1:" + strconv.Itoa(freePort(t))}
+	e.r.Driver.PanelListen = []string{"127.0.0.1:" + strconv.Itoa(freePort(t))}
+	e.r.Driver.PanelUpstream = filepath.Join(e.dir, "panel.sock")
+	e.r.Driver.DBToolListen = []string{"127.0.0.1:" + strconv.Itoa(toolPort)}
+	e.r.Driver.DBToolSocket = filepath.Join(e.dir, "tool.sock")
+	e.r.Driver.DBToolRoot = filepath.Join(e.dir, "adminer")
+	e.r.Driver.LegacyHTTP2 = legacyHTTP2(t, e.ctl.bin)
+
+	if err := os.MkdirAll(e.r.Driver.DBToolRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// The tool's PHP-FPM: echoes what nginx passes on.
+	ln, err := net.Listen("unix", e.r.Driver.DBToolSocket)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Chmod(e.r.Driver.DBToolSocket, 0o666); err != nil {
+		t.Fatal(err)
+	}
+
+	go func() {
+		_ = fcgi.Serve(ln, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			env := fcgi.ProcessEnv(r)
+			_, _ = fmt.Fprintf(w, "script=%s uri=%s https=%t prefix=%q", env["SCRIPT_FILENAME"], r.URL.RequestURI(), r.TLS != nil, r.Header.Get("X-Forwarded-Prefix"))
+		}))
+	}()
+
+	t.Cleanup(func() { _ = ln.Close() })
+
+	if _, err := e.r.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	certDir := filepath.Join(e.dir, "certs")
+	if err := os.MkdirAll(certDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	panel := &Panel{Domain: "panel.example.com"}
+
+	var pool *x509.CertPool
+
+	panel.Cert, panel.Key, pool = selfSigned(t, certDir, "panel.example.com")
+
+	addr := "127.0.0.1:" + strconv.Itoa(toolPort)
+	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			var d net.Dialer
+
+			return d.DialContext(ctx, network, addr)
+		},
+	}}
+	// reply is what the tests read of a response; its body is closed.
+	type reply struct {
+		StatusCode int
+		Header     http.Header
+	}
+
+	get := func(path string, hdr map[string]string) (reply, string, error) {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://panel.example.com:"+strconv.Itoa(toolPort)+path, nil)
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return reply{}, "", err
+		}
+
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+
+		return reply{resp.StatusCode, resp.Header}, string(body), nil
+	}
+
+	// Without DBTool the port stays closed.
+	if _, err := e.r.Apply(ctx, Desired{Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := get("/", nil); err == nil {
+		t.Fatal("tool served without DBTool")
+	}
+
+	panel.DBTool = true
+	if _, err := e.r.Apply(ctx, Desired{Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, body, err := get("/?ticket=abc", map[string]string{"X-Forwarded-Prefix": "/evil"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := fmt.Sprintf(`script=%s/index.php uri=/?ticket=abc https=true prefix=""`, e.r.Driver.DBToolRoot)
+	if resp.StatusCode != http.StatusOK || body != want {
+		t.Fatalf("tool: %d %q", resp.StatusCode, body)
+	}
+
+	for _, h := range []string{"Strict-Transport-Security", "Referrer-Policy", "X-Frame-Options", "X-Content-Type-Options"} {
+		if resp.Header.Get(h) == "" {
+			t.Errorf("header %s missing", h)
+		}
+	}
+
+	// Only "/" reaches PHP.
+	for _, p := range []string{"/adminer.php", "/index.php", "/tool.php", "/x/"} {
+		if resp, _, err := get(p, nil); err != nil || resp.StatusCode != http.StatusNotFound {
+			t.Errorf("%s: %v %v", p, resp, err)
+		}
+	}
+
+	// Another name on the tool port gets no certificate.
+	if c, err := tls.Dial("tcp", addr, &tls.Config{ServerName: "other.example.com", InsecureSkipVerify: true}); err == nil {
+		_ = c.Close()
+
+		t.Fatal("handshake for another name on the tool port succeeded")
+	}
+
+	// The panel allowlist covers the tool too.
+	panel.Allow = []string{"192.0.2.1"}
+	if _, err := e.r.Apply(ctx, Desired{Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	if resp, _, err := get("/", nil); err != nil || resp.StatusCode != http.StatusForbidden {
+		t.Errorf("outside the allowlist: %v %v", resp, err)
+	}
+
+	panel.Allow = []string{"127.0.0.0/8"}
+	if _, err := e.r.Apply(ctx, Desired{Panel: panel}); err != nil {
+		t.Fatal(err)
+	}
+
+	if resp, _, err := get("/", nil); err != nil || resp.StatusCode != http.StatusOK {
+		t.Errorf("on the allowlist: %v %v", resp, err)
+	}
+}

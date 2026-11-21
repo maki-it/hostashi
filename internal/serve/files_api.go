@@ -178,7 +178,7 @@ func (p *filesProxy) forward(w http.ResponseWriter, r *http.Request, site, metho
 		return false
 	}
 
-	for _, h := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Last-Modified", "Content-Disposition", "X-Hostashi-Version"} {
+	for _, h := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Last-Modified", "Content-Disposition", "X-Hostashi-Version", "X-Hostashi-Received"} {
 		if v := res.Header.Get(h); v != "" {
 			w.Header().Set(h, v)
 		}
@@ -186,13 +186,52 @@ func (p *filesProxy) forward(w http.ResponseWriter, r *http.Request, site, metho
 
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	if strings.HasPrefix(res.Header.Get("Content-Type"), "application/x-ndjson") {
+		w.Header().Set("X-Accel-Buffering", "no")
+	}
+
 	w.WriteHeader(res.StatusCode)
 
-	if _, err := io.Copy(w, res.Body); err != nil {
-		p.log.InfoContext(r.Context(), "files answer cut off", "site", site, "err", err)
+	var err2 error
+
+	if strings.HasPrefix(res.Header.Get("Content-Type"), "application/x-ndjson") {
+		// Progress lines (extract) go out as they come; nginx must not
+		// hold them back either (X-Accel-Buffering above).
+		err2 = copyFlushing(w, rc, res.Body)
+	} else {
+		_, err2 = io.Copy(w, res.Body)
+	}
+
+	if err2 != nil {
+		p.log.InfoContext(r.Context(), "files answer cut off", "site", site, "err", err2)
 	}
 
 	return true
+}
+
+// copyFlushing copies src to w and flushes after every read.
+func copyFlushing(w io.Writer, rc *http.ResponseController, src io.Reader) error {
+	buf := make([]byte, 32<<10)
+
+	for {
+		n, err := src.Read(buf)
+		if n > 0 {
+			if _, werr := w.Write(buf[:n]); werr != nil {
+				return werr
+			}
+
+			_ = rc.Flush()
+		}
+
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func (p *filesProxy) helperFail(w http.ResponseWriter, r *http.Request, err error) {
@@ -227,6 +266,10 @@ func (p *filesProxy) helperError(w http.ResponseWriter, res *http.Response) {
 		writeError(w, http.StatusBadGateway, "files_unavailable", "the file manager gave no valid answer")
 
 		return
+	}
+
+	if v := res.Header.Get("X-Hostashi-Received"); v != "" {
+		w.Header().Set("X-Hostashi-Received", v)
 	}
 
 	status := res.StatusCode
@@ -290,6 +333,34 @@ var filesCalls = map[string]func(files.Request) (map[string]string, error){
 	"move":   selectionTo,
 	"copy":   selectionTo,
 	"delete": func(q files.Request) (map[string]string, error) { return selection(q.Paths) },
+	"upload-start": func(q files.Request) (map[string]string, error) {
+		d, err := onePath(q.Path)
+		if err == nil && q.Size < 0 {
+			err = fmt.Errorf("%w: negative size", files.ErrInvalidPath)
+		}
+
+		if err == nil {
+			d["size"] = strconv.FormatInt(q.Size, 10)
+			d["overwrite"] = strconv.FormatBool(q.Overwrite)
+		}
+
+		return d, err
+	},
+	"upload-cancel": func(q files.Request) (map[string]string, error) { return onePath(q.Path) },
+	"extract": func(q files.Request) (map[string]string, error) {
+		d, err := onePath(q.Path)
+		if err != nil {
+			return nil, err
+		}
+
+		to, err := files.CleanPath(q.To)
+		if err == nil {
+			d["to"] = to
+			d["overwrite"] = strconv.FormatBool(q.Overwrite)
+		}
+
+		return d, err
+	},
 	"chmod": func(q files.Request) (map[string]string, error) {
 		if _, err := files.ParseMode(q.Mode); err != nil {
 			return nil, err
@@ -427,6 +498,51 @@ func registerFiles(mux *routeMux, a authn, px *filesProxy) {
 		}
 	}))
 
+	// Several files and folders as one ZIP, built while streaming.
+	mux.HandleFunc("GET /api/v1/sites/{name}/files/zip", a.allow("files:read", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		paths := r.URL.Query()["path"]
+
+		detail, err := selection(paths)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", err.Error())
+
+			return
+		}
+
+		site, ok := px.siteReady(w, r)
+		if !ok {
+			return
+		}
+
+		if px.forward(w, r, site, http.MethodGet, "zip", url.Values{"path": paths}, nil) {
+			detail["zip"] = "true"
+			px.audit(r, p, "files.download", site, detail)
+		}
+	}))
+
+	// One chunk of an upload (8 MiB at most); upload-start is in the audit
+	// log, the chunks are not.
+	mux.HandleFunc("PUT /api/v1/sites/{name}/files/upload", a.allow("files:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		path, ok := cleanQueryPath(w, r)
+		if !ok {
+			return
+		}
+
+		in := r.URL.Query()
+		q := url.Values{"path": {path}, "id": {in.Get("id")}, "offset": {in.Get("offset")}, "size": {in.Get("size")}}
+
+		if in.Get("overwrite") == "1" {
+			q.Set("overwrite", "1")
+		}
+
+		site, ok := px.siteReady(w, r)
+		if !ok {
+			return
+		}
+
+		px.forward(w, r, site, http.MethodPut, "upload", q, http.MaxBytesReader(w, r.Body, files.MaxChunk+1))
+	}))
+
 	mux.HandleFunc("POST /api/v1/sites/{name}/files/{call}", a.allow("files:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		call := r.PathValue("call")
 
@@ -462,7 +578,12 @@ func registerFiles(mux *routeMux, a authn, px *filesProxy) {
 		}
 
 		if px.forward(w, r, site, http.MethodPost, call, nil, bytes.NewReader(b)) {
-			px.audit(r, p, "files."+strings.ToLower(call), site, detail)
+			action := "files." + strings.ToLower(call)
+			if call == "upload-start" {
+				action = "files.upload"
+			}
+
+			px.audit(r, p, action, site, detail)
 		}
 	}))
 }

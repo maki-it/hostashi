@@ -244,3 +244,56 @@ func edKey(t *testing.T) string {
 
 	return strings.TrimSuffix(string(ssh.MarshalAuthorizedKey(pk)), "\n")
 }
+
+func TestCreateSiteWithPageCache(t *testing.T) {
+	var existing []string
+
+	svc, _ := newService(t, func(context.Context) (plan.Target, error) {
+		return plan.Target{Sites: existing, PHP: []string{"8.4"}}, nil
+	})
+
+	site := func(user string) scan.Site {
+		return scan.Site{
+			Name: user + ".example.com", User: user, Type: "wordpress", Status: scan.StatusReview,
+			Domains: []string{user + ".example.com"}, DocRoot: "/home/" + user + "/htdocs/" + user + ".example.com",
+			Pool:     &scan.Pool{User: user, Version: "8.4"},
+			Sources:  []string{"/etc/nginx/sites-enabled/" + user + ".conf"},
+			Findings: []scan.Finding{{Severity: scan.SevReview, Code: "vhost_cache_tier", Msg: "cache"}},
+		}
+	}
+
+	b, err := json.Marshal(scan.Report{Format: scan.Format, Sites: []scan.Site{site("alpha"), site("beta")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := svc.Upload(t.Context(), 1, bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got []string
+
+	svc.Connect(func(_ context.Context, _ int64, s cpmigrate.NewSite) (cpmigrate.Created, error) {
+		got = append(got, s.PageCache)
+		existing = append(existing, s.Name)
+
+		return cpmigrate.Created{PageCache: s.PageCache != ""}, nil
+	}, &fakeImporter{})
+
+	ps, err := svc.CreateSite(t.Context(), 1, rep.ID, "alpha", cpmigrate.CreateOptions{Reviewed: true})
+	if err != nil || ps.PageCache != agentapi.PageCacheWordPress {
+		t.Fatalf("proposed cache: %+v %v", ps, err)
+	}
+
+	off := false
+
+	ps, err = svc.CreateSite(t.Context(), 1, rep.ID, "beta", cpmigrate.CreateOptions{Reviewed: true, PageCache: &off})
+	if err != nil || ps.PageCache != "" {
+		t.Fatalf("cache left off: %+v %v", ps, err)
+	}
+
+	if !slices.Equal(got, []string{agentapi.PageCacheWordPress, ""}) {
+		t.Fatalf("created with %q", got)
+	}
+}

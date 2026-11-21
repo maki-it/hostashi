@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState } from "react";
+import { EmailCard } from "./AccountEmail";
 import type { User } from "./auth";
 import { saveColorScheme, type ColorScheme } from "./scheme";
 import { Card, Notice, PageHead } from "./ui";
@@ -11,8 +12,9 @@ const choices: { value: ColorScheme; label: string; hint: string }[] = [
   { value: "dark", label: "Dark", hint: "" },
 ];
 
-// Account is the page of the logged-in account. For now it holds how the
-// panel looks (ADR-0037); the choice follows the account to every browser.
+// Account is the page of the logged-in account: how the panel looks
+// (ADR-0037), which follows the account to every browser, and its email
+// address (ADR-0044).
 export function Account({ user, onScheme }: { user: User; onScheme: (s: ColorScheme) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -55,6 +57,7 @@ export function Account({ user, onScheme }: { user: User; onScheme: (s: ColorSch
           {saved && !error && <Notice tone="ok" title="Saved. The panel looks like this in every browser you log in with." />}
         </div>
       </Card>
+      <EmailCard />
     </>
   );
 }

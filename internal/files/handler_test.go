@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -186,3 +187,76 @@ func TestSystemdListenerNeedsSocket(t *testing.T) {
 }
 
 func testLog() *slog.Logger { return slog.New(slog.DiscardHandler) }
+
+func TestHandlerArchivesAndUploads(t *testing.T) {
+	r, home, _ := newRoot(t)
+	h := &Handler{Root: r}
+
+	res, body := call(t, h, "GET", "/v1/zip?path=htdocs", "")
+	if res.StatusCode != http.StatusOK || res.Header.Get("Content-Type") != "application/zip" ||
+		!strings.Contains(res.Header.Get("Content-Disposition"), "htdocs.zip") || !strings.HasPrefix(body, "PK") {
+		t.Fatalf("zip: %d %v", res.StatusCode, res.Header)
+	}
+
+	if res, _ := call(t, h, "GET", "/v1/zip?path=nope", ""); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("zip of missing: %d", res.StatusCode)
+	}
+
+	if err := os.WriteFile(filepath.Join(home, "s.zip"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.Mkdir("restore"); err != nil {
+		t.Fatal(err)
+	}
+
+	res, body = call(t, h, "POST", "/v1/extract", `{"path":"s.zip","to":"restore"}`)
+
+	lines := strings.Split(strings.TrimSpace(body), "\n")
+
+	var last ExtractLine
+	if res.StatusCode != http.StatusOK || json.Unmarshal([]byte(lines[len(lines)-1]), &last) != nil || !last.Done || last.Error != "" || last.Result.Files != 2 {
+		t.Fatalf("extract: %d %s", res.StatusCode, body)
+	}
+
+	if read(t, filepath.Join(home, "restore", "htdocs", "sub", "a.txt")) != "a" {
+		t.Fatal("extracted content")
+	}
+
+	_, body = call(t, h, "POST", "/v1/extract", `{"path":"htdocs/index.php","to":""}`)
+	if json.Unmarshal([]byte(strings.TrimSpace(body)), &last) != nil || last.Error != "not_file" {
+		t.Fatalf("extract of a non-zip: %s", body)
+	}
+
+	res, body = call(t, h, "POST", "/v1/upload-start", `{"path":"up/f.txt","size":5,"parents":true}`)
+
+	var u Upload
+	if res.StatusCode != http.StatusOK || json.Unmarshal([]byte(body), &u) != nil || u.ID == "" {
+		t.Fatalf("start: %d %s", res.StatusCode, body)
+	}
+
+	res, _ = call(t, h, "PUT", "/v1/upload?path=up/f.txt&id="+u.ID+"&offset=2&size=5", "abc")
+	if res.StatusCode != http.StatusConflict || res.Header.Get("X-Hostashi-Received") != "0" {
+		t.Fatalf("wrong offset: %d %v", res.StatusCode, res.Header)
+	}
+
+	res, body = call(t, h, "PUT", "/v1/upload?path=up/f.txt&id="+u.ID+"&offset=0&size=5", "hello")
+	if res.StatusCode != http.StatusOK || json.Unmarshal([]byte(body), &u) != nil || !u.Done {
+		t.Fatalf("chunk: %d %s", res.StatusCode, body)
+	}
+
+	if read(t, filepath.Join(home, "up", "f.txt")) != "hello" {
+		t.Fatal("uploaded content")
+	}
+
+	if res, _ := call(t, h, "PUT", "/v1/upload?path=up/f.txt&id=x&offset=a&size=5", ""); res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bad offset: %d", res.StatusCode)
+	}
+
+	_, body = call(t, h, "POST", "/v1/upload-start", `{"path":"up/g.txt","size":5}`)
+	_ = json.Unmarshal([]byte(body), &u)
+
+	if res, body := call(t, h, "POST", "/v1/upload-cancel", `{"path":"up/g.txt","id":"`+u.ID+`"}`); res.StatusCode != http.StatusOK {
+		t.Fatalf("cancel: %d %s", res.StatusCode, body)
+	}
+}
