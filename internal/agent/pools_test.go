@@ -7,15 +7,17 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/quota"
 )
 
 func TestPoolListThroughServer(t *testing.T) {
-	c, pool := startSiteAgent(t)
+	c, pool := startSiteAgentCfg(t, Config{Quota: newFakeQuota(true)})
 	ctx := context.Background()
 
 	if _, err := agentapi.SiteCreate.Call(ctx, c, agentapi.SiteCreateRequest{User: "blog"}); err != nil {
@@ -27,8 +29,45 @@ func TestPoolListThroughServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(r.Pools) != 1 || r.Pools[0] != (agentapi.PoolInfo{Name: "default", Path: pool, Sites: 1}) {
+	if len(r.Pools) != 1 || r.Pools[0] != (agentapi.PoolInfo{Name: "default", Path: pool, Sites: 1, Quota: "enforced"}) {
 		t.Fatalf("pools %+v", r.Pools)
+	}
+}
+
+// TestQuotaEnforcedAtStart: a pool whose file system only counts usage gets
+// its limits enforced when the agent starts (spike S9 finding 6).
+func TestQuotaEnforcedAtStart(t *testing.T) {
+	fq := newFakeQuota(true)
+	fq.state = quota.Counting
+	c, pool := startSiteAgentCfg(t, Config{Quota: fq})
+
+	fq.mu.Lock()
+	enforced := slices.Clone(fq.enforced)
+	fq.mu.Unlock()
+
+	if !slices.Equal(enforced, []string{pool}) {
+		t.Errorf("enforced %v, want [%s]", enforced, pool)
+	}
+
+	r, err := agentapi.PoolList.Call(context.Background(), c, agentapi.PoolListRequest{})
+	if err != nil || len(r.Pools) != 1 || r.Pools[0].Quota != "enforced" {
+		t.Fatalf("pools %+v, %v", r.Pools, err)
+	}
+}
+
+// TestQuotaOffIsLeftAlone: without project quota nothing is switched on and
+// the pool reports "off".
+func TestQuotaOffIsLeftAlone(t *testing.T) {
+	fq := newFakeQuota(false)
+	c, _ := startSiteAgentCfg(t, Config{Quota: fq})
+
+	if len(fq.enforced) != 0 {
+		t.Errorf("enforced %v without quota", fq.enforced)
+	}
+
+	r, err := agentapi.PoolList.Call(context.Background(), c, agentapi.PoolListRequest{})
+	if err != nil || len(r.Pools) != 1 || r.Pools[0].Quota != "off" {
+		t.Fatalf("pools %+v, %v", r.Pools, err)
 	}
 }
 

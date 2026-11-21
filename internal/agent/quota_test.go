@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"testing"
 
@@ -19,6 +20,8 @@ type limits struct{ bytes, inodes uint64 }
 type fakeQuota struct {
 	mu        sync.Mutex
 	available bool
+	state     quota.State // what Status reports while available
+	enforced  []string    // dirs given to Enforce
 	assignErr error
 	assigned  map[string]uint32 // dir -> project
 	limits    map[uint32]limits
@@ -26,10 +29,35 @@ type fakeQuota struct {
 }
 
 func newFakeQuota(available bool) *fakeQuota {
-	return &fakeQuota{available: available, assigned: map[string]uint32{}, limits: map[uint32]limits{}, dirs: map[uint32]string{}}
+	return &fakeQuota{available: available, state: quota.Enforced, assigned: map[string]uint32{}, limits: map[uint32]limits{}, dirs: map[uint32]string{}}
 }
 
 func (f *fakeQuota) Available(string) (bool, error) { return f.available, nil }
+
+func (f *fakeQuota) Status(string) (quota.State, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if !f.available {
+		return quota.Off, nil
+	}
+
+	return f.state, nil
+}
+
+func (f *fakeQuota) Enforce(dir string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if !f.available {
+		return quota.ErrUnavailable
+	}
+
+	f.state = quota.Enforced
+	f.enforced = append(f.enforced, dir)
+
+	return nil
+}
 
 func (f *fakeQuota) Assign(dir string, id uint32, _ bool) error {
 	f.mu.Lock()
@@ -67,6 +95,11 @@ func TestSiteQuota(t *testing.T) {
 	fq := newFakeQuota(true)
 	c, pool := startSiteAgentCfg(t, Config{Quota: fq})
 
+	// Counting only, as after a mount: the set must switch enforcement on.
+	fq.mu.Lock()
+	fq.state, fq.enforced = quota.Counting, nil
+	fq.mu.Unlock()
+
 	site, err := agentapi.SiteCreate.Call(ctx, c, agentapi.SiteCreateRequest{User: "shop"})
 	if err != nil {
 		t.Fatal(err)
@@ -80,6 +113,10 @@ func TestSiteQuota(t *testing.T) {
 	want := agentapi.SiteQuota{Available: true, Bytes: 4096, Inodes: 3, BytesLimit: 10 << 30, InodesLimit: 500000}
 	if got != want {
 		t.Errorf("set returned %+v, want %+v", got, want)
+	}
+
+	if !slices.Contains(fq.enforced, pool) {
+		t.Errorf("limits set without enforcing them on %s: %v", pool, fq.enforced)
 	}
 
 	if fq.assigned[pool+"/shop"] != site.UID {

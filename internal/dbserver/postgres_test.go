@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -221,14 +222,60 @@ func TestPGDropDatabase(t *testing.T) {
 	}
 }
 
+func TestPGJobUser(t *testing.T) {
+	const (
+		user = "hostashi_job_0123456789abcdef"
+		pw   = "Abcdefghijklmnopqrstuvwxyz012345"
+	)
+
+	c, f, _ := newFakePG()
+	c.Now = func() time.Time { return time.Date(2026, 11, 21, 10, 0, 0, 0, time.FixedZone("x", 3600)) }
+
+	if err := c.CreateJobUser(t.Context(), "shop", user, pw); err != nil {
+		t.Fatal(err)
+	}
+
+	// 09:00 UTC plus 6 h 30 min.
+	if !strings.Contains(f.stmts[0], ` LOGIN PASSWORD 'SCRAM-SHA-256$4096:`) ||
+		!strings.HasSuffix(f.stmts[0], `' CONNECTION LIMIT 2 VALID UNTIL '2026-11-21 15:30:00+00' IN ROLE "`+OwnerRole("shop")+`"`) ||
+		strings.Contains(strings.Join(f.stmts, "\n"), pw) {
+		t.Fatalf("create: %v", f.stmts)
+	}
+
+	if f.stmts[2] != `ALTER ROLE "`+user+`" SET role = '`+OwnerRole("shop")+`'` {
+		t.Fatalf("set role: %v", f.stmts)
+	}
+
+	for _, bad := range [][3]string{{"shop", "shop_user", pw}, {"shop", user, "short"}, {"shop", user, ""}, {"pg_x", user, pw}} {
+		if err := c.CreateJobUser(t.Context(), bad[0], bad[1], bad[2]); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%v: %v", bad, err)
+		}
+	}
+
+	c, f, in := newFakePG()
+
+	if err := c.DropJobUser(t.Context(), "shop", user); err != nil {
+		t.Fatal(err)
+	}
+
+	if f.stmts[0] != `ALTER ROLE "`+user+`" NOLOGIN` || f.stmts[len(f.stmts)-1] != `DROP ROLE IF EXISTS "`+user+`"` ||
+		in.stmts[0] != "-- in shop" {
+		t.Fatalf("drop: %v, %v", f.stmts, in.stmts)
+	}
+
+	// Only job roles: never a site's user or another role.
+	for _, u := range []string{"shop_user", "postgres", "hostashi_db_0123456789abcdef"} {
+		if err := c.DropJobUser(t.Context(), "shop", u); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: %v", u, err)
+		}
+	}
+}
+
 func TestPGNotYet(t *testing.T) {
 	c, _, _ := newFakePG()
 	ctx := t.Context()
 
-	for _, err := range []error{
-		c.CreateJobUser(ctx, "shop", "hostashi_job_0123456789abcdef", "x"), c.DropJobUser(ctx, "u"),
-		c.CreateToolUser(ctx, "shop", "u", "p"), c.DropToolUser(ctx, "u"),
-	} {
+	for _, err := range []error{c.CreateToolUser(ctx, "shop", "u", "p"), c.DropToolUser(ctx, "u")} {
 		if !errors.Is(err, ErrUnsupported) {
 			t.Errorf("got %v", err)
 		}

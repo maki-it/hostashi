@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/quota"
 )
 
 func write(t *testing.T, content string) string {
@@ -133,15 +134,19 @@ func TestPoolMode(t *testing.T) {
 }
 
 func TestQuota(t *testing.T) {
-	if c := Quota("/home", true, nil); c.Status != agentapi.DoctorOK {
+	if c := Quota("/home", quota.Enforced, nil); c.Status != agentapi.DoctorOK {
 		t.Errorf("available: %+v", c)
 	}
 
-	if c := Quota("/home", false, nil); c.Status != agentapi.DoctorWarn || !strings.Contains(c.Hint, "installer") {
+	if c := Quota("/home", quota.Counting, nil); c.Status != agentapi.DoctorFail || !strings.Contains(c.Summary, "not enforced") {
+		t.Errorf("counting only: %+v", c)
+	}
+
+	if c := Quota("/home", quota.Off, nil); c.Status != agentapi.DoctorWarn || !strings.Contains(c.Hint, "installer") {
 		t.Errorf("unavailable: %+v", c)
 	}
 
-	if c := Quota("/home", false, os.ErrPermission); c.Status != agentapi.DoctorFail {
+	if c := Quota("/home", quota.Off, os.ErrPermission); c.Status != agentapi.DoctorFail {
 		t.Errorf("error: %+v", c)
 	}
 }

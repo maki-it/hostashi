@@ -11,7 +11,7 @@ import (
 )
 
 func cfg() Config {
-	return Config{SiteLogDir: "/var/log/nginx/sites", ServerLogDir: "/var/log/nginx/hostashi", NginxPID: "/run/nginx.pid", Days: 7}
+	return Config{SiteLogDir: "/var/log/nginx/sites", ServerLogDir: "/var/log/nginx/hostashi", PHPLogDir: "/var/log/hostashi/php", NginxPID: "/run/nginx.pid", Days: 7}
 }
 
 func TestRender(t *testing.T) {
@@ -24,6 +24,8 @@ func TestRender(t *testing.T) {
 		"/var/log/nginx/sites/*/*.log /var/log/nginx/hostashi/*.log {",
 		"    rotate 7\n", "    maxage 7\n", "    daily\n", "    delaycompress\n",
 		`[ ! -s /run/nginx.pid ] || kill -USR1 "$(cat /run/nginx.pid)"`,
+		"/var/log/hostashi/php/*/*.log {",
+		"systemctl kill --kill-whom=main --signal=USR1 'hostashi-php-*@*.service'",
 	} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("missing %q in\n%s", want, b)

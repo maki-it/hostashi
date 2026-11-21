@@ -157,7 +157,7 @@ func (r fakeRemote) CreateJobUser(ctx context.Context, database, user, password 
 	return r.CreateUser(ctx, database, user, password)
 }
 
-func (r fakeRemote) DropJobUser(ctx context.Context, user string) error {
+func (r fakeRemote) DropJobUser(ctx context.Context, _, user string) error {
 	return r.DropUser(ctx, "", user)
 }
 
