@@ -79,6 +79,9 @@ type WebSite struct {
 	// Disabled answers every request of the site with 503 instead of
 	// serving its files. ACME challenges and HTTPS stay; PHP must be empty.
 	Disabled bool `json:"disabled,omitempty"`
+	// DisabledPage is the committed page a disabled site shows with its
+	// 503 (ADR-0047); nil shows a fixed text. Only with Disabled.
+	DisabledPage *WebPageRef `json:"disabledPage,omitempty"`
 	// Maintenance answers requests from addresses outside its allowlist
 	// with its page and status 503 (ADR-0027). Disabled wins over it.
 	Maintenance *WebMaintenance `json:"maintenance,omitempty"`
@@ -107,6 +110,21 @@ type WebSnippets struct {
 	Server string `json:"server,omitempty"`
 	// Root goes into the site's "location /".
 	Root string `json:"root,omitempty"`
+}
+
+// WebPageRef names a committed page version.
+type WebPageRef struct {
+	Page   string `json:"page"`
+	Digest string `json:"digest"`
+}
+
+// Validate checks the page id and digest.
+func (r WebPageRef) Validate() error {
+	if err := ValidatePageID(r.Page); err != nil {
+		return err
+	}
+
+	return ValidatePageDigest(r.Digest)
 }
 
 // WebMaintenance is the maintenance mode of a site: a committed page and
@@ -233,6 +251,16 @@ func (r WebApplyRequest) Validate() error {
 		if s.Maintenance != nil {
 			if err := s.Maintenance.Validate(); err != nil {
 				return fmt.Errorf("site %q: maintenance: %w", s.User, err)
+			}
+		}
+
+		if s.DisabledPage != nil {
+			if !s.Disabled {
+				return fmt.Errorf("site %q: a disabled page needs a disabled site", s.User)
+			}
+
+			if err := s.DisabledPage.Validate(); err != nil {
+				return fmt.Errorf("site %q: disabled page: %w", s.User, err)
 			}
 		}
 

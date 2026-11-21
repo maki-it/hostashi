@@ -1334,6 +1334,141 @@ func TestMaintenanceRender(t *testing.T) {
 	}
 }
 
+// TestDisabledPageRender checks the disabled branch with a stored page
+// (ADR-0047): the page location, the 503 to the page, no allowlist and no
+// Retry-After, and the fixed text without a page.
+func TestDisabledPageRender(t *testing.T) {
+	n := &Nginx{
+		Ctl: &testCtl{}, Listen: []string{"80"}, ListenTLS: []string{"443"},
+		ControlSocket: "/run/x.sock", PIDFile: "/run/x.pid", ErrorLog: "/var/log/x", MimeTypes: "/etc/x",
+	}
+
+	p := &PageRef{Page: "maint", Digest: digest64, Dir: "/var/lib/hostashi-pages/maint." + digest64}
+	m := &Maintenance{Page: "other", Digest: digest64, Dir: "/var/lib/hostashi-pages/other." + digest64, AllowIPs: []string{"203.0.113.7"}}
+
+	f, err := n.Render(Desired{Sites: []Site{
+		{User: "off", Domains: []string{"a.example.com"}, Root: "/srv/a", Cert: "/c.pem", Key: "/k.pem", HSTS: true, Disabled: true, DisabledPage: p, Maintenance: m},
+		{User: "plain", Domains: []string{"b.example.com"}, Root: "/srv/b", Disabled: true},
+	}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conf := string(f.Content["sites/off.conf"])
+	for _, want := range []string{
+		"error_page 503 /.hostashi/page/maint/index.html;",
+		"location ^~ /.hostashi/page/maint/ {", "alias /var/lib/hostashi-pages/maint." + digest64 + "/;",
+		`add_header Content-Security-Policy "` + PageCSP + `" always;`,
+		"add_header Strict-Transport-Security",
+		"return 503;",
+	} {
+		if !strings.Contains(conf, want) {
+			t.Errorf("disabled conf lacks %q:\n%s", want, conf)
+		}
+	}
+
+	for _, bad := range []string{"Retry-After", "geo ", "/.hostashi/page/other/", "203.0.113.7", "root /srv/a", "Temporarily unavailable"} {
+		if strings.Contains(conf, bad) {
+			t.Errorf("disabled conf contains %q:\n%s", bad, conf)
+		}
+	}
+
+	plain := string(f.Content["sites/plain.conf"])
+	if !strings.Contains(plain, "Temporarily unavailable") || strings.Contains(plain, "/.hostashi/page/") {
+		t.Errorf("disabled site without a page:\n%s", plain)
+	}
+}
+
+// TestDisabledPageNeedsDisabled checks that a disabled page on a site that
+// is not disabled, and a bad page directory, are refused.
+func TestDisabledPageNeedsDisabled(t *testing.T) {
+	p := &PageRef{Page: "maint", Digest: digest64, Dir: "/var/lib/hostashi-pages/maint." + digest64}
+
+	for name, s := range map[string]Site{
+		"not disabled": {User: "alpha", Domains: []string{"a.example.com"}, Root: "/srv/a", DisabledPage: p},
+		"bad dir":      {User: "alpha", Domains: []string{"a.example.com"}, Root: "/srv/a", Disabled: true, DisabledPage: &PageRef{Page: "maint", Digest: digest64, Dir: "/x/../y"}},
+		"bad digest":   {User: "alpha", Domains: []string{"a.example.com"}, Root: "/srv/a", Disabled: true, DisabledPage: &PageRef{Page: "maint", Digest: "abc", Dir: p.Dir}},
+		"bad id":       {User: "alpha", Domains: []string{"a.example.com"}, Root: "/srv/a", Disabled: true, DisabledPage: &PageRef{Page: "../x", Digest: digest64, Dir: p.Dir}},
+	} {
+		if err := (Desired{Sites: []Site{s}}).Validate(); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+
+	ok := Site{User: "alpha", Domains: []string{"a.example.com"}, Root: "/srv/a", Disabled: true, DisabledPage: p}
+	if err := (Desired{Sites: []Site{ok}}).Validate(); err != nil {
+		t.Errorf("valid disabled page: %v", err)
+	}
+}
+
+// TestDisabledSiteWithPage checks a disabled site with a stored page against
+// a real nginx: the page with 503 on every URL, its files with 200, no
+// Retry-After, no site files, and ACME challenges as before.
+func TestDisabledSiteWithPage(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+
+	e.r.Driver.ACMERoot = filepath.Join(e.dir, "acme")
+
+	challenge := filepath.Join(e.r.Driver.ACMERoot, ".well-known", "acme-challenge")
+	if err := os.MkdirAll(challenge, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(challenge, "tok123"), []byte("tok123.thumb"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := e.site(t, "alpha", "hello alpha", "alpha.example.com")
+	if err := os.WriteFile(filepath.Join(s.Root, "file.txt"), []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := e.page(t, map[string]string{
+		"index.html":   `<!doctype html><link rel="stylesheet" href="css/site.css"><h1>Contract ended</h1>`,
+		"css/site.css": "h1 { color: teal }",
+	})
+
+	if _, err := e.r.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	s.Disabled = true
+	s.DisabledPage = &PageRef{Page: m.Page, Digest: m.Digest, Dir: m.Dir}
+
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{s}}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, p := range []string{"/", "/file.txt", "/index.html", "/missing", "/index.php"} {
+		code, h, body := e.fetchFull(t, "alpha.example.com", p)
+		if code != http.StatusServiceUnavailable || !strings.Contains(body, "Contract ended") || strings.Contains(body, "data") {
+			t.Errorf("disabled %s: %d %q", p, code, body)
+		}
+
+		if h.Get("Retry-After") != "" || h.Get("Content-Security-Policy") != PageCSP || h.Get("Cache-Control") != "no-store" {
+			t.Errorf("disabled %s headers: %v", p, h)
+		}
+	}
+
+	if code, h, _ := e.fetchFull(t, "alpha.example.com", "/.hostashi/page/maint/css/site.css"); code != http.StatusOK || h.Get("Content-Type") != "text/css; charset=utf-8" {
+		t.Errorf("page file: %d %v", code, h)
+	}
+
+	if code, body := e.fetchPath(t, "alpha.example.com", "/.well-known/acme-challenge/tok123"); code != http.StatusOK || body != "tok123.thumb" {
+		t.Errorf("challenge on a disabled site: %d %q", code, body)
+	}
+
+	s.Disabled, s.DisabledPage = false, nil
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{s}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, body := e.fetch(t, "alpha.example.com"); code != http.StatusOK || body != "hello alpha" {
+		t.Errorf("enabled again: %d %q", code, body)
+	}
+}
+
 func TestMaintenanceSite(t *testing.T) {
 	e := newEnv(t)
 	ctx := t.Context()

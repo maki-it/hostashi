@@ -114,6 +114,13 @@ func TestPageUploadAndUse(t *testing.T) {
 	}}})
 	wantCode(t, err, agentrpc.CodeNotFound)
 
+	// The same for the page of a disabled site (ADR-0047).
+	_, err = agentapi.WebApply.Call(ctx, c, agentapi.WebApplyRequest{Sites: []agentapi.WebSite{{
+		User: "blog", Domains: []string{"blog.example.com"}, Disabled: true,
+		DisabledPage: &agentapi.WebPageRef{Page: "maint", Digest: "ab" + digest[2:]},
+	}}})
+	wantCode(t, err, agentrpc.CodeNotFound)
+
 	// A page that the live configuration uses cannot be deleted.
 	fakeLiveGeneration(t, base, `{"sites":[{"user":"blog","domains":["blog.example.com"],"root":"/x",`+
 		`"maintenance":{"page":"maint","digest":"`+digest+`","dir":"/x"}}]}`)
@@ -136,6 +143,19 @@ func TestPageUploadAndUse(t *testing.T) {
 	}
 }
 
+// TestUsedPagesCountsDisabledPages checks that the page of a disabled site
+// (ADR-0047) counts as in use, so it is neither pruned nor deleted.
+func TestUsedPagesCountsDisabledPages(t *testing.T) {
+	got := usedPages(web.Desired{Sites: []web.Site{
+		{User: "off", Disabled: true, DisabledPage: &web.PageRef{Page: "maint", Digest: "d1", Dir: "/x"}},
+		{User: "m", Maintenance: &web.Maintenance{Page: "other", Digest: "d2"}},
+	}})
+
+	if !got["maint.d1"] || !got["other.d2"] || len(got) != 2 {
+		t.Errorf("used pages %v", got)
+	}
+}
+
 func TestMaintenanceValidation(t *testing.T) {
 	c, _ := startSiteAgentCfg(t, Config{Web: &web.Reconciler{Base: filepath.Join(t.TempDir(), "web"), Driver: &web.Nginx{}}, Pages: &pages.Store{Dir: t.TempDir()}})
 	raw := agentrpc.Op[rawRequest, rawResponse]{Name: "web.apply"}
@@ -151,6 +171,15 @@ func TestMaintenanceValidation(t *testing.T) {
 	} {
 		body := `{"sites":[{"user":"blog","domains":["a.example.com"],"maintenance":` + m + `}]}`
 		_, err := raw.Call(context.Background(), c, rawRequest(body))
+		wantCode(t, err, agentrpc.CodeInvalidArgument)
+	}
+	// A disabled page needs a disabled site and a valid reference.
+	for _, site := range []string{
+		`{"user":"blog","domains":["a.example.com"],"disabledPage":{"page":"maint","digest":` + d + `}}`,
+		`{"user":"blog","domains":["a.example.com"],"disabled":true,"disabledPage":{"page":"../x","digest":` + d + `}}`,
+		`{"user":"blog","domains":["a.example.com"],"disabled":true,"disabledPage":{"page":"maint","digest":"abc"}}`,
+	} {
+		_, err := raw.Call(context.Background(), c, rawRequest(`{"sites":[`+site+`]}`))
 		wantCode(t, err, agentrpc.CodeInvalidArgument)
 	}
 }

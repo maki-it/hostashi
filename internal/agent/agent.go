@@ -518,6 +518,15 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			site.HSTS = s.HSTS
 		}
 
+		if s.DisabledPage != nil && s.Disabled {
+			m, err := h.maintenanceFor(&agentapi.WebMaintenance{Page: s.DisabledPage.Page, Digest: s.DisabledPage.Digest})
+			if err != nil {
+				return agentapi.WebApplyResponse{}, err
+			}
+
+			site.DisabledPage = &web.PageRef{Page: m.Page, Digest: m.Digest, Dir: m.Dir}
+		}
+
 		if s.Maintenance != nil && !s.Disabled {
 			m, err := h.maintenanceFor(s.Maintenance)
 			if err != nil {
