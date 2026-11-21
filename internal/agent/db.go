@@ -48,6 +48,10 @@ func openDB(ctx context.Context, stateDir string, sm *sites.Manager, log *slog.L
 			log.WarnContext(ctx, "remove leftover database job users", "err", err)
 		}
 
+		if err := m.RemoveToolUsers(rctx, conn); err != nil && log != nil {
+			log.WarnContext(ctx, "remove leftover database tool users", "err", err)
+		}
+
 		if err := m.LockOwners(rctx); err != nil && log != nil {
 			log.WarnContext(ctx, "lock database owner accounts", "err", err)
 		}
