@@ -20,6 +20,7 @@ import { Overview } from "./Overview";
 import { Parked } from "./Parked";
 import { PHPPage } from "./PHP";
 import { SecondFactor } from "./SecondFactor";
+import { Services } from "./Services";
 import { Setup } from "./Setup";
 import { Sites } from "./Sites";
 import { canSee } from "./nav";
@@ -136,6 +137,7 @@ export function App() {
         {show("php") && <PHPPage query={route.query} onQuery={replaceQuery} />}
         {show("limits") && <Presets query={route.query} onQuery={replaceQuery} />}
         {show("health") && <Doctor query={route.query} onQuery={replaceQuery} />}
+        {show("services") && <Services />}
         {show("firewall") && <Firewall />}
         {show("parked") && <Parked query={route.query} onQuery={replaceQuery} />}
         {show("pages") && <Pages query={route.query} onQuery={replaceQuery} />}

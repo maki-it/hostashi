@@ -545,7 +545,14 @@ function DatabaseView({
           }}
         >
           <div className="ui-narrow">
-            <Field label={`Type ${db.name} to confirm`} hint="The database is deleted with its users. This cannot be undone.">
+            <Field
+              label={
+                <>
+                  Type <code className="ui-confirm-phrase">{db.name}</code> to confirm
+                </>
+              }
+              hint="The database is deleted with its users. This cannot be undone."
+            >
               <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
             </Field>
           </div>

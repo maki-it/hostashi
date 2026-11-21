@@ -12,6 +12,7 @@ import {
   Globe,
   Heartbeat,
   type Icon,
+  Pulse,
   ShieldCheck,
   Signpost,
   SquaresFour,
@@ -43,6 +44,7 @@ export const navGroups: readonly NavGroup[] = [
     label: "Server",
     items: [
       { page: "health", label: "Health", icon: Heartbeat, roles: admin },
+      { page: "services", label: "Services", icon: Pulse, roles: admin },
       { page: "php", label: "PHP versions", icon: Code, roles: admin },
       { page: "backups", label: "Backups", icon: ClockCounterClockwise, roles: admin },
       { page: "firewall", label: "Firewall", icon: ShieldCheck, roles: admin },

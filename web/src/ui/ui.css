@@ -503,6 +503,9 @@ a.ui-btn {
   flex-direction: column;
   gap: 2px;
 }
+.ui-stack-tight > .ui-badge {
+  align-self: flex-start;
+}
 /* A checkbox with its label on one line */
 .ui-check {
   display: inline-flex;
@@ -905,4 +908,234 @@ a.ui-btn {
 }
 .ui-filters .ui-audit-date .ui-input {
   flex: 0 1 160px;
+}
+
+/* Charts of the dashboard (ADR-0052): thin lines on one axis from zero,
+ * recessive grid, a crosshair with a tooltip, and a table of the numbers. */
+.ui-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-5);
+}
+.ui-chart {
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.ui-chart-legend {
+  min-height: 1.5em;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ui-chart-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ui-chart-key {
+  display: inline-block;
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.ui-chart-legend .ui-chart-key {
+  margin-right: 0;
+}
+.ui-chart-key.ui-series-1 {
+  background: var(--series-1);
+}
+.ui-chart-key.ui-series-2 {
+  background: var(--series-2);
+}
+.ui-chart-plot {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.ui-chart-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 140px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1;
+}
+.ui-chart-area {
+  position: relative;
+  height: 140px;
+  min-width: 0;
+  touch-action: pan-y;
+  cursor: crosshair;
+}
+.ui-chart-area svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.ui-chart-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+  vector-effect: non-scaling-stroke;
+}
+.ui-chart-base {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.ui-chart-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.ui-chart-line.ui-series-1 {
+  stroke: var(--series-1);
+}
+.ui-chart-line.ui-series-2 {
+  stroke: var(--series-2);
+}
+.ui-chart-cross {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line-strong);
+  pointer-events: none;
+}
+.ui-chart-tip {
+  position: absolute;
+  top: 0;
+  transform: translateX(8px);
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  background: var(--tip-bg);
+  color: var(--tip-fg);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+.ui-chart-tip-left {
+  transform: translateX(calc(-100% - 8px));
+}
+.ui-chart-times {
+  display: flex;
+  justify-content: space-between;
+  margin-left: 48px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.ui-chart-table summary {
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ui-chart-table table {
+  margin-top: var(--space-2);
+  font-size: 12px;
+  border-collapse: collapse;
+}
+.ui-chart-table th,
+.ui-chart-table td {
+  padding: 2px var(--space-3) 2px 0;
+  text-align: left;
+}
+.ui-chart-table div,
+.ui-chart-table table {
+  max-height: 240px;
+  overflow: auto;
+  display: block;
+}
+.ui-range {
+  display: inline-flex;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.ui-range button {
+  border: 0;
+  background: var(--surface);
+  color: var(--fg);
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ui-range button + button {
+  border-left: 1px solid var(--line);
+}
+.ui-range button[aria-pressed="true"] {
+  background: var(--sunken);
+  font-weight: 600;
+}
+.ui-meter {
+  display: grid;
+  gap: 6px;
+}
+.ui-meter + .ui-meter {
+  margin-top: var(--space-3);
+}
+.ui-meter-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 13px;
+}
+.ui-meter-head span {
+  color: var(--muted);
+}
+.ui-meter-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--sunken);
+  overflow: hidden;
+}
+.ui-meter-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--series-1);
+}
+.ui-meter-warn .ui-meter-fill {
+  background: var(--warn);
+}
+.ui-meter-err .ui-meter-fill {
+  background: var(--err);
+}
+.ui-chart-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+/* The text a person must type to confirm a risky step */
+.ui-confirm-phrase {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--sunken);
+  color: var(--fg);
+  user-select: all;
+  /* Field labels are upper case; the phrase must show exactly as typed. */
+  text-transform: none;
+  letter-spacing: normal;
 }

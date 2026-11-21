@@ -19,6 +19,13 @@ Most work is done in the panel. The command line is for what the panel cannot do
 | `hostashi ping` | Checks that the agent answers. |
 | `hostashi version` | Prints the version. |
 
+## Services
+
+| Command | What it does |
+|---------|--------------|
+| `hostashi service list` | Lists the services with their state and automatic restarts. `-json` prints JSON. |
+| `hostashi service ID [SITE] ACTION` | Runs an action, for example `hostashi service nginx reload` or `hostashi service php blog restart`. Only the actions of the [service catalog](Services-and-dashboard.md#services) work. |
+
 ## Sites
 
 | Command | What it does |
