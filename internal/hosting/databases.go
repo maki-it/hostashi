@@ -137,6 +137,10 @@ func (s *Service) CreateDatabase(ctx context.Context, actor int64, req NewDataba
 
 	s.audit(ctx, actor, "database.create", req.Name, map[string]string{"site": req.Site, "server": srv})
 
+	if srv != store.LocalDBServer {
+		s.dbManifestChanged(ctx)
+	}
+
 	if req.User == "" {
 		return d, "", nil
 	}
@@ -188,6 +192,10 @@ func (s *Service) deleteDatabase(ctx context.Context, actor int64, name string) 
 	}
 
 	s.audit(ctx, actor, "database.delete", name, map[string]string{"site": d.Site, "server": d.Server})
+
+	if d.Server != store.LocalDBServer {
+		s.dbManifestChanged(ctx)
+	}
 
 	return nil
 }

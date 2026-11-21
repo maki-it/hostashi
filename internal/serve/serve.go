@@ -243,7 +243,12 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 		}
 
 		if deps.Doctor != nil {
-			registerDoctor(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Doctor, log)
+			var panel PanelChecks
+			if deps.Sites != nil {
+				panel = deps.Sites.DBServerDoctor
+			}
+
+			registerDoctor(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Doctor, panel, log)
 		}
 
 		if deps.Metrics != nil && deps.Settings != nil {
@@ -303,6 +308,24 @@ func PanelCopyPath(dbPath string) string {
 // copyEvery is how often the panel refreshes its database copy, so a
 // scheduled backup is never more than this behind.
 const copyEvery = time.Hour
+
+// dbServerLoop checks the external database servers every
+// hosting.DBServerCheckEvery, so the list shows their version and state and
+// doctor knows when one is gone (ADR-0041).
+func dbServerLoop(ctx context.Context, svc *hosting.Service) {
+	t := time.NewTicker(hosting.DBServerCheckEvery)
+	defer t.Stop()
+
+	for {
+		svc.RefreshDBServers(ctx)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
 
 func copyLoop(ctx context.Context, copyDB func(context.Context) error, log *slog.Logger) {
 	t := time.NewTicker(copyEvery)
@@ -407,7 +430,14 @@ func Run(ctx context.Context, cfg Config) error {
 
 	deps.Sites.EnableCron(hosting.RPCAgent{C: client})
 	deps.Sites.EnableSSH(hosting.RPCAgent{C: client})
-	deps.Sites.EnableDBServers(hosting.RemoteDBServers{Box: box})
+	deps.Sites.EnableDBServers(hosting.RemoteDBServers{Box: box}, filepath.Dir(copyPath))
+
+	if err := deps.Sites.WriteDBManifest(ctx); err != nil {
+		cfg.Log.ErrorContext(ctx, "write the external database list for the backup", "err", err)
+	}
+
+	go dbServerLoop(ctx, deps.Sites)
+
 	deps.Sites.EnableLimits(hosting.RPCAgent{C: client})
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)

@@ -168,7 +168,6 @@ jobs:
           - { image: "mariadb:11.8", tls: none }
           - { image: "mysql:8.4", tls: verify-ca }
           - { image: "mysql:9.7", tls: verify-ca }
-          - { image: "mysql:26.10", tls: verify-ca }
           - { image: "mysql:8.4", tls: none }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -244,6 +243,9 @@ jobs:
             mariadbd-safe >/dev/null 2>&1 &
             for _ in $(seq 1 30); do [ -S /run/mysqld/mysqld.sock ] && break; sleep 1; done
             mariadb -e "CREATE DATABASE resticdump; CREATE TABLE resticdump.t (a INT); INSERT INTO resticdump.t VALUES (1);"
+            # An administrator for the dump over TCP (ADR-0041), with a
+            # password with a double quote, a quote, a backslash, # and spaces.
+            mariadb -e "CREATE USER dumpadm@127.0.0.1 IDENTIFIED BY '"'"'a\"b\'"'"'c\\\\d #e f'"'"'; GRANT ALL ON *.* TO dumpadm@127.0.0.1;"
             useradd -m u1
             ssh-keygen -q -t ed25519 -N "" -f /root/id_ed25519
             install -d -m 700 -o u1 -g u1 /home/u1/.ssh
@@ -252,6 +254,7 @@ jobs:
             sleep 1
             ssh-keyscan -p 2222 -t ed25519 127.0.0.1 >/root/known_hosts 2>/dev/null
             HOSTASHI_TEST_RESTIC=1 HOSTASHI_TEST_MARIADB_SOCKET=/run/mysqld/mysqld.sock \
+            HOSTASHI_TEST_REMOTE_DUMP=1 HOSTASHI_TEST_MARIADB_DUMP=1 \
             HOSTASHI_TEST_RESTIC_SFTP=sftp://u1@127.0.0.1:2222/hostashi \
             HOSTASHI_TEST_RESTIC_SSH_KEY=/root/id_ed25519 HOSTASHI_TEST_RESTIC_KNOWN_HOSTS=/root/known_hosts \
               /resticctl.test -test.v -test.count=1'

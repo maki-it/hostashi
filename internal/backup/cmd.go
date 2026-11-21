@@ -14,6 +14,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/maki-it/hostashi/internal/extdb"
+	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/statefile"
 )
 
@@ -23,8 +25,16 @@ type RunConfig struct {
 	StatusDir string // default StatusDir
 	StateDir  string // the agent's state directory with the registries
 	CacheDir  string // default CacheDir
-	Host      string // default: the lowercase host name
-	Log       *slog.Logger
+	// PanelDir holds the panel's list of external databases, owned by
+	// PanelUser; default PanelBackupDir. KeyFile opens their passwords;
+	// default PanelKeyFile.
+	PanelDir string
+	KeyFile  string
+	// PanelUID returns the uid that must own PanelDir; default: the uid
+	// of PanelUser.
+	PanelUID func() (uint32, error)
+	Host     string // default: the lowercase host name
+	Log      *slog.Logger
 }
 
 // ErrBusy means another run holds the lock.
@@ -100,6 +110,14 @@ func run(ctx context.Context, cfg RunConfig, prev Status) Status {
 
 	r := &Runner{Settings: settings, Prev: prev, Log: cfg.Log}
 
+	// External databases (ADR-0041). A problem here does not stop the
+	// local part: the run saves everything else and reports it.
+	if sites, err = external(cfg, sites); err != nil {
+		cfg.Log.ErrorContext(ctx, "external databases", "err", err)
+
+		r.Warning = err.Error()
+	}
+
 	if settings.Target != nil {
 		repo, err := NewRepo(settings, cfg.ConfigDir, cfg.CacheDir, cfg.Host)
 		if err != nil {
@@ -111,6 +129,30 @@ func run(ctx context.Context, cfg RunConfig, prev Status) Status {
 	}
 
 	return r.Run(ctx, Plan(sites, PanelPaths))
+}
+
+// external adds the databases on external servers from the panel's list.
+func external(cfg RunConfig, sites []Site) ([]Site, error) {
+	uid, err := cfg.PanelUID()
+	if err != nil {
+		return sites, err
+	}
+
+	m, err := extdb.Read(cfg.PanelDir, uid)
+	if err != nil {
+		return sites, fmt.Errorf("read the list of external databases: %w", err)
+	}
+
+	if len(m.Databases) == 0 {
+		return sites, nil
+	}
+
+	box, err := secrets.Load(cfg.KeyFile)
+	if err != nil {
+		return sites, fmt.Errorf("external databases not saved: %w", err)
+	}
+
+	return AddExternal(sites, m, box)
 }
 
 func (c RunConfig) withDefaults() RunConfig {
@@ -133,6 +175,18 @@ func (c RunConfig) withDefaults() RunConfig {
 
 	if c.Log == nil {
 		c.Log = slog.New(slog.DiscardHandler)
+	}
+
+	if c.PanelDir == "" {
+		c.PanelDir = PanelBackupDir
+	}
+
+	if c.KeyFile == "" {
+		c.KeyFile = PanelKeyFile
+	}
+
+	if c.PanelUID == nil {
+		c.PanelUID = func() (uint32, error) { return panelUID(PanelUser) }
 	}
 
 	return c

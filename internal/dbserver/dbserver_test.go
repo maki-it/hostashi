@@ -87,6 +87,8 @@ func TestConfigValidate(t *testing.T) {
 		"long user":        func(c *Config) { c.AdminUser = strings.Repeat("a", MaxAdminUser+1) },
 		"no password":      func(c *Config) { c.AdminPassword = "" },
 		"long password":    func(c *Config) { c.AdminPassword = strings.Repeat("a", MaxAdminPwLen+1) },
+		"password newline": func(c *Config) { c.AdminPassword = "a\nb" },
+		"password utf8":    func(c *Config) { c.AdminPassword = "pässword" },
 		"unknown tls":      func(c *Config) { c.TLS = "require" },
 		"empty tls":        func(c *Config) { c.TLS = "" },
 		"verify-ca no CA":  func(c *Config) { c.TLS = TLSVerifyCA },
@@ -169,7 +171,7 @@ func TestParseVersion(t *testing.T) {
 		}
 	}
 
-	for _, in := range []string{"", "x", "5.7.44", "10.4.34-MariaDB", "5.5.5-10.3.0-MariaDB", "a.b"} {
+	for _, in := range []string{"", "x", "5.7.44", "10.4.34-MariaDB", "5.5.5-10.3.0-MariaDB", "a.b", "26.10.0", "10.0.1"} {
 		if _, _, err := ParseVersion(in); !errors.Is(err, ErrUnsupported) {
 			t.Errorf("%q: got %v", in, err)
 		}
@@ -341,5 +343,43 @@ func TestClassify(t *testing.T) {
 		if c.want != nil && !errors.Is(got, c.want) {
 			t.Errorf("%v: got %v", c.err, got)
 		}
+	}
+}
+
+func TestClientOptions(t *testing.T) {
+	c := validConfig()
+
+	got, err := c.ClientOptions("")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := "[client]\nhost=db.example.net\nport=3306\nuser=\"hostashi_admin\"\n" +
+		`password="s3cret'\"` + "`" + `\\ x"` + "\nssl\nssl-verify-server-cert\nssl-ca=" + SystemCAFile + "\n"
+	if got != want {
+		t.Fatalf("verify:\n%s\nwant:\n%s", got, want)
+	}
+
+	c.TLS, c.CAPEM = TLSVerifyCA, testCA(t)
+
+	if got, err := c.ClientOptions("/tmp/ca.pem"); err != nil || !strings.HasSuffix(got, "ssl\nssl-verify-server-cert\nssl-ca=/tmp/ca.pem\n") {
+		t.Fatalf("verify-ca: %q %v", got, err)
+	}
+
+	for _, p := range []string{"", "ca.pem", "/tmp/a\nssl=0", "/tmp/a#b"} {
+		if _, err := c.ClientOptions(p); !errors.Is(err, ErrInvalid) {
+			t.Errorf("CA path %q: %v", p, err)
+		}
+	}
+
+	c.TLS, c.CAPEM = TLSNone, ""
+
+	if got, err := c.ClientOptions(""); err != nil || !strings.HasSuffix(got, "\nskip-ssl\n") {
+		t.Fatalf("none: %q %v", got, err)
+	}
+
+	c.Host = "x\ny"
+	if _, err := c.ClientOptions(""); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("bad host: %v", err)
 	}
 }
