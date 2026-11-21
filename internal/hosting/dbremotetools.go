@@ -70,6 +70,7 @@ func (s *Service) openRemoteTool(ctx context.Context, d store.Database, minutes 
 	if err := s.remote(ctx, srv, func(c RemoteDB) error { return c.CreateToolUser(ctx, d.Name, user, password, ends) }); err != nil {
 		return agentapi.DBToolOpenResponse{}, err
 	}
+
 	bg := context.WithoutCancel(ctx)
 
 	// Recorded before the agent sees the password, so the user never
