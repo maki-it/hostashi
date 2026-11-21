@@ -597,7 +597,19 @@ func (s *Service) Delete(ctx context.Context, actor int64, name string) error {
 		return err
 	}
 
-	// The site is offline now; its databases go before the account.
+	if err := s.removeOfflineSite(ctx, actor, name); err != nil {
+		return err
+	}
+
+	s.audit(ctx, actor, "site.delete", name, nil)
+
+	return nil
+}
+
+// removeOfflineSite removes the databases, the account with its files and
+// the row of a site that the web server no longer serves.
+func (s *Service) removeOfflineSite(ctx context.Context, actor int64, name string) error {
+	// Its databases go before the account.
 	if err := s.deleteSiteDatabases(ctx, actor, name); err != nil {
 		return err
 	}
@@ -606,13 +618,7 @@ func (s *Service) Delete(ctx context.Context, actor int64, name string) error {
 		return err
 	}
 
-	if err := s.st.DeleteSite(ctx, name); err != nil {
-		return err
-	}
-
-	s.audit(ctx, actor, "site.delete", name, nil)
-
-	return nil
+	return s.st.DeleteSite(ctx, name)
 }
 
 // Sync sends the current web state to the agent again, for example after a

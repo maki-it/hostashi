@@ -211,3 +211,137 @@ func TestFailedSiteChangesParkAgain(t *testing.T) {
 		t.Fatalf("still parked: %v", err)
 	}
 }
+
+func TestDeleteAndPark(t *testing.T) {
+	s, ag, st := newService(t)
+	ctx := t.Context()
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", Domains: []string{"blog.example.com", "www.blog.example.com", "old.example.org"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	park := func(req ParkRequest) error { return s.DeleteAndPark(ctx, 1, "blog", req) }
+	keep := ParkRequest{Domains: []string{"www.blog.example.com", "Blog.Example.com"}, Confirm: "blog"}
+
+	for name, tc := range map[string]struct {
+		req  ParkRequest
+		want error
+	}{
+		"wrong name":        {ParkRequest{Domains: keep.Domains, Confirm: "Blog"}, ErrInvalid},
+		"no domain":         {ParkRequest{Confirm: "blog"}, ErrInvalid},
+		"foreign domain":    {ParkRequest{Domains: []string{"shop.example.com"}, Confirm: "blog"}, ErrInvalid},
+		"twice":             {ParkRequest{Domains: []string{"blog.example.com", "BLOG.example.com"}, Confirm: "blog"}, ErrInvalid},
+		"https, no issuer":  {ParkRequest{Domains: keep.Domains, Confirm: "blog", TLS: true}, ErrNoTLS},
+		"unknown page":      {ParkRequest{Domains: keep.Domains, Confirm: "blog", Page: "page-99"}, ErrPageNotFound},
+		"page id no number": {ParkRequest{Domains: keep.Domains, Confirm: "blog", Page: "x"}, ErrPageNotFound},
+	} {
+		if err := park(tc.req); !errors.Is(err, tc.want) {
+			t.Errorf("%s: %v, want %v", name, err, tc.want)
+		}
+	}
+
+	if err := s.DeleteAndPark(ctx, 1, "nope", ParkRequest{Domains: []string{"a.example"}, Confirm: "nope"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown site: %v", err)
+	}
+
+	// nginx refuses: the site stays as it was, nothing is parked.
+	ag.webErr = errDown
+
+	if err := park(keep); !errors.Is(err, errDown) {
+		t.Fatalf("web failed: %v", err)
+	}
+
+	if site, err := s.Get(ctx, "blog"); err != nil || site.State != "active" || !ag.accounts["blog"] {
+		t.Fatalf("after failed web state: %+v %v", site, err)
+	}
+
+	if p, _ := s.ParkedDomains(ctx); len(p) != 0 {
+		t.Fatalf("parked after failure: %+v", p)
+	}
+
+	// Removing the account fails: the domains stay parked, the site waits
+	// in state deleting, and a plain delete finishes the job.
+	ag.webErr = nil
+	ag.deleteErr = errDown
+
+	if err := park(keep); !errors.Is(err, errDown) {
+		t.Fatalf("account delete failed: %v", err)
+	}
+
+	if site, err := s.Get(ctx, "blog"); err != nil || site.State != "deleting" {
+		t.Fatalf("after failed account delete: %+v %v", site, err)
+	}
+
+	if len(ag.web.Sites) != 0 || len(ag.web.Parked) != 2 || ag.web.Parked[0].Domain != "blog.example.com" {
+		t.Fatalf("web %+v", ag.web)
+	}
+
+	if err := park(keep); !errors.Is(err, ErrState) {
+		t.Fatalf("twice: %v", err)
+	}
+
+	ag.deleteErr = nil
+
+	if err := s.Delete(ctx, 1, "blog"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Get(ctx, "blog"); !errors.Is(err, ErrNotFound) || ag.accounts["blog"] {
+		t.Fatalf("site stayed: %v", err)
+	}
+
+	parked, err := s.ParkedDomains(ctx)
+	if err != nil || len(parked) != 2 || parked[0].Domain != "blog.example.com" || parked[1].Domain != "www.blog.example.com" || parked[0].TLS {
+		t.Fatalf("parked %+v %v", parked, err)
+	}
+
+	// The domain left out is free for a new site.
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "old", Domains: []string{"old.example.org"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	var n int
+	if err := st.RawCount(ctx, `SELECT count(*) FROM audit_log WHERE action = ?`, "site.park", &n); err != nil || n != 1 {
+		t.Fatalf("audit %d %v", n, err)
+	}
+}
+
+func TestDeleteAndParkWithHTTPSAndPage(t *testing.T) {
+	s, ag, _ := newService(t)
+	ctx := t.Context()
+
+	s.EnableTLS(&fakeIssuer{validDays: 90})
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", Domains: []string{"blog.example.com"}, TLS: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	page, err := s.CreatePage(ctx, 1, "Soon", statuspage.KindParking, PageUpload{Filename: "p.html", Data: []byte("x")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	maint, err := s.CreatePage(ctx, 1, "Work", statuspage.KindMaintenance, PageUpload{Filename: "m.html", Data: []byte("x")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := ParkRequest{Domains: []string{"blog.example.com"}, Confirm: "blog", TLS: true, Page: maint.ID}
+	if err := s.DeleteAndPark(ctx, 1, "blog", req); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("maintenance page: %v", err)
+	}
+
+	req.Page = page.ID
+	if err := s.DeleteAndPark(ctx, 1, "blog", req); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := s.ParkedDomain(ctx, "blog.example.com")
+	if err != nil || !p.TLS || pageAgentID(p.Page) != page.ID {
+		t.Fatalf("%+v %v", p, err)
+	}
+
+	if len(ag.web.Parked) != 1 || ag.web.Parked[0].Page != page.ID {
+		t.Fatalf("web %+v", ag.web.Parked)
+	}
+}

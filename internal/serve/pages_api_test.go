@@ -179,3 +179,41 @@ func TestParkedDomainsOverHTTP(t *testing.T) {
 		t.Errorf("get deleted: %d %s", rec.Code, rec.Body)
 	}
 }
+
+// Deleting a site and parking its domains needs sites:delete and the scope
+// of parked:write (ADR-0048).
+func TestDeleteAndParkOverHTTP(t *testing.T) {
+	ag := &stubAgent{}
+	e := newAPIWithAgent(t, ag)
+	c := e.adminCookie(t)
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"blog","domains":["blog.example.com","old.example.org"]}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	del := e.createToken(t, c, `{"name":"del","scopes":["sites:delete"]}`)
+	both := e.createToken(t, c, `{"name":"both","scopes":["sites:delete","sites.maintenance:write"]}`)
+	body := `{"domains":["blog.example.com"],"tls":false,"confirm":"blog"}`
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/park", header: bearerHeader(del.Token), body: body}); rec.Code != http.StatusForbidden || errCode(t, rec) != "insufficient_scope" {
+		t.Fatalf("only sites:delete: %d %s", rec.Code, rec.Body)
+	}
+
+	for _, bad := range []string{`{"domains":["blog.example.com"],"tls":false,"confirm":"other"}`, `{"domains":[],"tls":false,"confirm":"blog"}`, `{"domains":["x.example.com"],"tls":false,"confirm":"blog"}`} {
+		if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/park", header: bearerHeader(both.Token), body: bad}); rec.Code != http.StatusUnprocessableEntity {
+			t.Errorf("%s: %d %s", bad, rec.Code, rec.Body)
+		}
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/park", header: bearerHeader(both.Token), body: body}); rec.Code != http.StatusNoContent {
+		t.Fatalf("park: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/blog", cookie: c}); rec.Code != http.StatusNotFound {
+		t.Errorf("site stayed: %d", rec.Code)
+	}
+
+	if len(ag.web.Sites) != 0 || len(ag.web.Parked) != 1 || ag.web.Parked[0].Domain != "blog.example.com" {
+		t.Fatalf("web %+v", ag.web)
+	}
+}
