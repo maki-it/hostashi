@@ -5,6 +5,7 @@ import {
   fieldOfIni,
   fromForm,
   getPHPSettings,
+  memoryWarning,
   numberFields,
   phpSettingsMessage,
   placeholder,
@@ -116,6 +117,7 @@ export function PHPSettingsCard({ site }: { site: Site }) {
   }
 
   const empty = toForm({});
+  const memWarn = memoryWarning(form, view);
   const allDefault = Object.values(toForm(view.settings)).every((v) => v === "");
 
   const numberField = (key: NumberKey) => {
@@ -156,6 +158,7 @@ export function PHPSettingsCard({ site }: { site: Site }) {
           <div className="ui-form-grid">
             {numberFields.filter((f) => f.group === "limits").map((f) => numberField(f.key))}
           </div>
+          {memWarn && <Notice tone="warn" title={memWarn} />}
         </fieldset>
         <fieldset className="ui-fieldset ui-stack" disabled={busy}>
           <legend>Behaviour</legend>

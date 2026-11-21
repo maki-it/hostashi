@@ -4,7 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { PHPSettingsCard } from "./PHPSettings";
-import { fromForm, MiB, toForm, type PHPSettings, type PHPSettingsView } from "./phpsettings";
+import { fromForm, memoryWarning, MiB, toForm, type PHPSettings, type PHPSettingsView } from "./phpsettings";
 import type { Site } from "./sites";
 import { mockFetch } from "./test-utils";
 
@@ -55,6 +55,8 @@ const view = (settings: PHPSettings): PHPSettingsView => ({
   defaults,
   bounds,
   errorReportingPresets: ["production", "development", "errors"],
+  memoryLimitBytes: 0,
+  phpWorkers: 5,
 });
 
 describe("phpsettings form", () => {
@@ -149,5 +151,28 @@ describe("PHPSettingsCard", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("back to the defaults");
     expect(calls).toContainEqual({ method: "PUT", path: "/api/v1/sites/blog/php/settings", body: {} });
     expect(screen.getByRole("textbox", { name: "Input variables" })).toHaveValue("");
+  });
+});
+
+describe("memoryWarning", () => {
+  const v = { defaults, memoryLimitBytes: 1024 * MiB, phpWorkers: 5 };
+
+  it("warns only when memory_limit times the workers exceeds the site's limit", () => {
+    // 5 × 256 MiB (the default) = 1280 MiB > 1024 MiB.
+    expect(memoryWarning({ memoryLimit: "" }, v)).toMatch(/could use 1280 MiB, more than the site's memory limit of 1024 MiB/);
+    expect(memoryWarning({ memoryLimit: "200" }, v)).toBe("");
+    expect(memoryWarning({ memoryLimit: "" }, { ...v, memoryLimitBytes: 0 })).toBe("");
+  });
+
+  it("shows on the card while typing", async () => {
+    mockFetch({ "GET /api/v1/sites/blog/php/settings": { body: { ...view({}), memoryLimitBytes: 2048 * MiB, phpWorkers: 8 } } });
+    const user = userEvent.setup();
+    render(<PHPSettingsCard site={site} />);
+
+    const mem = await screen.findByRole("textbox", { name: "Memory limit (MiB)" });
+    expect(screen.queryByText(/more than the site's memory limit/)).not.toBeInTheDocument();
+
+    await user.type(mem, "512");
+    expect(screen.getByText(/8 PHP workers with 512 MiB each could use 4096 MiB/)).toBeInTheDocument();
   });
 });

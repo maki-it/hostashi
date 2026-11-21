@@ -31,6 +31,29 @@ type phpSettingsJSON struct {
 	// ErrorReporting lists the presets of error_reporting.
 	ErrorReporting []string   `json:"errorReportingPresets"`
 	UpdatedAt      *time.Time `json:"updatedAt,omitempty"`
+	// MemoryLimitBytes and PHPWorkers come from the site's limits
+	// (ADR-0015), so the form can warn when memory_limit times the workers
+	// exceeds the memory limit. 0 bytes: no memory limit.
+	MemoryLimitBytes int64 `json:"memoryLimitBytes"`
+	PHPWorkers       int64 `json:"phpWorkers"`
+}
+
+// withLimits adds the site's memory limit and PHP workers.
+func withLimits(ctx context.Context, svc *hosting.Service, name string, out phpSettingsJSON) (phpSettingsJSON, error) {
+	l, err := svc.SiteLimits(ctx, name)
+	if err != nil {
+		return out, err
+	}
+
+	out.PHPWorkers = agentapi.DefaultPHPWorkers
+	if l.Set {
+		out.MemoryLimitBytes = l.Limits.MemoryBytes
+		if l.Limits.PHPWorkers > 0 {
+			out.PHPWorkers = l.Limits.PHPWorkers
+		}
+	}
+
+	return out, nil
 }
 
 var phpSettingBounds = map[string]phpBound{
@@ -73,7 +96,14 @@ func registerPHPSettings(mux *routeMux, a authn, svc *hosting.Service, log *slog
 			return
 		}
 
-		writeJSON(w, http.StatusOK, toPHPSettingsJSON(ps))
+		out, err := withLimits(r.Context(), svc, r.PathValue("name"), toPHPSettingsJSON(ps))
+		if err != nil {
+			siteFail(log, w, err, "read site limits")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, out)
 	}))
 
 	// The body replaces all settings; a field left out is the default.
@@ -105,6 +135,13 @@ func registerPHPSettings(mux *routeMux, a authn, svc *hosting.Service, log *slog
 			return
 		}
 
-		writeJSON(w, http.StatusOK, toPHPSettingsJSON(ps))
+		out, err := withLimits(r.Context(), svc, r.PathValue("name"), toPHPSettingsJSON(ps))
+		if err != nil {
+			siteFail(log, w, err, "read site limits")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, out)
 	}))
 }
