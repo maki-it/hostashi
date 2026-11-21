@@ -77,8 +77,10 @@ func (s *Service) Database(ctx context.Context, name string) (store.Database, er
 // NewDatabase describes a database to create, optionally with its first
 // user. An empty Password with a User generates one.
 type NewDatabase struct {
-	Site     string
-	Name     string
+	Site string
+	Name string
+	// Server is the database server's name; empty: the default server.
+	Server   string
 	User     string
 	Password string
 }
@@ -113,7 +115,12 @@ func (s *Service) CreateDatabase(ctx context.Context, actor int64, req NewDataba
 		}
 	}
 
-	d, err := s.st.CreateDatabase(ctx, req.Site, req.Name, s.now())
+	be, srv, err := s.backendFor(ctx, req.Server)
+	if err != nil {
+		return store.Database{}, "", err
+	}
+
+	d, err := s.st.CreateDatabaseOn(ctx, req.Site, req.Name, srv, s.now())
 	if errors.Is(err, store.ErrDatabaseExists) {
 		return store.Database{}, "", ErrDatabaseExists
 	}
@@ -122,19 +129,19 @@ func (s *Service) CreateDatabase(ctx context.Context, actor int64, req NewDataba
 		return store.Database{}, "", err
 	}
 
-	if err := s.ag.DBCreate(ctx, req.Site, req.Name); err != nil {
+	if err := be.create(ctx, req.Site, req.Name); err != nil {
 		s.forgetDatabase(ctx, req.Name)
 
 		return store.Database{}, "", err
 	}
 
-	s.audit(ctx, actor, "database.create", req.Name, map[string]string{"site": req.Site})
+	s.audit(ctx, actor, "database.create", req.Name, map[string]string{"site": req.Site, "server": srv})
 
 	if req.User == "" {
 		return d, "", nil
 	}
 
-	if err := s.createUser(ctx, actor, req.Name, req.User, pw); err != nil {
+	if err := s.createUser(ctx, actor, be, req.Name, req.User, pw); err != nil {
 		// The database is kept: it was created and is listed. The caller
 		// sees why the user is missing and can add one.
 		return d, "", err
@@ -167,7 +174,12 @@ func (s *Service) deleteDatabase(ctx context.Context, actor int64, name string) 
 		return err
 	}
 
-	if err := s.ag.DBDelete(ctx, name); err != nil && !isCode(err, agentrpc.CodeNotFound) {
+	be, _, err := s.backendFor(ctx, d.Server)
+	if err != nil {
+		return err
+	}
+
+	if err := be.drop(ctx, name, d.Users); err != nil {
 		return err
 	}
 
@@ -175,7 +187,7 @@ func (s *Service) deleteDatabase(ctx context.Context, actor int64, name string) 
 		return err
 	}
 
-	s.audit(ctx, actor, "database.delete", name, map[string]string{"site": d.Site})
+	s.audit(ctx, actor, "database.delete", name, map[string]string{"site": d.Site, "server": d.Server})
 
 	return nil
 }
@@ -195,13 +207,12 @@ func (s *Service) CreateDatabaseUser(ctx context.Context, actor int64, database,
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, err := s.st.DatabaseByName(ctx, database); errors.Is(err, store.ErrNotFound) {
-		return "", ErrDatabaseNotFound
-	} else if err != nil {
+	be, err := s.backendOf(ctx, database)
+	if err != nil {
 		return "", err
 	}
 
-	if err := s.createUser(ctx, actor, database, user, pw); err != nil {
+	if err := s.createUser(ctx, actor, be, database, user, pw); err != nil {
 		return "", err
 	}
 
@@ -212,7 +223,7 @@ func (s *Service) CreateDatabaseUser(ctx context.Context, actor int64, database,
 	return "", nil
 }
 
-func (s *Service) createUser(ctx context.Context, actor int64, database, user, pw string) error {
+func (s *Service) createUser(ctx context.Context, actor int64, be dbBackend, database, user, pw string) error {
 	err := s.st.CreateDatabaseUser(ctx, database, user, s.now())
 	if errors.Is(err, store.ErrDatabaseUserExists) {
 		return ErrDatabaseExists
@@ -222,7 +233,7 @@ func (s *Service) createUser(ctx context.Context, actor int64, database, user, p
 		return err
 	}
 
-	if err := s.ag.DBUserCreate(ctx, database, user, pw); err != nil {
+	if err := be.createUser(ctx, database, user, pw); err != nil {
 		if derr := s.st.DeleteDatabaseUser(context.WithoutCancel(ctx), user); derr != nil {
 			s.log.ErrorContext(ctx, "remove database user row after failed create", "user", user, "err", derr)
 		}
@@ -244,7 +255,12 @@ func (s *Service) DeleteDatabaseUser(ctx context.Context, actor int64, database,
 		return err
 	}
 
-	if err := s.ag.DBUserDelete(ctx, user); err != nil && !isCode(err, agentrpc.CodeNotFound) {
+	be, err := s.backendOf(ctx, database)
+	if err != nil {
+		return err
+	}
+
+	if err := be.dropUser(ctx, user); err != nil {
 		return err
 	}
 
@@ -272,7 +288,12 @@ func (s *Service) SetDatabaseUserPassword(ctx context.Context, actor int64, data
 		return "", err
 	}
 
-	if err := s.ag.DBUserPassword(ctx, user, pw); err != nil {
+	be, err := s.backendOf(ctx, database)
+	if err != nil {
+		return "", err
+	}
+
+	if err := be.setPassword(ctx, user, pw); err != nil {
 		return "", err
 	}
 
@@ -341,4 +362,129 @@ func passwordFor(user, password string) (pw string, generated bool, err error) {
 	}
 
 	return password, false, nil
+}
+
+// dbBackend runs the database operations on the server a database lives
+// on: the agent for the local server, the panel process for an external
+// one (ADR-0041).
+type dbBackend interface {
+	create(ctx context.Context, site, name string) error
+	drop(ctx context.Context, name string, users []string) error
+	createUser(ctx context.Context, database, user, password string) error
+	dropUser(ctx context.Context, user string) error
+	setPassword(ctx context.Context, user, password string) error
+}
+
+// backendFor returns the backend of the server named server ("" for the
+// default) and the server's name.
+func (s *Service) backendFor(ctx context.Context, server string) (dbBackend, string, error) {
+	var (
+		srv store.DBServer
+		err error
+	)
+
+	if server == "" {
+		srv, err = s.st.DefaultDBServer(ctx)
+	} else {
+		srv, err = s.dbServer(ctx, server)
+	}
+
+	if err != nil {
+		return nil, "", err
+	}
+
+	if srv.Local() {
+		return agentDB{s.ag}, srv.Name, nil
+	}
+
+	if s.dbs == nil {
+		return nil, "", ErrDBServersOff
+	}
+
+	return remoteBackend{s: s, srv: srv}, srv.Name, nil
+}
+
+// backendOf returns the backend of an existing database.
+func (s *Service) backendOf(ctx context.Context, database string) (dbBackend, error) {
+	d, err := s.st.DatabaseByName(ctx, database)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, ErrDatabaseNotFound
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	be, _, err := s.backendFor(ctx, d.Server)
+
+	return be, err
+}
+
+// agentDB is the local server through the agent, which keeps its own
+// registry and drops a database's users with it.
+type agentDB struct{ ag Agent }
+
+func (a agentDB) create(ctx context.Context, site, name string) error {
+	return a.ag.DBCreate(ctx, site, name)
+}
+
+func (a agentDB) drop(ctx context.Context, name string, _ []string) error {
+	if err := a.ag.DBDelete(ctx, name); err != nil && !isCode(err, agentrpc.CodeNotFound) {
+		return err
+	}
+
+	return nil
+}
+
+func (a agentDB) createUser(ctx context.Context, database, user, password string) error {
+	return a.ag.DBUserCreate(ctx, database, user, password)
+}
+
+func (a agentDB) dropUser(ctx context.Context, user string) error {
+	if err := a.ag.DBUserDelete(ctx, user); err != nil && !isCode(err, agentrpc.CodeNotFound) {
+		return err
+	}
+
+	return nil
+}
+
+func (a agentDB) setPassword(ctx context.Context, user, password string) error {
+	return a.ag.DBUserPassword(ctx, user, password)
+}
+
+// remoteBackend is an external server. The panel store is the registry:
+// only databases and users recorded there are ever dropped.
+type remoteBackend struct {
+	s   *Service
+	srv store.DBServer
+}
+
+func (r remoteBackend) create(ctx context.Context, _, name string) error {
+	return r.s.remote(ctx, r.srv, func(c RemoteDB) error { return c.CreateDatabase(ctx, name) })
+}
+
+func (r remoteBackend) drop(ctx context.Context, name string, users []string) error {
+	return r.s.remote(ctx, r.srv, func(c RemoteDB) error {
+		// Users first, as on the local server: IF EXISTS makes a retry
+		// after a partial failure safe.
+		for _, u := range users {
+			if err := c.DropUser(ctx, u); err != nil {
+				return err
+			}
+		}
+
+		return c.DropDatabase(ctx, name)
+	})
+}
+
+func (r remoteBackend) createUser(ctx context.Context, database, user, password string) error {
+	return r.s.remote(ctx, r.srv, func(c RemoteDB) error { return c.CreateUser(ctx, database, user, password) })
+}
+
+func (r remoteBackend) dropUser(ctx context.Context, user string) error {
+	return r.s.remote(ctx, r.srv, func(c RemoteDB) error { return c.DropUser(ctx, user) })
+}
+
+func (r remoteBackend) setPassword(ctx context.Context, user, password string) error {
+	return r.s.remote(ctx, r.srv, func(c RemoteDB) error { return c.SetPassword(ctx, user, password) })
 }

@@ -32,6 +32,8 @@ const php = { "GET /api/v1/php/versions": { body: { installed: ["8.2", "8.4"], s
   // And its resource limits (Limits.test.tsx tests them).
   "GET /api/v1/sites/blog/limits": { body: { set: false, preset: "", applyError: "", appliedAt: 0, updatedAt: 0 } },
   "GET /api/v1/limit-presets": { body: { presets: [] } },
+  // The Domains & HTTPS tab reads the live certificate (Certificate.test.tsx tests it).
+  "GET /api/v1/sites/blog/tls/certificate": { body: { certificate: null } },
 };
 
 describe("siteNameProblem", () => {
