@@ -1727,7 +1727,7 @@ if [ -n "${PEBBLE_DIR:-}" ]; then
       install -m 0600 -o postgres /certs/server.key /certs/server.pem /tmp/ &&
       exec docker-entrypoint.sh postgres -c listen_addresses="$0" -c port=55433 -c ssl=on \
         -c ssl_cert_file=/tmp/server.pem -c ssl_key_file=/tmp/server.key' "$ext_ip" >/dev/null || fail "PostgreSQL container did not start"
-  pgsu() { docker exec "$pgname" psql -U postgres -v ON_ERROR_STOP=1 -qAt "$@"; }
+  pgsu() { docker exec "$pgname" psql -U postgres -p 55433 -v ON_ERROR_STOP=1 -qAt "$@"; }
   for _ in $(seq 1 60); do docker exec "$pgname" pg_isready -q -h "$ext_ip" -p 55433 2>/dev/null && break; sleep 1; done
   pgsu -c "CREATE ROLE pgadmin LOGIN CREATEDB CREATEROLE PASSWORD 'Pg-admin-pw-1234'" || fail "PostgreSQL admin role"
   # Over the network only with TLS, so a login proves the tool used it.
