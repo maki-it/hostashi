@@ -51,6 +51,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0045 | Object cache (Valkey) per site | Accepted on 2026-11-21 ([adr/0045](adr/0045-object-cache-per-site.md)) | No |
 | 0046 | Page cache (nginx FastCGI cache) per site | Accepted on 2026-11-21 ([adr/0046](adr/0046-page-cache-per-site.md)) | No |
 | 0047 | Status page for disabled sites | Accepted on 2026-11-21 ([adr/0047](adr/0047-status-page-for-disabled-sites.md)) | No |
+| 0048 | Convert a parked domain into a site and back | Accepted on 2026-11-21 ([adr/0048](adr/0048-convert-parked-domain-and-site.md)) | No |
 | 0049 | PHP settings per site | Proposed ([adr/0049](adr/0049-php-settings-per-site.md)) | No |
 
 ---
@@ -340,6 +341,10 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0047 Status page for disabled sites
 
 **Full text (status Accepted, 2026-11-21, by Kim):** [adr/0047](adr/0047-status-page-for-disabled-sites.md). Summary: a disabled site answers with a fixed English 503 string today. Recommended: disabling a site takes an optional maintenance page (ADR-0027), default the built-in one (Kim, 2026-11-21: reuse the maintenance pages, no kind of its own). nginx serves it like a maintenance page (503, same CSP, no `Retry-After`, no allowlist), PHP stays stopped. No new agent operation, no new `os/exec`. No open questions.
+
+## ADR-0048 Convert a parked domain into a site and back
+
+**Full text (status Accepted, 2026-11-21, by Kim):** [adr/0048](adr/0048-convert-parked-domain-and-site.md). Summary: Kim wants to turn a parked domain into a site and back. Recommended: "Make a site" on a parked domain opens the New site form prefilled (API unchanged), and a failed create now restores the parking; "Delete and park domains" on a site deletes it like delete (typed name, last backup shown) and parks the domains checked in its dialog (all checked by default; Kim, 2026-11-21), with the vhost swap in one `web.apply` so the domains are always answered. Scopes `sites:delete` and `parked:write`. No new agent operation, no new `os/exec`.
 
 ## ADR-0049 PHP settings per site
 

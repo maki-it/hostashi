@@ -1,6 +1,6 @@
 # ADR-0041 External database servers
 
-**Status:** Accepted (Kim, 2026-11-20). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups), ADR-0024 (MariaDB per site, no stored passwords), ADR-0025 (import and export), ADR-0033 (hardening), ADR-0035 (roles), ADR-0037 (UI redesign), ADR-0038 (web database tool).
+**Status:** Accepted (Kim, 2026-11-20); Addendum 1 Accepted (Kim, 2026-11-21). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups), ADR-0024 (MariaDB per site, no stored passwords), ADR-0025 (import and export), ADR-0033 (hardening), ADR-0035 (roles), ADR-0037 (UI redesign), ADR-0038 (web database tool).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -64,3 +64,50 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 1. ~~MariaDB and MySQL 8.0+, or MariaDB only?~~ **Decided (Kim, 2026-11-20): both.**
 2. ~~Panel process talks to external servers, agent stays without network (option A)?~~ **Decided (Kim, 2026-11-20): yes.**
+
+## Addendum 1: import, export and Adminer for external databases
+
+**Status:** Accepted (Kim, 2026-11-21). **Decides:** Kim.
+
+### Context
+
+- The first implementation (PRs #244, #248, #264, #266) refuses import, export and Adminer for databases on external servers (`db_server_local_only`) [V: `internal/hosting/dbdumps.go`, `internal/hosting/dbtool.go`]. The line "Import and export … work for external databases" in the recommendation above is therefore not done yet.
+- Both jobs run in places without network: the import and export run in the agent (`IPAddressDeny=any`), Adminer runs in `hostashi-adminer.service` with `RestrictAddressFamilies=AF_UNIX` and `IPAddressDeny=any` [V: `packaging/systemd/hostashi-agent.service`, `packaging/adminer/hostashi-adminer.service`].
+- Kim chose a separate unit with network access only to the database server over moving the feature after v1 [V: Kim, decision card in the thread, 2026-11-21].
+- There is a precedent: `hostashi-import@<id>.service` (ADR-0026) is started by the agent, has network, runs `mariadb-dump` as the site user and writes into the site's home [V: `packaging/systemd/hostashi-import@.service`, `internal/resticctl/systemd.go`].
+
+### Proposal
+
+**Import and export: `hostashi-dbjob@<id>.service`**
+
+1. The panel creates a temporary database user on the external server with privileges on the one database only, as the agent does locally (ADR-0025), with a random password and a name like `hostashi_job_<8 hex>`. The panel keeps the administrator credential; the job never sees it.
+2. The panel calls a new typed agent operation `db.job.start_remote` with: kind (import or export), database, site, relative path, server host, port, TLS mode, CA (PEM), the resolved IP addresses of the server, the temporary user and its password. The agent validates every field with the existing validators.
+3. The agent writes a job file (root, 0600) into its state directory and a drop-in for this instance only: `IPAddressDeny=any`, `IPAddressAllow=` the resolved addresses, and `ReadWritePaths=` the site's home, as for `hostashi-import@`. Then it starts the unit with the existing `systemctl start --no-block` exception (fixed template name, id of 16 hex digits). No new `os/exec` exception: the unit uses `internal/mariadbctl` (already allowed to run `mariadb` and `mariadb-dump`).
+4. The unit reads and removes the job file, opens the dump file in the home as today, and runs `mariadb` (with `--sandbox`) or `mariadb-dump` as the site user. The credentials go through the pipe (`--defaults-file=/dev/fd/3`) as today, now with `host`, `port` and the TLS options (`ssl-verify-server-cert`, `ssl-ca` from a 0600 file in a private temp directory, or `skip-ssl` for `none`). `--host` is the resolved IP address and `ssl-verify-server-cert` checks the name the admin entered [A: needs a test; the MariaDB client may check the certificate against `--host`, then the unit maps the name to the address in a private `/etc/hosts` instead].
+5. When the job ends, the agent reports the state like a local job; the panel drops the temporary user. A temporary user that outlives its job (panel restart) is removed by the 15-minute server check [A].
+
+Sandbox of the unit: like `hostashi-import@`, plus `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`, no DNS needed (addresses are resolved by the panel), capabilities only `CAP_SETUID CAP_SETGID CAP_CHOWN CAP_DAC_OVERRIDE`, all dropped after the switch to the site user.
+
+**Adminer**
+
+- The panel creates the temporary user on the external server (same limits and lifetime as for local tickets) and puts host, port, TLS mode and the CA path into the ticket.
+- The wrapper `index.php` connects to the ticket's server instead of the fixed socket; it accepts only servers that are in the ticket, so a user cannot point Adminer elsewhere.
+- `hostashi-adminer.service` gets `AF_INET`/`AF_INET6` and an `IPAddressAllow=` drop-in with the addresses of all configured external servers. The agent rewrites the drop-in and restarts the pool when the server list changes (new typed operation `dbtool.servers`).
+- Risk: unlike the job unit, the Adminer pool is long-running and can reach every configured external server, not only the one of the current ticket. A compromised Adminer process could try other servers, but it holds no credential for them [A].
+
+### Consequences
+
+- New agent operations `db.job.start_remote` and `dbtool.servers`; new unit `hostashi-dbjob@.service`; installer and container test learn the unit.
+- The CI `dbserver` job gets an import and export test against MariaDB and MySQL with TLS.
+- The `db_server_local_only` refusal is removed for import, export and Adminer.
+
+### Risks to name openly
+
+- **A second place with network next to the panel**: the job unit runs as root until it drops to the site user. Its network is limited to the server's addresses for one job.
+- **Temporary users on the external server** that are not removed when the panel dies at the wrong moment; the periodic check removes them.
+- **DNS changes**: the unit allows the addresses resolved when the job starts; a server that moves during a job fails that job.
+
+### Open questions
+
+1. ~~Is Adminer for external databases part of v1 as described, or only import and export first?~~ **Decided (Kim, 2026-11-21): both in v1, import and export first.**
+2. ~~Resolve the server name in the panel (as proposed) or allow DNS in the unit?~~ **Decided (Kim, 2026-11-21): in the panel; the unit needs no resolver.**
