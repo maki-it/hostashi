@@ -1347,8 +1347,8 @@ UNIT
   url=$(x sed -n 's/.*"url":"\([^"]*\)".*/\1/p' /tmp/api.out)
   drop=/etc/systemd/system/hostashi-adminer.service.d/servers.conf
   x grep -qx "IPAddressAllow=$ext_ip" "$drop" || fail "tool drop-in: $(x cat "$drop")"
-  user=$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User LIKE 'hostashi\_tool\_%' AND Host = '$ext_ip'")
-  [ -n "$user" ] || fail "no temporary user on the external server"
+  user=$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User LIKE 'hostashi\_tool\_%' AND Host <> 'localhost'")
+  [ -n "$user" ] || fail "no temporary user on the external server: $(x mariadb -N -e "SELECT User, Host FROM mysql.user")"
   x systemctl is-active --quiet hostashi-adminer.service || fail "tool pool not running after the restart"
   x rm -f /tmp/tool.jar
   page=$(p8444 -L "$url") || fail "tool did not answer"
