@@ -155,6 +155,8 @@ The package never changes site configs by itself; the agent's reconciler re-appl
 
 ## 5. Rollback
 
+Decided by Kim (2026-11-21) as below.
+
 - Plain apt works when the database schema did not change between the two versions: `sudo apt install --allow-downgrades hostashi=<old version>`. The apt repository keeps the last five versions [E].
 - If the newer release migrated the database, the old binary would refuse to start (`ErrSchemaTooNew`, verified). On a downgrade dpkg runs the installed package's `prerm upgrade <old version>` [U]; it compares the schema versions and, when they differ, stops the downgrade with a message that points to `hostashi-rollback`, before anything is changed.
 - `sudo hostashi-rollback [version]` (a root-only shell script from the package, default: the version before the current one) shows which snapshot it uses and that changes made in the panel since the upgrade are lost, asks for confirmation, stops panel and agent, restores the snapshot that `preinst` took when upgrading from that version, installs the old version with apt and starts the services. It is a script like the installer, so the panel and the agent gain no `os/exec`.
