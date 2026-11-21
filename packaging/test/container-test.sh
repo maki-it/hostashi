@@ -255,6 +255,7 @@ expect_mode /usr/share/hostashi/adminer/adminer.css "644 root:root"
 expect_mode /usr/share/hostashi/adminer/fonts "755 root:root"
 expect_mode /usr/share/hostashi/adminer/fonts/sora-latin-700-normal.woff2 "644 root:root"
 expect_mode /run/hostashi-adminer/tickets "700 hostashi-adminer:hostashi-adminer"
+expect_mode /run/hostashi-adminer/sessions "750 root:hostashi-adminer"
 expect_mode /run/hostashi-adminer-fpm/fpm.sock "660 hostashi-adminer:www-data"
 [ "$(x getent passwd hostashi-adminer | cut -d: -f7)" = /usr/sbin/nologin ] || fail "hostashi-adminer has a shell"
 x sh -c 'cd /usr/share/hostashi/adminer && sha256sum --quiet -c /opt/hostashi/adminer/SHA256SUMS' || fail "installed adminer.php is not the pinned one"
@@ -1384,7 +1385,24 @@ UNIT
   if x curl -sSk -o /dev/null --resolve unknown.example.com:8444:127.0.0.1 https://unknown.example.com:8444/ 2>/dev/null; then
     fail "tool port answered an unknown name"
   fi
-  # Deleting the database ends the session: the user is gone.
+  # The panel lists, extends and ends the session (ADR-0038 addendum 1);
+  # an open tab learns both.
+  [ "$(api GET /api/v1/databases/tooldb_wp/tool/sessions)" = 200 ] || fail "list tool sessions: $(x cat /tmp/api.out)"
+  x grep -q "\"id\":\"$user\"" /tmp/api.out || fail "session not listed: $(x cat /tmp/api.out)"
+  grep -q "id='hostashi-extend'" <<<"$page" || fail "no way to extend the session from the tool"
+  before=$(x cat "/run/hostashi-adminer/sessions/$user") || fail "no session file"
+  [ "$(api POST "/api/v1/databases/tooldb_wp/tool/sessions/$user/extend")" = 200 ] || fail "extend tool session: $(x cat /tmp/api.out)"
+  after=$(x cat "/run/hostashi-adminer/sessions/$user")
+  [ "$after" -eq $((before + 1800)) ] || fail "session end $before -> $after"
+  page=$(p8444 "https://other.example.com:8444/?username=$user&db=tooldb_wp") || fail "tool did not answer after the extension"
+  grep -q "data-expires='$after'" <<<"$page" || fail "the open tab missed the new end: $(grep -o "data-expires='[0-9]*'" <<<"$page")"
+  [ "$(api DELETE "/api/v1/databases/tooldb_wp/tool/sessions/$user")" = 204 ] || fail "end tool session: $(x cat /tmp/api.out)"
+  [ -z "$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User = '$user'")" ] || fail "ended session kept its user"
+  [ "$(p8444 -o /dev/null -w '%{http_code}' "https://other.example.com:8444/?username=$user&db=tooldb_wp")" = 403 ] || fail "the tool kept an ended session"
+  # Deleting the database ends any other session: the user is gone.
+  [ "$(api POST /api/v1/databases/tooldb_wp/tool '{"minutes":30}')" = 201 ] || fail "open tool again: $(x cat /tmp/api.out)"
+  user=$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User LIKE 'hostashi\_tool\_%'")
+  [ -n "$user" ] || fail "no temporary database user"
   [ "$(api DELETE /api/v1/sites/tooldb)" = 204 ] || fail "delete site: $(x cat /tmp/api.out)"
   [ -z "$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User = '$user'")" ] || fail "temporary user outlived its database"
 

@@ -54,6 +54,9 @@ func (t *dbTool) register(s *agentrpc.Server) {
 	agentrpc.Handle(s, agentapi.DBToolOpen, t.open)
 	agentrpc.Handle(s, agentapi.DBToolServers, t.setServers)
 	agentrpc.Handle(s, agentapi.DBToolRemote, t.remote)
+	agentrpc.Handle(s, agentapi.DBToolExtend, t.extend)
+	agentrpc.Handle(s, agentapi.DBToolEnd, t.end)
+	agentrpc.Handle(s, agentapi.DBToolSessions, t.sessions)
 }
 
 func (t *dbTool) open(ctx context.Context, _ agentrpc.Caller, req agentapi.DBToolOpenRequest) (agentapi.DBToolOpenResponse, error) {
@@ -93,7 +96,14 @@ func (t *dbTool) open(ctx context.Context, _ agentrpc.Caller, req agentapi.DBToo
 		Expires: login.Expires, TicketExpires: t.now().Add(agentapi.DBToolTicketTTL),
 	}
 
+	if err := t.writeSession(login.User, login.Expires); err != nil {
+		closeUser()
+
+		return agentapi.DBToolOpenResponse{}, err
+	}
+
 	if err := t.writeTicket(id, ticket, uid, gid); err != nil {
+		t.removeSession(login.User)
 		closeUser()
 
 		return agentapi.DBToolOpenResponse{}, err
@@ -104,6 +114,7 @@ func (t *dbTool) open(ctx context.Context, _ agentrpc.Caller, req agentapi.DBToo
 	t.after(agentapi.DBToolTicketTTL, func() {
 		err := os.Remove(filepath.Join(t.dir, id))
 		if err == nil {
+			t.removeSession(login.User)
 			closeUser()
 		} else if !errors.Is(err, os.ErrNotExist) {
 			t.log.ErrorContext(bg, "database tool: remove unused ticket", "err", err)

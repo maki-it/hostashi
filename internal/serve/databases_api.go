@@ -40,6 +40,10 @@ func dbFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusNotFound, "not_found", "no such database or database user")
 	case errors.Is(err, hosting.ErrJobNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "no such job for this database")
+	case errors.Is(err, hosting.ErrToolSessionNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "the session has ended")
+	case errors.Is(err, hosting.ErrToolSessionLimit):
+		writeError(w, http.StatusConflict, "dbtool_session_limit", "the session already ends as late as it may")
 	case errors.Is(err, hosting.ErrNoDBTool):
 		writeError(w, http.StatusConflict, "dbtool_unavailable", "the database tool is not available on this server")
 	case errors.Is(err, hosting.ErrDatabaseExists):
@@ -279,6 +283,49 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, http.StatusCreated, s)
+	}))
+
+	// Open sessions of the tool (ADR-0038 addendum 1): whoever may open a
+	// database in the tool may see, extend and end its sessions.
+	mux.HandleFunc("GET /api/v1/databases/{db}/tool/sessions", a.allowSite("databases:open", dbSite, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		list, err := svc.DBToolSessionsOf(ctx, r.PathValue("db"))
+		if err != nil {
+			dbFail(log, w, err, "list database tool sessions")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{"sessions": list})
+	}))
+
+	mux.HandleFunc("POST /api/v1/databases/{db}/tool/sessions/{id}/extend", a.allowSite("databases:open", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		v, err := svc.ExtendDBToolSession(ctx, p.User.ID, r.PathValue("db"), r.PathValue("id"))
+		if err != nil {
+			dbFail(log, w, err, "extend database tool session")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, v)
+	}))
+
+	mux.HandleFunc("DELETE /api/v1/databases/{db}/tool/sessions/{id}", a.allowSite("databases:open", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		if err := svc.EndDBToolSession(ctx, p.User.ID, r.PathValue("db"), r.PathValue("id")); err != nil {
+			dbFail(log, w, err, "end database tool session")
+
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
 	}))
 
 	mux.HandleFunc("GET /api/v1/databases/{db}/jobs/{id}", a.allowSite("databases:read", dbSite, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {

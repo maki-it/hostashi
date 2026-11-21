@@ -31,6 +31,7 @@ Hostashi's firewall lets in only these ports, plus what you open in the panel or
 | `/var/log/hostashi-install.log` | the installer's log |
 | `/usr/share/hostashi/adminer/` | the database tool: the pinned Adminer, Hostashi's front for it, and `adminer.css` with the panel's fonts for the panel's look |
 | `/run/hostashi-adminer/tickets/` | one-time tickets for the database tool; each is removed on first use or after 60 seconds |
+| `/run/hostashi-adminer/sessions/` | when each open session of the database tool ends, written by the agent when a session is opened, extended or ended in the panel |
 | `/etc/hostashi-adminer/servers/` | the external database servers the database tool may reach: their addresses, a hosts file and their CA certificates, written by the agent |
 
 ### Keys to keep outside the server

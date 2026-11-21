@@ -12,10 +12,13 @@
 //   ticket's temporary user, for the ticket's database, on the local
 //   MariaDB socket or on the external server the ticket names.
 // - The session ends at the ticket's expiry; the agent drops the user then.
+//   The panel can extend or end it (ADR-0038 addendum 1): the agent then
+//   writes the new end into SESSION_DIR, read on every request.
 
 namespace Hostashi {
 
 const TICKET_DIR = '/run/hostashi-adminer/tickets';
+const SESSION_DIR = '/run/hostashi-adminer/sessions';
 
 /** Sends a short page without Adminer and stops. */
 function stop(int $status, string $message): never
@@ -115,9 +118,39 @@ function remote_server(array $t): ?array
 function session_login(): ?array
 {
     $s = $_SESSION['hostashi'] ?? null;
+    if (!is_array($s)) {
+        return null;
+    }
+
+    $s['expires'] = session_end($s['user'] ?? '', $s['expires'] ?? 0);
 
     // Sessions from before the look (ADR-0038) have no scheme and panel.
-    return is_array($s) ? $s + ['scheme' => '', 'panel' => ''] : null;
+    return $s + ['scheme' => '', 'panel' => ''];
+}
+
+/**
+ * The end of user's session as the agent last wrote it: later after the
+ * panel extended it, 0 after the panel ended it. Without a file (a session
+ * from before the file existed) the ticket's end stays.
+ */
+function session_end(mixed $user, mixed $expires): int
+{
+    $expires = is_int($expires) ? $expires : 0;
+    if (!is_string($user) || !preg_match('/^hostashi_tool_[0-9a-f]{16}$/D', $user)) {
+        return 0;
+    }
+
+    $path = SESSION_DIR . '/' . $user;
+    if (is_link($path)) {
+        return 0;
+    }
+
+    $raw = @file_get_contents($path, false, null, 0, 32);
+    if ($raw === false) {
+        return $expires;
+    }
+
+    return preg_match('/^(0|[1-9][0-9]{0,11})$/D', $raw) ? (int) $raw : 0;
 }
 
 /**

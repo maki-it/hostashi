@@ -466,6 +466,8 @@ a.doc { display: none; }
   text-decoration: none;
 }
 #hostashi-bar a:hover { color: var(--accent); border-color: var(--accent); }
+#hostashi-bar #hostashi-extend { height: auto; padding: 0 2px; color: var(--accent); border: 0; }
+#hostashi-bar #hostashi-extend:hover { text-decoration: underline; }
 @media (max-width: 1280px) {
   .ends-word { display: none; }
 }

@@ -27,6 +27,10 @@ type DBToolAgent interface {
 	// The external servers (ADR-0041 addendum 1).
 	DBToolServers(ctx context.Context, req agentapi.DBToolServersRequest) (agentapi.DBToolServersResponse, error)
 	DBToolRemote(ctx context.Context, req agentapi.DBToolRemoteRequest) (agentapi.DBToolOpenResponse, error)
+	// Open sessions (ADR-0038 addendum 1).
+	DBToolExtend(ctx context.Context, req agentapi.DBToolExtendRequest) (agentapi.DBToolSessionInfo, error)
+	DBToolEnd(ctx context.Context, req agentapi.DBToolEndRequest) error
+	DBToolSessions(ctx context.Context) ([]agentapi.DBToolSessionInfo, error)
 }
 
 // DBToolOpen calls db.tool.open.
@@ -132,6 +136,8 @@ func (s *Service) OpenDatabaseTool(ctx context.Context, actor int64, database st
 	if !agentapi.ValidDBToolTicket(res.Ticket) {
 		return DBToolSession{}, errors.New("hosting: agent returned an invalid ticket")
 	}
+
+	s.recordToolSession(ctx, actor, d, res)
 
 	s.audit(ctx, actor, "database.tool.open", database, map[string]string{
 		"site": d.Site, "minutes": strconv.Itoa(minutes), "dbUser": res.User,

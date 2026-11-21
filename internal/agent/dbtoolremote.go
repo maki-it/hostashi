@@ -283,8 +283,14 @@ func (t *dbTool) remote(ctx context.Context, _ agentrpc.Caller, req agentapi.DBT
 		return agentapi.DBToolOpenResponse{}, err
 	}
 
+	if err := t.writeSession(req.User, ticket.Expires); err != nil {
+		return agentapi.DBToolOpenResponse{}, err
+	}
+
 	id := newTicketID()
 	if err := t.writeTicket(id, ticket, uid, gid); err != nil {
+		t.removeSession(req.User)
+
 		return agentapi.DBToolOpenResponse{}, err
 	}
 
@@ -293,7 +299,10 @@ func (t *dbTool) remote(ctx context.Context, _ agentrpc.Caller, req agentapi.DBT
 	bg := context.WithoutCancel(ctx)
 
 	t.after(agentapi.DBToolTicketTTL, func() {
-		if err := os.Remove(filepath.Join(t.dir, id)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		err := os.Remove(filepath.Join(t.dir, id))
+		if err == nil {
+			t.removeSession(req.User)
+		} else if !errors.Is(err, os.ErrNotExist) {
 			t.log.ErrorContext(bg, "database tool: remove unused ticket", "err", err)
 		}
 	})
