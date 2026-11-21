@@ -29,7 +29,7 @@ func TestInvitationFlow(t *testing.T) {
 	ctx := context.Background()
 	kim := e.admin(t)
 
-	a, inv, err := e.svc.CreateAccount(ctx, kim, "anna", "manager", "10.0.0.1")
+	a, inv, err := e.svc.CreateAccount(ctx, kim, "anna", "manager", "", "10.0.0.1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestInvitationExpiresAndIsRateLimited(t *testing.T) {
 	ctx := context.Background()
 	kim := e.admin(t)
 
-	_, inv, err := e.svc.CreateAccount(ctx, kim, "anna", "user", "10.0.0.1")
+	_, inv, err := e.svc.CreateAccount(ctx, kim, "anna", "user", "", "10.0.0.1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,12 +107,12 @@ func TestAccountRules(t *testing.T) {
 	yes := true
 
 	for _, c := range []struct{ name, role string }{{"Bad Name", "user"}, {"anna", "root"}, {"anna", ""}} {
-		if _, _, err := e.svc.CreateAccount(ctx, kim, c.name, c.role, ""); err == nil {
+		if _, _, err := e.svc.CreateAccount(ctx, kim, c.name, c.role, "", ""); err == nil {
 			t.Errorf("create %q %q accepted", c.name, c.role)
 		}
 	}
 
-	if _, _, err := e.svc.CreateAccount(ctx, kim, "kim", "user", ""); !errors.Is(err, store.ErrUserExists) {
+	if _, _, err := e.svc.CreateAccount(ctx, kim, "kim", "user", "", ""); !errors.Is(err, store.ErrUserExists) {
 		t.Fatalf("duplicate: %v", err)
 	}
 
@@ -129,7 +129,7 @@ func TestAccountRules(t *testing.T) {
 		t.Fatalf("self reset: %v", err)
 	}
 
-	anna, annaInv, err := e.svc.CreateAccount(ctx, kim, "anna", "admin", "")
+	anna, annaInv, err := e.svc.CreateAccount(ctx, kim, "anna", "admin", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestResetEndsAccess(t *testing.T) {
 	ctx := context.Background()
 	kim := e.admin(t)
 
-	a, inv, err := e.svc.CreateAccount(ctx, kim, "anna", "user", "")
+	a, inv, err := e.svc.CreateAccount(ctx, kim, "anna", "user", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestGrantsThroughService(t *testing.T) {
 	ctx := context.Background()
 	kim := e.admin(t)
 
-	a, _, err := e.svc.CreateAccount(ctx, kim, "anna", "user", "")
+	a, _, err := e.svc.CreateAccount(ctx, kim, "anna", "user", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -124,3 +124,19 @@ func (s *Service) RemoveEmail(ctx context.Context, u store.User, ip string) (str
 
 	return old, nil
 }
+
+// ConfirmedEmail returns the user name and confirmed address of an account;
+// the address is empty when it has none.
+func (s *Service) ConfirmedEmail(ctx context.Context, userID int64) (username, address string, err error) {
+	u, err := s.st.UserByID(ctx, userID)
+	if err != nil {
+		return "", "", accountErr(err)
+	}
+
+	e, err := s.st.UserEmail(ctx, userID, s.now())
+	if err != nil {
+		return "", "", accountErr(err)
+	}
+
+	return u.Username, e.Confirmed, nil
+}

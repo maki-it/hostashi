@@ -205,3 +205,79 @@ func registerAccountEmail(mux *routeMux, a authn, relay MailRelay, outbox MailOu
 		writeJSON(w, http.StatusOK, map[string]string{"email": address})
 	})
 }
+
+// mailer sends the account emails of ADR-0044 through the outbox. A nil
+// mailer, or one without a relay, sends nothing: links are then only shown.
+type mailer struct {
+	relay     MailRelay
+	outbox    MailOutbox
+	publicURL string
+	log       *slog.Logger
+	// who returns the user name and confirmed address of an account.
+	who func(ctx context.Context, userID int64) (username, address string, err error)
+}
+
+// ready reports whether email can be sent now: a relay and a public URL
+// for links.
+func (m *mailer) ready(ctx context.Context) bool {
+	if m == nil || panelLink(m.publicURL, "") == "" {
+		return false
+	}
+
+	_, err := m.relay.Load(ctx)
+
+	return err == nil
+}
+
+// send queues a message and reports whether it was queued. Failures are
+// logged, never returned: the panel still shows what the email would hold.
+func (m *mailer) send(ctx context.Context, msg mail.Message, env mail.Envelope) bool {
+	if m == nil {
+		return false
+	}
+
+	ok, err := m.outbox.Enqueue(ctx, msg, env)
+	if err != nil && !errors.Is(err, mail.ErrNotConfigured) {
+		m.log.WarnContext(ctx, "queue email", "template", env.Template, "err", mail.Summary(err))
+	}
+
+	return ok && err == nil
+}
+
+// invitation emails an invitation or reset link to inv.Email.
+func (m *mailer) invitation(ctx context.Context, actor, username, role string, reset bool, inv auth.NewInvitation) bool {
+	if inv.Email == "" || !m.ready(ctx) {
+		return false
+	}
+
+	link := panelLink(m.publicURL, "invite/"+inv.Secret)
+	host := panelHost(m.publicURL)
+
+	if reset {
+		msg, env := mail.ResetLink(inv.Email, actor, username, link, host, inv.Expires)
+
+		return m.send(ctx, msg, env)
+	}
+
+	msg, env := mail.Invitation(inv.Email, actor, username, role, link, host, inv.Expires)
+
+	return m.send(ctx, msg, env)
+}
+
+// accountEvent tells the account's confirmed address about a security
+// change. It is the auth service's account event hook.
+func (m *mailer) accountEvent(ctx context.Context, e auth.AccountEvent) {
+	if m == nil || m.who == nil {
+		return
+	}
+
+	username, addr, err := m.who(ctx, e.UserID)
+	if err != nil || addr == "" {
+		return
+	}
+
+	msg, env, ok := mail.AccountSecurity(addr, username, e.Kind, e.Name, e.IP, panelHost(m.publicURL), time.Now())
+	if ok {
+		m.send(ctx, msg, env)
+	}
+}

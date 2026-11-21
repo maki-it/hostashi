@@ -108,6 +108,9 @@ type Invitation struct {
 	TokenHash []byte
 	Created   time.Time
 	Expires   time.Time
+	// Email is the address the link is emailed to (ADR-0044); accepting
+	// the link confirms it. Empty when the link is only shown.
+	Email string
 }
 
 // CreateAccount adds an account without a password and its invitation, in
@@ -151,10 +154,10 @@ func isUniqueErr(err error) bool {
 
 func putInvitation(ctx context.Context, tx *sql.Tx, userID int64, inv Invitation) error {
 	_, err := tx.ExecContext(ctx,
-		`INSERT INTO invitations (user_id, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?)
+		`INSERT INTO invitations (user_id, token_hash, created_at, expires_at, email) VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT (user_id) DO UPDATE SET token_hash = excluded.token_hash,
-		     created_at = excluded.created_at, expires_at = excluded.expires_at`,
-		userID, inv.TokenHash, inv.Created.Unix(), inv.Expires.Unix())
+		     created_at = excluded.created_at, expires_at = excluded.expires_at, email = excluded.email`,
+		userID, inv.TokenHash, inv.Created.Unix(), inv.Expires.Unix(), inv.Email)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
@@ -381,11 +384,14 @@ func (s *Store) AcceptInvitation(ctx context.Context, tokenHash []byte, password
 
 	defer func() { _ = tx.Rollback() }()
 
-	var id int64
+	var (
+		id    int64
+		email string
+	)
 
 	err = tx.QueryRowContext(ctx,
-		`SELECT i.user_id FROM invitations i JOIN users u ON u.id = i.user_id
-		  WHERE i.token_hash = ? AND i.expires_at > ? AND u.disabled = 0`, tokenHash, now.Unix()).Scan(&id)
+		`SELECT i.user_id, i.email FROM invitations i JOIN users u ON u.id = i.user_id
+		  WHERE i.token_hash = ? AND i.expires_at > ? AND u.disabled = 0`, tokenHash, now.Unix()).Scan(&id, &email)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -394,7 +400,10 @@ func (s *Store) AcceptInvitation(ctx context.Context, tokenHash []byte, password
 		return User{}, fmt.Errorf("store: %w", err)
 	}
 
-	if _, err := tx.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE id = ?`, passwordHash, id); err != nil {
+	// An emailed link proves the mailbox: its address becomes the account's.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET password_hash = ?, email = CASE WHEN ? != '' THEN ? ELSE email END WHERE id = ?`,
+		passwordHash, email, email, id); err != nil {
 		return User{}, fmt.Errorf("store: %w", err)
 	}
 
@@ -407,6 +416,16 @@ func (s *Store) AcceptInvitation(ctx context.Context, tokenHash []byte, password
 	}
 
 	return s.UserByID(ctx, id)
+}
+
+// ClearInvitationEmail forgets the address of an account's open invitation,
+// when the email could not be queued and the link is only shown.
+func (s *Store) ClearInvitationEmail(ctx context.Context, userID int64) error {
+	if _, err := s.w.ExecContext(ctx, `UPDATE invitations SET email = '' WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteExpiredInvitations removes invitations past their end.

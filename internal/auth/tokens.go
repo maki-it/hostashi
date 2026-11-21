@@ -208,6 +208,7 @@ func (s *Service) CreateToken(ctx context.Context, userID int64, req TokenReques
 		"id": strconv.FormatInt(t.ID, 10), "scopes": strings.Join(t.Scopes, " "), "expires": expires, "ip": ip,
 		"sites": tokenSitesAudit(t.Sites),
 	})
+	s.notify(ctx, AccountEvent{UserID: userID, Kind: EventTokenCreated, Name: t.Name, IP: ip})
 
 	return NewToken{Secret: secret, Token: t}, nil
 }

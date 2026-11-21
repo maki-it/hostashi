@@ -281,6 +281,7 @@ function RoleSelect({ value, onChange }: { value: Role; onChange: (r: Role) => v
 function CreateForm({ onCreated, onCancel }: { onCreated: (username: string, inv: Invitation) => void; onCancel: () => void }) {
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<Role>("user");
+  const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -289,7 +290,7 @@ function CreateForm({ onCreated, onCancel }: { onCreated: (username: string, inv
     setBusy(true);
     setError("");
     try {
-      const r = await createUser(username.trim(), role);
+      const r = await createUser(username.trim(), role, email.trim());
       onCreated(r.user.username, r.invitation);
     } catch (err) {
       setError(usersMessage(err));
@@ -313,6 +314,19 @@ function CreateForm({ onCreated, onCancel }: { onCreated: (username: string, inv
         </Field>
       </div>
       <RoleSelect value={role} onChange={setRole} />
+      <div className="ui-narrow">
+        <Field label="Email (optional)" hint="The link is sent there, and the address becomes the account's once the link is used. Needs email set up.">
+          <input
+            className="ui-input"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="off"
+            maxLength={254}
+            spellCheck={false}
+          />
+        </Field>
+      </div>
       {error && <Notice tone="err" title={error} />}
       <div className="ui-row">
         <Button type="submit" variant="primary" disabled={busy || username.trim() === ""}>
@@ -340,6 +354,11 @@ function LinkCard({ username, invitation, onClose }: { username: string; invitat
   return (
     <Card title={"Invitation for " + username}>
       <div className="ui-stack">
+        {invitation.emailedTo && (
+          <Notice tone="ok" title={"The link was emailed to " + invitation.emailedTo + "."}>
+            If it does not arrive, send the link below yourself.
+          </Notice>
+        )}
         <p className="ui-flush">
           Send this link to {username} on a channel you trust. It works once, expires <RelTime iso={invitation.expiresAt} /> and is shown only
           now.
