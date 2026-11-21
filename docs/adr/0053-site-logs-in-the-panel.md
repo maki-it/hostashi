@@ -1,6 +1,6 @@
 # ADR-0053 Site logs in the panel
 
-**Status:** Proposed. **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0021 (brute-force protection, per-site nginx logs), ADR-0018 (API), ADR-0033 (hardening), ADR-0035 (users and roles), [03-features](../03-features.md) section 3.0 (scope of release 1.0).
+**Status:** Accepted (2026-11-21, by Kim). **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0021 (brute-force protection, per-site nginx logs), ADR-0018 (API), ADR-0033 (hardening), ADR-0035 (users and roles), [03-features](../03-features.md) section 3.0 (scope of release 1.0).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
