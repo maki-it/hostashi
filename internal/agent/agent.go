@@ -1194,6 +1194,7 @@ func openPHP(stateDir string, log *slog.Logger) *php.Manager {
 	return &php.Manager{
 		Dir:       filepath.Join(stateDir, "php"),
 		SocketDir: PHPSocketDir,
+		LogDir:    php.LogDir,
 		WebGroup:  WebUser,
 		Ctl:       phpctl.Controller{},
 		Units:     phpctl.Controller{},
@@ -1220,7 +1221,7 @@ const ServerLogDir = "/var/log/nginx/hostashi"
 // LogRotateConfig is the logrotate configuration of the logs above; the
 // panel only chooses the days.
 func LogRotateConfig() logrotate.Config {
-	return logrotate.Config{SiteLogDir: SiteLogDir, ServerLogDir: ServerLogDir, NginxPID: "/run/nginx.pid", Days: logrotate.DefaultDays}
+	return logrotate.Config{SiteLogDir: SiteLogDir, ServerLogDir: ServerLogDir, PHPLogDir: php.LogDir, NginxPID: "/run/nginx.pid", Days: logrotate.DefaultDays}
 }
 
 // Run starts the agent and blocks until ctx is canceled.

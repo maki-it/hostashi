@@ -24,6 +24,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/quota"
 )
 
 // Check is one result.
@@ -179,14 +180,17 @@ func (s System) Disk(paths []string) []Check {
 }
 
 // Quota reports whether the file system of dir enforces project quota.
-func Quota(dir string, available bool, err error) Check {
+func Quota(dir string, st quota.State, err error) Check {
 	const id = "system.quota"
 
 	switch {
 	case err != nil:
 		return fail(id, dir+": cannot read the quota state: "+describe(err), "")
-	case available:
+	case st == quota.Enforced:
 		return ok(id, dir+": disk limits are enforced (project quota)")
+	case st == quota.Counting:
+		return fail(id, dir+": project quota only counts usage, disk limits are not enforced",
+			"Restart hostashi-agent: it switches enforcement on. If this stays, check the agent log.")
 	default:
 		return warn(id, dir+": no project quota, sites get no disk limit",
 			"Run the installer again: it enables quota with one reboot, or says why it cannot.")

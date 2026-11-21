@@ -125,10 +125,16 @@ func TestRender(t *testing.T) {
 		"[blog]\n", "user = blog\n", "group = blog\n",
 		"listen = /run/hostashi-php/blog/php-fpm.sock\n", "listen.owner = blog\n", "listen.group = www-data\n", "listen.mode = 0660\n",
 		"pm = ondemand\n", "php_admin_value[open_basedir] = /home/blog/:/tmp/\n", "daemonize = no\n", "security.limit_extensions = .php\n",
+		"error_log = /var/log/hostashi/php/blog/error.log\n", "catch_workers_output = yes\n",
 	} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("missing %q in\n%s", want, b)
 		}
+	}
+
+	// PHP's errors go to the site's own file, not to the journal (ADR-0053).
+	if strings.Contains(string(b), "syslog") {
+		t.Errorf("pool still logs to syslog:\n%s", b)
 	}
 
 	if !strings.Contains(string(b), "\npm.max_children = 5\n") {
@@ -427,7 +433,11 @@ func TestRenderedPoolPassesRealPHPFPM(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	m := &Manager{Dir: dir, SocketDir: dir, WebGroup: name}
+	m := &Manager{Dir: dir, SocketDir: dir, LogDir: filepath.Join(dir, "log"), WebGroup: name}
+
+	if err := m.ensureLogDir(name); err != nil {
+		t.Fatal(err)
+	}
 
 	on := true
 	custom := &agentapi.PHPSettings{MemoryLimit: 1 << 30, UploadMaxFilesize: 512 << 20, Timezone: "Europe/Berlin", DisplayErrors: &on, ErrorReporting: agentapi.ErrorReportingErrors, ShortOpenTag: &on}
@@ -491,5 +501,44 @@ func TestEnsureWorkersChange(t *testing.T) {
 	b, err := os.ReadFile(m.conf("blog"))
 	if err != nil || !strings.Contains(string(b), "pm.max_children = 9\n") {
 		t.Errorf("pool file: %v\n%s", err, b)
+	}
+}
+
+func TestEnsureLogDir(t *testing.T) {
+	m, _ := newManager(t)
+	ctx := t.Context()
+
+	// Without LogDir (tests) nothing is created; the pool names the default.
+	if err := m.Ensure(ctx, []Pool{{User: "blog", Version: "8.4", Home: "/home/blog"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	m.LogDir = filepath.Join(t.TempDir(), "log")
+	if err := m.Ensure(ctx, []Pool{{User: "shop", Version: "8.4", Home: "/home/shop"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	fi, err := os.Lstat(filepath.Join(m.LogDir, "shop"))
+	if err != nil || !fi.IsDir() || fi.Mode().Perm() != 0o750 {
+		t.Fatalf("log directory: %v %v", fi, err)
+	}
+
+	b, _ := os.ReadFile(filepath.Join(m.Dir, "shop.conf"))
+	if !strings.Contains(string(b), "error_log = "+m.LogDir+"/shop/error.log\n") {
+		t.Fatalf("pool:\n%s", b)
+	}
+
+	// A symlink in place of the directory is refused.
+	if err := os.Symlink(t.TempDir(), filepath.Join(m.LogDir, "wp")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := m.Ensure(ctx, []Pool{{User: "wp", Version: "8.4", Home: "/home/wp"}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("symlink as log directory: %v", err)
+	}
+
+	m.LogDir = "/var/log/x y"
+	if err := m.Ensure(ctx, []Pool{{User: "blog", Version: "8.4", Home: "/home/blog"}}); !errors.Is(err, ErrInvalid) {
+		t.Fatal("log directory with a space accepted")
 	}
 }

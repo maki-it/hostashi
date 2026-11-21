@@ -32,14 +32,16 @@ Most work is done in the panel. The command line is for what the panel cannot do
 
 A storage pool is an extra volume for site homes, for example a provider volume for large sites. Hostashi never formats or mounts a volume. You prepare it first:
 
-1. Create an ext4 or XFS file system on the volume.
-2. Add it to `/etc/fstab` with `nosuid,nodev,nofail`, for example `UUID=... /srv/vol1 ext4 nosuid,nodev,nofail 0 2`, and mount it.
+1. Create an ext4 or XFS file system on the volume. For disk limits per site, create it with project quota: `mkfs.ext4 -O quota,project -E quotatype=prjquota /dev/...` (an existing, unmounted ext4 volume: `tune2fs -O project,quota -Q prjquota /dev/...`). XFS needs nothing at this step.
+2. Add it to `/etc/fstab` with `nosuid,nodev,nofail` and, for disk limits, `prjquota`, for example `UUID=... /srv/vol1 ext4 nosuid,nodev,nofail,prjquota 0 2`, and mount it.
 3. Leave it empty (`lost+found` is fine).
+
+Without project quota a pool works, but its sites get no disk limit. The agent switches on the enforcement of the limits on every pool that counts usage, at its start and when a pool is added, so no `quotaon` is needed. `hostashi pool list` and `hostashi doctor` show the quota state of each pool: `enforced`, `counting` (limits are not enforced, doctor reports a failure) or `off`.
 
 | Command | What it does |
 |---------|--------------|
 | `hostashi pool add NAME PATH` | Adds the mounted volume at PATH as pool NAME. It refuses, with the reason, a path that is not a mount point, not ext4 or XFS, not mounted with `nosuid,nodev`, not in `/etc/fstab`, not empty, inside a system directory or overlapping another pool. |
-| `hostashi pool list` | Lists the pools with their path and number of sites. |
+| `hostashi pool list` | Lists the pools with their path, number of sites and quota state. |
 | `hostashi pool remove NAME` | Removes a pool without sites. Then you can unmount the volume. |
 
 A site gets its pool when it is created and stays there. Its databases stay in MariaDB's own directory.
