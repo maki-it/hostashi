@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Checks the .deb that GoReleaser builds (ADR-0050) inside a throwaway
-# container of a supported distribution: it installs with apt, the binary
-# runs and reports the package version, the frontend is embedded, the
-# installer and its data files sit where the installer looks for them, an
-# install over itself changes nothing, and removal leaves no file behind.
+# container of a supported distribution: its dependencies cover every
+# package the installer installs and all exist in the distribution, it
+# installs with apt, the binary runs and reports the package version, the
+# frontend is embedded, the installer and its data files sit where the
+# installer looks for them, an install over itself changes nothing, and
+# removal leaves no file behind.
 #
 #   docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/src:ro" IMAGE \
 #     /src/packaging/test/deb-test.sh /dist
@@ -26,9 +28,30 @@ echo "package: $deb"
 version=$(dpkg-deb -f "$deb" Version)
 [ -n "$version" ] || fail "no version"
 
-# Install with apt, as an end user would (no network needed: no dependencies yet).
+# Every package the installer installs (the *_PKGS lists and the literal
+# apt_install calls) is a dependency, so a run with --no-apt from the
+# package's maintainer scripts finds them. quota is only recommended
+# (--no-quota); phpredis is versioned and installed by the installer.
+deps=$(dpkg-deb -f "$deb" Depends | tr ',' '\n' | sed 's/^ *//; s/ .*//')
+recs=$(dpkg-deb -f "$deb" Recommends | tr ',' '\n' | sed 's/^ *//; s/ .*//')
+want=$({
+  sed -n 's/^[A-Z0-9_]*_PKGS=(\(.*\))$/\1/p' /src/packaging/install.sh | tr ' ' '\n'
+  grep -oE '^[[:space:]]*apt_install [a-z0-9][a-z0-9.+-]*' /src/packaging/install.sh | awk '{print $2}'
+} | sort -u)
+[ -n "$want" ] || fail "found no package lists in install.sh"
+for p in $want; do
+  grep -qx "$p" <<<"$deps" || grep -qx "$p" <<<"$recs" || fail "install.sh installs $p, the package does not depend on it"
+done
+grep -qx quota <<<"$recs" || fail "quota should be recommended"
+
+# Install with apt, as the install script does: dependencies from the
+# distribution, no recommends.
 export DEBIAN_FRONTEND=noninteractive
-apt-get install -y -qq "$deb" >/dev/null || fail "apt-get install"
+apt-get update -qq >/dev/null || fail "apt-get update"
+apt-get install -y -qq --no-install-recommends "$deb" >/dev/null || fail "apt-get install"
+for p in $deps; do
+  [ "$(dpkg-query -W -f '${Status}' "$p" 2>/dev/null)" = "install ok installed" ] || fail "dependency $p not installed"
+done
 [ "$(dpkg-query -W -f '${Status}' hostashi)" = "install ok installed" ] || fail "not installed"
 
 # The binary runs and carries the version. nFPM writes a pre-release as
@@ -63,10 +86,10 @@ ww=$(dpkg -L hostashi | while read -r f; do [ -e "$f" ] && [ ! -L "$f" ] && find
 # Installing the same package again works and changes nothing.
 sum() { dpkg -L hostashi | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done | sort; }
 before=$(sum)
-apt-get install -y -qq --reinstall "$deb" >/dev/null || fail "reinstall"
+apt-get install -y -qq --no-install-recommends --reinstall "$deb" >/dev/null || fail "reinstall"
 [ "$(sum)" = "$before" ] || fail "reinstall changed files"
 
-# Purge leaves nothing behind.
+# Purge leaves nothing of the package behind (dependencies stay, as apt does).
 files=$(dpkg -L hostashi | grep -vE '^/(\.|usr|usr/bin|usr/share|usr/share/doc)$')
 apt-get purge -y -qq hostashi >/dev/null || fail "purge"
 for f in $files; do [ ! -e "$f" ] || fail "left behind: $f"; done
