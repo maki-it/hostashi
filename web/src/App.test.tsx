@@ -399,6 +399,44 @@ describe("Shell", () => {
     window.location.hash = "";
   });
 
+  it("switches between light and dark with one click and saves it for the account", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...noSetup,
+      "GET /api/v1/auth/me": { body: { ...admin, auth: "session", colorScheme: "light", theme: "default" } },
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "PATCH /api/v1/me": (b) => ({ body: { theme: "default", ...(b as object) } }),
+    });
+    render(<App />);
+    const toggle = await screen.findByRole("button", { name: "Use dark colours" });
+    expect(document.documentElement.dataset.scheme).toBe("light");
+    await user.click(toggle);
+    expect(document.documentElement.dataset.scheme).toBe("dark");
+    expect(calls).toContainEqual({ method: "PATCH", path: "/api/v1/me", body: { colorScheme: "dark" } });
+    expect(screen.getByRole("button", { name: "Use light colours" })).toBeInTheDocument();
+  });
+
+  it("offers following the system on the account page", async () => {
+    const user = userEvent.setup();
+    window.location.hash = "#/account";
+    const calls = mockFetch({
+      ...noSetup,
+      "GET /api/v1/auth/me": { body: { ...admin, auth: "session", colorScheme: "dark", theme: "default" } },
+      "PATCH /api/v1/me": (b) => ({ body: { theme: "default", ...(b as object) } }),
+    });
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Your account", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^kim/ })).toHaveAttribute("aria-current", "page");
+    const group = within(screen.getByRole("group", { name: "Colour scheme" }));
+    expect(group.getByRole("radio", { name: "Dark" })).toBeChecked();
+    expect(document.documentElement.dataset.scheme).toBe("dark");
+    await user.click(group.getByRole("radio", { name: /Follow the system/ }));
+    expect(document.documentElement.dataset.scheme).toBeUndefined();
+    expect(await screen.findByText(/^Saved\./)).toBeInTheDocument();
+    expect(calls).toContainEqual({ method: "PATCH", path: "/api/v1/me", body: { colorScheme: "system" } });
+    window.location.hash = "";
+  });
+
   it("opens and closes the menu for narrow windows", async () => {
     const user = userEvent.setup();
     mockFetch(session);

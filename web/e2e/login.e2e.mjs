@@ -196,6 +196,21 @@ try {
   await page.getByText("second factor on").or(page.getByText("no second factor")).first().waitFor();
   await ok("the users page lists both accounts");
 
+  // The colour scheme belongs to the account: it survives a reload and
+  // the login page after logout follows the system again (ADR-0037).
+  const scheme = () => page.evaluate(() => document.documentElement.dataset.scheme ?? "system");
+  const [saved] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/v1/me") && r.request().method() === "PATCH"),
+    page.getByRole("button", { name: /^Use (dark|light) colours$/ }).click(),
+  ]);
+  if (!saved.ok()) throw new Error("saving the scheme: " + saved.status());
+  const picked = await scheme();
+  if (picked === "system") throw new Error("the scheme button set nothing");
+  await page.reload();
+  await page.getByRole("button", { name: /^Use (dark|light) colours$/ }).waitFor();
+  if ((await scheme()) !== picked) throw new Error("scheme after reload " + (await scheme()) + ", want " + picked);
+  await ok("the colour scheme is stored for the account");
+
   if (pageErrors.length > 0) throw new Error("browser errors:\n" + pageErrors.join("\n"));
   await ok("no script errors or CSP violations");
 } finally {

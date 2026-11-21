@@ -144,6 +144,20 @@
   font-weight: 600;
   line-height: 1.3;
 }
+a.app-user-name {
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: var(--radius);
+  color: inherit;
+  text-decoration: none;
+}
+a.app-user-name:hover {
+  text-decoration: underline;
+}
+a.app-user-name[aria-current="page"] {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
 .app-user-name small {
   font-size: 12px;
   font-weight: 400;
@@ -243,7 +257,13 @@
   }
 }
 
-/* The menu button sits at the right edge: keep its tooltip on the screen. */
+.app-top-actions {
+  display: flex;
+  margin-left: auto;
+}
+
+/* The menu button and the scheme button sit at the right edge: keep their tooltips on the screen. */
+.app-top-actions .ui-icon-btn::after,
 .app-menu-btn .ui-icon-btn::after {
   right: 0;
   left: auto;

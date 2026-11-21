@@ -238,7 +238,18 @@
   flex-direction: column;
   gap: 6px;
 }
-.ui-field > label {
+.ui-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ui-fieldset > legend {
+  margin-bottom: 6px;
+  padding: 0;
+}
+.ui-field > label,
+.ui-fieldset > legend {
   font-family: var(--label-font);
   font-size: var(--label-size);
   font-weight: 500;
