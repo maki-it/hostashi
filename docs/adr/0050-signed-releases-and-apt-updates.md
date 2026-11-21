@@ -53,12 +53,12 @@ The release on GitHub carries the `.deb` files, plain binaries, `SHA256SUMS`, an
 | C. Forgejo package registry on `git.prod.maki-it.de` (it supports Debian packages) [U] | Already runs, has a Debian registry built in | The registry signs with a key held by the server; a Maki IT server becomes part of every user's supply chain; ties a public project to private infra |
 | D. Third-party hosting (Cloudsmith, packagecloud) | Managed, signing built in | Account and possibly cost; key held by the vendor |
 
-**Recommendation: B2** (decided by Kim, 2026-11-21: GitHub, one repo, `hostashi.com/apt`, stay in the `maki-it` org).
+**Recommendation: B2** (decided by Kim, 2026-11-21: GitHub, one repo, stay in the `maki-it` org). Changed the same day (Kim): the Pages site of this repo serves only `get.hostashi.com` with `/apt` and `/install.sh`. The docs will be built with Zensical and their hosting is open, so `hostashi.com` stays free for the website and docs, and moving the apt address later (which every server has in its source) is not needed.
 
 - The release workflow builds the repository with `apt-ftparchive` (or `reprepro`) from the `.deb` files of the last five releases [E], signs `InRelease` and `Release.gpg`, and attaches the whole tree as `apt-repo.tar.gz` to the GitHub release. Only this job holds the signing subkey.
 - Pages is deployed by one workflow (GitHub Actions as Pages source): it builds the start page and the docs and unpacks the newest `apt-repo.tar.gz` into `/apt`. A docs change re-deploys the same signed tree and never touches the key.
-- The install script is served at `https://hostashi.com/install.sh`, the public key at `https://hostashi.com/apt/hostashi.asc`.
-- `docs.hostashi.com` and `hostashi.de` redirect to `hostashi.com` at the registrar. This changes the plan of 2026-11-20 (docs under `docs.hostashi.com`) in so far as the docs live under `hostashi.com/docs`; the source stays `docs/wiki/` (ADR-0043).
+- The install script is served at `https://get.hostashi.com/install.sh`, the public key at `https://get.hostashi.com/apt/hostashi.asc`.
+- ~~`docs.hostashi.com` and `hostashi.de` redirect to `hostashi.com`; docs under `hostashi.com/docs`.~~ Superseded (Kim, 2026-11-21): the docs move to Zensical later and their hosting is decided then; until then the source stays `docs/wiki/` (ADR-0043). DNS for `get.hostashi.com` is a `CNAME` to `maki-it.github.io` at Hetzner, set by Kim.
 - Layout: one suite `stable` with component `main` for both distributions, because the package is a static Go binary and the distro differences sit in `Depends:` alternatives and in the installer [A: needs a check that all dependency names exist in both distros; otherwise one suite per codename, `trixie` and `resolute`].
 
 ## 3. Signing keys
@@ -81,7 +81,7 @@ Two different signatures, with different jobs:
 - Renewal: a scheduled workflow in the `release` environment (monthly check [E]) extends the expiry by two years once less than a year is left, and opens a PR with the updated public key. It needs Kim's approval like a release. The release workflow warns when less than 90 days are left.
 - The `hostashi` package ships the public key at `/usr/share/keyrings/hostashi-archive-keyring.asc` and the source points `Signed-By:` there, so every update also updates the key (new expiry, or a new key after a leak). The installer checks the first download against the fingerprint built into the script.
 - After a leak: revoke, create a new key, ship it in a package update signed with the old key while it is still trusted, then switch signing. Servers that did not update before the switch need the new key by hand; the docs describe this.
-- The public key is also served at `https://hostashi.com/apt/hostashi.asc` and printed with its fingerprint in the docs.
+- The public key is also served at `https://get.hostashi.com/apt/hostashi.asc` and printed with its fingerprint in the docs.
 - Release assets get keyless Sigstore signatures and attestations as above; they need no key at all.
 
 ## 4. Install and upgrade (`apt install`, `postinst`)
@@ -93,7 +93,7 @@ Kim asked for installation through apt too (2026-11-21), and then decided (2026-
 The documented way for end users:
 
 ```text
-curl -fsSLO https://hostashi.com/install.sh   # until the domain is set up: from the latest GitHub release
+curl -fsSLO https://get.hostashi.com/install.sh   # until the domain is set up: from the latest GitHub release
 less install.sh                                    # recommended, not enforced
 sudo bash install.sh --panel-domain cp.example.com [options]
 ```
@@ -104,11 +104,11 @@ The same thing by hand, for admins who prefer plain apt:
 
 ```text
 # 1. trust the key for this repository only
-sudo curl -fsSL https://hostashi.com/apt/hostashi.asc -o /usr/share/keyrings/hostashi-archive-keyring.asc
+sudo curl -fsSL https://get.hostashi.com/apt/hostashi.asc -o /usr/share/keyrings/hostashi-archive-keyring.asc
 # 2. add the source (deb822)
 sudo tee /etc/apt/sources.list.d/hostashi.sources <<'EOF'
 Types: deb
-URIs: https://hostashi.com/apt
+URIs: https://get.hostashi.com/apt
 Suites: stable
 Components: main
 Signed-By: /usr/share/keyrings/hostashi-archive-keyring.asc
@@ -180,16 +180,16 @@ Decided by Kim (2026-11-21) as below.
 
 ## Consequences
 
-- New: `.goreleaser.yaml`, a release workflow with the `release` environment, a Pages deploy for `hostashi.com` (start page, docs, apt), maintainer scripts, `hostashi setup`, the install script's apt bootstrap, `install.sh` `upgrade` mode, `hostashi-rollback`, upgrade test in CI, release and key renewal docs in the wiki.
+- New: `.goreleaser.yaml`, a release workflow with the `release` environment, a Pages deploy for `get.hostashi.com` (apt repository and install script), maintainer scripts, `hostashi setup`, the install script's apt bootstrap, `install.sh` `upgrade` mode, `hostashi-rollback`, upgrade test in CI, release and key renewal docs in the wiki.
 - `install.sh` must split "install packages" from "configure"; package lists move into the `.deb`'s `Depends:` and are checked against both distributions in CI.
 - Supply chain: the build runs on GitHub-hosted runners; actions are pinned by commit SHA; the release job has no other secrets than the signing subkey.
-- Outside effects that need Kim's approval: creating the OpenPGP key, enabling Pages with the custom domain `hostashi.com`, the `release` environment with its secret, and the DNS records and redirects for `hostashi.com`, `docs.hostashi.com` and `hostashi.de`.
+- Outside effects that need Kim's approval: creating the OpenPGP key, enabling Pages with the custom domain `get.hostashi.com`, the `release` environment with its secret, and the DNS records and redirects for `hostashi.com`, `docs.hostashi.com` and `hostashi.de`.
 - Not in scope: other distributions, an RPM repository, a panel button that updates, Docker images.
 
 ## Questions for Kim (all decided on 2026-11-21)
 
 1. ~~Installation~~ Decided (Kim, 2026-11-21): install script as entry point, it installs the package through apt and runs `hostashi setup`; plain `apt install hostashi` plus `hostashi setup` works too.
-2. ~~Apt repository~~ Decided (Kim, 2026-11-21): GitHub Pages of `maki-it/hostashi` on `hostashi.com`, apt under `/apt`.
+2. ~~Apt repository~~ Decided (Kim, 2026-11-21): GitHub Pages of `maki-it/hostashi` on `get.hostashi.com`, apt under `/apt`, install script at `/install.sh`; docs hosting separate and open (Zensical).
 3. ~~Signing~~ Decided (Kim, 2026-11-21): one key with expiry in the `release` environment, renewed by a workflow after Kim's approval, no manual `gpg`.
 4. ~~Upgrade~~ Decided (Kim, 2026-11-21): snapshot, configure steps with the saved options, restart, wait for the health check.
 5. ~~Automatic updates~~ Decided (Kim, 2026-11-21): off by default, `--auto-update` opts in; the panel shows available updates.

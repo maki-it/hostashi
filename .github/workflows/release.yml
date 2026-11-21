@@ -7,7 +7,8 @@
 # in the environment "release", the only place that holds the apt signing
 # key: that job builds the signed apt repository from this release and the
 # four stable releases before it, attaches it as apt-repo.tar.gz and
-# publishes the release. A pre-release is published without apt.
+# publishes the release; the Pages workflow then deploys it to
+# get.hostashi.com. A pre-release is published without apt.
 name: Release
 
 on:
@@ -150,3 +151,12 @@ jobs:
         run: |
           gh release upload "$TAG" apt-repo.tar.gz --repo "$GITHUB_REPOSITORY"
           gh release edit "$TAG" --draft=false --latest --repo "$GITHUB_REPOSITORY"
+
+  pages:
+    name: Deploy get.hostashi.com
+    needs: apt
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml

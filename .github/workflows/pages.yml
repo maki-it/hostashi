@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Deploys get.hostashi.com (ADR-0050) on GitHub Pages: the signed apt
+# repository at /apt and the install script at /install.sh, both taken
+# unchanged from the apt-repo.tar.gz of the latest stable release. This job
+# holds no key; it checks the repository's signature against the key in
+# packaging/keyring before it deploys. The Release workflow calls it after
+# publishing (a release published with the workflow token starts no other
+# workflow); run it by hand to deploy the latest release again.
+name: Pages
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: get.hostashi.com
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: apt-repo.tar.gz of the latest stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          echo "release: $tag"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern apt-repo.tar.gz --dir .
+          mkdir site
+          tar -xzf apt-repo.tar.gz -C site --no-same-owner --no-same-permissions
+          [ -f site/install.sh ] && [ -f site/apt/dists/stable/InRelease ] || { echo "::error::apt-repo.tar.gz of $tag is incomplete"; exit 1; }
+          if [ -n "$(find site -type l -print -quit)" ]; then echo "::error::links in apt-repo.tar.gz"; exit 1; fi
+      - name: Signed by the Hostashi key
+        run: |
+          GNUPGHOME=$(mktemp -d)
+          export GNUPGHOME
+          gpg --batch --quiet --dearmor -o "$GNUPGHOME/key.gpg" packaging/keyring/hostashi-archive-keyring.asc
+          gpgv --keyring "$GNUPGHOME/key.gpg" site/apt/dists/stable/InRelease
+          gpgv --keyring "$GNUPGHOME/key.gpg" site/apt/dists/stable/Release.gpg site/apt/dists/stable/Release
+          cmp -s site/apt/hostashi.asc packaging/keyring/hostashi-archive-keyring.asc ||
+            echo "::warning::hostashi.asc in the release differs from packaging/keyring (key renewed since?)"
+      - name: Start page
+        run: |
+          cat >site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Hostashi packages</title>
+          <h1>Hostashi packages</h1>
+          <p>Install Hostashi on a fresh Debian 13 or Ubuntu 26.04 server:</p>
+          <pre>curl -fsSLO https://get.hostashi.com/install.sh
+          less install.sh
+          sudo bash install.sh --yes --panel-domain panel.example.com</pre>
+          <p>apt repository: <code>https://get.hostashi.com/apt</code>, suite <code>stable</code>,
+          signing key <a href="apt/hostashi.asc">apt/hostashi.asc</a>.
+          Source: <a href="https://github.com/maki-it/hostashi">github.com/maki-it/hostashi</a>.</p>
+          </html>
+          HTML
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
