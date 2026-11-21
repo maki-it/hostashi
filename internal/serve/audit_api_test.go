@@ -96,6 +96,17 @@ func TestAuditList(t *testing.T) {
 		}
 	}
 
+	// Entries written while serving a request carry its address; the
+	// login of adminCookie came from the test client.
+	byIP := e.auditPage(t, c, "ip=192.0.2.10&action=login")
+	if len(byIP.Entries) == 0 || byIP.Entries[0].IP != "192.0.2.10" || string(byIP.Entries[0].Diff) != "{}" {
+		t.Errorf("ip filter: %+v", byIP.Entries)
+	}
+
+	if other := e.auditPage(t, c, "ip=::ffff:198.51.100.1"); len(other.Entries) != 0 {
+		t.Errorf("other ip: %+v", other.Entries)
+	}
+
 	none := e.auditPage(t, c, "since=2099-01-01T00:00:00Z")
 	if none.Entries == nil || len(none.Entries) != 0 {
 		t.Errorf("future: %+v", none)
@@ -105,7 +116,7 @@ func TestAuditList(t *testing.T) {
 		"limit=0", "limit=201", "limit=x", "before=0", "before=-1",
 		"action=Site", "action=site.", "action=site%25", "action=" + strings.Repeat("a", 129),
 		"actor=" + strings.Repeat("a", 65), "actor=a%0Ab", "target=" + strings.Repeat("a", 201), "target=%00",
-		"since=yesterday", "until=2026-11-21", "since=2026-11-21T00:00:00Z&until=2026-11-20T00:00:00Z",
+		"since=yesterday", "ip=192.0.2", "ip=host", "until=2026-11-21", "since=2026-11-21T00:00:00Z&until=2026-11-20T00:00:00Z",
 		"since=2026-11-21T00:00:00Z&until=2026-11-21T00:00:00Z",
 	} {
 		rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/audit?" + q, cookie: c})
@@ -161,26 +172,26 @@ func TestAuditExport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if strings.Join(rows[0], ",") != "id,at,user_id,actor,action,target,detail" {
+	if strings.Join(rows[0], ",") != "id,at,user_id,actor,ip,action,target,detail,diff" {
 		t.Errorf("header: %v", rows[0])
 	}
 
 	byAction := map[string][]string{}
 	for _, r := range rows[1:] {
-		byAction[r[4]] = r
+		byAction[r[5]] = r
 	}
 
-	if r := byAction["login.failed"]; r == nil || r[5] != `'=HYPERLINK("http://x")` || r[6] != `{"ip":"192.0.2.7"}` || r[2] != "" {
+	if r := byAction["login.failed"]; r == nil || r[6] != `'=HYPERLINK("http://x")` || r[7] != `{"ip":"192.0.2.7"}` || r[2] != "" || r[4] != "" || r[8] != "{}" {
 		t.Errorf("failed login row: %q", r)
 	}
 
-	if r := byAction["site.create"]; r == nil || r[5] != "shop,\"quoted\"\nline" {
+	if r := byAction["site.create"]; r == nil || r[6] != "shop,\"quoted\"\nline" {
 		t.Errorf("quoted row: %q", r)
 	}
 
 	// The export wrote itself to the log, before its rows: it is the last
 	// row of the file, with the filters.
-	if r := rows[len(rows)-1]; r[4] != "audit.export" || r[3] != "kim" || !strings.Contains(r[6], `"format":"csv"`) {
+	if r := rows[len(rows)-1]; r[5] != "audit.export" || r[3] != "kim" || r[4] != "192.0.2.10" || !strings.Contains(r[7], `"format":"csv"`) {
 		t.Errorf("export entry: %q", r)
 	}
 

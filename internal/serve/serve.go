@@ -335,7 +335,9 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 		h = deps.Metrics.Instrument(h)
 	}
 
-	return withRequestID(h), mux.patterns
+	// Both wrappers copy the request, so they stay outside Instrument, which
+	// reads the route pattern the mux sets on the request it sees.
+	return withRequestID(withAuditIP(h)), mux.patterns
 }
 
 // RequestIDHeader names the response header with the request's ID.
@@ -350,6 +352,14 @@ func withRequestID(next http.Handler) http.Handler {
 		id := reqid.New()
 		w.Header().Set(RequestIDHeader, id)
 		next.ServeHTTP(w, r.WithContext(reqid.With(r.Context(), id)))
+	})
+}
+
+// withAuditIP puts the client's address into the request's context, so
+// that every audit entry written while serving it records the address.
+func withAuditIP(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(store.WithClientIP(r.Context(), clientIP(r))))
 	})
 }
 
