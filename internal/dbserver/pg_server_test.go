@@ -286,3 +286,114 @@ func TestPGServerUntrustedCertificate(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// TestPGServerJobUser checks the temporary role of an import or export: it
+// works on the database as the owner role, has at most two connections, and
+// dropping it keeps what it made.
+func TestPGServerJobUser(t *testing.T) {
+	cfg := pgServerConfig(t)
+	ctx := t.Context()
+	admin := open(t, cfg)
+	c := NewPGClient(admin, cfg)
+
+	const (
+		job = "hostashi_job_00112233445566ff"
+		pw  = "Abcdefghijklmnopqrstuvwxyz012345"
+	)
+
+	_ = c.DropJobUser(ctx, "jobs", job)
+	_ = c.DropDatabase(ctx, "jobs")
+
+	if err := c.CreateDatabase(ctx, "jobs"); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.WithoutCancel(ctx)
+		_ = c.DropJobUser(ctx, "jobs", job)
+		_ = c.DropUser(ctx, "jobs", "jobs_u")
+		_ = c.DropDatabase(ctx, "jobs")
+	})
+
+	if err := c.CreateUser(ctx, "jobs", "jobs_u", "Abcdefghijklmnop1234"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.CreateJobUser(ctx, "jobs", job, pw); err != nil {
+		t.Fatal(err)
+	}
+
+	var (
+		limit int
+		until time.Time
+	)
+
+	if err := admin.QueryRowContext(ctx, "SELECT rolconnlimit, rolvaliduntil FROM pg_roles WHERE rolname = $1", job).Scan(&limit, &until); err != nil {
+		t.Fatal(err)
+	}
+
+	if limit != JobRoleConnections || until.Before(time.Now().Add(6*time.Hour)) || until.After(time.Now().Add(7*time.Hour)) {
+		t.Fatalf("limit %d, valid until %v", limit, until)
+	}
+
+	jc := cfg
+	jc.AdminUser, jc.AdminPassword = job, pw
+
+	jdb := openPG(t, jc, "jobs")
+	if _, err := jdb.ExecContext(ctx, "CREATE TABLE imported (a int); INSERT INTO imported VALUES (1)"); err != nil {
+		t.Fatalf("job role cannot use the database: %v", err)
+	}
+
+	// The site's user sees the table the job made.
+	uc := cfg
+	uc.AdminUser, uc.AdminPassword = "jobs_u", "Abcdefghijklmnop1234"
+
+	var n int
+	if err := openPG(t, uc, "jobs").QueryRowContext(ctx, "SELECT count(*) FROM imported").Scan(&n); err != nil || n != 1 {
+		t.Fatalf("site user reads the import: %d, %v", n, err)
+	}
+
+	// A third connection is refused.
+	jdb.SetMaxOpenConns(3)
+
+	var conns []*sql.Conn
+
+	for range 2 {
+		conn, err := jdb.Conn(ctx)
+		if err != nil {
+			t.Fatalf("connection within the limit: %v", err)
+		}
+
+		conns = append(conns, conn)
+	}
+
+	if conn, err := jdb.Conn(ctx); err == nil {
+		if err := conn.PingContext(ctx); err == nil {
+			t.Fatal("third connection accepted")
+		}
+	}
+
+	for _, conn := range conns {
+		_ = conn.Close()
+	}
+
+	if _, err := openPG(t, jc, "postgres").ExecContext(ctx, "SELECT 1"); err == nil {
+		t.Fatal("job role reaches another database")
+	}
+
+	if err := c.DropJobUser(ctx, "jobs", job); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := jdb.ExecContext(ctx, "SELECT 1"); err == nil {
+		t.Fatal("session of the dropped job role still works")
+	}
+
+	if err := c.DropJobUser(ctx, "jobs", job); err != nil {
+		t.Fatalf("second drop: %v", err)
+	}
+
+	if err := openPG(t, uc, "jobs").QueryRowContext(ctx, "SELECT count(*) FROM imported").Scan(&n); err != nil || n != 1 {
+		t.Fatalf("import gone with the job role: %d, %v", n, err)
+	}
+}
