@@ -70,11 +70,19 @@ Two different signatures, with different jobs:
 
 | Option for the apt key | Pro | Contra |
 |--------|-----|--------|
-| A. One OpenPGP key, private part as a plain repository secret | Simplest | Anyone with write access to workflows could use or leak it; no revocation story |
-| **B. Primary key offline with Kim (certify only), an Ed25519 signing subkey in a GitHub Actions environment `release` that needs Kim's approval and only runs for tags on `main`** | A leaked subkey can be revoked and replaced without changing the key that users trust; every release needs a click by Kim | Kim must keep the primary key safe (password manager or hardware key) and renew the subkey before it expires |
-| C. Hardware key (YubiKey) signs each release by hand | Strongest | Releases need Kim's machine; no CI release |
+| A. One OpenPGP key without expiry as a plain repository secret | Simplest | Anyone with write access to workflows could use it; a leaked key without expiry signs valid updates forever, because apt never checks revocations [U] |
+| B. Primary key offline with Kim, an expiring signing subkey in CI | A leaked subkey can be replaced without changing the key servers trust | Kim must handle `gpg` for renewals; Kim does not want that (2026-11-21) |
+| **C. One Ed25519 key with a two-year expiry, held only in a GitHub Actions environment `release` that needs Kim's approval and only allows tags on `main`; expiry extended by a scheduled workflow** | Kim never runs `gpg` by hand: setup is one script, renewal is one click on "Approve" | The whole key lives in GitHub, not offline; after a leak a new key can only reach servers through a package update |
+| D. Hardware key (YubiKey) signs each release by hand | Strongest | Releases need Kim's machine; no CI release |
 
-**Recommendation: B.** Subkey validity two years [E], renewal is a documented task. The public key is published in the main repo (`packaging/apt/hostashi-archive-keyring.asc`), under `https://hostashi.com/apt/hostashi.asc` and in the docs, with its fingerprint in the installer. Creating the key is Kim's step (outside effect); the ADR does not create it.
+**Recommendation: C** (decided by Kim, 2026-11-21).
+
+- Setup: `tools/release-key/new.sh` creates the key in a temporary `GNUPGHOME`, prints the armored private key for the `release` environment secret, writes the public key to `packaging/apt/hostashi-archive-keyring.asc` and prints the fingerprint for the installer. Kim keeps a copy of the private key in the password manager as a backup. Creating the key and the environment is Kim's step (outside effect).
+- Renewal: a scheduled workflow in the `release` environment (monthly check [E]) extends the expiry by two years once less than a year is left, and opens a PR with the updated public key. It needs Kim's approval like a release. The release workflow warns when less than 90 days are left.
+- The `hostashi` package ships the public key at `/usr/share/keyrings/hostashi-archive-keyring.asc` and the source points `Signed-By:` there, so every update also updates the key (new expiry, or a new key after a leak). The installer checks the first download against the fingerprint built into the script.
+- After a leak: revoke, create a new key, ship it in a package update signed with the old key while it is still trusted, then switch signing. Servers that did not update before the switch need the new key by hand; the docs describe this.
+- The public key is also served at `https://hostashi.com/apt/hostashi.asc` and printed with its fingerprint in the docs.
+- Release assets get keyless Sigstore signatures and attestations as above; they need no key at all.
 
 ## 4. Install and upgrade (`apt install`, `postinst`)
 
@@ -96,14 +104,14 @@ The same thing by hand, for admins who prefer plain apt:
 
 ```text
 # 1. trust the key for this repository only
-sudo curl -fsSL https://hostashi.com/apt/hostashi.asc -o /etc/apt/keyrings/hostashi.asc
+sudo curl -fsSL https://hostashi.com/apt/hostashi.asc -o /usr/share/keyrings/hostashi-archive-keyring.asc
 # 2. add the source (deb822)
 sudo tee /etc/apt/sources.list.d/hostashi.sources <<'EOF'
 Types: deb
 URIs: https://hostashi.com/apt
 Suites: stable
 Components: main
-Signed-By: /etc/apt/keyrings/hostashi.asc
+Signed-By: /usr/share/keyrings/hostashi-archive-keyring.asc
 EOF
 # 3. install, then set up
 sudo apt update && sudo apt install hostashi
@@ -178,7 +186,7 @@ The package never changes site configs by itself; the agent's reconciler re-appl
 
 1. ~~Installation~~ Decided (Kim, 2026-11-21): install script as entry point, it installs the package through apt and runs `hostashi setup`; plain `apt install hostashi` plus `hostashi setup` works too.
 2. ~~Apt repository~~ Decided (Kim, 2026-11-21): GitHub Pages of `maki-it/hostashi` on `hostashi.com`, apt under `/apt`.
-3. Signing: offline primary key with a CI subkey behind an approval (recommended)?
+3. ~~Signing~~ Decided (Kim, 2026-11-21): one key with expiry in the `release` environment, renewed by a workflow after Kim's approval, no manual `gpg`.
 4. `postinst` runs the installer's configure steps on every upgrade (recommended)?
 5. Automatic Hostashi updates off by default with `--auto-update` (recommended)?
 6. Only a `stable` channel for v1 (recommended)?
