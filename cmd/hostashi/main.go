@@ -47,6 +47,9 @@ commands:
             on the server); exit code 3 if a check failed, 0 otherwise
   site create NAME [POOL] | site delete NAME | site list
             manage site accounts through the agent (root on the server)
+  site files NAME
+            start the file manager's socket of a site and print its path
+            (ADR-0040)
   site limits NAME [memory=BYTES] [tasks=N] [cpu-weight=N] [cpu-quota=PERCENT]
             show or set the CPU, memory and process limits of a site's slice;
             with values, every one left out means no limit (ADR-0015)

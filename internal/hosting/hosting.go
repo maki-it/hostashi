@@ -30,6 +30,11 @@ type Agent interface {
 	PHPVersions(ctx context.Context) ([]string, error)
 	TLSCSR(ctx context.Context, user string, domains []string) (string, error)
 	TLSInstall(ctx context.Context, user, chain string) (agentapi.TLSCertInfo, error)
+	// Own certificates (ADR-0039).
+	TLSCustomCSR(ctx context.Context, user string, domains []string) (string, error)
+	TLSUpload(ctx context.Context, req agentapi.TLSUploadRequest) (agentapi.TLSCertInfo, error)
+	TLSInfo(ctx context.Context, user string) (agentapi.TLSInfoResponse, error)
+	TLSDelete(ctx context.Context, user string) error
 	DBCreate(ctx context.Context, site, name string) error
 	DBDelete(ctx context.Context, name string) error
 	DBUserCreate(ctx context.Context, database, user, password string) error
@@ -94,6 +99,30 @@ func (a RPCAgent) TLSCSR(ctx context.Context, user string, domains []string) (st
 // TLSInstall calls tls.install.
 func (a RPCAgent) TLSInstall(ctx context.Context, user, chain string) (agentapi.TLSCertInfo, error) {
 	return agentapi.TLSInstall.Call(ctx, a.C, agentapi.TLSInstallRequest{User: user, Chain: chain})
+}
+
+// TLSCustomCSR calls tls.csr for an own certificate.
+func (a RPCAgent) TLSCustomCSR(ctx context.Context, user string, domains []string) (string, error) {
+	res, err := agentapi.TLSCSR.Call(ctx, a.C, agentapi.TLSCSRRequest{User: user, Domains: domains, Custom: true})
+
+	return res.CSR, err
+}
+
+// TLSUpload calls tls.upload.
+func (a RPCAgent) TLSUpload(ctx context.Context, req agentapi.TLSUploadRequest) (agentapi.TLSCertInfo, error) {
+	return agentapi.TLSUpload.Call(ctx, a.C, req)
+}
+
+// TLSInfo calls tls.info.
+func (a RPCAgent) TLSInfo(ctx context.Context, user string) (agentapi.TLSInfoResponse, error) {
+	return agentapi.TLSInfo.Call(ctx, a.C, agentapi.TLSNameRequest{User: user})
+}
+
+// TLSDelete calls tls.delete.
+func (a RPCAgent) TLSDelete(ctx context.Context, user string) error {
+	_, err := agentapi.TLSDelete.Call(ctx, a.C, agentapi.TLSNameRequest{User: user})
+
+	return err
 }
 
 // Errors a caller can act on. Errors of the agent come back as
@@ -398,6 +427,10 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 		return store.Site{}, ErrState
 	}
 
+	if err := checkOwnCertDomains(site, domains); err != nil {
+		return store.Site{}, err
+	}
+
 	old, err := s.st.ReplaceSiteDomains(ctx, name, domains, s.now())
 	if errors.Is(err, store.ErrDomainTaken) {
 		return store.Site{}, fmt.Errorf("%w: %w", ErrDomainTaken, err)
@@ -421,7 +454,7 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 
 	// A certificate for the old names no longer covers the site: the site
 	// is served over HTTP until the new one is there.
-	if site.TLS {
+	if site.TLS && site.TLSSource == store.TLSLetsEncrypt {
 		s.Kick()
 	}
 

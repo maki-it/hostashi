@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { CertificateCard } from "./Certificate";
 import { CronSettings } from "./Cron";
 import { LimitSettings } from "./Limits";
 import { ObjectCacheSettings } from "./ObjectCache";
@@ -357,19 +358,17 @@ function DomainsTab({ site, onChange }: TabProps) {
         <div className="ui-stack">
           <label className="ui-check">
             <input type="checkbox" checked={site.tls.enabled} disabled={h.busy} onChange={(e) => void toggleTLS(e.target.checked)} />
-            HTTPS with a Let's Encrypt certificate
+            {site.tls.source === "custom" ? "HTTPS with the own certificate" : "HTTPS with a Let's Encrypt certificate"}
           </label>
           <label className="ui-check">
             <input type="checkbox" checked={site.tls.hsts} disabled={h.busy} onChange={(e) => void toggleHSTS(e.target.checked)} />
             HSTS: browsers use only HTTPS for this site
           </label>
           {site.tls.hsts && !site.tls.active && <p className="ui-hint">HSTS is sent only while the site is served over HTTPS.</p>}
-          {site.tls.active && site.tls.notAfter && (
-            <p className="ui-hint">The certificate is valid until {site.tls.notAfter.slice(0, 10)} and is renewed 30 days before.</p>
-          )}
           {h.result}
         </div>
       </Card>
+      <CertificateCard site={site} onChange={onChange} />
     </>
   );
 }
