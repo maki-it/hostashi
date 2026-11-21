@@ -206,6 +206,30 @@ expect_mode /run/hostashi-panel.sock "660 hostashi:www-data"
 expect_mode /var/lib/hostashi-acme "755 root:root"
 expect_mode /var/lib/hostashi-acme/.well-known/acme-challenge "2750 hostashi:www-data"
 
+step "the database tool is installed (ADR-0038)"
+[ "$(x systemctl is-active hostashi-adminer.service)" = active ] || fail "hostashi-adminer.service not running"
+x grep -qx 'HOSTASHI_DB_TOOL_PORT=8444' /etc/hostashi/hostashi.env || fail "database tool port not in the settings"
+expect_mode /usr/share/hostashi/adminer "755 root:root"
+expect_mode /usr/share/hostashi/adminer/adminer.php "644 root:root"
+expect_mode /usr/share/hostashi/adminer/index.php "644 root:root"
+expect_mode /run/hostashi-adminer/tickets "700 hostashi-adminer:hostashi-adminer"
+expect_mode /run/hostashi-adminer-fpm/fpm.sock "660 hostashi-adminer:www-data"
+[ "$(x getent passwd hostashi-adminer | cut -d: -f7)" = /usr/sbin/nologin ] || fail "hostashi-adminer has a shell"
+x sh -c 'cd /usr/share/hostashi/adminer && sha256sum --quiet -c /opt/hostashi/adminer/SHA256SUMS' || fail "installed adminer.php is not the pinned one"
+# The workers run as the tool user and reach nothing of the sites.
+for p in /etc/hostashi /var/lib/hostashi-agent /var/lib/hostashi; do
+  if x runuser -u hostashi-adminer -- ls "$p/" >/dev/null 2>&1; then fail "hostashi-adminer can list $p"; fi
+done
+if x runuser -u nobody -- test -w /run/hostashi-adminer-fpm/fpm.sock; then fail "another user can write the tool socket"; fi
+# A changed pinned file is refused, the server keeps the installed one.
+x cp -a /opt/hostashi /opt/hostashi-bad
+x sh -c 'echo "<?php // changed" >>/opt/hostashi-bad/adminer/adminer.php'
+if x /opt/hostashi-bad/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com >/dev/null 2>&1; then
+  fail "a changed adminer.php was installed"
+fi
+x sh -c 'cd /usr/share/hostashi/adminer && sha256sum --quiet -c /opt/hostashi/adminer/SHA256SUMS' || fail "a changed adminer.php replaced the installed one"
+x rm -rf /opt/hostashi-bad
+
 step "nginx runs on the agent's generation"
 [ "$(x systemctl is-active nginx.service)" = active ] || fail "nginx is not running"
 x test -L /var/lib/hostashi-agent/web/current || fail "no web generation"
@@ -1204,6 +1228,35 @@ UNIT
   [ "$(api POST /api/v1/sites '{"name":"steal","domains":["other.example.com"]}')" = 409 ] || fail "site on the panel's name: $(x cat /tmp/api.out)"
   x grep -q '"domain_reserved"' /tmp/api.out || fail "no domain_reserved: $(x cat /tmp/api.out)"
   [ "$(api DELETE /api/v1/sites/next)" = 204 ] || fail "delete site next: $(x cat /tmp/api.out)"
+
+  step "a database in the web database tool (ADR-0038)"
+  [ "$(api POST /api/v1/sites '{"name":"tooldb","domains":["tooldb.example.com"]}')" = 201 ] || fail "create site: $(x cat /tmp/api.out)"
+  [ "$(api POST /api/v1/sites/tooldb/databases '{"name":"tooldb_wp"}')" = 201 ] || fail "create database: $(x cat /tmp/api.out)"
+  for _ in $(seq 1 30); do
+    [ "$(api GET /api/v1/dbtool)" = 200 ] && x grep -q '"available":true' /tmp/api.out && break
+    sleep 2
+  done
+  x grep -q '"available":true' /tmp/api.out || fail "database tool not available: $(x cat /tmp/api.out)"
+  [ "$(api POST /api/v1/databases/tooldb_wp/tool '{"minutes":30}')" = 201 ] || fail "open tool: $(x cat /tmp/api.out)"
+  url=$(x sed -n 's/.*"url":"\([^"]*\)".*/\1/p' /tmp/api.out)
+  case "$url" in https://other.example.com:8444/?ticket=*) ;; *) fail "tool address '$url'";; esac
+  user=$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User LIKE 'hostashi\_tool\_%'")
+  [ -n "$user" ] || fail "no temporary database user"
+  p8444() { x curl -sSk --resolve other.example.com:8444:127.0.0.1 -c /tmp/tool.jar -b /tmp/tool.jar "$@"; }
+  page=$(p8444 -L "$url") || fail "tool did not answer"
+  grep -q 'Tables and views' <<<"$page" || fail "tool did not log in: $(head -c 400 <<<"$page")"
+  if grep -q 'auth\[password\]' <<<"$page"; then fail "the tool shows a login form"; fi
+  [ "$(p8444 -o /dev/null -w '%{http_code}' "$url")" = 403 ] || fail "a ticket worked twice"
+  x test -z "$(x ls -A /run/hostashi-adminer/tickets)" || fail "used ticket kept"
+  [ "$(p8444 -o /dev/null -w '%{http_code}' https://other.example.com:8444/adminer.php)" = 404 ] || fail "adminer.php reachable"
+  rp=$(p8444 -o /dev/null -D - "https://other.example.com:8444/?username=$user&db=tooldb_wp" | tr -d '\r' | grep -i '^referrer-policy:' | head -n1)
+  [ "$rp" = "referrer-policy: no-referrer" ] || fail "tool referrer policy: '$rp'"
+  if x curl -sSk -o /dev/null --resolve unknown.example.com:8444:127.0.0.1 https://unknown.example.com:8444/ 2>/dev/null; then
+    fail "tool port answered an unknown name"
+  fi
+  # Deleting the database ends the session: the user is gone.
+  [ "$(api DELETE /api/v1/sites/tooldb)" = 204 ] || fail "delete site: $(x cat /tmp/api.out)"
+  [ -z "$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User = '$user'")" ] || fail "temporary user outlived its database"
 fi
 
 step "more PHP versions from sury.org (ADR-0019)"

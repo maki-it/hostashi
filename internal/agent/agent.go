@@ -81,6 +81,10 @@ type Config struct {
 	// 0 means DefaultPanelPort, 443 shares the sites' port (ADR-0042).
 	PanelPort int
 
+	// DBToolPort is the HTTPS port of the web database tool (ADR-0038);
+	// 0 serves no tool.
+	DBToolPort int
+
 	// DB manages the sites' MariaDB databases. Run builds it from StateDir;
 	// without it db.* answer failed_precondition.
 	DB *mariadb.Manager
@@ -166,6 +170,13 @@ const DefaultPanelPort = 8443
 // PanelSocket is the panel's Unix socket that nginx proxies to. systemd
 // creates it (hostashi-panel.socket) for hostashi and www-data only.
 const PanelSocket = "/run/hostashi-panel.sock"
+
+// DBToolSocket is the FastCGI socket of the web database tool's PHP-FPM
+// (packaging/adminer), DBToolRoot its files (ADR-0038).
+const (
+	DBToolSocket = "/run/hostashi-adminer-fpm/fpm.sock"
+	DBToolRoot   = "/usr/share/hostashi/adminer"
+)
 
 // ErrNotRoot is returned when the agent is started without root.
 var ErrNotRoot = errors.New("agent must run as root")
@@ -656,6 +667,14 @@ func (h *siteOps) panelFor(p agentapi.WebPanel) (*web.Panel, error) {
 
 	panel.Cert, panel.Key = h.certs.CertPath(agentapi.PanelCert), h.certs.KeyPath(agentapi.PanelCert)
 
+	if p.DBTool {
+		if len(h.web.Driver.DBToolListen) == 0 {
+			return nil, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the database tool is not installed on this server"}
+		}
+
+		panel.DBTool = true
+	}
+
 	return panel, nil
 }
 
@@ -984,7 +1003,7 @@ func webGID(log *slog.Logger) uint32 {
 }
 
 // openWeb builds the production reconciler, or nil when nginx is missing.
-func openWeb(ctx context.Context, stateDir string, panelPort int, log *slog.Logger) *web.Reconciler {
+func openWeb(ctx context.Context, stateDir string, panelPort, dbToolPort int, log *slog.Logger) *web.Reconciler {
 	if _, err := os.Stat(webctl.Nginx); err != nil {
 		if log != nil {
 			log.WarnContext(ctx, "nginx not installed, web operations disabled", "path", webctl.Nginx)
@@ -1022,8 +1041,17 @@ func openWeb(ctx context.Context, stateDir string, panelPort int, log *slog.Logg
 	pp := strconv.Itoa(panelPort)
 
 	listen, listenTLS, listenPanel := []string{"80"}, []string{"443"}, []string{pp}
+
+	var listenTool []string
+	if dbToolPort != 0 {
+		listenTool = []string{strconv.Itoa(dbToolPort)}
+	}
+
 	if ipv6Available() {
 		listen, listenTLS, listenPanel = append(listen, "[::]:80"), append(listenTLS, "[::]:443"), append(listenPanel, "[::]:"+pp)
+		if dbToolPort != 0 {
+			listenTool = append(listenTool, "[::]:"+strconv.Itoa(dbToolPort))
+		}
 	}
 
 	// On 443 the panel shares the sites' listeners by host name (ADR-0042).
@@ -1050,6 +1078,9 @@ func openWeb(ctx context.Context, stateDir string, panelPort int, log *slog.Logg
 			ACMERoot:      ACMERoot,
 			PanelListen:   listenPanel,
 			PanelUpstream: PanelSocket,
+			DBToolListen:  listenTool,
+			DBToolSocket:  DBToolSocket,
+			DBToolRoot:    DBToolRoot,
 		},
 	}
 }
@@ -1123,7 +1154,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if cfg.Web == nil {
-		cfg.Web = openWeb(ctx, cfg.StateDir, cfg.PanelPort, cfg.Log)
+		cfg.Web = openWeb(ctx, cfg.StateDir, cfg.PanelPort, cfg.DBToolPort, cfg.Log)
 	}
 
 	if cfg.PHP == nil {

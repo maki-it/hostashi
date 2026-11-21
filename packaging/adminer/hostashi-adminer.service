@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# PHP-FPM of Hostashi's web database tool (ADR-0038). The installer writes
+# it as /etc/systemd/system/hostashi-adminer.service and replaces @VERSION@
+# with the distribution's PHP version. nginx serves the tool on its own port
+# and passes requests to the socket in /run/hostashi-adminer-fpm.
+#
+# The sandbox is the one of a site's PHP master (hostashi-php@.service):
+# the master keeps root only to drop its workers to hostashi-adminer and to
+# hand the socket to the web server group.
+
+[Unit]
+Description=Hostashi database tool (Adminer)
+Documentation=https://github.com/maki-it/hostashi
+After=network.target mariadb.service
+
+[Service]
+LimitCORE=0
+Type=notify
+ExecStart=/usr/sbin/php-fpm@VERSION@ --nodaemonize --fpm-config /etc/hostashi-adminer/php-fpm.conf
+ExecReload=/bin/kill -USR2 $MAINPID
+RuntimeDirectory=hostashi-adminer-fpm
+RuntimeDirectoryMode=0755
+Restart=on-failure
+RestartSec=2s
+
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+# The tickets come from the agent (systemd-tmpfiles creates the directory
+# at boot, packaging/adminer/hostashi-adminer.tmpfiles); the tool reads and
+# removes them. The MariaDB socket is reached through /run, read only.
+ReadWritePaths=/run/hostashi-adminer/tickets
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_CHOWN CAP_KILL
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+NoNewPrivileges=yes
+# Only the Unix socket of MariaDB: no network at all.
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+ProtectProc=invisible
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

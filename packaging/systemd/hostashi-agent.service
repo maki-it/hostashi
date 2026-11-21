@@ -20,9 +20,9 @@ Before=hostashi.service
 LimitCORE=0
 Type=simple
 # HOSTASHI_PANEL_PORT: HTTPS port of the panel's own address (ADR-0023).
-Environment=HOSTASHI_PANEL_PORT=8443
+Environment=HOSTASHI_PANEL_PORT=8443 HOSTASHI_DB_TOOL_PORT=0
 EnvironmentFile=-/etc/hostashi/hostashi.env
-ExecStart=/usr/local/bin/hostashi agent -serve-user hostashi -socket /run/hostashi/agent.sock -state-dir /var/lib/hostashi-agent "-panel-port=${HOSTASHI_PANEL_PORT}"
+ExecStart=/usr/local/bin/hostashi agent -serve-user hostashi -socket /run/hostashi/agent.sock -state-dir /var/lib/hostashi-agent "-panel-port=${HOSTASHI_PANEL_PORT}" "-db-tool-port=${HOSTASHI_DB_TOOL_PORT}"
 # root:root 0750; the agent gives the group to the serve user at start.
 RuntimeDirectory=hostashi
 RuntimeDirectoryMode=0750

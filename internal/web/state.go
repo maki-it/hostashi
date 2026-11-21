@@ -121,6 +121,9 @@ type Panel struct {
 	Domain string `json:"domain"`
 	Cert   string `json:"cert,omitempty"`
 	Key    string `json:"key,omitempty"`
+	// DBTool serves the web database tool (ADR-0038) on the driver's tool
+	// port, with the panel's certificate. Without one it is not served.
+	DBTool bool `json:"dbTool,omitempty"`
 	// Allow limits the panel's HTTPS server to these addresses and
 	// prefixes (nginx allow, then deny all); empty allows everyone. The
 	// agent sets it from the firewall's panel allowlist when the panel
