@@ -454,6 +454,15 @@ echo @file_get_contents("/etc/hostname") === false ? " jailed" : " open";
 PHP
 body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/some/pretty/url)
 [ "$body" = "php $ver user wp jailed" ] || fail "PHP site answered '$body'"
+# The file manager through the panel (ADR-0040): the panel, without root
+# and in its own user namespace, reaches the helper's socket, and the
+# helper writes as the site user.
+[ "$(api GET '/api/v1/sites/wp/files?path=htdocs')" = 200 ] || fail "file list through the panel: $(x cat /tmp/api.out)"
+x grep -q '"name":"index.php"' /tmp/api.out || fail "panel file list lacks index.php: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/wp/files/touch '{"path":"htdocs/from-panel.txt"}')" = 200 ] || fail "file create through the panel: $(x cat /tmp/api.out)"
+expect_mode /home/wp/htdocs/from-panel.txt "644 wp:wp"
+[ "$(api POST /api/v1/sites/wp/files/delete '{"paths":["htdocs/from-panel.txt"]}')" = 200 ] || fail "file delete through the panel: $(x cat /tmp/api.out)"
+x test ! -e /home/wp/htdocs/from-panel.txt || fail "file deleted through the panel is still there"
 # A PHP package update replaces the binary under the running master; the
 # dpkg hook (ADR-0033) restarts the site's unit, the package's own unit
 # stays off.
