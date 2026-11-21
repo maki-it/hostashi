@@ -103,6 +103,7 @@ export function App() {
               key={route.site.name}
               name={route.site.name}
               tab={route.site.tab}
+              role={user.role}
               onTab={(tab) => {
                 window.location.hash = formatHash({ page: "sites", site: { name: route.site!.name, tab } });
               }}

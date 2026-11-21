@@ -47,6 +47,8 @@ type Agent interface {
 	PageDelete(ctx context.Context, id string) error
 	// SnippetCheck checks custom snippets of a site (ADR-0029).
 	SnippetCheck(ctx context.Context, req agentapi.SnippetCheckRequest) (agentapi.SnippetCheckResponse, error)
+	// PageCachePurge empties the page cache of a site (ADR-0046).
+	PageCachePurge(ctx context.Context, user string) error
 }
 
 // Issuer turns a certificate signing request into a certificate chain. The
@@ -123,10 +125,17 @@ type Service struct {
 	limits LimitsAgent // nil: no resource limits (ADR-0015)
 	ssh    SSHAgent    // nil: no SSH keys (ADR-0032)
 
+	dbTool     DBToolAgent // nil: no web database tool (ADR-0038)
+	dbToolPort int
+
 	panelDomain string // ADR-0023; empty: nginx serves no panel address
 	panelServed string // panel domain of the last accepted web state; under mu
 
 	onApply func(ok bool, generation int) // nil: nobody listens
+
+	// purged holds the last page cache purge per site (ADR-0046).
+	purgeMu sync.Mutex
+	purged  map[string]time.Time
 }
 
 // New builds a Service.
@@ -547,6 +556,11 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		return err
 	}
 
+	caches, err := s.st.AllPageCaches(ctx)
+	if err != nil {
+		return err
+	}
+
 	for _, site := range sites {
 		if site.State == store.SiteActive && len(site.Domains) > 0 {
 			tls := site.TLS && s.certCovers(site, 0)
@@ -567,6 +581,10 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				ws.PHPWorkers = phpWorkers(workers, site.ID)
 				ws.PHPPrograms = site.PHPPrograms
 			}
+
+			// Sent in maintenance as well, so the agent keeps the cache's
+			// directory; it purges it when the site is served again.
+			ws.PageCache = webPageCache(caches, site, php)
 
 			// The agent leaves them out while the site is disabled or in
 			// maintenance; they are sent anyway so the state stays complete.
