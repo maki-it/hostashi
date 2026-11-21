@@ -37,6 +37,15 @@ func (o *statsOps) snapshot(ctx context.Context) agentapi.MetricsSnapshotRespons
 		}
 	}
 
+	var caches map[string]agentapi.CacheStatus
+
+	if o.h.objc != nil {
+		var err error
+		if caches, err = o.h.objc.Sites(); err != nil {
+			o.h.log.WarnContext(ctx, "metrics: read object cache state", "err", err)
+		}
+	}
+
 	all := o.h.m.List()
 	if len(all) > agentapi.MaxSites {
 		all = all[:agentapi.MaxSites]
@@ -56,6 +65,17 @@ func (o *statsOps) snapshot(ctx context.Context) agentapi.MetricsSnapshotRespons
 			}
 
 			st.PHPUp, st.PHPMemoryBytes, st.PHPMemoryKnown = v.Up, v.MemoryBytes, v.MemoryKnown
+		}
+
+		if c, ok := caches[site.User]; ok {
+			st.CacheMB = c.MemoryMB
+
+			v, err := sitestats.ReadCache(o.cgroupRoot, site.User)
+			if err != nil {
+				o.h.log.WarnContext(ctx, "metrics: read object cache cgroup", "site", site.User, "err", err)
+			}
+
+			st.CacheUp, st.CacheMemoryBytes, st.CacheMemoryKnown = v.Up, v.MemoryBytes, v.MemoryKnown
 		}
 
 		d := o.disk.Get(site.User)

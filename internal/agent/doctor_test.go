@@ -62,6 +62,8 @@ func doctorEnv(t *testing.T) DoctorEnv {
 		Hardening: doctor.Hardening{Root: root, Active: func(context.Context, string) (bool, error) {
 			return false, errors.New("not asked: there is no rules file")
 		}},
+		ValkeyBinary:  osr, // any file: Valkey counts as installed
+		ValkeyDefault: func(context.Context) (string, string, error) { return "inactive", "masked", nil },
 	}
 }
 

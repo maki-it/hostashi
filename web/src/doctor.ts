@@ -41,11 +41,13 @@ const titles: Record<string, string> = {
   "system.php": "PHP after updates",
   "system.ssh": "Admin SSH login",
   "system.sysctl": "Kernel settings",
+  "service.valkey": "Object cache (Valkey)",
   "site.home": "Home directory",
   "site.disk": "Disk use",
   "site.limits": "Resource limits",
   "site.tls": "Certificate",
   "site.php": "PHP version",
+  "site.cache": "Object cache",
 };
 
 export const checkTitle = (id: string) => titles[id] ?? id;

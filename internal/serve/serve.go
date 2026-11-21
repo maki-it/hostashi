@@ -658,6 +658,7 @@ func siteStats(c *agentrpc.Client) func(context.Context) ([]metrics.Site, error)
 				Name: s.Name, PHPVersion: s.PHPVersion, PHPUp: s.PHPUp,
 				PHPMemoryBytes: s.PHPMemoryBytes, PHPMemoryKnown: s.PHPMemoryKnown,
 				DiskUsedBytes: s.DiskUsedBytes, DiskMeasuredAt: s.DiskMeasuredAt,
+				CacheMB: s.CacheMB, CacheUp: s.CacheUp, CacheMemoryBytes: s.CacheMemoryBytes, CacheMemoryKnown: s.CacheMemoryKnown,
 			})
 		}
 

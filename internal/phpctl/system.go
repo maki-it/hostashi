@@ -87,3 +87,28 @@ func (InstallUnits) Active(ctx context.Context, version string) (bool, error) {
 
 	return false, nil
 }
+
+// ValkeyDefaultUnit is the Valkey package's own service, which the
+// installer masks (ADR-0045).
+const ValkeyDefaultUnit = "valkey-server.service"
+
+// ValkeyDefaultState returns ActiveState and UnitFileState of the
+// package's Valkey service, for hostashi doctor. Reading changes nothing.
+func ValkeyDefaultState(ctx context.Context) (active, file string, err error) {
+	out, err := output(ctx, Systemctl, "show", "--property=ActiveState", "--property=UnitFileState", ValkeyDefaultUnit)
+	if err != nil {
+		return "", "", err
+	}
+
+	for l := range strings.SplitSeq(out, "\n") {
+		k, v, _ := strings.Cut(l, "=")
+		switch k {
+		case "ActiveState":
+			active = v
+		case "UnitFileState":
+			file = v
+		}
+	}
+
+	return active, file, nil
+}
