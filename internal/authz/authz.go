@@ -107,12 +107,15 @@ var table = map[Action]Rule{
 	"pages:read":        all("pages:read"),
 
 	// What spans all sites or claims names: managers (ADR-0035, question 3).
-	"sites:create":         manage("sites:write"),
-	"limits.presets:read":  manage("limits:read"),
-	"pages:write":          manage("pages:write"),
-	"parked:read":          manage("sites:read"),
-	"parked:write":         manage("sites.maintenance:write"),
-	"sites:delete":         mgrSite("sites:delete"),
+	"sites:create":        manage("sites:write"),
+	"limits.presets:read": manage("limits:read"),
+	"pages:write":         manage("pages:write"),
+	"parked:read":         manage("sites:read"),
+	"parked:write":        manage("sites.maintenance:write"),
+	"sites:delete":        mgrSite("sites:delete"),
+	// Delete a site and park domains of it (ADR-0048); the handler also
+	// asks for parked:write.
+	"sites:park":           mgrSite("sites:delete"),
 	"sites.domains:write":  mgrSite("sites:write"),
 	"sites.tls:write":      mgrSite("sites:write"),
 	"sites.disabled:write": mgrSite("sites:write"),

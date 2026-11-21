@@ -109,6 +109,7 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/php/install":                                "php.install:read",
 	"POST /api/v1/php/install":                               "php:install",
 	"DELETE /api/v1/sites/{name}":                            "sites:delete",
+	"POST /api/v1/sites/{name}/park":                         "sites:park",
 	"GET /api/v1/panel/tls":                                  "panel.tls:read",
 	"GET /api/v1/panel/tls/certificate":                      "panel.tls:read",
 	"PUT /api/v1/panel/tls/certificate":                      "panel.tls:write",
