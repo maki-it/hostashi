@@ -20,6 +20,7 @@ Goal: make decisions and test the riskiest assumptions with throwaway code.
 | S6 CloudPanel adopt | Can a real CloudPanel instance be read in through the file system? | If fewer than 80 % of the sites are taken over cleanly, postpone the importer |
 | S7 UI prototype | Svelte vs. React, terminal and live graphs, bundle size | |
 | S8 Resource limits | Can project quota be enabled on fresh Debian 13 and Ubuntu 24.04 (idempotent, with reboot)? RAM per FPM master per site, limits for cron and services ([ADR-0015](adr/0015-per-site-resource-limits.md)) | If quota cannot be enabled safely, re-evaluate alternatives (user quota, separate volume) |
+| S9 Storage pools | Do marker file, mount check and `RequiresMountsFor` keep sites off the root disk when a volume is missing, and does quota work per volume ([ADR-0016](adr/0016-per-site-storage-location.md))? | If a missing volume cannot be detected reliably, pools stay off ([report](../spike/s9-storage-pools/REPORT.md)) |
 | S11 Brotli | Is there a maintained Brotli module for the nginx.org builds on Debian 13 and Ubuntu 24.04 ([ADR-0017](adr/0017-cloudpanel-import-and-presets.md))? | If not, gzip stays the default ([report](../spike/s11-brotli/REPORT.md)) |
 | S12 Distribution nginx | Do Debian 13 and Ubuntu 26.04 deliver Brotli over HTTP/2 and HTTP/3 with the distribution nginx ([ADR-0020](adr/0020-nginx-package-source-and-brotli.md))? | If not, re-evaluate ADR-0020 ([report](../spike/s12-nginx-distro/REPORT.md)) |
 
