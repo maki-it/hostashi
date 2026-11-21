@@ -551,6 +551,15 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			pools = append(pools, php.Pool{User: s.User, Version: s.PHP, Home: home, Workers: s.PHPWorkers, Programs: s.PHPPrograms, Settings: s.PHPSettings})
 			keep[s.User] = true
 			site.PHPSocket = h.php.Socket(s.User)
+
+			// nginx follows the PHP settings (ADR-0049).
+			var ps agentapi.PHPSettings
+			if s.PHPSettings != nil {
+				ps = *s.PHPSettings
+			}
+
+			site.BodyMax = ps.ClientMaxBodySize()
+			site.FastCGIReadTimeout = ps.FastCGIReadTimeout()
 		}
 
 		if s.PageCache != nil {
