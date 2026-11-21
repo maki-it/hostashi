@@ -8,7 +8,7 @@
 
 | Feature | Prio | Phase | Source | Note |
 |---------|------|-------|--------|------|
-| Installer (idempotent, signed) and `.deb` package | P0 | A | CP | Ubuntu 22.04/24.04, Debian 12/13, amd64 + arm64 |
+| Installer (idempotent, signed) and `.deb` package | P0 | A | CP | Debian 13 and Ubuntu 26.04, amd64 + arm64 ([ADR-0020](adr/0020-nginx-package-source-and-brotli.md)); `.deb` and apt updates in [ADR-0050](adr/0050-signed-releases-and-apt-updates.md) |
 | Initial setup with a one-time token (no default credentials) | P0 | A | NEW | Prevents "first visitor becomes admin" |
 | Manage services (start/stop/reload, status) | P0 | A | CP | Nginx, PHP-FPM, DB, Redis. systemd restarts crashed services automatically (`Restart=`), the panel shows restarts |
 | Dashboard with CPU/RAM/disk/network | P0 | A | CP | Local ring buffer, no external TSDB |
@@ -65,9 +65,9 @@
 |---------|------|-------|--------|------|
 | MariaDB/MySQL: create/delete DB and user | P0 | A | CP | Typed names, no string SQL |
 | Import/export (gzip) | P0 | A | CP | |
-| Web DB tool with SSO (Adminer or phpMyAdmin) | P1 | B | CP | Only short-lived tokens, never master credentials in the browser |
+| Web DB tool with SSO (Adminer or phpMyAdmin) | P1 | B | CP | Only short-lived tokens, never master credentials in the browser. Adminer with one-time tickets, implemented ([ADR-0038](adr/0038-web-database-tool.md)) |
 | Remote access through IP allowlist | P1 | B | CP | |
-| Multiple DB servers | P2 | 2+ | CP | |
+| Multiple DB servers | P2 | 2+ | CP | Built early for v1: external MariaDB/MySQL servers ([ADR-0041](adr/0041-external-database-servers.md)) |
 | PostgreSQL | P1 | 1 | NEW | |
 | Object cache per site (Valkey, Unix socket, ADR-0045) | P1 | B | CP | Needed for the web2 migration |
 
@@ -77,7 +77,7 @@
 |---------|------|-------|--------|------|
 | SSH keys and SFTP per site user (chroot optional) | P0 | A | CP | |
 | Classic FTP | P2 | 2+ | CP | Off by default, SFTP preferred |
-| File manager in the browser | P1 | B | CP | Operations through the agent with path confinement |
+| File manager in the browser | P1 | B | CP | Operations through the agent with path confinement. Implemented as a per-site helper unit ([ADR-0040](adr/0040-file-manager.md)) |
 | Cron jobs per site (validator instead of deny lists) | P0 | A | CP | systemd timers as an option. Pause jobs individually and run them immediately |
 | View/tail logs (access, error, PHP, app) | P0 | A | CP | Logrotate per site |
 | Web terminal | P2 | 2+ | NEW | Only with strong auth and audit |

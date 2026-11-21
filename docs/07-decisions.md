@@ -128,9 +128,9 @@ Original entry: Restic as the engine (encryption, deduplication, many backends, 
 
 ## ADR-0009 Target platforms and packaging
 
-Start: **Debian 13 and Ubuntu 26.04** (Ubuntu 24.04 is dropped for v1 because of ADR-0020; previously: Ubuntu 24.04 and Debian 13, plus 22.04/Debian 12), **amd64 and arm64**. Add Ubuntu 26.04 once the dependencies are stable. No EOL systems (CloudPanel still supports Debian 11, which we deliberately do not take over). Distribution through a signed APT repository and `.deb`.
+Start: **Debian 13 and Ubuntu 26.04** (Ubuntu 24.04 is dropped for v1 because of ADR-0020; previously: Ubuntu 24.04 and Debian 13, plus 22.04/Debian 12), **amd64 and arm64**. No EOL systems (CloudPanel still supports Debian 11, which we deliberately do not take over). Distribution through a signed APT repository and `.deb`.
 
-**Fresh servers only (Kim, 2026-11-17):** Hostashi is always set up on a freshly installed server, never added to grown systems. Recommended image: **Debian 13**, second supported option: **Ubuntu 24.04 LTS**. Ubuntu 26.04 LTS is added once the dependencies and spikes S5 and S8 run on it. The initial setup should be as simple and automated as possible, for example a one-liner or a cloud-init script when ordering the server (spike S5).
+**Fresh servers only (Kim, 2026-11-17):** Hostashi is always set up on a freshly installed server, never added to grown systems. Recommended image: **Debian 13**, second supported option: **Ubuntu 26.04 LTS** (ADR-0020; Ubuntu 24.04 was dropped for v1). The initial setup should be as simple and automated as possible, for example a one-liner or a cloud-init script when ordering the server (spike S5).
 
 Rationale (general knowledge, unverified): Debian is more conservative, has fewer breaks between package versions and no additional services such as snap or vendor advertising notices. That fits a server that should run unobtrusively for a long time. Ubuntu LTS is stable too and widely used by providers. The only argument against Ubuntu 26.04 as the first choice is that it is new. Multiple PHP versions need an additional package repository on both systems (to be checked). Open: quota modules on the kernels of both systems, checked in spike S8 (see [ADR-0015](adr/0015-per-site-resource-limits.md)).
 
