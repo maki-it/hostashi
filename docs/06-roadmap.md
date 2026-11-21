@@ -63,11 +63,11 @@ Goal: trustworthy enough for production servers.
 - Adopt mode and CloudPanel importer
 - PostgreSQL, staging/cloning, zero-downtime deployments
 - State as YAML (export/apply), OIDC SSO, Prometheus endpoint, Fail2ban/CrowdSec
-- **External pentest** and fixes, automated restore tests
+- **Own security review** and fixes (code review of every trust boundary, gosec, govulncheck, semgrep, isolation test, IDOR matrix), automated restore tests. An external pentest stays a goal for later; there is no budget for it before 1.0 (Kim, 2026-11-21)
 - Complete documentation (EN), UI in EN/DE, migration guides
 - Signed releases, SBOM, support and update policy
 
-**Acceptance:** no open critical or high findings from the pentest, upgrade tests from beta to 1.0, release checklist complete.
+**Acceptance:** no open critical or high findings from the own security review, upgrade tests from beta to 1.0, release checklist complete.
 
 ## Phase 4 and later (not planned, options only)
 
@@ -89,7 +89,7 @@ Multi-server (controller + agents), resellers and packages, mail integration (Ma
 
 | Risk | Likelihood | Impact | Countermeasure |
 |------|------------|--------|----------------|
-| A security vulnerability after release damages trust permanently | medium | high | Privilege separation, external pentest before 1.0, disclosure process, honest "alpha/beta" labeling |
+| A security vulnerability after release damages trust permanently | medium | high | Privilege separation, own security review before 1.0 (external pentest later), disclosure process, honest "alpha/beta" labeling |
 | Maintenance effort for OS/PHP/DB versions eats up the team | high | high | Keep the matrix small, templates instead of code, automation, define support periods |
 | Dependency on third-party repositories (sury.org, nginx.org, MariaDB) | medium | medium | Pin keys, mirror option, documentation of the fallback source |
 | Legal problems from taking over CloudPanel content | low with discipline | high | Clean-room, review rule "copy nothing from reference repositories", ADR-0001 |
