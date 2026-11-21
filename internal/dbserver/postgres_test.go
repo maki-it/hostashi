@@ -271,14 +271,58 @@ func TestPGJobUser(t *testing.T) {
 	}
 }
 
-func TestPGNotYet(t *testing.T) {
-	c, _, _ := newFakePG()
+func TestPGToolUser(t *testing.T) {
+	const (
+		user = "hostashi_tool_0123456789abcdef"
+		pw   = "Abcdefghijklmnopqrstuvwxyz012345"
+	)
+
+	c, f, _ := newFakePG()
 	ctx := t.Context()
 
-	for _, err := range []error{c.CreateToolUser(ctx, "shop", "u", "p"), c.DropToolUser(ctx, "u")} {
-		if !errors.Is(err, ErrUnsupported) {
-			t.Errorf("got %v", err)
+	if err := c.CreateToolUser(ctx, "shop", user, pw); err != nil {
+		t.Fatal(err)
+	}
+
+	all := strings.Join(f.stmts, "\n")
+	if strings.Contains(all, pw) || !strings.Contains(f.stmts[0], "LOGIN PASSWORD 'SCRAM-SHA-256$4096:") ||
+		!strings.Contains(f.stmts[0], " CONNECTION LIMIT 2 IN ROLE \""+OwnerRole("shop")+`"`) ||
+		f.stmts[2] != `ALTER ROLE "`+user+`" SET role = '`+OwnerRole("shop")+`'` {
+		t.Fatalf("statements:\n%s", all)
+	}
+
+	c, f, in := newFakePG()
+	if err := c.DropToolUser(ctx, "shop", user); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(f.stmts) != 3 || f.stmts[0] != `ALTER ROLE "`+user+`" NOLOGIN` || f.stmts[2] != `DROP ROLE IF EXISTS "`+user+`"` ||
+		!strings.Contains(strings.Join(in.stmts, "\n"), "REASSIGN OWNED BY \""+user+"\" TO") {
+		t.Fatalf("statements: %v, %v", f.stmts, in.stmts)
+	}
+
+	// Only the tool's own users, its own passwords and valid databases;
+	// nothing reaches the server.
+	c, f, _ = newFakePG()
+
+	for name, err := range map[string]error{
+		"site user":   c.CreateToolUser(ctx, "shop", "shop_user", pw),
+		"job user":    c.CreateToolUser(ctx, "shop", "hostashi_job_0123456789abcdef", pw),
+		"short pw":    c.CreateToolUser(ctx, "shop", user, "Abcdefghijklmnop1234"),
+		"no pw":       c.CreateToolUser(ctx, "shop", user, ""),
+		"quote pw":    c.CreateToolUser(ctx, "shop", user, "Abcdefghijklmnopqrstuvwxyz01234'"),
+		"reserved db": c.CreateToolUser(ctx, "postgres", user, pw),
+		"pg_ db":      c.CreateToolUser(ctx, "pg_shop", user, pw),
+		"drop site":   c.DropToolUser(ctx, "shop", "shop_user"),
+		"drop db":     c.DropToolUser(ctx, "template1", user),
+	} {
+		if !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
 		}
+	}
+
+	if len(f.stmts) != 0 {
+		t.Fatalf("statements sent: %v", f.stmts)
 	}
 }
 

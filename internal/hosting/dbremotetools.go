@@ -75,14 +75,14 @@ func (s *Service) openRemoteTool(ctx context.Context, d store.Database, minutes 
 	// Recorded before the agent sees the password, so the user never
 	// outlives the panel's knowledge of it.
 	if err := s.st.AddDBRemoteTool(bg, store.DBRemoteTool{User: user, Database: d.Name, ServerID: srv.ID, Expires: ends}); err != nil {
-		s.dropToolUser(bg, srv, user)
+		s.dropToolUser(bg, srv, d.Name, user)
 
 		return agentapi.DBToolOpenResponse{}, err
 	}
 
 	res, err := s.dbTool.DBToolRemote(ctx, req)
 	if err != nil {
-		if s.dropToolUser(bg, srv, user) {
+		if s.dropToolUser(bg, srv, d.Name, user) {
 			_ = s.st.DeleteDBRemoteTool(bg, user)
 		}
 
@@ -216,7 +216,7 @@ func (s *Service) FinishDBRemoteTools(ctx context.Context) {
 			continue
 		}
 
-		if err == nil && !s.dropToolUser(ctx, srv, t.User) {
+		if err == nil && !s.dropToolUser(ctx, srv, t.Database, t.User) {
 			continue
 		}
 
@@ -241,7 +241,7 @@ func (s *Service) endRemoteTools(ctx context.Context, srv store.DBServer, databa
 			continue
 		}
 
-		if err := s.remote(ctx, srv, func(c RemoteDB) error { return c.DropToolUser(ctx, t.User) }); err != nil {
+		if err := s.remote(ctx, srv, func(c RemoteDB) error { return c.DropToolUser(ctx, t.Database, t.User) }); err != nil {
 			return err
 		}
 
@@ -254,11 +254,11 @@ func (s *Service) endRemoteTools(ctx context.Context, srv store.DBServer, databa
 }
 
 // dropToolUser drops a session's temporary user and logs a failure.
-func (s *Service) dropToolUser(ctx context.Context, srv store.DBServer, user string) bool {
+func (s *Service) dropToolUser(ctx context.Context, srv store.DBServer, database, user string) bool {
 	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()
 
-	if err := s.remote(cctx, srv, func(c RemoteDB) error { return c.DropToolUser(cctx, user) }); err != nil {
+	if err := s.remote(cctx, srv, func(c RemoteDB) error { return c.DropToolUser(cctx, database, user) }); err != nil {
 		s.log.ErrorContext(ctx, "drop the temporary user of a database tool session", "server", srv.Name, "user", user, "err", err)
 
 		return false

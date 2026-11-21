@@ -52,7 +52,7 @@ type RemoteDB interface {
 	DropJobUser(ctx context.Context, database, user string) error
 	// The temporary user of a web database tool session.
 	CreateToolUser(ctx context.Context, database, user, password string) error
-	DropToolUser(ctx context.Context, user string) error
+	DropToolUser(ctx context.Context, database, user string) error
 }
 
 // DBServers reaches external database servers. The panel process does

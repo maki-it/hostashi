@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/maki-it/hostashi/internal/agentapi"
 )
 
 // pgServerConfig reads a real PostgreSQL server from the environment. CI
@@ -284,6 +286,132 @@ func TestPGServerUntrustedCertificate(t *testing.T) {
 
 	if _, err := ProbePostgres(t.Context(), open(t, cfg)); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// TestPGServerToolUser checks the temporary user of a web database tool
+// session: it works in its database as the owner role, reaches no other
+// database, has at most DBToolMaxConnections sessions, and dropping it ends
+// them and keeps what it made.
+func TestPGServerToolUser(t *testing.T) {
+	cfg := pgServerConfig(t)
+	ctx := t.Context()
+	c := NewPGClient(open(t, cfg), cfg)
+
+	const (
+		user = "hostashi_tool_0123456789abcdef"
+		pw   = "Abcdefghijklmnopqrstuvwxyz012345"
+	)
+
+	for _, db := range []string{"tool_db", "tool_other"} {
+		_ = c.DropToolUser(ctx, db, user)
+		_ = c.DropDatabase(ctx, db)
+
+		if err := c.CreateDatabase(ctx, db); err != nil {
+			t.Fatal(err)
+		}
+
+		t.Cleanup(func() {
+			ctx := context.WithoutCancel(ctx)
+			_ = c.DropToolUser(ctx, db, user)
+			_ = c.DropDatabase(ctx, db)
+		})
+	}
+
+	if err := c.CreateToolUser(ctx, "tool_db", user, pw); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.CreateToolUser(ctx, "tool_db", user, pw); !errors.Is(err, ErrExists) {
+		t.Fatalf("second create: %v", err)
+	}
+
+	tool := cfg
+	tool.AdminUser, tool.AdminPassword = user, pw
+
+	// One connection per pool, so each one counts.
+	conn := func(database string) (*sql.DB, error) {
+		db, err := openPostgres(tool, database)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Cleanup(func() { _ = db.Close() })
+		db.SetMaxOpenConns(1)
+
+		return db, db.PingContext(ctx)
+	}
+
+	first, err := conn("tool_db")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := first.ExecContext(ctx, "CREATE TABLE shared (a int); RESET ROLE; CREATE TABLE mine (a int)"); err != nil {
+		t.Fatalf("tool user cannot use its database: %v", err)
+	}
+
+	if _, err := conn("tool_other"); !errors.Is(classifyPG("connect", err), ErrAccess) {
+		t.Fatalf("tool user reaches another database: %v", err)
+	}
+
+	if _, err := conn("tool_db"); err != nil {
+		t.Fatalf("second session: %v", err)
+	}
+
+	if _, err := conn("tool_db"); err == nil {
+		t.Fatalf("more than %d sessions", agentapi.DBToolMaxConnections)
+	}
+
+	if err := c.DropToolUser(ctx, "tool_db", user); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := first.ExecContext(ctx, "SELECT 1"); err == nil {
+		t.Fatal("session of the dropped tool user still works")
+	}
+
+	if err := c.DropToolUser(ctx, "tool_db", user); err != nil {
+		t.Fatalf("second drop: %v", err)
+	}
+
+	site := "tool_db_u"
+	_ = c.DropUser(ctx, "tool_db", site)
+
+	if err := c.CreateUser(ctx, "tool_db", site, pw[:20]); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = c.DropUser(context.WithoutCancel(ctx), "tool_db", site) })
+
+	su := cfg
+	su.AdminUser, su.AdminPassword = site, pw[:20]
+
+	rows, err := openPG(t, su, "tool_db").QueryContext(ctx,
+		"SELECT tablename, tableowner FROM pg_tables WHERE tablename IN ('shared', 'mine') ORDER BY 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer rows.Close()
+
+	n := 0
+
+	for rows.Next() {
+		var name, owner string
+		if err := rows.Scan(&name, &owner); err != nil {
+			t.Fatal(err)
+		}
+
+		if owner != OwnerRole("tool_db") {
+			t.Errorf("%s belongs to %s", name, owner)
+		}
+
+		n++
+	}
+
+	if err := rows.Err(); err != nil || n != 2 {
+		t.Fatalf("tables %d, %v", n, err)
 	}
 }
 
