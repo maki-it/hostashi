@@ -23,6 +23,11 @@ type PoolInfo struct {
 	// "counting" (usage only, limits not enforced) or "enforced". Empty when
 	// the volume cannot be checked, for example because it is not mounted.
 	Quota string `json:"quota,omitempty"`
+	// Available: the volume is mounted and carries the pool's marker. Only
+	// then are the sizes below set.
+	Available  bool   `json:"available"`
+	FreeBytes  uint64 `json:"freeBytes,omitempty"`
+	TotalBytes uint64 `json:"totalBytes,omitempty"`
 }
 
 // PoolAddRequest registers a mounted volume as a pool. It carries a path,

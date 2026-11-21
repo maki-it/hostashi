@@ -22,7 +22,11 @@
 //     the user the tool runs as, in a directory the caller names (the job's
 //     private temp directory), and removed after the run. It is never in
 //     argv or the environment.
-//   - The process never runs as root.
+//   - The process never runs as root, with one exception: DumpCommand
+//     gives hostashi-backup the pg_dump command that restic starts, as
+//     root inside the backup unit's sandbox, like mariadb-dump there
+//     (ADR-0051). That sandbox keeps only CAP_DAC_READ_SEARCH and no
+//     capability to change users.
 //
 // psql runs SQL files for imports. It cannot switch off its own
 // meta-commands (\!, \o |cmd, \copy ... program); the guard is that it runs
@@ -105,6 +109,49 @@ func Dump(ctx context.Context, r Run, out io.Writer) error {
 // and privileges, so it loads into a database of another server or name.
 func DumpSQL(ctx context.Context, r Run, out io.Writer) error {
 	return run(ctx, r, toolDump, []string{"--format=plain", "--no-owner", "--no-privileges", "--no-password"}, nil, out)
+}
+
+// DumpCommand is the pg_dump command, its environment and a cleanup for a
+// dump in pg_dump's custom format that another program starts: restic's
+// --stdin-from-command in hostashi-backup, which then fails the snapshot
+// if pg_dump fails. The session switches to role (the database's owner
+// role) after the login. UID and GID may be 0 here; the passfile is
+// written in TempDir and removed by cleanup.
+func DumpCommand(r Run, role string) (argv, env []string, cleanup func(), err error) {
+	if err := agentapi.ValidateDBName(r.Database); err != nil {
+		return nil, nil, nil, fmt.Errorf("%w: %w", ErrFailed, err)
+	}
+
+	if !roleRe.MatchString(role) {
+		return nil, nil, nil, fmt.Errorf("%w: invalid role", ErrFailed)
+	}
+
+	env, err = environment(r)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	bin, err := Binary(r.Root, r.Major, toolDump)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	pass, err := writePassfile(r)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// PATH, LANG and HOME come from the starting program.
+	pg := env[:0]
+
+	for _, e := range env {
+		if strings.HasPrefix(e, "PG") {
+			pg = append(pg, e)
+		}
+	}
+
+	return []string{bin, "--format=custom", "--no-password", "--role=" + role}, append(pg, "PGPASSFILE="+pass),
+		func() { _ = os.Remove(pass) }, nil
 }
 
 // Restore loads a custom-format dump from in. Objects are created as

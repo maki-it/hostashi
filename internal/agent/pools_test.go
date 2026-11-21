@@ -29,7 +29,36 @@ func TestPoolListThroughServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(r.Pools) != 1 || r.Pools[0] != (agentapi.PoolInfo{Name: "default", Path: pool, Sites: 1, Quota: "enforced"}) {
+	if len(r.Pools) != 1 {
+		t.Fatalf("pools %+v", r.Pools)
+	}
+
+	got := r.Pools[0]
+	if got.TotalBytes == 0 || got.FreeBytes > got.TotalBytes {
+		t.Errorf("sizes %+v", got)
+	}
+
+	got.FreeBytes, got.TotalBytes = 0, 0
+	if got != (agentapi.PoolInfo{Name: "default", Path: pool, Sites: 1, Quota: "enforced", Available: true}) {
+		t.Fatalf("pools %+v", r.Pools)
+	}
+}
+
+// TestPoolListMissingVolume: no state and no sizes, which would be the root
+// disk's.
+func TestPoolListMissingVolume(t *testing.T) {
+	c, pool := startSiteAgentCfg(t, Config{Quota: newFakeQuota(true)})
+
+	if err := os.Remove(pool); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := agentapi.PoolList.Call(context.Background(), c, agentapi.PoolListRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(r.Pools) != 1 || r.Pools[0] != (agentapi.PoolInfo{Name: "default", Path: pool}) {
 		t.Fatalf("pools %+v", r.Pools)
 	}
 }

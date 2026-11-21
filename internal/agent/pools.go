@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/sites"
@@ -42,7 +44,7 @@ func (h *siteOps) registerPools(s *agentrpc.Server, adminUID uint32) {
 			h.enforceQuota(p)
 		}
 
-		return agentapi.PoolInfo{Name: p.Name, Path: p.Path, Quota: h.quotaState(p)}, nil
+		return h.poolInfo(p, 0), nil
 	})
 
 	agentrpc.Handle(s, agentapi.PoolRemove, func(ctx context.Context, c agentrpc.Caller, req agentapi.PoolRemoveRequest) (agentapi.PoolRemoveResponse, error) {
@@ -71,10 +73,30 @@ func (h *siteOps) poolInfos() []agentapi.PoolInfo {
 
 	out := []agentapi.PoolInfo{}
 	for _, p := range h.m.Pools() {
-		out = append(out, agentapi.PoolInfo{Name: p.Name, Path: p.Path, Sites: count[p.Name], Quota: h.quotaState(p)})
+		out = append(out, h.poolInfo(p, count[p.Name]))
 	}
 
 	return out
+}
+
+// poolInfo describes a pool; state, quota and sizes only when its volume
+// is there, so a missing volume never shows the root disk's free space.
+func (h *siteOps) poolInfo(p sites.Pool, n int) agentapi.PoolInfo {
+	info := agentapi.PoolInfo{Name: p.Name, Path: p.Path, Sites: n}
+	if h.m.CheckPool(p.Name) != nil {
+		return info
+	}
+
+	info.Available = true
+	info.Quota = h.quotaState(p)
+
+	var st unix.Statfs_t
+	if err := unix.Statfs(p.Path, &st); err == nil {
+		bsize := uint64(st.Bsize) //nolint:gosec // the block size is positive
+		info.FreeBytes, info.TotalBytes = st.Bavail*bsize, st.Blocks*bsize
+	}
+
+	return info
 }
 
 // refreshUnits writes the site units again so they hide the changed set of

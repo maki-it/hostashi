@@ -126,6 +126,9 @@ type Deps struct {
 	// Firewall is the panel's part of the firewall (ADR-0034); nil
 	// disables its routes. Needs Auth and Settings.
 	Firewall Firewall
+	// Pools lists the storage pools (ADR-0016); nil disables its route.
+	// Needs Auth.
+	Pools Pools
 	// PHP installs more PHP versions (ADR-0036); nil disables its routes.
 	// Needs Auth and Settings.
 	PHP PHPInstaller
@@ -143,6 +146,10 @@ type Deps struct {
 	// Files starts the sites' file manager sockets (ADR-0040); nil
 	// disables the file routes. Needs Auth, Sites and Settings.
 	Files FilesOpener
+
+	// Logs reads the sites' logs and sets their retention (ADR-0053); nil
+	// disables the log routes. Needs Auth and Settings.
+	Logs SiteLogs
 
 	// NotifyPrefs keeps the operations email switches; nil disables their
 	// routes. Needs Auth and Mail.
@@ -240,6 +247,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			}
 		}
 
+		if deps.Logs != nil && deps.Settings != nil {
+			registerLogs(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Logs, deps.Settings, log)
+		}
+
 		if deps.Backups != nil {
 			var dbs SiteDatabases
 			if deps.Sites != nil {
@@ -285,6 +296,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			registerNotifications(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Mail, deps.NotifyPrefs)
 		}
 
+		if deps.Pools != nil {
+			registerPools(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Pools, log)
+		}
+
 		if deps.Doctor != nil {
 			var panel []PanelChecks
 			if deps.Sites != nil {
@@ -320,7 +335,9 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 		h = deps.Metrics.Instrument(h)
 	}
 
-	return withRequestID(h), mux.patterns
+	// Both wrappers copy the request, so they stay outside Instrument, which
+	// reads the route pattern the mux sets on the request it sees.
+	return withRequestID(withAuditIP(h)), mux.patterns
 }
 
 // RequestIDHeader names the response header with the request's ID.
@@ -335,6 +352,14 @@ func withRequestID(next http.Handler) http.Handler {
 		id := reqid.New()
 		w.Header().Set(RequestIDHeader, id)
 		next.ServeHTTP(w, r.WithContext(reqid.With(r.Context(), id)))
+	})
+}
+
+// withAuditIP puts the client's address into the request's context, so
+// that every audit entry written while serving it records the address.
+func withAuditIP(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(store.WithClientIP(r.Context(), clientIP(r))))
 	})
 }
 
@@ -471,6 +496,7 @@ func Run(ctx context.Context, cfg Config) error {
 		Metrics:     m,
 		Settings:    st,
 		Doctor:      RPCDoctor(client),
+		Pools:       RPCPools(client),
 		Firewall:    RPCFirewall{C: client},
 		PHP:         RPCPHPInstaller{C: client},
 		PGClient:    RPCPGClient{C: client},
@@ -481,7 +507,10 @@ func Run(ctx context.Context, cfg Config) error {
 		MailSend:    func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
 		Files:       RPCFilesOpener(client),
 		AuditLog:    st,
+		Logs:        RPCSiteLogs{C: client},
 	}
+
+	go SyncLogRetention(ctx, deps.Logs, st, 30, 10*time.Second, cfg.Log)
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
 	deps.CloudPanel.Connect(siteCreator(deps.Sites, cfg.Log), RPCCloudPanelImports{C: client})

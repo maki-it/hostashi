@@ -210,6 +210,47 @@ describe("Sites", () => {
     expect(screen.getByLabelText(/^Name/)).toHaveValue("");
   });
 
+  it("puts a site on a second storage pool", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/pools": {
+        body: {
+          pools: [
+            { name: "default", path: "/home", sites: 3, available: true, quota: "enforced", freeBytes: 20 * 2 ** 30, totalBytes: 38 * 2 ** 30 },
+            { name: "vol1", path: "/srv/vol1", sites: 0, available: true, quota: "off", freeBytes: 190 * 2 ** 30, totalBytes: 200 * 2 ** 30 },
+            { name: "vol2", path: "/srv/vol2", sites: 1, available: false },
+          ],
+        },
+      },
+      "POST /api/v1/sites": { status: 201, body: { ...blog, pool: "vol1", tls: noTLS } },
+    });
+    render(<ListHarness initial="new=1" />);
+    const select = await screen.findByLabelText(/^Storage pool/);
+    expect(select).toHaveValue("default");
+    expect(screen.getByRole("option", { name: "default (/home), 20 GiB free" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "vol2 (/srv/vol2), not available" })).toBeDisabled();
+    await user.selectOptions(select, "vol1");
+    expect(screen.getByText(/no disk quota: sites on it get no disk limit/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/^Name/), "blog");
+    await user.type(screen.getByLabelText(/^Domains/), "blog.example.com");
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    expect(await screen.findByText("Site blog created.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ name: "blog", pool: "vol1" });
+  });
+
+  it("shows no pool choice with only the default pool", async () => {
+    mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/pools": { body: { pools: [{ name: "default", path: "/home", sites: 0, available: true, quota: "enforced" }] } },
+    });
+    render(<ListHarness initial="new=1" />);
+    await waitFor(() => expect(screen.getByLabelText("PHP")).toHaveValue("8.4"));
+    expect(screen.queryByLabelText(/^Storage pool/)).not.toBeInTheDocument();
+  });
+
   it("warns about legacy PHP and sends no HSTS without HTTPS", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({
@@ -304,6 +345,7 @@ describe("SitePage", () => {
       "Cron",
       "SSH & SFTP",
       "Limits",
+      "Logs",
       "nginx",
     ]);
     await user.click(within(tabs).getByRole("tab", { name: "PHP" }));

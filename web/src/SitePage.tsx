@@ -6,6 +6,7 @@ import { siteCertBase } from "./certs";
 import { CronSettings } from "./Cron";
 import { FileManager } from "./Files";
 import { LimitSettings } from "./Limits";
+import { SiteLogs } from "./Logs";
 import { ObjectCacheSettings } from "./ObjectCache";
 import { allowIpsProblem, clientIp, listPages, pageMessage, parseAllowIps, setMaintenance, type StatusPage } from "./pages";
 import { formatHash, type SiteTab } from "./routes";
@@ -45,6 +46,7 @@ const tabs: { id: SiteTab; label: string }[] = [
   { id: "cron", label: "Cron" },
   { id: "ssh", label: "SSH & SFTP" },
   { id: "limits", label: "Limits" },
+  { id: "logs", label: "Logs" },
   { id: "nginx", label: "nginx" },
 ];
 
@@ -104,6 +106,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
         {active === "overview" && role === "admin" && <Services site={site.name} />}
         {active === "domains" && <DomainsTab site={site} onChange={load} />}
         {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
+        {active === "logs" && <SiteLogs site={site} admin={role === "admin"} />}
         {active === "php" && (
           <>
             <PHPTab site={site} php={php} onChange={load} />

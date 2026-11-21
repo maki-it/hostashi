@@ -35,6 +35,8 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/dbserver"
+	"github.com/maki-it/hostashi/internal/pgclient"
+	"github.com/maki-it/hostashi/internal/pgctl"
 )
 
 // Fixed paths (Debian 13 and Ubuntu 26.04 have merged /usr).
@@ -91,6 +93,8 @@ type Repo struct {
 	// TempDir holds the option files of external dumps; "" is
 	// os.TempDir(), which is private to the backup unit (PrivateTmp).
 	TempDir string
+	// PGRoot is prefixed to /usr/lib/postgresql (tests); "" is /.
+	PGRoot string
 }
 
 // Summary is the result of one backup.
@@ -290,6 +294,10 @@ func (r *Repo) BackupRemoteDatabase(ctx context.Context, tags []string, database
 
 	defer os.RemoveAll(dir)
 
+	if dbserver.IsPostgres(cfg.Engine) {
+		return r.backupPostgres(ctx, tags, database, cfg, dir)
+	}
+
 	optFile, err := WriteDumpOptions(dir, cfg)
 	if err != nil {
 		return Summary{}, err
@@ -303,6 +311,61 @@ func (r *Repo) BackupRemoteDatabase(ctx context.Context, tags []string, database
 
 	return r.backup(ctx, args)
 }
+
+// backupPostgres stores a dump of a database on an external PostgreSQL
+// server (ADR-0051) as <database>.dump in pg_dump's custom format. restic
+// starts pg_dump of the newest installed client (pgctl.DumpCommand) with
+// the admin login switched to the database's owner role; the connection
+// and the passfile's path reach pg_dump through restic's environment.
+func (r *Repo) backupPostgres(ctx context.Context, tags []string, database string, cfg dbserver.Config, dir string) (Summary, error) {
+	majors := (&pgclient.Manager{Root: r.PGRoot}).Installed()
+	if len(majors) == 0 {
+		return Summary{}, ErrNoPGClient
+	}
+
+	run := pgctl.Run{
+		Major: majors[len(majors)-1], Database: database, User: cfg.AdminUser, Password: cfg.AdminPassword,
+		Host: cfg.Host, Port: cfg.Port, TLS: string(cfg.TLS), TempDir: dir, Root: r.PGRoot,
+	}
+
+	if cfg.TLS == dbserver.TLSVerifyCA {
+		run.CAFile = filepath.Join(dir, "ca.pem")
+
+		if err := os.WriteFile(run.CAFile, []byte(cfg.CAPEM), 0o600); err != nil {
+			return Summary{}, fmt.Errorf("resticctl: %w", err)
+		}
+	}
+
+	argv, env, cleanup, err := pgctl.DumpCommand(run, dbserver.OwnerRole(database))
+	if err != nil {
+		return Summary{}, err
+	}
+	defer cleanup()
+
+	args := []string{
+		"backup", "--quiet", "--tag", strings.Join(tags, ","),
+		"--stdin-filename", database + PGDumpSuffix, "--stdin-from-command", "--",
+	}
+	args = append(args, argv...)
+
+	out, err := r.execEnv(ctx, env, args...)
+	if err != nil && !errors.Is(err, ErrPartial) {
+		return Summary{}, err
+	}
+
+	sum, perr := parseSummary(out)
+	if perr != nil {
+		return Summary{}, perr
+	}
+
+	return sum, err
+}
+
+// PGDumpSuffix ends the file name of a PostgreSQL database in a snapshot.
+const PGDumpSuffix = ".dump"
+
+// ErrNoPGClient: no PostgreSQL client is installed for a dump.
+var ErrNoPGClient = errors.New("resticctl: no PostgreSQL client is installed")
 
 // WriteDumpOptions writes the option file, and the CA for verify-ca, into
 // dir and returns the option file's path.
@@ -469,7 +532,7 @@ func (r *Repo) Dump(ctx context.Context, id string, w io.Writer) error {
 		return fmt.Errorf("%w: snapshot id", ErrInvalid)
 	}
 
-	_, err := r.exec(ctx, w, "dump", "--archive", "tar", id, "/")
+	_, err := r.exec(ctx, w, nil, "dump", "--archive", "tar", id, "/")
 
 	return err
 }
@@ -477,12 +540,20 @@ func (r *Repo) Dump(ctx context.Context, id string, w io.Writer) error {
 func (r *Repo) run(ctx context.Context, args ...string) ([]byte, error) {
 	var stdout bytes.Buffer
 
-	return r.exec(ctx, &limitedWriter{buf: &stdout, max: maxOutput}, args...)
+	return r.exec(ctx, &limitedWriter{buf: &stdout, max: maxOutput}, nil, args...)
+}
+
+// execEnv is run with more environment variables for restic, which hands
+// its environment to a --stdin-from-command program.
+func (r *Repo) execEnv(ctx context.Context, env []string, args ...string) ([]byte, error) {
+	var stdout bytes.Buffer
+
+	return r.exec(ctx, &limitedWriter{buf: &stdout, max: maxOutput}, env, args...)
 }
 
 // exec runs restic with stdout going to out. The returned bytes are
 // stdout when out is the buffer of run, for the exit message and callers.
-func (r *Repo) exec(ctx context.Context, out io.Writer, args ...string) ([]byte, error) {
+func (r *Repo) exec(ctx context.Context, out io.Writer, extraEnv []string, args ...string) ([]byte, error) {
 	if err := r.validate(); err != nil {
 		return nil, err
 	}
@@ -528,6 +599,7 @@ func (r *Repo) exec(ctx context.Context, out io.Writer, args ...string) ([]byte,
 		"RESTIC_CACHE_DIR=" + r.CacheDir,
 		"RESTIC_PROGRESS_FPS=0.016",
 	}
+	cmd.Env = append(cmd.Env, extraEnv...)
 	cmd.Dir = "/"
 	cmd.Stdout = out
 	cmd.Stderr = &limitedWriter{buf: &stderr, max: 16 << 10}

@@ -9,6 +9,10 @@ import {
   databaseMessage,
   deleteDatabase,
   defaultDumpPath,
+  dumpFormats,
+  formatOf,
+  withFormat,
+  type DumpFormat,
   deleteUser,
   getDumpJob,
   isPostgres,
@@ -228,7 +232,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
         {db && toolMinutes && <ToolSessions db={db.name} reload={toolClosed} />}
         {error && <Notice tone="err" title={error} />}
         {db ? (
-          <DatabaseView key={db.name} db={db} host={hostOf(db.server)} onSecret={setSecret} onChange={load} onDeleted={() => set({ db: "" })} />
+          <DatabaseView key={db.name} db={db} host={hostOf(db.server)} postgres={isPostgres(serverOf(db.name))} onSecret={setSecret} onChange={load} onDeleted={() => set({ db: "" })} />
         ) : (
           <Notice tone="warn" title={`There is no database named ${one}.`} />
         )}
@@ -491,12 +495,14 @@ function CreateCard({
 function DatabaseView({
   db,
   host,
+  postgres,
   onSecret,
   onChange,
   onDeleted,
 }: {
   db: Database;
   host: string;
+  postgres: boolean;
   onSecret: (c: Credentials) => void;
   onChange: () => Promise<void>;
   onDeleted: () => void;
@@ -533,7 +539,7 @@ function DatabaseView({
         <AddUser db={db.name} host={host} onSecret={onSecret} onChange={onChange} />
       </Card>
       <Card title="Import or export">
-        <DumpForm db={db.name} site={db.site} server={db.server} />
+        <DumpForm db={db.name} site={db.site} server={db.server} postgres={postgres} />
       </Card>
       <Card title="Delete database">
         <form
@@ -705,9 +711,9 @@ function AddUser({
 // exports the database into a new file there (ADR-0025).
 // For a database on an external server, the job connects to that server
 // with a temporary user (ADR-0041 addendum 1).
-function DumpForm({ db, site, server }: { db: string; site: string; server: string }) {
+function DumpForm({ db, site, server, postgres }: { db: string; site: string; server: string; postgres: boolean }) {
   const [kind, setKind] = useState<"export" | "import">("export");
-  const [path, setPath] = useState(() => defaultDumpPath(db));
+  const [path, setPath] = useState(() => defaultDumpPath(db, new Date(), postgres));
   const [job, setJob] = useState<DumpJob | null>(null);
   const [error, setError] = useState("");
 
@@ -715,7 +721,7 @@ function DumpForm({ db, site, server }: { db: string; site: string; server: stri
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const problem = pathProblem(path);
+    const problem = pathProblem(path, postgres);
     if (problem) {
       setError(problem);
       return;
@@ -745,12 +751,29 @@ function DumpForm({ db, site, server }: { db: string; site: string; server: stri
           Import a file
         </label>
       </fieldset>
+      {kind === "export" && (
+        <Field label="Format">
+          <select
+            className="ui-select"
+            value={formatOf(path)}
+            onChange={(e) => e.target.value && setPath(withFormat(path, e.target.value as DumpFormat))}
+          >
+            {formatOf(path) === "" && <option value="">Other (see the file name)</option>}
+            {dumpFormats(postgres).map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
       <Field
         label={`File in the home of site ${site}`}
         hint={
-          kind === "export"
-            ? "Relative to the home, ending in .sql or .sql.gz. An existing file is never replaced."
-            : "Relative to the home, ending in .sql or .sql.gz. Upload it first, for example over SFTP."
+          (postgres
+            ? "Relative to the home, ending in .dump (pg_dump custom format), .sql or .sql.gz. "
+            : "Relative to the home, ending in .sql or .sql.gz. ") +
+          (kind === "export" ? "An existing file is never replaced." : "Upload it first, for example over SFTP.")
         }
       >
         <input className="ui-input ui-mono" value={path} onChange={(e) => setPath(e.target.value.trim())} autoComplete="off" spellCheck={false} />
@@ -760,9 +783,15 @@ function DumpForm({ db, site, server }: { db: string; site: string; server: stri
           The data goes between this machine and {server} with a temporary database user that the panel removes after the job.
         </p>
       )}
-      {kind === "import" && (
-        <Notice tone="warn" title={`The statements in the file run in ${db}. Import into an empty database: a failed import is not rolled back.`} />
-      )}
+      {kind === "import" &&
+        (postgres ? (
+          <Notice
+            tone="warn"
+            title={`The file runs in ${db} as one transaction: a failed import changes nothing. A .dump file replaces the tables it contains.`}
+          />
+        ) : (
+          <Notice tone="warn" title={`The statements in the file run in ${db}. Import into an empty database: a failed import is not rolled back.`} />
+        ))}
       {running && <p aria-busy="true">{job.kind === "import" ? "Importing…" : "Exporting…"}</p>}
       {job?.state === "done" && (
         <Notice tone="ok" title={job.kind === "import" ? `Imported ${job.path} into ${db}.` : `Exported ${db} into ${job.path}.`} />

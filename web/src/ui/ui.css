@@ -1139,3 +1139,113 @@ a.ui-btn {
   text-transform: none;
   letter-spacing: normal;
 }
+
+/* A small group of mutually exclusive choices (radio buttons as a strip) */
+.ui-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  align-self: flex-end;
+}
+.ui-seg-btn {
+  min-height: var(--control-h);
+  padding: 0 var(--space-3);
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface);
+  border: 0;
+  border-left: 1px solid var(--line);
+  cursor: pointer;
+}
+.ui-seg-btn:first-child {
+  border-left: 0;
+}
+.ui-seg-btn[aria-checked="true"] {
+  color: var(--surface);
+  background: var(--accent);
+}
+.ui-seg-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -3px;
+}
+
+/* A log file (ADR-0053): monospace, newest line at the bottom */
+.ui-log-tools {
+  align-items: flex-end;
+}
+.ui-log {
+  height: min(60vh, 34rem);
+  overflow: auto;
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.ui-log:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.ui-log-line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding-left: var(--space-2);
+  border-left: 3px solid transparent;
+}
+.ui-log-line.warn {
+  color: var(--warn);
+  border-left-color: var(--warn);
+}
+.ui-log-line.err {
+  color: var(--err);
+  border-left-color: var(--err);
+}
+.ui-log-mark {
+  margin: var(--space-1) 0;
+  color: var(--muted);
+  text-align: center;
+}
+.ui-log-days {
+  width: 7rem;
+}
+/* Live or paused state of a followed log */
+.ui-live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ui-live::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.ui-live.on {
+  color: var(--accent);
+}
+.ui-live.on::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--sunken);
+  animation: ui-live-pulse 2s ease-in-out infinite;
+}
+@keyframes ui-live-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-live.on::before {
+    animation: none;
+  }
+}
+.ui-log-foot {
+  justify-content: space-between;
+}

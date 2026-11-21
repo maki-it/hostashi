@@ -119,19 +119,49 @@ export const getDumpJob = (db: string, id: string) =>
 
 // pathProblem mirrors agentapi.ValidateDumpPath: a path relative to the
 // site home, ending in .sql or .sql.gz, without hidden or option-like parts.
+// A PostgreSQL database also takes .dump, pg_dump's custom format
+// (agentapi.ValidatePGDumpPath, ADR-0051).
 const dumpComponentRe = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
 
-export function pathProblem(p: string): string {
+export function pathProblem(p: string, postgres = false): string {
   if (p === "" || p.length > 255) return "Enter a path of 1 to 255 characters.";
-  if (!p.endsWith(".sql") && !p.endsWith(".sql.gz")) return "The file must end in .sql or .sql.gz.";
+  if (postgres) {
+    if (!p.endsWith(".dump") && !p.endsWith(".sql") && !p.endsWith(".sql.gz")) return "The file must end in .dump, .sql or .sql.gz.";
+  } else if (!p.endsWith(".sql") && !p.endsWith(".sql.gz")) {
+    return "The file must end in .sql or .sql.gz.";
+  }
   for (const c of p.split("/")) {
     if (!dumpComponentRe.test(c)) return "Use a path inside the site's home, like backups/shop.sql.gz, without parts that start with a dot or dash.";
   }
   return "";
 }
 
-// defaultDumpPath suggests a new export file name with the date.
-export const defaultDumpPath = (db: string, now = new Date()) => db + "-" + now.toISOString().slice(0, 10) + ".sql.gz";
+// defaultDumpPath suggests a new export file name with the date: for
+// PostgreSQL the custom format, which pg_restore loads back exactly.
+export const defaultDumpPath = (db: string, now = new Date(), postgres = false) =>
+  db + "-" + now.toISOString().slice(0, 10) + (postgres ? ".dump" : ".sql.gz");
+
+// Dump formats an export can write; the file name's ending names it. The
+// custom format of pg_dump (.dump) is compressed already.
+export type DumpFormat = ".dump" | ".sql.gz" | ".sql";
+
+export const dumpFormats = (postgres: boolean): { value: DumpFormat; label: string }[] => [
+  ...(postgres ? [{ value: ".dump" as DumpFormat, label: "PostgreSQL format (.dump, compressed)" }] : []),
+  { value: ".sql.gz", label: "SQL, compressed (.sql.gz)" },
+  { value: ".sql", label: "SQL, uncompressed (.sql)" },
+];
+
+// formatOf is the format a path ends in, or "" for none.
+export function formatOf(path: string): DumpFormat | "" {
+  for (const f of [".dump", ".sql.gz", ".sql"] as DumpFormat[]) if (path.endsWith(f)) return f;
+  return "";
+}
+
+// withFormat replaces the path's ending by format, or appends it.
+export function withFormat(path: string, format: DumpFormat): string {
+  const cur = formatOf(path);
+  return (cur ? path.slice(0, -cur.length) : path) + format;
+}
 
 // LOCAL_SERVER is the MariaDB on this machine, reached over its socket.
 export const LOCAL_SERVER = "localhost";
