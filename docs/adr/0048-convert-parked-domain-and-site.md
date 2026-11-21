@@ -38,9 +38,9 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 **Site → parked domain**
 
 - On the site's settings page, in the danger zone next to "Delete site", a second action "Delete and park domains". The dialog lists what is deleted (files, databases, cron jobs, SSH logins), shows the time of the last backup, lets you pick a parking page (default: built-in) and HTTPS, and asks you to type the site's name, like delete.
-- All domains of the site are parked, including aliases and `www.` names [A: what Kim wants; see open question 1].
-- API: `POST /api/v1/sites/{name}/park {"page", "tls", "confirm": "<name>"}`, scopes `sites:delete` **and** `parked:write`. A missing scope is a 403 like everywhere else (ADR-0035).
-- Order, in one store transaction: the site goes to state `deleting` and its domains become parked rows; then one `web.apply` swaps the site's vhost for the parking vhosts, so there is no moment where nobody answers. Only then the databases, account and files are removed, as in today's delete. If `web.apply` fails, the transaction is undone and the site stays active. If removing files stops halfway, the site stays in `deleting` (as today), the domains stay parked, and a second delete finishes the job.
+- The dialog lists every domain of the site (main domain, aliases, `www.` names) with a checkbox, all checked by default (Kim, 2026-11-21). Checked domains are parked, unchecked ones are free afterwards. At least one must be checked; with none checked, the action is plain "Delete site".
+- API: `POST /api/v1/sites/{name}/park {"domains": [...], "page", "tls", "confirm": "<name>"}`; `domains` must be a non-empty subset of the site's domains, otherwise `400`, scopes `sites:delete` **and** `parked:write`. A missing scope is a 403 like everywhere else (ADR-0035).
+- Order, in one store transaction: the site goes to state `deleting` and the chosen domains become parked rows; then one `web.apply` swaps the site's vhost for the parking vhosts, so there is no moment where nobody answers. Only then the databases, account and files are removed, as in today's delete. If `web.apply` fails, the transaction is undone and the site stays active. If removing files stops halfway, the site stays in `deleting` (as today), the domains stay parked, and a second delete finishes the job.
 - The parked domains get new certificates under `_park-<n>` in the background; until then HTTP only, as for any newly parked domain.
 
 **Not in scope:** moving a single domain from a site to parked (today: remove it from the site, then park it), and keeping the site's files (see the status-page thread).
@@ -49,9 +49,11 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 - Store: `CreateSite` returns the parked rows it removed; a new `ParkSiteDomains` transaction (site to `deleting`, domains to parked rows). Hosting: restore in `removeAfterFailure`, new `DeleteAndPark`. Serve: one endpoint, audit action `site.park`. No new agent operation, no new `os/exec` exception.
 - Frontend: icon button on the Parked domains page, prefilled New site form, a second action in the site's danger zone.
-- Tests: create with a parked domain that fails on `web.apply` restores the parking; delete-and-park with a failing `web.apply` keeps the site active and nothing parked; a failure after `web.apply` leaves `deleting` plus parked; a wrong `confirm`, missing scopes and a domain that is the panel's address (ADR-0042) are refused.
+- Tests: create with a parked domain that fails on `web.apply` restores the parking; delete-and-park with a failing `web.apply` keeps the site active and nothing parked; a failure after `web.apply` leaves `deleting` plus parked; a wrong `confirm`, an empty or foreign `domains` list, missing scopes and a domain that is the panel's address (ADR-0042) are refused.
 - User docs (ADR-0043): a short section on the Parked domains page in the wiki.
 
 ## Open questions for Kim
 
-1. Site → parked: delete the site and park **all** its domains in one step (recommended), or something else?
+None left.
+
+1. ~~Site → parked: park all domains of the site?~~ Decided (Kim, 2026-11-21): the dialog lists the domains with checkboxes, all checked by default; unchecked ones become free.
