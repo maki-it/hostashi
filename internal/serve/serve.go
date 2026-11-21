@@ -55,6 +55,10 @@ type Config struct {
 	// MetricsListen is a loopback IP and port that serves /metrics without
 	// a token (ADR-0022); empty turns that listener off.
 	MetricsListen string
+
+	// DBToolPort is the HTTPS port of the web database tool (ADR-0038),
+	// served for the panel's host name; 0 turns the tool off.
+	DBToolPort int
 }
 
 // DefaultChallengeDir is where nginx looks for HTTP-01 challenge files
@@ -194,6 +198,7 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			registerCron(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSSH(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerPageCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerLimits(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 		}
 
@@ -424,6 +429,12 @@ func Run(ctx context.Context, cfg Config) error {
 				cfg.Log.ErrorContext(ctx, "the panel's host name belongs to "+owner+"; nginx does not serve the panel there, choose another --panel-domain", "domain", d)
 			}
 		} else if err := deps.Sites.EnablePanel(d); err != nil {
+			return err
+		}
+	}
+
+	if cfg.DBToolPort != 0 {
+		if err := deps.Sites.EnableDBTool(hosting.RPCAgent{C: client}, cfg.DBToolPort); err != nil {
 			return err
 		}
 	}

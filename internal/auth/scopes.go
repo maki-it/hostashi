@@ -23,6 +23,7 @@ var scopeCatalog = map[string]ScopeInfo{
 	"sites:write":             {Description: "Create and change sites"},
 	"sites:delete":            {Description: "Delete sites and their files", HighRisk: true},
 	"sites.maintenance:write": {Description: "Switch the maintenance mode of sites and park domains"},
+	"pagecache:purge":         {Description: "Empty the page cache of sites, and nothing else (for a CMS that purges on save)"},
 	"sites.snippets:write":    {Description: "Change the custom nginx snippets of sites (checked against an allowlist)", HighRisk: true},
 	"cron:read":               {Description: "List the cron jobs of sites with their last and next runs"},
 	"cron:write":              {Description: "Create, change, pause, run and delete cron jobs (they run commands as the site user)", HighRisk: true},

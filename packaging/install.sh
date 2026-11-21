@@ -16,7 +16,8 @@
 #                        passkeys). nginx serves the panel there over HTTPS on the panel port with
 #                        a Let's Encrypt certificate (ADR-0023, ADR-0042). Without it, the panel is
 #                        reachable only through an SSH tunnel to --listen.
-#   --panel-port PORT    HTTPS port of the panel, default 8443 (TCP and UDP must be open)
+#   --panel-port PORT    HTTPS port of the panel, default 8443 (TCP and UDP must be open). 443
+#                        shares the sites' port by host name and needs --panel-domain (ADR-0042)
 #   --listen ADDR        panel listen address, default 127.0.0.1:8080 (loopback only: SSH tunnel)
 #   --allow-untested     accept an OS release that is not on the supported list
 #   --no-quota           do not enable disk quota (sites then get no disk limit)
@@ -151,7 +152,7 @@ preflight() {
     *) fail "--listen '$LISTEN' must be a loopback address (nginx serves the panel over HTTPS)";;
   esac
   case "$PANEL_PORT" in
-    80 | 443) fail "--panel-port $PANEL_PORT is taken by the sites";;
+    80) fail "--panel-port 80 is taken by the sites";;
     [1-9] | [1-9][0-9] | [1-9][0-9][0-9] | [1-9][0-9][0-9][0-9] | [1-9][0-9][0-9][0-9][0-9]) ;;
     *) fail "--panel-port '$PANEL_PORT' is not a port";;
   esac
@@ -160,8 +161,12 @@ preflight() {
     PANEL_DOMAIN=$(printf '%s' "$PANEL_DOMAIN" | tr '[:upper:]' '[:lower:]')
     valid_domain "$PANEL_DOMAIN" ||
       fail "--panel-domain '$PANEL_DOMAIN' must be a host name like panel.example.com (no scheme, port or path)"
-    PUBLIC_URL=https://$PANEL_DOMAIN:$PANEL_PORT
+    PUBLIC_URL=https://$PANEL_DOMAIN
+    [ "$PANEL_PORT" = 443 ] || PUBLIC_URL=$PUBLIC_URL:$PANEL_PORT
     log "the panel is served at $PUBLIC_URL"
+  elif [ "$PANEL_PORT" = 443 ]; then
+    # nginx tells the panel from the sites on 443 by its name only.
+    fail "--panel-port 443 needs --panel-domain"
   fi
 
   local a
@@ -208,7 +213,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config ssh harden sysctl nginx php phpversions mariadb backup units service fail2ban firewall updates quota"
+STEPS="account dirs key binary config ssh harden sysctl nginx php phpversions valkey mariadb backup units service fail2ban firewall updates quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -426,8 +431,17 @@ do_nginx() {
 }
 
 # PHP from the distribution (Debian 13: 8.4, Ubuntu 26.04: 8.5) with the
-# extensions of spike S5. The agent runs one FPM master per site.
+# extensions of spike S5, and phpredis for the object cache (ADR-0045). The
+# agent runs one FPM master per site.
 PHP_PKGS=(php-fpm php-cli php-mysql php-curl php-gd php-mbstring php-xml php-zip php-intl php-bcmath)
+# phpredis by its versioned name: sury.org's php<version>-redis provide
+# php-redis and make apt remove the distribution's php-redis, while
+# php<distro version>-redis stays (ADR-0036).
+distro_php_redis() {
+  local dep
+  dep=$(dpkg-query -W -f='${Depends}' php-fpm 2>/dev/null) || return 1
+  case "$dep" in php[0-9].[0-9]-fpm) dep=${dep#php}; echo "php${dep%-fpm}-redis";; *) return 1;; esac
+}
 # Every version the agent may run a site on (agentapi.PHPVersions); a unit
 # template is installed for each, whether the version is installed or not.
 PHP_VERSIONS=(7.4 8.1 8.2 8.3 8.4 8.5 8.6)
@@ -444,6 +458,8 @@ distro_fpm_units() {
 chk_php() {
   local p u
   for p in "${PHP_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
+  p=$(distro_php_redis) || { echo "cannot tell the PHP version of php-fpm"; return 1; }
+  pkg_installed "$p" || { echo "$p not installed"; return 1; }
   for u in $(distro_fpm_units); do
     [ "$(systemctl is-enabled "$u" 2>/dev/null)" != enabled ] || { echo "$u is enabled"; return 1; }
     [ "$(systemctl is-active "$u" 2>/dev/null)" != active ] || { echo "$u is running"; return 1; }
@@ -452,7 +468,9 @@ chk_php() {
 do_php() {
   apt-get update -qq >>"$LOG" 2>&1 &&
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${PHP_PKGS[@]}" >>"$LOG" 2>&1 || return 1
-  local u
+  local u r
+  r=$(distro_php_redis) || return 1
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "$r" >>"$LOG" 2>&1 || return 1
   for u in $(distro_fpm_units); do
     systemctl disable --now "$u" >>"$LOG" 2>&1 || return 1
   done
@@ -496,6 +514,27 @@ do_phpversions() {
     HOSTASHI_STATE_DIR=$STATE_DIR HOSTASHI_OS_RELEASE=$OS_RELEASE "$PHP_INSTALL_BIN" install $(php_requested) "$@" 2>&1 | tee -a "$LOG" | grep -E 'WARNING|REFUSED|cannot' >&2
     [ "${PIPESTATUS[0]}" = 0 ] || return 1
   fi
+}
+
+# Valkey from the distribution for the sites' object caches (ADR-0045). The
+# agent runs one instance per site that turns the cache on, through the
+# template hostashi-valkey@.service (step units). The package's own service
+# would listen on 127.0.0.1:6379 for everyone: it is stopped and masked, so
+# a package update cannot start it again.
+VALKEY_PKGS=(valkey-server)
+VALKEY_DEFAULT_UNIT=valkey-server.service
+
+chk_valkey() {
+  local p
+  for p in "${VALKEY_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
+  [ "$(systemctl is-enabled "$VALKEY_DEFAULT_UNIT" 2>/dev/null)" = masked ] || { echo "$VALKEY_DEFAULT_UNIT is not masked"; return 1; }
+  [ "$(systemctl is-active "$VALKEY_DEFAULT_UNIT" 2>/dev/null)" != active ] || { echo "$VALKEY_DEFAULT_UNIT is running"; return 1; }
+}
+do_valkey() {
+  apt-get update -qq >>"$LOG" 2>&1 &&
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${VALKEY_PKGS[@]}" >>"$LOG" 2>&1 || return 1
+  systemctl disable --now "$VALKEY_DEFAULT_UNIT" >>"$LOG" 2>&1 || return 1
+  systemctl mask "$VALKEY_DEFAULT_UNIT" >>"$LOG" 2>&1
 }
 
 # MariaDB from the distribution (ADR-0024). The package defaults stay: it
@@ -656,8 +695,13 @@ fw_render() {
   local ssh
   ssh=$(fw_ssh_ports | grep -E '^[0-9]+$' | sort -nu | paste -sd, - | sed 's/,/, /g')
   [ -n "$ssh" ] || { echo "no SSH port found (sshd -T), refusing to lock SSH out" >&2; return 1; }
+  # On 443 the panel shares the sites' port: the packet filter cannot tell
+  # them apart, so panel_ports stays empty and nginx enforces the panel
+  # allowlist (ADR-0042).
+  local panel=(-e "s/@PANEL@/$PANEL_PORT/")
+  [ "$PANEL_PORT" != 443 ] || panel=(-e "/@PANEL@/d")
   sed -e "s/@TCP@/$(fw_ports tcp)/" -e "s/@UDP@/$(fw_ports udp)/" -e "s/@SSH@/$ssh/" \
-    -e "s/@PANEL@/$PANEL_PORT/" -e "s#@PANEL_FILE@#$FW_PANEL_FILE#" "$FW_SRC/hostashi.nft"
+    "${panel[@]}" -e "s#@PANEL_FILE@#$FW_PANEL_FILE#" "$FW_SRC/hostashi.nft"
 }
 
 # fw_panel_file creates the panel's rules file if it is missing.
@@ -790,7 +834,7 @@ php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }
 
 chk_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-valkey@.service; do
     file_matches "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u" || { echo "$u differs"; return 1; }
   done
   dir_ok "$(dirname "$NGINX_DROPIN")" 755 root:root || { echo "nginx drop-in directory"; return 1; }
@@ -802,7 +846,7 @@ chk_units() {
 }
 do_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-valkey@.service; do
     write_file "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u"
     [ $? -le 1 ] || return 1
   done

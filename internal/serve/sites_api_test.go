@@ -23,6 +23,16 @@ type stubAgent struct {
 	webErr  error
 	deleted []string
 	pages   []agentapi.PageVersion
+	purges  []string
+}
+
+func (a *stubAgent) PageCachePurge(_ context.Context, user string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.purges = append(a.purges, user)
+
+	return nil
 }
 
 func (a *stubAgent) SiteCreate(_ context.Context, req agentapi.SiteCreateRequest) (agentapi.SiteInfo, error) {
