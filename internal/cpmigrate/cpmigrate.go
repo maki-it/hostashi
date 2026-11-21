@@ -54,6 +54,7 @@ type Service struct {
 
 	create   SiteCreator
 	importer Importer
+	pools    PoolLister
 	loads    *loads
 	cutover  *cutover
 }

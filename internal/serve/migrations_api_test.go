@@ -237,7 +237,21 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 		t.Fatalf("snippet or cron command in the refusal: %s", rec.Body)
 	}
 
-	rec = e.do(t, reqOpts{method: "POST", path: sites + "shop", cookie: c, body: `{"reviewed":true}`})
+	// A pool the agent does not list, then one too small for the old home
+	// of 20 GiB (ADR-0016).
+	rec = e.do(t, reqOpts{method: "POST", path: sites + "shop", cookie: c, body: `{"reviewed":true,"pool":"vol1"}`})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "pool_unusable" {
+		t.Fatalf("unknown pool: %d %s", rec.Code, rec.Body)
+	}
+
+	e.pools.pools = []agentapi.PoolInfo{{Name: "vol1", Path: "/srv/vol1", Available: true, FreeBytes: 10 << 30, TotalBytes: 100 << 30}}
+	if rec = e.do(t, reqOpts{method: "POST", path: sites + "shop", cookie: c, body: `{"reviewed":true,"pool":"vol1"}`}); rec.Code != http.StatusConflict {
+		t.Fatalf("small pool: %d %s", rec.Code, rec.Body)
+	}
+
+	e.pools.pools[0].FreeBytes = 90 << 30
+
+	rec = e.do(t, reqOpts{method: "POST", path: sites + "shop", cookie: c, body: `{"reviewed":true,"pool":"vol1"}`})
 	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"cronImport":1`) || strings.Contains(rec.Body.String(), "cr0n-t0ken") {
 		t.Fatalf("create: %d %s", rec.Code, rec.Body)
 	}
@@ -253,7 +267,7 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 	}
 
 	s, err := e.sites.Get(t.Context(), "shop")
-	if err != nil || s.PHP != "8.4" || len(s.Domains) != 1 || s.Domains[0] != "shop.example.com" {
+	if err != nil || s.PHP != "8.4" || len(s.Domains) != 1 || s.Domains[0] != "shop.example.com" || s.Pool != "vol1" {
 		t.Fatalf("site %+v %v", s, err)
 	}
 
