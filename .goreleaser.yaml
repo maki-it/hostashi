@@ -93,11 +93,22 @@ nfpms:
       - valkey-server
     recommends:
       - quota
+    # Upgrade a set-up server in place (ADR-0050): database copy, installer
+    # with the saved options and without apt, wait for the panel. prerm
+    # lets a downgrade through only with the same database schema.
+    scripts:
+      preinstall: packaging/deb/preinst
+      postinstall: packaging/deb/postinst
+      preremove: packaging/deb/prerm
     contents:
       # The installer and the files it installs (ADR-0050, section 1). The
       # installer finds its data next to itself.
       - src: packaging/install.sh
         dst: /usr/share/hostashi/install.sh
+        file_info:
+          mode: 0755
+      - src: packaging/deb/hostashi-rollback
+        dst: /usr/sbin/hostashi-rollback
         file_info:
           mode: 0755
       - src: packaging/adminer/

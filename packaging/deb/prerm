@@ -1,0 +1,45 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# prerm of the hostashi package (ADR-0050). A downgrade on a server the
+# installer has set up goes through only if the older version uses the
+# same database schema as this one; preinst noted the schema of each
+# version it replaced. Otherwise the older binary could not open the
+# database, and the downgrade stops with the way back: hostashi-rollback
+# restores the database copy of that version and installs it.
+set -e
+
+OPTIONS=/etc/hostashi/install.options
+DIR=/var/lib/hostashi-installer/upgrade
+
+case "$1" in
+  upgrade) ;;
+  # dpkg asks the older package's prerm whether to go on after this
+  # script refused: never.
+  failed-upgrade) [ ! -f "$OPTIONS" ] || [ "${HOSTASHI_ROLLBACK:-}" = 1 ] || exit 1; exit 0;;
+  *) exit 0;;
+esac
+
+new=$2
+[ -f "$OPTIONS" ] || exit 0
+[ "${HOSTASHI_ROLLBACK:-}" != 1 ] || exit 0
+cur=$(dpkg-query -W -f '${Version}' hostashi 2>/dev/null || true)
+[ -n "$cur" ] && [ -n "$new" ] && dpkg --compare-versions "$new" lt "$cur" || exit 0
+
+case "$new" in
+  *[!0-9A-Za-z.+~:-]*) echo "hostashi: unexpected version '$new'" >&2; exit 1;;
+esac
+have=$(/usr/bin/hostashi version -schema 2>/dev/null || true)
+want=$(cat "$DIR/hostashi-$new.schema" 2>/dev/null || true)
+if [ -n "$have" ] && [ "$want" = "$have" ]; then
+  exit 0
+fi
+
+echo "hostashi: $new cannot open the database of $cur (schema ${want:-unknown}, this version $have)." >&2
+if [ -f "$DIR/hostashi-$new.db" ]; then
+  echo "hostashi: go back with its database copy (changes since then are lost):" >&2
+  echo "  sudo hostashi-rollback --yes $new" >&2
+else
+  echo "hostashi: there is no database copy of $new on this server; a downgrade is not possible." >&2
+fi
+exit 1

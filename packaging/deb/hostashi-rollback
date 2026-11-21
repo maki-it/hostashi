@@ -1,0 +1,130 @@
+#!/bin/bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# hostashi-rollback: go back to an older version of the hostashi package
+# whose database schema differs (ADR-0050). It restores the copy of the
+# panel database that the package kept when it upgraded from that version,
+# then installs that version. Changes in the panel since that upgrade are
+# lost; the current database is kept next to the copies.
+#
+#   hostashi-rollback [--yes] [--deb FILE] [VERSION]
+#
+# VERSION defaults to the newest version older than the installed one that
+# has a database copy. Without --yes it asks on a terminal, and otherwise
+# only says what it would do. Without --deb it installs
+# VERSION from the configured apt sources. A downgrade with the same
+# schema does not need this: apt install --allow-downgrades hostashi=VERSION.
+set -euo pipefail
+
+OPTIONS=/etc/hostashi/install.options
+DB=/var/lib/hostashi/hostashi.db
+DIR=/var/lib/hostashi-installer/upgrade
+
+usage() { echo "usage: hostashi-rollback [--yes] [--deb FILE] [VERSION]" >&2; exit 64; }
+die() { echo "hostashi-rollback: $*" >&2; exit 1; }
+
+yes="" deb="" ver=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --yes) yes=1;;
+    --deb) [ $# -ge 2 ] || usage; deb=$2; shift;;
+    -*) usage;;
+    *) [ -z "$ver" ] || usage; ver=$1;;
+  esac
+  shift
+done
+case "$ver" in
+  *[!0-9A-Za-z.+~:-]*) die "not a version: '$ver'";;
+esac
+
+[ "$(id -u)" = 0 ] || die "run as root"
+[ -f "$OPTIONS" ] || die "this server was not set up by the installer ($OPTIONS missing)"
+cur=$(dpkg-query -W -f '${Version}' hostashi 2>/dev/null) || die "the hostashi package is not installed"
+if [ -z "$ver" ]; then
+  for f in "$DIR"/hostashi-*.db; do
+    [ -f "$f" ] || continue
+    c=${f##*/hostashi-} c=${c%.db}
+    dpkg --compare-versions "$c" lt "$cur" || continue
+    [ -z "$ver" ] || dpkg --compare-versions "$c" gt "$ver" || continue
+    ver=$c
+  done
+  [ -n "$ver" ] || die "no database copy of a version older than $cur in $DIR"
+fi
+dpkg --compare-versions "$ver" lt "$cur" || die "$ver is not older than the installed $cur"
+snap=$DIR/hostashi-$ver.db
+copies() { local f; for f in "$DIR"/hostashi-*.db; do [ -f "$f" ] && f=${f##*/hostashi-} && printf '%s ' "${f%.db}"; done; }
+[ -f "$snap" ] && [ ! -L "$snap" ] || die "no database copy of $ver in $DIR; copies of: $(copies)"
+
+if [ -n "$deb" ]; then
+  [ -f "$deb" ] || die "$deb: no such file"
+  [ "$(dpkg-deb -f "$deb" Package)" = hostashi ] && [ "$(dpkg-deb -f "$deb" Version)" = "$ver" ] ||
+    die "$deb is not hostashi $ver"
+  case "$deb" in /*) ;; *) deb=./$deb;; esac
+  target=$deb
+else
+  apt-cache madison hostashi 2>/dev/null | awk -F'|' '{gsub(/ /, "", $2); print $2}' | grep -qxF "$ver" ||
+    die "apt does not offer hostashi $ver (apt-cache madison hostashi); pass --deb FILE"
+  target=hostashi=$ver
+fi
+
+keep=$DIR/before-rollback-$cur.db
+echo "hostashi-rollback: from $cur to $ver"
+echo "  1. stop the panel"
+echo "  2. keep the current database as $keep"
+echo "  3. restore $snap (panel changes since the upgrade from $ver are lost)"
+echo "  4. install $target and set it up with the saved options"
+if [ -z "$yes" ]; then
+  [ -t 0 ] || { echo "Run again with --yes to do this."; exit 0; }
+  read -r -p "Go back to $ver? [y/N] " a
+  case "$a" in y | Y | yes) ;; *) echo "Nothing changed."; exit 0;; esac
+fi
+
+systemctl stop hostashi-panel.socket hostashi.service
+
+# The live database's owner and mode, for the files put in its place.
+owner=$(stat -c %u:%g "$DB")
+mode=$(stat -c %a "$DB")
+
+# copy SRC DST: a database and its WAL next to DST; place DST puts them in
+# place with the live database's owner and mode.
+copy() {
+  rm -f "$2.tmp" "$2.tmp-wal"
+  cp "$1" "$2.tmp"
+  [ ! -f "$1-wal" ] || cp "$1-wal" "$2.tmp-wal"
+}
+place() {
+  local dst=$1 f
+  for f in "$dst.tmp" "$dst.tmp-wal"; do
+    [ -f "$f" ] || continue
+    chown "$owner" "$f"
+    chmod "$mode" "$f"
+  done
+  rm -f "$dst-wal" "$dst-shm"
+  [ ! -f "$dst.tmp-wal" ] || mv -f "$dst.tmp-wal" "$dst-wal"
+  mv -f "$dst.tmp" "$dst"
+}
+
+copy "$DB" "$keep"
+chmod 0600 "$keep.tmp"
+[ ! -f "$keep.tmp-wal" ] || { chmod 0600 "$keep.tmp-wal"; mv -f "$keep.tmp-wal" "$keep-wal"; }
+mv -f "$keep.tmp" "$keep"
+echo "hostashi-rollback: current database kept as $keep"
+
+copy "$snap" "$DB"
+place "$DB"
+echo "hostashi-rollback: restored the database of $ver"
+
+if HOSTASHI_ROLLBACK=1 DEBIAN_FRONTEND=noninteractive apt-get install -y -q --allow-downgrades --no-install-recommends "$target"; then
+  echo "hostashi-rollback: hostashi $ver is installed and running"
+  exit 0
+fi
+
+now=$(dpkg-query -W -f '${Version}' hostashi 2>/dev/null || true)
+if [ "$now" = "$cur" ]; then
+  # Nothing changed hands: back to the database of the installed version.
+  copy "$keep" "$DB"
+  place "$DB"
+  systemctl start hostashi-panel.socket hostashi.service || true
+  die "installing $ver failed; $cur runs again with its database"
+fi
+die "installing $ver failed halfway (package $now); see /var/log/hostashi-upgrade.log, fix the cause, then run: sudo dpkg --configure -a"

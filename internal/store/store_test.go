@@ -177,6 +177,24 @@ func TestSchemaTooNew(t *testing.T) {
 	}
 }
 
+func TestSchemaVersion(t *testing.T) {
+	n, err := SchemaVersion()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := open(t, dbPath(t))
+
+	var got int
+	if err := s.w.QueryRowContext(context.Background(), `PRAGMA user_version`).Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+
+	if n == 0 || got != n {
+		t.Fatalf("SchemaVersion %d, opened database at %d", n, got)
+	}
+}
+
 func TestInsecurePermissions(t *testing.T) {
 	t.Run("world writable directory", func(t *testing.T) {
 		path := dbPath(t)

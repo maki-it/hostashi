@@ -1,0 +1,63 @@
+#!/bin/bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# postinst of the hostashi package (ADR-0050). On a server the installer
+# has set up, it runs the installer again with the saved options and
+# without apt (dpkg holds the apt lock), which installs the new binary and
+# files and restarts agent and panel; the panel migrates its database when
+# it starts. Then it waits until the panel answers. A failure stops the
+# upgrade with the log's path; the package stays unconfigured and
+# 'dpkg --configure -a' tries again.
+#
+# On a first install it changes nothing and says how to set the server up.
+set -e
+
+[ "$1" = configure ] || exit 0
+
+OPTIONS=/etc/hostashi/install.options
+LOG=/var/log/hostashi-upgrade.log
+INSTALLER=/usr/share/hostashi/install.sh
+
+if [ ! -f "$OPTIONS" ]; then
+  if [ -f /var/lib/hostashi/hostashi.db ]; then
+    echo "hostashi: this server was set up before the installer saved its options."
+    echo "hostashi: run the installer once with its options, then updates apply by themselves:"
+  else
+    echo "hostashi: installed. Set the server up with:"
+  fi
+  echo "  sudo $INSTALLER plan --binary /usr/bin/hostashi --panel-domain panel.example.com"
+  echo "  sudo $INSTALLER apply --yes --binary /usr/bin/hostashi --panel-domain panel.example.com"
+  exit 0
+fi
+
+touch "$LOG" && chmod 0600 "$LOG"
+echo "=== $(date -u +%FT%TZ) hostashi ${2:+$2 -> }$(/usr/bin/hostashi version)" >>"$LOG"
+if ! "$INSTALLER" upgrade >>"$LOG" 2>&1; then
+  # preinst stopped the panel; run it with what is there, so the server
+  # keeps working while the cause gets fixed.
+  systemctl start hostashi-agent.service hostashi-panel.socket hostashi.service >/dev/null 2>&1 || true
+  echo "hostashi: setting up the new version failed, see $LOG and /var/log/hostashi-install.log." >&2
+  echo "hostashi: fix the cause, then run: sudo dpkg --configure -a" >&2
+  exit 1
+fi
+
+# Wait until the panel answers on its own address (--listen).
+listen=$(sed -n 's/^--listen //p' "$OPTIONS" | tail -n 1)
+listen=${listen:-127.0.0.1:8080}
+host=${listen%:*} port=${listen##*:}
+host=${host#[} host=${host%]}
+for _ in $(seq 1 60); do
+  if exec 3<>"/dev/tcp/$host/$port" 2>/dev/null; then
+    printf 'GET /api/v1/health HTTP/1.0\r\nHost: %s\r\n\r\n' "$listen" >&3
+    status=""
+    read -r -t 5 _ status _ <&3 || true
+    exec 3<&-
+    if [ "$status" = 200 ]; then
+      echo "hostashi: $(/usr/bin/hostashi version) is up" | tee -a "$LOG"
+      exit 0
+    fi
+  fi
+  sleep 1
+done
+echo "hostashi: the panel did not answer on $listen within 60 s, see $LOG and 'journalctl -u hostashi'." >&2
+exit 1

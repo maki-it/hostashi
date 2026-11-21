@@ -102,6 +102,22 @@ After each successful `apply` the installer saves its options (all of the above 
 
 The installer refuses an options file that anyone but root could have written, or that holds anything but the options above.
 
+### Updates with the package
+
+On a server set up this way, installing a newer `hostashi` package (`apt upgrade`) updates it by itself. Before the new files land, the package stops the panel and keeps a copy of the panel database in `/var/lib/hostashi-installer/upgrade/` (the three newest). Then it runs `install.sh upgrade`, which restarts agent and panel, and waits up to 60 seconds for the panel to answer. The output goes to `/var/log/hostashi-upgrade.log`.
+
+If that fails, the panel runs again as far as possible and apt reports an error; the package stays unconfigured. Fix the cause (the log says what failed), then run `sudo dpkg --configure -a`.
+
+### Going back to an older version
+
+If the older version uses the same database schema, apt goes back by itself: `sudo apt install --allow-downgrades hostashi=VERSION`. If the schema differs, the older panel could not open the database, so the package stops the downgrade before anything changes and names the way back:
+
+```sh
+sudo hostashi-rollback VERSION
+```
+
+It restores the database copy that the package kept when it upgraded from `VERSION` and installs that version. Changes made in the panel since then are lost; sites, their files and databases are not touched. The current database stays next to the copies as `before-rollback-<version>.db`. Without `VERSION` it takes the newest older version with a copy; `--deb FILE` installs from a downloaded package instead of apt, `--yes` skips the question.
+
 ## Exit codes
 
 | Code | Meaning |

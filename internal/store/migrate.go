@@ -83,6 +83,19 @@ func userVersion(ctx context.Context, q interface {
 	return v, nil
 }
 
+// SchemaVersion is the schema version a database has after Open with this
+// binary: the number of embedded migrations. The package scripts compare it
+// across versions to tell whether a downgrade can keep the database
+// (ADR-0050).
+func SchemaVersion() (int, error) {
+	ms, err := loadMigrations(migrations)
+	if err != nil {
+		return 0, err
+	}
+
+	return len(ms), nil
+}
+
 // migrate applies every pending migration in its own transaction. The schema
 // version is kept in PRAGMA user_version, which is part of the transaction,
 // so a failed migration leaves the database at the previous version.
