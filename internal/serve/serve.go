@@ -128,6 +128,9 @@ type Deps struct {
 	// PHP installs more PHP versions (ADR-0036); nil disables its routes.
 	// Needs Auth and Settings.
 	PHP PHPInstaller
+	// PGClient installs the PostgreSQL client tools (ADR-0051); nil
+	// disables its routes. Needs Auth and Settings.
+	PGClient PGClient
 	// Mail is the SMTP relay (ADR-0044); nil disables its routes. Needs
 	// Auth, Settings and MailSend.
 	Mail     MailRelay
@@ -146,6 +149,9 @@ type Deps struct {
 	// MailHistory adds the email check to the doctor report; nil leaves it
 	// out. Needs Mail.
 	MailHistory MailHistory
+	// AuditLog reads the audit log for its page and export; nil disables
+	// its routes. Needs Auth.
+	AuditLog AuditLog
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -257,6 +263,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			registerPHPInstall(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.PHP, deps.Settings, log)
 		}
 
+		if deps.PGClient != nil && deps.Settings != nil {
+			registerPGClient(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.PGClient, deps.Settings, log)
+		}
+
 		if deps.Mail != nil && deps.MailSend != nil && deps.Settings != nil {
 			registerMail(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Mail, deps.MailSend, deps.Settings, log)
 		}
@@ -280,6 +290,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			}
 
 			registerDoctor(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Doctor, allPanelChecks(panel), log)
+		}
+
+		if deps.AuditLog != nil {
+			registerAudit(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.AuditLog, log)
 		}
 
 		if deps.Metrics != nil && deps.Settings != nil {
@@ -445,12 +459,14 @@ func Run(ctx context.Context, cfg Config) error {
 		Doctor:      RPCDoctor(client),
 		Firewall:    RPCFirewall{C: client},
 		PHP:         RPCPHPInstaller{C: client},
+		PGClient:    RPCPGClient{C: client},
 		Mail:        relay,
 		Outbox:      outbox,
 		NotifyPrefs: st,
 		MailHistory: st,
 		MailSend:    func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
 		Files:       RPCFilesOpener(client),
+		AuditLog:    st,
 	}
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)

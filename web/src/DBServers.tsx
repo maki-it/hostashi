@@ -6,11 +6,13 @@ import {
   addServer,
   checkServer,
   databaseMessage,
+  defaultPort,
   deleteServer,
   engineLabel,
   serverAddress,
   serverNameProblem,
   setDefaultServer,
+  type DBEngine,
   type DBServer,
   type NewDBServer,
 } from "./databases";
@@ -40,9 +42,9 @@ function tlsLabel(s: DBServer): string {
   }
 }
 
-// DBServersView lists the database servers for administrators (ADR-0041):
-// the local MariaDB and the external servers, with check, default and
-// delete, and the form for a new server (new=1).
+// DBServersView lists the database servers for administrators (ADR-0041,
+// ADR-0051): the local MariaDB and the external servers, with check,
+// default and delete, and the form for a new server (new=1).
 export function DBServersView({
   servers,
   query,
@@ -56,6 +58,8 @@ export function DBServersView({
   const [error, setError] = useState("");
   const [result, setResult] = useState("");
   const [confirm, setConfirm] = useState("");
+  // What adding a server warned about, shown on the list after it.
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   const back = (
     <a className="ui-btn" href={formatHash({ page: "databases" })}>
@@ -69,7 +73,7 @@ export function DBServersView({
       <>
         <PageHead
           title="Add database server"
-          description="A MariaDB or MySQL server that the panel creates databases on."
+          description="A MariaDB, MySQL or PostgreSQL server that the panel creates databases on."
           actions={
             <a className="ui-btn" href={serversHref()}>
               <ArrowLeft size={16} aria-hidden="true" />
@@ -78,7 +82,10 @@ export function DBServersView({
           }
         />
         <AddServerCard
-          onAdded={async () => {
+          onAdded={async (s) => {
+            setError("");
+            setResult(`Added ${s.name} (${engineLabel(s)}).`);
+            setWarnings(s.warnings ?? []);
             await onChange();
             window.location.hash = serversHref();
           }}
@@ -91,6 +98,7 @@ export function DBServersView({
     setBusy(name);
     setError("");
     setResult("");
+    setWarnings([]);
     try {
       if (what === "check") {
         const s = await checkServer(name);
@@ -209,6 +217,9 @@ export function DBServersView({
         }
       />
       {result && <Notice tone="ok" title={result} />}
+      {warnings.map((w) => (
+        <Notice key={w} tone="warn" title={w.charAt(0).toUpperCase() + w.slice(1) + "."} />
+      ))}
       {error && <Notice tone="err" title={error} />}
       {failing.map((s) => (
         <Notice key={s.name} tone="warn" title={`${s.name}: ${s.lastError ?? ""}`} />
@@ -233,16 +244,39 @@ export function DBServersView({
   );
 }
 
-const emptyServer: NewDBServer = { name: "", host: "", port: 3306, adminUser: "", adminPassword: "", tlsMode: "verify", caCertificate: "" };
+const emptyServer: NewDBServer = {
+  engine: "mariadb",
+  name: "",
+  host: "",
+  port: 3306,
+  adminUser: "",
+  adminPassword: "",
+  tlsMode: "verify",
+  caCertificate: "",
+};
+
+const engineHints: Record<DBEngine, { port: string; admin: string }> = {
+  mariadb: {
+    port: "Usually 3306.",
+    admin: "Needs CREATE, DROP, CREATE USER and GRANT OPTION. The panel stores the password encrypted.",
+  },
+  postgresql: {
+    port: "Usually 5432.",
+    admin: "A role with CREATEDB and CREATEROLE, not a superuser. The panel stores the password encrypted.",
+  },
+};
 
 // AddServerCard adds a server. The panel connects, checks the version and
 // creates and drops a test database and user before it saves anything.
-function AddServerCard({ onAdded }: { onAdded: () => Promise<void> }) {
+function AddServerCard({ onAdded }: { onAdded: (s: DBServer & { warnings?: string[] }) => Promise<void> }) {
   const [s, setS] = useState<NewDBServer>(emptyServer);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const set = (changes: Partial<NewDBServer>) => setS((prev) => ({ ...prev, ...changes }));
+  // A port left at the old engine's default follows the new engine.
+  const setEngine = (engine: DBEngine) =>
+    setS((prev) => ({ ...prev, engine, port: prev.port === defaultPort(prev.engine) ? defaultPort(engine) : prev.port }));
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -260,9 +294,9 @@ function AddServerCard({ onAdded }: { onAdded: () => Promise<void> }) {
     setBusy(true);
     setError("");
     try {
-      await addServer(s);
+      const added = await addServer(s);
       setS(emptyServer);
-      await onAdded();
+      await onAdded(added);
     } catch (err) {
       setError(databaseMessage(err));
     } finally {
@@ -273,6 +307,17 @@ function AddServerCard({ onAdded }: { onAdded: () => Promise<void> }) {
   return (
     <Card>
       <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
+        <fieldset className="ui-fieldset ui-stack-tight">
+          <legend>Engine</legend>
+          <label className="ui-check">
+            <input type="radio" name="db-server-engine" checked={s.engine === "mariadb"} onChange={() => setEngine("mariadb")} />
+            MariaDB or MySQL
+          </label>
+          <label className="ui-check">
+            <input type="radio" name="db-server-engine" checked={s.engine === "postgresql"} onChange={() => setEngine("postgresql")} />
+            PostgreSQL
+          </label>
+        </fieldset>
         <Field label="Name" hint="How the panel shows the server, for example db1.">
           <input className="ui-input" value={s.name} onChange={(e) => set({ name: e.target.value.trim() })} autoComplete="off" spellCheck={false} />
         </Field>
@@ -280,11 +325,11 @@ function AddServerCard({ onAdded }: { onAdded: () => Promise<void> }) {
           <Field label="Host" hint="Host name or IP address. Sites use it as DB_HOST.">
             <input className="ui-input ui-mono" value={s.host} onChange={(e) => set({ host: e.target.value.trim() })} autoComplete="off" spellCheck={false} />
           </Field>
-          <Field label="Port" hint="Usually 3306.">
+          <Field label="Port" hint={engineHints[s.engine].port}>
             <input className="ui-input" type="number" min={1} max={65535} value={s.port} onChange={(e) => set({ port: Number(e.target.value) })} />
           </Field>
         </div>
-        <Field label="Administrator" hint="Needs CREATE, DROP, CREATE USER and GRANT OPTION. The panel stores the password encrypted.">
+        <Field label="Administrator" hint={engineHints[s.engine].admin}>
           <input className="ui-input ui-mono" value={s.adminUser} onChange={(e) => set({ adminUser: e.target.value.trim() })} autoComplete="off" spellCheck={false} />
         </Field>
         <Field label="Administrator password">
@@ -321,6 +366,12 @@ function AddServerCard({ onAdded }: { onAdded: () => Promise<void> }) {
               spellCheck={false}
             />
           </Field>
+        )}
+        {s.engine === "postgresql" && (
+          <Notice
+            tone="info"
+            title="PostgreSQL decides in its pg_hba.conf which hosts may log in. Allow this machine's address there, and only it."
+          />
         )}
         {s.tlsMode === "none" && (
           <Notice tone="warn" title="Passwords and data cross the network unencrypted. Use this only inside a private network you trust." />

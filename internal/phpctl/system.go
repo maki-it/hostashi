@@ -75,6 +75,12 @@ func (InstallUnits) Active(ctx context.Context, version string) (bool, error) {
 		return false, err
 	}
 
+	return unitActive(ctx, unit)
+}
+
+// unitActive reports whether a unit is running or about to; unit is one
+// of the checked names above.
+func unitActive(ctx context.Context, unit string) (bool, error) {
 	out, err := output(ctx, Systemctl, "show", "--property=ActiveState", "--value", unit)
 	if err != nil {
 		return false, err
@@ -86,6 +92,40 @@ func (InstallUnits) Active(ctx context.Context, version string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+// PGClientUnits starts and reads hostashi-pg-client-install@<major>.service,
+// the fixed unit that installs the PostgreSQL client tools from
+// apt.postgresql.org (ADR-0051). The major must be one of
+// agentapi.PGClientMajors; the script behind the unit checks it again.
+type PGClientUnits struct{}
+
+func pgClientUnit(major string) (string, error) {
+	if err := agentapi.ValidatePGClientMajor(major); err != nil {
+		return "", err
+	}
+
+	return "hostashi-pg-client-install@" + major + ".service", nil
+}
+
+// Start queues the unit (systemctl start --no-block).
+func (PGClientUnits) Start(ctx context.Context, major string) error {
+	unit, err := pgClientUnit(major)
+	if err != nil {
+		return err
+	}
+
+	return run(ctx, Systemctl, "start", "--no-block", unit)
+}
+
+// Active reports whether the unit is running or about to.
+func (PGClientUnits) Active(ctx context.Context, major string) (bool, error) {
+	unit, err := pgClientUnit(major)
+	if err != nil {
+		return false, err
+	}
+
+	return unitActive(ctx, unit)
 }
 
 // ValkeyDefaultUnit is the Valkey package's own service, which the

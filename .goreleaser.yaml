@@ -137,6 +137,9 @@ nfpms:
       - src: packaging/php/
         dst: /usr/share/hostashi/php/
         type: tree
+      - src: packaging/postgresql/
+        dst: /usr/share/hostashi/postgresql/
+        type: tree
       - src: packaging/ssh/
         dst: /usr/share/hostashi/ssh/
         type: tree
