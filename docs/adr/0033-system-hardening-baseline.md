@@ -1,6 +1,6 @@
 # ADR-0033 System hardening baseline before v1
 
-**Status:** Proposed. **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0007 (isolation model), ADR-0015 (per-site resource limits), ADR-0019 (PHP), ADR-0021 (fail2ban), ADR-0023 (panel HTTPS), ADR-0024 (MariaDB), ADR-0028 (cron), ADR-0032 (SSH and SFTP), [`04-architecture.md`](../04-architecture.md), [`05-security.md`](../05-security.md), [`03-features.md`](../03-features.md) row "Firewall (nftables/UFW) with defaults" (P0).
+**Status:** Accepted (Kim, 2026-11-21). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0007 (isolation model), ADR-0015 (per-site resource limits), ADR-0019 (PHP), ADR-0021 (fail2ban), ADR-0023 (panel HTTPS), ADR-0024 (MariaDB), ADR-0028 (cron), ADR-0032 (SSH and SFTP), [`04-architecture.md`](../04-architecture.md), [`05-security.md`](../05-security.md), [`03-features.md`](../03-features.md) row "Firewall (nftables/UFW) with defaults" (P0).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
