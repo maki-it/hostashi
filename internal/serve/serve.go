@@ -190,6 +190,7 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 		if deps.Sites != nil {
 			registerSites(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDatabases(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerDBServers(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPages(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerParked(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerCron(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
@@ -396,6 +397,7 @@ func Run(ctx context.Context, cfg Config) error {
 
 	deps.Sites.EnableCron(hosting.RPCAgent{C: client})
 	deps.Sites.EnableSSH(hosting.RPCAgent{C: client})
+	deps.Sites.EnableDBServers(hosting.RemoteDBServers{Box: box})
 	deps.Sites.EnableLimits(hosting.RPCAgent{C: client})
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
