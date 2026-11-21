@@ -44,6 +44,8 @@ Without project quota a pool works, but its sites get no disk limit. The agent s
 | `hostashi pool list` | Lists the pools with their path, number of sites and quota state. |
 | `hostashi pool remove NAME` | Removes a pool without sites. Then you can unmount the volume. |
 
+`hostashi doctor` fails a pool whose volume is not mounted or whose marker is missing, and warns when a pool's volume is mounted without `nosuid,nodev` or has no `/etc/fstab` entry. While a volume is missing, its sites do not start and cannot be changed; mount it and restart `hostashi-agent`.
+
 A site gets its pool when it is created and stays there. Its databases stay in MariaDB's own directory.
 
 ## Databases
