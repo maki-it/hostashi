@@ -6,15 +6,22 @@
 
 import { ApiError, request } from "./api";
 
-export type Database = { name: string; site: string; users: string[]; createdAt: string };
+export type Database = { name: string; site: string; server: string; users: string[]; createdAt: string };
 
 // Credentials is what a page shows once after a password was generated.
-export type Credentials = { database: string; user: string; password: string };
+// host is what the site uses as DB_HOST.
+export type Credentials = { database: string; user: string; password: string; host: string };
 
 export const listDatabases = async () => (await request<{ databases: Database[] }>("GET", "/databases")).databases;
 
-export const createDatabase = (site: string, name: string, user: string) =>
-  request<Database & { password?: string }>("POST", "/sites/" + encodeURIComponent(site) + "/databases", user ? { name, user } : { name });
+// createDatabase creates a database on the given server; without one it
+// goes to the panel's default server (ADR-0041).
+export const createDatabase = (site: string, name: string, user: string, server = "") =>
+  request<Database & { password?: string }>("POST", "/sites/" + encodeURIComponent(site) + "/databases", {
+    name,
+    ...(user ? { user } : {}),
+    ...(server ? { server } : {}),
+  });
 
 export const deleteDatabase = (db: string) => request<void>("DELETE", "/databases/" + encodeURIComponent(db));
 
@@ -66,6 +73,20 @@ export function databaseMessage(err: unknown): string {
         return "Only administrators can manage databases.";
       case "agent_timeout":
         return "The server did not answer in time. Reload the page to see whether the change was made.";
+      case "db_server_local_only":
+        return "This only works for databases on the local server.";
+      case "unknown_db_server":
+        return "This database server does not exist any more. Reload the page.";
+      case "db_server_unavailable":
+        return "The database server is not reachable. Check it on the Servers tab or try again later.";
+      case "db_server_denied":
+        return "The database server refused the panel's administrator. Check the server's privileges.";
+      case "db_server_exists":
+        return "A database server with this name exists. Choose another name.";
+      case "db_server_in_use":
+        return "The server still has databases. Delete or move them first.";
+      case "db_server_check_failed":
+        return "The check failed: " + err.message + ".";
       default:
         return err.message ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + "." : "Something went wrong (" + err.code + ").";
     }
@@ -105,3 +126,79 @@ export function pathProblem(p: string): string {
 
 // defaultDumpPath suggests a new export file name with the date.
 export const defaultDumpPath = (db: string, now = new Date()) => db + "-" + now.toISOString().slice(0, 10) + ".sql.gz";
+
+// LOCAL_SERVER is the MariaDB on this machine, reached over its socket.
+export const LOCAL_SERVER = "localhost";
+
+// DBServer is a database server the panel creates databases on (ADR-0041).
+// adminUser, clientHost and lastError are only sent to administrators.
+export type TLSMode = "socket" | "verify" | "verify-ca" | "none";
+
+export type DBServer = {
+  name: string;
+  local: boolean;
+  default: boolean;
+  engine?: "mariadb" | "mysql";
+  version?: string;
+  state: "ok" | "error" | "unchecked";
+  databases: number;
+  tlsMode: TLSMode;
+  tlsActive: boolean;
+  checkedAt?: string;
+  certExpires?: string;
+  host?: string;
+  port?: number;
+  adminUser?: string;
+  clientHost?: string;
+  lastError?: string;
+};
+
+export type NewDBServer = {
+  name: string;
+  host: string;
+  port: number;
+  adminUser: string;
+  adminPassword: string;
+  tlsMode: "verify" | "verify-ca" | "none";
+  caCertificate: string;
+};
+
+export const listServers = async () => (await request<{ servers: DBServer[] }>("GET", "/db-servers")).servers;
+
+export const addServer = (s: NewDBServer) =>
+  request<DBServer>("POST", "/db-servers", {
+    name: s.name,
+    host: s.host,
+    port: s.port,
+    adminUser: s.adminUser,
+    adminPassword: s.adminPassword,
+    tlsMode: s.tlsMode,
+    ...(s.tlsMode === "verify-ca" ? { caCertificate: s.caCertificate } : {}),
+  });
+
+export const checkServer = (name: string) => request<DBServer>("POST", "/db-servers/" + encodeURIComponent(name) + "/check");
+
+export const setDefaultServer = (name: string) => request<void>("PUT", "/db-servers/" + encodeURIComponent(name) + "/default", {});
+
+export const deleteServer = (name: string) => request<void>("DELETE", "/db-servers/" + encodeURIComponent(name));
+
+// serverAddress is what goes into the site's configuration as DB_HOST.
+export function serverAddress(s: DBServer | undefined): string {
+  if (!s || s.local || !s.host) return "localhost";
+  const host = s.host.includes(":") ? "[" + s.host + "]" : s.host;
+  return s.port && s.port !== 3306 ? host + ":" + s.port : host;
+}
+
+// engineLabel names the engine and version, like "MariaDB 11.8.6".
+export function engineLabel(s: DBServer): string {
+  if (!s.engine) return s.local ? "MariaDB" : "Not checked yet";
+  return (s.engine === "mysql" ? "MySQL" : "MariaDB") + (s.version ? " " + s.version : "");
+}
+
+// serverNameProblem mirrors hosting.ValidateDBServerName.
+export function serverNameProblem(v: string): string {
+  if (v === "") return "Enter a name.";
+  if (!/^[a-z][a-z0-9-]{0,31}$/.test(v)) return "Use 1 to 32 characters: lowercase letters, digits and -, starting with a letter.";
+  if (v === LOCAL_SERVER) return "This name is reserved for the local server.";
+  return "";
+}

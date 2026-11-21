@@ -8,8 +8,13 @@ import { Databases } from "./Databases";
 import { durationLabel, safeToolURL } from "./dbtool";
 import { mockFetch } from "./test-utils";
 
-const sites = { "GET /api/v1/sites": { body: { sites: [{ name: "blog", state: "active" }] } } };
-const blogWp = { name: "blog_wp", site: "blog", users: ["blog_wp"], createdAt: "2026-11-19T08:00:00Z" };
+const sites = {
+  "GET /api/v1/sites": { body: { sites: [{ name: "blog", state: "active" }] } },
+  "GET /api/v1/db-servers": {
+    body: { servers: [{ name: "localhost", local: true, default: true, state: "ok", databases: 1, tlsMode: "socket", tlsActive: false }] },
+  },
+};
+const blogWp = { name: "blog_wp", site: "blog", server: "localhost", users: ["blog_wp"], createdAt: "2026-11-19T08:00:00Z" };
 const ticketURL = "https://panel.example.com:8444/?ticket=0123456789abcdef0123456789abcdef";
 const available = { "GET /api/v1/dbtool": { body: { available: true, minutes: [30, 120] } } };
 
@@ -48,10 +53,25 @@ describe("database tool helpers", () => {
 
 describe("Open in Adminer", () => {
   it("has no button when the tool is not available", async () => {
-    mockFetch({ ...sites, "GET /api/v1/databases": { body: { databases: [blogWp] } }, "GET /api/v1/dbtool": { body: { available: false, minutes: [30, 120] } } });
+    mockFetch({
+      ...sites,
+      "GET /api/v1/databases": { body: { databases: [blogWp] } },
+      "GET /api/v1/dbtool": { body: { available: false, minutes: [30, 120] } },
+    });
     render(<Harness />);
     expect(await screen.findByRole("link", { name: "blog_wp" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open blog_wp in Adminer" })).not.toBeInTheDocument();
+  });
+
+  it("has no button for a database on an external server", async () => {
+    mockFetch({
+      ...sites,
+      "GET /api/v1/databases": { body: { databases: [blogWp, { ...blogWp, name: "blog_ext", server: "db1" }] } },
+      ...available,
+    });
+    render(<Harness />);
+    expect(await screen.findByRole("button", { name: "Open blog_wp in Adminer" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open blog_ext in Adminer" })).not.toBeInTheDocument();
   });
 
   it("opens a database for the chosen time in a new tab", async () => {

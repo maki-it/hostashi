@@ -153,12 +153,14 @@ func TestDBServersOverHTTP(t *testing.T) {
 		t.Fatalf("delete in use: %d %s", rec.Code, rec.Body)
 	}
 
-	// A user sees the servers to pick one, but not how they are reached.
+	// A user sees the servers to pick one and the host for DB_HOST, but
+	// not the administrator or the last error.
 	uc, _ := matrixLogin(t, e, c, "uma", "user")
 
 	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/db-servers", cookie: uc})
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"name":"db1"`) ||
-		strings.Contains(rec.Body.String(), "db.example.net") || strings.Contains(rec.Body.String(), "hostashi_admin") {
+		!strings.Contains(rec.Body.String(), `"host":"db.example.net"`) || strings.Contains(rec.Body.String(), "hostashi_admin") ||
+		strings.Contains(rec.Body.String(), "clientHost") {
 		t.Fatalf("user list: %d %s", rec.Code, rec.Body)
 	}
 

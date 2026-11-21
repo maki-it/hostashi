@@ -130,7 +130,7 @@ export function App() {
           ) : (
             <Sites query={route.query} onQuery={replaceQuery} />
           ))}
-        {show("databases") && <Databases query={route.query} onQuery={replaceQuery} />}
+        {show("databases") && <Databases role={user.role} query={route.query} onQuery={replaceQuery} />}
         {show("backups") && <Backups query={route.query} onQuery={replaceQuery} />}
         {show("php") && <PHPPage query={route.query} onQuery={replaceQuery} />}
         {show("limits") && <Presets query={route.query} onQuery={replaceQuery} />}
