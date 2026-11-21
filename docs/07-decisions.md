@@ -54,7 +54,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0048 | Convert a parked domain into a site and back | Accepted on 2026-11-21 ([adr/0048](adr/0048-convert-parked-domain-and-site.md)) | No |
 | 0049 | PHP settings per site | Accepted on 2026-11-21 ([adr/0049](adr/0049-php-settings-per-site.md)) | No |
 | 0050 | Signed releases, install and updates through apt | Accepted on 2026-11-21 ([adr/0050](adr/0050-signed-releases-and-apt-updates.md)) | No |
-| 0051 | External PostgreSQL servers | Proposed ([adr/0051](adr/0051-external-postgresql-servers.md)) | **Yes** |
+| 0051 | External PostgreSQL servers | Accepted on 2026-11-21 ([adr/0051](adr/0051-external-postgresql-servers.md)) | Done |
 
 ---
 
@@ -372,4 +372,4 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0051 External PostgreSQL servers
 
-**Full draft (status Proposed, 2026-11-21):** [adr/0051](adr/0051-external-postgresql-servers.md). Summary: MariaDB stays the only local engine (Kim, 2026-11-21). Sites that need PostgreSQL use external PostgreSQL servers as a third engine in the ADR-0041 design, in v1 with databases, backups, import and export and Adminer. Recommended: pgx in the panel, client tools from apt.postgresql.org installed when the first server is added, Adminer's full build in the existing pool, and a sixth `os/exec` exception `internal/pgctl` for `pg_dump`, `pg_restore` and `psql`.
+**Full text (status Accepted, 2026-11-21, by Kim):** [adr/0051](adr/0051-external-postgresql-servers.md). Summary: MariaDB stays the only local engine (Kim, 2026-11-21). Sites that need PostgreSQL use external PostgreSQL servers as a third engine in the ADR-0041 design, in v1 with databases, backups, import and export and Adminer. Recommended: pgx in the panel, client tools from apt.postgresql.org installed when the first server is added, Adminer's full build in the existing pool, and a sixth `os/exec` exception `internal/pgctl` for `pg_dump`, `pg_restore` and `psql`.

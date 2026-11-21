@@ -1,6 +1,6 @@
 # ADR-0051 External PostgreSQL servers
 
-**Status:** Proposed. **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups), ADR-0024 (MariaDB per site, no stored passwords), ADR-0025 (import and export), ADR-0033 (hardening), ADR-0035 (roles), ADR-0038 (web database tool), ADR-0041 (external database servers and its Addendum 1), [`03-features.md`](../03-features.md) row "PostgreSQL" (P1).
+**Status:** Accepted (Kim, 2026-11-21). **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups), ADR-0024 (MariaDB per site, no stored passwords), ADR-0025 (import and export), ADR-0033 (hardening), ADR-0035 (roles), ADR-0038 (web database tool), ADR-0041 (external database servers and its Addendum 1), [`03-features.md`](../03-features.md) row "PostgreSQL" (P1).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
