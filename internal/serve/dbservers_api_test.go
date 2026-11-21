@@ -22,9 +22,13 @@ type stubDBServers struct {
 	dbs      map[string]bool
 }
 
-func (s *stubDBServers) Check(context.Context, dbserver.Config, bool) (dbserver.Info, error) {
+func (s *stubDBServers) Check(_ context.Context, cfg dbserver.Config, _ bool) (dbserver.Info, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if dbserver.IsPostgres(cfg.Engine) {
+		return dbserver.Info{Engine: dbserver.EnginePostgreSQL, Version: "18.1", ClientHost: "10.0.0.2", TLS: true, Superuser: true}, s.checkErr
+	}
 
 	return dbserver.Info{Engine: dbserver.EngineMariaDB, Version: "11.8.6", ClientHost: "10.0.0.2", TLS: true}, s.checkErr
 }
@@ -60,7 +64,7 @@ func (r stubRemote) DropDatabase(_ context.Context, name string) error {
 }
 
 func (stubRemote) CreateUser(context.Context, string, string, string) error     { return nil }
-func (stubRemote) DropUser(context.Context, string) error                       { return nil }
+func (stubRemote) DropUser(context.Context, string, string) error               { return nil }
 func (stubRemote) SetPassword(context.Context, string, string) error            { return nil }
 func (stubRemote) CreateJobUser(context.Context, string, string, string) error  { return nil }
 func (stubRemote) DropJobUser(context.Context, string) error                    { return nil }
@@ -86,6 +90,19 @@ func TestDBServersOverHTTP(t *testing.T) {
 		t.Fatalf("%+v %v", got, err)
 	}
 
+	// A PostgreSQL server gets its own default port and a warning for a
+	// superuser.
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/db-servers", cookie: c, body: `{"engine":"postgresql","name":"pg1","host":"pg.example.net","adminUser":"postgres","adminPassword":"Top-secret-admin"}`})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("add PostgreSQL: %d %s", rec.Code, rec.Body)
+	}
+
+	got = dbServerJSON{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || got.Engine != "PostgreSQL" || got.Port != 5432 ||
+		len(got.Warnings) != 1 || !strings.Contains(got.Warnings[0], "superuser") {
+		t.Fatalf("PostgreSQL: %+v %v", got, err)
+	}
+
 	cases := []struct {
 		method, path, body string
 		code               int
@@ -95,6 +112,7 @@ func TestDBServersOverHTTP(t *testing.T) {
 		{"POST", "/api/v1/db-servers", `{"name":"db2","host":"x y","adminUser":"a","adminPassword":"b"}`, http.StatusUnprocessableEntity},
 		{"POST", "/api/v1/db-servers", `{"name":"db2","host":"x.example.net","adminUser":"a","adminPassword":"b","tlsMode":"verify-ca"}`, http.StatusUnprocessableEntity},
 		{"POST", "/api/v1/db-servers", `{"name":"db2","nope":1}`, http.StatusBadRequest},
+		{"POST", "/api/v1/db-servers", `{"engine":"oracle","name":"db2","host":"x.example.net","adminUser":"a","adminPassword":"b"}`, http.StatusUnprocessableEntity},
 		{"POST", "/api/v1/db-servers/nope/check", ``, http.StatusNotFound},
 		{"PUT", "/api/v1/db-servers/nope/default", ``, http.StatusNotFound},
 		{"DELETE", "/api/v1/db-servers/nope", ``, http.StatusNotFound},
@@ -177,7 +195,7 @@ func TestDBServersOverHTTP(t *testing.T) {
 	var list struct {
 		Servers []dbServerJSON `json:"servers"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || len(list.Servers) != 2 || !list.Servers[0].Local ||
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || len(list.Servers) != 3 || !list.Servers[0].Local ||
 		list.Servers[0].Default || !list.Servers[1].Default || list.Servers[1].Databases != 1 {
 		t.Fatalf("admin list: %s %v", rec.Body, err)
 	}

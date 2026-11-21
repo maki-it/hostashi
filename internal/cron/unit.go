@@ -77,6 +77,9 @@ type Unit struct {
 	Home   string // the site's home, absolute
 	Script string // the job's script file, absolute
 	Slice  string // optional, a slice unit name
+	// Hidden are the pool roots the job must not see besides /home
+	// (sites.Manager.HiddenPaths, ADR-0016).
+	Hidden []string
 	// Nice is the job's niceness, 0 to 19; 0 leaves it unset (ADR-0015:
 	// 10 by default for cron jobs).
 	Nice    int
@@ -108,7 +111,7 @@ func (u Unit) check() error {
 		return fmt.Errorf("cron: job id %d", u.ID)
 	}
 
-	for _, p := range []string{u.Home, u.Script} {
+	for _, p := range append([]string{u.Home, u.Script}, u.Hidden...) {
 		if !unitPathRe.MatchString(p) || path.Clean(p) != p || p == "/" {
 			return fmt.Errorf("cron: path %q", p)
 		}
@@ -156,6 +159,8 @@ func (u Unit) Service() ([]byte, error) {
 	w("Description=Hostashi cron job ", strconv.FormatInt(u.ID, 10), " of site ", u.Site)
 	w("Documentation=https://github.com/maki-it/hostashi")
 	w("ConditionPathExists=", u.Script)
+	// The job never starts on the root disk below a missing volume.
+	w("RequiresMountsFor=", u.Home)
 	w("")
 	w("[Service]")
 	w("Type=oneshot")
@@ -182,6 +187,12 @@ func (u Unit) Service() ([]byte, error) {
 	w("ProtectSystem=strict")
 	// Other homes below /home disappear; the site's own is mounted back.
 	w("ProtectHome=tmpfs")
+
+	for _, p := range u.Hidden {
+		// ProtectHome= covers /home only: the other pools go the same way.
+		w("TemporaryFileSystem=", p, ":ro")
+	}
+
 	w("BindPaths=", u.Home)
 	w("ReadWritePaths=", u.Home)
 	w("ProtectKernelTunables=yes")

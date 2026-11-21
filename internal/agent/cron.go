@@ -67,7 +67,7 @@ func (h *siteOps) cronSite(user string) (cronjobs.Site, bool) {
 
 	for _, s := range h.m.List() {
 		if s.User == user {
-			return cronjobs.Site{Name: user, Home: home, UID: s.UID, GID: s.GID, Slice: siteSlice(user)}, true
+			return cronjobs.Site{Name: user, Home: home, UID: s.UID, GID: s.GID, Slice: siteSlice(user), Hidden: h.m.HiddenPaths()}, true
 		}
 	}
 

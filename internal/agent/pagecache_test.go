@@ -152,6 +152,41 @@ func TestWebApplyPreparesCacheDirectory(t *testing.T) {
 	}
 }
 
+// TestWebApplyKeepsCacheOffAnUnusablePool: with the pool failing its checks
+// (here: writable by others, like a missing volume's bare mountpoint), the
+// cache directory is never created below it (spike S9).
+func TestWebApplyKeepsCacheOffAnUnusablePool(t *testing.T) {
+	p := &php.Manager{Dir: filepath.Join(t.TempDir(), "php"), SocketDir: "/run/hostashi-php", WebGroup: "www-data", Ctl: nopPHP{}}
+	c, pool := startSiteAgentCfg(t, Config{
+		Web: &web.Reconciler{Base: filepath.Join(t.TempDir(), "web"), Driver: &web.Nginx{}},
+		PHP: p, PageCache: testCacheDirs(), Quota: newFakeQuota(true),
+	})
+	ctx := context.Background()
+
+	if _, err := agentapi.SiteCreate.Call(ctx, c, agentapi.SiteCreateRequest{User: "blog"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Chmod(pool, 0o777); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := agentapi.WebApply.Call(ctx, c, agentapi.WebApplyRequest{Sites: []agentapi.WebSite{{
+		User: "blog", Domains: []string{"blog.example.com"}, PHP: "8.4",
+		PageCache: &agentapi.WebPageCache{Preset: agentapi.PageCacheWordPress, Minutes: 10, SizeMB: 256},
+	}}})
+	wantCode(t, err, agentrpc.CodePrecondition)
+
+	_, err = agentapi.PageCachePurge.Call(ctx, c, agentapi.PageCachePurgeRequest{User: "blog"})
+	if err == nil {
+		t.Error("purge on an unusable pool succeeded")
+	}
+
+	if _, err := os.Lstat(filepath.Join(pool, pagecache.DirName)); !os.IsNotExist(err) {
+		t.Fatalf("cache directory below the unusable pool: %v", err)
+	}
+}
+
 func TestWebApplyRefusesCacheWithoutDirs(t *testing.T) {
 	p := &php.Manager{Dir: filepath.Join(t.TempDir(), "php"), SocketDir: "/run/hostashi-php", WebGroup: "www-data", Ctl: nopPHP{}}
 	c, _ := startSiteAgentPHP(t, &web.Reconciler{Base: filepath.Join(t.TempDir(), "web"), Driver: &web.Nginx{}}, p)

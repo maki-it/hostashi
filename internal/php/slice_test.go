@@ -47,6 +47,14 @@ func TestSliceDropIn(t *testing.T) {
 		t.Errorf("drop-in:\n%s", got)
 	}
 
+	if !strings.Contains(string(got), "[Unit]\nRequiresMountsFor="+home+"\n[Service]\n") {
+		t.Errorf("drop-in does not require the home's mount:\n%s", got)
+	}
+
+	if strings.Contains(string(got), "TemporaryFileSystem=") {
+		t.Errorf("nothing to hide, drop-in:\n%s", got)
+	}
+
 	if st, _ := os.Stat(dropIn); st.Mode().Perm() != 0o644 {
 		t.Errorf("drop-in mode %v", st.Mode().Perm())
 	}
@@ -116,5 +124,26 @@ func TestSliceDropIn(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Dir(newDropIn)); !os.IsNotExist(err) {
 		t.Errorf("drop-in directory left after prune: %v", err)
+	}
+}
+
+func TestSliceDropInHidesOtherPools(t *testing.T) {
+	ctx := context.Background()
+	m, ctl := newManager(t)
+	m.Units, m.UnitDir, m.Slice = ctl, t.TempDir(), sliceOf
+	m.Hidden = func() []string { return []string{"/srv/vol1", "/mnt/b"} }
+
+	home := t.TempDir()
+	if err := m.Ensure(ctx, []Pool{{User: "shop", Version: "8.4", Home: home}}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(m.UnitDir, "hostashi-php-8.4@shop.service.d", DropInName))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want := "BindPaths=" + home + "\nReadWritePaths=" + home + "\nTemporaryFileSystem=/srv/vol1:ro\nTemporaryFileSystem=/mnt/b:ro\n"; !strings.HasSuffix(string(got), want) {
+		t.Errorf("drop-in:\n%s", got)
 	}
 }

@@ -221,7 +221,7 @@ func TestStatements(t *testing.T) {
 		c.CreateDatabase(ctx, "shop_wp"),
 		c.CreateUser(ctx, "shop_wp", "shop_user", pw),
 		c.SetPassword(ctx, "shop_user", pw+"x"),
-		c.DropUser(ctx, "shop_user"),
+		c.DropUser(ctx, "", "shop_user"),
 		c.DropDatabase(ctx, "shop_wp"),
 	} {
 		if err != nil {
@@ -254,7 +254,7 @@ func TestStatementsRejectInvalid(t *testing.T) {
 		"db reserved":    c.CreateDatabase(ctx, "mysql"),
 		"db hostashi":    c.DropDatabase(ctx, "hostashi_x"),
 		"user quote":     c.CreateUser(ctx, "shop", "a'b", pw),
-		"user reserved":  c.DropUser(ctx, "root"),
+		"user reserved":  c.DropUser(ctx, "", "root"),
 		"pw quote":       c.CreateUser(ctx, "shop", "shop", "Abcdefghijkl'mnop1234"),
 		"pw short":       c.SetPassword(ctx, "shop", "short"),
 		"pw backslash":   c.SetPassword(ctx, "shop", `Abcdefghijklmnop\1234`),

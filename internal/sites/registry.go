@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -71,6 +72,11 @@ var (
 	ErrStateUnsafe  = errors.New("sites: state directory or file is not safe")
 	ErrStateInvalid = errors.New("sites: state file is invalid")
 )
+
+// poolPathRe is the character set of a pool path: it ends up in unit
+// files and drop-ins (sites.UnitIsolation), so nothing that systemd would
+// read as a separator, specifier or escape.
+var poolPathRe = regexp.MustCompile(`^/[A-Za-z0-9_./-]+$`)
 
 // DefaultPools is what a fresh registry starts with: one pool on the system
 // volume. The installer or a later admin command adds real pools.
@@ -280,8 +286,8 @@ func validatePool(p Pool) error {
 		return err
 	}
 
-	if !filepath.IsAbs(p.Path) || filepath.Clean(p.Path) != p.Path || p.Path == "/" {
-		return fmt.Errorf("pool %q: path must be absolute, clean and not /", p.Name)
+	if !filepath.IsAbs(p.Path) || filepath.Clean(p.Path) != p.Path || p.Path == "/" || !poolPathRe.MatchString(p.Path) {
+		return fmt.Errorf("pool %q: path must be absolute, clean, not / and only letters, digits and _ . / -", p.Name)
 	}
 
 	if strings.ContainsAny(p.ID, "\r\n\x00") || len(p.ID) > 128 {

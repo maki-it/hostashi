@@ -130,13 +130,19 @@ jobs:
           export GNUPGHOME
           trap 'gpgconf --kill all; rm -rf "$GNUPGHOME"' EXIT
           gpg --batch --quiet --import <<<"$APT_SIGNING_KEY"
+          # Only the key that the package and the install script trust.
+          want=$(gpg --batch --with-colons --show-keys packaging/keyring/hostashi-archive-keyring.asc | awk -F: '$1 == "fpr" { print $10; exit }')
+          have=$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "fpr" { print $10; exit }')
+          [ -n "$want" ] && [ "$have" = "$want" ] ||
+            { echo "::error::APT_SIGNING_KEY ($have) is not the key in packaging/keyring ($want)"; exit 1; }
           # Renewal is due a year before expiry (ADR-0050); warn at 90 days.
           exp=$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "sec" { print $7; exit }')
           if [ -n "$exp" ] && [ "$exp" -lt $(( $(date +%s) + 90 * 86400 )) ]; then
             echo "::warning::the apt signing key expires on $(date -u -d "@$exp" +%F); renew it"
           fi
           packaging/apt-repo/build.sh debs out/apt
-          tar -C out -czf apt-repo.tar.gz apt
+          cp packaging/get/install.sh out/install.sh
+          tar -C out -czf apt-repo.tar.gz apt install.sh
       - name: Attach apt-repo.tar.gz and publish
         env:
           GH_TOKEN: ${{ github.token }}
