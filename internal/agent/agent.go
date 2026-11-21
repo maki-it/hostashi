@@ -35,6 +35,7 @@ import (
 	"github.com/maki-it/hostashi/internal/objcache"
 	"github.com/maki-it/hostashi/internal/pagecache"
 	"github.com/maki-it/hostashi/internal/pages"
+	"github.com/maki-it/hostashi/internal/pgclient"
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
 	"github.com/maki-it/hostashi/internal/phpinstall"
@@ -155,6 +156,11 @@ type Config struct {
 	// (ADR-0036). Run builds it; without it php.install answers
 	// failed_precondition.
 	PHPInstall *phpinstall.Manager
+
+	// PGClient installs the PostgreSQL client tools through the fixed
+	// install unit (ADR-0051). Run builds it; without it pg.client.*
+	// answer failed_precondition.
+	PGClient *pgclient.Manager
 
 	// PageCache keeps the sites' page cache directories (ADR-0046). Run
 	// builds it for nginx's worker user; without it a page cache is
@@ -295,6 +301,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	registerDBJobs(s, cfg.DBJobs)
 	registerFirewall(s, cfg.Firewall)
 	registerPHPInstall(s, cfg.PHPInstall)
+	registerPGClient(s, cfg.PGClient)
 
 	return s
 }
@@ -1280,6 +1287,10 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.PHPInstall == nil {
 		cfg.PHPInstall = &phpinstall.Manager{Units: phpctl.InstallUnits{}, Installed: phpctl.Installed}
+	}
+
+	if cfg.PGClient == nil {
+		cfg.PGClient = &pgclient.Manager{Units: phpctl.PGClientUnits{}}
 	}
 
 	if cfg.Firewall == nil {

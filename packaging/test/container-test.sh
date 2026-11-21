@@ -179,7 +179,8 @@ esac
 grep -qF "$want" <<<"$origins" || fail "security origin missing: $origins"
 for o in $origins; do
   # sury.org (more PHP versions, ADR-0019) has no security archive of its own.
-  case "$o" in *-security* | "origin=deb.sury.org,archive=$codename") ;; *) fail "unattended-upgrades allows a non-security origin: $o";; esac
+  # Neither has apt.postgresql.org (PostgreSQL client tools, ADR-0051).
+  case "$o" in *-security* | "origin=deb.sury.org,archive=$codename" | "origin=apt.postgresql.org,archive=$codename-pgdg") ;; *) fail "unattended-upgrades allows a non-security origin: $o";; esac
 done
 [ "$(x apt-config dump --format '%v%n' Unattended-Upgrade::Automatic-Reboot)" = false ] || fail "automatic reboot is on"
 for t in apt-daily.timer apt-daily-upgrade.timer; do
@@ -1526,6 +1527,43 @@ exposure "hostashi-php-$NEWEST@next.service" 3.0
 body=$(x curl -fsS -H 'Host: next.example.com' http://127.0.0.1/index.php)
 [ "$body" = "php $NEWEST {\"ok\":true}" ] || fail "PHP $NEWEST site answered '$body'"
 [ "$(api DELETE /api/v1/sites/next)" = 204 ] || fail "delete $NEWEST site: $(x cat /tmp/api.out)"
+
+step "PostgreSQL client tools from apt.postgresql.org (ADR-0051)"
+# The installer only puts the script and its unit in place; nothing of
+# apt.postgresql.org exists before the panel asks for the client.
+expect_mode /usr/local/lib/hostashi/pg-client-install "755 root:root"
+expect_mode /var/lib/hostashi-agent/pg-client-install "700 root:root"
+! x test -e /etc/apt/sources.list.d/hostashi-pgdg.sources || fail "apt.postgresql.org set up without a request"
+grep -qF "origin=apt.postgresql.org,archive=$codename-pgdg" <<<"$origins" || fail "apt.postgresql.org not in unattended-upgrades: $origins"
+if x systemctl start hostashi-pg-client-install@13.service 2>/dev/null; then fail "the unit installed PostgreSQL client 13"; fi
+PG_NEWEST=$(sed -n 's/^PG_MAJORS=(\(.*\))$/\1/p' "$HERE/postgresql/pg-client-install" | awk '{print $NF}')
+[ -n "$PG_NEWEST" ] || fail "no PG_MAJORS in pg-client-install"
+[ "$(api GET /api/v1/db-servers/postgresql-client)" = 200 ] || fail "pg client status: $(x cat /tmp/api.out)"
+x grep -q '"installed":\[\]' /tmp/api.out || fail "a PostgreSQL client is installed already: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/db-servers/postgresql-client '{"major":"13"}')" = 422 ] || fail "pg client 13: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/db-servers/postgresql-client '{}')" = 202 ] || fail "pg client install: $(x cat /tmp/api.out)"
+state=""
+for _ in $(seq 1 150); do
+  [ "$(api GET /api/v1/db-servers/postgresql-client)" = 200 ] || fail "pg client status: $(x cat /tmp/api.out)"
+  state=$(x sed -n 's/.*"state":"\([a-z]*\)".*/\1/p' /tmp/api.out)
+  [ "$state" = running ] || break
+  sleep 2
+done
+[ "$state" = succeeded ] || fail "PostgreSQL client from the panel: $(x cat /tmp/api.out)"
+x grep -q "\"installed\":\\[\"$PG_NEWEST\"\\]" /tmp/api.out || fail "PostgreSQL client $PG_NEWEST not listed: $(x cat /tmp/api.out)"
+for b in pg_dump pg_restore psql; do
+  x "/usr/lib/postgresql/$PG_NEWEST/bin/$b" --version | grep -q "(PostgreSQL) $PG_NEWEST\." || fail "$b is not from PostgreSQL $PG_NEWEST"
+done
+expect_mode /usr/share/keyrings/hostashi-pgdg.asc "644 root:root"
+expect_mode /etc/apt/preferences.d/hostashi-pgdg "644 root:root"
+# Only the client packages come from apt.postgresql.org.
+for p in "postgresql-client-$PG_NEWEST" libpq5; do
+  case "$(origin "$p")" in *apt.postgresql.org*) ;; *) fail "$p does not come from apt.postgresql.org: $(origin "$p")";; esac
+done
+! x dpkg-query -W -f='${Status}' "postgresql-$PG_NEWEST" 2>/dev/null | grep -q 'install ok installed' || fail "the PostgreSQL server was installed"
+[ "$(api POST /api/v1/db-servers/postgresql-client '{}')" = 409 ] || fail "second pg client install: $(x cat /tmp/api.out)"
+out=$(inst apply --yes)
+grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the PostgreSQL client install changed something"; }
 
 step "root gets an account back (ADR-0035)"
 out=$(x /usr/local/bin/hostashi user recover kim) || fail "user recover: $out"
