@@ -3,12 +3,14 @@
 package dbserver
 
 import (
+	"crypto/x509"
 	"database/sql"
 	"errors"
 	"net"
 	"os"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 )
@@ -76,6 +78,10 @@ func open(t *testing.T, c Config) *sql.DB {
 func TestServer(t *testing.T) {
 	cfg := serverConfig(t)
 	ctx := t.Context()
+
+	var notAfter time.Time
+
+	cfg.OnCertificate = func(c *x509.Certificate) { notAfter = c.NotAfter }
 	admin := open(t, cfg)
 
 	info, err := Probe(ctx, admin)
@@ -87,6 +93,11 @@ func TestServer(t *testing.T) {
 
 	if info.TLS != (cfg.TLS != TLSNone) {
 		t.Fatalf("TLS %v with mode %s", info.TLS, cfg.TLS)
+	}
+
+	// The CI certificate is valid for one day.
+	if cfg.TLS != TLSNone && (notAfter.Before(time.Now()) || notAfter.After(time.Now().Add(49*time.Hour))) {
+		t.Fatalf("certificate end %v", notAfter)
 	}
 
 	c, err := NewClient(admin, info.ClientHost)

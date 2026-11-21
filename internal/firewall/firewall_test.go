@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -370,5 +371,74 @@ func TestDisabled(t *testing.T) {
 
 	if st, err := m.Status(); err != nil || st.Enabled {
 		t.Errorf("status: %+v %v", st, err)
+	}
+}
+
+// panelLog records the calls of a panel hook.
+type panelLog struct {
+	calls [][]string
+	fail  bool
+}
+
+func (p *panelLog) hook(_ context.Context, allow []string) error {
+	p.calls = append(p.calls, slices.Clone(allow))
+	if p.fail {
+		return errors.New("nginx rejected it")
+	}
+
+	return nil
+}
+
+func (p *panelLog) last() []string { return p.calls[len(p.calls)-1] }
+
+func TestPanelHook(t *testing.T) {
+	ctx := context.Background()
+	m, _, _ := newManager(t)
+	pl := &panelLog{}
+
+	// Installing the hook hands it the live list once.
+	if err := m.SetPanelHook(ctx, pl.hook); err != nil || len(pl.calls) != 1 || len(pl.last()) != 0 {
+		t.Fatalf("install: %v %v", err, pl.calls)
+	}
+
+	st, err := m.Apply(ctx, Example)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want := normalize(Example).PanelAllow; !slices.Equal(pl.last(), want) {
+		t.Fatalf("after apply: %v, want %v", pl.last(), want)
+	}
+
+	// The rollback hands back the previous list.
+	m.expire(ctx, st.Pending.ID)
+
+	if len(pl.last()) != 0 {
+		t.Fatalf("after rollback: %v", pl.last())
+	}
+
+	// A hook that fails undoes the change like rules that do not load.
+	pl.fail = true
+
+	if _, err := m.Apply(ctx, Example); err == nil {
+		t.Fatal("change accepted although the hook failed")
+	}
+
+	pl.fail = false
+
+	if st, _ := m.Status(); st.Pending != nil || len(st.State.PanelAllow) != 0 {
+		t.Fatalf("after a failed hook: %+v", st)
+	}
+}
+
+func TestPanelHookWithoutFirewall(t *testing.T) {
+	m, _, _ := newManager(t)
+	if err := os.Remove(m.Base); err != nil {
+		t.Fatal(err)
+	}
+
+	pl := &panelLog{}
+	if err := m.SetPanelHook(context.Background(), pl.hook); err != nil || len(pl.calls) != 1 || pl.last() != nil {
+		t.Fatalf("without firewall: %v %v", err, pl.calls)
 	}
 }

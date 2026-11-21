@@ -110,6 +110,11 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/databases/{db}/jobs/{id}":             "databases:read",
 	"GET /api/v1/dbtool":                               "databases:list",
 	"POST /api/v1/databases/{db}/tool":                 "databases:open",
+	"GET /api/v1/db-servers":                           "db_servers:list",
+	"POST /api/v1/db-servers":                          "db_servers:write",
+	"POST /api/v1/db-servers/{server}/check":           "db_servers:write",
+	"PUT /api/v1/db-servers/{server}/default":          "db_servers:write",
+	"DELETE /api/v1/db-servers/{server}":               "db_servers:write",
 
 	"GET /api/v1/status-pages":               "pages:read",
 	"GET /api/v1/status-pages/{id}":          "pages:read",
