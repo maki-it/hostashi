@@ -1,6 +1,6 @@
 # ADR-0047 Status page for disabled sites
 
-**Status:** Proposed. **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0027 (maintenance and parking pages), ADR-0018 (API), ADR-0035 (users and roles), PR #93 (disable a site).
+**Status:** Accepted (2026-11-21, by Kim). **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0027 (maintenance and parking pages), ADR-0018 (API), ADR-0035 (users and roles), PR #93 (disable a site).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
