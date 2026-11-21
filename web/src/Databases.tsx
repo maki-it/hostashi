@@ -28,6 +28,7 @@ import {
 import { DBServersView, serversHref } from "./DBServers";
 import { poll } from "./backups";
 import { OpenToolDialog } from "./DBTool";
+import { ToolSessions } from "./DBToolSessions";
 import { getDBTool, type DBToolStatus } from "./dbtool";
 import { formatHash } from "./routes";
 import { Button, Card, Field, IconButton, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
@@ -101,6 +102,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
   const [secret, setSecret] = useState<Credentials | null>(null);
   const [tool, setTool] = useState<DBToolStatus | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+  const [toolClosed, setToolClosed] = useState(0);
 
   // Without the tool (or without the status) there is no Adminer button.
   useEffect(() => {
@@ -135,7 +137,11 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
   const notice = secret && <PasswordNotice creds={secret} onClose={() => setSecret(null)} />;
   const toolMinutes = tool?.available ? tool.minutes : null;
   const onOpen = toolMinutes ? setOpening : undefined;
-  const toolDialog = opening && toolMinutes && <OpenToolDialog key={opening} db={opening} server={dbs?.find((d) => d.name === opening)?.server ?? LOCAL_SERVER} minutes={toolMinutes} onClose={() => setOpening(null)} />;
+  const closeTool = () => {
+    setOpening(null);
+    setToolClosed((n) => n + 1);
+  };
+  const toolDialog = opening && toolMinutes && <OpenToolDialog key={opening} db={opening} server={dbs?.find((d) => d.name === opening)?.server ?? LOCAL_SERVER} minutes={toolMinutes} onClose={closeTool} />;
   const listLink = (
     <a className="ui-btn" href={formatHash({ page: "databases" })}>
       <ArrowLeft size={16} aria-hidden="true" />
@@ -210,6 +216,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
         />
         {notice}
         {toolDialog}
+        {db && toolMinutes && <ToolSessions db={db.name} reload={toolClosed} />}
         {error && <Notice tone="err" title={error} />}
         {db ? (
           <DatabaseView key={db.name} db={db} host={hostOf(db.server)} onSecret={setSecret} onChange={load} onDeleted={() => set({ db: "" })} />

@@ -603,6 +603,7 @@ DBTOOL_FILES=(adminer.php index.php tool.php adminer.css
 DBTOOL_CONF=/etc/hostashi-adminer/php-fpm.conf
 DBTOOL_TMPFILES=/etc/tmpfiles.d/hostashi-adminer.conf
 DBTOOL_TICKETS=/run/hostashi-adminer/tickets
+DBTOOL_SESSIONS=/run/hostashi-adminer/sessions
 DBTOOL_UNIT=hostashi-adminer.service
 DBTOOL_CHANGED=no
 
@@ -641,6 +642,7 @@ chk_dbtool() {
   file_matches "$DBTOOL_CONF" 0644 root:root <"$DBTOOL_SRC/php-fpm.conf" || { echo "$DBTOOL_CONF differs"; return 1; }
   file_matches "$DBTOOL_TMPFILES" 0644 root:root <"$DBTOOL_SRC/hostashi-adminer.tmpfiles" || { echo "$DBTOOL_TMPFILES differs"; return 1; }
   dir_ok "$DBTOOL_TICKETS" 700 "$DBTOOL_USER:$DBTOOL_USER" || { echo "$DBTOOL_TICKETS"; return 1; }
+  dir_ok "$DBTOOL_SESSIONS" 750 "root:$DBTOOL_USER" || { echo "$DBTOOL_SESSIONS"; return 1; }
   unit=$(dbtool_unit 2>&1) || { echo "$unit"; return 1; }
   printf '%s\n' "$unit" | file_matches "/etc/systemd/system/$DBTOOL_UNIT" 0644 root:root || { echo "$DBTOOL_UNIT differs"; return 1; }
   [ "$DBTOOL_CHANGED" = no ] || { echo "restart needed after a change"; return 1; }

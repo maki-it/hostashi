@@ -162,3 +162,65 @@ describe("Open in Adminer", () => {
     expect(tab.location.replace).not.toHaveBeenCalled();
   });
 });
+
+describe("Adminer sessions", () => {
+  const soon = () => new Date(Date.now() + 3 * 60000).toISOString();
+  const later = () => new Date(Date.now() + 25 * 60000).toISOString();
+  const id = "hostashi_tool_0123456789abcdef";
+  const path = "/api/v1/databases/blog_wp/tool/sessions";
+
+  it("names nothing while no session is open", async () => {
+    mockFetch({ ...sites, ...available, "GET /api/v1/databases": { body: { databases: [blogWp] } }, ["GET " + path]: { body: { sessions: [] } } });
+    render(<Harness initial="db=blog_wp" />);
+    expect(await screen.findByRole("button", { name: "Open in Adminer" })).toBeInTheDocument();
+    expect(screen.queryByText("Adminer sessions")).not.toBeInTheDocument();
+  });
+
+  it("lists who opened a session, extends and ends it", async () => {
+    const user = userEvent.setup();
+    const first = { id, user: "kim", opened: new Date().toISOString(), expires: soon() };
+    let sessions = [first];
+    const calls = mockFetch({
+      ...sites,
+      ...available,
+      "GET /api/v1/databases": { body: { databases: [blogWp] } },
+      ["GET " + path]: () => ({ body: { sessions } }),
+      ["POST " + path + "/" + id + "/extend"]: () => {
+        sessions = [{ ...first, expires: later() }];
+        return { body: sessions[0] };
+      },
+      ["DELETE " + path + "/" + id]: () => {
+        sessions = [];
+        return { status: 204 };
+      },
+    });
+    render(<Harness initial="db=blog_wp" />);
+    const row = (await screen.findByText("kim")).closest("li") as HTMLElement;
+    expect(within(row).getByText("Ends soon")).toBeInTheDocument();
+    expect(within(row).getByText("ends in 3 min")).toBeInTheDocument();
+
+    await user.click(within(row).getByRole("button", { name: "Extend by 30 minutes" }));
+    expect(calls.some((c) => c.method === "POST" && c.path.endsWith("/extend"))).toBe(true);
+    expect(await within(row).findByText("Open")).toBeInTheDocument();
+    expect(within(row).getByText("ends in 25 min")).toBeInTheDocument();
+
+    await user.click(within(row).getByRole("button", { name: "End now" }));
+    expect(calls.some((c) => c.method === "DELETE" && c.path === path + "/" + id)).toBe(true);
+    await vi.waitFor(() => expect(screen.queryByText("Adminer sessions")).not.toBeInTheDocument());
+  });
+
+  it("says why a session cannot be extended", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      ...sites,
+      ...available,
+      "GET /api/v1/databases": { body: { databases: [blogWp] } },
+      ["GET " + path]: { body: { sessions: [{ id, user: "", opened: new Date().toISOString(), expires: later() }] } },
+      ["POST " + path + "/" + id + "/extend"]: { status: 409, body: { error: { code: "dbtool_session_limit", message: "x" } } },
+    });
+    render(<Harness initial="db=blog_wp" />);
+    expect(await screen.findByText("A removed account")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Extend by 30 minutes" }));
+    expect(await screen.findByText(/at most two hours ahead/)).toBeInTheDocument();
+  });
+});

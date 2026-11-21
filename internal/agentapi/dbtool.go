@@ -29,6 +29,83 @@ const (
 	DBToolUserPrefix = "hostashi_tool_"
 	// DBToolMaxConnections bounds the connections of one temporary user.
 	DBToolMaxConnections = 2
+	// DBToolSessionDir holds one file per open session, named by its
+	// temporary user, with the session's end in Unix seconds; 0 means the
+	// session was ended. The agent writes it, the tool only reads it, so an
+	// extended or ended session reaches a tab that is already open.
+	DBToolSessionDir = "/run/hostashi-adminer/sessions"
+	// DBToolExtendStep is how much one extension adds.
+	DBToolExtendStep = 30 * time.Minute
+	// DBToolMaxRemaining bounds how far ahead a session may end, however
+	// often it is extended.
+	DBToolMaxRemaining = 2 * time.Hour
+)
+
+// DBToolExtendRequest moves the end of an open session to Expires.
+// Remote is set for a session on an external server: the panel holds its
+// user, the agent only tells the tool.
+type DBToolExtendRequest struct {
+	User    string    `json:"user"`
+	Expires time.Time `json:"expires"`
+	Remote  bool      `json:"remote,omitempty"`
+}
+
+// Validate checks the request.
+func (r DBToolExtendRequest) Validate() error {
+	now := time.Now()
+
+	if !ValidDBToolUser(r.User) {
+		return errors.New("user: not a session of the database tool")
+	}
+
+	if !r.Expires.After(now) || r.Expires.Sub(now) > DBToolMaxRemaining+time.Minute {
+		return fmt.Errorf("expires: must be within %s", DBToolMaxRemaining)
+	}
+
+	return nil
+}
+
+// DBToolEndRequest ends an open session now.
+type DBToolEndRequest struct {
+	User   string `json:"user"`
+	Remote bool   `json:"remote,omitempty"`
+}
+
+// Validate checks the request.
+func (r DBToolEndRequest) Validate() error {
+	if !ValidDBToolUser(r.User) {
+		return errors.New("user: not a session of the database tool")
+	}
+
+	return nil
+}
+
+// DBToolSessionInfo is an open local session as the agent knows it.
+type DBToolSessionInfo struct {
+	User     string    `json:"user"`
+	Database string    `json:"database"`
+	Expires  time.Time `json:"expires"`
+}
+
+// DBToolSessionsRequest asks for the open local sessions.
+type DBToolSessionsRequest struct{}
+
+// Validate checks the request.
+func (DBToolSessionsRequest) Validate() error { return nil }
+
+// DBToolSessionsResponse lists the open local sessions.
+type DBToolSessionsResponse struct {
+	Sessions []DBToolSessionInfo `json:"sessions"`
+}
+
+var (
+	// DBToolExtend moves the end of a session.
+	DBToolExtend = agentrpc.Op[DBToolExtendRequest, DBToolSessionInfo]{Name: "db.tool.extend"}
+	// DBToolEnd ends a session: a local user is dropped with its
+	// connections, and the tool refuses the session from then on.
+	DBToolEnd = agentrpc.Op[DBToolEndRequest, struct{}]{Name: "db.tool.end"}
+	// DBToolSessions lists the open local sessions.
+	DBToolSessions = agentrpc.Op[DBToolSessionsRequest, DBToolSessionsResponse]{Name: "db.tool.sessions"}
 )
 
 // DBToolDurations are the session lengths a user can choose, in minutes.

@@ -143,8 +143,11 @@ class Tool extends \Adminer\Adminer
         echo "<div id='hostashi-bar'><span id='hostashi-ends' data-expires='", (int) LOGIN['expires'], "'>",
             "<span class='ends-word'>Session ends in </span>$left min</span>";
         if (LOGIN['panel'] !== '') {
-            $back = LOGIN['panel'] . '/#/databases?db=' . rawurlencode(LOGIN['database']);
-            echo "<a id='hostashi-panel' href='", \Adminer\h($back), "'>Back to panel</a>";
+            // The panel extends the session (ADR-0038 addendum 1); the
+            // tool itself has no way to.
+            $back = \Adminer\h(LOGIN['panel'] . '/#/databases?db=' . rawurlencode(LOGIN['database']));
+            echo "<a id='hostashi-extend' href='$back' target='_blank' rel='noopener' title='Extend this session in the panel'>+30 min</a>",
+                "<a id='hostashi-panel' href='$back'>Back to panel</a>";
         }
         echo "</div>\n";
     }

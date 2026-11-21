@@ -702,6 +702,23 @@ a.ui-btn {
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--line);
 }
+/* A list without bullets; its last row has no line below */
+.ui-plain-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ui-plain-list > .ui-list-row:last-child {
+  border-bottom: 0;
+}
+.ui-tool-who,
+.ui-tool-end {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 /* Short form fields side by side, stacked on a phone */
 .ui-fields {
   display: grid;

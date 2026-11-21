@@ -192,3 +192,48 @@ func TestDeleteClosesTools(t *testing.T) {
 		t.Fatalf("timers stopped %d", ft.stopped)
 	}
 }
+
+func TestExtendTool(t *testing.T) {
+	m, db, ft := toolManager(t)
+
+	l, err := m.OpenTool(t.Context(), "shop_wp", 30*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	end := l.Expires.Add(30 * time.Minute)
+
+	s, err := m.ExtendTool(t.Context(), l.User, end)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !s.Expires.Equal(end) || s.Database != "shop_wp" {
+		t.Fatalf("session %+v", s)
+	}
+
+	// The old timer stopped, a new one runs; it drops the user.
+	if ft.stopped != 1 || len(ft.fns) != 2 {
+		t.Fatalf("timers: %d stopped, %d started", ft.stopped, len(ft.fns))
+	}
+
+	if got := m.ToolSessions(); !got[0].Expires.Equal(end) {
+		t.Fatalf("sessions %+v", got)
+	}
+
+	if _, err := m.ExtendTool(t.Context(), l.User, l.Expires.Add(-time.Hour)); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("past end: %v", err)
+	}
+
+	db.stmts = nil
+
+	ft.fns[1]()
+
+	if len(m.ToolSessions()) != 0 || len(db.stmts) != 2 {
+		t.Fatalf("after the new end: %v", db.stmts)
+	}
+
+	if _, err := m.ExtendTool(t.Context(), l.User, end); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("ended session: %v", err)
+	}
+}

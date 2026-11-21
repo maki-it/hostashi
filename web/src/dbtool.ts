@@ -24,7 +24,9 @@ export function toolMessage(err: unknown): string {
       case "dbtool_unavailable":
         return "The database tool is not available. It needs the panel's own certificate; see Health.";
       case "not_found":
-        return "This database does not exist any more. Reload the page.";
+        return err.message === "the session has ended" ? "This session has ended already." : "This database does not exist any more. Reload the page.";
+      case "dbtool_session_limit":
+        return "A session can run at most two hours ahead. Extend it again later.";
       case "forbidden":
         return "Your role does not allow opening this database.";
       case "site_busy":
@@ -62,3 +64,17 @@ export function withLook(u: string, scheme: string | undefined, panel: Pick<Loca
   if (panel.protocol === "https:") p.searchParams.set("panel", panel.port || "443");
   return p.toString();
 }
+
+// An open Adminer session on one database: who opened it and until when.
+// user is empty once that account is gone.
+export type DBToolOpen = { id: string; user: string; opened: string; expires: string };
+
+const sessionsPath = (db: string) => "/databases/" + encodeURIComponent(db) + "/tool/sessions";
+
+export const listToolSessions = async (db: string) => (await request<{ sessions: DBToolOpen[] }>("GET", sessionsPath(db))).sessions;
+
+// extendToolSession moves the end 30 minutes later, at most two hours ahead.
+export const extendToolSession = (db: string, id: string) =>
+  request<DBToolOpen>("POST", sessionsPath(db) + "/" + encodeURIComponent(id) + "/extend");
+
+export const endToolSession = (db: string, id: string) => request<void>("DELETE", sessionsPath(db) + "/" + encodeURIComponent(id));

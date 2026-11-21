@@ -79,20 +79,49 @@ func (m *Manager) OpenTool(ctx context.Context, database string, ttl time.Durati
 		m.tools = map[string]*toolSession{}
 	}
 
-	m.tools[user] = &toolSession{
-		database: database,
-		expires:  now.Add(ttl),
-		stop: m.after(ttl, func() {
-			cctx, cancel := context.WithTimeout(bg, toolCloseTimeout)
-			defer cancel()
-
-			if err := m.CloseTool(cctx, user); err != nil {
-				m.log.ErrorContext(cctx, "mariadb: drop expired tool user", "user", user, "err", err)
-			}
-		}),
-	}
+	m.tools[user] = &toolSession{database: database, expires: now.Add(ttl), stop: m.toolTimer(bg, user, ttl)}
 
 	return ToolLogin{Database: database, User: user, Password: pw, Expires: now.Add(ttl)}, nil
+}
+
+// toolTimer drops user after d. The caller holds m.mu.
+func (m *Manager) toolTimer(bg context.Context, user string, d time.Duration) func() bool {
+	return m.after(d, func() {
+		cctx, cancel := context.WithTimeout(bg, toolCloseTimeout)
+		defer cancel()
+
+		if err := m.CloseTool(cctx, user); err != nil {
+			m.log.ErrorContext(cctx, "mariadb: drop expired tool user", "user", user, "err", err)
+		}
+	})
+}
+
+// ExtendTool moves the end of user's session to expires, which must lie
+// ahead. An unknown user is ErrNotFound: the session has ended.
+func (m *Manager) ExtendTool(ctx context.Context, user string, expires time.Time) (ToolSession, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	s, ok := m.tools[user]
+	if !ok {
+		return ToolSession{}, ErrNotFound
+	}
+
+	d := expires.Sub(m.now())
+	if d <= 0 {
+		return ToolSession{}, fmt.Errorf("%w: the new end has passed", ErrInvalid)
+	}
+
+	// A timer that already fired is about to drop the user; the session
+	// ends anyway.
+	if !s.stop() {
+		return ToolSession{}, ErrNotFound
+	}
+
+	s.expires = expires
+	s.stop = m.toolTimer(context.WithoutCancel(ctx), user, d)
+
+	return ToolSession{Database: s.database, User: user, Expires: expires}, nil
 }
 
 // CloseTool ends a session: it drops the user, then kills its connections,

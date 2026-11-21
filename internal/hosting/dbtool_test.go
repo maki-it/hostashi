@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/agentrpc"
 )
 
 type fakeDBTool struct {
@@ -21,6 +22,45 @@ type fakeDBTool struct {
 	serversErr error
 	remote     []agentapi.DBToolRemoteRequest
 	remoteErr  error
+
+	// Open sessions (ADR-0038 addendum 1).
+	local   map[string]agentapi.DBToolSessionInfo
+	extends []agentapi.DBToolExtendRequest
+	ends    []agentapi.DBToolEndRequest
+}
+
+func (f *fakeDBTool) DBToolExtend(_ context.Context, req agentapi.DBToolExtendRequest) (agentapi.DBToolSessionInfo, error) {
+	f.extends = append(f.extends, req)
+
+	if req.Remote {
+		return agentapi.DBToolSessionInfo{User: req.User, Expires: req.Expires}, nil
+	}
+
+	s, ok := f.local[req.User]
+	if !ok {
+		return agentapi.DBToolSessionInfo{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "the session has ended"}
+	}
+
+	s.Expires = req.Expires
+	f.local[req.User] = s
+
+	return s, nil
+}
+
+func (f *fakeDBTool) DBToolEnd(_ context.Context, req agentapi.DBToolEndRequest) error {
+	f.ends = append(f.ends, req)
+	delete(f.local, req.User)
+
+	return nil
+}
+
+func (f *fakeDBTool) DBToolSessions(context.Context) ([]agentapi.DBToolSessionInfo, error) {
+	out := []agentapi.DBToolSessionInfo{}
+	for _, s := range f.local {
+		out = append(out, s)
+	}
+
+	return out, nil
 }
 
 func (f *fakeDBTool) DBToolServers(_ context.Context, req agentapi.DBToolServersRequest) (agentapi.DBToolServersResponse, error) {
@@ -45,6 +85,14 @@ func (f *fakeDBTool) DBToolRemote(_ context.Context, req agentapi.DBToolRemoteRe
 
 func (f *fakeDBTool) DBToolOpen(_ context.Context, database string, minutes int) (agentapi.DBToolOpenResponse, error) {
 	f.calls = append(f.calls, agentapi.DBToolOpenRequest{Database: database, Minutes: minutes})
+
+	if f.err == nil {
+		if f.local == nil {
+			f.local = map[string]agentapi.DBToolSessionInfo{}
+		}
+
+		f.local[f.res.User] = agentapi.DBToolSessionInfo{User: f.res.User, Database: database, Expires: f.res.Expires}
+	}
 
 	return f.res, f.err
 }

@@ -1,6 +1,6 @@
 # ADR-0038 Web database tool with short-lived access
 
-**Status:** Accepted (Kim, 2026-11-20). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0023 (panel HTTPS through nginx), ADR-0024 (MariaDB per site, no stored passwords), ADR-0025 (database import and export), ADR-0033 (hardening baseline), ADR-0034 (firewall), ADR-0035 (roles), ADR-0037 (UI redesign).
+**Status:** Accepted (Kim, 2026-11-20); Addendum 1 Proposed. **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0023 (panel HTTPS through nginx), ADR-0024 (MariaDB per site, no stored passwords), ADR-0025 (database import and export), ADR-0033 (hardening baseline), ADR-0034 (firewall), ADR-0035 (roles), ADR-0037 (UI redesign).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -65,3 +65,15 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 1. ~~Adminer as a single pinned file, on its own port 8444, with a temporary user per opening?~~ **Decided (Kim, 2026-11-20): yes.**
 2. ~~May the role `user` open it with write access, or only read-only?~~ **Decided (Kim, 2026-11-20): write access, on granted sites.**
+
+## Addendum 1: extend and end sessions
+
+Asked for by Kim (2026-11-21) together with the panel's look in Adminer: a session that is about to end can be extended from the panel, and any open session can be ended at once.
+
+- **Panel.** The database page shows a card "Adminer sessions" while a session on that database runs: who opened it, when, how long it still runs, with two actions, "Extend by 30 minutes" and "End now". Whoever may open the database (`databases:open`) may see, extend and end its sessions, also those another account opened. Both actions are audited (`database.tool.extend`, `database.tool.end`) [V: `internal/hosting/dbtoolsessions.go`].
+- **Limits.** One extension adds 30 minutes; a session never ends more than 2 hours ahead, however often it is extended [V: `agentapi.DBToolExtendStep`, `agentapi.DBToolMaxRemaining`].
+- **Who opened it.** The table `db_tool_sessions` (migration 0042) records the account and the times. Whether a session still runs comes from the agent (local) and `db_remote_tools` (external servers); rows of sessions that ended otherwise drop out when the panel lists them [V].
+- **Agent.** Three operations, `db.tool.extend`, `db.tool.end` and `db.tool.sessions`, plain SQL and file writes, no new `os/exec` [V: `internal/agent/dbtoolsession.go`]. Extending moves the timer that drops the user. Ending first marks the session ended for the tool, then drops the user and kills its connections. On an external server the panel drops the user, as at the regular end.
+- **The open tab.** The agent writes each session's end to `/run/hostashi-adminer/sessions/<user>` (`root:hostashi-adminer`, `0640`, directory `0750`), `0` once it was ended. Hostashi's `index.php` reads it on every request, so an extended session keeps working and an ended one is refused at the next click. The tool can only read the file [V: `packaging/adminer/index.php`].
+- **In Adminer.** The top bar has a "+30 min" link next to the remaining time. It opens the database in the panel, where the session is extended; the tool's pool gets no way to talk to the agent.
+
