@@ -47,6 +47,7 @@ func TestDBToolExtendAndEnd(t *testing.T) {
 
 	// The agent runs with UMask=0077; the tool must still read the file.
 	old := syscall.Umask(0o077)
+
 	t.Cleanup(func() { syscall.Umask(old) })
 
 	db := &recordingDB{}
