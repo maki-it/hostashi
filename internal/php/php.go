@@ -57,6 +57,9 @@ type Pool struct {
 	// Programs lets the site's PHP start programs (exec, system, ...).
 	// Without it those functions are disabled (ADR-0033).
 	Programs bool `json:"programs,omitempty"`
+	// Settings are the site's PHP ini settings (ADR-0049), rendered as
+	// php_value defaults; nil renders the Hostashi defaults.
+	Settings *agentapi.PHPSettings `json:"settings,omitempty"`
 }
 
 // DisabledFunctions are the PHP functions that start programs. A pool
@@ -132,6 +135,12 @@ func (m *Manager) check(p Pool) error {
 		return fmt.Errorf("%w: site %s: %d workers", ErrInvalid, p.User, p.Workers)
 	}
 
+	if p.Settings != nil {
+		if err := p.Settings.Validate(); err != nil {
+			return fmt.Errorf("%w: site %s: %w", ErrInvalid, p.User, err)
+		}
+	}
+
 	if !homeRe.MatchString(m.SocketDir) || !groupRe.MatchString(m.WebGroup) {
 		return fmt.Errorf("%w: socket directory or web group", ErrInvalid)
 	}
@@ -175,6 +184,10 @@ php_admin_value[session.save_path] = /tmp
 php_admin_flag[allow_url_include] = off
 php_admin_flag[session.use_strict_mode] = on
 php_admin_flag[session.cookie_httponly] = on
+; Defaults from the panel (ADR-0049); the site's .user.ini may change them.
+{{- range .Ini}}
+php_value[{{.Key}}] = {{.Value}}
+{{- end}}
 {{- if not .P.Programs}}
 ; The site may not start programs (ADR-0033); the panel switches this per site.
 php_admin_value[disable_functions] = {{.Disabled}}
@@ -194,7 +207,17 @@ func (m *Manager) Render(p Pool) ([]byte, error) {
 		return nil, fmt.Errorf("%w: %d workers", ErrInvalid, p.Workers)
 	}
 
-	if err := poolTmpl.Execute(&b, map[string]any{"P": p, "Socket": m.Socket(p.User), "Group": m.WebGroup, "Workers": workers, "Disabled": DisabledFunctions}); err != nil {
+	var settings agentapi.PHPSettings
+
+	if p.Settings != nil {
+		if err := p.Settings.Validate(); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+		}
+
+		settings = *p.Settings
+	}
+
+	if err := poolTmpl.Execute(&b, map[string]any{"Ini": settings.IniValues(), "P": p, "Socket": m.Socket(p.User), "Group": m.WebGroup, "Workers": workers, "Disabled": DisabledFunctions}); err != nil {
 		return nil, fmt.Errorf("php: render pool %s: %w", p.User, err)
 	}
 
@@ -326,7 +349,10 @@ func (m *Manager) ensure(ctx context.Context, st map[string]Pool, p Pool) error 
 
 	cur, had := st[p.User]
 
-	if had && cur == p {
+	// The file holds every field of the pool, so the same version and the
+	// same file mean nothing changed (Settings is a pointer, == would not
+	// see equal values).
+	if had && cur.Version == p.Version {
 		if old, err := os.ReadFile(m.conf(p.User)); err == nil && bytes.Equal(old, content) {
 			return m.moveIntoSlice(ctx, p)
 		}
