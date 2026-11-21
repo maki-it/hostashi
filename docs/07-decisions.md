@@ -50,6 +50,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0044 | Outgoing email through an SMTP relay | Accepted on 2026-11-21 ([adr/0044](adr/0044-outgoing-email.md)) | No |
 | 0045 | Object cache (Valkey) per site | Accepted on 2026-11-21 ([adr/0045](adr/0045-object-cache-per-site.md)) | No |
 | 0046 | Page cache (nginx FastCGI cache) per site | Accepted on 2026-11-21 ([adr/0046](adr/0046-page-cache-per-site.md)) | No |
+| 0047 | Status page for disabled sites | Proposed ([adr/0047](adr/0047-status-page-for-disabled-sites.md)) | No |
 
 ---
 
@@ -334,3 +335,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0046 Page cache (nginx FastCGI cache) per site
 
 **Full text (status Accepted, 2026-11-21, by Kim):** [adr/0046](adr/0046-page-cache-per-site.md). Summary: after comparing Varnish and the nginx FastCGI cache, Kim asked for a draft of the FastCGI cache instead of Varnish. Recommended: an opt-in page cache per site, off by default, with a zone and a directory per site outside the site home (owned by `www-data`, tagged with the site's project ID so it counts against the disk quota), a fixed cache key, upstream cache headers honoured, and fixed skip rules for non-GET requests, `Authorization`, logged-in and cart cookies and admin paths. Presets for WordPress, WooCommerce and generic PHP, cache times from 1 to 60 minutes, validated excluded paths, an `X-Cache` header. Purge is a typed agent operation in pure Go, no new `os/exec`. Roles as in ADR-0045. The CloudPanel import pre-selects the cache for sites with a cache tier. Changes in part ADR-0017: decided by Kim on 2026-11-21, the FastCGI cache replaces Varnish for now, and both caches (ADR-0045 and this one) ship in v1.
+
+## ADR-0047 Status page for disabled sites
+
+**Full text (status Proposed, 2026-11-21):** [adr/0047](adr/0047-status-page-for-disabled-sites.md). Summary: a disabled site answers with a fixed English 503 string today. Recommended: a third page kind `disabled` next to `maintenance` and `parking` (ADR-0027) with its own built-in page; disabling a site takes an optional page of that kind. nginx serves it like a maintenance page (503, same CSP, no `Retry-After`, no allowlist), PHP stays stopped. No new agent operation, no new `os/exec`. Open for Kim: own kind or reuse the maintenance pages.
