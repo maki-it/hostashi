@@ -531,6 +531,12 @@ a.ui-btn {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: var(--space-5);
 }
+/* Form fields in columns, one column on a phone */
+.ui-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
 /* Rows of form fields, one opened port each */
 .ui-port-rows {
   display: flex;

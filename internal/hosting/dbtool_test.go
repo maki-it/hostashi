@@ -5,6 +5,7 @@ package hosting
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -15,6 +16,31 @@ type fakeDBTool struct {
 	calls []agentapi.DBToolOpenRequest
 	res   agentapi.DBToolOpenResponse
 	err   error
+
+	servers    []agentapi.DBToolServersRequest
+	serversErr error
+	remote     []agentapi.DBToolRemoteRequest
+	remoteErr  error
+}
+
+func (f *fakeDBTool) DBToolServers(_ context.Context, req agentapi.DBToolServersRequest) (agentapi.DBToolServersResponse, error) {
+	if f.serversErr != nil {
+		return agentapi.DBToolServersResponse{}, f.serversErr
+	}
+
+	restarted := len(f.servers) == 0 || !reflect.DeepEqual(f.servers[len(f.servers)-1], req)
+	f.servers = append(f.servers, req)
+
+	return agentapi.DBToolServersResponse{Restarted: restarted}, nil
+}
+
+func (f *fakeDBTool) DBToolRemote(_ context.Context, req agentapi.DBToolRemoteRequest) (agentapi.DBToolOpenResponse, error) {
+	f.remote = append(f.remote, req)
+	if f.remoteErr != nil {
+		return agentapi.DBToolOpenResponse{}, f.remoteErr
+	}
+
+	return agentapi.DBToolOpenResponse{Ticket: "fedcba9876543210fedcba9876543210", User: req.User, Expires: time.Now().Add(time.Duration(req.Minutes) * time.Minute)}, nil
 }
 
 func (f *fakeDBTool) DBToolOpen(_ context.Context, database string, minutes int) (agentapi.DBToolOpenResponse, error) {

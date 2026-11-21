@@ -430,3 +430,45 @@ func TestJobUserStatements(t *testing.T) {
 		t.Fatalf("statements ran: %q", f.stmts)
 	}
 }
+
+func TestToolUserStatements(t *testing.T) {
+	f := &fakeExec{}
+	c, _ := NewClient(f, "10.0.0.7")
+	ctx := t.Context()
+	user, pw := "hostashi_tool_0123456789abcdef", "Abcdefghijklmnopqrstuvwxyz012345"
+
+	for name, err := range map[string]error{
+		"site user": c.CreateToolUser(ctx, "shop_wp", "shop_user", pw),
+		"job user":  c.DropToolUser(ctx, "hostashi_job_0123456789abcdef"),
+		"short pw":  c.CreateToolUser(ctx, "shop_wp", user, "Abcdefghijklmnop1234"),
+		"no pw":     c.CreateToolUser(ctx, "shop_wp", user, ""),
+		"db":        c.CreateToolUser(ctx, "mysql", user, pw),
+	} {
+		if !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: got %v", name, err)
+		}
+	}
+
+	if len(f.stmts) != 0 {
+		t.Fatalf("statements ran: %q", f.stmts)
+	}
+
+	if err := c.CreateToolUser(ctx, "shop_wp", user, pw); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.DropToolUser(ctx, user); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"CREATE USER '" + user + "'@'10.0.0.7' IDENTIFIED BY '" + pw + "' WITH MAX_USER_CONNECTIONS 2",
+		"GRANT ALL PRIVILEGES ON `shop\\_wp`.* TO '" + user + "'@'10.0.0.7'",
+		"DROP USER IF EXISTS '" + user + "'@'10.0.0.7'",
+		"KILL HARD CONNECTION USER '" + user + "'@'10.0.0.7'",
+	}
+
+	if strings.Join(f.stmts, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("statements:\n%s\nwant:\n%s", strings.Join(f.stmts, "\n"), strings.Join(want, "\n"))
+	}
+}

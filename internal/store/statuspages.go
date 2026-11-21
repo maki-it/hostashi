@@ -127,7 +127,7 @@ func (s *Store) DeleteStatusPage(ctx context.Context, id int64) error {
 	defer func() { _ = tx.Rollback() }()
 
 	var n int
-	if err := tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM sites WHERE maintenance_page = ?) + (SELECT count(*) FROM parked_domains WHERE page = ?)`, id, id).Scan(&n); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM sites WHERE maintenance_page = ? OR disabled_page = ?) + (SELECT count(*) FROM parked_domains WHERE page = ?)`, id, id, id).Scan(&n); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 
@@ -238,7 +238,7 @@ func (s *Store) pageDetails(ctx context.Context, p *StatusPage) error {
 
 	_ = rows.Close()
 
-	if p.Sites, err = s.names(ctx, `SELECT name FROM sites WHERE maintenance_page = ? ORDER BY name`, p.ID); err != nil {
+	if p.Sites, err = s.names(ctx, `SELECT name FROM sites WHERE maintenance_page = ? OR disabled_page = ? ORDER BY name`, p.ID, p.ID); err != nil {
 		return err
 	}
 
@@ -302,6 +302,30 @@ func (s *Store) StatusPageFiles(ctx context.Context, id int64) (map[string][]byt
 	}
 
 	return out, nil
+}
+
+// SetSiteDisabledPage stores the page a disabled site shows (ADR-0047);
+// page 0 is the built-in maintenance page.
+func (s *Store) SetSiteDisabledPage(ctx context.Context, name string, page int64, now time.Time) error {
+	var ref any
+	if page != 0 {
+		ref = page
+	}
+
+	res, err := s.w.ExecContext(ctx, `UPDATE sites SET disabled_page = ?, updated_at = ? WHERE name = ?`, ref, now.Unix(), name)
+	if err != nil {
+		if strings.Contains(err.Error(), "FOREIGN KEY") {
+			return ErrNotFound
+		}
+
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+
+	return nil
 }
 
 // SetSiteMaintenance stores the maintenance settings of a site. page 0 is

@@ -29,6 +29,12 @@ export function toolMessage(err: unknown): string {
         return "Your role does not allow opening this database.";
       case "site_busy":
         return "The site is being created or deleted. Try again in a moment.";
+      case "db_server_unresolved":
+        return "The database server's name does not resolve to an address this machine can reach. Check its DNS records.";
+      case "db_server_unavailable":
+        return "The database server is not reachable. Check it on the Servers tab or try again later.";
+      case "db_server_denied":
+        return "The database server refused the panel's administrator. Check the server's privileges.";
       default:
         return err.message ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + "." : "Something went wrong (" + err.code + ").";
     }

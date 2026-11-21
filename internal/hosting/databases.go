@@ -472,6 +472,12 @@ func (r remoteBackend) create(ctx context.Context, _, name string) error {
 }
 
 func (r remoteBackend) drop(ctx context.Context, name string, users []string) error {
+	// Open tool sessions end first, so no temporary user keeps rights on
+	// a database created later under the same name.
+	if err := r.s.endRemoteTools(ctx, r.srv, name); err != nil {
+		return err
+	}
+
 	return r.s.remote(ctx, r.srv, func(c RemoteDB) error {
 		// Users first, as on the local server: IF EXISTS makes a retry
 		// after a partial failure safe.

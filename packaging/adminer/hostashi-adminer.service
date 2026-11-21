@@ -39,7 +39,11 @@ ProtectControlGroups=yes
 ProtectClock=yes
 ProtectHostname=yes
 NoNewPrivileges=yes
-# Only the Unix socket of MariaDB: no network at all.
+# Only the Unix socket of MariaDB. With external database servers
+# (ADR-0041 addendum 1) the agent's drop-in hostashi-adminer.service.d/
+# servers.conf adds AF_INET and AF_INET6, allows exactly the servers'
+# addresses and binds a hosts file that maps their names, so the pool
+# needs no DNS.
 RestrictAddressFamilies=AF_UNIX
 IPAddressDeny=any
 RestrictNamespaces=yes

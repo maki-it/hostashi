@@ -3,10 +3,13 @@
 import { ArrowSquareOut } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { durationLabel, openDBTool, safeToolURL, toolMessage } from "./dbtool";
+import { LOCAL_SERVER } from "./databases";
 import { Button, Notice } from "./ui";
 
 type Props = {
   db: string;
+  // server is the database server's name; LOCAL_SERVER for this machine.
+  server: string;
   minutes: number[];
   onClose: () => void;
 };
@@ -15,7 +18,7 @@ type Props = {
 // time. The tab is opened in the click itself, so a popup blocker lets it
 // through, and gets the address once the server answers. Without a tab the
 // dialog shows the link instead; its ticket is valid for a minute.
-export function OpenToolDialog({ db, minutes, onClose }: Props) {
+export function OpenToolDialog({ db, server, minutes, onClose }: Props) {
   const [choice, setChoice] = useState(minutes[0] ?? 30);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -58,6 +61,12 @@ export function OpenToolDialog({ db, minutes, onClose }: Props) {
         Adminer opens in a new tab with a temporary database user for {db} only. It runs any SQL on this database, including deleting tables;
         backups are the safety net.
       </p>
+      {server !== LOCAL_SERVER && (
+        <p className="ui-hint ui-flush">
+          Adminer connects from this machine to {server}, where the panel creates the temporary user. The first session on a server, or one after
+          its address changed, ends the Adminer sessions open at that moment.
+        </p>
+      )}
       {link ? (
         <Notice tone="info" title="Your browser blocked the new tab.">
           <a className="ui-btn ui-btn-primary" href={link.url} target="_blank" rel="noopener noreferrer" onClick={onClose}>

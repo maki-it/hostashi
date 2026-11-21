@@ -24,6 +24,9 @@ var ErrNoDBTool = errors.New("hosting: the database tool is not available")
 // (ADR-0038).
 type DBToolAgent interface {
 	DBToolOpen(ctx context.Context, database string, minutes int) (agentapi.DBToolOpenResponse, error)
+	// The external servers (ADR-0041 addendum 1).
+	DBToolServers(ctx context.Context, req agentapi.DBToolServersRequest) (agentapi.DBToolServersResponse, error)
+	DBToolRemote(ctx context.Context, req agentapi.DBToolRemoteRequest) (agentapi.DBToolOpenResponse, error)
 }
 
 // DBToolOpen calls db.tool.open.
@@ -96,10 +99,6 @@ func (s *Service) OpenDatabaseTool(ctx context.Context, actor int64, database st
 		return DBToolSession{}, err
 	}
 
-	if d.Server != store.LocalDBServer {
-		return DBToolSession{}, ErrDBServerLocalOnly
-	}
-
 	site, err := s.Get(ctx, d.Site)
 	if err != nil {
 		return DBToolSession{}, err
@@ -118,7 +117,14 @@ func (s *Service) OpenDatabaseTool(ctx context.Context, actor int64, database st
 		return DBToolSession{}, ErrNoDBTool
 	}
 
-	res, err := s.dbTool.DBToolOpen(ctx, database, minutes)
+	var res agentapi.DBToolOpenResponse
+
+	if d.Server == store.LocalDBServer {
+		res, err = s.dbTool.DBToolOpen(ctx, database, minutes)
+	} else {
+		res, err = s.openRemoteTool(ctx, d, minutes)
+	}
+
 	if err != nil {
 		return DBToolSession{}, err
 	}
@@ -129,7 +135,7 @@ func (s *Service) OpenDatabaseTool(ctx context.Context, actor int64, database st
 
 	s.audit(ctx, actor, "database.tool.open", database, map[string]string{
 		"site": d.Site, "minutes": strconv.Itoa(minutes), "dbUser": res.User,
-		"expires": res.Expires.UTC().Format(time.RFC3339),
+		"expires": res.Expires.UTC().Format(time.RFC3339), "server": d.Server,
 	})
 
 	u := url.URL{
