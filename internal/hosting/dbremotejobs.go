@@ -67,6 +67,10 @@ func (s *Service) startRemoteDump(ctx context.Context, actor int64, action strin
 		return agentapi.DBJob{}, err
 	}
 
+	if IsPostgres(srv) {
+		return agentapi.DBJob{}, ErrPostgreSQLNotYet
+	}
+
 	addrs, err := s.serverAddrs(ctx, srv)
 	if err != nil {
 		return agentapi.DBJob{}, err

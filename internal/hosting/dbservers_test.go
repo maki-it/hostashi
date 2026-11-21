@@ -48,6 +48,13 @@ func (f *fakeDBServers) Check(_ context.Context, cfg dbserver.Config, privileges
 		return dbserver.Info{}, errors.New("no password")
 	}
 
+	if dbserver.IsPostgres(cfg.Engine) {
+		return dbserver.Info{
+			Engine: dbserver.EnginePostgreSQL, Version: "18.1", ClientHost: "10.0.0.2", TLS: cfg.TLS != dbserver.TLSNone,
+			Superuser: cfg.AdminUser == "postgres",
+		}, nil
+	}
+
 	return dbserver.Info{Engine: dbserver.EngineMySQL, Version: "8.4.13", ClientHost: "10.0.0.2", TLS: cfg.TLS != dbserver.TLSNone}, nil
 }
 
@@ -69,7 +76,7 @@ func (f *fakeDBServers) Config(srv store.DBServer) (dbserver.Config, error) {
 	}
 
 	return dbserver.Config{
-		Host: srv.Host, Port: srv.Port, AdminUser: srv.AdminUser, AdminPassword: f.sealed[srv.ID],
+		Engine: engineOf(srv), Host: srv.Host, Port: srv.Port, AdminUser: srv.AdminUser, AdminPassword: f.sealed[srv.ID],
 		TLS: dbserver.TLSMode(srv.TLSMode),
 	}, nil
 }
@@ -131,7 +138,7 @@ func (r fakeRemote) CreateUser(_ context.Context, database, user, _ string) erro
 	return nil
 }
 
-func (r fakeRemote) DropUser(_ context.Context, user string) error {
+func (r fakeRemote) DropUser(_ context.Context, _, user string) error {
 	r.f.mu.Lock()
 	defer r.f.mu.Unlock()
 
@@ -148,14 +155,16 @@ func (r fakeRemote) CreateJobUser(ctx context.Context, database, user, password 
 	return r.CreateUser(ctx, database, user, password)
 }
 
-func (r fakeRemote) DropJobUser(ctx context.Context, user string) error { return r.DropUser(ctx, user) }
+func (r fakeRemote) DropJobUser(ctx context.Context, user string) error {
+	return r.DropUser(ctx, "", user)
+}
 
 func (r fakeRemote) CreateToolUser(ctx context.Context, database, user, password string) error {
 	return r.CreateUser(ctx, database, user, password)
 }
 
 func (r fakeRemote) DropToolUser(ctx context.Context, user string) error {
-	return r.DropUser(ctx, user)
+	return r.DropUser(ctx, "", user)
 }
 
 func (r fakeRemote) SetPassword(_ context.Context, user, _ string) error {
@@ -172,7 +181,7 @@ func (r fakeRemote) SetPassword(_ context.Context, user, _ string) error {
 func addServer(t *testing.T, s *Service, name string) store.DBServer {
 	t.Helper()
 
-	d, err := s.AddDBServer(t.Context(), 1, NewDBServer{
+	d, _, err := s.AddDBServer(t.Context(), 1, NewDBServer{
 		Name: name, Host: "db.example.net", AdminUser: "hostashi_admin", AdminPassword: "Admin-pw-1",
 	})
 	if err != nil {
@@ -185,7 +194,7 @@ func addServer(t *testing.T, s *Service, name string) store.DBServer {
 func TestDBServersOffWithoutEnable(t *testing.T) {
 	s, _, _ := newService(t)
 
-	_, err := s.AddDBServer(t.Context(), 1, NewDBServer{Name: "db1", Host: "db.example.net", AdminUser: "a", AdminPassword: "b"})
+	_, _, err := s.AddDBServer(t.Context(), 1, NewDBServer{Name: "db1", Host: "db.example.net", AdminUser: "a", AdminPassword: "b"})
 	if !errors.Is(err, ErrDBServersOff) {
 		t.Fatalf("got %v", err)
 	}
@@ -208,7 +217,7 @@ func TestAddDBServer(t *testing.T) {
 		t.Fatalf("checks %v: adding must test the privileges", f.checks)
 	}
 
-	if _, err := s.AddDBServer(ctx, 1, NewDBServer{Name: "db1", Host: "x.example.net", AdminUser: "a", AdminPassword: "b"}); !errors.Is(err, ErrDBServerExists) {
+	if _, _, err := s.AddDBServer(ctx, 1, NewDBServer{Name: "db1", Host: "x.example.net", AdminUser: "a", AdminPassword: "b"}); !errors.Is(err, ErrDBServerExists) {
 		t.Fatalf("duplicate: %v", err)
 	}
 
@@ -222,14 +231,14 @@ func TestAddDBServer(t *testing.T) {
 	}
 
 	for name, req := range bad {
-		if _, err := s.AddDBServer(ctx, 1, req); !errors.Is(err, ErrInvalid) {
+		if _, _, err := s.AddDBServer(ctx, 1, req); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
 
 	f.checkErr = dbserver.ErrAccess
 
-	_, err := s.AddDBServer(ctx, 1, NewDBServer{Name: "db2", Host: "x.example.net", AdminUser: "a", AdminPassword: "b"})
+	_, _, err := s.AddDBServer(ctx, 1, NewDBServer{Name: "db2", Host: "x.example.net", AdminUser: "a", AdminPassword: "b"})
 	if !errors.Is(err, ErrDBServerCheck) || !errors.Is(err, dbserver.ErrAccess) {
 		t.Fatalf("failed check: %v", err)
 	}
@@ -256,6 +265,86 @@ func TestAddDBServer(t *testing.T) {
 
 	if _, err := s.CheckDBServer(ctx, "nope"); !errors.Is(err, ErrDBServerNotFound) {
 		t.Fatalf("check unknown: %v", err)
+	}
+}
+
+func TestAddPostgresServer(t *testing.T) {
+	s, _, st := newService(t)
+	f := newFakeDBServers()
+	manifest := filepath.Join(t.TempDir(), "backup")
+
+	if err := os.Mkdir(manifest, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	s.EnableDBServers(f, manifest)
+
+	ctx := t.Context()
+
+	d, warnings, err := s.AddDBServer(ctx, 1, NewDBServer{
+		Engine: dbserver.EnginePostgreSQL, Name: "pg1", Host: "pg.example.net", AdminUser: "hostashi_admin", AdminPassword: "Admin-pw-1",
+	})
+	if err != nil || d.Port != dbserver.DefaultPostgresPort || d.Status.Engine != dbserver.EnginePostgreSQL || len(warnings) != 0 || !IsPostgres(d) {
+		t.Fatalf("server %+v, warnings %v, %v", d, warnings, err)
+	}
+
+	cfg, err := f.Config(d)
+	if err != nil || cfg.Engine != dbserver.EnginePostgreSQL {
+		t.Fatalf("config %+v %v", cfg, err)
+	}
+
+	// A superuser works but is warned about.
+	_, warnings, err = s.AddDBServer(ctx, 1, NewDBServer{
+		Engine: dbserver.EnginePostgreSQL, Name: "pg2", Host: "pg.example.net", AdminUser: "postgres", AdminPassword: "Admin-pw-1",
+	})
+	if err != nil || len(warnings) != 1 || warnings[0] != SuperuserWarning {
+		t.Fatalf("superuser: %v %v", warnings, err)
+	}
+
+	if _, _, err := s.AddDBServer(ctx, 1, NewDBServer{
+		Engine: "Oracle", Name: "pg3", Host: "pg.example.net", AdminUser: "a", AdminPassword: "b",
+	}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unknown engine: %v", err)
+	}
+
+	m, err := extdb.Read(manifest, uint32(os.Getuid()))
+	if err != nil || len(m.Servers) != 2 || m.Servers[0].Engine != dbserver.EnginePostgreSQL {
+		t.Fatalf("manifest %+v %v", m, err)
+	}
+
+	// Import, export and the web database tool refuse PostgreSQL for now.
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "shop", Domains: []string{"shop.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := s.CreateDatabase(ctx, 1, NewDatabase{Site: "shop", Name: "shop_pg", User: "shop_pg", Server: "pg1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := st.DatabaseByName(ctx, "shop_pg")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.ExportDatabase(ctx, 1, "shop_pg", "dumps/x.sql"); !errors.Is(err, ErrPostgreSQLNotYet) {
+		t.Fatalf("export: %v", err)
+	}
+
+	if _, err := s.openRemoteTool(ctx, db, 30); !errors.Is(err, ErrPostgreSQLNotYet) {
+		t.Fatalf("tool: %v", err)
+	}
+
+	// Errors of the client map to the panel's.
+	f.opErr = dbserver.ErrPostgresNotYet
+
+	if err := s.remote(ctx, d, func(c RemoteDB) error { return c.CreateDatabase(ctx, "x") }); !errors.Is(err, ErrPostgreSQLNotYet) {
+		t.Fatalf("not yet: %v", err)
+	}
+
+	f.opErr = dbserver.ErrInvalid
+
+	if err := s.remote(ctx, d, func(c RemoteDB) error { return c.CreateDatabase(ctx, "x") }); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("invalid: %v", err)
 	}
 }
 

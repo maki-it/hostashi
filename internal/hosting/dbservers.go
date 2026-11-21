@@ -5,6 +5,7 @@ package hosting
 import (
 	"context"
 	"crypto/x509"
+	"database/sql"
 	"errors"
 	"fmt"
 	"regexp"
@@ -28,6 +29,9 @@ var (
 	// ErrDBServerLocalOnly: loading a dump as the owner works only on the
 	// local server (ADR-0041 addendum 1).
 	ErrDBServerLocalOnly = errors.New("hosting: this works only for databases on the local server so far")
+	// ErrPostgreSQLNotYet: backups, import, export and the web database
+	// tool for PostgreSQL databases come with later steps of ADR-0051.
+	ErrPostgreSQLNotYet = errors.New("hosting: this does not work for PostgreSQL databases yet")
 	// ErrDBServerCheck wraps why a server failed the connection check.
 	ErrDBServerCheck = errors.New("hosting: the database server failed the check")
 )
@@ -38,7 +42,9 @@ type RemoteDB interface {
 	CreateDatabase(ctx context.Context, name string) error
 	DropDatabase(ctx context.Context, name string) error
 	CreateUser(ctx context.Context, database, user, password string) error
-	DropUser(ctx context.Context, user string) error
+	// DropUser drops a user of database; PostgreSQL needs the database
+	// to hand over what the user owned there.
+	DropUser(ctx context.Context, database, user string) error
 	SetPassword(ctx context.Context, user, password string) error
 	// The temporary user of an import or export (ADR-0041 addendum 1).
 	CreateJobUser(ctx context.Context, database, user, password string) error
@@ -94,7 +100,7 @@ func (s *Service) WriteDBManifest(ctx context.Context) error {
 	for _, srv := range servers {
 		if !srv.Local() {
 			m.Servers = append(m.Servers, extdb.Server{
-				ID: srv.ID, Name: srv.Name, Host: srv.Host, Port: srv.Port, AdminUser: srv.AdminUser,
+				Engine: engineOf(srv), ID: srv.ID, Name: srv.Name, Host: srv.Host, Port: srv.Port, AdminUser: srv.AdminUser,
 				SealedPassword: srv.SealedPassword, TLSMode: srv.TLSMode, CAPEM: srv.CAPEM,
 			})
 		}
@@ -137,9 +143,12 @@ func ValidateDBServerName(name string) error {
 
 // NewDBServer describes an external server to add.
 type NewDBServer struct {
+	// Engine is dbserver.EnginePostgreSQL for PostgreSQL; empty for
+	// MariaDB or MySQL, which the check tells apart.
+	Engine        string
 	Name          string
 	Host          string
-	Port          int // 0: 3306
+	Port          int // 0: the engine's default port
 	AdminUser     string
 	AdminPassword string
 	TLS           dbserver.TLSMode // empty: verify
@@ -151,20 +160,44 @@ func (s *Service) DBServerList(ctx context.Context) ([]store.DBServer, error) {
 	return s.st.DBServers(ctx)
 }
 
+// SuperuserWarning is what AddDBServer warns about a PostgreSQL
+// administrator with SUPERUSER (ADR-0051).
+const SuperuserWarning = "the administrator is a PostgreSQL superuser; a dedicated role with only CREATEDB and CREATEROLE limits the damage if the panel is compromised"
+
 // AddDBServer checks the connection, TLS and privileges and stores the
 // server with its sealed admin password. A server that fails the check is
-// not stored.
-func (s *Service) AddDBServer(ctx context.Context, actor int64, req NewDBServer) (store.DBServer, error) {
+// not stored. The warnings say what works but is not recommended.
+func (s *Service) AddDBServer(ctx context.Context, actor int64, req NewDBServer) (store.DBServer, []string, error) {
+	d, info, err := s.addDBServer(ctx, actor, req)
+	if err != nil {
+		return store.DBServer{}, nil, err
+	}
+
+	var warnings []string
+	if info.Superuser {
+		warnings = append(warnings, SuperuserWarning)
+	}
+
+	return d, warnings, nil
+}
+
+func (s *Service) addDBServer(ctx context.Context, actor int64, req NewDBServer) (store.DBServer, dbserver.Info, error) {
+	var none dbserver.Info
+
 	if s.dbs == nil {
-		return store.DBServer{}, ErrDBServersOff
+		return store.DBServer{}, none, ErrDBServersOff
 	}
 
 	if err := ValidateDBServerName(req.Name); err != nil {
-		return store.DBServer{}, err
+		return store.DBServer{}, none, err
+	}
+
+	if req.Engine != "" && !dbserver.IsPostgres(req.Engine) {
+		return store.DBServer{}, none, fmt.Errorf("%w: engine must be empty (MariaDB or MySQL) or %q", ErrInvalid, dbserver.EnginePostgreSQL)
 	}
 
 	if req.Port == 0 {
-		req.Port = dbserver.DefaultPort
+		req.Port = dbserver.DefaultPortFor(req.Engine)
 	}
 
 	if req.TLS == "" {
@@ -172,20 +205,20 @@ func (s *Service) AddDBServer(ctx context.Context, actor int64, req NewDBServer)
 	}
 
 	cfg := dbserver.Config{
-		Host: req.Host, Port: req.Port, AdminUser: req.AdminUser, AdminPassword: req.AdminPassword,
+		Engine: req.Engine, Host: req.Host, Port: req.Port, AdminUser: req.AdminUser, AdminPassword: req.AdminPassword,
 		TLS: req.TLS, CAPEM: req.CAPEM,
 	}
 	if err := cfg.Validate(); err != nil {
-		return store.DBServer{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+		return store.DBServer{}, none, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 
 	if _, err := s.st.DBServerByName(ctx, req.Name); err == nil {
-		return store.DBServer{}, ErrDBServerExists
+		return store.DBServer{}, none, ErrDBServerExists
 	}
 
 	info, err := s.dbs.Check(ctx, cfg, true)
 	if err != nil {
-		return store.DBServer{}, fmt.Errorf("%w: %w", ErrDBServerCheck, err)
+		return store.DBServer{}, none, fmt.Errorf("%w: %w", ErrDBServerCheck, err)
 	}
 
 	d, err := s.st.CreateDBServer(ctx, store.NewDBServer{
@@ -194,19 +227,20 @@ func (s *Service) AddDBServer(ctx context.Context, actor int64, req NewDBServer)
 		Seal: func(id int64) ([]byte, error) { return s.dbs.Seal(req.AdminPassword, id) },
 	}, s.now())
 	if errors.Is(err, store.ErrDBServerExists) {
-		return store.DBServer{}, ErrDBServerExists
+		return store.DBServer{}, none, ErrDBServerExists
 	}
 
 	if err != nil {
-		return store.DBServer{}, err
+		return store.DBServer{}, none, err
 	}
 
 	s.dbManifestChanged(ctx)
 	s.audit(ctx, actor, "db_server.create", req.Name, map[string]string{
 		"host": req.Host, "port": strconv.Itoa(req.Port), "tls": string(req.TLS), "server": info.Display(),
+		"superuser": strconv.FormatBool(info.Superuser),
 	})
 
-	return d, nil
+	return d, info, nil
 }
 
 // CheckDBServer connects to an external server again and records what it
@@ -320,6 +354,11 @@ func (s *Service) remote(ctx context.Context, srv store.DBServer, fn func(Remote
 	switch {
 	case errors.Is(err, dbserver.ErrExists):
 		return ErrDatabaseExists
+	case errors.Is(err, dbserver.ErrInvalid):
+		// For example a name PostgreSQL keeps for itself.
+		return fmt.Errorf("%w: %w", ErrInvalid, err)
+	case errors.Is(err, dbserver.ErrPostgresNotYet):
+		return ErrPostgreSQLNotYet
 	default:
 		return err
 	}
@@ -353,7 +392,7 @@ func (r RemoteDBServers) Check(ctx context.Context, cfg dbserver.Config, privile
 
 	defer db.Close()
 
-	info, err := dbserver.Probe(ctx, db)
+	info, err := probe(ctx, cfg.Engine, db)
 	if err != nil {
 		return dbserver.Info{}, err
 	}
@@ -366,7 +405,9 @@ func (r RemoteDBServers) Check(ctx context.Context, cfg dbserver.Config, privile
 		return info, nil
 	}
 
-	c, err := dbserver.NewClient(db, info.ClientHost)
+	cfg.OnCertificate = nil
+
+	c, err := newRemoteClient(db, cfg, info.ClientHost)
 	if err != nil {
 		return dbserver.Info{}, err
 	}
@@ -376,6 +417,31 @@ func (r RemoteDBServers) Check(ctx context.Context, cfg dbserver.Config, privile
 	}
 
 	return info, nil
+}
+
+// probe reads the server with the probe of its engine.
+func probe(ctx context.Context, engine string, db dbserver.Querier) (dbserver.Info, error) {
+	if dbserver.IsPostgres(engine) {
+		return dbserver.ProbePostgres(ctx, db)
+	}
+
+	return dbserver.Probe(ctx, db)
+}
+
+// remoteClient is a RemoteDB that can also test the privileges.
+type remoteClient interface {
+	RemoteDB
+	CheckPrivileges(ctx context.Context) error
+}
+
+// newRemoteClient returns the client of cfg's engine on db. clientHost is
+// the host part of MariaDB and MySQL users; PostgreSQL has none.
+func newRemoteClient(db *sql.DB, cfg dbserver.Config, clientHost string) (remoteClient, error) {
+	if dbserver.IsPostgres(cfg.Engine) {
+		return dbserver.NewPGClient(db, cfg), nil
+	}
+
+	return dbserver.NewClient(db, clientHost)
 }
 
 // Seal implements DBServers.
@@ -391,7 +457,7 @@ func (r RemoteDBServers) Config(srv store.DBServer) (dbserver.Config, error) {
 	}
 
 	return dbserver.Config{
-		Host: srv.Host, Port: srv.Port, AdminUser: srv.AdminUser, AdminPassword: string(pw),
+		Engine: engineOf(srv), Host: srv.Host, Port: srv.Port, AdminUser: srv.AdminUser, AdminPassword: string(pw),
 		TLS: dbserver.TLSMode(srv.TLSMode), CAPEM: srv.CAPEM,
 	}, nil
 }
@@ -412,7 +478,7 @@ func (r RemoteDBServers) With(ctx context.Context, srv store.DBServer, fn func(R
 
 	host := srv.Status.ClientHost
 	if host == "" {
-		info, err := dbserver.Probe(ctx, db)
+		info, err := probe(ctx, cfg.Engine, db)
 		if err != nil {
 			return err
 		}
@@ -420,13 +486,28 @@ func (r RemoteDBServers) With(ctx context.Context, srv store.DBServer, fn func(R
 		host = info.ClientHost
 	}
 
-	c, err := dbserver.NewClient(db, host)
+	c, err := newRemoteClient(db, cfg, host)
 	if err != nil {
 		return err
 	}
 
 	return fn(c)
 }
+
+// engineOf returns the engine family of an external server for its
+// Config. The column holds what the last successful check saw, and a
+// server is stored only after one, so it is never empty for an external
+// server; a PostgreSQL server never reports another engine.
+func engineOf(srv store.DBServer) string {
+	if dbserver.IsPostgres(srv.Status.Engine) {
+		return dbserver.EnginePostgreSQL
+	}
+
+	return ""
+}
+
+// IsPostgres reports whether srv is a PostgreSQL server.
+func IsPostgres(srv store.DBServer) bool { return dbserver.IsPostgres(srv.Status.Engine) }
 
 // DBServerCheckEvery is how often the panel checks the external servers
 // again (ADR-0041).
