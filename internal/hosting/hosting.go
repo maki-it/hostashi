@@ -100,8 +100,10 @@ var (
 	ErrInvalid     = errors.New("hosting: invalid input")
 	ErrExists      = errors.New("hosting: a site with this name exists")
 	ErrDomainTaken = errors.New("hosting: domain belongs to another site")
-	ErrNotFound    = errors.New("hosting: unknown site")
-	ErrState       = errors.New("hosting: the site is being created or deleted")
+	// ErrDomainReserved: the domain is the panel's own address (ADR-0042).
+	ErrDomainReserved = errors.New("hosting: domain is the panel's address")
+	ErrNotFound       = errors.New("hosting: unknown site")
+	ErrState          = errors.New("hosting: the site is being created or deleted")
 	// ErrNoTLS means the panel has no ACME client configured.
 	ErrNoTLS = errors.New("hosting: certificates are not available")
 )
@@ -242,6 +244,10 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, fmt.Errorf("%w: programs need a PHP version", ErrInvalid)
 	}
 
+	if err := s.checkReserved(domains); err != nil {
+		return store.Site{}, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -363,6 +369,10 @@ func (s *Service) removeAfterFailure(ctx context.Context, name string) {
 func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in []string) (store.Site, error) {
 	domains, err := NormalizeDomains(in)
 	if err != nil {
+		return store.Site{}, err
+	}
+
+	if err := s.checkReserved(domains); err != nil {
 		return store.Site{}, err
 	}
 

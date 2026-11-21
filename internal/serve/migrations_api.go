@@ -337,7 +337,7 @@ func migrationTarget(sites *hosting.Service) cpmigrate.TargetFunc {
 			return plan.Target{}, err
 		}
 
-		var t plan.Target
+		t := plan.Target{Panel: sites.PanelDomain()}
 
 		for _, s := range list {
 			t.Sites = append(t.Sites, s.Name)

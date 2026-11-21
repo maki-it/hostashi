@@ -400,7 +400,16 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if d := PanelDomain(cfg.PublicURL); d != "" {
-		if err := deps.Sites.EnablePanel(d); err != nil {
+		// A site or parked domain that already has the name keeps it, and
+		// nginx serves no panel there: the agent would refuse every web
+		// state with both (ADR-0042). The admin picks another name.
+		if owner, err := panelNameOwner(ctx, deps.Sites, d); err != nil {
+			return err
+		} else if owner != "" {
+			if cfg.Log != nil {
+				cfg.Log.ErrorContext(ctx, "the panel's host name belongs to "+owner+"; nginx does not serve the panel there, choose another --panel-domain", "domain", d)
+			}
+		} else if err := deps.Sites.EnablePanel(d); err != nil {
 			return err
 		}
 	}

@@ -10,10 +10,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/hosting"
 )
 
 // nginx reaches the panel through a Unix socket that systemd creates
@@ -98,4 +100,32 @@ func PanelDomain(publicURL string) string {
 	}
 
 	return host
+}
+
+// panelNameOwner names the site or parked domain that uses the panel's
+// host name, or returns "" if none does.
+func panelNameOwner(ctx context.Context, sites *hosting.Service, domain string) (string, error) {
+	list, err := sites.List(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	for _, s := range list {
+		if slices.Contains(s.Domains, domain) {
+			return "site " + s.Name, nil
+		}
+	}
+
+	parked, err := sites.ParkedDomains(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	for _, p := range parked {
+		if p.Domain == domain {
+			return "the parked domain " + p.Domain, nil
+		}
+	}
+
+	return "", nil
 }
