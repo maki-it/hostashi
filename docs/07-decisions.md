@@ -55,6 +55,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0049 | PHP settings per site | Accepted on 2026-11-21 ([adr/0049](adr/0049-php-settings-per-site.md)) | No |
 | 0050 | Signed releases, install and updates through apt | Accepted on 2026-11-21 ([adr/0050](adr/0050-signed-releases-and-apt-updates.md)) | No |
 | 0051 | External PostgreSQL servers | Accepted on 2026-11-21 ([adr/0051](adr/0051-external-postgresql-servers.md)) | Done |
+| 0053 | Site logs in the panel | Proposed ([adr/0053](adr/0053-site-logs-in-the-panel.md)) | Yes |
 
 ---
 
@@ -373,3 +374,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0051 External PostgreSQL servers
 
 **Full text (status Accepted, 2026-11-21, by Kim):** [adr/0051](adr/0051-external-postgresql-servers.md). Summary: MariaDB stays the only local engine (Kim, 2026-11-21). Sites that need PostgreSQL use external PostgreSQL servers as a third engine in the ADR-0041 design, in v1 with databases, backups, import and export and Adminer. Recommended: pgx in the panel, client tools from apt.postgresql.org installed when the first server is added, Adminer's full build in the existing pool, and a sixth `os/exec` exception `internal/pgctl` for `pg_dump`, `pg_restore` and `psql`.
+
+## ADR-0053 Site logs in the panel
+
+**Full text (status Proposed, 2026-11-21):** [adr/0053](adr/0053-site-logs-in-the-panel.md). Summary: build the per-site nginx logs of ADR-0021, move the PHP-FPM error log of each site from the journal into a root-owned file, rotate all three with logrotate (14 days proposed), and read them through a typed agent operation `site.logs.read` (closed set of kinds, path built by the agent, cursor for live follow by polling every 2 s). Action `sites.logs:read` for everyone with a grant for the site, new token scope `logs:read`. No new `os/exec` exception, no migration.
