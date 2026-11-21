@@ -896,6 +896,17 @@ for log in /var/log/nginx/hostashi/access.log /var/log/nginx/hostashi/error.log 
   if as_wp sh -c "echo x >>$log" 2>/dev/null; then fail "wp writes $log"; fi
 done
 [ -z "$(as_wp journalctl -q --no-pager -t hostashi-php-shop 2>/dev/null)" ] || fail "wp reads shop's PHP messages in the journal"
+# The panel reads the logs through the agent (ADR-0053) and sets the retention.
+[ "$(api GET '/api/v1/sites/shop/logs/access?lines=50')" = 200 ] || fail "access log through the panel: $(x cat /tmp/api.out)"
+x grep -q 'hostashi-log-probe=shop' /tmp/api.out || fail "probe not in the panel's access log: $(x cat /tmp/api.out)"
+[ "$(api GET '/api/v1/sites/shop/logs/php?lines=50')" = 200 ] || fail "PHP log through the panel: $(x cat /tmp/api.out)"
+x grep -q 'hostashi-log-probe' /tmp/api.out || fail "probe not in the panel's PHP log: $(x cat /tmp/api.out)"
+[ "$(api GET '/api/v1/sites/shop/logs/secrets')" = 404 ] || fail "unknown log kind: $(x cat /tmp/api.out)"
+[ "$(api PUT /api/v1/settings/logs '{"days":14}')" = 200 ] || fail "log retention: $(x cat /tmp/api.out)"
+x grep -q '^    rotate 14$' /etc/logrotate.d/hostashi || fail "retention not written: $(x cat /etc/logrotate.d/hostashi)"
+x logrotate --debug /etc/logrotate.d/hostashi >/tmp/logrotate.out 2>&1 || fail "logrotate rejects 14 days: $(x cat /tmp/logrotate.out)"
+[ "$(api PUT /api/v1/settings/logs '{"days":0}')" = 422 ] || fail "retention 0 accepted: $(x cat /tmp/api.out)"
+[ "$(api PUT /api/v1/settings/logs '{"days":7}')" = 200 ] || fail "log retention back: $(x cat /tmp/api.out)"
 # Sockets: curl exits with 7 when it cannot connect.
 for sock in /run/hostashi-php/shop/php-fpm.sock /run/hostashi-panel.sock /run/hostashi/agent.sock; do
   rc=0

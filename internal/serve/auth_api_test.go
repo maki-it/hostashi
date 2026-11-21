@@ -48,6 +48,7 @@ type apiEnv struct {
 	files     *stubFiles
 	monitor   *servermon.Monitor
 	srvAgent  *stubServerAgent
+	logs      *stubLogs
 }
 
 func newAPI(t *testing.T) *apiEnv {
@@ -106,6 +107,8 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	deps.Outbox = outbox
 	fm := &stubFiles{t: t}
 	deps.Files = fm.open
+	lg := &stubLogs{days: -1}
+	deps.Logs = lg
 	deps.NotifyPrefs = st
 	deps.MailHistory = st
 	sa := &stubServerAgent{}
@@ -124,7 +127,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	return &apiEnv{
 		h: Handler(Config{PublicURL: testPublicURL}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st, cp: deps.CloudPanel,
 		imports: imports, doctor: doc, firewall: fw, php: php, pgclient: pgc, mail: deps.Mail, mailSent: sent, outbox: outbox, files: fm,
-		monitor: mon, srvAgent: sa,
+		monitor: mon, srvAgent: sa, logs: lg,
 	}
 }
 

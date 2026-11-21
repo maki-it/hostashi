@@ -159,6 +159,8 @@ var table = map[Action]Rule{
 	// The file manager writes as the site user (ADR-0040).
 	"files:read":  ownSite("files:read"),
 	"files:write": ownSite("files:write"),
+	// The site's own logs (ADR-0053); they hold its visitors' addresses.
+	"sites.logs:read": ownSite("logs:read"),
 }
 
 // Lookup returns the rule of an action.

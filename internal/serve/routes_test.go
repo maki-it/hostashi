@@ -80,6 +80,8 @@ var routeAccess = map[string]authz.Action{
 	"PUT /api/v1/settings/mail":             authz.SettingsWrite,
 	"DELETE /api/v1/settings/mail":          authz.SettingsWrite,
 	"POST /api/v1/settings/mail/test":       authz.SettingsWrite,
+	"GET /api/v1/settings/logs":             authz.SettingsRead,
+	"PUT /api/v1/settings/logs":             authz.SettingsWrite,
 
 	"GET /api/v1/sites":        "sites:list",
 	"GET /api/v1/sites/{name}": "sites:read",
@@ -90,6 +92,7 @@ var routeAccess = map[string]authz.Action{
 	"PUT /api/v1/sites/{name}/files/content": "files:write",
 	"POST /api/v1/sites/{name}/files/{call}": "files:write",
 	"GET /api/v1/sites/{name}/files/zip":     "files:read",
+	"GET /api/v1/sites/{name}/logs/{kind}":   "sites.logs:read",
 	"PUT /api/v1/sites/{name}/files/upload":  "files:write",
 
 	"POST /api/v1/sites":                                     "sites:create",
@@ -259,7 +262,7 @@ func newFullAPI(t *testing.T) (*apiEnv, []string) {
 		PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb,
 		CloudPanel: e.cp, CloudPanelSource: newStubSource(t), Metrics: e.metrics, Settings: e.settings,
 		Doctor: e.doctor.run, Firewall: e.firewall, PHP: e.php, PGClient: e.pgclient, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open, NotifyPrefs: e.st, AuditLog: e.st,
-		Monitor: e.monitor,
+		Monitor: e.monitor, Logs: e.logs,
 	})
 
 	return e, patterns
