@@ -23,6 +23,10 @@ type AuditEntry struct {
 	Target string
 	// Detail is the JSON object stored with the entry, unchanged.
 	Detail json.RawMessage
+	// IP is the client's address; empty for work without a request.
+	IP string
+	// Diff is the JSON object of changed fields (Diff), unchanged.
+	Diff json.RawMessage
 }
 
 // AuditFilter narrows a read of the audit log. Zero fields do not filter.
@@ -34,6 +38,8 @@ type AuditFilter struct {
 	Actor string
 	// Target matches entries whose target contains it, ignoring ASCII case.
 	Target string
+	// IP is the exact client address.
+	IP string
 	// Since and Until limit the time: Since <= at < Until.
 	Since, Until time.Time
 }
@@ -74,6 +80,11 @@ func (f AuditFilter) where(before int64) (string, []any) {
 		args = append(args, "%"+likeEscape(f.Target)+"%")
 	}
 
+	if f.IP != "" {
+		conds = append(conds, "ip = ?")
+		args = append(args, f.IP)
+	}
+
 	if !f.Since.IsZero() {
 		conds = append(conds, "at >= ?")
 		args = append(args, f.Since.UTC().Format(auditTime))
@@ -91,7 +102,7 @@ func (f AuditFilter) where(before int64) (string, []any) {
 	return " WHERE " + strings.Join(conds, " AND "), args
 }
 
-const auditColumns = `SELECT id, at, user_id, actor, action, target, detail FROM audit_log`
+const auditColumns = `SELECT id, at, user_id, actor, action, target, detail, ip, diff FROM audit_log`
 
 func scanAudit(rows *sql.Rows) (AuditEntry, error) {
 	var (
@@ -99,9 +110,10 @@ func scanAudit(rows *sql.Rows) (AuditEntry, error) {
 		at     string
 		uid    sql.NullInt64
 		detail string
+		diff   string
 	)
 
-	if err := rows.Scan(&e.ID, &at, &uid, &e.Actor, &e.Action, &e.Target, &detail); err != nil {
+	if err := rows.Scan(&e.ID, &at, &uid, &e.Actor, &e.Action, &e.Target, &detail, &e.IP, &diff); err != nil {
 		return AuditEntry{}, fmt.Errorf("store: %w", err)
 	}
 
@@ -112,6 +124,7 @@ func scanAudit(rows *sql.Rows) (AuditEntry, error) {
 
 	e.At = t.UTC()
 	e.Detail = json.RawMessage(detail)
+	e.Diff = json.RawMessage(diff)
 
 	if uid.Valid {
 		e.UserID = &uid.Int64

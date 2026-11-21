@@ -4,9 +4,13 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"io/fs"
 	"slices"
+	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
@@ -204,5 +208,151 @@ func TestAuditActions(t *testing.T) {
 	want := []string{"login", "login.failed", "site.cert.upload", "site.certificate", "site.create", "sitex.create"}
 	if !slices.Equal(got, want) {
 		t.Errorf("got %v", got)
+	}
+}
+
+func TestAuditIPAndDiff(t *testing.T) {
+	s := open(t, dbPath(t))
+	ctx := context.Background()
+
+	u, err := s.CreateFirstUser(ctx, "kim", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Without a request there is no address.
+	if err := s.Audit(ctx, nil, "cron.run", "shop", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	rctx := WithClientIP(ctx, "::ffff:192.0.2.7")
+	diff := DiffOf(map[string]string{"php": "8.3", "workers": "4"}, map[string]string{"php": "8.4", "workers": "4", "hsts": "on"})
+
+	if err := s.AuditChange(rctx, &u.ID, "site.update", "shop", map[string]string{"php": "8.4"}, diff); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _, err := s.AuditEntries(ctx, AuditFilter{}, 0, 10)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("%v %v", got, err)
+	}
+
+	if got[1].IP != "" || string(got[1].Diff) != "{}" {
+		t.Errorf("background entry: ip %q diff %s", got[1].IP, got[1].Diff)
+	}
+
+	if got[0].IP != "192.0.2.7" || string(got[0].Diff) != `{"hsts":{"old":null,"new":"on"},"php":{"old":"8.3","new":"8.4"}}` {
+		t.Errorf("change: ip %q diff %s", got[0].IP, got[0].Diff)
+	}
+
+	byIP, _, err := s.AuditEntries(ctx, AuditFilter{IP: "192.0.2.7"}, 0, 10)
+	if err != nil || len(byIP) != 1 || byIP[0].ID != got[0].ID {
+		t.Errorf("ip filter: %v %v", byIP, err)
+	}
+
+	for name, q := range map[string]string{
+		"update ip":   `UPDATE audit_log SET ip = '198.51.100.1'`,
+		"update diff": `UPDATE audit_log SET diff = '{}'`,
+		"bad diff":    `INSERT INTO audit_log (action, diff) VALUES ('x', '[]')`,
+		"long ip":     `INSERT INTO audit_log (action, ip) VALUES ('x', '` + strings.Repeat("1", 46) + `')`,
+	} {
+		if err := s.RawExec(ctx, q); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+func TestWithClientIP(t *testing.T) {
+	ctx := context.Background()
+
+	for in, want := range map[string]string{
+		"192.0.2.1": "192.0.2.1", "2001:db8::1": "2001:db8::1", "::ffff:10.0.0.1": "10.0.0.1",
+		"": "", "localhost": "", "192.0.2.1:80": "",
+	} {
+		if got := ClientIP(WithClientIP(ctx, in)); got != want {
+			t.Errorf("%q: %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestDiffOf(t *testing.T) {
+	if d := DiffOf(map[string]string{"a": "1"}, map[string]string{"a": "1"}); len(d) != 0 {
+		t.Errorf("equal: %v", d)
+	}
+
+	if d := DiffOf(nil, nil); len(d) != 0 {
+		t.Errorf("nil: %v", d)
+	}
+
+	d := DiffOf(map[string]string{"gone": "x", "same": "s", "empty": ""}, map[string]string{"same": "s", "empty": "now", "new": ""})
+	if len(d) != 3 || d["gone"].New != nil || *d["gone"].Old != "x" || *d["empty"].Old != "" || *d["empty"].New != "now" ||
+		d["new"].Old != nil || *d["new"].New != "" {
+		t.Errorf("diff: %+v", d)
+	}
+}
+
+func TestAuditIPBackfill(t *testing.T) {
+	ctx := context.Background()
+
+	// A database at 0043 with entries that kept the address in detail.ip.
+	old := fstest.MapFS{}
+
+	entries, err := fs.ReadDir(embedded, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, e := range entries {
+		if e.Name() < "0044" {
+			b, err := fs.ReadFile(embedded, "migrations/"+e.Name())
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			old["migrations/"+e.Name()] = &fstest.MapFile{Data: b}
+		}
+	}
+
+	db, err := sql.Open("sqlite", dsn(dbPath(t), false))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = db.Close() })
+
+	if err := migrate(ctx, db, old); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, detail := range []string{`{"ip":"192.0.2.5"}`, `{"ip":7}`, `{}`, `{"ip":"` + strings.Repeat("1", 46) + `"}`} {
+		if _, err := db.ExecContext(ctx, `INSERT INTO audit_log (action, detail) VALUES ('login', ?)`, detail); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := migrate(ctx, db, embedded); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := db.QueryContext(ctx, `SELECT ip, diff FROM audit_log ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() { _ = rows.Close() }()
+
+	var got []string
+
+	for rows.Next() {
+		var ip, diff string
+		if err := rows.Scan(&ip, &diff); err != nil {
+			t.Fatal(err)
+		}
+
+		got = append(got, ip+"|"+diff)
+	}
+
+	if want := []string{"192.0.2.5|{}", "|{}", "|{}", "|{}"}; !slices.Equal(got, want) {
+		t.Errorf("after 0044: %q, want %q", got, want)
 	}
 }
