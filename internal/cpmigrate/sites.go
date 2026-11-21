@@ -222,8 +222,7 @@ func (s *Service) StartImport(ctx context.Context, actor int64, reportID, name s
 	})
 
 	if s.loads != nil && len(dbs) > 0 {
-		//nolint:contextcheck // the watch outlives the request and runs under the panel context
-		s.watch(actor, imp.ID)
+		s.watchNew(ctx, actor, imp.ID)
 	}
 
 	return imp, nil

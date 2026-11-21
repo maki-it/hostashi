@@ -254,8 +254,8 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 	}))
 
 	// The dumps of a finished import are loaded on their own (ADR-0030);
-	// this starts the loads again, for example after a panel restart. A
-	// dump whose load started already is not loaded twice.
+	// this starts loads whose start failed again. A dump whose load started
+	// already is not loaded twice, also after a panel restart.
 	mux.HandleFunc("POST /api/v1/migrations/cloudpanel/imports/{id}/load", a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
