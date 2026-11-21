@@ -24,7 +24,7 @@ describe("App start", () => {
   it("shows home when a session exists", async () => {
     mockFetch({ ...noSetup, "GET /api/v1/auth/me": { body: { ...admin, auth: "session" } } });
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Welcome, kim" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Overview", level: 1 })).toBeInTheDocument();
   });
 
   it("opens the backup page from the navigation", async () => {
@@ -151,7 +151,7 @@ describe("Login", () => {
     });
     render(<App />);
     await fillLogin(user);
-    expect(await screen.findByRole("heading", { name: "Welcome, kim" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Overview", level: 1 })).toBeInTheDocument();
     expect(calls.find((c) => c.path === "/api/v1/auth/login")?.body).toEqual({ username: "kim", password: "correct horse", totp: "" });
     await user.click(screen.getByRole("button", { name: "Log out" }));
     expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
@@ -194,7 +194,7 @@ describe("Login", () => {
     expect(screen.getByLabelText(/One-time code/)).toHaveValue("");
     await user.type(screen.getByLabelText(/One-time code/), " 123456 ");
     await user.click(screen.getByRole("button", { name: "Verify" }));
-    expect(await screen.findByRole("heading", { name: "Welcome, kim" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Overview", level: 1 })).toBeInTheDocument();
     const logins = calls.filter((c) => c.path === "/api/v1/auth/login").map((c) => (c.body as { totp: string }).totp);
     expect(logins).toEqual(["", "999999", "123456"]);
   });
@@ -249,7 +249,7 @@ describe("Passkey login", () => {
     });
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "Log in with a passkey" }));
-    expect(await screen.findByRole("heading", { name: "Welcome, kim" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Overview", level: 1 })).toBeInTheDocument();
     expect(get).toHaveBeenCalledOnce();
     expect(calls.find((c) => c.path.endsWith("/finish"))?.body).toEqual({
       ceremonyId: "c1",
@@ -350,7 +350,7 @@ describe("Roles", () => {
     window.location.hash = "#/firewall";
     mockFetch({ ...noSetup, "GET /api/v1/auth/me": { body: { username: "uma", role: "user" } } });
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Welcome, uma" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Overview", level: 1 })).toBeInTheDocument();
     window.location.hash = "";
   });
 });
@@ -389,7 +389,7 @@ describe("Shell", () => {
   it("follows address changes", async () => {
     mockFetch({ ...session, "GET /api/v1/databases": { body: { databases: [] } }, "GET /api/v1/sites": { body: { sites: [] } } });
     render(<App />);
-    await screen.findByRole("heading", { name: "Welcome, kim" });
+    await screen.findByRole("heading", { name: "Overview", level: 1 });
     window.location.hash = "#/databases";
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     expect(await screen.findByText("Create a site first. Every database belongs to a site.")).toBeInTheDocument();
