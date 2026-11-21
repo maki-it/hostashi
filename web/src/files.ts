@@ -76,6 +76,29 @@ export const copy = (site: string, paths: string[], to: string) =>
 export const remove = (site: string, paths: string[]) => request<unknown>("POST", base(site) + "/delete", { paths });
 export const chmod = (site: string, paths: string[], mode: string) => request<unknown>("POST", base(site) + "/chmod", { paths, mode });
 
+/** The largest file the editor opens (files.MaxEditBytes). */
+export const maxEditBytes = 1 << 20;
+
+/** fileVersion is the version of an entry, "" when it has none. */
+export const fileVersion = (e: FileEntry) => e.version ?? "";
+
+/**
+ * saveFile writes the editor's text. version is the one the file was
+ * opened with; the helper refuses the save when the file changed since.
+ */
+export async function saveFile(site: string, path: string, text: string, version: string): Promise<FileEntry> {
+  const params: Record<string, string> = { path };
+  if (version !== "") params.version = version;
+  const res = await fetch("/api/v1" + base(site) + "/content" + q(params), {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { Accept: "application/json", "Content-Type": "text/plain; charset=utf-8" },
+    body: text,
+  });
+  if (!res.ok) throw await errorOf(res);
+  return (await res.json()) as FileEntry;
+}
+
 /** downloadUrl is the address of one file; the browser downloads it. */
 export const downloadUrl = (site: string, path: string) => "/api/v1" + base(site) + "/content" + q({ path });
 

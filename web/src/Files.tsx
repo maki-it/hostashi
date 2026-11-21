@@ -19,11 +19,12 @@ import {
   House,
   LinkSimple,
   LockKey,
+  NotePencil,
   PencilSimpleLine,
   Trash,
   UploadSimple,
 } from "@phosphor-icons/react";
-import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import {
   chmod,
   cleanPath,
@@ -34,6 +35,7 @@ import {
   formatSize,
   joinPath,
   listFiles,
+  maxEditBytes,
   maxZipUrl,
   mkdir,
   modeProblem,
@@ -66,6 +68,9 @@ type Dialog =
 
 type UploadRow = { name: string; size: number; sent: number; error?: string };
 
+// CodeMirror is loaded only when the editor opens (ADR-0040).
+const EditorDialog = lazy(() => import("./Editor"));
+
 const isZip = (e: FileEntry) => e.type === "file" && e.name.toLowerCase().endsWith(".zip");
 
 export function FileManager({ site, path, onPath }: Props) {
@@ -78,6 +83,7 @@ export function FileManager({ site, path, onPath }: Props) {
   const [done, setDone] = useState("");
   const [uploads, setUploads] = useState<UploadRow[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [editing, setEditing] = useState<FileEntry | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
 
@@ -96,6 +102,7 @@ export function FileManager({ site, path, onPath }: Props) {
     setListing(null);
     setSelected(new Set());
     setDialog(null);
+    setEditing(null);
     setDone("");
     void load();
   }, [load]);
@@ -188,6 +195,9 @@ export function FileManager({ site, path, onPath }: Props) {
             <a className="ui-icon-btn" href={zipUrl(site.name, [joinPath(path, e.name)])} download aria-label={"Download " + e.name + " as ZIP"} data-tip="Download as ZIP">
               <DownloadSimple size={18} aria-hidden="true" />
             </a>
+          )}
+          {e.type === "file" && e.size <= maxEditBytes && (
+            <IconButton label={"Edit " + e.name} icon={<NotePencil size={18} aria-hidden="true" />} onClick={() => setEditing(e)} />
           )}
           {isZip(e) && <IconButton label={"Extract " + e.name} icon={<FileArchive size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "extract", entry: e })} />}
           <IconButton label={"Rename " + e.name} icon={<PencilSimpleLine size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "rename", entry: e })} />
@@ -312,6 +322,20 @@ export function FileManager({ site, path, onPath }: Props) {
           />
         )}
       </div>
+      {editing && (
+        <Suspense fallback={<p aria-busy="true">Loading the editor…</p>}>
+          <EditorDialog
+            site={site.name}
+            path={joinPath(path, editing.name)}
+            entry={editing}
+            onClose={() => {
+              setEditing(null);
+              void load();
+            }}
+            onSaved={() => setDone(`${editing.name} saved.`)}
+          />
+        </Suspense>
+      )}
     </Card>
   );
 }
