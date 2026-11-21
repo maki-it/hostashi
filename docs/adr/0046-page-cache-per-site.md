@@ -113,6 +113,17 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - **Stale pages.** Without auto-purge in v1, edits show up after the cache time at the latest. This is why the default is 10 minutes and the panel has a purge button.
 - **Not a pentest.**
 
+## Implementation notes
+
+Added while building it (2026-11-21):
+
+- **No purge after a restore.** A restore (ADR-0008) writes into a separate restore directory, never over the live web root, so the cache does not serve pages of files that changed under it. The admin who moves restored files into place can purge by hand.
+- **Switching off removes the directory** instead of purging it. Every `web.apply` removes each cache directory of a site that has no cache, also one left over by an earlier failure; doctor reports leftovers until then (`system.pagecache`).
+- **Purge also runs** when the preset, the cache time or the excluded paths change, and when a site serves again after maintenance or being disabled. A size change alone keeps the entries.
+- **Rate limit** of the purge route: one purge per site every 10 seconds, kept in memory; `429` with `Retry-After`.
+- **Import:** the plan proposes the preset from the site type (WordPress or generic PHP) for a PHP site with a cache tier; the admin can untick it when creating the site.
+- **Metrics** for the cache size per site are not in this first version.
+
 ## Open questions
 
 1. ~~Should the FastCGI cache **replace** the Varnish option from ADR-0017 in v1?~~ Decided by Kim on 2026-11-21: yes, for now. Varnish possibly after v1 as its own ADR.
