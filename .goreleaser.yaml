@@ -73,6 +73,7 @@ nfpms:
       - fail2ban
       - libnginx-mod-http-brotli-filter
       - libnginx-mod-http-brotli-static
+      - logrotate
       - mariadb-server
       - nftables
       - nginx

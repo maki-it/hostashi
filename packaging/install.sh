@@ -456,7 +456,8 @@ do_sysctl() {
 
 # nginx and its brotli modules from the distribution (ADR-0020). The agent
 # renders the whole config; the package's default site is never used.
-NGINX_PKGS=(nginx libnginx-mod-http-brotli-filter libnginx-mod-http-brotli-static)
+# logrotate rotates the per-site logs with the panel's retention (ADR-0053).
+NGINX_PKGS=(nginx libnginx-mod-http-brotli-filter libnginx-mod-http-brotli-static logrotate)
 NGINX_DROPIN=/etc/systemd/system/nginx.service.d/hostashi.conf
 
 chk_nginx() {

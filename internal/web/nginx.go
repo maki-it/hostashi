@@ -67,6 +67,11 @@ type Nginx struct {
 	PIDFile   string
 	ErrorLog  string
 	AccessLog string // empty: access_log off
+	// SiteLogDir holds one directory per site, <SiteLogDir>/<site>/ with
+	// access.log and error.log (ADR-0021, ADR-0053). The directories are
+	// root:root 0750, so a site cannot write fake lines into them. Empty
+	// keeps every site on ErrorLog and AccessLog (tests).
+	SiteLogDir string
 	// TempDir replaces the compiled-in temp paths (tests); empty keeps them.
 	TempDir string
 	// Modules is an include glob for load_module files, empty for none.
@@ -139,7 +144,7 @@ func (n *Nginx) check() error {
 		return fmt.Errorf("web: invalid database tool socket %q or root %q", n.DBToolSocket, n.DBToolRoot)
 	}
 
-	for _, p := range []string{n.AccessLog, n.TempDir, n.Modules, n.ACMERoot} {
+	for _, p := range []string{n.AccessLog, n.SiteLogDir, n.TempDir, n.Modules, n.ACMERoot} {
 		if p != "" && !confPathRe.MatchString(p) {
 			return fmt.Errorf("web: invalid path %q", p)
 		}
@@ -625,6 +630,10 @@ server {
     {{- end}}
     listen unix:{{.N.ControlSocket}};
     server_name{{range .S.Domains}} {{.}}{{end}};
+    {{- if .N.SiteLogDir}}
+    access_log {{.N.SiteLogDir}}/{{.S.User}}/access.log;
+    error_log {{.N.SiteLogDir}}/{{.S.User}}/error.log warn;
+    {{- end}}
     {{- if .N.ACMERoot}}
 
     # HTTP-01 challenges of the panel's ACME client.
@@ -664,6 +673,10 @@ server {
     http2 on;
     {{- end}}
     server_name{{range .S.Domains}} {{.}}{{end}};
+    {{- if .N.SiteLogDir}}
+    access_log {{.N.SiteLogDir}}/{{.S.User}}/access.log;
+    error_log {{.N.SiteLogDir}}/{{.S.User}}/error.log warn;
+    {{- end}}
     ssl_certificate {{.S.Cert}};
     ssl_certificate_key {{.S.Key}};
     # Headers here apply to every response of the site; a location with its

@@ -521,6 +521,12 @@ func (r *Reconciler) apply(ctx context.Context, d Desired) (Result, error) {
 		return Result{Generation: cur}, err // a crash leaves only <n>.tmp behind
 	}
 
+	if err := r.Driver.PrepareLogs(d.Users()); err != nil {
+		r.markFailed(next, err)
+
+		return Result{Generation: cur}, err
+	}
+
 	if err := r.Driver.Validate(ctx, r.genDir(next)); err != nil {
 		r.markFailed(next, err)
 
@@ -547,6 +553,12 @@ func (r *Reconciler) apply(ctx context.Context, d Desired) (Result, error) {
 	}
 
 	r.prune()
+
+	// Logs of deleted sites go once nginx no longer writes them.
+	if err := r.Driver.PruneLogs(d.Users()); err != nil {
+		r.log().WarnContext(ctx, "web: remove logs of deleted sites", "err", err)
+	}
+
 	r.log().InfoContext(ctx, "web: generation live", "generation", next, "sites", len(d.Sites))
 
 	return Result{Generation: next, Changed: true}, nil
@@ -573,6 +585,10 @@ func (r *Reconciler) rollback(ctx context.Context, bad, prev int, hasPrev bool, 
 func (r *Reconciler) restore(ctx context.Context, n int) error {
 	d, err := r.readDesired(n)
 	if err != nil {
+		return err
+	}
+
+	if err := r.Driver.PrepareLogs(d.Users()); err != nil {
 		return err
 	}
 
