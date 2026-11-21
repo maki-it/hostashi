@@ -102,6 +102,8 @@ func dbServerFail(log *slog.Logger, w http.ResponseWriter, err error, what strin
 		writeError(w, http.StatusConflict, "db_server_in_use", "the server has databases or is the local server")
 	case errors.Is(err, hosting.ErrDBServersOff):
 		writeError(w, http.StatusConflict, "db_servers_unavailable", "external database servers are not available on this panel")
+	case errors.Is(err, hosting.ErrPGClientTooOld):
+		writeError(w, http.StatusUnprocessableEntity, "pg_client_too_old", "the PostgreSQL server is newer than the client tools this Hostashi release can install; update Hostashi first")
 	case errors.Is(err, hosting.ErrDBServerCheck):
 		// The text names the failed step and the server error number,
 		// never a statement or password (internal/dbserver).
