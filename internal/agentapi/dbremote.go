@@ -111,6 +111,10 @@ func ValidateRemoteJobUser(user, password string) error {
 	return nil
 }
 
+// ValidRemotePassword reports whether p is a temporary user's password on an
+// external server: 32 letters and digits.
+func ValidRemotePassword(p string) bool { return remoteJobPassRe.MatchString(p) }
+
 // Addresses parses Addrs with ParseRemoteAddrs.
 func (r DBRemoteJobRequest) Addresses() ([]netip.Addr, error) {
 	return ParseRemoteAddrs(r.Host, r.Addrs)

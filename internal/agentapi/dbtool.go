@@ -203,7 +203,7 @@ func (r DBToolRemoteRequest) Validate() error {
 		return fmt.Errorf("user: must match %s", dbToolUserRe)
 	}
 
-	if !remoteJobPassRe.MatchString(r.Password) {
+	if !ValidRemotePassword(r.Password) {
 		return errors.New("password: must be 32 letters and digits")
 	}
 

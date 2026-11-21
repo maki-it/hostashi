@@ -165,6 +165,13 @@ type Service struct {
 	dbTool     DBToolAgent // nil: no web database tool (ADR-0038)
 	dbToolPort int
 
+	// The tool's external servers (ADR-0041 addendum 1): the list last
+	// sent to the agent, under remoteToolsMu, and how the end of a
+	// session is scheduled (nil: time.AfterFunc).
+	remoteToolsMu sync.Mutex
+	toolServers   map[int64]agentapi.DBToolServer
+	afterFunc     func(d time.Duration, f func())
+
 	dbManifestDir string     // extdb list for the backup; empty: none
 	manifestMu    sync.Mutex // serializes the manifest writes
 
