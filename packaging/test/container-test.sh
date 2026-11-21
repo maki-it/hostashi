@@ -978,7 +978,23 @@ seen=$(x sh -c "ls -A /proc/\$(systemctl show -p MainPID --value $bigunit)/root/
 [ -z "$seen" ] || fail "big's PHP master sees in /home: $seen"
 if x runuser -u wp -- ls /srv/vol1 >/dev/null 2>&1; then fail "wp lists vol1"; fi
 if x /usr/local/bin/hostashi pool remove vol1 >/dev/null 2>&1; then fail "a pool with a site was removed"; fi
+doc=$(x /usr/local/bin/hostashi doctor || true)
+grep -Eq "^  ok    system.pool.volume +pool vol1 \(/srv/vol1\) is mounted with its marker" <<<"$doc" || fail "doctor on vol1: $doc"
+grep -Eq "^  ok    system.quota +/srv/vol1: disk limits are enforced" <<<"$doc" || [ "$volquota" = off ] || fail "doctor quota on vol1: $doc"
 [ "$(api DELETE /api/v1/sites/big)" = 204 ] || fail "delete site big: $(x cat /tmp/api.out)"
+# A missing volume (as after a boot without it): doctor fails the pool and
+# does not report the root disk's free space for its path.
+x umount /srv/vol1
+x systemctl restart hostashi-agent.service
+for _ in $(seq 1 30); do x /usr/local/bin/hostashi ping >/dev/null 2>&1 && break; sleep 1; done
+rc=0
+doc=$(x /usr/local/bin/hostashi doctor) || rc=$?
+[ "$rc" != 0 ] || fail "doctor passed with the pool's volume missing"
+grep -Eq "^  FAIL  system.pool.volume +pool vol1 \(/srv/vol1\) is not available" <<<"$doc" || fail "doctor without vol1: $doc"
+if grep -Eq "^  [a-zA-Z]+ +system.disk +/srv/vol1:" <<<"$doc"; then fail "doctor reports disk space below the missing volume: $doc"; fi
+x mount /srv/vol1
+x systemctl restart hostashi-agent.service
+for _ in $(seq 1 30); do x /usr/local/bin/hostashi ping >/dev/null 2>&1 && break; sleep 1; done
 x /usr/local/bin/hostashi pool remove vol1 || fail "pool remove"
 x test ! -e /srv/vol1/.hostashi-pool || fail "marker left after pool remove"
 x grep -q 'TemporaryFileSystem' "/etc/systemd/system/$wpunit.d/50-hostashi-slice.conf" && fail "wp still hides the removed pool"

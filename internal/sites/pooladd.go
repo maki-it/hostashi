@@ -284,6 +284,10 @@ func (m *Manager) inFstab(dir string) bool {
 	return fstabHas(f, dir)
 }
 
+// PoolInFstab reports whether the fstab has an active entry for the mount
+// point dir, for doctor.
+func (m *Manager) PoolInFstab(dir string) bool { return m.inFstab(dir) }
+
 func fstabHas(r io.Reader, dir string) bool {
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {

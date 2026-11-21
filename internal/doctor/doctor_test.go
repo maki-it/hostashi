@@ -5,6 +5,7 @@ package doctor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"os"
@@ -130,6 +131,40 @@ func TestPoolMode(t *testing.T) {
 
 	if c := PoolMode(filepath.Join(d, "missing")); c.Status != agentapi.DoctorFail {
 		t.Errorf("missing pool: %+v", c)
+	}
+}
+
+func TestPoolVolume(t *testing.T) {
+	flags := map[string]int64{"/srv/good": unix.ST_NOSUID | unix.ST_NODEV, "/srv/suid": unix.ST_NODEV}
+	s := System{Statfs: func(p string, st *unix.Statfs_t) error {
+		f, found := flags[p]
+		if !found {
+			return os.ErrNotExist
+		}
+
+		st.Flags = f
+
+		return nil
+	}}
+
+	cases := []struct {
+		p      PoolState
+		status string
+		text   string
+	}{
+		{PoolState{Name: "default", Path: "/home"}, agentapi.DoctorOK, "available"},
+		{PoolState{Name: "vol1", Path: "/srv/good", Volume: true, InFstab: true}, agentapi.DoctorOK, "nosuid,nodev and an fstab entry"},
+		{PoolState{Name: "vol1", Path: "/srv/good", Volume: true}, agentapi.DoctorWarn, "no entry in /etc/fstab"},
+		{PoolState{Name: "vol1", Path: "/srv/suid", Volume: true, InFstab: true}, agentapi.DoctorWarn, "without nosuid,nodev"},
+		{PoolState{Name: "vol1", Path: "/srv/gone", Volume: true, Unavailable: errors.New("x")}, agentapi.DoctorFail, "not available"},
+		{PoolState{Name: "vol1", Path: "/srv/gone", Volume: true}, agentapi.DoctorFail, "vol1"},
+	}
+
+	for _, c := range cases {
+		got := s.PoolVolume(c.p)
+		if got.ID != "system.pool.volume" || got.Status != c.status || !strings.Contains(got.Summary, c.text) {
+			t.Errorf("%+v: %+v, want %s with %q", c.p, got, c.status, c.text)
+		}
 	}
 }
 
