@@ -122,6 +122,7 @@ Added while building it (2026-11-21):
 - **Purge also runs** when the preset, the cache time or the excluded paths change, and when a site serves again after maintenance or being disabled. A size change alone keeps the entries.
 - **Rate limit** of the purge route: one purge per site every 10 seconds, kept in memory; `429` with `Retry-After`.
 - **Import:** the plan proposes the preset from the site type (WordPress or generic PHP) for a PHP site with a cache tier; the admin can untick it when creating the site.
+- **Limit presets** (Kim, 2026-11-21): the field "page cache: off or size" is a default for new sites, as for the object cache (ADR-0045). A site gets it when it is created, imported or switched to the preset; a site that never chose a cache preset gets the strict generic one. A later change of the preset only changes the size of following sites whose cache is on; the preset never switches a cache on or off.
 - **Metrics** for the cache size per site are not in this first version.
 
 ## Open questions

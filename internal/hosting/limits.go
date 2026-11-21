@@ -176,6 +176,7 @@ func (s *Service) CreateLimitPreset(ctx context.Context, actor int64, name strin
 
 	detail := limitsAudit(l)
 	detail["objectCacheMb"] = strconv.FormatInt(c.ObjectCacheMB, 10)
+	detail["pageCacheMb"] = strconv.FormatInt(c.PageCacheMB, 10)
 	detail["default"] = strconv.FormatBool(def)
 	s.audit(ctx, actor, "limits.preset.create", name, detail)
 
@@ -226,6 +227,7 @@ func (s *Service) UpdateLimitPreset(ctx context.Context, actor int64, name, newN
 
 	detail := limitsAudit(l)
 	detail["objectCacheMb"] = strconv.FormatInt(c.ObjectCacheMB, 10)
+	detail["pageCacheMb"] = strconv.FormatInt(c.PageCacheMB, 10)
 	detail["name"] = newName
 	detail["default"] = strconv.FormatBool(def || cur.Default)
 	s.audit(ctx, actor, "limits.preset.update", name, detail)
@@ -247,7 +249,7 @@ func (s *Service) UpdateLimitPreset(ctx context.Context, actor int64, name, newN
 				s.log.WarnContext(ctx, "apply preset to site", "site", site.Name, "preset", newName, "err", err)
 			}
 
-			s.followPresetCache(ctx, actor, site, cur.Caches, c)
+			s.followPresetCaches(ctx, actor, site, cur.Caches, c)
 		}
 	}
 
@@ -401,7 +403,7 @@ func (s *Service) SetSiteLimits(ctx context.Context, actor int64, name, preset s
 	// Switching to a preset gives the site its object cache; staying on
 	// the same preset changes nothing there.
 	if presetID != 0 && (!hadBefore || before.PresetID != presetID) {
-		s.presetObjectCache(ctx, actor, site, caches)
+		s.presetCaches(ctx, actor, site, caches)
 	}
 
 	v, err := s.siteLimitsView(ctx, site)
