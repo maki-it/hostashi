@@ -1753,7 +1753,12 @@ if [ -n "${PEBBLE_DIR:-}" ]; then
   [ -n "$(x find /etc/hostashi-adminer/servers -name 'ca-*.pem' -perm 0644)" ] || fail "the server's CA is not readable by the tool: $(x ls -l /etc/hostashi-adminer/servers/)"
   x rm -f /tmp/tool.jar
   page=$(p8444 -L "$url") || fail "tool did not answer"
-  grep -q 'Tables and views' <<<"$page" || fail "tool did not log in to PostgreSQL: $(grep -o "class='error'>[^<]*" <<<"$page"; x ls -l /etc/hostashi-adminer/servers/)"
+  if ! grep -q 'Tables and views' <<<"$page"; then
+    grep -o "class='error'>[^<]*" <<<"$page" || true
+    docker logs --tail 30 "$pgname" 2>&1 || true
+    x journalctl -u hostashi-adminer.service --no-pager -n 30 || true
+    fail "tool did not log in to PostgreSQL"
+  fi
   grep -q 'pgsql=&amp;username=' <<<"$page" || fail "the tool does not run the pgsql driver"
   page=$(p8444 "https://other.example.com:8444/?pgsql=&username=$user&db=toolpg_db&ns=public&select=posts") || fail "tool did not answer"
   grep -q 'hello from pg' <<<"$page" || fail "the tool does not show the table's rows"
