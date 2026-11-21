@@ -95,6 +95,8 @@ var table = map[Action]Rule{
 	"panel.tls:write":      server("sites:write"),
 	"php:install":          server("php:install"),
 	"php.install:read":     server("sites:read"),
+	"services:read":        server("services:read"),
+	"services:write":       server("services:write"),
 	"web:sync":             server("sites:write"),
 
 	// Read-only things everyone needs. The lists of sites and databases

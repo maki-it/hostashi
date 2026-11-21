@@ -46,6 +46,8 @@ var scopeCatalog = map[string]ScopeInfo{
 	"firewall:write":          {Description: "Open ports and set the allowlists for SSH and the panel (a wrong list locks out until the rollback)", HighRisk: true},
 	"php:install":             {Description: "Install more PHP versions from sury.org (runs apt as root with a fixed package list)", HighRisk: true},
 	"metrics:read":            {Description: "Read the Prometheus metrics endpoint"},
+	"services:read":           {Description: "Read the state and restarts of the server's services and the dashboard's CPU, memory, disk and network figures"},
+	"services:write":          {Description: "Start, stop, restart and reload the server's services where the service catalog allows it", HighRisk: true},
 	"migrations:read":         {Description: "List uploaded CloudPanel scan reports and read their migration plans"},
 	"migrations:write":        {Description: "Upload and delete CloudPanel scan reports"},
 	"backups:restore":         {Description: "Restore a site's backups into its home", HighRisk: true},
@@ -67,8 +69,9 @@ func Scopes() []ScopeInfo {
 	return out
 }
 
-// maxScopesPerToken keeps a token description small.
-const maxScopesPerToken = 32
+// maxScopesPerToken keeps a token description small. It stays above the
+// size of the catalog, so a token can carry every scope.
+const maxScopesPerToken = 64
 
 // normalizeScopes checks a requested scope list against the catalog and
 // returns it sorted without duplicates. An empty list, an unknown scope or a

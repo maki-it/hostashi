@@ -231,7 +231,14 @@ var routeAccess = map[string]authz.Action{
 	"PUT /api/v1/firewall":          "firewall:write",
 	"POST /api/v1/firewall/confirm": "firewall:write",
 	"GET /api/v1/doctor":            "doctor:read",
-	"GET /metrics":                  "metrics:read",
+
+	"GET /api/v1/services":                             "services:read",
+	"GET /api/v1/sites/{name}/services":                "services:read",
+	"GET /api/v1/services/events":                      "services:read",
+	"POST /api/v1/services/{id}/{action}":              "services:write",
+	"POST /api/v1/sites/{name}/services/{id}/{action}": "services:write",
+	"GET /api/v1/dashboard":                            "services:read",
+	"GET /metrics":                                     "metrics:read",
 }
 
 // newFullAPI serves every route group at once.
@@ -247,6 +254,7 @@ func newFullAPI(t *testing.T) (*apiEnv, []string) {
 		PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb,
 		CloudPanel: e.cp, CloudPanelSource: newStubSource(t), Metrics: e.metrics, Settings: e.settings,
 		Doctor: e.doctor.run, Firewall: e.firewall, PHP: e.php, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open, NotifyPrefs: e.st,
+		Monitor: e.monitor,
 	})
 
 	return e, patterns
