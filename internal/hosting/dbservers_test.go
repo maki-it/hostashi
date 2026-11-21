@@ -28,12 +28,13 @@ type fakeDBServers struct {
 	opErr    error
 	checks   []bool // privileges flag of each Check
 	dbs      map[string]bool
-	users    map[string]string // user -> database
+	users    map[string]string    // user -> database
+	until    map[string]time.Time // tool user -> end of its password
 	sealed   map[int64]string
 }
 
 func newFakeDBServers() *fakeDBServers {
-	return &fakeDBServers{dbs: map[string]bool{}, users: map[string]string{}, sealed: map[int64]string{}}
+	return &fakeDBServers{dbs: map[string]bool{}, users: map[string]string{}, until: map[string]time.Time{}, sealed: map[int64]string{}}
 }
 
 func (f *fakeDBServers) Check(_ context.Context, cfg dbserver.Config, privileges bool) (dbserver.Info, error) {
@@ -161,8 +162,30 @@ func (r fakeRemote) DropJobUser(ctx context.Context, _, user string) error {
 	return r.DropUser(ctx, "", user)
 }
 
-func (r fakeRemote) CreateToolUser(ctx context.Context, database, user, password string) error {
-	return r.CreateUser(ctx, database, user, password)
+func (r fakeRemote) CreateToolUser(ctx context.Context, database, user, password string, until time.Time) error {
+	if err := r.CreateUser(ctx, database, user, password); err != nil {
+		return err
+	}
+
+	r.f.mu.Lock()
+	defer r.f.mu.Unlock()
+
+	r.f.until[user] = until
+
+	return nil
+}
+
+func (r fakeRemote) ExtendToolUser(_ context.Context, user string, until time.Time) error {
+	r.f.mu.Lock()
+	defer r.f.mu.Unlock()
+
+	if r.f.opErr != nil {
+		return r.f.opErr
+	}
+
+	r.f.until[user] = until
+
+	return nil
 }
 
 func (r fakeRemote) DropToolUser(ctx context.Context, database, user string) error {

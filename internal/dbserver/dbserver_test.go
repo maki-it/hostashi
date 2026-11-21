@@ -438,11 +438,11 @@ func TestToolUserStatements(t *testing.T) {
 	user, pw := "hostashi_tool_0123456789abcdef", "Abcdefghijklmnopqrstuvwxyz012345"
 
 	for name, err := range map[string]error{
-		"site user": c.CreateToolUser(ctx, "shop_wp", "shop_user", pw),
+		"site user": c.CreateToolUser(ctx, "shop_wp", "shop_user", pw, time.Time{}),
 		"job user":  c.DropToolUser(ctx, "shop_wp", "hostashi_job_0123456789abcdef"),
-		"short pw":  c.CreateToolUser(ctx, "shop_wp", user, "Abcdefghijklmnop1234"),
-		"no pw":     c.CreateToolUser(ctx, "shop_wp", user, ""),
-		"db":        c.CreateToolUser(ctx, "mysql", user, pw),
+		"short pw":  c.CreateToolUser(ctx, "shop_wp", user, "Abcdefghijklmnop1234", time.Time{}),
+		"no pw":     c.CreateToolUser(ctx, "shop_wp", user, "", time.Time{}),
+		"db":        c.CreateToolUser(ctx, "mysql", user, pw, time.Time{}),
 	} {
 		if !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: got %v", name, err)
@@ -453,7 +453,7 @@ func TestToolUserStatements(t *testing.T) {
 		t.Fatalf("statements ran: %q", f.stmts)
 	}
 
-	if err := c.CreateToolUser(ctx, "shop_wp", user, pw); err != nil {
+	if err := c.CreateToolUser(ctx, "shop_wp", user, pw, time.Time{}); err != nil {
 		t.Fatal(err)
 	}
 

@@ -318,16 +318,47 @@ func TestPGServerToolUser(t *testing.T) {
 		})
 	}
 
-	if err := c.CreateToolUser(ctx, "tool_db", user, pw); err != nil {
+	until := time.Now().Add(time.Hour).Truncate(time.Second)
+
+	if err := c.CreateToolUser(ctx, "tool_db", user, pw, until); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := c.CreateToolUser(ctx, "tool_db", user, pw); !errors.Is(err, ErrExists) {
+	var valid time.Time
+
+	admin := open(t, cfg)
+	if err := admin.QueryRowContext(ctx, "SELECT rolvaliduntil FROM pg_roles WHERE rolname = $1", user).Scan(&valid); err != nil || !valid.Equal(until) {
+		t.Fatalf("valid until %v, want %v: %v", valid, until, err)
+	}
+
+	until = until.Add(30 * time.Minute)
+	if err := c.ExtendToolUser(ctx, user, until); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := admin.QueryRowContext(ctx, "SELECT rolvaliduntil FROM pg_roles WHERE rolname = $1", user).Scan(&valid); err != nil || !valid.Equal(until) {
+		t.Fatalf("extended until %v, want %v: %v", valid, until, err)
+	}
+
+	if err := c.CreateToolUser(ctx, "tool_db", user, pw, until); !errors.Is(err, ErrExists) {
 		t.Fatalf("second create: %v", err)
 	}
 
 	tool := cfg
 	tool.AdminUser, tool.AdminPassword = user, pw
+
+	// A password past its end no longer logs in.
+	if err := c.ExtendToolUser(ctx, user, time.Now().Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := openPG(t, tool, "tool_db").PingContext(ctx); err == nil {
+		t.Fatal("login after the password's end")
+	}
+
+	if err := c.ExtendToolUser(ctx, user, until); err != nil {
+		t.Fatal(err)
+	}
 
 	// One connection per pool, so each one counts.
 	conn := func(database string) (*sql.DB, error) {

@@ -65,11 +65,12 @@ func (s *Service) openRemoteTool(ctx context.Context, d store.Database, minutes 
 		return agentapi.DBToolOpenResponse{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 
-	if err := s.remote(ctx, srv, func(c RemoteDB) error { return c.CreateToolUser(ctx, d.Name, user, password) }); err != nil {
+	ends := s.now().Add(time.Duration(minutes)*time.Minute + remoteToolMargin).UTC()
+
+	if err := s.remote(ctx, srv, func(c RemoteDB) error { return c.CreateToolUser(ctx, d.Name, user, password, ends) }); err != nil {
 		return agentapi.DBToolOpenResponse{}, err
 	}
 
-	ends := s.now().Add(time.Duration(minutes)*time.Minute + remoteToolMargin).UTC()
 	bg := context.WithoutCancel(ctx)
 
 	// Recorded before the agent sees the password, so the user never

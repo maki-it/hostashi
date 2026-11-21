@@ -473,7 +473,7 @@ func (c *PGClient) CreateJobUser(ctx context.Context, database, user, password s
 		return fmt.Errorf("%w: job user", ErrInvalid)
 	}
 
-	until := c.now().Add(JobRoleValidFor).UTC().Format("2006-01-02 15:04:05+00")
+	until := pgTime(c.now().Add(JobRoleValidFor))
 
 	return c.createRole(ctx, database, user, password, fmt.Sprintf(" CONNECTION LIMIT %d VALID UNTIL '%s'", JobRoleConnections, until))
 }
@@ -494,8 +494,10 @@ func (c *PGClient) DropJobUser(ctx context.Context, database, user string) error
 
 // CreateToolUser creates the temporary user of a web database tool session
 // (ADR-0051): a member of the database's owner role like any user of it,
-// with at most agentapi.DBToolMaxConnections connections.
-func (c *PGClient) CreateToolUser(ctx context.Context, database, user, password string) error {
+// with at most agentapi.DBToolMaxConnections connections and a password
+// valid until the session's end. Adminer logs in again on every request,
+// so the session stops at that time even if dropping the user fails.
+func (c *PGClient) CreateToolUser(ctx context.Context, database, user, password string, until time.Time) error {
 	if err := ValidatePostgresDBName(database); err != nil {
 		return err
 	}
@@ -504,8 +506,21 @@ func (c *PGClient) CreateToolUser(ctx context.Context, database, user, password 
 		return fmt.Errorf("%w: tool user", ErrInvalid)
 	}
 
-	return c.createRole(ctx, database, user, password, fmt.Sprintf(" CONNECTION LIMIT %d", agentapi.DBToolMaxConnections))
+	return c.createRole(ctx, database, user, password, fmt.Sprintf(" CONNECTION LIMIT %d VALID UNTIL '%s'", agentapi.DBToolMaxConnections, pgTime(until)))
 }
+
+// ExtendToolUser moves the end of a tool user's password to until, after
+// the panel extended its session.
+func (c *PGClient) ExtendToolUser(ctx context.Context, user string, until time.Time) error {
+	if !agentapi.ValidDBToolUser(user) {
+		return fmt.Errorf("%w: tool user", ErrInvalid)
+	}
+
+	return c.exec(ctx, "extend tool user", "ALTER ROLE "+pgIdent(user)+" VALID UNTIL '"+pgTime(until)+"'")
+}
+
+// pgTime formats t for VALID UNTIL, in UTC with its offset.
+func pgTime(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05+00") }
 
 // DropToolUser ends the sessions of a tool session's user and drops it
 // like DropUser; a missing one is not an error.
