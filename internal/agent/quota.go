@@ -21,6 +21,10 @@ type QuotaFS interface {
 	Assign(dir string, id uint32, force bool) error
 	SetLimits(dir string, id uint32, bytes, inodes uint64) error
 	Get(dir string, id uint32) (quota.Usage, error)
+	// Status tells counting from enforced limits; Enforce switches
+	// enforcement on where usage is counted (spike S8 and S9).
+	Status(dir string) (quota.State, error)
+	Enforce(dir string) error
 }
 
 // KernelQuota is QuotaFS on the running kernel.
@@ -41,6 +45,12 @@ func (KernelQuota) SetLimits(dir string, id uint32, bytes, inodes uint64) error 
 
 // Get implements QuotaFS.
 func (KernelQuota) Get(dir string, id uint32) (quota.Usage, error) { return quota.Get(dir, id) }
+
+// Status implements QuotaFS.
+func (KernelQuota) Status(dir string) (quota.State, error) { return quota.Status(dir) }
+
+// Enforce implements QuotaFS.
+func (KernelQuota) Enforce(dir string) error { return quota.Enforce(dir) }
 
 var errQuotaUnavailable = &agentrpc.Error{
 	Code: agentrpc.CodePrecondition, Message: "disk quota is not enabled on the file system of this site",
@@ -84,6 +94,11 @@ func (h *siteOps) quotaSet(_ context.Context, _ agentrpc.Caller, req agentapi.Si
 		}
 
 		return agentapi.SiteQuota{}, errQuotaUnavailable
+	}
+
+	// A limit that is only counted would be no limit at all.
+	if err := h.quota.Enforce(poolOf(home)); err != nil {
+		return agentapi.SiteQuota{}, mapQuotaError(err)
 	}
 
 	if err := h.quota.Assign(home, site.UID, false); err != nil {
@@ -194,6 +209,49 @@ func (h *siteOps) registerQuota(s *agentrpc.Server) {
 
 	agentrpc.Handle(s, agentapi.SiteQuotaSet, h.quotaSet)
 	agentrpc.Handle(s, agentapi.SiteQuotaGet, h.quotaGet)
+
+	for _, p := range h.m.Pools() {
+		h.enforceQuota(p)
+	}
+}
+
+// enforceQuota switches on the enforcement of disk limits on a pool whose
+// file system only counts usage: a volume mounted with prjquota can come up
+// that way, and the installer's quotaon unit covers only /. The agent does
+// it at start, when a pool is added and before it sets limits. A pool whose
+// volume is missing is left alone; failures are logged, doctor shows them.
+func (h *siteOps) enforceQuota(p sites.Pool) {
+	if err := h.m.CheckPool(p.Name); err != nil {
+		return
+	}
+
+	st, err := h.quota.Status(p.Path)
+	if err != nil || st != quota.Counting {
+		return
+	}
+
+	if err := h.quota.Enforce(p.Path); err != nil {
+		h.log.Error("enforce disk limits", "pool", p.Name, "path", p.Path, "err", err)
+
+		return
+	}
+
+	h.log.Info("disk limits enforced", "pool", p.Name, "path", p.Path)
+}
+
+// quotaState is the pool's quota state for PoolInfo; empty when the volume
+// cannot be checked.
+func (h *siteOps) quotaState(p sites.Pool) string {
+	if h.quota == nil || h.m.CheckPool(p.Name) != nil {
+		return ""
+	}
+
+	st, err := h.quota.Status(p.Path)
+	if err != nil {
+		return ""
+	}
+
+	return st.String()
 }
 
 // poolOf is the pool directory of a home.

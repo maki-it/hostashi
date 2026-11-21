@@ -17,7 +17,10 @@ import (
 
 func TestQcmd(t *testing.T) {
 	// Values from linux/quota.h: QCMD(Q_GETQUOTA, PRJQUOTA) and so on.
-	cases := map[int]int{qGetInfo: 0x80000502, qGetQuota: 0x80000702, qSetQuota: 0x80000802}
+	cases := map[int]int{
+		qQuotaOn: 0x80000202, qQuotaOff: 0x80000302, qGetInfo: 0x80000502, qGetQuota: 0x80000702,
+		qSetQuota: 0x80000802, qXGetQStatV: 0x580802,
+	}
 	for cmd, want := range cases {
 		if got := qcmd(cmd, prjQuota); got != want {
 			t.Errorf("qcmd(%#x) = %#x, want %#x", cmd, got, want)
@@ -75,10 +78,68 @@ func TestNoQuota(t *testing.T) {
 	if _, err := Get(dir, 1000); err == nil {
 		t.Error("Get succeeded without project quota")
 	}
+
+	if st, err := Status(dir); err == nil && st != Off {
+		t.Errorf("Status = %v without project quota, want off", st)
+	}
+
+	if err := Enforce(dir); err == nil {
+		t.Error("Enforce succeeded without project quota")
+	}
+}
+
+func TestStateString(t *testing.T) {
+	for st, want := range map[State]string{Off: "off", Counting: "counting", Enforced: "enforced", State(9): "off"} {
+		if got := st.String(); got != want {
+			t.Errorf("%d.String() = %q, want %q", st, got, want)
+		}
+	}
+}
+
+// TestEnforce switches enforcement off (accounting stays, as after a mount
+// that only counts) and on again through Enforce, without quotaon.
+func TestEnforce(t *testing.T) {
+	base := os.Getenv("HOSTASHI_QUOTA_TEST_DIR")
+	if base == "" {
+		t.Skip("HOSTASHI_QUOTA_TEST_DIR not set")
+	}
+
+	fd, err := openRoot(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(fd)
+
+	// Q_QUOTAOFF on a file system with quota as a feature drops only the
+	// enforcement.
+	if err := quotactlFD(fd, qQuotaOff, 0, nil); err != nil && !errors.Is(err, unix.EINVAL) {
+		t.Fatalf("quota off: %v", err)
+	}
+
+	if st, err := Status(base); err != nil || st != Counting {
+		t.Fatalf("Status after quota off = %v, %v; want counting", st, err)
+	}
+
+	if ok, err := Available(base); err != nil || !ok {
+		t.Errorf("Available while counting = %v, %v; want true", ok, err)
+	}
+
+	if err := Enforce(base); err != nil {
+		t.Fatalf("Enforce: %v", err)
+	}
+
+	if st, err := Status(base); err != nil || st != Enforced {
+		t.Fatalf("Status after Enforce = %v, %v; want enforced", st, err)
+	}
+
+	// Again: nothing to do.
+	if err := Enforce(base); err != nil {
+		t.Errorf("second Enforce: %v", err)
+	}
 }
 
 // TestProjectQuota needs root and a directory on an ext4 (or XFS) file system
-// mounted with prjquota and enforcement on, named by HOSTASHI_QUOTA_TEST_DIR.
+// mounted with prjquota, named by HOSTASHI_QUOTA_TEST_DIR.
 // CI creates one on a loop device (go.yml, job quota).
 func TestProjectQuota(t *testing.T) {
 	base := os.Getenv("HOSTASHI_QUOTA_TEST_DIR")
@@ -89,6 +150,10 @@ func TestProjectQuota(t *testing.T) {
 	ok, err := Available(base)
 	if err != nil || !ok {
 		t.Fatalf("Available(%s) = %v, %v; want true", base, ok, err)
+	}
+
+	if err := Enforce(base); err != nil {
+		t.Fatalf("Enforce: %v", err)
 	}
 
 	id := uint32(40000 + os.Getpid()%10000)
