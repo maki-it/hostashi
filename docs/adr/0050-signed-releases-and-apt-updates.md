@@ -70,9 +70,21 @@ Two different signatures, with different jobs:
 
 ## 4. Install and upgrade (`apt install`, `postinst`)
 
-### First install with `apt install`
+### First install
 
-Kim asked for installation through apt too (2026-11-21). A new server gets Hostashi in three steps:
+Kim asked for installation through apt too (2026-11-21), and then decided (2026-11-21): the install script stays the entry point for end users, and it installs Hostashi through apt underneath, so every later update is `apt upgrade`.
+
+The documented way for end users:
+
+```text
+curl -fsSLO https://get.hostashi.com/install.sh   # placeholder; until then from the latest GitHub release
+less install.sh                                    # recommended, not enforced
+sudo bash install.sh --panel-domain cp.example.com [options]
+```
+
+The script checks the distribution, downloads the public key and compares it with the fingerprint built into the script, writes the key and the source below, runs `apt-get install hostashi` and then `hostashi setup` with its arguments. At the end it prints the panel address and the first admin link. Without `--panel-domain` on a terminal it asks. We document `curl -O` plus `bash` on purpose, not `curl | sudo bash`, so the script can be read first.
+
+The same thing by hand, for admins who prefer plain apt:
 
 ```text
 # 1. trust the key for this repository only
@@ -102,7 +114,7 @@ How the installer's options map to apt:
 
 **Recommendation: C.** On first install `postinst` enables nothing, writes no config and prints one line: "Run `sudo hostashi setup` to configure this server." `hostashi setup` is a thin root-only CLI command that runs `/usr/share/hostashi/install.sh apply` with the given flags (no `os/exec` in the panel or agent: the installer is the admin's own root shell, as today [A: the `cmd/hostashi` CLI path is outside depguard's product-code rule; otherwise `setup` stays a shell wrapper in `/usr/sbin/hostashi-setup`]). Without flags on a terminal it asks for the panel domain and shows the plan before applying. The options are saved to `/etc/hostashi/install.env` (0640 root), so upgrades and later `setup` runs reuse them.
 
-For people who want one line, a small `get.sh` on the release does steps 1 to 3 (key checked against the fingerprint built into the script) and then calls `hostashi setup` with its arguments. It is optional; the documented way is the three steps above.
+Decided by Kim (2026-11-21): option C, with the install script above as the documented entry point.
 
 `--binary PATH` stays for development and CI (installs a local `.deb` or binary).
 
@@ -148,7 +160,7 @@ The package never changes site configs by itself; the agent's reconciler re-appl
 
 ## Consequences
 
-- New: `.goreleaser.yaml`, a release workflow with the `release` environment, a Pages repo, maintainer scripts, `hostashi setup`, optional `get.sh`, `install.sh` `upgrade` mode, `hostashi rollback`, upgrade test in CI, release and key renewal docs in the wiki.
+- New: `.goreleaser.yaml`, a release workflow with the `release` environment, a Pages repo, maintainer scripts, `hostashi setup`, the install script's apt bootstrap, `install.sh` `upgrade` mode, `hostashi rollback`, upgrade test in CI, release and key renewal docs in the wiki.
 - `install.sh` must split "install packages" from "configure"; package lists move into the `.deb`'s `Depends:` and are checked against both distributions in CI.
 - Supply chain: the build runs on GitHub-hosted runners; actions are pinned by commit SHA; the release job has no other secrets than the signing subkey.
 - Outside effects that need Kim's approval: creating the OpenPGP key, the Pages repo and its settings, the `release` environment with its secret, and later the DNS name `apt.hostashi.com`.
@@ -156,7 +168,7 @@ The package never changes site configs by itself; the agent's reconciler re-appl
 
 ## Open questions for Kim
 
-1. Installation: `apt install hostashi`, then `hostashi setup` (recommended), instead of debconf or a setup inside `postinst`?
+1. ~~Installation~~ Decided (Kim, 2026-11-21): install script as entry point, it installs the package through apt and runs `hostashi setup`; plain `apt install hostashi` plus `hostashi setup` works too.
 2. Apt repository on GitHub Pages in its own repo (recommended) or somewhere else?
 3. Signing: offline primary key with a CI subkey behind an approval (recommended)?
 4. `postinst` runs the installer's configure steps on every upgrade (recommended)?
