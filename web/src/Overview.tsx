@@ -3,6 +3,7 @@
 import { ArrowRight } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
 import type { User } from "./auth";
+import { daysLeft } from "./certs";
 import { getBackups, type BackupInfo } from "./backups";
 import { checkTitle, runDoctor, type DoctorReport } from "./doctor";
 import { canSee } from "./nav";
@@ -41,9 +42,28 @@ export function attention(d: Data): Item[] {
       });
     }
   }
+  // Own certificates are never renewed by the panel (ADR-0039): 30 and 7
+  // days before expiry they need someone. They replace the doctor's check.
+  const own = new Set<string>();
+  for (const s of d.sites ?? []) {
+    if (s.tls.certSource !== "custom") continue;
+    own.add(s.name);
+    const left = daysLeft(s.tls.notAfter);
+    if (left === null || left >= 30) continue;
+    items.push({
+      key: "owncert-" + s.name,
+      tone: left < 7 ? "err" : "warn",
+      word: left < 7 ? "Failed" : "Warning",
+      title: left < 0 ? `The own certificate of site ${s.name} has expired` : `The own certificate of site ${s.name} expires in ${left} days`,
+      detail: "It is not renewed automatically. Upload a new one, or switch the site to Let's Encrypt.",
+      href: formatHash({ page: "sites", site: { name: s.name, tab: "domains" } }),
+      link: "Open domains",
+    });
+  }
   if (d.doctor) {
     for (const c of d.doctor.checks) {
       if (c.status === "ok") continue;
+      if (c.id === "site.tls" && c.site && own.has(c.site)) continue;
       const where = c.site ? "site " + c.site : "the server";
       items.push({
         key: "doctor-" + c.id + (c.site ?? ""),
