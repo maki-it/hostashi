@@ -31,6 +31,12 @@ The size is 32 to 1024 MiB and at most half of the site's memory limit, so the c
 
 The cache's memory counts against the site's memory limit, because it runs in the site's own resource group.
 
+## Default in a limit preset
+
+**For:** admins.
+
+A limit preset can switch the object cache on for its sites: under **Limits**, edit the preset and choose a size under **Default for new sites**. A site gets the cache when it is created, imported or switched to the preset. If you change the size in the preset later, sites that follow the preset and have the cache on get the new size; the preset never switches a site's cache on or off afterwards. The size must be at most half of the preset's memory limit.
+
 ## Flush and switch off
 
 **Flush cache** empties it at once, for example after a change the app does not notice. Switching the cache off stops it and removes its settings. While a site is disabled, its cache is stopped as well and starts again when the site is enabled.

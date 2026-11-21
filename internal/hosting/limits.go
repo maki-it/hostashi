@@ -153,7 +153,7 @@ func presetErr(err error) error {
 
 // CreateLimitPreset adds a preset; with def it becomes the default for new
 // sites.
-func (s *Service) CreateLimitPreset(ctx context.Context, actor int64, name string, l store.Limits, def bool) (store.LimitPreset, error) {
+func (s *Service) CreateLimitPreset(ctx context.Context, actor int64, name string, l store.Limits, c store.PresetCaches, def bool) (store.LimitPreset, error) {
 	if err := checkPresetName(name); err != nil {
 		return store.LimitPreset{}, err
 	}
@@ -162,15 +162,20 @@ func (s *Service) CreateLimitPreset(ctx context.Context, actor int64, name strin
 		return store.LimitPreset{}, err
 	}
 
+	if err := CheckPresetCaches(c, l); err != nil {
+		return store.LimitPreset{}, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	p, err := s.st.CreateLimitPreset(ctx, name, l, def, s.now())
+	p, err := s.st.CreateLimitPreset(ctx, name, l, c, def, s.now())
 	if err != nil {
 		return store.LimitPreset{}, presetErr(err)
 	}
 
 	detail := limitsAudit(l)
+	detail["objectCacheMb"] = strconv.FormatInt(c.ObjectCacheMB, 10)
 	detail["default"] = strconv.FormatBool(def)
 	s.audit(ctx, actor, "limits.preset.create", name, detail)
 
@@ -182,7 +187,7 @@ func (s *Service) CreateLimitPreset(ctx context.Context, actor int64, name strin
 // desired state with the error recorded (see SiteLimits); the preset change
 // itself stands. def makes the preset the default; the default flag is only
 // moved by making another preset the default.
-func (s *Service) UpdateLimitPreset(ctx context.Context, actor int64, name, newName string, l store.Limits, def bool) (store.LimitPreset, error) {
+func (s *Service) UpdateLimitPreset(ctx context.Context, actor int64, name, newName string, l store.Limits, c store.PresetCaches, def bool) (store.LimitPreset, error) {
 	if err := checkPresetName(newName); err != nil {
 		return store.LimitPreset{}, err
 	}
@@ -199,7 +204,11 @@ func (s *Service) UpdateLimitPreset(ctx context.Context, actor int64, name, newN
 		return store.LimitPreset{}, err
 	}
 
-	if _, err := s.st.UpdateLimitPreset(ctx, cur.ID, newName, l, def, s.now()); err != nil {
+	if err := CheckPresetCaches(c, l); err != nil {
+		return store.LimitPreset{}, err
+	}
+
+	if _, err := s.st.UpdateLimitPreset(ctx, cur.ID, newName, l, c, def, s.now()); err != nil {
 		return store.LimitPreset{}, presetErr(err)
 	}
 
@@ -216,6 +225,7 @@ func (s *Service) UpdateLimitPreset(ctx context.Context, actor int64, name, newN
 	}
 
 	detail := limitsAudit(l)
+	detail["objectCacheMb"] = strconv.FormatInt(c.ObjectCacheMB, 10)
 	detail["name"] = newName
 	detail["default"] = strconv.FormatBool(def || cur.Default)
 	s.audit(ctx, actor, "limits.preset.update", name, detail)
@@ -236,6 +246,8 @@ func (s *Service) UpdateLimitPreset(ctx context.Context, actor int64, name, newN
 			if err := s.applyLimits(ctx, site, l); err != nil {
 				s.log.WarnContext(ctx, "apply preset to site", "site", site.Name, "preset", newName, "err", err)
 			}
+
+			s.followPresetCache(ctx, actor, site, cur.Caches, c)
 		}
 	}
 
@@ -350,6 +362,7 @@ func (s *Service) SetSiteLimits(ctx context.Context, actor int64, name, preset s
 	var (
 		presetID int64
 		l        store.Limits
+		caches   store.PresetCaches
 	)
 
 	before, hadBefore, err := s.st.SiteLimits(ctx, site.ID)
@@ -365,7 +378,7 @@ func (s *Service) SetSiteLimits(ctx context.Context, actor int64, name, preset s
 			return SiteLimitsView{}, presetErr(err)
 		}
 
-		presetID, l = p.ID, p.Limits
+		presetID, l, caches = p.ID, p.Limits, p.Caches
 	}
 
 	if err := s.st.SetSiteLimits(ctx, site.ID, presetID, l, s.now()); err != nil {
@@ -383,6 +396,12 @@ func (s *Service) SetSiteLimits(ctx context.Context, actor int64, name, preset s
 		if err := s.applyWeb(ctx); err != nil && applyErr == nil {
 			applyErr = err
 		}
+	}
+
+	// Switching to a preset gives the site its object cache; staying on
+	// the same preset changes nothing there.
+	if presetID != 0 && (!hadBefore || before.PresetID != presetID) {
+		s.presetObjectCache(ctx, actor, site, caches)
 	}
 
 	v, err := s.siteLimitsView(ctx, site)
@@ -433,18 +452,19 @@ func ImportLimits(def store.Limits, u Usage) (store.Limits, bool) {
 
 // storeDefaultLimits gives a new site the default preset, before its
 // web state is applied; with usage (an import) the disk limits are raised
-// to fit (ImportLimits). It reports false (and logs why) when the site
-// gets no limits; the site itself stays.
-func (s *Service) storeDefaultLimits(ctx context.Context, site store.Site, usage *Usage) (store.Limits, bool) {
+// to fit (ImportLimits). It returns the preset's caches for the caller to
+// set up once the site runs, and reports false (and logs why) when the
+// site gets no limits; the site itself stays.
+func (s *Service) storeDefaultLimits(ctx context.Context, site store.Site, usage *Usage) (store.Limits, store.PresetCaches, bool) {
 	if s.limits == nil {
-		return store.Limits{}, false
+		return store.Limits{}, store.PresetCaches{}, false
 	}
 
 	p, err := s.st.DefaultLimitPreset(ctx)
 	if err != nil {
 		s.log.ErrorContext(ctx, "default limit preset", "site", site.Name, "err", err)
 
-		return store.Limits{}, false
+		return store.Limits{}, store.PresetCaches{}, false
 	}
 
 	l, presetID := p.Limits, p.ID
@@ -458,10 +478,10 @@ func (s *Service) storeDefaultLimits(ctx context.Context, site store.Site, usage
 	if err := s.st.SetSiteLimits(ctx, site.ID, presetID, l, s.now()); err != nil {
 		s.log.ErrorContext(ctx, "store limits of a new site", "site", site.Name, "err", err)
 
-		return store.Limits{}, false
+		return store.Limits{}, store.PresetCaches{}, false
 	}
 
-	return l, true
+	return l, p.Caches, true
 }
 
 // phpWorkers is the worker count to send for a site: its limit, or 0 (the
