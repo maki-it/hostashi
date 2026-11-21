@@ -136,9 +136,9 @@ if x /opt/hostashi/install.sh apply --yes --no-apt --binary /opt/hostashi/hostas
   fail "--no-apt succeeded with restic missing"
 fi
 x grep -q 'missing package(s) with --no-apt: restic' /var/log/hostashi-install.log || fail "--no-apt did not name restic"
-x dpkg-query -W -f '${Status}' restic 2>/dev/null | grep -q 'install ok installed' && fail "--no-apt installed restic"
+x dpkg-query -W -f "\${Status}" restic 2>/dev/null | grep -q 'install ok installed' && fail "--no-apt installed restic"
 x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com >/dev/null || fail "apply did not bring restic back"
-x dpkg-query -W -f '${Status}' restic | grep -q 'install ok installed' || fail "restic not reinstalled"
+x dpkg-query -W -f "\${Status}" restic | grep -q 'install ok installed' || fail "restic not reinstalled"
 
 step "security updates only, never a reboot"
 # shellcheck disable=SC2016 # expanded inside the container
