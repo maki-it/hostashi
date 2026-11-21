@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Installs Hostashi from its apt repository (ADR-0050) on a fresh Debian 13
-# or Ubuntu 26.04 server. Served at https://hostashi.com/install.sh:
+# or Ubuntu 26.04 server. Served at https://get.hostashi.com/install.sh:
 #
-#   curl -fsSLO https://hostashi.com/install.sh
+#   curl -fsSLO https://get.hostashi.com/install.sh
 #   less install.sh
 #   sudo bash install.sh --yes --panel-domain panel.example.com
 #
@@ -18,7 +18,7 @@
 # HOSTASHI_APT_URL overrides the repository address (tests, mirrors).
 set -euo pipefail
 
-APT_URL=${HOSTASHI_APT_URL:-https://hostashi.com/apt}
+APT_URL=${HOSTASHI_APT_URL:-https://get.hostashi.com/apt}
 FINGERPRINT=64F6AE8DC40D1299E68A008F735A7A2D741149DB
 KEYRING=/usr/share/keyrings/hostashi-archive-keyring.asc
 SOURCES=/etc/apt/sources.list.d/hostashi.sources

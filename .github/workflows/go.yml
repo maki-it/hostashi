@@ -467,7 +467,7 @@ jobs:
           for img in debian:trixie ubuntu:26.04; do
             docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/src:ro" "$img" /src/packaging/test/apt-repo-test.sh /dist
           done
-      - name: Install script for hostashi.com (local repository over HTTP)
+      - name: Install script for get.hostashi.com (local repository over HTTP)
         run: |
           for img in debian:trixie ubuntu:26.04; do
             docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/src:ro" "$img" /src/packaging/test/get-test.sh /dist
