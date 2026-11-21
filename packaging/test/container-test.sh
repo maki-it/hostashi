@@ -1359,7 +1359,8 @@ UNIT
   [ "$(api POST "/api/v1/databases/tooldb_wp/tool/sessions/$user/extend")" = 200 ] || fail "extend tool session: $(x cat /tmp/api.out)"
   after=$(x cat "/run/hostashi-adminer/sessions/$user")
   [ "$after" -eq $((before + 1800)) ] || fail "session end $before -> $after"
-  p8444 "https://other.example.com:8444/?username=$user&db=tooldb_wp" | grep -q "data-expires='$after'" || fail "the open tab missed the new end"
+  page=$(p8444 "https://other.example.com:8444/?username=$user&db=tooldb_wp") || fail "tool did not answer after the extension"
+  grep -q "data-expires='$after'" <<<"$page" || fail "the open tab missed the new end: $(grep -o "data-expires='[0-9]*'" <<<"$page")"
   [ "$(api DELETE "/api/v1/databases/tooldb_wp/tool/sessions/$user")" = 204 ] || fail "end tool session: $(x cat /tmp/api.out)"
   [ -z "$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User = '$user'")" ] || fail "ended session kept its user"
   [ "$(p8444 -o /dev/null -w '%{http_code}' "https://other.example.com:8444/?username=$user&db=tooldb_wp")" = 403 ] || fail "the tool kept an ended session"
