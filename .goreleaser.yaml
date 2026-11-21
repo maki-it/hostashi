@@ -2,8 +2,9 @@
 #
 # Release build (ADR-0050). Builds the hostashi binary with the embedded
 # frontend for amd64 and arm64, tarballs, SHA256SUMS and one .deb per
-# architecture. Signing, SBOMs and the apt repository come in later steps;
-# CI only runs `goreleaser release --snapshot`, which publishes nothing.
+# architecture. Signing and the apt repository happen in the Release
+# workflow after this build. CI runs `goreleaser release --snapshot`, which publishes nothing; the
+# Release workflow (.github/workflows/release.yml) publishes tags v*.
 version: 2
 
 project_name: hostashi
@@ -144,8 +145,8 @@ nfpms:
           mode: 0644
 
 release:
-  # The release workflow (a later step) publishes; until then nothing here
-  # runs outside --snapshot.
+  # A draft until the Release workflow has signed and attached everything;
+  # it publishes the release at the end.
   draft: true
   prerelease: auto
 
