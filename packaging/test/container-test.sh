@@ -555,6 +555,36 @@ body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/)
 # The distribution's own FPM service stays off.
 ! x systemctl is-active --quiet "php$ver-fpm.service" || fail "distribution php$ver-fpm is running"
 
+step "Page cache of a PHP site (ADR-0046)"
+xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/now.php' <<'PHP'
+<?php
+echo hrtime(true);
+PHP
+xcache() { x curl -sS -o /dev/null -D - -H 'Host: wp.example.com' "$@" | tr -d '\r' | sed -n 's/^x-cache: //Ip'; }
+[ "$(api PUT /api/v1/sites/wp/page-cache '{"enabled":true,"preset":"php","minutes":10,"exclude":["/fresh*"]}')" = 200 ] ||
+  fail "page cache on: $(x cat /tmp/api.out)"
+expect_mode /home/.hostashi-cache "711 root:root"
+expect_mode /home/.hostashi-cache/wp "700 www-data:www-data"
+[ "$(xcache http://127.0.0.1/now.php)" = MISS ] || fail "first request not a MISS"
+[ "$(xcache http://127.0.0.1/now.php)" = HIT ] || fail "second request not a HIT"
+a=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/now.php)
+b=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/now.php)
+[ "$a" = "$b" ] || fail "cached page changed: $a $b"
+[ "$(xcache -H 'Cookie: session=1' http://127.0.0.1/now.php)" = BYPASS ] || fail "request with a cookie used the cache"
+[ "$(xcache http://127.0.0.1/fresh/page)" = BYPASS ] || fail "excluded path used the cache"
+# The site user can neither list nor read the cached pages.
+if x runuser -u wp -- ls /home/.hostashi-cache/wp >/dev/null 2>&1; then fail "site user can list the page cache"; fi
+[ "$(api POST /api/v1/sites/wp/page-cache/purge)" = 204 ] || fail "purge: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/wp/page-cache/purge)" = 429 ] || fail "second purge not rate limited"
+[ "$(xcache http://127.0.0.1/now.php)" = MISS ] || fail "purged cache still answered"
+expect_mode /home/.hostashi-cache/wp "700 www-data:www-data"
+[ "$(api GET /api/v1/doctor)" = 200 ] || fail "doctor: $(x cat /tmp/api.out)"
+if x grep -q '"site.pagecache"[^}]*"fail"' /tmp/api.out; then fail "doctor finds the page cache broken: $(x cat /tmp/api.out)"; fi
+[ "$(api PUT /api/v1/sites/wp/page-cache '{"enabled":false,"preset":"php","minutes":10}')" = 200 ] ||
+  fail "page cache off: $(x cat /tmp/api.out)"
+if x test -e /home/.hostashi-cache/wp; then fail "cache directory left after switching off"; fi
+[ -z "$(xcache http://127.0.0.1/now.php)" ] || fail "X-Cache sent without a page cache"
+
 step "SSH keys through the panel API (ADR-0032)"
 x sh -c 'mkdir -p /run/sshd /root/t && rm -f /root/t/k && ssh-keygen -q -t ed25519 -N "" -C kim@laptop -f /root/t/k'
 pub=$(x cat /root/t/k.pub)
