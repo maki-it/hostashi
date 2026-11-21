@@ -25,6 +25,8 @@ func TestRun(t *testing.T) {
 		{"no args", nil, 1000, 2, "usage"},
 		{"unknown command", []string{"exec"}, 1000, 2, "unknown command"},
 		{"version", []string{"version"}, 1000, 0, ""},
+		{"schema version", []string{"version", "-schema"}, 1000, 0, ""},
+		{"version extra args", []string{"version", "x"}, 1000, 2, ""},
 		{"bad flag", []string{"serve", "-nope"}, 1000, 2, ""},
 		{"extra args", []string{"agent", "sh"}, 0, 2, ""},
 		{"serve as root", []string{"serve"}, 0, 1, "must not run as root"},

@@ -3,8 +3,11 @@
 #
 # preinst of the hostashi package (ADR-0050). On an upgrade of a server the
 # installer has set up, it stops the panel and keeps a copy of the panel
-# database for hostashi-rollback; postinst starts the panel again. A
-# package that was only installed, never set up, has nothing to keep.
+# database for hostashi-rollback, with the schema version of the old binary
+# (prerm reads it to decide whether a plain downgrade keeps the database);
+# postinst starts the panel again. A package that was only installed, never
+# set up, has nothing to keep. hostashi-rollback has restored a copy
+# itself and sets HOSTASHI_ROLLBACK=1.
 set -e
 
 case "$1" in
@@ -22,6 +25,7 @@ DIR=/var/lib/hostashi-installer/upgrade
 KEEP=3
 
 [ -f "$OPTIONS" ] && [ -f "$DB" ] || exit 0
+[ "${HOSTASHI_ROLLBACK:-}" != 1 ] || exit 0
 
 old=$2
 case "$old" in
@@ -41,10 +45,17 @@ chmod 0600 "$snap.tmp"
 [ ! -f "$snap.tmp-wal" ] || { chmod 0600 "$snap.tmp-wal"; mv -f "$snap.tmp-wal" "$snap-wal"; }
 mv -f "$snap.tmp" "$snap"
 echo "hostashi: panel database of $old saved to $snap"
+# Binaries before ADR-0050's package scripts cannot tell; no file then.
+schema=$DIR/hostashi-$old.schema
+if n=$(/usr/bin/hostashi version -schema 2>/dev/null) && [ -n "$n" ] && [ "$n" -ge 0 ] 2>/dev/null; then
+  echo "$n" >"$schema.tmp" && chmod 0600 "$schema.tmp" && mv -f "$schema.tmp" "$schema"
+else
+  rm -f "$schema"
+fi
 
 # Keep the newest copies only. The names are ours (checked version above).
 # shellcheck disable=SC2012
 ls -1t "$DIR"/hostashi-*.db 2>/dev/null | tail -n +$((KEEP + 1)) | while IFS= read -r f; do
-  rm -f "$f" "$f-wal"
+  rm -f "$f" "$f-wal" "${f%.db}.schema"
 done
 exit 0

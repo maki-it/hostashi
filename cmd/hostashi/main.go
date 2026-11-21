@@ -101,7 +101,9 @@ commands:
             the file manager's helper for one site (the site user; started
             by hostashi-files@SITE.socket, ADR-0040)
   setup-token  print the one-time token for the first login (read as the serve user or root)
-  version   print the version
+  version [-schema]
+            print the version, or with -schema the database schema
+            version this binary migrates to (package scripts, ADR-0050)
 `
 
 func main() {
@@ -312,7 +314,21 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 			fmt.Fprintln(stdout, tok)
 		}
 	case "version":
-		fmt.Fprintln(stdout, version)
+		schema := fs.Bool("schema", false, "print the database schema version instead")
+		if fs.Parse(args) != nil || fs.NArg() != 0 {
+			return 2
+		}
+
+		if !*schema {
+			fmt.Fprintln(stdout, version)
+
+			break
+		}
+
+		var n int
+		if n, err = store.SchemaVersion(); err == nil {
+			fmt.Fprintln(stdout, n)
+		}
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 	default:

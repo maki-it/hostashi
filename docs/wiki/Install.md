@@ -108,6 +108,16 @@ On a server set up this way, installing a newer `hostashi` package (`apt upgrade
 
 If that fails, the panel runs again as far as possible and apt reports an error; the package stays unconfigured. Fix the cause (the log says what failed), then run `sudo dpkg --configure -a`.
 
+### Going back to an older version
+
+If the older version uses the same database schema, apt goes back by itself: `sudo apt install --allow-downgrades hostashi=VERSION`. If the schema differs, the older panel could not open the database, so the package stops the downgrade before anything changes and names the way back:
+
+```sh
+sudo hostashi-rollback VERSION
+```
+
+It restores the database copy that the package kept when it upgraded from `VERSION` and installs that version. Changes made in the panel since then are lost; sites, their files and databases are not touched. The current database stays next to the copies as `before-rollback-<version>.db`. Without `VERSION` it takes the newest older version with a copy; `--deb FILE` installs from a downloaded package instead of apt, `--yes` skips the question.
+
 ## Exit codes
 
 | Code | Meaning |

@@ -76,6 +76,9 @@ cmp -s /src/packaging/install.sh "$share/install.sh" || fail "install.sh differs
 [ -x "$share/apt/php-restart" ] || fail "php-restart lost its mode"
 [ ! -e "$share/test" ] || fail "test scripts must not ship"
 [ -f /usr/share/doc/hostashi/copyright ] || fail "copyright missing"
+cmp -s /src/packaging/deb/hostashi-rollback /usr/sbin/hostashi-rollback || fail "hostashi-rollback differs"
+[ "$(stat -c '%a %U:%G' /usr/sbin/hostashi-rollback)" = "755 root:root" ] || fail "hostashi-rollback owner or mode"
+[ "$(/usr/bin/hostashi version -schema)" -gt 0 ] || fail "hostashi version -schema"
 
 # Nothing outside /usr, and no file writable by others.
 bad=$(dpkg -L hostashi | grep -vE '^/(\.|usr(/.*)?)$' || true)
@@ -90,7 +93,7 @@ apt-get install -y -qq --no-install-recommends --reinstall "$deb" >/dev/null || 
 [ "$(sum)" = "$before" ] || fail "reinstall changed files"
 
 # Purge leaves nothing of the package behind (dependencies stay, as apt does).
-files=$(dpkg -L hostashi | grep -vE '^/(\.|usr|usr/bin|usr/share|usr/share/doc)$')
+files=$(dpkg -L hostashi | grep -vE '^/(\.|usr|usr/bin|usr/sbin|usr/share|usr/share/doc)$')
 apt-get purge -y -qq hostashi >/dev/null || fail "purge"
 for f in $files; do [ ! -e "$f" ] || fail "left behind: $f"; done
 
