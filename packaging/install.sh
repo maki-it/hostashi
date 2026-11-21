@@ -26,6 +26,8 @@
 #   --no-db-tool         no web database tool (Adminer on port 8444, ADR-0038); removes it if present
 #   --php-versions LIST  more PHP versions from sury.org next to the distribution's, comma-separated
 #                        from 7.4, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6 (7.4, 8.1 and 8.2 are legacy). Kept for later runs
+#   --no-apt             install no packages; a step that needs a missing one fails and names it.
+#                        For runs from the hostashi package, whose dependencies are installed (ADR-0050)
 #
 # nginx comes from the distribution with its brotli modules (ADR-0020) and
 # runs on the configuration the agent renders. PHP is the distribution's
@@ -72,7 +74,7 @@ BIN=/usr/local/bin/hostashi
 PHP_REQUEST=""
 MODE=plan YES=no BINARY="" PANEL_DOMAIN="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no NO_FIREWALL=no
 FW_ALLOW=()
-NO_DB_TOOL=no DB_TOOL_PORT=8444
+NO_DB_TOOL=no DB_TOOL_PORT=8444 NO_APT=no
 PHP_REQUEST_SET=no
 CHANGES=0 BINARY_CHANGED=no CONFIG_CHANGED=no
 
@@ -90,6 +92,22 @@ detect() {
 }
 
 pkg_installed() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q '^install ok installed$'; }
+
+# apt_install PKG... installs the packages that are missing, without
+# recommends, and does nothing if all are there. With --no-apt (a package
+# upgrade runs the installer from dpkg, which holds the apt lock, ADR-0050)
+# it installs nothing and fails with the names of the missing packages.
+apt_install() {
+  local p missing=()
+  for p in "$@"; do pkg_installed "$p" || missing+=("$p"); done
+  [ ${#missing[@]} -gt 0 ] || return 0
+  if [ "$NO_APT" = yes ]; then
+    log "missing package(s) with --no-apt: ${missing[*]} (install them with apt-get install ${missing[*]})"
+    return 1
+  fi
+  apt-get update -qq >>"$LOG" 2>&1 &&
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${missing[@]}" >>"$LOG" 2>&1
+}
 
 # write_file PATH MODE OWNER:GROUP < content. Returns 0 if the file changed.
 write_file() {
@@ -313,10 +331,7 @@ chk_ssh() {
 }
 do_ssh() {
   local rc
-  if ! pkg_installed openssh-server; then
-    apt-get update -qq >>"$LOG" 2>&1 &&
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-server >>"$LOG" 2>&1 || return 1
-  fi
+  apt_install openssh-server || return 1
   getent group "$SSH_GROUP" >/dev/null || groupadd --system "$SSH_GROUP" >>"$LOG" 2>&1 || return 1
   install -d -m 0755 -o root -g root /etc/hostashi-ssh "$SSH_KEYS_DIR" /etc/ssh/sshd_config.d || return 1
   write_file "$SSH_DROPIN" 0644 root:root <"$SSH_SRC/10-hostashi.conf"; rc=$?
@@ -434,10 +449,7 @@ chk_nginx() {
   local p
   for p in "${NGINX_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
 }
-do_nginx() {
-  apt-get update -qq >>"$LOG" 2>&1 &&
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${NGINX_PKGS[@]}" >>"$LOG" 2>&1
-}
+do_nginx() { apt_install "${NGINX_PKGS[@]}"; }
 
 # PHP from the distribution (Debian 13: 8.4, Ubuntu 26.04: 8.5) with the
 # extensions of spike S5, and phpredis for the object cache (ADR-0045). The
@@ -475,11 +487,10 @@ chk_php() {
   done
 }
 do_php() {
-  apt-get update -qq >>"$LOG" 2>&1 &&
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${PHP_PKGS[@]}" >>"$LOG" 2>&1 || return 1
+  apt_install "${PHP_PKGS[@]}" || return 1
   local u r
   r=$(distro_php_redis) || return 1
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "$r" >>"$LOG" 2>&1 || return 1
+  apt_install "$r" || return 1
   for u in $(distro_fpm_units); do
     systemctl disable --now "$u" >>"$LOG" 2>&1 || return 1
   done
@@ -540,8 +551,7 @@ chk_valkey() {
   [ "$(systemctl is-active "$VALKEY_DEFAULT_UNIT" 2>/dev/null)" != active ] || { echo "$VALKEY_DEFAULT_UNIT is running"; return 1; }
 }
 do_valkey() {
-  apt-get update -qq >>"$LOG" 2>&1 &&
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${VALKEY_PKGS[@]}" >>"$LOG" 2>&1 || return 1
+  apt_install "${VALKEY_PKGS[@]}" || return 1
   systemctl disable --now "$VALKEY_DEFAULT_UNIT" >>"$LOG" 2>&1 || return 1
   systemctl mask "$VALKEY_DEFAULT_UNIT" >>"$LOG" 2>&1
 }
@@ -564,10 +574,7 @@ chk_mariadb() {
 }
 do_mariadb() {
   local rc
-  if ! pkg_installed mariadb-server; then
-    apt-get update -qq >>"$LOG" 2>&1 &&
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${MARIADB_PKGS[@]}" >>"$LOG" 2>&1 || return 1
-  fi
+  apt_install "${MARIADB_PKGS[@]}" || return 1
   install -d -m 0755 -o root -g root "${MARIADB_CNF%/*}" || return 1
   write_file "$MARIADB_CNF" 0644 root:root <"$MARIADB_SRC/90-hostashi.cnf"
   rc=$?
@@ -686,10 +693,7 @@ chk_backup() {
   local p
   for p in "${BACKUP_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
 }
-do_backup() {
-  apt-get update -qq >>"$LOG" 2>&1 &&
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${BACKUP_PKGS[@]}" >>"$LOG" 2>&1
-}
+do_backup() { apt_install "${BACKUP_PKGS[@]}"; }
 
 # fail2ban from the distribution, on by default (ADR-0021): jails sshd,
 # hostashi-panel (the panel's auth.failed lines) and recidive, all reading
@@ -721,10 +725,7 @@ chk_fail2ban() {
 }
 do_fail2ban() {
   local f rc
-  if ! pkg_installed fail2ban || ! pkg_installed python3-systemd || ! pkg_installed nftables; then
-    apt-get update -qq >>"$LOG" 2>&1 &&
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${F2B_PKGS[@]}" >>"$LOG" 2>&1 || return 1
-  fi
+  apt_install "${F2B_PKGS[@]}" || return 1
   for f in "${F2B_FILES[@]}"; do
     write_file "${f#*:}" 0644 root:root <"$F2B_SRC/${f%%:*}"; rc=$?
     [ "$rc" -le 1 ] || return 1
@@ -857,10 +858,7 @@ do_firewall() {
     if nft list table inet hostashi >/dev/null 2>&1; then nft delete table inet hostashi >>"$LOG" 2>&1 || return 1; fi
     return 0
   fi
-  if ! pkg_installed nftables; then
-    apt-get update -qq >>"$LOG" 2>&1 &&
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends nftables >>"$LOG" 2>&1 || return 1
-  fi
+  apt_install nftables || return 1
   rules=$(fw_render 2>>"$LOG") || { log "no SSH port found, the firewall was not set up"; return 1; }
   fw_panel_file || return 1
   # nft checks the rules before anything is written or loaded.
@@ -933,10 +931,7 @@ chk_updates() {
 }
 do_updates() {
   local t
-  if ! pkg_installed unattended-upgrades; then
-    apt-get update -qq >>"$LOG" 2>&1 &&
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends unattended-upgrades >>"$LOG" 2>&1 || return 1
-  fi
+  apt_install unattended-upgrades || return 1
   uu_render | write_file "$UU_FILE" 0644 root:root
   [ $? -le 1 ] || return 1
   install -d -m 0755 -o root -g root "${PHP_HOOK_BIN%/*}" || return 1
@@ -1322,8 +1317,7 @@ do_quota() {
     quota_rebuild_initrd >>"$LOG" 2>&1
     return 1
   }
-  apt-get update -qq >>"$LOG" 2>&1 &&
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${QUOTA_PKGS[@]}" >>"$LOG" 2>&1 || return 1
+  apt_install "${QUOTA_PKGS[@]}" || return 1
 
   backup="$STATE_DIR/fstab.$(date -u +%Y%m%dT%H%M%SZ)"
   cp -p "$FSTAB" "$backup" || { log "quota: cannot back up $FSTAB"; return 1; }
@@ -1421,8 +1415,9 @@ main() {
       --no-firewall) NO_FIREWALL=yes;;
       --firewall-allow) shift; FW_ALLOW+=("${1:-}");;
       --no-db-tool) NO_DB_TOOL=yes;;
+      --no-apt) NO_APT=yes;;
       --php-versions) shift; PHP_REQUEST=${1:-}; PHP_REQUEST_SET=yes;;
-      *) echo "usage: $0 [plan | apply --yes] --binary PATH [--panel-domain NAME] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall] [--no-db-tool] [--php-versions LIST]" >&2; exit 64;;
+      *) echo "usage: $0 [plan | apply --yes] --binary PATH [--no-apt] [--panel-domain NAME] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall] [--no-db-tool] [--php-versions LIST]" >&2; exit 64;;
     esac
     shift
   done

@@ -62,6 +62,37 @@ nfpms:
     section: admin
     priority: optional
     bindir: /usr/bin
+    # Every package the installer installs on every server (packaging/test/
+    # deb-test.sh checks the list against install.sh), so that a package
+    # upgrade can run the installer with --no-apt (ADR-0050). Not here:
+    # phpredis (its name carries the PHP version of the distribution, the
+    # installer picks it) and quota (only with disk quota, --no-quota).
+    dependencies:
+      - adduser
+      - fail2ban
+      - libnginx-mod-http-brotli-filter
+      - libnginx-mod-http-brotli-static
+      - mariadb-server
+      - nftables
+      - nginx
+      - openssh-client
+      - openssh-server
+      - php-bcmath
+      - php-cli
+      - php-curl
+      - php-fpm
+      - php-gd
+      - php-intl
+      - php-mbstring
+      - php-mysql
+      - php-xml
+      - php-zip
+      - python3-systemd
+      - restic
+      - unattended-upgrades
+      - valkey-server
+    recommends:
+      - quota
     contents:
       # The installer and the files it installs (ADR-0050, section 1). The
       # installer finds its data next to itself.

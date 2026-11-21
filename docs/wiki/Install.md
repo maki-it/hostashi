@@ -94,6 +94,7 @@ Things to know:
 | `--no-db-tool` | Do not install the web database tool (Adminer on port 8444). Given on a server that has it, the installer removes it. |
 | `--no-quota` | Do not enable disk quota. Sites then have no disk limit. |
 | `--allow-untested` | Accept an operating system release that is not on the supported list. |
+| `--no-apt` | Install no packages. A step that needs a missing package fails and names it. Meant for runs from the `hostashi` package, which brings its dependencies. |
 
 ## Exit codes
 
