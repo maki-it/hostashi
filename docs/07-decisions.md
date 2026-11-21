@@ -339,7 +339,7 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0047 Status page for disabled sites
 
-**Full text (status Proposed, 2026-11-21):** [adr/0047](adr/0047-status-page-for-disabled-sites.md). Summary: a disabled site answers with a fixed English 503 string today. Recommended: a third page kind `disabled` next to `maintenance` and `parking` (ADR-0027) with its own built-in page; disabling a site takes an optional page of that kind. nginx serves it like a maintenance page (503, same CSP, no `Retry-After`, no allowlist), PHP stays stopped. No new agent operation, no new `os/exec`. Open for Kim: own kind or reuse the maintenance pages.
+**Full text (status Proposed, 2026-11-21):** [adr/0047](adr/0047-status-page-for-disabled-sites.md). Summary: a disabled site answers with a fixed English 503 string today. Recommended: disabling a site takes an optional maintenance page (ADR-0027), default the built-in one (Kim, 2026-11-21: reuse the maintenance pages, no kind of its own). nginx serves it like a maintenance page (503, same CSP, no `Retry-After`, no allowlist), PHP stays stopped. No new agent operation, no new `os/exec`. No open questions.
 
 ## ADR-0049 PHP settings per site
 
