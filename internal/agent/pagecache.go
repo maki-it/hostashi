@@ -127,7 +127,7 @@ func (h *siteOps) applyCacheChanges(ctx context.Context, prev, next web.Desired)
 		return
 	}
 
-	purge, remove := cacheChanges(prev, next)
+	purge, _ := cacheChanges(prev, next)
 
 	for _, u := range purge {
 		if err := h.purgeCache(u); err != nil {
@@ -135,11 +135,40 @@ func (h *siteOps) applyCacheChanges(ctx context.Context, prev, next web.Desired)
 		}
 	}
 
-	for _, u := range remove {
-		h.removeCache(ctx, u)
+	// Every directory without a cache in next goes, also one left over by
+	// an earlier failure.
+	used := map[string]bool{}
+
+	for _, s := range next.Sites {
+		if s.PageCache != nil {
+			used[s.User] = true
+		}
 	}
 
-	if len(purge)+len(remove) > 0 {
+	removed := false
+
+	for _, p := range h.m.Pools() {
+		names, err := h.cache.List(p.Path)
+		if err != nil {
+			h.log.ErrorContext(ctx, "list page caches", "pool", p.Name, "err", err)
+
+			continue
+		}
+
+		for _, n := range names {
+			if used[n] {
+				continue
+			}
+
+			if err := h.cache.Remove(p.Path, n); err != nil {
+				h.log.ErrorContext(ctx, "remove page cache", "site", n, "pool", p.Name, "err", err)
+			}
+
+			removed = true
+		}
+	}
+
+	if len(purge) > 0 || removed {
 		go h.sweepCaches(context.WithoutCancel(ctx))
 	}
 }
@@ -210,4 +239,71 @@ func (h *siteOps) pageCachePurge(ctx context.Context, _ agentrpc.Caller, req age
 	go h.sweepCaches(context.WithoutCancel(ctx))
 
 	return agentapi.PageCachePurgeResponse{}, nil
+}
+
+// pageCacheChecks are the doctor checks of the page caches (ADR-0046): each
+// cache in the live web state has its directory with the right owner and
+// mode, cached pages count against the site's disk limit where quota is
+// on, and no directory is left over from a cache that is gone.
+func (h *siteOps) pageCacheChecks() []agentapi.DoctorCheck {
+	if h.cache == nil || h.web == nil {
+		return nil
+	}
+
+	cur, _, err := h.web.Current()
+	if err != nil {
+		return []agentapi.DoctorCheck{{ID: "system.pagecache", Status: agentapi.DoctorWarn, Summary: "cannot read the web state: " + err.Error()}}
+	}
+
+	var out []agentapi.DoctorCheck
+
+	want := map[string]bool{}
+
+	for _, s := range cur.Sites {
+		if s.PageCache == nil {
+			continue
+		}
+
+		want[s.User] = true
+		c := agentapi.DoctorCheck{ID: "site.pagecache", Site: s.User, Status: agentapi.DoctorOK, Summary: "the page cache directory is in order"}
+
+		_, home, err := h.site(s.User)
+		if err == nil {
+			err = h.cache.Check(poolOf(home), s.User)
+		}
+
+		switch {
+		case err != nil:
+			c.Status, c.Summary, c.Hint = agentapi.DoctorFail, "page cache directory: "+err.Error(), "Run hostashi web sync; it recreates the directory."
+		case h.quota != nil:
+			if ok, qerr := h.quota.Available(home); qerr == nil && !ok {
+				c.Status = agentapi.DoctorWarn
+				c.Summary = "cached pages do not count against the disk limit: the file system has no project quota"
+				c.Hint = "Only the cache size limits it."
+			}
+		}
+
+		out = append(out, c)
+	}
+
+	for _, p := range h.m.Pools() {
+		names, err := h.cache.List(p.Path)
+		if err != nil {
+			out = append(out, agentapi.DoctorCheck{ID: "system.pagecache", Status: agentapi.DoctorWarn, Summary: "pool " + p.Name + ": " + err.Error()})
+
+			continue
+		}
+
+		for _, n := range names {
+			if !want[n] {
+				out = append(out, agentapi.DoctorCheck{
+					ID: "system.pagecache", Status: agentapi.DoctorWarn,
+					Summary: "pool " + p.Name + " holds a page cache directory of " + n + ", which has no page cache",
+					Hint:    "Run hostashi web sync; it removes the directory.",
+				})
+			}
+		}
+	}
+
+	return out
 }

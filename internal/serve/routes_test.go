@@ -131,6 +131,11 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/sites/{name}/snippets": "sites:read",
 	"PUT /api/v1/sites/{name}/snippets": "sites.snippets:write",
 
+	"GET /api/v1/sites/{name}/page-cache":        "sites:read",
+	"PUT /api/v1/sites/{name}/page-cache":        "sites.pagecache:write",
+	"PUT /api/v1/sites/{name}/page-cache/size":   "sites.pagecache.size:write",
+	"POST /api/v1/sites/{name}/page-cache/purge": "sites.pagecache:purge",
+
 	"GET /api/v1/limit-presets":           "limits.presets:read",
 	"GET /api/v1/limit-presets/{name}":    "limits.presets:read",
 	"POST /api/v1/limit-presets":          "limits.presets:write",

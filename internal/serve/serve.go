@@ -191,6 +191,7 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			registerCron(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSSH(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerPageCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerLimits(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 		}
 
