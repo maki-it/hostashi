@@ -633,3 +633,40 @@ func (r *Reconciler) Recover(ctx context.Context) (Result, error) {
 
 	return r.apply(ctx, Desired{})
 }
+
+// ErrNoGeneration is returned by Server when nginx has no generation of
+// ours to run yet.
+var ErrNoGeneration = errors.New("web: no confirmed generation to run")
+
+// ErrConfigRejected is returned by Server when nginx -t rejects the
+// current generation; nginx was not touched.
+var ErrConfigRejected = errors.New("web: nginx -t rejected the current generation")
+
+// Server reloads or restarts nginx on the current generation, for the
+// service page (ADR-0052). It holds the reconciler's lock, so it never runs
+// between the steps of an Apply, and it runs nginx -t on the current
+// generation first, so a broken config on disk never reaches the server.
+// restart false sends a reload, true a restart (which also starts a
+// stopped nginx).
+func (r *Reconciler) Server(ctx context.Context, restart bool) error {
+	unlock, err := r.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	n, ok := r.current()
+	if !ok {
+		return ErrNoGeneration
+	}
+
+	if err := r.Driver.Validate(ctx, r.genDir(n)); err != nil {
+		return fmt.Errorf("%w: %w", ErrConfigRejected, err)
+	}
+
+	if restart {
+		return r.Driver.Ctl.Restart(ctx)
+	}
+
+	return r.Driver.Ctl.Reload(ctx)
+}

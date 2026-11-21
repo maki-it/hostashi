@@ -73,6 +73,8 @@ export function databaseMessage(err: unknown): string {
         return "Only administrators can manage databases.";
       case "agent_timeout":
         return "The server did not answer in time. Reload the page to see whether the change was made.";
+      case "pg_client_too_old":
+        return "This PostgreSQL server is newer than the client tools this Hostashi version can install. Update Hostashi first.";
       case "postgresql_not_yet":
         return "This does not work for PostgreSQL databases yet.";
       case "db_server_local_only":

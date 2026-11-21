@@ -282,6 +282,41 @@ x test -L /var/lib/hostashi-agent/web/current || fail "no web generation"
 code=$(x curl -s -o /dev/null -w '%{http_code}' -H 'Host: unknown.example.com' http://127.0.0.1/ || true)
 [ "$code" = 000 ] || fail "unknown host answered $code, want no answer"
 
+step "services and restarts (ADR-0052)"
+svc=$(x /usr/local/bin/hostashi service list)
+echo "$svc"
+for id in nginx mariadb fail2ban panel agent adminer; do
+  grep -Eq "^$id +- +active " <<<"$svc" || fail "service list: $id is not active"
+done
+x /usr/local/bin/hostashi service list -json | grep -q '"unit": "hostashi-agent.service"' || fail "service list -json"
+for u in nginx.service mariadb.service; do
+  [ "$(x systemctl show -p Restart --value $u)" = on-failure ] || fail "$u does not restart after a failure"
+done
+expect_mode /etc/systemd/system/mariadb.service.d/hostashi.conf "644 root:root"
+x /usr/local/bin/hostashi service nginx reload >/dev/null || fail "nginx reload through the agent"
+x /usr/local/bin/hostashi service nginx restart | grep -q '"active": "active"' || fail "nginx restart through the agent"
+x /usr/local/bin/hostashi service mariadb restart | grep -q '"active": "active"' || fail "mariadb restart through the agent"
+for a in "nginx stop" "agent restart" "panel stop" "ssh stop" "firewall stop"; do
+  # shellcheck disable=SC2086 # two words on purpose
+  if x /usr/local/bin/hostashi service $a >/dev/null 2>&1; then fail "service $a was allowed"; fi
+done
+[ "$(x systemctl is-active nginx.service)" = active ] || fail "nginx stopped"
+# A crashed MariaDB comes back by itself and systemd counts the restart.
+before=$(x systemctl show -p NRestarts --value mariadb.service)
+pid=$(x systemctl show -p MainPID --value mariadb.service)
+x kill -KILL "$pid"
+for _ in $(seq 1 60); do
+  now=$(x systemctl show -p MainPID --value mariadb.service)
+  [ "$now" != 0 ] && [ "$now" != "$pid" ] && [ "$(x systemctl is-active mariadb.service)" = active ] && break
+  sleep 1
+done
+[ "$(x systemctl is-active mariadb.service)" = active ] || fail "mariadb did not come back after a crash"
+after=$(x systemctl show -p NRestarts --value mariadb.service)
+[ "$after" -gt "$before" ] || fail "NRestarts did not grow ($before -> $after)"
+x /usr/local/bin/hostashi service list | grep -Eq "^mariadb +- +active \(running\) +$after " || fail "service list does not show the restart"
+curl_ok=$(x curl -fsS http://127.0.0.1:8080/api/v1/health) || fail "panel gone after the service actions"
+grep -q '"agent":"ok"' <<<"$curl_ok" || fail "panel cannot reach the agent after the service actions"
+
 step "a site is served, with brotli"
 x /usr/local/bin/hostashi site create blog
 expect_mode /home/blog "750 blog:www-data"
