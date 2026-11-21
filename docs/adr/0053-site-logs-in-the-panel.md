@@ -46,7 +46,16 @@ How the panel follows a log live:
 - Directories are `root:root 0750`. The agent creates the nginx directory before `web.apply` and removes it when the site is deleted; systemd creates the PHP one. The site user can neither write nor read them directly; the panel is the way to read them.
 - The server-wide `error.log` and `access.log` stay for requests that match no site.
 - The PHP pool gets `error_log = /var/log/hostashi/php/<site>/error.log` instead of syslog. A site's own `.user.ini` may still send PHP errors to a file in its home; then the panel shows only what reaches the master [A].
-- logrotate (installed by the installer if missing) rotates all three daily, keeps **14 days** [A: to be confirmed by Kim], compresses with `delaycompress`, and tells nginx (`USR1`) and the PHP-FPM masters (`systemctl kill -s USR1`) to reopen their files. fail2ban and a later CrowdSec read the same nginx files (ADR-0021).
+- logrotate (installed by the installer if missing) rotates all three daily, compresses with `delaycompress`, and tells nginx (`USR1`) and the PHP-FPM masters (`systemctl kill -s USR1`) to reopen their files. fail2ban and a later CrowdSec read the same nginx files (ADR-0021).
+
+### Retention, set in the panel
+
+- Kim wants to set the retention in the panel, because it must match what the data processing agreement (AVV) and the privacy policy promise; Kim's say 7 days (Kim, 2026-11-21) [V].
+- One server-wide value in days, **default 7, range 1 to 365**. It lives in the existing `settings` table (no migration) and is changed by admins only (`settings:write`, browser session, like the other panel settings).
+- The panel sends the number to a typed agent operation `logs.retention.set {days}`. The agent checks the range and renders `/etc/logrotate.d/hostashi-sites` from a fixed template (`rotate <days>`, `maxage <days>`); nothing else comes from the panel. On start the panel sends the stored value again, so a fresh install or a restored database ends up with the same file.
+- Lowering the value takes effect at the next logrotate run (daily); logrotate then deletes the files older than the new value. The settings page says so.
+- The value covers the three site logs and the server-wide nginx logs of Hostashi. The journal (panel, agent, fail2ban) keeps the distribution's settings; the settings page says that too, so nobody reads 7 days as "every log on this server".
+- One value per site is not in v1: the processing agreement is one per server operator [A].
 
 ### Agent operation `site.logs.read`
 
@@ -63,14 +72,14 @@ How the panel follows a log live:
 
 ## Consequences
 
-- No new `os/exec` exception and no new table or migration.
+- No new `os/exec` exception and no new table or migration. Two agent operations: `site.logs.read` and `logs.retention.set`.
 - Changes in several places: nginx template (per-site `access_log`/`error_log`), PHP pool and unit (`LogsDirectory=`), installer (logrotate file, package), agent (directory lifecycle, new operation), authz table, API, UI, wiki page.
 - Existing sites get their new log files on the first `web.apply` after the update; nothing is moved from the old server-wide files.
-- Disk: logs count against `/var/log`, not against the site's disk quota, because root owns them [A]. A busy site can fill `/var/log` within the 14 days; the doctor check for free space covers `/` today [A: check].
+- Disk: logs count against `/var/log`, not against the site's disk quota, because root owns them [A]. A busy site can fill `/var/log` within the retention; the doctor check for free space covers `/` today [A: check].
 - Tests: agent unit tests for cursor, rotation, truncation, symlinks, wrong owner, unknown kind, long lines and binary data; nginx and PHP template tests; authz tests for a user without a grant; the container test checks that a request lands in the site's access log and a PHP warning in the PHP log; an e2e screenshot test of the tab.
 - Risk: the site's own code decides what it writes to the PHP log, including data of its visitors. That is the site owner's responsibility, as today in the journal.
 - Not in scope for v1: older rotated files in the panel, search on the server, log download of whole files, app logs of Node.js and Python sites (they follow with those site types), traffic statistics from the access logs (P2).
 
 ## Open questions for Kim
 
-1. Keep logs **14 days**? (Recommendation: yes, the Debian default for nginx and short enough for the GDPR.)
+1. ~~Keep logs 14 days?~~ Decided (Kim, 2026-11-21): the retention is set in the panel; default 7 days, range 1 to 365 (recommended in this ADR).
