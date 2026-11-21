@@ -132,6 +132,8 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
       setLoaded({ ...loaded, version: fileVersion(e) });
       setOriginal(current);
       setSaved(true);
+      // The save button turns inactive; keep typing where it was.
+      editor.current?.view.focus();
       onSaved(e);
       return true;
     } catch (err) {
@@ -175,6 +177,21 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
     storeWrap(wrap);
   }, [wrap]);
 
+  // Ctrl/Cmd+S saves wherever the focus is while the editor is open, and
+  // never opens the browser's own "Save page" dialog.
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (dirtyRef.current) void saveRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // Leaving or reloading the page with unsaved changes: the browser asks.
   useEffect(() => {
     if (!dirty) return;
@@ -203,12 +220,6 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
       }}
       onClick={(e) => {
         if (e.target === dialog.current) requestClose();
-      }}
-      onKeyDown={(e) => {
-        if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "s") {
-          e.preventDefault();
-          if (dirty) void saveRef.current();
-        }
       }}
     >
       <div className="ui-editor-head">
