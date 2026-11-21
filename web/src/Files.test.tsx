@@ -56,6 +56,8 @@ describe("FileManager", () => {
     expect(within(table).getByRole("button", { name: "Extract site.zip" })).toBeInTheDocument();
     expect(within(table).queryByRole("button", { name: "Extract index.php" })).toBeNull();
     expect(within(table).queryByRole("button", { name: "current" })).toBeNull();
+    expect(within(table).getByRole("button", { name: "Edit index.php" })).toBeInTheDocument();
+    expect(within(table).queryByRole("button", { name: "Edit wp-content" })).toBeNull();
 
     await userEvent.click(within(table).getByRole("button", { name: "wp-content" }));
     expect(onPath).toHaveBeenCalledWith("htdocs/wp-content");
