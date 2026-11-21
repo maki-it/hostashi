@@ -30,6 +30,7 @@ import (
 	"github.com/maki-it/hostashi/internal/dbjob"
 	"github.com/maki-it/hostashi/internal/filesunit"
 	"github.com/maki-it/hostashi/internal/firewall"
+	"github.com/maki-it/hostashi/internal/hoststats"
 	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/netaddrs"
 	"github.com/maki-it/hostashi/internal/objcache"
@@ -171,6 +172,12 @@ type Config struct {
 	// Doctor overrides what doctor.run reads, for tests. The zero value
 	// reads the server.
 	Doctor DoctorEnv
+
+	// Services reads and drives the units of the service catalog and Host
+	// reads the server's counters (ADR-0052); nil turns the operations off.
+	// Run sets the production ones.
+	Services ServiceCtl
+	Host     HostReader
 }
 
 // DefaultPanelPort is the panel's HTTPS port (ADR-0023).
@@ -300,6 +307,13 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	registerDBJobs(s, cfg.DBJobs)
 	registerFirewall(s, cfg.Firewall)
 	registerPHPInstall(s, cfg.PHPInstall)
+
+	svcLog := cfg.Log
+	if svcLog == nil {
+		svcLog = slog.New(slog.DiscardHandler)
+	}
+
+	registerServices(s, &serviceOps{ctl: cfg.Services, host: cfg.Host, h: h, web: cfg.Web, log: svcLog})
 
 	return s
 }
@@ -1281,6 +1295,14 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.Files == nil {
 		cfg.Files = &filesunit.Manager{UnitDir: filesunit.DefaultUnitDir, Ctl: phpctl.FilesController{}, Log: cfg.Log}
+	}
+
+	if cfg.Services == nil {
+		cfg.Services = phpctl.Services{}
+	}
+
+	if cfg.Host == nil {
+		cfg.Host = hoststats.Reader{}
 	}
 
 	if cfg.PHPInstall == nil {
