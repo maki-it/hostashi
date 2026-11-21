@@ -15,6 +15,7 @@ const site = (name: string, extra: Partial<Site> = {}): Site => ({
   php: "8.4",
   phpPrograms: false,
   disabled: false,
+  disabledPage: "builtin-maintenance",
   maintenance: { enabled: false, page: "builtin-maintenance", allowIps: [] },
   domains: [name + ".example"],
   tls: { enabled: true, active: true, hsts: false, domains: [], notAfter: null },
