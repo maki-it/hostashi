@@ -44,6 +44,17 @@ APT_OPTS=(-o DPkg::Lock::Timeout=600 -y -qq --no-install-recommends)
 
 say() { echo "php-install: $*"; }
 
+# apt_update retries: sury.org's mirrors briefly serve mismatched indexes
+# while they sync ("File has unexpected size ... Mirror sync in progress?").
+apt_update() {
+  local i
+  for i in 1 2 3 4; do
+    apt-get -o DPkg::Lock::Timeout=600 update -qq && return 0
+    [ "$i" = 4 ] || { say "apt-get update failed, trying again in $((i * 15)) s"; sleep $((i * 15)); }
+  done
+  return 1
+}
+
 php_allowed() { local v; for v in "${PHP_VERSIONS[@]}"; do [ "$v" = "$1" ] && return 0; done; return 1; }
 php_legacy() { local v; for v in "${LEGACY_PHP_VERSIONS[@]}"; do [ "$v" = "$1" ] && return 0; done; return 1; }
 pkg_installed() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q '^install ok installed$'; }
@@ -172,7 +183,7 @@ install_versions() {
   done
   if ! command -v gpg >/dev/null; then
     say "installing gpg to check the sury.org key"
-    apt-get -o DPkg::Lock::Timeout=600 update -qq && apt-get install "${APT_OPTS[@]}" gpg || return 1
+    apt_update && apt-get install "${APT_OPTS[@]}" gpg || return 1
   fi
   if [ ! -f "$SURY_KEYRING" ] || ! key_check "$SURY_KEYRING" >/dev/null; then
     say "fetching the sury.org key"
@@ -190,7 +201,7 @@ install_versions() {
   # to sury.org (Spike S10).
   sury_pin "$@" | put "$SURY_PIN" 0644 || return 1
   sury_source | put "$SURY_SOURCE" 0644 || return 1
-  apt-get -o DPkg::Lock::Timeout=600 update -qq || return 1
+  apt_update || return 1
   for v in "$@"; do
     mapfile -t -O "${#pkgs[@]}" pkgs < <(php_pkgs "$v")
     if has_candidate "$(redis_pkg "$v")"; then
