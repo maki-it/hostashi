@@ -1757,6 +1757,14 @@ if [ -n "${PEBBLE_DIR:-}" ]; then
     grep -o "class='error'>[^<]*" <<<"$page" || true
     docker logs --tail 30 "$pgname" 2>&1 || true
     x journalctl -u hostashi-adminer.service --no-pager -n 30 || true
+    pgca=$(x find /etc/hostashi-adminer/servers -name 'ca-*.pem' | head -n 1)
+    pgconn="host=$ext_ip port=55433 dbname=toolpg_db user=pgadmin sslmode=verify-full sslrootcert=$pgca gssencmode=disable"
+    x env PGPASSWORD=Pg-admin-pw-1234 "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
+    x runuser -u hostashi-adminer -- env PGPASSWORD=Pg-admin-pw-1234 "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
+    x php -r 'var_dump(function_exists("pg_connect"));' || true
+    x systemd-run --wait --pipe -q -p User=hostashi-adminer -p ProtectSystem=strict -p ProtectHome=yes -p PrivateDevices=yes \
+      -p SystemCallFilter=@system-service -p UMask=0077 -E PGPASSWORD=Pg-admin-pw-1234 \
+      "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
     fail "tool did not log in to PostgreSQL"
   fi
   grep -q 'pgsql=&amp;username=' <<<"$page" || fail "the tool does not run the pgsql driver"
