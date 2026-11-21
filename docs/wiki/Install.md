@@ -72,6 +72,8 @@ sudo ./packaging/install.sh apply --yes --binary ./hostashi --panel-domain cp.ex
 
 Before that, create a DNS record for the name that points to the server (`A`, and `AAAA` for IPv6), so that Let's Encrypt can check it. nginx then serves the panel on port 443 next to the sites and tells them apart by the host name. That name cannot be used for a site or a parked domain afterwards.
 
+To switch an installed server between 8443 and 443, run the same `apply` command again with the other `--panel-port`. The installer changes the settings and the firewall and restarts the panel.
+
 Things to know:
 
 - The panel allowlist (Firewall page) is applied by nginx on port 443, not by the firewall. Addresses outside it still reach the TLS handshake and then get `403`. On port 8443 the firewall drops them earlier.
