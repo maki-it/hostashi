@@ -40,6 +40,7 @@ type apiEnv struct {
 	doctor    *stubDoctor
 	firewall  *stubFirewall
 	php       *stubPHP
+	pgclient  *stubPGClient
 	mail      MailRelay
 	mailSent  *stubMailSend
 	outbox    *mail.Outbox
@@ -92,6 +93,8 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	deps.Firewall = fw
 	php := &stubPHP{}
 	deps.PHP = php
+	pgc := &stubPGClient{}
+	deps.PGClient = pgc
 	deps.Mail = mail.NewStore(st, box)
 	sent := &stubMailSend{}
 	deps.MailSend = sent.send
@@ -113,7 +116,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 
 	return &apiEnv{
 		h: Handler(Config{PublicURL: testPublicURL}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st, cp: deps.CloudPanel,
-		imports: imports, doctor: doc, firewall: fw, php: php, mail: deps.Mail, mailSent: sent, outbox: outbox, files: fm,
+		imports: imports, doctor: doc, firewall: fw, php: php, pgclient: pgc, mail: deps.Mail, mailSent: sent, outbox: outbox, files: fm,
 	}
 }
 

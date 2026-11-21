@@ -29,7 +29,7 @@ func (h *siteOps) registerFiles(s *agentrpc.Server) {
 			return agentapi.FilesOpenResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site " + req.Site}
 		}
 
-		sock, err := h.files.Open(ctx, filesunit.Site{Name: req.Site, Home: home, Slice: siteSlice(req.Site)})
+		sock, err := h.files.Open(ctx, filesunit.Site{Name: req.Site, Home: home, Slice: siteSlice(req.Site), Hidden: h.m.HiddenPaths()})
 		if errors.Is(err, filesunit.ErrInvalid) {
 			return agentapi.FilesOpenResponse{}, &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: err.Error()}
 		}
