@@ -15,6 +15,9 @@ import (
 type Target struct {
 	Sites   []string // site names (= Linux users)
 	Domains []string // every domain of every site
+	// Panel is the panel's own host name, reserved against sites
+	// (ADR-0042); empty for none.
+	Panel string
 	// PHP lists the PHP versions installed here (agent php.versions).
 	PHP []string
 }
@@ -191,6 +194,10 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 
 		if slices.Contains(t.Domains, d) {
 			skip("domain_taken", "the domain "+d+" belongs to a site on this server")
+		}
+
+		if t.Panel != "" && d == t.Panel {
+			skip("domain_reserved", "the domain "+d+" is the address of this panel")
 		}
 	}
 

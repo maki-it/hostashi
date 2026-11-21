@@ -131,6 +131,11 @@ func TestBuildSite(t *testing.T) {
 			s.RedirectFrom = []string{"www.shop.example.com"}
 			t.Domains = []string{"www.shop.example.com"}
 		}, plan.ActionSkip, "domain_taken"},
+		{"panel's name", func(_ *scan.Site, t *plan.Target) { t.Panel = "shop.example.com" }, plan.ActionSkip, "domain_reserved"},
+		{"panel's name as redirect host", func(s *scan.Site, t *plan.Target) {
+			s.RedirectFrom = []string{"www.shop.example.com"}
+			t.Panel = "www.shop.example.com"
+		}, plan.ActionSkip, "domain_reserved"},
 		{"nodejs", func(s *scan.Site, _ *plan.Target) { s.Type, s.Pool = "nodejs", nil }, plan.ActionSkip, "type_unsupported"},
 		{"php 5.6", func(s *scan.Site, _ *plan.Target) { s.Pool.Version = "5.6" }, plan.ActionSkip, "php_unsupported"},
 		{"php not installed", func(s *scan.Site, _ *plan.Target) { s.Pool.Version = "8.3" }, plan.ActionReview, "php_missing"},

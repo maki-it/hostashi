@@ -118,6 +118,20 @@ describe("Parked", () => {
     const form = within(await screen.findByRole("form", { name: "Park a domain" }));
     await user.type(form.getByRole("textbox", { name: "Domain" }), "blog.example");
     await user.click(form.getByRole("button", { name: "Park domain" }));
-    expect(await form.findByRole("alert")).toHaveTextContent("A site or the panel already uses this domain.");
+    expect(await form.findByRole("alert")).toHaveTextContent("A site already uses this domain.");
+  });
+
+  it("explains the panel's reserved domain", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      "GET /api/v1/parked-domains": { body: { parkedDomains: [] } },
+      "GET /api/v1/status-pages": { body: { pages } },
+      "PUT /api/v1/parked-domains/blog.example": { status: 409, body: { error: { code: "domain_reserved", message: "reserved" } } },
+    });
+    render(<Harness initial="new=1" />);
+    const form = within(await screen.findByRole("form", { name: "Park a domain" }));
+    await user.type(form.getByRole("textbox", { name: "Domain" }), "blog.example");
+    await user.click(form.getByRole("button", { name: "Park domain" }));
+    expect(await form.findByRole("alert")).toHaveTextContent("This domain is the panel's own address.");
   });
 });

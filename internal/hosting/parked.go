@@ -81,8 +81,8 @@ func (s *Service) SetParked(ctx context.Context, actor int64, domain, page strin
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if domain == s.panelDomain {
-		return store.Parked{}, fmt.Errorf("%w: %s is the panel's address", ErrDomainTaken, domain)
+	if err := s.checkReserved([]string{domain}); err != nil {
+		return store.Parked{}, err
 	}
 
 	if ref != 0 {
