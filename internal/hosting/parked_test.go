@@ -137,3 +137,77 @@ func TestParkedDomainPagesAndFailures(t *testing.T) {
 		t.Fatalf("delete twice: %v", err)
 	}
 }
+
+// A site that does not come up gives its parked domains back, with their
+// ids and certificates (ADR-0048).
+func TestFailedSiteChangesParkAgain(t *testing.T) {
+	s, ag, _ := newService(t)
+	ctx := t.Context()
+
+	s.now = func() time.Time { return time.Unix(0, 0).Add(1000 * 24 * time.Hour) }
+	s.EnableTLS(&fakeIssuer{validDays: 1090})
+
+	if _, err := s.SetParked(ctx, 1, "soon.example.net", "", true); err != nil {
+		t.Fatal(err)
+	}
+
+	s.RenewDue(ctx)
+
+	before, err := s.ParkedDomain(ctx, "soon.example.net")
+	if err != nil || before.TLSNotAfter.IsZero() {
+		t.Fatalf("%+v %v", before, err)
+	}
+
+	same := func(step string) {
+		t.Helper()
+
+		p, err := s.ParkedDomain(ctx, "soon.example.net")
+		if err != nil || p.ID != before.ID || !p.TLSNotAfter.Equal(before.TLSNotAfter) || p.TLS != before.TLS {
+			t.Fatalf("%s: %+v %v", step, p, err)
+		}
+	}
+
+	// The agent cannot create the account.
+	ag.createErr = errDown
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", Domains: []string{"soon.example.net", "www.soon.example.net"}}); !errors.Is(err, errDown) {
+		t.Fatalf("create: %v", err)
+	}
+
+	same("account failed")
+
+	// nginx refuses the new state.
+	ag.createErr = nil
+	ag.webErr = &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "nginx rejected the configuration"}
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", Domains: []string{"soon.example.net"}}); !isCode(err, agentrpc.CodePrecondition) {
+		t.Fatalf("create: %v", err)
+	}
+
+	same("web failed")
+
+	// A domain change of another site that takes the domain fails too.
+	ag.webErr = nil
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "shop", Domains: []string{"shop.example.net"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	ag.webErr = errDown
+
+	if _, err := s.SetDomains(ctx, 1, "shop", []string{"shop.example.net", "soon.example.net"}); !errors.Is(err, errDown) {
+		t.Fatalf("domains: %v", err)
+	}
+
+	same("domain change failed")
+
+	// When the change goes through, the parking ends.
+	ag.webErr = nil
+
+	if _, err := s.SetDomains(ctx, 1, "shop", []string{"shop.example.net", "soon.example.net"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.ParkedDomain(ctx, "soon.example.net"); !errors.Is(err, ErrParkedNotFound) {
+		t.Fatalf("still parked: %v", err)
+	}
+}
