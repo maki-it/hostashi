@@ -1,4 +1,4 @@
-# ADR-0047 Convert a parked domain into a site and back
+# ADR-0048 Convert a parked domain into a site and back
 
 **Status:** Proposed. **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0006 (state store and reconciler), ADR-0018 (API), ADR-0023 (panel certificate names), ADR-0027 (maintenance and parking pages), ADR-0035 (roles), ADR-0037 (UI redesign), ADR-0039 (certificate management).
 
