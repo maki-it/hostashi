@@ -46,10 +46,6 @@ func (s *Service) openRemoteTool(ctx context.Context, d store.Database, minutes 
 		return agentapi.DBToolOpenResponse{}, err
 	}
 
-	if IsPostgres(srv) {
-		return agentapi.DBToolOpenResponse{}, ErrPostgreSQLNotYet
-	}
-
 	if err := s.syncToolServers(ctx, srv.ID); err != nil {
 		return agentapi.DBToolOpenResponse{}, err
 	}
@@ -59,6 +55,10 @@ func (s *Service) openRemoteTool(ctx context.Context, d store.Database, minutes 
 	req := agentapi.DBToolRemoteRequest{
 		Database: d.Name, Minutes: minutes, ServerID: srv.ID, Host: srv.Host, Port: srv.Port, TLS: srv.TLSMode,
 		User: user, Password: password,
+	}
+
+	if IsPostgres(srv) {
+		req.Engine = agentapi.DBToolEnginePostgreSQL
 	}
 
 	if err := req.Validate(); err != nil {

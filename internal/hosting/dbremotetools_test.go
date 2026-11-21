@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/dbserver"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -273,4 +274,50 @@ func TestRemoteToolCA(t *testing.T) {
 
 func storeServer(mode, ca string) store.DBServer {
 	return store.DBServer{ID: 7, Name: "db7", Host: "192.0.2.7", Port: 3306, TLSMode: mode, CAPEM: ca}
+}
+
+// TestRemoteDatabaseToolPostgres opens the tool on a PostgreSQL server
+// (ADR-0051): the same temporary user and ticket as for MariaDB, with the
+// engine for Adminer's pgsql driver.
+func TestRemoteDatabaseToolPostgres(t *testing.T) {
+	s, tool, f, _, _ := remoteToolSetup(t)
+	ctx := t.Context()
+
+	s.afterFunc = func(time.Duration, func()) {}
+
+	if _, _, err := s.AddDBServer(ctx, 1, NewDBServer{
+		Engine: dbserver.EnginePostgreSQL, Name: "pg1", Host: "db.example.net", AdminUser: "hostashi_admin", AdminPassword: "Admin-pw-1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := s.CreateDatabase(ctx, 1, NewDatabase{Site: "shop", Name: "shop_pg", Server: "pg1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.OpenDatabaseTool(ctx, 1, "shop_pg", 30); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(tool.remote) != 1 {
+		t.Fatalf("remote %+v", tool.remote)
+	}
+
+	req := tool.remote[0]
+	if req.Engine != agentapi.DBToolEnginePostgreSQL || req.Port != dbserver.DefaultPostgresPort || req.Database != "shop_pg" {
+		t.Fatalf("request %+v", req)
+	}
+
+	if users := toolUsers(f); len(users) != 1 || users[0] != req.User {
+		t.Fatalf("tool users %v, request user %s", users, req.User)
+	}
+
+	// Ending the session drops the user, by its database.
+	if err := s.EndDBToolSession(ctx, 1, "shop_pg", req.User); err != nil {
+		t.Fatal(err)
+	}
+
+	if users := toolUsers(f); len(users) != 0 {
+		t.Fatalf("users left %v", users)
+	}
 }

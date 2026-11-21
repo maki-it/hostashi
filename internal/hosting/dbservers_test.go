@@ -393,8 +393,7 @@ func TestAddPostgresServer(t *testing.T) {
 		t.Fatalf("manifest %+v %v", m, err)
 	}
 
-	// The web database tool refuses PostgreSQL for now; import and export
-	// run with the PostgreSQL client.
+	// Import and export run with the PostgreSQL client.
 	if _, err := s.Create(ctx, 1, CreateRequest{Name: "shop", Domains: []string{"shop.example.com"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -403,8 +402,7 @@ func TestAddPostgresServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db, err := st.DatabaseByName(ctx, "shop_pg")
-	if err != nil {
+	if _, err := st.DatabaseByName(ctx, "shop_pg"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -419,10 +417,6 @@ func TestAddPostgresServer(t *testing.T) {
 	if req := ag.remote[len(ag.remote)-1]; req.Engine != agentapi.RemoteEnginePostgreSQL || req.Path != "dumps/x.sql.gz" ||
 		!strings.HasPrefix(req.User, "hostashi_job_") {
 		t.Fatalf("request %+v", req)
-	}
-
-	if _, err := s.openRemoteTool(ctx, db, 30); !errors.Is(err, ErrPostgreSQLNotYet) {
-		t.Fatalf("tool: %v", err)
 	}
 
 	// Errors of the client map to the panel's.

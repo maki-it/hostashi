@@ -32,7 +32,7 @@ SB_TMP=""
 cleanup() {
   [ -n "$SB_TMP" ] && sb_cleanup
   [ -n "${KEEP:-}" ] && return
-  docker rm -f "$NAME" "$NAME-prep" >/dev/null 2>&1 || true; docker rmi -f "$BASE" >/dev/null 2>&1 || true
+  docker rm -f "$NAME" "$NAME-prep" "$NAME-pg" >/dev/null 2>&1 || true; docker rmi -f "$BASE" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -1576,6 +1576,9 @@ UNIT
   user=$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User LIKE 'hostashi\_tool\_%' AND Host <> 'localhost'")
   [ -n "$user" ] || fail "no temporary user on the external server: $(x mariadb -N -e "SELECT User, Host FROM mysql.user")"
   x systemctl is-active --quiet hostashi-adminer.service || fail "tool pool not running after the restart"
+  # The pool reads the servers' CAs and hosts file (the agent's umask is 077).
+  expect_mode /etc/hostashi-adminer/servers "755 root:root"
+  expect_mode /etc/hostashi-adminer/servers/hosts "644 root:root"
   x rm -f /tmp/tool.jar
   page=$(p8444 -L "$url") || fail "tool did not answer"
   grep -q 'Tables and views' <<<"$page" || fail "tool did not log in to the external server: $(head -c 400 <<<"$page")"
@@ -1716,6 +1719,84 @@ done
 [ "$(api POST /api/v1/db-servers/postgresql-client '{}')" = 409 ] || fail "second pg client install: $(x cat /tmp/api.out)"
 out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the PostgreSQL client install changed something"; }
+
+if [ -n "${PEBBLE_DIR:-}" ]; then
+  step "a database on an external PostgreSQL server in the web database tool (ADR-0051)"
+  # A PostgreSQL container on the host's network stands in for the
+  # external server, with TLS from a test CA: Adminer's pgsql driver must
+  # check the certificate and the address (verify-full) against the
+  # server's own CA.
+  pgname="$NAME-pg"
+  pgcerts=$(mktemp -d)
+  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj /CN=test-pg-ca \
+    -keyout "$pgcerts/ca.key" -out "$pgcerts/ca.pem" 2>/dev/null
+  openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj "/CN=$ext_ip" \
+    -keyout "$pgcerts/server.key" -out "$pgcerts/server.csr" 2>/dev/null
+  openssl x509 -req -in "$pgcerts/server.csr" -CA "$pgcerts/ca.pem" -CAkey "$pgcerts/ca.key" -CAcreateserial -days 1 \
+    -extfile <(printf 'subjectAltName=IP:%s' "$ext_ip") -out "$pgcerts/server.pem" 2>/dev/null
+  chmod 0644 "$pgcerts"/*
+  # shellcheck disable=SC2016 # expanded by the container's shell
+  docker run -d --name "$pgname" --network host -v "$pgcerts:/certs:ro" \
+    -e POSTGRES_PASSWORD=Pg-super-pw-1234 -e POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --entrypoint sh "postgres:$PG_NEWEST" -c '
+      install -m 0600 -o postgres /certs/server.key /certs/server.pem /tmp/ &&
+      exec docker-entrypoint.sh postgres -c listen_addresses="$0" -c port=55433 -c ssl=on \
+        -c ssl_cert_file=/tmp/server.pem -c ssl_key_file=/tmp/server.key' "$ext_ip" >/dev/null || fail "PostgreSQL container did not start"
+  pgsu() { docker exec "$pgname" psql -U postgres -p 55433 -v ON_ERROR_STOP=1 -qAt "$@"; }
+  for _ in $(seq 1 60); do docker exec "$pgname" pg_isready -q -h "$ext_ip" -p 55433 2>/dev/null && break; sleep 1; done
+  pgsu -c "CREATE ROLE pgadmin LOGIN CREATEDB CREATEROLE PASSWORD 'Pg-admin-pw-1234'" || fail "PostgreSQL admin role"
+  # Over the network only with TLS, so a login proves the tool used it.
+  # shellcheck disable=SC2016 # expanded by the container's shell
+  docker exec "$pgname" sh -c 'sed -i "s/^host all all all /hostssl all all all /" "$PGDATA/pg_hba.conf"' || fail "pg_hba.conf"
+  [ "$(pgsu -c "SELECT pg_reload_conf()")" = t ] || fail "PostgreSQL reload"
+  [ "$(pgsu -c "SELECT count(*) FROM pg_hba_file_rules WHERE type = 'hostssl' AND address = 'all'")" = 1 ] ||
+    fail "no hostssl rule: $(pgsu -c "SELECT type, address FROM pg_hba_file_rules")"
+  ca=$(jq -Rs . <"$pgcerts/ca.pem")
+  [ "$(api POST /api/v1/db-servers "{\"engine\":\"postgresql\",\"name\":\"extpg\",\"host\":\"$ext_ip\",\"port\":55433,\"adminUser\":\"pgadmin\",\"adminPassword\":\"Pg-admin-pw-1234\",\"tlsMode\":\"verify-ca\",\"caCertificate\":$ca}")" = 201 ] ||
+    fail "add PostgreSQL server: $(x cat /tmp/api.out)"
+  [ "$(api POST /api/v1/sites '{"name":"toolpg","domains":["toolpg.example.com"]}')" = 201 ] || fail "create site: $(x cat /tmp/api.out)"
+  [ "$(api POST /api/v1/sites/toolpg/databases '{"name":"toolpg_db","server":"extpg"}')" = 201 ] || fail "create PostgreSQL database: $(x cat /tmp/api.out)"
+  pgsu -d toolpg_db -c "SET ROLE $(pgsu -c "SELECT datdba::regrole FROM pg_database WHERE datname = 'toolpg_db'"); CREATE TABLE posts (title text); INSERT INTO posts VALUES ('hello from pg')" ||
+    fail "PostgreSQL test table"
+  [ "$(api POST /api/v1/databases/toolpg_db/tool '{"minutes":30}')" = 201 ] || fail "open tool on PostgreSQL: $(x cat /tmp/api.out)"
+  url=$(x sed -n 's/.*"url":"\([^"]*\)".*/\1/p' /tmp/api.out)
+  user=$(pgsu -c "SELECT rolname FROM pg_roles WHERE rolname LIKE 'hostashi\_tool\_%'")
+  [ -n "$user" ] || fail "no temporary role on the PostgreSQL server"
+  [ "$(pgsu -c "SELECT rolconnlimit FROM pg_roles WHERE rolname = '$user'")" = 2 ] || fail "temporary role without connection limit"
+  [ -n "$(x find /etc/hostashi-adminer/servers -name 'ca-*.pem' -perm 0644)" ] || fail "the server's CA is not readable by the tool: $(x ls -l /etc/hostashi-adminer/servers/)"
+  x rm -f /tmp/tool.jar
+  page=$(p8444 -L "$url") || fail "tool did not answer"
+  if ! grep -q 'Tables and views' <<<"$page"; then
+    grep -o "class='error'>[^<]*" <<<"$page" || true
+    docker logs --tail 30 "$pgname" 2>&1 || true
+    x journalctl -u hostashi-adminer.service --no-pager -n 30 || true
+    pgca=$(x find /etc/hostashi-adminer/servers -name 'ca-*.pem' | head -n 1)
+    pgconn="host=$ext_ip port=55433 dbname=toolpg_db user=pgadmin sslmode=verify-full sslrootcert=$pgca gssencmode=disable"
+    x env PGPASSWORD=Pg-admin-pw-1234 "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
+    x runuser -u hostashi-adminer -- env PGPASSWORD=Pg-admin-pw-1234 "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
+    x php -r 'var_dump(function_exists("pg_connect"));' || true
+    x systemd-run --wait --pipe -q -p User=hostashi-adminer -p ProtectSystem=strict -p ProtectHome=yes -p PrivateDevices=yes \
+      -p SystemCallFilter=@system-service -p UMask=0077 -E PGPASSWORD=Pg-admin-pw-1234 \
+      "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
+    fail "tool did not log in to PostgreSQL"
+  fi
+  grep -q 'pgsql=&amp;username=' <<<"$page" || fail "the tool does not run the pgsql driver"
+  page=$(p8444 "https://other.example.com:8444/?pgsql=&username=$user&db=toolpg_db&ns=public&select=posts") || fail "tool did not answer"
+  grep -q 'hello from pg' <<<"$page" || fail "the tool does not show the table's rows"
+  # Only the session's driver, user and database: another driver's
+  # parameter (SQLite opens files) is sent back to the session's address.
+  for q in "sqlite=&username=$user&db=/etc/passwd" "server=&username=$user&db=toolpg_db" "pgsql=&ext=pdo&username=$user&db=toolpg_db" "pgsql=&username=$user&db=postgres"; do
+    loc=$(p8444 -o /dev/null -w '%{http_code} %{redirect_url}' "https://other.example.com:8444/?$q")
+    [ "$loc" = "303 https://other.example.com:8444/?pgsql=&username=$user&db=toolpg_db" ] || fail "tool with ?$q: '$loc'"
+  done
+  # Ending the session drops the role on the server.
+  [ "$(api DELETE "/api/v1/databases/toolpg_db/tool/sessions/$user")" = 204 ] || fail "end PostgreSQL tool session: $(x cat /tmp/api.out)"
+  [ -z "$(pgsu -c "SELECT rolname FROM pg_roles WHERE rolname = '$user'")" ] || fail "ended session kept its role"
+  [ "$(p8444 -o /dev/null -w '%{http_code}' "https://other.example.com:8444/?pgsql=&username=$user&db=toolpg_db")" = 403 ] || fail "the tool kept an ended PostgreSQL session"
+  [ "$(api DELETE /api/v1/sites/toolpg)" = 204 ] || fail "delete site: $(x cat /tmp/api.out)"
+  [ "$(api DELETE /api/v1/db-servers/extpg)" = 204 ] || fail "remove PostgreSQL server: $(x cat /tmp/api.out)"
+  docker rm -f "$pgname" >/dev/null
+  rm -rf "$pgcerts"
+fi
 
 step "root gets an account back (ADR-0035)"
 out=$(x /usr/local/bin/hostashi user recover kim) || fail "user recover: $out"

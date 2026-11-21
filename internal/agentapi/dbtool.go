@@ -166,7 +166,18 @@ type DBToolTicket struct {
 	Port   int    `json:"port,omitempty"`
 	TLS    string `json:"tls,omitempty"`    // "verify", "verify-ca" or "none"
 	CAFile string `json:"caFile,omitempty"` // for "verify-ca"
+	// Driver is Adminer's driver: DBToolDriverPgSQL for a PostgreSQL
+	// server (ADR-0051), empty for MariaDB and MySQL.
+	Driver string `json:"driver,omitempty"`
 }
+
+// DBToolDriverPgSQL is Adminer's PostgreSQL driver. Hostashi's wrapper
+// allows only it and MySQL's.
+const DBToolDriverPgSQL = "pgsql"
+
+// DBToolEnginePostgreSQL marks a DBToolRemoteRequest for a PostgreSQL
+// server; empty is MariaDB or MySQL.
+const DBToolEnginePostgreSQL = "postgresql"
 
 // External servers in the web database tool (ADR-0041 addendum 1). The
 // tool's pool reaches only the addresses of the configured external
@@ -252,10 +263,16 @@ type DBToolRemoteRequest struct {
 	TLS      string `json:"tls"`
 	User     string `json:"user"`
 	Password string `json:"password"`
+	// Engine is DBToolEnginePostgreSQL or empty.
+	Engine string `json:"engine,omitempty"`
 }
 
 // Validate checks the request.
 func (r DBToolRemoteRequest) Validate() error {
+	if r.Engine != "" && r.Engine != DBToolEnginePostgreSQL {
+		return errors.New("engine: must be empty or postgresql")
+	}
+
 	if err := (DBToolOpenRequest{Database: r.Database, Minutes: r.Minutes}).Validate(); err != nil {
 		return err
 	}
