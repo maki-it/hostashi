@@ -115,7 +115,7 @@ None at this level. Remaining before Accepted: Kim sets the status, and spike S9
 
 ## Addendum 1: adding pools and the results of spike S9
 
-**Status:** Proposed. **Decides:** Kim. **Related:** [spike S9 report](../../spike/s9-storage-pools/REPORT.md).
+**Status:** Accepted (Kim, 2026-11-21). **Decides:** Kim. **Related:** [spike S9 report](../../spike/s9-storage-pools/REPORT.md).
 
 ### Context
 
