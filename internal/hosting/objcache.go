@@ -203,7 +203,9 @@ func (s *Service) setObjectCache(ctx context.Context, actor int64, name string, 
 		action = "site.object_cache.on"
 	}
 
-	s.audit(ctx, actor, action, name, map[string]string{"memoryMb": strconv.Itoa(memoryMB)})
+	s.auditChange(ctx, actor, action, name, map[string]string{"memoryMb": strconv.Itoa(memoryMB)},
+		map[string]string{"enabled": strconv.FormatBool(old.Enabled), "memoryMb": strconv.Itoa(old.MemoryMB)},
+		map[string]string{"enabled": strconv.FormatBool(enabled), "memoryMb": strconv.Itoa(memoryMB)})
 
 	v.Enabled, v.MemoryMB, v.Status = enabled, memoryMB, &st
 

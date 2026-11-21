@@ -14,6 +14,7 @@ import (
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/metrics"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 // MetricsPath is where Prometheus scrapes the panel (its default path).
@@ -31,6 +32,7 @@ type Settings interface {
 	Setting(ctx context.Context, key string) (value string, ok bool, err error)
 	SetSetting(ctx context.Context, key, value string) error
 	Audit(ctx context.Context, userID *int64, action, target string, detail map[string]string) error
+	AuditChange(ctx context.Context, userID *int64, action, target string, detail map[string]string, diff store.Diff) error
 }
 
 func metricsEnabled(ctx context.Context, st Settings) (bool, error) {
@@ -136,6 +138,15 @@ func registerMetrics(mux *routeMux, a authn, m *metrics.Metrics, st Settings, lo
 		}
 
 		on := *in.Enabled
+
+		was, err := metricsEnabled(r.Context(), st)
+		if err != nil {
+			log.ErrorContext(r.Context(), "read metrics setting", "err", err)
+			writeError(w, http.StatusInternalServerError, "internal", "internal error")
+
+			return
+		}
+
 		if err := st.SetSetting(r.Context(), metricsEnabledKey, strconv.FormatBool(on)); err != nil {
 			log.ErrorContext(r.Context(), "store metrics setting", "err", err)
 			writeError(w, http.StatusInternalServerError, "internal", "internal error")
@@ -143,9 +154,9 @@ func registerMetrics(mux *routeMux, a authn, m *metrics.Metrics, st Settings, lo
 			return
 		}
 
-		_ = st.Audit(r.Context(), &uid, "settings.metrics", "", map[string]string{
+		_ = st.AuditChange(r.Context(), &uid, "settings.metrics", "", map[string]string{
 			"enabled": strconv.FormatBool(on), "ip": clientIP(r),
-		})
+		}, store.DiffOf(map[string]string{"enabled": strconv.FormatBool(was)}, map[string]string{"enabled": strconv.FormatBool(on)}))
 
 		writeJSON(w, http.StatusOK, metricsSettingJSON{Enabled: on})
 	})

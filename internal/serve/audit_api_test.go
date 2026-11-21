@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 func (e *apiEnv) auditPage(t *testing.T, c *http.Cookie, query string) auditPageJSON {
@@ -96,6 +98,17 @@ func TestAuditList(t *testing.T) {
 		}
 	}
 
+	// Entries written while serving a request carry its address; the
+	// login of adminCookie came from the test client.
+	byIP := e.auditPage(t, c, "ip=192.0.2.10&action=login")
+	if len(byIP.Entries) == 0 || byIP.Entries[0].IP != "192.0.2.10" || string(byIP.Entries[0].Diff) != "{}" {
+		t.Errorf("ip filter: %+v", byIP.Entries)
+	}
+
+	if other := e.auditPage(t, c, "ip=::ffff:198.51.100.1"); len(other.Entries) != 0 {
+		t.Errorf("other ip: %+v", other.Entries)
+	}
+
 	none := e.auditPage(t, c, "since=2099-01-01T00:00:00Z")
 	if none.Entries == nil || len(none.Entries) != 0 {
 		t.Errorf("future: %+v", none)
@@ -105,7 +118,7 @@ func TestAuditList(t *testing.T) {
 		"limit=0", "limit=201", "limit=x", "before=0", "before=-1",
 		"action=Site", "action=site.", "action=site%25", "action=" + strings.Repeat("a", 129),
 		"actor=" + strings.Repeat("a", 65), "actor=a%0Ab", "target=" + strings.Repeat("a", 201), "target=%00",
-		"since=yesterday", "until=2026-11-21", "since=2026-11-21T00:00:00Z&until=2026-11-20T00:00:00Z",
+		"since=yesterday", "ip=192.0.2", "ip=host", "until=2026-11-21", "since=2026-11-21T00:00:00Z&until=2026-11-20T00:00:00Z",
 		"since=2026-11-21T00:00:00Z&until=2026-11-21T00:00:00Z",
 	} {
 		rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/audit?" + q, cookie: c})
@@ -161,26 +174,26 @@ func TestAuditExport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if strings.Join(rows[0], ",") != "id,at,user_id,actor,action,target,detail" {
+	if strings.Join(rows[0], ",") != "id,at,user_id,actor,ip,action,target,detail,diff" {
 		t.Errorf("header: %v", rows[0])
 	}
 
 	byAction := map[string][]string{}
 	for _, r := range rows[1:] {
-		byAction[r[4]] = r
+		byAction[r[5]] = r
 	}
 
-	if r := byAction["login.failed"]; r == nil || r[5] != `'=HYPERLINK("http://x")` || r[6] != `{"ip":"192.0.2.7"}` || r[2] != "" {
+	if r := byAction["login.failed"]; r == nil || r[6] != `'=HYPERLINK("http://x")` || r[7] != `{"ip":"192.0.2.7"}` || r[2] != "" || r[4] != "" || r[8] != "{}" {
 		t.Errorf("failed login row: %q", r)
 	}
 
-	if r := byAction["site.create"]; r == nil || r[5] != "shop,\"quoted\"\nline" {
+	if r := byAction["site.create"]; r == nil || r[6] != "shop,\"quoted\"\nline" {
 		t.Errorf("quoted row: %q", r)
 	}
 
 	// The export wrote itself to the log, before its rows: it is the last
 	// row of the file, with the filters.
-	if r := rows[len(rows)-1]; r[4] != "audit.export" || r[3] != "kim" || !strings.Contains(r[6], `"format":"csv"`) {
+	if r := rows[len(rows)-1]; r[5] != "audit.export" || r[3] != "kim" || r[4] != "192.0.2.10" || !strings.Contains(r[7], `"format":"csv"`) {
 		t.Errorf("export entry: %q", r)
 	}
 
@@ -240,4 +253,89 @@ func TestCSVCell(t *testing.T) {
 			t.Errorf("%q: %q, want %q", in, got, want)
 		}
 	}
+}
+
+// lastAuditDiff returns the diff of the newest entry of an action.
+func (e *apiEnv) lastAuditDiff(t *testing.T, c *http.Cookie, action string) map[string]store.Change {
+	t.Helper()
+
+	p := e.auditPage(t, c, "limit=1&action="+action)
+	if len(p.Entries) != 1 || p.Entries[0].Action != action {
+		t.Fatalf("%s: %+v", action, p.Entries)
+	}
+
+	var d map[string]store.Change
+	if err := json.Unmarshal(p.Entries[0].Diff, &d); err != nil {
+		t.Fatal(err)
+	}
+
+	return d
+}
+
+func TestAuditDiffsOverHTTP(t *testing.T) {
+	e := newAPI(t)
+	c := e.adminCookie(t)
+
+	// Email relay: the password is never in the diff, only that it changed.
+	e.putMail(t, c, mailBody)
+
+	if d := e.lastAuditDiff(t, c, "settings.mail"); d["host"].New == nil || *d["host"].New != "smtp.example.com" || d["host"].Old != nil {
+		t.Errorf("first mail: %+v", d)
+	}
+
+	e.putMail(t, c, strings.Replace(strings.Replace(mailBody, "587", "465", 1), `"starttls"`, `"tls"`, 1))
+
+	d := e.lastAuditDiff(t, c, "settings.mail")
+	if !changeIs(d["port"], "587", "465") || !changeIs(d["tls"], "starttls", "tls") || !changeIs(d["password"], "kept", "changed") {
+		t.Errorf("mail: %+v", d)
+	}
+
+	if p := e.auditPage(t, c, "action=settings.mail"); strings.Contains(string(mustJSON(t, p)), "relay password") {
+		t.Error("the relay password reached the audit log")
+	}
+
+	// Firewall: the rules before and after.
+	rec := e.do(t, reqOpts{
+		method: "PUT", path: "/api/v1/firewall", cookie: c,
+		body: `{"state":{"open":[{"proto":"tcp","from":8080,"sources":["198.51.100.0/24"]}],"sshAllow":[],"panelAllow":[]}}`,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("firewall: %d %s", rec.Code, rec.Body)
+	}
+
+	if d := e.lastAuditDiff(t, c, "firewall.change"); !changeIs(d["open"], "", "tcp/8080 from 198.51.100.0/24") || len(d) != 1 {
+		t.Errorf("firewall: %+v", d)
+	}
+
+	// Accounts: the role before and after.
+	anna := e.createUser(t, c, "anna", "manager")
+	if rec := e.do(t, reqOpts{method: "PUT", path: userPath(anna.User.ID, ""), cookie: c, body: `{"role":"user"}`}); rec.Code != http.StatusOK {
+		t.Fatalf("update user: %d %s", rec.Code, rec.Body)
+	}
+
+	if d := e.lastAuditDiff(t, c, "user.update"); !changeIs(d["role"], "manager", "user") || len(d) != 1 {
+		t.Errorf("user: %+v", d)
+	}
+
+	// Metrics switch.
+	e.setMetrics(t, c, `{"enabled":true}`)
+
+	if d := e.lastAuditDiff(t, c, "settings.metrics"); !changeIs(d["enabled"], "false", "true") {
+		t.Errorf("metrics: %+v", d)
+	}
+}
+
+func changeIs(c store.Change, old, now string) bool {
+	return c.Old != nil && *c.Old == old && c.New != nil && *c.New == now
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return b
 }

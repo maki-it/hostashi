@@ -487,7 +487,9 @@ func (c *Client) DropJobUser(ctx context.Context, _, user string) error {
 // CreateToolUser creates the temporary user of a web database tool session
 // (ADR-0041 addendum 1): the rights of CreateUser and at most
 // agentapi.DBToolMaxConnections connections, as on the local server.
-func (c *Client) CreateToolUser(ctx context.Context, database, user, password string) error {
+// until is for PostgreSQL; MariaDB and MySQL have no password end that
+// works the same, there the panel drops the user at the session's end.
+func (c *Client) CreateToolUser(ctx context.Context, database, user, password string, _ time.Time) error {
 	if err := agentapi.ValidateDBName(database); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
@@ -498,6 +500,10 @@ func (c *Client) CreateToolUser(ctx context.Context, database, user, password st
 
 	return c.createUserWith(ctx, database, user, password, fmt.Sprintf(" WITH MAX_USER_CONNECTIONS %d", agentapi.DBToolMaxConnections))
 }
+
+// ExtendToolUser does nothing: on MariaDB and MySQL the panel drops the
+// user at the session's end, which it already moved.
+func (c *Client) ExtendToolUser(context.Context, string, time.Time) error { return nil }
 
 // DropToolUser drops the temporary user of a tool session; a missing one
 // is not an error. On MariaDB its open connections end too; MySQL has no

@@ -100,7 +100,13 @@ func (s *Service) SetParked(ctx context.Context, actor int64, domain, page strin
 		return store.Parked{}, err
 	}
 
-	s.audit(ctx, actor, "parked.set", domain, map[string]string{"page": page, "tls": strconv.FormatBool(tls)})
+	var was map[string]string
+	if existed {
+		was = map[string]string{"pageId": strconv.FormatInt(old.Page, 10), "tls": strconv.FormatBool(old.TLS)}
+	}
+
+	s.auditChange(ctx, actor, "parked.set", domain, map[string]string{"page": page, "tls": strconv.FormatBool(tls)},
+		was, map[string]string{"pageId": strconv.FormatInt(ref, 10), "tls": strconv.FormatBool(tls)})
 
 	if tls {
 		s.Kick()

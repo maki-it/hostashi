@@ -290,7 +290,16 @@ func (s *Service) UpdatePage(ctx context.Context, actor int64, id, name string, 
 		detail["sha256"], detail["files"] = digest, strconv.Itoa(len(files))
 	}
 
-	s.audit(ctx, actor, "page.update", id, detail)
+	was, now := map[string]string{"name": old.Name}, map[string]string{"name": old.Name}
+	if name != "" {
+		now["name"] = name
+	}
+
+	if files != nil {
+		was["sha256"], now["sha256"] = old.Digest, digest
+	}
+
+	s.auditChange(ctx, actor, "page.update", id, detail, was, now)
 
 	return s.Page(ctx, id)
 }
@@ -423,7 +432,8 @@ func (s *Service) SetMaintenance(ctx context.Context, actor int64, name string, 
 		action = "site.maintenance.on"
 	}
 
-	s.audit(ctx, actor, action, name, map[string]string{"page": m.Page, "allowIps": strings.Join(allow, " ")})
+	s.auditChange(ctx, actor, action, name, map[string]string{"page": m.Page, "allowIps": strings.Join(allow, " ")},
+		maintenanceFields(site.Maintenance, site.MaintenancePage, site.MaintenanceAllow), maintenanceFields(m.Enabled, page, allow))
 
 	return s.Get(ctx, name)
 }
@@ -588,4 +598,9 @@ func (a RPCAgent) PageDelete(ctx context.Context, id string) error {
 	_, err := agentapi.PageDelete.Call(ctx, a.C, agentapi.PageDeleteRequest{ID: id})
 
 	return err
+}
+
+// maintenanceFields describes the maintenance setting of a site for a diff.
+func maintenanceFields(on bool, page int64, allow []string) map[string]string {
+	return map[string]string{"maintenance": strconv.FormatBool(on), "pageId": strconv.FormatInt(page, 10), "allowIps": strings.Join(allow, " ")}
 }

@@ -4,6 +4,8 @@ package hosting
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 
@@ -87,9 +89,10 @@ func (s *Service) SetSnippets(ctx context.Context, actor int64, name, server, ro
 		return store.SiteSnippets{}, err
 	}
 
-	s.audit(ctx, actor, "site.snippets.set", name, map[string]string{
+	// The snippets can be long; the diff names their hashes.
+	s.auditChange(ctx, actor, "site.snippets.set", name, map[string]string{
 		"serverBytes": strconv.Itoa(len(server)), "rootBytes": strconv.Itoa(len(root)),
-	})
+	}, snippetFields(old.Server, old.Root), snippetFields(server, root))
 
 	return s.st.SiteSnippets(ctx, site.ID)
 }
@@ -122,4 +125,19 @@ func webSnippets(all map[int64]store.SiteSnippets, site store.Site) *agentapi.We
 	}
 
 	return &agentapi.WebSnippets{Server: sn.Server, Root: sn.Root}
+}
+
+// snippetFields describes the snippets for a diff by their SHA-256.
+func snippetFields(server, root string) map[string]string {
+	h := func(s string) string {
+		if s == "" {
+			return ""
+		}
+
+		sum := sha256.Sum256([]byte(s))
+
+		return "sha256:" + hex.EncodeToString(sum[:])
+	}
+
+	return map[string]string{"server": h(server), "root": h(root)}
 }

@@ -5,6 +5,7 @@
 // desired state; every change is applied to the web server at once.
 
 import { ApiError, request } from "./api";
+import { formatBytes } from "./limits";
 
 export type SiteTLS = {
   enabled: boolean; // HTTPS wanted
@@ -54,7 +55,39 @@ export type PHPVersions = {
   distro?: string;
 };
 
-export type NewSite = { name: string; php: string; domains: string[]; tls: boolean; hsts: boolean };
+export type NewSite = { name: string; pool?: string; php: string; domains: string[]; tls: boolean; hsts: boolean };
+
+// Pool is a storage pool for site homes (ADR-0016). Root adds pools on the
+// server (hostashi pool add); the panel only chooses one for a new site.
+export type Pool = {
+  name: string;
+  path: string;
+  sites: number;
+  // Mounted with its marker; only then are quota and the sizes set.
+  available: boolean;
+  quota?: "off" | "counting" | "enforced";
+  freeBytes?: number;
+  totalBytes?: number;
+};
+
+export const listPools = () => request<{ pools: Pool[] }>("GET", "/pools").then((r) => r.pools);
+
+/** The text of a pool in the choice: name, path and free space. */
+export function poolLabel(p: Pool): string {
+  const base = `${p.name} (${p.path})`;
+  if (!p.available) return `${base}, not available`;
+  if (p.freeBytes === undefined) return base;
+  return `${base}, ${formatBytes(p.freeBytes)} free`;
+}
+
+/** What to know before putting a site on the pool, or "". */
+export function poolNote(p: Pool | undefined): string {
+  if (!p) return "";
+  if (!p.available) return "The volume of this pool is not mounted. Sites cannot be created there until it is.";
+  if (p.quota === "off") return "This pool has no disk quota: sites on it get no disk limit.";
+  if (p.quota === "counting") return "Disk limits on this pool are not enforced. See Health.";
+  return "";
+}
 
 const sitePath = (name: string) => "/sites/" + encodeURIComponent(name);
 

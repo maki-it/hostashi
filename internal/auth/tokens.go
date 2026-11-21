@@ -401,11 +401,17 @@ func (s *Service) SetIPAllowlist(ctx context.Context, userID int64, entries []st
 		return nil, fmt.Errorf("auth: %w", err)
 	}
 
+	was, err := s.IPAllowlist(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := s.st.SetSetting(ctx, allowlistKey, string(b)); err != nil {
 		return nil, fmt.Errorf("auth: %w", err)
 	}
 
-	_ = s.st.Audit(ctx, &userID, "settings.api_ip_allowlist", "", map[string]string{"entries": strings.Join(norm, " "), "ip": ip})
+	_ = s.st.AuditChange(ctx, &userID, "settings.api_ip_allowlist", "", map[string]string{"entries": strings.Join(norm, " "), "ip": ip},
+		store.DiffOf(map[string]string{"entries": strings.Join(was, " ")}, map[string]string{"entries": strings.Join(norm, " ")}))
 
 	return norm, nil
 }

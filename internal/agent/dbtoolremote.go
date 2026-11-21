@@ -79,7 +79,7 @@ func (t *dbTool) setServers(ctx context.Context, _ agentrpc.Caller, req agentapi
 	sort.Slice(servers, func(i, j int) bool { return servers[i].ID < servers[j].ID })
 
 	dir := t.serverDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := readableDir(dir); err != nil {
 		return agentapi.DBToolServersResponse{}, fmt.Errorf("database tool: %w", err)
 	}
 
@@ -223,6 +223,16 @@ func toolHosts(servers []agentapi.DBToolServer) string {
 
 // writeIfChanged writes a world-readable file atomically unless it holds
 // content already.
+// readableDir makes dir, open to the tool's user: the agent's umask is
+// 077, and the pool reads the CAs and the hosts file in it.
+func readableDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	return os.Chmod(dir, 0o755)
+}
+
 func writeIfChanged(p string, content []byte) (bool, error) {
 	if old, err := os.ReadFile(p); err == nil && bytes.Equal(old, content) {
 		return false, nil
@@ -232,6 +242,14 @@ func writeIfChanged(p string, content []byte) (bool, error) {
 	_ = os.Remove(tmp)
 
 	if err := os.WriteFile(tmp, content, 0o644); err != nil { //nolint:gosec // read by the tool's pool, holds no secret
+		return false, fmt.Errorf("database tool: %w", err)
+	}
+
+	// The agent runs with UMask=0077; the pool's user must read the CAs
+	// and the hosts file.
+	if err := os.Chmod(tmp, 0o644); err != nil {
+		_ = os.Remove(tmp)
+
 		return false, fmt.Errorf("database tool: %w", err)
 	}
 
@@ -269,6 +287,10 @@ func (t *dbTool) remote(ctx context.Context, _ agentrpc.Caller, req agentapi.DBT
 		Expires:       t.now().Add(time.Duration(req.Minutes) * time.Minute).UTC(),
 		TicketExpires: t.now().Add(agentapi.DBToolTicketTTL).UTC(),
 		Host:          req.Host, Port: req.Port, TLS: req.TLS,
+	}
+
+	if req.Engine == agentapi.DBToolEnginePostgreSQL {
+		ticket.Driver = agentapi.DBToolDriverPgSQL
 	}
 
 	if req.TLS == "verify-ca" {

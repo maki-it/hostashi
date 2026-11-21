@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -159,6 +160,29 @@ func TestDBToolRemote(t *testing.T) {
 		t.Errorf("ticket %+v", tk)
 	}
 
+	if tk.Driver != "" {
+		t.Errorf("MariaDB ticket with driver %q", tk.Driver)
+	}
+
+	// A PostgreSQL server gets Adminer's pgsql driver (ADR-0051).
+	pg := remoteReq()
+	pg.Port, pg.Engine = 5432, agentapi.DBToolEnginePostgreSQL
+
+	res, err = tool.remote(t.Context(), agentrpc.Caller{}, pg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err = os.ReadFile(filepath.Join(tool.dir, res.Ticket))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tk = agentapi.DBToolTicket{}
+	if err := json.Unmarshal(raw, &tk); err != nil || tk.Driver != agentapi.DBToolDriverPgSQL || tk.Port != 5432 {
+		t.Errorf("PostgreSQL ticket %+v %v", tk, err)
+	}
+
 	// Another host than the list's is refused, so is a server without CA.
 	other := remoteReq()
 	other.Host = "evil.example.net"
@@ -189,6 +213,7 @@ func TestDBToolRemoteValidation(t *testing.T) {
 		"tls":      func(r *agentapi.DBToolRemoteRequest) { r.TLS = "off" },
 		"minutes":  func(r *agentapi.DBToolRemoteRequest) { r.Minutes = 5 },
 		"server":   func(r *agentapi.DBToolRemoteRequest) { r.ServerID = 0 },
+		"engine":   func(r *agentapi.DBToolRemoteRequest) { r.Engine = "sqlite" },
 	} {
 		r := remoteReq()
 		mutate(&r)
@@ -206,5 +231,30 @@ func TestDBToolRemoteValidation(t *testing.T) {
 	dup := agentapi.DBToolServersRequest{Servers: []agentapi.DBToolServer{toolServers.Servers[0], toolServers.Servers[0]}}
 	if dup.Validate() == nil {
 		t.Error("duplicate id accepted")
+	}
+}
+
+// TestDBToolServerFilesReadable: the agent runs with UMask=0077, the pool's
+// user still reads the CAs and the hosts file.
+func TestDBToolServerFilesReadable(t *testing.T) {
+	old := syscall.Umask(0o077)
+	defer syscall.Umask(old)
+
+	dir := filepath.Join(t.TempDir(), "servers")
+	if err := readableDir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	if st, err := os.Stat(dir); err != nil || st.Mode().Perm() != 0o755 {
+		t.Fatalf("directory mode %v, %v", st.Mode(), err)
+	}
+
+	p := filepath.Join(dir, "ca-1.pem")
+	if _, err := writeIfChanged(p, []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+
+	if st, err := os.Stat(p); err != nil || st.Mode().Perm() != 0o644 {
+		t.Fatalf("mode %v, %v", st.Mode(), err)
 	}
 }

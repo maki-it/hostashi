@@ -10,11 +10,13 @@ import (
 	"net/http"
 	"net/netip"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 // Firewall is the agent's part of the firewall (ADR-0034).
@@ -232,6 +234,13 @@ func registerFirewall(mux *routeMux, a authn, fw Firewall, st Settings, log *slo
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
+		// The state before the change, for the audit log's diff. Without
+		// it the entry still records the change, only without the diff.
+		var was map[string]string
+		if cur, err := fw.Status(ctx); err == nil {
+			was = firewallFields(cur.State)
+		}
+
 		s, err := fw.Apply(ctx, in.State)
 		if err != nil {
 			firewallFail(log, w, err, "firewall change")
@@ -248,7 +257,10 @@ func registerFirewall(mux *routeMux, a authn, fw Firewall, st Settings, log *slo
 			detail["id"] = s.Pending.ID
 		}
 
-		audit(r.Context(), &uid, "firewall.change", detail)
+		if err := st.AuditChange(r.Context(), &uid, "firewall.change", "", detail, store.DiffOf(was, firewallFields(in.State))); err != nil {
+			log.ErrorContext(r.Context(), "audit log", "action", "firewall.change", "err", err)
+		}
+
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, http.StatusOK, toFirewallJSON(s, r, true))
 	}))
@@ -287,4 +299,28 @@ func registerFirewall(mux *routeMux, a authn, fw Firewall, st Settings, log *slo
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, http.StatusOK, toFirewallJSON(s, r, false))
 	}))
+}
+
+// firewallFields describes the rules for a diff: one line per rule, and the
+// allowlists.
+func firewallFields(s agentapi.FirewallState) map[string]string {
+	rules := make([]string, 0, len(s.Open))
+
+	for _, r := range s.Open {
+		port := strconv.Itoa(r.From)
+		if r.To != 0 && r.To != r.From {
+			port += "-" + strconv.Itoa(r.To)
+		}
+
+		line := r.Proto + "/" + port
+		if len(r.Sources) > 0 {
+			line += " from " + strings.Join(r.Sources, ",")
+		}
+
+		rules = append(rules, line)
+	}
+
+	return map[string]string{
+		"open": strings.Join(rules, "; "), "sshAllow": strings.Join(s.SSHAllow, " "), "panelAllow": strings.Join(s.PanelAllow, " "),
+	}
 }

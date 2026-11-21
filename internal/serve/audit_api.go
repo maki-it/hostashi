@@ -10,6 +10,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -48,10 +49,14 @@ type auditEntryJSON struct {
 	Action string          `json:"action"`
 	Target string          `json:"target"`
 	Detail json.RawMessage `json:"detail"`
+	// IP is the client's address; empty for work without a request.
+	IP string `json:"ip"`
+	// Diff holds the fields an update changed: {"field": {"old": …, "new": …}}.
+	Diff json.RawMessage `json:"diff"`
 }
 
 func auditJSON(e store.AuditEntry) auditEntryJSON {
-	return auditEntryJSON{ID: e.ID, At: e.At, UserID: e.UserID, Actor: e.Actor, Action: e.Action, Target: e.Target, Detail: e.Detail}
+	return auditEntryJSON{ID: e.ID, At: e.At, UserID: e.UserID, Actor: e.Actor, Action: e.Action, Target: e.Target, Detail: e.Detail, IP: e.IP, Diff: e.Diff}
 }
 
 type auditPageJSON struct {
@@ -98,6 +103,15 @@ func parseAuditFilter(q url.Values) (store.AuditFilter, error) {
 		}
 
 		f.Target = v
+	}
+
+	if v := q.Get("ip"); v != "" {
+		a, err := netip.ParseAddr(v)
+		if err != nil {
+			return f, badAudit("ip must be an IP address")
+		}
+
+		f.IP = a.Unmap().String()
 	}
 
 	for _, p := range []struct {
@@ -236,9 +250,9 @@ func registerAudit(mux *routeMux, a authn, al AuditLog, log *slog.Logger) {
 
 		// The export itself is written to the log, with its filters, before
 		// any row leaves the server.
-		detail := map[string]string{"format": format, "ip": clientIP(r)}
+		detail := map[string]string{"format": format}
 
-		for _, k := range []string{"action", "actor", "target", "since", "until"} {
+		for _, k := range []string{"action", "actor", "target", "ip", "since", "until"} {
 			if v := q.Get(k); v != "" {
 				detail[k] = v
 			}
@@ -282,7 +296,7 @@ func registerAudit(mux *routeMux, a authn, al AuditLog, log *slog.Logger) {
 func exportAuditCSV(ctx context.Context, w *bufio.Writer, al AuditLog, f store.AuditFilter) error {
 	cw := csv.NewWriter(w)
 
-	if err := cw.Write([]string{"id", "at", "user_id", "actor", "action", "target", "detail"}); err != nil {
+	if err := cw.Write([]string{"id", "at", "user_id", "actor", "ip", "action", "target", "detail", "diff"}); err != nil {
 		return err
 	}
 
@@ -294,7 +308,7 @@ func exportAuditCSV(ctx context.Context, w *bufio.Writer, al AuditLog, f store.A
 
 		return cw.Write([]string{
 			strconv.FormatInt(e.ID, 10), e.At.Format(time.RFC3339Nano), uid,
-			csvCell(e.Actor), csvCell(e.Action), csvCell(e.Target), csvCell(string(e.Detail)),
+			csvCell(e.Actor), e.IP, csvCell(e.Action), csvCell(e.Target), csvCell(string(e.Detail)), csvCell(string(e.Diff)),
 		})
 	})
 	if err != nil {

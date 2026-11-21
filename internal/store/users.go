@@ -187,10 +187,21 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) (int64
 	return n, nil
 }
 
-// Audit appends an entry. detail must not contain secrets.
+// Audit appends an entry. detail must not contain secrets. The client's
+// address comes from ctx (WithClientIP).
 func (s *Store) Audit(ctx context.Context, userID *int64, action, target string, detail map[string]string) error {
+	return s.AuditChange(ctx, userID, action, target, detail, nil)
+}
+
+// AuditChange appends an entry for an update, with the fields it changed
+// (DiffOf). Neither detail nor diff may contain secrets.
+func (s *Store) AuditChange(ctx context.Context, userID *int64, action, target string, detail map[string]string, diff Diff) error {
 	if detail == nil {
 		detail = map[string]string{}
+	}
+
+	if diff == nil {
+		diff = Diff{}
 	}
 
 	b, err := json.Marshal(detail)
@@ -198,10 +209,15 @@ func (s *Store) Audit(ctx context.Context, userID *int64, action, target string,
 		return fmt.Errorf("store: %w", err)
 	}
 
+	d, err := json.Marshal(diff)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
 	_, err = s.w.ExecContext(ctx,
-		`INSERT INTO audit_log (user_id, actor, action, target, detail)
-		 VALUES (?, coalesce((SELECT username FROM users WHERE id = ?), ''), ?, ?, ?)`,
-		userID, userID, action, target, string(b))
+		`INSERT INTO audit_log (user_id, actor, action, target, detail, ip, diff)
+		 VALUES (?, coalesce((SELECT username FROM users WHERE id = ?), ''), ?, ?, ?, ?, ?)`,
+		userID, userID, action, target, string(b), ClientIP(ctx), string(d))
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}

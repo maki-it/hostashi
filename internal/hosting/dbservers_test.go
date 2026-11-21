@@ -28,12 +28,13 @@ type fakeDBServers struct {
 	opErr    error
 	checks   []bool // privileges flag of each Check
 	dbs      map[string]bool
-	users    map[string]string // user -> database
+	users    map[string]string    // user -> database
+	until    map[string]time.Time // tool user -> end of its password
 	sealed   map[int64]string
 }
 
 func newFakeDBServers() *fakeDBServers {
-	return &fakeDBServers{dbs: map[string]bool{}, users: map[string]string{}, sealed: map[int64]string{}}
+	return &fakeDBServers{dbs: map[string]bool{}, users: map[string]string{}, until: map[string]time.Time{}, sealed: map[int64]string{}}
 }
 
 func (f *fakeDBServers) Check(_ context.Context, cfg dbserver.Config, privileges bool) (dbserver.Info, error) {
@@ -161,8 +162,30 @@ func (r fakeRemote) DropJobUser(ctx context.Context, _, user string) error {
 	return r.DropUser(ctx, "", user)
 }
 
-func (r fakeRemote) CreateToolUser(ctx context.Context, database, user, password string) error {
-	return r.CreateUser(ctx, database, user, password)
+func (r fakeRemote) CreateToolUser(ctx context.Context, database, user, password string, until time.Time) error {
+	if err := r.CreateUser(ctx, database, user, password); err != nil {
+		return err
+	}
+
+	r.f.mu.Lock()
+	defer r.f.mu.Unlock()
+
+	r.f.until[user] = until
+
+	return nil
+}
+
+func (r fakeRemote) ExtendToolUser(_ context.Context, user string, until time.Time) error {
+	r.f.mu.Lock()
+	defer r.f.mu.Unlock()
+
+	if r.f.opErr != nil {
+		return r.f.opErr
+	}
+
+	r.f.until[user] = until
+
+	return nil
 }
 
 func (r fakeRemote) DropToolUser(ctx context.Context, database, user string) error {
@@ -393,8 +416,7 @@ func TestAddPostgresServer(t *testing.T) {
 		t.Fatalf("manifest %+v %v", m, err)
 	}
 
-	// The web database tool refuses PostgreSQL for now; import and export
-	// run with the PostgreSQL client.
+	// Import and export run with the PostgreSQL client.
 	if _, err := s.Create(ctx, 1, CreateRequest{Name: "shop", Domains: []string{"shop.example.com"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -403,8 +425,7 @@ func TestAddPostgresServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db, err := st.DatabaseByName(ctx, "shop_pg")
-	if err != nil {
+	if _, err := st.DatabaseByName(ctx, "shop_pg"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -419,10 +440,6 @@ func TestAddPostgresServer(t *testing.T) {
 	if req := ag.remote[len(ag.remote)-1]; req.Engine != agentapi.RemoteEnginePostgreSQL || req.Path != "dumps/x.sql.gz" ||
 		!strings.HasPrefix(req.User, "hostashi_job_") {
 		t.Fatalf("request %+v", req)
-	}
-
-	if _, err := s.openRemoteTool(ctx, db, 30); !errors.Is(err, ErrPostgreSQLNotYet) {
-		t.Fatalf("tool: %v", err)
 	}
 
 	// Errors of the client map to the panel's.

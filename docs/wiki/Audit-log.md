@@ -28,6 +28,6 @@ In the CSV file a cell that starts with `=`, `+`, `-` or `@` gets a leading `'`,
 
 The same data is available to API tokens with the scope `audit:read`, only for admins:
 
-- `GET /api/v1/audit` with the optional query values `action`, `actor`, `target`, `since`, `until` (RFC 3339), `limit` (1 to 200) and `before` (the `next` value of the previous page).
+- `GET /api/v1/audit` with the optional query values `action`, `actor`, `target`, `ip`, `since`, `until` (RFC 3339), `limit` (1 to 200) and `before` (the `next` value of the previous page).
 - `GET /api/v1/audit/actions` lists every action in the log.
 - `GET /api/v1/audit/export?format=csv` or `format=json` with the same filters.

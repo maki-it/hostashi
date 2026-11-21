@@ -643,9 +643,10 @@ do_mariadb() {
   fi
 }
 
-# The web database tool (ADR-0038): Adminer's single MySQL-only file,
-# pinned by its SHA-256 in packaging/adminer/SHA256SUMS, with Hostashi's
-# index.php and tool.php that allow only one-time ticket logins, and
+# The web database tool (ADR-0038): Adminer's single file with all its
+# drivers, pinned by its SHA-256 in packaging/adminer/SHA256SUMS, with
+# Hostashi's index.php and tool.php that allow only one-time ticket logins
+# and only the MySQL and PostgreSQL drivers (ADR-0051), and
 # adminer.css with the panel's fonts for the panel's look. Its own
 # PHP-FPM runs the distribution's PHP under hostashi-adminer, a system user
 # without home and shell; the agent writes the tickets into a directory
@@ -678,6 +679,15 @@ dbtool_unit() {
   [ -n "$v" ] || { echo "no PHP-FPM version found (php-fpm package)" >&2; return 1; }
   sed "s/@VERSION@/$v/g" "$DBTOOL_SRC/$DBTOOL_UNIT"
 }
+# dbtool_pkgs prints the PHP extensions the tool needs beyond PHP_PKGS:
+# pgsql for PostgreSQL servers (ADR-0051), by its versioned name like
+# phpredis, so sury.org's php-pgsql never replaces the distribution's.
+dbtool_pkgs() {
+  local v
+  v=$(dbtool_php)
+  [ -n "$v" ] || { echo "no PHP-FPM version found (php-fpm package)" >&2; return 1; }
+  echo "php$v-pgsql"
+}
 dbtool_pinned() { (cd "$DBTOOL_SRC" && sha256sum --quiet --strict -c SHA256SUMS) >/dev/null 2>&1; }
 
 chk_dbtool() {
@@ -688,6 +698,8 @@ chk_dbtool() {
     return 0
   fi
   dbtool_pinned || { echo "adminer.php does not match its pinned SHA-256"; return 1; }
+  f=$(dbtool_pkgs 2>&1) || { echo "$f"; return 1; }
+  pkg_installed "$f" || { echo "$f not installed"; return 1; }
   getent passwd "$DBTOOL_USER" >/dev/null || { echo "user $DBTOOL_USER missing"; return 1; }
   [ "$(getent passwd "$DBTOOL_USER" | cut -d: -f7)" = /usr/sbin/nologin ] || { echo "$DBTOOL_USER has a login shell"; return 1; }
   dir_ok /usr/share/hostashi 755 root:root || { echo "/usr/share/hostashi"; return 1; }
@@ -720,6 +732,11 @@ do_dbtool() {
   fi
   dbtool_pinned || { log "dbtool: $DBTOOL_SRC/adminer.php does not match SHA256SUMS, not installing it"; return 1; }
   unit=$(dbtool_unit) || return 1
+  f=$(dbtool_pkgs) || return 1
+  if ! pkg_installed "$f"; then
+    apt_install "$f" || return 1
+    DBTOOL_CHANGED=yes
+  fi
   if ! getent passwd "$DBTOOL_USER" >/dev/null; then
     adduser --system --group --no-create-home --home /nonexistent --shell /usr/sbin/nologin "$DBTOOL_USER" >>"$LOG" 2>&1 || return 1
   fi

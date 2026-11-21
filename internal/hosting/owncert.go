@@ -151,7 +151,8 @@ func (s *Service) SetTLSSource(ctx context.Context, actor int64, name, source st
 	}
 
 	if old != source {
-		s.audit(ctx, actor, "site.cert.source", name, map[string]string{"source": source})
+		s.auditChange(ctx, actor, "site.cert.source", name, map[string]string{"source": source},
+			map[string]string{"source": old}, map[string]string{"source": source})
 	}
 
 	if source == store.TLSLetsEncrypt {

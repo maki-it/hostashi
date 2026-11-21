@@ -3,8 +3,9 @@
 //
 // Adminer as Hostashi runs it (ADR-0038), through Adminer's extension
 // interface: one login (the ticket's temporary user), one server (the local
-// MariaDB socket or the ticket's external server), one database, no permanent login and nothing loaded from
-// adminer.org. index.php checks the ticket and the session before this
+// MariaDB socket or the ticket's external server), one driver (MySQL's or,
+// for PostgreSQL, pgsql), one database, no permanent login and nothing
+// loaded from adminer.org. index.php checks the ticket and the session before this
 // class is used. adminer.css gives it the panel's look; the script in
 // head() rebuilds the top bar like the panel's.
 
@@ -153,9 +154,15 @@ class Tool extends \Adminer\Adminer
     }
 
     // The empty server is mysqli's default: localhost over the socket. An
-    // external server comes from the ticket, never from the request.
+    // external server comes from the ticket, never from the request. Adminer
+    // asks for this before every connection: a driver other than the
+    // session's never connects.
     public function credentials()
     {
+        if (\Adminer\DRIVER !== LOGIN['driver']) {
+            stop(403, 'Open the database from the Hostashi panel.');
+        }
+
         return [LOGIN['server'] ?? '', LOGIN['user'], \Adminer\get_password()];
     }
 
@@ -164,6 +171,10 @@ class Tool extends \Adminer\Adminer
     // local socket or a server without TLS.
     public function connectSsl()
     {
+        if (LOGIN['driver'] === 'pgsql') {
+            return ['mode' => self::pgsqlMode()];
+        }
+
         switch (LOGIN['tls'] ?? '') {
             case 'verify':
                 return ['key' => '', 'cert' => '', 'ca' => '/etc/ssl/certs/ca-certificates.crt', 'verify' => true];
@@ -174,8 +185,30 @@ class Tool extends \Adminer\Adminer
         }
     }
 
+    // Adminer's pgsql driver puts this after "sslmode=" into the libpq
+    // connection string, unquoted: the mode, then the CA file to check
+    // the certificate against. verify-full checks the host name like
+    // MySQL's verify does. The CA paths are fixed or checked by index.php
+    // and hold no quote or space. GSSAPI stays off; libpq would try it
+    // first otherwise.
+    private static function pgsqlMode(): string
+    {
+        switch (LOGIN['tls'] ?? '') {
+            case 'verify':
+                return "verify-full sslrootcert='/etc/ssl/certs/ca-certificates.crt' gssencmode=disable";
+            case 'verify-ca':
+                return "verify-full sslrootcert='" . LOGIN['ca'] . "' gssencmode=disable";
+            default:
+                return 'disable gssencmode=disable';
+        }
+    }
+
     public function login($login, $password)
     {
+        if (\Adminer\DRIVER !== LOGIN['driver']) {
+            return 'Open the database from the Hostashi panel.';
+        }
+
         if ($login !== LOGIN['user'] || !is_string($password) || $password === '') {
             return 'Open the database from the Hostashi panel.';
         }

@@ -163,7 +163,8 @@ func (s *Service) toolSession(ctx context.Context, database, id string) (store.D
 // ExtendDBToolSession moves the end of session id on database
 // DBToolExtendStep later, at most DBToolMaxRemaining from now.
 func (s *Service) ExtendDBToolSession(ctx context.Context, actor int64, database, id string) (DBToolSessionView, error) {
-	if _, err := s.toolDatabase(ctx, database); err != nil {
+	d, err := s.toolDatabase(ctx, database)
+	if err != nil {
 		return DBToolSessionView{}, err
 	}
 
@@ -190,7 +191,7 @@ func (s *Service) ExtendDBToolSession(ctx context.Context, actor int64, database
 	}
 
 	if t.Remote {
-		err = s.extendRemoteTool(ctx, a, t, end)
+		err = s.extendRemoteTool(ctx, a, d, t, end)
 	} else {
 		_, err = a.DBToolExtend(ctx, agentapi.DBToolExtendRequest{User: t.User, Expires: end})
 		if err == nil {
@@ -217,13 +218,22 @@ func (s *Service) ExtendDBToolSession(ctx context.Context, actor int64, database
 
 // extendRemoteTool keeps the user on the external server longer: the
 // panel's own record first, so the user never lives past what the panel
-// knows, then the tool.
-func (s *Service) extendRemoteTool(ctx context.Context, a DBToolAgent, t store.DBToolSession, end time.Time) error {
+// knows, then the password's end on the server (PostgreSQL), then the tool.
+func (s *Service) extendRemoteTool(ctx context.Context, a DBToolAgent, d store.Database, t store.DBToolSession, end time.Time) error {
+	srv, err := s.dbServer(ctx, d.Server)
+	if err != nil {
+		return err
+	}
+
 	s.remoteToolsMu.Lock()
-	err := s.st.SetDBToolSessionExpires(ctx, t.User, end, end.Add(remoteToolMargin))
+	err = s.st.SetDBToolSessionExpires(ctx, t.User, end, end.Add(remoteToolMargin))
 	s.remoteToolsMu.Unlock()
 
 	if err != nil {
+		return err
+	}
+
+	if err := s.remote(ctx, srv, func(c RemoteDB) error { return c.ExtendToolUser(ctx, t.User, end.Add(remoteToolMargin)) }); err != nil {
 		return err
 	}
 

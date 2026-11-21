@@ -239,10 +239,10 @@ func (h *siteOps) enforceQuota(p sites.Pool) {
 	h.log.Info("disk limits enforced", "pool", p.Name, "path", p.Path)
 }
 
-// quotaState is the pool's quota state for PoolInfo; empty when the volume
-// cannot be checked.
+// quotaState is the quota state of a usable pool for PoolInfo; empty when
+// it cannot be read.
 func (h *siteOps) quotaState(p sites.Pool) string {
-	if h.quota == nil || h.m.CheckPool(p.Name) != nil {
+	if h.quota == nil {
 		return ""
 	}
 

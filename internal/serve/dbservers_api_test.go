@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/maki-it/hostashi/internal/dbserver"
 	"github.com/maki-it/hostashi/internal/hosting"
@@ -63,13 +64,16 @@ func (r stubRemote) DropDatabase(_ context.Context, name string) error {
 	return nil
 }
 
-func (stubRemote) CreateUser(context.Context, string, string, string) error     { return nil }
-func (stubRemote) DropUser(context.Context, string, string) error               { return nil }
-func (stubRemote) SetPassword(context.Context, string, string) error            { return nil }
-func (stubRemote) CreateJobUser(context.Context, string, string, string) error  { return nil }
-func (stubRemote) DropJobUser(context.Context, string, string) error            { return nil }
-func (stubRemote) CreateToolUser(context.Context, string, string, string) error { return nil }
-func (stubRemote) DropToolUser(context.Context, string, string) error           { return nil }
+func (stubRemote) CreateUser(context.Context, string, string, string) error    { return nil }
+func (stubRemote) DropUser(context.Context, string, string) error              { return nil }
+func (stubRemote) SetPassword(context.Context, string, string) error           { return nil }
+func (stubRemote) CreateJobUser(context.Context, string, string, string) error { return nil }
+func (stubRemote) DropJobUser(context.Context, string, string) error           { return nil }
+func (stubRemote) CreateToolUser(context.Context, string, string, string, time.Time) error {
+	return nil
+}
+func (stubRemote) ExtendToolUser(context.Context, string, time.Time) error { return nil }
+func (stubRemote) DropToolUser(context.Context, string, string) error      { return nil }
 
 func TestDBServersOverHTTP(t *testing.T) {
 	e := newAPIWithAgent(t, &stubAgent{})
