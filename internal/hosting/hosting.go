@@ -663,6 +663,11 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		return err
 	}
 
+	phpSettings, err := s.st.AllSitePHPSettings(ctx)
+	if err != nil {
+		return err
+	}
+
 	workers, err := s.st.PHPWorkers(ctx)
 	if err != nil {
 		return err
@@ -692,6 +697,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 			if php != "" {
 				ws.PHPWorkers = phpWorkers(workers, site.ID)
 				ws.PHPPrograms = site.PHPPrograms
+				ws.PHPSettings = webPHPSettings(phpSettings, site)
 			}
 
 			// Sent in maintenance as well, so the agent keeps the cache's
