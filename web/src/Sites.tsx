@@ -8,14 +8,18 @@ import {
   domainsProblem,
   httpsLabel,
   httpsTone,
+  listPools,
   listSites,
   parseDomains,
   phpChoices,
   phpVersions,
+  poolLabel,
+  poolNote,
   siteMessage,
   siteNameProblem,
   siteStatus,
   type PHPVersions,
+  type Pool,
   type Site,
 } from "./sites";
 import { Badge, Button, Card, Field, IconLink, Notice, PageHead, RowActions, Table, type Column, type Sort } from "./ui";
@@ -234,6 +238,18 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
   const [created, setCreated] = useState("");
+  const [pools, setPools] = useState<Pool[]>([]);
+  const [pool, setPool] = useState("default");
+
+  // The pool choice shows only with a second pool (ADR-0016). Without the
+  // list, the site goes to the default pool as before.
+  useEffect(() => {
+    listPools()
+      .then(setPools)
+      .catch(() => setPools([]));
+  }, []);
+  const choosePool = pools.length > 1;
+  const chosen = pools.find((p) => p.name === pool);
 
   // Default to the newest installed version that is not legacy.
   const newest = [...(php?.installed ?? [])].reverse().find((v) => !php?.legacy.includes(v)) ?? "";
@@ -251,7 +267,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
     setError("");
     setDone("");
     try {
-      const s = await createSite({ name, php: phpValue, domains: list, tls, hsts: tls && hsts });
+      const s = await createSite({ name, ...(choosePool && { pool }), php: phpValue, domains: list, tls, hsts: tls && hsts });
       setDone(
         s.tls.enabled && !s.tls.active
           ? `Site ${s.name} created. It is served over HTTP until its certificate is there.`
@@ -287,6 +303,18 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
             spellCheck={false}
           />
         </Field>
+        {choosePool && (
+          <Field label="Storage pool" hint="Where the site's home lives. A site stays on its pool.">
+            <select className="ui-select" value={pool} onChange={(e) => setPool(e.target.value)}>
+              {pools.map((p) => (
+                <option key={p.name} value={p.name} disabled={!p.available}>
+                  {poolLabel(p)}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+        {choosePool && poolNote(chosen) && <Notice tone="warn" title={poolNote(chosen)} />}
         <Field label="PHP">
           <select className="ui-select" value={phpValue} onChange={(e) => setVersion(e.target.value)}>
             <PHPOptions php={php} />
