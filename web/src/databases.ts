@@ -75,6 +75,8 @@ export function databaseMessage(err: unknown): string {
         return "The server did not answer in time. Reload the page to see whether the change was made.";
       case "db_server_local_only":
         return "This only works for databases on the local server.";
+      case "db_server_unresolved":
+        return "The database server's name does not resolve to an address this machine can reach. Check its DNS records.";
       case "unknown_db_server":
         return "This database server does not exist any more. Reload the page.";
       case "db_server_unavailable":

@@ -344,6 +344,65 @@ describe("SitePage", () => {
     window.location.hash = "";
   });
 
+  it("deletes a site and parks the chosen domains (ADR-0048)", async () => {
+    const user = userEvent.setup();
+    window.location.hash = "#/sites/blog";
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [blog] } },
+      "GET /api/v1/status-pages": {
+        body: {
+          pages: [
+            { id: "builtin-parking", name: "Parking", kind: "parking", builtin: true },
+            { id: "p2", name: "Coming soon", kind: "parking", builtin: false },
+            { id: "p3", name: "Summer break", kind: "maintenance", builtin: false },
+          ],
+        },
+      },
+      "POST /api/v1/sites/blog/park": { status: 204 },
+    });
+    render(<SitePage name="blog" tab="overview" onTab={() => undefined} role="manager" />);
+    await user.click(await screen.findByRole("button", { name: "Delete and park domains" }));
+    const both = screen.getAllByRole("checkbox").slice(0, 2);
+    expect(both.map((c) => (c as HTMLInputElement).checked)).toEqual([true, true]);
+    const select = screen.getByLabelText("Parking page");
+    await waitFor(() => expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["Built-in parking page", "Coming soon"]));
+    await user.selectOptions(select, "p2");
+    const confirm = screen.getByRole("button", { name: "Delete blog and park" });
+    await user.type(screen.getByLabelText(/Type blog to confirm/), "blog");
+    await user.click(screen.getByRole("checkbox", { name: "blog.example.com" }));
+    await user.click(screen.getByRole("checkbox", { name: "www.blog.example.com" }));
+    expect(confirm).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: "www.blog.example.com" }));
+    await user.click(confirm);
+    await waitFor(() => expect(window.location.hash).toBe("#/parked"));
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ domains: ["www.blog.example.com"], page: "p2", tls: true, confirm: "blog" });
+    window.location.hash = "";
+  });
+
+  it("offers delete and park only to admins and managers", async () => {
+    mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [blog] } } });
+    render(<PageHarness />);
+    expect(await screen.findByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete and park domains" })).not.toBeInTheDocument();
+  });
+
+  it("fills in the new site form from a parked domain", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "POST /api/v1/sites": { status: 201, body: { ...blog, domains: ["soon.example.net"], tls: noTLS } },
+    });
+    render(<ListHarness initial="new=1&domain=soon.example.net&tls=0" />);
+    expect(await screen.findByText("soon.example.net is parked. Its parking page ends when the site is live.")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Domains/)).toHaveValue("soon.example.net");
+    expect(screen.getByRole("checkbox", { name: /HTTPS/ })).not.toBeChecked();
+    await user.type(screen.getByLabelText(/^Name/), "soon");
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ name: "soon", domains: ["soon.example.net"], tls: false }));
+  });
+
   it("changes domains, HTTPS and HSTS", async () => {
     const user = userEvent.setup();
     let cur: Site = { ...blog, domains: ["blog.example.com"] };

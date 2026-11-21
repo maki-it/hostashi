@@ -383,3 +383,50 @@ func TestClientOptions(t *testing.T) {
 		t.Fatalf("bad host: %v", err)
 	}
 }
+
+func TestJobUserStatements(t *testing.T) {
+	f := &fakeExec{}
+	c, _ := NewClient(f, "10.0.0.7")
+	ctx := t.Context()
+
+	const (
+		user = "hostashi_job_0123456789abcdef"
+		pw   = "Abcdefghijklmnopqrstuvwxyz012345"
+	)
+
+	if err := c.CreateJobUser(ctx, "shop_wp", user, pw); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.DropJobUser(ctx, user); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"CREATE USER '" + user + "'@'10.0.0.7' IDENTIFIED BY '" + pw + "'",
+		"GRANT ALL PRIVILEGES ON `shop\\_wp`.* TO '" + user + "'@'10.0.0.7'",
+		"DROP USER IF EXISTS '" + user + "'@'10.0.0.7'",
+	}
+
+	if strings.Join(f.stmts, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("statements:\n%s", strings.Join(f.stmts, "\n"))
+	}
+
+	f.stmts = nil
+
+	for name, err := range map[string]error{
+		"site user":  c.CreateJobUser(ctx, "shop_wp", "shop_user", pw),
+		"no pw":      c.CreateJobUser(ctx, "shop_wp", user, ""),
+		"short pw":   c.CreateJobUser(ctx, "shop_wp", user, "Abc"),
+		"bad db":     c.CreateJobUser(ctx, "mysql", user, pw),
+		"drop other": c.DropJobUser(ctx, "root"),
+	} {
+		if !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: got %v", name, err)
+		}
+	}
+
+	if len(f.stmts) != 0 {
+		t.Fatalf("statements ran: %q", f.stmts)
+	}
+}

@@ -110,6 +110,18 @@ describe("Parked", () => {
     expect(await screen.findByText("No domain is parked.")).toBeInTheDocument();
   });
 
+  it("links each domain to a new site filled in with it (ADR-0048)", async () => {
+    mockFetch({
+      "GET /api/v1/parked-domains": {
+        body: { parkedDomains: [parkedDomain("soon.example", { enabled: false, active: false, notAfter: null }), parkedDomain("tls.example", { enabled: true, active: true, notAfter: null })] },
+      },
+      "GET /api/v1/status-pages": { body: { pages } },
+    });
+    render(<Harness />);
+    expect(await screen.findByRole("link", { name: "Make a site of soon.example" })).toHaveAttribute("href", "#/sites?new=1&domain=soon.example&tls=0");
+    expect(screen.getByRole("link", { name: "Make a site of tls.example" })).toHaveAttribute("href", "#/sites?new=1&domain=tls.example&tls=1");
+  });
+
   it("explains a taken domain", async () => {
     const user = userEvent.setup();
     mockFetch({

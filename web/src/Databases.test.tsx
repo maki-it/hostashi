@@ -373,7 +373,7 @@ describe("Database servers", () => {
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({ name: "blog_db", user: "blog_db", server: "db1" });
   });
 
-  it("shows the server column and hides import for external databases", async () => {
+  it("shows the server column and offers import and export for external databases", async () => {
     mockFetch({
       ...sites,
       "GET /api/v1/db-servers": { body: { servers: [localServer, db1] } },
@@ -385,8 +385,8 @@ describe("Database servers", () => {
     unmount();
 
     render(<Harness initial="db=blog_ext" role="user" />);
-    expect(await screen.findByText(/Import and export work only for databases on this machine/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Start export" })).not.toBeInTheDocument();
+    expect(await screen.findByText(/temporary database user that the panel removes after the job/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start export" })).toBeInTheDocument();
   });
 
   it("lists the servers for admins and checks, sets the default and removes one", async () => {
