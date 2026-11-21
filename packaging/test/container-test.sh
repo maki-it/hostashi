@@ -1566,6 +1566,7 @@ UNIT
   [ -n "$user" ] || fail "no temporary user on the external server: $(x mariadb -N -e "SELECT User, Host FROM mysql.user")"
   x systemctl is-active --quiet hostashi-adminer.service || fail "tool pool not running after the restart"
   # The pool reads the servers' CAs and hosts file (the agent's umask is 077).
+  expect_mode /etc/hostashi-adminer/servers "755 root:root"
   expect_mode /etc/hostashi-adminer/servers/hosts "644 root:root"
   x rm -f /tmp/tool.jar
   page=$(p8444 -L "$url") || fail "tool did not answer"

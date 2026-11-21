@@ -79,7 +79,7 @@ func (t *dbTool) setServers(ctx context.Context, _ agentrpc.Caller, req agentapi
 	sort.Slice(servers, func(i, j int) bool { return servers[i].ID < servers[j].ID })
 
 	dir := t.serverDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := readableDir(dir); err != nil {
 		return agentapi.DBToolServersResponse{}, fmt.Errorf("database tool: %w", err)
 	}
 
@@ -223,6 +223,16 @@ func toolHosts(servers []agentapi.DBToolServer) string {
 
 // writeIfChanged writes a world-readable file atomically unless it holds
 // content already.
+// readableDir makes dir, open to the tool's user: the agent's umask is
+// 077, and the pool reads the CAs and the hosts file in it.
+func readableDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	return os.Chmod(dir, 0o755)
+}
+
 func writeIfChanged(p string, content []byte) (bool, error) {
 	if old, err := os.ReadFile(p); err == nil && bytes.Equal(old, content) {
 		return false, nil

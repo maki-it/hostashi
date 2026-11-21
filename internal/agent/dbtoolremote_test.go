@@ -240,7 +240,16 @@ func TestDBToolServerFilesReadable(t *testing.T) {
 	old := syscall.Umask(0o077)
 	defer syscall.Umask(old)
 
-	p := filepath.Join(t.TempDir(), "ca-1.pem")
+	dir := filepath.Join(t.TempDir(), "servers")
+	if err := readableDir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	if st, err := os.Stat(dir); err != nil || st.Mode().Perm() != 0o755 {
+		t.Fatalf("directory mode %v, %v", st.Mode(), err)
+	}
+
+	p := filepath.Join(dir, "ca-1.pem")
 	if _, err := writeIfChanged(p, []byte("x")); err != nil {
 		t.Fatal(err)
 	}
