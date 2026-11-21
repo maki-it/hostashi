@@ -129,6 +129,9 @@ type Deps struct {
 	// PHP installs more PHP versions (ADR-0036); nil disables its routes.
 	// Needs Auth and Settings.
 	PHP PHPInstaller
+	// PGClient installs the PostgreSQL client tools (ADR-0051); nil
+	// disables its routes. Needs Auth and Settings.
+	PGClient PGClient
 	// Mail is the SMTP relay (ADR-0044); nil disables its routes. Needs
 	// Auth, Settings and MailSend.
 	Mail     MailRelay
@@ -260,6 +263,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 
 		if deps.PHP != nil && deps.Settings != nil {
 			registerPHPInstall(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.PHP, deps.Settings, log)
+		}
+
+		if deps.PGClient != nil && deps.Settings != nil {
+			registerPGClient(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.PGClient, deps.Settings, log)
 		}
 
 		if deps.Mail != nil && deps.MailSend != nil && deps.Settings != nil {
@@ -454,6 +461,7 @@ func Run(ctx context.Context, cfg Config) error {
 		Doctor:      RPCDoctor(client),
 		Firewall:    RPCFirewall{C: client},
 		PHP:         RPCPHPInstaller{C: client},
+		PGClient:    RPCPGClient{C: client},
 		Mail:        relay,
 		Outbox:      outbox,
 		NotifyPrefs: st,

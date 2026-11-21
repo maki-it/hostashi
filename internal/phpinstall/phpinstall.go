@@ -155,7 +155,14 @@ const maxLogBytes = 1 << 20
 // tail returns the last LogLines lines of a version's log, without
 // control characters.
 func (m *Manager) tail(version string) ([]string, error) {
-	f, err := os.Open(m.path(filepath.Join(LogDir, version+".log")))
+	return TailLog(m.path(filepath.Join(LogDir, version+".log")))
+}
+
+// TailLog returns the last LogLines non-empty lines of an install unit's
+// log, without control characters; a missing file has none. The
+// PostgreSQL client install (internal/pgclient) reads its logs the same way.
+func TailLog(name string) ([]string, error) {
+	f, err := os.Open(name)
 	if errors.Is(err, os.ErrNotExist) {
 		return []string{}, nil
 	}
