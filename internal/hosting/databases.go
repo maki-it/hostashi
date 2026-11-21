@@ -268,7 +268,7 @@ func (s *Service) DeleteDatabaseUser(ctx context.Context, actor int64, database,
 		return err
 	}
 
-	if err := be.dropUser(ctx, user); err != nil {
+	if err := be.dropUser(ctx, database, user); err != nil {
 		return err
 	}
 
@@ -379,7 +379,7 @@ type dbBackend interface {
 	create(ctx context.Context, site, name string) error
 	drop(ctx context.Context, name string, users []string) error
 	createUser(ctx context.Context, database, user, password string) error
-	dropUser(ctx context.Context, user string) error
+	dropUser(ctx context.Context, database, user string) error
 	setPassword(ctx context.Context, user, password string) error
 }
 
@@ -448,7 +448,7 @@ func (a agentDB) createUser(ctx context.Context, database, user, password string
 	return a.ag.DBUserCreate(ctx, database, user, password)
 }
 
-func (a agentDB) dropUser(ctx context.Context, user string) error {
+func (a agentDB) dropUser(ctx context.Context, _, user string) error {
 	if err := a.ag.DBUserDelete(ctx, user); err != nil && !isCode(err, agentrpc.CodeNotFound) {
 		return err
 	}
@@ -482,7 +482,7 @@ func (r remoteBackend) drop(ctx context.Context, name string, users []string) er
 		// Users first, as on the local server: IF EXISTS makes a retry
 		// after a partial failure safe.
 		for _, u := range users {
-			if err := c.DropUser(ctx, u); err != nil {
+			if err := c.DropUser(ctx, name, u); err != nil {
 				return err
 			}
 		}
@@ -495,8 +495,8 @@ func (r remoteBackend) createUser(ctx context.Context, database, user, password 
 	return r.s.remote(ctx, r.srv, func(c RemoteDB) error { return c.CreateUser(ctx, database, user, password) })
 }
 
-func (r remoteBackend) dropUser(ctx context.Context, user string) error {
-	return r.s.remote(ctx, r.srv, func(c RemoteDB) error { return c.DropUser(ctx, user) })
+func (r remoteBackend) dropUser(ctx context.Context, database, user string) error {
+	return r.s.remote(ctx, r.srv, func(c RemoteDB) error { return c.DropUser(ctx, database, user) })
 }
 
 func (r remoteBackend) setPassword(ctx context.Context, user, password string) error {

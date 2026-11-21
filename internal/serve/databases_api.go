@@ -48,6 +48,8 @@ func dbFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "dbtool_unavailable", "the database tool is not available on this server")
 	case errors.Is(err, hosting.ErrDatabaseExists):
 		writeError(w, http.StatusConflict, "database_exists", "a database or database user with this name exists")
+	case errors.Is(err, hosting.ErrPostgreSQLNotYet):
+		writeError(w, http.StatusConflict, "postgresql_not_yet", "this does not work for PostgreSQL databases yet")
 	case errors.Is(err, hosting.ErrDBServerLocalOnly):
 		writeError(w, http.StatusConflict, "db_server_local_only", "this works only for databases on the local server so far")
 	case errors.Is(err, hosting.ErrDBServerResolve):

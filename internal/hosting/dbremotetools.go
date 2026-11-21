@@ -46,6 +46,10 @@ func (s *Service) openRemoteTool(ctx context.Context, d store.Database, minutes 
 		return agentapi.DBToolOpenResponse{}, err
 	}
 
+	if IsPostgres(srv) {
+		return agentapi.DBToolOpenResponse{}, ErrPostgreSQLNotYet
+	}
+
 	if err := s.syncToolServers(ctx, srv.ID); err != nil {
 		return agentapi.DBToolOpenResponse{}, err
 	}
