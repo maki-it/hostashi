@@ -235,6 +235,14 @@ func writeIfChanged(p string, content []byte) (bool, error) {
 		return false, fmt.Errorf("database tool: %w", err)
 	}
 
+	// The agent runs with UMask=0077; the pool's user must read the CAs
+	// and the hosts file.
+	if err := os.Chmod(tmp, 0o644); err != nil { //nolint:gosec // as above
+		_ = os.Remove(tmp)
+
+		return false, fmt.Errorf("database tool: %w", err)
+	}
+
 	if err := os.Rename(tmp, p); err != nil {
 		_ = os.Remove(tmp)
 

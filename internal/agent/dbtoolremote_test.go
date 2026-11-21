@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -230,5 +231,21 @@ func TestDBToolRemoteValidation(t *testing.T) {
 	dup := agentapi.DBToolServersRequest{Servers: []agentapi.DBToolServer{toolServers.Servers[0], toolServers.Servers[0]}}
 	if dup.Validate() == nil {
 		t.Error("duplicate id accepted")
+	}
+}
+
+// TestDBToolServerFilesReadable: the agent runs with UMask=0077, the pool's
+// user still reads the CAs and the hosts file.
+func TestDBToolServerFilesReadable(t *testing.T) {
+	old := syscall.Umask(0o077)
+	defer syscall.Umask(old)
+
+	p := filepath.Join(t.TempDir(), "ca-1.pem")
+	if _, err := writeIfChanged(p, []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+
+	if st, err := os.Stat(p); err != nil || st.Mode().Perm() != 0o644 {
+		t.Fatalf("mode %v, %v", st.Mode(), err)
 	}
 }

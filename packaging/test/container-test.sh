@@ -1565,6 +1565,8 @@ UNIT
   user=$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User LIKE 'hostashi\_tool\_%' AND Host <> 'localhost'")
   [ -n "$user" ] || fail "no temporary user on the external server: $(x mariadb -N -e "SELECT User, Host FROM mysql.user")"
   x systemctl is-active --quiet hostashi-adminer.service || fail "tool pool not running after the restart"
+  # The pool reads the servers' CAs and hosts file (the agent's umask is 077).
+  expect_mode /etc/hostashi-adminer/servers/hosts "644 root:root"
   x rm -f /tmp/tool.jar
   page=$(p8444 -L "$url") || fail "tool did not answer"
   grep -q 'Tables and views' <<<"$page" || fail "tool did not log in to the external server: $(head -c 400 <<<"$page")"
@@ -1748,9 +1750,10 @@ if [ -n "${PEBBLE_DIR:-}" ]; then
   user=$(pgsu -c "SELECT rolname FROM pg_roles WHERE rolname LIKE 'hostashi\_tool\_%'")
   [ -n "$user" ] || fail "no temporary role on the PostgreSQL server"
   [ "$(pgsu -c "SELECT rolconnlimit FROM pg_roles WHERE rolname = '$user'")" = 2 ] || fail "temporary role without connection limit"
+  [ -n "$(x find /etc/hostashi-adminer/servers -name 'ca-*.pem' -perm 0644)" ] || fail "the server's CA is not readable by the tool: $(x ls -l /etc/hostashi-adminer/servers/)"
   x rm -f /tmp/tool.jar
   page=$(p8444 -L "$url") || fail "tool did not answer"
-  grep -q 'Tables and views' <<<"$page" || fail "tool did not log in to PostgreSQL: $(head -c 600 <<<"$page")"
+  grep -q 'Tables and views' <<<"$page" || fail "tool did not log in to PostgreSQL: $(grep -o "class='error'>[^<]*" <<<"$page"; x ls -l /etc/hostashi-adminer/servers/)"
   grep -q 'pgsql=&amp;username=' <<<"$page" || fail "the tool does not run the pgsql driver"
   page=$(p8444 "https://other.example.com:8444/?pgsql=&username=$user&db=toolpg_db&ns=public&select=posts") || fail "tool did not answer"
   grep -q 'hello from pg' <<<"$page" || fail "the tool does not show the table's rows"
