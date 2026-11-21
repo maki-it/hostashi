@@ -14,6 +14,14 @@ export type SiteTLS = {
   notAfter: string | null;
   error?: string; // reason of the last failed attempt
   failedAt?: string;
+  // Where the certificate comes from, and where the live one came from
+  // ("" for none). trusted is false for an own certificate without a
+  // public chain (ADR-0039). Older answers lack them.
+  source?: "letsencrypt" | "custom";
+  certSource?: "" | "letsencrypt" | "custom";
+  trusted?: boolean;
+  renewAt?: string;
+  renewPending?: boolean;
 };
 
 export type Site = {
@@ -129,6 +137,12 @@ export function siteMessage(err: unknown): string {
         return "A domain is the panel's own address. Choose another domain.";
       case "tls_unavailable":
         return "Certificates are not available on this panel. Start it with a public address to use Let's Encrypt.";
+      case "renew_too_soon":
+        return "The certificate was renewed less than 10 minutes ago. Try again later.";
+      case "certificate_in_use":
+        return "Turn HTTPS off before deleting the certificate.";
+      case "not_letsencrypt":
+        return "Only a certificate from Let's Encrypt can be renewed here. Upload a new own certificate instead.";
       case "site_busy":
         return "The site is being created or deleted. Reload the page in a moment.";
       case "not_found":
