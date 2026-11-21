@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -122,21 +123,22 @@ func TestDoctor(t *testing.T) {
 
 	m = byID(r)
 	want := map[string]string{
-		"system.os":        agentapi.DoctorOK,
-		"system.quota":     agentapi.DoctorOK,
-		"system.proc":      agentapi.DoctorOK,
-		"system.pool":      agentapi.DoctorWarn, // the test pool is 0700, not root 0711
-		"service.panel":    agentapi.DoctorFail, // no panel socket
-		"service.nginx":    agentapi.DoctorFail, // no web reconciler
-		"service.mariadb":  agentapi.DoctorWarn, // no database manager
-		"service.fail2ban": agentapi.DoctorOK,
-		"system.firewall":  agentapi.DoctorWarn, // no rules file
-		"system.updates":   agentapi.DoctorWarn,
-		"system.reboot":    agentapi.DoctorOK,
-		"system.php":       agentapi.DoctorOK,
-		"system.ssh":       agentapi.DoctorWarn, // no sshd_config
-		"system.sysctl":    agentapi.DoctorWarn, // no sysctl file
-		"shop/site.limits": agentapi.DoctorOK,
+		"system.os":          agentapi.DoctorOK,
+		"system.quota":       agentapi.DoctorOK,
+		"system.proc":        agentapi.DoctorOK,
+		"system.pool":        agentapi.DoctorWarn, // the test pool is 0700, not root 0711
+		"system.pool.volume": agentapi.DoctorOK,
+		"service.panel":      agentapi.DoctorFail, // no panel socket
+		"service.nginx":      agentapi.DoctorFail, // no web reconciler
+		"service.mariadb":    agentapi.DoctorWarn, // no database manager
+		"service.fail2ban":   agentapi.DoctorOK,
+		"system.firewall":    agentapi.DoctorWarn, // no rules file
+		"system.updates":     agentapi.DoctorWarn,
+		"system.reboot":      agentapi.DoctorOK,
+		"system.php":         agentapi.DoctorOK,
+		"system.ssh":         agentapi.DoctorWarn, // no sshd_config
+		"system.sysctl":      agentapi.DoctorWarn, // no sysctl file
+		"shop/site.limits":   agentapi.DoctorOK,
 	}
 
 	if len(m["system.disk"]) == 0 { // its status depends on the test machine's disk
@@ -166,6 +168,37 @@ func TestDoctor(t *testing.T) {
 		}
 
 		last = ch.Site
+	}
+}
+
+// TestDoctorMissingPool: a pool whose volume is gone fails, and its path
+// gets no disk, quota or mode check that would describe the root disk
+// (spike S9 finding 4).
+func TestDoctorMissingPool(t *testing.T) {
+	c, pool := startSiteAgentCfg(t, Config{Quota: newFakeQuota(true), Doctor: doctorEnv(t)})
+
+	if err := os.Remove(pool); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := agentapi.Doctor.Call(context.Background(), c, agentapi.DoctorRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m := byID(r)
+	if v := m["system.pool.volume"]; len(v) != 1 || v[0].Status != agentapi.DoctorFail || !strings.Contains(v[0].Hint, "mount "+pool) {
+		t.Errorf("missing pool: %+v", v)
+	}
+
+	if len(m["system.quota"]) != 0 || len(m["system.pool"]) != 0 {
+		t.Errorf("checks of a missing pool: quota %+v, mode %+v", m["system.quota"], m["system.pool"])
+	}
+
+	for _, d := range m["system.disk"] {
+		if strings.HasPrefix(d.Summary, pool) {
+			t.Errorf("disk check of a missing pool: %+v", d)
+		}
 	}
 }
 

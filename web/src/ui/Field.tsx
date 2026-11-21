@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { cloneElement, useId, type ReactElement } from "react";
+import { cloneElement, useId, type ReactElement, type ReactNode } from "react";
 
 type ControlProps = {
   id?: string;
@@ -9,7 +9,7 @@ type ControlProps = {
 };
 
 type FieldProps = {
-  label: string;
+  label: ReactNode;
   hint?: string;
   error?: string;
   /** One input, select or textarea; the field wires id, hint and error to it. */

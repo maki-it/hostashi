@@ -29,6 +29,7 @@ const titles: Record<string, string> = {
   "system.quota": "Disk limits",
   "system.proc": "Process privacy",
   "system.pool": "Home directories",
+  "system.pool.volume": "Storage pools",
   "service.panel": "Panel",
   "panel.mail": "Email",
   "service.nginx": "Web server",

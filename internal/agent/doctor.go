@@ -80,13 +80,29 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	sys := d.env.System
 	out := []agentapi.DoctorCheck{sys.OS()}
 
-	var pools []string
+	// Only usable pools get the disk, quota and mode checks: below a
+	// missing volume they would report the root disk.
+	var (
+		pools     []string
+		poolCheck []agentapi.DoctorCheck
+	)
 
 	if d.h != nil {
 		for _, p := range d.h.m.Pools() {
-			pools = append(pools, p.Path)
+			ps := doctor.PoolState{Name: p.Name, Path: p.Path, Volume: p.RequireMount, Unavailable: d.h.m.CheckPool(p.Name)}
+			if p.RequireMount {
+				ps.InFstab = d.h.m.PoolInFstab(p.Path)
+			}
+
+			poolCheck = append(poolCheck, sys.PoolVolume(ps))
+
+			if ps.Unavailable == nil {
+				pools = append(pools, p.Path)
+			}
 		}
 	}
+
+	out = append(out, poolCheck...)
 
 	disk := d.env.Disk
 	if disk == nil {

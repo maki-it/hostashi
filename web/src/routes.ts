@@ -16,6 +16,7 @@ export const pages = [
   "parked",
   "pages",
   "health",
+  "services",
   "php",
   "backups",
   "firewall",

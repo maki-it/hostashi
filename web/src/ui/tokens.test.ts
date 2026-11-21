@@ -62,6 +62,8 @@ const pairs: [string, string, number][] = [
   ["--focus", "--surface", 3],
   ["--focus", "--bg", 3],
   ["--active-bar", "--side-active-bg", 3],
+  ["--series-1", "--surface", 3],
+  ["--series-2", "--surface", 3],
 ];
 
 describe("theme tokens", () => {

@@ -239,6 +239,61 @@ func lastField(s string) string {
 	return f[len(f)-1]
 }
 
+// PoolState is what the agent knows about a storage pool (ADR-0016).
+type PoolState struct {
+	Name string
+	Path string
+	// Unavailable is why the agent refuses the pool: the volume is not
+	// mounted, or the marker is missing or belongs to another pool.
+	Unavailable error
+	// Volume: the pool was added with "hostashi pool add" and must be its
+	// own mounted volume. The default pool on the system disk is not.
+	Volume bool
+	// InFstab: /etc/fstab has an entry for the mount point.
+	InFstab bool
+}
+
+// PoolVolume checks that a pool is usable and, for a pool on its own
+// volume, mounted the way "pool add" demands (spike S9 finding 4). An
+// unavailable pool fails: its sites do not start, and the free space
+// reported for its path would be the root disk's.
+func (s System) PoolVolume(p PoolState) Check {
+	const id = "system.pool.volume"
+
+	where := fmt.Sprintf("pool %s (%s)", p.Name, p.Path)
+
+	if p.Unavailable != nil {
+		return fail(id, where+" is not available: the volume is not mounted or its marker is missing",
+			fmt.Sprintf("Mount the volume (mount %s) and restart hostashi-agent. Until then its sites do not start and cannot be changed.", p.Path))
+	}
+
+	if !p.Volume {
+		return ok(id, where+" is available")
+	}
+
+	var problems []string
+
+	var st unix.Statfs_t
+	if err := s.statfs(p.Path, &st); err != nil {
+		return fail(id, where+": "+describe(err), "")
+	}
+
+	if st.Flags&unix.ST_NOSUID == 0 || st.Flags&unix.ST_NODEV == 0 {
+		problems = append(problems, "is mounted without nosuid,nodev")
+	}
+
+	if !p.InFstab {
+		problems = append(problems, "has no entry in /etc/fstab")
+	}
+
+	if len(problems) > 0 {
+		return warn(id, where+" "+strings.Join(problems, " and "),
+			"Mount it from /etc/fstab with nosuid,nodev,nofail, so nothing on the volume can raise privileges and its sites wait for it at boot.")
+	}
+
+	return ok(id, where+" is mounted with its marker, nosuid,nodev and an fstab entry")
+}
+
 // PoolMode checks that a pool of homes is root 0711, so site users cannot
 // list each other (ADR-0032).
 func PoolMode(dir string) Check {

@@ -4,6 +4,7 @@ import { ArrowRight } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
 import type { User } from "./auth";
 import { daysLeft } from "./certs";
+import { ServerDashboard } from "./Dashboard";
 import { getBackups, type BackupInfo } from "./backups";
 import { checkTitle, runDoctor, type DoctorReport } from "./doctor";
 import { canSee } from "./nav";
@@ -218,6 +219,7 @@ export function Overview({ user }: { user: User }) {
           </Stat>
         )}
       </div>
+      {may("services") && <ServerDashboard />}
       {!data.sites && <Notice tone="err" title="The sites could not be loaded. Reload the page." />}
     </>
   );

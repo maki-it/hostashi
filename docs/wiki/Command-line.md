@@ -19,6 +19,13 @@ Most work is done in the panel. The command line is for what the panel cannot do
 | `hostashi ping` | Checks that the agent answers. |
 | `hostashi version` | Prints the version. |
 
+## Services
+
+| Command | What it does |
+|---------|--------------|
+| `hostashi service list` | Lists the services with their state and automatic restarts. `-json` prints JSON. |
+| `hostashi service ID [SITE] ACTION` | Runs an action, for example `hostashi service nginx reload` or `hostashi service php blog restart`. Only the actions of the [service catalog](Services-and-dashboard.md#services) work. |
+
 ## Sites
 
 | Command | What it does |
@@ -43,6 +50,8 @@ Without project quota a pool works, but its sites get no disk limit. The agent s
 | `hostashi pool add NAME PATH` | Adds the mounted volume at PATH as pool NAME. It refuses, with the reason, a path that is not a mount point, not ext4 or XFS, not mounted with `nosuid,nodev`, not in `/etc/fstab`, not empty, inside a system directory or overlapping another pool. |
 | `hostashi pool list` | Lists the pools with their path, number of sites and quota state. |
 | `hostashi pool remove NAME` | Removes a pool without sites. Then you can unmount the volume. |
+
+`hostashi doctor` fails a pool whose volume is not mounted or whose marker is missing, and warns when a pool's volume is mounted without `nosuid,nodev` or has no `/etc/fstab` entry. While a volume is missing, its sites do not start and cannot be changed; mount it and restart `hostashi-agent`.
 
 A site gets its pool when it is created and stays there. Its databases stay in MariaDB's own directory.
 
