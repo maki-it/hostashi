@@ -32,6 +32,8 @@ const php = { "GET /api/v1/php/versions": { body: { installed: ["8.2", "8.4"], s
   // And its resource limits (Limits.test.tsx tests them).
   "GET /api/v1/sites/blog/limits": { body: { set: false, preset: "", applyError: "", appliedAt: 0, updatedAt: 0 } },
   "GET /api/v1/limit-presets": { body: { presets: [] } },
+  // The Domains & HTTPS tab reads the live certificate (Certificate.test.tsx tests it).
+  "GET /api/v1/sites/blog/tls/certificate": { body: { certificate: null } },
 };
 
 describe("siteNameProblem", () => {
@@ -254,6 +256,20 @@ describe("Sites", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("belongs to another site");
   });
 
+  it("explains the panel's reserved domain", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "POST /api/v1/sites": { status: 409, body: { error: { code: "domain_reserved" } } },
+    });
+    render(<ListHarness initial="new=1" />);
+    await user.type(screen.getByLabelText(/^Name/), "blog");
+    await user.type(screen.getByLabelText(/^Domains/), "blog.example.com");
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("the panel's own address");
+  });
+
   it("offers no PHP when the versions cannot be read", async () => {
     mockFetch({ "GET /api/v1/sites": { body: { sites: [] } }, "GET /api/v1/php/versions": { status: 503, body: { error: { code: "agent_unavailable" } } } });
     render(<ListHarness initial="new=1" />);
@@ -282,6 +298,7 @@ describe("SitePage", () => {
     expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Overview",
       "Domains & HTTPS",
+      "Files",
       "PHP",
       "Cron",
       "SSH & SFTP",
@@ -306,7 +323,7 @@ describe("SitePage", () => {
 
   it("shows the overview for a tab that does not exist yet", async () => {
     mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [blog] } } });
-    render(<PageHarness tab="files" />);
+    render(<PageHarness tab="backups" />);
     expect(await screen.findByRole("tabpanel", { name: "Overview" })).toBeInTheDocument();
   });
 

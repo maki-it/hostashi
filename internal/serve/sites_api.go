@@ -42,6 +42,15 @@ type tlsJSON struct {
 	NotAfter *time.Time `json:"notAfter"`
 	Error    string     `json:"error,omitempty"`
 	FailedAt *time.Time `json:"failedAt,omitempty"`
+	// Source is where the certificate comes from ("letsencrypt" or
+	// "custom"); CertSource where the live one came from ("" for none).
+	Source     string `json:"source"`
+	CertSource string `json:"certSource"`
+	// Trusted is false for an own certificate without a public chain.
+	Trusted bool `json:"trusted"`
+	// RenewAt is the last "renew now"; RenewPending while it runs.
+	RenewAt      *time.Time `json:"renewAt,omitempty"`
+	RenewPending bool       `json:"renewPending"`
 }
 
 // panelTLSJSON is the HTTPS state of the panel's own address: whether
@@ -55,6 +64,21 @@ type panelTLSJSON struct {
 	NotAfter *time.Time `json:"notAfter"`
 	Error    string     `json:"error,omitempty"`
 	FailedAt *time.Time `json:"failedAt,omitempty"`
+	// As for sites (ADR-0039).
+	Source       string     `json:"source"`
+	CertSource   string     `json:"certSource"`
+	Trusted      bool       `json:"trusted"`
+	RenewAt      *time.Time `json:"renewAt,omitempty"`
+	RenewPending bool       `json:"renewPending"`
+}
+
+func toPanelTLSJSON(p hosting.PanelTLS) panelTLSJSON {
+	return panelTLSJSON{
+		Enabled: p.Domain != "", Domain: p.Domain, Active: p.Live, Domains: p.Domains,
+		NotAfter: timeOrNil(p.NotAfter), Error: p.Error, FailedAt: timeOrNil(p.FailedAt),
+		Source: p.WantedSource(), CertSource: p.LiveSource(), Trusted: !p.Untrusted,
+		RenewAt: timeOrNil(p.RenewAt), RenewPending: p.RenewForced,
+	}
 }
 
 func timeOrNil(t time.Time) *time.Time {
@@ -81,6 +105,8 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 		TLS: tlsJSON{
 			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
+			Source: s.TLSSource, CertSource: s.TLSCertSource, Trusted: s.TLSTrusted,
+			RenewAt: timeOrNil(s.TLSRenewAt), RenewPending: s.TLSRenewForced,
 		},
 		PHPPrograms: s.PHPPrograms,
 		CreatedAt:   s.CreatedAt, UpdatedAt: s.UpdatedAt,
@@ -104,8 +130,18 @@ func siteFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "site_exists", "a site with this name exists")
 	case errors.Is(err, hosting.ErrDomainTaken):
 		writeError(w, http.StatusConflict, "domain_taken", err.Error())
+	case errors.Is(err, hosting.ErrDomainReserved):
+		writeError(w, http.StatusConflict, "domain_reserved", "this domain is the panel's own address")
 	case errors.Is(err, hosting.ErrNoTLS):
 		writeError(w, http.StatusConflict, "tls_unavailable", "certificates are not available on this panel")
+	case errors.Is(err, hosting.ErrNoPanel):
+		writeError(w, http.StatusConflict, "panel_address_missing", "the panel has no address of its own")
+	case errors.Is(err, hosting.ErrTooSoon):
+		writeError(w, http.StatusTooManyRequests, "renew_too_soon", "renewed less than 10 minutes ago, try again later")
+	case errors.Is(err, hosting.ErrCertInUse):
+		writeError(w, http.StatusConflict, "certificate_in_use", "turn HTTPS off before deleting the certificate")
+	case errors.Is(err, hosting.ErrNotLetsEncrypt):
+		writeError(w, http.StatusConflict, "not_letsencrypt", "only a site with HTTPS from Let's Encrypt can be renewed")
 	case errors.Is(err, hosting.ErrState):
 		writeError(w, http.StatusConflict, "site_busy", "the site is being created or deleted")
 	case errors.As(err, &ae):
@@ -412,10 +448,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			return
 		}
 
-		writeJSON(w, http.StatusOK, panelTLSJSON{
-			Enabled: p.Domain != "", Domain: p.Domain, Active: p.Live, Domains: p.Domains,
-			NotAfter: timeOrNil(p.NotAfter), Error: p.Error, FailedAt: timeOrNil(p.FailedAt),
-		})
+		writeJSON(w, http.StatusOK, toPanelTLSJSON(p))
 	}))
 
 	// Sends the stored state to the web server again, for example after a

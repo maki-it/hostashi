@@ -8,7 +8,9 @@ package ui
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/rand"
 	"embed"
+	"encoding/base64"
 	"io/fs"
 	"mime"
 	"net/http"
@@ -25,6 +27,29 @@ var embedded embed.FS
 // inline code, no eval. The API keeps its own stricter policy.
 const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; " +
 	"connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+
+// The code editor of the file manager (CodeMirror, ADR-0040) injects its
+// styles as <style> elements. index.html gets a fresh nonce per response
+// in the policy and in a meta tag, which the editor puts on those
+// elements; scripts stay 'self' only.
+const (
+	nonceMeta  = `<meta name="hostashi-style-nonce" content="" />`
+	nonceBytes = 18
+)
+
+// indexCSP is the policy of index.html with the style nonce.
+func indexCSP(nonce string) string {
+	return strings.Replace(csp, "style-src 'self'", "style-src 'self' 'nonce-"+nonce+"'", 1)
+}
+
+// newNonce returns a random nonce in base64 (URL alphabet, no padding: no
+// quote or "/" can end up in the policy or the meta tag).
+func newNonce() string {
+	b := make([]byte, nonceBytes)
+	_, _ = rand.Read(b) // crypto/rand.Read never fails (Go 1.24+)
+
+	return base64.RawURLEncoding.EncodeToString(b)
+}
 
 const notBuilt = `<!doctype html>
 <meta charset="utf-8">
@@ -99,6 +124,19 @@ func newHandler(root fs.FS) http.Handler {
 		}
 
 		h.Set("Cache-Control", "no-store")
+
+		// With a nonce meta tag, every response gets its own nonce; the
+		// page is small, so it is sent uncompressed.
+		if bytes.Contains(index.data, []byte(nonceMeta)) {
+			nonce := newNonce()
+			h.Set("Content-Security-Policy", indexCSP(nonce))
+
+			page := bytes.Replace(index.data, []byte(nonceMeta), []byte(`<meta name="hostashi-style-nonce" content="`+nonce+`" />`), 1)
+			serve(w, r, "index.html", file{data: page, ctyp: index.ctyp})
+
+			return
+		}
+
 		serve(w, r, "index.html", index)
 	})
 }

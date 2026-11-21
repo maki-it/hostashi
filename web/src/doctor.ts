@@ -30,6 +30,7 @@ const titles: Record<string, string> = {
   "system.proc": "Process privacy",
   "system.pool": "Home directories",
   "service.panel": "Panel",
+  "panel.mail": "Email",
   "service.nginx": "Web server",
   "service.mariadb": "MariaDB",
   "service.fail2ban": "Brute-force protection",
@@ -38,13 +39,16 @@ const titles: Record<string, string> = {
   "system.updates": "Security updates",
   "system.reboot": "Reboot",
   "system.php": "PHP after updates",
+  "system.files": "File manager",
   "system.ssh": "Admin SSH login",
   "system.sysctl": "Kernel settings",
+  "service.valkey": "Object cache (Valkey)",
   "site.home": "Home directory",
   "site.disk": "Disk use",
   "site.limits": "Resource limits",
   "site.tls": "Certificate",
   "site.php": "PHP version",
+  "site.cache": "Object cache",
 };
 
 export const checkTitle = (id: string) => titles[id] ?? id;

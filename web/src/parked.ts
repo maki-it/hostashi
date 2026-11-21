@@ -11,6 +11,11 @@ export type ParkedTLS = {
   notAfter: string | null;
   error?: string;
   failedAt?: string;
+  // As for sites (ADR-0039).
+  source?: "letsencrypt" | "custom";
+  certSource?: "" | "letsencrypt" | "custom";
+  trusted?: boolean;
+  renewPending?: boolean;
 };
 
 export type ParkedDomain = {
@@ -33,7 +38,9 @@ export function parkedMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case "domain_taken":
-        return "A site or the panel already uses this domain.";
+        return "A site already uses this domain.";
+      case "domain_reserved":
+        return "This domain is the panel's own address. Choose another domain.";
       case "tls_unavailable":
         return "Certificates are not available on this panel. Park the domain without HTTPS.";
       case "parked_not_found":

@@ -54,9 +54,26 @@ type Site struct {
 	// TLSError is the reason of the last failed attempt at TLSFailedAt.
 	TLSError    string
 	TLSFailedAt time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// TLSSource is where the certificate should come from (TLSLetsEncrypt
+	// or TLSCustom, ADR-0039); TLSCertSource is where the live one came
+	// from ("" without one). TLSTrusted is false for an own certificate
+	// accepted without a publicly trusted chain.
+	TLSSource     string
+	TLSCertSource string
+	TLSTrusted    bool
+	// TLSRenewAt is the last "renew now"; TLSRenewForced asks the renewal
+	// loop for a new certificate regardless of the expiry.
+	TLSRenewAt     time.Time
+	TLSRenewForced bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
+
+// Certificate sources of a site (ADR-0039).
+const (
+	TLSLetsEncrypt = "letsencrypt"
+	TLSCustom      = "custom"
+)
 
 // CreateSite stores a new site in state creating together with its domains.
 func (s *Store) CreateSite(ctx context.Context, name, pool, php string, domains []string, now time.Time) (Site, error) {
@@ -343,20 +360,22 @@ func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
 type scanner interface{ Scan(dest ...any) error }
 
 const siteColumns = `id, name, pool, state, php, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
-	maintenance, coalesce(maintenance_page, 0), maintenance_allow, created_at, updated_at`
+	maintenance, coalesce(maintenance_page, 0), maintenance_allow, tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
+	created_at, updated_at`
 
 func scanSite(r scanner) (Site, error) {
 	var (
 		st                         Site
 		tls, hsts, progs           int
 		disabled, live             int
-		maint                      int
+		maint, trusted, forced     int
 		tlsDomains, allow          string
 		notAfter, failed, cre, upd int64
+		renewAt                    int64
 	)
 
 	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
-		&maint, &st.MaintenancePage, &allow, &cre, &upd)
+		&maint, &st.MaintenancePage, &allow, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
 	}
@@ -370,6 +389,7 @@ func scanSite(r scanner) (Site, error) {
 	st.Maintenance, st.MaintenanceAllow = maint == 1, strings.Fields(allow)
 	st.TLSDomains = strings.Fields(tlsDomains)
 	st.TLSNotAfter, st.TLSFailedAt = unixOrZero(notAfter), unixOrZero(failed)
+	st.TLSTrusted, st.TLSRenewForced, st.TLSRenewAt = trusted == 1, forced == 1, unixOrZero(renewAt)
 	st.CreatedAt, st.UpdatedAt = time.Unix(cre, 0).UTC(), time.Unix(upd, 0).UTC()
 
 	return st, nil
@@ -419,10 +439,12 @@ func (s *Store) SetSiteTLS(ctx context.Context, name string, on bool, now time.T
 	return old == 1, nil
 }
 
-// SetSiteCert records a newly installed certificate and clears the error.
+// SetSiteCert records a newly installed Let's Encrypt certificate and
+// clears the error and a forced renewal.
 func (s *Store) SetSiteCert(ctx context.Context, name string, domains []string, notAfter, now time.Time) error {
 	res, err := s.w.ExecContext(ctx,
-		`UPDATE sites SET tls_domains = ?, tls_not_after = ?, tls_error = '', tls_failed_at = 0, updated_at = ? WHERE name = ?`,
+		`UPDATE sites SET tls_domains = ?, tls_not_after = ?, tls_error = '', tls_failed_at = 0, tls_cert_source = 'letsencrypt',
+			tls_trusted = 1, tls_renew_forced = 0, updated_at = ? WHERE name = ?`,
 		strings.Join(domains, " "), notAfter.Unix(), now.Unix(), name)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
@@ -509,11 +531,111 @@ func (s *Store) SetSiteTLSError(ctx context.Context, name, msg string, at time.T
 		msg = strings.ToValidUTF8(msg[:1000], "")
 	}
 
-	if _, err := s.w.ExecContext(ctx, `UPDATE sites SET tls_error = ?, tls_failed_at = ? WHERE name = ?`, msg, at.Unix(), name); err != nil {
+	if _, err := s.w.ExecContext(ctx, `UPDATE sites SET tls_error = ?, tls_failed_at = ?, tls_renew_forced = 0 WHERE name = ?`,
+		msg, at.Unix(), name); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 
 	return nil
+}
+
+// SetSiteCustomCert records an own certificate that is now live: the
+// source becomes TLSCustom and HTTPS is wanted.
+func (s *Store) SetSiteCustomCert(ctx context.Context, name string, domains []string, notAfter time.Time, trusted bool, now time.Time) error {
+	t := 0
+	if trusted {
+		t = 1
+	}
+
+	res, err := s.w.ExecContext(ctx,
+		`UPDATE sites SET tls = 1, tls_source = 'custom', tls_cert_source = 'custom', tls_domains = ?, tls_not_after = ?, tls_trusted = ?,
+			tls_error = '', tls_failed_at = 0, tls_renew_forced = 0, updated_at = ? WHERE name = ?`,
+		strings.Join(domains, " "), notAfter.Unix(), t, now.Unix(), name)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// SetSiteTLSSource sets where the certificate of a site should come from
+// and returns the previous source. The live certificate stays.
+func (s *Store) SetSiteTLSSource(ctx context.Context, name, source string, now time.Time) (string, error) {
+	if source != TLSLetsEncrypt && source != TLSCustom {
+		return "", fmt.Errorf("store: unknown certificate source %q", source)
+	}
+
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var old string
+	if err := tx.QueryRowContext(ctx, `SELECT tls_source FROM sites WHERE name = ?`, name).Scan(&old); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET tls_source = ?, tls_error = '', tls_failed_at = 0, updated_at = ? WHERE name = ?`,
+		source, now.Unix(), name); err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	return old, nil
+}
+
+// ClearSiteCert forgets the certificate of a site after it was deleted;
+// the source goes back to TLSLetsEncrypt.
+func (s *Store) ClearSiteCert(ctx context.Context, name string, now time.Time) error {
+	res, err := s.w.ExecContext(ctx,
+		`UPDATE sites SET tls_domains = '', tls_not_after = 0, tls_cert_source = '', tls_trusted = 1, tls_source = 'letsencrypt',
+			tls_renew_forced = 0, tls_error = '', tls_failed_at = 0, updated_at = ? WHERE name = ?`, now.Unix(), name)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// ErrTooSoon means "renew now" was asked for again within the pause.
+var ErrTooSoon = errors.New("store: asked again too soon")
+
+// RequestSiteRenew asks the renewal loop for a new certificate of a site,
+// at most once per gap: ErrTooSoon when the last request is younger.
+func (s *Store) RequestSiteRenew(ctx context.Context, name string, gap time.Duration, now time.Time) error {
+	res, err := s.w.ExecContext(ctx,
+		`UPDATE sites SET tls_renew_at = ?, tls_renew_forced = 1, tls_error = '', tls_failed_at = 0 WHERE name = ? AND tls_renew_at <= ?`,
+		now.Unix(), name, now.Add(-gap).Unix())
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n == 1 {
+		return nil
+	}
+
+	if _, err := s.SiteByName(ctx, name); err != nil {
+		return err
+	}
+
+	return ErrTooSoon
 }
 
 // DeleteSite removes a site and its domains. A missing site is not an error.

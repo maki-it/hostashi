@@ -60,8 +60,11 @@ func (s *Service) SetParked(ctx context.Context, actor int64, domain, page strin
 		return store.Parked{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 
+	// An own certificate needs no ACME client.
 	if tls && s.issuer == nil {
-		return store.Parked{}, ErrNoTLS
+		if cur, err := s.st.ParkedDomain(ctx, domain); err != nil || cur.TLSSource != store.TLSCustom {
+			return store.Parked{}, ErrNoTLS
+		}
 	}
 
 	ref := int64(0)
@@ -81,8 +84,8 @@ func (s *Service) SetParked(ctx context.Context, actor int64, domain, page strin
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if domain == s.panelDomain {
-		return store.Parked{}, fmt.Errorf("%w: %s is the panel's address", ErrDomainTaken, domain)
+	if err := s.checkReserved([]string{domain}); err != nil {
+		return store.Parked{}, err
 	}
 
 	if ref != 0 {
@@ -176,7 +179,7 @@ func (s *Service) renewParked(ctx context.Context) {
 			return
 		}
 
-		if !p.TLS || s.parkCovers(p, RenewBefore) || (!p.TLSFailedAt.IsZero() && s.now().Before(p.TLSFailedAt.Add(RetryAfter))) {
+		if !s.parkRenewDue(p) {
 			continue
 		}
 

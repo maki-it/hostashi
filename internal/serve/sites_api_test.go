@@ -23,6 +23,16 @@ type stubAgent struct {
 	webErr  error
 	deleted []string
 	pages   []agentapi.PageVersion
+	purges  []string
+}
+
+func (a *stubAgent) PageCachePurge(_ context.Context, user string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.purges = append(a.purges, user)
+
+	return nil
 }
 
 func (a *stubAgent) SiteCreate(_ context.Context, req agentapi.SiteCreateRequest) (agentapi.SiteInfo, error) {
@@ -64,6 +74,25 @@ func (a *stubAgent) TLSInstall(_ context.Context, user, _ string) (agentapi.TLSC
 
 	return agentapi.TLSCertInfo{Domains: []string{"blog.example.org"}, NotAfter: time.Now().Add(90 * 24 * time.Hour)}, nil
 }
+
+func (a *stubAgent) TLSCustomCSR(_ context.Context, user string, _ []string) (string, error) {
+	return "-----BEGIN CERTIFICATE REQUEST-----\n" + user + "\n-----END CERTIFICATE REQUEST-----\n", nil
+}
+
+// TLSUpload accepts the chain "good" for the site's domains.
+func (a *stubAgent) TLSUpload(_ context.Context, req agentapi.TLSUploadRequest) (agentapi.TLSCertInfo, error) {
+	if req.Chain != "good" {
+		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "the key does not belong to the certificate"}
+	}
+
+	return agentapi.TLSCertInfo{Domains: req.Domains, NotAfter: time.Now().Add(365 * 24 * time.Hour), Issuer: "Test CA", Fingerprint: "ab12", Trusted: true}, nil
+}
+
+func (a *stubAgent) TLSInfo(context.Context, string) (agentapi.TLSInfoResponse, error) {
+	return agentapi.TLSInfoResponse{Cert: &agentapi.TLSCertInfo{Domains: []string{"blog.example.org"}, Issuer: "Test CA", Fingerprint: "ab12", Trusted: true}}, nil
+}
+
+func (a *stubAgent) TLSDelete(context.Context, string) error { return nil }
 
 func (a *stubAgent) DBCreate(context.Context, string, string) error { return nil }
 
@@ -334,7 +363,7 @@ func TestSiteTLSOverHTTP(t *testing.T) {
 	}
 
 	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/tls", cookie: c, body: `{"enabled":true}`})
-	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"tls":{"enabled":true,"active":false,"hsts":false,"domains":[],"notAfter":null}`) {
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"tls":{"enabled":true,"active":false,"hsts":false,"domains":[],"notAfter":null,"source":"letsencrypt","certSource":"","trusted":true,"renewPending":false}`) {
 		t.Fatalf("tls on: %d %s", rec.Code, rec.Body)
 	}
 
@@ -452,7 +481,7 @@ func TestPanelTLSOverHTTP(t *testing.T) {
 	c := e.adminCookie(t)
 
 	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/panel/tls", cookie: c})
-	if rec.Code != http.StatusOK || rec.Body.String() != `{"enabled":false,"domain":"","active":false,"domains":[],"notAfter":null}`+"\n" {
+	if rec.Code != http.StatusOK || rec.Body.String() != `{"enabled":false,"domain":"","active":false,"domains":[],"notAfter":null,"source":"letsencrypt","certSource":"","trusted":true,"renewPending":false}`+"\n" {
 		t.Fatalf("without a panel name: %d %s", rec.Code, rec.Body)
 	}
 
@@ -471,5 +500,42 @@ func TestPanelTLSOverHTTP(t *testing.T) {
 
 	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/panel/tls"}); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("without login: %d", rec.Code)
+	}
+
+	// The panel's name is reserved (ADR-0042).
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"blog","domains":["panel.example.org"]}`})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "domain_reserved" {
+		t.Fatalf("site on the panel's name: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/parked-domains/panel.example.org", cookie: c, body: `{}`})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "domain_reserved" {
+		t.Fatalf("parked panel name: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestPanelNameOwner(t *testing.T) {
+	e := newAPIWithAgent(t, &stubAgent{})
+	c := e.adminCookie(t)
+	ctx := t.Context()
+
+	if owner, err := panelNameOwner(ctx, e.sites, "cp.example.org"); err != nil || owner != "" {
+		t.Fatalf("no sites: %q %v", owner, err)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"blog","domains":["blog.example.org","cp.example.org"]}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	if owner, err := panelNameOwner(ctx, e.sites, "cp.example.org"); err != nil || owner != "site blog" {
+		t.Fatalf("site: %q %v", owner, err)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/parked-domains/old.example.org", cookie: c, body: `{"tls":false}`}); rec.Code != http.StatusOK {
+		t.Fatalf("park: %d %s", rec.Code, rec.Body)
+	}
+
+	if owner, err := panelNameOwner(ctx, e.sites, "old.example.org"); err != nil || owner != "the parked domain old.example.org" {
+		t.Fatalf("parked: %q %v", owner, err)
 	}
 }

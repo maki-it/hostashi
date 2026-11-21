@@ -14,6 +14,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,9 +27,12 @@ import (
 	"github.com/maki-it/hostashi/internal/cpimport"
 	"github.com/maki-it/hostashi/internal/cpsource"
 	"github.com/maki-it/hostashi/internal/cronjobs"
+	"github.com/maki-it/hostashi/internal/filesunit"
 	"github.com/maki-it/hostashi/internal/firewall"
 	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/netaddrs"
+	"github.com/maki-it/hostashi/internal/objcache"
+	"github.com/maki-it/hostashi/internal/pagecache"
 	"github.com/maki-it/hostashi/internal/pages"
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
@@ -74,12 +78,20 @@ type Config struct {
 	Certs *certs.Store
 
 	// PanelPort is the HTTPS port of the panel's own address (ADR-0023);
-	// 0 means DefaultPanelPort.
+	// 0 means DefaultPanelPort, 443 shares the sites' port (ADR-0042).
 	PanelPort int
+
+	// DBToolPort is the HTTPS port of the web database tool (ADR-0038);
+	// 0 serves no tool.
+	DBToolPort int
 
 	// DB manages the sites' MariaDB databases. Run builds it from StateDir;
 	// without it db.* answer failed_precondition.
 	DB *mariadb.Manager
+
+	// DBToolDir is the ticket directory of the web database tool
+	// (ADR-0038); empty means agentapi.DBToolTicketDir.
+	DBToolDir string
 
 	// Backup serves backup.*. Run builds it with the fixed paths of a
 	// server; without it the operations answer failed_precondition.
@@ -126,10 +138,26 @@ type Config struct {
 	// failed_precondition.
 	Firewall *firewall.Manager
 
+	// panelACL hands the panel allowlist to nginx on port 443 (ADR-0042);
+	// Run sets it up.
+	panelACL *panelACL
+
 	// PHPInstall installs more PHP versions through the fixed install unit
 	// (ADR-0036). Run builds it; without it php.install answers
 	// failed_precondition.
 	PHPInstall *phpinstall.Manager
+
+	// PageCache keeps the sites' page cache directories (ADR-0046). Run
+	// builds it for nginx's worker user; without it a page cache is
+	// refused.
+	PageCache *pagecache.Dirs
+	// ObjectCache runs the sites' object caches (ADR-0045). Run builds it below
+	// StateDir; without it cache.* answer failed_precondition.
+	ObjectCache *objcache.Manager
+
+	// Files starts the sites' file manager sockets (ADR-0040). Run builds
+	// it; without it files.open answers failed_precondition.
+	Files *filesunit.Manager
 
 	// Doctor overrides what doctor.run reads, for tests. The zero value
 	// reads the server.
@@ -142,6 +170,13 @@ const DefaultPanelPort = 8443
 // PanelSocket is the panel's Unix socket that nginx proxies to. systemd
 // creates it (hostashi-panel.socket) for hostashi and www-data only.
 const PanelSocket = "/run/hostashi-panel.sock"
+
+// DBToolSocket is the FastCGI socket of the web database tool's PHP-FPM
+// (packaging/adminer), DBToolRoot its files (ADR-0038).
+const (
+	DBToolSocket = "/run/hostashi-adminer-fpm/fpm.sock"
+	DBToolRoot   = "/usr/share/hostashi/adminer"
+)
 
 // ErrNotRoot is returned when the agent is started without root.
 var ErrNotRoot = errors.New("agent must run as root")
@@ -216,7 +251,8 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, files: cfg.Files, log: log}
+		h.acl = cfg.panelACL
 		h.register(s)
 
 		if cfg.Backup != nil && cfg.Backup.Space == nil {
@@ -235,7 +271,14 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 		(&statsOps{h: h, disk: disk, cgroupRoot: root}).register(s)
 	}
 
-	registerDoctor(s, cfg.Doctor, cfg.StateDir, h, cfg.Firewall)
+	toolLog := cfg.Log
+	if toolLog == nil {
+		toolLog = slog.New(slog.DiscardHandler)
+	}
+
+	newDBTool(cfg.DB, cfg.DBToolDir, toolLog).register(s)
+
+	registerDoctor(s, cfg.Doctor, cfg.StateDir, h, cfg.Firewall, cfg.DBToolPort > 0)
 	registerBackup(s, cfg.Backup)
 	registerCloudPanel(s, cfg.CloudPanel, cfg.CloudPanelImport)
 	registerFirewall(s, cfg.Firewall)
@@ -259,8 +302,15 @@ type siteOps struct {
 	ssh    *sshaccess.Manager
 	quota  QuotaFS
 	slices *siteslice.Manager
+	cache  *pagecache.Dirs
+	objc   *objcache.Manager
+	files  *filesunit.Manager
 	log    *slog.Logger
 	mu     sync.Mutex
+	// acl hands the panel allowlist to nginx on 443; nil for none.
+	acl *panelACL
+	// sweepMu keeps the background deletes of purged caches apart.
+	sweepMu sync.Mutex
 }
 
 // register adds the operations. Only the errors listed in the map functions
@@ -315,6 +365,14 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			}
 		}
 
+		// The helper runs as the site user; it must be gone before the
+		// user is. Opening the files again starts it anew.
+		if h.files != nil {
+			if err := h.files.Remove(ctx, req.User); err != nil {
+				return agentapi.SiteDeleteResponse{}, fmt.Errorf("stop file manager of site %s: %w", req.User, err)
+			}
+		}
+
 		if err := m.Delete(ctx, req.User); err != nil {
 			return agentapi.SiteDeleteResponse{}, mapSiteError(err)
 		}
@@ -322,6 +380,8 @@ func (h *siteOps) register(s *agentrpc.Server) {
 		if siteErr == nil {
 			h.clearQuota(ctx, poolOf(home), site.UID)
 		}
+
+		h.removeCache(ctx, req.User)
 
 		if h.slices != nil {
 			uid := uint32(0) // not known: only the site's slice goes
@@ -337,6 +397,12 @@ func (h *siteOps) register(s *agentrpc.Server) {
 		if h.cron != nil {
 			if err := h.cron.Remove(ctx, req.User); err != nil {
 				h.log.ErrorContext(ctx, "remove cron jobs of deleted site", "site", req.User, "err", err)
+			}
+		}
+
+		if h.objc != nil {
+			if err := h.objc.Remove(ctx, req.User); err != nil {
+				h.log.ErrorContext(ctx, "remove object cache of deleted site", "site", req.User, "err", err)
 			}
 		}
 
@@ -374,12 +440,16 @@ func (h *siteOps) register(s *agentrpc.Server) {
 		if err == nil {
 			h.cronDisabled(ctx, req)
 			h.sshDisabled(ctx, req)
+			h.cacheDisabled(ctx, req)
 		}
 
 		return resp, err
 	})
 
 	h.registerCron(s)
+
+	h.registerCache(s)
+	h.registerFiles(s)
 
 	h.registerSSH(s)
 
@@ -393,8 +463,13 @@ func (h *siteOps) register(s *agentrpc.Server) {
 
 	agentrpc.Handle(s, agentapi.TLSCSR, h.tlsCSR)
 	agentrpc.Handle(s, agentapi.TLSInstall, h.tlsInstall)
+	agentrpc.Handle(s, agentapi.TLSUpload, h.tlsUpload)
+	agentrpc.Handle(s, agentapi.TLSInfo, h.tlsInfo)
+	agentrpc.Handle(s, agentapi.TLSDelete, h.tlsDelete)
 
 	agentrpc.Handle(s, agentapi.SnippetCheck, h.snippetCheck)
+
+	agentrpc.Handle(s, agentapi.PageCachePurge, h.pageCachePurge)
 
 	agentrpc.Handle(s, agentapi.PHPVersionsList, func(_ context.Context, _ agentrpc.Caller, _ agentapi.PHPVersionsRequest) (agentapi.PHPVersionsResponse, error) {
 		if h.php == nil || h.php.Installed == nil {
@@ -417,6 +492,11 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	if h.acl != nil {
+		h.acl.mu.Lock()
+		defer h.acl.mu.Unlock()
+	}
 
 	d := web.Desired{Sites: make([]web.Site, 0, len(req.Sites))}
 	pools := []php.Pool{}
@@ -457,6 +537,15 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			site.PHPSocket = h.php.Socket(s.User)
 		}
 
+		if s.PageCache != nil {
+			c, err := h.pageCacheFor(s.User, home, *s.PageCache)
+			if err != nil {
+				return agentapi.WebApplyResponse{}, err
+			}
+
+			site.PageCache = c
+		}
+
 		// Snippets are checked again by package web (ADR-0029); a disabled
 		// site or one in maintenance does not render them.
 		if sn := s.Snippets; sn != nil && !site.Disabled && site.Maintenance == nil {
@@ -482,6 +571,10 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			return agentapi.WebApplyResponse{}, err
 		}
 
+		if h.acl != nil {
+			h.acl.fill(panel)
+		}
+
 		d.Panel = panel
 	}
 
@@ -494,10 +587,17 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		}
 	}
 
+	prev, _, err := h.web.Current()
+	if err != nil {
+		return agentapi.WebApplyResponse{}, err
+	}
+
 	res, err := h.web.Apply(ctx, d)
 	if err != nil {
 		return agentapi.WebApplyResponse{Generation: res.Generation}, mapWebError(err)
 	}
+
+	h.applyCacheChanges(ctx, prev, d)
 
 	if h.php != nil {
 		// The web server change is live; a pool that could not be stopped
@@ -567,6 +667,14 @@ func (h *siteOps) panelFor(p agentapi.WebPanel) (*web.Panel, error) {
 
 	panel.Cert, panel.Key = h.certs.CertPath(agentapi.PanelCert), h.certs.KeyPath(agentapi.PanelCert)
 
+	if p.DBTool {
+		if len(h.web.Driver.DBToolListen) == 0 {
+			return nil, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the database tool is not installed on this server"}
+		}
+
+		panel.DBTool = true
+	}
+
 	return panel, nil
 }
 
@@ -591,7 +699,12 @@ func (h *siteOps) tlsCSR(_ context.Context, _ agentrpc.Caller, req agentapi.TLSC
 		return agentapi.TLSCSRResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site"}
 	}
 
-	csr, err := h.certs.CSR(req.User, req.Domains)
+	create := h.certs.CSR
+	if req.Custom {
+		create = h.certs.CustomCSR
+	}
+
+	csr, err := create(req.User, req.Domains)
 	if err != nil {
 		return agentapi.TLSCSRResponse{}, mapCertError(err)
 	}
@@ -620,8 +733,136 @@ func (h *siteOps) tlsInstall(_ context.Context, _ agentrpc.Caller, req agentapi.
 	return agentapi.TLSCertInfo{Domains: info.Domains, NotAfter: info.NotAfter}, nil
 }
 
-func mapCertError(err error) error {
+func (h *siteOps) tlsUpload(ctx context.Context, _ agentrpc.Caller, req agentapi.TLSUploadRequest) (agentapi.TLSCertInfo, error) {
+	if h.certs == nil {
+		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "HTTPS is not available on this server"}
+	}
+
+	if !h.knownCertName(req.User) {
+		return agentapi.TLSCertInfo{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site"}
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	info, err := h.certs.Upload(req.User, certs.Upload{
+		Chain: []byte(req.Chain), Key: []byte(req.Key), Domains: req.Domains, AllowUntrusted: req.AllowUntrusted,
+	})
+	if err != nil {
+		return agentapi.TLSCertInfo{}, mapCertError(err)
+	}
+
+	h.log.InfoContext(ctx, "own certificate installed", "name", req.User, "fingerprint", info.Fingerprint, "trusted", info.Trusted)
+
+	return certInfo(info), nil
+}
+
+func (h *siteOps) tlsInfo(_ context.Context, _ agentrpc.Caller, req agentapi.TLSNameRequest) (agentapi.TLSInfoResponse, error) {
+	if h.certs == nil {
+		return agentapi.TLSInfoResponse{}, nil
+	}
+
+	var res agentapi.TLSInfoResponse
+
+	info, err := h.certs.Details(req.User)
+
 	switch {
+	case err == nil:
+		ci := certInfo(info)
+		res.Cert = &ci
+	case !errors.Is(err, certs.ErrNotFound):
+		return agentapi.TLSInfoResponse{}, mapCertError(err)
+	}
+
+	csr, err := h.certs.PendingCSR(req.User)
+	if err != nil {
+		return agentapi.TLSInfoResponse{}, mapCertError(err)
+	}
+
+	res.CSR = string(csr)
+
+	return res, nil
+}
+
+func (h *siteOps) tlsDelete(ctx context.Context, _ agentrpc.Caller, req agentapi.TLSNameRequest) (agentapi.TLSDeleteResponse, error) {
+	if h.certs == nil {
+		return agentapi.TLSDeleteResponse{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "HTTPS is not available on this server"}
+	}
+
+	// web.apply reads the pair under the same lock.
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.web != nil {
+		cur, _, err := h.web.Current()
+		if err != nil {
+			return agentapi.TLSDeleteResponse{}, err
+		}
+
+		if servesTLS(cur, req.User) {
+			return agentapi.TLSDeleteResponse{}, &agentrpc.Error{
+				Code: agentrpc.CodePrecondition, Message: "the certificate is still served, turn HTTPS off with web.apply first",
+			}
+		}
+	}
+
+	if err := h.certs.Delete(req.User); err != nil {
+		if errors.Is(err, certs.ErrNotFound) {
+			return agentapi.TLSDeleteResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "no certificate"}
+		}
+
+		return agentapi.TLSDeleteResponse{}, mapCertError(err)
+	}
+
+	h.log.InfoContext(ctx, "certificate deleted", "name", req.User)
+
+	return agentapi.TLSDeleteResponse{}, nil
+}
+
+// servesTLS reports whether the web state d serves the certificate name.
+func servesTLS(d web.Desired, name string) bool {
+	if name == agentapi.PanelCert {
+		return d.Panel != nil && d.Panel.Cert != ""
+	}
+
+	for _, p := range d.Parked {
+		if p.Name == name && p.Cert != "" {
+			return true
+		}
+	}
+
+	for _, s := range d.Sites {
+		if s.User == name && s.Cert != "" {
+			return true
+		}
+	}
+
+	return false
+}
+
+func certInfo(i certs.Info) agentapi.TLSCertInfo {
+	return agentapi.TLSCertInfo{
+		Domains: i.Domains, NotAfter: i.NotAfter, NotBefore: i.NotBefore,
+		Issuer: i.Issuer, Fingerprint: i.Fingerprint, Trusted: i.Trusted,
+	}
+}
+
+func mapCertError(err error) error {
+	var (
+		missing   *certs.MissingNamesError
+		untrusted *certs.UntrustedError
+	)
+
+	switch {
+	case errors.As(err, &missing):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the certificate does not cover " + strings.Join(missing.Names, ", ")}
+	case errors.As(err, &untrusted):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the chain is not publicly trusted: " + untrusted.Reason}
+	case errors.Is(err, certs.ErrKeyType), errors.Is(err, certs.ErrKeyMismatch), errors.Is(err, certs.ErrEncrypted),
+		errors.Is(err, certs.ErrValidity), errors.Is(err, certs.ErrUsage):
+		return &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: strings.TrimPrefix(err.Error(), "certs: ")}
+	case errors.Is(err, certs.ErrNoCustomKey):
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "no key given and no pending CSR"}
 	case errors.Is(err, certs.ErrInvalid):
 		return &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "invalid certificate or request"}
 	case errors.Is(err, certs.ErrNoPendingKey):
@@ -762,7 +1003,7 @@ func webGID(log *slog.Logger) uint32 {
 }
 
 // openWeb builds the production reconciler, or nil when nginx is missing.
-func openWeb(ctx context.Context, stateDir string, panelPort int, log *slog.Logger) *web.Reconciler {
+func openWeb(ctx context.Context, stateDir string, panelPort, dbToolPort int, log *slog.Logger) *web.Reconciler {
 	if _, err := os.Stat(webctl.Nginx); err != nil {
 		if log != nil {
 			log.WarnContext(ctx, "nginx not installed, web operations disabled", "path", webctl.Nginx)
@@ -800,8 +1041,22 @@ func openWeb(ctx context.Context, stateDir string, panelPort int, log *slog.Logg
 	pp := strconv.Itoa(panelPort)
 
 	listen, listenTLS, listenPanel := []string{"80"}, []string{"443"}, []string{pp}
+
+	var listenTool []string
+	if dbToolPort != 0 {
+		listenTool = []string{strconv.Itoa(dbToolPort)}
+	}
+
 	if ipv6Available() {
 		listen, listenTLS, listenPanel = append(listen, "[::]:80"), append(listenTLS, "[::]:443"), append(listenPanel, "[::]:"+pp)
+		if dbToolPort != 0 {
+			listenTool = append(listenTool, "[::]:"+strconv.Itoa(dbToolPort))
+		}
+	}
+
+	// On 443 the panel shares the sites' listeners by host name (ADR-0042).
+	if panelPort == 443 {
+		listenPanel = listenTLS
 	}
 
 	return &web.Reconciler{
@@ -823,6 +1078,9 @@ func openWeb(ctx context.Context, stateDir string, panelPort int, log *slog.Logg
 			ACMERoot:      ACMERoot,
 			PanelListen:   listenPanel,
 			PanelUpstream: PanelSocket,
+			DBToolListen:  listenTool,
+			DBToolSocket:  DBToolSocket,
+			DBToolRoot:    DBToolRoot,
 		},
 	}
 }
@@ -896,7 +1154,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if cfg.Web == nil {
-		cfg.Web = openWeb(ctx, cfg.StateDir, cfg.PanelPort, cfg.Log)
+		cfg.Web = openWeb(ctx, cfg.StateDir, cfg.PanelPort, cfg.DBToolPort, cfg.Log)
 	}
 
 	if cfg.PHP == nil {
@@ -917,6 +1175,11 @@ func Run(ctx context.Context, cfg Config) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	// Tickets of an earlier run name users that openDB drops.
+	if err := clearTickets(cfg.DBToolDir); err != nil && cfg.Log != nil {
+		cfg.Log.WarnContext(ctx, "remove leftover database tool tickets", "err", err)
 	}
 
 	if cfg.Backup == nil {
@@ -958,6 +1221,22 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 	}
 
+	if cfg.ObjectCache == nil {
+		cfg.ObjectCache = &objcache.Manager{
+			Dir:   filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "valkey"),
+			Slice: siteslice.Name, Ctl: phpctl.CacheController{}, Log: cfg.Log,
+		}
+
+		// Like PHP: a failure is logged, cache.apply retries.
+		if err := cfg.ObjectCache.Recover(ctx); err != nil && cfg.Log != nil {
+			cfg.Log.ErrorContext(ctx, "object cache recovery failed", "err", err)
+		}
+	}
+
+	if cfg.Files == nil {
+		cfg.Files = &filesunit.Manager{UnitDir: filesunit.DefaultUnitDir, Ctl: phpctl.FilesController{}, Log: cfg.Log}
+	}
+
 	if cfg.PHPInstall == nil {
 		cfg.PHPInstall = &phpinstall.Manager{Units: phpctl.InstallUnits{}, Installed: phpctl.Installed}
 	}
@@ -993,12 +1272,23 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 	}
 
+	// After both recoveries: nginx gets the firewall's panel allowlist
+	// when the panel is on 443, and every later firewall change with it.
+	cfg.panelACL = &panelACL{web: cfg.Web}
+	if err := cfg.Firewall.SetPanelHook(ctx, cfg.panelACL.set); err != nil && cfg.Log != nil {
+		cfg.Log.ErrorContext(ctx, "panel allowlist in nginx", "err", err)
+	}
+
 	if err := prepareSocketDir(filepath.Dir(cfg.Socket), gid); err != nil {
 		return err
 	}
 
 	if cfg.Disk == nil {
 		cfg.Disk = &sitestats.DiskCache{}
+	}
+
+	if cfg.PageCache == nil {
+		cfg.PageCache = openPageCache()
 	}
 
 	s := NewServer(cfg, uid)

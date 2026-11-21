@@ -10,8 +10,11 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"math/big"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,4 +141,130 @@ func TestPanelCertificate(t *testing.T) {
 		Panel: &agentapi.WebPanel{Domain: "panel.example.com"},
 	})
 	wantCode(t, err, agentrpc.CodeInvalidArgument)
+}
+
+// selfSigned returns a self-signed leaf for names and its PKCS #8 key.
+func selfSigned(t *testing.T, names ...string) (chain, key string) {
+	t.Helper()
+
+	k, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(3), Subject: pkix.Name{CommonName: names[0]}, DNSNames: names,
+		NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(30 * 24 * time.Hour),
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &k.PublicKey, k)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keyDER, _ := x509.MarshalPKCS8PrivateKey(k)
+
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})),
+		string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}))
+}
+
+func TestOwnCertificateOperations(t *testing.T) {
+	store := &certs.Store{Dir: filepath.Join(t.TempDir(), "tls"), Roots: x509.NewCertPool()}
+	base := filepath.Join(t.TempDir(), "web")
+	rec := &web.Reconciler{Base: base, Driver: &web.Nginx{ListenTLS: []string{"443"}}}
+	c, _ := startSiteAgentCfg(t, Config{Web: rec, Certs: store})
+	ctx := context.Background()
+	domains := []string{"blog.example.com", "www.blog.example.com"}
+
+	chain, key := selfSigned(t, "*.blog.example.com", "blog.example.com")
+
+	_, err := agentapi.TLSUpload.Call(ctx, c, agentapi.TLSUploadRequest{User: "blog", Chain: chain, Key: key, Domains: domains})
+	wantCode(t, err, agentrpc.CodeNotFound)
+
+	if _, err := agentapi.SiteCreate.Call(ctx, c, agentapi.SiteCreateRequest{User: "blog"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Self-signed: refused unless allowed.
+	_, err = agentapi.TLSUpload.Call(ctx, c, agentapi.TLSUploadRequest{User: "blog", Chain: chain, Key: key, Domains: domains})
+	wantCode(t, err, agentrpc.CodePrecondition)
+
+	// A name it does not cover is named in the error.
+	_, err = agentapi.TLSUpload.Call(ctx, c, agentapi.TLSUploadRequest{
+		User: "blog", Chain: chain, Key: key, Domains: []string{"blog.example.com", "shop.example.com"}, AllowUntrusted: true,
+	})
+
+	var rpcErr *agentrpc.Error
+	if !errors.As(err, &rpcErr) || rpcErr.Code != agentrpc.CodePrecondition || !strings.Contains(rpcErr.Message, "shop.example.com") {
+		t.Fatalf("missing name: %v", err)
+	}
+
+	// A wrong key: invalid argument, and the message holds no key material.
+	_, otherKey := selfSigned(t, "blog.example.com")
+
+	_, err = agentapi.TLSUpload.Call(ctx, c, agentapi.TLSUploadRequest{User: "blog", Chain: chain, Key: otherKey, Domains: domains, AllowUntrusted: true})
+	wantCode(t, err, agentrpc.CodeInvalidArgument)
+
+	if strings.Contains(err.Error(), "PRIVATE") {
+		t.Fatalf("key in error: %v", err)
+	}
+
+	info, err := agentapi.TLSUpload.Call(ctx, c, agentapi.TLSUploadRequest{User: "blog", Chain: chain, Key: key, Domains: domains, AllowUntrusted: true})
+	if err != nil || info.Trusted || info.Fingerprint == "" || info.Issuer != "*.blog.example.com" {
+		t.Fatalf("upload %+v %v", info, err)
+	}
+
+	// The wildcard certificate is good enough for web.apply.
+	if ok, err := store.Covers("blog", domains); !ok || err != nil {
+		t.Fatalf("covers %v %v", ok, err)
+	}
+
+	// A custom CSR is kept and shown until its certificate comes.
+	csr, err := agentapi.TLSCSR.Call(ctx, c, agentapi.TLSCSRRequest{User: "blog", Domains: domains, Custom: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := agentapi.TLSInfo.Call(ctx, c, agentapi.TLSNameRequest{User: "blog"})
+	if err != nil || got.Cert == nil || got.Cert.Fingerprint != info.Fingerprint || got.CSR != csr.CSR {
+		t.Fatalf("info %+v %v", got, err)
+	}
+
+	// While nginx serves the pair over HTTPS, it cannot be deleted.
+	fakeLiveGeneration(t, base, `{"sites":[{"user":"blog","domains":["blog.example.com"],"root":"/x","cert":"/c","key":"/k"}]}`)
+
+	_, err = agentapi.TLSDelete.Call(ctx, c, agentapi.TLSNameRequest{User: "blog"})
+	wantCode(t, err, agentrpc.CodePrecondition)
+
+	if err := os.Remove(filepath.Join(base, "current")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := agentapi.TLSDelete.Call(ctx, c, agentapi.TLSNameRequest{User: "blog"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err = agentapi.TLSInfo.Call(ctx, c, agentapi.TLSNameRequest{User: "blog"})
+	if err != nil || got.Cert != nil || got.CSR != "" {
+		t.Fatalf("info after delete %+v %v", got, err)
+	}
+
+	_, err = agentapi.TLSDelete.Call(ctx, c, agentapi.TLSNameRequest{User: "blog"})
+	wantCode(t, err, agentrpc.CodeNotFound)
+}
+
+func TestServesTLS(t *testing.T) {
+	d := web.Desired{
+		Sites:  []web.Site{{User: "blog", Cert: "/c"}, {User: "shop"}},
+		Parked: []web.Parked{{Name: "_park-1", Cert: "/c"}, {Name: "_park-2"}},
+		Panel:  &web.Panel{Domain: "panel.example.com"},
+	}
+
+	for name, want := range map[string]bool{"blog": true, "shop": false, "_park-1": true, "_park-2": false, agentapi.PanelCert: false, "other": false} {
+		if got := servesTLS(d, name); got != want {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
+
+	d.Panel.Cert = "/c"
+	if !servesTLS(d, agentapi.PanelCert) {
+		t.Fatal("panel")
+	}
 }

@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -98,7 +99,12 @@ func TestFixtureCorpus(t *testing.T) {
 
 func TestMappedDetails(t *testing.T) {
 	dir, _ := build(t)
-	got := byVhost(run(t, dir))
+	rep := run(t, dir)
+	got := byVhost(rep)
+
+	if !slices.ContainsFunc(rep.Global, func(f scan.Finding) bool { return f.Code == "redis_detected" }) {
+		t.Errorf("shared Redis not noted: %+v", rep.Global)
+	}
 
 	a := got["alpha-shop.de.conf"]
 	if a.User != "alpha" || a.DocRoot != "/home/alpha/htdocs/alpha-shop.de" {
@@ -147,6 +153,14 @@ func TestMappedDetails(t *testing.T) {
 
 	if s := got["theta-app.de.conf"]; !hasCode(s, "vhost_cache_tier") || s.Type != "wordpress" {
 		t.Errorf("cache tier: %+v", s.Findings)
+	}
+
+	if s := got["theta-app.de.conf"]; !s.ObjectCache || !hasCode(s, "object_cache") {
+		t.Errorf("object cache drop-in not found: %+v", s.Findings)
+	}
+
+	if s := got["alpha-shop.de.conf"]; s.ObjectCache {
+		t.Errorf("object cache on a site without a drop-in")
 	}
 
 	if s := got["kappa-portal.de.conf"]; s.Upstream != "https://10.0.0.5:8080" {

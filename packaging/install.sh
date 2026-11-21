@@ -12,15 +12,18 @@
 #
 # Options:
 #   --binary PATH        the hostashi binary to install (required for apply)
-#   --public-url URL     address users open the panel at, e.g. https://panel.example.com:8443
-#                        (enables passkeys). With a host name, nginx serves the panel there over
-#                        HTTPS with a Let's Encrypt certificate (ADR-0023); the port is the panel port.
-#   --panel-port PORT    HTTPS port of the panel, default 8443 (TCP and UDP must be open)
+#   --panel-domain NAME  host name users open the panel at, e.g. panel.example.com (enables
+#                        passkeys). nginx serves the panel there over HTTPS on the panel port with
+#                        a Let's Encrypt certificate (ADR-0023, ADR-0042). Without it, the panel is
+#                        reachable only through an SSH tunnel to --listen.
+#   --panel-port PORT    HTTPS port of the panel, default 8443 (TCP and UDP must be open). 443
+#                        shares the sites' port by host name and needs --panel-domain (ADR-0042)
 #   --listen ADDR        panel listen address, default 127.0.0.1:8080 (loopback only: SSH tunnel)
 #   --allow-untested     accept an OS release that is not on the supported list
 #   --no-quota           do not enable disk quota (sites then get no disk limit)
 #   --firewall-allow P   also open port P to the internet, as PORT/tcp or PORT/udp (repeatable)
 #   --no-firewall        no Hostashi firewall (only behind a provider firewall); removes it if present
+#   --no-db-tool         no web database tool (Adminer on port 8444, ADR-0038); removes it if present
 #   --php-versions LIST  more PHP versions from sury.org next to the distribution's, comma-separated
 #                        from 7.4, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6 (7.4, 8.1 and 8.2 are legacy). Kept for later runs
 #
@@ -37,6 +40,10 @@
 # every day without a reboot (ADR-0033). More PHP versions come from
 # sury.org only with --php-versions, with the distribution's PHP pinned as
 # the default (ADR-0019).
+#
+# The web database tool is Adminer, pinned by SHA-256 (packaging/adminer),
+# in a PHP-FPM pool of its own under the system user hostashi-adminer;
+# nginx serves it on port 8444 for the panel's host name (ADR-0038).
 #
 # Exit codes: 0 ok, 2 refused by preflight (server unchanged), 3 a step
 # failed (re-running is safe), 64 usage.
@@ -63,8 +70,9 @@ OS_RELEASE=${HOSTASHI_OS_RELEASE:-/etc/os-release}
 BIN=/usr/local/bin/hostashi
 
 PHP_REQUEST=""
-MODE=plan YES=no BINARY="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no NO_FIREWALL=no
+MODE=plan YES=no BINARY="" PANEL_DOMAIN="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no NO_FIREWALL=no
 FW_ALLOW=()
+NO_DB_TOOL=no DB_TOOL_PORT=8444
 PHP_REQUEST_SET=no
 CHANGES=0 BINARY_CHANGED=no CONFIG_CHANGED=no
 
@@ -110,6 +118,24 @@ file_matches() {
 dir_ok() { [ -d "$1" ] && [ ! -L "$1" ] && [ "$(stat -c '%a %U:%G' "$1")" = "$2 $3" ]; }
 
 # ------------------------------------------------------------- preflight
+# valid_domain NAME: a host name as agentapi.ValidateDomain accepts it, in
+# lower case: at least two labels of letters, digits and inner hyphens,
+# at most 253 characters, and a top-level label that is not all digits.
+valid_domain() {
+  local d=$1 l
+  [ ${#d} -ge 3 ] && [ ${#d} -le 253 ] || return 1
+  [[ "$d" == *.* ]] || return 1
+  [[ "$d" =~ ^[a-z0-9.-]+$ ]] || return 1
+  local IFS=.
+  # shellcheck disable=SC2086 # split on dots on purpose
+  set -- $d
+  [ "${d: -1}" != . ] || return 1
+  for l in "$@"; do
+    [[ "$l" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] || return 1
+  done
+  ! [[ "${!#}" =~ ^[0-9]+$ ]]
+}
+
 preflight() {
   local problems=0
   fail() { log "preflight: FAIL: $*"; problems=$((problems + 1)); }
@@ -132,28 +158,23 @@ preflight() {
     *) fail "--listen '$LISTEN' must be a loopback address (nginx serves the panel over HTTPS)";;
   esac
   case "$PANEL_PORT" in
-    80 | 443) fail "--panel-port $PANEL_PORT is taken by the sites";;
+    80) fail "--panel-port 80 is taken by the sites";;
     [1-9] | [1-9][0-9] | [1-9][0-9][0-9] | [1-9][0-9][0-9][0-9] | [1-9][0-9][0-9][0-9][0-9]) ;;
     *) fail "--panel-port '$PANEL_PORT' is not a port";;
   esac
   [ "$PANEL_PORT" -le 65535 ] || fail "--panel-port '$PANEL_PORT' is not a port"
-  if [ -n "$PUBLIC_URL" ]; then
-    printf '%s' "$PUBLIC_URL" | grep -Eq '^(https://[A-Za-z0-9.-]+(:[0-9]+)?|http://localhost(:[0-9]+)?)/?$' ||
-      fail "--public-url '$PUBLIC_URL' must look like https://panel.example.com:$PANEL_PORT"
-    PUBLIC_URL=${PUBLIC_URL%/}
-    # A host name (not localhost, not an IP) is served by nginx on the panel port.
-    local host=${PUBLIC_URL#https://} port=""
-    host=${host%%:*}
-    case "$PUBLIC_URL" in https://*:*) port=${PUBLIC_URL##*:};; esac
-    if [ "${PUBLIC_URL#https://}" != "$PUBLIC_URL" ] && [ "$host" != localhost ] &&
-      ! printf '%s' "$host" | grep -Eq '^[0-9.]+$'; then
-      if [ -z "$port" ]; then
-        PUBLIC_URL="$PUBLIC_URL:$PANEL_PORT"
-        log "the panel is served on port $PANEL_PORT: public URL is $PUBLIC_URL"
-      elif [ "$port" != "$PANEL_PORT" ]; then
-        fail "--public-url port $port differs from --panel-port $PANEL_PORT"
-      fi
-    fi
+  [ "$NO_DB_TOOL" = yes ] || [ "$PANEL_PORT" != "$DB_TOOL_PORT" ] ||
+    fail "--panel-port $PANEL_PORT is the port of the database tool; choose another or add --no-db-tool"
+  if [ -n "$PANEL_DOMAIN" ]; then
+    PANEL_DOMAIN=$(printf '%s' "$PANEL_DOMAIN" | tr '[:upper:]' '[:lower:]')
+    valid_domain "$PANEL_DOMAIN" ||
+      fail "--panel-domain '$PANEL_DOMAIN' must be a host name like panel.example.com (no scheme, port or path)"
+    PUBLIC_URL=https://$PANEL_DOMAIN
+    [ "$PANEL_PORT" = 443 ] || PUBLIC_URL=$PUBLIC_URL:$PANEL_PORT
+    log "the panel is served at $PUBLIC_URL"
+  elif [ "$PANEL_PORT" = 443 ]; then
+    # nginx tells the panel from the sites on 443 by its name only.
+    fail "--panel-port 443 needs --panel-domain"
   fi
 
   local a
@@ -200,7 +221,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config ssh harden sysctl nginx php phpversions mariadb backup units service fail2ban firewall updates quota"
+STEPS="account dirs key binary config ssh harden sysctl nginx php phpversions valkey mariadb dbtool backup units service fail2ban firewall updates quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -264,6 +285,7 @@ env_file() {
   echo "HOSTASHI_LISTEN=$LISTEN"
   echo "HOSTASHI_PUBLIC_URL=$PUBLIC_URL"
   echo "HOSTASHI_PANEL_PORT=$PANEL_PORT"
+  echo "HOSTASHI_DB_TOOL_PORT=$(db_tool_port)"
 }
 chk_config() { env_file | file_matches /etc/hostashi/hostashi.env 0640 root:hostashi || { echo "settings differ"; return 1; }; }
 do_config() { env_file | write_file /etc/hostashi/hostashi.env 0640 root:hostashi; [ $? -le 1 ] && CONFIG_CHANGED=yes; }
@@ -418,8 +440,17 @@ do_nginx() {
 }
 
 # PHP from the distribution (Debian 13: 8.4, Ubuntu 26.04: 8.5) with the
-# extensions of spike S5. The agent runs one FPM master per site.
+# extensions of spike S5, and phpredis for the object cache (ADR-0045). The
+# agent runs one FPM master per site.
 PHP_PKGS=(php-fpm php-cli php-mysql php-curl php-gd php-mbstring php-xml php-zip php-intl php-bcmath)
+# phpredis by its versioned name: sury.org's php<version>-redis provide
+# php-redis and make apt remove the distribution's php-redis, while
+# php<distro version>-redis stays (ADR-0036).
+distro_php_redis() {
+  local dep
+  dep=$(dpkg-query -W -f='${Depends}' php-fpm 2>/dev/null) || return 1
+  case "$dep" in php[0-9].[0-9]-fpm) dep=${dep#php}; echo "php${dep%-fpm}-redis";; *) return 1;; esac
+}
 # Every version the agent may run a site on (agentapi.PHPVersions); a unit
 # template is installed for each, whether the version is installed or not.
 PHP_VERSIONS=(7.4 8.1 8.2 8.3 8.4 8.5 8.6)
@@ -436,6 +467,8 @@ distro_fpm_units() {
 chk_php() {
   local p u
   for p in "${PHP_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
+  p=$(distro_php_redis) || { echo "cannot tell the PHP version of php-fpm"; return 1; }
+  pkg_installed "$p" || { echo "$p not installed"; return 1; }
   for u in $(distro_fpm_units); do
     [ "$(systemctl is-enabled "$u" 2>/dev/null)" != enabled ] || { echo "$u is enabled"; return 1; }
     [ "$(systemctl is-active "$u" 2>/dev/null)" != active ] || { echo "$u is running"; return 1; }
@@ -444,7 +477,9 @@ chk_php() {
 do_php() {
   apt-get update -qq >>"$LOG" 2>&1 &&
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${PHP_PKGS[@]}" >>"$LOG" 2>&1 || return 1
-  local u
+  local u r
+  r=$(distro_php_redis) || return 1
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "$r" >>"$LOG" 2>&1 || return 1
   for u in $(distro_fpm_units); do
     systemctl disable --now "$u" >>"$LOG" 2>&1 || return 1
   done
@@ -490,6 +525,27 @@ do_phpversions() {
   fi
 }
 
+# Valkey from the distribution for the sites' object caches (ADR-0045). The
+# agent runs one instance per site that turns the cache on, through the
+# template hostashi-valkey@.service (step units). The package's own service
+# would listen on 127.0.0.1:6379 for everyone: it is stopped and masked, so
+# a package update cannot start it again.
+VALKEY_PKGS=(valkey-server)
+VALKEY_DEFAULT_UNIT=valkey-server.service
+
+chk_valkey() {
+  local p
+  for p in "${VALKEY_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
+  [ "$(systemctl is-enabled "$VALKEY_DEFAULT_UNIT" 2>/dev/null)" = masked ] || { echo "$VALKEY_DEFAULT_UNIT is not masked"; return 1; }
+  [ "$(systemctl is-active "$VALKEY_DEFAULT_UNIT" 2>/dev/null)" != active ] || { echo "$VALKEY_DEFAULT_UNIT is running"; return 1; }
+}
+do_valkey() {
+  apt-get update -qq >>"$LOG" 2>&1 &&
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${VALKEY_PKGS[@]}" >>"$LOG" 2>&1 || return 1
+  systemctl disable --now "$VALKEY_DEFAULT_UNIT" >>"$LOG" 2>&1 || return 1
+  systemctl mask "$VALKEY_DEFAULT_UNIT" >>"$LOG" 2>&1
+}
+
 # MariaDB from the distribution (ADR-0024). The package defaults stay: it
 # listens on 127.0.0.1 only and root logs in only through the Unix socket
 # (unix_socket), which is how the agent connects. No password is set. One
@@ -523,6 +579,102 @@ do_mariadb() {
   else
     systemctl start mariadb.service >>"$LOG" 2>&1
   fi
+}
+
+# The web database tool (ADR-0038): Adminer's single MySQL-only file,
+# pinned by its SHA-256 in packaging/adminer/SHA256SUMS, with Hostashi's
+# index.php and tool.php that allow only one-time ticket logins. Its own
+# PHP-FPM runs the distribution's PHP under hostashi-adminer, a system user
+# without home and shell; the agent writes the tickets into a directory
+# that systemd-tmpfiles creates at boot. nginx serves it on DB_TOOL_PORT.
+DBTOOL_SRC=${HOSTASHI_DBTOOL_SRC:-$HERE/adminer}
+DBTOOL_USER=hostashi-adminer
+DBTOOL_DIR=/usr/share/hostashi/adminer
+DBTOOL_FILES=(adminer.php index.php tool.php)
+DBTOOL_CONF=/etc/hostashi-adminer/php-fpm.conf
+DBTOOL_TMPFILES=/etc/tmpfiles.d/hostashi-adminer.conf
+DBTOOL_TICKETS=/run/hostashi-adminer/tickets
+DBTOOL_UNIT=hostashi-adminer.service
+DBTOOL_CHANGED=no
+
+db_tool_port() { if [ "$NO_DB_TOOL" = yes ]; then echo 0; else echo "$DB_TOOL_PORT"; fi; }
+
+# dbtool_php prints the distribution's PHP version, from the php-fpm
+# package's dependency (php8.4-fpm on Debian 13, php8.5-fpm on Ubuntu 26.04).
+dbtool_php() {
+  dpkg-query -W -f='${Depends}' php-fpm 2>/dev/null | grep -oE 'php[0-9]+\.[0-9]+-fpm' | head -n1 | sed -e 's/^php//' -e 's/-fpm$//'
+}
+dbtool_unit() {
+  local v
+  v=$(dbtool_php)
+  [ -n "$v" ] || { echo "no PHP-FPM version found (php-fpm package)" >&2; return 1; }
+  sed "s/@VERSION@/$v/g" "$DBTOOL_SRC/$DBTOOL_UNIT"
+}
+dbtool_pinned() { (cd "$DBTOOL_SRC" && sha256sum --quiet --strict -c SHA256SUMS) >/dev/null 2>&1; }
+
+chk_dbtool() {
+  local f unit
+  if [ "$NO_DB_TOOL" = yes ]; then
+    [ ! -e "/etc/systemd/system/$DBTOOL_UNIT" ] || { echo "$DBTOOL_UNIT installed, --no-db-tool given"; return 1; }
+    [ ! -e "$DBTOOL_DIR" ] || { echo "$DBTOOL_DIR present, --no-db-tool given"; return 1; }
+    return 0
+  fi
+  dbtool_pinned || { echo "adminer.php does not match its pinned SHA-256"; return 1; }
+  getent passwd "$DBTOOL_USER" >/dev/null || { echo "user $DBTOOL_USER missing"; return 1; }
+  [ "$(getent passwd "$DBTOOL_USER" | cut -d: -f7)" = /usr/sbin/nologin ] || { echo "$DBTOOL_USER has a login shell"; return 1; }
+  dir_ok /usr/share/hostashi 755 root:root || { echo "/usr/share/hostashi"; return 1; }
+  dir_ok "$DBTOOL_DIR" 755 root:root || { echo "$DBTOOL_DIR"; return 1; }
+  for f in "${DBTOOL_FILES[@]}"; do
+    file_matches "$DBTOOL_DIR/$f" 0644 root:root <"$DBTOOL_SRC/$f" || { echo "$DBTOOL_DIR/$f differs"; return 1; }
+  done
+  dir_ok "${DBTOOL_CONF%/*}" 755 root:root || { echo "${DBTOOL_CONF%/*}"; return 1; }
+  file_matches "$DBTOOL_CONF" 0644 root:root <"$DBTOOL_SRC/php-fpm.conf" || { echo "$DBTOOL_CONF differs"; return 1; }
+  file_matches "$DBTOOL_TMPFILES" 0644 root:root <"$DBTOOL_SRC/hostashi-adminer.tmpfiles" || { echo "$DBTOOL_TMPFILES differs"; return 1; }
+  dir_ok "$DBTOOL_TICKETS" 700 "$DBTOOL_USER:$DBTOOL_USER" || { echo "$DBTOOL_TICKETS"; return 1; }
+  unit=$(dbtool_unit 2>&1) || { echo "$unit"; return 1; }
+  printf '%s\n' "$unit" | file_matches "/etc/systemd/system/$DBTOOL_UNIT" 0644 root:root || { echo "$DBTOOL_UNIT differs"; return 1; }
+  [ "$DBTOOL_CHANGED" = no ] || { echo "restart needed after a change"; return 1; }
+  [ "$(systemctl is-enabled "$DBTOOL_UNIT" 2>/dev/null)" = enabled ] || { echo "$DBTOOL_UNIT not enabled"; return 1; }
+  [ "$(systemctl is-active "$DBTOOL_UNIT" 2>/dev/null)" = active ] || { echo "$DBTOOL_UNIT not running"; return 1; }
+}
+do_dbtool() {
+  local f unit rc
+  if [ "$NO_DB_TOOL" = yes ]; then
+    systemctl disable --now "$DBTOOL_UNIT" >>"$LOG" 2>&1
+    rm -f "/etc/systemd/system/$DBTOOL_UNIT" "$DBTOOL_TMPFILES" "$DBTOOL_CONF" || return 1
+    rm -rf "$DBTOOL_DIR" /run/hostashi-adminer || return 1
+    rmdir "${DBTOOL_CONF%/*}" 2>/dev/null
+    systemctl daemon-reload >>"$LOG" 2>&1
+    return 0
+  fi
+  dbtool_pinned || { log "dbtool: $DBTOOL_SRC/adminer.php does not match SHA256SUMS, not installing it"; return 1; }
+  unit=$(dbtool_unit) || return 1
+  if ! getent passwd "$DBTOOL_USER" >/dev/null; then
+    adduser --system --group --no-create-home --home /nonexistent --shell /usr/sbin/nologin "$DBTOOL_USER" >>"$LOG" 2>&1 || return 1
+  fi
+  install -d -m 0755 -o root -g root /usr/share/hostashi "$DBTOOL_DIR" "${DBTOOL_CONF%/*}" || return 1
+  for f in "${DBTOOL_FILES[@]}"; do
+    write_file "$DBTOOL_DIR/$f" 0644 root:root <"$DBTOOL_SRC/$f"; rc=$?
+    [ "$rc" -le 1 ] || return 1
+    [ "$rc" = 1 ] || DBTOOL_CHANGED=yes
+  done
+  write_file "$DBTOOL_CONF" 0644 root:root <"$DBTOOL_SRC/php-fpm.conf"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  [ "$rc" = 1 ] || DBTOOL_CHANGED=yes
+  write_file "$DBTOOL_TMPFILES" 0644 root:root <"$DBTOOL_SRC/hostashi-adminer.tmpfiles"
+  [ $? -le 1 ] || return 1
+  systemd-tmpfiles --create "$DBTOOL_TMPFILES" >>"$LOG" 2>&1 || return 1
+  printf '%s\n' "$unit" | write_file "/etc/systemd/system/$DBTOOL_UNIT" 0644 root:root; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  [ "$rc" = 1 ] || DBTOOL_CHANGED=yes
+  systemctl daemon-reload >>"$LOG" 2>&1 || return 1
+  systemctl enable "$DBTOOL_UNIT" >>"$LOG" 2>&1 || return 1
+  if [ "$DBTOOL_CHANGED" = yes ]; then
+    systemctl restart "$DBTOOL_UNIT" >>"$LOG" 2>&1 || return 1
+  else
+    systemctl start "$DBTOOL_UNIT" >>"$LOG" 2>&1 || return 1
+  fi
+  DBTOOL_CHANGED=no
 }
 
 # restic from the distribution for the backups (ADR-0008), and the ssh
@@ -639,8 +791,18 @@ fw_ports() {
     if [ "$1" = tcp ]; then fw_ssh_ports; echo 80; fi
     echo 443
     echo "$PANEL_PORT"
+    if [ "$1" = tcp ] && [ "$NO_DB_TOOL" = no ]; then echo "$DB_TOOL_PORT"; fi
     for a in "${FW_ALLOW[@]}"; do [ "${a#*/}" = "$1" ] && echo "${a%/*}"; done
   } | grep -E '^[0-9]+$' | sort -nu | paste -sd, - | sed 's/,/, /g'
+}
+
+# fw_panel_ports prints the ports of the panel allowlist: the panel and the
+# database tool, which is served for the same users (ADR-0038).
+fw_panel_ports() {
+  {
+    [ "$PANEL_PORT" = 443 ] || echo "$PANEL_PORT"
+    [ "$NO_DB_TOOL" = yes ] || echo "$DB_TOOL_PORT"
+  } | paste -sd, - | sed 's/,/, /g'
 }
 
 # fw_render prints the rules file; it fails without an SSH port.
@@ -648,8 +810,15 @@ fw_render() {
   local ssh
   ssh=$(fw_ssh_ports | grep -E '^[0-9]+$' | sort -nu | paste -sd, - | sed 's/,/, /g')
   [ -n "$ssh" ] || { echo "no SSH port found (sshd -T), refusing to lock SSH out" >&2; return 1; }
+  # On 443 the panel shares the sites' port: the packet filter cannot tell
+  # them apart, so panel_ports stays empty and nginx enforces the panel
+  # allowlist (ADR-0042). The database tool keeps its own port there.
+  local ports panel
+  ports=$(fw_panel_ports)
+  panel=(-e "s/@PANEL@/$ports/")
+  [ -n "$ports" ] || panel=(-e "/@PANEL@/d")
   sed -e "s/@TCP@/$(fw_ports tcp)/" -e "s/@UDP@/$(fw_ports udp)/" -e "s/@SSH@/$ssh/" \
-    -e "s/@PANEL@/$PANEL_PORT/" -e "s#@PANEL_FILE@#$FW_PANEL_FILE#" "$FW_SRC/hostashi.nft"
+    "${panel[@]}" -e "s#@PANEL_FILE@#$FW_PANEL_FILE#" "$FW_SRC/hostashi.nft"
 }
 
 # fw_panel_file creates the panel's rules file if it is missing.
@@ -782,7 +951,7 @@ php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }
 
 chk_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-valkey@.service hostashi-files@.service hostashi-files@.socket; do
     file_matches "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u" || { echo "$u differs"; return 1; }
   done
   dir_ok "$(dirname "$NGINX_DROPIN")" 755 root:root || { echo "nginx drop-in directory"; return 1; }
@@ -794,7 +963,7 @@ chk_units() {
 }
 do_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-valkey@.service hostashi-files@.service hostashi-files@.socket; do
     write_file "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u"
     [ $? -le 1 ] || return 1
   done
@@ -1245,14 +1414,15 @@ main() {
       --yes) YES=yes;;
       --allow-untested) ALLOW_UNTESTED=yes;;
       --binary) shift; BINARY=${1:-};;
-      --public-url) shift; PUBLIC_URL=${1:-};;
+      --panel-domain) shift; PANEL_DOMAIN=${1:-};;
       --listen) shift; LISTEN=${1:-};;
       --panel-port) shift; PANEL_PORT=${1:-};;
       --no-quota) NO_QUOTA=yes;;
       --no-firewall) NO_FIREWALL=yes;;
       --firewall-allow) shift; FW_ALLOW+=("${1:-}");;
+      --no-db-tool) NO_DB_TOOL=yes;;
       --php-versions) shift; PHP_REQUEST=${1:-}; PHP_REQUEST_SET=yes;;
-      *) echo "usage: $0 [plan | apply --yes] --binary PATH [--public-url URL] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall] [--php-versions LIST]" >&2; exit 64;;
+      *) echo "usage: $0 [plan | apply --yes] --binary PATH [--panel-domain NAME] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall] [--no-db-tool] [--php-versions LIST]" >&2; exit 64;;
     esac
     shift
   done

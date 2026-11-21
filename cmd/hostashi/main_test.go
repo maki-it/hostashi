@@ -13,6 +13,7 @@ import (
 
 func TestRun(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "none.sock")
+	home := t.TempDir()
 
 	cases := []struct {
 		name    string
@@ -32,6 +33,9 @@ func TestRun(t *testing.T) {
 		{"serve metrics by name", []string{"serve", "-metrics-listen", "localhost:9471"}, 1000, 1, "only a loopback IP"},
 		{"agent as user", []string{"agent"}, 1000, 1, "must run as root"},
 		{"agent root as serve user", []string{"agent", "-serve-user", "root"}, 0, 1, "dedicated unprivileged user"},
+		{"files helper without home", []string{"files-helper"}, 1000, 2, ""},
+		{"files helper as root", []string{"files-helper", "-home", "/"}, 0, 1, "must not run as root"},
+		{"files helper without socket", []string{"files-helper", "-home", home}, 1000, 1, "hostashi-files@<site>.socket"},
 		{"ping without agent", []string{"ping", "-socket", missing}, 1000, 1, "unavailable"},
 	}
 	for _, tc := range cases {
@@ -55,6 +59,8 @@ func TestAdminUsage(t *testing.T) {
 		{"site"},
 		{"site", "bogus"},
 		{"site", "delete"},
+		{"site", "files"},
+		{"site", "files", "a", "b"},
 		{"web"},
 		{"web", "apply", "extra"},
 		{"db"},

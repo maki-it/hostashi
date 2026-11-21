@@ -25,7 +25,9 @@ import (
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/cpmigrate"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/mail"
 	"github.com/maki-it/hostashi/internal/metrics"
+	"github.com/maki-it/hostashi/internal/notify"
 	"github.com/maki-it/hostashi/internal/reqid"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
@@ -54,6 +56,10 @@ type Config struct {
 	// MetricsListen is a loopback IP and port that serves /metrics without
 	// a token (ADR-0022); empty turns that listener off.
 	MetricsListen string
+
+	// DBToolPort is the HTTPS port of the web database tool (ADR-0038),
+	// served for the panel's host name; 0 turns the tool off.
+	DBToolPort int
 }
 
 // DefaultChallengeDir is where nginx looks for HTTP-01 challenge files
@@ -122,6 +128,24 @@ type Deps struct {
 	// PHP installs more PHP versions (ADR-0036); nil disables its routes.
 	// Needs Auth and Settings.
 	PHP PHPInstaller
+	// Mail is the SMTP relay (ADR-0044); nil disables its routes. Needs
+	// Auth, Settings and MailSend.
+	Mail     MailRelay
+	MailSend MailSender
+	// Outbox queues email; nil disables the account address routes. Needs
+	// Auth and Mail.
+	Outbox MailOutbox
+
+	// Files starts the sites' file manager sockets (ADR-0040); nil
+	// disables the file routes. Needs Auth, Sites and Settings.
+	Files FilesOpener
+
+	// NotifyPrefs keeps the operations email switches; nil disables their
+	// routes. Needs Auth and Mail.
+	NotifyPrefs NotifyPrefs
+	// MailHistory adds the email check to the doctor report; nil leaves it
+	// out. Needs Mail.
+	MailHistory MailHistory
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -176,17 +200,31 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 	})
 
 	if deps.Auth != nil {
-		registerAuth(mux, deps.Auth, log)
+		var m *mailer
+		if deps.Mail != nil && deps.Outbox != nil {
+			m = &mailer{relay: deps.Mail, outbox: deps.Outbox, publicURL: cfg.PublicURL, log: log, who: deps.Auth.ConfirmedEmail}
+			deps.Auth.OnAccountEvent(m.accountEvent)
+		}
+
+		registerAuth(mux, deps.Auth, m, log)
 
 		if deps.Sites != nil {
 			registerSites(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerCerts(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDatabases(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerDBServers(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPages(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerParked(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerCron(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSSH(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerPageCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerLimits(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerObjectCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+
+			if deps.Files != nil && deps.Settings != nil {
+				registerFiles(mux, authn{svc: deps.Auth, fail: newFail(log)}, newFilesProxy(deps.Files, deps.Sites, deps.Settings, log))
+			}
 		}
 
 		if deps.Backups != nil {
@@ -218,8 +256,29 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			registerPHPInstall(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.PHP, deps.Settings, log)
 		}
 
+		if deps.Mail != nil && deps.MailSend != nil && deps.Settings != nil {
+			registerMail(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Mail, deps.MailSend, deps.Settings, log)
+		}
+
+		if deps.Mail != nil && deps.Outbox != nil {
+			registerAccountEmail(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Mail, deps.Outbox, cfg.PublicURL, log)
+		}
+
+		if deps.Mail != nil && deps.NotifyPrefs != nil {
+			registerNotifications(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Mail, deps.NotifyPrefs)
+		}
+
 		if deps.Doctor != nil {
-			registerDoctor(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Doctor, log)
+			var panel []PanelChecks
+			if deps.Sites != nil {
+				panel = append(panel, deps.Sites.DBServerDoctor)
+			}
+
+			if deps.Mail != nil && deps.MailHistory != nil {
+				panel = append(panel, mailCheck(deps.Mail, deps.MailHistory))
+			}
+
+			registerDoctor(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Doctor, allPanelChecks(panel), log)
 		}
 
 		if deps.Metrics != nil && deps.Settings != nil {
@@ -279,6 +338,24 @@ func PanelCopyPath(dbPath string) string {
 // copyEvery is how often the panel refreshes its database copy, so a
 // scheduled backup is never more than this behind.
 const copyEvery = time.Hour
+
+// dbServerLoop checks the external database servers every
+// hosting.DBServerCheckEvery, so the list shows their version and state and
+// doctor knows when one is gone (ADR-0041).
+func dbServerLoop(ctx context.Context, svc *hosting.Service) {
+	t := time.NewTicker(hosting.DBServerCheckEvery)
+	defer t.Stop()
+
+	for {
+		svc.RefreshDBServers(ctx)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
 
 func copyLoop(ctx context.Context, copyDB func(context.Context) error, log *slog.Logger) {
 	t := time.NewTicker(copyEvery)
@@ -347,20 +424,32 @@ func Run(ctx context.Context, cfg Config) error {
 	client := agentrpc.NewClient(cfg.Socket)
 	client.Observe(m.AgentOp)
 
+	// Outgoing email (ADR-0044): nothing is queued while no relay is set.
+	relay := mail.NewStore(st, box)
+	outbox := mail.NewOutbox(st, relay, box, cfg.Log)
+
+	go outbox.Run(ctx)
+
 	deps := Deps{
 		PingAgent: func(ctx context.Context) error {
 			_, err := agentapi.Ping.Call(ctx, client, agentapi.PingRequest{})
 			return err
 		},
-		PingDB:   st.Ping,
-		Auth:     svc,
-		Sites:    hosting.New(st, hosting.RPCAgent{C: client}, cfg.Log),
-		Backups:  RPCBackups{C: client, BeforeRun: panelCopy},
-		Metrics:  m,
-		Settings: st,
-		Doctor:   RPCDoctor(client),
-		Firewall: RPCFirewall{C: client},
-		PHP:      RPCPHPInstaller{C: client},
+		PingDB:      st.Ping,
+		Auth:        svc,
+		Sites:       hosting.New(st, hosting.RPCAgent{C: client}, cfg.Log),
+		Backups:     RPCBackups{C: client, BeforeRun: panelCopy},
+		Metrics:     m,
+		Settings:    st,
+		Doctor:      RPCDoctor(client),
+		Firewall:    RPCFirewall{C: client},
+		PHP:         RPCPHPInstaller{C: client},
+		Mail:        relay,
+		Outbox:      outbox,
+		NotifyPrefs: st,
+		MailHistory: st,
+		MailSend:    func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
+		Files:       RPCFilesOpener(client),
 	}
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
@@ -374,11 +463,35 @@ func Run(ctx context.Context, cfg Config) error {
 
 	deps.Sites.EnableCron(hosting.RPCAgent{C: client})
 	deps.Sites.EnableSSH(hosting.RPCAgent{C: client})
+	deps.Sites.EnableDBServers(hosting.RemoteDBServers{Box: box}, filepath.Dir(copyPath))
+
+	if err := deps.Sites.WriteDBManifest(ctx); err != nil {
+		cfg.Log.ErrorContext(ctx, "write the external database list for the backup", "err", err)
+	}
+
+	go dbServerLoop(ctx, deps.Sites)
+
 	deps.Sites.EnableLimits(hosting.RPCAgent{C: client})
+	deps.Sites.EnableObjectCache(hosting.RPCAgent{C: client})
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
 	m.RegisterSites(siteStats(client), cfg.Log)
 	m.RegisterTokenExpiry(svc.MetricsTokenExpiry, cfg.Log)
+
+	// Operations emails (ADR-0044) for the accounts that switched them on.
+	watcher := &notify.Watcher{
+		Notifier: &notify.Notifier{
+			St: st, Outbox: outbox, Host: panelHost(cfg.PublicURL), Log: cfg.Log,
+			Link: func(f string) string { return panelLink(cfg.PublicURL, f) },
+		},
+		Backups: deps.Backups.Status,
+		Certs:   notifyCerts(st, deps.Sites, PanelDomain(cfg.PublicURL)),
+		Doctor:  deps.Doctor,
+		Now:     time.Now,
+		Log:     cfg.Log,
+	}
+
+	go watcher.Run(ctx)
 
 	if iss, err := newIssuer(cfg, st, box); err != nil {
 		return err
@@ -389,7 +502,22 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if d := PanelDomain(cfg.PublicURL); d != "" {
-		if err := deps.Sites.EnablePanel(d); err != nil {
+		// A site or parked domain that already has the name keeps it, and
+		// nginx serves no panel there: the agent would refuse every web
+		// state with both (ADR-0042). The admin picks another name.
+		if owner, err := panelNameOwner(ctx, deps.Sites, d); err != nil {
+			return err
+		} else if owner != "" {
+			if cfg.Log != nil {
+				cfg.Log.ErrorContext(ctx, "the panel's host name belongs to "+owner+"; nginx does not serve the panel there, choose another --panel-domain", "domain", d)
+			}
+		} else if err := deps.Sites.EnablePanel(d); err != nil {
+			return err
+		}
+	}
+
+	if cfg.DBToolPort != 0 {
+		if err := deps.Sites.EnableDBTool(hosting.RPCAgent{C: client}, cfg.DBToolPort); err != nil {
 			return err
 		}
 	}
@@ -486,6 +614,36 @@ func certList(svc *hosting.Service) func(context.Context) ([]metrics.Cert, error
 	}
 }
 
+// notifyCerts lists the certificates of sites with TLS and of the panel's
+// own address for the operations emails.
+func notifyCerts(st *store.Store, svc *hosting.Service, panelDomain string) func(context.Context) ([]notify.Cert, error) {
+	return func(ctx context.Context) ([]notify.Cert, error) {
+		sites, err := st.Sites(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		out := []notify.Cert{}
+
+		for _, s := range sites {
+			if s.TLS && !s.Disabled {
+				out = append(out, notify.Cert{Site: s.Name, Name: s.Name, NotAfter: s.TLSNotAfter, Error: s.TLSError, FailedAt: s.TLSFailedAt})
+			}
+		}
+
+		if panelDomain != "" {
+			p, err := svc.PanelTLS(ctx)
+			if err != nil {
+				return out, err
+			}
+
+			out = append(out, notify.Cert{Name: panelDomain, NotAfter: p.NotAfter, Error: p.Error, FailedAt: p.FailedAt})
+		}
+
+		return out, nil
+	}
+}
+
 // siteStats feeds the per-site series from the agent (ADR-0022).
 func siteStats(c *agentrpc.Client) func(context.Context) ([]metrics.Site, error) {
 	return func(ctx context.Context) ([]metrics.Site, error) {
@@ -500,6 +658,7 @@ func siteStats(c *agentrpc.Client) func(context.Context) ([]metrics.Site, error)
 				Name: s.Name, PHPVersion: s.PHPVersion, PHPUp: s.PHPUp,
 				PHPMemoryBytes: s.PHPMemoryBytes, PHPMemoryKnown: s.PHPMemoryKnown,
 				DiskUsedBytes: s.DiskUsedBytes, DiskMeasuredAt: s.DiskMeasuredAt,
+				CacheMB: s.CacheMB, CacheUp: s.CacheUp, CacheMemoryBytes: s.CacheMemoryBytes, CacheMemoryKnown: s.CacheMemoryKnown,
 			})
 		}
 

@@ -2,6 +2,8 @@
 
 import { ArrowLeft, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { CertificateCard } from "./Certificate";
+import { parkedCertBase } from "./certs";
 import { deleteParked, listParked, parkedMessage, setParked, type ParkedDomain, type ParkedTLS } from "./parked";
 import { listPages, type StatusPage } from "./pages";
 import { formatHash } from "./routes";
@@ -175,6 +177,13 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
         <Card title="Page and HTTPS">
           <EditForm key={p.domain + p.updatedAt} parked={p} pages={pages} onCancel={() => set({ edit: "" })} onSaved={changed} />
         </Card>
+        <CertificateCard
+          base={parkedCertBase(p.domain)}
+          name={p.domain}
+          tls={p.tls}
+          offHint="turn HTTPS off above first"
+          onChange={load}
+        />
         {unparkDialog || (
           <Card title="Unpark">
             <div className="ui-stack">

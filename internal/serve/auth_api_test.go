@@ -19,6 +19,7 @@ import (
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/cpmigrate"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/mail"
 	"github.com/maki-it/hostashi/internal/metrics"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
@@ -39,6 +40,10 @@ type apiEnv struct {
 	doctor    *stubDoctor
 	firewall  *stubFirewall
 	php       *stubPHP
+	mail      MailRelay
+	mailSent  *stubMailSend
+	outbox    *mail.Outbox
+	files     *stubFiles
 }
 
 func newAPI(t *testing.T) *apiEnv {
@@ -87,6 +92,16 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	deps.Firewall = fw
 	php := &stubPHP{}
 	deps.PHP = php
+	deps.Mail = mail.NewStore(st, box)
+	sent := &stubMailSend{}
+	deps.MailSend = sent.send
+	outbox := mail.NewOutbox(st, deps.Mail, box, nil)
+	outbox.Send = sent.deliver
+	deps.Outbox = outbox
+	fm := &stubFiles{t: t}
+	deps.Files = fm.open
+	deps.NotifyPrefs = st
+	deps.MailHistory = st
 
 	if ag != nil {
 		deps.Sites = hosting.New(st, ag, nil)
@@ -97,8 +112,8 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	}
 
 	return &apiEnv{
-		h: Handler(Config{}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st, cp: deps.CloudPanel,
-		imports: imports, doctor: doc, firewall: fw, php: php,
+		h: Handler(Config{PublicURL: testPublicURL}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st, cp: deps.CloudPanel,
+		imports: imports, doctor: doc, firewall: fw, php: php, mail: deps.Mail, mailSent: sent, outbox: outbox, files: fm,
 	}
 }
 

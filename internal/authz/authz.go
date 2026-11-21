@@ -83,6 +83,7 @@ var table = map[Action]Rule{
 	// Server-wide: admins only.
 	"backups.server:read":  server("backups:read"),
 	"backups.server:write": server("backups:write"),
+	"db_servers:write":     server("db_servers:write"),
 	"doctor:read":          server("doctor:read"),
 	"firewall:read":        server("firewall:read"),
 	"firewall:write":       server("firewall:write"),
@@ -91,6 +92,7 @@ var table = map[Action]Rule{
 	"migrations:read":      server("migrations:read"),
 	"migrations:write":     server("migrations:write"),
 	"panel.tls:read":       server("sites:read"),
+	"panel.tls:write":      server("sites:write"),
 	"php:install":          server("php:install"),
 	"php.install:read":     server("sites:read"),
 	"web:sync":             server("sites:write"),
@@ -99,6 +101,7 @@ var table = map[Action]Rule{
 	// are filtered to the sites a user may see.
 	"sites:list":        all("sites:read"),
 	"databases:list":    all("databases:read"),
+	"db_servers:list":   all("databases:read"),
 	"php.versions:read": all("sites:read"),
 	"ssh.hostkeys:read": all("ssh:read"),
 	"pages:read":        all("pages:read"),
@@ -114,6 +117,10 @@ var table = map[Action]Rule{
 	"sites.tls:write":      mgrSite("sites:write"),
 	"sites.disabled:write": mgrSite("sites:write"),
 	"limits:write":         mgrSite("limits:write"),
+	// The page cache size counts against the site's disk limit (ADR-0046).
+	"sites.pagecache.size:write": mgrSite("sites:write"),
+	// The cache's memory counts against the site's limit (ADR-0045).
+	"sites.objectcache.size:write": mgrSite("objectcache:write"),
 	// Letting PHP start programs undoes a hardening default (ADR-0033).
 	"sites.programs:write": mgrSite("sites:write"),
 
@@ -126,7 +133,11 @@ var table = map[Action]Rule{
 	"sites.php:write":         ownSite("sites:write"),
 	"sites.hsts:write":        ownSite("sites:write"),
 	"sites.maintenance:write": ownSite("sites.maintenance:write"),
+	"sites.pagecache:write":   ownSite("sites:write"),
+	"sites.pagecache:purge":   ownSite("pagecache:purge"),
 	"limits:read":             ownSite("limits:read"),
+	"sites.objectcache:read":  ownSite("objectcache:read"),
+	"sites.objectcache:write": ownSite("objectcache:write"),
 	"cron:read":               ownSite("cron:read"),
 	"cron:write":              ownSite("cron:write"),
 	"ssh:read":                ownSite("ssh:read"),
@@ -134,8 +145,14 @@ var table = map[Action]Rule{
 	"databases:read":          ownSite("databases:read"),
 	"databases:write":         ownSite("databases:write"),
 	"databases:delete":        ownSite("databases:delete"),
-	"backups:read":            ownSite("backups:read"),
-	"backups:restore":         ownSite("backups:restore"),
+	// The web database tool (ADR-0038) gives what a new database user
+	// with a known password gives, so it shares databases:write.
+	"databases:open":  ownSite("databases:write"),
+	"backups:read":    ownSite("backups:read"),
+	"backups:restore": ownSite("backups:restore"),
+	// The file manager writes as the site user (ADR-0040).
+	"files:read":  ownSite("files:read"),
+	"files:write": ownSite("files:write"),
 }
 
 // Lookup returns the rule of an action.

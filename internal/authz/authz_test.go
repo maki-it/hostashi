@@ -50,6 +50,7 @@ func TestDecidedRules(t *testing.T) {
 			authz.UsersRead, authz.SettingsRead, "sites:create", "sites:delete", "sites.domains:write",
 			"sites.tls:write", "sites.disabled:write", "sites.programs:write", "limits:write",
 			"sites.snippets:write", "parked:write", "pages:write", "backups.server:read", "firewall:read",
+			"sites.pagecache.size:write",
 		},
 	}
 
@@ -64,6 +65,7 @@ func TestDecidedRules(t *testing.T) {
 	userMay := []authz.Action{
 		"sites:list", "sites:read", "sites.php:write", "sites.maintenance:write", "limits:read",
 		"cron:write", "ssh:write", "databases:write", "databases:delete", "backups:read", "backups:restore",
+		"sites.pagecache:write", "sites.pagecache:purge",
 	}
 	for _, a := range userMay {
 		if !authz.Allowed(authz.RoleUser, a) {
@@ -71,7 +73,7 @@ func TestDecidedRules(t *testing.T) {
 		}
 	}
 
-	for _, a := range []authz.Action{"sites:create", "sites.domains:write", "limits:write", "sites:delete"} {
+	for _, a := range []authz.Action{"sites:create", "sites.domains:write", "limits:write", "sites:delete", "sites.pagecache.size:write"} {
 		if !authz.Allowed(authz.RoleManager, a) {
 			t.Errorf("manager may not %s", a)
 		}
@@ -81,7 +83,7 @@ func TestDecidedRules(t *testing.T) {
 // A user's actions on one site must be site actions, or a grant would not
 // limit them.
 func TestUserActionsAreSiteBound(t *testing.T) {
-	unbound := []authz.Action{"sites:list", "databases:list", "php.versions:read", "ssh.hostkeys:read", "pages:read"}
+	unbound := []authz.Action{"sites:list", "databases:list", "db_servers:list", "php.versions:read", "ssh.hostkeys:read", "pages:read"}
 
 	for _, a := range authz.Actions() {
 		r, _ := authz.Lookup(a)

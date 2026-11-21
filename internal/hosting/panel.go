@@ -6,11 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 // panelTLSKey is the settings key of the panel certificate's state.
@@ -25,6 +27,38 @@ type PanelTLS struct {
 	FailedAt time.Time `json:"failedAt,omitzero"`
 	// Live: the last accepted web state served the panel over HTTPS.
 	Live bool `json:"live"`
+	// Source and CertSource as for sites (ADR-0039); "" is Let's Encrypt
+	// for states saved before. Trusted is false for an own certificate
+	// without a public chain.
+	Source      string    `json:"source,omitempty"`
+	CertSource  string    `json:"certSource,omitempty"`
+	Untrusted   bool      `json:"untrusted,omitempty"`
+	RenewAt     time.Time `json:"renewAt,omitzero"`
+	RenewForced bool      `json:"renewForced,omitempty"`
+}
+
+// WantedSource is where the panel's certificate should come from.
+func (p PanelTLS) WantedSource() string { return p.source() }
+
+// LiveSource is where the live certificate came from, "" for none.
+func (p PanelTLS) LiveSource() string { return p.certSource() }
+
+// source returns the wanted source, Let's Encrypt for older states.
+func (p PanelTLS) source() string {
+	if p.Source == "" {
+		return store.TLSLetsEncrypt
+	}
+
+	return p.Source
+}
+
+// certSource returns where the live certificate came from.
+func (p PanelTLS) certSource() string {
+	if p.CertSource == "" && !p.NotAfter.IsZero() {
+		return store.TLSLetsEncrypt
+	}
+
+	return p.CertSource
 }
 
 // EnablePanel serves the panel's own address through nginx (ADR-0023) and
@@ -36,6 +70,21 @@ func (s *Service) EnablePanel(domain string) error {
 	}
 
 	s.panelDomain = domain
+
+	return nil
+}
+
+// PanelDomain is the panel's own host name, or "" if nginx serves none.
+func (s *Service) PanelDomain() string { return s.panelDomain }
+
+// checkReserved refuses the panel's own host name as a domain of a site
+// or a parked domain (ADR-0042): nginx would serve two things under it.
+// panelDomain is set before the service handles requests and never
+// changes, so no lock is needed.
+func (s *Service) checkReserved(domains []string) error {
+	if s.panelDomain != "" && slices.Contains(domains, s.panelDomain) {
+		return fmt.Errorf("%w: %s", ErrDomainReserved, s.panelDomain)
+	}
 
 	return nil
 }
@@ -78,7 +127,7 @@ func (s *Service) savePanelTLS(ctx context.Context, p PanelTLS) error {
 // panelCovers reports whether the panel's certificate names its domain and is
 // valid for at least margin.
 func (s *Service) panelCovers(p PanelTLS, margin time.Duration) bool {
-	return !p.NotAfter.IsZero() && s.now().Add(margin).Before(p.NotAfter) && slices.Contains(p.Domains, s.panelDomain)
+	return !p.NotAfter.IsZero() && s.now().Add(margin).Before(p.NotAfter) && agentapi.CertCovers(p.Domains, s.panelDomain)
 }
 
 // panelWeb is the panel part of web.apply, nil without a panel address.
@@ -92,7 +141,9 @@ func (s *Service) panelWeb(ctx context.Context) (*agentapi.WebPanel, error) {
 		return nil, err
 	}
 
-	return &agentapi.WebPanel{Domain: s.panelDomain, TLS: s.panelCovers(p, 0)}, nil
+	tls := s.panelCovers(p, 0)
+
+	return &agentapi.WebPanel{Domain: s.panelDomain, TLS: tls, DBTool: tls && s.dbTool != nil}, nil
 }
 
 // panelApplied records whether the accepted web state serves the panel over
@@ -130,7 +181,7 @@ func (s *Service) renewPanel(ctx context.Context) {
 		return
 	}
 
-	if s.panelCovers(p, RenewBefore) || (!p.FailedAt.IsZero() && s.now().Before(p.FailedAt.Add(RetryAfter))) {
+	if !s.panelRenewDue(p) {
 		return
 	}
 
@@ -148,6 +199,8 @@ func (s *Service) renewPanel(ctx context.Context) {
 
 	if err == nil {
 		p.Domains, p.NotAfter, p.Error, p.FailedAt = info.Domains, info.NotAfter, "", time.Time{}
+		p.CertSource, p.Untrusted, p.RenewForced = store.TLSLetsEncrypt, false, false
+
 		if err = s.savePanelTLS(ctx, p); err == nil {
 			s.log.InfoContext(ctx, "panel certificate installed", "domain", s.panelDomain, "notAfter", info.NotAfter)
 
@@ -174,7 +227,7 @@ func (s *Service) renewPanel(ctx context.Context) {
 			msg = strings.ToValidUTF8(msg[:1000], "")
 		}
 
-		p.Error, p.FailedAt = msg, s.now()
+		p.Error, p.FailedAt, p.RenewForced = msg, s.now(), false
 		rerr = s.savePanelTLS(context.WithoutCancel(ctx), p)
 	}
 

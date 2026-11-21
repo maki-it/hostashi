@@ -24,6 +24,7 @@ Most work is done in the panel. The command line is for what the panel cannot do
 | Command | What it does |
 |---------|--------------|
 | `hostashi site list` | Lists the site accounts. |
+| `hostashi site files NAME` | Starts the file manager of a site and prints its socket. The panel does this by itself; the command is for checks. |
 | `hostashi site limits NAME` | Shows the CPU, memory and process limits of a site. |
 | `hostashi site limits NAME memory=BYTES tasks=N cpu-weight=N cpu-quota=PERCENT` | Sets them. A value you leave out means no limit. |
 

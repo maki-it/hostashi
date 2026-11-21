@@ -23,20 +23,29 @@ type Parked struct {
 	TLSNotAfter time.Time // zero: no certificate
 	TLSError    string
 	TLSFailedAt time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// Certificate source and renewal requests as for sites (ADR-0039).
+	TLSSource      string
+	TLSCertSource  string
+	TLSTrusted     bool
+	TLSRenewAt     time.Time
+	TLSRenewForced bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
-const parkedColumns = `id, domain, coalesce(page, 0), tls, tls_live, tls_not_after, tls_error, tls_failed_at, created_at, updated_at`
+const parkedColumns = `id, domain, coalesce(page, 0), tls, tls_live, tls_not_after, tls_error, tls_failed_at,
+	tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced, created_at, updated_at`
 
 func scanParked(r scanner) (Parked, error) {
 	var (
 		p                          Parked
-		tls, live                  int
+		tls, live, trusted, forced int
 		notAfter, failed, cre, upd int64
+		renewAt                    int64
 	)
 
-	if err := r.Scan(&p.ID, &p.Domain, &p.Page, &tls, &live, &notAfter, &p.TLSError, &failed, &cre, &upd); err != nil {
+	if err := r.Scan(&p.ID, &p.Domain, &p.Page, &tls, &live, &notAfter, &p.TLSError, &failed,
+		&p.TLSSource, &p.TLSCertSource, &trusted, &renewAt, &forced, &cre, &upd); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Parked{}, ErrNotFound
 		}
@@ -46,6 +55,7 @@ func scanParked(r scanner) (Parked, error) {
 
 	p.TLS, p.TLSLive = tls == 1, live == 1
 	p.TLSNotAfter, p.TLSFailedAt = unixOrZero(notAfter), unixOrZero(failed)
+	p.TLSTrusted, p.TLSRenewForced, p.TLSRenewAt = trusted == 1, forced == 1, unixOrZero(renewAt)
 	p.CreatedAt, p.UpdatedAt = time.Unix(cre, 0).UTC(), time.Unix(upd, 0).UTC()
 
 	return p, nil
@@ -164,9 +174,11 @@ func (s *Store) DeleteParked(ctx context.Context, domain string) error {
 	return nil
 }
 
-// SetParkedCert records the live certificate of a parked domain.
+// SetParkedCert records the live Let's Encrypt certificate of a parked
+// domain.
 func (s *Store) SetParkedCert(ctx context.Context, id int64, notAfter, now time.Time) error {
-	_, err := s.w.ExecContext(ctx, `UPDATE parked_domains SET tls_not_after = ?, tls_error = '', tls_failed_at = 0, updated_at = ? WHERE id = ?`,
+	_, err := s.w.ExecContext(ctx, `UPDATE parked_domains SET tls_not_after = ?, tls_error = '', tls_failed_at = 0,
+		tls_cert_source = 'letsencrypt', tls_trusted = 1, tls_renew_forced = 0, updated_at = ? WHERE id = ?`,
 		notAfter.Unix(), now.Unix(), id)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
@@ -181,7 +193,8 @@ func (s *Store) SetParkedTLSError(ctx context.Context, id int64, msg string, at 
 		msg = strings.ToValidUTF8(msg[:1000], "")
 	}
 
-	if _, err := s.w.ExecContext(ctx, `UPDATE parked_domains SET tls_error = ?, tls_failed_at = ? WHERE id = ?`, msg, at.Unix(), id); err != nil {
+	if _, err := s.w.ExecContext(ctx, `UPDATE parked_domains SET tls_error = ?, tls_failed_at = ?, tls_renew_forced = 0 WHERE id = ?`,
+		msg, at.Unix(), id); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 
@@ -201,4 +214,90 @@ func (s *Store) SetParkedTLSLive(ctx context.Context, ids []int64) error {
 	}
 
 	return nil
+}
+
+// SetParkedCustomCert records an own certificate that is now live for a
+// parked domain: the source becomes custom and HTTPS is wanted.
+func (s *Store) SetParkedCustomCert(ctx context.Context, id int64, notAfter time.Time, trusted bool, now time.Time) error {
+	t := 0
+	if trusted {
+		t = 1
+	}
+
+	res, err := s.w.ExecContext(ctx,
+		`UPDATE parked_domains SET tls = 1, tls_source = 'custom', tls_cert_source = 'custom', tls_not_after = ?, tls_trusted = ?,
+			tls_error = '', tls_failed_at = 0, tls_renew_forced = 0, updated_at = ? WHERE id = ?`,
+		notAfter.Unix(), t, now.Unix(), id)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// SetParkedTLSSource sets where the certificate of a parked domain should
+// come from. The live certificate stays.
+func (s *Store) SetParkedTLSSource(ctx context.Context, id int64, source string, now time.Time) error {
+	if source != TLSLetsEncrypt && source != TLSCustom {
+		return fmt.Errorf("store: unknown certificate source %q", source)
+	}
+
+	res, err := s.w.ExecContext(ctx, `UPDATE parked_domains SET tls_source = ?, tls_error = '', tls_failed_at = 0, updated_at = ? WHERE id = ?`,
+		source, now.Unix(), id)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// ClearParkedCert forgets the certificate of a parked domain after it was
+// deleted; the source goes back to Let's Encrypt.
+func (s *Store) ClearParkedCert(ctx context.Context, id int64, now time.Time) error {
+	res, err := s.w.ExecContext(ctx,
+		`UPDATE parked_domains SET tls_not_after = 0, tls_cert_source = '', tls_trusted = 1, tls_source = 'letsencrypt',
+			tls_renew_forced = 0, tls_error = '', tls_failed_at = 0, updated_at = ? WHERE id = ?`, now.Unix(), id)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// RequestParkedRenew asks for a new certificate of a parked domain, at
+// most once per gap (ErrTooSoon).
+func (s *Store) RequestParkedRenew(ctx context.Context, id int64, gap time.Duration, now time.Time) error {
+	res, err := s.w.ExecContext(ctx,
+		`UPDATE parked_domains SET tls_renew_at = ?, tls_renew_forced = 1, tls_error = '', tls_failed_at = 0 WHERE id = ? AND tls_renew_at <= ?`,
+		now.Unix(), id, now.Add(-gap).Unix())
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n == 1 {
+		return nil
+	}
+
+	var one int
+	if err := s.db.QueryRowContext(ctx, `SELECT 1 FROM parked_domains WHERE id = ?`, id).Scan(&one); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+
+		return fmt.Errorf("store: %w", err)
+	}
+
+	return ErrTooSoon
 }

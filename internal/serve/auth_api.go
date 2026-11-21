@@ -273,7 +273,7 @@ func newFail(log *slog.Logger) failFunc {
 }
 
 // registerAuth adds the setup, session and token routes.
-func registerAuth(mux *routeMux, svc *auth.Service, log *slog.Logger) {
+func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger) {
 	fail := newFail(log)
 	a := authn{svc: svc, fail: fail}
 
@@ -458,6 +458,6 @@ func registerAuth(mux *routeMux, svc *auth.Service, log *slog.Logger) {
 	})
 
 	registerTokens(mux, a)
-	registerUsers(mux, a)
+	registerUsers(mux, a, m)
 	registerPasskeys(mux, a)
 }

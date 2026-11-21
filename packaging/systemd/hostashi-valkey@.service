@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Object cache (Valkey) of one site (ADR-0045). The agent renders the config
+# /var/lib/hostashi-agent/valkey/<site>.conf and a drop-in that puts the
+# unit into the site's slice (ADR-0015), then starts
+# hostashi-valkey@<site>.service. The instance name is the site user.
+#
+# The cache holds nothing worth keeping: no persistence, no data directory,
+# a restart empties it. It listens only on a Unix socket that only the site
+# user can open; there is no TCP and no password.
+
+[Unit]
+Description=Object cache (Valkey) for Hostashi site %i
+Documentation=https://github.com/maki-it/hostashi
+ConditionPathExists=/var/lib/hostashi-agent/valkey/%i.conf
+
+[Service]
+Type=notify
+User=%i
+Group=%i
+# The agent's state directory is root 0700, so the site user cannot open
+# the config itself: systemd opens it as root and hands it over on standard
+# input, which valkey-server reads for the config name "-".
+ExecStart=/usr/bin/valkey-server - --supervised systemd --daemonize no
+StandardInput=file:/var/lib/hostashi-agent/valkey/%i.conf
+StandardOutput=journal
+StandardError=journal
+Restart=on-failure
+RestartSec=2s
+# No core dumps: they would hold the site's cached data (ADR-0033).
+LimitCORE=0
+# /run/hostashi-valkey/<site>: <site> 0700, the socket in it 0600. Only the
+# site user (its PHP workers, cron jobs and SSH sessions) gets in.
+RuntimeDirectory=hostashi-valkey/%i
+RuntimeDirectoryMode=0700
+WorkingDirectory=/run/hostashi-valkey/%i
+UMask=0077
+
+# The same sandbox as the Debian package's own template, tighter where a
+# cache needs nothing: no network at all, no home, no writable path but the
+# runtime directory.
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateUsers=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProcSubset=pid
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+# valkey-server runs nothing else: no shell for an attacker.
+NoExecPaths=/
+ExecPaths=/usr/bin/valkey-server /usr/lib /lib
+
+[Install]
+WantedBy=multi-user.target

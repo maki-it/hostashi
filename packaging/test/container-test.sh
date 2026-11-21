@@ -74,6 +74,15 @@ docker cp "$HERE/." "$NAME:/opt/hostashi/"
 docker cp "$BINARY" "$NAME:/opt/hostashi/hostashi"
 x() { docker exec "$NAME" "$@"; }
 xi() { docker exec -i "$NAME" "$@"; }
+# exposure UNIT MAX fails when the unit's exposure score rises above MAX
+# (ADR-0033): a change that weakens the sandbox shows up here.
+exposure() {
+  local score
+  # "→ Overall exposure level for hostashi-php-8.4@wp.service: 2.4 OK :-)"
+  score=$(x systemd-analyze security "$1" | tail -1 | sed -E 's/.*: ([0-9]+\.[0-9]+) .*/\1/')
+  echo "$1: exposure $score"
+  awk -v s="$score" -v m="$2" 'BEGIN { exit !(s <= m) }' || fail "$1: exposure $score is above $2"
+}
 
 # The panel name would otherwise go to the real Let's Encrypt at the first
 # start. The Pebble part below replaces this drop-in.
@@ -89,17 +98,29 @@ if x /opt/hostashi/install.sh apply --binary /opt/hostashi/hostashi; then fail "
 step "plan"
 x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall
 
+step "--panel-domain takes a host name only (ADR-0042)"
+for d in https://panel.example.com panel.example.com:8443 panel.example.com/ localhost 192.0.2.1 panel_x.example.com .example.com; do
+  if x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall --panel-domain "$d" >/dev/null 2>&1; then
+    fail "--panel-domain '$d' accepted"
+  fi
+done
+if x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall --public-url https://panel.example.com >/dev/null 2>&1; then
+  fail "the removed --public-url was accepted"
+fi
+out=$(x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall --panel-domain Panel.Example.com 2>&1)
+grep -q 'https://panel.example.com:8443' <<<"$out" || fail "--panel-domain not lower-cased into the public URL: $out"
+
 # The container shares the host's network (--network host), so every run
 # passes --no-firewall: the rules would land on the host. The firewall
 # step is tested in a container of its own (packaging/test/firewall-test.sh).
 step "apply"
-x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --public-url https://panel.example.com || {
+x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com || {
   x tail -n 60 /var/log/hostashi-install.log >&2 || true
   fail "first apply failed"
 }
 
 step "second apply changes nothing"
-out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --public-url https://panel.example.com)
+out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com)
 echo "$out"
 grep -q 'changes=0' <<<"$out" || fail "second run changed something"
 # The container's root is an overlay: the quota step must skip with a
@@ -154,11 +175,11 @@ step "hostashi doctor"
 rc=0
 doc=$(x /usr/local/bin/hostashi doctor) || rc=$?
 echo "$doc"
-for id in system.os system.pool service.panel service.nginx service.mariadb service.fail2ban; do
+for id in system.os system.pool service.panel service.nginx service.mariadb service.fail2ban service.dbtool; do
   grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"
 done
 grep -Eq "^  WARN  system.quota " <<<"$doc" || fail "doctor: no quota warning on an overlay root"
-for id in system.updates system.reboot system.php system.sysctl; do
+for id in system.updates system.reboot system.php system.files system.sysctl; do
   grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"
 done
 # This test passes --no-firewall (the container shares the host's network).
@@ -184,6 +205,30 @@ expect_mode /run/hostashi/agent.sock "660 root:hostashi"
 expect_mode /run/hostashi-panel.sock "660 hostashi:www-data"
 expect_mode /var/lib/hostashi-acme "755 root:root"
 expect_mode /var/lib/hostashi-acme/.well-known/acme-challenge "2750 hostashi:www-data"
+
+step "the database tool is installed (ADR-0038)"
+[ "$(x systemctl is-active hostashi-adminer.service)" = active ] || fail "hostashi-adminer.service not running"
+x grep -qx 'HOSTASHI_DB_TOOL_PORT=8444' /etc/hostashi/hostashi.env || fail "database tool port not in the settings"
+expect_mode /usr/share/hostashi/adminer "755 root:root"
+expect_mode /usr/share/hostashi/adminer/adminer.php "644 root:root"
+expect_mode /usr/share/hostashi/adminer/index.php "644 root:root"
+expect_mode /run/hostashi-adminer/tickets "700 hostashi-adminer:hostashi-adminer"
+expect_mode /run/hostashi-adminer-fpm/fpm.sock "660 hostashi-adminer:www-data"
+[ "$(x getent passwd hostashi-adminer | cut -d: -f7)" = /usr/sbin/nologin ] || fail "hostashi-adminer has a shell"
+x sh -c 'cd /usr/share/hostashi/adminer && sha256sum --quiet -c /opt/hostashi/adminer/SHA256SUMS' || fail "installed adminer.php is not the pinned one"
+# The workers run as the tool user and reach nothing of the sites.
+for p in /etc/hostashi /var/lib/hostashi-agent /var/lib/hostashi; do
+  if x runuser -u hostashi-adminer -- ls "$p/" >/dev/null 2>&1; then fail "hostashi-adminer can list $p"; fi
+done
+if x runuser -u nobody -- test -w /run/hostashi-adminer-fpm/fpm.sock; then fail "another user can write the tool socket"; fi
+# A changed pinned file is refused, the server keeps the installed one.
+x cp -a /opt/hostashi /opt/hostashi-bad
+x sh -c 'echo "<?php // changed" >>/opt/hostashi-bad/adminer/adminer.php'
+if x /opt/hostashi-bad/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com >/dev/null 2>&1; then
+  fail "a changed adminer.php was installed"
+fi
+x sh -c 'cd /usr/share/hostashi/adminer && sha256sum --quiet -c /opt/hostashi/adminer/SHA256SUMS' || fail "a changed adminer.php replaced the installed one"
+x rm -rf /opt/hostashi-bad
 
 step "nginx runs on the agent's generation"
 [ "$(x systemctl is-active nginx.service)" = active ] || fail "nginx is not running"
@@ -236,6 +281,60 @@ x loginctl terminate-user blog 2>/dev/null || true
 for _ in $(seq 1 30); do x pgrep -u blog >/dev/null || break; sleep 1; done
 x pgrep -u blog >/dev/null && fail "processes of blog left after the SSH logins"
 x rm -rf /etc/hostashi-ssh/keys/blog /home/blog/.ssh /root/t
+step "object cache unit of a site (ADR-0045)"
+# The package's own Valkey on 127.0.0.1:6379 must never run.
+[ "$(x systemctl is-enabled valkey-server.service 2>/dev/null)" = masked ] || fail "valkey-server.service is not masked"
+x bash -c 'exec 3<>/dev/tcp/127.0.0.1/6379' 2>/dev/null && fail "something listens on port 6379"
+# The config and drop-in are written by hand here, in the format the agent
+# renders; the agent's own tests cover the rendering.
+x install -d -m 0700 /var/lib/hostashi-agent/valkey
+xi sh -c 'umask 077; cat >/var/lib/hostashi-agent/valkey/blog.conf' <<'CONF'
+port 0
+unixsocket /run/hostashi-valkey/blog/valkey.sock
+unixsocketperm 600
+dir /run/hostashi-valkey/blog
+save ""
+appendonly no
+maxmemory 32mb
+maxmemory-policy allkeys-lru
+enable-protected-configs no
+enable-debug-command no
+enable-module-command no
+user default on nopass ~* &* +@all -@admin
+CONF
+x install -d -m 0755 /etc/systemd/system/hostashi-valkey@blog.service.d
+x sh -c 'printf "[Service]\nSlice=hostashi-site-blog.slice\n" >/etc/systemd/system/hostashi-valkey@blog.service.d/50-hostashi-slice.conf'
+x systemctl daemon-reload
+x systemctl start hostashi-valkey@blog.service || { x journalctl -u hostashi-valkey@blog.service --no-pager -n 30 >&2; fail "cache unit did not start"; }
+[ "$(x systemctl show -P Slice hostashi-valkey@blog.service)" = hostashi-site-blog.slice ] || fail "cache is not in the site's slice"
+[ "$(x stat -c '%U' /proc/"$(x systemctl show -P MainPID hostashi-valkey@blog.service)")" = blog ] || fail "cache does not run as the site user"
+expect_mode /run/hostashi-valkey/blog "700 blog:blog"
+expect_mode /run/hostashi-valkey/blog/valkey.sock "600 blog:blog"
+# cache.php OP: what the site's PHP sees through phpredis.
+xi sh -c 'cat >/tmp/cache.php && chmod 644 /tmp/cache.php' <<'PHP'
+<?php
+$r = new Redis();
+$r->connect('/run/hostashi-valkey/blog/valkey.sock');
+switch ($argv[1]) {
+case 'set': $r->set('k', 'v'); echo $r->get('k'), "\n"; break;
+case 'flush': echo $r->flushAll() ? "flushed\n" : "no\n"; echo $r->dbSize(), "\n"; break;
+case 'config': try { $r->config('SET', 'dir', '/tmp'); echo "config allowed\n"; } catch (RedisException $e) { echo "refused\n"; } break;
+case 'info': echo $r->info('memory')['maxmemory'], "\n"; break;
+}
+PHP
+[ "$(x runuser -u blog -- php /tmp/cache.php set)" = v ] || fail "the site cannot use its cache"
+[ "$(x runuser -u blog -- php /tmp/cache.php info)" = 33554432 ] || fail "cache has the wrong maxmemory"
+[ "$(x runuser -u blog -- php /tmp/cache.php config)" = refused ] || fail "the site may change the cache's config"
+# Not "| head -1": with pipefail, php's SIGPIPE on the second line would fail it.
+[ "$(x runuser -u blog -- php /tmp/cache.php flush)" = "$(printf 'flushed\n0')" ] || fail "the site cannot flush its cache"
+x useradd -M -s /usr/sbin/nologin cacheprobe
+x runuser -u cacheprobe -- php /tmp/cache.php set >/dev/null 2>&1 && fail "another user reached the site's cache"
+x userdel cacheprobe
+exposure hostashi-valkey@blog.service 1.0
+x systemctl stop hostashi-valkey@blog.service
+x rm -rf /var/lib/hostashi-agent/valkey/blog.conf /etc/systemd/system/hostashi-valkey@blog.service.d /tmp/cache.php
+x systemctl daemon-reload
+
 # shellcheck disable=SC2016 # expanded inside the container
 x sh -c 'echo "hello from blog" >/home/blog/htdocs/index.html; for i in $(seq 1 200); do echo ".c$i { color: red; }"; done >/home/blog/htdocs/app.css; chown blog:blog /home/blog/htdocs/*'
 web_apply() { docker exec -i "$NAME" /usr/local/bin/hostashi web apply <<<"$1"; }
@@ -248,23 +347,42 @@ out=$(web_apply '{"sites":[{"user":"blog","domains":["blog.example.com","www.blo
 grep -q 'changed: false' <<<"$out" || fail "same web state applied again: $out"
 if x /usr/local/bin/hostashi site delete blog; then fail "site with a virtual host was deleted"; fi
 
+step "file manager helper runs as the site user (ADR-0040)"
+sock=$(x /usr/local/bin/hostashi site files blog)
+[ "$sock" = /run/hostashi-files/blog.sock ] || fail "file manager socket is '$sock'"
+expect_mode "$sock" "660 root:hostashi"
+expect_mode /etc/systemd/system/hostashi-files@blog.service.d/50-hostashi-site.conf "644 root:root"
+fm() { x curl -fsS --unix-socket "$sock" "http://files$1" "${@:2}"; }
+fm '/v1/list?path=htdocs' | grep -q '"name":"index.html"' || fail "helper does not list the web root"
+[ "$(fm '/v1/file?path=htdocs/index.html')" = "hello from blog" ] || fail "helper download differs"
+fm /v1/mkdir -X POST -d '{"path":"htdocs/fm"}' >/dev/null || fail "helper mkdir failed"
+fm '/v1/file?path=htdocs/fm/new.txt' -X PUT --data-binary 'from the panel' >/dev/null || fail "helper write failed"
+expect_mode /home/blog/htdocs/fm "755 blog:blog"
+expect_mode /home/blog/htdocs/fm/new.txt "644 blog:blog"
+# fchmodat2 must pass the unit's system call filter.
+fm /v1/chmod -X POST -d '{"paths":["htdocs/fm/new.txt"],"mode":"0600"}' >/dev/null || fail "helper chmod failed"
+expect_mode /home/blog/htdocs/fm/new.txt "600 blog:blog"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' --unix-socket "$sock" 'http://files/v1/file?path=../../etc/passwd')
+[ "$code" = 400 ] || fail "helper path outside the home answered $code"
+x ln -s /etc /home/blog/htdocs/fm/etc
+code=$(x curl -sS -o /dev/null -w '%{http_code}' --unix-socket "$sock" 'http://files/v1/file?path=htdocs/fm/etc/hostname')
+[ "$code" = 400 ] || fail "helper followed a symlink ($code)"
+[ "$(x systemctl show -p User --value hostashi-files@blog.service)" = blog ] || fail "helper does not run as blog"
+[ "$(x systemctl show -p Slice --value hostashi-files@blog.service)" = hostashi-site-blog.slice ] || fail "helper not in the site's slice"
+x pgrep -u blog -f 'hostashi files-helper' >/dev/null || fail "no helper process of blog"
+fm /v1/delete -X POST -d '{"paths":["htdocs/fm"]}' >/dev/null || fail "helper delete failed"
+x test ! -e /home/blog/htdocs/fm || fail "helper delete left the folder"
+x test -e /etc/hostname || fail "delete followed the symlink"
+
 step "systemd exposure"
 x systemd-analyze security hostashi.service | tail -1
 x systemd-analyze security hostashi-agent.service | tail -1
-# exposure UNIT MAX fails when the unit's exposure score rises above MAX
-# (ADR-0033): a change that weakens the sandbox shows up here.
-exposure() {
-  local score
-  # "→ Overall exposure level for hostashi-php-8.4@wp.service: 2.4 OK :-)"
-  score=$(x systemd-analyze security "$1" | tail -1 | sed -E 's/.*: ([0-9]+\.[0-9]+) .*/\1/')
-  echo "$1: exposure $score"
-  awk -v s="$score" -v m="$2" 'BEGIN { exit !(s <= m) }' || fail "$1: exposure $score is above $2"
-}
 exposure hostashi.service 2.0
 exposure hostashi-agent.service 4.5
+exposure hostashi-files@blog.service 1.0
 
 step "changed setting is applied and the panel restarts"
-out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --public-url https://other.example.com)
+out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com)
 echo "$out"
 grep -q 'apply.*config' <<<"$out" || fail "config change not applied"
 [ "$(x systemctl is-active hostashi.service)" = active ] || fail "panel did not come back after the change"
@@ -277,6 +395,8 @@ step "remove the site"
 web_apply '{"sites":[]}'
 x /usr/local/bin/hostashi site delete blog
 x test ! -e /home/blog || fail "site home still there"
+x test ! -e /etc/systemd/system/hostashi-files@blog.service.d || fail "file manager drop-in left"
+x test ! -e /run/hostashi-files/blog.sock || fail "file manager socket left"
 
 step "a site through the panel API"
 tok=$(x /usr/local/bin/hostashi setup-token -db /var/lib/hostashi/hostashi.db)
@@ -358,6 +478,18 @@ echo @file_get_contents("/etc/hostname") === false ? " jailed" : " open";
 PHP
 body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/some/pretty/url)
 [ "$body" = "php $ver user wp jailed" ] || fail "PHP site answered '$body'"
+# The file manager through the panel (ADR-0040): the panel, without root
+# and in its own user namespace, reaches the helper's socket, and the
+# helper writes as the site user.
+[ "$(api GET '/api/v1/sites/wp/files?path=htdocs')" = 200 ] || fail "file list through the panel: $(x cat /tmp/api.out)"
+x grep -q '"name":"index.php"' /tmp/api.out || fail "panel file list lacks index.php: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/wp/files/touch '{"path":"htdocs/from-panel.txt"}')" = 200 ] || fail "file create through the panel: $(x cat /tmp/api.out)"
+expect_mode /home/wp/htdocs/from-panel.txt "644 wp:wp"
+[ "$(api POST /api/v1/sites/wp/files/delete '{"paths":["htdocs/from-panel.txt"]}')" = 200 ] || fail "file delete through the panel: $(x cat /tmp/api.out)"
+x test ! -e /home/wp/htdocs/from-panel.txt || fail "file deleted through the panel is still there"
+# The helper runs as wp until it is idle; the SSH checks below expect no
+# process of wp outside PHP, so it is stopped here.
+x systemctl stop hostashi-files@wp.service
 # A PHP package update replaces the binary under the running master; the
 # dpkg hook (ADR-0033) restarts the site's unit, the package's own unit
 # stays off.
@@ -374,6 +506,31 @@ if x grep -Eq ' /usr/[^ ]+ \(deleted\)$' "/proc/$new/maps"; then fail "restarted
 if x systemctl is-active --quiet "php$ver-fpm.service"; then fail "package unit php$ver-fpm started by the update"; fi
 body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/some/pretty/url)
 [ "$body" = "php $ver user wp jailed" ] || fail "PHP site answered '$body' after the update"
+# The object cache through the panel (ADR-0045): the site's PHP-FPM, in
+# its own sandbox, reaches its Valkey over the socket.
+[ "$(api PUT /api/v1/sites/wp/object-cache '{"enabled":true}')" = 200 ] || fail "object cache on: $(x cat /tmp/api.out)"
+x systemctl is-active --quiet hostashi-valkey@wp.service || fail "cache unit of wp not running"
+[ "$(x systemctl show -P Slice hostashi-valkey@wp.service)" = hostashi-site-wp.slice ] || fail "cache of wp is not in its slice"
+xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/cache.php' <<'PHP'
+<?php
+$r = new Redis();
+$r->connect('/run/hostashi-valkey/wp/valkey.sock');
+if (($_GET['op'] ?? '') === 'set') { $r->set('k', 'cached'); }
+echo $r->get('k') ?: 'empty', ' ', $r->info('memory')['maxmemory'];
+PHP
+body=$(x curl -fsS -H 'Host: wp.example.com' 'http://127.0.0.1/cache.php?op=set')
+[ "$body" = "cached 67108864" ] || fail "PHP of wp got '$body' from its cache"
+[ "$(api POST /api/v1/sites/wp/object-cache/flush)" = 200 ] || fail "flush: $(x cat /tmp/api.out)"
+body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/cache.php)
+[ "$body" = "empty 67108864" ] || fail "cache of wp not empty after a flush: '$body'"
+[ "$(api PUT /api/v1/sites/wp/object-cache/size '{"memoryMb":128}')" = 200 ] || fail "cache size: $(x cat /tmp/api.out)"
+body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/cache.php)
+[ "$body" = "empty 134217728" ] || fail "cache of wp not resized: '$body'"
+exposure hostashi-valkey@wp.service 1.0
+[ "$(api PUT /api/v1/sites/wp/object-cache '{"enabled":false}')" = 200 ] || fail "object cache off: $(x cat /tmp/api.out)"
+x systemctl is-active --quiet hostashi-valkey@wp.service && fail "cache unit of wp still running after off"
+x test ! -e /var/lib/hostashi-agent/valkey/wp.conf || fail "cache config of wp left after off"
+x rm -f /home/wp/htdocs/cache.php
 # Metrics (ADR-0022): off by default, then on with a metrics:read token.
 # php_up comes from the unit's cgroup, which checks the slice path.
 [ "$(x curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/metrics)" = 404 ] || fail "metrics on by default"
@@ -446,6 +603,36 @@ body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/)
 [ "$body" = "php $ver user wp jailed" ] || fail "PHP site answered '$body' after PHP on"
 # The distribution's own FPM service stays off.
 ! x systemctl is-active --quiet "php$ver-fpm.service" || fail "distribution php$ver-fpm is running"
+
+step "Page cache of a PHP site (ADR-0046)"
+xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/now.php' <<'PHP'
+<?php
+echo hrtime(true);
+PHP
+xcache() { x curl -sS -o /dev/null -D - -H 'Host: wp.example.com' "$@" | tr -d '\r' | sed -n 's/^x-cache: //Ip'; }
+[ "$(api PUT /api/v1/sites/wp/page-cache '{"enabled":true,"preset":"php","minutes":10,"exclude":["/fresh*"]}')" = 200 ] ||
+  fail "page cache on: $(x cat /tmp/api.out)"
+expect_mode /home/.hostashi-cache "711 root:root"
+expect_mode /home/.hostashi-cache/wp "700 www-data:www-data"
+[ "$(xcache http://127.0.0.1/now.php)" = MISS ] || fail "first request not a MISS"
+[ "$(xcache http://127.0.0.1/now.php)" = HIT ] || fail "second request not a HIT"
+a=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/now.php)
+b=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/now.php)
+[ "$a" = "$b" ] || fail "cached page changed: $a $b"
+[ "$(xcache -H 'Cookie: session=1' http://127.0.0.1/now.php)" = BYPASS ] || fail "request with a cookie used the cache"
+[ "$(xcache http://127.0.0.1/fresh/page)" = BYPASS ] || fail "excluded path used the cache"
+# The site user can neither list nor read the cached pages.
+if x runuser -u wp -- ls /home/.hostashi-cache/wp >/dev/null 2>&1; then fail "site user can list the page cache"; fi
+[ "$(api POST /api/v1/sites/wp/page-cache/purge)" = 204 ] || fail "purge: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/wp/page-cache/purge)" = 429 ] || fail "second purge not rate limited"
+[ "$(xcache http://127.0.0.1/now.php)" = MISS ] || fail "purged cache still answered"
+expect_mode /home/.hostashi-cache/wp "700 www-data:www-data"
+[ "$(api GET /api/v1/doctor)" = 200 ] || fail "doctor: $(x cat /tmp/api.out)"
+if x grep -q '"site.pagecache"[^}]*"fail"' /tmp/api.out; then fail "doctor finds the page cache broken: $(x cat /tmp/api.out)"; fi
+[ "$(api PUT /api/v1/sites/wp/page-cache '{"enabled":false,"preset":"php","minutes":10}')" = 200 ] ||
+  fail "page cache off: $(x cat /tmp/api.out)"
+if x test -e /home/.hostashi-cache/wp; then fail "cache directory left after switching off"; fi
+[ -z "$(xcache http://127.0.0.1/now.php)" ] || fail "X-Cache sent without a page cache"
 
 step "SSH keys through the panel API (ADR-0032)"
 x sh -c 'mkdir -p /run/sshd /root/t && rm -f /root/t/k && ssh-keygen -q -t ed25519 -N "" -C kim@laptop -f /root/t/k'
@@ -1031,10 +1218,74 @@ UNIT
   x grep -q "\"lastUsedIp\":\"$ip\"" /tmp/api.out || fail "panel did not see the client address $ip: $(x cat /tmp/api.out)"
   # Only nginx and the panel may use the socket.
   if x runuser -u nobody -- test -w /run/hostashi-panel.sock; then fail "another user can write the panel socket"; fi
+
+  step "the panel on port 443 next to the sites (ADR-0042)"
+  if x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall --panel-port 443 >/dev/null 2>&1; then
+    fail "--panel-port 443 accepted without --panel-domain"
+  fi
+  if x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com --panel-port 80 >/dev/null 2>&1; then
+    fail "--panel-port 80 accepted"
+  fi
+  out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com --panel-port 443) || {
+    x tail -n 60 /var/log/hostashi-install.log >&2 || true
+    fail "apply with --panel-port 443 failed"
+  }
+  x grep -qx 'HOSTASHI_PUBLIC_URL=https://other.example.com' /etc/hostashi/hostashi.env || fail "public URL on 443 has a port"
+  [ "$(api POST /api/v1/sites '{"name":"next","domains":["next.example.com"]}')" = 201 ] || fail "site next to the panel: $(x cat /tmp/api.out)"
+  x sh -c 'echo "hello next" >/home/next/htdocs/index.html'
+  [ "$(api PUT /api/v1/sites/next/tls '{"enabled":true}')" = 202 ] || fail "TLS on for next: $(x cat /tmp/api.out)"
+  p443() { x curl -sSk --resolve other.example.com:443:127.0.0.1 --resolve next.example.com:443:127.0.0.1 "$@"; }
+  for _ in $(seq 1 60); do
+    p443 -f -o /dev/null https://other.example.com/api/v1/health 2>/dev/null && p443 -f -o /dev/null https://next.example.com/ 2>/dev/null && break
+    sleep 2
+  done
+  health=$(p443 -f https://other.example.com/api/v1/health) || fail "panel not served on 443"
+  grep -q '"agent":"ok"' <<<"$health" || fail "panel on 443: $health"
+  [ "$(p443 -f https://next.example.com/)" = "hello next" ] || fail "site not served next to the panel on 443"
+  loc=$(x curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' -H 'Host: other.example.com' http://127.0.0.1/login)
+  [ "$loc" = "301 https://other.example.com/login" ] || fail "panel HTTP redirect on 443: '$loc'"
+  if x curl -sSk -o /dev/null --resolve other.example.com:8443:127.0.0.1 https://other.example.com:8443/ 2>/dev/null; then
+    fail "the panel still answers on 8443"
+  fi
+  if x curl -sSk -o /dev/null --resolve unknown.example.com:443:127.0.0.1 https://unknown.example.com/ 2>/dev/null; then
+    fail "port 443 answered an unknown name"
+  fi
+  [ "$(api POST /api/v1/sites '{"name":"steal","domains":["other.example.com"]}')" = 409 ] || fail "site on the panel's name: $(x cat /tmp/api.out)"
+  x grep -q '"domain_reserved"' /tmp/api.out || fail "no domain_reserved: $(x cat /tmp/api.out)"
+  [ "$(api DELETE /api/v1/sites/next)" = 204 ] || fail "delete site next: $(x cat /tmp/api.out)"
+
+  step "a database in the web database tool (ADR-0038)"
+  [ "$(api POST /api/v1/sites '{"name":"tooldb","domains":["tooldb.example.com"]}')" = 201 ] || fail "create site: $(x cat /tmp/api.out)"
+  [ "$(api POST /api/v1/sites/tooldb/databases '{"name":"tooldb_wp"}')" = 201 ] || fail "create database: $(x cat /tmp/api.out)"
+  for _ in $(seq 1 30); do
+    [ "$(api GET /api/v1/dbtool)" = 200 ] && x grep -q '"available":true' /tmp/api.out && break
+    sleep 2
+  done
+  x grep -q '"available":true' /tmp/api.out || fail "database tool not available: $(x cat /tmp/api.out)"
+  [ "$(api POST /api/v1/databases/tooldb_wp/tool '{"minutes":30}')" = 201 ] || fail "open tool: $(x cat /tmp/api.out)"
+  url=$(x sed -n 's/.*"url":"\([^"]*\)".*/\1/p' /tmp/api.out)
+  case "$url" in https://other.example.com:8444/?ticket=*) ;; *) fail "tool address '$url'";; esac
+  user=$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User LIKE 'hostashi\_tool\_%'")
+  [ -n "$user" ] || fail "no temporary database user"
+  p8444() { x curl -sSk --resolve other.example.com:8444:127.0.0.1 -c /tmp/tool.jar -b /tmp/tool.jar "$@"; }
+  page=$(p8444 -L "$url") || fail "tool did not answer"
+  grep -q 'Tables and views' <<<"$page" || fail "tool did not log in: $(head -c 400 <<<"$page")"
+  if grep -q 'auth\[password\]' <<<"$page"; then fail "the tool shows a login form"; fi
+  [ "$(p8444 -o /dev/null -w '%{http_code}' "$url")" = 403 ] || fail "a ticket worked twice"
+  x test -z "$(x ls -A /run/hostashi-adminer/tickets)" || fail "used ticket kept"
+  [ "$(p8444 -o /dev/null -w '%{http_code}' https://other.example.com:8444/adminer.php)" = 404 ] || fail "adminer.php reachable"
+  rp=$(p8444 -o /dev/null -D - "https://other.example.com:8444/?username=$user&db=tooldb_wp" | tr -d '\r' | grep -i '^referrer-policy:' | head -n1)
+  [ "$rp" = "referrer-policy: no-referrer" ] || fail "tool referrer policy: '$rp'"
+  if x curl -sSk -o /dev/null --resolve unknown.example.com:8444:127.0.0.1 https://unknown.example.com:8444/ 2>/dev/null; then
+    fail "tool port answered an unknown name"
+  fi
+  # Deleting the database ends the session: the user is gone.
+  [ "$(api DELETE /api/v1/sites/tooldb)" = 204 ] || fail "delete site: $(x cat /tmp/api.out)"
+  [ -z "$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User = '$user'")" ] || fail "temporary user outlived its database"
 fi
 
 step "more PHP versions from sury.org (ADR-0019)"
-inst() { x /opt/hostashi/install.sh "$@" --binary /opt/hostashi/hostashi --no-firewall --public-url https://other.example.com; }
+inst() { x /opt/hostashi/install.sh "$@" --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com; }
 if inst plan --php-versions 8.0 2>/dev/null; then fail "PHP 8.0 accepted"; fi
 if inst plan --php-versions '8.1;7.4' 2>/dev/null; then fail "a list with ';' accepted"; fi
 # shellcheck disable=SC2016 # a dpkg-query format, not shell

@@ -191,3 +191,33 @@ func TestReadPHPInSlice(t *testing.T) {
 		t.Fatalf("in slice: %+v %v", p, err)
 	}
 }
+
+func TestReadCache(t *testing.T) {
+	root := t.TempDir()
+
+	got := CacheCgroup("/sys/fs/cgroup", "my-shop")
+	want := `/sys/fs/cgroup/hostashi.slice/hostashi-site.slice/hostashi-site-my\x2dshop.slice/hostashi-valkey@my-shop.service`
+
+	if got != want {
+		t.Fatalf("%s\nwant %s", got, want)
+	}
+
+	if c, err := ReadCache(root, "shop"); err != nil || c.Up {
+		t.Fatalf("missing: %+v %v", c, err)
+	}
+
+	dir := CacheCgroup(root, "shop")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, v := range map[string]string{"cgroup.procs": "42\n", "memory.current": "4194304\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(v), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if c, err := ReadCache(root, "shop"); err != nil || !c.Up || !c.MemoryKnown || c.MemoryBytes != 4194304 {
+		t.Fatalf("running: %+v %v", c, err)
+	}
+}

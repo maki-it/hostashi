@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -165,6 +166,11 @@ func TestEmbedded(t *testing.T) {
 	if rec.Code != http.StatusOK && rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status %d", rec.Code)
 	}
+
+	// A built frontend has the nonce tag the editor needs (ADR-0040).
+	if rec.Code == http.StatusOK && !strings.Contains(rec.Header().Get("Content-Security-Policy"), "'nonce-") {
+		t.Fatalf("built index.html without the style nonce: %q", rec.Header().Get("Content-Security-Policy"))
+	}
 }
 
 func TestAcceptsGzip(t *testing.T) {
@@ -187,5 +193,42 @@ func TestAcceptsGzip(t *testing.T) {
 		if got := acceptsGzip([]string{in}); got != want {
 			t.Errorf("%q: got %v, want %v", in, got, want)
 		}
+	}
+}
+
+func TestStyleNonce(t *testing.T) {
+	fsys := testFS()
+	fsys["index.html"] = &fstest.MapFile{Data: []byte("<!doctype html><head>" + nonceMeta + "<title>Hostashi</title>")}
+	h := newHandler(fsys)
+
+	seen := map[string]bool{}
+
+	for range 3 {
+		rec := get(t, h, http.MethodGet, "/sites/blog/files", map[string]string{"Accept-Encoding": "gzip"})
+
+		m := regexp.MustCompile(`<meta name="hostashi-style-nonce" content="([A-Za-z0-9_-]{24})" />`).FindStringSubmatch(rec.Body.String())
+		if m == nil {
+			t.Fatalf("no nonce in %q", rec.Body.String())
+		}
+
+		got := rec.Header().Get("Content-Security-Policy")
+		if !strings.Contains(got, "style-src 'self' 'nonce-"+m[1]+"';") || !strings.Contains(got, "script-src 'self';") || strings.Contains(got, "unsafe") {
+			t.Fatalf("CSP %q for nonce %s", got, m[1])
+		}
+
+		if rec.Header().Get("Content-Encoding") != "" || rec.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("headers %v", rec.Header())
+		}
+
+		if seen[m[1]] {
+			t.Fatal("nonce repeated")
+		}
+
+		seen[m[1]] = true
+	}
+
+	// Assets keep the policy without a nonce.
+	if got := get(t, h, http.MethodGet, "/assets/app-abc.js", nil).Header().Get("Content-Security-Policy"); got != csp {
+		t.Fatalf("asset CSP %q", got)
 	}
 }

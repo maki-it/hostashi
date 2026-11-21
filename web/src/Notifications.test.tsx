@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it } from "vitest";
+import { NotificationsCard } from "./Notifications";
+import { mockFetch } from "./test-utils";
+
+const admin = {
+  email: "kim@example.com",
+  mail_enabled: true,
+  categories: [
+    { id: "backups", enabled: true },
+    { id: "certificates", enabled: true },
+  ],
+};
+
+describe("NotificationsCard", () => {
+  it("switches a category and saves only that one", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      "GET /api/v1/account/notifications": { body: admin },
+      "PUT /api/v1/account/notifications": { body: { ...admin, categories: [{ id: "backups", enabled: false }, admin.categories[1]] } },
+    });
+    render(<NotificationsCard />);
+
+    const backups = await screen.findByRole("checkbox", { name: /Backups/ });
+    expect(backups).toBeChecked();
+    await user.click(backups);
+
+    expect(await screen.findByRole("checkbox", { name: /Backups/ })).not.toBeChecked();
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ backups: false });
+    expect(screen.getByRole("checkbox", { name: /Certificates/ })).toBeChecked();
+  });
+
+  it("asks for a confirmed address first", async () => {
+    mockFetch({ "GET /api/v1/account/notifications": { body: { ...admin, email: "" } } });
+    render(<NotificationsCard />);
+
+    expect(await screen.findByText("Add and confirm an email address above to get notifications.")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Backups/ })).toBeDisabled();
+  });
+
+  it("explains that email is off", async () => {
+    mockFetch({ "GET /api/v1/account/notifications": { body: { ...admin, mail_enabled: false } } });
+    render(<NotificationsCard />);
+
+    expect(await screen.findByText("Notifications need email, which is not set up on this panel yet.")).toBeInTheDocument();
+  });
+});

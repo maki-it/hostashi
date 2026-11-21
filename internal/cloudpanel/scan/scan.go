@@ -75,6 +75,12 @@ func Run(o Options) (*Report, error) {
 		return nil, fmt.Errorf("listing %s: %w", sitesEnabled, err)
 	}
 
+	// A shared Redis (ADR-0045) is noted, not read: its config is not
+	// root's, and its keys are the sites' data.
+	if r.Exists("/etc/redis/redis.conf") || r.Exists("/usr/bin/redis-server") {
+		rep.Global = append(rep.Global, Finding{SevInfo, "redis_detected", "Redis is installed and shared by the sites; Hostashi runs one cache per site on a Unix socket instead, apps that use 127.0.0.1:6379 have to switch to it", "/etc/redis/redis.conf", 0})
+	}
+
 	if r.Exists("/home/" + panelUser) {
 		rep.Global = append(rep.Global, Finding{SevInfo, "panel_detected", "home of the panel user " + panelUser + " exists; looks like a CloudPanel server", "", 0})
 	}
@@ -588,6 +594,13 @@ func (s *scanner) siteType(site *Site, sv server, p string) {
 
 		if s.r.Exists(site.DocRoot+"/wp-config.php") || s.r.Exists(site.DocRoot+"/wp-includes") {
 			site.Type = "wordpress"
+
+			// An object cache drop-in (ADR-0045), checked for existence
+			// only: its content is the site's.
+			if s.r.Exists(site.DocRoot + "/wp-content/object-cache.php") {
+				site.ObjectCache = true
+				site.Findings = append(site.Findings, Finding{SevInfo, "object_cache", "WordPress uses an object cache (wp-content/object-cache.php); Hostashi gives the site its own cache on a Unix socket, and wp-config.php has to point at it", site.DocRoot + "/wp-content/object-cache.php", 0})
+			}
 		}
 	case sv.ProxyPass != "":
 		site.Upstream = sv.ProxyPass

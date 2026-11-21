@@ -29,11 +29,18 @@ type DoctorEnv struct {
 	System         doctor.System
 	PanelSocket    string   // default PanelSocket
 	Fail2banSocket string   // default Fail2banSocket
+	DBToolSocket   string   // default DBToolSocket
 	Disk           []string // file systems to check besides the pools; default / and the state directories
 	// Hardening reads the files of the hardening baseline (ADR-0033). The
 	// zero value reads the server and asks systemd through phpctl.
 	Hardening doctor.Hardening
 	Now       func() time.Time
+	// ValkeyDefault reads the state of the Valkey package's own service
+	// (ADR-0045); nil asks systemd through phpctl.
+	ValkeyDefault func(ctx context.Context) (active, file string, err error)
+	// ValkeyBinary is where the installer put valkey-server; default
+	// /usr/bin/valkey-server.
+	ValkeyBinary string
 }
 
 type doctorOps struct {
@@ -41,10 +48,11 @@ type doctorOps struct {
 	stateDir string
 	h        *siteOps          // nil without the site operations
 	fw       *firewall.Manager // nil without the panel's firewall rules
+	dbTool   bool              // the web database tool is installed (ADR-0038)
 }
 
-func registerDoctor(s *agentrpc.Server, env DoctorEnv, stateDir string, h *siteOps, fw *firewall.Manager) {
-	d := &doctorOps{env: env, stateDir: stateDir, h: h, fw: fw}
+func registerDoctor(s *agentrpc.Server, env DoctorEnv, stateDir string, h *siteOps, fw *firewall.Manager, dbTool bool) {
+	d := &doctorOps{env: env, stateDir: stateDir, h: h, fw: fw, dbTool: dbTool}
 
 	agentrpc.Handle(s, agentapi.Doctor, func(ctx context.Context, _ agentrpc.Caller, _ agentapi.DoctorRequest) (agentapi.DoctorReport, error) {
 		return d.run(ctx), nil
@@ -107,6 +115,11 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	out = append(out, doctor.Socket(ctx, "service.fail2ban", "fail2ban", orDefault(d.env.Fail2banSocket, Fail2banSocket),
 		"Logins are not protected against brute force. Check: systemctl status fail2ban."))
 
+	if d.dbTool {
+		out = append(out, doctor.Socket(ctx, "service.dbtool", "the database tool", orDefault(d.env.DBToolSocket, DBToolSocket),
+			"Databases cannot be opened in Adminer. Check: systemctl status hostashi-adminer."))
+	}
+
 	hard := d.env.Hardening
 	if hard.Active == nil {
 		hard.Active = phpctl.UnitActive
@@ -125,10 +138,12 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 		}
 	}
 
-	out = append(out, hard.Updates(), hard.Reboot(), hard.PHP(), hard.SSH(), hard.Sysctl())
+	out = append(out, hard.Updates(), hard.Reboot(), hard.PHP(), hard.Files(), hard.SSH(), hard.Sysctl())
+	out = append(out, d.valkey(ctx))
 
 	if d.h != nil {
-		out = append(out, d.sites()...)
+		out = append(out, d.sites(ctx)...)
+		out = append(out, d.h.pageCacheChecks()...)
 	}
 
 	return agentapi.DoctorReport{Checks: out}
@@ -198,7 +213,7 @@ func (d *doctorOps) mariadb(ctx context.Context) agentapi.DoctorCheck {
 }
 
 // sites checks each site's disk use, its slice and its certificate.
-func (d *doctorOps) sites() []agentapi.DoctorCheck {
+func (d *doctorOps) sites(ctx context.Context) []agentapi.DoctorCheck {
 	var out []agentapi.DoctorCheck
 
 	count := func(n uint64) string { return strconv.FormatUint(n, 10) }
@@ -239,6 +254,10 @@ func (d *doctorOps) sites() []agentapi.DoctorCheck {
 			if c, ok := d.cert(s.User); ok {
 				out = append(out, c)
 			}
+		}
+
+		if c, ok := d.cache(ctx, s.User, s.UID); ok {
+			out = append(out, c)
 		}
 	}
 

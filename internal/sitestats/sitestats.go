@@ -58,12 +58,35 @@ type PHP struct {
 // The unit is looked up in the site's slice first, then in systemd's
 // default place for a unit that has not moved yet.
 func ReadPHP(root, version, user string) (PHP, error) {
-	dir := PHPSliceCgroup(root, version, user)
+	return readUnit(PHPSliceCgroup(root, version, user), PHPCgroup(root, version, user))
+}
 
-	procs, err := os.ReadFile(filepath.Join(dir, "cgroup.procs"))
-	if errors.Is(err, fs.ErrNotExist) {
-		dir = PHPCgroup(root, version, user)
+// CacheCgroup is the cgroup directory of a site's object cache unit
+// hostashi-valkey@<site>.service in the site's slice (ADR-0045).
+func CacheCgroup(root, user string) string {
+	slice := "hostashi-site-" + escapeUnitPrefix(user) + ".slice"
+
+	return filepath.Join(root, "hostashi.slice", "hostashi-site.slice", slice, "hostashi-valkey@"+user+".service")
+}
+
+// ReadCache reads the cgroup of a site's object cache like ReadPHP.
+func ReadCache(root, user string) (PHP, error) {
+	return readUnit(CacheCgroup(root, user))
+}
+
+// readUnit reads the first of the cgroup directories that exists.
+func readUnit(dirs ...string) (PHP, error) {
+	var (
+		dir   string
+		procs []byte
+		err   error
+	)
+
+	for _, dir = range dirs {
 		procs, err = os.ReadFile(filepath.Join(dir, "cgroup.procs"))
+		if !errors.Is(err, fs.ErrNotExist) {
+			break
+		}
 	}
 
 	if errors.Is(err, fs.ErrNotExist) {

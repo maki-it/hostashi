@@ -15,6 +15,9 @@ import (
 type Target struct {
 	Sites   []string // site names (= Linux users)
 	Domains []string // every domain of every site
+	// Panel is the panel's own host name, reserved against sites
+	// (ADR-0042); empty for none.
+	Panel string
 	// PHP lists the PHP versions installed here (agent php.versions).
 	PHP []string
 }
@@ -64,13 +67,21 @@ type Site struct {
 	// SFTP only (ADR-0032); SSHImport how many the site got.
 	SSHKeys   int `json:"sshKeys"`
 	SSHImport int `json:"sshImport"`
+	// ObjectCache: the old site uses an object cache, so the new one gets
+	// its own (ADR-0045). ObjectCacheOn tells whether it was turned on.
+	ObjectCache   bool `json:"objectCache"`
+	ObjectCacheOn bool `json:"objectCacheOn"`
 	// HomeBytes and HomeInodes are what the home uses on the old server,
 	// zero if the scan did not measure it. The new site's disk limits start
 	// from them (ADR-0015: use plus 50 %).
-	HomeBytes  int64    `json:"homeBytes,omitempty"`
-	HomeInodes int64    `json:"homeInodes,omitempty"`
-	Action     Action   `json:"action"`
-	Reasons    []Reason `json:"reasons"`
+	HomeBytes  int64 `json:"homeBytes,omitempty"`
+	HomeInodes int64 `json:"homeInodes,omitempty"`
+	// PageCache is the page cache preset proposed for a site that had a
+	// cache (likely Varnish) in front of it on the old server, "" for none
+	// (ADR-0046).
+	PageCache string   `json:"pageCache,omitempty"`
+	Action    Action   `json:"action"`
+	Reasons   []Reason `json:"reasons"`
 	// Source is the vhost file on the old server, to find the site in the report.
 	Source string `json:"source"`
 }
@@ -135,7 +146,7 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 	ps := Site{
 		Name: s.User, Type: s.Type, Domains: nonNil(s.Domains), RedirectFrom: nonNil(s.RedirectFrom),
 		DocRoot: s.DocRoot, Custom: len(s.Custom), Cron: len(s.Cron), CronImport: len(CronJobs(s)),
-		SSHKeys: len(SSHKeys(s)),
+		SSHKeys: len(SSHKeys(s)), ObjectCache: s.ObjectCache,
 		Reasons: []Reason{}, Source: first(s.Sources),
 	}
 	if s.Usage != nil {
@@ -192,6 +203,10 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 		if slices.Contains(t.Domains, d) {
 			skip("domain_taken", "the domain "+d+" belongs to a site on this server")
 		}
+
+		if t.Panel != "" && d == t.Panel {
+			skip("domain_reserved", "the domain "+d+" is the address of this panel")
+		}
 	}
 
 	switch {
@@ -231,17 +246,40 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 		review("ssh_keys", fmt.Sprintf("%d SSH keys of the site user are carried over as SFTP only; give a key shell access in the site's settings if it needs one", ps.SSHKeys))
 	}
 
+	if ps.ObjectCache {
+		review("object_cache", "the site gets its own object cache on a Unix socket; after the import point wp-config.php at /run/hostashi-valkey/"+ps.Name+"/valkey.sock (WP_REDIS_SCHEME unix, WP_REDIS_PATH), the old 127.0.0.1:6379 is not there")
+	}
+
 	if len(ps.RedirectFrom) > 0 {
 		review("redirects", "redirect hosts are served as aliases until typed redirects exist")
 	}
 
 	for _, f := range s.Findings {
-		if f.Severity == scan.SevReview && !reviewCodesCovered[f.Code] {
-			review(f.Code, f.Msg)
+		if f.Severity != scan.SevReview || reviewCodesCovered[f.Code] {
+			continue
 		}
+
+		if f.Code == "vhost_cache_tier" && ps.PHP != "" {
+			ps.PageCache = cachePreset(s.Type)
+			review("page_cache", "the old server had a cache (likely Varnish) in front of the site: the page cache is switched on with the "+
+				ps.PageCache+" preset. The Varnish rules are not carried over; remove a Varnish purge plugin from the app after the move.")
+
+			continue
+		}
+
+		review(f.Code, f.Msg)
 	}
 
 	return ps
+}
+
+// cachePreset is the page cache preset for a site type (ADR-0046).
+func cachePreset(siteType string) string {
+	if siteType == "wordpress" {
+		return agentapi.PageCacheWordPress
+	}
+
+	return agentapi.PageCachePHP
 }
 
 // reviewCodesCovered are scan findings the plan already explains itself.

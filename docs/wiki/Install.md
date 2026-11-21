@@ -31,13 +31,13 @@ There is no release yet. Until there is, build the `hostashi` binary from the re
 The installer has two modes. `plan` only reads and lists what it would do:
 
 ```sh
-sudo ./packaging/install.sh plan --binary ./hostashi --public-url https://panel.example.com
+sudo ./packaging/install.sh plan --binary ./hostashi --panel-domain panel.example.com
 ```
 
 ## 3. Install
 
 ```sh
-sudo ./packaging/install.sh apply --yes --binary ./hostashi --public-url https://panel.example.com
+sudo ./packaging/install.sh apply --yes --binary ./hostashi --panel-domain panel.example.com
 ```
 
 At the end it prints a **one-time setup token**, valid for 24 hours. Keep it for the first login.
@@ -62,17 +62,34 @@ Open the panel address (for example `https://panel.example.com:8443`), enter the
 sudo hostashi setup-token
 ```
 
+## Panel without a port
+
+To open the panel as `https://cp.example.com/` instead of `https://cp.example.com:8443/`, install with port 443:
+
+```sh
+sudo ./packaging/install.sh apply --yes --binary ./hostashi --panel-domain cp.example.com --panel-port 443
+```
+
+Before that, create a DNS record for the name that points to the server (`A`, and `AAAA` for IPv6), so that Let's Encrypt can check it. nginx then serves the panel on port 443 next to the sites and tells them apart by the host name. That name cannot be used for a site or a parked domain afterwards.
+
+Things to know:
+
+- The panel allowlist (Firewall page) is applied by nginx on port 443, not by the firewall. Addresses outside it still reach the TLS handshake and then get `403`. On port 8443 the firewall drops them earlier.
+- If fail2ban bans an address for wrong panel logins, it cannot reach the sites on this server either while the ban lasts. That also happens on 8443.
+- The database tool (Adminer) keeps its own port 8444, so it stays a separate origin from the panel.
+
 ## Installer options
 
 | Option | Meaning |
 |--------|---------|
 | `--binary PATH` | The `hostashi` binary to install. Required for `apply`. |
-| `--public-url URL` | The address users open the panel at, such as `https://panel.example.com`. With a host name, nginx serves the panel over HTTPS on the panel port with a Let's Encrypt certificate. Needed for passkeys. |
-| `--panel-port PORT` | HTTPS port of the panel, default `8443`. TCP and UDP must be open. |
+| `--panel-domain NAME` | The host name users open the panel at, such as `panel.example.com`, without `https://` or a port. nginx serves the panel there over HTTPS on the panel port with a Let's Encrypt certificate, so the name needs a DNS record pointing to the server. Needed for passkeys. Without it, the panel is reachable only through an SSH tunnel. |
+| `--panel-port PORT` | HTTPS port of the panel, default `8443`. TCP and UDP must be open. `443` serves the panel on the sites' port under its own host name and needs `--panel-domain`. See [Panel without a port](#panel-without-a-port). |
 | `--listen ADDR` | Where the panel process itself listens, default `127.0.0.1:8080`. |
 | `--php-versions LIST` | More PHP versions from sury.org next to the distribution's, comma-separated, such as `8.3,7.4`. 7.4, 8.1 and 8.2 are legacy versions. |
 | `--firewall-allow PORT/PROTO` | Also open this port to the internet, such as `3000/tcp`. Can be given more than once. |
 | `--no-firewall` | No Hostashi firewall. Only use this behind a provider firewall. |
+| `--no-db-tool` | Do not install the web database tool (Adminer on port 8444). Given on a server that has it, the installer removes it. |
 | `--no-quota` | Do not enable disk quota. Sites then have no disk limit. |
 | `--allow-untested` | Accept an operating system release that is not on the supported list. |
 

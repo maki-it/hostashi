@@ -127,3 +127,51 @@ func TestPanelServedBeforeChallenge(t *testing.T) {
 		t.Fatalf("%+v %v calls %d", p, err, iss.calls)
 	}
 }
+
+func TestPanelDomainReserved(t *testing.T) {
+	s, ag, _ := newService(t)
+	ctx := t.Context()
+
+	if s.PanelDomain() != "" {
+		t.Fatalf("panel domain before EnablePanel: %q", s.PanelDomain())
+	}
+
+	if err := s.EnablePanel("cp.example.com"); err != nil {
+		t.Fatal(err)
+	}
+
+	if s.PanelDomain() != "cp.example.com" {
+		t.Fatalf("panel domain %q", s.PanelDomain())
+	}
+
+	// Site domains are normalized first, so case does not get around it.
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", Domains: []string{"blog.example.com", "CP.example.com"}}); !errors.Is(err, ErrDomainReserved) {
+		t.Fatalf("create with the panel's name: %v", err)
+	}
+
+	if _, ok := ag.accounts["blog"]; ok {
+		t.Fatal("a refused site got an account")
+	}
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", Domains: []string{"blog.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.SetDomains(ctx, 1, "blog", []string{"blog.example.com", "cp.example.com"}); !errors.Is(err, ErrDomainReserved) {
+		t.Fatalf("set domains with the panel's name: %v", err)
+	}
+
+	site, err := s.Get(ctx, "blog")
+	if err != nil || len(site.Domains) != 1 {
+		t.Fatalf("domains changed: %+v %v", site, err)
+	}
+
+	if _, err := s.SetParked(ctx, 1, "cp.example.com", "", false); !errors.Is(err, ErrDomainReserved) {
+		t.Fatalf("park the panel's name: %v", err)
+	}
+
+	// Other names of the same zone are fine.
+	if _, err := s.SetParked(ctx, 1, "www.cp.example.com", "", false); err != nil {
+		t.Fatal(err)
+	}
+}

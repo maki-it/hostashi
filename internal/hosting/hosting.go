@@ -30,6 +30,11 @@ type Agent interface {
 	PHPVersions(ctx context.Context) ([]string, error)
 	TLSCSR(ctx context.Context, user string, domains []string) (string, error)
 	TLSInstall(ctx context.Context, user, chain string) (agentapi.TLSCertInfo, error)
+	// Own certificates (ADR-0039).
+	TLSCustomCSR(ctx context.Context, user string, domains []string) (string, error)
+	TLSUpload(ctx context.Context, req agentapi.TLSUploadRequest) (agentapi.TLSCertInfo, error)
+	TLSInfo(ctx context.Context, user string) (agentapi.TLSInfoResponse, error)
+	TLSDelete(ctx context.Context, user string) error
 	DBCreate(ctx context.Context, site, name string) error
 	DBDelete(ctx context.Context, name string) error
 	DBUserCreate(ctx context.Context, database, user, password string) error
@@ -47,6 +52,8 @@ type Agent interface {
 	PageDelete(ctx context.Context, id string) error
 	// SnippetCheck checks custom snippets of a site (ADR-0029).
 	SnippetCheck(ctx context.Context, req agentapi.SnippetCheckRequest) (agentapi.SnippetCheckResponse, error)
+	// PageCachePurge empties the page cache of a site (ADR-0046).
+	PageCachePurge(ctx context.Context, user string) error
 }
 
 // Issuer turns a certificate signing request into a certificate chain. The
@@ -94,14 +101,40 @@ func (a RPCAgent) TLSInstall(ctx context.Context, user, chain string) (agentapi.
 	return agentapi.TLSInstall.Call(ctx, a.C, agentapi.TLSInstallRequest{User: user, Chain: chain})
 }
 
+// TLSCustomCSR calls tls.csr for an own certificate.
+func (a RPCAgent) TLSCustomCSR(ctx context.Context, user string, domains []string) (string, error) {
+	res, err := agentapi.TLSCSR.Call(ctx, a.C, agentapi.TLSCSRRequest{User: user, Domains: domains, Custom: true})
+
+	return res.CSR, err
+}
+
+// TLSUpload calls tls.upload.
+func (a RPCAgent) TLSUpload(ctx context.Context, req agentapi.TLSUploadRequest) (agentapi.TLSCertInfo, error) {
+	return agentapi.TLSUpload.Call(ctx, a.C, req)
+}
+
+// TLSInfo calls tls.info.
+func (a RPCAgent) TLSInfo(ctx context.Context, user string) (agentapi.TLSInfoResponse, error) {
+	return agentapi.TLSInfo.Call(ctx, a.C, agentapi.TLSNameRequest{User: user})
+}
+
+// TLSDelete calls tls.delete.
+func (a RPCAgent) TLSDelete(ctx context.Context, user string) error {
+	_, err := agentapi.TLSDelete.Call(ctx, a.C, agentapi.TLSNameRequest{User: user})
+
+	return err
+}
+
 // Errors a caller can act on. Errors of the agent come back as
 // *agentrpc.Error with its code.
 var (
 	ErrInvalid     = errors.New("hosting: invalid input")
 	ErrExists      = errors.New("hosting: a site with this name exists")
 	ErrDomainTaken = errors.New("hosting: domain belongs to another site")
-	ErrNotFound    = errors.New("hosting: unknown site")
-	ErrState       = errors.New("hosting: the site is being created or deleted")
+	// ErrDomainReserved: the domain is the panel's own address (ADR-0042).
+	ErrDomainReserved = errors.New("hosting: domain is the panel's address")
+	ErrNotFound       = errors.New("hosting: unknown site")
+	ErrState          = errors.New("hosting: the site is being created or deleted")
 	// ErrNoTLS means the panel has no ACME client configured.
 	ErrNoTLS = errors.New("hosting: certificates are not available")
 )
@@ -120,11 +153,23 @@ type Service struct {
 	cron   CronAgent   // nil: no cron jobs
 	limits LimitsAgent // nil: no resource limits (ADR-0015)
 	ssh    SSHAgent    // nil: no SSH keys (ADR-0032)
+	cache  CacheAgent  // nil: no object caches (ADR-0045)
+	dbs    DBServers   // nil: only the local database server (ADR-0041)
+
+	dbTool     DBToolAgent // nil: no web database tool (ADR-0038)
+	dbToolPort int
+
+	dbManifestDir string     // extdb list for the backup; empty: none
+	manifestMu    sync.Mutex // serializes the manifest writes
 
 	panelDomain string // ADR-0023; empty: nginx serves no panel address
 	panelServed string // panel domain of the last accepted web state; under mu
 
 	onApply func(ok bool, generation int) // nil: nobody listens
+
+	// purged holds the last page cache purge per site (ADR-0046).
+	purgeMu sync.Mutex
+	purged  map[string]time.Time
 }
 
 // New builds a Service.
@@ -240,6 +285,10 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 
 	if req.PHPPrograms && req.PHP == "" {
 		return store.Site{}, fmt.Errorf("%w: programs need a PHP version", ErrInvalid)
+	}
+
+	if err := s.checkReserved(domains); err != nil {
+		return store.Site{}, err
 	}
 
 	s.mu.Lock()
@@ -366,6 +415,10 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 		return store.Site{}, err
 	}
 
+	if err := s.checkReserved(domains); err != nil {
+		return store.Site{}, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -376,6 +429,10 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 
 	if site.State != store.SiteActive {
 		return store.Site{}, ErrState
+	}
+
+	if err := checkOwnCertDomains(site, domains); err != nil {
+		return store.Site{}, err
 	}
 
 	old, err := s.st.ReplaceSiteDomains(ctx, name, domains, s.now())
@@ -401,7 +458,7 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 
 	// A certificate for the old names no longer covers the site: the site
 	// is served over HTTP until the new one is there.
-	if site.TLS {
+	if site.TLS && site.TLSSource == store.TLSLetsEncrypt {
 		s.Kick()
 	}
 
@@ -537,6 +594,11 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		return err
 	}
 
+	caches, err := s.st.AllPageCaches(ctx)
+	if err != nil {
+		return err
+	}
+
 	for _, site := range sites {
 		if site.State == store.SiteActive && len(site.Domains) > 0 {
 			tls := site.TLS && s.certCovers(site, 0)
@@ -557,6 +619,10 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				ws.PHPWorkers = phpWorkers(workers, site.ID)
 				ws.PHPPrograms = site.PHPPrograms
 			}
+
+			// Sent in maintenance as well, so the agent keeps the cache's
+			// directory; it purges it when the site is served again.
+			ws.PageCache = webPageCache(caches, site, php)
 
 			// The agent leaves them out while the site is disabled or in
 			// maintenance; they are sent anyway so the state stays complete.
