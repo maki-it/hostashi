@@ -144,7 +144,7 @@ What the package does:
 | **B. `postinst` runs the installer in a new mode `upgrade`: every step except the ones that install packages, with the saved options; then restarts agent and panel** | Every server converges to the release's state on each `apt upgrade`; uses the tested idempotent steps | Steps that need new packages must move the package into `Depends:`; a failing step fails the upgrade (visible, but must leave a working system) |
 | C. `postinst` starts a oneshot unit that runs the full installer after apt finishes | Can install packages | Races with apt and unattended-upgrades; errors are invisible to the person running `apt upgrade` |
 
-**Recommendation: B.** Order on upgrade:
+**Recommendation: B** (decided by Kim, 2026-11-21). Order on upgrade:
 
 1. `preinst`: stop nothing yet; copy the SQLite database with `VACUUM INTO` to `/var/lib/hostashi/upgrade/hostashi-<old version>.db` (0600, keep the last three) [A: `VACUUM INTO` works while the panel runs; else stop the panel first].
 2. dpkg unpacks the new files.
@@ -155,10 +155,12 @@ The package never changes site configs by itself; the agent's reconciler re-appl
 
 ## 5. Rollback
 
-- `apt install hostashi=<old version>` downgrades the package; the apt repository keeps the last five versions [E].
-- If the newer release migrated the database, the old binary refuses to start (`ErrSchemaTooNew`, verified). `hostashi rollback <version>` (new CLI command, root only, outside the panel) stops the services, restores the matching `preinst` snapshot and starts them. Data written after the upgrade is lost; the command says so and asks for confirmation.
-- Migrations stay additive within a minor version where possible [A: a rule for reviews, not enforced by code].
-- An upgrade test in CI (install the last release, create data, upgrade to the new `.deb`, check; then roll back) becomes mandatory per release, as the roadmap's test table already says [V: `docs/06-roadmap.md`].
+- Plain apt works when the database schema did not change between the two versions: `sudo apt install --allow-downgrades hostashi=<old version>`. The apt repository keeps the last five versions [E].
+- If the newer release migrated the database, the old binary would refuse to start (`ErrSchemaTooNew`, verified). On a downgrade dpkg runs the installed package's `prerm upgrade <old version>` [U]; it compares the schema versions and, when they differ, stops the downgrade with a message that points to `hostashi-rollback`, before anything is changed.
+- `sudo hostashi-rollback [version]` (a root-only shell script from the package, default: the version before the current one) shows which snapshot it uses and that changes made in the panel since the upgrade are lost, asks for confirmation, stops panel and agent, restores the snapshot that `preinst` took when upgrading from that version, installs the old version with apt and starts the services. It is a script like the installer, so the panel and the agent gain no `os/exec`.
+- Sites, their files and their databases are not touched by a rollback; only the panel database goes back.
+- Migrations stay additive within a minor version where possible, so most rollbacks within a minor need no snapshot [A: a review rule, not enforced by code].
+- An upgrade and rollback test in CI (install the last release, create data, upgrade to the new `.deb`, check, roll back, check) is mandatory per release, as the roadmap's test table already says [V: `docs/06-roadmap.md`].
 
 ## 6. Automatic updates
 
@@ -176,7 +178,7 @@ The package never changes site configs by itself; the agent's reconciler re-appl
 
 ## Consequences
 
-- New: `.goreleaser.yaml`, a release workflow with the `release` environment, a Pages deploy for `hostashi.com` (start page, docs, apt), maintainer scripts, `hostashi setup`, the install script's apt bootstrap, `install.sh` `upgrade` mode, `hostashi rollback`, upgrade test in CI, release and key renewal docs in the wiki.
+- New: `.goreleaser.yaml`, a release workflow with the `release` environment, a Pages deploy for `hostashi.com` (start page, docs, apt), maintainer scripts, `hostashi setup`, the install script's apt bootstrap, `install.sh` `upgrade` mode, `hostashi-rollback`, upgrade test in CI, release and key renewal docs in the wiki.
 - `install.sh` must split "install packages" from "configure"; package lists move into the `.deb`'s `Depends:` and are checked against both distributions in CI.
 - Supply chain: the build runs on GitHub-hosted runners; actions are pinned by commit SHA; the release job has no other secrets than the signing subkey.
 - Outside effects that need Kim's approval: creating the OpenPGP key, enabling Pages with the custom domain `hostashi.com`, the `release` environment with its secret, and the DNS records and redirects for `hostashi.com`, `docs.hostashi.com` and `hostashi.de`.
@@ -187,6 +189,6 @@ The package never changes site configs by itself; the agent's reconciler re-appl
 1. ~~Installation~~ Decided (Kim, 2026-11-21): install script as entry point, it installs the package through apt and runs `hostashi setup`; plain `apt install hostashi` plus `hostashi setup` works too.
 2. ~~Apt repository~~ Decided (Kim, 2026-11-21): GitHub Pages of `maki-it/hostashi` on `hostashi.com`, apt under `/apt`.
 3. ~~Signing~~ Decided (Kim, 2026-11-21): one key with expiry in the `release` environment, renewed by a workflow after Kim's approval, no manual `gpg`.
-4. `postinst` runs the installer's configure steps on every upgrade (recommended)?
+4. ~~Upgrade~~ Decided (Kim, 2026-11-21): snapshot, configure steps with the saved options, restart, wait for the health check.
 5. Automatic Hostashi updates off by default with `--auto-update` (recommended)?
 6. Only a `stable` channel for v1 (recommended)?
