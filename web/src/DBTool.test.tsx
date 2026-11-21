@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Databases } from "./Databases";
-import { durationLabel, safeToolURL } from "./dbtool";
+import { durationLabel, safeToolURL, withLook } from "./dbtool";
 import { mockFetch } from "./test-utils";
 
 const sites = {
@@ -49,6 +49,17 @@ describe("database tool helpers", () => {
     expect(safeToolURL("https://panel.example.com:8444/?ticket=x")).toBeNull();
     expect(safeToolURL("not a url")).toBeNull();
   });
+
+  it("adds the colour scheme and the panel's port for Adminer's look", () => {
+    const https = { protocol: "https:", port: "8443" };
+    expect(withLook(ticketURL, "dark", https)).toBe(ticketURL + "&scheme=dark&panel=8443");
+    expect(withLook(ticketURL, "light", { protocol: "https:", port: "" })).toBe(ticketURL + "&scheme=light&panel=443");
+    // The system's scheme and anything else add no scheme.
+    expect(withLook(ticketURL, undefined, https)).toBe(ticketURL + "&panel=8443");
+    expect(withLook(ticketURL, "evil", https)).toBe(ticketURL + "&panel=8443");
+    // A panel without https has no address to link back to.
+    expect(withLook(ticketURL, "dark", { protocol: "http:", port: "5173" })).toBe(ticketURL + "&scheme=dark");
+  });
 });
 
 describe("Open in Adminer", () => {
@@ -86,6 +97,7 @@ describe("Open in Adminer", () => {
       "GET /api/v1/databases": { body: { databases: [blogWp] } },
       "POST /api/v1/databases/blog_wp/tool": { status: 201, body: { url: ticketURL, expires: "2026-11-21T03:00:00Z" } },
     });
+    document.documentElement.dataset.scheme = "dark";
     render(<Harness />);
     await user.click(await screen.findByRole("button", { name: "Open blog_wp in Adminer" }));
     const dialog = screen.getByRole("dialog", { name: "Open blog_wp in Adminer" });
@@ -94,8 +106,9 @@ describe("Open in Adminer", () => {
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({ minutes: 120 });
     expect(open).toHaveBeenCalledWith("about:blank", "_blank");
     expect(tab.opener).toBeNull();
-    expect(tab.location.replace).toHaveBeenCalledWith(ticketURL);
+    expect(tab.location.replace).toHaveBeenCalledWith(ticketURL + "&scheme=dark");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    delete document.documentElement.dataset.scheme;
   });
 
   it("shows the link when the browser blocks the tab", async () => {

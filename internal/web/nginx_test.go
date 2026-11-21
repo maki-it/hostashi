@@ -1669,8 +1669,15 @@ func TestDBToolServer(t *testing.T) {
 	e.r.Driver.DBToolRoot = filepath.Join(e.dir, "adminer")
 	e.r.Driver.LegacyHTTP2 = legacyHTTP2(t, e.ctl.bin)
 
-	if err := os.MkdirAll(e.r.Driver.DBToolRoot, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(e.r.Driver.DBToolRoot, "fonts"), 0o755); err != nil {
 		t.Fatal(err)
+	}
+
+	// The look: served as files, like nothing else in the directory.
+	for name, body := range map[string]string{"adminer.css": "body{}", "fonts/sora-latin-600-normal.woff2": "wOF2", "fonts/x.ttf": "ttf", "index.php": "<?php"} {
+		if err := os.WriteFile(filepath.Join(e.r.Driver.DBToolRoot, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// The tool's PHP-FPM: echoes what nginx passes on.
@@ -1770,9 +1777,23 @@ func TestDBToolServer(t *testing.T) {
 	}
 
 	// Only "/" reaches PHP.
-	for _, p := range []string{"/adminer.php", "/index.php", "/tool.php", "/x/"} {
+	for _, p := range []string{"/adminer.php", "/index.php", "/tool.php", "/x/", "/fonts/x.ttf", "/fonts/", "/fonts/../index.php", "/adminer.css/x", "/fonts/missing.woff2"} {
 		if resp, _, err := get(p, nil); err != nil || resp.StatusCode != http.StatusNotFound {
 			t.Errorf("%s: %v %v", p, resp, err)
+		}
+	}
+
+	// adminer.css and its fonts are plain files, with the server's headers.
+	for p, want := range map[string]string{"/adminer.css": "body{}", "/fonts/sora-latin-600-normal.woff2": "wOF2"} {
+		resp, body, err := get(p, nil)
+		if err != nil || resp.StatusCode != http.StatusOK || body != want {
+			t.Errorf("%s: %v %q %v", p, resp, body, err)
+
+			continue
+		}
+
+		if resp.Header.Get("Strict-Transport-Security") == "" || resp.Header.Get("X-Content-Type-Options") == "" {
+			t.Errorf("%s: headers %v", p, resp.Header)
 		}
 	}
 

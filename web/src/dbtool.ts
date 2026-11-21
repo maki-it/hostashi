@@ -52,3 +52,13 @@ export function safeToolURL(u: string): string | null {
     return null;
   }
 }
+
+// withLook adds what Adminer needs to look like the panel: the colour
+// scheme the account chose (none for the system's) and the panel's https
+// port, for its links back. Both only change the page's look.
+export function withLook(u: string, scheme: string | undefined, panel: Pick<Location, "protocol" | "port"> = window.location): string {
+  const p = new URL(u);
+  if (scheme === "light" || scheme === "dark") p.searchParams.set("scheme", scheme);
+  if (panel.protocol === "https:") p.searchParams.set("panel", panel.port || "443");
+  return p.toString();
+}

@@ -426,7 +426,8 @@ server {
 
 # The web database tool (ADR-0038): Adminer on a port of its own, so it is
 # another origin than the panel, with the panel's name and certificate.
-# Only "/" exists; index.php takes a one-time ticket or its own session.
+# Only "/" reaches PHP; index.php takes a one-time ticket or its own
+# session. adminer.css and its fonts are the only files served as they are.
 server {
     {{- range .N.DBToolListen}}
     listen {{.}} ssl default_server;
@@ -487,6 +488,13 @@ server {
         fastcgi_param HTTP_PROXY "";
         fastcgi_param HTTP_X_FORWARDED_PREFIX "";
         fastcgi_read_timeout 300s;
+    }
+
+    # The tool's look (adminer.css and its fonts); nothing else in the
+    # directory is served as a file.
+    location ~ "^/(adminer\.css|fonts/[a-z0-9-]+\.woff2)$" {
+        root {{.N.DBToolRoot}};
+        try_files $uri =404;
     }
 
     location / {
