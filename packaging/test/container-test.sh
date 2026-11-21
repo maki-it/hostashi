@@ -1043,6 +1043,41 @@ UNIT
   x grep -q "\"lastUsedIp\":\"$ip\"" /tmp/api.out || fail "panel did not see the client address $ip: $(x cat /tmp/api.out)"
   # Only nginx and the panel may use the socket.
   if x runuser -u nobody -- test -w /run/hostashi-panel.sock; then fail "another user can write the panel socket"; fi
+
+  step "the panel on port 443 next to the sites (ADR-0042)"
+  if x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall --panel-port 443 >/dev/null 2>&1; then
+    fail "--panel-port 443 accepted without --panel-domain"
+  fi
+  if x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com --panel-port 80 >/dev/null 2>&1; then
+    fail "--panel-port 80 accepted"
+  fi
+  out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com --panel-port 443) || {
+    x tail -n 60 /var/log/hostashi-install.log >&2 || true
+    fail "apply with --panel-port 443 failed"
+  }
+  x grep -qx 'HOSTASHI_PUBLIC_URL=https://other.example.com' /etc/hostashi/hostashi.env || fail "public URL on 443 has a port"
+  [ "$(api POST /api/v1/sites '{"name":"next","domains":["next.example.com"]}')" = 201 ] || fail "site next to the panel: $(x cat /tmp/api.out)"
+  x sh -c 'echo "hello next" >/home/next/htdocs/index.html'
+  [ "$(api PUT /api/v1/sites/next/tls '{"enabled":true}')" = 202 ] || fail "TLS on for next: $(x cat /tmp/api.out)"
+  p443() { x curl -sSk --resolve other.example.com:443:127.0.0.1 --resolve next.example.com:443:127.0.0.1 "$@"; }
+  for _ in $(seq 1 60); do
+    p443 -f -o /dev/null https://other.example.com/api/v1/health 2>/dev/null && p443 -f -o /dev/null https://next.example.com/ 2>/dev/null && break
+    sleep 2
+  done
+  health=$(p443 -f https://other.example.com/api/v1/health) || fail "panel not served on 443"
+  grep -q '"agent":"ok"' <<<"$health" || fail "panel on 443: $health"
+  [ "$(p443 -f https://next.example.com/)" = "hello next" ] || fail "site not served next to the panel on 443"
+  loc=$(x curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' -H 'Host: other.example.com' http://127.0.0.1/login)
+  [ "$loc" = "301 https://other.example.com/login" ] || fail "panel HTTP redirect on 443: '$loc'"
+  if x curl -sSk -o /dev/null --resolve other.example.com:8443:127.0.0.1 https://other.example.com:8443/ 2>/dev/null; then
+    fail "the panel still answers on 8443"
+  fi
+  if x curl -sSk -o /dev/null --resolve unknown.example.com:443:127.0.0.1 https://unknown.example.com/ 2>/dev/null; then
+    fail "port 443 answered an unknown name"
+  fi
+  [ "$(api POST /api/v1/sites '{"name":"steal","domains":["other.example.com"]}')" = 409 ] || fail "site on the panel's name: $(x cat /tmp/api.out)"
+  x grep -q '"domain_reserved"' /tmp/api.out || fail "no domain_reserved: $(x cat /tmp/api.out)"
+  [ "$(api DELETE /api/v1/sites/next)" = 204 ] || fail "delete site next: $(x cat /tmp/api.out)"
 fi
 
 step "more PHP versions from sury.org (ADR-0019)"
