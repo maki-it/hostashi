@@ -109,9 +109,7 @@ export function App() {
         {show("parked") && <Parked query={route.query} onQuery={replaceQuery} />}
         {show("pages") && <Pages query={route.query} onQuery={replaceQuery} />}
         {show("users") && <Users me={user.username} query={route.query} onQuery={replaceQuery} />}
-        <div className="app-legacy">
-          {show("import") && <Migrate />}
-        </div>
+        {show("import") && <Migrate query={route.query} onQuery={replaceQuery} />}
       </Shell>
     );
   }

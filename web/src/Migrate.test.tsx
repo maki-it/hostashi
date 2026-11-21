@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { Migrate } from "./Migrate";
 import type { ImportJob, Plan, PlanSite, SourceInfo } from "./cloudpanel";
@@ -49,6 +50,12 @@ const exists = [
 
 const noCutover = { status: 404, body: { error: { code: "not_found", message: "the site has no cut-over" } } };
 
+// Harness keeps the address query in state, as the app does.
+function Harness({ initial = "" }: { initial?: string }) {
+  const [query, setQuery] = useState(new URLSearchParams(initial));
+  return <Migrate query={query} onQuery={setQuery} />;
+}
+
 describe("Migrate", () => {
   it("connects the old server and confirms its host key", async () => {
     const user = userEvent.setup();
@@ -78,7 +85,7 @@ describe("Migrate", () => {
     await user.click(hk.getByRole("button", { name: "Fetch the host key" }));
     expect(await hk.findByText("SHA256:abc")).toBeInTheDocument();
     await user.click(hk.getByRole("button", { name: "Trust this key" }));
-    expect(await hk.findByText(/^Trusted/)).toBeInTheDocument();
+    expect(await hk.findByText(/^Trusted:/)).toBeInTheDocument();
     expect(calls).toContainEqual({ method: "PUT", path: `${base}/source/hostkey`, body: { key: "ssh-ed25519 KEY" } });
     expect(screen.getByText(/The connection is ready/)).toBeInTheDocument();
   });
@@ -106,7 +113,7 @@ describe("Migrate", () => {
     expect(card.getByText(/A new password replaces the old one/)).toBeInTheDocument();
   });
 
-  it("uploads a report, creates reviewed sites and imports them", async () => {
+  it("creates a reviewed site from the plan and imports it", async () => {
     const user = userEvent.setup();
     let sites = [
       planSite("shop", "review", [{ code: "custom_snippets", msg: "2 nginx directives need a one-time review" }]),
@@ -174,51 +181,52 @@ describe("Migrate", () => {
       },
       [`GET ${base}/imports/imp1`]: () => ({ body: job(polls++ === 0 ? "running" : "done") }),
     });
-    render(<Migrate />);
+    render(<Harness initial="report=r1" />);
 
-    const reportsCard = within(await screen.findByRole("region", { name: "Scan reports" }));
-    await user.click(reportsCard.getByRole("button", { name: "Upload report" }));
-    expect(reportsCard.getByRole("alert")).toHaveTextContent("Choose the report file.");
+    expect(await screen.findByText("2 sites: 0 ready, 1 to review, 1 skipped.")).toBeInTheDocument();
+    const table = within(screen.getByRole("table", { name: "Plan" }));
+    const rows = table.getAllByRole("row").slice(1);
+    // Sites to review come first, skipped ones last with their reason.
+    expect(within(rows[0]!).getByRole("link", { name: "shop" })).toHaveAttribute("href", "#/import?report=r1&site=shop");
+    expect(within(rows[0]!).getByText("2 nginx directives need a one-time review.")).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('Site type "nodejs" is not supported by Hostashi yet.')).toBeInTheDocument();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Status" }), "skip");
+    expect(table.getAllByRole("row")).toHaveLength(2);
+    expect(table.queryByRole("link", { name: "shop" })).not.toBeInTheDocument();
 
-    const text = '{"format":"hostashi-cloudpanel-scan/1","sites":[]}';
-    await user.upload(reportsCard.getByLabelText("Report file"), new File([text], "hostashi-scan.json", { type: "application/json" }));
-    await user.click(reportsCard.getByRole("button", { name: "Upload report" }));
-
-    const planCard = within(await screen.findByRole("region", { name: "Plan" }));
-    expect(planCard.getByText(/2 sites: 0 ready, 1 to review, 1 skipped/)).toBeInTheDocument();
-    expect(calls).toContainEqual({ method: "POST", path: `${base}/reports`, body: JSON.parse(text) });
-
-    // The skipped site only explains why.
-    expect(planCard.getByText('Site type "nodejs" is not supported by Hostashi yet.')).toBeInTheDocument();
-    expect(planCard.queryByRole("button", { name: "Create old" })).not.toBeInTheDocument();
+    cleanup();
+    render(<Harness initial="report=r1&site=shop" />);
+    expect(await screen.findByRole("list", { name: "Reasons for shop" })).toHaveTextContent("2 nginx directives need a one-time review.");
 
     // A review needs the confirmation; PHP 8.2 is not installed here.
-    expect(planCard.getByText("2 nginx directives need a one-time review.")).toBeInTheDocument();
-    await user.click(planCard.getByRole("button", { name: "Create shop" }));
-    expect(planCard.getByRole("alert")).toHaveTextContent("Confirm that you checked");
+    const create = within(screen.getByRole("region", { name: "Create the site" }));
+    await user.click(create.getByRole("button", { name: "Create shop" }));
+    expect(create.getByRole("alert")).toHaveTextContent("Confirm that you checked");
     expect(calls.some((c) => c.path === `${base}/reports/r1/sites/shop`)).toBe(false);
-    const select = await planCard.findByRole("combobox", { name: "PHP version for shop" });
+    const select = await create.findByRole("combobox", { name: "PHP version for shop" });
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["8.2 (not installed)", "8.3", "8.4"]);
     await user.selectOptions(select, "8.4");
-    await user.click(planCard.getByRole("checkbox", { name: /I checked the points above for shop/ }));
-    await user.click(planCard.getByRole("button", { name: "Create shop" }));
+    await user.click(create.getByRole("checkbox", { name: /I checked the points above for shop/ }));
+    await user.click(create.getByRole("button", { name: "Create shop" }));
     expect(calls).toContainEqual({ method: "POST", path: `${base}/reports/r1/sites/shop`, body: { reviewed: true, php: "8.4" } });
 
     // Created: the plan now skips it because it is here; import it.
-    const area = await planCard.findByRole("textbox", { name: /Databases to copy for shop/ });
-    expect(await planCard.findByText(/This site has: shop\./)).toBeInTheDocument();
+    const files = within(await screen.findByRole("region", { name: "Files and databases" }));
+    expect(screen.queryByRole("region", { name: "Create the site" })).not.toBeInTheDocument();
+    const area = files.getByRole("textbox", { name: /Databases to copy for shop/ });
+    expect(await files.findByText(/This site has: shop\./)).toBeInTheDocument();
     await user.type(area, "shop_live");
-    await user.click(planCard.getByRole("button", { name: "Import shop" }));
-    expect(planCard.getByRole("alert")).toHaveTextContent("Line 1: write the old database");
+    await user.click(files.getByRole("button", { name: "Import shop" }));
+    expect(files.getByRole("alert")).toHaveTextContent("Line 1: write the old database");
     await user.clear(area);
     await user.type(area, "shop_live shop");
-    await user.click(planCard.getByRole("button", { name: "Import shop" }));
+    await user.click(files.getByRole("button", { name: "Import shop" }));
     expect(calls).toContainEqual({
       method: "POST",
       path: `${base}/reports/r1/sites/shop/import`,
       body: { databases: [{ from: "shop_live", to: "shop" }] },
     });
-    const status = within(await planCard.findByRole("region", { name: "Import of shop" }));
+    const status = within(await files.findByRole("region", { name: "Import of shop" }));
     expect(await status.findByText(/^Copying/)).toBeInTheDocument();
     await waitFor(() => expect(status.getByText(/^Done/)).toBeInTheDocument(), { timeout: 5000 });
     expect(status.getByText("120 files, 3.0 MiB")).toBeInTheDocument();
@@ -226,22 +234,42 @@ describe("Migrate", () => {
     expect(await loads.findByText("Failed")).toBeInTheDocument();
     expect(loads.getByText(/line 12: ERROR 1227/)).toBeInTheDocument();
     await user.click(loads.getByRole("button", { name: "Load the dumps again" }));
-    expect(await loads.findByText(/^Loaded at/)).toBeInTheDocument();
+    expect(await loads.findByText("Loaded")).toBeInTheDocument();
     expect(loads.queryByRole("button", { name: "Load the dumps again" })).not.toBeInTheDocument();
     expect(calls).toContainEqual({ method: "POST", path: `${base}/imports/imp1/load`, body: undefined });
     expect(status.getByText("cloudpanel-import-db/shop-20261119T100100Z.sql")).toBeInTheDocument();
-    expect(planCard.getByRole("button", { name: "Import shop again" })).toBeInTheDocument();
+    expect(files.getByRole("button", { name: "Import shop again" })).toBeInTheDocument();
 
     // After the final sync the imported files become the web root.
     await user.click(status.getByRole("button", { name: "Use imported files as web root" }));
     await user.click(status.getByRole("button", { name: "Use imported files for shop" }));
-    expect(planCard.getByText("1 cron job was created paused. Start it after the DNS switch.")).toBeInTheDocument();
+    expect(screen.getByText("1 cron job was created paused. Start it after the DNS switch.")).toBeInTheDocument();
     expect(await status.findByText(/kept as htdocs-before-import-20261119T100500Z/)).toBeInTheDocument();
     expect(calls).toContainEqual({ method: "POST", path: `${base}/sites/shop/activate`, body: undefined });
   });
 
-  it("shows the last import of a created site", async () => {
+  it("uploads a report and opens its plan", async () => {
     const user = userEvent.setup();
+    const report = { id: "r1", sites: 2, createdAt: "2026-11-19T09:00:00Z" };
+    const calls = mockFetch({
+      [`GET ${base}/source`]: { body: readySource },
+      [`GET ${base}/reports`]: { body: { reports: [] } },
+      [`POST ${base}/reports`]: { status: 201, body: report },
+    });
+    window.location.hash = "";
+    render(<Harness />);
+    const card = within(await screen.findByRole("region", { name: "Scan reports" }));
+    await user.click(card.getByRole("button", { name: "Upload report" }));
+    expect(card.getByRole("alert")).toHaveTextContent("Choose the report file.");
+
+    const text = '{"format":"hostashi-cloudpanel-scan/1","sites":[]}';
+    await user.upload(card.getByLabelText("Report file"), new File([text], "hostashi-scan.json", { type: "application/json" }));
+    await user.click(card.getByRole("button", { name: "Upload report" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/import?report=r1"));
+    expect(calls).toContainEqual({ method: "POST", path: `${base}/reports`, body: JSON.parse(text) });
+  });
+
+  it("shows the last import of a created site", async () => {
     const report = { id: "r1", sites: 1, createdAt: "2026-11-19T09:00:00Z" };
     const done: ImportJob = {
       id: "imp9",
@@ -269,12 +297,11 @@ describe("Migrate", () => {
       [`GET ${base}/sites/shop/cutover`]: noCutover,
       [`GET ${base}/imports/imp9`]: { body: done },
     });
-    render(<Migrate />);
-    await user.click(await screen.findByRole("button", { name: "Show plan" }));
+    render(<Harness initial="report=r1&site=shop" />);
     const status = within(await screen.findByRole("region", { name: "Import of shop" }));
     expect(await status.findByText(/^Failed/)).toBeInTheDocument();
     expect(status.getByRole("alert")).toHaveTextContent("the old server refused the key");
-    expect(screen.getByRole("button", { name: "Import shop again" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Import shop again" })).toBeInTheDocument();
     // A failed import cannot be made the web root.
     expect(status.queryByRole("button", { name: "Use imported files as web root" })).not.toBeInTheDocument();
   });
@@ -302,8 +329,7 @@ describe("Migrate", () => {
       },
       "PUT /api/v1/sites/shop/snippets": (b) => ({ body: b }),
     });
-    render(<Migrate />);
-    await user.click(await screen.findByRole("button", { name: "Show plan" }));
+    render(<Harness initial="report=r1&site=shop" />);
     await user.click(await screen.findByRole("button", { name: "Review custom nginx" }));
 
     const items = within(await screen.findByRole("list", { name: "Directives of shop" }));
@@ -311,7 +337,7 @@ describe("Migrate", () => {
     expect(screen.getByRole("textbox", { name: /Inside the server block/ })).toHaveValue("add_header X-Frame-Options SAMEORIGIN;\n");
 
     await user.click(screen.getByRole("button", { name: "Save as snippets of shop" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Snippets saved and active on shop.");
+    expect(await screen.findByText("Snippets saved and active on shop.")).toBeInTheDocument();
     expect(calls.at(-1)).toEqual({ method: "PUT", path: "/api/v1/sites/shop/snippets", body: { server: "add_header X-Frame-Options SAMEORIGIN;\n", root: "" } });
   });
 

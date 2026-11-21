@@ -213,11 +213,6 @@
   min-width: 0;
 }
 
-/* Pages that have not moved to the new components yet keep their width. */
-.app-legacy {
-  max-width: 48rem;
-}
-
 @media (max-width: 700px) {
   .app {
     flex-direction: column;
