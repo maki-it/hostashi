@@ -1125,3 +1125,17 @@ a.ui-btn {
   font-size: 14px;
   font-weight: 600;
 }
+/* The text a person must type to confirm a risky step */
+.ui-confirm-phrase {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--sunken);
+  color: var(--fg);
+  user-select: all;
+  /* Field labels are upper case; the phrase must show exactly as typed. */
+  text-transform: none;
+  letter-spacing: normal;
+}

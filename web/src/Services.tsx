@@ -234,7 +234,13 @@ function ConfirmAction({ pending, busy, onRun, onCancel }: { pending: Pending; b
       >
         {typedNeeded && (
           <div className="ui-narrow">
-            <Field label={`Type ${phrase} to confirm`}>
+            <Field
+              label={
+                <>
+                  Type <code className="ui-confirm-phrase">{phrase}</code> to confirm
+                </>
+              }
+            >
               <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
             </Field>
           </div>
