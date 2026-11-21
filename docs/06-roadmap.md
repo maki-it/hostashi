@@ -81,7 +81,7 @@ Multi-server (controller + agents), resellers and packages, mail integration (Ma
 | Fuzzing | `go test -fuzz` | Domains, paths, cron, vhost snippets |
 | Integration | Incus/QEMU VMs (Docker is no substitute for systemd) | Reconciler against real Nginx/FPM/MariaDB |
 | End-to-end | Playwright | Core flows in the UI |
-| Matrix | CI per OS × architecture | Ubuntu 22.04/24.04/26.04, Debian 12/13 × amd64/arm64 |
+| Matrix | CI per OS × architecture | Debian 13 and Ubuntu 26.04 × amd64/arm64 ([ADR-0020](adr/0020-nginx-package-source-and-brotli.md)) |
 | Security | Isolation test, IDOR matrix, gosec, semgrep, govulncheck | Mandatory per release |
 | Upgrade | Install old version, create data, update, check | Per release |
 
