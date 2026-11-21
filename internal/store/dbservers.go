@@ -14,7 +14,7 @@ import (
 // LocalDBServer is the name of the fixed row for the local MariaDB.
 const LocalDBServer = "localhost"
 
-// localDBServerID is its id (migration 0026).
+// localDBServerID is its id (migration 0029).
 const localDBServerID = 1
 
 // TLS mode of the local server, which is reached over the socket.
