@@ -42,6 +42,21 @@ func (s *stubMailSend) send(ctx context.Context, c mail.Config, m mail.Message) 
 	return nil
 }
 
+func (s *stubMailSend) deliver(ctx context.Context, c mail.Config, m mail.Message) (string, error) {
+	if err := s.send(ctx, c, m); err != nil {
+		return "", err
+	}
+
+	return "<test@example.com>", nil
+}
+
+func (s *stubMailSend) messages() []mail.Message {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return append([]mail.Message(nil), s.sent...)
+}
+
 const mailBody = `{"host":"smtp.example.com","port":587,"tls":"starttls","username":"relay","password":"relay password","from":"panel@example.com","from_name":"Hostashi"}`
 
 func (e *apiEnv) putMail(t *testing.T, c *http.Cookie, body string) mailSettingsJSON {

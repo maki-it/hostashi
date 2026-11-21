@@ -153,10 +153,14 @@ type Service struct {
 	cron   CronAgent   // nil: no cron jobs
 	limits LimitsAgent // nil: no resource limits (ADR-0015)
 	ssh    SSHAgent    // nil: no SSH keys (ADR-0032)
+	cache  CacheAgent  // nil: no object caches (ADR-0045)
 	dbs    DBServers   // nil: only the local database server (ADR-0041)
 
 	dbTool     DBToolAgent // nil: no web database tool (ADR-0038)
 	dbToolPort int
+
+	dbManifestDir string     // extdb list for the backup; empty: none
+	manifestMu    sync.Mutex // serializes the manifest writes
 
 	panelDomain string // ADR-0023; empty: nginx serves no panel address
 	panelServed string // panel domain of the last accepted web state; under mu

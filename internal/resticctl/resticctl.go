@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -33,6 +34,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/dbserver"
 )
 
 // Fixed paths (Debian 13 and Ubuntu 26.04 have merged /usr).
@@ -86,6 +88,9 @@ type Repo struct {
 	Binary  string
 	Timeout time.Duration // per call; 0 means DefaultTimeout
 	Log     *slog.Logger
+	// TempDir holds the option files of external dumps; "" is
+	// os.TempDir(), which is private to the backup unit (PrivateTmp).
+	TempDir string
 }
 
 // Summary is the result of one backup.
@@ -258,6 +263,82 @@ func (r *Repo) BackupDatabase(ctx context.Context, tags []string, database strin
 	}
 
 	return r.backup(ctx, args)
+}
+
+// BackupRemoteDatabase stores a dump of database on an external server
+// (ADR-0041) like BackupDatabase. The connection and the password go to
+// mariadb-dump in an option file of mode 0600 in the private temporary
+// directory, never on a command line; the file is removed afterwards.
+//
+// mariadb-dump runs as root here. It answers a server's request for a
+// local file (LOAD DATA LOCAL) with nothing, so a hostile server cannot
+// read this host's files [V: mariadb-dump 11.8.6, Debian 13, against a
+// fake server, 2026-11-21; TestRemoteDumpRefusesLocalInfile keeps it so].
+func (r *Repo) BackupRemoteDatabase(ctx context.Context, tags []string, database string, cfg dbserver.Config) (Summary, error) {
+	if err := checkTags(tags); err != nil {
+		return Summary{}, err
+	}
+
+	if err := agentapi.ValidateDBName(database); err != nil {
+		return Summary{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	dir, err := os.MkdirTemp(r.TempDir, "hostashi-dump-")
+	if err != nil {
+		return Summary{}, fmt.Errorf("resticctl: %w", err)
+	}
+
+	defer os.RemoveAll(dir)
+
+	optFile, err := WriteDumpOptions(dir, cfg)
+	if err != nil {
+		return Summary{}, err
+	}
+
+	args := []string{
+		"backup", "--quiet", "--tag", strings.Join(tags, ","),
+		"--stdin-filename", database + ".sql", "--stdin-from-command", "--",
+	}
+	args = append(args, RemoteDumpArgs(optFile, database)...)
+
+	return r.backup(ctx, args)
+}
+
+// WriteDumpOptions writes the option file, and the CA for verify-ca, into
+// dir and returns the option file's path.
+func WriteDumpOptions(dir string, cfg dbserver.Config) (string, error) {
+	caFile := ""
+
+	if cfg.TLS == dbserver.TLSVerifyCA {
+		caFile = filepath.Join(dir, "ca.pem")
+
+		if err := os.WriteFile(caFile, []byte(cfg.CAPEM), 0o600); err != nil {
+			return "", fmt.Errorf("resticctl: %w", err)
+		}
+	}
+
+	opts, err := cfg.ClientOptions(caFile)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	optFile := filepath.Join(dir, "client.cnf")
+
+	if err := os.WriteFile(optFile, []byte(opts), 0o600); err != nil {
+		return "", fmt.Errorf("resticctl: %w", err)
+	}
+
+	return optFile, nil
+}
+
+// RemoteDumpArgs is the mariadb-dump command for an external database.
+// --defaults-extra-file must come first.
+func RemoteDumpArgs(optFile, database string) []string {
+	return []string{
+		MariaDBDump, "--defaults-extra-file=" + optFile,
+		"--single-transaction", "--routines", "--events", "--triggers",
+		"--hex-blob", "--skip-dump-date", "--default-character-set=utf8mb4", "--", database,
+	}
 }
 
 func (r *Repo) backup(ctx context.Context, args []string) (Summary, error) {

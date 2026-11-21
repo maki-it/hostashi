@@ -70,10 +70,14 @@ type Site struct {
 	// HomeBytes and HomeInodes are what the home uses on the old server,
 	// zero if the scan did not measure it. The new site's disk limits start
 	// from them (ADR-0015: use plus 50 %).
-	HomeBytes  int64    `json:"homeBytes,omitempty"`
-	HomeInodes int64    `json:"homeInodes,omitempty"`
-	Action     Action   `json:"action"`
-	Reasons    []Reason `json:"reasons"`
+	HomeBytes  int64 `json:"homeBytes,omitempty"`
+	HomeInodes int64 `json:"homeInodes,omitempty"`
+	// PageCache is the page cache preset proposed for a site that had a
+	// cache (likely Varnish) in front of it on the old server, "" for none
+	// (ADR-0046).
+	PageCache string   `json:"pageCache,omitempty"`
+	Action    Action   `json:"action"`
+	Reasons   []Reason `json:"reasons"`
 	// Source is the vhost file on the old server, to find the site in the report.
 	Source string `json:"source"`
 }
@@ -243,12 +247,31 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 	}
 
 	for _, f := range s.Findings {
-		if f.Severity == scan.SevReview && !reviewCodesCovered[f.Code] {
-			review(f.Code, f.Msg)
+		if f.Severity != scan.SevReview || reviewCodesCovered[f.Code] {
+			continue
 		}
+
+		if f.Code == "vhost_cache_tier" && ps.PHP != "" {
+			ps.PageCache = cachePreset(s.Type)
+			review("page_cache", "the old server had a cache (likely Varnish) in front of the site: the page cache is switched on with the "+
+				ps.PageCache+" preset. The Varnish rules are not carried over; remove a Varnish purge plugin from the app after the move.")
+
+			continue
+		}
+
+		review(f.Code, f.Msg)
 	}
 
 	return ps
+}
+
+// cachePreset is the page cache preset for a site type (ADR-0046).
+func cachePreset(siteType string) string {
+	if siteType == "wordpress" {
+		return agentapi.PageCacheWordPress
+	}
+
+	return agentapi.PageCachePHP
 }
 
 // reviewCodesCovered are scan findings the plan already explains itself.

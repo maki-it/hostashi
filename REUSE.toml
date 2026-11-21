@@ -50,3 +50,17 @@ path = ["**/*.md", "docs/**"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 The Hostashi contributors"
 SPDX-License-Identifier = "CC-BY-4.0"
+
+# Adminer (ADR-0038), shipped unchanged and pinned by its SHA-256. Its own
+# header names both licenses, "one or other".
+[[annotations]]
+path = "packaging/adminer/adminer.php"
+precedence = "override"
+SPDX-FileCopyrightText = "2007 Jakub Vrana"
+SPDX-License-Identifier = "Apache-2.0 OR GPL-2.0-only"
+
+[[annotations]]
+path = "packaging/adminer/SHA256SUMS"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The Hostashi contributors"
+SPDX-License-Identifier = "AGPL-3.0-or-later"

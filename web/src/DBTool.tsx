@@ -1,0 +1,94 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { ArrowSquareOut } from "@phosphor-icons/react";
+import { useEffect, useRef, useState } from "react";
+import { durationLabel, openDBTool, safeToolURL, toolMessage } from "./dbtool";
+import { Button, Notice } from "./ui";
+
+type Props = {
+  db: string;
+  minutes: number[];
+  onClose: () => void;
+};
+
+// OpenToolDialog opens one database in Adminer (ADR-0038) for a chosen
+// time. The tab is opened in the click itself, so a popup blocker lets it
+// through, and gets the address once the server answers. Without a tab the
+// dialog shows the link instead; its ticket is valid for a minute.
+export function OpenToolDialog({ db, minutes, onClose }: Props) {
+  const [choice, setChoice] = useState(minutes[0] ?? 30);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [link, setLink] = useState<{ url: string; expires: string } | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    heading.current?.focus();
+  }, [db]);
+
+  async function open() {
+    setBusy(true);
+    setError("");
+    const tab = window.open("about:blank", "_blank");
+    try {
+      const s = await openDBTool(db, choice);
+      const url = safeToolURL(s.url);
+      if (!url) throw new Error("bad address");
+      if (tab) {
+        tab.opener = null;
+        tab.location.replace(url);
+        onClose();
+        return;
+      }
+      setLink({ url, expires: s.expires });
+    } catch (err) {
+      tab?.close();
+      setError(toolMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="ui-card ui-card-body ui-stack" role="dialog" aria-labelledby="dbtool-title">
+      <h2 id="dbtool-title" className="ui-flush" tabIndex={-1} ref={heading}>
+        Open {db} in Adminer
+      </h2>
+      <p className="ui-flush">
+        Adminer opens in a new tab with a temporary database user for {db} only. It runs any SQL on this database, including deleting tables;
+        backups are the safety net.
+      </p>
+      {link ? (
+        <Notice tone="info" title="Your browser blocked the new tab.">
+          <a className="ui-btn ui-btn-primary" href={link.url} target="_blank" rel="noopener noreferrer" onClick={onClose}>
+            <ArrowSquareOut size={16} aria-hidden="true" />
+            Open Adminer
+          </a>{" "}
+          The link works once, within a minute.
+        </Notice>
+      ) : (
+        <fieldset className="ui-fieldset ui-stack-tight" disabled={busy}>
+          <legend>Session length</legend>
+          {minutes.map((m) => (
+            <label className="ui-check" key={m}>
+              <input type="radio" name={"dbtool-" + db} checked={choice === m} onChange={() => setChoice(m)} />
+              {durationLabel(m)}
+            </label>
+          ))}
+          <p className="ui-hint ui-flush">The temporary user and its connections end after this time.</p>
+        </fieldset>
+      )}
+      {error && <Notice tone="err" title={error} />}
+      <div className="ui-row">
+        {!link && (
+          <Button variant="primary" icon={<ArrowSquareOut size={16} aria-hidden="true" />} disabled={busy} onClick={() => void open()}>
+            Open in Adminer
+          </Button>
+        )}
+        <Button disabled={busy} onClick={onClose}>
+          {link ? "Close" : "Cancel"}
+        </Button>
+      </div>
+    </section>
+  );
+}

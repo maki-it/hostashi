@@ -196,6 +196,34 @@ func TestDoctorWithoutSites(t *testing.T) {
 	if m := byID(r); m["system.os"][0].Status != agentapi.DoctorOK || m["service.nginx"][0].Status != agentapi.DoctorFail {
 		t.Errorf("report = %+v", r)
 	}
+
+	if m := byID(r); len(m["service.dbtool"]) != 0 {
+		t.Errorf("database tool checked without its port: %+v", m["service.dbtool"])
+	}
+}
+
+// With the database tool installed (ADR-0038), its PHP-FPM socket is
+// checked.
+func TestDoctorDBTool(t *testing.T) {
+	env := doctorEnv(t)
+
+	for _, tc := range []struct {
+		name, socket, want string
+	}{
+		{"running", env.Fail2banSocket, agentapi.DoctorOK},
+		{"down", env.Fail2banSocket + "-missing", agentapi.DoctorFail},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := env
+			e.DBToolSocket = tc.socket
+			d := &doctorOps{env: e, dbTool: true}
+
+			c := byID(d.run(context.Background()))["service.dbtool"]
+			if len(c) != 1 || c[0].Status != tc.want || (tc.want != agentapi.DoctorOK && c[0].Hint == "") {
+				t.Errorf("service.dbtool = %+v, want %s", c, tc.want)
+			}
+		})
+	}
 }
 
 func TestNginxCheck(t *testing.T) {

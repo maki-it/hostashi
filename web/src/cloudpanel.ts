@@ -20,6 +20,7 @@ export type PlanSite = {
   customSnippets: number;
   cronJobs: number;
   cronImport: number; // of cronJobs, created paused with the site
+  pageCache?: string; // page cache preset proposed for a site that had a cache in front
   action: PlanAction;
   reasons: PlanReason[];
   source: string;
@@ -30,7 +31,12 @@ export type Plan = {
   summary: { sites: number; import: number; review: number; skip: number };
 };
 
-export type Report = { id: string; sites: number; createdAt: string; plan?: Plan };
+export type Report = {
+  id: string;
+  sites: number;
+  createdAt: string;
+  plan?: Plan;
+};
 
 export type SourceInfo = {
   source: { host: string; port: number } | null;
@@ -67,37 +73,74 @@ export type ImportJob = {
 
 const reports = "/migrations/cloudpanel/reports";
 const reportPath = (id: string) => reports + "/" + encodeURIComponent(id);
-const sitePath = (id: string, name: string) => reportPath(id) + "/sites/" + encodeURIComponent(name);
+const sitePath = (id: string, name: string) =>
+  reportPath(id) + "/sites/" + encodeURIComponent(name);
 const source = "/migrations/cloudpanel/source";
 
 // The report is sent as the file's own JSON text: the panel checks it.
-export const uploadReport = (text: string) => request<Report>("POST", reports, new RawJSON(text));
-export const listReports = async () => (await request<{ reports: Report[] }>("GET", reports)).reports;
+export const uploadReport = (text: string) =>
+  request<Report>("POST", reports, new RawJSON(text));
+export const listReports = async () =>
+  (await request<{ reports: Report[] }>("GET", reports)).reports;
 export const getReport = (id: string) => request<Report>("GET", reportPath(id));
-export const deleteReport = (id: string) => request<void>("DELETE", reportPath(id));
+export const deleteReport = (id: string) =>
+  request<void>("DELETE", reportPath(id));
 
-export const createFromPlan = (id: string, name: string, reviewed: boolean, php: string) =>
-  request<PlanSite>("POST", sitePath(id, name), php ? { reviewed, php } : { reviewed });
+export const createFromPlan = (
+  id: string,
+  name: string,
+  reviewed: boolean,
+  php: string,
+  pageCache?: boolean,
+) =>
+  request<PlanSite>("POST", sitePath(id, name), {
+    reviewed,
+    ...(php ? { php } : {}),
+    ...(pageCache === undefined ? {} : { pageCache }),
+  });
 export const startImport = (id: string, name: string, databases: DBMap[]) =>
   request<ImportJob>("POST", sitePath(id, name) + "/import", { databases });
 // listImports returns a site's imports, newest first, without skippedPaths.
 export const listImports = async (site: string) =>
-  (await request<{ imports: ImportJob[] }>("GET", "/migrations/cloudpanel/imports?site=" + encodeURIComponent(site))).imports;
+  (
+    await request<{ imports: ImportJob[] }>(
+      "GET",
+      "/migrations/cloudpanel/imports?site=" + encodeURIComponent(site),
+    )
+  ).imports;
 // activateImport makes the imported files the site's web root; the old
 // web root is kept under the returned name.
 export const activateImport = (site: string) =>
-  request<{ site: string; previous: string }>("POST", "/migrations/cloudpanel/sites/" + encodeURIComponent(site) + "/activate");
+  request<{ site: string; previous: string }>(
+    "POST",
+    "/migrations/cloudpanel/sites/" + encodeURIComponent(site) + "/activate",
+  );
 // DumpLoad is the load of one copied dump into its database (ADR-0025).
 export type DumpLoad = {
   database: string;
   path: string;
-  job?: { id: string; state: "running" | "done" | "failed"; error?: string; started: string; finished?: string };
+  job?: {
+    id: string;
+    state: "running" | "done" | "failed";
+    error?: string;
+    started: string;
+    finished?: string;
+  };
   error?: string; // why the load could not start
 };
-const importPath = (id: string) => "/migrations/cloudpanel/imports/" + encodeURIComponent(id);
-export const listLoads = async (id: string) => (await request<{ loads: DumpLoad[] }>("GET", importPath(id) + "/loads")).loads;
-export const startLoads = async (id: string) => (await request<{ loads: DumpLoad[] }>("POST", importPath(id) + "/load")).loads;
-export const getImport = (id: string) => request<ImportJob>("GET", "/migrations/cloudpanel/imports/" + encodeURIComponent(id));
+const importPath = (id: string) =>
+  "/migrations/cloudpanel/imports/" + encodeURIComponent(id);
+export const listLoads = async (id: string) =>
+  (await request<{ loads: DumpLoad[] }>("GET", importPath(id) + "/loads"))
+    .loads;
+export const startLoads = async (id: string) =>
+  (await request<{ loads: DumpLoad[] }>("POST", importPath(id) + "/load"))
+    .loads;
+export const getImport = (id: string) =>
+  request<ImportJob>(
+    "GET",
+    "/migrations/cloudpanel/imports/" + encodeURIComponent(id),
+  );
 
 // DNS cut-over of an imported site (ADR-0031): the person points the
 // domains at this server; the panel checks them every minute and turns
@@ -121,7 +164,8 @@ export type Cutover = {
   answers: DomainAnswer[];
   error?: string;
 };
-const cutoverPath = (site: string) => "/migrations/cloudpanel/sites/" + encodeURIComponent(site) + "/cutover";
+const cutoverPath = (site: string) =>
+  "/migrations/cloudpanel/sites/" + encodeURIComponent(site) + "/cutover";
 // getCutover returns null when the site has no cut-over yet.
 export async function getCutover(site: string): Promise<Cutover | null> {
   try {
@@ -131,8 +175,10 @@ export async function getCutover(site: string): Promise<Cutover | null> {
     throw err;
   }
 }
-export const startCutover = (site: string) => request<Cutover>("POST", cutoverPath(site));
-export const cancelCutover = (site: string) => request<Cutover>("DELETE", cutoverPath(site));
+export const startCutover = (site: string) =>
+  request<Cutover>("POST", cutoverPath(site));
+export const cancelCutover = (site: string) =>
+  request<Cutover>("DELETE", cutoverPath(site));
 
 // ttlLabel writes a TTL in seconds the short way: 300 is "5 min".
 export function ttlLabel(s: number): string {
@@ -159,25 +205,38 @@ export function cutoverMessage(err: unknown): string {
 }
 
 export const getSource = () => request<SourceInfo>("GET", source);
-export const setSource = (host: string, port: number) => request<SourceInfo>("PUT", source, { host, port });
+export const setSource = (host: string, port: number) =>
+  request<SourceInfo>("PUT", source, { host, port });
 export const deleteSource = () => request<SourceInfo>("DELETE", source);
-export const scanSourceHostKey = () => request<{ key: string; fingerprint: string }>("POST", source + "/hostkey/scan");
-export const trustSourceHostKey = (key: string) => request<SourceInfo>("PUT", source + "/hostkey", { key });
-export const newDBPassword = () => request<DBCredentials>("POST", source + "/database");
+export const scanSourceHostKey = () =>
+  request<{ key: string; fingerprint: string }>(
+    "POST",
+    source + "/hostkey/scan",
+  );
+export const trustSourceHostKey = (key: string) =>
+  request<SourceInfo>("PUT", source + "/hostkey", { key });
+export const newDBPassword = () =>
+  request<DBCredentials>("POST", source + "/database");
 
 // A site the plan skips only because it exists here was created from the
 // plan (or by hand): the import copies the old files into it.
 export const existsHere = (s: PlanSite) =>
-  s.action === "skip" && s.reasons.some((r) => r.code === "site_exists") && s.reasons.every((r) => r.code === "site_exists" || r.code === "domain_taken");
+  s.action === "skip" &&
+  s.reasons.some((r) => r.code === "site_exists") &&
+  s.reasons.every((r) => r.code === "site_exists" || r.code === "domain_taken");
 
-const hostRe = /^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
-const ipv4Re = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+const hostRe =
+  /^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
+const ipv4Re =
+  /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 
 // hostProblem mirrors CloudPanelSource.Validate loosely; the agent decides.
 export function hostProblem(host: string, port: string): string {
   if (host === "") return "Enter the old server's address.";
-  if (!ipv4Re.test(host) && !host.includes(":") && !hostRe.test(host)) return "Use an IP address or a lowercase DNS name.";
-  if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) return "Use a port from 1 to 65535.";
+  if (!ipv4Re.test(host) && !host.includes(":") && !hostRe.test(host))
+    return "Use an IP address or a lowercase DNS name.";
+  if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535)
+    return "Use a port from 1 to 65535.";
   return "";
 }
 
@@ -185,24 +244,35 @@ export function hostProblem(host: string, port: string): string {
 export function parseDBMap(text: string): { maps: DBMap[]; problem: string } {
   const maps: DBMap[] = [];
   const seen = new Set<string>();
-  const lines = text.split("\n").map((l) => l.trim()).filter((l) => l !== "");
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "");
   for (const [i, line] of lines.entries()) {
     const parts = line.split(/\s+/);
     const at = `Line ${i + 1}: `;
-    if (parts.length !== 2) return { maps: [], problem: at + "write the old database, a space and the database here." };
+    if (parts.length !== 2)
+      return {
+        maps: [],
+        problem: at + "write the old database, a space and the database here.",
+      };
     const [from, to] = parts as [string, string];
     const p = nameProblem("database", from) || nameProblem("database", to);
     if (p) return { maps: [], problem: at + p };
-    if (seen.has(to)) return { maps: [], problem: at + `${to} is named twice.` };
+    if (seen.has(to))
+      return { maps: [], problem: at + `${to} is named twice.` };
     seen.add(to);
     maps.push({ from, to });
   }
-  if (maps.length > 50) return { maps: [], problem: "At most 50 databases per import." };
+  if (maps.length > 50)
+    return { maps: [], problem: "At most 50 databases per import." };
   return { maps, problem: "" };
 }
 
 // cronLabel says what happens to the old site's cron jobs.
-export function cronLabel(s: Pick<PlanSite, "cronJobs" | "cronImport">): string {
+export function cronLabel(
+  s: Pick<PlanSite, "cronJobs" | "cronImport">,
+): string {
   const n = s.cronImport ?? 0;
   const rest = s.cronJobs - n;
   const parts: string[] = [];
@@ -226,7 +296,11 @@ export function migrationMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case "invalid_report":
-        return "This is not a valid scan report: " + err.message + ". Create it with hostashi cloudpanel scan -json -full.";
+        return (
+          "This is not a valid scan report: " +
+          err.message +
+          ". Create it with hostashi cloudpanel scan -json -full."
+        );
       case "too_large":
         return "The report is larger than 16 MiB.";
       case "too_many_reports":
@@ -260,7 +334,9 @@ export function migrationMessage(err: unknown): string {
       case "agent_unavailable":
         return "The change could not be completed. Try again.";
       default:
-        return err.message ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + "." : "Something went wrong (" + err.code + ").";
+        return err.message
+          ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + "."
+          : "Something went wrong (" + err.code + ").";
     }
   }
   if (err instanceof TypeError) return "The server is not reachable.";

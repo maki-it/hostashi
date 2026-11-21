@@ -53,9 +53,13 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/auth/passkeys":                  accessSession,
 	"DELETE /api/v1/auth/passkeys/{id}":          accessSession,
 	"PATCH /api/v1/me":                           accessSession,
+	"GET /api/v1/account/email":                  accessSession,
+	"PUT /api/v1/account/email":                  accessSession,
+	"DELETE /api/v1/account/email":               accessSession,
 
-	"POST /api/v1/invitations/check":  accessPublic,
-	"POST /api/v1/invitations/accept": accessPublic,
+	"POST /api/v1/invitations/check":     accessPublic,
+	"POST /api/v1/invitations/accept":    accessPublic,
+	"POST /api/v1/account/email/confirm": accessPublic,
 
 	"GET /api/v1/users":             authz.UsersRead,
 	"POST /api/v1/users":            authz.UsersWrite,
@@ -83,6 +87,8 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/sites/{name}/files/content": "files:read",
 	"PUT /api/v1/sites/{name}/files/content": "files:write",
 	"POST /api/v1/sites/{name}/files/{call}": "files:write",
+	"GET /api/v1/sites/{name}/files/zip":     "files:read",
+	"PUT /api/v1/sites/{name}/files/upload":  "files:write",
 
 	"POST /api/v1/sites":                                     "sites:create",
 	"PUT /api/v1/sites/{name}/domains":                       "sites.domains:write",
@@ -145,12 +151,16 @@ var routeAccess = map[string]authz.Action{
 	"PUT /api/v1/parked-domains/{domain}":    "parked:write",
 	"DELETE /api/v1/parked-domains/{domain}": "parked:write",
 
-	"GET /api/v1/sites/{name}/cron":           "cron:read",
-	"GET /api/v1/sites/{name}/cron/{id}":      "cron:read",
-	"POST /api/v1/sites/{name}/cron":          "cron:write",
-	"PUT /api/v1/sites/{name}/cron/{id}":      "cron:write",
-	"DELETE /api/v1/sites/{name}/cron/{id}":   "cron:write",
-	"POST /api/v1/sites/{name}/cron/{id}/run": "cron:write",
+	"GET /api/v1/sites/{name}/object-cache":        "sites.objectcache:read",
+	"PUT /api/v1/sites/{name}/object-cache":        "sites.objectcache:write",
+	"PUT /api/v1/sites/{name}/object-cache/size":   "sites.objectcache.size:write",
+	"POST /api/v1/sites/{name}/object-cache/flush": "sites.objectcache:write",
+	"GET /api/v1/sites/{name}/cron":                "cron:read",
+	"GET /api/v1/sites/{name}/cron/{id}":           "cron:read",
+	"POST /api/v1/sites/{name}/cron":               "cron:write",
+	"PUT /api/v1/sites/{name}/cron/{id}":           "cron:write",
+	"DELETE /api/v1/sites/{name}/cron/{id}":        "cron:write",
+	"POST /api/v1/sites/{name}/cron/{id}/run":      "cron:write",
 
 	"GET /api/v1/ssh/host-keys":                 "ssh.hostkeys:read",
 	"GET /api/v1/sites/{name}/ssh-keys":         "ssh:read",
@@ -225,10 +235,10 @@ func newFullAPI(t *testing.T) (*apiEnv, []string) {
 
 	var patterns []string
 
-	e.h, patterns = handler(Config{}, Deps{
+	e.h, patterns = handler(Config{PublicURL: testPublicURL}, Deps{
 		PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb,
 		CloudPanel: e.cp, CloudPanelSource: newStubSource(t), Metrics: e.metrics, Settings: e.settings,
-		Doctor: e.doctor.run, Firewall: e.firewall, PHP: e.php, Mail: e.mail, MailSend: e.mailSent.send, Files: e.files.open,
+		Doctor: e.doctor.run, Firewall: e.firewall, PHP: e.php, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open,
 	})
 
 	return e, patterns

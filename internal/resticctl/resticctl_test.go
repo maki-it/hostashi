@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/maki-it/hostashi/internal/dbserver"
 )
 
 func validRepo() *Repo {
@@ -234,6 +236,37 @@ func TestRestic(t *testing.T) {
 
 		if _, err := r.BackupDatabase(ctx, []string{"site:blog", "kind:db"}, "doesnotexist"); err == nil {
 			t.Fatal("dump of a missing database succeeded")
+		}
+	})
+
+	// The same server over TCP, as an external server (ADR-0041), with an
+	// administrator whose password needs quoting in the option file. CI
+	// creates the user; see .github/workflows/go.yml.
+	if os.Getenv("HOSTASHI_TEST_REMOTE_DUMP") != "1" {
+		return
+	}
+
+	t.Run("remote database", func(t *testing.T) {
+		r := *repos["local"]
+		r.TempDir = t.TempDir()
+		cfg := dbserver.Config{
+			Host: "127.0.0.1", Port: 3306, AdminUser: "dumpadm", AdminPassword: `a"b'c\d #e f`, TLS: dbserver.TLSNone,
+		}
+
+		sum, err := r.BackupRemoteDatabase(ctx, []string{"site:blog", "kind:db", "db:resticdump"}, "resticdump", cfg)
+		if err != nil || !ValidSnapshotID(sum.SnapshotID) {
+			t.Fatalf("remote dump: %+v, %v", sum, err)
+		}
+
+		if left, _ := os.ReadDir(r.TempDir); len(left) != 0 {
+			t.Fatalf("option files left behind: %v", left)
+		}
+
+		wrong := cfg
+		wrong.AdminPassword = "wrong"
+
+		if _, err := r.BackupRemoteDatabase(ctx, []string{"site:blog", "kind:db", "db:resticdump"}, "resticdump", wrong); err == nil {
+			t.Fatal("dump with a wrong password succeeded")
 		}
 	})
 }

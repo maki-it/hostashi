@@ -12,7 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/dbserver"
+	"github.com/maki-it/hostashi/internal/extdb"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -55,8 +57,61 @@ type DBServers interface {
 	With(ctx context.Context, srv store.DBServer, fn func(RemoteDB) error) error
 }
 
-// EnableDBServers turns on external database servers.
-func (s *Service) EnableDBServers(d DBServers) { s.dbs = d }
+// EnableDBServers turns on external database servers. manifestDir is where
+// the list for the backup goes (extdb); empty writes none, for tests.
+func (s *Service) EnableDBServers(d DBServers, manifestDir string) {
+	s.dbs, s.dbManifestDir = d, manifestDir
+}
+
+// WriteDBManifest writes the external servers and their databases for the
+// backup (extdb). The panel calls it at start; every change of a server or
+// an external database calls it too.
+func (s *Service) WriteDBManifest(ctx context.Context) error {
+	if s.dbManifestDir == "" {
+		return nil
+	}
+
+	s.manifestMu.Lock()
+	defer s.manifestMu.Unlock()
+
+	servers, err := s.st.DBServers(ctx)
+	if err != nil {
+		return err
+	}
+
+	dbs, err := s.st.Databases(ctx, "")
+	if err != nil {
+		return err
+	}
+
+	m := extdb.Manifest{}
+
+	for _, srv := range servers {
+		if !srv.Local() {
+			m.Servers = append(m.Servers, extdb.Server{
+				ID: srv.ID, Name: srv.Name, Host: srv.Host, Port: srv.Port, AdminUser: srv.AdminUser,
+				SealedPassword: srv.SealedPassword, TLSMode: srv.TLSMode, CAPEM: srv.CAPEM,
+			})
+		}
+	}
+
+	for _, d := range dbs {
+		if d.Server != store.LocalDBServer {
+			m.Databases = append(m.Databases, extdb.Database{Name: d.Name, Site: d.Site, Server: d.Server})
+		}
+	}
+
+	return extdb.Write(s.dbManifestDir, m)
+}
+
+// dbManifestChanged rewrites the manifest after a change and logs a
+// failure: the change itself stands, and the next change or start writes
+// the file again. Until then the backup misses the new state.
+func (s *Service) dbManifestChanged(ctx context.Context) {
+	if err := s.WriteDBManifest(context.WithoutCancel(ctx)); err != nil {
+		s.log.ErrorContext(ctx, "write the external database list for the backup", "err", err)
+	}
+}
 
 // dbServerNameRe is the rule for a server's name: short, lower case, safe
 // in paths and logs.
@@ -141,6 +196,7 @@ func (s *Service) AddDBServer(ctx context.Context, actor int64, req NewDBServer)
 		return store.DBServer{}, err
 	}
 
+	s.dbManifestChanged(ctx)
 	s.audit(ctx, actor, "db_server.create", req.Name, map[string]string{
 		"host": req.Host, "port": strconv.Itoa(req.Port), "tls": string(req.TLS), "server": info.Display(),
 	})
@@ -218,6 +274,7 @@ func (s *Service) DeleteDBServer(ctx context.Context, actor int64, name string) 
 		return err
 	}
 
+	s.dbManifestChanged(ctx)
 	s.audit(ctx, actor, "db_server.delete", name, nil)
 
 	return nil
@@ -268,7 +325,7 @@ type RemoteDBServers struct {
 	Box *secrets.Box
 }
 
-func dbServerPurpose(id int64) string { return "db-server:" + strconv.FormatInt(id, 10) }
+func dbServerPurpose(id int64) string { return extdb.PasswordPurpose(id) }
 
 // Check implements DBServers.
 func (r RemoteDBServers) Check(ctx context.Context, cfg dbserver.Config, privileges bool) (dbserver.Info, error) {
@@ -363,4 +420,133 @@ func (r RemoteDBServers) With(ctx context.Context, srv store.DBServer, fn func(R
 	}
 
 	return fn(c)
+}
+
+// DBServerCheckEvery is how often the panel checks the external servers
+// again (ADR-0041).
+const DBServerCheckEvery = 15 * time.Minute
+
+// RefreshDBServers checks every external server once and records what it
+// saw. A server that fails is recorded with its error; only a failure to
+// record is logged.
+func (s *Service) RefreshDBServers(ctx context.Context) {
+	if s.dbs == nil {
+		return
+	}
+
+	list, err := s.st.DBServers(ctx)
+	if err != nil {
+		s.log.ErrorContext(ctx, "list database servers", "err", err)
+
+		return
+	}
+
+	for _, srv := range list {
+		if srv.Local() || ctx.Err() != nil {
+			continue
+		}
+
+		cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		if _, err := s.CheckDBServer(cctx, srv.Name); err != nil {
+			s.log.ErrorContext(ctx, "check database server", "server", srv.Name, "err", err)
+		}
+
+		cancel()
+	}
+}
+
+// Days before an external server's certificate ends at which doctor warns
+// and fails. The server's operator renews it, so the margin is wider than
+// for the sites' own certificates.
+const (
+	DBServerCertWarnDays = 21
+	DBServerCertFailDays = 7
+)
+
+// DBServerDoctor reports the external servers for doctor from their last
+// check: unreachable, unencrypted, certificate ending soon, not checked
+// for a while.
+func (s *Service) DBServerDoctor(ctx context.Context, now time.Time) ([]agentapi.DoctorCheck, error) {
+	list, err := s.st.DBServers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []agentapi.DoctorCheck
+
+	for _, srv := range list {
+		if srv.Local() {
+			continue
+		}
+
+		out = append(out, dbServerChecks(srv, now)...)
+	}
+
+	return out, nil
+}
+
+func dbServerChecks(srv store.DBServer, now time.Time) []agentapi.DoctorCheck {
+	name, st := srv.Name, srv.Status
+
+	what := name
+	if st.Version != "" {
+		what = name + " (" + st.Engine + " " + st.Version + ")"
+	}
+
+	var out []agentapi.DoctorCheck
+
+	switch {
+	case st.CheckedAt.IsZero():
+		out = append(out, agentapi.DoctorCheck{
+			ID: "dbserver.reachable", Status: agentapi.DoctorWarn, Summary: "database server " + name + " was not checked yet",
+			Hint: "Check it under Databases, Servers.",
+		})
+	case st.LastError != "":
+		out = append(out, agentapi.DoctorCheck{
+			ID: "dbserver.reachable", Status: agentapi.DoctorFail,
+			Summary: "database server " + what + " is not reachable: " + st.LastError,
+			Hint:    "Sites with databases there fail, and their backups are incomplete. Check the server, the network and the admin user.",
+		})
+	default:
+		out = append(out, agentapi.DoctorCheck{
+			ID: "dbserver.reachable", Status: agentapi.DoctorOK, Summary: "database server " + what + " is reachable",
+		})
+	}
+
+	if !st.CheckedAt.IsZero() && now.Sub(st.CheckedAt) > 4*DBServerCheckEvery {
+		out = append(out, agentapi.DoctorCheck{
+			ID: "dbserver.checked", Status: agentapi.DoctorWarn,
+			Summary: "database server " + name + " was last checked " + st.CheckedAt.UTC().Format(time.RFC3339),
+			Hint:    "The panel checks every 15 minutes; restart hostashi.service if this stays.",
+		})
+	}
+
+	if srv.TLSMode == string(dbserver.TLSNone) {
+		out = append(out, agentapi.DoctorCheck{
+			ID: "dbserver.tls", Status: agentapi.DoctorWarn,
+			Summary: "database server " + name + " is reached without TLS: passwords and data cross the network in plain text",
+			Hint:    "Fine only in a private network you trust; otherwise turn on TLS on the server and add it again with TLS.",
+		})
+	}
+
+	if !st.CertExpires.IsZero() {
+		days := int(st.CertExpires.Sub(now).Hours() / 24)
+
+		switch {
+		case days < DBServerCertFailDays:
+			out = append(out, agentapi.DoctorCheck{
+				ID: "dbserver.cert", Status: agentapi.DoctorFail,
+				Summary: fmt.Sprintf("the TLS certificate of database server %s ends in %d days", name, days),
+				Hint:    "Renew it on the database server; without it Hostashi cannot connect.",
+			})
+		case days < DBServerCertWarnDays:
+			out = append(out, agentapi.DoctorCheck{
+				ID: "dbserver.cert", Status: agentapi.DoctorWarn,
+				Summary: fmt.Sprintf("the TLS certificate of database server %s ends in %d days", name, days),
+				Hint:    "Renew it on the database server.",
+			})
+		}
+	}
+
+	return out
 }

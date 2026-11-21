@@ -183,6 +183,9 @@ type WebPanel struct {
 	// TLS serves the panel with the live PanelCert certificate. Without it
 	// port 80 answers only ACME challenges for the domain.
 	TLS bool `json:"tls,omitempty"`
+	// DBTool also serves the web database tool (ADR-0038) on its own port
+	// with the panel's certificate; only together with TLS.
+	DBTool bool `json:"dbTool,omitempty"`
 }
 
 // WebApplyRequest is the complete desired web server state. Sites that are

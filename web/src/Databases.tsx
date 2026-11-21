@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ArrowLeft, Gear, Plus } from "@phosphor-icons/react";
+import { ArrowLeft, Gear, Plus, Table as TableIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { listSites, type Site } from "./backups";
 import {
@@ -22,8 +22,10 @@ import {
   type DumpJob,
 } from "./databases";
 import { poll } from "./backups";
+import { OpenToolDialog } from "./DBTool";
+import { getDBTool, type DBToolStatus } from "./dbtool";
 import { formatHash } from "./routes";
-import { Button, Card, Field, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
+import { Button, Card, Field, IconButton, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
 
 type QueryProps = {
   /** The address query: q, site, sort, dir; new=1 for the form; db=<name> for one database. */
@@ -34,7 +36,9 @@ type QueryProps = {
 
 const dbHref = (name: string) => formatHash({ page: "databases", query: new URLSearchParams({ db: name }) });
 
-const columns: Column<Database>[] = [
+// columns builds the table; onOpen is set when the database tool can be
+// opened (ADR-0038).
+const columns = (onOpen?: (db: string) => void): Column<Database>[] => [
   {
     key: "name",
     header: "Database",
@@ -64,6 +68,7 @@ const columns: Column<Database>[] = [
     srHeader: true,
     cell: (d) => (
       <RowActions>
+        {onOpen && <IconButton label={`Open ${d.name} in Adminer`} icon={<TableIcon size={16} />} onClick={() => onOpen(d.name)} />}
         <IconLink label={`Manage ${d.name}`} icon={<Gear size={16} />} href={dbHref(d.name)} />
       </RowActions>
     ),
@@ -79,6 +84,13 @@ export function Databases({ query, onQuery }: QueryProps) {
   const [sites, setSites] = useState<Site[] | null>(null);
   const [error, setError] = useState("");
   const [secret, setSecret] = useState<Credentials | null>(null);
+  const [tool, setTool] = useState<DBToolStatus | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
+
+  // Without the tool (or without the status) there is no Adminer button.
+  useEffect(() => {
+    getDBTool().then(setTool, () => setTool(null));
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -105,6 +117,9 @@ export function Databases({ query, onQuery }: QueryProps) {
   };
 
   const notice = secret && <PasswordNotice creds={secret} onClose={() => setSecret(null)} />;
+  const toolMinutes = tool?.available ? tool.minutes : null;
+  const onOpen = toolMinutes ? setOpening : undefined;
+  const toolDialog = opening && toolMinutes && <OpenToolDialog key={opening} db={opening} minutes={toolMinutes} onClose={() => setOpening(null)} />;
   const listLink = (
     <a className="ui-btn" href={formatHash({ page: "databases" })}>
       <ArrowLeft size={16} aria-hidden="true" />
@@ -143,8 +158,22 @@ export function Databases({ query, onQuery }: QueryProps) {
     const db = dbs.find((d) => d.name === one);
     return (
       <>
-        <PageHead title={one} description={db && <>Database of site <a href={formatHash({ page: "sites", site: { name: db.site } })}>{db.site}</a></>} actions={listLink} />
+        <PageHead
+          title={one}
+          description={db && <>Database of site <a href={formatHash({ page: "sites", site: { name: db.site } })}>{db.site}</a></>}
+          actions={
+            <>
+              {db && onOpen && (
+                <Button icon={<TableIcon size={16} aria-hidden="true" />} onClick={() => onOpen(db.name)}>
+                  Open in Adminer
+                </Button>
+              )}
+              {listLink}
+            </>
+          }
+        />
         {notice}
+        {toolDialog}
         {error && <Notice tone="err" title={error} />}
         {db ? (
           <DatabaseView key={db.name} db={db} onSecret={setSecret} onChange={load} onDeleted={() => set({ db: "" })} />
@@ -176,6 +205,7 @@ export function Databases({ query, onQuery }: QueryProps) {
         }
       />
       {notice}
+      {toolDialog}
       {error && <Notice tone="err" title={error} />}
       {sites.length === 0 && dbs.length === 0 ? (
         <Notice tone="info" title="Create a site first. Every database belongs to a site." />
@@ -201,7 +231,7 @@ export function Databases({ query, onQuery }: QueryProps) {
           </div>
           <Table
             label="Databases"
-            columns={columns}
+            columns={columns(onOpen)}
             rows={shown}
             rowKey={(d) => d.name}
             sort={sort}

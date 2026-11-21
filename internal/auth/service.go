@@ -67,6 +67,7 @@ type Service struct {
 	ipLimit    *Limiter
 	userLimit  *Limiter
 	tokenLimit *Limiter
+	emailLimit *Limiter
 
 	wa  *webauthn.WebAuthn // nil: passkeys disabled
 	cer *ceremonies
@@ -110,6 +111,9 @@ func NewService(c Config) *Service {
 		userLimit: NewLimiter(20, 15*time.Minute, now),
 		// Unknown bearer tokens per address; a client with a valid token never counts.
 		tokenLimit: NewLimiter(30, 15*time.Minute, now),
+		// Confirmation emails per account, so nobody floods a stranger's
+		// mailbox through the relay.
+		emailLimit: NewLimiter(emailRequestsPerHour, time.Hour, now),
 	}
 }
 
@@ -321,6 +325,10 @@ func (s *Service) Cleanup(ctx context.Context) error {
 	}
 
 	if err := s.st.DeleteExpiredInvitations(ctx, s.now()); err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
+
+	if err := s.st.DeleteExpiredEmailConfirmations(ctx, s.now()); err != nil {
 		return fmt.Errorf("auth: %w", err)
 	}
 

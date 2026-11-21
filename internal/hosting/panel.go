@@ -141,7 +141,9 @@ func (s *Service) panelWeb(ctx context.Context) (*agentapi.WebPanel, error) {
 		return nil, err
 	}
 
-	return &agentapi.WebPanel{Domain: s.panelDomain, TLS: s.panelCovers(p, 0)}, nil
+	tls := s.panelCovers(p, 0)
+
+	return &agentapi.WebPanel{Domain: s.panelDomain, TLS: tls, DBTool: tls && s.dbTool != nil}, nil
 }
 
 // panelApplied records whether the accepted web state serves the panel over

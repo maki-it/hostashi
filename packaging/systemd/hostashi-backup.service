@@ -9,7 +9,9 @@
 # rest small: the whole file system is read-only except the status and
 # cache directories, and of root's capabilities only CAP_DAC_READ_SEARCH
 # (read any file) is left. The network is open, because the Storage Box is
-# reached by name.
+# reached by name, and databases on external servers (ADR-0041) are dumped
+# over TCP with the panel's list and the server key; mariadb-dump gets the
+# connection in an option file in the private /tmp.
 
 [Unit]
 Description=Hostashi backup run

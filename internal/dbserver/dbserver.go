@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -111,8 +112,10 @@ func (c Config) Validate() error {
 		return fmt.Errorf("%w: admin user must have 1 to %d printable characters", ErrInvalid, MaxAdminUser)
 	}
 
-	if c.AdminPassword == "" || len(c.AdminPassword) > MaxAdminPwLen {
-		return fmt.Errorf("%w: admin password must have 1 to %d characters", ErrInvalid, MaxAdminPwLen)
+	// Printable ASCII, so the password also fits the option file that
+	// mariadb-dump reads for backups (ClientOptions).
+	if c.AdminPassword == "" || len(c.AdminPassword) > MaxAdminPwLen || !printable(c.AdminPassword) {
+		return fmt.Errorf("%w: admin password must have 1 to %d printable ASCII characters", ErrInvalid, MaxAdminPwLen)
 	}
 
 	switch c.TLS {
@@ -364,6 +367,14 @@ func ParseVersion(v string) (engine, version string, err error) {
 		return "", "", fmt.Errorf("%w: MySQL %s is older than 8.0", ErrUnsupported, num)
 	}
 
+	// mariadb-dump, which the backup uses, takes a server version of 10.3
+	// or later for MariaDB and asks for Oracle-mode packages, which MySQL
+	// 26 and later rejects, so the dump fails [V: mariadb-dump 11.8.6
+	// against MySQL 26.10.0, 2026-11-21].
+	if major >= 10 {
+		return "", "", fmt.Errorf("%w: MySQL %s cannot be backed up with mariadb-dump yet; MySQL 8.0 to 9.x are supported", ErrUnsupported, num)
+	}
+
 	return EngineMySQL, num, nil
 }
 
@@ -531,4 +542,50 @@ func classify(step string, err error) error {
 	}
 
 	return fmt.Errorf("dbserver: %s: %w", step, err)
+}
+
+// SystemCAFile is the CA bundle of Debian and Ubuntu, which TLSVerify uses
+// for mariadb-dump; the Go client uses the same system roots.
+const SystemCAFile = "/etc/ssl/certs/ca-certificates.crt"
+
+// ClientOptions returns a [client] section for mariadb-dump's
+// --defaults-extra-file with the connection and the password, so neither
+// appears on a command line. caFile holds CAPEM for TLSVerifyCA; it is
+// ignored otherwise. The caller writes the text to a file of mode 0600.
+func (c Config) ClientOptions(caFile string) (string, error) {
+	if err := c.Validate(); err != nil {
+		return "", err
+	}
+
+	var b strings.Builder
+
+	b.WriteString("[client]\n")
+	b.WriteString("host=" + c.Host + "\n")
+	b.WriteString("port=" + strconv.Itoa(c.Port) + "\n")
+	b.WriteString("user=" + optionValue(c.AdminUser) + "\n")
+	b.WriteString("password=" + optionValue(c.AdminPassword) + "\n")
+
+	switch c.TLS {
+	case TLSNone:
+		b.WriteString("skip-ssl\n")
+	case TLSVerify:
+		b.WriteString("ssl\nssl-verify-server-cert\nssl-ca=" + SystemCAFile + "\n")
+	case TLSVerifyCA:
+		if caFile == "" || !filepath.IsAbs(caFile) || strings.ContainsAny(caFile, "\n\"'\\#") {
+			return "", fmt.Errorf("%w: CA file path", ErrInvalid)
+		}
+
+		b.WriteString("ssl\nssl-verify-server-cert\nssl-ca=" + caFile + "\n")
+	}
+
+	return b.String(), nil
+}
+
+// optionValue quotes a printable value for an option file: inside double
+// quotes, backslash and double quote are escaped; "#" and spaces are then
+// part of the value.
+func optionValue(v string) string {
+	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`)
+
+	return `"` + r.Replace(v) + `"`
 }
