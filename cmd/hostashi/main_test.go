@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/maki-it/hostashi/internal/agentapi"
 )
 
 func TestRun(t *testing.T) {
@@ -70,6 +72,10 @@ func TestAdminUsage(t *testing.T) {
 		{"db", "user"},
 		{"db", "user", "create", "shop"},
 		{"db", "list", "x"},
+		{"service"},
+		{"service", "nginx"},
+		{"service", "list", "-yaml", "x"},
+		{"service", "php", "blog", "reload", "now"},
 	} {
 		var out, errOut bytes.Buffer
 		if code := run(t.Context(), args, 0, &out, &errOut); code != 2 {
@@ -114,5 +120,22 @@ func TestReadPassword(t *testing.T) {
 
 	if _, gen, err := readPassword(); err != nil || !gen {
 		t.Fatalf("empty stdin: %v %v", gen, err)
+	}
+}
+
+func TestPrintServices(t *testing.T) {
+	var b bytes.Buffer
+
+	printServices(&b, []agentapi.ServiceState{
+		{ID: "nginx", Installed: true, Active: "active", Sub: "running", NRestarts: 2},
+		{ID: "adminer"},
+		{ID: "php", Site: "blog", Installed: true, Active: "failed"},
+	})
+
+	got := b.String()
+	for _, want := range []string{"SERVICE", "nginx", "active (running)", "adminer", "not installed", "blog", "failed"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in\n%s", want, got)
+		}
 	}
 }

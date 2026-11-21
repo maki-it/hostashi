@@ -47,6 +47,10 @@ commands:
   doctor [-json]
             check the server and every site without changing anything (root
             on the server); exit code 3 if a check failed, 0 otherwise
+  service list [-json] | service ID [SITE] ACTION
+            show the managed services with their state and restarts, or
+            start, stop, restart or reload one where the service catalog
+            allows it (root on the server, ADR-0052)
   site create NAME [POOL] | site delete NAME | site list
             manage site accounts through the agent (root on the server)
   site files NAME
@@ -201,6 +205,17 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		}
 
 		err = adminCmd(ctx, agentrpc.NewClient(*socket), cmd, fs.Args(), stdout)
+		if errors.Is(err, errUsage) {
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+	case "service":
+		if fs.Parse(args) != nil {
+			return 2
+		}
+
+		err = serviceCmd(ctx, agentrpc.NewClient(*socket), fs.Args(), stdout)
 		if errors.Is(err, errUsage) {
 			fmt.Fprint(stderr, usage)
 

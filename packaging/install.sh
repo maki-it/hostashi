@@ -458,6 +458,9 @@ do_sysctl() {
 # renders the whole config; the package's default site is never used.
 NGINX_PKGS=(nginx libnginx-mod-http-brotli-filter libnginx-mod-http-brotli-static)
 NGINX_DROPIN=/etc/systemd/system/nginx.service.d/hostashi.conf
+# Restart after a failure for the distribution's MariaDB (ADR-0052); the
+# units step installs it with the other units.
+MARIADB_DROPIN=/etc/systemd/system/mariadb.service.d/hostashi.conf
 
 chk_nginx() {
   local p
@@ -1014,6 +1017,8 @@ chk_units() {
   done
   dir_ok "$(dirname "$NGINX_DROPIN")" 755 root:root || { echo "nginx drop-in directory"; return 1; }
   file_matches "$NGINX_DROPIN" 0644 root:root <"$UNIT_DIR/nginx-hostashi.conf" || { echo "nginx drop-in differs"; return 1; }
+  dir_ok "$(dirname "$MARIADB_DROPIN")" 755 root:root || { echo "mariadb drop-in directory"; return 1; }
+  file_matches "$MARIADB_DROPIN" 0644 root:root <"$UNIT_DIR/mariadb-hostashi.conf" || { echo "mariadb drop-in differs"; return 1; }
   local v
   for v in "${PHP_VERSIONS[@]}"; do
     php_unit "$v" | file_matches "/etc/systemd/system/hostashi-php-$v@.service" 0644 root:root || { echo "PHP $v unit differs"; return 1; }
@@ -1027,6 +1032,9 @@ do_units() {
   done
   install -d -m 0755 -o root -g root "$(dirname "$NGINX_DROPIN")" || return 1
   write_file "$NGINX_DROPIN" 0644 root:root <"$UNIT_DIR/nginx-hostashi.conf"
+  [ $? -le 1 ] || return 1
+  install -d -m 0755 -o root -g root "$(dirname "$MARIADB_DROPIN")" || return 1
+  write_file "$MARIADB_DROPIN" 0644 root:root <"$UNIT_DIR/mariadb-hostashi.conf"
   [ $? -le 1 ] || return 1
   local v
   for v in "${PHP_VERSIONS[@]}"; do
