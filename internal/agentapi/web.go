@@ -70,6 +70,9 @@ type WebSite struct {
 	// PHPPrograms lets the site's PHP start programs (exec, system, ...);
 	// without it the pool disables those functions (ADR-0033).
 	PHPPrograms bool `json:"phpPrograms,omitempty"`
+	// PHPSettings are the site's PHP ini settings (ADR-0049); nil uses
+	// the defaults. They need a PHP version.
+	PHPSettings *PHPSettings `json:"phpSettings,omitempty"`
 	// TLS serves the site over HTTPS with its live certificate (tls.install)
 	// and redirects HTTP to HTTPS. The certificate must name every domain.
 	TLS bool `json:"tls,omitempty"`
@@ -256,6 +259,16 @@ func (r WebApplyRequest) Validate() error {
 
 		if s.PHPPrograms && s.PHP == "" {
 			return fmt.Errorf("site %q: php programs need a PHP version", s.User)
+		}
+
+		if ps := s.PHPSettings; ps != nil {
+			if s.PHP == "" {
+				return fmt.Errorf("site %q: php settings need a PHP version", s.User)
+			}
+
+			if err := ps.Validate(); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
 		}
 
 		if c := s.PageCache; c != nil {
