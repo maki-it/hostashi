@@ -1,6 +1,6 @@
 # ADR-0041 External database servers
 
-**Status:** Accepted (Kim, 2026-11-20); Addendum 1 Proposed (2026-11-21). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups), ADR-0024 (MariaDB per site, no stored passwords), ADR-0025 (import and export), ADR-0033 (hardening), ADR-0035 (roles), ADR-0037 (UI redesign), ADR-0038 (web database tool).
+**Status:** Accepted (Kim, 2026-11-20); Addendum 1 Accepted (Kim, 2026-11-21). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups), ADR-0024 (MariaDB per site, no stored passwords), ADR-0025 (import and export), ADR-0033 (hardening), ADR-0035 (roles), ADR-0037 (UI redesign), ADR-0038 (web database tool).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -67,7 +67,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Addendum 1: import, export and Adminer for external databases
 
-**Status:** Proposed (2026-11-21). **Decides:** Kim.
+**Status:** Accepted (Kim, 2026-11-21). **Decides:** Kim.
 
 ### Context
 
@@ -109,5 +109,5 @@ Sandbox of the unit: like `hostashi-import@`, plus `RestrictAddressFamilies=AF_U
 
 ### Open questions
 
-1. Is Adminer for external databases part of v1 as described, or only import and export first? Recommendation: both, in that order (import and export first).
-2. Resolve the server name in the panel (as proposed) or allow DNS in the unit? Recommendation: in the panel, so the unit needs no resolver.
+1. ~~Is Adminer for external databases part of v1 as described, or only import and export first?~~ **Decided (Kim, 2026-11-21): both in v1, import and export first.**
+2. ~~Resolve the server name in the panel (as proposed) or allow DNS in the unit?~~ **Decided (Kim, 2026-11-21): in the panel; the unit needs no resolver.**
