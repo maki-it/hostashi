@@ -86,6 +86,10 @@ type WebSite struct {
 	// checks them against the allowlist itself; they are not rendered while
 	// the site is disabled or in maintenance.
 	Snippets *WebSnippets `json:"snippets,omitempty"`
+	// PageCache caches the answers of the site's PHP (ADR-0046); nil
+	// caches nothing. It needs PHP and is not used while the site is in
+	// maintenance.
+	PageCache *WebPageCache `json:"pageCache,omitempty"`
 }
 
 // PHP workers of a site's pool (pm.max_children, ADR-0015).
@@ -249,6 +253,16 @@ func (r WebApplyRequest) Validate() error {
 
 		if s.PHPPrograms && s.PHP == "" {
 			return fmt.Errorf("site %q: php programs need a PHP version", s.User)
+		}
+
+		if c := s.PageCache; c != nil {
+			if s.PHP == "" {
+				return fmt.Errorf("site %q: the page cache needs a PHP version", s.User)
+			}
+
+			if err := c.Validate(); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
 		}
 
 		if len(s.Domains) == 0 || len(s.Domains) > MaxDomainsPerSite {

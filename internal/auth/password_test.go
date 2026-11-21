@@ -4,6 +4,7 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -16,7 +17,7 @@ func TestHashAndVerify(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !strings.HasPrefix(h, "$argon2id$v=19$m=65536,t=3,p=1$") {
+	if !strings.HasPrefix(h, fmt.Sprintf("$argon2id$v=19$m=%d,t=%d,p=1$", hashCost.memoryKiB, hashCost.time)) {
 		t.Fatalf("unexpected format %q", h)
 	}
 
@@ -34,6 +35,14 @@ func TestHashAndVerify(t *testing.T) {
 	h2, err := HashPassword(pw)
 	if err != nil || h2 == h {
 		t.Fatalf("salt reused: %v", err)
+	}
+}
+
+// The production cost must not change by accident; old hashes keep
+// verifying because the cost is stored with each hash.
+func TestProductionCost(t *testing.T) {
+	if productionCost != (argonCost{memoryKiB: 65536, time: 3}) {
+		t.Fatalf("production cost changed: %+v", productionCost)
 	}
 }
 

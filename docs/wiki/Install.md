@@ -31,13 +31,13 @@ There is no release yet. Until there is, build the `hostashi` binary from the re
 The installer has two modes. `plan` only reads and lists what it would do:
 
 ```sh
-sudo ./packaging/install.sh plan --binary ./hostashi --public-url https://panel.example.com
+sudo ./packaging/install.sh plan --binary ./hostashi --panel-domain panel.example.com
 ```
 
 ## 3. Install
 
 ```sh
-sudo ./packaging/install.sh apply --yes --binary ./hostashi --public-url https://panel.example.com
+sudo ./packaging/install.sh apply --yes --binary ./hostashi --panel-domain panel.example.com
 ```
 
 At the end it prints a **one-time setup token**, valid for 24 hours. Keep it for the first login.
@@ -67,7 +67,7 @@ sudo hostashi setup-token
 | Option | Meaning |
 |--------|---------|
 | `--binary PATH` | The `hostashi` binary to install. Required for `apply`. |
-| `--public-url URL` | The address users open the panel at, such as `https://panel.example.com`. With a host name, nginx serves the panel over HTTPS on the panel port with a Let's Encrypt certificate. Needed for passkeys. |
+| `--panel-domain NAME` | The host name users open the panel at, such as `panel.example.com`, without `https://` or a port. nginx serves the panel there over HTTPS on the panel port with a Let's Encrypt certificate, so the name needs a DNS record pointing to the server. Needed for passkeys. Without it, the panel is reachable only through an SSH tunnel. |
 | `--panel-port PORT` | HTTPS port of the panel, default `8443`. TCP and UDP must be open. |
 | `--listen ADDR` | Where the panel process itself listens, default `127.0.0.1:8080`. |
 | `--php-versions LIST` | More PHP versions from sury.org next to the distribution's, comma-separated, such as `8.3,7.4`. 7.4, 8.1 and 8.2 are legacy versions. |
