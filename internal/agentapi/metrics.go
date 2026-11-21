@@ -28,6 +28,12 @@ type SiteStats struct {
 	// walks each home at most every DiskEvery. Zero DiskMeasuredAt: not yet.
 	DiskUsedBytes  uint64    `json:"diskUsedBytes"`
 	DiskMeasuredAt time.Time `json:"diskMeasuredAt,omitzero"`
+	// CacheMB is the size of the site's object cache (ADR-0045), 0 for
+	// none; the other Cache fields come from the unit's cgroup.
+	CacheMB          int    `json:"cacheMb,omitempty"`
+	CacheUp          bool   `json:"cacheUp,omitempty"`
+	CacheMemoryBytes uint64 `json:"cacheMemoryBytes,omitempty"`
+	CacheMemoryKnown bool   `json:"cacheMemoryKnown,omitempty"`
 }
 
 // DiskEvery is how often the agent measures the sites' homes [E].
