@@ -322,13 +322,6 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 
 	registerServices(s, &serviceOps{ctl: cfg.Services, host: cfg.Host, h: h, web: cfg.Web, log: svcLog})
 
-	svcLog := cfg.Log
-	if svcLog == nil {
-		svcLog = slog.New(slog.DiscardHandler)
-	}
-
-	registerServices(s, &serviceOps{ctl: cfg.Services, host: cfg.Host, h: h, web: cfg.Web, log: svcLog})
-
 	return s
 }
 
