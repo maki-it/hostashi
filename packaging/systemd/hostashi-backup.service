@@ -11,7 +11,8 @@
 # (read any file) is left. The network is open, because the Storage Box is
 # reached by name, and databases on external servers (ADR-0041) are dumped
 # over TCP with the panel's list and the server key; mariadb-dump gets the
-# connection in an option file in the private /tmp.
+# connection in an option file in the private /tmp, pg_dump (ADR-0051) a
+# passfile there and the rest through restic's environment.
 
 [Unit]
 Description=Hostashi backup run
