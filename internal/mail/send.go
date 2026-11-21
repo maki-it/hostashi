@@ -140,39 +140,69 @@ func build(c Config, m Message) (*gomail.Msg, error) {
 // Send delivers the messages over one connection. The error is safe to log
 // only through Summary: it may carry the server's answer.
 func Send(ctx context.Context, c Config, msgs ...Message) error {
+	_, err := deliver(ctx, c, msgs)
+
+	return err
+}
+
+// Deliver sends one message and returns its Message-ID, for the log.
+func Deliver(ctx context.Context, c Config, m Message) (string, error) {
+	ids, err := deliver(ctx, c, []Message{m})
+	if err != nil {
+		return "", err
+	}
+
+	return ids[0], nil
+}
+
+func deliver(ctx context.Context, c Config, msgs []Message) ([]string, error) {
 	c, err := c.Validate()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	built := make([]*gomail.Msg, 0, len(msgs))
+	ids := make([]string, 0, len(msgs))
 
 	for _, m := range msgs {
 		if err := m.check(); err != nil {
-			return err
+			return nil, err
 		}
 
 		msg, err := build(c, m)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		built = append(built, msg)
+		ids = append(ids, msg.GetMessageID())
 	}
 
 	cl, err := client(c)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, sendTimeout)
 	defer cancel()
 
 	if err := cl.DialAndSendWithContext(ctx, built...); err != nil {
-		return fmt.Errorf("mail: %w", err)
+		return nil, fmt.Errorf("mail: %w", err)
 	}
 
-	return nil
+	return ids, nil
+}
+
+// Permanent reports whether the relay refused for good (an SMTP 5xx
+// answer), so retrying makes no sense. Timeouts, connection and TLS
+// problems and 4xx answers are worth another try.
+func Permanent(err error) bool {
+	var se *gomail.SendError
+	if errors.As(err, &se) {
+		return !se.IsTemp() && se.ErrorCode() >= 500
+	}
+
+	return errors.Is(err, ErrInvalid)
 }
 
 const maxSummaryLen = 200

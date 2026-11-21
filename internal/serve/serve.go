@@ -356,6 +356,12 @@ func Run(ctx context.Context, cfg Config) error {
 	client := agentrpc.NewClient(cfg.Socket)
 	client.Observe(m.AgentOp)
 
+	// Outgoing email (ADR-0044): nothing is queued while no relay is set.
+	relay := mail.NewStore(st, box)
+	outbox := mail.NewOutbox(st, relay, box, cfg.Log)
+
+	go outbox.Run(ctx)
+
 	deps := Deps{
 		PingAgent: func(ctx context.Context) error {
 			_, err := agentapi.Ping.Call(ctx, client, agentapi.PingRequest{})
@@ -370,7 +376,7 @@ func Run(ctx context.Context, cfg Config) error {
 		Doctor:   RPCDoctor(client),
 		Firewall: RPCFirewall{C: client},
 		PHP:      RPCPHPInstaller{C: client},
-		Mail:     mail.NewStore(st, box),
+		Mail:     relay,
 		MailSend: func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
 	}
 
