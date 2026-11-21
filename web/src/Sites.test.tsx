@@ -298,6 +298,7 @@ describe("SitePage", () => {
     expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Overview",
       "Domains & HTTPS",
+      "Files",
       "PHP",
       "Cron",
       "SSH & SFTP",
@@ -322,7 +323,7 @@ describe("SitePage", () => {
 
   it("shows the overview for a tab that does not exist yet", async () => {
     mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [blog] } } });
-    render(<PageHarness tab="files" />);
+    render(<PageHarness tab="backups" />);
     expect(await screen.findByRole("tabpanel", { name: "Overview" })).toBeInTheDocument();
   });
 
