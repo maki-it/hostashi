@@ -27,6 +27,7 @@ import (
 	"github.com/maki-it/hostashi/internal/cpimport"
 	"github.com/maki-it/hostashi/internal/cpsource"
 	"github.com/maki-it/hostashi/internal/cronjobs"
+	"github.com/maki-it/hostashi/internal/filesunit"
 	"github.com/maki-it/hostashi/internal/firewall"
 	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/netaddrs"
@@ -150,6 +151,10 @@ type Config struct {
 	// StateDir; without it cache.* answer failed_precondition.
 	ObjectCache *objcache.Manager
 
+	// Files starts the sites' file manager sockets (ADR-0040). Run builds
+	// it; without it files.open answers failed_precondition.
+	Files *filesunit.Manager
+
 	// Doctor overrides what doctor.run reads, for tests. The zero value
 	// reads the server.
 	Doctor DoctorEnv
@@ -235,7 +240,8 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, acl: cfg.panelACL, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, files: cfg.Files, log: log}
+		h.acl = cfg.panelACL
 		h.register(s)
 
 		if cfg.Backup != nil && cfg.Backup.Space == nil {
@@ -287,9 +293,11 @@ type siteOps struct {
 	slices *siteslice.Manager
 	cache  *pagecache.Dirs
 	objc   *objcache.Manager
-	acl    *panelACL // nil: no panel allowlist in nginx
+	files  *filesunit.Manager
 	log    *slog.Logger
 	mu     sync.Mutex
+	// acl hands the panel allowlist to nginx on 443; nil for none.
+	acl *panelACL
 	// sweepMu keeps the background deletes of purged caches apart.
 	sweepMu sync.Mutex
 }
@@ -343,6 +351,14 @@ func (h *siteOps) register(s *agentrpc.Server) {
 		if h.db != nil && h.db.SiteHasDatabases(req.User) {
 			return agentapi.SiteDeleteResponse{}, &agentrpc.Error{
 				Code: agentrpc.CodePrecondition, Message: "site still has databases, remove them with db.delete first",
+			}
+		}
+
+		// The helper runs as the site user; it must be gone before the
+		// user is. Opening the files again starts it anew.
+		if h.files != nil {
+			if err := h.files.Remove(ctx, req.User); err != nil {
+				return agentapi.SiteDeleteResponse{}, fmt.Errorf("stop file manager of site %s: %w", req.User, err)
 			}
 		}
 
@@ -422,6 +438,7 @@ func (h *siteOps) register(s *agentrpc.Server) {
 	h.registerCron(s)
 
 	h.registerCache(s)
+	h.registerFiles(s)
 
 	h.registerSSH(s)
 
@@ -1183,6 +1200,10 @@ func Run(ctx context.Context, cfg Config) error {
 		if err := cfg.ObjectCache.Recover(ctx); err != nil && cfg.Log != nil {
 			cfg.Log.ErrorContext(ctx, "object cache recovery failed", "err", err)
 		}
+	}
+
+	if cfg.Files == nil {
+		cfg.Files = &filesunit.Manager{UnitDir: filesunit.DefaultUnitDir, Ctl: phpctl.FilesController{}, Log: cfg.Log}
 	}
 
 	if cfg.PHPInstall == nil {
