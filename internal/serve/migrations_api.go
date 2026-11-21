@@ -410,6 +410,15 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 
 		// A cache in front of the old site becomes the page cache
 		// (ADR-0046). The default size counts against the site's disk.
+		// The old pool's PHP settings (ADR-0049), clamped by the plan.
+		if s.PHPSettings != nil {
+			if _, err := sites.SetPHPSettings(ctx, actor, s.Name, *s.PHPSettings); err != nil {
+				log.WarnContext(ctx, "imported PHP settings not set", "site", s.Name, "err", err)
+			} else {
+				n.PHPSettings = true
+			}
+		}
+
 		if s.PageCache != "" {
 			_, err := sites.SetPageCache(ctx, actor, s.Name, hosting.PageCacheSettings{
 				Enabled: true, Preset: s.PageCache, Minutes: agentapi.DefaultPageCacheMinutes,

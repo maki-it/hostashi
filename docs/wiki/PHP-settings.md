@@ -39,3 +39,7 @@ The values are defaults for the site. The site's own `.user.ini` file or `ini_se
 - The site's memory limit (on the **Limits** tab) caps all of its PHP processes together, whatever `memory_limit` says.
 
 A server snippet on the **nginx** tab that sets `client_max_body_size` or `fastcgi_read_timeout` itself wins over these values.
+
+## Sites from CloudPanel
+
+The import takes over these settings from the old site's PHP-FPM pool. Values outside the ranges above are set to the nearest allowed value, for example `memory_limit = -1` becomes 4096 MiB. The plan lists every changed value and every pool setting that is not taken over, and says when the old vhost's `client_max_body_size` differs from the new largest request.

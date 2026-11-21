@@ -54,6 +54,9 @@ type NewSite struct {
 	PageCache string
 	// ObjectCache turns on the site's own object cache (ADR-0045).
 	ObjectCache bool
+	// PHPSettings are the old pool's allowlisted PHP settings, clamped to
+	// the bounds; nil for none (ADR-0049).
+	PHPSettings *agentapi.PHPSettings
 }
 
 // Created counts what came with a new site.
@@ -62,6 +65,7 @@ type Created struct {
 	SSHKeys     int
 	PageCache   bool
 	ObjectCache bool
+	PHPSettings bool
 }
 
 // SiteCreator creates a site on this server (hosting.Service.Create), its
@@ -144,6 +148,7 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		Name: ps.Name, PHP: php, Domains: domains, Cron: plan.CronJobs(site), Usage: site.Usage, SSHKeys: plan.SSHKeys(site),
 		PageCache:   cache,
 		ObjectCache: ps.ObjectCache && php != "",
+		PHPSettings: phpSettings(site, php),
 	})
 	if err != nil {
 		return ps, err
@@ -153,14 +158,30 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		"report": reportID, "php": php, "cron": strconv.Itoa(n.Cron), "sshKeys": strconv.Itoa(n.SSHKeys),
 		"pageCache":   strconv.FormatBool(n.PageCache),
 		"objectCache": strconv.FormatBool(n.ObjectCache),
+		"phpSettings": strconv.FormatBool(n.PHPSettings),
 	})
 
-	ps.PHP, ps.CronImport, ps.SSHImport, ps.ObjectCacheOn = php, n.Cron, n.SSHKeys, n.ObjectCache
+	ps.PHP, ps.CronImport, ps.SSHImport, ps.ObjectCacheOn, ps.PHPSettingsOn = php, n.Cron, n.SSHKeys, n.ObjectCache, n.PHPSettings
 	if !n.PageCache {
 		ps.PageCache = ""
 	}
 
 	return ps, nil
+}
+
+// phpSettings are the PHP settings the new site takes over, nil if none
+// or the site has no PHP.
+func phpSettings(site scan.Site, php string) *agentapi.PHPSettings {
+	if php == "" {
+		return nil
+	}
+
+	pi := plan.PHPSettingsOf(site)
+	if pi.Settings == (agentapi.PHPSettings{}) {
+		return nil
+	}
+
+	return &pi.Settings
 }
 
 // StartImport copies the site's files, and the given databases, from the
