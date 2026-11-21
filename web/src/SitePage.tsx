@@ -5,6 +5,7 @@ import { CertificateCard } from "./Certificate";
 import { CronSettings } from "./Cron";
 import { FileManager } from "./Files";
 import { LimitSettings } from "./Limits";
+import { ObjectCacheSettings } from "./ObjectCache";
 import { allowIpsProblem, clientIp, listPages, pageMessage, parseAllowIps, setMaintenance, type StatusPage } from "./pages";
 import { formatHash, type SiteTab } from "./routes";
 import { PHPOptions, useSites } from "./Sites";
@@ -101,6 +102,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
         {active === "php" && (
           <>
             <PHPTab site={site} php={php} onChange={load} />
+            {site.php && <ObjectCacheSettings site={site} canSize={role === "admin" || role === "manager"} />}
             {site.php && <PageCacheSettings site={site} canSize={role === "admin" || role === "manager"} />}
           </>
         )}

@@ -506,6 +506,31 @@ if x grep -Eq ' /usr/[^ ]+ \(deleted\)$' "/proc/$new/maps"; then fail "restarted
 if x systemctl is-active --quiet "php$ver-fpm.service"; then fail "package unit php$ver-fpm started by the update"; fi
 body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/some/pretty/url)
 [ "$body" = "php $ver user wp jailed" ] || fail "PHP site answered '$body' after the update"
+# The object cache through the panel (ADR-0045): the site's PHP-FPM, in
+# its own sandbox, reaches its Valkey over the socket.
+[ "$(api PUT /api/v1/sites/wp/object-cache '{"enabled":true}')" = 200 ] || fail "object cache on: $(x cat /tmp/api.out)"
+x systemctl is-active --quiet hostashi-valkey@wp.service || fail "cache unit of wp not running"
+[ "$(x systemctl show -P Slice hostashi-valkey@wp.service)" = hostashi-site-wp.slice ] || fail "cache of wp is not in its slice"
+xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/cache.php' <<'PHP'
+<?php
+$r = new Redis();
+$r->connect('/run/hostashi-valkey/wp/valkey.sock');
+if (($_GET['op'] ?? '') === 'set') { $r->set('k', 'cached'); }
+echo $r->get('k') ?: 'empty', ' ', $r->info('memory')['maxmemory'];
+PHP
+body=$(x curl -fsS -H 'Host: wp.example.com' 'http://127.0.0.1/cache.php?op=set')
+[ "$body" = "cached 67108864" ] || fail "PHP of wp got '$body' from its cache"
+[ "$(api POST /api/v1/sites/wp/object-cache/flush)" = 200 ] || fail "flush: $(x cat /tmp/api.out)"
+body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/cache.php)
+[ "$body" = "empty 67108864" ] || fail "cache of wp not empty after a flush: '$body'"
+[ "$(api PUT /api/v1/sites/wp/object-cache/size '{"memoryMb":128}')" = 200 ] || fail "cache size: $(x cat /tmp/api.out)"
+body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/cache.php)
+[ "$body" = "empty 134217728" ] || fail "cache of wp not resized: '$body'"
+exposure hostashi-valkey@wp.service 1.0
+[ "$(api PUT /api/v1/sites/wp/object-cache '{"enabled":false}')" = 200 ] || fail "object cache off: $(x cat /tmp/api.out)"
+x systemctl is-active --quiet hostashi-valkey@wp.service && fail "cache unit of wp still running after off"
+x test ! -e /var/lib/hostashi-agent/valkey/wp.conf || fail "cache config of wp left after off"
+x rm -f /home/wp/htdocs/cache.php
 # Metrics (ADR-0022): off by default, then on with a metrics:read token.
 # php_up comes from the unit's cgroup, which checks the slice path.
 [ "$(x curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/metrics)" = 404 ] || fail "metrics on by default"
