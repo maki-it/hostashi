@@ -1,6 +1,6 @@
 # ADR-0049 PHP settings per site
 
-**Status:** Proposed. **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0005 (web server), ADR-0015 (per-site resource limits), ADR-0017 (import and presets), ADR-0019 (PHP), ADR-0029 (nginx snippets), ADR-0033 (hardening baseline), ADR-0035 (roles), ADR-0036 (PHP versions from the panel).
+**Status:** Accepted (Kim, 2026-11-21). **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0005 (web server), ADR-0015 (per-site resource limits), ADR-0017 (import and presets), ADR-0019 (PHP), ADR-0029 (nginx snippets), ADR-0033 (hardening baseline), ADR-0035 (roles), ADR-0036 (PHP versions from the panel).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 

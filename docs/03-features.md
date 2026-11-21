@@ -39,7 +39,7 @@
 | Aliases, redirects, www/non-www, HTTP→HTTPS | P0 | A | CP | |
 | Vhost templates (Laravel, Symfony, WP, Magento, Shopware, …) | P1 | B | CP | Custom templates, YAML-based, preview |
 | Vhost editor with `nginx -t` and rollback | P0 | A | CP | Custom snippets in include files |
-| Per-site PHP settings (memory_limit, …) | P0 | A | CP | Through the pool config, not through `PHP_VALUE` in Nginx. PHP version visible in the site overview; unused PHP versions can be switched off |
+| Per-site PHP settings (memory_limit, …) | P0 | A | CP | Through the pool config, not through `PHP_VALUE` in Nginx. Allowlist of twelve settings as `php_value` defaults (ADR-0049, accepted). PHP version visible in the site overview; unused PHP versions can be switched off |
 | Resource limits per site (CPU, RAM, tasks, I/O) | P1 | B | NEW | systemd/cgroup v2 |
 | Disk quota per site | P1 | B | NEW | Project quota (ext4/XFS), enabled during initial setup, details in [ADR-0015](adr/0015-per-site-resource-limits.md). Spike S8 done, ADR accepted. Used space per site (files and DB) is shown in the UI, even without quota |
 | HTTP/3 per site | P1 | B | CP | |
