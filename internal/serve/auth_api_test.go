@@ -101,6 +101,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	fm := &stubFiles{t: t}
 	deps.Files = fm.open
 	deps.NotifyPrefs = st
+	deps.MailHistory = st
 
 	if ag != nil {
 		deps.Sites = hosting.New(st, ag, nil)

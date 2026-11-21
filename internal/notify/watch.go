@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -22,7 +23,20 @@ const (
 	recent = 48 * time.Hour
 	// longWindow keeps one email per backup run or certificate threshold.
 	longWindow = 30 * 24 * time.Hour
+	// doctorEvery: the checks read the whole server, so not every tick.
+	doctorEvery = time.Hour
+	// week is the window of the PHP end-of-life reminder (ADR-0036).
+	week = 7 * 24 * time.Hour
+	// fullPercent is the disk use that ADR-0044 reports.
+	fullPercent = 90
 )
+
+// ownCategory lists the checks that have a category of their own, so the
+// daily digest leaves them out.
+var ownCategory = map[string]bool{"site.php": true, "site.disk": true, "system.disk": true, "site.tls": true}
+
+// percent reads the "(NN %)" at the end of a disk check's summary.
+var percent = regexp.MustCompile(`\((\d{1,3}) %\)$`)
 
 // Expiry thresholds of ADR-0044, in days, largest first.
 var expiryDays = []int{14, 3}
@@ -42,8 +56,12 @@ type Watcher struct {
 	Notifier *Notifier
 	Backups  func(ctx context.Context) (agentapi.BackupStatus, error) // nil: no backups
 	Certs    func(ctx context.Context) ([]Cert, error)
-	Now      func() time.Time
-	Log      *slog.Logger
+	// Doctor runs the server checks; nil: none. It runs at most hourly.
+	Doctor func(ctx context.Context) (agentapi.DoctorReport, error)
+	Now    func() time.Time
+	Log    *slog.Logger
+
+	lastDoctor time.Time
 }
 
 // Run checks at start and then every 15 minutes until ctx ends.
@@ -82,6 +100,21 @@ func (w *Watcher) Check(ctx context.Context) {
 			for _, ev := range w.certEvents(c) {
 				w.notify(ctx, ev)
 			}
+		}
+	}
+
+	if w.Doctor != nil && w.Now().Sub(w.lastDoctor) >= doctorEvery {
+		rep, err := w.Doctor(ctx)
+		if err != nil {
+			w.Log.WarnContext(ctx, "notify: doctor", "err", err)
+
+			return
+		}
+
+		w.lastDoctor = w.Now()
+
+		for _, ev := range w.doctorEvents(rep) {
+			w.notify(ctx, ev)
 		}
 	}
 }
@@ -203,6 +236,87 @@ func (w *Watcher) certEvents(c Cert) []Event {
 	}
 
 	return out
+}
+
+// doctorEvents turns a report into one daily digest of errors for admins,
+// a weekly reminder per site on an old PHP version, and a note per disk
+// or site above 90 percent.
+func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
+	var (
+		out    []Event
+		digest []string
+	)
+
+	for _, c := range rep.Checks {
+		switch {
+		case c.ID == "site.php" && c.Status != agentapi.DoctorOK && c.Site != "":
+			out = append(out, Event{
+				Category: PHP, Site: c.Site, Key: "php-eol:" + c.Site, Window: week, Fragment: "sites/" + c.Site + "/php",
+				Mail: mail.OpsEvent{Template: "php-eol", Subject: "Old PHP version on the site " + c.Site, Lines: []string{
+					"The site " + c.Site + ": " + c.Summary + ".", c.Hint,
+				}},
+			})
+		case c.ID == "site.disk" && c.Site != "" && used(c, false) >= fullPercent:
+			what, _, _ := strings.Cut(c.Summary, ":")
+			out = append(out, Event{
+				Category: Disk, Site: c.Site, Key: "disk:" + c.Site + ":" + what, Fragment: "sites/" + c.Site + "/limits",
+				Mail: mail.OpsEvent{Template: "disk-full", Subject: "The site " + c.Site + " is almost full", Lines: []string{
+					"The site " + c.Site + ", " + c.Summary + ".", c.Hint,
+				}},
+			})
+		case c.ID == "system.disk" && used(c, true) >= fullPercent:
+			path, _, _ := strings.Cut(c.Summary, ":")
+			out = append(out, Event{
+				Category: Disk, Key: "disk:server:" + path, Fragment: "health",
+				Mail: mail.OpsEvent{Template: "disk-full", Subject: "The server's disk is almost full", Lines: []string{
+					"Free space on the server, " + c.Summary + ".", c.Hint,
+				}},
+			})
+		case c.Status == agentapi.DoctorFail && !ownCategory[c.ID]:
+			line := "- " + c.Summary
+			if c.Site != "" {
+				line = "- site " + c.Site + ": " + c.Summary
+			}
+
+			digest = append(digest, line)
+		}
+	}
+
+	if len(digest) > 0 {
+		const most = 30
+
+		if len(digest) > most {
+			digest = append(digest[:most], fmt.Sprintf("- and %d more", len(digest)-most))
+		}
+
+		lines := append([]string{"the server checks found errors:", ""}, digest...)
+		out = append(out, Event{
+			Category: Doctor, Key: "doctor-digest:" + w.Now().UTC().Format(time.DateOnly), Fragment: "health",
+			Mail: mail.OpsEvent{Template: "doctor-digest", Subject: "Server checks found errors", Lines: lines},
+		})
+	}
+
+	return out
+}
+
+// used returns the used percent of a disk check, or -1 when the summary
+// has none. The server's check gives the free percent.
+func used(c agentapi.DoctorCheck, free bool) int {
+	m := percent.FindStringSubmatch(c.Summary)
+	if m == nil {
+		return -1
+	}
+
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		return -1
+	}
+
+	if free {
+		return 100 - n
+	}
+
+	return n
 }
 
 func when(t time.Time) string { return t.UTC().Format("2 January 2006, 15:04 UTC") }

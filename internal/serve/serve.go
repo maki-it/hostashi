@@ -143,6 +143,9 @@ type Deps struct {
 	// NotifyPrefs keeps the operations email switches; nil disables their
 	// routes. Needs Auth and Mail.
 	NotifyPrefs NotifyPrefs
+	// MailHistory adds the email check to the doctor report; nil leaves it
+	// out. Needs Mail.
+	MailHistory MailHistory
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -266,12 +269,16 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 		}
 
 		if deps.Doctor != nil {
-			var panel PanelChecks
+			var panel []PanelChecks
 			if deps.Sites != nil {
-				panel = deps.Sites.DBServerDoctor
+				panel = append(panel, deps.Sites.DBServerDoctor)
 			}
 
-			registerDoctor(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Doctor, panel, log)
+			if deps.Mail != nil && deps.MailHistory != nil {
+				panel = append(panel, mailCheck(deps.Mail, deps.MailHistory))
+			}
+
+			registerDoctor(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Doctor, allPanelChecks(panel), log)
 		}
 
 		if deps.Metrics != nil && deps.Settings != nil {
@@ -440,6 +447,7 @@ func Run(ctx context.Context, cfg Config) error {
 		Mail:        relay,
 		Outbox:      outbox,
 		NotifyPrefs: st,
+		MailHistory: st,
 		MailSend:    func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
 		Files:       RPCFilesOpener(client),
 	}
@@ -478,6 +486,7 @@ func Run(ctx context.Context, cfg Config) error {
 		},
 		Backups: deps.Backups.Status,
 		Certs:   notifyCerts(st, deps.Sites, PanelDomain(cfg.PublicURL)),
+		Doctor:  deps.Doctor,
 		Now:     time.Now,
 		Log:     cfg.Log,
 	}

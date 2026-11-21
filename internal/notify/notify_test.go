@@ -288,3 +288,76 @@ func TestWatcherCerts(t *testing.T) {
 		t.Fatalf("expired sent again: %s", got)
 	}
 }
+
+func TestWatcherDoctor(t *testing.T) {
+	n, _, ob := newNotifier(t)
+	now := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
+	runs := 0
+	rep := agentapi.DoctorReport{Checks: []agentapi.DoctorCheck{
+		{ID: "system.disk", Status: agentapi.DoctorFail, Summary: "/: 2 GB free of 38 GB (5 %)", Hint: "Free space now."},
+		{ID: "system.disk", Status: agentapi.DoctorWarn, Summary: "/srv: 12 GB free of 100 GB (12 %)"},
+		{ID: "service.nginx", Status: agentapi.DoctorFail, Summary: "nginx is not running"},
+		{ID: "system.updates", Status: agentapi.DoctorWarn, Summary: "3 security updates"},
+		{ID: "site.disk", Site: "shop", Status: agentapi.DoctorWarn, Summary: "files: 9.2 GB of 10 GB (92 %)", Hint: "Filling up."},
+		{ID: "site.disk", Site: "blog", Status: agentapi.DoctorWarn, Summary: "files: 8.5 GB of 10 GB (85 %)"},
+		{ID: "site.php", Site: "shop", Status: agentapi.DoctorWarn, Summary: "PHP 8.1 gets no security fixes since 2025-12-31", Hint: "Move the site."},
+		{ID: "site.home", Site: "shop", Status: agentapi.DoctorFail, Summary: "home is world-readable"},
+	}}
+	w := &Watcher{
+		Notifier: n, Now: func() time.Time { return now }, Log: n.Log,
+		Doctor: func(context.Context) (agentapi.DoctorReport, error) { runs++; return rep, nil },
+	}
+
+	w.Check(t.Context())
+	w.Check(t.Context()) // within the hour: not run again
+
+	if runs != 1 {
+		t.Fatalf("runs %d", runs)
+	}
+
+	byTo := map[string][]string{}
+	for _, m := range ob.sent {
+		byTo[m.To] = append(byTo[m.To], m.Subject)
+	}
+
+	// kim is an admin with every default; mona (manager) only opted into
+	// certificates and backups; uli (user, grant on shop) only certificates.
+	want := "The server's disk is almost full|The site shop is almost full|Old PHP version on the site shop|Server checks found errors"
+	if got := strings.Join(byTo["kim@example.com"], "|"); got != want {
+		t.Fatalf("kim:\n%s\nwant\n%s", got, want)
+	}
+
+	if len(byTo["mona@example.com"]) != 0 || len(byTo["uli@example.com"]) != 0 {
+		t.Fatalf("opted out got mail: %v", byTo)
+	}
+
+	var digest string
+
+	for _, m := range ob.sent {
+		if m.To == "kim@example.com" && m.Subject == "Server checks found errors" {
+			digest = m.Body
+		}
+	}
+
+	for _, want := range []string{"- nginx is not running", "- site shop: home is world-readable", "#/health"} {
+		if !strings.Contains(digest, want) {
+			t.Errorf("digest lacks %q:\n%s", want, digest)
+		}
+	}
+
+	for _, not := range []string{"security updates", "PHP 8.1", "38 GB"} {
+		if strings.Contains(digest, not) {
+			t.Errorf("digest has %q:\n%s", not, digest)
+		}
+	}
+
+	// An hour later nothing new goes out: the same keys.
+	before := len(ob.sent)
+	now = now.Add(time.Hour)
+
+	w.Check(t.Context())
+
+	if runs != 2 || len(ob.sent) != before {
+		t.Fatalf("runs %d, sent %d more", runs, len(ob.sent)-before)
+	}
+}
