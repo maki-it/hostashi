@@ -149,6 +149,9 @@ var table = map[Action]Rule{
 	"databases:open":  ownSite("databases:write"),
 	"backups:read":    ownSite("backups:read"),
 	"backups:restore": ownSite("backups:restore"),
+	// The file manager writes as the site user (ADR-0040).
+	"files:read":  ownSite("files:read"),
+	"files:write": ownSite("files:write"),
 }
 
 // Lookup returns the rule of an action.
