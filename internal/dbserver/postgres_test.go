@@ -240,7 +240,7 @@ func TestPGToolUser(t *testing.T) {
 		pw   = "Abcdefghijklmnopqrstuvwxyz012345"
 	)
 
-	c, f, in := newFakePG()
+	c, f, _ := newFakePG()
 	ctx := t.Context()
 
 	if err := c.CreateToolUser(ctx, "shop", user, pw); err != nil {
@@ -254,7 +254,7 @@ func TestPGToolUser(t *testing.T) {
 		t.Fatalf("statements:\n%s", all)
 	}
 
-	c, f, in = newFakePG()
+	c, f, in := newFakePG()
 	if err := c.DropToolUser(ctx, "shop", user); err != nil {
 		t.Fatal(err)
 	}
