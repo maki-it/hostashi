@@ -72,6 +72,10 @@
   --side-active-fg: #0d1f1a;
   --side-line: #d6dfda;
   --active-bar: #1f6b55;
+
+  /* chart series, in this order (checked for colour blindness, ADR-0052) */
+  --series-1: #0f8a6e;
+  --series-2: #7050d0;
 }
 
 /* dark: chosen, or following the system when nothing is chosen */
@@ -105,6 +109,9 @@
   --side-active-fg: #ffffff;
   --side-line: #1a2c22;
   --active-bar: #ff6f61;
+
+  --series-1: #2f9c7c;
+  --series-2: #8a78ee;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -138,5 +145,8 @@
     --side-active-fg: #ffffff;
     --side-line: #1a2c22;
     --active-bar: #ff6f61;
+
+    --series-1: #2f9c7c;
+    --series-2: #8a78ee;
   }
 }
