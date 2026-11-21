@@ -175,7 +175,7 @@ step "hostashi doctor"
 rc=0
 doc=$(x /usr/local/bin/hostashi doctor) || rc=$?
 echo "$doc"
-for id in system.os system.pool service.panel service.nginx service.mariadb service.fail2ban; do
+for id in system.os system.pool service.panel service.nginx service.mariadb service.fail2ban service.dbtool; do
   grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"
 done
 grep -Eq "^  WARN  system.quota " <<<"$doc" || fail "doctor: no quota warning on an overlay root"

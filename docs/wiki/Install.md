@@ -76,6 +76,7 @@ Things to know:
 
 - The panel allowlist (Firewall page) is applied by nginx on port 443, not by the firewall. Addresses outside it still reach the TLS handshake and then get `403`. On port 8443 the firewall drops them earlier.
 - If fail2ban bans an address for wrong panel logins, it cannot reach the sites on this server either while the ban lasts. That also happens on 8443.
+- The database tool (Adminer) keeps its own port 8444, so it stays a separate origin from the panel.
 
 ## Installer options
 
@@ -88,6 +89,7 @@ Things to know:
 | `--php-versions LIST` | More PHP versions from sury.org next to the distribution's, comma-separated, such as `8.3,7.4`. 7.4, 8.1 and 8.2 are legacy versions. |
 | `--firewall-allow PORT/PROTO` | Also open this port to the internet, such as `3000/tcp`. Can be given more than once. |
 | `--no-firewall` | No Hostashi firewall. Only use this behind a provider firewall. |
+| `--no-db-tool` | Do not install the web database tool (Adminer on port 8444). Given on a server that has it, the installer removes it. |
 | `--no-quota` | Do not enable disk quota. Sites then have no disk limit. |
 | `--allow-untested` | Accept an operating system release that is not on the supported list. |
 
