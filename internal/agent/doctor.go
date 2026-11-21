@@ -138,7 +138,7 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 		}
 	}
 
-	out = append(out, hard.Updates(), hard.Reboot(), hard.PHP(), hard.SSH(), hard.Sysctl())
+	out = append(out, hard.Updates(), hard.Reboot(), hard.PHP(), hard.Files(), hard.SSH(), hard.Sysctl())
 	out = append(out, d.valkey(ctx))
 
 	if d.h != nil {

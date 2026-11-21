@@ -39,6 +39,7 @@ const titles: Record<string, string> = {
   "system.updates": "Security updates",
   "system.reboot": "Reboot",
   "system.php": "PHP after updates",
+  "system.files": "File manager",
   "system.ssh": "Admin SSH login",
   "system.sysctl": "Kernel settings",
   "service.valkey": "Object cache (Valkey)",
