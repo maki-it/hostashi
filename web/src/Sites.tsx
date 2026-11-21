@@ -134,7 +134,7 @@ export function Sites({ query, onQuery }: QueryProps) {
     return (
       <>
         <PageHead title="New site" description="A site is a Linux user with its own home, PHP pool and domains." />
-        <CreateForm php={php} onChange={load} />
+        <CreateForm php={php} onChange={load} parked={query.get("domain") ?? ""} parkedTls={query.get("tls") !== "0"} />
       </>
     );
   }
@@ -216,11 +216,19 @@ export function PHPOptions({ php, current = "" }: { php: PHPVersions | null; cur
   );
 }
 
-function CreateForm({ php, onChange }: { php: PHPVersions | null; onChange: () => Promise<void> }) {
+type CreateProps = {
+  php: PHPVersions | null;
+  onChange: () => Promise<void>;
+  /** A parked domain the site is made from, with its HTTPS setting (ADR-0048). */
+  parked?: string;
+  parkedTls?: boolean;
+};
+
+function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProps) {
   const [name, setName] = useState("");
-  const [domains, setDomainsText] = useState("");
+  const [domains, setDomainsText] = useState(parked);
   const [version, setVersion] = useState<string | null>(null);
-  const [tls, setTls] = useState(true);
+  const [tls, setTls] = useState(parked ? parkedTls : true);
   const [hsts, setHsts] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -264,6 +272,7 @@ function CreateForm({ php, onChange }: { php: PHPVersions | null; onChange: () =
   return (
     <Card>
       <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
+        {parked && !created && <Notice tone="info" title={`${parked} is parked. Its parking page ends when the site is live.`} />}
         <Field label="Name" hint="Becomes the Linux user of the site. 2 to 32 characters: lowercase letters, digits, _ and -.">
           <input className="ui-input" value={name} onChange={(e) => setName(e.target.value.trim())} required autoComplete="off" spellCheck={false} />
         </Field>
