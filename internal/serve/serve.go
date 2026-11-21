@@ -126,6 +126,9 @@ type Deps struct {
 	// Firewall is the panel's part of the firewall (ADR-0034); nil
 	// disables its routes. Needs Auth and Settings.
 	Firewall Firewall
+	// Pools lists the storage pools (ADR-0016); nil disables its route.
+	// Needs Auth.
+	Pools Pools
 	// PHP installs more PHP versions (ADR-0036); nil disables its routes.
 	// Needs Auth and Settings.
 	PHP PHPInstaller
@@ -291,6 +294,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 
 		if deps.Mail != nil && deps.NotifyPrefs != nil {
 			registerNotifications(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Mail, deps.NotifyPrefs)
+		}
+
+		if deps.Pools != nil {
+			registerPools(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Pools, log)
 		}
 
 		if deps.Doctor != nil {
@@ -479,6 +486,7 @@ func Run(ctx context.Context, cfg Config) error {
 		Metrics:     m,
 		Settings:    st,
 		Doctor:      RPCDoctor(client),
+		Pools:       RPCPools(client),
 		Firewall:    RPCFirewall{C: client},
 		PHP:         RPCPHPInstaller{C: client},
 		PGClient:    RPCPGClient{C: client},

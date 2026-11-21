@@ -114,8 +114,10 @@ var table = map[Action]Rule{
 	"limits.presets:read": manage("limits:read"),
 	"pages:write":         manage("pages:write"),
 	"parked:read":         manage("sites:read"),
-	"parked:write":        manage("sites.maintenance:write"),
-	"sites:delete":        mgrSite("sites:delete"),
+	// The pool choice of "New site" (ADR-0016).
+	"pools:read":   manage("sites:read"),
+	"parked:write": manage("sites.maintenance:write"),
+	"sites:delete": mgrSite("sites:delete"),
 	// Delete a site and park domains of it (ADR-0048); the handler also
 	// asks for parked:write.
 	"sites:park":           mgrSite("sites:delete"),

@@ -39,6 +39,7 @@ type apiEnv struct {
 	imports   *stubImports
 	cp        *cpmigrate.Service
 	doctor    *stubDoctor
+	pools     *stubPools
 	firewall  *stubFirewall
 	php       *stubPHP
 	pgclient  *stubPGClient
@@ -93,6 +94,8 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	imports := &stubImports{}
 	doc := &stubDoctor{}
 	deps.Doctor = doc.run
+	pl := &stubPools{}
+	deps.Pools = pl.list
 	fw := &stubFirewall{enabled: true}
 	deps.Firewall = fw
 	php := &stubPHP{}
@@ -126,7 +129,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 
 	return &apiEnv{
 		h: Handler(Config{PublicURL: testPublicURL}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st, cp: deps.CloudPanel,
-		imports: imports, doctor: doc, firewall: fw, php: php, pgclient: pgc, mail: deps.Mail, mailSent: sent, outbox: outbox, files: fm,
+		imports: imports, doctor: doc, pools: pl, firewall: fw, php: php, pgclient: pgc, mail: deps.Mail, mailSent: sent, outbox: outbox, files: fm,
 		monitor: mon, srvAgent: sa, logs: lg,
 	}
 }
