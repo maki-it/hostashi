@@ -6,8 +6,9 @@
 // through ACME and hands back only the certificate chain.
 //
 // Layout below Dir (root, 0700): <site>/pending.key (a key waiting for its
-// certificate), <site>/key.pem and <site>/cert.pem (the live pair, read by
-// the nginx master).
+// ACME certificate), <site>/csr.key and <site>/csr.pem (a key waiting for
+// an own certificate, ADR-0039), <site>/key.pem and <site>/cert.pem (the
+// live pair, read by the nginx master). Every file is 0600.
 package certs
 
 import (
@@ -43,6 +44,9 @@ var (
 type Store struct {
 	Dir string
 	Now func() time.Time // nil: time.Now
+	// Roots are the trusted roots for own certificates; nil: the system
+	// trust store.
+	Roots *x509.CertPool
 
 	mu sync.Mutex
 }
@@ -51,6 +55,11 @@ type Store struct {
 type Info struct {
 	Domains  []string
 	NotAfter time.Time
+	// Set by Upload and Details only.
+	NotBefore   time.Time
+	Issuer      string
+	Fingerprint string // SHA-256 of the leaf, hex
+	Trusted     bool
 }
 
 func (s *Store) now() time.Time {
@@ -82,26 +91,9 @@ func (s *Store) CSR(user string, domains []string) ([]byte, error) {
 		return nil, err
 	}
 
-	if err := checkDomains(domains); err != nil {
+	keyPEM, csrPEM, err := newKeyAndCSR(domains)
+	if err != nil {
 		return nil, err
-	}
-
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return nil, fmt.Errorf("certs: %w", err)
-	}
-
-	der, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
-		Subject:  pkix.Name{CommonName: domains[0]},
-		DNSNames: domains,
-	}, key)
-	if err != nil {
-		return nil, fmt.Errorf("certs: %w", err)
-	}
-
-	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
-	if err != nil {
-		return nil, fmt.Errorf("certs: %w", err)
 	}
 
 	s.mu.Lock()
@@ -111,11 +103,39 @@ func (s *Store) CSR(user string, domains []string) ([]byte, error) {
 		return nil, fmt.Errorf("certs: %w", err)
 	}
 
-	if err := writeAtomic(filepath.Join(dir, "pending.key"), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})); err != nil {
+	if err := writeAtomic(filepath.Join(dir, "pending.key"), keyPEM); err != nil {
 		return nil, err
 	}
 
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: der}), nil
+	return csrPEM, nil
+}
+
+// newKeyAndCSR creates an ECDSA P-256 key and a CSR for domains, both PEM.
+func newKeyAndCSR(domains []string) (keyPEM, csrPEM []byte, err error) {
+	if err := checkDomains(domains); err != nil {
+		return nil, nil, err
+	}
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, nil, fmt.Errorf("certs: %w", err)
+	}
+
+	der, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
+		Subject:  pkix.Name{CommonName: domains[0]},
+		DNSNames: domains,
+	}, key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("certs: %w", err)
+	}
+
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("certs: %w", err)
+	}
+
+	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}),
+		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: der}), nil
 }
 
 func checkDomains(domains []string) error {
@@ -273,29 +293,39 @@ func (s *Store) Live(user string) (Info, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	b, err := os.ReadFile(s.CertPath(user))
-	if errors.Is(err, os.ErrNotExist) {
-		return Info{}, ErrNotFound
-	}
-
-	if err != nil {
-		return Info{}, fmt.Errorf("certs: %w", err)
-	}
-
-	if _, err := os.Stat(s.KeyPath(user)); err != nil {
-		return Info{}, ErrNotFound
-	}
-
-	certs, _, err := parseChain(b)
+	certs, err := s.liveChain(user)
 	if err != nil {
 		return Info{}, err
 	}
 
-	return Info{Domains: slices.Clone(certs[0].DNSNames), NotAfter: certs[0].NotAfter}, nil
+	return Info{Domains: hostNames(certs[0]), NotAfter: certs[0].NotAfter}, nil
+}
+
+// liveChain reads the live chain of a name; s.mu is held.
+func (s *Store) liveChain(user string) ([]*x509.Certificate, error) {
+	b, err := os.ReadFile(s.CertPath(user))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, ErrNotFound
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("certs: %w", err)
+	}
+
+	if _, err := os.Stat(s.KeyPath(user)); err != nil {
+		return nil, ErrNotFound
+	}
+
+	certs, _, err := parseChain(b)
+	if err != nil {
+		return nil, err
+	}
+
+	return certs, nil
 }
 
 // Covers reports whether the live certificate of a site is valid now and
-// names every domain in domains.
+// covers every domain in domains (wildcards count).
 func (s *Store) Covers(user string, domains []string) (bool, error) {
 	info, err := s.Live(user)
 	if errors.Is(err, ErrNotFound) {
@@ -310,13 +340,7 @@ func (s *Store) Covers(user string, domains []string) (bool, error) {
 		return false, nil
 	}
 
-	for _, d := range domains {
-		if !slices.Contains(info.Domains, d) {
-			return false, nil
-		}
-	}
-
-	return true, nil
+	return len(agentapi.MissingNames(info.Domains, domains)) == 0, nil
 }
 
 // Remove deletes everything of a site.

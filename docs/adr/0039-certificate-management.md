@@ -31,7 +31,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
   - the chain builds up to a root in the system trust store, or the admin confirms "not publicly trusted" (for internal CAs);
   - the certificate is valid now and for at least 1 more day;
   - it covers every domain of the site (wildcards count); missing names are listed and block the switch;
-  - size limits (64 KiB per field).
+  - size limits: chain 32 KiB, key 16 KiB, so a request fits one agent frame of 64 KiB (implementation note, PR "agent: own certificates").
   The key goes straight into the agent's request and is written root 0600 like the LE keys; the panel does not keep it, logs never contain it [A].
 - **CSR.** "Create key and CSR": the agent creates the key as today and returns the CSR with the site's domains; the admin uploads the issued certificate later. The same checks run.
 - **Renew now.** A button for `letsencrypt`: runs the normal ACME order at once, independent of the 30-day rule. Rate limit: at most once per 10 minutes per site, because Let's Encrypt limits duplicate certificates [U: 5 per week for the same names].
