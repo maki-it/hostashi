@@ -33,6 +33,8 @@ type Limits struct {
 // are starting values, not limits: site_limits does not copy them.
 type PresetCaches struct {
 	ObjectCacheMB int64 // 0: off
+	// PageCacheMB is the size of the page cache (ADR-0046), 0: off.
+	PageCacheMB int64
 }
 
 // LimitPreset is a named set of limits.
@@ -72,7 +74,7 @@ func scanPreset(r scanner) (LimitPreset, error) {
 
 	l := &p.Limits
 	if err := r.Scan(&p.ID, &p.Name, &l.DiskBytes, &l.DiskInodes, &l.MemoryBytes, &l.PHPWorkers, &l.Tasks, &l.CPUPriority,
-		&l.CPUQuotaPercent, &p.Caches.ObjectCacheMB, &def, &cre, &upd); err != nil {
+		&l.CPUQuotaPercent, &p.Caches.ObjectCacheMB, &p.Caches.PageCacheMB, &def, &cre, &upd); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return LimitPreset{}, ErrNotFound
 		}
@@ -86,7 +88,7 @@ func scanPreset(r scanner) (LimitPreset, error) {
 	return p, nil
 }
 
-const presetSelect = `SELECT id, name, ` + limitColumns + `, object_cache_mb, is_default, created_at, updated_at FROM limit_presets`
+const presetSelect = `SELECT id, name, ` + limitColumns + `, object_cache_mb, page_cache_mb, is_default, created_at, updated_at FROM limit_presets`
 
 type querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
@@ -158,10 +160,10 @@ func (s *Store) CreateLimitPreset(ctx context.Context, name string, l Limits, c 
 	}
 
 	args := append([]any{name}, limitArgs(l)...)
-	args = append(args, c.ObjectCacheMB, boolInt(def), now.Unix(), now.Unix())
+	args = append(args, c.ObjectCacheMB, c.PageCacheMB, boolInt(def), now.Unix(), now.Unix())
 
-	res, err := tx.ExecContext(ctx, `INSERT INTO limit_presets (name, `+limitColumns+`, object_cache_mb, is_default, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, args...)
+	res, err := tx.ExecContext(ctx, `INSERT INTO limit_presets (name, `+limitColumns+`, object_cache_mb, page_cache_mb, is_default, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, args...)
 	if isUnique(err) {
 		return LimitPreset{}, ErrPresetExists
 	}
@@ -211,10 +213,10 @@ func (s *Store) UpdateLimitPreset(ctx context.Context, id int64, name string, l 
 	}
 
 	args := append([]any{name}, limitArgs(l)...)
-	args = append(args, c.ObjectCacheMB, boolInt(def || old.Default), now.Unix(), id)
+	args = append(args, c.ObjectCacheMB, c.PageCacheMB, boolInt(def || old.Default), now.Unix(), id)
 
 	_, err = tx.ExecContext(ctx, `UPDATE limit_presets SET name = ?, disk_bytes = ?, disk_inodes = ?, memory_bytes = ?, php_workers = ?,
-		tasks = ?, cpu_priority = ?, cpu_quota_percent = ?, object_cache_mb = ?, is_default = ?, updated_at = ? WHERE id = ?`, args...)
+		tasks = ?, cpu_priority = ?, cpu_quota_percent = ?, object_cache_mb = ?, page_cache_mb = ?, is_default = ?, updated_at = ? WHERE id = ?`, args...)
 	if isUnique(err) {
 		return LimitPreset{}, ErrPresetExists
 	}
@@ -262,10 +264,10 @@ func (s *Store) RestoreLimitPreset(ctx context.Context, p LimitPreset, now time.
 	}
 
 	args := append([]any{p.Name}, limitArgs(p.Limits)...)
-	args = append(args, p.Caches.ObjectCacheMB, boolInt(p.Default), p.UpdatedAt.Unix(), p.ID)
+	args = append(args, p.Caches.ObjectCacheMB, p.Caches.PageCacheMB, boolInt(p.Default), p.UpdatedAt.Unix(), p.ID)
 
 	if _, err := tx.ExecContext(ctx, `UPDATE limit_presets SET name = ?, disk_bytes = ?, disk_inodes = ?, memory_bytes = ?, php_workers = ?,
-		tasks = ?, cpu_priority = ?, cpu_quota_percent = ?, object_cache_mb = ?, is_default = ?, updated_at = ? WHERE id = ?`, args...); err != nil {
+		tasks = ?, cpu_priority = ?, cpu_quota_percent = ?, object_cache_mb = ?, page_cache_mb = ?, is_default = ?, updated_at = ? WHERE id = ?`, args...); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 

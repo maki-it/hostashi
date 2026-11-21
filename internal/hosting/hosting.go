@@ -358,7 +358,7 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		}
 
 		// After the limits, so the cache starts inside the site's slice.
-		s.presetObjectCache(ctx, actor, site, caches)
+		s.presetCaches(ctx, actor, site, caches)
 	}
 
 	return site, nil

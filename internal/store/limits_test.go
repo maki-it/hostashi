@@ -80,12 +80,12 @@ func TestLimitPresets(t *testing.T) {
 	bigger := vals
 	bigger.MemoryBytes = 1 << 30
 
-	old, err := s.UpdateLimitPreset(ctx, tiny.ID, "tiny", bigger, PresetCaches{ObjectCacheMB: 64}, false, now.Add(time.Minute))
+	old, err := s.UpdateLimitPreset(ctx, tiny.ID, "tiny", bigger, PresetCaches{ObjectCacheMB: 64, PageCacheMB: 512}, false, now.Add(time.Minute))
 	if err != nil || old.Limits != vals {
 		t.Fatalf("update %+v %v", old, err)
 	}
 
-	if p, _ := s.LimitPresetByID(ctx, tiny.ID); !p.Default || p.Limits != bigger || p.Caches.ObjectCacheMB != 64 {
+	if p, _ := s.LimitPresetByID(ctx, tiny.ID); !p.Default || p.Limits != bigger || p.Caches.ObjectCacheMB != 64 || p.Caches.PageCacheMB != 512 {
 		t.Errorf("update with def=false must keep the default: %+v", p)
 	}
 
@@ -106,12 +106,16 @@ func TestLimitPresets(t *testing.T) {
 		t.Errorf("follower after restore %+v", f)
 	}
 
-	if p, _ := s.LimitPresetByID(ctx, tiny.ID); p.Caches.ObjectCacheMB != 0 {
-		t.Errorf("object cache after restore %+v", p.Caches)
+	if p, _ := s.LimitPresetByID(ctx, tiny.ID); p.Caches.ObjectCacheMB != 0 || p.Caches.PageCacheMB != 0 {
+		t.Errorf("caches after restore %+v", p.Caches)
 	}
 
 	if _, err := s.UpdateLimitPreset(ctx, tiny.ID, "tiny", vals, PresetCaches{ObjectCacheMB: 8}, false, now); err == nil {
 		t.Error("a cache below 32 MiB must be refused by the schema")
+	}
+
+	if _, err := s.UpdateLimitPreset(ctx, tiny.ID, "tiny", vals, PresetCaches{PageCacheMB: 100}, false, now); err == nil {
+		t.Error("a page cache size outside the choices must be refused by the schema")
 	}
 
 	if _, err := s.UpdateLimitPreset(ctx, tiny.ID, "medium", vals, PresetCaches{}, false, now); !errors.Is(err, ErrPresetExists) {

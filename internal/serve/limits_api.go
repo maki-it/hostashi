@@ -55,9 +55,11 @@ func (l limitsJSON) limits() store.Limits {
 }
 
 // presetCachesJSON are the starting values a site gets with the preset
-// (ADR-0045). They are not limits: a site can change them afterwards.
+// (ADR-0045, ADR-0046). They are not limits: a site can change them
+// afterwards.
 type presetCachesJSON struct {
 	ObjectCacheMB int64 `json:"objectCacheMb"` // 0: off
+	PageCacheMB   int64 `json:"pageCacheMb"`   // 0: off
 }
 
 type presetJSON struct {
@@ -71,7 +73,7 @@ type presetJSON struct {
 
 func toPresetJSON(p store.LimitPreset) presetJSON {
 	return presetJSON{
-		Name: p.Name, Default: p.Default, Limits: toLimitsJSON(p.Limits), Caches: presetCachesJSON{ObjectCacheMB: p.Caches.ObjectCacheMB},
+		Name: p.Name, Default: p.Default, Limits: toLimitsJSON(p.Limits), Caches: presetCachesJSON{ObjectCacheMB: p.Caches.ObjectCacheMB, PageCacheMB: p.Caches.PageCacheMB},
 		CreatedAt: p.CreatedAt.Unix(), UpdatedAt: p.UpdatedAt.Unix(),
 	}
 }
@@ -86,7 +88,7 @@ type presetInputJSON struct {
 }
 
 func (c presetCachesJSON) caches() store.PresetCaches {
-	return store.PresetCaches{ObjectCacheMB: c.ObjectCacheMB}
+	return store.PresetCaches{ObjectCacheMB: c.ObjectCacheMB, PageCacheMB: c.PageCacheMB}
 }
 
 // Warning levels of the disk use (ADR-0015): from 80 and 95 percent of a

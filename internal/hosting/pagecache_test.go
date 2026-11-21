@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 func (f *fakeAgent) siteWeb(user string) (agentapi.WebSite, bool) {
@@ -201,5 +202,96 @@ func TestPurgePageCache(t *testing.T) {
 
 	if err := s.PurgePageCache(ctx, 1, "nosuch"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown: %v", err)
+	}
+}
+
+// The preset's page cache is a starting value (ADR-0046), as the object
+// cache: a new site and a site switched to the preset get it; a later change
+// of the preset only resizes caches that are on.
+func TestPresetPageCache(t *testing.T) {
+	s, _, _ := newService(t)
+	ctx := t.Context()
+
+	s.EnableLimits(newFakeLimits())
+
+	small, err := s.LimitPreset(ctx, "small")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.UpdateLimitPreset(ctx, 1, "small", "small", small.Limits, store.PresetCaches{PageCacheMB: 100}, false); !errors.Is(err, ErrInvalid) {
+		t.Errorf("size outside the choices: %v", err)
+	}
+
+	if _, err := s.UpdateLimitPreset(ctx, 1, "small", "small", small.Limits, store.PresetCaches{PageCacheMB: 128}, false); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, n := range []string{"blog", "shop"} {
+		if _, err := s.Create(ctx, 1, CreateRequest{Name: n, PHP: "8.4", Domains: []string{n + ".example.com"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "static", Domains: []string{"static.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A new PHP site gets the cache with the strict preset; a static one not.
+	if c, err := s.PageCache(ctx, "blog"); err != nil || !c.Enabled || c.SizeMB != 128 || c.Preset != agentapi.PageCachePHP {
+		t.Fatalf("new site: %+v %v", c, err)
+	}
+
+	if c, _ := s.PageCache(ctx, "static"); c.Enabled {
+		t.Error("a site without PHP got a page cache")
+	}
+
+	// Off on the site stays off when the preset's size changes.
+	if _, err := s.SetPageCache(ctx, 1, "shop", PageCacheSettings{Preset: agentapi.PageCachePHP, Minutes: 10}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.UpdateLimitPreset(ctx, 1, "small", "small", small.Limits, store.PresetCaches{PageCacheMB: 512}, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if c, _ := s.PageCache(ctx, "blog"); !c.Enabled || c.SizeMB != 512 {
+		t.Errorf("following site after a size change: %+v", c)
+	}
+
+	if c, _ := s.PageCache(ctx, "shop"); c.Enabled {
+		t.Errorf("a cache that is off was turned on: %+v", c)
+	}
+
+	// Off in the preset leaves the sites' caches as they are.
+	if _, err := s.UpdateLimitPreset(ctx, 1, "small", "small", small.Limits, store.PresetCaches{}, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if c, _ := s.PageCache(ctx, "blog"); !c.Enabled || c.SizeMB != 512 {
+		t.Errorf("preset off turned a site's cache off: %+v", c)
+	}
+
+	// Switching to a preset with a cache turns it on and keeps the site's
+	// own preset choice.
+	if _, err := s.SetPageCache(ctx, 1, "shop", PageCacheSettings{Preset: agentapi.PageCacheWooCommerce, Minutes: 30}); err != nil {
+		t.Fatal(err)
+	}
+
+	medium, err := s.LimitPreset(ctx, "medium")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.UpdateLimitPreset(ctx, 1, "medium", "medium", medium.Limits, store.PresetCaches{PageCacheMB: 1024}, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.SetSiteLimits(ctx, 1, "shop", "medium", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if c, _ := s.PageCache(ctx, "shop"); !c.Enabled || c.SizeMB != 1024 || c.Preset != agentapi.PageCacheWooCommerce || c.Minutes != 30 {
+		t.Errorf("switch to a preset with a cache: %+v", c)
 	}
 }
