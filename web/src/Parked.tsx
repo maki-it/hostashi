@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ArrowLeft, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
+import { ArrowLeft, Globe, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { CertificateCard } from "./Certificate";
 import { parkedCertBase } from "./certs";
 import { deleteParked, listParked, parkedMessage, setParked, type ParkedDomain, type ParkedTLS } from "./parked";
 import { listPages, type StatusPage } from "./pages";
 import { formatHash } from "./routes";
-import { domainProblem } from "./sites";
+import { domainProblem, newSiteHash } from "./sites";
 import {
   Badge,
   Button,
@@ -184,6 +184,16 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
           offHint="turn HTTPS off above first"
           onChange={load}
         />
+        <Card title="Make a site">
+          <div className="ui-stack">
+            <p className="ui-flush">Creates a site for {p.domain}. The parking page ends when the site is live.</p>
+            <div className="ui-row">
+              <a className="ui-btn" href={newSiteHash(p.domain, p.tls.enabled)}>
+                Make a site
+              </a>
+            </div>
+          </div>
+        </Card>
         {unparkDialog || (
           <Card title="Unpark">
             <div className="ui-stack">
@@ -241,6 +251,7 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
       cell: (p) => (
         <RowActions>
           <IconLink label={`Change ${p.domain}`} icon={<PencilSimple size={16} />} href={parkedHash({ edit: p.domain })} />
+          <IconLink label={`Make a site of ${p.domain}`} icon={<Globe size={16} />} href={newSiteHash(p.domain, p.tls.enabled)} />
           <IconButton
             label={`Unpark ${p.domain}`}
             icon={<Trash size={16} />}

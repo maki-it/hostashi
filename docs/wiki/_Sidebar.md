@@ -3,6 +3,7 @@
 - [Home](Home.md)
 - [Install](Install.md)
 - [File manager](File-manager.md)
+- [Parked domains](Parked-domains.md)
 
 **Reference**
 
