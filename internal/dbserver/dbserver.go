@@ -90,6 +90,11 @@ type Config struct {
 	TLS           TLSMode
 	// CAPEM is the CA for TLSVerifyCA, empty otherwise.
 	CAPEM string
+
+	// OnCertificate, if set, sees the server's leaf certificate of every
+	// TLS connection after it passed the checks; a probe uses it to note
+	// when the certificate expires.
+	OnCertificate func(*x509.Certificate) `json:"-"`
 }
 
 // Validate checks the configuration without connecting.
@@ -164,21 +169,36 @@ func caPool(pemData string) (*x509.CertPool, error) {
 
 // tlsConfig returns the client TLS configuration, nil for TLSNone.
 func (c Config) tlsConfig() (*tls.Config, error) {
+	var tc *tls.Config
+
 	switch c.TLS {
 	case TLSNone:
 		return nil, nil //nolint:nilnil // nil means plain text to the driver
 	case TLSVerify:
-		return &tls.Config{ServerName: c.Host, MinVersion: tls.VersionTLS12}, nil
+		tc = &tls.Config{ServerName: c.Host, MinVersion: tls.VersionTLS12}
 	case TLSVerifyCA:
 		pool, err := caPool(c.CAPEM)
 		if err != nil {
 			return nil, err
 		}
 
-		return &tls.Config{ServerName: c.Host, RootCAs: pool, MinVersion: tls.VersionTLS12}, nil
+		tc = &tls.Config{ServerName: c.Host, RootCAs: pool, MinVersion: tls.VersionTLS12}
 	default:
 		return nil, fmt.Errorf("%w: unknown TLS mode", ErrInvalid)
 	}
+
+	if seen := c.OnCertificate; seen != nil {
+		// Runs after the normal verification, which stays on.
+		tc.VerifyConnection = func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) > 0 {
+				seen(cs.PeerCertificates[0])
+			}
+
+			return nil
+		}
+	}
+
+	return tc, nil
 }
 
 // Open returns a small pool for the server. It does not connect yet.
@@ -274,6 +294,9 @@ type Info struct {
 	ClientHost string
 	// TLS reports whether the connection is encrypted.
 	TLS bool
+	// CertExpires is when the server certificate ends, if the caller set
+	// Config.OnCertificate; zero otherwise.
+	CertExpires time.Time
 }
 
 // Display returns for example "MariaDB 11.8.6".
