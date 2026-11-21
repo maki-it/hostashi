@@ -51,7 +51,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0045 | Object cache (Valkey) per site | Accepted on 2026-11-21 ([adr/0045](adr/0045-object-cache-per-site.md)) | No |
 | 0046 | Page cache (nginx FastCGI cache) per site | Accepted on 2026-11-21 ([adr/0046](adr/0046-page-cache-per-site.md)) | No |
 | 0048 | Convert a parked domain into a site and back | Accepted on 2026-11-21 ([adr/0048](adr/0048-convert-parked-domain-and-site.md)) | No |
-| 0049 | PHP settings per site | Proposed ([adr/0049](adr/0049-php-settings-per-site.md)) | No |
+| 0049 | PHP settings per site | Accepted on 2026-11-21 ([adr/0049](adr/0049-php-settings-per-site.md)) | No |
 
 ---
 
@@ -343,4 +343,4 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0049 PHP settings per site
 
-**Full text (status Proposed, 2026-11-21):** [adr/0049](adr/0049-php-settings-per-site.md). Summary: Kim wants more PHP ini settings per site, from an allowlist only. Recommended: a closed, typed allowlist (memory, upload and post size, execution and input time, input vars, file uploads, time zone, error display and reporting presets, session lifetime, short tags) rendered as `php_value` defaults that the site's `.user.ini` and `ini_set()` may still change; the hard limits stay in the slice and in nginx, whose `client_max_body_size` and `fastcgi_read_timeout` now follow the PHP values (today the site vhost has nginx's 1 MB default). Security-relevant settings stay fixed `php_admin_*` values. No new `os/exec`. Open: defaults or fixed values, the list itself, and roles.
+**Full text (status Accepted, 2026-11-21, by Kim):** [adr/0049](adr/0049-php-settings-per-site.md). Summary: Kim wants more PHP ini settings per site, from an allowlist only. Recommended: a closed, typed allowlist (memory, upload and post size, execution and input time, input vars, file uploads, time zone, error display and reporting presets, session lifetime, short tags) rendered as `php_value` defaults that the site's `.user.ini` and `ini_set()` may still change; the hard limits stay in the slice and in nginx, whose `client_max_body_size` and `fastcgi_read_timeout` now follow the PHP values (today the site vhost has nginx's 1 MB default). Security-relevant settings stay fixed `php_admin_*` values. No new `os/exec`. Decided by Kim on 2026-11-21: defaults (`php_value`), the twelve settings as listed, and `user` may change all of them for its own site.
