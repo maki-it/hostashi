@@ -1,6 +1,6 @@
 # ADR-0050 Signed releases, install and updates through apt
 
-**Status:** Proposed. **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0020 (nginx package source), ADR-0019 and ADR-0036 (PHP versions), ADR-0033 (hardening, unattended-upgrades), ADR-0002 (license), roadmap phase 3 ("signed releases, SBOM, support and update policy").
+**Status:** Accepted (2026-11-21, by Kim). **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0020 (nginx package source), ADR-0019 and ADR-0036 (PHP versions), ADR-0033 (hardening, unattended-upgrades), ADR-0002 (license), roadmap phase 3 ("signed releases, SBOM, support and update policy").
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
