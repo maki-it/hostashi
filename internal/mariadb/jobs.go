@@ -77,7 +77,9 @@ const (
 
 var jobUserRe = regexp.MustCompile(`^hostashi_job_[0-9a-f]{16}$`)
 
-// EnableDumps turns on import and export.
+// EnableDumps turns on import and export. It loads the jobs an earlier
+// run of the agent kept; one that was still running was cut off by the
+// restart and is reported as failed.
 func (m *Manager) EnableDumps(d Dumps) {
 	if d.MaxDuration <= 0 {
 		d.MaxDuration = defaultJobT
@@ -91,8 +93,9 @@ func (m *Manager) EnableDumps(d Dumps) {
 	defer m.mu.Unlock()
 
 	m.dumps = &d
-	m.jobs = map[string]*agentapi.DBJob{}
+	m.jobs = m.loadJobs()
 	m.busy = map[string]bool{}
+	m.saveJobs()
 }
 
 // Job returns a copy of a job.
@@ -179,6 +182,7 @@ func (m *Manager) start(kind, database, rel string, asOwner bool) (agentapi.DBJo
 	m.pruneJobs()
 	m.jobs[id] = job
 	m.busy[database] = true
+	m.saveJobs()
 
 	if m.done == nil {
 		m.done = map[string]chan struct{}{}
@@ -211,6 +215,8 @@ func (m *Manager) start(kind, database, rel string, asOwner bool) (agentapi.DBJo
 			job.Error = jobError(err)
 			m.log.Error("mariadb: job failed", "job", id, "kind", kind, "database", database, "err", err)
 		}
+
+		m.saveJobs()
 	}()
 
 	return *job, nil
