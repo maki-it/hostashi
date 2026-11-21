@@ -5,6 +5,7 @@ package plan
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/cloudpanel/scan"
@@ -79,9 +80,13 @@ type Site struct {
 	// PageCache is the page cache preset proposed for a site that had a
 	// cache (likely Varnish) in front of it on the old server, "" for none
 	// (ADR-0046).
-	PageCache string   `json:"pageCache,omitempty"`
-	Action    Action   `json:"action"`
-	Reasons   []Reason `json:"reasons"`
+	PageCache string `json:"pageCache,omitempty"`
+	// PHPSettings is how many PHP settings of the old pool the site takes
+	// over (ADR-0049); PHPSettingsOn tells whether they were set.
+	PHPSettings   int      `json:"phpSettings"`
+	PHPSettingsOn bool     `json:"phpSettingsOn"`
+	Action        Action   `json:"action"`
+	Reasons       []Reason `json:"reasons"`
 	// Source is the vhost file on the old server, to find the site in the report.
 	Source string `json:"source"`
 }
@@ -248,6 +253,23 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 
 	if ps.ObjectCache {
 		review("object_cache", "the site gets its own object cache on a Unix socket; after the import point wp-config.php at /run/hostashi-valkey/"+ps.Name+"/valkey.sock (WP_REDIS_SCHEME unix, WP_REDIS_PATH), the old 127.0.0.1:6379 is not there")
+	}
+
+	if ps.PHP != "" {
+		pi := PHPSettingsOf(s)
+		ps.PHPSettings = countSet(pi.Settings)
+
+		if len(pi.Changed) > 0 {
+			review("php_settings_changed", "PHP settings out of Hostashi's bounds are changed: "+strings.Join(pi.Changed, "; "))
+		}
+
+		if len(pi.NotTaken) > 0 {
+			review("php_settings_not_taken", "PHP settings not taken over: "+strings.Join(pi.NotTaken, ", "))
+		}
+
+		if msg := bodyDiffers(s.ClientMaxBody, pi.Settings); msg != "" {
+			review("body_size", msg)
+		}
 	}
 
 	if len(ps.RedirectFrom) > 0 {

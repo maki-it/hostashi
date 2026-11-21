@@ -37,6 +37,7 @@ func scanReportJSON(t *testing.T) string {
 
 	shop := site("shop", "shop.example.com")
 	shop.Usage = &scan.Usage{Bytes: 20 << 30, Inodes: 1_000_000}
+	shop.Pool.Settings = map[string]string{"php_admin_value[memory_limit]": "512M"}
 	shop.SSHKeys = []scan.SSHKey{{Public: testSSHKey(t), Comment: "kim (laptop)", Source: "/home/shop/.ssh/authorized_keys", Line: 1}}
 
 	b, err := json.Marshal(scan.Report{Format: scan.Format, Sites: []scan.Site{
@@ -254,6 +255,11 @@ func TestCloudPanelSitesOverHTTP(t *testing.T) {
 	s, err := e.sites.Get(t.Context(), "shop")
 	if err != nil || s.PHP != "8.4" || len(s.Domains) != 1 || s.Domains[0] != "shop.example.com" {
 		t.Fatalf("site %+v %v", s, err)
+	}
+
+	// The pool's PHP settings come along (ADR-0049).
+	if ps, err := e.sites.PHPSettings(t.Context(), "shop"); err != nil || ps.Settings.MemoryLimit != 512<<20 || !strings.Contains(rec.Body.String(), `"phpSettingsOn":true`) {
+		t.Fatalf("php settings %+v %v %s", ps, err, rec.Body)
 	}
 
 	// The old site may have called programs from PHP: it keeps that (ADR-0033).

@@ -43,6 +43,7 @@ var phpSettingKnown = map[string]bool{
 	"sys_temp_dir": true, "upload_tmp_dir": true, "session.save_path": true,
 	"short_open_tag": true, "opcache.enable": true, "opcache.memory_consumption": true,
 	"output_buffering": true, "allow_url_fopen": true, "expose_php": true,
+	"max_file_uploads": true, "session.gc_maxlifetime": true,
 }
 
 // parsePools parses one php-fpm pool file. Values of env[...] are discarded

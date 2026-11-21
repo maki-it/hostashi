@@ -4,12 +4,15 @@ package cpmigrate
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 // ErrNotDone means the import has not finished copying, or failed, so its
@@ -38,7 +41,6 @@ type DumpLoad struct {
 const (
 	DefaultLoadPoll = 5 * time.Second
 	maxWatch        = 48 * time.Hour
-	maxLoadsKept    = 100
 )
 
 type loads struct {
@@ -46,30 +48,65 @@ type loads struct {
 	ctx  context.Context //nolint:containedctx // watches outlive the request that starts them
 	poll time.Duration
 
-	mu    sync.Mutex
-	byImp map[string][]DumpLoad
-	order []string
+	// mu serializes LoadDumps, so a dump is never started twice.
+	mu sync.Mutex
 }
 
 // EnableLoads makes every import with databases load its dumps on its own
 // once the files are copied (ADR-0030). ctx bounds the watches; poll is how
-// often the import is read, DefaultLoadPoll if zero. The loads live in
-// memory: after a panel restart, LoadDumps starts them by hand.
+// often the import is read, DefaultLoadPoll if zero. The loads are kept in
+// the panel database: imports that still waited when the panel stopped are
+// watched again here.
 func (s *Service) EnableLoads(ctx context.Context, l DumpLoader, poll time.Duration) {
 	if poll <= 0 {
 		poll = DefaultLoadPoll
 	}
 
-	s.loads = &loads{l: l, ctx: ctx, poll: poll, byImp: map[string][]DumpLoad{}}
+	s.loads = &loads{l: l, ctx: ctx, poll: poll}
+
+	waiting, err := s.st.WatchingDumpLoads(ctx)
+	if err != nil {
+		s.log.ErrorContext(ctx, "cloudpanel: read imports that wait for loading their dumps", "err", err)
+
+		return
+	}
+
+	for _, w := range waiting {
+		deadline := w.CreatedAt.Add(maxWatch)
+
+		// The user who started the import is gone, or the wait is over.
+		if w.StartedBy == nil || !s.now().Before(deadline) {
+			s.stopLoads(ctx, w.ImportID)
+
+			continue
+		}
+
+		//nolint:contextcheck // the watch runs under the panel context of the loads
+		s.watch(*w.StartedBy, w.ImportID, deadline)
+	}
+}
+
+// watchNew records that a new import's dumps are to be loaded and starts
+// waiting for it.
+func (s *Service) watchNew(ctx context.Context, actor int64, id string) {
+	now := s.now()
+
+	if err := s.st.WatchDumpLoads(ctx, id, &actor, now); err != nil {
+		// The watch still runs; only a panel restart would lose it.
+		s.log.ErrorContext(ctx, "cloudpanel: keep the import for loading its dumps", "import", id, "err", err)
+	}
+
+	//nolint:contextcheck // the watch outlives the request and runs under the panel context
+	s.watch(actor, id, now.Add(maxWatch))
 }
 
 // watch waits in the background until the import has ended and then loads
 // its dumps.
-func (s *Service) watch(actor int64, id string) {
+func (s *Service) watch(actor int64, id string, deadline time.Time) {
 	ld := s.loads
 
 	go func() {
-		ctx, cancel := context.WithTimeout(ld.ctx, maxWatch)
+		ctx, cancel := context.WithDeadline(ld.ctx, deadline)
 		defer cancel()
 
 		t := time.NewTicker(ld.poll)
@@ -78,6 +115,11 @@ func (s *Service) watch(actor int64, id string) {
 		for {
 			select {
 			case <-ctx.Done():
+				// A panel stop keeps the wait for the next start.
+				if ld.ctx.Err() == nil {
+					s.stopLoads(ld.ctx, id)
+				}
+
 				return
 			case <-t.C:
 			}
@@ -91,6 +133,8 @@ func (s *Service) watch(actor int64, id string) {
 			case err != nil:
 				s.log.WarnContext(ctx, "cloudpanel: read import for loading its dumps", "import", id, "err", err)
 			case imp.State == agentapi.ImportFailed:
+				s.stopLoads(ctx, id)
+
 				return
 			case imp.State == agentapi.ImportDone:
 				if _, err := s.LoadDumps(ctx, actor, id); err != nil {
@@ -103,9 +147,16 @@ func (s *Service) watch(actor int64, id string) {
 	}()
 }
 
+func (s *Service) stopLoads(ctx context.Context, id string) {
+	if err := s.st.StopDumpLoads(ctx, id); err != nil {
+		s.log.ErrorContext(ctx, "cloudpanel: stop waiting for an import", "import", id, "err", err)
+	}
+}
+
 // LoadDumps starts one load per dump of a finished import, into the
 // database the import mapped it to. A dump whose load started already is
-// not loaded again; one whose start failed is tried again.
+// not loaded again, also after a panel restart; one whose start failed is
+// tried again.
 func (s *Service) LoadDumps(ctx context.Context, actor int64, id string) ([]DumpLoad, error) {
 	if s.importer == nil || s.loads == nil {
 		return nil, ErrNoImporter
@@ -129,7 +180,15 @@ func (s *Service) LoadDumps(ctx context.Context, actor int64, id string) ([]Dump
 	ld.mu.Lock()
 	defer ld.mu.Unlock()
 
-	prev := ld.byImp[id]
+	row, prev, err := s.keptLoads(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if row.ImportID == "" {
+		row = store.DumpLoads{ImportID: id, StartedBy: &actor, CreatedAt: s.now()}
+	}
+
 	out := make([]DumpLoad, len(imp.Databases))
 	started := 0
 
@@ -154,19 +213,40 @@ func (s *Service) LoadDumps(ctx context.Context, actor int64, id string) ([]Dump
 		started++
 	}
 
-	if _, ok := ld.byImp[id]; !ok {
-		ld.order = append(ld.order, id)
-		if len(ld.order) > maxLoadsKept {
-			delete(ld.byImp, ld.order[0])
-			ld.order = ld.order[1:]
-		}
+	raw, err := json.Marshal(out)
+	if err != nil {
+		return nil, fmt.Errorf("cpmigrate: %w", err)
 	}
 
-	ld.byImp[id] = out
+	row.State, row.Loads = store.DumpLoadsLoaded, raw
+
+	if err := s.st.SaveDumpLoads(ctx, row); err != nil {
+		// The jobs run; a later LoadDumps could start them again.
+		s.log.ErrorContext(ctx, "cloudpanel: keep the started loads", "import", id, "err", err)
+	}
 
 	s.audit(ctx, actor, "cloudpanel.import.load", imp.Site, map[string]string{"import": id, "started": strconv.Itoa(started)})
 
 	return copyLoads(out), nil
+}
+
+// keptLoads reads the stored loads of an import; none is an empty row.
+func (s *Service) keptLoads(ctx context.Context, id string) (store.DumpLoads, []DumpLoad, error) {
+	row, err := s.st.DumpLoadsOf(ctx, id)
+
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return store.DumpLoads{}, nil, nil
+	case err != nil:
+		return store.DumpLoads{}, nil, err
+	}
+
+	var prev []DumpLoad
+	if err := json.Unmarshal(row.Loads, &prev); err != nil {
+		return store.DumpLoads{}, nil, fmt.Errorf("cpmigrate: stored loads of import %s: %w", id, err)
+	}
+
+	return row, prev, nil
 }
 
 // Loads reports the loads of an import with each job as it is now. An
@@ -180,9 +260,10 @@ func (s *Service) Loads(ctx context.Context, id string) ([]DumpLoad, error) {
 		return nil, ErrNotFound
 	}
 
-	s.loads.mu.Lock()
-	out := copyLoads(s.loads.byImp[id])
-	s.loads.mu.Unlock()
+	_, out, err := s.keptLoads(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 
 	for i := range out {
 		if out[i].Job == nil {
@@ -191,7 +272,6 @@ func (s *Service) Loads(ctx context.Context, id string) ([]DumpLoad, error) {
 
 		j, err := s.loads.l.DatabaseJob(ctx, out[i].Database, out[i].Job.ID)
 		if err != nil {
-			// The agent forgets jobs when it restarts.
 			out[i].Error = "job state unknown"
 
 			continue

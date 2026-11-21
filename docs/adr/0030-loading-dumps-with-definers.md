@@ -29,7 +29,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - The filter removes `DEFINER=<user>@<host>` with backquoted or quoted names, nothing else. Statements without a definer pass unchanged. It is fuzz-tested [A].
 - Loads of CloudPanel dumps use the owner account; other imports (ADR-0025) keep the temporary user. The admin may choose the owner load for any import later [A].
 - Deleting the database drops its owner account; `hostashi_own_` is reserved like `hostashi_job_` (ADR-0024) [A].
-- After the import job is done, the panel starts one load per dump into its target database, so the admin does not start them by hand [A].
+- After the import job is done, the panel starts one load per dump into its target database, so the admin does not start them by hand [A]. *Update 2026-11-21:* the panel keeps the wait and the started loads in its database (`cloudpanel_dump_loads`), so a panel restart resumes the wait and never loads a dump twice; the wait ends after 48 hours or when the import fails.
 
 ## Consequences
 

@@ -36,6 +36,10 @@ If you raise only the largest upload, the largest request follows it.
 The values are defaults for the site. The site's own `.user.ini` file or `ini_set()` in its code can still change them, as on most hosts; many plugins rely on that. The server's limits stay in place:
 
 - nginx takes no request larger than **Largest request** and waits for PHP no longer than **Execution time** plus 10 seconds (at least 60 seconds). A higher value in `.user.ini` does not get past nginx.
-- The site's memory limit (on the **Limits** tab) caps all of its PHP processes together, whatever `memory_limit` says.
+- The site's memory limit (on the **Limits** tab) caps all of its PHP processes together, whatever `memory_limit` says. The form warns when `memory_limit` times the site's PHP workers is more than that limit. It still saves: workers rarely all need their maximum at once.
 
 A server snippet on the **nginx** tab that sets `client_max_body_size` or `fastcgi_read_timeout` itself wins over these values.
+
+## Sites from CloudPanel
+
+The import takes over these settings from the old site's PHP-FPM pool. Values outside the ranges above are set to the nearest allowed value, for example `memory_limit = -1` becomes 4096 MiB. The plan lists every changed value and every pool setting that is not taken over, and says when the old vhost's `client_max_body_size` differs from the new largest request.

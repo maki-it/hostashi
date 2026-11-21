@@ -31,6 +31,9 @@ export type PHPSettingsView = {
   bounds: Record<NumberKey, { min: number; max: number }>;
   errorReportingPresets: string[];
   updatedAt?: string;
+  /** The site's memory limit in bytes, 0 for none (ADR-0015). */
+  memoryLimitBytes: number;
+  phpWorkers: number;
 };
 
 const settingsPath = (site: string) => "/sites/" + encodeURIComponent(site) + "/php/settings";
@@ -127,6 +130,17 @@ export function phpSettingsMessage(err: unknown): string {
     return err.message;
   }
   return "The PHP settings could not be loaded or saved. Try again.";
+}
+
+// memoryWarning warns when memory_limit times the PHP workers exceeds the
+// site's memory limit (ADR-0049). It does not refuse: workers rarely all
+// use their maximum at once.
+export function memoryWarning(form: Pick<PHPForm, "memoryLimit">, v: Pick<PHPSettingsView, "defaults" | "memoryLimitBytes" | "phpWorkers">): string {
+  if (v.memoryLimitBytes <= 0 || v.phpWorkers <= 0) return "";
+  const text = form.memoryLimit.trim();
+  const mem = /^\d+$/.test(text) ? Number(text) * MiB : v.defaults.memoryLimit;
+  if (mem * v.phpWorkers <= v.memoryLimitBytes) return "";
+  return `${v.phpWorkers} PHP workers with ${mem / MiB} MiB each could use ${(mem * v.phpWorkers) / MiB} MiB, more than the site's memory limit of ${Math.floor(v.memoryLimitBytes / MiB)} MiB. If they all need that much at once, the kernel stops one of them. Lower the memory limit or the workers, or raise the site's limit.`;
 }
 
 export const presetLabels: Record<string, string> = {
