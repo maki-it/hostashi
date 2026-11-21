@@ -1,6 +1,6 @@
 # ADR-0016 Per-site storage location (storage pools)
 
-**Status:** Proposed (not accepted). **Date drafted:** 2026-11-17. **Decides:** Kim. **Related:** ADR-0015 (resource limits and quota), ADR-0004 (web/agent split), ADR-0007 (isolation model), ADR-0008 (backups). **Needs spike:** S9 (proposed, see below).
+**Status:** Accepted (Kim, 2026-11-21). **Date drafted:** 2026-11-17. **Decides:** Kim. **Related:** ADR-0015 (resource limits and quota), ADR-0004 (web/agent split), ADR-0007 (isolation model), ADR-0008 (backups). **Needs spike:** S9 (proposed, see below).
 
 ## Context
 

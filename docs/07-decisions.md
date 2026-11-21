@@ -4,22 +4,22 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 
 | ADR | Topic | Status | Decision needed from you? |
 |-----|-------|--------|---------------------------|
-| 0001 | Clean-room and handling of reference repositories | Proposed | No, minimum legal rule |
+| 0001 | Clean-room and handling of reference repositories | Accepted on 2026-11-21 (Kim) | No, minimum legal rule |
 | 0002 | Project license | Accepted on 2026-11-18 ([adr/0002](adr/0002-license.md)), AGPL-3.0 + CC-BY-4.0 + DCO | Done |
 | 0003 | Language and stack | Accepted on 2026-11-18 ([adr/0003](adr/0003-language-and-stack.md)) | **Yes** (team know-how) |
-| 0004 | Web/agent privilege separation | Proposed | No |
+| 0004 | Web/agent privilege separation | Accepted on 2026-11-21 (Kim) | No |
 | 0005 | Web server | Accepted on 2026-11-18 ([adr/0005](adr/0005-web-server.md)), nginx | No, S3 is done |
-| 0006 | State store and reconciler | Proposed | No |
-| 0007 | Isolation model per site | Proposed | No |
+| 0006 | State store and reconciler | Accepted on 2026-11-21 (Kim) | No |
+| 0007 | Isolation model per site | Accepted on 2026-11-21 (Kim) | No |
 | 0008 | Backups with restic | Accepted on 2026-11-19 ([adr/0008](adr/0008-backups-with-restic.md)) | Done |
-| 0009 | Target platforms and packaging | Proposed | Partly |
+| 0009 | Target platforms and packaging | Accepted on 2026-11-21 (Kim) | Partly |
 | 0010 | Target audience and v1 scope | Proposed (draft: [adr/0010](adr/0010-target-audience-and-v1-scope.md)) | **Yes** |
 | 0011 | Name and trademark | Accepted (subject to trademark search) | Done, trademark open |
-| 0012 | Language of code and documentation | Proposed | Yes, briefly |
+| 0012 | Language of code and documentation | Accepted on 2026-11-21 (Kim) | Yes, briefly |
 | 0013 | Business model and governance | Proposed (draft: [adr/0013](adr/0013-business-model-and-governance.md)) | **Yes** |
-| 0014 | Name of the CLI tool | Proposed | Yes, briefly |
+| 0014 | Name of the CLI tool | Accepted on 2026-11-21 (Kim) | Yes, briefly |
 | 0015 | Per-site resource limits | Accepted ([adr/0015](adr/0015-per-site-resource-limits.md)) | No |
-| 0016 | Per-site storage location (storage pools) | Proposed (draft: [adr/0016](adr/0016-per-site-storage-location.md)) | **Yes** |
+| 0016 | Per-site storage location (storage pools) | Accepted on 2026-11-21 ([adr/0016](adr/0016-per-site-storage-location.md)) | Done |
 | 0017 | CloudPanel import as migration, presets | Accepted on 2026-11-18 ([adr/0017](adr/0017-cloudpanel-import-and-presets.md)) | Done |
 | 0018 | Public REST API | Accepted on 2026-11-18 ([adr/0018](adr/0018-public-rest-api.md)) | Done |
 | 0019 | PHP package source and multiple PHP versions | Accepted (Kim, 2026-11-18, [adr/0019](adr/0019-php-package-source-and-versions.md)) | **Yes** |
@@ -58,6 +58,8 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 ---
 
 ## ADR-0001 Clean-room and handling of reference repositories
+
+**Status:** Accepted (Kim, 2026-11-21).
 
 **Context.** `cloudpanel-ce` contains no source code. `vhost-templates` and `docs` have no LICENSE file and are therefore protected by copyright. `dploy` is MIT, `clp-wp-varnish-cache` is GPLv3.
 
@@ -100,6 +102,8 @@ Original proposal:
 
 ## ADR-0004 Web/agent privilege separation
 
+**Status:** Accepted (Kim, 2026-11-21).
+
 See [architecture 4.2](04-architecture.md). Two processes, typed RPC over a Unix socket, no shell, no general exec interface.
 
 **Consequence:** More initial effort per operation (schema, validator, handler). In return a much smaller attack surface. Boilerplate is reduced through codegen from a schema (spike S1).
@@ -110,6 +114,8 @@ See [architecture 4.2](04-architecture.md). Two processes, typed RPC over a Unix
 
 ## ADR-0006 State store and reconciler
 
+**Status:** Accepted (Kim, 2026-11-21).
+
 SQLite (WAL) as the source of truth, generated configs in versioned generations, validation before switching, rollback on error, drift detection. See [architecture 4.3](04-architecture.md).
 
 **Open:** If multi-server comes early, PostgreSQL fits better. Re-evaluate after 1.0, not before.
@@ -117,6 +123,8 @@ SQLite (WAL) as the source of truth, generated configs in versioned generations,
 **Load check (2026-11-20):** SQLite holds a mixed saturation load at 1000 sites without errors and with writes under 70 ms; the store now uses one write connection and a query-only read pool. See [sqlite-load.md](sqlite-load.md).
 
 ## ADR-0007 Isolation model per site
+
+**Status:** Accepted (Kim, 2026-11-21).
 
 Linux user per site, FPM pool over a Unix socket, systemd sandbox, cgroup limits. Containers (Podman/Docker) as an **optional** site type later. Rationale: the same isolation strength as established panels, but without a container runtime as a mandatory dependency and with little RAM.
 
@@ -127,6 +135,8 @@ Linux user per site, FPM pool over a Unix socket, systemd sandbox, cgroup limits
 Original entry: Restic as the engine (encryption, deduplication, many backends, also through Rclone). Databases through consistent dumps (MariaDB: `mariadb-dump --single-transaction` or `mariabackup`, PostgreSQL: `pg_dump`). Restore test as a feature. The alternative Borg is good too, but has fewer backends.
 
 ## ADR-0009 Target platforms and packaging
+
+**Status:** Accepted (Kim, 2026-11-21).
 
 Start: **Debian 13 and Ubuntu 26.04** (Ubuntu 24.04 is dropped for v1 because of ADR-0020; previously: Ubuntu 24.04 and Debian 13, plus 22.04/Debian 12), **amd64 and arm64**. No EOL systems (CloudPanel still supports Debian 11, which we deliberately do not take over). Distribution through a signed APT repository and `.deb`.
 
@@ -173,6 +183,8 @@ Original proposal: single server for developers and agencies. Resellers, mail, D
 
 ## ADR-0012 Language of code and documentation
 
+**Status:** Accepted (Kim, 2026-11-21).
+
 Proposal: **English** for code, comments, issues, public documentation and the default UI language. German as a fully maintained UI translation. These planning documents were written in German because they were internal. For publication they are translated into English (done on 2026-11-18).
 
 ## ADR-0013 Business model and governance
@@ -184,6 +196,8 @@ Original options:
 Options: (a) pure community project with donations/sponsoring, (b) free plus paid support and hosting offers, (c) open core with pro features (for example multi-server, reseller, SSO), (d) an internal tool of your company that you open up later. This determines the license (ADR-0002), contribution rules (CLA/DCO), roadmap priority and funding of the pentest.
 
 ## ADR-0014 Name of the CLI tool
+
+**Status:** Accepted (Kim, 2026-11-21).
 
 **Proposal:** Binary, package and services are called **`hostashi`**. Short form as an optional alias (symlink): **`ashi`**.
 
@@ -204,7 +218,7 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0016 Per-site storage location (storage pools)
 
-**Full draft (status Proposed):** [adr/0016-per-site-storage-location.md](adr/0016-per-site-storage-location.md). Summary: the storage location can be chosen through named **storage pools** (for example a second volume), never through a free path from the API. The agent checks mount point, marker file and quota per pool, so that an unmounted volume does not fill the root disk. The site's home directory lives directly in the pool, without symlinks. Hostashi does not format or partition disks. Moving between pools is a later, separate operation. All mechanisms are unverified, spike S9 clarifies this.
+**Full text (status Accepted, 2026-11-21):** [adr/0016-per-site-storage-location.md](adr/0016-per-site-storage-location.md). Summary: the storage location can be chosen through named **storage pools** (for example a second volume), never through a free path from the API. The agent checks mount point, marker file and quota per pool, so that an unmounted volume does not fill the root disk. The site's home directory lives directly in the pool, without symlinks. Hostashi does not format or partition disks. Moving between pools is a later, separate operation. All mechanisms are unverified, spike S9 clarifies this.
 
 ## ADR-0017 CloudPanel import as migration, presets
 
