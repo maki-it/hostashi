@@ -63,7 +63,8 @@ describe("Open in Adminer", () => {
     expect(screen.queryByRole("button", { name: "Open blog_wp in Adminer" })).not.toBeInTheDocument();
   });
 
-  it("has no button for a database on an external server", async () => {
+  it("opens a database on an external server too, with a hint", async () => {
+    const user = userEvent.setup();
     mockFetch({
       ...sites,
       "GET /api/v1/databases": { body: { databases: [blogWp, { ...blogWp, name: "blog_ext", server: "db1" }] } },
@@ -71,7 +72,9 @@ describe("Open in Adminer", () => {
     });
     render(<Harness />);
     expect(await screen.findByRole("button", { name: "Open blog_wp in Adminer" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open blog_ext in Adminer" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open blog_ext in Adminer" }));
+    const dialog = screen.getByRole("dialog", { name: "Open blog_ext in Adminer" });
+    expect(within(dialog).getByText(/connects from this machine to db1/)).toBeInTheDocument();
   });
 
   it("opens a database for the chosen time in a new tab", async () => {

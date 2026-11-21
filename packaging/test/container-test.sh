@@ -1331,6 +1331,38 @@ UNIT
   # Deleting the database ends the session: the user is gone.
   [ "$(api DELETE /api/v1/sites/tooldb)" = 204 ] || fail "delete site: $(x cat /tmp/api.out)"
   [ -z "$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User = '$user'")" ] || fail "temporary user outlived its database"
+
+  step "a database on an external server in the web database tool (ADR-0041 addendum 1)"
+  # The local MariaDB on its own address stands in for the external server
+  # again. The tool's pool may reach it only through the drop-in the agent
+  # writes, by the address the panel sent.
+  printf '[mariadbd]\nbind-address = 127.0.0.1,%s\n' "$ext_ip" | xi sh -c 'cat >/etc/mysql/mariadb.conf.d/95-test-external.cnf'
+  x systemctl restart mariadb.service
+  x mariadb -e "CREATE USER 'extadmin'@'$ext_ip' IDENTIFIED BY 'Ext-admin-pw-1234'; GRANT ALL ON *.* TO 'extadmin'@'$ext_ip' WITH GRANT OPTION"
+  [ "$(api POST /api/v1/db-servers "{\"name\":\"ext\",\"host\":\"$ext_ip\",\"adminUser\":\"extadmin\",\"adminPassword\":\"Ext-admin-pw-1234\",\"tlsMode\":\"none\"}")" = 201 ] ||
+    fail "add external server: $(x cat /tmp/api.out)"
+  [ "$(api POST /api/v1/sites '{"name":"toolext","domains":["toolext.example.com"]}')" = 201 ] || fail "create site: $(x cat /tmp/api.out)"
+  [ "$(api POST /api/v1/sites/toolext/databases '{"name":"toolext_wp","server":"ext"}')" = 201 ] || fail "create external database: $(x cat /tmp/api.out)"
+  [ "$(api POST /api/v1/databases/toolext_wp/tool '{"minutes":30}')" = 201 ] || fail "open tool on the external server: $(x cat /tmp/api.out)"
+  url=$(x sed -n 's/.*"url":"\([^"]*\)".*/\1/p' /tmp/api.out)
+  drop=/etc/systemd/system/hostashi-adminer.service.d/servers.conf
+  x grep -qx "IPAddressAllow=$ext_ip" "$drop" || fail "tool drop-in: $(x cat "$drop")"
+  user=$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User LIKE 'hostashi\_tool\_%' AND Host = '$ext_ip'")
+  [ -n "$user" ] || fail "no temporary user on the external server"
+  x systemctl is-active --quiet hostashi-adminer.service || fail "tool pool not running after the restart"
+  x rm -f /tmp/tool.jar
+  page=$(p8444 -L "$url") || fail "tool did not answer"
+  grep -q 'Tables and views' <<<"$page" || fail "tool did not log in to the external server: $(head -c 400 <<<"$page")"
+  ! x sh -c 'grep -rq Ext-admin-pw /etc/hostashi-adminer/servers/' || fail "the server list holds the admin password"
+  # Deleting the database ends the session; removing the server takes the
+  # pool's network away again.
+  [ "$(api DELETE /api/v1/sites/toolext)" = 204 ] || fail "delete site: $(x cat /tmp/api.out)"
+  [ -z "$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User = '$user'")" ] || fail "temporary user outlived its external database"
+  [ "$(api DELETE /api/v1/db-servers/ext)" = 204 ] || fail "remove external server: $(x cat /tmp/api.out)"
+  x test ! -e "$drop" || fail "tool drop-in kept without servers"
+  x rm -f /etc/mysql/mariadb.conf.d/95-test-external.cnf
+  x mariadb -e "DROP USER 'extadmin'@'$ext_ip'"
+  x systemctl restart mariadb.service
 fi
 
 step "more PHP versions from sury.org (ADR-0019)"

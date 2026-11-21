@@ -82,7 +82,7 @@ const columns = (onOpen?: (db: string) => void): Column<Database>[] => [
     srHeader: true,
     cell: (d) => (
       <RowActions>
-        {onOpen && d.server === LOCAL_SERVER && <IconButton label={`Open ${d.name} in Adminer`} icon={<TableIcon size={16} />} onClick={() => onOpen(d.name)} />}
+        {onOpen && <IconButton label={`Open ${d.name} in Adminer`} icon={<TableIcon size={16} />} onClick={() => onOpen(d.name)} />}
         <IconLink label={`Manage ${d.name}`} icon={<Gear size={16} />} href={dbHref(d.name)} />
       </RowActions>
     ),
@@ -135,7 +135,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
   const notice = secret && <PasswordNotice creds={secret} onClose={() => setSecret(null)} />;
   const toolMinutes = tool?.available ? tool.minutes : null;
   const onOpen = toolMinutes ? setOpening : undefined;
-  const toolDialog = opening && toolMinutes && <OpenToolDialog key={opening} db={opening} minutes={toolMinutes} onClose={() => setOpening(null)} />;
+  const toolDialog = opening && toolMinutes && <OpenToolDialog key={opening} db={opening} server={dbs?.find((d) => d.name === opening)?.server ?? LOCAL_SERVER} minutes={toolMinutes} onClose={() => setOpening(null)} />;
   const listLink = (
     <a className="ui-btn" href={formatHash({ page: "databases" })}>
       <ArrowLeft size={16} aria-hidden="true" />
@@ -199,7 +199,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
           }
           actions={
             <>
-              {db && onOpen && db.server === LOCAL_SERVER && (
+              {db && onOpen && (
                 <Button icon={<TableIcon size={16} aria-hidden="true" />} onClick={() => onOpen(db.name)}>
                   Open in Adminer
                 </Button>
