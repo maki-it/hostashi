@@ -11,10 +11,12 @@ import {
   defaultDumpPath,
   deleteUser,
   getDumpJob,
+  isPostgres,
   LOCAL_SERVER,
   listDatabases,
   listServers,
   nameProblem,
+  pgSSLMode,
   serverAddress,
   pathProblem,
   resetPassword,
@@ -44,16 +46,23 @@ type QueryProps = {
 
 const dbHref = (name: string) => formatHash({ page: "databases", query: new URLSearchParams({ db: name }) });
 
-const serverColumn: Column<Database> = {
+// serverColumn names the server and, for PostgreSQL, the engine (ADR-0051).
+const serverColumn = (servers: DBServer[]): Column<Database> => ({
   key: "server",
   header: "Server",
   sortValue: (d) => d.server,
-  cell: (d) => <span className="ui-mono">{d.server}</span>,
-};
+  cell: (d) => (
+    <span>
+      <span className="ui-mono">{d.server}</span>
+      {isPostgres(servers.find((v) => v.name === d.server)) && <span className="ui-hint"> PostgreSQL</span>}
+    </span>
+  ),
+});
 
 // columns builds the table; onOpen is set when the database tool can be
-// opened (ADR-0038). The tool reaches only databases on this machine.
-const columns = (onOpen?: (db: string) => void): Column<Database>[] => [
+// opened (ADR-0038), and toolable says for which databases: the tool has no
+// PostgreSQL support yet (ADR-0051).
+const columns = (onOpen?: (db: string) => void, toolable: (d: Database) => boolean = () => true): Column<Database>[] => [
   {
     key: "name",
     header: "Database",
@@ -83,7 +92,7 @@ const columns = (onOpen?: (db: string) => void): Column<Database>[] => [
     srHeader: true,
     cell: (d) => (
       <RowActions>
-        {onOpen && <IconButton label={`Open ${d.name} in Adminer`} icon={<TableIcon size={16} />} onClick={() => onOpen(d.name)} />}
+        {onOpen && toolable(d) && <IconButton label={`Open ${d.name} in Adminer`} icon={<TableIcon size={16} />} onClick={() => onOpen(d.name)} />}
         <IconLink label={`Manage ${d.name}`} icon={<Gear size={16} />} href={dbHref(d.name)} />
       </RowActions>
     ),
@@ -134,7 +143,8 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
     onQuery(next);
   };
 
-  const notice = secret && <PasswordNotice creds={secret} onClose={() => setSecret(null)} />;
+  const serverOf = (database: string) => servers?.find((v) => v.name === dbs?.find((d) => d.name === database)?.server);
+  const notice = secret && <PasswordNotice creds={secret} server={serverOf(secret.database)} onClose={() => setSecret(null)} />;
   const toolMinutes = tool?.available ? tool.minutes : null;
   const onOpen = toolMinutes ? setOpening : undefined;
   const closeTool = () => {
@@ -205,7 +215,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
           }
           actions={
             <>
-              {db && onOpen && (
+              {db && onOpen && !isPostgres(serverOf(db.name)) && (
                 <Button icon={<TableIcon size={16} aria-hidden="true" />} onClick={() => onOpen(db.name)}>
                   Open in Adminer
                 </Button>
@@ -232,8 +242,8 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
   const sortKey = query.get("sort");
   const sort: Sort | undefined = sortKey ? { key: sortKey, dir: query.get("dir") === "desc" ? "desc" : "asc" } : undefined;
   // The server column only matters once there is more than one server.
-  const base = columns(onOpen);
-  const tableColumns = servers.length > 1 ? [...base.slice(0, 2), serverColumn, ...base.slice(2)] : base;
+  const base = columns(onOpen, (d) => !isPostgres(servers.find((v) => v.name === d.server)));
+  const tableColumns = servers.length > 1 ? [...base.slice(0, 2), serverColumn(servers), ...base.slice(2)] : base;
   const shown = dbs.filter((d) => (!site || d.site === site) && (!q || d.name.includes(q) || d.users.some((u) => u.includes(q))));
 
   return (
@@ -300,7 +310,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
 
 // PasswordNotice shows a generated password once. The panel cannot show it
 // again; closing the notice drops it from memory.
-function PasswordNotice({ creds, onClose }: { creds: Credentials; onClose: () => void }) {
+function PasswordNotice({ creds, server, onClose }: { creds: Credentials; server: DBServer | undefined; onClose: () => void }) {
   const [copied, setCopied] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -339,6 +349,16 @@ function PasswordNotice({ creds, onClose }: { creds: Credentials; onClose: () =>
         <dd>
           <code>{creds.host}</code>
         </dd>
+        {server && isPostgres(server) && (
+          <>
+            <dt>Engine</dt>
+            <dd>PostgreSQL</dd>
+            <dt>SSL mode</dt>
+            <dd>
+              <code>{pgSSLMode(server)}</code>
+            </dd>
+          </>
+        )}
       </dl>
       <Field label="Password">
         <input
