@@ -463,6 +463,9 @@ x grep -q '"name":"index.php"' /tmp/api.out || fail "panel file list lacks index
 expect_mode /home/wp/htdocs/from-panel.txt "644 wp:wp"
 [ "$(api POST /api/v1/sites/wp/files/delete '{"paths":["htdocs/from-panel.txt"]}')" = 200 ] || fail "file delete through the panel: $(x cat /tmp/api.out)"
 x test ! -e /home/wp/htdocs/from-panel.txt || fail "file deleted through the panel is still there"
+# The helper runs as wp until it is idle; the SSH checks below expect no
+# process of wp outside PHP, so it is stopped here.
+x systemctl stop hostashi-files@wp.service
 # A PHP package update replaces the binary under the running master; the
 # dpkg hook (ADR-0033) restarts the site's unit, the package's own unit
 # stays off.
