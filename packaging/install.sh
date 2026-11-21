@@ -642,7 +642,8 @@ do_dbtool() {
   if [ "$NO_DB_TOOL" = yes ]; then
     systemctl disable --now "$DBTOOL_UNIT" >>"$LOG" 2>&1
     rm -f "/etc/systemd/system/$DBTOOL_UNIT" "$DBTOOL_TMPFILES" "$DBTOOL_CONF" || return 1
-    rm -rf "$DBTOOL_DIR" /run/hostashi-adminer || return 1
+    # The agent's files for external database servers (ADR-0041 addendum 1).
+    rm -rf "$DBTOOL_DIR" /run/hostashi-adminer "${DBTOOL_CONF%/*}/servers" "/etc/systemd/system/$DBTOOL_UNIT.d" || return 1
     rmdir "${DBTOOL_CONF%/*}" 2>/dev/null
     systemctl daemon-reload >>"$LOG" 2>&1
     return 0

@@ -9,8 +9,8 @@
 //   password in it never reaches the browser (Adminer keeps it in the PHP
 //   session, encrypted with a key in a cookie).
 // - Adminer's own login form is gone, and its login accepts only the
-//   ticket's temporary user, on the local MariaDB socket, for the ticket's
-//   database.
+//   ticket's temporary user, for the ticket's database, on the local
+//   MariaDB socket or on the external server the ticket names.
 // - The session ends at the ticket's expiry; the agent drops the user then.
 
 namespace Hostashi {
@@ -68,7 +68,47 @@ function take_ticket(string $id): ?array
         return null;
     }
 
-    return ['database' => $t['database'], 'user' => $t['user'], 'password' => $t['password'], 'expires' => $expires];
+    $login = ['database' => $t['database'], 'user' => $t['user'], 'password' => $t['password'], 'expires' => $expires, 'server' => '', 'tls' => '', 'ca' => ''];
+
+    // An external server (ADR-0041 addendum 1): the agent took host and
+    // port from the panel's server list, the pool reaches only its
+    // addresses.
+    if (isset($t['host'])) {
+        $server = remote_server($t);
+        if ($server === null) {
+            return null;
+        }
+
+        $login = array_merge($login, $server);
+    }
+
+    return $login;
+}
+
+/** The server, TLS mode and CA of an external ticket; null if malformed. */
+function remote_server(array $t): ?array
+{
+    $host = $t['host'] ?? null;
+    $port = $t['port'] ?? null;
+    $tls = $t['tls'] ?? null;
+    $ca = $t['caFile'] ?? '';
+
+    if (!is_string($host) || !is_int($port) || $port < 1 || $port > 65535 || !in_array($tls, ['verify', 'verify-ca', 'none'], true) || !is_string($ca)) {
+        return null;
+    }
+
+    $ip = filter_var($host, FILTER_VALIDATE_IP);
+    if ($ip === false && !preg_match('/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/D', $host)) {
+        return null;
+    }
+
+    if ($tls === 'verify-ca' ? !preg_match('~^/etc/hostashi-adminer/servers/ca-[0-9]+\.pem$~D', $ca) : $ca !== '') {
+        return null;
+    }
+
+    $name = str_contains($host, ':') ? '[' . $host . ']' : $host;
+
+    return ['server' => $name . ':' . $port, 'tls' => $tls, 'ca' => $ca];
 }
 
 /** The session's login, null outside a ticket session. */
@@ -105,7 +145,10 @@ if (is_string($ticket)) {
     // A ticket replaces whatever session this browser had.
     $_SESSION = [];
     session_regenerate_id(true);
-    $_SESSION['hostashi'] = ['database' => $t['database'], 'user' => $t['user'], 'expires' => $t['expires']];
+    $_SESSION['hostashi'] = [
+        'database' => $t['database'], 'user' => $t['user'], 'expires' => $t['expires'],
+        'server' => $t['server'], 'tls' => $t['tls'], 'ca' => $t['ca'],
+    ];
 
     $_POST['auth'] = [
         'driver' => 'server', 'server' => '', 'username' => $t['user'],

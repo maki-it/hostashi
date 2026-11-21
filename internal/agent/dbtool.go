@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -31,6 +32,12 @@ type dbTool struct {
 	// after replaces time.AfterFunc in tests.
 	after func(d time.Duration, f func())
 	now   func() time.Time
+
+	// External servers (dbtoolremote.go). units nil: none.
+	units      DBToolUnits
+	serversDir string // default agentapi.DBToolServerDir
+	unitDir    string // default /etc/systemd/system
+	mu         sync.Mutex
 }
 
 var errNoDBTool = &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the database tool is not installed on this server"}
@@ -45,6 +52,8 @@ func newDBTool(db *mariadb.Manager, dir string, log *slog.Logger) *dbTool {
 
 func (t *dbTool) register(s *agentrpc.Server) {
 	agentrpc.Handle(s, agentapi.DBToolOpen, t.open)
+	agentrpc.Handle(s, agentapi.DBToolServers, t.setServers)
+	agentrpc.Handle(s, agentapi.DBToolRemote, t.remote)
 }
 
 func (t *dbTool) open(ctx context.Context, _ agentrpc.Caller, req agentapi.DBToolOpenRequest) (agentapi.DBToolOpenResponse, error) {
