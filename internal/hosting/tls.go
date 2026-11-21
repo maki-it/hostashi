@@ -175,7 +175,11 @@ func (s *Service) SetPHPPrograms(ctx context.Context, actor int64, name string, 
 // SetDisabled disables or enables an active site. A disabled site answers
 // every request with 503 and its PHP pool is stopped; its account, files,
 // databases, certificate and renewal stay.
-func (s *Service) SetDisabled(ctx context.Context, actor int64, name string, on bool) (store.Site, error) {
+//
+// page is the maintenance page a disabled site shows (ADR-0047): a page id,
+// or empty for the built-in page. It is only stored while disabling, so
+// enabling keeps the last choice.
+func (s *Service) SetDisabled(ctx context.Context, actor int64, name string, on bool, page string) (store.Site, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -188,8 +192,32 @@ func (s *Service) SetDisabled(ctx context.Context, actor int64, name string, on 
 		return store.Site{}, ErrState
 	}
 
+	pageID := site.DisabledPage
+
+	if on {
+		if pageID, err = s.maintenancePage(ctx, page); err != nil {
+			return store.Site{}, err
+		}
+
+		if err := s.st.SetSiteDisabledPage(ctx, name, pageID, s.now()); err != nil {
+			return store.Site{}, err
+		}
+	}
+
+	restorePage := func() {
+		if pageID == site.DisabledPage {
+			return
+		}
+
+		if err := s.st.SetSiteDisabledPage(context.WithoutCancel(ctx), name, site.DisabledPage, s.now()); err != nil {
+			s.log.ErrorContext(ctx, "restore disabled page after failed change", "site", name, "err", err)
+		}
+	}
+
 	old, err := s.st.SetSiteDisabled(ctx, name, on, s.now())
 	if err != nil {
+		restorePage()
+
 		return store.Site{}, err
 	}
 
@@ -198,15 +226,17 @@ func (s *Service) SetDisabled(ctx context.Context, actor int64, name string, on 
 			s.log.ErrorContext(ctx, "restore disabled setting after failed change", "site", name, "err", rerr)
 		}
 
+		restorePage()
+
 		return store.Site{}, err
 	}
 
-	action := "site.enable"
+	action, details := "site.enable", map[string]string(nil)
 	if on {
-		action = "site.disable"
+		action, details = "site.disable", map[string]string{"page": pageIDString(pageID)}
 	}
 
-	s.audit(ctx, actor, action, name, nil)
+	s.audit(ctx, actor, action, name, details)
 
 	return s.Get(ctx, name)
 }

@@ -41,11 +41,11 @@ func TestMaintenanceWithBuiltinPage(t *testing.T) {
 	}
 
 	// Disabled wins.
-	if _, err := s.SetDisabled(ctx, 1, "blog", true); err != nil || ag.live() != "[blog=[blog.example.com]+disabled]" {
+	if _, err := s.SetDisabled(ctx, 1, "blog", true, ""); err != nil || ag.live() != "[blog=[blog.example.com]+disabled(builtin-maintenance)]" {
 		t.Fatalf("%v live %s", err, ag.live())
 	}
 
-	if _, err := s.SetDisabled(ctx, 1, "blog", false); err != nil {
+	if _, err := s.SetDisabled(ctx, 1, "blog", false, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -201,5 +201,86 @@ func TestUploadedPages(t *testing.T) {
 	var n int
 	if err := st.RawCount(ctx, `SELECT count(*) FROM audit_log WHERE action LIKE ?`, "page.%", &n); err != nil || n != 4 {
 		t.Fatalf("audit entries %d %v", n, err)
+	}
+}
+
+// TestDisabledSiteShowsMaintenancePage checks ADR-0047: a disabled site
+// shows the built-in maintenance page or a chosen one, parking pages and
+// unknown pages are refused, a failed change keeps the old page, and the
+// page counts as in use.
+func TestDisabledSiteShowsMaintenancePage(t *testing.T) {
+	s, ag, _ := newService(t)
+	ctx := t.Context()
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", PHP: "8.4", Domains: []string{"blog.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := s.CreatePage(ctx, 1, "Contract ended", statuspage.KindMaintenance, PageUpload{Filename: "page.html", Data: []byte("<h1>Ended</h1>")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	parking, err := s.CreatePage(ctx, 1, "Parked", statuspage.KindParking, PageUpload{Filename: "p.html", Data: []byte("x")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	site, err := s.SetDisabled(ctx, 1, "blog", true, p.ID)
+	if err != nil || DisabledPageID(site) != p.ID || ag.live() != "[blog=[blog.example.com]+disabled("+p.ID+")]" {
+		t.Fatalf("%+v %v live %s", site, err, ag.live())
+	}
+
+	if err := s.DeletePage(ctx, 1, p.ID); !errors.Is(err, ErrPageInUse) {
+		t.Fatalf("delete page in use: %v", err)
+	}
+
+	pages, err := s.Pages(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, pg := range pages {
+		if pg.ID == p.ID && !slices.Equal(pg.Sites, []string{"blog"}) {
+			t.Errorf("page sites %v", pg.Sites)
+		}
+	}
+
+	for _, bad := range []string{parking.ID, "p99", "nonsense"} {
+		if _, err := s.SetDisabled(ctx, 1, "blog", true, bad); err == nil {
+			t.Errorf("page %q accepted", bad)
+		}
+	}
+
+	if _, err := s.SetDisabled(ctx, 1, "blog", true, parking.ID); !errors.Is(err, ErrInvalid) {
+		t.Errorf("parking page: %v", err)
+	}
+
+	// The agent refuses: page and state stay.
+	ag.webErr = &agentrpc.Error{Code: agentrpc.CodeInternal, Message: "nginx down"}
+
+	if _, err := s.SetDisabled(ctx, 1, "blog", true, ""); err == nil {
+		t.Fatal("change succeeded although the agent refused")
+	}
+
+	if got, _ := s.Get(ctx, "blog"); !got.Disabled || DisabledPageID(got) != p.ID {
+		t.Fatalf("failed change was stored: %+v", got)
+	}
+
+	ag.webErr = nil
+
+	// Enabling keeps the choice; the built-in page is the default.
+	site, err = s.SetDisabled(ctx, 1, "blog", false, "")
+	if err != nil || site.Disabled || DisabledPageID(site) != p.ID {
+		t.Fatalf("enable %+v %v", site, err)
+	}
+
+	site, err = s.SetDisabled(ctx, 1, "blog", true, "")
+	if err != nil || DisabledPageID(site) != statuspage.BuiltinMaintenance || ag.live() != "[blog=[blog.example.com]+disabled(builtin-maintenance)]" {
+		t.Fatalf("built-in %+v %v live %s", site, err, ag.live())
+	}
+
+	if err := s.DeletePage(ctx, 1, p.ID); err != nil {
+		t.Fatalf("delete unused page: %v", err)
 	}
 }
