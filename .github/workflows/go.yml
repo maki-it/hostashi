@@ -153,6 +153,67 @@ jobs:
             mariadb --version
             HOSTASHI_TEST_MARIADB_SOCKET=/run/mysqld/mysqld.sock /mariadb.test -test.v -test.count=1'
 
+  dbserver:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    name: External DB server (${{ matrix.image }}, TLS ${{ matrix.tls }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: "mariadb:10.11", tls: verify-ca }
+          - { image: "mariadb:11.8", tls: verify-ca }
+          - { image: "mariadb:12.3", tls: verify-ca }
+          - { image: "mariadb:11.8", tls: none }
+          - { image: "mysql:8.4", tls: verify-ca }
+          - { image: "mysql:9.7", tls: verify-ca }
+          - { image: "mysql:26.10", tls: verify-ca }
+          - { image: "mysql:8.4", tls: none }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build the test binary
+        env:
+          CGO_ENABLED: "0"
+        run: go test -c -o "$RUNNER_TEMP/dbserver.test" ./internal/dbserver/
+      - name: Run against the server over TCP
+        env:
+          IMAGE: ${{ matrix.image }}
+          MODE: ${{ matrix.tls }}
+        run: |
+          d="$RUNNER_TEMP/certs"
+          install -d -m 0755 "$d"
+          # A private CA and a server certificate for 127.0.0.1, so verify-ca
+          # checks the chain and the address.
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj /CN=test-ca \
+            -keyout "$d/ca.key" -out "$d/ca.pem" 2>/dev/null
+          openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj /CN=127.0.0.1 \
+            -keyout "$d/server.key" -out "$d/server.csr" 2>/dev/null
+          openssl x509 -req -in "$d/server.csr" -CA "$d/ca.pem" -CAkey "$d/ca.key" -CAcreateserial -days 1 \
+            -extfile <(printf 'subjectAltName=IP:127.0.0.1') -out "$d/server.pem" 2>/dev/null
+          chmod 0644 "$d"/*
+          case "$IMAGE" in
+            mariadb*) env=MARIADB_ROOT_PASSWORD; client=mariadb ;;
+            mysql*) env=MYSQL_ROOT_PASSWORD; client=mysql ;;
+          esac
+          tls=()
+          if [ "$MODE" = verify-ca ]; then
+            tls=(--ssl-ca=/certs/ca.pem --ssl-cert=/certs/server.pem --ssl-key=/certs/server.key)
+          fi
+          docker run -d --name db -p 127.0.0.1:3306:3306 -v "$d:/certs:ro" -e "$env=rootpw" "$IMAGE" "${tls[@]}"
+          for _ in $(seq 1 120); do docker exec db "$client" -uroot -prootpw -e 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
+          # A dedicated administrator, as ADR-0041 recommends, not root.
+          docker exec db "$client" -uroot -prootpw -e "CREATE USER 'hostashi_admin'@'%' IDENTIFIED BY 'Adm1n-pw'; GRANT ALL PRIVILEGES ON *.* TO 'hostashi_admin'@'%' WITH GRANT OPTION;"
+          HOSTASHI_TEST_DBSERVER=127.0.0.1:3306 HOSTASHI_TEST_DBSERVER_USER=hostashi_admin HOSTASHI_TEST_DBSERVER_PW=Adm1n-pw \
+            HOSTASHI_TEST_DBSERVER_CA="$d/ca.pem" HOSTASHI_TEST_DBSERVER_TLS="$MODE" \
+            "$RUNNER_TEMP/dbserver.test" -test.v -test.count=1
+
   restic:
     needs: changes
     if: needs.changes.outputs.go == 'true'
