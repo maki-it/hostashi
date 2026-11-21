@@ -4,6 +4,7 @@
 - [Install](Install.md)
 - [File manager](File-manager.md)
 - [Parked domains](Parked-domains.md)
+- [PHP settings](PHP-settings.md)
 
 **Reference**
 
