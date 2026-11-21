@@ -129,6 +129,10 @@ func usedPages(d web.Desired) map[string]bool {
 		if m := s.Maintenance; m != nil {
 			out[m.Page+"."+m.Digest] = true
 		}
+
+		if p := s.DisabledPage; p != nil {
+			out[p.Page+"."+p.Digest] = true
+		}
 	}
 
 	return out

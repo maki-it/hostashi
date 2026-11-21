@@ -96,25 +96,25 @@ func TestLimitPresetsService(t *testing.T) {
 	vals := store.Limits{DiskBytes: 2 << 30, DiskInodes: 50_000, MemoryBytes: 256 << 20, PHPWorkers: 3, Tasks: 64, CPUPriority: "low"}
 
 	for _, name := range []string{"", "Tiny", "a b", "-x", "../x"} {
-		if _, err := s.CreateLimitPreset(ctx, 1, name, vals, false); !errors.Is(err, ErrInvalid) {
+		if _, err := s.CreateLimitPreset(ctx, 1, name, vals, store.PresetCaches{}, false); !errors.Is(err, ErrInvalid) {
 			t.Errorf("name %q: %v", name, err)
 		}
 	}
 
-	if _, err := s.CreateLimitPreset(ctx, 1, "small", vals, false); !errors.Is(err, ErrPresetExists) {
+	if _, err := s.CreateLimitPreset(ctx, 1, "small", vals, store.PresetCaches{}, false); !errors.Is(err, ErrPresetExists) {
 		t.Errorf("duplicate: %v", err)
 	}
 
-	if _, err := s.CreateLimitPreset(ctx, 1, "open", store.Limits{PHPWorkers: 5, CPUPriority: "normal"}, true); !errors.Is(err, ErrUnlimitedDefault) {
+	if _, err := s.CreateLimitPreset(ctx, 1, "open", store.Limits{PHPWorkers: 5, CPUPriority: "normal"}, store.PresetCaches{}, true); !errors.Is(err, ErrUnlimitedDefault) {
 		t.Errorf("unlimited default: %v", err)
 	}
 
-	if _, err := s.CreateLimitPreset(ctx, 1, "open", store.Limits{PHPWorkers: 5, CPUPriority: "normal"}, false); err != nil {
+	if _, err := s.CreateLimitPreset(ctx, 1, "open", store.Limits{PHPWorkers: 5, CPUPriority: "normal"}, store.PresetCaches{}, false); err != nil {
 		t.Errorf("unlimited preset (not default): %v", err)
 	}
 
 	// The default preset cannot be made unlimited by an update either.
-	if _, err := s.UpdateLimitPreset(ctx, 1, "small", "small", store.Limits{PHPWorkers: 5, CPUPriority: "normal"}, false); !errors.Is(err, ErrUnlimitedDefault) {
+	if _, err := s.UpdateLimitPreset(ctx, 1, "small", "small", store.Limits{PHPWorkers: 5, CPUPriority: "normal"}, store.PresetCaches{}, false); !errors.Is(err, ErrUnlimitedDefault) {
 		t.Errorf("update default to unlimited: %v", err)
 	}
 
@@ -232,7 +232,7 @@ func TestSiteLimitsService(t *testing.T) {
 	l := large.Limits
 	l.MemoryBytes = 3 << 30
 
-	if _, err := s.UpdateLimitPreset(ctx, 1, "large", "xl", l, false); err != nil {
+	if _, err := s.UpdateLimitPreset(ctx, 1, "large", "xl", l, store.PresetCaches{}, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -283,7 +283,7 @@ func TestPHPWorkersReachThePool(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := s.UpdateLimitPreset(ctx, 1, "medium", "medium", medium.Limits, true); err != nil {
+	if _, err := s.UpdateLimitPreset(ctx, 1, "medium", "medium", medium.Limits, store.PresetCaches{}, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -324,7 +324,7 @@ func TestPHPWorkersReachThePool(t *testing.T) {
 	l := medium.Limits
 	l.PHPWorkers = 15
 
-	if _, err := s.UpdateLimitPreset(ctx, 1, "medium", "medium", l, false); err != nil {
+	if _, err := s.UpdateLimitPreset(ctx, 1, "medium", "medium", l, store.PresetCaches{}, false); err != nil {
 		t.Fatal(err)
 	}
 

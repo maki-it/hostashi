@@ -549,6 +549,7 @@ type pageLoc struct {
 	CSP               string
 	AltSvc            string // port for Alt-Svc, empty for none
 	HSTS              bool
+	Retry             bool // Retry-After on the 503 answers (maintenance)
 }
 
 const pageLocSrc = `{{define "pageloc"}}
@@ -566,7 +567,9 @@ const pageLocSrc = `{{define "pageloc"}}
         add_header Content-Security-Policy "{{.CSP}}" always;
         add_header X-Content-Type-Options nosniff always;
         add_header Cache-Control no-store always;
+        {{- if .Retry}}
         add_header Retry-After $hostashi_retry_after always;
+        {{- end}}
         {{- if .AltSvc}}
         add_header Alt-Svc 'h3=":{{.AltSvc}}"; ma=86400' always;
         {{- end}}
@@ -581,8 +584,8 @@ func withPageLoc(name, src string) *template.Template {
 	return template.Must(template.Must(template.New(name).Parse(src)).Parse(pageLocSrc))
 }
 
-func (n *Nginx) pageLoc(page, dir string, tls, hsts bool) pageLoc {
-	pl := pageLoc{Prefix: agentapi.PagePathPrefix, Page: page, Dir: dir, Types: pageTypes, CSP: PageCSP}
+func (n *Nginx) pageLoc(page, dir string, tls, hsts, retry bool) pageLoc {
+	pl := pageLoc{Prefix: agentapi.PagePathPrefix, Page: page, Dir: dir, Types: pageTypes, CSP: PageCSP, Retry: retry}
 	if tls {
 		pl.HSTS = hsts
 
@@ -665,12 +668,25 @@ server {
     {{- end}}
     {{- end}}
     {{- if .S.Disabled}}
+    {{- with .D}}
+
+    # Disabled in the panel (ADR-0047): the page's files and, for every
+    # other URL, the page with 503. Nothing of the site is served.
+    error_page 503 {{$.Prefix}}{{.Page}}/index.html;
+
+    {{- template "pageloc" $.PL}}
+
+    location / {
+        return 503;
+    }
+    {{- else}}
 
     # Disabled in the panel: nothing of the site is served.
     location / {
         default_type text/html;
         return 503 "<!doctype html><title>Temporarily unavailable</title><h1>Temporarily unavailable</h1><p>This site is not available at the moment. Please try again later.</p>\n";
     }
+    {{- end}}
     {{- else}}
     {{- if .C}}
     # HIT, MISS, BYPASS, EXPIRED, STALE or UPDATING on PHP answers.
@@ -792,12 +808,20 @@ func (n *Nginx) Render(d Desired, gen int) (Files, error) {
 
 		b.Reset()
 
-		data := map[string]any{"N": n, "S": s, "M": (*Maintenance)(nil), "C": (*cacheView)(nil)}
+		data := map[string]any{"N": n, "S": s, "M": (*Maintenance)(nil), "D": (*PageRef)(nil), "C": (*cacheView)(nil)}
 		if s.Maintenance != nil && !s.Disabled {
 			data["M"] = s.Maintenance
 			data["Open"] = "hostashi_open_" + hex.EncodeToString([]byte(s.User))
 			data["Prefix"] = agentapi.PagePathPrefix
-			data["PL"] = n.pageLoc(s.Maintenance.Page, s.Maintenance.Dir, s.Cert != "", s.HSTS)
+			data["PL"] = n.pageLoc(s.Maintenance.Page, s.Maintenance.Dir, s.Cert != "", s.HSTS, true)
+		}
+
+		// A disabled site has no allowlist and no Retry-After: nobody knows
+		// when it comes back (ADR-0047).
+		if p := s.DisabledPage; p != nil && s.Disabled {
+			data["D"] = p
+			data["Prefix"] = agentapi.PagePathPrefix
+			data["PL"] = n.pageLoc(p.Page, p.Dir, s.Cert != "", s.HSTS, false)
 		}
 
 		// No cache while the site is disabled or in maintenance: the
@@ -845,7 +869,7 @@ func (n *Nginx) Render(d Desired, gen int) (Files, error) {
 
 		b.Reset()
 
-		data := map[string]any{"N": n, "P": p, "PL": n.pageLoc(p.Page, p.Dir, p.Cert != "", false)}
+		data := map[string]any{"N": n, "P": p, "PL": n.pageLoc(p.Page, p.Dir, p.Cert != "", false, true)}
 		if err := parkTmpl.Execute(&b, data); err != nil {
 			return Files{}, fmt.Errorf("web: render parked %s: %w", p.Domain, err)
 		}

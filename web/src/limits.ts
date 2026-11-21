@@ -20,7 +20,17 @@ export type Limits = {
   unlimited?: string[]; // set by the server: the limits that are 0
 };
 
-export type Preset = { name: string; default: boolean; limits: Limits; createdAt: number; updatedAt: number };
+// PresetCaches are starting values for a site that gets the preset
+// (ADR-0045, ADR-0046), not limits: the site can change them afterwards.
+// 0 means off.
+export type PresetCaches = { objectCacheMb: number; pageCacheMb?: number };
+
+export const noCaches: PresetCaches = { objectCacheMb: 0, pageCacheMb: 0 };
+
+// The page cache sizes a preset may give (agentapi.PageCacheSizesMB).
+export const pageCacheSizes = [64, 128, 256, 512, 1024, 2048, 4096];
+
+export type Preset = { name: string; default: boolean; limits: Limits; caches?: PresetCaches; createdAt: number; updatedAt: number };
 
 export type Usage = {
   enforced: boolean; // false: no project quota, disk limits are not enforced
@@ -47,10 +57,21 @@ const sitePath = (site: string) => "/sites/" + encodeURIComponent(site) + "/limi
 // listPresets also says how many CPU cores the server has (ADR-0037), for
 // the CPU limit in cores.
 export const listPresets = () => request<{ presets: Preset[]; cpus?: number }>("GET", presetPath());
-export const createPreset = (name: string, isDefault: boolean, limits: Limits) =>
-  request<Preset>("POST", presetPath(), { name, default: isDefault, limits: strip(limits) });
-export const updatePreset = (old: string, name: string, isDefault: boolean, limits: Limits) =>
-  request<Preset>("PUT", presetPath(old), { name, default: isDefault, limits: strip(limits) });
+export const createPreset = (name: string, isDefault: boolean, limits: Limits, caches: PresetCaches) =>
+  request<Preset>("POST", presetPath(), { name, default: isDefault, limits: strip(limits), caches });
+// updatePreset replaces the whole preset: pass the caches it keeps.
+export const updatePreset = (old: string, name: string, isDefault: boolean, limits: Limits, caches: PresetCaches) =>
+  request<Preset>("PUT", presetPath(old), { name, default: isDefault, limits: strip(limits), caches });
+
+// presetCacheProblem checks the object cache against the preset's memory
+// limit, as the server does: at most half of it.
+export function presetCacheProblem(c: PresetCaches, memoryBytes: number): string {
+  if (c.objectCacheMb === 0 || memoryBytes === 0) return "";
+  if (c.objectCacheMb * 1024 ** 2 > memoryBytes / 2) {
+    return `The object cache may take at most half of the memory limit (${String(Math.floor(memoryBytes / 2 / 1024 ** 2))} MiB).`;
+  }
+  return "";
+}
 export const deletePreset = (name: string) => request<void>("DELETE", presetPath(name));
 
 export const getSiteLimits = (site: string) => request<SiteLimits>("GET", sitePath(site));

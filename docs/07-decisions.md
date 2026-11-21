@@ -50,8 +50,10 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0044 | Outgoing email through an SMTP relay | Accepted on 2026-11-21 ([adr/0044](adr/0044-outgoing-email.md)) | No |
 | 0045 | Object cache (Valkey) per site | Accepted on 2026-11-21 ([adr/0045](adr/0045-object-cache-per-site.md)) | No |
 | 0046 | Page cache (nginx FastCGI cache) per site | Accepted on 2026-11-21 ([adr/0046](adr/0046-page-cache-per-site.md)) | No |
+| 0047 | Status page for disabled sites | Accepted on 2026-11-21 ([adr/0047](adr/0047-status-page-for-disabled-sites.md)) | No |
 | 0048 | Convert a parked domain into a site and back | Accepted on 2026-11-21 ([adr/0048](adr/0048-convert-parked-domain-and-site.md)) | No |
-| 0049 | PHP settings per site | Proposed ([adr/0049](adr/0049-php-settings-per-site.md)) | No |
+| 0049 | PHP settings per site | Accepted on 2026-11-21 ([adr/0049](adr/0049-php-settings-per-site.md)) | No |
+| 0050 | Signed releases, install and updates through apt | Accepted on 2026-11-21 ([adr/0050](adr/0050-signed-releases-and-apt-updates.md)) | No |
 
 ---
 
@@ -337,10 +339,18 @@ ashi site add example.com --type php --php 8.4   # same program
 
 **Full text (status Accepted, 2026-11-21, by Kim):** [adr/0046](adr/0046-page-cache-per-site.md). Summary: after comparing Varnish and the nginx FastCGI cache, Kim asked for a draft of the FastCGI cache instead of Varnish. Recommended: an opt-in page cache per site, off by default, with a zone and a directory per site outside the site home (owned by `www-data`, tagged with the site's project ID so it counts against the disk quota), a fixed cache key, upstream cache headers honoured, and fixed skip rules for non-GET requests, `Authorization`, logged-in and cart cookies and admin paths. Presets for WordPress, WooCommerce and generic PHP, cache times from 1 to 60 minutes, validated excluded paths, an `X-Cache` header. Purge is a typed agent operation in pure Go, no new `os/exec`. Roles as in ADR-0045. The CloudPanel import pre-selects the cache for sites with a cache tier. Changes in part ADR-0017: decided by Kim on 2026-11-21, the FastCGI cache replaces Varnish for now, and both caches (ADR-0045 and this one) ship in v1.
 
+## ADR-0047 Status page for disabled sites
+
+**Full text (status Accepted, 2026-11-21, by Kim):** [adr/0047](adr/0047-status-page-for-disabled-sites.md). Summary: a disabled site answers with a fixed English 503 string today. Recommended: disabling a site takes an optional maintenance page (ADR-0027), default the built-in one (Kim, 2026-11-21: reuse the maintenance pages, no kind of its own). nginx serves it like a maintenance page (503, same CSP, no `Retry-After`, no allowlist), PHP stays stopped. No new agent operation, no new `os/exec`. No open questions.
+
 ## ADR-0048 Convert a parked domain into a site and back
 
 **Full text (status Accepted, 2026-11-21, by Kim):** [adr/0048](adr/0048-convert-parked-domain-and-site.md). Summary: Kim wants to turn a parked domain into a site and back. Recommended: "Make a site" on a parked domain opens the New site form prefilled (API unchanged), and a failed create now restores the parking; "Delete and park domains" on a site deletes it like delete (typed name, last backup shown) and parks the domains checked in its dialog (all checked by default; Kim, 2026-11-21), with the vhost swap in one `web.apply` so the domains are always answered. Scopes `sites:delete` and `parked:write`. No new agent operation, no new `os/exec`.
 
 ## ADR-0049 PHP settings per site
 
-**Full text (status Proposed, 2026-11-21):** [adr/0049](adr/0049-php-settings-per-site.md). Summary: Kim wants more PHP ini settings per site, from an allowlist only. Recommended: a closed, typed allowlist (memory, upload and post size, execution and input time, input vars, file uploads, time zone, error display and reporting presets, session lifetime, short tags) rendered as `php_value` defaults that the site's `.user.ini` and `ini_set()` may still change; the hard limits stay in the slice and in nginx, whose `client_max_body_size` and `fastcgi_read_timeout` now follow the PHP values (today the site vhost has nginx's 1 MB default). Security-relevant settings stay fixed `php_admin_*` values. No new `os/exec`. Open: defaults or fixed values, the list itself, and roles.
+**Full text (status Accepted, 2026-11-21, by Kim):** [adr/0049](adr/0049-php-settings-per-site.md). Summary: Kim wants more PHP ini settings per site, from an allowlist only. Recommended: a closed, typed allowlist (memory, upload and post size, execution and input time, input vars, file uploads, time zone, error display and reporting presets, session lifetime, short tags) rendered as `php_value` defaults that the site's `.user.ini` and `ini_set()` may still change; the hard limits stay in the slice and in nginx, whose `client_max_body_size` and `fastcgi_read_timeout` now follow the PHP values (today the site vhost has nginx's 1 MB default). Security-relevant settings stay fixed `php_admin_*` values. No new `os/exec`. Decided by Kim on 2026-11-21: defaults (`php_value`), the twelve settings as listed, and `user` may change all of them for its own site.
+
+## ADR-0050 Signed releases, install and updates through apt
+
+**Full text (status Accepted, 2026-11-21, by Kim):** [adr/0050](adr/0050-signed-releases-and-apt-updates.md). Summary: Kim wants signed GitHub releases and install and update through apt. Recommended: GoReleaser builds a `hostashi` `.deb` per architecture with SBOM, cosign signatures and attestations; a static apt repository on the GitHub Pages site of this repo under `hostashi.com/apt`, signed by one expiring key held only in a `release` environment behind Kim's approval and renewed by a workflow (no manual `gpg`); the install script installs through apt and runs `hostashi setup`; `postinst` re-runs the installer's configure steps on upgrade after a database snapshot; `hostashi-rollback`; automatic Hostashi updates opt-in; one `stable` channel. No new `os/exec` exception in panel or agent.

@@ -15,6 +15,9 @@ import {
   limitsMessage,
   limitsOf,
   listPresets,
+  noCaches,
+  pageCacheSizes,
+  presetCacheProblem,
   presetNameProblem,
   priorityLabel,
   setSiteCustom,
@@ -24,9 +27,12 @@ import {
   type LimitFields,
   type Limits,
   type Preset,
+  type PresetCaches,
   type SiteLimits,
   type Usage,
 } from "./limits";
+import { cacheSizes } from "./objcache";
+import { formatSize } from "./pagecache";
 import { formatHash } from "./routes";
 import type { Site } from "./sites";
 import { Badge, Button, Card, Field, IconButton, IconLink, Notice, PageHead, RowActions, Table, type Column, type Sort } from "./ui";
@@ -429,12 +435,12 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
             cpus={cpus}
             onCancel={() => set({ new: "", edit: "" })}
             {...(initial ? { initial } : {})}
-            onSubmit={async (name, isDefault, limits) => {
+            onSubmit={async (name, isDefault, limits, caches) => {
               if (initial) {
-                await updatePreset(initial.name, name, isDefault, limits);
+                await updatePreset(initial.name, name, isDefault, limits, caches);
                 await changed(`Preset ${name} saved. Sites that use it get the new values.`);
               } else {
-                await createPreset(name, isDefault, limits);
+                await createPreset(name, isDefault, limits, caches);
                 await changed(`Preset ${name} added.`);
               }
             }}
@@ -477,6 +483,18 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
       cell: (p) => (p.limits.cpuQuotaPercent ? formatCores(p.limits.cpuQuotaPercent) : <span className="ui-hint">No limit</span>),
     },
     {
+      key: "objectCache",
+      header: "Object cache",
+      sortValue: (p) => p.caches?.objectCacheMb ?? 0,
+      cell: (p) => (p.caches?.objectCacheMb ? `${String(p.caches.objectCacheMb)} MiB` : <span className="ui-hint">Off</span>),
+    },
+    {
+      key: "pageCache",
+      header: "Page cache",
+      sortValue: (p) => p.caches?.pageCacheMb ?? 0,
+      cell: (p) => (p.caches?.pageCacheMb ? formatSize(p.caches.pageCacheMb) : <span className="ui-hint">Off</span>),
+    },
+    {
       key: "priority",
       header: "CPU priority",
       sortValue: (p) => ["low", "normal", "high"].indexOf(p.limits.cpuPriority),
@@ -497,7 +515,7 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
                 void act(async () => {
                   const l = limitsOf(fieldsOf(p.limits), true);
                   if (typeof l === "string") throw new Error(l);
-                  await updatePreset(p.name, p.name, true, p.limits);
+                  await updatePreset(p.name, p.name, true, p.limits, p.caches ?? noCaches);
                   return `New sites now get the preset ${p.name}.`;
                 })
               }
@@ -609,10 +627,12 @@ function PresetForm({
   submitLabel: string;
   initial?: Preset;
   cpus?: number | undefined;
-  onSubmit: (name: string, isDefault: boolean, limits: Limits) => Promise<void>;
+  onSubmit: (name: string, isDefault: boolean, limits: Limits, caches: PresetCaches) => Promise<void>;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
+  const [objectCacheMb, setObjectCacheMb] = useState(initial?.caches?.objectCacheMb ?? 0);
+  const [pageCacheMb, setPageCacheMb] = useState(initial?.caches?.pageCacheMb ?? 0);
   const [isDefault, setDefault] = useState(initial?.default ?? false);
   const [fields, setFields] = useState<LimitFields>(
     fieldsOf(
@@ -642,10 +662,16 @@ function PresetForm({
       setError(l);
       return;
     }
+    const caches = { objectCacheMb, pageCacheMb };
+    const cacheProblem = presetCacheProblem(caches, l.memoryBytes);
+    if (cacheProblem) {
+      setError(cacheProblem);
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      await onSubmit(name, isDefault, l);
+      await onSubmit(name, isDefault, l, caches);
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -666,6 +692,36 @@ function PresetForm({
       )}
       <LimitInputs f={fields} set={setFields} allowUnlimited={!isDefault && !initial?.default} cpus={cpus} />
       {unlimitedWarning(fields)}
+      <fieldset className="ui-stack">
+        <legend>Default for new sites</legend>
+        <p className="ui-hint">
+          A site that gets this preset, when it is created, imported or switched to it, starts with these settings. Changing them here later
+          only changes the size for sites that follow the preset and have the cache on; it never turns a cache on or off.
+        </p>
+        <Field label="Object cache" hint="Valkey for the site's PHP, on a socket only the site can open. At most half of the memory limit.">
+          <select className="ui-select" value={objectCacheMb} onChange={(e) => setObjectCacheMb(Number(e.target.value))}>
+            <option value={0}>Off</option>
+            {cacheSizes.map((n) => (
+              <option key={n} value={n}>
+                {n} MiB
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field
+          label="Page cache"
+          hint="nginx keeps whole PHP pages, with the strict preset for any application. Cached pages count against the disk limit."
+        >
+          <select className="ui-select" value={pageCacheMb} onChange={(e) => setPageCacheMb(Number(e.target.value))}>
+            <option value={0}>Off</option>
+            {pageCacheSizes.map((n) => (
+              <option key={n} value={n}>
+                {formatSize(n)}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </fieldset>
       <div className="ui-row">
         <Button variant="primary" type="submit" disabled={busy}>
           {submitLabel}

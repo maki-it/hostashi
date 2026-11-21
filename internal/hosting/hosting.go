@@ -341,7 +341,7 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 
 	// Stored before the web state, so the PHP pool starts with the
 	// preset's workers.
-	limits, hasLimits := s.storeDefaultLimits(ctx, created, req.Usage)
+	limits, caches, hasLimits := s.storeDefaultLimits(ctx, created, req.Usage)
 
 	if err := s.applyWeb(ctx); err != nil {
 		s.removeAfterFailure(undo, req.Name)
@@ -368,6 +368,9 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		if err := s.applyLimits(ctx, site, limits); err != nil {
 			s.log.WarnContext(ctx, "apply limits of a new site", "site", site.Name, "err", err)
 		}
+
+		// After the limits, so the cache starts inside the site's slice.
+		s.presetCaches(ctx, actor, site, caches)
 	}
 
 	return site, nil

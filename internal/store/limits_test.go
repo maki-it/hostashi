@@ -38,11 +38,11 @@ func TestLimitPresets(t *testing.T) {
 
 	vals := Limits{DiskBytes: 5 << 30, DiskInodes: 100_000, MemoryBytes: 256 << 20, PHPWorkers: 3, Tasks: 64, CPUPriority: "low"}
 
-	if _, err := s.CreateLimitPreset(ctx, "small", vals, false, now); !errors.Is(err, ErrPresetExists) {
+	if _, err := s.CreateLimitPreset(ctx, "small", vals, PresetCaches{}, false, now); !errors.Is(err, ErrPresetExists) {
 		t.Errorf("duplicate name: %v", err)
 	}
 
-	tiny, err := s.CreateLimitPreset(ctx, "tiny", vals, true, now)
+	tiny, err := s.CreateLimitPreset(ctx, "tiny", vals, PresetCaches{}, true, now)
 	if err != nil || !tiny.Default {
 		t.Fatalf("create %+v %v", tiny, err)
 	}
@@ -80,12 +80,12 @@ func TestLimitPresets(t *testing.T) {
 	bigger := vals
 	bigger.MemoryBytes = 1 << 30
 
-	old, err := s.UpdateLimitPreset(ctx, tiny.ID, "tiny", bigger, false, now.Add(time.Minute))
+	old, err := s.UpdateLimitPreset(ctx, tiny.ID, "tiny", bigger, PresetCaches{ObjectCacheMB: 64, PageCacheMB: 512}, false, now.Add(time.Minute))
 	if err != nil || old.Limits != vals {
 		t.Fatalf("update %+v %v", old, err)
 	}
 
-	if p, _ := s.LimitPresetByID(ctx, tiny.ID); !p.Default || p.Limits != bigger {
+	if p, _ := s.LimitPresetByID(ctx, tiny.ID); !p.Default || p.Limits != bigger || p.Caches.ObjectCacheMB != 64 || p.Caches.PageCacheMB != 512 {
 		t.Errorf("update with def=false must keep the default: %+v", p)
 	}
 
@@ -106,13 +106,25 @@ func TestLimitPresets(t *testing.T) {
 		t.Errorf("follower after restore %+v", f)
 	}
 
-	if _, err := s.UpdateLimitPreset(ctx, tiny.ID, "medium", vals, false, now); !errors.Is(err, ErrPresetExists) {
+	if p, _ := s.LimitPresetByID(ctx, tiny.ID); p.Caches.ObjectCacheMB != 0 || p.Caches.PageCacheMB != 0 {
+		t.Errorf("caches after restore %+v", p.Caches)
+	}
+
+	if _, err := s.UpdateLimitPreset(ctx, tiny.ID, "tiny", vals, PresetCaches{ObjectCacheMB: 8}, false, now); err == nil {
+		t.Error("a cache below 32 MiB must be refused by the schema")
+	}
+
+	if _, err := s.UpdateLimitPreset(ctx, tiny.ID, "tiny", vals, PresetCaches{PageCacheMB: 100}, false, now); err == nil {
+		t.Error("a page cache size outside the choices must be refused by the schema")
+	}
+
+	if _, err := s.UpdateLimitPreset(ctx, tiny.ID, "medium", vals, PresetCaches{}, false, now); !errors.Is(err, ErrPresetExists) {
 		t.Errorf("rename onto another preset: %v", err)
 	}
 
 	// Making "small" the default again frees "tiny" for deletion; its
 	// site keeps the values as custom ones.
-	if _, err := s.UpdateLimitPreset(ctx, small.ID, "small", small.Limits, true, now); err != nil {
+	if _, err := s.UpdateLimitPreset(ctx, small.ID, "small", small.Limits, small.Caches, true, now); err != nil {
 		t.Fatal(err)
 	}
 

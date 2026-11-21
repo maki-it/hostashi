@@ -36,6 +36,9 @@ type Site struct {
 	// Disabled answers every request with 503 and never serves Root.
 	// ACME challenges, the health check and the HTTPS redirect stay.
 	Disabled bool `json:"disabled,omitempty"`
+	// DisabledPage is the stored page a disabled site shows with its 503
+	// (ADR-0047), without an allowlist; nil shows a fixed text.
+	DisabledPage *PageRef `json:"disabledPage,omitempty"`
 	// Maintenance serves a stored page with 503 to every address outside
 	// its allowlist (ADR-0027). Disabled wins over it.
 	Maintenance *Maintenance `json:"maintenance,omitempty"`
@@ -94,6 +97,13 @@ type Maintenance struct {
 	AllowIPs []string `json:"allowIps,omitempty"`
 }
 
+// PageRef is a committed page version and its directory (package pages).
+type PageRef struct {
+	Page   string `json:"page"`
+	Digest string `json:"digest"`
+	Dir    string `json:"dir"`
+}
+
 // Desired is the complete web server state.
 type Desired struct {
 	Sites []Site `json:"sites"`
@@ -148,6 +158,20 @@ func (d Desired) Validate() error {
 
 			if !rootRe.MatchString(m.Dir) || path.Clean(m.Dir) != m.Dir {
 				return fmt.Errorf("site %q: invalid page directory %q", s.User, m.Dir)
+			}
+		}
+
+		if p := s.DisabledPage; p != nil {
+			if !s.Disabled {
+				return fmt.Errorf("site %q: a disabled page needs a disabled site", s.User)
+			}
+
+			if err := (agentapi.WebPageRef{Page: p.Page, Digest: p.Digest}).Validate(); err != nil {
+				return fmt.Errorf("site %q: disabled page: %w", s.User, err)
+			}
+
+			if !rootRe.MatchString(p.Dir) || path.Clean(p.Dir) != p.Dir {
+				return fmt.Errorf("site %q: invalid page directory %q", s.User, p.Dir)
 			}
 		}
 

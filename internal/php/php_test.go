@@ -14,6 +14,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/phpctl"
 )
 
@@ -160,6 +161,85 @@ func TestRender(t *testing.T) {
 		if err := m.Ensure(t.Context(), []Pool{{User: "blog", Version: "8.4", Home: "/home/blog", Workers: n}}); !errors.Is(err, ErrInvalid) {
 			t.Errorf("Ensure with %d workers: %v", n, err)
 		}
+	}
+}
+
+func TestRenderSettings(t *testing.T) {
+	m, _ := newManager(t)
+
+	// Without settings the pool carries the Hostashi defaults (ADR-0049).
+	b, err := m.Render(Pool{User: "blog", Version: "8.4", Home: "/home/blog"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{"\nphp_value[memory_limit] = 256M\n", "\nphp_value[upload_max_filesize] = 64M\n", "\nphp_value[date.timezone] = UTC\n", "\nphp_value[error_reporting] = E_ALL & ~E_DEPRECATED\n"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("missing %q in\n%s", want, b)
+		}
+	}
+
+	on := true
+
+	b, err = m.Render(Pool{User: "blog", Version: "8.4", Home: "/home/blog", Settings: &agentapi.PHPSettings{MemoryLimit: 512 << 20, Timezone: "Europe/Berlin", DisplayErrors: &on}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{"\nphp_value[memory_limit] = 512M\n", "\nphp_value[date.timezone] = Europe/Berlin\n", "\nphp_value[display_errors] = On\n"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("missing %q in\n%s", want, b)
+		}
+	}
+
+	// The security values stay php_admin_* and are not settings.
+	if strings.Contains(string(b), "php_value[open_basedir]") || strings.Contains(string(b), "php_value[disable_functions]") {
+		t.Errorf("security value as php_value in\n%s", b)
+	}
+
+	bad := Pool{User: "blog", Version: "8.4", Home: "/home/blog", Settings: &agentapi.PHPSettings{Timezone: "UTC\nphp_admin_value[open_basedir] = /"}}
+	if _, err := m.Render(bad); !errors.Is(err, ErrInvalid) {
+		t.Errorf("Render: %v", err)
+	}
+
+	if err := m.Ensure(t.Context(), []Pool{bad}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("Ensure: %v", err)
+	}
+}
+
+func TestEnsureSettingsChange(t *testing.T) {
+	m, ctl := newManager(t)
+
+	pool := func(mem uint64) Pool {
+		return Pool{User: "blog", Version: "8.4", Home: "/home/blog", Settings: &agentapi.PHPSettings{MemoryLimit: mem}}
+	}
+
+	if err := m.Ensure(t.Context(), []Pool{pool(512 << 20)}); err != nil {
+		t.Fatal(err)
+	}
+
+	ctl.take()
+
+	// Equal settings in a new value change nothing.
+	if err := m.Ensure(t.Context(), []Pool{pool(512 << 20)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := ctl.take(); got != "" {
+		t.Fatalf("unchanged settings: %s", got)
+	}
+
+	if err := m.Ensure(t.Context(), []Pool{pool(1 << 30)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := ctl.take(); !strings.Contains(got, "reload hostashi-php-8.4@blog.service") {
+		t.Fatalf("changed settings: %s", got)
+	}
+
+	b, err := os.ReadFile(filepath.Join(m.Dir, "blog.conf"))
+	if err != nil || !strings.Contains(string(b), "php_value[memory_limit] = 1024M") {
+		t.Fatalf("pool file: %v\n%s", err, b)
 	}
 }
 
@@ -349,8 +429,16 @@ func TestRenderedPoolPassesRealPHPFPM(t *testing.T) {
 	dir := t.TempDir()
 	m := &Manager{Dir: dir, SocketDir: dir, WebGroup: name}
 
-	for _, programs := range []bool{false, true} {
-		b, err := m.Render(Pool{User: name, Version: versions[0], Home: dir, Programs: programs})
+	on := true
+	custom := &agentapi.PHPSettings{MemoryLimit: 1 << 30, UploadMaxFilesize: 512 << 20, Timezone: "Europe/Berlin", DisplayErrors: &on, ErrorReporting: agentapi.ErrorReportingErrors, ShortOpenTag: &on}
+
+	for i, programs := range []bool{false, true} {
+		settings := custom
+		if i == 0 {
+			settings = nil
+		}
+
+		b, err := m.Render(Pool{User: name, Version: versions[0], Home: dir, Programs: programs, Settings: settings})
 		if err != nil {
 			t.Fatal(err)
 		}

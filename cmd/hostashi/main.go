@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/backup"
+	"github.com/maki-it/hostashi/internal/dbjob"
 	"github.com/maki-it/hostashi/internal/files"
 	"github.com/maki-it/hostashi/internal/reqid"
 	"github.com/maki-it/hostashi/internal/secrets"
@@ -88,6 +90,9 @@ commands:
             again for the final sync
   cloudpanel import-run ID
             one import (root; started by hostashi-import@ID.service)
+  dbjob run ID | dbjob finish ID
+            one import or export of a database on an external server and
+            its cleanup (root; started by hostashi-dbjob@ID.service)
   user recover [-public-url URL] NAME
             reset NAME's password and second factors, enable the account
             and print a new invitation link (root; the way back in when
@@ -249,6 +254,28 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		case len(a) == 2 && a[0] == "import-status":
 			err = printJSON[agentapi.CloudPanelImport](stdout)(agentapi.CloudPanelImportGet.Call(ctx, agentrpc.NewClient(*socket),
 				agentapi.CloudPanelImportGetRequest{ID: a[1]}))
+		default:
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+	case "dbjob":
+		stateDir := fs.String("state-dir", agent.DefaultStateDir, "the agent's state directory")
+		if fs.Parse(args) != nil || fs.NArg() != 2 {
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+
+		cfg := dbjob.RunConfig{
+			Dir: filepath.Join(*stateDir, "dbjobs"), StateDir: *stateDir, TempDir: os.TempDir(), Log: log,
+		}
+
+		switch fs.Arg(0) {
+		case "run":
+			err = dbjob.RunOnce(ctx, cfg, fs.Arg(1))
+		case "finish":
+			err = dbjob.Finish(cfg, fs.Arg(1))
 		default:
 			fmt.Fprint(stderr, usage)
 

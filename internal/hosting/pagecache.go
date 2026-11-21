@@ -107,6 +107,15 @@ func (s *Service) changePageCache(ctx context.Context, actor int64, name string,
 		return store.PageCache{}, err
 	}
 
+	return s.changeSitePageCache(ctx, actor, site, change)
+}
+
+// changeSitePageCache is changePageCache for a caller that holds s.mu.
+func (s *Service) changeSitePageCache(ctx context.Context, actor int64, site store.Site,
+	change func(store.Site, *store.PageCache) (map[string]string, error),
+) (store.PageCache, error) {
+	name := site.Name
+
 	if site.State != store.SiteActive {
 		return store.PageCache{}, ErrState
 	}
@@ -208,4 +217,50 @@ func webPageCache(caches map[int64]store.PageCache, site store.Site, php string)
 	}
 
 	return &agentapi.WebPageCache{Preset: c.Preset, Minutes: c.Minutes, SizeMB: c.SizeMB, Exclude: c.Exclude}
+}
+
+// presetPageCache gives a site the page cache of the preset it just got (a
+// new site, or one switched to the preset): on with the preset's size, or
+// the size alone for a cache that is already on. A site that never chose a
+// preset for its cache gets the strict generic one, which is safe for any
+// application. Failures are logged; the site stands without.
+func (s *Service) presetPageCache(ctx context.Context, actor int64, site store.Site, c store.PresetCaches) {
+	if c.PageCacheMB == 0 || site.PHP == "" || site.Disabled {
+		return
+	}
+
+	_, err := s.changeSitePageCache(ctx, actor, site, func(_ store.Site, pc *store.PageCache) (map[string]string, error) {
+		if !pc.Enabled && pc.UpdatedAt.IsZero() {
+			pc.Preset = agentapi.PageCachePHP
+		}
+
+		pc.Enabled, pc.SizeMB = true, int(c.PageCacheMB)
+
+		return map[string]string{"enabled": "true", "preset": pc.Preset, "sizeMB": strconv.Itoa(pc.SizeMB), "from": "limit preset"}, nil
+	})
+	if err != nil {
+		s.log.WarnContext(ctx, "page cache of the preset not applied", "site", site.Name, "err", err)
+	}
+}
+
+// followPresetPageCache changes the size of a following site's page cache
+// after its preset changed. It never turns a cache on or off.
+func (s *Service) followPresetPageCache(ctx context.Context, actor int64, site store.Site, old, c store.PresetCaches) {
+	if c.PageCacheMB == 0 || c.PageCacheMB == old.PageCacheMB {
+		return
+	}
+
+	cur, err := s.st.SitePageCache(ctx, site.ID)
+	if err != nil || !cur.Enabled || int64(cur.SizeMB) == c.PageCacheMB {
+		return
+	}
+
+	_, err = s.changeSitePageCache(ctx, actor, site, func(_ store.Site, pc *store.PageCache) (map[string]string, error) {
+		pc.SizeMB = int(c.PageCacheMB)
+
+		return map[string]string{"sizeMB": strconv.Itoa(pc.SizeMB), "from": "limit preset"}, nil
+	})
+	if err != nil {
+		s.log.WarnContext(ctx, "page cache size of the preset not applied", "site", site.Name, "err", err)
+	}
 }

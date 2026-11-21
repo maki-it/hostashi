@@ -54,22 +54,41 @@ func (l limitsJSON) limits() store.Limits {
 	}
 }
 
+// presetCachesJSON are the starting values a site gets with the preset
+// (ADR-0045, ADR-0046). They are not limits: a site can change them
+// afterwards.
+type presetCachesJSON struct {
+	ObjectCacheMB int64 `json:"objectCacheMb"` // 0: off
+	PageCacheMB   int64 `json:"pageCacheMb"`   // 0: off
+}
+
 type presetJSON struct {
-	Name      string     `json:"name"`
-	Default   bool       `json:"default"`
-	Limits    limitsJSON `json:"limits"`
-	CreatedAt int64      `json:"createdAt"`
-	UpdatedAt int64      `json:"updatedAt"`
+	Name      string           `json:"name"`
+	Default   bool             `json:"default"`
+	Limits    limitsJSON       `json:"limits"`
+	Caches    presetCachesJSON `json:"caches"`
+	CreatedAt int64            `json:"createdAt"`
+	UpdatedAt int64            `json:"updatedAt"`
 }
 
 func toPresetJSON(p store.LimitPreset) presetJSON {
-	return presetJSON{Name: p.Name, Default: p.Default, Limits: toLimitsJSON(p.Limits), CreatedAt: p.CreatedAt.Unix(), UpdatedAt: p.UpdatedAt.Unix()}
+	return presetJSON{
+		Name: p.Name, Default: p.Default, Limits: toLimitsJSON(p.Limits), Caches: presetCachesJSON{ObjectCacheMB: p.Caches.ObjectCacheMB, PageCacheMB: p.Caches.PageCacheMB},
+		CreatedAt: p.CreatedAt.Unix(), UpdatedAt: p.UpdatedAt.Unix(),
+	}
 }
 
+// presetInputJSON is the body of a create or a full replace: missing caches
+// mean off.
 type presetInputJSON struct {
-	Name    string     `json:"name"`
-	Default bool       `json:"default"`
-	Limits  limitsJSON `json:"limits"`
+	Name    string           `json:"name"`
+	Default bool             `json:"default"`
+	Limits  limitsJSON       `json:"limits"`
+	Caches  presetCachesJSON `json:"caches"`
+}
+
+func (c presetCachesJSON) caches() store.PresetCaches {
+	return store.PresetCaches{ObjectCacheMB: c.ObjectCacheMB, PageCacheMB: c.PageCacheMB}
 }
 
 // Warning levels of the disk use (ADR-0015): from 80 and 95 percent of a
@@ -200,7 +219,7 @@ func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 			return
 		}
 
-		out, err := svc.CreateLimitPreset(r.Context(), p.User.ID, in.Name, in.Limits.limits(), in.Default)
+		out, err := svc.CreateLimitPreset(r.Context(), p.User.ID, in.Name, in.Limits.limits(), in.Caches.caches(), in.Default)
 		if err != nil {
 			limitsFail(log, w, err, "create limit preset")
 
@@ -222,7 +241,7 @@ func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
-		out, err := svc.UpdateLimitPreset(ctx, p.User.ID, r.PathValue("name"), in.Name, in.Limits.limits(), in.Default)
+		out, err := svc.UpdateLimitPreset(ctx, p.User.ID, r.PathValue("name"), in.Name, in.Limits.limits(), in.Caches.caches(), in.Default)
 		if err != nil {
 			limitsFail(log, w, err, "change limit preset")
 
