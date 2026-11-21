@@ -37,7 +37,7 @@ cleanup() {
 trap cleanup EXIT
 
 step() { echo "=== $*"; }
-fail() { echo "FAIL: $*" >&2; docker exec "$NAME" journalctl --no-pager -u hostashi-agent -u hostashi -n 50 >&2 || true; exit 1; }
+fail() { echo "FAIL: $*" >&2; docker exec "$NAME" journalctl --no-pager -u hostashi-agent -u hostashi -u 'hostashi-dbjob@*' -n 50 >&2 || true; exit 1; }
 
 step "prepare $IMG with systemd"
 docker run -d --name "$NAME-prep" --network host "$IMG" sleep infinity >/dev/null
