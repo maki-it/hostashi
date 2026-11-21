@@ -53,7 +53,10 @@ type Options struct {
 	// (www-data), so nginx can enter the home and read the web root. Zero
 	// keeps the site's own group (tests).
 	WebGID uint32
-	Log    *slog.Logger
+	// Fstab is where AddPool looks for the volume's mount entry; empty
+	// means DefaultFstab.
+	Fstab string
+	Log   *slog.Logger
 }
 
 // Manager creates and deletes sites. Calls are serialized, because they
@@ -63,6 +66,11 @@ type Manager struct {
 	reg *Registry
 	acc Accounts
 	opt Options
+	// fsCheck replaces mountCheck in tests, which run without mounts.
+	fsCheck func(fd int, dir string) error
+	// trees replaces systemTrees in tests, whose temporary directories
+	// lie in one of them.
+	trees []string
 }
 
 // NewManager builds a Manager on a loaded registry.

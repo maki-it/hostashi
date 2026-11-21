@@ -296,3 +296,40 @@ func TestStatus(t *testing.T) {
 		t.Errorf("no jobs: %+v", empty)
 	}
 }
+
+// TestRefreshRendersUnitsAgain: after a pool change every site's units
+// carry the new set of hidden pools; sites the caller does not know stay.
+func TestRefreshRendersUnitsAgain(t *testing.T) {
+	m, _ := newManager(t)
+	ctx := t.Context()
+
+	must(t, m.Apply(ctx, shop, []agentapi.CronJob{{ID: 1, Schedule: "@daily", Command: "true"}}))
+
+	gone := Site{Name: "gone", Home: "/home/gone", UID: 1002, GID: 1002}
+	must(t, m.Apply(ctx, gone, []agentapi.CronJob{{ID: 2, Schedule: "@daily", Command: "true"}}))
+
+	hidden := shop
+	hidden.Hidden = []string{"/srv/vol1"}
+
+	must(t, m.Refresh(ctx, func(name string) (Site, bool) {
+		if name == "shop" {
+			return hidden, true
+		}
+
+		return Site{}, false
+	}))
+
+	svc, err := os.ReadFile(filepath.Join(m.UnitDir, "hostashi-cron-shop-1.service"))
+	must(t, err)
+
+	if !strings.Contains(string(svc), "\nTemporaryFileSystem=/srv/vol1:ro\n") {
+		t.Errorf("shop not refreshed:\n%s", svc)
+	}
+
+	other, err := os.ReadFile(filepath.Join(m.UnitDir, "hostashi-cron-gone-2.service"))
+	must(t, err)
+
+	if strings.Contains(string(other), "TemporaryFileSystem=") {
+		t.Errorf("unknown site changed:\n%s", other)
+	}
+}

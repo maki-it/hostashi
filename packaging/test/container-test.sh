@@ -52,7 +52,7 @@ fi
 # server fetches xz first. Like a real server, so apt_update's switch
 # between xz and gz (php-install) is what the test sees.
 docker exec "$NAME-prep" rm -f /etc/apt/apt.conf.d/docker-gzip-indexes
-docker exec "$NAME-prep" bash -c 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq systemd systemd-sysv adduser curl >/dev/null'
+docker exec "$NAME-prep" bash -c 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq systemd systemd-sysv adduser curl e2fsprogs >/dev/null'
 docker commit "$NAME-prep" "$BASE" >/dev/null
 docker rm -f "$NAME-prep" >/dev/null
 
@@ -911,6 +911,64 @@ body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/iso.php)
 x rm -f /home/wp/htdocs/iso.php
 x pkill -u shop -x sleep || true
 [ "$(api DELETE /api/v1/sites/shop)" = 204 ] || fail "delete site shop: $(x cat /tmp/api.out)"
+
+step "a second storage pool on its own volume (ADR-0016, spike S9)"
+# An ext4 file system on a loop device inside the container stands in for
+# a provider volume. Hostashi never formats or mounts: the admin does.
+x truncate -s 256M /var/tmp/vol1.img
+loopdev=$(x losetup -f --show /var/tmp/vol1.img)
+x mkfs.ext4 -q "$loopdev"
+x install -d -m 0755 /srv/vol1 /srv/plain
+if out=$(x /usr/local/bin/hostashi pool add vol1 /srv/vol1 2>&1); then fail "an unmounted directory became a pool: $out"; fi
+grep -q 'not a mount point' <<<"$out" || fail "unmounted directory refused without the reason: $out"
+x mount -o nosuid,nodev "$loopdev" /srv/vol1
+# The container's root mount is private, so a new mount does not reach the
+# agent's own mount namespace as it would on a server (shared /); a restart
+# gives the agent a fresh view.
+x systemctl restart hostashi-agent.service
+for _ in $(seq 1 30); do x /usr/local/bin/hostashi ping >/dev/null 2>&1 && break; sleep 1; done
+if out=$(x /usr/local/bin/hostashi pool add vol1 /srv/vol1 2>&1); then fail "a volume without fstab entry became a pool: $out"; fi
+grep -q 'no entry in /etc/fstab' <<<"$out" || fail "missing fstab entry refused without the reason: $out"
+x sh -c "echo '$loopdev /srv/vol1 ext4 nosuid,nodev,nofail 0 2' >>/etc/fstab"
+x systemctl daemon-reload
+for p in /etc/vol1 /srv/plain /srv; do
+  if x /usr/local/bin/hostashi pool add bad "$p" >/dev/null 2>&1; then fail "$p became a pool"; fi
+done
+x /usr/local/bin/hostashi pool add vol1 /srv/vol1 || fail "pool add"
+expect_mode /srv/vol1 "711 root:root"
+expect_mode /srv/vol1/.hostashi-pool "644 root:root"
+x /usr/local/bin/hostashi pool list | grep -q "^vol1	/srv/vol1	sites=0$" || fail "pool list: $(x /usr/local/bin/hostashi pool list)"
+# The running PHP master of wp got the new pool hidden right away.
+wpunit="hostashi-php-$ver@wp.service"
+x grep -qx 'TemporaryFileSystem=/srv/vol1:ro' "/etc/systemd/system/$wpunit.d/50-hostashi-slice.conf" || fail "wp's drop-in does not hide vol1"
+[ "$(api POST /api/v1/sites "{\"name\":\"big\",\"pool\":\"vol1\",\"php\":\"$ver\",\"domains\":[\"big.example.com\"]}")" = 201 ] ||
+  fail "create site on vol1: $(x cat /tmp/api.out)"
+expect_mode /srv/vol1/big "750 big:www-data"
+[ "$(x findmnt -no SOURCE -T /srv/vol1/big)" = "$loopdev" ] || fail "big's home is not on the volume"
+xi runuser -u big -- sh -c 'cat >/srv/vol1/big/htdocs/index.php' <<<'<?php echo "big on vol1";'
+[ "$(x curl -fsS -H 'Host: big.example.com' http://127.0.0.1/)" = "big on vol1" ] || fail "site on vol1 does not answer"
+bigunit="hostashi-php-$ver@big.service"
+x systemctl show -p RequiresMountsFor --value "$bigunit" | grep -qw /srv/vol1/big || fail "big's PHP unit does not require its volume"
+x systemctl show -p After --value "$bigunit" | grep -qw srv-vol1.mount || fail "big's PHP unit is not ordered after its volume"
+# Each master sees only its own home, on either pool.
+seen=$(x sh -c "ls -A /proc/\$(systemctl show -p MainPID --value $wpunit)/root/srv/vol1")
+[ -z "$seen" ] || fail "wp's PHP master sees on vol1: $seen"
+seen=$(x sh -c "ls -A /proc/\$(systemctl show -p MainPID --value $bigunit)/root/srv/vol1")
+[ "$seen" = big ] || fail "big's PHP master sees on vol1: $seen"
+seen=$(x sh -c "ls -A /proc/\$(systemctl show -p MainPID --value $bigunit)/root/home")
+[ -z "$seen" ] || fail "big's PHP master sees in /home: $seen"
+if x runuser -u wp -- ls /srv/vol1 >/dev/null 2>&1; then fail "wp lists vol1"; fi
+if x /usr/local/bin/hostashi pool remove vol1 >/dev/null 2>&1; then fail "a pool with a site was removed"; fi
+[ "$(api DELETE /api/v1/sites/big)" = 204 ] || fail "delete site big: $(x cat /tmp/api.out)"
+x /usr/local/bin/hostashi pool remove vol1 || fail "pool remove"
+x test ! -e /srv/vol1/.hostashi-pool || fail "marker left after pool remove"
+x grep -q 'TemporaryFileSystem' "/etc/systemd/system/$wpunit.d/50-hostashi-slice.conf" && fail "wp still hides the removed pool"
+x umount /srv/vol1
+x sed -i '\#/srv/vol1#d' /etc/fstab
+x systemctl daemon-reload
+x losetup -d "$loopdev"
+x rm -f /var/tmp/vol1.img
+x rmdir /srv/vol1 /srv/plain
 
 step "cron jobs of a site (ADR-0028)"
 # The job writes who and where it runs, and whether other homes and /etc

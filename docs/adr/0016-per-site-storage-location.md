@@ -112,3 +112,32 @@ Time box: 2 to 3 days [E]. Questions:
 ## Open questions
 
 None at this level. Remaining before Accepted: Kim sets the status, and spike S9 must not contradict the design.
+
+## Addendum 1: adding pools and the results of spike S9
+
+**Status:** Accepted (Kim, 2026-11-21). **Decides:** Kim. **Related:** [spike S9 report](../../spike/s9-storage-pools/REPORT.md).
+
+### Context
+
+- Spike S9 ran a second pool on an ext4 loop volume in a Debian 13 systemd container [V: S9 report]. Sites on it work. The agent refuses to create or delete sites on a pool whose volume is missing, and it refuses symlinked pools, wrong markers and plain directories [V].
+- The gaps it found: the site units saw the other pools (`ProtectHome=` hides only `/home`), no site unit waited for its volume, the page cache could write below a missing volume, and there was no way to add a pool [V: S9 findings 1 to 5]. The first three are fixed (PR #319). This addendum is about adding pools.
+- `RequiresMountsFor=` only works when the volume has a mount unit, which in practice means an `/etc/fstab` entry. Without one, a unit starts on the bare mountpoint [V: S9 finding 2].
+
+### Decision (recommended)
+
+1. **Root only, on the command line.** `hostashi pool add NAME PATH`, `hostashi pool list` and `hostashi pool remove NAME` call typed agent operations (`pool.add`, `pool.list`, `pool.remove`). The agent accepts add and remove only from root, never from the panel, because they carry a path and change what every site unit hides. The panel will only list pools and let the admin pick one for a new site (later PR).
+2. **Hostashi never formats, partitions or mounts.** The admin mounts the volume and adds it to `/etc/fstab` first (`nofail` recommended). `pool add` checks, and refuses with the reason:
+   - the name follows the pool name rule and is new; the path is absolute, clean and only `A-Za-z0-9_./-`;
+   - the path is not in a system tree (`/bin`, `/boot`, `/dev`, `/etc`, `/lib*`, `/proc`, `/root`, `/run`, `/sbin`, `/sys`, `/tmp`, `/usr`, `/var`) and does not overlap another pool (so nothing below `/home`);
+   - it is opened without following symlinks, owned by root, the **root of a mount**, ext4 or XFS, mounted read-write with **`nosuid,nodev`**;
+   - it has an `/etc/fstab` entry;
+   - it is **empty** apart from `lost+found`, so no old marker or data from another server mixes in.
+3. Then the agent sets the pool root to root `0711` (like `/home`, ADR-0032), writes the marker `.hostashi-pool` with a new random ID and records the pool with `requireMount`. It writes the PHP drop-ins and cron units of all sites again so they hide the new pool (PHP masters restart once). The file manager follows at its next start.
+4. `pool remove` only works for a pool without sites and never for `default`. It deletes the marker, so the volume can be unmounted or added again.
+5. Quota per pool, doctor checks per pool, the panel and the import follow in their own PRs (S9 proposal steps 3 to 6).
+
+### Consequences
+
+- Positive: a second volume can be used without editing state files, and every check of finding 3 runs before the first site lands there.
+- Negative: an admin who mounts a volume without `nosuid,nodev` or without an fstab entry is refused and has to fix the mount first. This is intended.
+- Open: XFS is accepted but not tested yet [U]; a reboot with a missing volume on a real host is not tested [U].

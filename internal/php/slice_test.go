@@ -147,3 +147,44 @@ func TestSliceDropInHidesOtherPools(t *testing.T) {
 		t.Errorf("drop-in:\n%s", got)
 	}
 }
+
+// TestRefreshHidesANewPool: a pool added later reaches the drop-ins of the
+// running sites, and their units restart.
+func TestRefreshHidesANewPool(t *testing.T) {
+	ctx := context.Background()
+	m, ctl := newManager(t)
+	m.Units, m.UnitDir, m.Slice = ctl, t.TempDir(), sliceOf
+
+	if err := m.Ensure(ctx, []Pool{{User: "shop", Version: "8.4", Home: t.TempDir()}}); err != nil {
+		t.Fatal(err)
+	}
+
+	_ = ctl.take()
+	m.Hidden = func() []string { return []string{"/srv/vol1"} }
+
+	if err := m.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(m.UnitDir, "hostashi-php-8.4@shop.service.d", DropInName))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.HasSuffix(string(got), "TemporaryFileSystem=/srv/vol1:ro\n") {
+		t.Errorf("drop-in:\n%s", got)
+	}
+
+	if calls := ctl.take(); calls != "daemon-reload; restart hostashi-php-8.4@shop.service" {
+		t.Errorf("calls: %s", calls)
+	}
+
+	// Nothing changed: nothing restarts.
+	if err := m.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if calls := ctl.take(); calls != "" {
+		t.Errorf("second refresh: %s", calls)
+	}
+}

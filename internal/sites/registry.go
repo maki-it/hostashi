@@ -455,3 +455,49 @@ func (r *Registry) remove(user string) error {
 
 	return nil
 }
+
+// addPool records a new pool and persists it; on a write failure memory is
+// reverted.
+func (r *Registry) addPool(p Pool) error {
+	if err := validatePool(p); err != nil {
+		return fmt.Errorf("%w: %w", ErrStateInvalid, err)
+	}
+
+	if _, ok := r.pools[p.Name]; ok {
+		return fmt.Errorf("sites: pool %q already registered", p.Name)
+	}
+
+	r.pools[p.Name] = p
+
+	if err := r.save(); err != nil {
+		delete(r.pools, p.Name)
+
+		return err
+	}
+
+	return nil
+}
+
+// removePool drops a pool no site uses and persists it.
+func (r *Registry) removePool(name string) error {
+	old, ok := r.pools[name]
+	if !ok {
+		return nil
+	}
+
+	for _, s := range r.sites {
+		if s.Pool == name {
+			return fmt.Errorf("sites: pool %q is used by site %q", name, s.User)
+		}
+	}
+
+	delete(r.pools, name)
+
+	if err := r.save(); err != nil {
+		r.pools[name] = old
+
+		return err
+	}
+
+	return nil
+}

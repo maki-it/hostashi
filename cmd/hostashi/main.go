@@ -53,6 +53,10 @@ commands:
             allows it (root on the server, ADR-0052)
   site create NAME [POOL] | site delete NAME | site list
             manage site accounts through the agent (root on the server)
+  pool add NAME PATH | pool remove NAME | pool list
+            storage pools for site homes (ADR-0016, root on the server):
+            PATH is a mounted, empty ext4 or XFS volume with nosuid,nodev
+            and an /etc/fstab entry; Hostashi never formats or mounts
   site files NAME
             start the file manager's socket of a site and print its path
             (ADR-0040)
@@ -199,7 +203,7 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		}
 
 		return doctorCmd(ctx, agentrpc.NewClient(*socket), *asJSON, stdout, stderr)
-	case "site", "web", "db":
+	case "site", "web", "db", "pool":
 		if fs.Parse(args) != nil {
 			return 2
 		}

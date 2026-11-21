@@ -179,6 +179,10 @@ type Config struct {
 	// reads the server.
 	Doctor DoctorEnv
 
+	// adminUID is the caller that may add and remove storage pools: root,
+	// except in unprivileged tests.
+	adminUID uint32
+
 	// Services reads and drives the units of the service catalog and Host
 	// reads the server's counters (ADR-0052); nil turns the operations off.
 	// Run sets the production ones.
@@ -281,6 +285,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 		}
 
 		h.register(s)
+		h.registerPools(s, cfg.adminUID)
 
 		if cfg.Backup != nil && cfg.Backup.Space == nil {
 			cfg.Backup.Space = h.freeSpace

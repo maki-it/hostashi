@@ -536,3 +536,32 @@ func writeFile(name string, data []byte, gid uint32, mode os.FileMode) error {
 
 	return nil
 }
+
+// Refresh renders the units of every site with jobs again, after something
+// the units carry changed for all sites (a pool was added or removed,
+// ADR-0016). site returns what the units need of a site; sites it does not
+// know are left alone.
+func (m *Manager) Refresh(ctx context.Context, site func(name string) (Site, bool)) error {
+	m.mu.Lock()
+	st, err := m.load()
+	m.mu.Unlock()
+
+	if err != nil {
+		return err
+	}
+
+	var errs []error
+
+	for name, ss := range st.Sites {
+		s, ok := site(name)
+		if !ok || len(ss.Jobs) == 0 {
+			continue
+		}
+
+		if err := m.Apply(ctx, s, ss.Jobs); err != nil {
+			errs = append(errs, fmt.Errorf("site %s: %w", name, err))
+		}
+	}
+
+	return errors.Join(errs...)
+}
