@@ -43,6 +43,7 @@ type apiEnv struct {
 	mail      MailRelay
 	mailSent  *stubMailSend
 	outbox    *mail.Outbox
+	files     *stubFiles
 }
 
 func newAPI(t *testing.T) *apiEnv {
@@ -97,6 +98,8 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	outbox := mail.NewOutbox(st, deps.Mail, box, nil)
 	outbox.Send = sent.deliver
 	deps.Outbox = outbox
+	fm := &stubFiles{t: t}
+	deps.Files = fm.open
 
 	if ag != nil {
 		deps.Sites = hosting.New(st, ag, nil)
@@ -108,7 +111,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 
 	return &apiEnv{
 		h: Handler(Config{PublicURL: testPublicURL}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st, cp: deps.CloudPanel,
-		imports: imports, doctor: doc, firewall: fw, php: php, mail: deps.Mail, mailSent: sent, outbox: outbox,
+		imports: imports, doctor: doc, firewall: fw, php: php, mail: deps.Mail, mailSent: sent, outbox: outbox, files: fm,
 	}
 }
 

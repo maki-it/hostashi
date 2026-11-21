@@ -134,6 +134,10 @@ type Deps struct {
 	// Outbox queues email; nil disables the account address routes. Needs
 	// Auth and Mail.
 	Outbox MailOutbox
+
+	// Files starts the sites' file manager sockets (ADR-0040); nil
+	// disables the file routes. Needs Auth, Sites and Settings.
+	Files FilesOpener
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -202,6 +206,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPageCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerLimits(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+
+			if deps.Files != nil && deps.Settings != nil {
+				registerFiles(mux, authn{svc: deps.Auth, fail: newFail(log)}, newFilesProxy(deps.Files, deps.Sites, deps.Settings, log))
+			}
 		}
 
 		if deps.Backups != nil {
@@ -393,6 +401,7 @@ func Run(ctx context.Context, cfg Config) error {
 		Mail:     relay,
 		Outbox:   outbox,
 		MailSend: func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
+		Files:    RPCFilesOpener(client),
 	}
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)

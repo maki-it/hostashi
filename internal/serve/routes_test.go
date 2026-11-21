@@ -79,8 +79,15 @@ var routeAccess = map[string]authz.Action{
 	"DELETE /api/v1/settings/mail":          authz.SettingsWrite,
 	"POST /api/v1/settings/mail/test":       authz.SettingsWrite,
 
-	"GET /api/v1/sites":                           "sites:list",
-	"GET /api/v1/sites/{name}":                    "sites:read",
+	"GET /api/v1/sites":        "sites:list",
+	"GET /api/v1/sites/{name}": "sites:read",
+
+	"GET /api/v1/sites/{name}/files":         "files:read",
+	"GET /api/v1/sites/{name}/files/stat":    "files:read",
+	"GET /api/v1/sites/{name}/files/content": "files:read",
+	"PUT /api/v1/sites/{name}/files/content": "files:write",
+	"POST /api/v1/sites/{name}/files/{call}": "files:write",
+
 	"POST /api/v1/sites":                          "sites:create",
 	"PUT /api/v1/sites/{name}/domains":            "sites.domains:write",
 	"PUT /api/v1/sites/{name}/php":                "sites.php:write",
@@ -214,7 +221,7 @@ func newFullAPI(t *testing.T) (*apiEnv, []string) {
 	e.h, patterns = handler(Config{PublicURL: testPublicURL}, Deps{
 		PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb,
 		CloudPanel: e.cp, CloudPanelSource: newStubSource(t), Metrics: e.metrics, Settings: e.settings,
-		Doctor: e.doctor.run, Firewall: e.firewall, PHP: e.php, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox,
+		Doctor: e.doctor.run, Firewall: e.firewall, PHP: e.php, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open,
 	})
 
 	return e, patterns
