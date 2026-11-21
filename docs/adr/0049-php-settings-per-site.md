@@ -51,7 +51,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - **`.user.ini` stays on.** Security and cache plugins write it [U]. The panel says that a `.user.ini` in the site can change these values, and that the server's limits (upload size, timeout, memory) still apply.
 - **Agent.** `php.Pool` gets a `Settings` field; the agent checks it again against the allowlist, renders `php_value[...]` lines, runs `php-fpm -t` and reloads, with the existing rollback. The vhost values come with the next `web.apply`. No new agent operation type beyond the pool and vhost fields, no new `os/exec`.
 - **API.** `GET /api/v1/sites/{name}/php/settings` returns the values, the defaults and the allowlist with bounds (for the form); `PUT` takes only changed keys, `422 php_setting_rejected` names the key and the reason. An empty value means "Hostashi default".
-- **Roles.** The settings change only the site itself, and the site could set most of them in `.user.ini` anyway, so `user` may change them for its own site (same as the PHP version, `sites.php:write`) [A].
+- **Roles.** The settings change only the site itself, and the site could set most of them in `.user.ini` anyway, so `user` may change them for its own site (same as the PHP version, `sites.php:write`) [V: Kim, 2026-11-21].
 - **Import.** Allowlisted keys from a CloudPanel pool are taken over (values out of bounds are clamped and named in the review); all other keys are listed as "not taken over". The vhost's `client_max_body_size` is compared with `post_max_size` and shown if it differs.
 - **Panel.** Site page, tab PHP: a form with the groups "Limits" and "Behaviour", the default as placeholder, a reset per field.
 
@@ -71,6 +71,6 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions
 
-1. Settings as defaults the site may still change (`php_value`, option A), or as fixed values (`php_admin_value`, option B)?
-2. Is the allowlist above right, or is something missing (for example `allow_url_fopen` as a switch, or `output_buffering`)?
-3. May the role `user` change all of them for its own site, or only admin and manager the limits (memory, upload, time)?
+1. ~~Settings as defaults the site may still change (`php_value`, option A), or as fixed values (`php_admin_value`, option B)?~~ **Decided (Kim, 2026-11-21): defaults, option A.**
+2. ~~Is the allowlist above right, or is something missing (for example `allow_url_fopen` as a switch, or `output_buffering`)?~~ **Decided (Kim, 2026-11-21): the twelve settings above, nothing more for now.**
+3. ~~May the role `user` change all of them for its own site, or only admin and manager the limits (memory, upload, time)?~~ **Decided (Kim, 2026-11-21): `user` may change all of them for its own site.**
