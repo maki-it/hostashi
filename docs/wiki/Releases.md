@@ -6,6 +6,15 @@ How Hostashi releases are signed and published (ADR-0050). This page is for main
 
 apt checks every update against one OpenPGP key (Ed25519, valid for two years). The private key lives only in the GitHub environment `release` of the repository, as the secret `APT_SIGNING_KEY`. A job in that environment runs only for a tag `v*` and only after a maintainer approves it.
 
+The current key (created 2026-11-21, expires 2028-11-20):
+
+```text
+64F6 AE8D C40D 1299 E68A  008F 735A 7A2D 7411 49DB
+Hostashi archive signing key <kontakt@maki-it.de>
+```
+
+It is in `packaging/keyring/hostashi-archive-keyring.asc` (the package installs it to `/usr/share/keyrings/`) and built into the install script `packaging/get/install.sh`. CI checks that both are the same key and that it does not expire within 90 days; the release job refuses to sign with any other key.
+
 ### Create the key (once)
 
 On your own computer, as an admin of the repository, with `gpg` and the [GitHub CLI](https://cli.github.com) logged in (`gh auth login`):

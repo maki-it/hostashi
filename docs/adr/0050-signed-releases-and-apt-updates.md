@@ -98,7 +98,7 @@ less install.sh                                    # recommended, not enforced
 sudo bash install.sh --panel-domain cp.example.com [options]
 ```
 
-The script checks the distribution, downloads the public key and compares it with the fingerprint built into the script, writes the key and the source below, runs `apt-get install hostashi` and then `hostashi setup` with its arguments. At the end it prints the panel address and the first admin link. Without `--panel-domain` on a terminal it asks. We document `curl -O` plus `bash` on purpose, not `curl | sudo bash`, so the script can be read first.
+The script checks the distribution, writes the public key built into it (no second download; `packaging/test/key-test.sh` keeps it equal to the package's keyring) and the source and pin below, runs `apt-get install hostashi` and then `hostashi setup` with its arguments. At the end it prints the panel address and the first admin link. Without `--panel-domain` on a terminal it asks. We document `curl -O` plus `bash` on purpose, not `curl | sudo bash`, so the script can be read first.
 
 The same thing by hand, for admins who prefer plain apt:
 
