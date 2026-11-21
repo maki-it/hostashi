@@ -24,7 +24,13 @@ var (
 	ErrNeedsReview = errors.New("cpmigrate: the site needs a review first")
 	ErrBadRequest  = errors.New("cpmigrate: invalid request")
 	ErrNoImporter  = errors.New("cpmigrate: importing is not available")
+	// ErrPool: the chosen storage pool is unknown, its volume is missing,
+	// or it has less free space than the old home uses (ADR-0016).
+	ErrPool = errors.New("cpmigrate: the storage pool cannot take the site")
 )
+
+// PoolLister lists the storage pools for the pool choice (ADR-0016).
+type PoolLister func(ctx context.Context) ([]agentapi.PoolInfo, error)
 
 // PlanError is ErrSkipped or ErrNeedsReview with the plan's reasons.
 type PlanError struct {
@@ -37,7 +43,9 @@ func (e *PlanError) Unwrap() error { return e.Err }
 
 // NewSite is what CreateSite hands to the site service.
 type NewSite struct {
-	Name    string
+	Name string
+	// Pool is the storage pool of the home, "" for the default (ADR-0016).
+	Pool    string
 	PHP     string
 	Domains []string
 	// Cron are the old site's jobs that Hostashi accepts (plan.CronJobs).
@@ -89,6 +97,11 @@ func (s *Service) Connect(create SiteCreator, imp Importer) {
 	s.create, s.importer = create, imp
 }
 
+// ConnectPools lets CreateSite check a chosen pool before it creates the
+// site. Without it a pool is passed on unchecked; the agent still refuses
+// an unknown or missing one.
+func (s *Service) ConnectPools(list PoolLister) { s.pools = list }
+
 // CreateOptions confirm or change what the plan proposes.
 type CreateOptions struct {
 	// Reviewed confirms a site whose plan action is review.
@@ -98,6 +111,9 @@ type CreateOptions struct {
 	// PageCache false leaves off the page cache the plan proposes; nil
 	// follows the plan (ADR-0046).
 	PageCache *bool
+	// Pool puts the site's home on this storage pool, "" for the default
+	// (ADR-0016).
+	Pool string
 }
 
 // CreateSite creates the site of the report that the plan names, with the
@@ -137,6 +153,10 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		php = o.PHP
 	}
 
+	if err := s.checkPool(ctx, o.Pool, ps.HomeBytes); err != nil {
+		return ps, err
+	}
+
 	domains := append(slices.Clone(ps.Domains), ps.RedirectFrom...)
 
 	cache := ps.PageCache
@@ -145,7 +165,7 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 	}
 
 	n, err := s.create(ctx, actor, NewSite{
-		Name: ps.Name, PHP: php, Domains: domains, Cron: plan.CronJobs(site), Usage: site.Usage, SSHKeys: plan.SSHKeys(site),
+		Name: ps.Name, Pool: o.Pool, PHP: php, Domains: domains, Cron: plan.CronJobs(site), Usage: site.Usage, SSHKeys: plan.SSHKeys(site),
 		PageCache:   cache,
 		ObjectCache: ps.ObjectCache && php != "",
 		PHPSettings: phpSettings(site, php),
@@ -155,7 +175,7 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 	}
 
 	s.audit(ctx, actor, "cloudpanel.site.create", ps.Name, map[string]string{
-		"report": reportID, "php": php, "cron": strconv.Itoa(n.Cron), "sshKeys": strconv.Itoa(n.SSHKeys),
+		"report": reportID, "pool": orDefaultPool(o.Pool), "php": php, "cron": strconv.Itoa(n.Cron), "sshKeys": strconv.Itoa(n.SSHKeys),
 		"pageCache":   strconv.FormatBool(n.PageCache),
 		"objectCache": strconv.FormatBool(n.ObjectCache),
 		"phpSettings": strconv.FormatBool(n.PHPSettings),
@@ -167,6 +187,53 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 	}
 
 	return ps, nil
+}
+
+// checkPool refuses a pool that is unknown, whose volume is missing, or
+// that has less free space than the old home uses: the copy would stop
+// half way.
+func (s *Service) checkPool(ctx context.Context, name string, homeBytes int64) error {
+	if name == "" {
+		return nil
+	}
+
+	if err := agentapi.ValidatePoolName(name); err != nil {
+		return fmt.Errorf("%w: %w", ErrBadRequest, err)
+	}
+
+	if s.pools == nil {
+		return nil
+	}
+
+	pools, err := s.pools(ctx)
+	if err != nil {
+		return fmt.Errorf("list storage pools: %w", err)
+	}
+
+	for _, p := range pools {
+		if p.Name != name {
+			continue
+		}
+
+		switch {
+		case !p.Available:
+			return fmt.Errorf("%w: the volume of pool %s is not mounted", ErrPool, name)
+		case homeBytes > 0 && p.TotalBytes > 0 && uint64(homeBytes) > p.FreeBytes:
+			return fmt.Errorf("%w: pool %s has %d bytes free, the site uses %d", ErrPool, name, p.FreeBytes, homeBytes)
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("%w: unknown pool %s", ErrPool, name)
+}
+
+func orDefaultPool(name string) string {
+	if name == "" {
+		return agentapi.DefaultPool
+	}
+
+	return name
 }
 
 // phpSettings are the PHP settings the new site takes over, nil if none

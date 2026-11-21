@@ -39,7 +39,7 @@ import {
 import { listDatabases } from "./databases";
 import { formatHash } from "./routes";
 import { presetLabel, type Preset } from "./pagecache";
-import { phpVersions } from "./sites";
+import { listPools, phpVersions, poolLabel, poolNote, type Pool } from "./sites";
 import {
   Badge,
   Button,
@@ -801,7 +801,19 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
   const [cache, setCache] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [pools, setPools] = useState<Pool[]>([]);
+  const [pool, setPool] = useState("default");
   const review = site.action === "review";
+
+  // The pool choice shows only with a second pool (ADR-0016).
+  useEffect(() => {
+    listPools()
+      .then(setPools)
+      .catch(() => setPools([]));
+  }, []);
+  const choosePool = pools.length > 1;
+  const chosen = pools.find((p) => p.name === pool);
+  const tooSmall = !!(chosen?.available && site.homeBytes && chosen.freeBytes !== undefined && site.homeBytes > chosen.freeBytes);
   const choices = site.php && !php.includes(site.php) ? [site.php, ...php] : php;
 
   async function submit(e: FormEvent) {
@@ -813,7 +825,7 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
     setBusy(true);
     setError("");
     try {
-      await createFromPlan(report, site.name, reviewed, version !== site.php ? version : "", site.pageCache ? cache : undefined);
+      await createFromPlan(report, site.name, reviewed, version !== site.php ? version : "", site.pageCache ? cache : undefined, choosePool ? pool : "");
       await onChange();
     } catch (err) {
       setError(migrationMessage(err));
@@ -839,6 +851,24 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
           </Field>
         </div>
       )}
+      {choosePool && (
+        <div className="ui-narrow">
+          <Field
+            label={"Storage pool for " + site.name}
+            hint={site.homeBytes ? `The old home uses ${formatBytes(site.homeBytes)}.` : "Where the site's home lives. A site stays on its pool."}
+          >
+            <select className="ui-select" value={pool} onChange={(e) => setPool(e.target.value)}>
+              {pools.map((p) => (
+                <option key={p.name} value={p.name} disabled={!p.available}>
+                  {poolLabel(p)}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      )}
+      {choosePool && tooSmall && <Notice tone="err" title={`Pool ${pool} has less free space than the old home uses. Choose another pool.`} />}
+      {choosePool && !tooSmall && poolNote(chosen) && <Notice tone="warn" title={poolNote(chosen)} />}
       {site.pageCache && (
         <label className="ui-check">
           <input type="checkbox" checked={cache} onChange={(e) => setCache(e.target.checked)} />
@@ -852,7 +882,7 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
       )}
       {error && <Notice tone="err" title={error} />}
       <div className="ui-row">
-        <Button type="submit" variant="primary" disabled={busy}>
+        <Button type="submit" variant="primary" disabled={busy || (choosePool && tooSmall)}>
           {busy ? "Creating…" : "Create " + site.name}
         </Button>
       </div>

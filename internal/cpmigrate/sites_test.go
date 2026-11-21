@@ -309,3 +309,75 @@ func TestCreateSiteWithPageCache(t *testing.T) {
 		t.Fatalf("created with %q", got)
 	}
 }
+
+// TestCreateSiteOnPool: the import puts a site on the chosen pool, after
+// checking that the pool exists, is mounted and has room for the old home
+// (ADR-0016, spike S9 finding 8).
+func TestCreateSiteOnPool(t *testing.T) {
+	var existing []string
+
+	svc, _ := newService(t, func(context.Context) (plan.Target, error) {
+		return plan.Target{Sites: existing, PHP: []string{"8.4"}}, nil
+	})
+
+	rep, err := svc.Upload(t.Context(), 1, bytes.NewReader(sitesReport(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var pools []string
+
+	svc.Connect(func(_ context.Context, _ int64, s cpmigrate.NewSite) (cpmigrate.Created, error) {
+		pools = append(pools, s.Pool)
+		existing = append(existing, s.Name)
+
+		return cpmigrate.Created{}, nil
+	}, &fakeImporter{})
+
+	listErr := error(nil)
+
+	svc.ConnectPools(func(context.Context) ([]agentapi.PoolInfo, error) {
+		return []agentapi.PoolInfo{
+			{Name: "default", Path: "/home", Available: true, FreeBytes: 5 << 30, TotalBytes: 38 << 30},
+			{Name: "vol1", Path: "/srv/vol1", Available: true, FreeBytes: 180 << 30, TotalBytes: 200 << 30},
+			{Name: "gone", Path: "/srv/gone"},
+		}, listErr
+	})
+
+	// alpha uses 12 GiB on the old server.
+	for pool, want := range map[string]error{
+		"default": cpmigrate.ErrPool, // 5 GiB free
+		"gone":    cpmigrate.ErrPool, // volume missing
+		"nosuch":  cpmigrate.ErrPool,
+		"Bad/X":   cpmigrate.ErrBadRequest,
+	} {
+		if _, err := svc.CreateSite(t.Context(), 1, rep.ID, "alpha", cpmigrate.CreateOptions{Reviewed: true, Pool: pool}); !errors.Is(err, want) {
+			t.Errorf("pool %s: %v, want %v", pool, err, want)
+		}
+	}
+
+	listErr = errors.New("agent down")
+
+	if _, err := svc.CreateSite(t.Context(), 1, rep.ID, "alpha", cpmigrate.CreateOptions{Reviewed: true, Pool: "vol1"}); err == nil {
+		t.Error("created without the pool list")
+	}
+
+	listErr = nil
+
+	if len(pools) != 0 {
+		t.Fatalf("created despite refusals: %v", pools)
+	}
+
+	if _, err := svc.CreateSite(t.Context(), 1, rep.ID, "alpha", cpmigrate.CreateOptions{Reviewed: true, Pool: "vol1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// beta has no measured use; the default pool takes it unchecked.
+	if _, err := svc.CreateSite(t.Context(), 1, rep.ID, "beta", cpmigrate.CreateOptions{Reviewed: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Equal(pools, []string{"vol1", ""}) {
+		t.Fatalf("pools %q", pools)
+	}
+}
