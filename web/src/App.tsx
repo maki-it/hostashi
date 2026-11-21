@@ -105,10 +105,10 @@ export function App() {
         {show("health") && <Doctor query={route.query} onQuery={replaceQuery} />}
         {show("firewall") && <Firewall />}
         {show("parked") && <Parked query={route.query} onQuery={replaceQuery} />}
+        {show("pages") && <Pages query={route.query} onQuery={replaceQuery} />}
         {show("users") && <Users me={user.username} query={route.query} onQuery={replaceQuery} />}
         <div className="app-legacy">
           {show("home") && <Home user={user} />}
-          {show("pages") && <Pages />}
           {show("import") && <Migrate />}
         </div>
       </Shell>
