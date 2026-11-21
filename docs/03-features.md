@@ -100,7 +100,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 | Passkeys (WebAuthn) | P0 | A | NEW | Alongside TOTP from the start, Kim 2026-11-18. Phishing-resistant. Recovery through recovery codes, several passkeys per user |
 | OIDC SSO | P2 | 1 | NEW | |
 | API tokens with scopes, expiry date | P0 | A | NEW | |
-| Audit log (who, what, when, diff) | P0 | A | CP | Immutable (append-only), exportable |
+| Audit log (who, what, when, diff) | P0 | A | CP | Immutable (append-only), exportable. Page and CSV/JSON export, admins only |
 | IP/bot blocking, basic auth per site | P1 | B | CP | |
 | fail2ban (SSH, panel, recidive) | P0 | A | NEW | On by default, ADR-0021 |
 | CrowdSec as opt-in | P2 | 2+ | NEW | Reports IPs to an external service, ADR-0021 |

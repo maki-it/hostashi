@@ -4,6 +4,7 @@ import {
   ArrowSquareIn,
   Browser,
   ClockCounterClockwise,
+  ListMagnifyingGlass,
   Code,
   Database,
   EnvelopeSimple,
@@ -54,6 +55,7 @@ export const navGroups: readonly NavGroup[] = [
       { page: "users", label: "Users", icon: UsersThree, roles: admin },
       { page: "mail", label: "Email", icon: EnvelopeSimple, roles: admin },
       { page: "import", label: "CloudPanel import", icon: ArrowSquareIn, roles: admin },
+      { page: "audit", label: "Audit log", icon: ListMagnifyingGlass, roles: admin },
     ],
   },
 ];

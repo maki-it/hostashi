@@ -1,0 +1,100 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+// The append-only audit log of the panel: who did what and when. Only
+// administrators read it (scope audit:read).
+
+import { ApiError, request } from "./api";
+
+export type AuditEntry = {
+  id: number;
+  at: string;
+  /** null for a failed login and for accounts deleted since. */
+  userId: number | null;
+  /** The username at the time of the action; empty without an account. */
+  actor: string;
+  action: string;
+  target: string;
+  detail: Record<string, unknown>;
+};
+
+export type AuditPage = { entries: AuditEntry[]; next: string | null };
+
+/** The filters of the page, as the address keeps them. Dates are local days (YYYY-MM-DD). */
+export type AuditFilter = { action?: string; actor?: string; target?: string; from?: string; to?: string };
+
+const day = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** localDay turns a local day into the instant it starts, or null. */
+export function localDay(s: string, plusDays = 0): Date | null {
+  const m = day.exec(s);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + plusDays);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * auditQuery turns the filters into the API's query. The days are local
+ * and "to" includes its whole day, so until is the start of the next one.
+ */
+export function auditQuery(f: AuditFilter): URLSearchParams {
+  const q = new URLSearchParams();
+  if (f.action) q.set("action", f.action);
+  if (f.actor?.trim()) q.set("actor", f.actor.trim());
+  if (f.target?.trim()) q.set("target", f.target.trim());
+  const since = f.from ? localDay(f.from) : null;
+  const until = f.to ? localDay(f.to, 1) : null;
+  if (since) q.set("since", since.toISOString());
+  if (until) q.set("until", until.toISOString());
+  return q;
+}
+
+export function listAudit(f: AuditFilter, before?: string, limit = 50) {
+  const q = auditQuery(f);
+  q.set("limit", String(limit));
+  if (before) q.set("before", before);
+  return request<AuditPage>("GET", "/audit?" + q.toString());
+}
+
+export const auditActions = () => request<{ actions: string[] }>("GET", "/audit/actions").then((r) => r.actions);
+
+/** exportUrl is the download address of the filtered log; the session cookie authorizes it. */
+export function exportUrl(format: "csv" | "json", f: AuditFilter): string {
+  const q = auditQuery(f);
+  q.set("format", format);
+  return "/api/v1/audit/export?" + q.toString();
+}
+
+/** actionGroups groups actions by their first part, for the filter: site, user, login, … */
+export function actionGroups(actions: readonly string[]): { prefix: string; actions: string[] }[] {
+  const groups = new Map<string, string[]>();
+  for (const a of actions) {
+    const prefix = a.split(".")[0] ?? a;
+    groups.set(prefix, [...(groups.get(prefix) ?? []), a]);
+  }
+  return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([prefix, list]) => ({ prefix, actions: list }));
+}
+
+/** detailPairs shows the detail object as key and value text, in a fixed order. */
+export function detailPairs(detail: Record<string, unknown>): [string, string][] {
+  return Object.keys(detail)
+    .sort()
+    .map((k) => {
+      const v = detail[k];
+      return [k, typeof v === "string" ? v : JSON.stringify(v)];
+    });
+}
+
+export function auditMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    switch (err.code) {
+      case "forbidden":
+        return "Only administrators can read the audit log.";
+      case "invalid_query":
+        return err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
+      default:
+        return "Something went wrong (" + err.code + ").";
+    }
+  }
+  if (err instanceof TypeError) return "The server is not reachable.";
+  return "Something went wrong. Try again.";
+}

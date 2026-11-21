@@ -879,3 +879,30 @@ a.ui-btn {
   font-family: var(--font-mono);
   font-size: 13px;
 }
+/* The audit log: the detail of an entry as small key and value lines */
+.ui-audit-detail {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  font-size: 13px;
+}
+.ui-audit-detail > div {
+  display: flex;
+  gap: var(--space-2);
+}
+.ui-audit-detail dt {
+  color: var(--muted);
+  min-width: 4.5em;
+}
+.ui-audit-detail dd {
+  margin: 0;
+}
+.ui-audit-date {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+}
+.ui-filters .ui-audit-date .ui-input {
+  flex: 0 1 160px;
+}
