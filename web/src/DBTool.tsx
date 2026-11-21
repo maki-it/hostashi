@@ -2,7 +2,7 @@
 
 import { ArrowSquareOut } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
-import { durationLabel, openDBTool, safeToolURL, toolMessage } from "./dbtool";
+import { durationLabel, openDBTool, safeToolURL, toolMessage, withLook } from "./dbtool";
 import { LOCAL_SERVER } from "./databases";
 import { Button, Notice } from "./ui";
 
@@ -35,8 +35,9 @@ export function OpenToolDialog({ db, server, minutes, onClose }: Props) {
     const tab = window.open("about:blank", "_blank");
     try {
       const s = await openDBTool(db, choice);
-      const url = safeToolURL(s.url);
-      if (!url) throw new Error("bad address");
+      const safe = safeToolURL(s.url);
+      if (!safe) throw new Error("bad address");
+      const url = withLook(safe, document.documentElement.dataset.scheme);
       if (tab) {
         tab.opener = null;
         tab.location.replace(url);

@@ -216,6 +216,9 @@ x grep -qx 'HOSTASHI_DB_TOOL_PORT=8444' /etc/hostashi/hostashi.env || fail "data
 expect_mode /usr/share/hostashi/adminer "755 root:root"
 expect_mode /usr/share/hostashi/adminer/adminer.php "644 root:root"
 expect_mode /usr/share/hostashi/adminer/index.php "644 root:root"
+expect_mode /usr/share/hostashi/adminer/adminer.css "644 root:root"
+expect_mode /usr/share/hostashi/adminer/fonts "755 root:root"
+expect_mode /usr/share/hostashi/adminer/fonts/sora-latin-700-normal.woff2 "644 root:root"
 expect_mode /run/hostashi-adminer/tickets "700 hostashi-adminer:hostashi-adminer"
 expect_mode /run/hostashi-adminer-fpm/fpm.sock "660 hostashi-adminer:www-data"
 [ "$(x getent passwd hostashi-adminer | cut -d: -f7)" = /usr/sbin/nologin ] || fail "hostashi-adminer has a shell"
@@ -1321,10 +1324,24 @@ UNIT
   user=$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User LIKE 'hostashi\_tool\_%'")
   [ -n "$user" ] || fail "no temporary database user"
   p8444() { x curl -sSk --resolve other.example.com:8444:127.0.0.1 -c /tmp/tool.jar -b /tmp/tool.jar "$@"; }
-  page=$(p8444 -L "$url") || fail "tool did not answer"
+  page=$(p8444 -L "$url&scheme=dark&panel=443") || fail "tool did not answer"
   grep -q 'Tables and views' <<<"$page" || fail "tool did not log in: $(head -c 400 <<<"$page")"
+  grep -q 'dataset.scheme = "dark"' <<<"$page" || fail "the tool ignores the panel's colour scheme"
+  grep -q "href='https://other.example.com/#/databases?db=tooldb_wp'" <<<"$page" || fail "no way back to the panel"
   if grep -q 'auth\[password\]' <<<"$page"; then fail "the tool shows a login form"; fi
   [ "$(p8444 -o /dev/null -w '%{http_code}' "$url")" = 403 ] || fail "a ticket worked twice"
+  # The look: Adminer's own styles and scripts load, then adminer.css with
+  # the panel's fonts and the user's colour scheme from the address.
+  grep -q 'adminer\.css?v=' <<<"$page" || fail "the tool does not load adminer.css"
+  statics=$(grep -o '?file=[a-z]*\.\(css\|js\)&amp;version=[^"'"'"']*' <<<"$page" | sed 's/&amp;/\&/g' | sort -u)
+  [ -n "$statics" ] || fail "the tool page names no styles or scripts"
+  while read -r f; do
+    ct=$(p8444 -o /dev/null -w '%{http_code} %{content_type}' "https://other.example.com:8444/$f")
+    case "$ct" in "200 text/css"*|"200 text/javascript"*|"200 application/javascript"*) ;; *) fail "tool $f: '$ct'";; esac
+  done <<<"$statics"
+  [ "$(p8444 -o /dev/null -w '%{http_code}' https://other.example.com:8444/adminer.css)" = 200 ] || fail "adminer.css not served"
+  [ "$(p8444 -o /dev/null -w '%{http_code}' https://other.example.com:8444/fonts/sora-latin-700-normal.woff2)" = 200 ] || fail "fonts not served"
+  [ "$(p8444 -o /dev/null -w '%{http_code}' https://other.example.com:8444/tool.php)" = 404 ] || fail "tool.php reachable"
   x test -z "$(x ls -A /run/hostashi-adminer/tickets)" || fail "used ticket kept"
   [ "$(p8444 -o /dev/null -w '%{http_code}' https://other.example.com:8444/adminer.php)" = 404 ] || fail "adminer.php reachable"
   rp=$(p8444 -o /dev/null -D - "https://other.example.com:8444/?username=$user&db=tooldb_wp" | tr -d '\r' | grep -i '^referrer-policy:' | head -n1)

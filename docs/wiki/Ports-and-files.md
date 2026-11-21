@@ -29,7 +29,7 @@ Hostashi's firewall lets in only these ports, plus what you open in the panel or
 | `/run/hostashi-valkey/<site>/valkey.sock` | the object cache (Valkey) of a site, if it is on. Only the site's own user can open it; it holds nothing worth keeping and is empty after a restart. |
 | `/var/log/nginx/sites/<site>/` | access and error logs of a site |
 | `/var/log/hostashi-install.log` | the installer's log |
-| `/usr/share/hostashi/adminer/` | the database tool: the pinned Adminer and Hostashi's front for it |
+| `/usr/share/hostashi/adminer/` | the database tool: the pinned Adminer, Hostashi's front for it, and `adminer.css` with the panel's fonts for the panel's look |
 | `/run/hostashi-adminer/tickets/` | one-time tickets for the database tool; each is removed on first use or after 60 seconds |
 | `/etc/hostashi-adminer/servers/` | the external database servers the database tool may reach: their addresses, a hosts file and their CA certificates, written by the agent |
 

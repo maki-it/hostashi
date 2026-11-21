@@ -116,7 +116,28 @@ function session_login(): ?array
 {
     $s = $_SESSION['hostashi'] ?? null;
 
-    return is_array($s) ? $s : null;
+    // Sessions from before the look (ADR-0038) have no scheme and panel.
+    return is_array($s) ? $s + ['scheme' => '', 'panel' => ''] : null;
+}
+
+/**
+ * The look the panel asks for along with the ticket: the user's colour
+ * scheme and the panel's port. Both only change how the page looks; the
+ * panel's address is this server's own name, never taken from the request.
+ */
+function panel_look(): array
+{
+    $scheme = $_GET['scheme'] ?? '';
+    $port = $_GET['panel'] ?? '';
+    $host = $_SERVER['SERVER_NAME'] ?? '';
+    $panel = '';
+
+    if (is_string($port) && preg_match('/^[1-9][0-9]{0,4}$/D', $port) && (int) $port <= 65535
+        && is_string($host) && preg_match('/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/D', $host)) {
+        $panel = 'https://' . $host . ((int) $port === 443 ? '' : ':' . (int) $port);
+    }
+
+    return ['scheme' => in_array($scheme, ['light', 'dark'], true) ? $scheme : '', 'panel' => $panel];
 }
 
 // Requests may only reach Adminer through this file.
@@ -148,7 +169,7 @@ if (is_string($ticket)) {
     $_SESSION['hostashi'] = [
         'database' => $t['database'], 'user' => $t['user'], 'expires' => $t['expires'],
         'server' => $t['server'], 'tls' => $t['tls'], 'ca' => $t['ca'],
-    ];
+    ] + panel_look();
 
     $_POST['auth'] = [
         'driver' => 'server', 'server' => '', 'username' => $t['user'],
@@ -157,7 +178,7 @@ if (is_string($ticket)) {
     $ticketLogin = true;
 
     // The ticket leaves the address; Adminer redirects to its own.
-    unset($_GET['ticket']);
+    unset($_GET['ticket'], $_GET['scheme'], $_GET['panel']);
     $_SERVER['REQUEST_URI'] = '/';
     $_SERVER['REQUEST_METHOD'] = 'POST';
 }
@@ -174,8 +195,12 @@ if ($login['expires'] < time()) {
     stop(403, 'The session has ended. Open the database again from the Hostashi panel.');
 }
 
+// Adminer's own styles, scripts and images (?file=...) need no login; any
+// other request names the ticket's user and database.
+$static = array_diff(array_keys($_GET), ['file', 'version']) === [] && is_string($_GET['file'] ?? null);
+
 // Only the ticket's user, database and the local server.
-if (!$ticketLogin && (($_GET['username'] ?? null) !== $login['user'] || ($_GET['db'] ?? '') !== $login['database'])) {
+if (!$ticketLogin && !$static && (($_GET['username'] ?? null) !== $login['user'] || ($_GET['db'] ?? '') !== $login['database'])) {
     header('Location: /?username=' . rawurlencode($login['user']) . '&db=' . rawurlencode($login['database']), true, 303);
     exit;
 }

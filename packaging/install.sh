@@ -587,14 +587,19 @@ do_mariadb() {
 
 # The web database tool (ADR-0038): Adminer's single MySQL-only file,
 # pinned by its SHA-256 in packaging/adminer/SHA256SUMS, with Hostashi's
-# index.php and tool.php that allow only one-time ticket logins. Its own
+# index.php and tool.php that allow only one-time ticket logins, and
+# adminer.css with the panel's fonts for the panel's look. Its own
 # PHP-FPM runs the distribution's PHP under hostashi-adminer, a system user
 # without home and shell; the agent writes the tickets into a directory
 # that systemd-tmpfiles creates at boot. nginx serves it on DB_TOOL_PORT.
 DBTOOL_SRC=${HOSTASHI_DBTOOL_SRC:-$HERE/adminer}
 DBTOOL_USER=hostashi-adminer
 DBTOOL_DIR=/usr/share/hostashi/adminer
-DBTOOL_FILES=(adminer.php index.php tool.php)
+DBTOOL_FILES=(adminer.php index.php tool.php adminer.css
+  fonts/sora-latin-600-normal.woff2 fonts/sora-latin-700-normal.woff2
+  fonts/ibm-plex-sans-latin-400-normal.woff2 fonts/ibm-plex-sans-latin-500-normal.woff2
+  fonts/ibm-plex-sans-latin-600-normal.woff2 fonts/ibm-plex-mono-latin-400-normal.woff2
+  fonts/ibm-plex-mono-latin-500-normal.woff2)
 DBTOOL_CONF=/etc/hostashi-adminer/php-fpm.conf
 DBTOOL_TMPFILES=/etc/tmpfiles.d/hostashi-adminer.conf
 DBTOOL_TICKETS=/run/hostashi-adminer/tickets
@@ -628,6 +633,7 @@ chk_dbtool() {
   [ "$(getent passwd "$DBTOOL_USER" | cut -d: -f7)" = /usr/sbin/nologin ] || { echo "$DBTOOL_USER has a login shell"; return 1; }
   dir_ok /usr/share/hostashi 755 root:root || { echo "/usr/share/hostashi"; return 1; }
   dir_ok "$DBTOOL_DIR" 755 root:root || { echo "$DBTOOL_DIR"; return 1; }
+  dir_ok "$DBTOOL_DIR/fonts" 755 root:root || { echo "$DBTOOL_DIR/fonts"; return 1; }
   for f in "${DBTOOL_FILES[@]}"; do
     file_matches "$DBTOOL_DIR/$f" 0644 root:root <"$DBTOOL_SRC/$f" || { echo "$DBTOOL_DIR/$f differs"; return 1; }
   done
@@ -657,7 +663,7 @@ do_dbtool() {
   if ! getent passwd "$DBTOOL_USER" >/dev/null; then
     adduser --system --group --no-create-home --home /nonexistent --shell /usr/sbin/nologin "$DBTOOL_USER" >>"$LOG" 2>&1 || return 1
   fi
-  install -d -m 0755 -o root -g root /usr/share/hostashi "$DBTOOL_DIR" "${DBTOOL_CONF%/*}" || return 1
+  install -d -m 0755 -o root -g root /usr/share/hostashi "$DBTOOL_DIR" "$DBTOOL_DIR/fonts" "${DBTOOL_CONF%/*}" || return 1
   for f in "${DBTOOL_FILES[@]}"; do
     write_file "$DBTOOL_DIR/$f" 0644 root:root <"$DBTOOL_SRC/$f"; rc=$?
     [ "$rc" -le 1 ] || return 1
