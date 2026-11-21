@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/dbserver"
 	"github.com/maki-it/hostashi/internal/extdb"
 	"github.com/maki-it/hostashi/internal/secrets"
@@ -160,6 +161,70 @@ func (s *Service) DBServerList(ctx context.Context) ([]store.DBServer, error) {
 	return s.st.DBServers(ctx)
 }
 
+// PGClientTools installs the PostgreSQL client tools through the agent
+// (ADR-0051); serve.RPCPGClient implements it.
+type PGClientTools interface {
+	Install(ctx context.Context, major string) (agentapi.PGClientStatus, error)
+	Status(ctx context.Context) (agentapi.PGClientStatus, error)
+}
+
+// EnablePGClient lets adding a PostgreSQL server install the client tools.
+func (s *Service) EnablePGClient(p PGClientTools) { s.pgClient = p }
+
+// ErrPGClientTooOld: the server's PostgreSQL is newer than every client
+// major this Hostashi release can install, so pg_dump could not back it up.
+var ErrPGClientTooOld = errors.New("hosting: the PostgreSQL server is newer than the client tools this Hostashi release installs")
+
+// PGClientInstallWarning is AddDBServer's warning while the client tools
+// are missing or older than the new server.
+const PGClientInstallWarning = "the PostgreSQL client tools for backups, import and export are being installed; this takes a few minutes"
+
+// checkPGClient refuses a server newer than the newest client major and
+// starts installing the newest client when none installed covers the
+// server. It returns a warning while that runs. pgx needs no client, so
+// the server itself works at once.
+func (s *Service) checkPGClient(ctx context.Context, version string) (string, error) {
+	major := dbserver.PostgresMajor(version)
+
+	newest, err := strconv.Atoi(agentapi.PGClientNewest())
+	if err != nil {
+		return "", err
+	}
+
+	if major > newest {
+		return "", fmt.Errorf("%w: PostgreSQL %d, newest client %d; update Hostashi first", ErrPGClientTooOld, major, newest)
+	}
+
+	if s.pgClient == nil {
+		return "", nil
+	}
+
+	st, err := s.pgClient.Status(ctx)
+	if err != nil {
+		return "", fmt.Errorf("hosting: read the PostgreSQL client tools: %w", err)
+	}
+
+	for _, m := range st.Installed {
+		if n, err := strconv.Atoi(m); err == nil && n >= major {
+			return "", nil
+		}
+	}
+
+	if st.State == agentapi.PHPInstallRunning {
+		return PGClientInstallWarning, nil
+	}
+
+	if _, err := s.pgClient.Install(ctx, ""); err != nil {
+		var ae *agentrpc.Error
+		// Refused because a run started or finished meanwhile.
+		if !errors.As(err, &ae) || ae.Code != agentrpc.CodePrecondition {
+			return "", fmt.Errorf("hosting: install the PostgreSQL client tools: %w", err)
+		}
+	}
+
+	return PGClientInstallWarning, nil
+}
+
 // SuperuserWarning is what AddDBServer warns about a PostgreSQL
 // administrator with SUPERUSER (ADR-0051).
 const SuperuserWarning = "the administrator is a PostgreSQL superuser; a dedicated role with only CREATEDB and CREATEROLE limits the damage if the panel is compromised"
@@ -168,7 +233,7 @@ const SuperuserWarning = "the administrator is a PostgreSQL superuser; a dedicat
 // server with its sealed admin password. A server that fails the check is
 // not stored. The warnings say what works but is not recommended.
 func (s *Service) AddDBServer(ctx context.Context, actor int64, req NewDBServer) (store.DBServer, []string, error) {
-	d, info, err := s.addDBServer(ctx, actor, req)
+	d, info, pgWarning, err := s.addDBServer(ctx, actor, req)
 	if err != nil {
 		return store.DBServer{}, nil, err
 	}
@@ -178,22 +243,26 @@ func (s *Service) AddDBServer(ctx context.Context, actor int64, req NewDBServer)
 		warnings = append(warnings, SuperuserWarning)
 	}
 
+	if pgWarning != "" {
+		warnings = append(warnings, pgWarning)
+	}
+
 	return d, warnings, nil
 }
 
-func (s *Service) addDBServer(ctx context.Context, actor int64, req NewDBServer) (store.DBServer, dbserver.Info, error) {
+func (s *Service) addDBServer(ctx context.Context, actor int64, req NewDBServer) (store.DBServer, dbserver.Info, string, error) {
 	var none dbserver.Info
 
 	if s.dbs == nil {
-		return store.DBServer{}, none, ErrDBServersOff
+		return store.DBServer{}, none, "", ErrDBServersOff
 	}
 
 	if err := ValidateDBServerName(req.Name); err != nil {
-		return store.DBServer{}, none, err
+		return store.DBServer{}, none, "", err
 	}
 
 	if req.Engine != "" && !dbserver.IsPostgres(req.Engine) {
-		return store.DBServer{}, none, fmt.Errorf("%w: engine must be empty (MariaDB or MySQL) or %q", ErrInvalid, dbserver.EnginePostgreSQL)
+		return store.DBServer{}, none, "", fmt.Errorf("%w: engine must be empty (MariaDB or MySQL) or %q", ErrInvalid, dbserver.EnginePostgreSQL)
 	}
 
 	if req.Port == 0 {
@@ -209,16 +278,24 @@ func (s *Service) addDBServer(ctx context.Context, actor int64, req NewDBServer)
 		TLS: req.TLS, CAPEM: req.CAPEM,
 	}
 	if err := cfg.Validate(); err != nil {
-		return store.DBServer{}, none, fmt.Errorf("%w: %w", ErrInvalid, err)
+		return store.DBServer{}, none, "", fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 
 	if _, err := s.st.DBServerByName(ctx, req.Name); err == nil {
-		return store.DBServer{}, none, ErrDBServerExists
+		return store.DBServer{}, none, "", ErrDBServerExists
 	}
 
 	info, err := s.dbs.Check(ctx, cfg, true)
 	if err != nil {
-		return store.DBServer{}, none, fmt.Errorf("%w: %w", ErrDBServerCheck, err)
+		return store.DBServer{}, none, "", fmt.Errorf("%w: %w", ErrDBServerCheck, err)
+	}
+
+	var pgWarning string
+
+	if dbserver.IsPostgres(info.Engine) {
+		if pgWarning, err = s.checkPGClient(ctx, info.Version); err != nil {
+			return store.DBServer{}, none, "", err
+		}
 	}
 
 	d, err := s.st.CreateDBServer(ctx, store.NewDBServer{
@@ -227,11 +304,11 @@ func (s *Service) addDBServer(ctx context.Context, actor int64, req NewDBServer)
 		Seal: func(id int64) ([]byte, error) { return s.dbs.Seal(req.AdminPassword, id) },
 	}, s.now())
 	if errors.Is(err, store.ErrDBServerExists) {
-		return store.DBServer{}, none, ErrDBServerExists
+		return store.DBServer{}, none, "", ErrDBServerExists
 	}
 
 	if err != nil {
-		return store.DBServer{}, none, err
+		return store.DBServer{}, none, "", err
 	}
 
 	s.dbManifestChanged(ctx)
@@ -240,7 +317,7 @@ func (s *Service) addDBServer(ctx context.Context, actor int64, req NewDBServer)
 		"superuser": strconv.FormatBool(info.Superuser),
 	})
 
-	return d, info, nil
+	return d, info, pgWarning, nil
 }
 
 // CheckDBServer connects to an external server again and records what it

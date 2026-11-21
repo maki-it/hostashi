@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/dbserver"
 	"github.com/maki-it/hostashi/internal/extdb"
 	"github.com/maki-it/hostashi/internal/store"
@@ -265,6 +267,85 @@ func TestAddDBServer(t *testing.T) {
 
 	if _, err := s.CheckDBServer(ctx, "nope"); !errors.Is(err, ErrDBServerNotFound) {
 		t.Fatalf("check unknown: %v", err)
+	}
+}
+
+// fakePGClient is the agent's client tool installs.
+type fakePGClient struct {
+	status   agentapi.PGClientStatus
+	installs int
+	err      error
+}
+
+func (f *fakePGClient) Status(context.Context) (agentapi.PGClientStatus, error) { return f.status, nil }
+
+func (f *fakePGClient) Install(context.Context, string) (agentapi.PGClientStatus, error) {
+	f.installs++
+	if f.err != nil {
+		return agentapi.PGClientStatus{}, f.err
+	}
+
+	f.status.State = agentapi.PHPInstallRunning
+
+	return f.status, nil
+}
+
+func TestAddPostgresServerInstallsClient(t *testing.T) {
+	s, _, _ := newService(t)
+	f := newFakeDBServers()
+	s.EnableDBServers(f, "")
+
+	pg := &fakePGClient{status: agentapi.PGClientStatus{State: agentapi.PHPInstallIdle}}
+	s.EnablePGClient(pg)
+
+	ctx := t.Context()
+	add := func(name string) ([]string, error) {
+		_, w, err := s.AddDBServer(ctx, 1, NewDBServer{
+			Engine: dbserver.EnginePostgreSQL, Name: name, Host: "pg.example.net", AdminUser: "hostashi_admin", AdminPassword: "Admin-pw-1",
+		})
+
+		return w, err
+	}
+
+	// No client yet: the first server starts the install and warns.
+	if w, err := add("pg1"); err != nil || pg.installs != 1 || len(w) != 1 || w[0] != PGClientInstallWarning {
+		t.Fatalf("first: %v %v, installs %d", w, err, pg.installs)
+	}
+
+	// While it runs, no second install.
+	if w, err := add("pg2"); err != nil || pg.installs != 1 || len(w) != 1 {
+		t.Fatalf("running: %v %v, installs %d", w, err, pg.installs)
+	}
+
+	// A client as new as the server (18.1) is enough.
+	pg.status = agentapi.PGClientStatus{Installed: []string{"18"}, State: agentapi.PHPInstallSucceeded}
+	if w, err := add("pg3"); err != nil || pg.installs != 1 || len(w) != 0 {
+		t.Fatalf("installed: %v %v", w, err)
+	}
+
+	// An older client starts the newest; a race with another install is fine.
+	pg.status = agentapi.PGClientStatus{Installed: []string{"16"}, State: agentapi.PHPInstallSucceeded}
+	pg.err = &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "busy"}
+
+	if w, err := add("pg4"); err != nil || pg.installs != 2 || len(w) != 1 {
+		t.Fatalf("older client: %v %v", w, err)
+	}
+
+	pg.err = errors.New("agent gone")
+	if _, err := add("pg5"); err == nil {
+		t.Fatal("agent error ignored")
+	}
+}
+
+func TestPGClientTooOld(t *testing.T) {
+	s, _, _ := newService(t)
+
+	if _, err := s.checkPGClient(t.Context(), "99.1"); !errors.Is(err, ErrPGClientTooOld) {
+		t.Fatalf("got %v", err)
+	}
+
+	if w, err := s.checkPGClient(t.Context(), agentapi.PGClientNewest()+".0"); err != nil || w != "" {
+		t.Fatalf("newest without installer: %q %v", w, err)
 	}
 }
 

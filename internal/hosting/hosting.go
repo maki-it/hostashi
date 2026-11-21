@@ -172,8 +172,9 @@ type Service struct {
 	toolServers   map[int64]agentapi.DBToolServer
 	afterFunc     func(d time.Duration, f func())
 
-	dbManifestDir string     // extdb list for the backup; empty: none
-	manifestMu    sync.Mutex // serializes the manifest writes
+	dbManifestDir string        // extdb list for the backup; empty: none
+	pgClient      PGClientTools // nil: no PostgreSQL client installs (tests)
+	manifestMu    sync.Mutex    // serializes the manifest writes
 
 	panelDomain string // ADR-0023; empty: nginx serves no panel address
 	panelServed string // panel domain of the last accepted web state; under mu

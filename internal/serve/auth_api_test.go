@@ -111,6 +111,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	sa := &stubServerAgent{}
 	mon := &servermon.Monitor{Agent: sa, Store: st}
 	deps.Monitor = mon
+	deps.AuditLog = st
 
 	if ag != nil {
 		deps.Sites = hosting.New(st, ag, nil)

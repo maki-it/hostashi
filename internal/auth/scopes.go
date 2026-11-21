@@ -41,13 +41,14 @@ var scopeCatalog = map[string]ScopeInfo{
 	"db_servers:write":        {Description: "Add, check and remove external database servers (stores their administrator password)", HighRisk: true},
 	"backups:read":            {Description: "Read backup settings, status and snapshots"},
 	"backups:write":           {Description: "Change backup settings, confirm the target's host key, start a backup"},
+	"audit:read":              {Description: "Read and export the audit log of the panel (every account, site, action and the IP addresses involved)"},
 	"doctor:read":             {Description: "Run the read-only checks of hostashi doctor and read their results"},
+	"services:read":           {Description: "Read the state and restarts of the server's services and the dashboard's CPU, memory, disk and network figures"},
+	"services:write":          {Description: "Start, stop, restart and reload the server's services where the service catalog allows it", HighRisk: true},
 	"firewall:read":           {Description: "Read the firewall's opened ports and the allowlists for SSH and the panel"},
 	"firewall:write":          {Description: "Open ports and set the allowlists for SSH and the panel (a wrong list locks out until the rollback)", HighRisk: true},
 	"php:install":             {Description: "Install more PHP versions from sury.org (runs apt as root with a fixed package list)", HighRisk: true},
 	"metrics:read":            {Description: "Read the Prometheus metrics endpoint"},
-	"services:read":           {Description: "Read the state and restarts of the server's services and the dashboard's CPU, memory, disk and network figures"},
-	"services:write":          {Description: "Start, stop, restart and reload the server's services where the service catalog allows it", HighRisk: true},
 	"migrations:read":         {Description: "List uploaded CloudPanel scan reports and read their migration plans"},
 	"migrations:write":        {Description: "Upload and delete CloudPanel scan reports"},
 	"backups:restore":         {Description: "Restore a site's backups into its home", HighRisk: true},
@@ -69,8 +70,8 @@ func Scopes() []ScopeInfo {
 	return out
 }
 
-// maxScopesPerToken keeps a token description small. It stays above the
-// size of the catalog, so a token can carry every scope.
+// maxScopesPerToken keeps a token description small. A token with every
+// scope of the catalog must still fit (TestScopeCatalogFitsOneToken).
 const maxScopesPerToken = 64
 
 // normalizeScopes checks a requested scope list against the catalog and

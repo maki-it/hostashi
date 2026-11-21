@@ -154,6 +154,10 @@ type Deps struct {
 	// Monitor serves service management and the dashboard (ADR-0052); nil
 	// disables their routes. Needs Auth and Settings (for the audit log).
 	Monitor ServerMonitor
+
+	// AuditLog reads the audit log for its page and export; nil disables
+	// its routes. Needs Auth.
+	AuditLog AuditLog
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -296,6 +300,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 
 		if deps.Monitor != nil && deps.Settings != nil {
 			registerServices(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Monitor, deps.Settings, log)
+		}
+
+		if deps.AuditLog != nil {
+			registerAudit(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.AuditLog, log)
 		}
 
 		if deps.Metrics != nil && deps.Settings != nil {
@@ -468,6 +476,7 @@ func Run(ctx context.Context, cfg Config) error {
 		MailHistory: st,
 		MailSend:    func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
 		Files:       RPCFilesOpener(client),
+		AuditLog:    st,
 	}
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
@@ -482,6 +491,7 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.Sites.EnableCron(hosting.RPCAgent{C: client})
 	deps.Sites.EnableSSH(hosting.RPCAgent{C: client})
 	deps.Sites.EnableDBServers(hosting.RemoteDBServers{Box: box}, filepath.Dir(copyPath))
+	deps.Sites.EnablePGClient(RPCPGClient{C: client})
 
 	if err := deps.Sites.WriteDBManifest(ctx); err != nil {
 		cfg.Log.ErrorContext(ctx, "write the external database list for the backup", "err", err)
