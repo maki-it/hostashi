@@ -102,6 +102,12 @@ After each successful `apply` the installer saves its options (all of the above 
 
 The installer refuses an options file that anyone but root could have written, or that holds anything but the options above.
 
+### Updates with the package
+
+On a server set up this way, installing a newer `hostashi` package (`apt upgrade`) updates it by itself. Before the new files land, the package stops the panel and keeps a copy of the panel database in `/var/lib/hostashi-installer/upgrade/` (the three newest). Then it runs `install.sh upgrade`, which restarts agent and panel, and waits up to 60 seconds for the panel to answer. The output goes to `/var/log/hostashi-upgrade.log`.
+
+If that fails, the panel runs again as far as possible and apt reports an error; the package stays unconfigured. Fix the cause (the log says what failed), then run `sudo dpkg --configure -a`.
+
 ## Exit codes
 
 | Code | Meaning |

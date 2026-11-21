@@ -401,6 +401,11 @@ jobs:
           for img in debian:trixie ubuntu:26.04; do
             docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/src:ro" "$img" /src/packaging/test/deb-test.sh /dist
           done
+      - name: Upgrade a set-up server with the package (systemd container)
+        run: |
+          for img in debian:trixie ubuntu:26.04; do
+            packaging/test/upgrade-test.sh "$img" ./dist
+          done
 
   dracut:
     needs: changes
@@ -437,7 +442,7 @@ jobs:
           CGO_ENABLED: "0"
         run: go build -trimpath -o hostashi ./cmd/hostashi
       - name: shellcheck
-        run: shellcheck -x packaging/install.sh packaging/php/php-install packaging/test/container-test.sh packaging/test/deb-test.sh packaging/test/quota-test.sh packaging/test/dracut-test.sh packaging/test/firewall-test.sh packaging/test/apt-update-test.sh
+        run: shellcheck -x packaging/install.sh packaging/php/php-install packaging/test/container-test.sh packaging/test/deb-test.sh packaging/test/quota-test.sh packaging/test/dracut-test.sh packaging/test/firewall-test.sh packaging/test/apt-update-test.sh packaging/test/upgrade-test.sh packaging/deb/preinst packaging/deb/postinst
       - name: apt-get update waits out an out-of-sync mirror (stubbed apt)
         run: packaging/test/apt-update-test.sh
       - name: Quota step (stubbed filesystem and boot tools)
