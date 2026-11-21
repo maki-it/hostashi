@@ -27,6 +27,7 @@ import (
 	"github.com/maki-it/hostashi/internal/cpimport"
 	"github.com/maki-it/hostashi/internal/cpsource"
 	"github.com/maki-it/hostashi/internal/cronjobs"
+	"github.com/maki-it/hostashi/internal/dbjob"
 	"github.com/maki-it/hostashi/internal/filesunit"
 	"github.com/maki-it/hostashi/internal/firewall"
 	"github.com/maki-it/hostashi/internal/mariadb"
@@ -104,6 +105,11 @@ type Config struct {
 	// below StateDir with CloudPanel; without it cloudpanel.import answers
 	// failed_precondition.
 	CloudPanelImport *cpimport.Agent
+
+	// DBJobs imports and exports databases on external servers (ADR-0041
+	// addendum 1). Run builds it below StateDir; without it db.remote.*
+	// answer failed_precondition.
+	DBJobs *dbjob.Agent
 
 	// Pages keeps the maintenance and parking pages (ADR-0027). Run builds
 	// it at PagesDir; without it page.* answer failed_precondition.
@@ -281,6 +287,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	registerDoctor(s, cfg.Doctor, cfg.StateDir, h, cfg.Firewall, cfg.DBToolPort > 0)
 	registerBackup(s, cfg.Backup)
 	registerCloudPanel(s, cfg.CloudPanel, cfg.CloudPanelImport)
+	registerDBJobs(s, cfg.DBJobs)
 	registerFirewall(s, cfg.Firewall)
 	registerPHPInstall(s, cfg.PHPInstall)
 
@@ -1218,6 +1225,13 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.CloudPanelImport = &cpimport.Agent{
 			Dir: filepath.Join(cpDir, "imports"), StateDir: cmp.Or(cfg.StateDir, DefaultStateDir),
 			Source: cfg.CloudPanel, Units: resticctl.Units{},
+		}
+	}
+
+	if cfg.DBJobs == nil {
+		cfg.DBJobs = &dbjob.Agent{
+			Dir: filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "dbjobs"), StateDir: cmp.Or(cfg.StateDir, DefaultStateDir),
+			Units: resticctl.Units{},
 		}
 	}
 

@@ -155,7 +155,7 @@ for kv in fs.suid_dumpable=0 fs.protected_regular=2 kernel.kptr_restrict=2 net.i
   [ "$got" = "${kv#*=}" ] || fail "$k is $got, want ${kv#*=}"
 done
 # A template has no properties of its own; an instance shows them.
-for u in hostashi-agent.service hostashi.service hostashi-backup.service hostashi-restore@probe.service hostashi-import@probe.service; do
+for u in hostashi-agent.service hostashi.service hostashi-backup.service hostashi-restore@probe.service hostashi-import@probe.service hostashi-dbjob@probe.service; do
   [ "$(x systemctl show -p LimitCORE --value "$u")" = 0 ] || fail "$u allows core dumps"
 done
 
