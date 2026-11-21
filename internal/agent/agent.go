@@ -31,6 +31,7 @@ import (
 	"github.com/maki-it/hostashi/internal/filesunit"
 	"github.com/maki-it/hostashi/internal/firewall"
 	"github.com/maki-it/hostashi/internal/hoststats"
+	"github.com/maki-it/hostashi/internal/logrotate"
 	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/netaddrs"
 	"github.com/maki-it/hostashi/internal/objcache"
@@ -1120,6 +1121,12 @@ func openWeb(ctx context.Context, stateDir string, panelPort, dbToolPort int, lo
 		listenPanel = listenTLS
 	}
 
+	// Rotation of the logs below, with the retention the panel set
+	// (ADR-0053). A failure leaves the logs unrotated, not the sites down.
+	if err := logrotate.Ensure(logrotate.File, LogRotateConfig()); err != nil && log != nil {
+		log.ErrorContext(ctx, "write logrotate configuration", "err", err)
+	}
+
 	return &web.Reconciler{
 		Base: filepath.Join(stateDir, "web"),
 		Log:  log,
@@ -1129,8 +1136,9 @@ func openWeb(ctx context.Context, stateDir string, panelPort, dbToolPort int, lo
 			ControlSocket: WebControlSocket,
 			User:          WebUser,
 			PIDFile:       "/run/nginx.pid",
-			ErrorLog:      "/var/log/nginx/error.log",
-			AccessLog:     "/var/log/nginx/access.log",
+			ErrorLog:      ServerLogDir + "/error.log",
+			AccessLog:     ServerLogDir + "/access.log",
+			SiteLogDir:    SiteLogDir,
 			Modules:       "/etc/nginx/modules-enabled/*.conf",
 			MimeTypes:     "/etc/nginx/mime.types",
 			Brotli:        brotli,
@@ -1199,6 +1207,21 @@ func openPHP(stateDir string, log *slog.Logger) *php.Manager {
 // WebControlSocket is where nginx answers the agent's checks. Its directory
 // is the RuntimeDirectory of the nginx unit drop-in (root, 0700).
 const WebControlSocket = "/run/hostashi-web/control.sock"
+
+// SiteLogDir holds the nginx logs of each site, <SiteLogDir>/<site>/
+// access.log and error.log (ADR-0021, ADR-0053), root:root 0750.
+const SiteLogDir = "/var/log/nginx/sites"
+
+// ServerLogDir holds nginx's server-wide access.log and error.log, for
+// requests of no site. It is not /var/log/nginx itself, whose *.log the
+// nginx package rotates with its own retention (ADR-0053).
+const ServerLogDir = "/var/log/nginx/hostashi"
+
+// LogRotateConfig is the logrotate configuration of the logs above; the
+// panel only chooses the days.
+func LogRotateConfig() logrotate.Config {
+	return logrotate.Config{SiteLogDir: SiteLogDir, ServerLogDir: ServerLogDir, NginxPID: "/run/nginx.pid", Days: logrotate.DefaultDays}
+}
 
 // Run starts the agent and blocks until ctx is canceled.
 func Run(ctx context.Context, cfg Config) error {

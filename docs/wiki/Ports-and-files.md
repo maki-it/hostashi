@@ -27,7 +27,9 @@ Hostashi's firewall lets in only these ports, plus what you open in the panel or
 | `/home/<site>/htdocs` | the web root of a site; `/home/<site>` is the home of the site's Linux user |
 | `/home/.hostashi-cache/<site>` | the page cache of a site, if it is on. Only the web server can read it; it counts against the site's disk limit and is not backed up. |
 | `/run/hostashi-valkey/<site>/valkey.sock` | the object cache (Valkey) of a site, if it is on. Only the site's own user can open it; it holds nothing worth keeping and is empty after a restart. |
-| `/var/log/nginx/sites/<site>/` | access and error logs of a site |
+| `/var/log/nginx/sites/<site>/` | access and error logs of a site, readable only by root and in the panel |
+| `/var/log/nginx/hostashi/` | access and error logs of requests for no site |
+| `/etc/logrotate.d/hostashi` | daily rotation of these logs; the panel sets how many days are kept (default 7) |
 | `/var/log/hostashi-install.log` | the installer's log |
 | `/usr/share/hostashi/adminer/` | the database tool: the pinned Adminer, Hostashi's front for it, and `adminer.css` with the panel's fonts for the panel's look |
 | `/run/hostashi-adminer/tickets/` | one-time tickets for the database tool; each is removed on first use or after 60 seconds |
