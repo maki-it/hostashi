@@ -36,7 +36,7 @@ Run the checks locally:
 golangci-lint fmt ./...    # gofmt and goimports, config in .golangci.yml
 golangci-lint run ./...    # includes staticcheck, gosec and a ban on os/exec
 go vet ./...
-go test -race ./...
+go test -race -tags hostashi_fasthash ./...   # cheap password hashes, as in CI
 sudo env "PATH=$PATH" go test -race -run '^TestCrossUser$' ./internal/agentrpc/   # needs root
 sudo env "PATH=$PATH" go test -race -run '^TestRoot' ./internal/sysuser/          # needs root, creates and removes real test users
 ```
