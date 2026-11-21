@@ -58,7 +58,7 @@ func TestDatabaseDumps(t *testing.T) {
 	}
 
 	// The path is checked before the agent is asked.
-	for _, p := range []string{"", "../etc/passwd.sql", "/home/shop/x.sql", "x.txt", "a/../b.sql", ".hidden/../x.sql"} {
+	for _, p := range []string{"", "../etc/passwd.sql", "/home/shop/x.sql", "x.txt", "a/../b.sql", ".hidden/../x.sql", "x.dump"} {
 		if _, err := s.ImportDatabase(ctx, 1, "shop_wp", p); !errors.Is(err, ErrInvalid) {
 			t.Errorf("path %q: %v", p, err)
 		}

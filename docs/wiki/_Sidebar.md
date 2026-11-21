@@ -6,6 +6,7 @@
 - [Parked domains](Parked-domains.md)
 - [PHP settings](PHP-settings.md)
 - [Audit log](Audit-log.md)
+- [Services and dashboard](Services-and-dashboard.md)
 
 **Reference**
 

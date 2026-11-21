@@ -263,6 +263,30 @@ func TestAgainstServer(t *testing.T) {
 		t.Fatalf("restored rows: %v", err)
 	}
 
+	// A plain dump loads with Exec into the other database: no owners, no
+	// grants, and from a newer pg_dump the preamble line an older server
+	// refuses is dropped.
+	var plain bytes.Buffer
+	if err := DumpSQL(ctx, r, &plain); err != nil {
+		t.Fatalf("plain dump: %v", err)
+	}
+
+	if bytes.Contains(plain.Bytes(), []byte("OWNER TO")) || bytes.Contains(plain.Bytes(), []byte("GRANT ")) {
+		t.Fatal("plain dump has owners or grants")
+	}
+
+	if err := Exec(ctx, cp, "site1", strings.NewReader("DROP TABLE t;\n")); err != nil {
+		t.Fatalf("drop before plain load: %v", err)
+	}
+
+	if err := Exec(ctx, cp, "site1", bytes.NewReader(plain.Bytes())); err != nil {
+		t.Fatalf("plain load: %v", err)
+	}
+
+	if err := Exec(ctx, cp, "site1", strings.NewReader(check)); err != nil {
+		t.Fatalf("rows after plain load: %v", err)
+	}
+
 	// The first error stops the file and rolls it back.
 	bad := "CREATE TABLE u (a int);\nSELECT 1;\nSELECT * FROM missing_table;\n"
 	if err := Exec(ctx, r, "site1", strings.NewReader(bad)); err == nil || !strings.Contains(err.Error(), "line 4") {

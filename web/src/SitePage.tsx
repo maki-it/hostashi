@@ -30,6 +30,7 @@ import {
 } from "./sites";
 import { PageCacheSettings } from "./PageCache";
 import { PHPSettingsCard } from "./PHPSettings";
+import { Services } from "./Services";
 import { SnippetSettings } from "./Snippets";
 import { SSHSettings } from "./SSH";
 import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
@@ -100,6 +101,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
       {ready && <Tabs label={site.name} tabs={tabs} active={active} onChange={(t) => onTab(t as SiteTab)} idPrefix={prefix} />}
       <div {...(ready ? tabPanelProps(prefix, active) : {})} className="ui-stack">
         {active === "overview" && <Overview site={site} onChange={load} staff={role === "admin" || role === "manager"} />}
+        {active === "overview" && role === "admin" && <Services site={site.name} />}
         {active === "domains" && <DomainsTab site={site} onChange={load} />}
         {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
         {active === "php" && (

@@ -55,7 +55,13 @@ func (s *Service) ExportDatabase(ctx context.Context, actor int64, database, pat
 }
 
 func (s *Service) startDump(ctx context.Context, actor int64, action, database, path string) (agentapi.DBJob, error) {
-	if err := (agentapi.DBDumpRequest{Database: database, Path: path}).Validate(); err != nil {
+	// A custom-format dump (.dump) is for PostgreSQL databases only; that
+	// is checked once the database's server is known.
+	if err := agentapi.ValidateDBName(database); err != nil {
+		return agentapi.DBJob{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	if err := agentapi.ValidatePGDumpPath(path); err != nil {
 		return agentapi.DBJob{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 
@@ -82,6 +88,10 @@ func (s *Service) startDump(ctx context.Context, actor int64, action, database, 
 
 	if d.Server != store.LocalDBServer {
 		return s.startRemoteDump(ctx, actor, action, d, d.Site, path)
+	}
+
+	if err := agentapi.ValidateDumpPath(path); err != nil {
+		return agentapi.DBJob{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 
 	start := s.ag.DBImport

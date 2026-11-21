@@ -24,12 +24,29 @@ var (
 // .sql or .sql.gz. Components may not start with a dot or dash, so "..",
 // hidden files and option-like names are out.
 func ValidateDumpPath(p string) error {
-	if p == "" || len(p) > MaxDumpPathLen {
-		return fmt.Errorf("path: must have 1 to %d characters", MaxDumpPathLen)
-	}
-
 	if !strings.HasSuffix(p, ".sql") && !strings.HasSuffix(p, ".sql.gz") {
 		return errors.New("path: must end in .sql or .sql.gz")
+	}
+
+	return validateDumpComponents(p)
+}
+
+// PGCustomSuffix marks a dump in pg_dump's custom format.
+const PGCustomSuffix = ".dump"
+
+// ValidatePGDumpPath is ValidateDumpPath for a PostgreSQL database
+// (ADR-0051), which also takes a custom-format dump ending in .dump.
+func ValidatePGDumpPath(p string) error {
+	if !strings.HasSuffix(p, PGCustomSuffix) {
+		return ValidateDumpPath(p)
+	}
+
+	return validateDumpComponents(p)
+}
+
+func validateDumpComponents(p string) error {
+	if p == "" || len(p) > MaxDumpPathLen {
+		return fmt.Errorf("path: must have 1 to %d characters", MaxDumpPathLen)
 	}
 
 	for c := range strings.SplitSeq(p, "/") {

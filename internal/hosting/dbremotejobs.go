@@ -67,8 +67,12 @@ func (s *Service) startRemoteDump(ctx context.Context, actor int64, action strin
 		return agentapi.DBJob{}, err
 	}
 
+	engine := ""
+
 	if IsPostgres(srv) {
-		return agentapi.DBJob{}, ErrPostgreSQLNotYet
+		engine = agentapi.RemoteEnginePostgreSQL
+	} else if err := agentapi.ValidateDumpPath(path); err != nil {
+		return agentapi.DBJob{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 
 	addrs, err := s.serverAddrs(ctx, srv)
@@ -84,7 +88,7 @@ func (s *Service) startRemoteDump(ctx context.Context, actor int64, action strin
 	user, password := "hostashi_job_"+randomHex(8), randomAlnum(32)
 
 	req := agentapi.DBRemoteJobRequest{
-		Kind: kind, Site: site, Database: d.Name, Path: path,
+		Kind: kind, Engine: engine, Site: site, Database: d.Name, Path: path,
 		Host: srv.Host, Port: srv.Port, Addrs: addrs, TLS: string(cfg.TLS), CAPEM: cfg.CAPEM,
 		User: user, Password: password,
 	}
