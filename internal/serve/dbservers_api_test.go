@@ -66,7 +66,7 @@ func (stubRemote) SetPassword(context.Context, string, string) error        { re
 func TestDBServersOverHTTP(t *testing.T) {
 	e := newAPIWithAgent(t, &stubAgent{})
 	remote := &stubDBServers{dbs: map[string]bool{}}
-	e.sites.EnableDBServers(remote)
+	e.sites.EnableDBServers(remote, "")
 	c := e.adminCookie(t)
 
 	add := `{"name":"db1","host":"db.example.net","adminUser":"hostashi_admin","adminPassword":"Top-secret-admin"}`

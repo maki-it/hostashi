@@ -398,7 +398,12 @@ func Run(ctx context.Context, cfg Config) error {
 
 	deps.Sites.EnableCron(hosting.RPCAgent{C: client})
 	deps.Sites.EnableSSH(hosting.RPCAgent{C: client})
-	deps.Sites.EnableDBServers(hosting.RemoteDBServers{Box: box})
+	deps.Sites.EnableDBServers(hosting.RemoteDBServers{Box: box}, filepath.Dir(copyPath))
+
+	if err := deps.Sites.WriteDBManifest(ctx); err != nil {
+		cfg.Log.ErrorContext(ctx, "write the external database list for the backup", "err", err)
+	}
+
 	deps.Sites.EnableLimits(hosting.RPCAgent{C: client})
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)

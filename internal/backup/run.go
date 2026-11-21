@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/dbserver"
 	"github.com/maki-it/hostashi/internal/resticctl"
 )
 
@@ -29,6 +30,13 @@ type Item struct {
 	Site     string   // files and db
 	Database string   // db
 	Paths    []string // files and panel
+
+	// Remote is the server of a database on an external server
+	// (ADR-0041); nil for the local server.
+	Remote *dbserver.Config
+	// Err fails the item without running it, for an external database
+	// whose server could not be opened.
+	Err error
 }
 
 // Tags are the restic tags of the item. Together with the host they form
@@ -50,6 +58,16 @@ type Site struct {
 	Home      string
 	UID, GID  uint32
 	Databases []string
+	// External are the site's databases on external servers.
+	External []ExternalDB
+}
+
+// ExternalDB is a database on an external server with its connection, or
+// the reason it cannot be reached.
+type ExternalDB struct {
+	Name   string
+	Server *dbserver.Config
+	Err    error
 }
 
 // PanelPaths are the panel's state in a backup: its environment file, the
@@ -77,6 +95,13 @@ func Plan(sites []Site, panelPaths []string) []Item {
 		for _, d := range dbs {
 			items = append(items, Item{Kind: KindDB, Site: s.Name, Database: d})
 		}
+
+		ext := append([]ExternalDB{}, s.External...)
+		sort.Slice(ext, func(i, j int) bool { return ext[i].Name < ext[j].Name })
+
+		for _, d := range ext {
+			items = append(items, Item{Kind: KindDB, Site: s.Name, Database: d.Name, Remote: d.Server, Err: d.Err})
+		}
 	}
 
 	if len(panelPaths) > 0 {
@@ -93,6 +118,7 @@ type Repo interface {
 	Snapshots(ctx context.Context, tags []string) ([]resticctl.Snapshot, error)
 	Backup(ctx context.Context, tags []string, paths ...string) (resticctl.Summary, error)
 	BackupDatabase(ctx context.Context, tags []string, database string) (resticctl.Summary, error)
+	BackupRemoteDatabase(ctx context.Context, tags []string, database string, cfg dbserver.Config) (resticctl.Summary, error)
 	Forget(ctx context.Context, k resticctl.Keep) error
 	Prune(ctx context.Context) error
 	Check(ctx context.Context, part, total int) error
@@ -195,6 +221,10 @@ type Runner struct {
 	Log      *slog.Logger
 	// Lstat is os.Lstat; tests replace it.
 	Lstat func(string) (os.FileInfo, error)
+	// Warning is a problem found before the run that left something out,
+	// such as an unreadable list of external databases. The run saves the
+	// rest and reports it as its error.
+	Warning string
 }
 
 // Run backs up all items, applies the retention policy and does the
@@ -276,6 +306,10 @@ func (r *Runner) Run(ctx context.Context, items []Item) Status {
 		st.Snapshots = entries(snaps)
 	}
 
+	if r.Warning != "" {
+		return finish(errors.New(r.Warning))
+	}
+
 	return finish(nil)
 }
 
@@ -306,7 +340,17 @@ func (r *Runner) item(ctx context.Context, it Item, lstat func(string) (os.FileI
 			sum, err = r.Repo.Backup(ctx, it.Tags(), it.Paths...)
 		}
 	case KindDB:
-		if err = agentapi.ValidateDBName(it.Database); err == nil {
+		err = agentapi.ValidateDBName(it.Database)
+
+		switch {
+		case err != nil:
+		case it.Err != nil:
+			err = it.Err
+		case it.Remote != nil:
+			// An unreachable server fails only this item: the other
+			// items are saved, and the run shows as needing attention.
+			sum, err = r.Repo.BackupRemoteDatabase(ctx, it.Tags(), it.Database, *it.Remote)
+		default:
 			sum, err = r.Repo.BackupDatabase(ctx, it.Tags(), it.Database)
 		}
 	case KindPanel:

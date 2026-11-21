@@ -158,3 +158,42 @@ func TestLoadRejects(t *testing.T) {
 		t.Fatal("key created in a missing directory")
 	}
 }
+
+func TestLoad(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "secret.key")
+
+	if _, err := Load(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing key: %v", err)
+	}
+
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("Load created a key")
+	}
+
+	a, err := LoadOrCreate(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sealed, err := a.Seal([]byte("pw"), "db-server:2")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := b.Open(sealed, "db-server:2"); err != nil || string(got) != "pw" {
+		t.Fatalf("%q %v", got, err)
+	}
+
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Load(path); !errors.Is(err, ErrInsecureKeyFile) {
+		t.Fatalf("loose mode: %v", err)
+	}
+}

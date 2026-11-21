@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/dbserver"
 	"github.com/maki-it/hostashi/internal/resticctl"
 )
 
@@ -198,6 +199,10 @@ func (f *fakeRepo) Backup(_ context.Context, tags []string, paths ...string) (re
 
 func (f *fakeRepo) BackupDatabase(_ context.Context, tags []string, db string) (resticctl.Summary, error) {
 	return f.save(tags, "dump "+db)
+}
+
+func (f *fakeRepo) BackupRemoteDatabase(_ context.Context, tags []string, db string, cfg dbserver.Config) (resticctl.Summary, error) {
+	return f.save(tags, "remote-dump "+cfg.Host+" "+db)
 }
 
 func (f *fakeRepo) Forget(_ context.Context, k resticctl.Keep) error {

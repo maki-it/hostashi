@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/dbserver"
+	"github.com/maki-it/hostashi/internal/extdb"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -55,8 +56,61 @@ type DBServers interface {
 	With(ctx context.Context, srv store.DBServer, fn func(RemoteDB) error) error
 }
 
-// EnableDBServers turns on external database servers.
-func (s *Service) EnableDBServers(d DBServers) { s.dbs = d }
+// EnableDBServers turns on external database servers. manifestDir is where
+// the list for the backup goes (extdb); empty writes none, for tests.
+func (s *Service) EnableDBServers(d DBServers, manifestDir string) {
+	s.dbs, s.dbManifestDir = d, manifestDir
+}
+
+// WriteDBManifest writes the external servers and their databases for the
+// backup (extdb). The panel calls it at start; every change of a server or
+// an external database calls it too.
+func (s *Service) WriteDBManifest(ctx context.Context) error {
+	if s.dbManifestDir == "" {
+		return nil
+	}
+
+	s.manifestMu.Lock()
+	defer s.manifestMu.Unlock()
+
+	servers, err := s.st.DBServers(ctx)
+	if err != nil {
+		return err
+	}
+
+	dbs, err := s.st.Databases(ctx, "")
+	if err != nil {
+		return err
+	}
+
+	m := extdb.Manifest{}
+
+	for _, srv := range servers {
+		if !srv.Local() {
+			m.Servers = append(m.Servers, extdb.Server{
+				ID: srv.ID, Name: srv.Name, Host: srv.Host, Port: srv.Port, AdminUser: srv.AdminUser,
+				SealedPassword: srv.SealedPassword, TLSMode: srv.TLSMode, CAPEM: srv.CAPEM,
+			})
+		}
+	}
+
+	for _, d := range dbs {
+		if d.Server != store.LocalDBServer {
+			m.Databases = append(m.Databases, extdb.Database{Name: d.Name, Site: d.Site, Server: d.Server})
+		}
+	}
+
+	return extdb.Write(s.dbManifestDir, m)
+}
+
+// dbManifestChanged rewrites the manifest after a change and logs a
+// failure: the change itself stands, and the next change or start writes
+// the file again. Until then the backup misses the new state.
+func (s *Service) dbManifestChanged(ctx context.Context) {
+	if err := s.WriteDBManifest(context.WithoutCancel(ctx)); err != nil {
+		s.log.ErrorContext(ctx, "write the external database list for the backup", "err", err)
+	}
+}
 
 // dbServerNameRe is the rule for a server's name: short, lower case, safe
 // in paths and logs.
@@ -141,6 +195,7 @@ func (s *Service) AddDBServer(ctx context.Context, actor int64, req NewDBServer)
 		return store.DBServer{}, err
 	}
 
+	s.dbManifestChanged(ctx)
 	s.audit(ctx, actor, "db_server.create", req.Name, map[string]string{
 		"host": req.Host, "port": strconv.Itoa(req.Port), "tls": string(req.TLS), "server": info.Display(),
 	})
@@ -218,6 +273,7 @@ func (s *Service) DeleteDBServer(ctx context.Context, actor int64, name string) 
 		return err
 	}
 
+	s.dbManifestChanged(ctx)
 	s.audit(ctx, actor, "db_server.delete", name, nil)
 
 	return nil
@@ -268,7 +324,7 @@ type RemoteDBServers struct {
 	Box *secrets.Box
 }
 
-func dbServerPurpose(id int64) string { return "db-server:" + strconv.FormatInt(id, 10) }
+func dbServerPurpose(id int64) string { return extdb.PasswordPurpose(id) }
 
 // Check implements DBServers.
 func (r RemoteDBServers) Check(ctx context.Context, cfg dbserver.Config, privileges bool) (dbserver.Info, error) {

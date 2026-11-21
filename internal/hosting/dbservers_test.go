@@ -5,12 +5,15 @@ package hosting
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"sync"
 	"testing"
 
 	"github.com/maki-it/hostashi/internal/dbserver"
+	"github.com/maki-it/hostashi/internal/extdb"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -175,7 +178,7 @@ func TestDBServersOffWithoutEnable(t *testing.T) {
 func TestAddDBServer(t *testing.T) {
 	s, _, st := newService(t)
 	f := newFakeDBServers()
-	s.EnableDBServers(f)
+	s.EnableDBServers(f, "")
 
 	ctx := t.Context()
 
@@ -243,7 +246,13 @@ func TestAddDBServer(t *testing.T) {
 func TestDatabasesOnExternalServer(t *testing.T) {
 	s, ag, st := newService(t)
 	f := newFakeDBServers()
-	s.EnableDBServers(f)
+	manifest := filepath.Join(t.TempDir(), "backup")
+
+	if err := os.Mkdir(manifest, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	s.EnableDBServers(f, manifest)
 
 	ctx := t.Context()
 
@@ -273,6 +282,13 @@ func TestDatabasesOnExternalServer(t *testing.T) {
 
 	if d, _, err := s.CreateDatabase(ctx, 1, NewDatabase{Site: "shop", Name: "shop_two"}); err != nil || d.Server != "db1" || !f.dbs["shop_two"] {
 		t.Fatalf("default db1: %+v %v", d, err)
+	}
+
+	// The backup's list has the external databases only.
+	m, err := extdb.Read(manifest, uint32(os.Getuid()))
+	if err != nil || len(m.Servers) != 1 || m.Servers[0].Name != "db1" || string(m.Servers[0].SealedPassword) == "" ||
+		len(m.Databases) != 2 || m.Databases[0].Name != "shop_two" || m.Databases[1].Name != "shop_wp" {
+		t.Fatalf("manifest %+v %v", m, err)
 	}
 
 	if err := s.SetDefaultDBServer(ctx, 1, "nope"); !errors.Is(err, ErrDBServerNotFound) {
@@ -354,5 +370,9 @@ func TestDatabasesOnExternalServer(t *testing.T) {
 
 	if def, err := st.DefaultDBServer(ctx); err != nil || def.Name != "localhost" {
 		t.Fatalf("default after delete: %+v %v", def, err)
+	}
+
+	if m, err := extdb.Read(manifest, uint32(os.Getuid())); err != nil || len(m.Servers) != 0 || len(m.Databases) != 0 {
+		t.Fatalf("manifest after delete %+v %v", m, err)
 	}
 }
