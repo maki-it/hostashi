@@ -294,6 +294,13 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// A parked domain becomes part of the site; it is parked again if the
+	// site does not come up (ADR-0048).
+	parked, err := s.parkedAmong(ctx, domains)
+	if err != nil {
+		return store.Site{}, err
+	}
+
 	created, err := s.st.CreateSite(ctx, req.Name, req.Pool, req.PHP, domains, s.now())
 
 	switch {
@@ -313,6 +320,8 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 			s.log.ErrorContext(ctx, "remove site row after failed create", "site", req.Name, "err", derr)
 		}
 
+		s.parkAgain(undo, actor, req.Name, parked)
+
 		return store.Site{}, err
 	}
 
@@ -320,6 +329,8 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		if derr := s.st.DeleteSite(undo, req.Name); derr != nil {
 			s.log.ErrorContext(ctx, "remove site row after failed create", "site", req.Name, "err", derr)
 		}
+
+		s.parkAgain(undo, actor, req.Name, parked)
 
 		return store.Site{}, err
 	}
@@ -334,6 +345,7 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 
 	if err := s.applyWeb(ctx); err != nil {
 		s.removeAfterFailure(undo, req.Name)
+		s.parkAgain(undo, actor, req.Name, parked)
 
 		return store.Site{}, err
 	}
@@ -386,6 +398,46 @@ func (s *Service) storeTLSChoice(ctx context.Context, req CreateRequest) error {
 	return nil
 }
 
+// parkedAmong returns the parked domains among domains.
+func (s *Service) parkedAmong(ctx context.Context, domains []string) ([]store.Parked, error) {
+	var out []store.Parked
+
+	for _, d := range domains {
+		p, err := s.st.ParkedDomain(ctx, d)
+
+		switch {
+		case err == nil:
+			out = append(out, p)
+		case !errors.Is(err, store.ErrNotFound):
+			return nil, err
+		}
+	}
+
+	return out, nil
+}
+
+// parkAgain parks domains again that a failed site change had taken over,
+// with their ids, pages and certificates (ADR-0048). The agent still serves
+// them from the last accepted web state, so no new web state is needed.
+func (s *Service) parkAgain(ctx context.Context, actor int64, site string, parked []store.Parked) {
+	if len(parked) == 0 {
+		return
+	}
+
+	domains := make([]string, len(parked))
+	for i, p := range parked {
+		domains[i] = p.Domain
+	}
+
+	if err := s.st.ReinsertParked(ctx, parked); err != nil {
+		s.log.ErrorContext(ctx, "park domains again after a failed site change", "site", site, "domains", domains, "err", err)
+
+		return
+	}
+
+	s.audit(ctx, actor, "parked.restore", site, map[string]string{"domains": strings.Join(domains, " ")})
+}
+
 // removeAfterFailure takes a just created site away again. If the account
 // cannot be removed, the row stays in state deleting so a delete can finish
 // the job.
@@ -435,6 +487,11 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 		return store.Site{}, err
 	}
 
+	parked, err := s.parkedAmong(ctx, domains)
+	if err != nil {
+		return store.Site{}, err
+	}
+
 	old, err := s.st.ReplaceSiteDomains(ctx, name, domains, s.now())
 	if errors.Is(err, store.ErrDomainTaken) {
 		return store.Site{}, fmt.Errorf("%w: %w", ErrDomainTaken, err)
@@ -447,6 +504,8 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 	if err := s.applyWeb(ctx); err != nil {
 		if _, rerr := s.st.ReplaceSiteDomains(context.WithoutCancel(ctx), name, old, s.now()); rerr != nil {
 			s.log.ErrorContext(ctx, "restore domains after failed change", "site", name, "err", rerr)
+		} else {
+			s.parkAgain(context.WithoutCancel(ctx), actor, name, parked)
 		}
 
 		return store.Site{}, err

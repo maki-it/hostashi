@@ -301,3 +301,51 @@ func (s *Store) RequestParkedRenew(ctx context.Context, id int64, gap time.Durat
 
 	return ErrTooSoon
 }
+
+// ReinsertParked puts back parked domains exactly as they were, with their
+// ids, so their agent names and certificates fit again (ADR-0048). It is for
+// undoing a site change that took the domains over. A domain that belongs
+// to a site now is refused with ErrDomainTaken and nothing is stored.
+func (s *Store) ReinsertParked(ctx context.Context, rows []Parked) error {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	for _, p := range rows {
+		var n int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM site_domains WHERE domain = ?`, p.Domain).Scan(&n); err != nil {
+			return fmt.Errorf("store: %w", err)
+		}
+
+		if n > 0 {
+			return fmt.Errorf("%w: %s", ErrDomainTaken, p.Domain)
+		}
+
+		var ref any
+		if p.Page != 0 {
+			ref = p.Page
+		}
+
+		if _, err := tx.ExecContext(ctx, `INSERT INTO parked_domains (id, domain, page, tls, tls_live, tls_not_after, tls_error, tls_failed_at,
+			tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			p.ID, p.Domain, ref, boolInt(p.TLS), boolInt(p.TLSLive), unixOf(p.TLSNotAfter), p.TLSError, unixOf(p.TLSFailedAt),
+			p.TLSSource, p.TLSCertSource, boolInt(p.TLSTrusted), unixOf(p.TLSRenewAt), boolInt(p.TLSRenewForced),
+			p.CreatedAt.Unix(), p.UpdatedAt.Unix()); err != nil {
+			return fmt.Errorf("store: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	return nil
+}
