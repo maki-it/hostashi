@@ -33,6 +33,13 @@ function stubFetch(bytes: Uint8Array | string, put: (body: string, url: string) 
   return calls;
 }
 
+// opened waits until the file is loaded and CodeMirror is mounted: the
+// status bar renders a commit before the editor's effect builds the view.
+async function opened(eol: string) {
+  await screen.findByText(eol);
+  await waitFor(() => expect(document.querySelector(".cm-content")).not.toBeNull());
+}
+
 // type changes the document the way a keystroke would.
 function type(text: string) {
   const el = document.querySelector<HTMLElement>(".cm-content");
@@ -49,7 +56,7 @@ describe("EditorDialog", () => {
     const onClose = vi.fn();
     render(<EditorDialog site="blog" path="htdocs/index.php" entry={entry} onClose={onClose} onSaved={() => undefined} />);
 
-    await screen.findByText("LF");
+    await opened("LF");
     expect(document.querySelector(".cm-content")?.textContent).toContain("echo 1;");
     expect(screen.getByText("PHP")).toBeInTheDocument();
     expect(screen.getByText("LF")).toBeInTheDocument();
@@ -63,7 +70,7 @@ describe("EditorDialog", () => {
     const calls = stubFetch("a\r\nb\r\n");
     const onSaved = vi.fn();
     render(<EditorDialog site="blog" path="htdocs/index.php" entry={entry} onClose={() => undefined} onSaved={onSaved} />);
-    await screen.findByText("CRLF");
+    await opened("CRLF");
 
     type("c");
     expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
@@ -87,7 +94,7 @@ describe("EditorDialog", () => {
     stubFetch("x\n");
     const onClose = vi.fn();
     render(<EditorDialog site="blog" path="htdocs/index.php" entry={entry} onClose={onClose} onSaved={() => undefined} />);
-    await screen.findByText("LF");
+    await opened("LF");
     type("y");
     await screen.findByText("Unsaved changes");
 
@@ -107,7 +114,7 @@ describe("EditorDialog", () => {
   it("explains a file that changed meanwhile", async () => {
     stubFetch("x\n", () => Response.json({ error: { code: "files_changed", message: "files: changed" } }, { status: 409 }));
     render(<EditorDialog site="blog" path="htdocs/index.php" entry={entry} onClose={() => undefined} onSaved={() => undefined} />);
-    await screen.findByText("LF");
+    await opened("LF");
     type("y");
     await screen.findByText("Unsaved changes");
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));

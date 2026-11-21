@@ -47,6 +47,7 @@ sudo hostashi backup key show
 | `hostashi.service` | the panel (runs without root) |
 | `hostashi-agent.service` | the agent that makes changes on the system (runs as root, only fixed operations) |
 | `hostashi-php-<version>@<site>.service` | the PHP-FPM process of one site |
+| `hostashi-files@<site>.socket`, `hostashi-files@<site>.service` | the file manager of one site: started by its socket when the Files tab is used, runs as the site's user, stops after 5 minutes without requests |
 | `hostashi-backup.timer` | starts the scheduled backups |
 | `hostashi-adminer.service` | the PHP-FPM process of the database tool (runs as `hostashi-adminer`, no network) |
 
