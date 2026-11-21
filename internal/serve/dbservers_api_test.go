@@ -143,6 +143,12 @@ func TestDBServersOverHTTP(t *testing.T) {
 		t.Fatalf("check: %d %s", rec.Code, rec.Body)
 	}
 
+	// doctor reports the external server from its last check.
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/doctor", cookie: c})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"id":"dbserver.reachable"`) {
+		t.Fatalf("doctor: %d %s", rec.Code, rec.Body)
+	}
+
 	if rec := e.do(t, reqOpts{method: "DELETE", path: "/api/v1/db-servers/db1", cookie: c}); rec.Code != http.StatusConflict {
 		t.Fatalf("delete in use: %d %s", rec.Code, rec.Body)
 	}
