@@ -80,3 +80,16 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 2. ~~Client tools from apt.postgresql.org (option A) instead of the distribution's client?~~ **Decided (Kim, 2026-11-21): yes, from the official repository.**
 3. ~~Adminer: switch to the full build in one pool (option A)?~~ **Decided (Kim, 2026-11-21): yes.**
 4. ~~The new `os/exec` exception `internal/pgctl` for `pg_dump`, `pg_restore` and `psql`?~~ **Decided (Kim, 2026-11-21): yes.**
+
+## Implementation notes
+
+Details settled while building step 1 (`internal/dbserver/postgres.go`, 2026-11-21). They refine the recommendation above; they do not change a decision.
+
+- **Owner role per database.** Hostashi allows several users per database, so a database is owned by a group role `hostashi_db_<16 hex of SHA-256(name)>` without `LOGIN`, not by the first user. Each user is a `LOGIN` role, member of that group, with `ALTER ROLE ... SET role` to it, so all users of a database share its objects as on MariaDB [V: integration test on PostgreSQL 16.15]. The hash keeps the name within PostgreSQL's 63 bytes; site users cannot take names starting with `hostashi`.
+- **No `ALTER SCHEMA public OWNER`.** On PostgreSQL 15 and newer `public` belongs to `pg_database_owner`, which is the owner role [U]; on 14 a non-superuser cannot change it, and `public` stays open to the database's members only because `CONNECT` is revoked from `PUBLIC` [U, checked by the CI job on 14].
+- **Admin membership.** The administrator grants itself every role it creates (`GRANT ... TO CURRENT_USER`). PostgreSQL 16 and newer need that to create a database for another owner and to end a role's sessions [U, checked by CI on 14 to 19].
+- **Passwords as SCRAM verifiers.** The panel sends `PASSWORD 'SCRAM-SHA-256$4096:...'`, computed in Go, never the plain password, so even `log_statement = 'all'` logs no password [V: server log in the integration test].
+- **Deleting a user** turns off its login, ends its sessions, moves objects it made after `RESET ROLE` to the owner role (`REASSIGN OWNED`, in that database) and drops it. Deleting a database uses `DROP DATABASE ... WITH (FORCE)` and drops the owner role.
+- **Names.** On PostgreSQL, databases `postgres`, `template0`, `template1`, names starting with `pg_` and database names over 63 characters are refused; so are the role names `public`, `none`, `postgres`, `user`, `current_user`, `current_role` and `session_user`.
+- **Maintenance database.** The administrator connects to `postgres` [A: every server has it]. The pgx configuration ignores `PG*` environment variables, `~/.pgpass` and service files.
+- **Until the later steps land**, backups list PostgreSQL databases as failed with the reason, and import, export and the web database tool answer `postgresql_not_yet`.

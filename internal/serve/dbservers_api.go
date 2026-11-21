@@ -45,6 +45,10 @@ type dbServerJSON struct {
 	AdminUser  string `json:"adminUser,omitempty"`
 	ClientHost string `json:"clientHost,omitempty"`
 	LastError  string `json:"lastError,omitempty"`
+
+	// Warnings come only with a new server: what works but is not
+	// recommended, for example a PostgreSQL superuser.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 func toDBServerJSON(d store.DBServer, details bool) dbServerJSON {
@@ -115,7 +119,7 @@ func checkMessage(err error) string {
 	case errors.Is(err, dbserver.ErrUnavailable):
 		return "the server is not reachable or its TLS certificate is not trusted: " + err.Error()
 	case errors.Is(err, dbserver.ErrUnsupported):
-		return "the server version is not supported (MariaDB 10.5+ or MySQL 8.0+): " + err.Error()
+		return "the server version is not supported (MariaDB 10.5+, MySQL 8.0 to 9.x or PostgreSQL 14+): " + err.Error()
 	default:
 		return err.Error()
 	}
@@ -145,9 +149,12 @@ func registerDBServers(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 
 	mux.HandleFunc("POST /api/v1/db-servers", a.allow("db_servers:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in struct {
+			// Engine is "mariadb" (default, also for MySQL) or
+			// "postgresql" (ADR-0051).
+			Engine        string `json:"engine"`
 			Name          string `json:"name"`
 			Host          string `json:"host"`
-			Port          int    `json:"port"` // 0: 3306
+			Port          int    `json:"port"` // 0: 3306 or 5432
 			AdminUser     string `json:"adminUser"`
 			AdminPassword string `json:"adminPassword"`
 			TLSMode       string `json:"tlsMode"` // "verify" (default), "verify-ca" or "none"
@@ -157,11 +164,23 @@ func registerDBServers(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 			return
 		}
 
+		var engine string
+
+		switch in.Engine {
+		case "", "mariadb":
+		case "postgresql":
+			engine = dbserver.EnginePostgreSQL
+		default:
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", `engine must be "mariadb" or "postgresql"`)
+
+			return
+		}
+
 		ctx, cancel := context.WithTimeout(r.Context(), dbServerTimeout)
 		defer cancel()
 
-		d, err := svc.AddDBServer(ctx, p.User.ID, hosting.NewDBServer{
-			Name: in.Name, Host: in.Host, Port: in.Port, AdminUser: in.AdminUser, AdminPassword: in.AdminPassword,
+		d, warnings, err := svc.AddDBServer(ctx, p.User.ID, hosting.NewDBServer{
+			Engine: engine, Name: in.Name, Host: in.Host, Port: in.Port, AdminUser: in.AdminUser, AdminPassword: in.AdminPassword,
 			TLS: dbserver.TLSMode(in.TLSMode), CAPEM: in.CACertificate,
 		})
 		if err != nil {
@@ -170,7 +189,9 @@ func registerDBServers(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 			return
 		}
 
-		writeJSON(w, http.StatusCreated, toDBServerJSON(d, true))
+		out := toDBServerJSON(d, true)
+		out.Warnings = warnings
+		writeJSON(w, http.StatusCreated, out)
 	}))
 
 	mux.HandleFunc("POST /api/v1/db-servers/{server}/check", a.allow("db_servers:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {

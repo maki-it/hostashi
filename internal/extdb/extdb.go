@@ -34,6 +34,9 @@ const version = 1
 // Server is an external server with its sealed admin password; the purpose
 // of the seal is PasswordPurpose(ID).
 type Server struct {
+	// Engine is dbserver.EnginePostgreSQL for PostgreSQL (ADR-0051);
+	// empty for MariaDB and MySQL, as in files written before it.
+	Engine         string `json:"engine,omitempty"`
 	ID             int64  `json:"id"`
 	Name           string `json:"name"`
 	Host           string `json:"host"`
@@ -50,7 +53,7 @@ func PasswordPurpose(id int64) string { return fmt.Sprintf("db-server:%d", id) }
 // Config is the connection with the opened password.
 func (s Server) Config(password string) dbserver.Config {
 	return dbserver.Config{
-		Host: s.Host, Port: s.Port, AdminUser: s.AdminUser, AdminPassword: password,
+		Engine: s.Engine, Host: s.Host, Port: s.Port, AdminUser: s.AdminUser, AdminPassword: password,
 		TLS: dbserver.TLSMode(s.TLSMode), CAPEM: s.CAPEM,
 	}
 }
@@ -79,7 +82,8 @@ func (m Manifest) Validate() error {
 
 	for _, s := range m.Servers {
 		cfg := s.Config("x")
-		if s.ID < 2 || s.Name == "" || len(s.Name) > 32 || servers[s.Name] || len(s.SealedPassword) == 0 {
+		if s.ID < 2 || s.Name == "" || len(s.Name) > 32 || servers[s.Name] || len(s.SealedPassword) == 0 ||
+			(s.Engine != "" && !dbserver.IsPostgres(s.Engine)) {
 			return fmt.Errorf("extdb: bad server %q", s.Name)
 		}
 

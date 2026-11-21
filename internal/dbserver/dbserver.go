@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package dbserver manages the sites' databases and database users on an
-// external MariaDB or MySQL server over TCP (ADR-0041). It runs in the panel
+// external MariaDB, MySQL (ADR-0041) or PostgreSQL server (ADR-0051, see
+// postgres.go) over TCP. It runs in the panel
 // process, which has network access; the agent keeps talking only to the
 // local server over its socket (internal/mariadb).
 //
@@ -82,6 +83,9 @@ var hostRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9](
 
 // Config describes how to reach one server as its administrator.
 type Config struct {
+	// Engine is EnginePostgreSQL for a PostgreSQL server; anything else
+	// means MariaDB or MySQL, which share one protocol.
+	Engine    string `json:",omitempty"`
 	Host      string
 	Port      int
 	AdminUser string
@@ -204,10 +208,15 @@ func (c Config) tlsConfig() (*tls.Config, error) {
 	return tc, nil
 }
 
-// Open returns a small pool for the server. It does not connect yet.
+// Open returns a small pool for the server. It does not connect yet. A
+// PostgreSQL pool connects to PostgresMaintenanceDB.
 func Open(c Config) (*sql.DB, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
+	}
+
+	if IsPostgres(c.Engine) {
+		return openPostgres(c, PostgresMaintenanceDB)
 	}
 
 	tc, err := c.tlsConfig()
@@ -291,7 +300,7 @@ func ValidateClientHost(host string) error {
 
 // Info describes a server as Probe saw it.
 type Info struct {
-	Engine  string // EngineMariaDB or EngineMySQL
+	Engine  string // EngineMariaDB, EngineMySQL or EnginePostgreSQL
 	Version string // for example "11.8.6"
 	// ClientHost is the address the server sees for this host.
 	ClientHost string
@@ -300,6 +309,9 @@ type Info struct {
 	// CertExpires is when the server certificate ends, if the caller set
 	// Config.OnCertificate; zero otherwise.
 	CertExpires time.Time
+	// Superuser is set for a PostgreSQL administrator with SUPERUSER,
+	// which works but holds more than Hostashi needs (ADR-0051).
+	Superuser bool
 }
 
 // Display returns for example "MariaDB 11.8.6".
@@ -526,8 +538,9 @@ func (c *Client) createUserWith(ctx context.Context, database, user, password, w
 	return nil
 }
 
-// DropUser drops a user; a missing one is not an error.
-func (c *Client) DropUser(ctx context.Context, user string) error {
+// DropUser drops a user; a missing one is not an error. The database is
+// not needed on MariaDB and MySQL, where a user is not tied to one.
+func (c *Client) DropUser(ctx context.Context, _, user string) error {
 	if err := agentapi.ValidateDBUser(user); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
