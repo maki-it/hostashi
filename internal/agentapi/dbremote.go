@@ -16,6 +16,10 @@ import (
 // agent records the job and starts hostashi-dbjob@<id>.service, which may
 // reach only the server's addresses and runs the client as the site user.
 
+// RemoteEnginePostgreSQL is DBRemoteJobRequest.Engine for a PostgreSQL
+// server.
+const RemoteEnginePostgreSQL = "postgresql"
+
 // Limits of a remote job request.
 const (
 	MaxRemoteHostLen  = 253
@@ -34,7 +38,10 @@ var (
 // external server. The password belongs to a temporary user the panel
 // created for this job with privileges on Database only.
 type DBRemoteJobRequest struct {
-	Kind     string `json:"kind"` // "import" or "export"
+	Kind string `json:"kind"` // "import" or "export"
+	// Engine is EnginePostgreSQL for a PostgreSQL server (ADR-0051);
+	// empty means MariaDB or MySQL.
+	Engine   string `json:"engine,omitempty"`
 	Site     string `json:"site"`
 	Database string `json:"database"`
 	Path     string `json:"path"`
@@ -61,8 +68,21 @@ func (r DBRemoteJobRequest) Validate() error {
 		return err
 	}
 
-	if err := (DBDumpRequest{Database: r.Database, Path: r.Path}).Validate(); err != nil {
-		return err
+	switch r.Engine {
+	case "":
+		if err := (DBDumpRequest{Database: r.Database, Path: r.Path}).Validate(); err != nil {
+			return err
+		}
+	case RemoteEnginePostgreSQL:
+		if err := ValidateDBName(r.Database); err != nil {
+			return err
+		}
+
+		if err := ValidatePGDumpPath(r.Path); err != nil {
+			return err
+		}
+	default:
+		return errors.New("engine: must be empty or postgresql")
 	}
 
 	if r.Password == "" {

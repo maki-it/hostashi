@@ -101,6 +101,12 @@ func Dump(ctx context.Context, r Run, out io.Writer) error {
 	return run(ctx, r, toolDump, []string{"--format=custom", "--no-password"}, nil, out)
 }
 
+// DumpSQL writes the database as a plain SQL file to out, without owners
+// and privileges, so it loads into a database of another server or name.
+func DumpSQL(ctx context.Context, r Run, out io.Writer) error {
+	return run(ctx, r, toolDump, []string{"--format=plain", "--no-owner", "--no-privileges", "--no-password"}, nil, out)
+}
+
 // Restore loads a custom-format dump from in. Objects are created as
 // role (the site's role), existing ones are replaced, ownership in the
 // dump is ignored, and the first error stops and rolls back the restore.
@@ -126,7 +132,7 @@ func Restore(ctx context.Context, r Run, role string, in io.Reader) error {
 		done <- err
 	}()
 
-	err := Exec(ctx, r, role, pr)
+	err := execSQL(ctx, r, role, pr)
 	// psql may stop early; pg_restore then fails on its next write.
 	_ = pr.CloseWithError(errors.New("pgctl: psql stopped"))
 	rerr := <-done
@@ -209,8 +215,29 @@ func (f *preambleFilter) Write(p []byte) (int, error) {
 }
 
 // Exec runs the plain SQL file from in with psql, in one transaction, as
-// role; the first error stops it.
+// role; the first error stops it. Like Restore it drops "SET
+// transaction_timeout = 0;" from the preamble, so a plain dump of
+// pg_dump 17 or newer loads into an older server.
 func Exec(ctx context.Context, r Run, role string, in io.Reader) error {
+	if !roleRe.MatchString(role) {
+		return fmt.Errorf("%w: invalid role", ErrFailed)
+	}
+
+	pr, pw := io.Pipe()
+
+	go func() {
+		_, err := io.Copy(&preambleFilter{w: pw}, in)
+		_ = pw.CloseWithError(err)
+	}()
+
+	err := execSQL(ctx, r, role, pr)
+	// psql may stop early; the copy then ends on its next write.
+	_ = pr.CloseWithError(errors.New("pgctl: psql stopped"))
+
+	return err
+}
+
+func execSQL(ctx context.Context, r Run, role string, in io.Reader) error {
 	if !roleRe.MatchString(role) {
 		return fmt.Errorf("%w: invalid role", ErrFailed)
 	}

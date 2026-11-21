@@ -350,7 +350,7 @@ func TestPGClientTooOld(t *testing.T) {
 }
 
 func TestAddPostgresServer(t *testing.T) {
-	s, _, st := newService(t)
+	s, ag, st := newService(t)
 	f := newFakeDBServers()
 	manifest := filepath.Join(t.TempDir(), "backup")
 
@@ -393,7 +393,8 @@ func TestAddPostgresServer(t *testing.T) {
 		t.Fatalf("manifest %+v %v", m, err)
 	}
 
-	// Import, export and the web database tool refuse PostgreSQL for now.
+	// The web database tool refuses PostgreSQL for now; import and export
+	// run with the PostgreSQL client.
 	if _, err := s.Create(ctx, 1, CreateRequest{Name: "shop", Domains: []string{"shop.example.com"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -407,8 +408,17 @@ func TestAddPostgresServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := s.ExportDatabase(ctx, 1, "shop_pg", "dumps/x.sql"); !errors.Is(err, ErrPostgreSQLNotYet) {
-		t.Fatalf("export: %v", err)
+	s.SetResolver(&fakeResolver{addrs: addrs("10.0.0.7")})
+
+	for _, p := range []string{"dumps/x.dump", "dumps/x.sql.gz"} {
+		if _, err := s.ExportDatabase(ctx, 1, "shop_pg", p); err != nil {
+			t.Fatalf("export %s: %v", p, err)
+		}
+	}
+
+	if req := ag.remote[len(ag.remote)-1]; req.Engine != agentapi.RemoteEnginePostgreSQL || req.Path != "dumps/x.sql.gz" ||
+		!strings.HasPrefix(req.User, "hostashi_job_") {
+		t.Fatalf("request %+v", req)
 	}
 
 	if _, err := s.openRemoteTool(ctx, db, 30); !errors.Is(err, ErrPostgreSQLNotYet) {

@@ -90,8 +90,13 @@ func TestRemoteExport(t *testing.T) {
 		t.Fatalf("agent requests: %+v", ag.remote)
 	}
 
+	// MariaDB has no custom-format dump.
+	if _, err := s.ExportDatabase(ctx, 1, "shop_wp", "backup.dump"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("custom format on MariaDB: %v", err)
+	}
+
 	req := ag.remote[0]
-	if req.Site != "shop" || req.Database != "shop_wp" || req.Host != "db.example.net" || req.Port != 3306 || req.TLS != "verify" ||
+	if req.Engine != "" || req.Site != "shop" || req.Database != "shop_wp" || req.Host != "db.example.net" || req.Port != 3306 || req.TLS != "verify" ||
 		!reflect.DeepEqual(req.Addrs, []string{"10.0.0.5", "10.0.0.6"}) {
 		t.Errorf("request %+v", req)
 	}
