@@ -294,6 +294,16 @@ func TestDatabasesOnExternalServer(t *testing.T) {
 		t.Fatalf("row kept: %v", err)
 	}
 
+	// Import, export and the database tool run in the agent, which has no
+	// network: refused for an external database.
+	if _, err := s.ImportDatabase(ctx, 1, "shop_wp", "dumps/old.sql"); !errors.Is(err, ErrDBServerLocalOnly) {
+		t.Fatalf("import: %v", err)
+	}
+
+	if _, err := s.ExportDatabase(ctx, 1, "shop_wp", "dumps/new.sql"); !errors.Is(err, ErrDBServerLocalOnly) {
+		t.Fatalf("export: %v", err)
+	}
+
 	// Users and passwords go to the database's server.
 	if _, err := s.CreateDatabaseUser(ctx, 1, "shop_wp", "reader", ""); err != nil || f.users["reader"] != "shop_wp" {
 		t.Fatalf("user: %v %v", err, f.users)

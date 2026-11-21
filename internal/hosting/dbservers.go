@@ -21,6 +21,10 @@ var (
 	ErrDBServerExists   = errors.New("hosting: a database server with this name exists")
 	ErrDBServerInUse    = errors.New("hosting: the database server has databases or is the local server")
 	ErrDBServersOff     = errors.New("hosting: external database servers are not available")
+	// ErrDBServerLocalOnly: import, export and the web database tool work
+	// only on the local server so far; the agent that runs them has no
+	// network (ADR-0041, open question 3).
+	ErrDBServerLocalOnly = errors.New("hosting: this works only for databases on the local server so far")
 	// ErrDBServerCheck wraps why a server failed the connection check.
 	ErrDBServerCheck = errors.New("hosting: the database server failed the check")
 )
