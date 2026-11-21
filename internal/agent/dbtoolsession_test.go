@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -43,6 +44,10 @@ func TestDBToolExtendAndEnd(t *testing.T) {
 	}
 
 	toolUser(t)
+
+	// The agent runs with UMask=0077; the tool must still read the file.
+	old := syscall.Umask(0o077)
+	t.Cleanup(func() { syscall.Umask(old) })
 
 	db := &recordingDB{}
 	m := newDBManager(t, db)
@@ -146,8 +151,8 @@ func TestDBToolExtendAndEnd(t *testing.T) {
 	}
 
 	// Files long past their end go when the next one is written.
-	old := time.Now().Add(-sessionStale - time.Minute)
-	if err := os.Chtimes(filepath.Join(tool.sessionDir(), remote), old, old); err != nil {
+	stale := time.Now().Add(-sessionStale - time.Minute)
+	if err := os.Chtimes(filepath.Join(tool.sessionDir(), remote), stale, stale); err != nil {
 		t.Fatal(err)
 	}
 

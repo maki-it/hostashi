@@ -118,6 +118,11 @@ func (t *dbTool) writeSession(user string, expires time.Time) error {
 		werr = f.Chown(-1, gid)
 	}
 
+	// The agent's umask would leave the tool's group out.
+	if werr == nil {
+		werr = f.Chmod(0o640)
+	}
+
 	if cerr := f.Close(); werr == nil {
 		werr = cerr
 	}
