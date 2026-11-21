@@ -5,7 +5,6 @@
 // CSR from the server.
 
 import { request } from "./api";
-import type { Site } from "./sites";
 
 export type CertSource = "letsencrypt" | "custom";
 
@@ -27,14 +26,27 @@ export type CertUpload = { certificate: string; chain: string; key: string; allo
 export const maxChainBytes = 32 << 10;
 export const maxKeyBytes = 16 << 10;
 
-const certPath = (name: string) => "/sites/" + encodeURIComponent(name) + "/tls";
+// The certificate routes of a site, a parked domain or the panel address.
+export const siteCertBase = (name: string) => "/sites/" + encodeURIComponent(name) + "/tls";
+export const parkedCertBase = (domain: string) => "/parked-domains/" + encodeURIComponent(domain) + "/tls";
+export const panelCertBase = "/panel/tls";
 
-export const certInfo = (name: string) => request<CertInfo>("GET", certPath(name) + "/certificate");
-export const uploadCert = (name: string, u: CertUpload) => request<Site>("PUT", certPath(name) + "/certificate", u);
-export const deleteCert = (name: string) => request<Site>("DELETE", certPath(name) + "/certificate");
-export const createCSR = async (name: string) => (await request<{ csr: string }>("POST", certPath(name) + "/csr")).csr;
-export const setCertSource = (name: string, source: CertSource) => request<Site>("PUT", certPath(name) + "/source", { source });
-export const renewCert = (name: string) => request<Site>("POST", certPath(name) + "/renew");
+export const certInfo = (base: string) => request<CertInfo>("GET", base + "/certificate");
+export const uploadCert = (base: string, u: CertUpload) => request<unknown>("PUT", base + "/certificate", u);
+export const deleteCert = (base: string) => request<unknown>("DELETE", base + "/certificate");
+export const createCSR = async (base: string) => (await request<{ csr: string }>("POST", base + "/csr")).csr;
+export const setCertSource = (base: string, source: CertSource) => request<unknown>("PUT", base + "/source", { source });
+export const renewCert = (base: string) => request<unknown>("POST", base + "/renew");
+
+// CertState is the HTTPS state of what the card shows: wanted (enabled),
+// served (active), and the sources as the API reports them.
+export type CertState = {
+  enabled: boolean;
+  active: boolean;
+  source?: CertSource;
+  certSource?: "" | CertSource;
+  renewPending?: boolean;
+};
 
 const pemRe = (type: string) => new RegExp(`-----BEGIN ${type}-----[\\s\\S]+?-----END ${type}-----`);
 
@@ -62,3 +74,8 @@ export function daysLeft(iso: string | null, now: Date = new Date()): number | n
 
 // fingerprintText groups a hex fingerprint as AB:CD:... for reading.
 export const fingerprintText = (hex: string) => (hex.toUpperCase().match(/.{1,2}/g) ?? []).join(":");
+
+// PanelTLS is the HTTPS state of the panel's own address (ADR-0023).
+export type PanelTLS = CertState & { domain: string; domains: string[]; notAfter: string | null; error?: string };
+
+export const panelTLS = () => request<PanelTLS>("GET", panelCertBase);

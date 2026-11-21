@@ -2,8 +2,8 @@
 
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
-import { CertificateCard } from "./Certificate";
+import { describe, expect, it, vi } from "vitest";
+import { CertificateCard, PanelCertificate } from "./Certificate";
 import { daysLeft, fingerprintText, uploadProblem, type CertInfo } from "./certs";
 import type { Site } from "./sites";
 import { mockFetch } from "./test-utils";
@@ -66,7 +66,7 @@ describe("CertificateCard", () => {
       "GET /api/v1/sites/blog/tls/certificate": { body: leCert },
       "POST /api/v1/sites/blog/tls/renew": { status: 202, body: site },
     });
-    render(<CertificateCard site={site} onChange={noop} />);
+    render(<CertificateCard base="/sites/blog/tls" name="blog" tls={site.tls} onChange={noop} />);
     const card = within(await screen.findByRole("region", { name: "Certificate" }));
     const facts = within(await card.findByLabelText("Live certificate"));
     expect(facts.getByText("R11")).toBeInTheDocument();
@@ -86,7 +86,7 @@ describe("CertificateCard", () => {
       "GET /api/v1/sites/blog/tls/certificate": { body: leCert },
       "POST /api/v1/sites/blog/tls/renew": { status: 429, body: { error: { code: "renew_too_soon", message: "x" } } },
     });
-    render(<CertificateCard site={site} onChange={noop} />);
+    render(<CertificateCard base="/sites/blog/tls" name="blog" tls={site.tls} onChange={noop} />);
     const card = within(await screen.findByRole("region", { name: "Certificate" }));
     await user.click(card.getByRole("button", { name: "Renew now" }));
     expect(await card.findByText(/less than 10 minutes ago/)).toBeInTheDocument();
@@ -98,7 +98,7 @@ describe("CertificateCard", () => {
       "GET /api/v1/sites/blog/tls/certificate": { body: leCert },
       "PUT /api/v1/sites/blog/tls/certificate": { body: site },
     });
-    render(<CertificateCard site={site} onChange={noop} />);
+    render(<CertificateCard base="/sites/blog/tls" name="blog" tls={site.tls} onChange={noop} />);
     const card = within(await screen.findByRole("region", { name: "Certificate" }));
     // Choosing "own" opens the upload; the source changes with the upload.
     await user.click(card.getByLabelText(/^Own certificate/));
@@ -131,7 +131,7 @@ describe("CertificateCard", () => {
       },
       "PUT /api/v1/sites/blog/tls/certificate": { body: site },
     });
-    render(<CertificateCard site={{ ...site, tls: { ...site.tls, enabled: false, active: false } }} onChange={noop} />);
+    render(<CertificateCard base="/sites/blog/tls" name="blog" tls={{ ...site.tls, enabled: false, active: false }} onChange={noop} />);
     const card = within(await screen.findByRole("region", { name: "Certificate" }));
     expect(await card.findByText("No certificate yet.")).toBeInTheDocument();
     expect(card.queryByRole("button", { name: "Renew now" })).toBeNull();
@@ -157,7 +157,7 @@ describe("CertificateCard", () => {
       "DELETE /api/v1/sites/blog/tls/certificate": { body: site },
     });
     const off = { ...site, tls: { ...site.tls, enabled: false, active: false } };
-    render(<CertificateCard site={off} onChange={noop} />);
+    render(<CertificateCard base="/sites/blog/tls" name="blog" tls={off.tls} onChange={noop} />);
     const card = within(await screen.findByRole("region", { name: "Certificate" }));
     await card.findByLabelText("Live certificate");
     await user.click(card.getByRole("button", { name: "Delete certificate" }));
@@ -174,7 +174,7 @@ describe("CertificateCard", () => {
       "PUT /api/v1/sites/blog/tls/source": { body: site },
     });
     const own = { ...site, tls: { ...site.tls, source: "custom" as const, certSource: "custom" as const, trusted: false } };
-    render(<CertificateCard site={own} onChange={noop} />);
+    render(<CertificateCard base="/sites/blog/tls" name="blog" tls={own.tls} onChange={noop} />);
     const card = within(await screen.findByRole("region", { name: "Certificate" }));
     expect(await card.findByText("Not publicly trusted")).toBeInTheDocument();
     expect(card.getByText(/Not renewed automatically/)).toBeInTheDocument();
@@ -182,5 +182,28 @@ describe("CertificateCard", () => {
     await user.click(card.getByLabelText(/^Let's Encrypt/));
     expect(await card.findByText(/source again/)).toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ source: "letsencrypt" });
+  });
+});
+
+describe("PanelCertificate", () => {
+  it("shows nothing without a panel address", async () => {
+    const calls = mockFetch({ "GET /api/v1/panel/tls": { body: { enabled: false, domain: "", active: false, domains: [], notAfter: null } } });
+    const { container } = render(<PanelCertificate />);
+    await vi.waitFor(() => expect(calls.length).toBe(1));
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("offers upload and CSR, but no delete, for the panel address", async () => {
+    mockFetch({
+      "GET /api/v1/panel/tls": {
+        body: { enabled: true, domain: "panel.example.com", active: true, domains: ["panel.example.com"], notAfter: "2099-01-01T00:00:00Z", source: "letsencrypt", certSource: "letsencrypt", trusted: true, renewPending: false },
+      },
+      "GET /api/v1/panel/tls/certificate": { body: leCert },
+    });
+    render(<PanelCertificate />);
+    const card = within(await screen.findByRole("region", { name: "Panel certificate (panel.example.com)" }));
+    expect(card.getByRole("button", { name: "Renew now" })).toBeInTheDocument();
+    expect(card.getByRole("button", { name: "Upload certificate" })).toBeInTheDocument();
+    expect(card.queryByRole("button", { name: /Delete/ })).toBeNull();
   });
 });

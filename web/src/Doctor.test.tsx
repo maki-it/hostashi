@@ -67,7 +67,7 @@ describe("Doctor", () => {
     current = { status: "ok", checkedAt: "2026-11-20T09:31:00Z", counts: { ok: 1, warn: 0, fail: 0 }, checks: [report.checks[0]!] };
     await user.click(screen.getByRole("button", { name: "Check again" }));
     expect(await screen.findByText("Everything is fine.")).toBeInTheDocument();
-    expect(calls.length).toBe(2);
+    expect(calls.filter((c) => c.path === "/api/v1/doctor").length).toBe(2);
   });
 
   it("explains an agent that does not answer", async () => {

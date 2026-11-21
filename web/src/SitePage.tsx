@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { CertificateCard } from "./Certificate";
+import { siteCertBase } from "./certs";
 import { CronSettings } from "./Cron";
 import { LimitSettings } from "./Limits";
 import { allowIpsProblem, clientIp, listPages, pageMessage, parseAllowIps, setMaintenance, type StatusPage } from "./pages";
@@ -366,7 +367,7 @@ function DomainsTab({ site, onChange }: TabProps) {
           {h.result}
         </div>
       </Card>
-      <CertificateCard site={site} onChange={onChange} />
+      <CertificateCard base={siteCertBase(site.name)} name={site.name} tls={site.tls} onChange={onChange} />
     </>
   );
 }
