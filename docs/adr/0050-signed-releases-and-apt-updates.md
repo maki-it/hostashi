@@ -176,7 +176,7 @@ Decided by Kim (2026-11-21) as below.
 
 ## 7. Release channels
 
-**Recommendation:** one channel `stable` for v1. Pre-releases (`v1.0.0-rc.1`) are published on GitHub only, not in the apt repo. A `testing` suite can come later without breaking clients.
+**Recommendation** (decided by Kim, 2026-11-21): one channel `stable` for v1. Pre-releases (`v1.0.0-rc.1`) are published on GitHub only, not in the apt repo. A `testing` suite can come later without breaking clients.
 
 ## Consequences
 
@@ -186,11 +186,11 @@ Decided by Kim (2026-11-21) as below.
 - Outside effects that need Kim's approval: creating the OpenPGP key, enabling Pages with the custom domain `hostashi.com`, the `release` environment with its secret, and the DNS records and redirects for `hostashi.com`, `docs.hostashi.com` and `hostashi.de`.
 - Not in scope: other distributions, an RPM repository, a panel button that updates, Docker images.
 
-## Open questions for Kim
+## Questions for Kim (all decided on 2026-11-21)
 
 1. ~~Installation~~ Decided (Kim, 2026-11-21): install script as entry point, it installs the package through apt and runs `hostashi setup`; plain `apt install hostashi` plus `hostashi setup` works too.
 2. ~~Apt repository~~ Decided (Kim, 2026-11-21): GitHub Pages of `maki-it/hostashi` on `hostashi.com`, apt under `/apt`.
 3. ~~Signing~~ Decided (Kim, 2026-11-21): one key with expiry in the `release` environment, renewed by a workflow after Kim's approval, no manual `gpg`.
 4. ~~Upgrade~~ Decided (Kim, 2026-11-21): snapshot, configure steps with the saved options, restart, wait for the health check.
 5. ~~Automatic updates~~ Decided (Kim, 2026-11-21): off by default, `--auto-update` opts in; the panel shows available updates.
-6. Only a `stable` channel for v1 (recommended)?
+6. ~~Channels~~ Decided (Kim, 2026-11-21): only `stable` for v1; pre-releases on GitHub only.
