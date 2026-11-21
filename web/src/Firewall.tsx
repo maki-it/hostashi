@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { Plus, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError } from "./api";
 import {
@@ -13,6 +14,7 @@ import {
   type FirewallRule,
   type FirewallState,
 } from "./firewall";
+import { Button, Card, Field, IconButton, Notice, PageHead, RelTime } from "./ui";
 
 type RuleDraft = { proto: "tcp" | "udp"; ports: string; sources: string; note: string };
 
@@ -74,36 +76,44 @@ export function Firewall() {
     void load();
   }, [load]);
 
+  const head = (
+    <PageHead
+      title="Firewall"
+      description="Ports 80 and 443 are always open for the sites. SSH and the panel are open to everyone until you set an allowlist."
+    />
+  );
+
   if (!fw) {
-    return error ? (
-      <p role="alert" className="card">
-        {error}
-      </p>
-    ) : (
-      <p aria-busy="true">Loading…</p>
+    return (
+      <>
+        {head}
+        {error ? (
+          <Notice tone="err" title={error}>
+            <Button onClick={() => void load()}>Try again</Button>
+          </Notice>
+        ) : (
+          <p aria-busy="true">Loading…</p>
+        )}
+      </>
     );
   }
 
   if (!fw.enabled) {
     return (
-      <section className="card" aria-labelledby="fw-title">
-        <h2 id="fw-title">Firewall</h2>
-        <p>Hostashi&apos;s firewall is off: the server was installed with --no-firewall.</p>
-        <p className="muted">
-          Use the firewall in front of the server (for example at your provider), and let only SSH, 80, 443 and the panel port
-          through. Run the installer again without --no-firewall to manage the rules here.
-        </p>
-      </section>
+      <>
+        {head}
+        <Notice tone="warn" title="Hostashi's firewall is off: the server was installed with --no-firewall.">
+          Use the firewall in front of the server (for example at your provider), and let only SSH, 80, 443 and the panel port through.
+          Run the installer again without --no-firewall to manage the rules here.
+        </Notice>
+      </>
     );
   }
 
   return (
     <>
-      {error && (
-        <p role="alert" className="card">
-          {error}
-        </p>
-      )}
+      {head}
+      {error && <Notice tone="err" title={error} />}
       <Editor key={JSON.stringify(fw.state) + (fw.pending?.deadline ?? "")} fw={fw} reload={load} flash={flash} setFlash={setFlash} />
     </>
   );
@@ -218,148 +228,163 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
   const foreignPending = !!fw.pending && !waiting;
 
   return (
-    <form className="stack" onSubmit={(e) => void save(e)}>
-      <section className="card" aria-labelledby="fw-title">
-        <h2 id="fw-title">Firewall</h2>
-        <p>
-          Ports 80 and 443 are always open for the sites. SSH and the panel are open to everyone until you set an allowlist. Every
-          change rolls back after {fw.confirmWithin} seconds unless it is confirmed.
-        </p>
-        <p className="muted">
-          Your address as the panel sees it: <span className="mono">{fw.clientIp}</span>. A firewall in front of the server (for
-          example at your provider) still applies: open a port there too.
-        </p>
-        {fw.rolledBack && !waiting && (
-          <p role="status">The last change was not confirmed in time and was rolled back at {new Date(fw.rolledBack).toLocaleString()}.</p>
-        )}
-        {flash && !flash.alert && <p role="status">{flash.text}</p>}
-        {flash?.alert && <p role="alert">{flash.text}</p>}
-      </section>
+    <form className="ui-stack" onSubmit={(e) => void save(e)}>
+      <Notice tone="info" title={"Your address as the panel sees it: " + fw.clientIp}>
+        Every change rolls back after {fw.confirmWithin} seconds unless it is confirmed. A firewall in front of the server (for example at
+        your provider) still applies: open a port there too.
+      </Notice>
+      {fw.rolledBack && !waiting && (
+        <Notice tone="warn" title="The last change was not confirmed in time and was rolled back.">
+          Rolled back <RelTime iso={fw.rolledBack} />.
+        </Notice>
+      )}
+      {flash && <Notice tone={flash.alert ? "err" : "ok"} title={flash.text} />}
 
       {waiting && (
-        <section className="card notice" aria-labelledby="fw-wait">
-          <h2 id="fw-wait" ref={waitRef} tabIndex={-1}>
+        <section className="ui-card ui-card-body ui-stack ui-attention" aria-labelledby="fw-wait">
+          <h2 id="fw-wait" className="ui-flush" ref={waitRef} tabIndex={-1}>
             Waiting for confirmation
           </h2>
           {waiting.ssh ? (
             <>
-              <p>
-                The SSH allowlist changed. Open a new terminal now and log in over SSH. Keep the session you have open until the
-                test works.
+              <p className="ui-flush">
+                The SSH allowlist changed. Open a new terminal now and log in over SSH. Keep the session you have open until the test
+                works.
               </p>
-              <p>The rules roll back in {now} seconds unless you keep them.</p>
-              <div className="actions">
-                <button type="button" disabled={busy} onClick={() => void confirm(waiting.id)}>
+              <p className="ui-flush">
+                The rules roll back in <strong>{now} seconds</strong> unless you keep them.
+              </p>
+              <div className="ui-row">
+                <Button variant="primary" disabled={busy} onClick={() => void confirm(waiting.id)}>
                   SSH works, keep the rules
-                </button>
+                </Button>
               </div>
             </>
           ) : (
-            <p aria-busy="true">Checking that the panel still answers…</p>
+            <p className="ui-flush" aria-busy="true">
+              Checking that the panel still answers…
+            </p>
           )}
         </section>
       )}
 
       {foreignPending && (
-        <section className="card notice" aria-labelledby="fw-foreign">
-          <h2 id="fw-foreign">A change is waiting</h2>
-          <p>
-            Another browser made a change that waits for its confirmation. It rolls back in {now} seconds unless that browser keeps
-            it.
+        <section className="ui-card ui-card-body ui-stack ui-attention" aria-labelledby="fw-foreign">
+          <h2 id="fw-foreign" className="ui-flush">
+            A change is waiting
+          </h2>
+          <p className="ui-flush">
+            Another browser made a change that waits for its confirmation. It rolls back in {now} seconds unless that browser keeps it.
           </p>
         </section>
       )}
 
-      <section className="card" aria-labelledby="fw-allow">
-        <h2 id="fw-allow">Allowlists</h2>
-        <p className="muted">One IP address or CIDR range per line, IPv4 or IPv6. An empty list leaves the port open to everyone.</p>
-        <label>
-          SSH
-          <textarea value={ssh} onChange={(e) => setSSH(e.target.value)} rows={3} spellCheck={false} className="mono" />
-        </label>
-        <div className="actions">
-          <button type="button" onClick={() => addMine(ssh, setSSH)}>
-            Add my address to SSH
-          </button>
+      <Card title="Allowlists">
+        <div className="ui-stack">
+          <p className="ui-hint ui-flush">
+            One IP address or CIDR range per line, IPv4 or IPv6. An empty list leaves the port open to everyone. A home connection often
+            gets a new address overnight; a VPN or a fixed office address works better.
+          </p>
+          <div className="ui-allow">
+            <div className="ui-stack-tight">
+              <Field label="SSH">
+                <textarea className="ui-input ui-textarea ui-mono" value={ssh} onChange={(e) => setSSH(e.target.value)} rows={3} spellCheck={false} />
+              </Field>
+              <div className="ui-row">
+                <Button icon={<Plus size={16} aria-hidden="true" />} onClick={() => addMine(ssh, setSSH)}>
+                  Add my address to SSH
+                </Button>
+              </div>
+            </div>
+            <div className="ui-stack-tight">
+              <Field label="Panel">
+                <textarea
+                  className="ui-input ui-textarea ui-mono"
+                  value={panel}
+                  onChange={(e) => setPanel(e.target.value)}
+                  rows={3}
+                  spellCheck={false}
+                />
+              </Field>
+              <div className="ui-row">
+                <Button icon={<Plus size={16} aria-hidden="true" />} onClick={() => addMine(panel, setPanel)}>
+                  Add my address to the panel
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
-        <label>
-          Panel
-          <textarea value={panel} onChange={(e) => setPanel(e.target.value)} rows={3} spellCheck={false} className="mono" />
-        </label>
-        <div className="actions">
-          <button type="button" onClick={() => addMine(panel, setPanel)}>
-            Add my address to the panel
-          </button>
-        </div>
-        <p className="muted">A home connection often gets a new address overnight. A VPN or a fixed office address works better.</p>
-      </section>
+      </Card>
 
-      <section className="card" aria-labelledby="fw-open">
-        <h2 id="fw-open">Opened ports</h2>
+      <Card
+        title="Opened ports"
+        actions={
+          <Button
+            icon={<Plus size={16} aria-hidden="true" />}
+            onClick={() => setRules([...rules, { proto: "tcp", ports: "", sources: "", note: "" }])}
+          >
+            Add port
+          </Button>
+        }
+      >
         {rules.length === 0 ? (
-          <p className="muted">No other port is open.</p>
+          <p className="ui-hint ui-flush">No other port is open.</p>
         ) : (
-          <ul className="jobs">
+          <ul className="ui-port-rows">
             {rules.map((r, i) => (
-              <li key={i} aria-label={"Port " + (i + 1)}>
-                <label>
-                  Protocol
-                  <select value={r.proto} onChange={(e) => setRule(i, { proto: e.target.value as "tcp" | "udp" })}>
+              <li key={i} aria-label={"Port " + (i + 1)} className="ui-port-row">
+                <Field label="Protocol">
+                  <select className="ui-select" value={r.proto} onChange={(e) => setRule(i, { proto: e.target.value as "tcp" | "udp" })}>
                     <option value="tcp">TCP</option>
                     <option value="udp">UDP</option>
                   </select>
-                </label>
-                <label>
-                  Port or range
-                  <input value={r.ports} onChange={(e) => setRule(i, { ports: e.target.value })} placeholder="3000 or 6000-6010" />
-                </label>
-                <label>
-                  Only from (optional)
+                </Field>
+                <Field label="Port or range">
                   <input
+                    className="ui-input ui-mono"
+                    value={r.ports}
+                    onChange={(e) => setRule(i, { ports: e.target.value })}
+                    placeholder="3000 or 6000-6010"
+                  />
+                </Field>
+                <Field label="Only from (optional)">
+                  <input
+                    className="ui-input ui-mono"
                     value={r.sources}
                     onChange={(e) => setRule(i, { sources: e.target.value })}
                     placeholder="Everyone"
                     spellCheck={false}
-                    className="mono"
                   />
-                </label>
-                <label>
-                  Note
-                  <input value={r.note} onChange={(e) => setRule(i, { note: e.target.value })} maxLength={64} />
-                </label>
-                <div className="actions">
-                  <button type="button" onClick={() => setRules(rules.filter((_, j) => j !== i))}>
-                    Remove
-                  </button>
-                </div>
+                </Field>
+                <Field label="Note">
+                  <input className="ui-input" value={r.note} onChange={(e) => setRule(i, { note: e.target.value })} maxLength={64} />
+                </Field>
+                <IconButton
+                  label={"Remove port " + (i + 1)}
+                  icon={<Trash size={16} />}
+                  danger
+                  onClick={() => setRules(rules.filter((_, j) => j !== i))}
+                />
               </li>
             ))}
           </ul>
         )}
-        <div className="actions">
-          <button type="button" onClick={() => setRules([...rules, { proto: "tcp", ports: "", sources: "", note: "" }])}>
-            Add port
-          </button>
-        </div>
-      </section>
+      </Card>
 
-      <section className="card" aria-label="Apply">
-        {error && <p role="alert">{error}</p>}
-        {lockout && (
-          <div role="alert">
-            <p>{lockout}</p>
-            <label className="check">
-              <input type="checkbox" checked={otherWay} onChange={(e) => setOtherWay(e.target.checked)} />I reach the server another
-              way (VPN, another address, the provider&apos;s console)
-            </label>
-          </div>
-        )}
-        <div className="actions">
-          <button type="submit" disabled={busy || !!waiting || foreignPending}>
-            {busy ? "Applying…" : "Apply rules"}
-          </button>
-        </div>
-      </section>
+      {error && <Notice tone="err" title={error} />}
+      {lockout && (
+        <Notice tone="err" title={lockout}>
+          <label className="ui-check">
+            <input type="checkbox" checked={otherWay} onChange={(e) => setOtherWay(e.target.checked)} />I reach the server another way (VPN,
+            another address, the provider&apos;s console)
+          </label>
+        </Notice>
+      )}
+      <div className="ui-row">
+        <Button type="submit" variant="primary" disabled={busy || !!waiting || foreignPending}>
+          {busy ? "Applying…" : "Apply rules"}
+        </Button>
+      </div>
     </form>
   );
 }

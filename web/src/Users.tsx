@@ -472,7 +472,7 @@ function AccountView({ account: a, self, sites, back, onChange, onLink, onDelete
                 <legend>Sites {a.username} may work on</legend>
                 {sites.length === 0 && <p className="muted">There are no sites yet.</p>}
                 {sites.map((s) => (
-                  <label key={s} className="check">
+                  <label key={s} className="ui-check">
                     <input type="checkbox" checked={grants.includes(s)} onChange={(e) => toggle(s, e.target.checked)} />
                     {s}
                   </label>
@@ -491,7 +491,7 @@ function AccountView({ account: a, self, sites, back, onChange, onLink, onDelete
       <Card title="Sign-in">
         <div className="ui-stack">
           {a.role === "user" && (
-            <label className="check">
+            <label className="ui-check">
               <input
                 type="checkbox"
                 checked={a.requireSecondFactor}
