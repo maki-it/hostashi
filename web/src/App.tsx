@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Account } from "./Account";
 import { ConfirmEmail } from "./ConfirmEmail";
 import { currentUser, needsSecondFactor, setupRequired, type User } from "./auth";
+import { Audit } from "./Audit";
 import { Backups } from "./Backups";
 import { Databases } from "./Databases";
 import { Doctor } from "./Doctor";
@@ -141,6 +142,7 @@ export function App() {
         {show("users") && <Users me={user.username} query={route.query} onQuery={replaceQuery} />}
         {show("mail") && <Mail />}
         {show("import") && <Migrate query={route.query} onQuery={replaceQuery} />}
+        {show("audit") && <Audit query={route.query} onQuery={replaceQuery} />}
         {show("account") && <Account user={user} onScheme={onScheme} />}
       </Shell>
     );
