@@ -180,7 +180,7 @@ must_closed 3000
 step "the panel on 443 leaves 443 out of panel_ports (ADR-0042)"
 # A panel file that drops every panel port: on 8443 it closes the panel,
 # on 443 it must not close the sites.
-x sh -c 'printf "table inet hostashi { chain panel { meta l4proto { tcp, udp } th dport @panel_ports drop; } }\n" >/var/lib/hostashi-agent/firewall/panel.nft'
+x sh -c 'printf "table inet hostashi { chain panel { meta l4proto { tcp, udp } th dport @panel_ports drop; }; }\n" >/var/lib/hostashi-agent/firewall/panel.nft'
 x systemctl reload hostashi-firewall.service || fail "drop-all panel file does not load"
 must_closed 8443
 must_open 80 443
