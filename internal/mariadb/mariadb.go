@@ -63,10 +63,11 @@ type Options struct {
 // Manager serializes all changes, because each one touches the server and
 // the registry together.
 type Manager struct {
-	mu  sync.Mutex
-	db  Execer
-	reg *registry
-	log *slog.Logger
+	mu    sync.Mutex
+	db    Execer
+	reg   *registry
+	log   *slog.Logger
+	owner uint32 // owner of the state directory
 
 	// Import and export (jobs.go); nil until EnableDumps.
 	dumps *Dumps
@@ -117,7 +118,7 @@ func New(stateDir string, db Execer, opt Options) (*Manager, error) {
 		opt.Log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Manager{db: db, reg: reg, log: opt.Log}, nil
+	return &Manager{db: db, reg: reg, log: opt.Log, owner: opt.OwnerUID}, nil
 }
 
 // List returns all registered databases sorted by name.

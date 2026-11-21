@@ -103,7 +103,7 @@ Tests in `internal/store/pool_test.go` cover the read pool refusing writes, the 
 ## Not covered, and when to look again
 
 - **Audit log growth.** The audit log is append-only and never pruned. Estimate: at 1 000 entries a day it grows by roughly 0.1 MB a day; lists of the log need paging before it reaches millions of rows. Not urgent for v1.
-- **Job queue.** The architecture (04, "Jobs") plans a persistent job queue in SQLite. It does not exist yet. When it comes, its writes go through the same write connection and should keep transactions short (no agent call or network request while a transaction is open).
+- **Job queue.** Not planned for v1 (04, "Jobs"): long runs are jobs of the agent and keep their state there. Should a queue in SQLite come later, its writes go through the same write connection and should keep transactions short (no agent call or network request while a transaction is open).
 - **Power loss.** `synchronous=NORMAL` can lose the last commits on a power loss. That is accepted (the reconciler compares desired and live state on start), but was not tested here.
 - **Multi-server.** Out of scope for v1 (ADR-0006 already notes PostgreSQL for that case).
-- Look again when the job queue lands, or if a server ever has more than a few thousand sites.
+- Look again if a job queue in SQLite ever lands, or if a server ever has more than a few thousand sites.

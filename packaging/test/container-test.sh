@@ -699,6 +699,9 @@ expect_mode /home/wp/backup.sql.gz "600 wp:wp"
 x mariadb -e 'DELETE FROM wp_db.t'
 x /usr/local/bin/hostashi db import wp_db backup.sql.gz
 [ "$(x mariadb -Nse 'SELECT SUM(i) FROM wp_db.t')" = 42 ] || fail "import did not restore the table"
+# The agent keeps its jobs, so a restart does not forget them.
+expect_mode /var/lib/hostashi-agent/database-jobs.json "600 root:root"
+x grep -q '"kind":"export","database":"wp_db","path":"backup.sql.gz"' /var/lib/hostashi-agent/database-jobs.json || fail "export job not kept"
 if x /usr/local/bin/hostashi db import wp_db ../other/backup.sql; then fail "path outside the home accepted"; fi
 [ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User LIKE 'hostashi%job%'")" ] || fail "job user left behind"
 x rm -f /home/wp/backup.sql.gz
