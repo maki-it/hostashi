@@ -36,6 +36,7 @@ var scopeCatalog = map[string]ScopeInfo{
 	"databases:read":          {Description: "List databases and their users"},
 	"databases:write":         {Description: "Create databases and users, set passwords, remove users"},
 	"databases:delete":        {Description: "Delete databases and their data", HighRisk: true},
+	"db_servers:write":        {Description: "Add, check and remove external database servers (stores their administrator password)", HighRisk: true},
 	"backups:read":            {Description: "Read backup settings, status and snapshots"},
 	"backups:write":           {Description: "Change backup settings, confirm the target's host key, start a backup"},
 	"doctor:read":             {Description: "Run the read-only checks of hostashi doctor and read their results"},
@@ -46,6 +47,8 @@ var scopeCatalog = map[string]ScopeInfo{
 	"migrations:read":         {Description: "List uploaded CloudPanel scan reports and read their migration plans"},
 	"migrations:write":        {Description: "Upload and delete CloudPanel scan reports"},
 	"backups:restore":         {Description: "Restore a site's backups into its home", HighRisk: true},
+	"files:read":              {Description: "List and download the files of sites"},
+	"files:write":             {Description: "Upload, change, move, copy and delete the files of sites (this changes the sites' code)", HighRisk: true},
 }
 
 // Scopes returns the catalog sorted by name.

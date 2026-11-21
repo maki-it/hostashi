@@ -323,11 +323,39 @@ out=$(web_apply '{"sites":[{"user":"blog","domains":["blog.example.com","www.blo
 grep -q 'changed: false' <<<"$out" || fail "same web state applied again: $out"
 if x /usr/local/bin/hostashi site delete blog; then fail "site with a virtual host was deleted"; fi
 
+step "file manager helper runs as the site user (ADR-0040)"
+sock=$(x /usr/local/bin/hostashi site files blog)
+[ "$sock" = /run/hostashi-files/blog.sock ] || fail "file manager socket is '$sock'"
+expect_mode "$sock" "660 root:hostashi"
+expect_mode /etc/systemd/system/hostashi-files@blog.service.d/50-hostashi-site.conf "644 root:root"
+fm() { x curl -fsS --unix-socket "$sock" "http://files$1" "${@:2}"; }
+fm '/v1/list?path=htdocs' | grep -q '"name":"index.html"' || fail "helper does not list the web root"
+[ "$(fm '/v1/file?path=htdocs/index.html')" = "hello from blog" ] || fail "helper download differs"
+fm /v1/mkdir -X POST -d '{"path":"htdocs/fm"}' >/dev/null || fail "helper mkdir failed"
+fm '/v1/file?path=htdocs/fm/new.txt' -X PUT --data-binary 'from the panel' >/dev/null || fail "helper write failed"
+expect_mode /home/blog/htdocs/fm "755 blog:blog"
+expect_mode /home/blog/htdocs/fm/new.txt "644 blog:blog"
+# fchmodat2 must pass the unit's system call filter.
+fm /v1/chmod -X POST -d '{"paths":["htdocs/fm/new.txt"],"mode":"0600"}' >/dev/null || fail "helper chmod failed"
+expect_mode /home/blog/htdocs/fm/new.txt "600 blog:blog"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' --unix-socket "$sock" 'http://files/v1/file?path=../../etc/passwd')
+[ "$code" = 400 ] || fail "helper path outside the home answered $code"
+x ln -s /etc /home/blog/htdocs/fm/etc
+code=$(x curl -sS -o /dev/null -w '%{http_code}' --unix-socket "$sock" 'http://files/v1/file?path=htdocs/fm/etc/hostname')
+[ "$code" = 400 ] || fail "helper followed a symlink ($code)"
+[ "$(x systemctl show -p User --value hostashi-files@blog.service)" = blog ] || fail "helper does not run as blog"
+[ "$(x systemctl show -p Slice --value hostashi-files@blog.service)" = hostashi-site-blog.slice ] || fail "helper not in the site's slice"
+x pgrep -u blog -f 'hostashi files-helper' >/dev/null || fail "no helper process of blog"
+fm /v1/delete -X POST -d '{"paths":["htdocs/fm"]}' >/dev/null || fail "helper delete failed"
+x test ! -e /home/blog/htdocs/fm || fail "helper delete left the folder"
+x test -e /etc/hostname || fail "delete followed the symlink"
+
 step "systemd exposure"
 x systemd-analyze security hostashi.service | tail -1
 x systemd-analyze security hostashi-agent.service | tail -1
 exposure hostashi.service 2.0
 exposure hostashi-agent.service 4.5
+exposure hostashi-files@blog.service 1.0
 
 step "changed setting is applied and the panel restarts"
 out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com)
@@ -343,6 +371,8 @@ step "remove the site"
 web_apply '{"sites":[]}'
 x /usr/local/bin/hostashi site delete blog
 x test ! -e /home/blog || fail "site home still there"
+x test ! -e /etc/systemd/system/hostashi-files@blog.service.d || fail "file manager drop-in left"
+x test ! -e /run/hostashi-files/blog.sock || fail "file manager socket left"
 
 step "a site through the panel API"
 tok=$(x /usr/local/bin/hostashi setup-token -db /var/lib/hostashi/hostashi.db)
@@ -424,6 +454,18 @@ echo @file_get_contents("/etc/hostname") === false ? " jailed" : " open";
 PHP
 body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/some/pretty/url)
 [ "$body" = "php $ver user wp jailed" ] || fail "PHP site answered '$body'"
+# The file manager through the panel (ADR-0040): the panel, without root
+# and in its own user namespace, reaches the helper's socket, and the
+# helper writes as the site user.
+[ "$(api GET '/api/v1/sites/wp/files?path=htdocs')" = 200 ] || fail "file list through the panel: $(x cat /tmp/api.out)"
+x grep -q '"name":"index.php"' /tmp/api.out || fail "panel file list lacks index.php: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/wp/files/touch '{"path":"htdocs/from-panel.txt"}')" = 200 ] || fail "file create through the panel: $(x cat /tmp/api.out)"
+expect_mode /home/wp/htdocs/from-panel.txt "644 wp:wp"
+[ "$(api POST /api/v1/sites/wp/files/delete '{"paths":["htdocs/from-panel.txt"]}')" = 200 ] || fail "file delete through the panel: $(x cat /tmp/api.out)"
+x test ! -e /home/wp/htdocs/from-panel.txt || fail "file deleted through the panel is still there"
+# The helper runs as wp until it is idle; the SSH checks below expect no
+# process of wp outside PHP, so it is stopped here.
+x systemctl stop hostashi-files@wp.service
 # A PHP package update replaces the binary under the running master; the
 # dpkg hook (ADR-0033) restarts the site's unit, the package's own unit
 # stays off.

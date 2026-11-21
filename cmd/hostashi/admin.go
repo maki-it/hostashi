@@ -59,6 +59,13 @@ func adminCmd(ctx context.Context, c *agentrpc.Client, cmd string, args []string
 		for _, s := range r.Sites {
 			fmt.Fprintf(out, "%s\tuid=%d\tpool=%s\n", s.User, s.UID, s.Pool)
 		}
+	case sub == "site files" && len(args) == 2:
+		r, err := agentapi.FilesOpen.Call(ctx, c, agentapi.FilesOpenRequest{Site: args[1]})
+		if err != nil {
+			return err
+		}
+
+		fmt.Fprintln(out, r.Socket)
 	case sub == "site limits" && len(args) >= 2:
 		return limitsCmd(ctx, c, args[1], args[2:], out)
 	case sub == "web apply" && len(args) == 1:

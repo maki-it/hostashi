@@ -131,6 +131,10 @@ type Deps struct {
 	// Auth, Settings and MailSend.
 	Mail     MailRelay
 	MailSend MailSender
+
+	// Files starts the sites' file manager sockets (ADR-0040); nil
+	// disables the file routes. Needs Auth, Sites and Settings.
+	Files FilesOpener
 }
 
 // Handler returns the HTTP routes of the web process.
@@ -191,6 +195,7 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			registerSites(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerCerts(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDatabases(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerDBServers(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPages(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerParked(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerCron(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
@@ -198,6 +203,10 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPageCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerLimits(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+
+			if deps.Files != nil && deps.Settings != nil {
+				registerFiles(mux, authn{svc: deps.Auth, fail: newFail(log)}, newFilesProxy(deps.Files, deps.Sites, deps.Settings, log))
+			}
 		}
 
 		if deps.Backups != nil {
@@ -384,6 +393,7 @@ func Run(ctx context.Context, cfg Config) error {
 		PHP:      RPCPHPInstaller{C: client},
 		Mail:     relay,
 		MailSend: func(ctx context.Context, c mail.Config, m mail.Message) error { return mail.Send(ctx, c, m) },
+		Files:    RPCFilesOpener(client),
 	}
 
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
@@ -397,6 +407,7 @@ func Run(ctx context.Context, cfg Config) error {
 
 	deps.Sites.EnableCron(hosting.RPCAgent{C: client})
 	deps.Sites.EnableSSH(hosting.RPCAgent{C: client})
+	deps.Sites.EnableDBServers(hosting.RemoteDBServers{Box: box})
 	deps.Sites.EnableLimits(hosting.RPCAgent{C: client})
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
