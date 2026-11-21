@@ -147,6 +147,8 @@ var routeAccess = map[string]authz.Action{
 	"POST /api/v1/db-servers/{server}/check":                "db_servers:write",
 	"PUT /api/v1/db-servers/{server}/default":               "db_servers:write",
 	"DELETE /api/v1/db-servers/{server}":                    "db_servers:write",
+	"GET /api/v1/db-servers/postgresql-client":              "db_servers:write",
+	"POST /api/v1/db-servers/postgresql-client":             "db_servers:write",
 
 	"GET /api/v1/status-pages":               "pages:read",
 	"GET /api/v1/status-pages/{id}":          "pages:read",
@@ -249,7 +251,7 @@ func newFullAPI(t *testing.T) (*apiEnv, []string) {
 	e.h, patterns = handler(Config{PublicURL: testPublicURL}, Deps{
 		PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb,
 		CloudPanel: e.cp, CloudPanelSource: newStubSource(t), Metrics: e.metrics, Settings: e.settings,
-		Doctor: e.doctor.run, Firewall: e.firewall, PHP: e.php, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open, NotifyPrefs: e.st, AuditLog: e.st,
+		Doctor: e.doctor.run, Firewall: e.firewall, PHP: e.php, PGClient: e.pgclient, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open, NotifyPrefs: e.st, AuditLog: e.st,
 	})
 
 	return e, patterns

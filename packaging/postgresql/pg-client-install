@@ -1,0 +1,167 @@
+#!/bin/bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Installs the PostgreSQL client tools (pg_dump, pg_restore, psql) from the
+# PostgreSQL project's own apt repository, apt.postgresql.org (ADR-0051), for
+# external PostgreSQL servers. The panel starts it through the unit
+# hostashi-pg-client-install@<major>.service when the first PostgreSQL
+# server is added, or when a server is newer than the installed client;
+# neither the panel nor the agent can change what this script does (root,
+# 0755). The installer only installs the script and its unit.
+#
+#   pg-client-install check [MAJOR...]   read-only: exit 0 if the majors (and
+#                                        every recorded one) are set up, else 1
+#                                        with the reason on stdout
+#   pg-client-install install MAJOR...   set up the repository and install
+#                                        postgresql-client-<MAJOR>
+#
+# Only the client packages come from apt.postgresql.org: the pin gives the
+# repository priority 100 and 600 only to postgresql-client-<major>,
+# postgresql-client-common and libpq5 (the client needs a libpq5 of its own
+# major). The pin is written before anything is installed. The key is
+# fetched with apt's own helper and accepted only with exactly the pinned
+# fingerprint. Installed majors are recorded, so the pin keeps covering them.
+# Removing a major is not supported.
+#
+# apt_update, download, matches and put come from php-install (ADR-0036),
+# which the installer puts next to this script.
+#
+# Exit codes: 0 ok, 1 not set up (check) or failed (install), 64 usage.
+# Test hooks (environment): HOSTASHI_STATE_DIR, HOSTASHI_OS_RELEASE,
+# HOSTASHI_PHP_LIB (php-install to source).
+set -u
+set -o pipefail
+umask 022
+
+PHP_LIB=${HOSTASHI_PHP_LIB:-$(dirname "$(readlink -f "$0")")/php-install}
+# shellcheck source=packaging/php/php-install
+HOSTASHI_LIB=1 . "$PHP_LIB" || { echo "pg-client-install: cannot load $PHP_LIB" >&2; exit 1; }
+
+STATE_DIR=${HOSTASHI_STATE_DIR:-/var/lib/hostashi-installer}
+OS_RELEASE=${HOSTASHI_OS_RELEASE:-/etc/os-release}
+PG_STATE=$STATE_DIR/pg-client-majors
+PGDG_URL=https://apt.postgresql.org/pub/repos/apt
+PGDG_KEY_URL=$PGDG_URL/ACCC4CF8.asc
+# The repository's signing key (PostgreSQL Debian Repository); it has no
+# expiry date.
+PGDG_FPR=B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8
+PGDG_KEYRING=/usr/share/keyrings/hostashi-pgdg.asc
+PGDG_SOURCE=/etc/apt/sources.list.d/hostashi-pgdg.sources
+PGDG_PIN=/etc/apt/preferences.d/hostashi-pgdg
+# The same list as agentapi.PGClientMajors (checked by a Go test).
+PG_MAJORS=(19)
+LIB_DIR=/usr/lib/postgresql
+
+pg_say() { echo "pg-client-install: $*"; }
+pg_allowed() { local m; for m in "${PG_MAJORS[@]}"; do [ "$m" = "$1" ] && return 0; done; return 1; }
+
+# pg_majors MAJOR... prints the given and the recorded majors, in the order
+# of PG_MAJORS.
+pg_majors() {
+  local m want
+  want=" $* $(tr '\n' ' ' 2>/dev/null <"$PG_STATE") "
+  for m in "${PG_MAJORS[@]}"; do
+    case "$want" in *" $m "*) echo "$m";; esac
+  done
+}
+
+pgdg_source() {
+  local code
+  # shellcheck source=/dev/null
+  code=$(. "$OS_RELEASE" && echo "${VERSION_CODENAME:-}")
+  printf '# Managed by Hostashi (ADR-0051): PostgreSQL client tools.\n'
+  printf 'Types: deb\nURIs: %s\nSuites: %s-pgdg\nComponents: main\nSigned-By: %s\n' "$PGDG_URL" "$code" "$PGDG_KEYRING"
+}
+pgdg_pin() {
+  local m list="postgresql-client-common libpq5"
+  for m in "$@"; do list="$list postgresql-client-$m"; done
+  printf '# Managed by Hostashi (ADR-0051). Only the client tools come from\n'
+  printf '# apt.postgresql.org; everything else stays on the distribution.\n'
+  printf 'Package: *\nPin: origin apt.postgresql.org\nPin-Priority: 100\n\n'
+  printf 'Package: %s\nPin: origin apt.postgresql.org\nPin-Priority: 600\n' "$list"
+}
+
+# pg_key_check FILE prints the problem with a key file: exactly PGDG_FPR.
+pg_key_check() {
+  local home fprs
+  command -v gpg >/dev/null || { echo "gpg is not installed"; return 1; }
+  home=$(mktemp -d) || return 1
+  fprs=$(GNUPGHOME=$home gpg --batch --with-colons --show-keys "$1" 2>/dev/null | awk -F: '$1 == "fpr" { print $10 }' | sort -u | tr '\n' ' ')
+  rm -rf "$home"
+  [ "$fprs" = "$PGDG_FPR " ] || { echo "the apt.postgresql.org key has unexpected fingerprints: $fprs"; return 1; }
+}
+
+# client_ok MAJOR: the package is installed and its pg_dump is there.
+client_ok() { pkg_installed "postgresql-client-$1" && [ -x "$LIB_DIR/$1/bin/pg_dump" ]; }
+
+pg_check() {
+  local m majors why
+  majors=$(pg_majors "$@")
+  [ -n "$majors" ] || return 0
+  # shellcheck disable=SC2086 # one major per word
+  set -- $majors
+  [ -f "$PGDG_KEYRING" ] && [ ! -L "$PGDG_KEYRING" ] && [ "$(stat -c '%a %U:%G' "$PGDG_KEYRING")" = "644 root:root" ] ||
+    { echo "the apt.postgresql.org key is missing"; return 1; }
+  why=$(pg_key_check "$PGDG_KEYRING") || { echo "$why"; return 1; }
+  pgdg_source | matches "$PGDG_SOURCE" 644 || { echo "the apt.postgresql.org source differs"; return 1; }
+  pgdg_pin "$@" | matches "$PGDG_PIN" 644 || { echo "the apt.postgresql.org pin differs"; return 1; }
+  for m in "$@"; do
+    client_ok "$m" || { echo "postgresql-client-$m is not installed"; return 1; }
+    grep -qx "$m" "$PG_STATE" 2>/dev/null || { echo "PostgreSQL client $m is not recorded"; return 1; }
+  done
+}
+
+pg_install() {
+  local m tmp why majors pkgs=()
+  majors=$(pg_majors "$@")
+  # shellcheck disable=SC2086 # one major per word
+  set -- $majors
+  if ! command -v gpg >/dev/null; then
+    pg_say "installing gpg to check the apt.postgresql.org key"
+    apt_update && apt-get install "${APT_OPTS[@]}" gpg || return 1
+  fi
+  if [ ! -f "$PGDG_KEYRING" ] || ! pg_key_check "$PGDG_KEYRING" >/dev/null; then
+    pg_say "fetching the apt.postgresql.org key"
+    tmp=$(mktemp) || return 1
+    if ! download "$PGDG_KEY_URL" "$tmp"; then
+      rm -f "$tmp"; pg_say "cannot download the apt.postgresql.org key"; return 1
+    fi
+    if ! why=$(pg_key_check "$tmp"); then
+      rm -f "$tmp"; pg_say "REFUSED: $why"; return 1
+    fi
+    put "$PGDG_KEYRING" 0644 <"$tmp" || { rm -f "$tmp"; return 1; }
+    rm -f "$tmp"
+  fi
+  # The pin first: without it the next apt run could take other packages
+  # (postgresql-common, the server) from apt.postgresql.org.
+  pgdg_pin "$@" | put "$PGDG_PIN" 0644 || return 1
+  pgdg_source | put "$PGDG_SOURCE" 0644 || return 1
+  apt_update || return 1
+  for m in "$@"; do pkgs+=("postgresql-client-$m"); done
+  pg_say "installing PostgreSQL client $*"
+  apt-get install "${APT_OPTS[@]}" "${pkgs[@]}" || return 1
+  for m in "$@"; do
+    [ -x "$LIB_DIR/$m/bin/pg_dump" ] || { pg_say "$LIB_DIR/$m/bin/pg_dump is missing after the install"; return 1; }
+  done
+  install -d -m 0700 -o root -g root "$STATE_DIR" || return 1
+  printf '%s\n' "$@" | put "$PG_STATE" 0600 || return 1
+  pg_say "done: PostgreSQL client $* installed"
+}
+
+pg_usage() { echo "usage: $0 check [MAJOR...] | install MAJOR..." >&2; exit 64; }
+
+pg_main() {
+  local cmd=${1:-} m
+  [ $# -gt 0 ] && shift
+  for m in "$@"; do pg_allowed "$m" || { echo "pg-client-install: '$m' is not one of ${PG_MAJORS[*]}" >&2; exit 64; }; done
+  case "$cmd" in
+    check) pg_check "$@";;
+    install)
+      [ $# -gt 0 ] || pg_usage
+      [ "$(id -u)" = 0 ] || { echo "pg-client-install: must run as root" >&2; exit 1; }
+      pg_install "$@";;
+    *) pg_usage;;
+  esac
+}
+
+pg_main "$@"

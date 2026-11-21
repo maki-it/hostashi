@@ -73,6 +73,8 @@ export function databaseMessage(err: unknown): string {
         return "Only administrators can manage databases.";
       case "agent_timeout":
         return "The server did not answer in time. Reload the page to see whether the change was made.";
+      case "postgresql_not_yet":
+        return "This does not work for PostgreSQL databases yet.";
       case "db_server_local_only":
         return "This only works for databases on the local server.";
       case "db_server_unresolved":
@@ -140,7 +142,8 @@ export type DBServer = {
   name: string;
   local: boolean;
   default: boolean;
-  engine?: "mariadb" | "mysql";
+  // What the last check saw; PostgreSQL servers are added as such (ADR-0051).
+  engine?: "MariaDB" | "MySQL" | "PostgreSQL";
   version?: string;
   state: "ok" | "error" | "unchecked";
   databases: number;
@@ -155,7 +158,10 @@ export type DBServer = {
   lastError?: string;
 };
 
+export type DBEngine = "mariadb" | "postgresql";
+
 export type NewDBServer = {
+  engine: DBEngine;
   name: string;
   host: string;
   port: number;
@@ -168,7 +174,8 @@ export type NewDBServer = {
 export const listServers = async () => (await request<{ servers: DBServer[] }>("GET", "/db-servers")).servers;
 
 export const addServer = (s: NewDBServer) =>
-  request<DBServer>("POST", "/db-servers", {
+  request<DBServer & { warnings?: string[] }>("POST", "/db-servers", {
+    engine: s.engine,
     name: s.name,
     host: s.host,
     port: s.port,
@@ -184,17 +191,34 @@ export const setDefaultServer = (name: string) => request<void>("PUT", "/db-serv
 
 export const deleteServer = (name: string) => request<void>("DELETE", "/db-servers/" + encodeURIComponent(name));
 
+// defaultPort is the usual port of an engine.
+export const defaultPort = (engine: DBEngine) => (engine === "postgresql" ? 5432 : 3306);
+
+export const isPostgres = (s: DBServer | undefined) => s?.engine === "PostgreSQL";
+
 // serverAddress is what goes into the site's configuration as DB_HOST.
 export function serverAddress(s: DBServer | undefined): string {
   if (!s || s.local || !s.host) return "localhost";
   const host = s.host.includes(":") ? "[" + s.host + "]" : s.host;
-  return s.port && s.port !== 3306 ? host + ":" + s.port : host;
+  return s.port && s.port !== defaultPort(isPostgres(s) ? "postgresql" : "mariadb") ? host + ":" + s.port : host;
+}
+
+// pgSSLMode is the sslmode a site's PostgreSQL client should use for s.
+export function pgSSLMode(s: DBServer): string {
+  switch (s.tlsMode) {
+    case "verify":
+      return "verify-full";
+    case "verify-ca":
+      return "verify-ca";
+    default:
+      return "disable";
+  }
 }
 
 // engineLabel names the engine and version, like "MariaDB 11.8.6".
 export function engineLabel(s: DBServer): string {
   if (!s.engine) return s.local ? "MariaDB" : "Not checked yet";
-  return (s.engine === "mysql" ? "MySQL" : "MariaDB") + (s.version ? " " + s.version : "");
+  return s.engine + (s.version ? " " + s.version : "");
 }
 
 // serverNameProblem mirrors hosting.ValidateDBServerName.
