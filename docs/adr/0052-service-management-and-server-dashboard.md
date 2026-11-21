@@ -1,6 +1,6 @@
 # ADR-0052 Service management and server dashboard
 
-**Status:** Proposed. **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0015 (per-site resource limits), ADR-0022 (metrics), ADR-0033 (system hardening), ADR-0035 (users and roles), ADR-0045 (object cache per site), [`03-features.md`](../03-features.md) section 3.0 and rows "Manage services" and "Dashboard with CPU/RAM/disk/network" (both P0), [`04-architecture.md`](../04-architecture.md) section 4.7.
+**Status:** Accepted (2026-11-21, by Kim). **Date drafted:** 2026-11-21. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0015 (per-site resource limits), ADR-0022 (metrics), ADR-0033 (system hardening), ADR-0035 (users and roles), ADR-0045 (object cache per site), [`03-features.md`](../03-features.md) section 3.0 and rows "Manage services" and "Dashboard with CPU/RAM/disk/network" (both P0), [`04-architecture.md`](../04-architecture.md) section 4.7.
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
