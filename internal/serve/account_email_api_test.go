@@ -218,3 +218,119 @@ func TestPanelLink(t *testing.T) {
 		}
 	}
 }
+
+func TestInvitationByEmail(t *testing.T) {
+	e := newAPI(t)
+	c := e.adminCookie(t)
+
+	body := `{"username":"anna","role":"user","email":"Anna@Example.com"}`
+
+	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/users", body: body, cookie: c})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "mail_not_configured" {
+		t.Fatalf("while off: %d %s", rec.Code, rec.Body)
+	}
+
+	e.putMail(t, c, mailBody)
+
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/users", body: `{"username":"bad","role":"user","email":"x"}`, cookie: c})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("bad address: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/users", body: body, cookie: c})
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"emailedTo":"anna@example.com"`) {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	var created struct {
+		User struct {
+			ID int64 `json:"id"`
+		} `json:"user"`
+		Invitation struct {
+			Token string `json:"token"`
+		} `json:"invitation"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.outbox.Process(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	msgs := e.mailSent.messages()
+	if len(msgs) != 1 || msgs[0].To != "anna@example.com" || !strings.Contains(msgs[0].Body, testPublicURL+"/#/invite/"+created.Invitation.Token) ||
+		!strings.Contains(msgs[0].Body, "invited you") {
+		t.Fatalf("invitation email: %+v", msgs)
+	}
+
+	// Accepting the emailed link confirms the address.
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/invitations/accept", body: `{"token":"` + created.Invitation.Token + `","password":"` + apiPassword + `"}`})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("accept: %d %s", rec.Code, rec.Body)
+	}
+
+	if _, addr, err := e.svc.ConfirmedEmail(t.Context(), created.User.ID); err != nil || addr != "anna@example.com" {
+		t.Fatalf("confirmed: %q %v", addr, err)
+	}
+
+	// A reset link goes to the confirmed address.
+	rec = e.do(t, reqOpts{method: "POST", path: userPath(created.User.ID, "/reset"), body: "{}", cookie: c})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"emailedTo":"anna@example.com"`) {
+		t.Fatalf("reset: %d %s", rec.Code, rec.Body)
+	}
+
+	if err := e.outbox.Process(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	msgs = e.mailSent.messages()
+	if last := msgs[len(msgs)-1]; last.Subject != "Your Hostashi account was reset" || !strings.Contains(last.Body, "/#/invite/") {
+		t.Fatalf("reset email: %+v", last)
+	}
+
+	// Without an address the link is only shown.
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/users", body: `{"username":"bert","role":"user"}`, cookie: c})
+	if rec.Code != http.StatusCreated || strings.Contains(rec.Body.String(), "emailedTo") {
+		t.Fatalf("no address: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestAccountSecurityEmail(t *testing.T) {
+	e := newAPI(t)
+	c := e.adminCookie(t)
+	e.putMail(t, c, mailBody)
+
+	// Nothing goes out while the account has no confirmed address.
+	e.createToken(t, c, `{"name":"before","scopes":["sites:read"]}`)
+
+	if err := e.outbox.Process(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if n := len(e.mailSent.messages()); n != 0 {
+		t.Fatalf("sent %d without an address", n)
+	}
+
+	token := e.requestEmail(t, c, "kim@example.com")
+	if code, _ := e.confirmEmail(t, token); code != http.StatusOK {
+		t.Fatal(code)
+	}
+
+	e.createToken(t, c, `{"name":"deploy","scopes":["sites:read"]}`)
+
+	if err := e.outbox.Process(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	msgs := e.mailSent.messages()
+	last := msgs[len(msgs)-1]
+
+	if last.To != "kim@example.com" || last.Subject != "Security change in your Hostashi account" || !strings.Contains(last.Body, "A new API token was created: deploy.") {
+		t.Fatalf("%+v", last)
+	}
+
+	if strings.Contains(last.Body, "hst_") {
+		t.Fatal("token secret in the email")
+	}
+}

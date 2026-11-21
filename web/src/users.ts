@@ -26,14 +26,19 @@ export type Account = {
   invitationExpiresAt: string | null;
 };
 
-export type Invitation = { token: string; expiresAt: string };
+export type Invitation = {
+  token: string;
+  expiresAt: string;
+  /** The address the link was emailed to (ADR-0044); missing when it is only shown. */
+  emailedTo?: string;
+};
 
 const userPath = (id: number) => "/users/" + String(id);
 
 export const listUsers = async () => (await request<{ users: Account[] }>("GET", "/users")).users;
 
-export const createUser = (username: string, role: Role) =>
-  request<{ user: Account; invitation: Invitation }>("POST", "/users", { username, role });
+export const createUser = (username: string, role: Role, email = "") =>
+  request<{ user: Account; invitation: Invitation }>("POST", "/users", email === "" ? { username, role } : { username, role, email });
 
 export const updateUser = (id: number, change: { role?: Role; disabled?: boolean; requireSecondFactor?: boolean }) =>
   request<Account>("PUT", userPath(id), change);
@@ -77,6 +82,8 @@ export function usersMessage(err: unknown): string {
         return "Only admins can manage accounts.";
       case "invalid_argument":
         return err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
+      case "mail_not_configured":
+        return "Email is not set up (Administration, Email). Leave the address empty and pass the link on yourself.";
       default:
         return "Something went wrong (" + err.code + "). Try again.";
     }

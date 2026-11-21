@@ -60,3 +60,66 @@ func EmailChanged(to, username, newAddress, panel string, at time.Time) (Message
 	return Message{To: to, Subject: "Your Hostashi email address was changed", Body: withFooter(body, panel)},
 		Envelope{Template: "email-changed", Category: Account}
 }
+
+// Invitation sends the one-time link of a new account (ADR-0035).
+func Invitation(to, invitedBy, username, role, link, panel string, expires time.Time) (Message, Envelope) {
+	body := "Hello,\n\n" +
+		clean(invitedBy, 64) + " invited you to the Hostashi panel at " + clean(panel, 253) + ".\n" +
+		"Your user name: " + clean(username, 64) + " (role " + clean(role, 16) + ")\n\n" +
+		"Choose your password here:\n\n" +
+		link + "\n\n" +
+		"The link works once, until " + when(expires) + ". Opening it also confirms this email address for your account.\n" +
+		"If you did not expect this invitation, ignore this email.\n"
+
+	return Message{To: to, Subject: "You are invited to Hostashi", Body: withFooter(body, panel)},
+		Envelope{Template: "invitation", Category: Account}
+}
+
+// ResetLink sends the new link after an admin reset the account.
+func ResetLink(to, resetBy, username, link, panel string, expires time.Time) (Message, Envelope) {
+	body := "Hello " + clean(username, 64) + ",\n\n" +
+		clean(resetBy, 64) + " reset your Hostashi account at " + clean(panel, 253) + ".\n" +
+		"Your password, second factors and sessions were removed. Choose a new password here:\n\n" +
+		link + "\n\n" +
+		"The link works once, until " + when(expires) + ".\n" +
+		"If you did not ask for this, tell an administrator.\n"
+
+	return Message{To: to, Subject: "Your Hostashi account was reset", Body: withFooter(body, panel)},
+		Envelope{Template: "account-reset", Category: Account}
+}
+
+// securityText says what happened, by event kind of internal/auth.
+var securityText = map[string]string{ //nolint:gosec // event texts, not credentials
+	"totp-enabled":    "An authenticator app (TOTP) was set up as a second factor.",
+	"totp-disabled":   "The authenticator app (TOTP) was removed as a second factor.",
+	"passkey-added":   "A passkey was added",
+	"passkey-removed": "A passkey was removed",
+	"token-created":   "A new API token was created",
+}
+
+// AccountSecurity tells the user about a change to their login or access.
+// It reports false for an unknown kind.
+func AccountSecurity(to, username, kind, name, ip, panel string, at time.Time) (Message, Envelope, bool) {
+	what, ok := securityText[kind]
+	if !ok {
+		return Message{}, Envelope{}, false
+	}
+
+	if name != "" {
+		what += ": " + clean(name, 64) + "."
+	} else if !strings.HasSuffix(what, ".") {
+		what += "."
+	}
+
+	body := "Hello " + clean(username, 64) + ",\n\n" +
+		"your Hostashi account at " + clean(panel, 253) + " changed on " + when(at) + ".\n" +
+		what + "\n"
+	if ip != "" {
+		body += "From the address " + clean(ip, 45) + ".\n"
+	}
+
+	body += "\nIf this was you, nothing needs to be done. If not, log in, check your account and tell an administrator.\n"
+
+	return Message{To: to, Subject: "Security change in your Hostashi account", Body: withFooter(body, panel)},
+		Envelope{Template: kind, Category: Account}, true
+}

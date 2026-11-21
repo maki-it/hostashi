@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/mail"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -39,6 +41,18 @@ func ValidRole(r string) bool {
 type NewInvitation struct {
 	Secret  string
 	Expires time.Time
+	// Email is the address to send the link to; empty means show only.
+	Email string
+}
+
+// ForgetInvitationEmail is called when the invitation email could not be
+// queued: the link is then only shown, and accepting it confirms nothing.
+func (s *Service) ForgetInvitationEmail(ctx context.Context, userID int64) error {
+	if err := s.st.ClearInvitationEmail(ctx, userID); err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Service) newInvitation() (store.Invitation, NewInvitation, error) {
@@ -90,7 +104,10 @@ func (s *Service) Account(ctx context.Context, id int64) (store.Account, error) 
 
 // CreateAccount adds an account without a password and returns its
 // invitation. The caller has checked that actor may manage users.
-func (s *Service) CreateAccount(ctx context.Context, actor store.User, username, role, ip string) (store.Account, NewInvitation, error) {
+//
+// email is optional: the address the invitation is emailed to, which
+// becomes the account's address once the link is accepted (ADR-0044).
+func (s *Service) CreateAccount(ctx context.Context, actor store.User, username, role, email, ip string) (store.Account, NewInvitation, error) {
 	if err := ValidateUsername(username); err != nil {
 		return store.Account{}, NewInvitation{}, err
 	}
@@ -99,17 +116,34 @@ func (s *Service) CreateAccount(ctx context.Context, actor store.User, username,
 		return store.Account{}, NewInvitation{}, ErrInvalidRole
 	}
 
+	if email != "" {
+		addr, err := mail.ParseAddress(strings.TrimSpace(email))
+		if err != nil {
+			return store.Account{}, NewInvitation{}, ErrEmailInvalid
+		}
+
+		email = strings.ToLower(addr)
+	}
+
 	inv, out, err := s.newInvitation()
 	if err != nil {
 		return store.Account{}, NewInvitation{}, err
 	}
+
+	inv.Email = email
+	out.Email = email
 
 	a, err := s.st.CreateAccount(ctx, username, role, inv)
 	if err != nil {
 		return store.Account{}, NewInvitation{}, accountErr(err)
 	}
 
-	_ = s.st.Audit(ctx, &actor.ID, "user.create", username, map[string]string{"role": role, "id": idString(a.ID), "ip": ip})
+	detail := map[string]string{"role": role, "id": idString(a.ID), "ip": ip}
+	if email != "" {
+		detail["email"] = email
+	}
+
+	_ = s.st.Audit(ctx, &actor.ID, "user.create", username, detail)
 
 	return a, out, nil
 }
@@ -179,10 +213,18 @@ func (s *Service) ResetAccount(ctx context.Context, actor store.User, id int64, 
 		return NewInvitation{}, accountErr(err)
 	}
 
+	e, err := s.st.UserEmail(ctx, id, s.now())
+	if err != nil {
+		return NewInvitation{}, accountErr(err)
+	}
+
 	inv, out, err := s.newInvitation()
 	if err != nil {
 		return NewInvitation{}, err
 	}
+
+	// The reset link goes to the confirmed address, if there is one.
+	inv.Email, out.Email = e.Confirmed, e.Confirmed
 
 	if err := s.st.ResetAccount(ctx, id, inv); err != nil {
 		return NewInvitation{}, accountErr(err)

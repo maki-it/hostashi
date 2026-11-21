@@ -192,7 +192,13 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 	})
 
 	if deps.Auth != nil {
-		registerAuth(mux, deps.Auth, log)
+		var m *mailer
+		if deps.Mail != nil && deps.Outbox != nil {
+			m = &mailer{relay: deps.Mail, outbox: deps.Outbox, publicURL: cfg.PublicURL, log: log, who: deps.Auth.ConfirmedEmail}
+			deps.Auth.OnAccountEvent(m.accountEvent)
+		}
+
+		registerAuth(mux, deps.Auth, m, log)
 
 		if deps.Sites != nil {
 			registerSites(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
