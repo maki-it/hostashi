@@ -1,6 +1,6 @@
 # ADR-0038 Web database tool with short-lived access
 
-**Status:** Accepted (Kim, 2026-11-20); Addendum 1 Proposed. **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0023 (panel HTTPS through nginx), ADR-0024 (MariaDB per site, no stored passwords), ADR-0025 (database import and export), ADR-0033 (hardening baseline), ADR-0034 (firewall), ADR-0035 (roles), ADR-0037 (UI redesign).
+**Status:** Accepted (Kim, 2026-11-20); Addendum 1 Accepted (Kim, 2026-11-21). **Date drafted:** 2026-11-20. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0023 (panel HTTPS through nginx), ADR-0024 (MariaDB per site, no stored passwords), ADR-0025 (database import and export), ADR-0033 (hardening baseline), ADR-0034 (firewall), ADR-0035 (roles), ADR-0037 (UI redesign).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
