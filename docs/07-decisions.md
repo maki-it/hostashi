@@ -54,6 +54,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0048 | Convert a parked domain into a site and back | Accepted on 2026-11-21 ([adr/0048](adr/0048-convert-parked-domain-and-site.md)) | No |
 | 0049 | PHP settings per site | Accepted on 2026-11-21 ([adr/0049](adr/0049-php-settings-per-site.md)) | No |
 | 0050 | Signed releases, install and updates through apt | Accepted on 2026-11-21 ([adr/0050](adr/0050-signed-releases-and-apt-updates.md)) | No |
+| 0051 | External PostgreSQL servers | Proposed ([adr/0051](adr/0051-external-postgresql-servers.md)) | **Yes** |
 
 ---
 
@@ -368,3 +369,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0050 Signed releases, install and updates through apt
 
 **Full text (status Accepted, 2026-11-21, by Kim):** [adr/0050](adr/0050-signed-releases-and-apt-updates.md). Summary: Kim wants signed GitHub releases and install and update through apt. Recommended: GoReleaser builds a `hostashi` `.deb` per architecture with SBOM, cosign signatures and attestations; a static apt repository on the GitHub Pages site of this repo under `hostashi.com/apt`, signed by one expiring key held only in a `release` environment behind Kim's approval and renewed by a workflow (no manual `gpg`); the install script installs through apt and runs `hostashi setup`; `postinst` re-runs the installer's configure steps on upgrade after a database snapshot; `hostashi-rollback`; automatic Hostashi updates opt-in; one `stable` channel. No new `os/exec` exception in panel or agent.
+
+## ADR-0051 External PostgreSQL servers
+
+**Full draft (status Proposed, 2026-11-21):** [adr/0051](adr/0051-external-postgresql-servers.md). Summary: MariaDB stays the only local engine (Kim, 2026-11-21). Sites that need PostgreSQL use external PostgreSQL servers as a third engine in the ADR-0041 design, in v1 with databases, backups, import and export and Adminer. Recommended: pgx in the panel, client tools from apt.postgresql.org installed when the first server is added, Adminer's full build in the existing pool, and a sixth `os/exec` exception `internal/pgctl` for `pg_dump`, `pg_restore` and `psql`.
