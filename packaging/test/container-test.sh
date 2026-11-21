@@ -89,17 +89,29 @@ if x /opt/hostashi/install.sh apply --binary /opt/hostashi/hostashi; then fail "
 step "plan"
 x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall
 
+step "--panel-domain takes a host name only (ADR-0042)"
+for d in https://panel.example.com panel.example.com:8443 panel.example.com/ localhost 192.0.2.1 panel_x.example.com .example.com; do
+  if x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall --panel-domain "$d" >/dev/null 2>&1; then
+    fail "--panel-domain '$d' accepted"
+  fi
+done
+if x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall --public-url https://panel.example.com >/dev/null 2>&1; then
+  fail "the removed --public-url was accepted"
+fi
+out=$(x /opt/hostashi/install.sh plan --binary /opt/hostashi/hostashi --no-firewall --panel-domain Panel.Example.com 2>&1)
+grep -q 'https://panel.example.com:8443' <<<"$out" || fail "--panel-domain not lower-cased into the public URL: $out"
+
 # The container shares the host's network (--network host), so every run
 # passes --no-firewall: the rules would land on the host. The firewall
 # step is tested in a container of its own (packaging/test/firewall-test.sh).
 step "apply"
-x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --public-url https://panel.example.com || {
+x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com || {
   x tail -n 60 /var/log/hostashi-install.log >&2 || true
   fail "first apply failed"
 }
 
 step "second apply changes nothing"
-out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --public-url https://panel.example.com)
+out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com)
 echo "$out"
 grep -q 'changes=0' <<<"$out" || fail "second run changed something"
 # The container's root is an overlay: the quota step must skip with a
@@ -264,7 +276,7 @@ exposure hostashi.service 2.0
 exposure hostashi-agent.service 4.5
 
 step "changed setting is applied and the panel restarts"
-out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --public-url https://other.example.com)
+out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com)
 echo "$out"
 grep -q 'apply.*config' <<<"$out" || fail "config change not applied"
 [ "$(x systemctl is-active hostashi.service)" = active ] || fail "panel did not come back after the change"
@@ -1034,7 +1046,7 @@ UNIT
 fi
 
 step "more PHP versions from sury.org (ADR-0019)"
-inst() { x /opt/hostashi/install.sh "$@" --binary /opt/hostashi/hostashi --no-firewall --public-url https://other.example.com; }
+inst() { x /opt/hostashi/install.sh "$@" --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com; }
 if inst plan --php-versions 8.0 2>/dev/null; then fail "PHP 8.0 accepted"; fi
 if inst plan --php-versions '8.1;7.4' 2>/dev/null; then fail "a list with ';' accepted"; fi
 # shellcheck disable=SC2016 # a dpkg-query format, not shell
