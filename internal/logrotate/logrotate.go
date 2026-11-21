@@ -15,14 +15,16 @@ import (
 	"regexp"
 	"strconv"
 	"text/template"
+
+	"github.com/maki-it/hostashi/internal/agentapi"
 )
 
 // The retention range in days (ADR-0053). The default matches what Kim's
 // data processing agreement promises.
 const (
-	MinDays     = 1
-	MaxDays     = 365
-	DefaultDays = 7
+	MinDays     = agentapi.MinLogRetentionDays
+	MaxDays     = agentapi.MaxLogRetentionDays
+	DefaultDays = agentapi.DefaultLogRetentionDays
 )
 
 // File is where the agent writes the configuration.
