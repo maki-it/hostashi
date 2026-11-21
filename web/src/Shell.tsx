@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { CaretRight, List, SignOut, X } from "@phosphor-icons/react";
+import { CaretRight, List, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
 import { useState, type ReactNode } from "react";
 import { logout, type User } from "./auth";
 import { navFor, navItem } from "./nav";
 import { formatHash, type Route } from "./routes";
+import { isDark, saveColorScheme, type ColorScheme } from "./scheme";
 import { IconButton } from "./ui";
 
 type ShellProps = {
   user: User;
   route: Route;
   onLogout: () => void;
+  /** Called with the scheme the user picks, before it is saved. */
+  onScheme: (s: ColorScheme) => void;
   children: ReactNode;
 };
 
@@ -28,6 +31,7 @@ export function Mark() {
 type Crumb = { label: string; href?: string };
 
 function crumbs(route: Route): Crumb[] {
+  if (route.page === "account") return [{ label: "Your account" }];
   const item = navItem(route.page);
   if (!item) return [];
   const out: Crumb[] = [];
@@ -46,7 +50,7 @@ function crumbs(route: Route): Crumb[] {
  * sidebar with the grouped navigation and the current user, and a top bar
  * with breadcrumbs. Below 700 px the sidebar collapses into a menu.
  */
-export function Shell({ user, route, onLogout, children }: ShellProps) {
+export function Shell({ user, route, onLogout, onScheme, children }: ShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -62,6 +66,20 @@ export function Shell({ user, route, onLogout, children }: ShellProps) {
     } catch {
       setError("Logout failed. Try again.");
       setBusy(false);
+    }
+  }
+
+  // The sun/moon button switches between light and dark in one click; the
+  // account page also offers following the system (ADR-0037).
+  const dark = isDark(user.colorScheme ?? "system");
+  async function toggleScheme() {
+    const next: ColorScheme = dark ? "light" : "dark";
+    onScheme(next);
+    setError("");
+    try {
+      await saveColorScheme(next);
+    } catch {
+      setError("The colour scheme could not be saved. It applies until you reload.");
     }
   }
 
@@ -114,10 +132,15 @@ export function Shell({ user, route, onLogout, children }: ShellProps) {
           <span className="app-avatar" aria-hidden="true">
             {user.username.slice(0, 2).toUpperCase()}
           </span>
-          <span className="app-user-name">
+          <a
+            className="app-user-name"
+            href={formatHash({ page: "account" })}
+            aria-current={route.page === "account" ? "page" : undefined}
+            onClick={() => setMenuOpen(false)}
+          >
             {user.username}
             <small>{user.role}</small>
-          </span>
+          </a>
           <IconButton label="Log out" icon={<SignOut size={20} />} disabled={busy} onClick={() => void doLogout()} />
         </div>
         {error && (
@@ -145,6 +168,14 @@ export function Shell({ user, route, onLogout, children }: ShellProps) {
               })}
             </ol>
           </nav>
+          <span className="app-top-actions">
+            <IconButton
+              label={dark ? "Use light colours" : "Use dark colours"}
+              icon={dark ? <Sun size={20} /> : <Moon size={20} />}
+              tipBelow
+              onClick={() => void toggleScheme()}
+            />
+          </span>
         </header>
         <div className="app-content">{children}</div>
       </div>

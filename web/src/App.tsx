@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
+import { Account } from "./Account";
 import { currentUser, needsSecondFactor, setupRequired, type User } from "./auth";
 import { Backups } from "./Backups";
 import { Databases } from "./Databases";
@@ -23,6 +24,7 @@ import { formatHash, parseHash, type Page } from "./routes";
 import { Mark, Shell } from "./Shell";
 import { SitePage } from "./SitePage";
 import { Users } from "./Users";
+import { applyScheme, type ColorScheme } from "./scheme";
 
 type View =
   | { kind: "loading" }
@@ -71,11 +73,17 @@ export function App() {
     void boot();
   }, [boot]);
 
+  // The account's colour scheme applies once logged in; before that, and
+  // after logout, the panel follows the system (ADR-0037).
+  const scheme: ColorScheme = view.kind === "home" ? (view.user.colorScheme ?? "system") : "system";
+  useEffect(() => applyScheme(scheme), [scheme]);
+  const onScheme = (s: ColorScheme) => setView((v) => (v.kind === "home" ? { ...v, user: { ...v.user, colorScheme: s } } : v));
+
   // locked: the account must set up a second factor first, and the server
   // refuses every other page until then.
   if (view.kind === "home" && !needsSecondFactor(view.user)) {
     const user = view.user;
-    const page: Page = canSee(user.role, route.page) ? route.page : "home";
+    const page: Page = route.page === "account" || canSee(user.role, route.page) ? route.page : "home";
     const show = (p: Page) => page === p;
     // replaceQuery changes the query of the address without a new history
     // entry, so that typing in a filter does not fill the back button.
@@ -85,7 +93,7 @@ export function App() {
       setRoute(next);
     };
     return (
-      <Shell user={user} route={{ ...route, page }} onLogout={() => setView({ kind: "login" })}>
+      <Shell user={user} route={{ ...route, page }} onLogout={() => setView({ kind: "login" })} onScheme={onScheme}>
         {show("home") && <Overview user={user} />}
         {show("sites") &&
           (route.site ? (
@@ -110,6 +118,7 @@ export function App() {
         {show("pages") && <Pages query={route.query} onQuery={replaceQuery} />}
         {show("users") && <Users me={user.username} query={route.query} onQuery={replaceQuery} />}
         {show("import") && <Migrate query={route.query} onQuery={replaceQuery} />}
+        {show("account") && <Account user={user} onScheme={onScheme} />}
       </Shell>
     );
   }

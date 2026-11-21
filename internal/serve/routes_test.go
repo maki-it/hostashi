@@ -52,6 +52,7 @@ var routeAccess = map[string]authz.Action{
 	"POST /api/v1/auth/passkeys/register/finish": accessSession,
 	"GET /api/v1/auth/passkeys":                  accessSession,
 	"DELETE /api/v1/auth/passkeys/{id}":          accessSession,
+	"PATCH /api/v1/me":                           accessSession,
 
 	"POST /api/v1/invitations/check":  accessPublic,
 	"POST /api/v1/invitations/accept": accessPublic,

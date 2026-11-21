@@ -54,6 +54,13 @@ type meJSON struct {
 
 	SecondFactor         bool `json:"secondFactor"`
 	SecondFactorRequired bool `json:"secondFactorRequired"`
+	preferencesJSON
+}
+
+// preferencesJSON is how the panel looks for the account (ADR-0037).
+type preferencesJSON struct {
+	ColorScheme string `json:"colorScheme"`
+	Theme       string `json:"theme"`
 }
 
 // me returns the second factor state of the account with its name and
@@ -66,9 +73,17 @@ func (a authn) me(w http.ResponseWriter, r *http.Request, u store.User) (meJSON,
 		return meJSON{}, false
 	}
 
+	p, err := a.svc.Preferences(r.Context(), u.ID)
+	if err != nil {
+		a.fail(w, err, "read preferences")
+
+		return meJSON{}, false
+	}
+
 	return meJSON{
 		userJSON:     userJSON{Username: u.Username, Role: u.Role},
 		SecondFactor: has, SecondFactorRequired: auth.SecondFactorRequired(u),
+		preferencesJSON: preferencesJSON{ColorScheme: p.ColorScheme, Theme: p.Theme},
 	}, true
 }
 
@@ -408,6 +423,38 @@ func registerAuth(mux *routeMux, svc *auth.Service, log *slog.Logger) {
 		}
 
 		writeJSON(w, http.StatusOK, out)
+	})
+
+	// PATCH /api/v1/me changes how the panel looks for the logged-in
+	// account (ADR-0037). Only a browser session can change it.
+	mux.HandleFunc("PATCH /api/v1/me", func(w http.ResponseWriter, r *http.Request) {
+		u, ok := a.session(w, r)
+		if !ok || !a.secondFactorOK(w, r, u) {
+			return
+		}
+
+		var in struct {
+			ColorScheme string `json:"colorScheme"`
+			Theme       string `json:"theme"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		p, err := svc.SetPreferences(r.Context(), u.ID, in.ColorScheme, in.Theme)
+		if errors.Is(err, auth.ErrInvalidPreference) {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", err.Error())
+
+			return
+		}
+
+		if err != nil {
+			fail(w, err, "set preferences")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, preferencesJSON{ColorScheme: p.ColorScheme, Theme: p.Theme})
 	})
 
 	registerTokens(mux, a)

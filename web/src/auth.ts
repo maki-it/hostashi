@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { ApiError, request } from "./api";
+import type { ColorScheme } from "./scheme";
 import { getAssertion } from "./webauthn";
 
 // secondFactorRequired without secondFactor: the account must set up TOTP
@@ -11,6 +12,9 @@ export type User = {
   clientIp?: string;
   secondFactor?: boolean;
   secondFactorRequired?: boolean;
+  /** How the panel looks for the account (ADR-0037); missing means the system's scheme. */
+  colorScheme?: ColorScheme;
+  theme?: string;
 };
 
 export const needsSecondFactor = (u: User): boolean => !!u.secondFactorRequired && !u.secondFactor;
