@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/maki-it/hostashi/internal/agentrpc"
 )
 
 // Page cache presets (ADR-0046). The preset decides which cookies and paths
@@ -102,3 +104,20 @@ func ValidatePageCacheExcludes(paths []string) error {
 
 	return nil
 }
+
+// PageCachePurgeRequest names the site whose page cache is emptied.
+type PageCachePurgeRequest struct {
+	User string `json:"user"`
+}
+
+// Validate checks the site name.
+func (r PageCachePurgeRequest) Validate() error { return ValidateSiteUser(r.User) }
+
+// PageCachePurgeResponse is empty.
+type PageCachePurgeResponse struct{}
+
+// PageCachePurge empties the page cache of a site (ADR-0046). The site must
+// have its cache switched on in the live web state; otherwise the call
+// answers failed_precondition. The old entries are deleted in the
+// background.
+var PageCachePurge = agentrpc.Op[PageCachePurgeRequest, PageCachePurgeResponse]{Name: "pagecache.purge"}
