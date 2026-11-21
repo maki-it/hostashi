@@ -385,6 +385,15 @@ server {
     {{- end}}
     add_header Strict-Transport-Security "max-age=31536000" always;
     client_max_body_size 16m;
+    {{- if .P.Allow}}
+
+    # The panel allowlist (ADR-0042): on the sites' port the firewall
+    # cannot apply it.
+    {{- range .P.Allow}}
+    allow {{.}};
+    {{- end}}
+    deny all;
+    {{- end}}
 
     location / {
         proxy_pass http://unix:{{.N.PanelUpstream}}:;

@@ -11,7 +11,7 @@
 | 443 | TCP and UDP | websites over HTTPS and HTTP/3 | internet, always |
 | 8443 | TCP and UDP | the panel (the port can be changed with `--panel-port`) | internet; can be limited to an allowlist in the panel |
 
-With `--panel-port 443`, the panel has no port of its own: nginx serves it on 443 under its host name, next to the sites. The firewall cannot tell panel and site traffic apart on a shared port.
+With `--panel-port 443`, the panel has no port of its own: nginx serves it on 443 under its host name, next to the sites. The firewall cannot tell panel and site traffic apart on a shared port, so nginx applies the panel allowlist there instead.
 
 Hostashi's firewall lets in only these ports, plus what you open in the panel or with `--firewall-allow`. Outgoing traffic is not limited. If you have a firewall at your provider as well, open the same ports there.
 

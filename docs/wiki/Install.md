@@ -74,6 +74,7 @@ Before that, create a DNS record for the name that points to the server (`A`, an
 
 Things to know:
 
+- The panel allowlist (Firewall page) is applied by nginx on port 443, not by the firewall. Addresses outside it still reach the TLS handshake and then get `403`. On port 8443 the firewall drops them earlier.
 - If fail2ban bans an address for wrong panel logins, it cannot reach the sites on this server either while the ban lasts. That also happens on 8443.
 
 ## Installer options
