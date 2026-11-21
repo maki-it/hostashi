@@ -301,7 +301,8 @@ PHP
 [ "$(x runuser -u blog -- php /tmp/cache.php set)" = v ] || fail "the site cannot use its cache"
 [ "$(x runuser -u blog -- php /tmp/cache.php info)" = 33554432 ] || fail "cache has the wrong maxmemory"
 [ "$(x runuser -u blog -- php /tmp/cache.php config)" = refused ] || fail "the site may change the cache's config"
-x runuser -u blog -- php /tmp/cache.php flush | head -1 | grep -qx flushed || fail "the site cannot flush its cache"
+# Not "| head -1": with pipefail, php's SIGPIPE on the second line would fail it.
+[ "$(x runuser -u blog -- php /tmp/cache.php flush)" = "$(printf 'flushed\n0')" ] || fail "the site cannot flush its cache"
 x useradd -M -s /usr/sbin/nologin cacheprobe
 x runuser -u cacheprobe -- php /tmp/cache.php set >/dev/null 2>&1 && fail "another user reached the site's cache"
 x userdel cacheprobe
