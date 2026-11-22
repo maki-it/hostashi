@@ -32,6 +32,9 @@ trap cleanup EXIT
 step() { echo "=== $*"; }
 fail() { echo "FAIL: $*" >&2; docker exec "$NAME" sh -c 'nft list ruleset; tail -n 30 /tmp/fw.log' >&2 || true; exit 1; }
 x() { docker exec "$NAME" "$@"; }
+# Pipes into grep use grep >/dev/null, not grep -q: grep -q stops reading at
+# the first match, docker exec then fails writing the rest (EPIPE), and
+# pipefail turns that into a failed check.
 
 step "prepare $IMG with systemd, nftables and sshd"
 docker run -d --name "$NAME-prep" "$IMG" sleep infinity >/dev/null
@@ -126,7 +129,7 @@ must_closed 3000 5000
 x nft list table inet f2b-table >/dev/null || fail "fail2ban's table is gone"
 # The database tool (ADR-0038) shares the panel's allowlist; its port is
 # TCP only.
-x grep -A2 'set panel_ports' /etc/hostashi/firewall.nft | grep -q 'elements = { 8443, 8444 }' || fail "panel_ports: $(x grep -A2 'set panel_ports' /etc/hostashi/firewall.nft)"
+x grep -A2 'set panel_ports' /etc/hostashi/firewall.nft | grep 'elements = { 8443, 8444 }' >/dev/null || fail "panel_ports: $(x grep -A2 'set panel_ports' /etc/hostashi/firewall.nft)"
 # shellcheck disable=SC2016 # expanded inside the container
 out=$(x bash -c 'HOSTASHI_LIB=1 . /opt/hostashi/install.sh; PANEL_PORT=8443 NO_DB_TOOL=yes; echo "$(fw_ports tcp) | $(fw_panel_ports)"' 2>/dev/null) || fail "fw_ports: $out"
 case "$out" in *8444*) fail "--no-db-tool still opens 8444: $out";; esac
@@ -183,7 +186,7 @@ sleep 1
 lo_connect() { x runuser -u "$1" -- timeout 3 bash -c 'exec 3<>/dev/tcp/127.0.0.1/20001' 2>/dev/null; }
 x sh -c 'printf "add element inet hostashi app_owners { 20001 . 1500 }\n" >/var/lib/hostashi-agent/firewall/apps.nft'
 x systemctl reload hostashi-firewall.service || fail "firewall did not load the apps file"
-x nft list set inet hostashi app_owners | grep -q '20001 . 1500' || fail "owner not loaded: $(x nft list set inet hostashi app_owners)"
+x nft list set inet hostashi app_owners | grep '20001 . 1500' >/dev/null || fail "owner not loaded: $(x nft list set inet hostashi app_owners)"
 lo_connect root || fail "root cannot reach the app"
 lo_connect www-data || fail "www-data cannot reach the app"
 lo_connect appowner || fail "the owner cannot reach its app"
@@ -216,13 +219,13 @@ must_open 80 443
 out=$(fw 'PANEL_PORT=443 NO_DB_TOOL=yes') || fail "firewall step with the panel on 443 failed: $out"
 x grep -q 'tcp dport { 22, 80, 443, 2200, 2222 } accept' /etc/hostashi/firewall.nft || fail "TCP ports on 443: $(x grep 'tcp dport' /etc/hostashi/firewall.nft)"
 x grep -q 'udp dport { 443 } accept' /etc/hostashi/firewall.nft || fail "UDP ports on 443: $(x grep 'udp dport' /etc/hostashi/firewall.nft)"
-if x grep -A3 'set panel_ports' /etc/hostashi/firewall.nft | grep -q elements; then fail "panel_ports is not empty on 443"; fi
+if x grep -A3 'set panel_ports' /etc/hostashi/firewall.nft | grep elements >/dev/null; then fail "panel_ports is not empty on 443"; fi
 must_open 22 80 443
 must_closed 8443
 # The database tool keeps its own port and the packet filter (ADR-0038).
 out=$(fw 'PANEL_PORT=443') || fail "firewall step with the panel on 443 and the tool failed: $out"
 x grep -q 'tcp dport { 22, 80, 443, 2200, 2222, 8444 } accept' /etc/hostashi/firewall.nft || fail "TCP ports on 443 with the tool: $(x grep 'tcp dport' /etc/hostashi/firewall.nft)"
-x grep -A2 'set panel_ports' /etc/hostashi/firewall.nft | grep -q 'elements = { 8444 }' || fail "panel_ports on 443: $(x grep -A3 'set panel_ports' /etc/hostashi/firewall.nft)"
+x grep -A2 'set panel_ports' /etc/hostashi/firewall.nft | grep 'elements = { 8444 }' >/dev/null || fail "panel_ports on 443: $(x grep -A3 'set panel_ports' /etc/hostashi/firewall.nft)"
 must_open 22 80 443
 x sh -c 'printf "# empty\n" >/var/lib/hostashi-agent/firewall/panel.nft'
 fw >/dev/null || fail "back to 8443 failed"
