@@ -152,3 +152,37 @@ func ValkeyDefaultState(ctx context.Context) (active, file string, err error) {
 
 	return active, file, nil
 }
+
+// NodeInstallUnits starts and reads hostashi-node-install@<major>.service,
+// the fixed unit that installs a pinned Node.js build (ADR-0054). The
+// major must be one of agentapi.NodeReleases; `hostashi node-install`
+// behind the unit checks it again.
+type NodeInstallUnits struct{}
+
+func nodeInstallUnit(major string) (string, error) {
+	if err := agentapi.ValidateNodeMajor(major); err != nil {
+		return "", err
+	}
+
+	return "hostashi-node-install@" + major + ".service", nil
+}
+
+// Start queues the unit (systemctl start --no-block).
+func (NodeInstallUnits) Start(ctx context.Context, major string) error {
+	unit, err := nodeInstallUnit(major)
+	if err != nil {
+		return err
+	}
+
+	return run(ctx, Systemctl, "start", "--no-block", unit)
+}
+
+// Active reports whether the unit is running or about to.
+func (NodeInstallUnits) Active(ctx context.Context, major string) (bool, error) {
+	unit, err := nodeInstallUnit(major)
+	if err != nil {
+		return false, err
+	}
+
+	return unitActive(ctx, unit)
+}

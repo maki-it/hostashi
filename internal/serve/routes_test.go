@@ -119,6 +119,8 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/php/versions":                               "php.versions:read",
 	"GET /api/v1/php/install":                                "php.install:read",
 	"POST /api/v1/php/install":                               "php:install",
+	"GET /api/v1/node":                                       "node:read",
+	"POST /api/v1/node/install":                              "node:install",
 	"DELETE /api/v1/sites/{name}":                            "sites:delete",
 	"POST /api/v1/sites/{name}/park":                         "sites:park",
 	"GET /api/v1/panel/tls":                                  "panel.tls:read",
@@ -277,7 +279,7 @@ func newFullAPIMux(t *testing.T) (*apiEnv, *routeMux) {
 	e.h, mux = handler(Config{PublicURL: testPublicURL}, Deps{
 		PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb,
 		CloudPanel: e.cp, CloudPanelSource: newStubSource(t), Metrics: e.metrics, Settings: e.settings,
-		Doctor: e.doctor.run, Pools: e.pools.list, Firewall: e.firewall, PHP: e.php, PGClient: e.pgclient, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open, NotifyPrefs: e.st, AuditLog: e.st,
+		Doctor: e.doctor.run, Pools: e.pools.list, Firewall: e.firewall, PHP: e.php, PGClient: e.pgclient, Node: e.node, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open, NotifyPrefs: e.st, AuditLog: e.st,
 		Monitor: e.monitor, Logs: e.logs,
 	})
 

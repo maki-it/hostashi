@@ -592,6 +592,32 @@
         },
         "type": "object"
       },
+      "Maintenance": {
+        "additionalProperties": false,
+        "properties": {
+          "allowIps": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "page": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "allowIps",
+          "enabled",
+          "page"
+        ],
+        "type": "object"
+      },
       "Me": {
         "additionalProperties": false,
         "properties": {
@@ -661,6 +687,101 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "Node": {
+        "additionalProperties": false,
+        "properties": {
+          "installed": {
+            "items": {
+              "$ref": "#/components/schemas/NodeInstalled"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "last": {
+            "type": "string"
+          },
+          "log": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "releases": {
+            "items": {
+              "$ref": "#/components/schemas/NodeRelease"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "installed",
+          "last",
+          "log",
+          "releases",
+          "state"
+        ],
+        "type": "object"
+      },
+      "NodeInstallInput": {
+        "additionalProperties": false,
+        "properties": {
+          "major": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "NodeInstalled": {
+        "additionalProperties": false,
+        "properties": {
+          "major": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "major",
+          "version"
+        ],
+        "type": "object"
+      },
+      "NodeRelease": {
+        "additionalProperties": false,
+        "properties": {
+          "codename": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          },
+          "major": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "codename",
+          "end",
+          "major",
+          "version"
+        ],
         "type": "object"
       },
       "Notifications": {
@@ -803,6 +924,41 @@
         },
         "type": "object"
       },
+      "Proxy": {
+        "additionalProperties": false,
+        "properties": {
+          "insecure": {
+            "type": "boolean"
+          },
+          "target": {
+            "type": "string"
+          },
+          "targetHost": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "insecure",
+          "target",
+          "targetHost"
+        ],
+        "type": "object"
+      },
+      "ProxyInput": {
+        "additionalProperties": false,
+        "properties": {
+          "insecure": {
+            "type": "boolean"
+          },
+          "target": {
+            "type": "string"
+          },
+          "targetHost": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "Reason": {
         "additionalProperties": false,
         "properties": {
@@ -835,6 +991,41 @@
         "required": [
           "recoveryCodes"
         ],
+        "type": "object"
+      },
+      "Redirect": {
+        "additionalProperties": false,
+        "properties": {
+          "keepPath": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "keepPath",
+          "status",
+          "target"
+        ],
+        "type": "object"
+      },
+      "RedirectInput": {
+        "additionalProperties": false,
+        "properties": {
+          "keepPath": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "ScopeInfo": {
@@ -902,6 +1093,104 @@
         ],
         "type": "object"
       },
+      "Site": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "disabled": {
+            "type": "boolean"
+          },
+          "disabledPage": {
+            "type": "string"
+          },
+          "domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "maintenance": {
+            "$ref": "#/components/schemas/Maintenance"
+          },
+          "name": {
+            "type": "string"
+          },
+          "php": {
+            "type": "string"
+          },
+          "phpPrograms": {
+            "type": "boolean"
+          },
+          "pool": {
+            "type": "string"
+          },
+          "proxy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Proxy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "redirect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Redirect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "type": "string"
+          },
+          "tls": {
+            "$ref": "#/components/schemas/Tls"
+          },
+          "type": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "web": {
+            "$ref": "#/components/schemas/Web"
+          }
+        },
+        "required": [
+          "account",
+          "createdAt",
+          "disabled",
+          "disabledPage",
+          "domains",
+          "maintenance",
+          "name",
+          "php",
+          "phpPrograms",
+          "pool",
+          "proxy",
+          "redirect",
+          "state",
+          "tls",
+          "type",
+          "updatedAt",
+          "web"
+        ],
+        "type": "object"
+      },
       "SiteLogs": {
         "additionalProperties": false,
         "properties": {
@@ -929,6 +1218,77 @@
           "lines",
           "more",
           "rotated"
+        ],
+        "type": "object"
+      },
+      "Tls": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "certSource": {
+            "type": "string"
+          },
+          "domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "failedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hsts": {
+            "type": "boolean"
+          },
+          "notAfter": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "renewAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "renewPending": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "trusted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "active",
+          "certSource",
+          "domains",
+          "enabled",
+          "hsts",
+          "notAfter",
+          "renewPending",
+          "source",
+          "trusted"
         ],
         "type": "object"
       },
@@ -1261,6 +1621,40 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "Web": {
+        "additionalProperties": false,
+        "properties": {
+          "assetCache": {
+            "type": "boolean"
+          },
+          "assetCacheExts": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "assetCacheSeconds": {
+            "type": "integer"
+          },
+          "dir": {
+            "type": "string"
+          },
+          "spa": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "assetCache",
+          "assetCacheExts",
+          "assetCacheSeconds",
+          "dir",
+          "spa"
+        ],
         "type": "object"
       }
     },
@@ -5594,6 +5988,102 @@
         "x-hostashi-undescribed": true
       }
     },
+    "/api/v1/node": {
+      "get": {
+        "operationId": "getNode",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "The Node.js LTS lines Hostashi installs, what is installed and the last installation",
+        "tags": [
+          "node"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "node:read"
+      }
+    },
+    "/api/v1/node/install": {
+      "post": {
+        "operationId": "installNode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeInstallInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "node:install"
+            ]
+          }
+        ],
+        "summary": "Start the installation of the pinned build of a Node.js LTS line",
+        "tags": [
+          "node"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "node:install"
+      }
+    },
     "/api/v1/openapi.json": {
       "get": {
         "operationId": "getOpenAPI",
@@ -9785,7 +10275,7 @@
     },
     "/api/v1/sites/{name}/proxy": {
       "put": {
-        "operationId": "putSitesNameProxy",
+        "operationId": "setSiteProxy",
         "parameters": [
           {
             "in": "path",
@@ -9800,17 +10290,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/ProxyInput"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
               }
             },
             "description": "OK"
@@ -9836,17 +10328,17 @@
             ]
           }
         ],
+        "summary": "Set the target of a reverse proxy site",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.proxy:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.proxy:write"
       }
     },
     "/api/v1/sites/{name}/redirect": {
       "put": {
-        "operationId": "putSitesNameRedirect",
+        "operationId": "setSiteRedirect",
         "parameters": [
           {
             "in": "path",
@@ -9861,17 +10353,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/RedirectInput"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
               }
             },
             "description": "OK"
@@ -9897,12 +10391,12 @@
             ]
           }
         ],
+        "summary": "Set the target of a redirect site",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.redirect:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.redirect:write"
       }
     },
     "/api/v1/sites/{name}/services": {
