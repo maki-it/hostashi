@@ -1765,7 +1765,8 @@ out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the Node.js install changed something"; }
 
 step "a Node.js site runs its app as the site user behind nginx (ADR-0054)"
-[ "$(api POST /api/v1/sites '{"name":"nodeapp","domains":["nodeapp.example.com"],"type":"node","node":{"version":"20"}}')" = 409 ] ||
+other_major=22; [ "$NODE_MAJOR" != 22 ] || other_major=24
+[ "$(api POST /api/v1/sites "{\"name\":\"nodeapp\",\"domains\":[\"nodeapp.example.com\"],\"type\":\"node\",\"node\":{\"version\":\"$other_major\"}}")" = 409 ] ||
   fail "node site on a line that is not installed: $(x cat /tmp/api.out)"
 [ "$(api POST /api/v1/sites "{\"name\":\"nodeapp\",\"domains\":[\"nodeapp.example.com\"],\"type\":\"node\",\"node\":{\"version\":\"$NODE_MAJOR\"}}")" = 201 ] ||
   fail "create node site: $(x cat /tmp/api.out)"
