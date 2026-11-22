@@ -343,6 +343,59 @@ describe("Migrate", () => {
     await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ pool: "vol1" }));
   });
 
+  it("creates a Node.js site with another Node.js line", async () => {
+    const user = userEvent.setup();
+    const report = { id: "r1", sites: 1, createdAt: "2026-11-19T09:00:00Z" };
+    const api: PlanSite = { ...planSite("api", "review", [{ code: "node_start", msg: "the app stays stopped" }]), type: "nodejs", php: "", node: "24", customSnippets: 0 };
+    const calls = mockFetch({
+      [`GET ${base}/source`]: { body: readySource },
+      [`GET ${base}/reports`]: { body: { reports: [report] } },
+      [`GET ${base}/reports/r1`]: { body: { ...report, plan: plan([api]) } },
+      "GET /api/v1/php/versions": { body: { installed: ["8.3"], supported: ["8.3"], legacy: [] } },
+      "GET /api/v1/pools": { body: { pools: [] } },
+      "GET /api/v1/node": {
+        body: {
+          installed: [{ major: "22", version: "22.23.5" }, { major: "24", version: "24.22.3" }],
+          last: "",
+          state: "idle",
+          log: [],
+          releases: ["22", "24", "26"].map((major) => ({ major, version: major + ".0.0", codename: "", end: "2029-04-30" })),
+        },
+      },
+      [`POST ${base}/reports/r1/sites/api`]: { status: 201, body: { ...api, action: "skip", reasons: exists } },
+      "GET /api/v1/databases": { body: { databases: [] } },
+      [`GET ${base}/imports?site=api`]: { body: { imports: [] } },
+      [`GET ${base}/sites/api/cutover`]: noCutover,
+    });
+    render(<Harness initial="report=r1&site=api" />);
+    expect(await screen.findByText("Node.js")).toBeInTheDocument();
+    const select = await screen.findByLabelText(/^Node.js for api/);
+    expect(within(select).getByRole("option", { name: "Node.js 26 (not installed)" })).toBeInTheDocument();
+    await user.selectOptions(select, "22");
+    await user.click(screen.getByLabelText(/I checked the points above/));
+    await user.click(screen.getByRole("button", { name: "Create api" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ reviewed: true, node: "22" }));
+  });
+
+  it("shows a created reverse proxy site without a file import", async () => {
+    const report = { id: "r1", sites: 1, createdAt: "2026-11-19T09:00:00Z" };
+    const portal: PlanSite = { ...planSite("portal", "skip", exists), type: "proxy", php: "", proxy: "http://10.0.0.5:8080", customSnippets: 1 };
+    mockFetch({
+      [`GET ${base}/source`]: { body: readySource },
+      [`GET ${base}/reports`]: { body: { reports: [report] } },
+      [`GET ${base}/reports/r1`]: { body: { ...report, plan: plan([portal]) } },
+      "GET /api/v1/php/versions": { body: { installed: ["8.3"], supported: ["8.3"], legacy: [] } },
+      [`GET ${base}/sites/portal/cutover`]: noCutover,
+    });
+    render(<Harness initial="report=r1&site=portal" />);
+    expect(await screen.findByText("Reverse proxy")).toBeInTheDocument();
+    expect(screen.getByText("http://10.0.0.5:8080")).toBeInTheDocument();
+    expect(screen.getByText(/no files or databases to copy/)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Files and databases" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Custom nginx" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Old files")).not.toBeInTheDocument();
+  });
+
   it("reviews the custom nginx of a created site and saves it as snippets", async () => {
     const user = userEvent.setup();
     const report = { id: "r1", sites: 1, createdAt: "2026-11-19T09:00:00Z" };

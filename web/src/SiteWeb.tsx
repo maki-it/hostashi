@@ -5,6 +5,7 @@
 
 import { useState, type FormEvent } from "react";
 import { formatHash } from "./routes";
+import { EnvCard } from "./SiteEnv";
 import { AppCard, AppSettingsCard } from "./SiteNode";
 import { ProgramSettingsCard } from "./SiteApp";
 import { ProxyCard } from "./SiteProxy";
@@ -46,6 +47,7 @@ export function SiteWebSettings({ site, php, onChange, admin = false, staff = fa
         <>
           <AppCard site={site} onChange={onChange} />
           <AppSettingsCard site={site} onChange={onChange} admin={admin} />
+          <EnvCard site={site} />
           {change}
         </>
       );
@@ -54,6 +56,7 @@ export function SiteWebSettings({ site, php, onChange, admin = false, staff = fa
         <>
           <AppCard site={site} onChange={onChange} />
           <ProgramSettingsCard site={site} onChange={onChange} />
+          <EnvCard site={site} />
           {change}
         </>
       );

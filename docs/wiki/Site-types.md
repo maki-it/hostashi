@@ -31,6 +31,7 @@ A Node.js site runs one app as the site's user. nginx passes every request to it
 - **Working directory.** The folder the app starts in, below the home, `htdocs` by default. Usually the folder with `package.json`.
 - **Start command.** Either a **start file** (`node server.js`) or an **npm script** (`npm run start`). Until one is set, the app stays stopped.
 - **Port.** The panel gives each app its own port and passes it in the variable `PORT`, with `HOST=127.0.0.1` and `NODE_ENV=production`. Your app must listen on `PORT`. Only nginx and the site's own user can reach the port.
+- **Environment variables.** Under **Environment variables** you set your own, one `NAME=value` per line, for example `DATABASE_URL`. The panel stores the values encrypted and shows only the names until you edit them. `PORT`, `HOST`, `HOME`, `USER`, `LOGNAME` and `PATH` are set by the panel; `NODE_ENV` you may change. A change restarts the app.
 
 Upload the code with SFTP or the [file manager](File-manager.md), and install its packages in the site's SSH shell ([SSH and SFTP](SSH-and-SFTP.md)) with the site's Node.js version first in `PATH`, for example:
 
@@ -47,7 +48,7 @@ An app site runs a program of your own instead of Node.js, for example a Go, Rus
 
 - **Program:** the executable below the site's home, for example `bin/server`. Upload it first; the app starts once it is there.
 - **Arguments:** one per line. Each line reaches the program exactly as written; no shell reads it.
-- **Working directory**, **port**, start, stop, restart and the app log as for Node.js.
+- **Working directory**, **port**, **environment variables**, start, stop, restart and the app log as for Node.js.
 
 ## Reverse proxy
 

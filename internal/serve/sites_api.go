@@ -292,6 +292,8 @@ func siteFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "node_missing", err.Error())
 	case errors.Is(err, hosting.ErrNoApps):
 		writeError(w, http.StatusConflict, "apps_unavailable", "apps are not available on this panel")
+	case errors.Is(err, hosting.ErrNoAppEnv):
+		writeError(w, http.StatusConflict, "app_env_unavailable", "environment variables are not available on this panel")
 	case errors.Is(err, hosting.ErrSiteType):
 		writeError(w, http.StatusConflict, "wrong_site_type", "not possible for this type of site")
 	case errors.As(err, &ae):

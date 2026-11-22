@@ -162,7 +162,10 @@ var table = map[Action]Rule{
 	"sites.redirect:write": ownSite("sites:write"),
 	"sites.proxy:write":    ownSite("sites:write"),
 	// The app runs as the site user inside its isolation (ADR-0054).
-	"sites.app:write":         ownSite("sites:write"),
+	"sites.app:write": ownSite("sites:write"),
+	// The values of the app's environment variables: whoever may change
+	// the app can read them from it anyway.
+	"sites.app.env:read":      ownSite("sites:write"),
 	"sites.maintenance:write": ownSite("sites.maintenance:write"),
 	"sites.pagecache:write":   ownSite("sites:write"),
 	"sites.pagecache:purge":   ownSite("pagecache:purge"),

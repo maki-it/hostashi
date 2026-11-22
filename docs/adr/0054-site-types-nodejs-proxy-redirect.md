@@ -194,7 +194,7 @@ Notes on how the app of a Node.js site is built; they change no decision.
 - Stdout and stderr go to `/var/log/hostashi/app/<site>/app.log` (log kind `app`, ADR-0053), opened by systemd as root, so the app cannot replace the file with a link. logrotate truncates it in place.
 - The app stays stopped while it has no start command, after a stop in the panel (until it is started again, also across reboots), and while the site is disabled. A crash restarts it after 2 seconds, at most 5 times a minute.
 - API: `type: "node"` with `node: {version, workdir, startKind, start}` on `POST /api/v1/sites`; `PUT /api/v1/sites/{name}/node`; `GET /api/v1/sites/{name}/app`; `POST /api/v1/sites/{name}/app/start|stop|restart` (scope `sites:write`, every role on its own sites: the app runs as the site user, like cron jobs). A line that is not installed answers 409 `node_missing`.
-- Not yet: environment variables for the app (encrypted, with their own migration) and type changes. Restarting the apps after a reinstall and the panel page are built (see below).
+- Restarting the apps after a reinstall, the panel page, type changes and environment variables are built (see below).
 
 ## Implementation notes: app sites (2026-11-22)
 
@@ -245,3 +245,12 @@ Notes on how the import rules above are built; they change no decision.
 - The plan takes `proxy` and `nodejs` sites; `python` stays `type_unsupported` [V: `internal/cloudpanel/plan/plan_test.go`].
 - A `proxy` site's target is the old `proxy_pass`, checked by `agentapi.ParseProxyTarget` against the site's own domains. A refused target (loopback, link-local, the site itself, not http or https) skips the site with `proxy_target`. The site gets no account, so cron jobs, SSH keys, the home's size and nginx snippets stay behind, each with a review reason, and files cannot be imported (422). An `https` target is verified, with a review reason: nginx does not verify by default, so the old site likely did not [A].
 - The scan does not read the old Node.js version, so "nearest supported LTS line" becomes: the newest line Hostashi pins that is installed here, or, if none is, the newest pinned line with `node_missing` (creating the site then answers 409 until it is installed). The request may name another line (`node`). The app gets `htdocs` as working directory, where the imported files land, a new port, and no start command, so it stays stopped; `node_start` says so and names the old port [V: `internal/serve/migrations_api_test.go`].
+
+## Implementation notes: environment variables (2026-11-22)
+
+Notes on how the environment variables of an app are built; they change no decision.
+
+- Names `[A-Z_][A-Z0-9_]{0,63}`, values up to 4 KiB of UTF-8 on one line (no NUL, newline or carriage return), at most 100 variables. `HOST`, `PORT`, `HOME`, `USER`, `LOGNAME` and `PATH` are refused, as Hostashi sets them; `NODE_ENV` may be replaced. In addition the variables may take at most 32 KiB as JSON together, so an app spec stays below the agent's 64 KiB frame whatever the values hold [V: `internal/agentapi/appenv.go`].
+- The panel stores each value sealed with `/etc/hostashi/secret.key`, bound to the site's id and the name (migration 0055, `site_app_env`). It opens them for every apply of the app and sends them with the spec.
+- The agent writes them to `hostashi-app.env` in the unit's drop-in directory, root `0600`, as `NAME="value"` with `\`, `"`, `` ` `` and `$` escaped, and the app drop-in names it with `EnvironmentFile=`. Not `Environment=`: the unit's properties, which every local user can read over D-Bus, would show the values. The agent's state file keeps no values; after a lost drop-in, recovery keeps the file as it is. A changed file restarts a running app [V: `internal/appunit/env_test.go`, container test].
+- API: `GET /api/v1/sites/{name}/app/env` lists the names (`sites:read`); `GET .../app/env/values` returns the values (action `sites.app.env:read`, scope `sites:write`: whoever may change the app can read them from it anyway); `PUT .../app/env` replaces all of them (`sites.app:write`). Audit `site.app.env` with the names and which values changed, never the values.
