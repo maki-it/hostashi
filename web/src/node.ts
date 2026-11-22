@@ -26,7 +26,11 @@ export type StartKind = "" | "script" | "npm";
 /** The app of a Node.js site; port and stopped are the panel's. */
 export type NodeApp = { version: string; workdir: string; startKind: StartKind; start: string; port: number; stopped: boolean };
 
-export type AppStatus = { state: string; subState: string; restarts: number; usedBytes: number; since: string };
+/** The program of an app site (ADR-0054 addendum 2); port and stopped are the panel's. */
+export type ProgramApp = { workdir: string; program: string; args: string[]; port: number; stopped: boolean };
+
+/** problem says why the program of an app site is not started, "" otherwise. */
+export type AppStatus = { state: string; subState: string; restarts: number; usedBytes: number; since: string; problem?: string };
 
 export type AppAction = "start" | "stop" | "restart";
 
@@ -34,6 +38,8 @@ const sitePath = (name: string) => "/sites/" + encodeURIComponent(name);
 
 export const setNodeApp = (name: string, a: Pick<NodeApp, "version" | "workdir" | "startKind" | "start">) =>
   request<{ site: Site; status: AppStatus }>("PUT", sitePath(name) + "/node", a);
+export const setProgramApp = (name: string, a: Pick<ProgramApp, "workdir" | "program" | "args">) =>
+  request<{ site: Site; status: AppStatus }>("PUT", sitePath(name) + "/app", a);
 export const getAppStatus = (name: string) => request<AppStatus>("GET", sitePath(name) + "/app");
 export const appAction = (name: string, action: AppAction) => request<AppStatus>("POST", sitePath(name) + "/app/" + action);
 
@@ -68,6 +74,37 @@ export function startProblem(kind: StartKind, start: string): string {
   return "";
 }
 
+/** programProblem mirrors agentapi.ValidateAppStart for a program: a file below the home. */
+export function programProblem(program: string): string {
+  if (program === "") return "";
+  if (program.length > 255 || program.split("/").length > 4) return "Use a file at most 4 folders below the home.";
+  if (!workdirRe.test(program) || program.split("/").some((p) => p === "." || p === ".."))
+    return "Use a file below the home, for example bin/server: letters, digits, . _ - and /, no .. and no leading /.";
+  return "";
+}
+
+/** The most arguments of a program, and the longest one in bytes (agentapi). */
+export const maxArgs = 16;
+export const maxArgBytes = 256;
+
+/** parseArgs takes one argument per line; empty lines are left out. */
+export const parseArgs = (text: string): string[] => text.split("\n").map((l) => l.replace(/\r$/, "")).filter((l) => l !== "");
+
+/** argsProblem mirrors agentapi.ValidateAppArgs. */
+export function argsProblem(args: string[]): string {
+  if (args.length > maxArgs) return `Use at most ${maxArgs} arguments.`;
+  const enc = new TextEncoder();
+  const long = args.findIndex((a) => enc.encode(a).length > maxArgBytes);
+  if (long >= 0) return `Argument ${long + 1} is longer than ${maxArgBytes} bytes.`;
+  return "";
+}
+
+/** quoteArg shows an argument the way a shell user reads it; only for the panel. */
+export const quoteArg = (a: string) => (/^[A-Za-z0-9._\/:=,@+-]+$/.test(a) ? a : "'" + a.replaceAll("'", "'\\''") + "'");
+
+/** The command line of a program, as shown in the panel. */
+export const programCommand = (a: Pick<ProgramApp, "program" | "args">) => ["~/" + a.program, ...a.args.map(quoteArg)].join(" ");
+
 /** The command the app runs, as shown in the panel. */
 export function startCommand(a: Pick<NodeApp, "startKind" | "start">): string {
   if (a.startKind === "script") return "node " + a.start;
@@ -77,13 +114,14 @@ export function startCommand(a: Pick<NodeApp, "startKind" | "start">): string {
 
 export type AppView = { word: string; tone: "ok" | "warn" | "err" | "off" };
 
-/** appView says in words what the app does. */
+/** appView says in words what the app of a Node.js or app site does. */
 export function appView(site: Site, st: AppStatus | null): AppView {
-  const a = site.node;
-  if (!a?.startKind) return { word: "No start command", tone: "off" };
+  const set = site.node ? site.node.startKind !== "" : !!site.app?.program;
+  if (!set) return { word: site.app ? "No program" : "No start command", tone: "off" };
   if (site.disabled) return { word: "Stopped: site disabled", tone: "off" };
-  if (a.stopped) return { word: "Stopped", tone: "off" };
+  if (site.node?.stopped || site.app?.stopped) return { word: "Stopped", tone: "off" };
   if (!st) return { word: "Unknown", tone: "off" };
+  if (st.problem) return { word: "Waiting for the program", tone: "warn" };
   switch (st.state) {
     case "active":
       return { word: "Running", tone: "ok" };

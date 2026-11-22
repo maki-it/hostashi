@@ -13,6 +13,7 @@ import {
   installedLines,
   newestLine,
   nodeMessage,
+  programCommand,
   setNodeApp,
   startCommand,
   startProblem,
@@ -146,13 +147,14 @@ export function NodeFields({
 
 const actionWord: Record<AppAction, string> = { start: "started", stop: "stopped", restart: "restarted" };
 
-/** AppCard shows what the app does and starts, stops or restarts it. */
+/** AppCard shows what the app of a Node.js or app site does and starts, stops or restarts it. */
 export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange: () => Promise<void>; poll?: number }) {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
-  const app = site.node;
+  const node = site.node;
+  const prog = site.app;
 
   const load = useCallback(async () => {
     try {
@@ -168,10 +170,13 @@ export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange:
     return () => clearInterval(t);
   }, [load, poll, site.updatedAt]);
 
+  const app = node ?? prog;
   if (!app) return null;
   const view = appView(site, status);
-  const canRun = app.startKind !== "" && !site.disabled;
+  const set = node ? node.startKind !== "" : !!prog?.program;
+  const canRun = set && !site.disabled;
   const running = !app.stopped && canRun;
+  const problem = running ? status?.problem : "";
 
   async function act(a: AppAction) {
     setBusy(true);
@@ -197,11 +202,15 @@ export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange:
             <Badge tone={view.tone}>{view.word}</Badge>
           </dd>
           <dt>Runs</dt>
-          <dd className="ui-mono">{app.startKind ? startCommand(app) : "nothing yet"}</dd>
+          <dd className="ui-mono">{!set ? "nothing yet" : node ? startCommand(node) : prog ? programCommand(prog) : ""}</dd>
           <dt>In</dt>
           <dd className="ui-mono">~/{app.workdir}</dd>
-          <dt>Node.js</dt>
-          <dd>{app.version}</dd>
+          {node && (
+            <>
+              <dt>Node.js</dt>
+              <dd>{node.version}</dd>
+            </>
+          )}
           <dt>Port</dt>
           <dd className="ui-mono">127.0.0.1:{app.port}</dd>
           {status && running && status.usedBytes > 0 && (
@@ -217,7 +226,12 @@ export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange:
             </>
           )}
         </dl>
-        {!app.startKind && <Notice tone="info" title="Set a start command below, then the app starts." />}
+        {!set && <Notice tone="info" title={node ? "Set a start command below, then the app starts." : "Set the program below, then the app starts."} />}
+        {problem && (
+          <Notice tone="warn" title="The program is not started yet.">
+            {problem.charAt(0).toUpperCase() + problem.slice(1)}.
+          </Notice>
+        )}
         {site.disabled && <Notice tone="info" title="The site is disabled, so its app is stopped. It starts again when the site is enabled." />}
         {view.tone === "err" && (
           <Notice tone="err" title="The app is not running as it should.">
@@ -227,7 +241,7 @@ export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange:
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
-          {app.stopped || !canRun ? (
+          {app.stopped || !canRun || problem ? (
             <Button variant="primary" icon={<Play size={16} aria-hidden="true" />} disabled={busy || !canRun} onClick={() => void act("start")}>
               Start
             </Button>

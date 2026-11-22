@@ -384,6 +384,32 @@ describe("redirect sites", () => {
     });
   });
 
+  it("creates an app site with its program and arguments", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/node": { body: { installed: [], last: "", state: "idle", log: [], releases: [] } },
+      "POST /api/v1/sites": { status: 201, body: { ...blog, name: "svc", php: "", type: "app", tls: noTLS } },
+    });
+    render(<ListHarness initial="new=1" />);
+    await user.type(screen.getByLabelText(/^Name/), "svc");
+    await user.type(screen.getByLabelText(/^Domains/), "svc.example.com");
+    await user.click(screen.getByLabelText(/^App/));
+    expect(screen.queryByLabelText("PHP version")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText(/^Program/), "bin/server");
+    await user.type(screen.getByLabelText(/^Arguments/), "--listen{Enter}a b");
+    expect(screen.getByText("Runs: ~/bin/server --listen 'a b'")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Site svc created.");
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
+      name: "svc",
+      php: "",
+      type: "app",
+      app: { workdir: "htdocs", program: "bin/server", args: ["--listen", "a b"] },
+    });
+  });
+
   it("shows only the tabs a redirect site has and saves its target", async () => {
     const user = userEvent.setup();
     const old = { ...blog, php: "", type: "redirect" as const, account: false, redirect: { target: "https://new.example.com", status: 301, keepPath: true } };
