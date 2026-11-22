@@ -317,6 +317,38 @@ x /usr/local/bin/hostashi service list | grep -Eq "^mariadb +- +active \(running
 curl_ok=$(x curl -fsS http://127.0.0.1:8080/api/v1/health) || fail "panel gone after the service actions"
 grep -q '"agent":"ok"' <<<"$curl_ok" || fail "panel cannot reach the agent after the service actions"
 
+step "time zone, hostname and reboot (ADR-0060)"
+info=$(x /usr/local/bin/hostashi system info) || fail "system info: $info"
+echo "$info"
+grep -q '"timezone":' <<<"$info" || fail "system info has no time zone"
+x /usr/local/bin/hostashi system timezones | grep -qx Europe/Berlin || fail "time zone list has no Europe/Berlin"
+old_tz=$(x timedatectl show -p Timezone --value)
+x /usr/local/bin/hostashi system timezone Europe/Berlin | grep -q '"timezone": "Europe/Berlin"' || fail "time zone not set"
+[ "$(x readlink -f /etc/localtime)" = /usr/share/zoneinfo/Europe/Berlin ] || fail "/etc/localtime does not point to Europe/Berlin"
+if x /usr/local/bin/hostashi system timezone Europe/Atlantis >/dev/null 2>&1; then fail "unknown time zone accepted"; fi
+if x /usr/local/bin/hostashi system timezone ../../etc/passwd >/dev/null 2>&1; then fail "path accepted as time zone"; fi
+x /usr/local/bin/hostashi system timezone "${old_tz:-UTC}" >/dev/null || fail "time zone not set back"
+# The test sets the name the container already has: the whole path runs,
+# nothing changes. Docker bind-mounts /etc/hostname and /etc/hosts, and a
+# rename over a mount point fails (EBUSY), so they become plain files first,
+# as on a real server.
+x bash -c 'for f in /etc/hostname /etc/hosts; do
+  if findmnt -n "$f" >/dev/null; then cp "$f" "/tmp/${f##*/}"; umount "$f" && cp "/tmp/${f##*/}" "$f"; fi
+done' || fail "could not unmount docker's /etc/hostname and /etc/hosts"
+host=$(x hostname | tr 'A-Z' 'a-z')
+if [[ "$host" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
+  x /usr/local/bin/hostashi system hostname "$host" | grep -q "\"hostname\": \"$host\"" || fail "hostname not set"
+  [ "$(x cat /etc/hostname)" = "$host" ] || fail "/etc/hostname is not $host"
+  x grep -Eq "^127\.0\.1\.1[[:space:]]+$host\$" /etc/hosts || fail "/etc/hosts has no 127.0.1.1 line for $host"
+else
+  echo "hostname $host is not a valid name for the panel, set skipped"
+fi
+if x /usr/local/bin/hostashi system hostname 'web;reboot' >/dev/null 2>&1; then fail "invalid hostname accepted"; fi
+# The reboot itself is not run: it would end the test. A wrong
+# confirmation must not reach logind.
+if x /usr/local/bin/hostashi system reboot not-this-host >/dev/null 2>&1; then fail "reboot without the right hostname"; fi
+[ "$(x systemctl is-system-running 2>/dev/null || true)" != stopping ] || fail "the container is shutting down"
+
 step "a site is served, with brotli"
 x /usr/local/bin/hostashi site create blog
 expect_mode /home/blog "750 blog:www-data"

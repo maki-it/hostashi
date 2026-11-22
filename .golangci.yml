@@ -78,6 +78,17 @@ linters:
           deny:
             - pkg: os/exec
               desc: "no process execution in product code (see docs/05-security.md)"
+        # A system bus connection reaches every method of every service.
+        # Only internal/sysconf, with its fixed calls to timedated,
+        # hostnamed and logind, may open one (ADR-0060).
+        no-dbus:
+          files:
+            - "$all"
+            - "!$test"
+            - "!**/internal/sysconf/*.go"
+          deny:
+            - pkg: github.com/godbus/dbus
+              desc: "D-Bus only through internal/sysconf (ADR-0060)"
     errcheck:
       exclude-functions:
         # Usage and status output to stdout/stderr; nothing useful to do on failure.
