@@ -44,7 +44,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 2. The required scope and access kind (public, session, any, action) come from the route matrix of ADR-0035, which moves from the test file into `internal/serve` so the generator can read it. The spec shows it as `x-hostashi-action` and as the bearer security requirement.
 3. A generator (`go run ./tools/openapi`) reflects the Go types into JSON Schema 2020-12 (OpenAPI 3.1) with `invopop/jsonschema` and writes `api/openapi.json`. Errors are one shared Problem Details schema (ADR-0018 rule 7) [A: today's error body is `{"error","message"}`, it is described as it is and changed separately].
 4. CI: a test fails if any registered route has no operation record, if two records share an id, or if `api/openapi.json` differs from a fresh generation. Handler tests validate every response they get against the document with `kin-openapi` (router plus `openapi3filter`), so a wrong schema fails the existing tests.
-5. `serve` serves the document at `GET /api/v1/openapi.json` (public, like `/health`; it names routes, not data) [A: Kim to confirm, see open question 2].
+5. `serve` serves the document at `GET /api/v1/openapi.json` only to a logged-in caller (access kind `any`: session or any token). The CLI uses its embedded copy and does not need it (Kim, 2026-11-22).
 6. Done area by area in small PRs (sites, databases, backups …). A route without a record is allowed only through an explicit "not yet described" list that shrinks to zero before v1.
 
 **CLI: option C.**
@@ -67,5 +67,5 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 ## Open questions for Kim
 
 1. ~~CLI as API client with login/token instead of root access to the agent?~~ Yes, CLI as API client (Kim, 2026-11-22).
-2. Serve `GET /api/v1/openapi.json` without login, or only for logged-in users?
+2. ~~Serve `GET /api/v1/openapi.json` without login, or only for logged-in users?~~ Only after login (Kim, 2026-11-22).
 3. Remove the duplicate root commands (`site create` …) after parity, or keep them as aliases that call the API?
