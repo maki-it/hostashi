@@ -12,15 +12,18 @@ Hostashi writes every change made in the panel or through the API to an audit lo
    - **Action**: one action, such as `site.create`, or a whole group, such as `site.* (all)`.
    - **Account**: the exact username. An account that was deleted since keeps its name in the log and shows *(deleted)*.
    - **Target**: part of what the action concerned, usually a site, database or account name.
+   - **IP address**: the exact address the change came from.
    - **From** and **To**: days in your browser's time zone, both included.
 
 The filters are part of the address, so you can bookmark or share a filtered view.
 
-The **Details** column shows what the panel recorded with the action, for example the IP address of a login or the settings that changed. It never contains passwords or keys.
+The **IP address** column shows the address of the browser or API client that made the change. Work the panel does by itself, such as scheduled jobs, has no address.
+
+The **Details** column shows what the panel recorded with the action. For an update it lists each field that changed, with the old value struck through and the new value next to it. Passwords, keys and cron commands never appear: the log only says that they changed.
 
 ## Export
 
-**CSV** and **JSON** at the top right download the log with the filters you set, oldest entry first. CSV opens in a spreadsheet; JSON suits scripts. Each export is itself written to the log, with its format and filters.
+**CSV** and **JSON** at the top right download the log with the filters you set, oldest entry first, including the IP address and the changes of each entry. CSV opens in a spreadsheet; JSON suits scripts. Each export is itself written to the log, with its format and filters.
 
 In the CSV file a cell that starts with `=`, `+`, `-` or `@` gets a leading `'`, so that a spreadsheet does not run a crafted username as a formula.
 

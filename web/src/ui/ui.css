@@ -900,6 +900,17 @@ a.ui-btn {
 .ui-audit-detail dd {
   margin: 0;
 }
+.ui-audit-diff del {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.ui-audit-diff ins {
+  text-decoration: none;
+  font-weight: 600;
+}
+.ui-filters .ui-input.ui-audit-ip {
+  flex: 0 1 180px;
+}
 .ui-audit-date {
   display: flex;
   align-items: center;

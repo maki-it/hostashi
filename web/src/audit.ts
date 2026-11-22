@@ -15,12 +15,16 @@ export type AuditEntry = {
   action: string;
   target: string;
   detail: Record<string, unknown>;
+  /** The client's address; empty for work without a request. */
+  ip: string;
+  /** The fields an update changed; null for a side that did not exist. */
+  diff: Record<string, { old: string | null; new: string | null }>;
 };
 
 export type AuditPage = { entries: AuditEntry[]; next: string | null };
 
 /** The filters of the page, as the address keeps them. Dates are local days (YYYY-MM-DD). */
-export type AuditFilter = { action?: string; actor?: string; target?: string; from?: string; to?: string };
+export type AuditFilter = { action?: string; actor?: string; target?: string; ip?: string; from?: string; to?: string };
 
 const day = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -41,6 +45,7 @@ export function auditQuery(f: AuditFilter): URLSearchParams {
   if (f.action) q.set("action", f.action);
   if (f.actor?.trim()) q.set("actor", f.actor.trim());
   if (f.target?.trim()) q.set("target", f.target.trim());
+  if (f.ip?.trim()) q.set("ip", f.ip.trim());
   const since = f.from ? localDay(f.from) : null;
   const until = f.to ? localDay(f.to, 1) : null;
   if (since) q.set("since", since.toISOString());
@@ -82,6 +87,13 @@ export function detailPairs(detail: Record<string, unknown>): [string, string][]
       const v = detail[k];
       return [k, typeof v === "string" ? v : JSON.stringify(v)];
     });
+}
+
+/** diffRows lists the changed fields in a fixed order; a missing side shows as an empty value. */
+export function diffRows(diff: AuditEntry["diff"] | undefined): { field: string; old: string; new: string }[] {
+  return Object.keys(diff ?? {})
+    .sort()
+    .map((field) => ({ field, old: diff?.[field]?.old ?? "", new: diff?.[field]?.new ?? "" }));
 }
 
 export function auditMessage(err: unknown): string {

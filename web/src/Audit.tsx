@@ -2,7 +2,7 @@
 
 import { DownloadSimple } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
-import { actionGroups, auditActions, auditMessage, detailPairs, exportUrl, listAudit, type AuditEntry, type AuditFilter } from "./audit";
+import { actionGroups, auditActions, auditMessage, detailPairs, diffRows, exportUrl, listAudit, type AuditEntry, type AuditFilter } from "./audit";
 import { Button, Card, Notice, PageHead, RelTime, Table, type Column } from "./ui";
 
 type QueryProps = {
@@ -31,23 +31,45 @@ const columns: Column<AuditEntry>[] = [
         <span className="ui-hint">none</span>
       ),
   },
+  { key: "ip", header: "IP address", cell: (e) => (e.ip ? <span className="ui-mono ui-nowrap">{e.ip}</span> : <span className="ui-hint">—</span>) },
   { key: "action", header: "Action", cell: (e) => <span className="ui-mono">{e.action}</span> },
   { key: "target", header: "Target", cell: (e) => <span className="ui-break">{e.target || "—"}</span> },
   {
     key: "detail",
     header: "Details",
     cell: (e) => {
-      const pairs = detailPairs(e.detail);
-      if (pairs.length === 0) return <span className="ui-hint">—</span>;
+      // The address has its own column; older entries also kept it here.
+      const pairs = detailPairs(e.detail).filter(([k]) => k !== "ip");
+      const changes = diffRows(e.diff);
+      if (pairs.length === 0 && changes.length === 0) return <span className="ui-hint">—</span>;
       return (
-        <dl className="ui-audit-detail">
-          {pairs.map(([k, v]) => (
-            <div key={k}>
-              <dt>{k}</dt>
-              <dd className="ui-mono ui-break">{v}</dd>
-            </div>
-          ))}
-        </dl>
+        <div className="ui-stack-tight">
+          {changes.length > 0 && (
+            <dl className="ui-audit-detail ui-audit-diff" aria-label="Changes">
+              {changes.map((c) => (
+                <div key={c.field}>
+                  <dt>{c.field}</dt>
+                  <dd className="ui-mono ui-break">
+                    <del>{c.old || "(none)"}</del>
+                    <span aria-hidden="true"> → </span>
+                    <span className="ui-sr-only"> changed to </span>
+                    <ins>{c.new || "(none)"}</ins>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          {pairs.length > 0 && (
+            <dl className="ui-audit-detail">
+              {pairs.map(([k, v]) => (
+                <div key={k}>
+                  <dt>{k}</dt>
+                  <dd className="ui-mono ui-break">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
       );
     },
   },
@@ -61,6 +83,7 @@ export function Audit({ query = new URLSearchParams(), onQuery = () => undefined
     action: query.get("action") ?? "",
     actor: query.get("actor") ?? "",
     target: query.get("target") ?? "",
+    ip: query.get("ip") ?? "",
     from: query.get("from") ?? "",
     to: query.get("to") ?? "",
   };
@@ -181,6 +204,15 @@ export function Audit({ query = new URLSearchParams(), onQuery = () => undefined
             maxLength={200}
             value={filter.target}
             onChange={(e) => set({ target: e.target.value })}
+          />
+          <input
+            className="ui-input ui-audit-ip"
+            type="search"
+            aria-label="IP address"
+            placeholder="IP address"
+            maxLength={45}
+            value={filter.ip}
+            onChange={(e) => set({ ip: e.target.value })}
           />
           <label className="ui-audit-date">
             From
