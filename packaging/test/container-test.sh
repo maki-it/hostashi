@@ -282,6 +282,47 @@ x test -L /var/lib/hostashi-agent/web/current || fail "no web generation"
 code=$(x curl -s -o /dev/null -w '%{http_code}' -H 'Host: unknown.example.com' http://127.0.0.1/ || true)
 [ "$code" = 000 ] || fail "unknown host answered $code, want no answer"
 
+step "the CLI logs in to the panel with an API token (ADR-0058)"
+tok=$(x /usr/local/bin/hostashi setup-token -db /var/lib/hostashi/hostashi.db)
+pw="test-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+# api METHOD PATH [BODY] prints the status code and leaves the body in /tmp/api.out (container).
+api() {
+  x curl -sS -o /tmp/api.out -w '%{http_code}' -X "$1" -H 'Content-Type: application/json' \
+    ${cookie:+-H "Cookie: $cookie"} ${3:+--data "$3"} "http://127.0.0.1:8080$2"
+}
+cookie=""
+[ "$(api POST /api/v1/setup "{\"token\":\"$tok\",\"username\":\"kim\",\"password\":\"$pw\"}")" = 201 ] || fail "setup: $(x cat /tmp/api.out)"
+cookie=$(x curl -sS -o /dev/null -D - -H 'Content-Type: application/json' \
+  --data "{\"username\":\"kim\",\"password\":\"$pw\"}" http://127.0.0.1:8080/api/v1/auth/login |
+  tr -d '\r' | sed -n 's/^[Ss]et-[Cc]ookie: \(hostashi_session=[^;]*\).*/\1/p')
+[ -n "$cookie" ] || fail "login gave no session cookie"
+# An admin needs a second factor before anything else (ADR-0035). The
+# code comes from the host, which has python3.
+totp() {
+  python3 -c 'import base64,hashlib,hmac,struct,sys,time
+s = sys.argv[1]
+k = base64.b32decode(s + "=" * (-len(s) % 8))
+h = hmac.new(k, struct.pack(">Q", int(time.time()) // 30), hashlib.sha1).digest()
+o = h[-1] & 15
+print("%06d" % ((struct.unpack(">I", h[o:o + 4])[0] & 0x7fffffff) % 1000000))' "$1"
+}
+[ "$(api POST /api/v1/sites '{"name":"early","domains":["early.example.com"]}')" = 403 ] || fail "admin without a second factor: $(x cat /tmp/api.out)"
+x grep -q second_factor_required /tmp/api.out || fail "no second_factor_required: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/auth/totp/enroll)" = 200 ] || fail "TOTP enroll: $(x cat /tmp/api.out)"
+secret=$(x cat /tmp/api.out | sed -n 's/.*"secret":"\([A-Z2-7]*\)".*/\1/p')
+[ -n "$secret" ] || fail "no TOTP secret: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/auth/totp/confirm "{\"code\":\"$(totp "$secret")\"}")" = 200 ] || fail "TOTP confirm: $(x cat /tmp/api.out)"
+# The CLI's service, system, site, db and backup commands go through the
+# panel's API with an ordinary token, like any other client.
+[ "$(api GET /api/v1/scopes)" = 200 ] || fail "scopes: $(x cat /tmp/api.out)"
+scopes=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.dumps([s["name"] for s in json.load(sys.stdin)["scopes"]]))')
+[ "$(api POST /api/v1/tokens "{\"name\":\"installer test\",\"scopes\":$scopes,\"expiresInDays\":1}")" = 201 ] || fail "create token: $(x cat /tmp/api.out)"
+cli_token=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+xi /usr/local/bin/hostashi login -token http://127.0.0.1:8080 <<<"$cli_token" || fail "hostashi login -token"
+who=$(x /usr/local/bin/hostashi whoami) || fail "whoami: $who"
+grep -qx 'kim (admin) at http://127.0.0.1:8080' <<<"$who" || fail "whoami: $who"
+expect_mode /root/.config/hostashi/credentials.json "600 root:root"
+
 step "services and restarts (ADR-0052)"
 svc=$(x /usr/local/bin/hostashi service list)
 echo "$svc"
@@ -293,9 +334,9 @@ for u in nginx.service mariadb.service; do
   [ "$(x systemctl show -p Restart --value $u)" = on-failure ] || fail "$u does not restart after a failure"
 done
 expect_mode /etc/systemd/system/mariadb.service.d/hostashi.conf "644 root:root"
-x /usr/local/bin/hostashi service nginx reload >/dev/null || fail "nginx reload through the agent"
-x /usr/local/bin/hostashi service nginx restart | grep -q '"active": "active"' || fail "nginx restart through the agent"
-x /usr/local/bin/hostashi service mariadb restart | grep -q '"active": "active"' || fail "mariadb restart through the agent"
+x /usr/local/bin/hostashi service nginx reload >/dev/null || fail "nginx reload through the API"
+x /usr/local/bin/hostashi service nginx restart | grep -q '"active": "active"' || fail "nginx restart through the API"
+x /usr/local/bin/hostashi service mariadb restart | grep -q '"active": "active"' || fail "mariadb restart through the API"
 for a in "nginx stop" "agent restart" "panel stop" "ssh stop" "firewall stop"; do
   # shellcheck disable=SC2086 # two words on purpose
   if x /usr/local/bin/hostashi service $a >/dev/null 2>&1; then fail "service $a was allowed"; fi
@@ -524,37 +565,6 @@ x /usr/local/bin/hostashi site delete blog
 x test ! -e /home/blog || fail "site home still there"
 x test ! -e /etc/systemd/system/hostashi-files@blog.service.d || fail "file manager drop-in left"
 x test ! -e /run/hostashi-files/blog.sock || fail "file manager socket left"
-
-step "a site through the panel API"
-tok=$(x /usr/local/bin/hostashi setup-token -db /var/lib/hostashi/hostashi.db)
-pw="test-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-# api METHOD PATH [BODY] prints the status code and leaves the body in /tmp/api.out (container).
-api() {
-  x curl -sS -o /tmp/api.out -w '%{http_code}' -X "$1" -H 'Content-Type: application/json' \
-    ${cookie:+-H "Cookie: $cookie"} ${3:+--data "$3"} "http://127.0.0.1:8080$2"
-}
-cookie=""
-[ "$(api POST /api/v1/setup "{\"token\":\"$tok\",\"username\":\"kim\",\"password\":\"$pw\"}")" = 201 ] || fail "setup: $(x cat /tmp/api.out)"
-cookie=$(x curl -sS -o /dev/null -D - -H 'Content-Type: application/json' \
-  --data "{\"username\":\"kim\",\"password\":\"$pw\"}" http://127.0.0.1:8080/api/v1/auth/login |
-  tr -d '\r' | sed -n 's/^[Ss]et-[Cc]ookie: \(hostashi_session=[^;]*\).*/\1/p')
-[ -n "$cookie" ] || fail "login gave no session cookie"
-# An admin needs a second factor before anything else (ADR-0035). The
-# code comes from the host, which has python3.
-totp() {
-  python3 -c 'import base64,hashlib,hmac,struct,sys,time
-s = sys.argv[1]
-k = base64.b32decode(s + "=" * (-len(s) % 8))
-h = hmac.new(k, struct.pack(">Q", int(time.time()) // 30), hashlib.sha1).digest()
-o = h[-1] & 15
-print("%06d" % ((struct.unpack(">I", h[o:o + 4])[0] & 0x7fffffff) % 1000000))' "$1"
-}
-[ "$(api POST /api/v1/sites '{"name":"early","domains":["early.example.com"]}')" = 403 ] || fail "admin without a second factor: $(x cat /tmp/api.out)"
-x grep -q second_factor_required /tmp/api.out || fail "no second_factor_required: $(x cat /tmp/api.out)"
-[ "$(api POST /api/v1/auth/totp/enroll)" = 200 ] || fail "TOTP enroll: $(x cat /tmp/api.out)"
-secret=$(x cat /tmp/api.out | sed -n 's/.*"secret":"\([A-Z2-7]*\)".*/\1/p')
-[ -n "$secret" ] || fail "no TOTP secret: $(x cat /tmp/api.out)"
-[ "$(api POST /api/v1/auth/totp/confirm "{\"code\":\"$(totp "$secret")\"}")" = 200 ] || fail "TOTP confirm: $(x cat /tmp/api.out)"
 
 step "fail2ban reads the panel's failed logins"
 for j in sshd hostashi-panel recidive; do

@@ -56,6 +56,8 @@ Approve only a login you started yourself: whoever started it gets a token for y
 
 ## Services
 
+These commands go through the panel's API like [`hostashi api`](#using-the-api-from-the-command-line), also as root on the server: log in once with `hostashi login` first. Your role and the token's scopes (`services:…`, `system:…`) decide what works, and every change is in the audit log. Naming the action on the command line counts as the confirmation the panel asks for.
+
 | Command | What it does |
 |---------|--------------|
 | `hostashi service list` | Lists the services with their state and automatic restarts. `-json` prints JSON. |
