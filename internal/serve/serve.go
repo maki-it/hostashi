@@ -244,6 +244,7 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPHPSettings(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerHeaders(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerRealIP(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPageCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerLimits(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerObjectCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -189,6 +190,10 @@ type Service struct {
 	panelServed string // panel domain of the last accepted web state; under mu
 
 	onApply func(ok bool, generation int) // nil: nobody listens
+
+	// localAddrs are the server's own addresses, which no trusted proxy
+	// range may hold (ADR-0059); nil reads the interfaces.
+	localAddrs func() ([]netip.Addr, error)
 
 	// purged holds the last page cache purge per site (ADR-0046).
 	purgeMu sync.Mutex
@@ -845,6 +850,11 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		return err
 	}
 
+	realips, err := s.st.AllSiteRealIP(ctx)
+	if err != nil {
+		return err
+	}
+
 	workers, err := s.st.PHPWorkers(ctx)
 	if err != nil {
 		return err
@@ -869,7 +879,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 
 			ws := agentapi.WebSite{
 				User: site.Name, Domains: site.Domains, PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
-				Headers: webHeaders(headers, site),
+				Headers: webHeaders(headers, site), RealIP: webRealIP(realips, site),
 			}
 
 			// Redirect and reverse proxy sites send only their target: no

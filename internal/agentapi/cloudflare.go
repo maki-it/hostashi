@@ -5,8 +5,9 @@ package agentapi
 // CloudflareRanges are Cloudflare's published edge ranges (ADR-0059), from
 // https://www.cloudflare.com/ips-v4, https://www.cloudflare.com/ips-v6
 // and https://api.cloudflare.com/client/v4/ips, which agreed on
-// CloudflareRangesDate. A weekly workflow compares them again and opens a
-// pull request when they change; servers never fetch them themselves.
+// CloudflareRangesDate. The weekly "Proxy ranges" workflow
+// (tools/proxyranges) compares them again and opens a pull request when
+// they change; servers never fetch them themselves.
 var CloudflareRanges = []string{
 	"173.245.48.0/20",
 	"103.21.244.0/22",
@@ -32,6 +33,6 @@ var CloudflareRanges = []string{
 	"2c0f:f248::/32",
 }
 
-// CloudflareRangesDate is the day CloudflareRanges were last compared with
+// CloudflareRangesDate is the day CloudflareRanges last changed from
 // Cloudflare's sources (YYYY-MM-DD).
 const CloudflareRangesDate = "2026-11-22"

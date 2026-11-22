@@ -120,6 +120,8 @@ var routeAccess = map[string]authz.Action{
 	"PUT /api/v1/sites/{name}/hsts":                          "sites.hsts:write",
 	"GET /api/v1/sites/{name}/headers":                       "sites:read",
 	"PUT /api/v1/sites/{name}/headers":                       "sites.headers:write",
+	"GET /api/v1/sites/{name}/real-ip":                       "sites:read",
+	"PUT /api/v1/sites/{name}/real-ip":                       "sites.realip:write",
 	"PUT /api/v1/sites/{name}/web":                           "sites.web:write",
 	"PUT /api/v1/sites/{name}/redirect":                      "sites.redirect:write",
 	"PUT /api/v1/sites/{name}/proxy":                         "sites.proxy:write",

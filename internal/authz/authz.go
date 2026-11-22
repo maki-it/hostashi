@@ -138,6 +138,9 @@ var table = map[Action]Rule{
 
 	// nginx runs for every site, so snippets stay with admins (ADR-0029).
 	"sites.snippets:write": admSite("sites.snippets:write"),
+	// Own proxy ranges also go into fail2ban's server-wide never-ban list
+	// (ADR-0059); the real IP handler asks for this when a change adds one.
+	"sites.realip.ranges:write": admSite("sites:write"),
 
 	// The day-to-day work on one's own site: everyone with a grant. All of
 	// it runs as the site's own Linux user inside its isolation.
@@ -145,6 +148,7 @@ var table = map[Action]Rule{
 	"sites.php:write":      ownSite("sites:write"),
 	"sites.hsts:write":     ownSite("sites:write"),
 	"sites.headers:write":  ownSite("sites:write"),
+	"sites.realip:write":   ownSite("sites:write"),
 	"sites.web:write":      ownSite("sites:write"),
 	"sites.redirect:write": ownSite("sites:write"),
 	"sites.proxy:write":    ownSite("sites:write"),

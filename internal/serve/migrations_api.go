@@ -4,6 +4,7 @@ package serve
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -20,6 +21,7 @@ import (
 	"github.com/maki-it/hostashi/internal/cpmigrate"
 	"github.com/maki-it/hostashi/internal/dnsq"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/sshkeys"
 )
 
@@ -28,6 +30,29 @@ type cloudPanelReportJSON struct {
 	Sites     int        `json:"sites"`
 	CreatedAt time.Time  `json:"createdAt"`
 	Plan      *plan.Plan `json:"plan,omitempty"`
+}
+
+type reportListJSON struct {
+	Reports []cloudPanelReportJSON `json:"reports"`
+}
+
+type importListJSON struct {
+	Imports []agentapi.CloudPanelImport `json:"imports"`
+}
+
+type dumpLoadListJSON struct {
+	Loads []cpmigrate.DumpLoad `json:"loads"`
+}
+
+type cloudPanelSiteRequest struct {
+	Reviewed  bool   `json:"reviewed"`
+	PHP       string `json:"php"`
+	PageCache *bool  `json:"pageCache"`
+	Pool      string `json:"pool"`
+}
+
+type cloudPanelImportRequest struct {
+	Databases []agentapi.CloudPanelDBMap `json:"databases"`
 }
 
 func toReportJSON(r cpmigrate.Report) cloudPanelReportJSON {
@@ -108,7 +133,9 @@ func cutoverFail(log *slog.Logger, w http.ResponseWriter, err error) {
 func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slog.Logger) {
 	const base = "/api/v1/migrations/cloudpanel/reports"
 
-	mux.HandleFunc("POST "+base, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST "+base, openapi.Operation{
+		ID: "uploadCloudPanelReport", Tag: "migrations", Summary: "Upload the JSON report of hostashi cloudpanel scan -json -full", In: json.RawMessage{}, Out: cloudPanelReportJSON{}, Status: http.StatusCreated,
+	}, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != "application/json" {
 			writeError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Content-Type must be application/json")
 
@@ -125,7 +152,9 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 		writeJSON(w, http.StatusCreated, toReportJSON(rep))
 	}))
 
-	mux.HandleFunc("GET "+base, a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET "+base, openapi.Operation{
+		ID: "listCloudPanelReports", Tag: "migrations", Summary: "List the uploaded CloudPanel reports", Out: reportListJSON{},
+	}, a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		list, err := svc.List(r.Context())
 		if err != nil {
 			migrationFail(log, w, err, "list cloudpanel reports")
@@ -138,10 +167,12 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 			out = append(out, toReportJSON(rep))
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]cloudPanelReportJSON{"reports": out})
+		writeJSON(w, http.StatusOK, reportListJSON{Reports: out})
 	}))
 
-	mux.HandleFunc("GET "+base+"/{id}", a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET "+base+"/{id}", openapi.Operation{
+		ID: "getCloudPanelReport", Tag: "migrations", Summary: "Get a report with its import plan", Out: cloudPanelReportJSON{},
+	}, a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		rep, err := svc.Get(r.Context(), r.PathValue("id"))
 		if err != nil {
 			migrationFail(log, w, err, "read cloudpanel report")
@@ -155,13 +186,10 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 	// Creating a site takes its name, domains and PHP version from the
 	// stored report; the body can only confirm a review, pick another
 	// PHP version or leave the proposed page cache off. No certificate is requested before the DNS switch.
-	mux.HandleFunc("POST "+base+"/{id}/sites/{name}", a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			Reviewed  bool   `json:"reviewed"`
-			PHP       string `json:"php"`
-			PageCache *bool  `json:"pageCache"`
-			Pool      string `json:"pool"`
-		}
+	mux.Op("POST "+base+"/{id}/sites/{name}", openapi.Operation{
+		ID: "createCloudPanelSite", Tag: "migrations", Summary: "Create a site from the report", In: cloudPanelSiteRequest{}, Out: plan.Site{}, Status: http.StatusCreated,
+	}, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in cloudPanelSiteRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -184,10 +212,10 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 	// The import copies from the old server what the report names for the
 	// site; the body only lists the databases. Starting it again is the
 	// final sync.
-	mux.HandleFunc("POST "+base+"/{id}/sites/{name}/import", a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			Databases []agentapi.CloudPanelDBMap `json:"databases"`
-		}
+	mux.Op("POST "+base+"/{id}/sites/{name}/import", openapi.Operation{
+		ID: "startCloudPanelImport", Tag: "migrations", Summary: "Copy the site's files and databases from the old server", In: cloudPanelImportRequest{}, Out: agentapi.CloudPanelImport{}, Status: http.StatusAccepted,
+	}, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in cloudPanelImportRequest
 		if !decodeJSONLimit(w, r, &in, 64<<10) {
 			return
 		}
@@ -207,7 +235,9 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 
 	// Activating swaps the imported files in as the web root; the previous
 	// one stays in the home as htdocs-before-import-<time>.
-	mux.HandleFunc("POST /api/v1/migrations/cloudpanel/sites/{name}/activate", a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST /api/v1/migrations/cloudpanel/sites/{name}/activate", openapi.Operation{
+		ID: "activateCloudPanelImport", Tag: "migrations", Summary: "Swap the imported files in as the web root", Out: agentapi.CloudPanelActivated{},
+	}, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -223,7 +253,9 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 
 	// ?site=NAME limits the list to one site. The agent keeps the last 50
 	// imports; each entry leaves out the skipped paths.
-	mux.HandleFunc("GET /api/v1/migrations/cloudpanel/imports", a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/migrations/cloudpanel/imports", openapi.Operation{
+		ID: "listCloudPanelImports", Tag: "migrations", Summary: "List the last imports", Out: importListJSON{}, Query: []openapi.Param{{Name: "site", Description: "only the imports of this site"}},
+	}, a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -234,10 +266,12 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]agentapi.CloudPanelImport{"imports": list})
+		writeJSON(w, http.StatusOK, importListJSON{Imports: list})
 	}))
 
-	mux.HandleFunc("GET /api/v1/migrations/cloudpanel/imports/{id}", a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/migrations/cloudpanel/imports/{id}", openapi.Operation{
+		ID: "getCloudPanelImport", Tag: "migrations", Summary: "Get an import", Out: agentapi.CloudPanelImport{},
+	}, a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -261,7 +295,9 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 	// The dumps of a finished import are loaded on their own (ADR-0030);
 	// this starts loads whose start failed again. A dump whose load started
 	// already is not loaded twice, also after a panel restart.
-	mux.HandleFunc("POST /api/v1/migrations/cloudpanel/imports/{id}/load", a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST /api/v1/migrations/cloudpanel/imports/{id}/load", openapi.Operation{
+		ID: "loadCloudPanelDumps", Tag: "migrations", Summary: "Start the dump loads of an import again", Out: dumpLoadListJSON{}, Status: http.StatusAccepted,
+	}, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -279,10 +315,12 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 			return
 		}
 
-		writeJSON(w, http.StatusAccepted, map[string][]cpmigrate.DumpLoad{"loads": loads})
+		writeJSON(w, http.StatusAccepted, dumpLoadListJSON{Loads: loads})
 	}))
 
-	mux.HandleFunc("GET /api/v1/migrations/cloudpanel/imports/{id}/loads", a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/migrations/cloudpanel/imports/{id}/loads", openapi.Operation{
+		ID: "listCloudPanelDumpLoads", Tag: "migrations", Summary: "List the dump loads of an import", Out: dumpLoadListJSON{},
+	}, a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -293,7 +331,7 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]cpmigrate.DumpLoad{"loads": loads})
+		writeJSON(w, http.StatusOK, dumpLoadListJSON{Loads: loads})
 	}))
 
 	// The DNS cut-over (ADR-0031): POST starts watching the site's domains,
@@ -317,13 +355,21 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 
 	const cutoverPath = "/api/v1/migrations/cloudpanel/sites/{name}/cutover"
 
-	mux.HandleFunc("POST "+cutoverPath, cutover("migrations:write", svc.StartCutover, http.StatusAccepted))
-	mux.HandleFunc("GET "+cutoverPath, cutover("migrations:read", func(ctx context.Context, _ int64, site string) (cpmigrate.Cutover, error) {
+	mux.Op("POST "+cutoverPath, openapi.Operation{
+		ID: "startCloudPanelCutover", Tag: "migrations", Summary: "Wait for the DNS switch, then turn HTTPS on", Out: cpmigrate.Cutover{}, Status: http.StatusAccepted,
+	}, cutover("migrations:write", svc.StartCutover, http.StatusAccepted))
+	mux.Op("GET "+cutoverPath, openapi.Operation{
+		ID: "getCloudPanelCutover", Tag: "migrations", Summary: "State of the DNS cut-over", Out: cpmigrate.Cutover{},
+	}, cutover("migrations:read", func(ctx context.Context, _ int64, site string) (cpmigrate.Cutover, error) {
 		return svc.Cutover(ctx, site)
 	}, http.StatusOK))
-	mux.HandleFunc("DELETE "+cutoverPath, cutover("migrations:write", svc.CancelCutover, http.StatusOK))
+	mux.Op("DELETE "+cutoverPath, openapi.Operation{
+		ID: "cancelCloudPanelCutover", Tag: "migrations", Summary: "Stop a waiting cut-over", Out: cpmigrate.Cutover{},
+	}, cutover("migrations:write", svc.CancelCutover, http.StatusOK))
 
-	mux.HandleFunc("DELETE "+base+"/{id}", a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("DELETE "+base+"/{id}", openapi.Operation{
+		ID: "deleteCloudPanelReport", Tag: "migrations", Summary: "Delete a report",
+	}, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		if err := svc.Delete(r.Context(), p.User.ID, r.PathValue("id")); err != nil {
 			migrationFail(log, w, err, "delete cloudpanel report")
 
