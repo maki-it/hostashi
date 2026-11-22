@@ -62,6 +62,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0056 | Security headers per site | Accepted on 2026-11-22 ([adr/0056](adr/0056-security-headers-per-site.md)) | No |
 | 0057 | Database size and connection limits per site | Accepted on 2026-11-22 ([adr/0057](adr/0057-database-size-and-connection-limits.md)) | No |
 | 0058 | OpenAPI specification and CLI parity | Accepted on 2026-11-22 ([adr/0058](adr/0058-openapi-spec-and-cli-parity.md)) | No |
+| 0059 | Real client IP behind CDNs and proxies | Accepted on 2026-11-22 ([adr/0059](adr/0059-real-client-ip-behind-proxies.md)) | No |
 | 0060 | Time zone, hostname and reboot from the panel | Accepted on 2026-11-22 ([adr/0060](adr/0060-time-zone-hostname-and-reboot.md)) | No |
 
 ---
@@ -409,6 +410,10 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0058 OpenAPI specification and CLI parity
 
 **Full text (status Accepted, 2026-11-22, by Kim):** [adr/0058](adr/0058-openapi-spec-and-cli-parity.md). Summary: code-first OpenAPI 3.1. Each route gets an operation record (id, tag, summary, request and response Go types) next to its `HandleFunc`; a generator builds `api/openapi.json` from the records, the ADR-0035 route matrix and the Go types (`invopop/jsonschema`). CI fails on a route without a record or a stale file, and handler tests validate responses with `kin-openapi`. The CLI becomes an API client (`hostashi login`, token in `~/.config/hostashi/credentials.json`, `HOSTASHI_URL`/`HOSTASHI_TOKEN`) whose `hostashi api <tag> <verb>` commands are built from the embedded document, so parity holds by construction. Root-only commands without an API stay; duplicates such as `site create` stay as aliases that call the API. `openapi.json` is served only after login. Addendum 1 (Accepted, Kim, 2026-11-22): `hostashi login` uses the device authorization grant (RFC 8628) so passkeys work: the CLI shows a short code, the user approves it in the panel at `#/device` and picks scopes and lifetime; pending codes live in memory for ten minutes. No new agent operation, no new `os/exec` exception.
+
+## ADR-0059 Real client IP behind CDNs and proxies
+
+**Full text (status Accepted, 2026-11-22, by Kim):** [adr/0059](adr/0059-real-client-ip-behind-proxies.md). Summary: provider-agnostic real client IP with nginx's realip module. A setting per site (Kim, 2026-11-22) plus one for the panel's own host name: trusted proxies as a shipped Cloudflare preset and/or own ranges, header from a fixed list (`X-Forwarded-For` recursive by default, `X-Real-IP`, `CF-Connecting-IP`, `True-Client-IP`). Ranges checked in panel and agent; too wide prefixes, loopback, link-local and the server's own addresses are refused. Rendered into the site's server blocks only, so its logs, PHP `REMOTE_ADDR` and proxied apps see the visitor; own ranges admin only; access logs keep the edge in an extra field. Trusted ranges go into fail2ban's server-wide `ignoreip`. The Cloudflare list ships in the code and a weekly workflow opens a pull request when Cloudflare's sources change. Migration 0053 (`site_realip`), no new agent operation, no new `os/exec` exception.
 
 ## ADR-0060 Time zone, hostname and reboot from the panel
 
