@@ -55,9 +55,9 @@ func TestStaticOptionsRender(t *testing.T) {
 	}
 
 	for name, s := range map[string]Site{
-		"php spa":         {User: "p", Domains: []string{"p.example.com"}, Root: "/srv/p", PHPSocket: "/run/p.sock", SPA: true},
-		"bad extension":   {User: "r", Domains: []string{"r.example.com"}, Root: "/srv/r", AssetCache: true, AssetCacheExts: []string{`css)$" 1d; } server { #`}},
-		"short time":      {User: "u", Domains: []string{"u.example.com"}, Root: "/srv/u", AssetCache: true, AssetCacheSeconds: 1},
+		"php spa":       {User: "p", Domains: []string{"p.example.com"}, Root: "/srv/p", PHPSocket: "/run/p.sock", SPA: true},
+		"bad extension": {User: "r", Domains: []string{"r.example.com"}, Root: "/srv/r", AssetCache: true, AssetCacheExts: []string{`css)$" 1d; } server { #`}},
+		"short time":    {User: "u", Domains: []string{"u.example.com"}, Root: "/srv/u", AssetCache: true, AssetCacheSeconds: 1},
 	} {
 		if err := (Desired{Sites: []Site{s}}).Validate(); err == nil {
 			t.Errorf("%s accepted", name)
