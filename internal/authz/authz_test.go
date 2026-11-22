@@ -50,7 +50,7 @@ func TestDecidedRules(t *testing.T) {
 			authz.UsersRead, authz.SettingsRead, "sites:create", "sites:delete", "sites.domains:write",
 			"sites.tls:write", "sites.disabled:write", "sites.programs:write", "limits:write",
 			"sites.snippets:write", "parked:write", "pages:write", "backups.server:read", "firewall:read",
-			"sites.pagecache.size:write", "sites.type:write",
+			"sites.pagecache.size:write", "sites.type:write", "sites.account:delete",
 		},
 	}
 
@@ -73,7 +73,7 @@ func TestDecidedRules(t *testing.T) {
 		}
 	}
 
-	for _, a := range []authz.Action{"sites:create", "sites.domains:write", "limits:write", "sites:delete", "sites.pagecache.size:write", "sites.type:write"} {
+	for _, a := range []authz.Action{"sites:create", "sites.domains:write", "limits:write", "sites:delete", "sites.pagecache.size:write", "sites.type:write", "sites.account:delete"} {
 		if !authz.Allowed(authz.RoleManager, a) {
 			t.Errorf("manager may not %s", a)
 		}

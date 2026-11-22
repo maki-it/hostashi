@@ -1975,6 +1975,15 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 [ "$body" = "{\"uid\":$uid,\"args\":[\"--back\"],\"env\":\"\"}" ] || fail "app after the change back: '$body'"
+# A redirect that kept its account can drop it; the redirect stays.
+[ "$(api POST /api/v1/sites/progapp/type '{"type":"redirect","redirect":{"target":"https://example.org/moved","status":302}}')" = 200 ] ||
+  fail "to redirect again: $(x cat /tmp/api.out)"
+[ "$(api DELETE /api/v1/sites/progapp/account)" = 200 ] || fail "remove account: $(x cat /tmp/api.out)"
+x grep -q '"account":false' /tmp/api.out || fail "account still listed: $(x cat /tmp/api.out)"
+x id progapp >/dev/null 2>&1 && fail "Linux user left after removing the account"
+x test ! -e /home/progapp || fail "home left after removing the account"
+loc=$(x curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' -H 'Host: progapp.example.com' http://127.0.0.1/a)
+[ "$loc" = "302 https://example.org/moved" ] || fail "redirect after removing the account: $loc"
 [ "$(api DELETE /api/v1/sites/progapp)" = 204 ] || fail "delete app site: $(x cat /tmp/api.out)"
 x test ! -e /etc/systemd/system/hostashi-app@progapp.service.d || fail "app drop-ins left after delete"
 # A line no app runs on can be removed; one in use cannot.

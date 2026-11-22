@@ -96,3 +96,51 @@ func TestSetSiteType(t *testing.T) {
 		t.Errorf("unknown site: %v", err)
 	}
 }
+
+func TestRemoveSiteAccount(t *testing.T) {
+	st := open(t, dbPath(t))
+	ctx := t.Context()
+	now := time.Unix(1_800_000_000, 0)
+
+	site, err := st.CreateSite(ctx, "shop", "default", "8.4", []string{"shop.example.com"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := st.InsertCronJob(ctx, CronJob{SiteID: site.ID, Schedule: "@hourly", Command: "php a.php"}, 5, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.SetSiteLimits(ctx, site.ID, 0, Limits{CPUPriority: "normal"}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.RemoveSiteAccount(ctx, "shop", now); !errors.Is(err, ErrSiteType) {
+		t.Fatalf("php site: %v", err)
+	}
+
+	if _, err := st.SetSiteType(ctx, "shop", SiteTypeChange{Type: SiteTypeProxy, Account: true, Proxy: &SiteProxy{Target: "http://10.0.0.5"}}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.RemoveSiteAccount(ctx, "shop", now); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := st.SiteByName(ctx, "shop")
+	if got.Account || got.Type != SiteTypeProxy {
+		t.Fatalf("site %+v", got)
+	}
+
+	if jobs, err := st.CronJobs(ctx, site.ID); err != nil || len(jobs) != 0 {
+		t.Fatalf("cron jobs left: %v %v", jobs, err)
+	}
+
+	if _, ok, _ := st.SiteLimits(ctx, site.ID); ok {
+		t.Fatal("limits left")
+	}
+
+	if err := st.RemoveSiteAccount(ctx, "nope", now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown site: %v", err)
+	}
+}

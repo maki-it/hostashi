@@ -180,3 +180,45 @@ func TestSetTypeWithoutAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRemoveAccount(t *testing.T) {
+	s, ag, st := newService(t)
+	ctx := t.Context()
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "old", PHP: "8.4", Domains: []string{"old.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.RemoveAccount(ctx, 1, "old"); !errors.Is(err, ErrSiteType) {
+		t.Fatalf("php site: %v", err)
+	}
+
+	if _, _, err := s.CreateDatabase(ctx, 1, NewDatabase{Site: "old", Name: "old_wp"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.SetType(ctx, 1, "old", TypeRequest{Type: store.SiteTypeRedirect, Redirect: &store.SiteRedirect{Target: "https://example.org", Status: 301}}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.RemoveAccount(ctx, 1, "old")
+	if err != nil || got.Account || got.Type != store.SiteTypeRedirect {
+		t.Fatalf("remove: %+v %v", got, err)
+	}
+
+	if ag.accounts["old"] || len(ag.dbs) != 0 {
+		t.Fatalf("account %v databases %v", ag.accounts["old"], ag.dbs)
+	}
+
+	if dbs, _ := st.Databases(ctx, "old"); len(dbs) != 0 {
+		t.Fatalf("database rows left: %v", dbs)
+	}
+
+	if ws, ok := webOf(ag, "old"); !ok || ws.Redirect == nil {
+		t.Fatalf("redirect gone: %+v", ws)
+	}
+
+	if _, err := s.RemoveAccount(ctx, 1, "old"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("second removal: %v", err)
+	}
+}

@@ -301,3 +301,44 @@ func typeAudit(site store.Site) map[string]string {
 
 	return out
 }
+
+// RemoveAccount removes the Linux account of a redirect or reverse proxy
+// site that kept it after a type change (ADR-0054 addendum 3): its
+// databases, home, files, cron jobs, SSH keys, limits and caches. nginx
+// keeps serving the site, with its certificate. A removal that stops
+// halfway can be repeated.
+func (s *Service) RemoveAccount(ctx context.Context, actor int64, name string) (store.Site, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	site, err := s.Get(ctx, name)
+	if err != nil {
+		return store.Site{}, err
+	}
+
+	switch {
+	case site.State != store.SiteActive:
+		return store.Site{}, ErrState
+	case !noFiles(site.Type):
+		return store.Site{}, ErrSiteType
+	case !site.Account:
+		return store.Site{}, fmt.Errorf("%w: the site has no account", ErrInvalid)
+	}
+
+	// The databases go before the account.
+	if err := s.deleteSiteDatabases(ctx, actor, name); err != nil {
+		return store.Site{}, err
+	}
+
+	if err := s.ag.SiteDelete(ctx, agentapi.SiteDeleteRequest{User: name, AccountOnly: true}); err != nil && !isCode(err, agentrpc.CodeNotFound) {
+		return store.Site{}, err
+	}
+
+	if err := s.st.RemoveSiteAccount(ctx, name, s.now()); err != nil {
+		return store.Site{}, err
+	}
+
+	s.audit(ctx, actor, "site.account.remove", name, map[string]string{"type": site.Type})
+
+	return s.Get(ctx, name)
+}

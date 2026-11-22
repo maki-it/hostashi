@@ -13358,6 +13358,59 @@
         "x-hostashi-action": "sites:read"
       }
     },
+    "/api/v1/sites/{name}/account": {
+      "delete": {
+        "operationId": "removeSiteAccount",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:delete"
+            ]
+          }
+        ],
+        "summary": "Remove the Linux account, files and databases a redirect or reverse proxy site kept after a type change",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.account:delete"
+      }
+    },
     "/api/v1/sites/{name}/app": {
       "get": {
         "operationId": "getSiteApp",
