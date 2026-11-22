@@ -62,6 +62,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0056 | Security headers per site | Accepted on 2026-11-22 ([adr/0056](adr/0056-security-headers-per-site.md)) | No |
 | 0057 | Database size and connection limits per site | Accepted on 2026-11-22 ([adr/0057](adr/0057-database-size-and-connection-limits.md)) | No |
 | 0058 | OpenAPI specification and CLI parity | Accepted on 2026-11-22 ([adr/0058](adr/0058-openapi-spec-and-cli-parity.md)) | No |
+| 0059 | Real client IP behind CDNs and proxies | Proposed ([adr/0059](adr/0059-real-client-ip-behind-proxies.md)) | Yes |
 
 ---
 
