@@ -11,6 +11,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/openapi"
 )
 
 // NodeInstaller is the agent's part of installing Node.js (ADR-0054).
@@ -45,6 +46,11 @@ type nodeJSON struct {
 
 	// Releases are the lines Hostashi installs, with the pinned release.
 	Releases []nodeReleaseJSON `json:"releases"`
+}
+
+type nodeInstallJSON struct {
+	// Major is the LTS line, for example "24".
+	Major string `json:"major"`
 }
 
 func nodeOut(s agentapi.NodeStatus) nodeJSON {
@@ -85,7 +91,9 @@ func registerNode(mux *routeMux, a authn, p NodeInstaller, st Settings, log *slo
 		}
 	}
 
-	mux.HandleFunc("GET /api/v1/node", a.allow("node:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/node", openapi.Operation{
+		ID: "getNode", Tag: "node", Summary: "The Node.js LTS lines Hostashi installs, what is installed and the last installation", Out: nodeJSON{},
+	}, a.allow("node:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -100,10 +108,11 @@ func registerNode(mux *routeMux, a authn, p NodeInstaller, st Settings, log *slo
 		writeJSON(w, http.StatusOK, nodeOut(s))
 	}))
 
-	mux.HandleFunc("POST /api/v1/node/install", a.allow("node:install", func(w http.ResponseWriter, r *http.Request, pr auth.Principal) {
-		var in struct {
-			Major string `json:"major"`
-		}
+	mux.Op("POST /api/v1/node/install", openapi.Operation{
+		ID: "installNode", Tag: "node", Summary: "Start the installation of the pinned build of a Node.js LTS line",
+		In: nodeInstallJSON{}, Out: nodeJSON{}, Status: http.StatusAccepted,
+	}, a.allow("node:install", func(w http.ResponseWriter, r *http.Request, pr auth.Principal) {
+		var in nodeInstallJSON
 
 		if !decodeJSON(w, r, &in) {
 			return

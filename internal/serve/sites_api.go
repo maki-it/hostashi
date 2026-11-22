@@ -14,6 +14,7 @@ import (
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -342,12 +343,10 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		writeJSON(w, http.StatusCreated, toSiteJSON(svc, s))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/redirect", a.allow("sites.redirect:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			Target   string `json:"target"`
-			Status   int    `json:"status"`
-			KeepPath bool   `json:"keepPath"`
-		}
+	mux.Op("PUT /api/v1/sites/{name}/redirect", openapi.Operation{
+		ID: "setSiteRedirect", Tag: "sites", Summary: "Set the target of a redirect site", In: redirectJSON{}, Out: siteJSON{},
+	}, a.allow("sites.redirect:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in redirectJSON
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -365,7 +364,9 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/proxy", a.allow("sites.proxy:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("PUT /api/v1/sites/{name}/proxy", openapi.Operation{
+		ID: "setSiteProxy", Tag: "sites", Summary: "Set the target of a reverse proxy site", In: proxyJSON{}, Out: siteJSON{},
+	}, a.allow("sites.proxy:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in proxyJSON
 		if !decodeJSON(w, r, &in) {
 			return
