@@ -130,7 +130,7 @@ func TestApply(t *testing.T) {
 		}
 	}
 
-	if fi, err := os.Stat(filepath.Join(e.root, "log", "shop")); err != nil || fi.Mode().Perm() != 0o750 {
+	if fi, err := os.Stat(filepath.Join(e.root, "log", "shop")); err != nil || fi.Mode().Perm() != 0o700 {
 		t.Errorf("log dir: %v %v", fi, err)
 	}
 

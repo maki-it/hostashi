@@ -1801,7 +1801,7 @@ x systemctl is-enabled --quiet hostashi-node@nodeapp.service || fail "app unit n
 # shellcheck disable=SC2016 # expanded inside the container
 homes=$(x sh -c 'nsenter -t "$(systemctl show -p MainPID --value hostashi-node@nodeapp.service)" -m ls -A /home')
 [ "$homes" = nodeapp ] || fail "the app sees other homes: $homes"
-expect_mode /var/log/hostashi/app/nodeapp "750 root:root"
+expect_mode /var/log/hostashi/app/nodeapp "700 root:root"
 x grep -q 'request /' /var/log/hostashi/app/nodeapp/app.log || fail "app log: $(x cat /var/log/hostashi/app/nodeapp/app.log)"
 [ "$(api GET '/api/v1/sites/nodeapp/logs/app?lines=10')" = 200 ] || fail "app log over the API: $(x cat /tmp/api.out)"
 x grep -q 'request /' /tmp/api.out || fail "app log over the API lacks the request: $(x cat /tmp/api.out)"

@@ -362,7 +362,12 @@ func (m *Manager) writeUnit(ctx context.Context, a agentapi.AppSpec, acct Site) 
 
 	// systemd opens the log as root before it starts the app; the site
 	// user can neither open nor change it (like the PHP error log).
-	if err := os.MkdirAll(filepath.Join(m.logDir(), a.Site), 0o750); err != nil {
+	logs := filepath.Join(m.logDir(), a.Site)
+	if err := os.MkdirAll(logs, 0o700); err != nil {
+		return false, fmt.Errorf("appunit: %w", err)
+	}
+
+	if err := os.Chmod(logs, 0o700); err != nil {
 		return false, fmt.Errorf("appunit: %w", err)
 	}
 
