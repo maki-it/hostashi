@@ -6,7 +6,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"slices"
+	"strconv"
 	"strings"
+
+	"github.com/maki-it/hostashi/internal/agentapi"
 )
 
 // Querier reads rows. *sql.DB implements it.
@@ -71,4 +76,40 @@ func (m *Manager) Sizes(ctx context.Context) (map[string]int64, error) {
 	}
 
 	return out, nil
+}
+
+// SetSiteConnections sets MAX_USER_CONNECTIONS of every registered user of
+// the site's databases, 0 for unlimited (ADR-0057). It returns the users,
+// sorted. On a failure the users before it keep the new value; the caller
+// repeats the whole call.
+func (m *Manager) SetSiteConnections(ctx context.Context, site string, maxConn uint32) ([]string, error) {
+	if err := (agentapi.DBSiteConnectionsRequest{Site: site, MaxConnections: maxConn}).Validate(); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	users := []string{}
+
+	for _, d := range m.reg.list() {
+		if d.Site == site {
+			users = append(users, d.Users...)
+		}
+	}
+
+	slices.Sort(users)
+
+	for _, u := range users {
+		acct, err := quoteAccount(u)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := m.exec(ctx, "set connection limit", "ALTER USER "+acct+" WITH MAX_USER_CONNECTIONS "+strconv.FormatUint(uint64(maxConn), 10)); err != nil {
+			return nil, err
+		}
+	}
+
+	return users, nil
 }

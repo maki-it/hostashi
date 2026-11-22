@@ -155,12 +155,25 @@ func (h *siteOps) registerDB(s *agentrpc.Server) {
 		return agentapi.DBSizesResponse{Databases: out}, nil
 	})
 
+	agentrpc.Handle(s, agentapi.DBSiteConnections, func(ctx context.Context, _ agentrpc.Caller, req agentapi.DBSiteConnectionsRequest) (agentapi.DBSiteConnectionsResponse, error) {
+		if h.db == nil {
+			return agentapi.DBSiteConnectionsResponse{}, errNoDB
+		}
+
+		users, err := h.db.SetSiteConnections(ctx, req.Site, req.MaxConnections)
+		if err != nil {
+			return agentapi.DBSiteConnectionsResponse{}, mapDBError(err)
+		}
+
+		return agentapi.DBSiteConnectionsResponse{Users: users}, nil
+	})
+
 	agentrpc.Handle(s, agentapi.DBUserCreate, func(ctx context.Context, _ agentrpc.Caller, req agentapi.DBUserCreateRequest) (agentapi.DBUserResponse, error) {
 		if h.db == nil {
 			return agentapi.DBUserResponse{}, errNoDB
 		}
 
-		return agentapi.DBUserResponse{}, mapDBError(h.db.CreateUser(ctx, req.Database, req.User, req.Password))
+		return agentapi.DBUserResponse{}, mapDBError(h.db.CreateUserLimited(ctx, req.Database, req.User, req.Password, req.MaxConnections))
 	})
 
 	agentrpc.Handle(s, agentapi.DBUserDelete, func(ctx context.Context, _ agentrpc.Caller, req agentapi.DBUserDeleteRequest) (agentapi.DBUserResponse, error) {

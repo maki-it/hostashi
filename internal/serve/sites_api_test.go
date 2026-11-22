@@ -98,7 +98,7 @@ func (a *stubAgent) DBCreate(context.Context, string, string) error { return nil
 
 func (a *stubAgent) DBDelete(context.Context, string) error { return nil }
 
-func (a *stubAgent) DBUserCreate(context.Context, string, string, string) error { return nil }
+func (a *stubAgent) DBUserCreate(context.Context, string, string, string, uint32) error { return nil }
 
 func (a *stubAgent) DBUserDelete(context.Context, string) error { return nil }
 

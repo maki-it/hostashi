@@ -37,6 +37,7 @@ type fakeAgent struct {
 	dbUsers map[string]string // user -> database
 	dbErr   error             // returned by every db call while set
 	userErr error             // returned by DBUserCreate while set
+	userMax map[string]uint32 // connection limit of each created user
 	jobs    map[string]agentapi.DBJob
 	remote  []agentapi.DBRemoteJobRequest // db.remote.start requests
 
@@ -859,7 +860,7 @@ func (f *fakeAgent) DBDelete(_ context.Context, name string) error {
 	return nil
 }
 
-func (f *fakeAgent) DBUserCreate(_ context.Context, database, user, password string) error {
+func (f *fakeAgent) DBUserCreate(_ context.Context, database, user, password string, maxConn uint32) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -880,6 +881,12 @@ func (f *fakeAgent) DBUserCreate(_ context.Context, database, user, password str
 	}
 
 	f.dbUsers[user] = database
+
+	if f.userMax == nil {
+		f.userMax = map[string]uint32{}
+	}
+
+	f.userMax[user] = maxConn
 
 	return nil
 }

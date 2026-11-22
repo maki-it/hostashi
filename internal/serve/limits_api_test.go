@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"runtime"
+	"slices"
 	"testing"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/hosting"
 )
 
 type stubLimits struct {
@@ -17,6 +19,8 @@ type stubLimits struct {
 	quotas map[string][2]uint64
 	used   uint64
 }
+
+func (s *stubLimits) DBSiteConnections(context.Context, string, uint32) error { return nil }
 
 func (s *stubLimits) SiteLimitsSet(_ context.Context, user string, l agentapi.SiteLimits) error {
 	s.slices[user] = l
@@ -103,8 +107,7 @@ func TestLimitsOverHTTP(t *testing.T) {
 		t.Fatalf("custom: %d %s", rec.Code, rec.Body)
 	}
 
-	if err := json.Unmarshal(rec.Body.Bytes(), &sl); err != nil || sl.Preset != "" || len(sl.Limits.Unlimited) != 2 ||
-		sl.Limits.Unlimited[0] != "diskBytes" || sl.Limits.Unlimited[1] != "diskInodes" {
+	if err := json.Unmarshal(rec.Body.Bytes(), &sl); err != nil || sl.Preset != "" || !slices.Equal(sl.Limits.Unlimited, []string{"diskBytes", "diskInodes", "databaseBytes", "databaseConnections"}) {
 		t.Fatalf("custom answer %s %v", rec.Body, err)
 	}
 
@@ -185,6 +188,59 @@ func TestLimitsOverHTTP(t *testing.T) {
 		o.header = bearerHeader(read.Token)
 		if rec := e.do(t, o); rec.Code != http.StatusForbidden {
 			t.Errorf("%s %s with limits:read: %d", o.method, o.path, rec.Code)
+		}
+	}
+}
+
+func TestDatabaseUsageOverHTTP(t *testing.T) {
+	e := newAPIWithAgent(t, &stubAgent{})
+	e.sites.EnableLimits(&stubLimits{slices: map[string]agentapi.SiteLimits{}, quotas: map[string][2]uint64{}})
+
+	c := e.adminCookie(t)
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"shop","domains":["shop.example.com"]}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("site: %d %s", rec.Code, rec.Body)
+	}
+
+	for _, n := range []string{"shop_wp", "shop_log"} {
+		if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/shop/databases", cookie: c, body: `{"name":"` + n + `"}`}); rec.Code != http.StatusCreated {
+			t.Fatalf("database: %d %s", rec.Code, rec.Body)
+		}
+	}
+
+	get := func() siteLimitsJSON {
+		t.Helper()
+
+		rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/shop/limits", cookie: c})
+
+		var sl siteLimitsJSON
+		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &sl) != nil {
+			t.Fatalf("get: %d %s", rec.Code, rec.Body)
+		}
+
+		return sl
+	}
+
+	// Not measured: no databaseUsage.
+	if sl := get(); sl.DatabaseUsage != nil || sl.Limits.DatabaseBytes != 2<<30 || sl.Limits.DatabaseConnections != 20 {
+		t.Fatalf("without sizes: %+v", sl)
+	}
+
+	// 1.75 GiB of 2 GiB: 87 %, a warning.
+	e.sites.EnableDBSizes(stubSizer{sizes: map[string]int64{"shop_wp": 1536 << 20, "shop_log": 256 << 20, "other": 5 << 30}})
+
+	du := get().DatabaseUsage
+	if du == nil || du.Bytes != 1792<<20 || du.Databases != 2 || du.Percent != 87 || du.Level != "warning" || du.MeasuredAt == 0 {
+		t.Fatalf("usage: %+v", du)
+	}
+
+	for _, c := range []struct {
+		bytes, limit int64
+		pct          int
+		level        string
+	}{{0, 0, 0, "ok"}, {5 << 30, 0, 0, "ok"}, {95, 100, 95, "critical"}, {79, 100, 79, "ok"}, {80, 100, 80, "warning"}} {
+		if u := toDBUsageJSON(hosting.DatabaseUsage{Bytes: c.bytes}, c.limit); u.Percent != c.pct || u.Level != c.level {
+			t.Errorf("%d of %d: %+v", c.bytes, c.limit, u)
 		}
 	}
 }
