@@ -58,7 +58,6 @@ func TestDatabaseLimitsMigration(t *testing.T) {
 
 	ctx := context.Background()
 	p := dbPath(t)
-	now := time.Unix(2_000_000, 0)
 
 	s, err := Open(ctx, p)
 	if err != nil {
@@ -75,15 +74,17 @@ func TestDatabaseLimitsMigration(t *testing.T) {
 	presetOf := map[string]string{"follows": "(SELECT id FROM limit_presets WHERE name = 'small')", "custom": "NULL", "ownpreset": "(SELECT id FROM limit_presets WHERE name = 'own')"}
 	ids := map[string]int64{}
 
-	for name := range presetOf {
-		site, err := s.CreateSite(ctx, name, "default", "", []string{name + ".example.com"}, now)
-		if err != nil {
-			t.Fatal(err)
-		}
+	var id int64
 
-		ids[name] = site.ID
+	for name := range presetOf {
+		// Written with SQL too: CreateSite knows columns of later
+		// migrations.
+		id++
+		ids[name] = id
+		pre = append(pre, `INSERT INTO sites (id, name, pool, state, type, php, created_at, updated_at)
+			VALUES (`+strconv.FormatInt(id, 10)+`, '`+name+`', 'default', 'active', 'static', '', 1, 1)`)
 		pre = append(pre, `INSERT INTO site_limits (site_id, preset_id, disk_bytes, disk_inodes, memory_bytes, php_workers, tasks, cpu_priority, applied_at, updated_at)
-			VALUES (`+strconv.FormatInt(site.ID, 10)+`, `+presetOf[name]+`, 1, 1, 0, 5, 0, 'normal', 1000, 1)`)
+			VALUES (`+strconv.FormatInt(id, 10)+`, `+presetOf[name]+`, 1, 1, 0, 5, 0, 'normal', 1000, 1)`)
 	}
 
 	for _, q := range pre {
