@@ -10,6 +10,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/authz"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -88,10 +89,61 @@ func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	return id, true
 }
 
+type accountListJSON struct {
+	Users []accountJSON `json:"users"`
+}
+
+// accountCreatedJSON is a new account with its invitation link token.
+type accountCreatedJSON struct {
+	User       accountJSON    `json:"user"`
+	Invitation invitationJSON `json:"invitation"`
+}
+
+type invitationResultJSON struct {
+	Invitation invitationJSON `json:"invitation"`
+}
+
+// grantsJSON lists the sites a user may reach.
+type grantsJSON struct {
+	Sites []string `json:"sites"`
+}
+
+type invitationCheckJSON struct {
+	Username string `json:"username"`
+}
+
+type userCreateRequest struct {
+	Username string `json:"username"`
+	Role     string `json:"role"`
+	// Email is optional: the invitation goes there (ADR-0044).
+	Email string `json:"email"`
+}
+
+type userUpdateRequest struct {
+	Role                *string `json:"role"`
+	Disabled            *bool   `json:"disabled"`
+	RequireSecondFactor *bool   `json:"requireSecondFactor"`
+}
+
+type grantsRequest struct {
+	Sites []string `json:"sites"`
+}
+
+type invitationTokenRequest struct {
+	Token string `json:"token"`
+}
+
+type invitationAcceptRequest struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
 // registerUsers adds account management (admins, browser session only) and
 // the public invitation routes (ADR-0035).
 func registerUsers(mux *routeMux, a authn, m *mailer) {
-	mux.HandleFunc("GET /api/v1/users", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("GET /api/v1/users", openapi.Operation{
+		ID: "listUsers", Tag: "users", Summary: "List the panel accounts", Out: accountListJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := a.sessionAllow(w, r, authz.UsersRead); !ok {
 			return
 		}
@@ -108,21 +160,18 @@ func registerUsers(mux *routeMux, a authn, m *mailer) {
 			out = append(out, toAccountJSON(x))
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]accountJSON{"users": out})
+		writeJSON(w, http.StatusOK, accountListJSON{Users: out})
 	})
 
-	mux.HandleFunc("POST /api/v1/users", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("POST /api/v1/users", openapi.Operation{
+		ID: "createUser", Tag: "users", Summary: "Invite a new account", In: userCreateRequest{}, Out: accountCreatedJSON{}, Status: http.StatusCreated,
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.sessionAllow(w, r, authz.UsersWrite)
 		if !ok {
 			return
 		}
 
-		var in struct {
-			Username string `json:"username"`
-			Role     string `json:"role"`
-			// Email is optional: the invitation goes there (ADR-0044).
-			Email string `json:"email"`
-		}
+		var in userCreateRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -146,13 +195,15 @@ func registerUsers(mux *routeMux, a authn, m *mailer) {
 			_ = a.svc.ForgetInvitationEmail(r.Context(), acc.ID)
 		}
 
-		writeJSON(w, http.StatusCreated, map[string]any{
-			"user":       toAccountJSON(acc),
-			"invitation": invitationJSON{Token: inv.Secret, ExpiresAt: inv.Expires, EmailedTo: emailedTo(emailed, inv)},
+		writeJSON(w, http.StatusCreated, accountCreatedJSON{
+			User:       toAccountJSON(acc),
+			Invitation: invitationJSON{Token: inv.Secret, ExpiresAt: inv.Expires, EmailedTo: emailedTo(emailed, inv)},
 		})
 	})
 
-	mux.HandleFunc("GET /api/v1/users/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("GET /api/v1/users/{id}", openapi.Operation{
+		ID: "getUser", Tag: "users", Summary: "Read one account", Out: accountJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := a.sessionAllow(w, r, authz.UsersRead); !ok {
 			return
 		}
@@ -172,7 +223,9 @@ func registerUsers(mux *routeMux, a authn, m *mailer) {
 		writeJSON(w, http.StatusOK, toAccountJSON(acc))
 	})
 
-	mux.HandleFunc("PUT /api/v1/users/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("PUT /api/v1/users/{id}", openapi.Operation{
+		ID: "updateUser", Tag: "users", Summary: "Change role, disabled state or the second-factor rule of an account", In: userUpdateRequest{}, Out: accountJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.sessionAllow(w, r, authz.UsersWrite)
 		if !ok {
 			return
@@ -183,11 +236,7 @@ func registerUsers(mux *routeMux, a authn, m *mailer) {
 			return
 		}
 
-		var in struct {
-			Role                *string `json:"role"`
-			Disabled            *bool   `json:"disabled"`
-			RequireSecondFactor *bool   `json:"requireSecondFactor"`
-		}
+		var in userUpdateRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -210,7 +259,9 @@ func registerUsers(mux *routeMux, a authn, m *mailer) {
 		writeJSON(w, http.StatusOK, toAccountJSON(acc))
 	})
 
-	mux.HandleFunc("DELETE /api/v1/users/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("DELETE /api/v1/users/{id}", openapi.Operation{
+		ID: "deleteUser", Tag: "users", Summary: "Delete an account",
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.sessionAllow(w, r, authz.UsersWrite)
 		if !ok {
 			return
@@ -230,7 +281,9 @@ func registerUsers(mux *routeMux, a authn, m *mailer) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	mux.HandleFunc("POST /api/v1/users/{id}/reset", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("POST /api/v1/users/{id}/reset", openapi.Operation{
+		ID: "resetUser", Tag: "users", Summary: "Reset password and second factors and make a new invitation", Out: invitationResultJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.sessionAllow(w, r, authz.UsersWrite)
 		if !ok {
 			return
@@ -257,10 +310,12 @@ func registerUsers(mux *routeMux, a authn, m *mailer) {
 
 		emailed := m.invitation(r.Context(), u.Username, acc.Username, acc.Role, true, inv)
 
-		writeJSON(w, http.StatusOK, map[string]invitationJSON{"invitation": {Token: inv.Secret, ExpiresAt: inv.Expires, EmailedTo: emailedTo(emailed, inv)}})
+		writeJSON(w, http.StatusOK, invitationResultJSON{Invitation: invitationJSON{Token: inv.Secret, ExpiresAt: inv.Expires, EmailedTo: emailedTo(emailed, inv)}})
 	})
 
-	mux.HandleFunc("GET /api/v1/users/{id}/grants", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("GET /api/v1/users/{id}/grants", openapi.Operation{
+		ID: "getUserGrants", Tag: "users", Summary: "The sites a user account may reach", Out: grantsJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := a.sessionAllow(w, r, authz.UsersRead); !ok {
 			return
 		}
@@ -277,10 +332,12 @@ func registerUsers(mux *routeMux, a authn, m *mailer) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]string{"sites": g})
+		writeJSON(w, http.StatusOK, grantsJSON{Sites: g})
 	})
 
-	mux.HandleFunc("PUT /api/v1/users/{id}/grants", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("PUT /api/v1/users/{id}/grants", openapi.Operation{
+		ID: "setUserGrants", Tag: "users", Summary: "Set the sites a user account may reach; an empty list removes all", In: grantsRequest{}, Out: grantsJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.sessionAllow(w, r, authz.UsersWrite)
 		if !ok {
 			return
@@ -291,9 +348,7 @@ func registerUsers(mux *routeMux, a authn, m *mailer) {
 			return
 		}
 
-		var in struct {
-			Sites []string `json:"sites"`
-		}
+		var in grantsRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -317,15 +372,15 @@ func registerUsers(mux *routeMux, a authn, m *mailer) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]string{"sites": g})
+		writeJSON(w, http.StatusOK, grantsJSON{Sites: g})
 	})
 
 	// The invitation routes are public: the token in the body is the
 	// credential. It never goes into a URL path or query.
-	mux.HandleFunc("POST /api/v1/invitations/check", func(w http.ResponseWriter, r *http.Request) {
-		var in struct {
-			Token string `json:"token"`
-		}
+	mux.Op("POST /api/v1/invitations/check", openapi.Operation{
+		ID: "checkInvitation", Tag: "users", Summary: "The account name of an invitation token", In: invitationTokenRequest{}, Out: invitationCheckJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		var in invitationTokenRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -337,14 +392,13 @@ func registerUsers(mux *routeMux, a authn, m *mailer) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]string{"username": name})
+		writeJSON(w, http.StatusOK, invitationCheckJSON{Username: name})
 	})
 
-	mux.HandleFunc("POST /api/v1/invitations/accept", func(w http.ResponseWriter, r *http.Request) {
-		var in struct {
-			Token    string `json:"token"`
-			Password string `json:"password"`
-		}
+	mux.Op("POST /api/v1/invitations/accept", openapi.Operation{
+		ID: "acceptInvitation", Tag: "users", Summary: "Set the password of an invited account and log in", In: invitationAcceptRequest{}, Out: meJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		var in invitationAcceptRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}

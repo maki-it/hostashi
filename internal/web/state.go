@@ -57,6 +57,11 @@ type Site struct {
 	// Headers are the site's security headers (ADR-0056), sent on every
 	// answer of the site. A snippet must not set one of them as well.
 	Headers agentapi.WebHeaders `json:"headers,omitzero"`
+	// RealIP takes the client address from a header of trusted proxies
+	// (ADR-0059), rendered into every server block of the site; the zero
+	// value trusts nobody. The agent has already refused ranges that hold
+	// one of its own addresses.
+	RealIP agentapi.WebRealIP `json:"realIp,omitzero"`
 	// BodyMax is the site's client_max_body_size in bytes, a whole number
 	// of MiB, and FastCGIReadTimeout its fastcgi_read_timeout in seconds;
 	// both follow the site's PHP settings (ADR-0049) and need PHPSocket.
@@ -259,6 +264,10 @@ func (d Desired) Validate() error {
 		}
 
 		if err := s.checkHeaders(); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if err := s.RealIP.Validate(); err != nil {
 			return fmt.Errorf("site %q: %w", s.User, err)
 		}
 

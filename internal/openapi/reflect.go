@@ -22,16 +22,24 @@ import (
 // is required; embedded structs without a JSON name are flattened.
 type reflector struct {
 	components map[string]any
-	names      map[reflect.Type]string
-	owners     map[string]reflect.Type
+	names      map[typeMode]string
+	owners     map[string]typeMode
 	errs       []error
+	// input is set while a request body is reflected: no field is
+	// required there, as the decoder takes any subset.
+	input bool
+}
+
+type typeMode struct {
+	t     reflect.Type
+	input bool
 }
 
 func newReflector() *reflector {
 	return &reflector{
 		components: map[string]any{},
-		names:      map[reflect.Type]string{},
-		owners:     map[string]reflect.Type{},
+		names:      map[typeMode]string{},
+		owners:     map[string]typeMode{},
 	}
 }
 
@@ -121,16 +129,21 @@ func (r *reflector) schema(t reflect.Type) map[string]any {
 
 // component registers a named struct type once and returns its name.
 func (r *reflector) component(t reflect.Type) string {
-	if n, ok := r.names[t]; ok {
+	key := typeMode{t, r.input}
+	if n, ok := r.names[key]; ok {
 		return n
 	}
 
 	n := schemaName(t)
-	if other, taken := r.owners[n]; taken {
-		r.errs = append(r.errs, fmt.Errorf("schema name %q is used by %s and %s", n, other, t))
+	if r.input && !strings.HasSuffix(n, "Request") && !strings.HasSuffix(n, "Input") {
+		n += "Input" // a response type that is also sent as a request
 	}
 
-	r.names[t], r.owners[n] = n, t
+	if other, taken := r.owners[n]; taken {
+		r.errs = append(r.errs, fmt.Errorf("schema name %q is used by %s and %s", n, other.t, t))
+	}
+
+	r.names[key], r.owners[n] = n, key
 	r.components[n] = map[string]any{} // placeholder against recursion
 	r.components[n] = r.object(t)
 
@@ -239,7 +252,7 @@ func (r *reflector) fields(t reflect.Type, depth int, out map[string]field) {
 			continue
 		}
 
-		out[name] = field{name: name, schema: s, required: !optional, depth: depth}
+		out[name] = field{name: name, schema: s, required: !optional && !r.input, depth: depth}
 	}
 }
 

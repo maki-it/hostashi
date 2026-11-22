@@ -6,6 +6,8 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/notify"
 )
 
@@ -19,6 +21,9 @@ type notifyCategoryJSON struct {
 	ID      notify.Category `json:"id"`
 	Enabled bool            `json:"enabled"`
 }
+
+// notificationPrefsRequest switches email categories on or off by id.
+type notificationPrefsRequest map[string]bool
 
 type notificationsJSON struct {
 	// Email is the confirmed address; without one nothing is sent.
@@ -57,7 +62,9 @@ func registerNotifications(mux *routeMux, a authn, relay MailRelay, prefs Notify
 		writeJSON(w, http.StatusOK, out)
 	}
 
-	mux.HandleFunc("GET /api/v1/account/notifications", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("GET /api/v1/account/notifications", openapi.Operation{
+		ID: "getNotifications", Tag: "account", Summary: "Which email notifications the caller gets", Out: notificationsJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok || !a.secondFactorOK(w, r, u) {
 			return
@@ -66,13 +73,15 @@ func registerNotifications(mux *routeMux, a authn, relay MailRelay, prefs Notify
 		state(w, r, u.ID, u.Role)
 	})
 
-	mux.HandleFunc("PUT /api/v1/account/notifications", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("PUT /api/v1/account/notifications", openapi.Operation{
+		ID: "setNotifications", Tag: "account", Summary: "Switch email notification categories on or off", In: notificationPrefsRequest{}, Out: notificationsJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok || !a.secondFactorOK(w, r, u) {
 			return
 		}
 
-		var in map[string]bool
+		var in notificationPrefsRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}

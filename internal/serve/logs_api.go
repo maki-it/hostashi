@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
@@ -94,8 +96,14 @@ func logRetention(ctx context.Context, st Settings) (int, error) {
 
 // registerLogs adds the log routes (ADR-0053): reading a site's logs for
 // everyone with a grant, the retention for admins in a browser session.
+type logRetentionRequest struct {
+	Days *int `json:"days"`
+}
+
 func registerLogs(mux *routeMux, a authn, logs SiteLogs, st Settings, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/sites/{name}/logs/{kind}", a.allow("sites.logs:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/logs/{kind}", openapi.Operation{
+		ID: "readSiteLog", Tag: "sites", Summary: "The last lines of a site log, or the lines after a cursor", Out: siteLogsJSON{}, Query: []openapi.Param{{Name: "lines", Type: "integer", Description: "last lines to read, default 200"}, {Name: "cursor", Description: "from an earlier answer; lines after it"}},
+	}, a.allow("sites.logs:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		req := agentapi.SiteLogsReadRequest{Site: r.PathValue("name"), Kind: agentapi.LogKind(r.PathValue("kind"))}
 
 		if !req.Kind.Valid() {
@@ -151,7 +159,9 @@ func registerLogs(mux *routeMux, a authn, logs SiteLogs, st Settings, log *slog.
 		writeJSON(w, http.StatusOK, siteLogsJSON{Lines: resp.Lines, Cursor: formatCursor(resp.Cursor), Rotated: resp.Rotated, More: resp.More})
 	}))
 
-	mux.HandleFunc("GET /api/v1/settings/logs", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("GET /api/v1/settings/logs", openapi.Operation{
+		ID: "getLogRetention", Tag: "settings", Summary: "How long site logs are kept", Out: logRetentionJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := a.sessionAllow(w, r, authz.SettingsRead); !ok {
 			return
 		}
@@ -167,7 +177,9 @@ func registerLogs(mux *routeMux, a authn, logs SiteLogs, st Settings, log *slog.
 		writeJSON(w, http.StatusOK, retentionJSON(d))
 	})
 
-	mux.HandleFunc("PUT /api/v1/settings/logs", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("PUT /api/v1/settings/logs", openapi.Operation{
+		ID: "setLogRetention", Tag: "settings", Summary: "Set how long site logs are kept", In: logRetentionRequest{}, Out: logRetentionJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.sessionAllow(w, r, authz.SettingsWrite)
 		if !ok {
 			return
@@ -175,9 +187,7 @@ func registerLogs(mux *routeMux, a authn, logs SiteLogs, st Settings, log *slog.
 
 		uid := u.ID
 
-		var in struct {
-			Days *int `json:"days"`
-		}
+		var in logRetentionRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}

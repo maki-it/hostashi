@@ -96,7 +96,7 @@ func TestBuildDescribed(t *testing.T) {
 		},
 		Route{
 			Pattern: "DELETE /api/v1/items/{id}",
-			Op:      &Operation{ID: "deleteItem", Tag: "items"},
+			Op:      &Operation{ID: "deleteItem", Tag: "items", Errors: map[int]any{422: createIn{}}},
 			Access:  Access{Kind: "any"},
 		},
 	)
@@ -128,8 +128,12 @@ func TestBuildDescribed(t *testing.T) {
 		t.Error("create has no 201")
 	}
 
-	if v := get(t, create, "requestBody", "content", "application/json", "schema", "$ref"); v != "#/components/schemas/CreateIn" {
+	if v := get(t, create, "requestBody", "content", "application/json", "schema", "$ref"); v != "#/components/schemas/CreateInInput" {
 		t.Errorf("request schema = %v", v)
+	}
+
+	if _, ok := get(t, doc, "components", "schemas", "CreateInInput").(map[string]any)["required"]; ok {
+		t.Error("a request schema should not require fields")
 	}
 
 	params, _ := json.Marshal(get(t, create, "parameters"))
@@ -145,6 +149,10 @@ func TestBuildDescribed(t *testing.T) {
 	del := get(t, doc, "paths", "/api/v1/items/{id}", "delete")
 	if _, ok := get(t, del, "responses").(map[string]any)["204"]; !ok {
 		t.Error("delete without body should answer 204")
+	}
+
+	if v := get(t, del, "responses", "422", "content", "application/json", "schema", "$ref"); v != "#/components/schemas/CreateIn" {
+		t.Errorf("own error body = %v", v)
 	}
 
 	item := get(t, doc, "components", "schemas", "Item")
@@ -249,6 +257,7 @@ func TestBuildErrors(t *testing.T) {
 		"query twice":    {{Pattern: "GET /a", Op: op(Operation{ID: "a", Tag: "x", Query: []Param{{Name: "q"}, {Name: "q"}}}), Access: Access{Kind: "public"}}},
 		"marshaler":      {{Pattern: "GET /a", Op: op(Operation{ID: "a", Tag: "x", Out: marshaler{}}), Access: Access{Kind: "public"}}},
 		"func":           {{Pattern: "GET /a", Op: op(Operation{ID: "a", Tag: "x", Out: withFunc{}}), Access: Access{Kind: "public"}}},
+		"error status":   {{Pattern: "GET /a", Op: op(Operation{ID: "a", Tag: "x", Errors: map[int]any{200: createIn{}}}), Access: Access{Kind: "public"}}},
 		"int map key":    {{Pattern: "GET /a", Op: op(Operation{ID: "a", Tag: "x", Out: map[int]string{}}), Access: Access{Kind: "public"}}},
 		"duplicate id": {
 			{Pattern: "GET /a", Op: op(Operation{ID: "a", Tag: "x"}), Access: Access{Kind: "public"}},

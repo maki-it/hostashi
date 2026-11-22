@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -32,8 +34,25 @@ type ceremonyJSON struct {
 	Options    any    `json:"options"` // pass to navigator.credentials.create or .get
 }
 
+type passkeyListJSON struct {
+	Passkeys []passkeyJSON `json:"passkeys"`
+}
+
+type passkeyRegisterRequest struct {
+	CeremonyID string          `json:"ceremonyId"`
+	Name       string          `json:"name"`
+	Credential json.RawMessage `json:"credential"`
+}
+
+type passkeyLoginRequest struct {
+	CeremonyID string          `json:"ceremonyId"`
+	Credential json.RawMessage `json:"credential"`
+}
+
 func registerPasskeys(mux *routeMux, a authn) {
-	mux.HandleFunc("POST /api/v1/auth/passkeys/register/begin", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("POST /api/v1/auth/passkeys/register/begin", openapi.Operation{
+		ID: "beginPasskeyRegistration", Tag: "passkeys", Summary: "Start adding a passkey (WebAuthn options for the browser)", Out: ceremonyJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok {
 			return
@@ -49,17 +68,15 @@ func registerPasskeys(mux *routeMux, a authn) {
 		writeJSON(w, http.StatusOK, ceremonyJSON{CeremonyID: id, Options: opts})
 	})
 
-	mux.HandleFunc("POST /api/v1/auth/passkeys/register/finish", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("POST /api/v1/auth/passkeys/register/finish", openapi.Operation{
+		ID: "finishPasskeyRegistration", Tag: "passkeys", Summary: "Store the new passkey", In: passkeyRegisterRequest{}, Out: passkeyJSON{}, Status: http.StatusCreated,
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok {
 			return
 		}
 
-		var in struct {
-			CeremonyID string          `json:"ceremonyId"`
-			Name       string          `json:"name"`
-			Credential json.RawMessage `json:"credential"`
-		}
+		var in passkeyRegisterRequest
 		if !decodeJSONLimit(w, r, &in, maxCredentialBytes) {
 			return
 		}
@@ -74,7 +91,9 @@ func registerPasskeys(mux *routeMux, a authn) {
 		writeJSON(w, http.StatusCreated, toPasskeyJSON(p))
 	})
 
-	mux.HandleFunc("GET /api/v1/auth/passkeys", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("GET /api/v1/auth/passkeys", openapi.Operation{
+		ID: "listPasskeys", Tag: "passkeys", Summary: "The caller's passkeys", Out: passkeyListJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok {
 			return
@@ -92,10 +111,12 @@ func registerPasskeys(mux *routeMux, a authn) {
 			out = append(out, toPasskeyJSON(p))
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]passkeyJSON{"passkeys": out})
+		writeJSON(w, http.StatusOK, passkeyListJSON{Passkeys: out})
 	})
 
-	mux.HandleFunc("DELETE /api/v1/auth/passkeys/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("DELETE /api/v1/auth/passkeys/{id}", openapi.Operation{
+		ID: "deletePasskey", Tag: "passkeys", Summary: "Remove one of the caller's passkeys",
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok {
 			return
@@ -117,7 +138,9 @@ func registerPasskeys(mux *routeMux, a authn) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	mux.HandleFunc("POST /api/v1/auth/passkey/login/begin", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("POST /api/v1/auth/passkey/login/begin", openapi.Operation{
+		ID: "beginPasskeyLogin", Tag: "passkeys", Summary: "Start a passkey login (WebAuthn options for the browser)", Out: ceremonyJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		id, opts, err := a.svc.PasskeyLoginBegin(clientIP(r))
 		if err != nil {
 			a.fail(w, err, "passkey login begin")
@@ -128,11 +151,10 @@ func registerPasskeys(mux *routeMux, a authn) {
 		writeJSON(w, http.StatusOK, ceremonyJSON{CeremonyID: id, Options: opts})
 	})
 
-	mux.HandleFunc("POST /api/v1/auth/passkey/login/finish", func(w http.ResponseWriter, r *http.Request) {
-		var in struct {
-			CeremonyID string          `json:"ceremonyId"`
-			Credential json.RawMessage `json:"credential"`
-		}
+	mux.Op("POST /api/v1/auth/passkey/login/finish", openapi.Operation{
+		ID: "finishPasskeyLogin", Tag: "passkeys", Summary: "Log in with a passkey and start a browser session", In: passkeyLoginRequest{}, Out: meJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		var in passkeyLoginRequest
 		if !decodeJSONLimit(w, r, &in, maxCredentialBytes) {
 			return
 		}

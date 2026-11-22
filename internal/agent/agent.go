@@ -669,6 +669,10 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			site.Headers = *s.Headers
 		}
 
+		if err := h.realIPFor(&site, s.RealIP); err != nil {
+			return agentapi.WebApplyResponse{}, err
+		}
+
 		if s.PageCache != nil {
 			c, err := h.pageCacheFor(s.User, home, *s.PageCache)
 			if err != nil {
@@ -855,6 +859,10 @@ func (h *siteOps) accountlessSite(ctx context.Context, s agentapi.WebSite) (web.
 
 	if s.Headers != nil {
 		site.Headers = *s.Headers
+	}
+
+	if err := h.realIPFor(&site, s.RealIP); err != nil {
+		return web.Site{}, err
 	}
 
 	return site, nil

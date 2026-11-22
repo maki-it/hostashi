@@ -18,6 +18,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -63,6 +65,20 @@ type auditPageJSON struct {
 	Entries []auditEntryJSON `json:"entries"`
 	// Next is the cursor of the next, older page; null on the last page.
 	Next *string `json:"next"`
+}
+
+type auditActionsJSON struct {
+	Actions []string `json:"actions"`
+}
+
+// auditFilters are the query parameters of the audit routes.
+var auditFilters = []openapi.Param{
+	{Name: "action", Description: "an action or a prefix of one, such as site.cert"},
+	{Name: "actor", Description: "account name"},
+	{Name: "target"},
+	{Name: "ip", Description: "client address"},
+	{Name: "since", Description: "RFC 3339 time"},
+	{Name: "until", Description: "RFC 3339 time"},
 }
 
 // auditQueryError is a bad filter; its text is the answer's message.
@@ -187,7 +203,9 @@ func registerAudit(mux *routeMux, a authn, al AuditLog, log *slog.Logger) {
 		return false
 	}
 
-	mux.HandleFunc("GET /api/v1/audit", a.allow("audit:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/audit", openapi.Operation{
+		ID: "listAudit", Tag: "audit", Summary: "Audit log entries, newest first", Out: auditPageJSON{}, Query: append(append([]openapi.Param{}, auditFilters...), openapi.Param{Name: "limit", Type: "integer"}, openapi.Param{Name: "before", Description: "cursor from next"}),
+	}, a.allow("audit:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		q := r.URL.Query()
 
 		f, err := parseAuditFilter(q)
@@ -221,7 +239,9 @@ func registerAudit(mux *routeMux, a authn, al AuditLog, log *slog.Logger) {
 		writeJSON(w, http.StatusOK, out)
 	}))
 
-	mux.HandleFunc("GET /api/v1/audit/actions", a.allow("audit:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/audit/actions", openapi.Operation{
+		ID: "listAuditActions", Tag: "audit", Summary: "The action names that occur in the audit log", Out: auditActionsJSON{},
+	}, a.allow("audit:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		actions, err := al.AuditActions(r.Context())
 		if err != nil {
 			a.fail(w, err, "read audit actions")
@@ -230,10 +250,12 @@ func registerAudit(mux *routeMux, a authn, al AuditLog, log *slog.Logger) {
 		}
 
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusOK, map[string][]string{"actions": actions})
+		writeJSON(w, http.StatusOK, auditActionsJSON{Actions: actions})
 	}))
 
-	mux.HandleFunc("GET /api/v1/audit/export", a.allow("audit:read", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("GET /api/v1/audit/export", openapi.Operation{
+		ID: "exportAudit", Tag: "audit", Summary: "Download the filtered audit log as CSV or JSON", OutContentType: "text/csv, application/json", Query: append(append([]openapi.Param{}, auditFilters...), openapi.Param{Name: "format", Required: true, Description: "csv or json"}),
+	}, a.allow("audit:read", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		q := r.URL.Query()
 
 		format := q.Get("format")

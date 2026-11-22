@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
@@ -65,6 +67,10 @@ type firewallJSON struct {
 	ClientIP string `json:"clientIp"`
 	// ConfirmWithin is how long a change waits for its confirmation.
 	ConfirmWithin int `json:"confirmWithin"`
+}
+
+type firewallConfirmRequest struct {
+	ID string `json:"id"`
 }
 
 func toFirewallJSON(st agentapi.FirewallStatus, r *http.Request, withID bool) firewallJSON {
@@ -197,7 +203,9 @@ func registerFirewall(mux *routeMux, a authn, fw Firewall, st Settings, log *slo
 		audit(ctx, nil, "firewall.rollback", map[string]string{"at": time.Unix(s.RolledBack, 0).UTC().Format(time.RFC3339)})
 	}
 
-	mux.HandleFunc("GET /api/v1/firewall", a.allow("firewall:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/firewall", openapi.Operation{
+		ID: "getFirewall", Tag: "firewall", Summary: "The host firewall state", Out: firewallJSON{},
+	}, a.allow("firewall:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -213,7 +221,9 @@ func registerFirewall(mux *routeMux, a authn, fw Firewall, st Settings, log *slo
 		writeJSON(w, http.StatusOK, toFirewallJSON(s, r, false))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/firewall", a.allow("firewall:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("PUT /api/v1/firewall", openapi.Operation{
+		ID: "setFirewall", Tag: "firewall", Summary: "Apply new firewall rules; they roll back unless confirmed in time", In: firewallPutJSON{}, Out: firewallJSON{},
+	}, a.allow("firewall:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in firewallPutJSON
 		if !decodeJSON(w, r, &in) {
 			return
@@ -265,10 +275,10 @@ func registerFirewall(mux *routeMux, a authn, fw Firewall, st Settings, log *slo
 		writeJSON(w, http.StatusOK, toFirewallJSON(s, r, true))
 	}))
 
-	mux.HandleFunc("POST /api/v1/firewall/confirm", a.allow("firewall:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			ID string `json:"id"`
-		}
+	mux.Op("POST /api/v1/firewall/confirm", openapi.Operation{
+		ID: "confirmFirewall", Tag: "firewall", Summary: "Keep the rules applied last", In: firewallConfirmRequest{}, Out: firewallJSON{},
+	}, a.allow("firewall:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in firewallConfirmRequest
 
 		if !decodeJSON(w, r, &in) {
 			return

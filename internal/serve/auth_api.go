@@ -77,6 +77,31 @@ type loginRequest struct {
 	TOTP     string `json:"totp"`
 }
 
+// totpEnrollJSON is a new TOTP secret, valid once confirmed.
+type totpEnrollJSON struct {
+	Secret string `json:"secret"`
+	URI    string `json:"uri"` // otpauth:// for authenticator apps
+}
+
+// recoveryCodesJSON is shown once after TOTP is confirmed.
+type recoveryCodesJSON struct {
+	RecoveryCodes []string `json:"recoveryCodes"`
+}
+
+type totpConfirmRequest struct {
+	Code string `json:"code"`
+}
+
+type totpDisableRequest struct {
+	Password string `json:"password"`
+	Code     string `json:"code"`
+}
+
+type preferencesRequest struct {
+	ColorScheme string `json:"colorScheme"`
+	Theme       string `json:"theme"`
+}
+
 // preferencesJSON is how the panel looks for the account (ADR-0037).
 type preferencesJSON struct {
 	ColorScheme string `json:"colorScheme"`
@@ -365,7 +390,9 @@ func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger)
 	// Account security changes never accept an API token.
 	current := a.session
 
-	mux.HandleFunc("POST /api/v1/auth/totp/enroll", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("POST /api/v1/auth/totp/enroll", openapi.Operation{
+		ID: "enrollTOTP", Tag: "auth", Summary: "Start setting up TOTP; returns the secret", Out: totpEnrollJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := current(w, r)
 		if !ok {
 			return
@@ -378,18 +405,18 @@ func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger)
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]string{"secret": secret, "uri": uri})
+		writeJSON(w, http.StatusOK, totpEnrollJSON{Secret: secret, URI: uri})
 	})
 
-	mux.HandleFunc("POST /api/v1/auth/totp/confirm", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("POST /api/v1/auth/totp/confirm", openapi.Operation{
+		ID: "confirmTOTP", Tag: "auth", Summary: "Confirm TOTP with a first code; returns recovery codes once", In: totpConfirmRequest{}, Out: recoveryCodesJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := current(w, r)
 		if !ok {
 			return
 		}
 
-		var in struct {
-			Code string `json:"code"`
-		}
+		var in totpConfirmRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -401,19 +428,18 @@ func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger)
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]string{"recoveryCodes": codes})
+		writeJSON(w, http.StatusOK, recoveryCodesJSON{RecoveryCodes: codes})
 	})
 
-	mux.HandleFunc("POST /api/v1/auth/totp/disable", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("POST /api/v1/auth/totp/disable", openapi.Operation{
+		ID: "disableTOTP", Tag: "auth", Summary: "Turn TOTP off with password and a current code", In: totpDisableRequest{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := current(w, r)
 		if !ok {
 			return
 		}
 
-		var in struct {
-			Password string `json:"password"`
-			Code     string `json:"code"`
-		}
+		var in totpDisableRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -450,16 +476,15 @@ func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger)
 
 	// PATCH /api/v1/me changes how the panel looks for the logged-in
 	// account (ADR-0037). Only a browser session can change it.
-	mux.HandleFunc("PATCH /api/v1/me", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("PATCH /api/v1/me", openapi.Operation{
+		ID: "updatePreferences", Tag: "auth", Summary: "Change how the panel looks for the caller", In: preferencesRequest{}, Out: preferencesJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok || !a.secondFactorOK(w, r, u) {
 			return
 		}
 
-		var in struct {
-			ColorScheme string `json:"colorScheme"`
-			Theme       string `json:"theme"`
-		}
+		var in preferencesRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
