@@ -79,6 +79,8 @@ func ValidateNodeMajor(major string) error {
 var (
 	NodeInstall  = agentrpc.Op[NodeInstallRequest, NodeStatus]{Name: "node.install"}
 	NodeStatusOp = agentrpc.Op[NodeStatusRequest, NodeStatus]{Name: "node.status"}
+	// NodeRemove deletes an installed line that no app runs on.
+	NodeRemove = agentrpc.Op[NodeRemoveRequest, NodeStatus]{Name: "node.remove"}
 )
 
 // NodeDoneMarker starts the installer's last line after a successful run.
@@ -91,6 +93,14 @@ type NodeInstallRequest struct {
 
 // Validate implements agentrpc's request check.
 func (r NodeInstallRequest) Validate() error { return ValidateNodeMajor(r.Major) }
+
+// NodeRemoveRequest removes one installed line.
+type NodeRemoveRequest struct {
+	Major string `json:"major"`
+}
+
+// Validate implements agentrpc's request check.
+func (r NodeRemoveRequest) Validate() error { return ValidateNodeMajor(r.Major) }
 
 // NodeStatusRequest asks for the installed lines and the last installation.
 type NodeStatusRequest struct{}

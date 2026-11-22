@@ -3447,6 +3447,9 @@
       "PHPInstallStatus": {
         "additionalProperties": false,
         "properties": {
+          "action": {
+            "type": "string"
+          },
           "log": {
             "items": {
               "type": "string"
@@ -4145,6 +4148,9 @@
       "PhpInstall": {
         "additionalProperties": false,
         "properties": {
+          "action": {
+            "type": "string"
+          },
           "log": {
             "items": {
               "type": "string"
@@ -4187,6 +4193,15 @@
           "confirmEol": {
             "type": "boolean"
           },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PhpRemoveRequest": {
+        "additionalProperties": false,
+        "properties": {
           "version": {
             "type": "string"
           }
@@ -11085,6 +11100,59 @@
         "x-hostashi-action": "node:install"
       }
     },
+    "/api/v1/node/remove": {
+      "post": {
+        "operationId": "removeNode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeInstallInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "node:install"
+            ]
+          }
+        ],
+        "summary": "Remove an installed Node.js line that no site's app runs on",
+        "tags": [
+          "node"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "node:remove"
+      }
+    },
     "/api/v1/openapi.json": {
       "get": {
         "operationId": "getOpenAPI",
@@ -12026,6 +12094,59 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "php:install"
+      }
+    },
+    "/api/v1/php/remove": {
+      "post": {
+        "operationId": "removePHP",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhpRemoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PHPInstallStatus"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "php:install"
+            ]
+          }
+        ],
+        "summary": "Remove a PHP version that no site uses",
+        "tags": [
+          "php"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "php:remove"
       }
     },
     "/api/v1/php/versions": {

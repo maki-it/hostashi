@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { DownloadSimple } from "@phosphor-icons/react";
+import { DownloadSimple, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
-import { daysUntil, getPHPInstall, installPHP, phpMessage, support, todayUTC, type PHPInstall, type Support } from "./php";
+import { daysUntil, getPHPInstall, installPHP, phpMessage, removePHP, support, todayUTC, type PHPInstall, type Support } from "./php";
 import { listSites, phpVersions, type PHPVersions, type Site } from "./sites";
-import { Badge, Button, Card, Notice, PageHead, Table, type Column, type Sort, type Tone } from "./ui";
+import { Badge, Button, Card, IconButton, Notice, PageHead, Table, type Column, type Sort, type Tone } from "./ui";
 
 const supportLabel: Record<Support, string> = {
   active: "Supported",
@@ -37,6 +37,7 @@ export function PHPPage({
   const [sites, setSites] = useState<Site[] | null>(null);
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -75,6 +76,16 @@ export function PHPPage({
     }
   };
 
+  const remove = async (version: string) => {
+    setConfirmRemove(null);
+    try {
+      setInst({ ...(inst ?? { repository: false, newer: [] }), ...(await removePHP(version)) });
+      setError("");
+    } catch (err) {
+      setError(phpMessage(err));
+    }
+  };
+
   const set = (changes: Record<string, string>) => {
     const next = new URLSearchParams(query);
     for (const [k, v] of Object.entries(changes)) {
@@ -87,7 +98,7 @@ export function PHPPage({
   const head = (
     <PageHead
       title="PHP versions"
-      description="The distribution's PHP is always installed. More versions come from the sury.org repository and get their updates automatically."
+      description="The distribution's PHP is always installed. More versions come from the sury.org repository and get their updates automatically; one that no site uses can be removed."
     />
   );
 
@@ -155,10 +166,15 @@ export function PHPPage({
       header: "Status",
       sortValue: (r) => (r.installed ? 0 : 1),
       cell: (r) =>
-        r.installed ? (
-          <Badge tone="ok">Installed</Badge>
-        ) : inst.state === "running" && inst.version === r.version ? (
-          <span aria-busy="true">Installing…</span>
+        inst.state === "running" && inst.version === r.version ? (
+          <span aria-busy="true">{inst.action === "remove" ? "Removing…" : "Installing…"}</span>
+        ) : r.installed ? (
+          <span className="ui-row">
+            <Badge tone="ok">Installed</Badge>
+            {r.sites === 0 && versions.distro !== r.version && (
+              <IconButton label={"Remove PHP " + r.version} icon={<Trash size={16} aria-hidden="true" />} danger disabled={running} onClick={() => setConfirmRemove(r.version)} />
+            )}
+          </span>
         ) : (
           <Button
             icon={<DownloadSimple size={16} aria-hidden="true" />}
@@ -196,19 +212,42 @@ export function PHPPage({
         </section>
       )}
 
+      {confirmRemove && (
+        <section className="ui-card ui-card-body ui-stack" role="alertdialog" aria-labelledby="php-remove-title">
+          <h2 id="php-remove-title" className="ui-flush">
+            Remove PHP {confirmRemove}?
+          </h2>
+          <p className="ui-flush">No site runs on it. Its packages and settings are removed from the server; you can install it again later.</p>
+          <div className="ui-row">
+            <Button variant="danger" onClick={() => void remove(confirmRemove)}>
+              Remove
+            </Button>
+            <Button onClick={() => setConfirmRemove(null)}>Cancel</Button>
+          </div>
+        </section>
+      )}
+
       {inst.state !== "idle" && inst.version && (
         <Card
           title={
-            inst.state === "running"
-              ? "Installing PHP " + inst.version + "…"
-              : inst.state === "succeeded"
-                ? "PHP " + inst.version + " was installed"
-                : "Installing PHP " + inst.version + " failed"
+            inst.action === "remove"
+              ? inst.state === "running"
+                ? "Removing PHP " + inst.version + "…"
+                : inst.state === "succeeded"
+                  ? "PHP " + inst.version + " was removed"
+                  : "Removing PHP " + inst.version + " failed"
+              : inst.state === "running"
+                ? "Installing PHP " + inst.version + "…"
+                : inst.state === "succeeded"
+                  ? "PHP " + inst.version + " was installed"
+                  : "Installing PHP " + inst.version + " failed"
           }
         >
           <div className="ui-stack">
-            {inst.state === "failed" && <Notice tone="err" title="The installation did not finish. The log shows why; you can try again." />}
-            {inst.log.length > 0 && <pre className="ui-code" aria-label="Installation log">{inst.log.join("\n")}</pre>}
+            {inst.state === "failed" && (
+              <Notice tone="err" title={(inst.action === "remove" ? "The removal" : "The installation") + " did not finish. The log shows why; you can try again."} />
+            )}
+            {inst.log.length > 0 && <pre className="ui-code" aria-label={inst.action === "remove" ? "Removal log" : "Installation log"}>{inst.log.join("\n")}</pre>}
           </div>
         </Card>
       )}

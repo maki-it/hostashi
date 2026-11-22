@@ -17,8 +17,22 @@ import (
 type stubNode struct {
 	mu      sync.Mutex
 	started []string
+	removed []string
 	status  agentapi.NodeStatus
 	refuse  bool
+}
+
+func (s *stubNode) Remove(_ context.Context, m string) (agentapi.NodeStatus, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.refuse {
+		return agentapi.NodeStatus{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "nodeinstall: apps still run on this Node.js line: shop"}
+	}
+
+	s.removed = append(s.removed, m)
+
+	return agentapi.NodeStatus{State: agentapi.PHPInstallIdle}, nil
 }
 
 func (s *stubNode) Install(_ context.Context, m string) (agentapi.NodeStatus, error) {
@@ -110,5 +124,44 @@ func TestNodeAPI(t *testing.T) {
 
 	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/node/install", body: `{"major":"24"}`, header: h}); rec.Code != http.StatusForbidden {
 		t.Errorf("install with sites:read: %d", rec.Code)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/node/remove", body: `{"major":"24"}`, header: h}); rec.Code != http.StatusForbidden {
+		t.Errorf("remove with sites:read: %d", rec.Code)
+	}
+}
+
+func TestNodeRemoveAPI(t *testing.T) {
+	e := newAPI(t)
+	c := e.adminCookie(t)
+	js := map[string]string{"Content-Type": "application/json"}
+	post := func(body string) (int, string) {
+		rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/node/remove", body: body, cookie: c, header: js})
+		if rec.Code >= 400 {
+			return rec.Code, errCode(t, rec)
+		}
+
+		return rec.Code, ""
+	}
+
+	for _, body := range []string{`{}`, `{"major":"25"}`, `{"major":"../24"}`} {
+		if code, _ := post(body); code != http.StatusUnprocessableEntity && code != http.StatusBadRequest {
+			t.Errorf("%s: %d", body, code)
+		}
+	}
+
+	if code, _ := post(`{"major":"22"}`); code != http.StatusOK || !slices.Equal(e.node.removed, []string{"22"}) {
+		t.Errorf("remove 22: %d %v", code, e.node.removed)
+	}
+
+	e.node.refuse = true
+
+	if code, ec := post(`{"major":"24"}`); code != http.StatusConflict || ec != "node_install_refused" {
+		t.Errorf("in use: %d %s", code, ec)
+	}
+
+	var n int
+	if err := e.st.RawCount(t.Context(), `SELECT count(*) FROM audit_log WHERE action = ?`, "node.remove", &n); err != nil || n != 1 {
+		t.Errorf("audit: %d %v", n, err)
 	}
 }

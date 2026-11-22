@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/openapi"
@@ -16,6 +17,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/doctor"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 // PHPInstaller is the agent's part of installing PHP versions (ADR-0036).
@@ -23,6 +25,7 @@ type PHPInstaller interface {
 	Versions(ctx context.Context) (agentapi.PHPVersionsResponse, error)
 	Install(ctx context.Context, version string) (agentapi.PHPInstallStatus, error)
 	Status(ctx context.Context) (agentapi.PHPInstallStatus, error)
+	Remove(ctx context.Context, version string) (agentapi.PHPInstallStatus, error)
 }
 
 // RPCPHPInstaller talks to the agent.
@@ -41,6 +44,11 @@ func (p RPCPHPInstaller) Install(ctx context.Context, version string) (agentapi.
 // Status implements PHPInstaller.
 func (p RPCPHPInstaller) Status(ctx context.Context) (agentapi.PHPInstallStatus, error) {
 	return agentapi.PHPInstallStatusOp.Call(ctx, p.C, agentapi.PHPInstallStatusRequest{})
+}
+
+// Remove implements PHPInstaller.
+func (p RPCPHPInstaller) Remove(ctx context.Context, version string) (agentapi.PHPInstallStatus, error) {
+	return agentapi.PHPRemove.Call(ctx, p.C, agentapi.PHPRemoveRequest{Version: version})
 }
 
 // phpEOL reports whether a version gets no security fixes any more on day now.
@@ -71,7 +79,14 @@ type phpInstallRequest struct {
 	ConfirmEOL bool `json:"confirmEol"`
 }
 
-func registerPHPInstall(mux *routeMux, a authn, p PHPInstaller, st Settings, log *slog.Logger) {
+type phpRemoveRequest struct {
+	Version string `json:"version"`
+}
+
+// registerPHPInstall adds the install routes and POST /api/v1/php/remove.
+// sites lists the sites, so a version in use is refused; nil skips that
+// check (the agent checks the pools again).
+func registerPHPInstall(mux *routeMux, a authn, p PHPInstaller, st Settings, sites func(context.Context) ([]store.Site, error), log *slog.Logger) {
 	fail := func(w http.ResponseWriter, err error, what string) {
 		var ae *agentrpc.Error
 
@@ -165,6 +180,74 @@ func registerPHPInstall(mux *routeMux, a authn, p PHPInstaller, st Settings, log
 
 		if err := st.Audit(r.Context(), &uid, "php.install", "", detail); err != nil {
 			log.ErrorContext(r.Context(), "audit log", "action", "php.install", "err", err)
+		}
+
+		if s.Log == nil {
+			s.Log = []string{}
+		}
+
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusAccepted, s)
+	}))
+
+	mux.Op("POST /api/v1/php/remove", openapi.Operation{
+		ID: "removePHP", Tag: "php", Summary: "Remove a PHP version that no site uses", In: phpRemoveRequest{}, Out: agentapi.PHPInstallStatus{}, Status: http.StatusAccepted,
+	}, a.allow("php:remove", func(w http.ResponseWriter, r *http.Request, pr auth.Principal) {
+		var in phpRemoveRequest
+
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if err := agentapi.ValidatePHPVersion(in.Version); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "version must be one of the supported PHP versions")
+
+			return
+		}
+
+		if in.Version == distroPHP() {
+			writeError(w, http.StatusConflict, "php_default", "PHP "+in.Version+" is the distribution's default and stays installed")
+
+			return
+		}
+
+		if sites != nil {
+			all, err := sites(r.Context())
+			if err != nil {
+				log.ErrorContext(r.Context(), "php remove: list sites", "err", err)
+				writeError(w, http.StatusInternalServerError, "internal", "internal error")
+
+				return
+			}
+
+			var users []string
+
+			for _, s := range all {
+				if s.PHP == in.Version {
+					users = append(users, s.Name)
+				}
+			}
+
+			if len(users) > 0 {
+				writeError(w, http.StatusConflict, "php_in_use", "sites still run on PHP "+in.Version+": "+strings.Join(users, ", "))
+
+				return
+			}
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		s, err := p.Remove(ctx, in.Version)
+		if err != nil {
+			fail(w, err, "php remove")
+
+			return
+		}
+
+		uid := pr.User.ID
+		if err := st.Audit(r.Context(), &uid, "php.remove", "", map[string]string{"version": in.Version}); err != nil {
+			log.ErrorContext(r.Context(), "audit log", "action", "php.remove", "err", err)
 		}
 
 		if s.Log == nil {

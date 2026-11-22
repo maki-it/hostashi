@@ -289,7 +289,12 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 		}
 
 		if deps.PHP != nil && deps.Settings != nil {
-			registerPHPInstall(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.PHP, deps.Settings, log)
+			var sites func(context.Context) ([]store.Site, error)
+			if deps.Sites != nil {
+				sites = deps.Sites.List
+			}
+
+			registerPHPInstall(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.PHP, deps.Settings, sites, log)
 		}
 
 		if deps.Node != nil && deps.Settings != nil {

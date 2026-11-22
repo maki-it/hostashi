@@ -31,6 +31,40 @@ func UnitActive(ctx context.Context, unit string) (bool, error) {
 	return strings.TrimSpace(out) == "active", nil
 }
 
+// RemoveUnits starts and reads hostashi-php-remove@<version>.service,
+// the fixed unit that removes a PHP version no site uses (ADR-0036). The
+// script behind it checks the version again and refuses the
+// distribution's default and a version with a running pool.
+type RemoveUnits struct{}
+
+func removeUnit(version string) (string, error) {
+	if err := agentapi.ValidatePHPVersion(version); err != nil {
+		return "", err
+	}
+
+	return "hostashi-php-remove@" + version + ".service", nil
+}
+
+// Start queues the unit (systemctl start --no-block).
+func (RemoveUnits) Start(ctx context.Context, version string) error {
+	unit, err := removeUnit(version)
+	if err != nil {
+		return err
+	}
+
+	return run(ctx, Systemctl, "start", "--no-block", unit)
+}
+
+// Active reports whether the unit is running or about to.
+func (RemoveUnits) Active(ctx context.Context, version string) (bool, error) {
+	unit, err := removeUnit(version)
+	if err != nil {
+		return false, err
+	}
+
+	return unitActive(ctx, unit)
+}
+
 // FirewallUnit loads Hostashi's nftables table, with the panel's rules
 // (ADR-0034).
 const FirewallUnit = "hostashi-firewall.service"

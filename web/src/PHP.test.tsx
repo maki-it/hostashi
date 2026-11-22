@@ -110,4 +110,47 @@ describe("PHPPage", () => {
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({ version: "7.4", confirmEol: true });
     expect(await screen.findByRole("alert")).toHaveTextContent("Another installation is still running.");
   });
+
+  it("removes an installed version no site uses, but not the distribution's", async () => {
+    const user = userEvent.setup();
+    let state: unknown = idle;
+    const more = { ...versions, installed: ["8.3", "8.4", "7.4"] };
+    const calls = mockFetch({
+      "GET /api/v1/php/versions": () => ({ body: state === idle ? more : versions }),
+      "GET /api/v1/php/install": () => ({ body: state }),
+      "GET /api/v1/sites": sites,
+      "POST /api/v1/php/remove": () => {
+        state = { version: "8.3", action: "remove", state: "succeeded", log: ["php-install: removing PHP 8.3", "php-install: done: PHP 8.3 removed"], repository: true, newer: [] };
+        return { status: 202, body: { version: "8.3", action: "remove", state: "running", log: [] } };
+      },
+    });
+    render(<PHPPage today={today} poll={10} />);
+
+    await user.click(await screen.findByRole("button", { name: "Remove PHP 8.3" }));
+    // 8.4 is the distribution's, 7.4 has a site.
+    expect(screen.queryByRole("button", { name: "Remove PHP 8.4" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove PHP 7.4" })).not.toBeInTheDocument();
+    const dialog = screen.getByRole("alertdialog", { name: "Remove PHP 8.3?" });
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ version: "8.3" });
+    expect(await screen.findByRole("heading", { name: "PHP 8.3 was removed" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Removal log")).toHaveTextContent("PHP 8.3 removed");
+    expect(await screen.findByRole("button", { name: "Install PHP 8.3" })).toBeInTheDocument();
+  });
+
+  it("explains a refused removal", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      "GET /api/v1/php/versions": { body: { ...versions, installed: ["8.3", "8.4"] } },
+      "GET /api/v1/php/install": { body: idle },
+      "GET /api/v1/sites": sites,
+      "POST /api/v1/php/remove": { status: 409, body: { error: { code: "php_in_use", message: "sites still run on PHP 8.3: x" } } },
+    });
+    render(<PHPPage today={today} />);
+    await user.click(await screen.findByRole("button", { name: "Remove PHP 8.3" }));
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Remove" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Sites still run on this version.");
+  });
 });

@@ -68,10 +68,31 @@ const (
 // PHPInstallStatus is the last installation: its version, its state and
 // the last lines of its log (the script's and apt's output).
 type PHPInstallStatus struct {
-	Version string   `json:"version,omitempty"`
-	State   string   `json:"state"`
-	Log     []string `json:"log"`
+	Version string `json:"version,omitempty"`
+	// Action is what the last run did: PHPActionInstall or
+	// PHPActionRemove; "" while idle.
+	Action string   `json:"action,omitempty"`
+	State  string   `json:"state"`
+	Log    []string `json:"log"`
 }
+
+// The actions of an install or remove run.
+const (
+	PHPActionInstall = "install"
+	PHPActionRemove  = "remove"
+)
+
+// PHPRemoveRequest removes a PHP version that no site uses (php.remove).
+type PHPRemoveRequest struct {
+	Version string `json:"version"`
+}
+
+// Validate accepts the versions of PHPVersions only.
+func (r PHPRemoveRequest) Validate() error { return ValidatePHPVersion(r.Version) }
+
+// PHPRemove starts the removal of a version; like PHPInstall it returns at
+// once and PHPInstallStatusOp follows it.
+var PHPRemove = agentrpc.Op[PHPRemoveRequest, PHPInstallStatus]{Name: "php.remove"}
 
 // PHPInstall starts the installation of a version (php.install); it
 // returns at once, PHPInstallStatusOp follows it.

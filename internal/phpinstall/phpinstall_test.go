@@ -125,6 +125,73 @@ func TestStatus(t *testing.T) {
 	}
 }
 
+func TestRemove(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	inst, rm := &fakeUnits{active: map[string]bool{}}, &fakeUnits{active: map[string]bool{}}
+	m := &Manager{Units: inst, Installed: func() []string { return []string{"8.2", "8.4"} }, Root: root}
+
+	if _, err := m.Remove(ctx, "8.2", nil); !errors.Is(err, ErrNoRemove) {
+		t.Fatalf("without remove units: %v", err)
+	}
+
+	m.Removes = rm
+
+	for _, v := range []string{"8.0", "", "../8.2"} {
+		if _, err := m.Remove(ctx, v, nil); err == nil {
+			t.Errorf("%q accepted", v)
+		}
+	}
+
+	if _, err := m.Remove(ctx, "8.1", nil); !errors.Is(err, ErrNotInstalled) {
+		t.Errorf("not installed: %v", err)
+	}
+
+	if _, err := m.Remove(ctx, "8.2", []string{"blog", "shop"}); !errors.Is(err, ErrInUse) || !strings.Contains(err.Error(), "blog, shop") {
+		t.Errorf("in use: %v", err)
+	}
+
+	inst.active["8.3"] = true
+
+	if _, err := m.Remove(ctx, "8.2", nil); !errors.Is(err, ErrBusy) {
+		t.Errorf("while installing: %v", err)
+	}
+
+	inst.active["8.3"] = false
+
+	st, err := m.Remove(ctx, "8.2", nil)
+	if err != nil || st.Action != agentapi.PHPActionRemove || st.State != agentapi.PHPInstallRunning || !slices.Equal(rm.started, []string{"8.2"}) || len(inst.started) != 0 {
+		t.Fatalf("remove: %+v %v %v", st, err, rm.started)
+	}
+
+	// A running removal is busy for installs too, and shows as one.
+	rm.active["8.2"] = true
+
+	if _, err := m.Start(ctx, "8.3"); !errors.Is(err, ErrBusy) {
+		t.Errorf("install while removing: %v", err)
+	}
+
+	write(t, root, LogDir+"/8.2.log", RemoveMarker+"8.2\n", time.Time{})
+
+	if st, _ := m.Status(ctx); st.Version != "8.2" || st.Action != agentapi.PHPActionRemove || st.State != agentapi.PHPInstallRunning {
+		t.Errorf("running removal: %+v", st)
+	}
+
+	rm.active["8.2"] = false
+
+	write(t, root, LogDir+"/8.2.log", RemoveMarker+"8.2\n"+DoneMarker+" PHP 8.2 removed\n", time.Time{})
+
+	if st, _ := m.Status(ctx); st.Action != agentapi.PHPActionRemove || st.State != agentapi.PHPInstallSucceeded {
+		t.Errorf("finished removal: %+v", st)
+	}
+
+	write(t, root, LogDir+"/8.2.log", "php-install: installing PHP 8.2\n"+DoneMarker+" PHP 8.2 installed\n", time.Time{})
+
+	if st, _ := m.Status(ctx); st.Action != agentapi.PHPActionInstall {
+		t.Errorf("install log: %+v", st)
+	}
+}
+
 func TestStatusTailsLongLogs(t *testing.T) {
 	root := t.TempDir()
 	m := &Manager{Units: &fakeUnits{}, Root: root}
