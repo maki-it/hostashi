@@ -20,6 +20,10 @@ These commands work as any user and on any machine, not only on the server. They
 | `hostashi login [URL]` | Logs in through the browser. It prints a link and a code such as `WDJB-MJHT`. Open the link in a browser where you are logged in to the panel (with a passkey or a password and second factor), check that the panel shows the same code and the name of your computer, pick what the token may do and approve. The command then stores the token in `~/.config/hostashi/credentials.json` (only readable by you). `URL` is the panel's address, for example `https://panel.example.com`; on the server itself it defaults to `http://127.0.0.1:8080`. |
 | `hostashi login -token [URL]` | Reads an existing API token from stdin instead, for scripts (see below). |
 | `hostashi whoami` | Shows the account, its role and the token's scopes. |
+| `hostashi api` | Lists the areas of the API, such as `sites`, `databases` or `backups`. |
+| `hostashi api AREA` | Lists the commands of an area with their arguments. |
+| `hostashi api AREA COMMAND -h` | Explains a command: the request it sends, the token scope it needs and its fields. |
+| `hostashi api AREA COMMAND ARGS` | Runs it and prints the answer as JSON, or a download as it is. |
 | `hostashi logout` | Removes the stored token. It stays valid until it expires; revoke it in the panel under your account if it may have leaked. |
 
 For example, with the token in a password manager:
@@ -27,6 +31,16 @@ For example, with the token in a password manager:
 ```sh
 pass show hostashi | hostashi login -token https://panel.example.com
 ```
+
+Every operation of the API is a command of `hostashi api`, so anything the panel can do through its API, the command line can do as well. Arguments after the command are, in this order:
+
+- the names in the route, such as the site: `hostashi api sites get blog`
+- fields as `key=value`; numbers, `true`/`false` and comma-separated lists are converted to the field's type: `hostashi api limits set-site blog preset=small`
+- any JSON value as `key:=JSON`: `hostashi api limits set-site blog 'custom:={"memory":1073741824}'`
+- the whole body with `-d JSON`, `-d @FILE` or `-d -` for stdin
+- a file for an upload as `key=@FILE`: `hostashi api pages create-status name=sorry kind=maintenance file=@sorry.html`
+
+Commands marked "panel only" refuse API tokens, for example creating tokens; use the panel for them.
 
 `HOSTASHI_URL` and `HOSTASHI_TOKEN` override the stored login, for example in CI jobs. Plain `http://` is only accepted for the server itself (`127.0.0.1`, `::1`, `localhost`), so that a token never crosses a network unencrypted.
 

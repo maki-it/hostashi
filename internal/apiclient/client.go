@@ -58,7 +58,10 @@ func New(base, token, userAgent string) *Client {
 // Do sends in as JSON (nil: no body) to path below /api/v1 and decodes the
 // answer into out (nil: ignored).
 func (c *Client) Do(ctx context.Context, method, path string, in, out any) error {
-	var body io.Reader
+	var (
+		body io.Reader
+		ct   string
+	)
 
 	if in != nil {
 		b, err := json.Marshal(in)
@@ -66,18 +69,45 @@ func (c *Client) Do(ctx context.Context, method, path string, in, out any) error
 			return err
 		}
 
-		body = bytes.NewReader(b)
+		body, ct = bytes.NewReader(b), "application/json"
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+"/api/v1"+path, body)
+	res, err := c.Send(ctx, method, path, ct, body)
 	if err != nil {
 		return err
 	}
 
+	defer func() { _ = res.Body.Close() }()
+
+	raw, err := io.ReadAll(io.LimitReader(res.Body, maxAnswer))
+	if err != nil {
+		return err
+	}
+
+	if out == nil || res.StatusCode == http.StatusNoContent {
+		return nil
+	}
+
+	if err := json.Unmarshal(raw, out); err != nil {
+		return fmt.Errorf("apiclient: answer of %s %s: %w", method, path, err)
+	}
+
+	return nil
+}
+
+// Send sends body with contentType ("" for none) to path below /api/v1.
+// An error answer is returned as *Error; otherwise the caller reads and
+// closes the response body.
+func (c *Client) Send(ctx context.Context, method, path, contentType string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+"/api/v1"+path, body)
+	if err != nil {
+		return nil, err
+	}
+
 	req.Header.Set("Accept", "application/json")
 
-	if in != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 
 	if c.Token != "" {
@@ -90,29 +120,18 @@ func (c *Client) Do(ctx context.Context, method, path string, in, out any) error
 
 	res, err := c.HTTP.Do(req)
 	if err != nil {
-		return err
-	}
-
-	defer func() { _ = res.Body.Close() }()
-
-	raw, err := io.ReadAll(io.LimitReader(res.Body, maxAnswer))
-	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if res.StatusCode >= 300 {
-		return answerError(res, raw)
+		defer func() { _ = res.Body.Close() }()
+
+		raw, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+
+		return nil, answerError(res, raw)
 	}
 
-	if out == nil || res.StatusCode == http.StatusNoContent {
-		return nil
-	}
-
-	if err := json.Unmarshal(raw, out); err != nil {
-		return fmt.Errorf("apiclient: answer of %s %s: %w", method, path, err)
-	}
-
-	return nil
+	return res, nil
 }
 
 func answerError(res *http.Response, raw []byte) error {

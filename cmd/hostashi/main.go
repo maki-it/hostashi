@@ -51,6 +51,10 @@ commands:
             (ADR-0058)
   logout    forget the stored token (revoke it in the panel if it leaked)
   whoami    show the account and panel the CLI talks to
+  api [AREA [COMMAND [ARGS…]]]
+            call any operation of the panel's API with the stored login,
+            e.g. hostashi api sites list or hostashi api sites get blog;
+            without arguments it lists the areas, -h explains a command
   serve     run the web process (never as root)
   agent     run the privileged agent (root only)
   ping      check that the agent answers
@@ -171,6 +175,8 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		return apiLogout(args, stdout, stderr)
 	case "whoami":
 		return apiWhoami(ctx, args, stdout, stderr)
+	case "api":
+		return apiCommand(ctx, args, stdout, stderr)
 	}
 
 	switch cmd {

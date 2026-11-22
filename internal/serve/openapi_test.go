@@ -7,7 +7,9 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +18,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 
 	"github.com/maki-it/hostashi/api"
+	"github.com/maki-it/hostashi/internal/apicli"
 	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/openapi"
 )
@@ -134,5 +137,55 @@ func TestOpenAPIValid(t *testing.T) {
 
 	if err := doc.Validate(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestCLIReachesEveryRoute is the CLI side of ADR-0058's parity: the
+// request "hostashi api TAG VERB" builds for every operation lands on
+// that operation's route.
+func TestCLIReachesEveryRoute(t *testing.T) {
+	_, mux := newFullAPIMux(t)
+
+	sp, err := apicli.Load(api.Spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	in := apicli.Input{
+		Stdin:    strings.NewReader("x"),
+		ReadFile: func(string) ([]byte, error) { return []byte("x"), nil },
+		Open:     func(string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader("x")), nil },
+	}
+
+	for _, op := range sp.Ops {
+		args := []string{}
+		for range op.PathParams {
+			args = append(args, "blog")
+		}
+
+		for _, q := range op.Query {
+			if q.Required {
+				args = append(args, q.Name+"=1")
+			}
+		}
+
+		switch op.BodyType {
+		case "application/octet-stream":
+			args = append(args, "-d", "-")
+		case "multipart/form-data":
+			args = append(args, "file=@f")
+		}
+
+		r, err := op.Build(args, in)
+		if err != nil {
+			t.Errorf("%s %s: %v", op.Tag, op.Verb, err)
+
+			continue
+		}
+
+		req := httptest.NewRequest(r.Method, "/api/v1"+r.Path, r.Body)
+		if _, pattern := mux.Handler(req); pattern != op.Method+" "+op.Path {
+			t.Errorf("hostashi api %s %s reaches %q, want %s %s", op.Tag, op.Verb, pattern, op.Method, op.Path)
+		}
 	}
 }
