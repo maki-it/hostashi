@@ -134,7 +134,7 @@ None left.
 
 **Order.** After Node.js (it reuses the app unit, the port and the filter): static, redirect, proxy, Node.js, app, import, UI, wiki.
 
-## Addendum 3: change the type of a site at any time (Proposed, 2026-11-22)
+## Addendum 3: change the type of a site at any time (Accepted, Kim, 2026-11-22)
 
 **Context.** Kim wants to change a site's type at any time after create (Kim, 2026-11-22). Types with an account (`static`, `php`, `node`, `app`) and types without one (`proxy`, `redirect`, decided in question 3) differ in what exists on the server.
 
