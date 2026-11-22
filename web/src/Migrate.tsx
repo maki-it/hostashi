@@ -38,6 +38,7 @@ import {
 } from "./cloudpanel";
 import { listDatabases } from "./databases";
 import { formatHash } from "./routes";
+import { getNode, type NodeStatus } from "./node";
 import { presetLabel, type Preset } from "./pagecache";
 import { listPools, phpVersions, poolLabel, poolNote, type Pool } from "./sites";
 import {
@@ -65,6 +66,16 @@ type QueryProps = {
   query?: URLSearchParams;
   /** Replaces the query in the address without a new history entry. */
   onQuery?: (q: URLSearchParams) => void;
+};
+
+// typeLabel names the scanned site types.
+const typeLabel: Record<string, string> = {
+  static: "Static",
+  php: "PHP",
+  wordpress: "WordPress",
+  nodejs: "Node.js",
+  python: "Python",
+  proxy: "Reverse proxy",
 };
 
 const importHash = (q?: Record<string, string>) => formatHash({ page: "import", ...(q ? { query: new URLSearchParams(q) } : {}) });
@@ -626,7 +637,7 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
         </div>
       ),
     },
-    { key: "type", header: "Type", sortValue: (p) => p.type, cell: (p) => p.type },
+    { key: "type", header: "Type", sortValue: (p) => p.type, cell: (p) => typeLabel[p.type] ?? p.type },
     { key: "php", header: "PHP", sortValue: (p) => p.php, cell: (p) => p.php || <span className="ui-hint">None</span> },
     {
       key: "status",
@@ -740,7 +751,13 @@ function PlanSiteView({ report, site, php, ready, back, onChange }: SiteViewProp
             </>
           )}
           <dt>Type</dt>
-          <dd>{site.type}</dd>
+          <dd>{typeLabel[site.type] ?? site.type}</dd>
+          {site.proxy && (
+            <>
+              <dt>Target</dt>
+              <dd className="ui-mono ui-break">{site.proxy}</dd>
+            </>
+          )}
           {site.php && (
             <>
               <dt>PHP</dt>
@@ -749,8 +766,12 @@ function PlanSiteView({ report, site, php, ready, back, onChange }: SiteViewProp
           )}
           <dt>HTTPS</dt>
           <dd>{tlsLabel[site.tls] ?? site.tls}</dd>
-          <dt>Old files</dt>
-          <dd className="ui-mono ui-break">{site.docRoot}</dd>
+          {!site.proxy && (
+            <>
+              <dt>Old files</dt>
+              <dd className="ui-mono ui-break">{site.docRoot}</dd>
+            </>
+          )}
           {site.customSnippets > 0 && (
             <>
               <dt>Custom nginx</dt>
@@ -776,12 +797,18 @@ function PlanSiteView({ report, site, php, ready, back, onChange }: SiteViewProp
           title={`${site.cronImport} cron ${site.cronImport === 1 ? "job was created paused. Start it" : "jobs were created paused. Start them"} after the DNS switch.`}
         />
       )}
-      {created && (
+      {created && site.proxy && (
+        <Notice tone="info" title="A reverse proxy site has no Linux account here: there are no files or databases to copy." />
+      )}
+      {created && site.node && (
+        <Notice tone="info" title="The app stays stopped. After the final sync, set its start command on the site's Web tab." />
+      )}
+      {created && !site.proxy && (
         <Card title="Files and databases">
           <ImportForm report={report} site={site} ready={ready} />
         </Card>
       )}
-      {created && site.customSnippets > 0 && (
+      {created && !site.proxy && site.customSnippets > 0 && (
         <Card title="Custom nginx">
           <SnippetDraftForm report={report} site={site} />
         </Card>
@@ -798,6 +825,8 @@ function PlanSiteView({ report, site, php, ready, back, onChange }: SiteViewProp
 function CreateForm({ report, site, php, onChange }: { report: string; site: PlanSite; php: string[]; onChange: () => Promise<void> }) {
   const [reviewed, setReviewed] = useState(false);
   const [version, setVersion] = useState(site.php);
+  const [line, setLine] = useState(site.node ?? "");
+  const [node, setNode] = useState<NodeStatus | null>(null);
   const [cache, setCache] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -805,12 +834,22 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
   const [pool, setPool] = useState("default");
   const review = site.action === "review";
 
-  // The pool choice shows only with a second pool (ADR-0016).
+  // The pool choice shows only with a second pool (ADR-0016); a reverse
+  // proxy site has no home.
   useEffect(() => {
+    if (site.proxy) return;
     listPools()
       .then(setPools)
       .catch(() => setPools([]));
-  }, []);
+  }, [site.proxy]);
+  useEffect(() => {
+    if (!site.node) return;
+    getNode()
+      .then(setNode)
+      .catch(() => setNode(null));
+  }, [site.node]);
+  const installed = node?.installed.map((i) => i.major) ?? [];
+  const lines = node?.releases.map((r) => r.major) ?? (site.node ? [site.node] : []);
   const choosePool = pools.length > 1;
   const chosen = pools.find((p) => p.name === pool);
   const tooSmall = !!(chosen?.available && site.homeBytes && chosen.freeBytes !== undefined && site.homeBytes > chosen.freeBytes);
@@ -825,7 +864,15 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
     setBusy(true);
     setError("");
     try {
-      await createFromPlan(report, site.name, reviewed, version !== site.php ? version : "", site.pageCache ? cache : undefined, choosePool ? pool : "");
+      await createFromPlan(
+        report,
+        site.name,
+        reviewed,
+        version !== site.php ? version : "",
+        site.pageCache ? cache : undefined,
+        choosePool ? pool : "",
+        line !== site.node ? line : "",
+      );
       await onChange();
     } catch (err) {
       setError(migrationMessage(err));
@@ -850,6 +897,25 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
             </select>
           </Field>
         </div>
+      )}
+      {site.node && lines.length > 0 && (
+        <div className="ui-narrow">
+          <Field label={"Node.js for " + site.name} hint="The old Node.js version is not known. The app stays stopped until you set its start command.">
+            <select className="ui-select" value={line} onChange={(e) => setLine(e.target.value)}>
+              {lines.map((v) => (
+                <option key={v} value={v}>
+                  Node.js {v}
+                  {node && !installed.includes(v) ? " (not installed)" : ""}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      )}
+      {site.proxy && (
+        <p className="ui-flush">
+          It passes every request on to <code>{site.proxy}</code>, without a Linux account, files or cron jobs.
+        </p>
       )}
       {choosePool && (
         <div className="ui-narrow">
