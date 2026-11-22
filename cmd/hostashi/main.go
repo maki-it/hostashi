@@ -42,6 +42,15 @@ var version = "dev"
 const usage = `usage: hostashi <command> [flags]
 
 commands:
+  login [-token] [-name NAME] [URL]
+            log in to the panel's API through the browser: prints a link and
+            a code to approve in the panel, then stores an API token in
+            ~/.config/hostashi/credentials.json; -token reads an existing
+            token from stdin instead. URL defaults to http://127.0.0.1:8080;
+            HOSTASHI_URL and HOSTASHI_TOKEN override the stored login
+            (ADR-0058)
+  logout    forget the stored token (revoke it in the panel if it leaked)
+  whoami    show the account and panel the CLI talks to
   serve     run the web process (never as root)
   agent     run the privileged agent (root only)
   ping      check that the agent answers
@@ -153,6 +162,16 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 	socket := fs.String("socket", agentapi.DefaultSocket, "agent socket path")
 
 	var err error
+
+	// The API client commands have their own flags and no agent socket.
+	switch cmd {
+	case "login":
+		return apiLogin(ctx, args, stdout, stderr)
+	case "logout":
+		return apiLogout(args, stdout, stderr)
+	case "whoami":
+		return apiWhoami(ctx, args, stdout, stderr)
+	}
 
 	switch cmd {
 	case "serve":

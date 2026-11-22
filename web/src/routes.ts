@@ -20,6 +20,7 @@ export const pages = [
   "services",
   "system",
   "php",
+  "node",
   "backups",
   "firewall",
   "limits",

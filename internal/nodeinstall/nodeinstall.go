@@ -557,9 +557,23 @@ func (m *Manager) logPath(major string) string {
 }
 
 // Status reports the installed lines and the last installation: a running
-// unit, else the line whose log is the newest.
+// unit, else the line whose log is the newest. The lines are read last: the
+// unit swaps a line in before it writes its final line and ends, so a
+// finished installation is always listed (read first, a unit that ends in
+// between showed "succeeded" without its line).
 func (m *Manager) Status(ctx context.Context) (agentapi.NodeStatus, error) {
-	st := agentapi.NodeStatus{Installed: m.Installed(), State: agentapi.PHPInstallIdle, Log: []string{}}
+	st, err := m.lastRun(ctx)
+	if err != nil {
+		return agentapi.NodeStatus{}, err
+	}
+
+	st.Installed = m.Installed()
+
+	return st, nil
+}
+
+func (m *Manager) lastRun(ctx context.Context) (agentapi.NodeStatus, error) {
+	st := agentapi.NodeStatus{State: agentapi.PHPInstallIdle, Log: []string{}}
 
 	busy, err := m.running(ctx)
 	if err != nil {
