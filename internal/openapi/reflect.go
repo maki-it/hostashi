@@ -48,7 +48,13 @@ var (
 	rawType           = reflect.TypeFor[json.RawMessage]()
 	jsonMarshalerType = reflect.TypeFor[json.Marshaler]()
 	textMarshalerType = reflect.TypeFor[encoding.TextMarshaler]()
+	fileType          = reflect.TypeFor[File]()
 )
+
+// File marks a file part of a multipart/form-data request body; it is
+// described as binary data. Use it in the In type of an operation with
+// InContentType "multipart/form-data".
+type File []byte
 
 // typeOf is reflect.TypeOf, but a nil value has no type.
 func typeOf(v any) reflect.Type {
@@ -69,6 +75,8 @@ func (r *reflector) schema(t reflect.Type) map[string]any {
 		return map[string]any{"type": "string", "format": "date-time"}
 	case t == rawType:
 		return map[string]any{}
+	case t == fileType:
+		return map[string]any{"type": "string", "format": "binary"}
 	case t.Kind() != reflect.Pointer && t.Implements(jsonMarshalerType),
 		t.Kind() != reflect.Pointer && reflect.PointerTo(t).Implements(jsonMarshalerType):
 		// Own JSON form; the record should use a plainer type instead.

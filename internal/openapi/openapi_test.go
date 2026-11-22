@@ -290,3 +290,42 @@ func TestSchemaNameClash(t *testing.T) {
 		t.Errorf("schemaName = %q", n)
 	}
 }
+
+type uploadForm struct {
+	Name string `json:"name"`
+	File File   `json:"file"`
+}
+
+func TestBuildUpload(t *testing.T) {
+	doc := build(t,
+		Route{
+			Pattern: "POST /form",
+			Op:      &Operation{ID: "form", Tag: "x", In: uploadForm{}, InContentType: "multipart/form-data"},
+			Access:  Access{Kind: "public"},
+		},
+		Route{
+			Pattern: "PUT /raw",
+			Op:      &Operation{ID: "raw", Tag: "x", InContentType: "application/octet-stream", Query: []Param{{Name: "path", Repeated: true}}},
+			Access:  Access{Kind: "public"},
+		},
+	)
+
+	if v := get(t, doc, "paths", "/form", "post", "requestBody", "content", "multipart/form-data", "schema", "$ref"); v != "#/components/schemas/UploadFormInput" {
+		t.Errorf("form schema = %v", v)
+	}
+
+	file, _ := json.Marshal(get(t, doc, "components", "schemas", "UploadFormInput", "properties", "file"))
+	if string(file) != `{"format":"binary","type":"string"}` {
+		t.Errorf("file part = %s", file)
+	}
+
+	params, _ := json.Marshal(get(t, doc, "paths", "/raw", "put", "parameters"))
+	if !strings.Contains(string(params), `"schema":{"items":{"type":"string"},"type":"array"}`) {
+		t.Errorf("repeated parameter = %s", params)
+	}
+
+	raw, _ := json.Marshal(get(t, doc, "paths", "/raw", "put", "requestBody", "content", "application/octet-stream", "schema"))
+	if string(raw) != `{"format":"binary","type":"string"}` {
+		t.Errorf("raw body = %s", raw)
+	}
+}

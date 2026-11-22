@@ -13,6 +13,7 @@ import (
 	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/dbserver"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -49,6 +50,23 @@ type dbServerJSON struct {
 	// Warnings come only with a new server: what works but is not
 	// recommended, for example a PostgreSQL superuser.
 	Warnings []string `json:"warnings,omitempty"`
+}
+
+type dbServerListJSON struct {
+	Servers []dbServerJSON `json:"servers"`
+}
+
+type dbServerAddRequest struct {
+	// Engine is "mariadb" (default, also for MySQL) or
+	// "postgresql" (ADR-0051).
+	Engine        string `json:"engine"`
+	Name          string `json:"name"`
+	Host          string `json:"host"`
+	Port          int    `json:"port"` // 0: 3306 or 5432
+	AdminUser     string `json:"adminUser"`
+	AdminPassword string `json:"adminPassword"`
+	TLSMode       string `json:"tlsMode"` // "verify" (default), "verify-ca" or "none"
+	CACertificate string `json:"caCertificate"`
 }
 
 func toDBServerJSON(d store.DBServer, details bool) dbServerJSON {
@@ -131,7 +149,9 @@ func checkMessage(err error) string {
 // who may create databases reads the list to pick a server; managing
 // servers is for admins.
 func registerDBServers(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/db-servers", a.allow("db_servers:list", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("GET /api/v1/db-servers", openapi.Operation{
+		ID: "listDBServers", Tag: "db-servers", Summary: "List the database servers", Out: dbServerListJSON{},
+	}, a.allow("db_servers:list", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		list, err := svc.DBServerList(r.Context())
 		if err != nil {
 			dbServerFail(log, w, err, "list database servers")
@@ -146,22 +166,13 @@ func registerDBServers(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 			out = append(out, toDBServerJSON(d, details))
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]dbServerJSON{"servers": out})
+		writeJSON(w, http.StatusOK, dbServerListJSON{Servers: out})
 	}))
 
-	mux.HandleFunc("POST /api/v1/db-servers", a.allow("db_servers:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			// Engine is "mariadb" (default, also for MySQL) or
-			// "postgresql" (ADR-0051).
-			Engine        string `json:"engine"`
-			Name          string `json:"name"`
-			Host          string `json:"host"`
-			Port          int    `json:"port"` // 0: 3306 or 5432
-			AdminUser     string `json:"adminUser"`
-			AdminPassword string `json:"adminPassword"`
-			TLSMode       string `json:"tlsMode"` // "verify" (default), "verify-ca" or "none"
-			CACertificate string `json:"caCertificate"`
-		}
+	mux.Op("POST /api/v1/db-servers", openapi.Operation{
+		ID: "addDBServer", Tag: "db-servers", Summary: "Add an external database server", In: dbServerAddRequest{}, Out: dbServerJSON{}, Status: http.StatusCreated,
+	}, a.allow("db_servers:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in dbServerAddRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -196,7 +207,9 @@ func registerDBServers(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		writeJSON(w, http.StatusCreated, out)
 	}))
 
-	mux.HandleFunc("POST /api/v1/db-servers/{server}/check", a.allow("db_servers:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("POST /api/v1/db-servers/{server}/check", openapi.Operation{
+		ID: "checkDBServer", Tag: "db-servers", Summary: "Check the connection to a database server", Out: dbServerJSON{},
+	}, a.allow("db_servers:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), dbServerTimeout)
 		defer cancel()
 
@@ -210,7 +223,9 @@ func registerDBServers(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		writeJSON(w, http.StatusOK, toDBServerJSON(d, true))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/db-servers/{server}/default", a.allow("db_servers:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("PUT /api/v1/db-servers/{server}/default", openapi.Operation{
+		ID: "setDefaultDBServer", Tag: "db-servers", Summary: "Make a database server the default",
+	}, a.allow("db_servers:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		if err := svc.SetDefaultDBServer(r.Context(), p.User.ID, r.PathValue("server")); err != nil {
 			dbServerFail(log, w, err, "set default database server")
 
@@ -220,7 +235,9 @@ func registerDBServers(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/db-servers/{server}", a.allow("db_servers:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("DELETE /api/v1/db-servers/{server}", openapi.Operation{
+		ID: "deleteDBServer", Tag: "db-servers", Summary: "Remove a database server without databases",
+	}, a.allow("db_servers:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		if err := svc.DeleteDBServer(r.Context(), p.User.ID, r.PathValue("server")); err != nil {
 			dbServerFail(log, w, err, "delete database server")
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/statuspage"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -34,6 +35,32 @@ type pageJSON struct {
 	Parked    []string       `json:"parked"` // parked domains that show it
 	CreatedAt *time.Time     `json:"createdAt"`
 	UpdatedAt *time.Time     `json:"updatedAt"`
+}
+
+type pageListJSON struct {
+	Pages []pageJSON `json:"pages"`
+}
+
+// pageFormRequest is the multipart form of a page upload (pageForm).
+type pageFormRequest struct {
+	Name string       `json:"name"`
+	Kind string       `json:"kind"` // only on create
+	File openapi.File `json:"file"`
+}
+
+type parkedListJSON struct {
+	ParkedDomains []parkedJSON `json:"parkedDomains"`
+}
+
+type maintenanceRequest struct {
+	Enabled  *bool    `json:"enabled"`
+	Page     string   `json:"page"`
+	AllowIPs []string `json:"allowIps"`
+}
+
+type parkRequest struct {
+	Page string `json:"page"`
+	TLS  *bool  `json:"tls"`
 }
 
 func toPageJSON(p hosting.Page) pageJSON {
@@ -159,7 +186,9 @@ func readPart(p *multipart.Part) ([]byte, error) {
 // registerPages adds the routes of the maintenance and parking pages and
 // of a site's maintenance (ADR-0027).
 func registerPages(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/status-pages", a.allow("pages:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/status-pages", openapi.Operation{
+		ID: "listStatusPages", Tag: "pages", Summary: "List the maintenance and parking pages", Out: pageListJSON{},
+	}, a.allow("pages:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		pages, err := svc.Pages(r.Context())
 		if err != nil {
 			pageFail(log, w, err, "list pages")
@@ -172,10 +201,12 @@ func registerPages(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			out = append(out, toPageJSON(p))
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]pageJSON{"pages": out})
+		writeJSON(w, http.StatusOK, pageListJSON{Pages: out})
 	}))
 
-	mux.HandleFunc("GET /api/v1/status-pages/{id}", a.allow("pages:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/status-pages/{id}", openapi.Operation{
+		ID: "getStatusPage", Tag: "pages", Summary: "Get a maintenance or parking page", Out: pageJSON{},
+	}, a.allow("pages:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		p, err := svc.Page(r.Context(), r.PathValue("id"))
 		if err != nil {
 			pageFail(log, w, err, "get page")
@@ -186,7 +217,9 @@ func registerPages(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		writeJSON(w, http.StatusOK, toPageJSON(p))
 	}))
 
-	mux.HandleFunc("POST /api/v1/status-pages", a.allow("pages:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST /api/v1/status-pages", openapi.Operation{
+		ID: "createStatusPage", Tag: "pages", Summary: "Upload a new maintenance or parking page", In: pageFormRequest{}, InContentType: "multipart/form-data", Out: pageJSON{}, Status: http.StatusCreated,
+	}, a.allow("pages:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		name, kind, upload, ok := pageForm(w, r)
 		if !ok {
 			return
@@ -209,7 +242,9 @@ func registerPages(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 	}))
 
 	// Renames a page (field name) and/or replaces its files (field file).
-	mux.HandleFunc("PUT /api/v1/status-pages/{id}", a.allow("pages:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("PUT /api/v1/status-pages/{id}", openapi.Operation{
+		ID: "updateStatusPage", Tag: "pages", Summary: "Rename a page or replace its file", In: pageFormRequest{}, InContentType: "multipart/form-data", Out: pageJSON{},
+	}, a.allow("pages:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		name, kind, upload, ok := pageForm(w, r)
 		if !ok {
 			return
@@ -240,7 +275,9 @@ func registerPages(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		writeJSON(w, http.StatusOK, toPageJSON(page))
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/status-pages/{id}", a.allow("pages:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("DELETE /api/v1/status-pages/{id}", openapi.Operation{
+		ID: "deleteStatusPage", Tag: "pages", Summary: "Delete an unused page",
+	}, a.allow("pages:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -253,12 +290,10 @@ func registerPages(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/maintenance", a.allow("sites.maintenance:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			Enabled  *bool    `json:"enabled"`
-			Page     string   `json:"page"`
-			AllowIPs []string `json:"allowIps"`
-		}
+	mux.Op("PUT /api/v1/sites/{name}/maintenance", openapi.Operation{
+		ID: "setSiteMaintenance", Tag: "sites", Summary: "Turn the site's maintenance page on or off", In: maintenanceRequest{}, Out: siteJSON{},
+	}, a.allow("sites.maintenance:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in maintenanceRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -319,7 +354,9 @@ func toParkedJSON(svc *hosting.Service, p store.Parked) parkedJSON {
 
 // registerParked adds the routes of parked domains (ADR-0027).
 func registerParked(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/parked-domains", a.allow("parked:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/parked-domains", openapi.Operation{
+		ID: "listParkedDomains", Tag: "parked", Summary: "List the parked domains", Out: parkedListJSON{},
+	}, a.allow("parked:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		list, err := svc.ParkedDomains(r.Context())
 		if err != nil {
 			pageFail(log, w, err, "list parked domains")
@@ -332,10 +369,12 @@ func registerParked(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 			out = append(out, toParkedJSON(svc, p))
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]parkedJSON{"parkedDomains": out})
+		writeJSON(w, http.StatusOK, parkedListJSON{ParkedDomains: out})
 	}))
 
-	mux.HandleFunc("GET /api/v1/parked-domains/{domain}", a.allow("parked:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/parked-domains/{domain}", openapi.Operation{
+		ID: "getParkedDomain", Tag: "parked", Summary: "Get a parked domain", Out: parkedJSON{},
+	}, a.allow("parked:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		p, err := svc.ParkedDomain(r.Context(), r.PathValue("domain"))
 		if err != nil {
 			pageFail(log, w, err, "get parked domain")
@@ -347,11 +386,10 @@ func registerParked(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 	}))
 
 	// Parks a domain or changes its page and HTTPS ("tls" defaults to on).
-	mux.HandleFunc("PUT /api/v1/parked-domains/{domain}", a.allow("parked:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			Page string `json:"page"`
-			TLS  *bool  `json:"tls"`
-		}
+	mux.Op("PUT /api/v1/parked-domains/{domain}", openapi.Operation{
+		ID: "parkDomain", Tag: "parked", Summary: "Park a domain or change its page", In: parkRequest{}, Out: parkedJSON{},
+	}, a.allow("parked:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in parkRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -371,7 +409,9 @@ func registerParked(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 		writeJSON(w, http.StatusOK, toParkedJSON(svc, parked))
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/parked-domains/{domain}", a.allow("parked:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("DELETE /api/v1/parked-domains/{domain}", openapi.Operation{
+		ID: "deleteParkedDomain", Tag: "parked", Summary: "Remove a parked domain",
+	}, a.allow("parked:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 

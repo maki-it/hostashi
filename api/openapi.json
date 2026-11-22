@@ -275,6 +275,413 @@
         ],
         "type": "object"
       },
+      "Backup": {
+        "additionalProperties": false,
+        "properties": {
+          "hostKey": {
+            "type": "string"
+          },
+          "publicKey": {
+            "type": "string"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/BackupSettings"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BackupStatus"
+          }
+        },
+        "required": [
+          "hostKey",
+          "publicKey",
+          "ready",
+          "settings",
+          "status"
+        ],
+        "type": "object"
+      },
+      "BackupHostKey": {
+        "additionalProperties": false,
+        "properties": {
+          "fingerprint": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fingerprint",
+          "key"
+        ],
+        "type": "object"
+      },
+      "BackupHostKeyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BackupItemResult": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "type": "integer"
+          },
+          "dataAdded": {
+            "type": "integer"
+          },
+          "database": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "files": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "partial": {
+            "type": "boolean"
+          },
+          "site": {
+            "type": "string"
+          },
+          "snapshotId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "dataAdded",
+          "files",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "BackupRestore": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "type": "integer"
+          },
+          "created": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "database": {
+            "type": "string"
+          },
+          "dir": {
+            "type": "string"
+          },
+          "dumpFile": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "files": {
+            "type": "integer"
+          },
+          "finished": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "site": {
+            "type": "string"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "snapshot": {
+            "type": "string"
+          },
+          "started": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "created",
+          "dir",
+          "files",
+          "id",
+          "kind",
+          "site",
+          "snapshot",
+          "state"
+        ],
+        "type": "object"
+      },
+      "BackupRetention": {
+        "additionalProperties": false,
+        "properties": {
+          "daily": {
+            "type": "integer"
+          },
+          "monthly": {
+            "type": "integer"
+          },
+          "weekly": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "daily",
+          "monthly",
+          "weekly"
+        ],
+        "type": "object"
+      },
+      "BackupRetentionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "daily": {
+            "type": "integer"
+          },
+          "monthly": {
+            "type": "integer"
+          },
+          "weekly": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "BackupSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "readParts": {
+            "type": "integer"
+          },
+          "retention": {
+            "$ref": "#/components/schemas/BackupRetention"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackupTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer"
+          },
+          "windowEnd": {
+            "type": "integer"
+          },
+          "windowStart": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "readParts",
+          "retention",
+          "version",
+          "windowEnd",
+          "windowStart"
+        ],
+        "type": "object"
+      },
+      "BackupSettingsInput": {
+        "additionalProperties": false,
+        "properties": {
+          "readParts": {
+            "type": "integer"
+          },
+          "retention": {
+            "$ref": "#/components/schemas/BackupRetentionInput"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackupTargetInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer"
+          },
+          "windowEnd": {
+            "type": "integer"
+          },
+          "windowStart": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "BackupSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "type": "integer"
+          },
+          "database": {
+            "type": "string"
+          },
+          "files": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "time": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "time"
+        ],
+        "type": "object"
+      },
+      "BackupSnapshotList": {
+        "additionalProperties": false,
+        "properties": {
+          "snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/BackupSnapshot"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "snapshots"
+        ],
+        "type": "object"
+      },
+      "BackupStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "finished": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BackupItemResult"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "lastCheck": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lastPrune": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lastReadCheck": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "maintenance": {
+            "type": "string"
+          },
+          "maintenanceOk": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "started": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "maintenanceOk",
+          "ok",
+          "running"
+        ],
+        "type": "object"
+      },
+      "BackupTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "path",
+          "port",
+          "user"
+        ],
+        "type": "object"
+      },
+      "BackupTargetInput": {
+        "additionalProperties": false,
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Ceremony": {
         "additionalProperties": false,
         "properties": {
@@ -286,6 +693,113 @@
         "required": [
           "ceremonyId",
           "options"
+        ],
+        "type": "object"
+      },
+      "Cert": {
+        "additionalProperties": false,
+        "properties": {
+          "domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "notAfter": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notBefore": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trusted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "domains",
+          "fingerprint",
+          "issuer",
+          "notAfter",
+          "notBefore",
+          "trusted"
+        ],
+        "type": "object"
+      },
+      "CertInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "certificate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cert"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "csr": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "certificate"
+        ],
+        "type": "object"
+      },
+      "CertSourceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CertUploadRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "allowUntrusted": {
+            "type": "boolean"
+          },
+          "certificate": {
+            "type": "string"
+          },
+          "chain": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CopyResult": {
+        "additionalProperties": false,
+        "properties": {
+          "skipped": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "skipped"
         ],
         "type": "object"
       },
@@ -418,6 +932,126 @@
         ],
         "type": "object"
       },
+      "Csr": {
+        "additionalProperties": false,
+        "properties": {
+          "csr": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "csr"
+        ],
+        "type": "object"
+      },
+      "DBJob": {
+        "additionalProperties": false,
+        "properties": {
+          "asOwner": {
+            "type": "boolean"
+          },
+          "database": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "finished": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "started": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "database",
+          "id",
+          "kind",
+          "path",
+          "started",
+          "state"
+        ],
+        "type": "object"
+      },
+      "DBToolSession": {
+        "additionalProperties": false,
+        "properties": {
+          "expires": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires",
+          "url"
+        ],
+        "type": "object"
+      },
+      "DBToolSessionView": {
+        "additionalProperties": false,
+        "properties": {
+          "expires": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "opened": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires",
+          "id",
+          "opened",
+          "user"
+        ],
+        "type": "object"
+      },
+      "DBToolStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "minutes": {
+            "items": {
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "available",
+          "minutes"
+        ],
+        "type": "object"
+      },
       "Dashboard": {
         "additionalProperties": false,
         "properties": {
@@ -441,6 +1075,376 @@
           "points",
           "range",
           "step"
+        ],
+        "type": "object"
+      },
+      "Database": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "server": {
+            "type": "string"
+          },
+          "site": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "users": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "createdAt",
+          "name",
+          "server",
+          "site",
+          "users"
+        ],
+        "type": "object"
+      },
+      "DatabaseCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "server": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DatabaseCreated": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "server": {
+            "type": "string"
+          },
+          "site": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "users": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "createdAt",
+          "name",
+          "server",
+          "site",
+          "users"
+        ],
+        "type": "object"
+      },
+      "DatabaseList": {
+        "additionalProperties": false,
+        "properties": {
+          "databases": {
+            "items": {
+              "$ref": "#/components/schemas/Database"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "databases"
+        ],
+        "type": "object"
+      },
+      "DbDumpRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DbPassword": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "password",
+          "user"
+        ],
+        "type": "object"
+      },
+      "DbPasswordRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DbServer": {
+        "additionalProperties": false,
+        "properties": {
+          "adminUser": {
+            "type": "string"
+          },
+          "certExpires": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "checkedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "clientHost": {
+            "type": "string"
+          },
+          "databases": {
+            "type": "integer"
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "lastError": {
+            "type": "string"
+          },
+          "local": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "state": {
+            "type": "string"
+          },
+          "tlsActive": {
+            "type": "boolean"
+          },
+          "tlsMode": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "databases",
+          "default",
+          "local",
+          "name",
+          "state",
+          "tlsActive",
+          "tlsMode"
+        ],
+        "type": "object"
+      },
+      "DbServerAddRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "adminPassword": {
+            "type": "string"
+          },
+          "adminUser": {
+            "type": "string"
+          },
+          "caCertificate": {
+            "type": "string"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "tlsMode": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DbServerList": {
+        "additionalProperties": false,
+        "properties": {
+          "servers": {
+            "items": {
+              "$ref": "#/components/schemas/DbServer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "servers"
+        ],
+        "type": "object"
+      },
+      "DbToolOpenRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "minutes": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "DbToolSessionList": {
+        "additionalProperties": false,
+        "properties": {
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/DBToolSessionView"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "sessions"
+        ],
+        "type": "object"
+      },
+      "DbUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "type": "integer"
+          },
+          "databases": {
+            "type": "integer"
+          },
+          "level": {
+            "type": "string"
+          },
+          "measuredAt": {
+            "type": "integer"
+          },
+          "percent": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bytes",
+          "databases",
+          "level",
+          "measuredAt",
+          "percent"
+        ],
+        "type": "object"
+      },
+      "DbUserCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DbUserCreated": {
+        "additionalProperties": false,
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "database",
+          "password",
+          "user"
         ],
         "type": "object"
       },
@@ -525,6 +1529,92 @@
         },
         "required": [
           "email"
+        ],
+        "type": "object"
+      },
+      "Entry": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "type": "string"
+          },
+          "modified": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "target": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "modified",
+          "name",
+          "size",
+          "type"
+        ],
+        "type": "object"
+      },
+      "FileOpRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "overwrite": {
+            "type": "boolean"
+          },
+          "parents": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "size": {
+            "type": "integer"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "FilesOK": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
         ],
         "type": "object"
       },
@@ -770,6 +1860,47 @@
         },
         "type": "object"
       },
+      "Headers": {
+        "additionalProperties": false,
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/WebHeaders"
+          },
+          "headers": {
+            "$ref": "#/components/schemas/WebHeaders"
+          },
+          "maxValueBytes": {
+            "type": "integer"
+          },
+          "permissionsPolicyStrict": {
+            "type": "string"
+          },
+          "referrerPolicies": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "defaults",
+          "headers",
+          "maxValueBytes",
+          "permissionsPolicyStrict",
+          "referrerPolicies"
+        ],
+        "type": "object"
+      },
       "Health": {
         "additionalProperties": false,
         "properties": {
@@ -1003,6 +2134,131 @@
         },
         "type": "object"
       },
+      "Limits": {
+        "additionalProperties": false,
+        "properties": {
+          "cpuPriority": {
+            "type": "string"
+          },
+          "cpuQuotaPercent": {
+            "type": "integer"
+          },
+          "databaseBytes": {
+            "type": "integer"
+          },
+          "databaseConnections": {
+            "type": "integer"
+          },
+          "diskBytes": {
+            "type": "integer"
+          },
+          "diskInodes": {
+            "type": "integer"
+          },
+          "memoryBytes": {
+            "type": "integer"
+          },
+          "phpWorkers": {
+            "type": "integer"
+          },
+          "tasks": {
+            "type": "integer"
+          },
+          "unlimited": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "cpuPriority",
+          "cpuQuotaPercent",
+          "databaseBytes",
+          "databaseConnections",
+          "diskBytes",
+          "diskInodes",
+          "memoryBytes",
+          "phpWorkers",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "LimitsInput": {
+        "additionalProperties": false,
+        "properties": {
+          "cpuPriority": {
+            "type": "string"
+          },
+          "cpuQuotaPercent": {
+            "type": "integer"
+          },
+          "databaseBytes": {
+            "type": "integer"
+          },
+          "databaseConnections": {
+            "type": "integer"
+          },
+          "diskBytes": {
+            "type": "integer"
+          },
+          "diskInodes": {
+            "type": "integer"
+          },
+          "memoryBytes": {
+            "type": "integer"
+          },
+          "phpWorkers": {
+            "type": "integer"
+          },
+          "tasks": {
+            "type": "integer"
+          },
+          "unlimited": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "Listing": {
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/Entry"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "unnamed": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entries",
+          "path",
+          "truncated",
+          "unnamed"
+        ],
+        "type": "object"
+      },
       "LogRetention": {
         "additionalProperties": false,
         "properties": {
@@ -1183,6 +2439,30 @@
           "enabled",
           "page"
         ],
+        "type": "object"
+      },
+      "MaintenanceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "allowIps": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "page": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "Me": {
@@ -1449,6 +2729,113 @@
         ],
         "type": "object"
       },
+      "ObjectCache": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "maxMb": {
+            "type": "integer"
+          },
+          "memoryLimitBytes": {
+            "type": "integer"
+          },
+          "memoryMb": {
+            "type": "integer"
+          },
+          "minMb": {
+            "type": "integer"
+          },
+          "socket": {
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObjectCacheStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "enabled",
+          "maxMb",
+          "memoryLimitBytes",
+          "memoryMb",
+          "minMb",
+          "socket",
+          "status"
+        ],
+        "type": "object"
+      },
+      "ObjectCacheFlush": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObjectCacheStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "ObjectCacheRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ObjectCacheSizeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "memoryMb": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ObjectCacheStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string"
+          },
+          "usedBytes": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "paused",
+          "state",
+          "usedBytes"
+        ],
+        "type": "object"
+      },
       "PHPInstallStatus": {
         "additionalProperties": false,
         "properties": {
@@ -1574,6 +2961,441 @@
             "type": "integer"
           }
         },
+        "type": "object"
+      },
+      "Page": {
+        "additionalProperties": false,
+        "properties": {
+          "builtin": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/PageFile"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parked": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "sites": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "builtin",
+          "createdAt",
+          "files",
+          "id",
+          "kind",
+          "name",
+          "parked",
+          "sha256",
+          "sites",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "PageCache": {
+        "additionalProperties": false,
+        "properties": {
+          "choices": {
+            "additionalProperties": false,
+            "properties": {
+              "maxExclude": {
+                "type": "integer"
+              },
+              "minutes": {
+                "items": {
+                  "type": "integer"
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              },
+              "presets": {
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              },
+              "sizesMB": {
+                "items": {
+                  "type": "integer"
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "maxExclude",
+              "minutes",
+              "presets",
+              "sizesMB"
+            ],
+            "type": "object"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "exclude": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "minutes": {
+            "type": "integer"
+          },
+          "preset": {
+            "type": "string"
+          },
+          "sizeMB": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "choices",
+          "enabled",
+          "exclude",
+          "minutes",
+          "preset",
+          "sizeMB"
+        ],
+        "type": "object"
+      },
+      "PageCacheRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "exclude": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "minutes": {
+            "type": "integer"
+          },
+          "preset": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PageCacheSizeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "sizeMB": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "PageFile": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "size"
+        ],
+        "type": "object"
+      },
+      "PageFormRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "format": "binary",
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PageList": {
+        "additionalProperties": false,
+        "properties": {
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/Page"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "pages"
+        ],
+        "type": "object"
+      },
+      "PanelTLS": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "certSource": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "failedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notAfter": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "renewAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "renewPending": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "trusted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "active",
+          "certSource",
+          "domain",
+          "domains",
+          "enabled",
+          "notAfter",
+          "renewPending",
+          "source",
+          "trusted"
+        ],
+        "type": "object"
+      },
+      "ParkRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "type": "string"
+          },
+          "tls": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ParkTLS": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "certSource": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "failedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notAfter": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "renewAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "renewPending": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "trusted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "active",
+          "certSource",
+          "enabled",
+          "notAfter",
+          "renewPending",
+          "source",
+          "trusted"
+        ],
+        "type": "object"
+      },
+      "Parked": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "page": {
+            "type": "string"
+          },
+          "tls": {
+            "$ref": "#/components/schemas/ParkTLS"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAt",
+          "domain",
+          "page",
+          "tls",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "ParkedList": {
+        "additionalProperties": false,
+        "properties": {
+          "parkedDomains": {
+            "items": {
+              "$ref": "#/components/schemas/Parked"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "parkedDomains"
+        ],
         "type": "object"
       },
       "Passkey": {
@@ -1914,6 +3736,106 @@
         },
         "type": "object"
       },
+      "Preset": {
+        "additionalProperties": false,
+        "properties": {
+          "caches": {
+            "$ref": "#/components/schemas/PresetCaches"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/Limits"
+          },
+          "name": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "caches",
+          "createdAt",
+          "default",
+          "limits",
+          "name",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "PresetCaches": {
+        "additionalProperties": false,
+        "properties": {
+          "objectCacheMb": {
+            "type": "integer"
+          },
+          "pageCacheMb": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "objectCacheMb",
+          "pageCacheMb"
+        ],
+        "type": "object"
+      },
+      "PresetCachesInput": {
+        "additionalProperties": false,
+        "properties": {
+          "objectCacheMb": {
+            "type": "integer"
+          },
+          "pageCacheMb": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "PresetInput": {
+        "additionalProperties": false,
+        "properties": {
+          "caches": {
+            "$ref": "#/components/schemas/PresetCachesInput"
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/LimitsInput"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PresetList": {
+        "additionalProperties": false,
+        "properties": {
+          "cpus": {
+            "type": "integer"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/Preset"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "cpus",
+          "presets"
+        ],
+        "type": "object"
+      },
       "Proxy": {
         "additionalProperties": false,
         "properties": {
@@ -2013,6 +3935,15 @@
             "type": "integer"
           },
           "target": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RestoreImportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "database": {
             "type": "string"
           }
         },
@@ -2447,6 +4378,77 @@
         ],
         "type": "object"
       },
+      "SiteLimits": {
+        "additionalProperties": false,
+        "properties": {
+          "appliedAt": {
+            "type": "integer"
+          },
+          "applyError": {
+            "type": "string"
+          },
+          "databaseUsage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DbUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limits": {
+            "$ref": "#/components/schemas/Limits"
+          },
+          "preset": {
+            "type": "string"
+          },
+          "set": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "appliedAt",
+          "applyError",
+          "limits",
+          "preset",
+          "set",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "SiteLimitsInput": {
+        "additionalProperties": false,
+        "properties": {
+          "custom": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LimitsInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preset": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "SiteLogs": {
         "additionalProperties": false,
         "properties": {
@@ -2475,6 +4477,117 @@
           "more",
           "rotated"
         ],
+        "type": "object"
+      },
+      "SnippetCheckResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "home": {
+            "type": "string"
+          },
+          "phpSocket": {
+            "type": "string"
+          },
+          "root": {
+            "items": {
+              "$ref": "#/components/schemas/SnippetProblem"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "server": {
+            "items": {
+              "$ref": "#/components/schemas/SnippetProblem"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "webRoot": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "home",
+          "root",
+          "server",
+          "webRoot"
+        ],
+        "type": "object"
+      },
+      "SnippetError": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ApiErrorBody"
+          },
+          "problems": {
+            "$ref": "#/components/schemas/SnippetCheckResponse"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "SnippetProblem": {
+        "additionalProperties": false,
+        "properties": {
+          "line": {
+            "type": "integer"
+          },
+          "msg": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "line",
+          "msg"
+        ],
+        "type": "object"
+      },
+      "Snippets": {
+        "additionalProperties": false,
+        "properties": {
+          "root": {
+            "type": "string"
+          },
+          "server": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "root",
+          "server"
+        ],
+        "type": "object"
+      },
+      "SnippetsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "root": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "server": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       },
       "SshHostKeys": {
@@ -2908,6 +5021,70 @@
         ],
         "type": "object"
       },
+      "Upload": {
+        "additionalProperties": false,
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "entry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Entry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "received": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "done",
+          "id",
+          "received"
+        ],
+        "type": "object"
+      },
+      "Usage": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "bytesPercent": {
+            "type": "integer"
+          },
+          "enforced": {
+            "type": "boolean"
+          },
+          "inodes": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "inodesPercent": {
+            "type": "integer"
+          },
+          "level": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "bytesPercent",
+          "enforced",
+          "inodes",
+          "inodesPercent",
+          "level"
+        ],
+        "type": "object"
+      },
       "User": {
         "additionalProperties": false,
         "properties": {
@@ -3010,6 +5187,54 @@
           "dir",
           "spa"
         ],
+        "type": "object"
+      },
+      "WebHeaders": {
+        "additionalProperties": false,
+        "properties": {
+          "csp": {
+            "type": "string"
+          },
+          "cspReportOnly": {
+            "type": "boolean"
+          },
+          "frameOptions": {
+            "type": "string"
+          },
+          "noSniff": {
+            "type": "boolean"
+          },
+          "permissionsPolicy": {
+            "type": "string"
+          },
+          "referrerPolicy": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "WebHeadersInput": {
+        "additionalProperties": false,
+        "properties": {
+          "csp": {
+            "type": "string"
+          },
+          "cspReportOnly": {
+            "type": "boolean"
+          },
+          "frameOptions": {
+            "type": "string"
+          },
+          "noSniff": {
+            "type": "boolean"
+          },
+          "permissionsPolicy": {
+            "type": "string"
+          },
+          "referrerPolicy": {
+            "type": "string"
+          }
+        },
         "type": "object"
       }
     },
@@ -4025,7 +6250,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Backup"
+                }
               }
             },
             "description": "OK"
@@ -4051,32 +6278,34 @@
             ]
           }
         ],
+        "summary": "Backup settings and the state of the last run",
         "tags": [
           "backups"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "backups.server:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "backups.server:read"
       }
     },
     "/api/v1/backups/hostkey": {
       "put": {
-        "operationId": "putBackupsHostkey",
+        "operationId": "setBackupHostKey",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/BackupHostKeyRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Backup"
+                }
               }
             },
             "description": "OK"
@@ -4102,32 +6331,24 @@
             ]
           }
         ],
+        "summary": "Trust a confirmed host key of the backup target",
         "tags": [
           "backups"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "backups.server:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "backups.server:write"
       }
     },
     "/api/v1/backups/hostkey/scan": {
       "post": {
-        "operationId": "postBackupsHostkeyScan",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
+        "operationId": "scanBackupHostKey",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BackupHostKey"
+                }
               }
             },
             "description": "OK"
@@ -4153,17 +6374,17 @@
             ]
           }
         ],
+        "summary": "Read the host key the backup target presents",
         "tags": [
           "backups"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "backups.server:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "backups.server:write"
       }
     },
     "/api/v1/backups/imports/{id}": {
       "get": {
-        "operationId": "getBackupsImportsId",
+        "operationId": "getRestoreImport",
         "parameters": [
           {
             "in": "path",
@@ -4178,7 +6399,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DBJob"
+                }
               }
             },
             "description": "OK"
@@ -4204,22 +6427,24 @@
             ]
           }
         ],
+        "summary": "State of a restored dump import",
         "tags": [
           "backups"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "backups:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "backups:read"
       }
     },
     "/api/v1/backups/panel": {
       "get": {
-        "operationId": "getBackupsPanel",
+        "operationId": "listPanelBackups",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BackupSnapshotList"
+                }
               }
             },
             "description": "OK"
@@ -4245,17 +6470,17 @@
             ]
           }
         ],
+        "summary": "List the snapshots of the panel itself",
         "tags": [
           "backups"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "backups.server:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "backups.server:read"
       }
     },
     "/api/v1/backups/restores/{id}": {
       "get": {
-        "operationId": "getBackupsRestoresId",
+        "operationId": "getRestore",
         "parameters": [
           {
             "in": "path",
@@ -4270,7 +6495,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BackupRestore"
+                }
               }
             },
             "description": "OK"
@@ -4296,17 +6523,17 @@
             ]
           }
         ],
+        "summary": "State of a restore",
         "tags": [
           "backups"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "backups:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "backups:read"
       }
     },
     "/api/v1/backups/restores/{id}/import": {
       "post": {
-        "operationId": "postBackupsRestoresIdImport",
+        "operationId": "importRestoredDump",
         "parameters": [
           {
             "in": "path",
@@ -4321,20 +6548,22 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/RestoreImportRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DBJob"
+                }
               }
             },
-            "description": "OK"
+            "description": "Accepted"
           },
           "default": {
             "content": {
@@ -4357,35 +6586,20 @@
             ]
           }
         ],
+        "summary": "Import a restored dump into a new database of the site",
         "tags": [
           "backups"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "backups:restore",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "backups:restore"
       }
     },
     "/api/v1/backups/run": {
       "post": {
-        "operationId": "postBackupsRun",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
+        "operationId": "runBackup",
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "202": {
+            "description": "Accepted"
           },
           "default": {
             "content": {
@@ -4408,32 +6622,34 @@
             ]
           }
         ],
+        "summary": "Start a backup now",
         "tags": [
           "backups"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "backups.server:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "backups.server:write"
       }
     },
     "/api/v1/backups/settings": {
       "put": {
-        "operationId": "putBackupsSettings",
+        "operationId": "setBackupSettings",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/BackupSettingsInput"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Backup"
+                }
               }
             },
             "description": "OK"
@@ -4459,12 +6675,12 @@
             ]
           }
         ],
+        "summary": "Set the backup target, retention and window",
         "tags": [
           "backups"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "backups.server:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "backups.server:write"
       }
     },
     "/api/v1/dashboard": {
@@ -4523,12 +6739,14 @@
     },
     "/api/v1/databases": {
       "get": {
-        "operationId": "getDatabases",
+        "operationId": "listDatabases",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseList"
+                }
               }
             },
             "description": "OK"
@@ -4554,17 +6772,17 @@
             ]
           }
         ],
+        "summary": "List the databases of all visible sites",
         "tags": [
           "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:list",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:list"
       }
     },
     "/api/v1/databases/{db}": {
       "delete": {
-        "operationId": "deleteDatabasesDb",
+        "operationId": "deleteDatabase",
         "parameters": [
           {
             "in": "path",
@@ -4576,13 +6794,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -4605,15 +6818,15 @@
             ]
           }
         ],
+        "summary": "Delete a database and its users",
         "tags": [
           "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:delete",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:delete"
       },
       "get": {
-        "operationId": "getDatabasesDb",
+        "operationId": "getDatabase",
         "parameters": [
           {
             "in": "path",
@@ -4628,7 +6841,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Database"
+                }
               }
             },
             "description": "OK"
@@ -4654,17 +6869,17 @@
             ]
           }
         ],
+        "summary": "Get a database",
         "tags": [
           "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:read"
       }
     },
     "/api/v1/databases/{db}/export": {
       "post": {
-        "operationId": "postDatabasesDbExport",
+        "operationId": "exportDatabase",
         "parameters": [
           {
             "in": "path",
@@ -4679,20 +6894,22 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/DbDumpRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DBJob"
+                }
               }
             },
-            "description": "OK"
+            "description": "Accepted"
           },
           "default": {
             "content": {
@@ -4715,17 +6932,17 @@
             ]
           }
         ],
+        "summary": "Export the database to a file in the site's home",
         "tags": [
           "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:write"
       }
     },
     "/api/v1/databases/{db}/import": {
       "post": {
-        "operationId": "postDatabasesDbImport",
+        "operationId": "importDatabase",
         "parameters": [
           {
             "in": "path",
@@ -4740,20 +6957,22 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/DbDumpRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DBJob"
+                }
               }
             },
-            "description": "OK"
+            "description": "Accepted"
           },
           "default": {
             "content": {
@@ -4776,17 +6995,17 @@
             ]
           }
         ],
+        "summary": "Import a dump file from the site's home",
         "tags": [
           "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:write"
       }
     },
     "/api/v1/databases/{db}/jobs/{id}": {
       "get": {
-        "operationId": "getDatabasesDbJobsId",
+        "operationId": "getDatabaseJob",
         "parameters": [
           {
             "in": "path",
@@ -4809,7 +7028,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DBJob"
+                }
               }
             },
             "description": "OK"
@@ -4835,17 +7056,17 @@
             ]
           }
         ],
+        "summary": "State of an import or export job",
         "tags": [
           "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:read"
       }
     },
     "/api/v1/databases/{db}/tool": {
       "post": {
-        "operationId": "postDatabasesDbTool",
+        "operationId": "openDatabaseTool",
         "parameters": [
           {
             "in": "path",
@@ -4860,20 +7081,22 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/DbToolOpenRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DBToolSession"
+                }
               }
             },
-            "description": "OK"
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -4896,17 +7119,17 @@
             ]
           }
         ],
+        "summary": "Open the database in the web database tool",
         "tags": [
           "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:open",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:open"
       }
     },
     "/api/v1/databases/{db}/tool/sessions": {
       "get": {
-        "operationId": "getDatabasesDbToolSessions",
+        "operationId": "listDatabaseToolSessions",
         "parameters": [
           {
             "in": "path",
@@ -4921,7 +7144,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DbToolSessionList"
+                }
               }
             },
             "description": "OK"
@@ -4947,17 +7172,17 @@
             ]
           }
         ],
+        "summary": "List open sessions of the database tool",
         "tags": [
           "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:open",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:open"
       }
     },
     "/api/v1/databases/{db}/tool/sessions/{id}": {
       "delete": {
-        "operationId": "deleteDatabasesDbToolSessionsId",
+        "operationId": "endDatabaseToolSession",
         "parameters": [
           {
             "in": "path",
@@ -4977,13 +7202,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -5006,17 +7226,17 @@
             ]
           }
         ],
+        "summary": "End a database tool session",
         "tags": [
           "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:open",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:open"
       }
     },
     "/api/v1/databases/{db}/tool/sessions/{id}/extend": {
       "post": {
-        "operationId": "postDatabasesDbToolSessionsIdExtend",
+        "operationId": "extendDatabaseToolSession",
         "parameters": [
           {
             "in": "path",
@@ -5035,21 +7255,13 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DBToolSessionView"
+                }
               }
             },
             "description": "OK"
@@ -5075,17 +7287,17 @@
             ]
           }
         ],
+        "summary": "Extend a database tool session",
         "tags": [
           "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:open",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:open"
       }
     },
     "/api/v1/databases/{db}/users": {
       "post": {
-        "operationId": "postDatabasesDbUsers",
+        "operationId": "createDatabaseUser",
         "parameters": [
           {
             "in": "path",
@@ -5100,20 +7312,22 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/DbUserCreateRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DbUserCreated"
+                }
               }
             },
-            "description": "OK"
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -5136,17 +7350,17 @@
             ]
           }
         ],
+        "summary": "Add a user to a database",
         "tags": [
           "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:write"
       }
     },
     "/api/v1/databases/{db}/users/{user}": {
       "delete": {
-        "operationId": "deleteDatabasesDbUsersUser",
+        "operationId": "deleteDatabaseUser",
         "parameters": [
           {
             "in": "path",
@@ -5166,13 +7380,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -5195,17 +7404,17 @@
             ]
           }
         ],
+        "summary": "Remove a database user",
         "tags": [
           "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:write"
       }
     },
     "/api/v1/databases/{db}/users/{user}/password": {
       "put": {
-        "operationId": "putDatabasesDbUsersUserPassword",
+        "operationId": "setDatabaseUserPassword",
         "parameters": [
           {
             "in": "path",
@@ -5228,17 +7437,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/DbPasswordRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DbPassword"
+                }
               }
             },
             "description": "OK"
@@ -5264,22 +7475,24 @@
             ]
           }
         ],
+        "summary": "Set or generate a database user's password",
         "tags": [
           "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:write"
       }
     },
     "/api/v1/db-servers": {
       "get": {
-        "operationId": "getDbServers",
+        "operationId": "listDBServers",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DbServerList"
+                }
               }
             },
             "description": "OK"
@@ -5305,33 +7518,35 @@
             ]
           }
         ],
+        "summary": "List the database servers",
         "tags": [
-          "db"
+          "db-servers"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "db_servers:list",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "db_servers:list"
       },
       "post": {
-        "operationId": "postDbServers",
+        "operationId": "addDBServer",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/DbServerAddRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DbServer"
+                }
               }
             },
-            "description": "OK"
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -5354,12 +7569,12 @@
             ]
           }
         ],
+        "summary": "Add an external database server",
         "tags": [
-          "db"
+          "db-servers"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "db_servers:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "db_servers:write"
       }
     },
     "/api/v1/db-servers/postgresql-client": {
@@ -5458,7 +7673,7 @@
     },
     "/api/v1/db-servers/{server}": {
       "delete": {
-        "operationId": "deleteDbServersServer",
+        "operationId": "deleteDBServer",
         "parameters": [
           {
             "in": "path",
@@ -5470,13 +7685,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -5499,17 +7709,17 @@
             ]
           }
         ],
+        "summary": "Remove a database server without databases",
         "tags": [
-          "db"
+          "db-servers"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "db_servers:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "db_servers:write"
       }
     },
     "/api/v1/db-servers/{server}/check": {
       "post": {
-        "operationId": "postDbServersServerCheck",
+        "operationId": "checkDBServer",
         "parameters": [
           {
             "in": "path",
@@ -5520,21 +7730,13 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DbServer"
+                }
               }
             },
             "description": "OK"
@@ -5560,17 +7762,17 @@
             ]
           }
         ],
+        "summary": "Check the connection to a database server",
         "tags": [
-          "db"
+          "db-servers"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "db_servers:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "db_servers:write"
       }
     },
     "/api/v1/db-servers/{server}/default": {
       "put": {
-        "operationId": "putDbServersServerDefault",
+        "operationId": "setDefaultDBServer",
         "parameters": [
           {
             "in": "path",
@@ -5581,24 +7783,9 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -5621,22 +7808,24 @@
             ]
           }
         ],
+        "summary": "Make a database server the default",
         "tags": [
-          "db"
+          "db-servers"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "db_servers:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "db_servers:write"
       }
     },
     "/api/v1/dbtool": {
       "get": {
-        "operationId": "getDbtool",
+        "operationId": "getDBTool",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DBToolStatus"
+                }
               }
             },
             "description": "OK"
@@ -5662,12 +7851,12 @@
             ]
           }
         ],
+        "summary": "State of the web database tool",
         "tags": [
-          "dbtool"
+          "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:list",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:list"
       }
     },
     "/api/v1/doctor": {
@@ -5981,12 +8170,14 @@
     },
     "/api/v1/limit-presets": {
       "get": {
-        "operationId": "getLimitPresets",
+        "operationId": "listLimitPresets",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PresetList"
+                }
               }
             },
             "description": "OK"
@@ -6012,33 +8203,35 @@
             ]
           }
         ],
+        "summary": "List the limit presets",
         "tags": [
-          "limit"
+          "limits"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "limits.presets:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "limits.presets:read"
       },
       "post": {
-        "operationId": "postLimitPresets",
+        "operationId": "createLimitPreset",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/PresetInput"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Preset"
+                }
               }
             },
-            "description": "OK"
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -6061,17 +8254,17 @@
             ]
           }
         ],
+        "summary": "Create a limit preset",
         "tags": [
-          "limit"
+          "limits"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "limits.presets:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "limits.presets:write"
       }
     },
     "/api/v1/limit-presets/{name}": {
       "delete": {
-        "operationId": "deleteLimitPresetsName",
+        "operationId": "deleteLimitPreset",
         "parameters": [
           {
             "in": "path",
@@ -6083,13 +8276,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -6112,15 +8300,15 @@
             ]
           }
         ],
+        "summary": "Delete an unused limit preset",
         "tags": [
-          "limit"
+          "limits"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "limits.presets:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "limits.presets:write"
       },
       "get": {
-        "operationId": "getLimitPresetsName",
+        "operationId": "getLimitPreset",
         "parameters": [
           {
             "in": "path",
@@ -6135,7 +8323,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Preset"
+                }
               }
             },
             "description": "OK"
@@ -6161,15 +8351,15 @@
             ]
           }
         ],
+        "summary": "Get a limit preset",
         "tags": [
-          "limit"
+          "limits"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "limits.presets:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "limits.presets:read"
       },
       "put": {
-        "operationId": "putLimitPresetsName",
+        "operationId": "updateLimitPreset",
         "parameters": [
           {
             "in": "path",
@@ -6184,17 +8374,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/PresetInput"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Preset"
+                }
               }
             },
             "description": "OK"
@@ -6220,12 +8412,12 @@
             ]
           }
         ],
+        "summary": "Change a limit preset",
         "tags": [
-          "limit"
+          "limits"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "limits.presets:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "limits.presets:write"
       }
     },
     "/api/v1/me": {
@@ -7545,12 +9737,14 @@
     },
     "/api/v1/panel/tls/certificate": {
       "get": {
-        "operationId": "getPanelTlsCertificate",
+        "operationId": "getPanelCertificate",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CertInfo"
+                }
               }
             },
             "description": "OK"
@@ -7576,30 +9770,32 @@
             ]
           }
         ],
+        "summary": "Get the live certificate and a pending CSR",
         "tags": [
           "panel"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "panel.tls:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "panel.tls:read"
       },
       "put": {
-        "operationId": "putPanelTlsCertificate",
+        "operationId": "uploadPanelCertificate",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/CertUploadRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PanelTLS"
+                }
               }
             },
             "description": "OK"
@@ -7625,32 +9821,24 @@
             ]
           }
         ],
+        "summary": "Upload an own certificate",
         "tags": [
           "panel"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "panel.tls:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "panel.tls:write"
       }
     },
     "/api/v1/panel/tls/csr": {
       "post": {
-        "operationId": "postPanelTlsCsr",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
+        "operationId": "createPanelCSR",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Csr"
+                }
               }
             },
             "description": "OK"
@@ -7676,35 +9864,27 @@
             ]
           }
         ],
+        "summary": "Create a key and a certificate signing request",
         "tags": [
           "panel"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "panel.tls:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "panel.tls:write"
       }
     },
     "/api/v1/panel/tls/renew": {
       "post": {
-        "operationId": "postPanelTlsRenew",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
+        "operationId": "renewPanelCertificate",
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PanelTLS"
+                }
               }
             },
-            "description": "OK"
+            "description": "Accepted"
           },
           "default": {
             "content": {
@@ -7727,32 +9907,34 @@
             ]
           }
         ],
+        "summary": "Ask for a new Let's Encrypt certificate now",
         "tags": [
           "panel"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "panel.tls:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "panel.tls:write"
       }
     },
     "/api/v1/panel/tls/source": {
       "put": {
-        "operationId": "putPanelTlsSource",
+        "operationId": "setPanelTLSSource",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/CertSourceRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PanelTLS"
+                }
               }
             },
             "description": "OK"
@@ -7778,22 +9960,24 @@
             ]
           }
         ],
+        "summary": "Choose Let's Encrypt or an own certificate",
         "tags": [
           "panel"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "panel.tls:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "panel.tls:write"
       }
     },
     "/api/v1/parked-domains": {
       "get": {
-        "operationId": "getParkedDomains",
+        "operationId": "listParkedDomains",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ParkedList"
+                }
               }
             },
             "description": "OK"
@@ -7819,17 +10003,17 @@
             ]
           }
         ],
+        "summary": "List the parked domains",
         "tags": [
           "parked"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "parked:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "parked:read"
       }
     },
     "/api/v1/parked-domains/{domain}": {
       "delete": {
-        "operationId": "deleteParkedDomainsDomain",
+        "operationId": "deleteParkedDomain",
         "parameters": [
           {
             "in": "path",
@@ -7841,13 +10025,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -7870,15 +10049,15 @@
             ]
           }
         ],
+        "summary": "Remove a parked domain",
         "tags": [
           "parked"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "parked:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "parked:write"
       },
       "get": {
-        "operationId": "getParkedDomainsDomain",
+        "operationId": "getParkedDomain",
         "parameters": [
           {
             "in": "path",
@@ -7893,7 +10072,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Parked"
+                }
               }
             },
             "description": "OK"
@@ -7919,15 +10100,15 @@
             ]
           }
         ],
+        "summary": "Get a parked domain",
         "tags": [
           "parked"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "parked:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "parked:read"
       },
       "put": {
-        "operationId": "putParkedDomainsDomain",
+        "operationId": "parkDomain",
         "parameters": [
           {
             "in": "path",
@@ -7942,17 +10123,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/ParkRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Parked"
+                }
               }
             },
             "description": "OK"
@@ -7978,17 +10161,17 @@
             ]
           }
         ],
+        "summary": "Park a domain or change its page",
         "tags": [
           "parked"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "parked:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "parked:write"
       }
     },
     "/api/v1/parked-domains/{domain}/tls/certificate": {
       "delete": {
-        "operationId": "deleteParkedDomainsDomainTlsCertificate",
+        "operationId": "deleteParkedCertificate",
         "parameters": [
           {
             "in": "path",
@@ -8003,7 +10186,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Parked"
+                }
               }
             },
             "description": "OK"
@@ -8029,15 +10214,15 @@
             ]
           }
         ],
+        "summary": "Remove the own certificate (HTTPS off only)",
         "tags": [
           "parked"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "parked:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "parked:write"
       },
       "get": {
-        "operationId": "getParkedDomainsDomainTlsCertificate",
+        "operationId": "getParkedCertificate",
         "parameters": [
           {
             "in": "path",
@@ -8052,7 +10237,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CertInfo"
+                }
               }
             },
             "description": "OK"
@@ -8078,15 +10265,15 @@
             ]
           }
         ],
+        "summary": "Get the live certificate and a pending CSR",
         "tags": [
           "parked"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "parked:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "parked:read"
       },
       "put": {
-        "operationId": "putParkedDomainsDomainTlsCertificate",
+        "operationId": "uploadParkedCertificate",
         "parameters": [
           {
             "in": "path",
@@ -8101,17 +10288,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/CertUploadRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Parked"
+                }
               }
             },
             "description": "OK"
@@ -8137,17 +10326,17 @@
             ]
           }
         ],
+        "summary": "Upload an own certificate",
         "tags": [
           "parked"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "parked:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "parked:write"
       }
     },
     "/api/v1/parked-domains/{domain}/tls/csr": {
       "post": {
-        "operationId": "postParkedDomainsDomainTlsCsr",
+        "operationId": "createParkedCSR",
         "parameters": [
           {
             "in": "path",
@@ -8158,21 +10347,13 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Csr"
+                }
               }
             },
             "description": "OK"
@@ -8198,17 +10379,17 @@
             ]
           }
         ],
+        "summary": "Create a key and a certificate signing request",
         "tags": [
           "parked"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "parked:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "parked:write"
       }
     },
     "/api/v1/parked-domains/{domain}/tls/renew": {
       "post": {
-        "operationId": "postParkedDomainsDomainTlsRenew",
+        "operationId": "renewParkedCertificate",
         "parameters": [
           {
             "in": "path",
@@ -8219,24 +10400,16 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Parked"
+                }
               }
             },
-            "description": "OK"
+            "description": "Accepted"
           },
           "default": {
             "content": {
@@ -8259,17 +10432,17 @@
             ]
           }
         ],
+        "summary": "Ask for a new Let's Encrypt certificate now",
         "tags": [
           "parked"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "parked:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "parked:write"
       }
     },
     "/api/v1/parked-domains/{domain}/tls/source": {
       "put": {
-        "operationId": "putParkedDomainsDomainTlsSource",
+        "operationId": "setParkedTLSSource",
         "parameters": [
           {
             "in": "path",
@@ -8284,17 +10457,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/CertSourceRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Parked"
+                }
               }
             },
             "description": "OK"
@@ -8320,12 +10495,12 @@
             ]
           }
         ],
+        "summary": "Choose Let's Encrypt or an own certificate",
         "tags": [
           "parked"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "parked:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "parked:write"
       }
     },
     "/api/v1/php/install": {
@@ -9620,7 +11795,7 @@
     },
     "/api/v1/sites/{name}/backups": {
       "get": {
-        "operationId": "getSitesNameBackups",
+        "operationId": "listSiteBackups",
         "parameters": [
           {
             "in": "path",
@@ -9635,7 +11810,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BackupSnapshotList"
+                }
               }
             },
             "description": "OK"
@@ -9661,17 +11838,17 @@
             ]
           }
         ],
+        "summary": "List the snapshots of a site",
         "tags": [
-          "sites"
+          "backups"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "backups:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "backups:read"
       }
     },
     "/api/v1/sites/{name}/backups/{snapshot}/restore": {
       "post": {
-        "operationId": "postSitesNameBackupsSnapshotRestore",
+        "operationId": "restoreSiteBackup",
         "parameters": [
           {
             "in": "path",
@@ -9690,24 +11867,16 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BackupRestore"
+                }
               }
             },
-            "description": "OK"
+            "description": "Accepted"
           },
           "default": {
             "content": {
@@ -9730,12 +11899,12 @@
             ]
           }
         ],
+        "summary": "Restore a snapshot into a new directory of the site",
         "tags": [
-          "sites"
+          "backups"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "backups:restore",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "backups:restore"
       }
     },
     "/api/v1/sites/{name}/cron": {
@@ -10090,7 +12259,7 @@
     },
     "/api/v1/sites/{name}/databases": {
       "get": {
-        "operationId": "getSitesNameDatabases",
+        "operationId": "listSiteDatabases",
         "parameters": [
           {
             "in": "path",
@@ -10105,7 +12274,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseList"
+                }
               }
             },
             "description": "OK"
@@ -10131,15 +12302,15 @@
             ]
           }
         ],
+        "summary": "List the databases of a site",
         "tags": [
-          "sites"
+          "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:read"
       },
       "post": {
-        "operationId": "postSitesNameDatabases",
+        "operationId": "createDatabase",
         "parameters": [
           {
             "in": "path",
@@ -10154,20 +12325,22 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/DatabaseCreateRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseCreated"
+                }
               }
             },
-            "description": "OK"
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -10190,12 +12363,12 @@
             ]
           }
         ],
+        "summary": "Create a database for a site",
         "tags": [
-          "sites"
+          "databases"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "databases:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "databases:write"
       }
     },
     "/api/v1/sites/{name}/disabled": {
@@ -10322,12 +12495,21 @@
     },
     "/api/v1/sites/{name}/files": {
       "get": {
-        "operationId": "getSitesNameFiles",
+        "operationId": "listFiles",
         "parameters": [
           {
             "in": "path",
             "name": "name",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "relative to the site's home; empty for the home itself",
+            "in": "query",
+            "name": "path",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -10337,7 +12519,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Listing"
+                }
               }
             },
             "description": "OK"
@@ -10363,17 +12547,80 @@
             ]
           }
         ],
+        "summary": "List a folder",
         "tags": [
-          "sites"
+          "files"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "files:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "files:read"
+      }
+    },
+    "/api/v1/sites/{name}/files/chmod": {
+      "post": {
+        "operationId": "chmodFiles",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileOpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilesOK"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "files:write"
+            ]
+          }
+        ],
+        "summary": "Change the mode of files and folders (paths, mode)",
+        "tags": [
+          "files"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "files:write"
       }
     },
     "/api/v1/sites/{name}/files/content": {
       "get": {
-        "operationId": "getSitesNameFilesContent",
+        "operationId": "downloadFile",
         "parameters": [
           {
             "in": "path",
@@ -10382,13 +12629,24 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "relative to the site's home; empty for the home itself",
+            "in": "query",
+            "name": "path",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {}
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "description": "OK"
@@ -10414,15 +12672,97 @@
             ]
           }
         ],
+        "summary": "Download a file; X-Hostashi-Version names its version",
         "tags": [
-          "sites"
+          "files"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "files:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "files:read"
       },
       "put": {
-        "operationId": "putSitesNameFilesContent",
+        "operationId": "saveFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "relative to the site's home; empty for the home itself",
+            "in": "query",
+            "name": "path",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "the version the editor opened; without it the file must not exist yet",
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Entry"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "files:write"
+            ]
+          }
+        ],
+        "summary": "Save a file from the editor",
+        "tags": [
+          "files"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "files:write"
+      }
+    },
+    "/api/v1/sites/{name}/files/copy": {
+      "post": {
+        "operationId": "copyFiles",
         "parameters": [
           {
             "in": "path",
@@ -10437,16 +12777,142 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/FileOpRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CopyResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "files:write"
+            ]
+          }
+        ],
+        "summary": "Copy files and folders into a folder (paths, to)",
+        "tags": [
+          "files"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "files:write"
+      }
+    },
+    "/api/v1/sites/{name}/files/delete": {
+      "post": {
+        "operationId": "deleteFiles",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileOpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilesOK"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "files:write"
+            ]
+          }
+        ],
+        "summary": "Delete files and folders (paths)",
+        "tags": [
+          "files"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "files:write"
+      }
+    },
+    "/api/v1/sites/{name}/files/extract": {
+      "post": {
+        "operationId": "extractArchive",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileOpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/x-ndjson": {
                 "schema": {}
               }
             },
@@ -10473,22 +12939,220 @@
             ]
           }
         ],
+        "summary": "Extract a ZIP or tar archive (path, to, overwrite); one JSON line per progress step",
         "tags": [
-          "sites"
+          "files"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "files:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "files:write"
+      }
+    },
+    "/api/v1/sites/{name}/files/mkdir": {
+      "post": {
+        "operationId": "createFolder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileOpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilesOK"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "files:write"
+            ]
+          }
+        ],
+        "summary": "Create a folder (path)",
+        "tags": [
+          "files"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "files:write"
+      }
+    },
+    "/api/v1/sites/{name}/files/move": {
+      "post": {
+        "operationId": "moveFiles",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileOpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilesOK"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "files:write"
+            ]
+          }
+        ],
+        "summary": "Move files and folders into a folder (paths, to)",
+        "tags": [
+          "files"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "files:write"
+      }
+    },
+    "/api/v1/sites/{name}/files/rename": {
+      "post": {
+        "operationId": "renameFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileOpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilesOK"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "files:write"
+            ]
+          }
+        ],
+        "summary": "Rename a file or folder (from, to)",
+        "tags": [
+          "files"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "files:write"
       }
     },
     "/api/v1/sites/{name}/files/stat": {
       "get": {
-        "operationId": "getSitesNameFilesStat",
+        "operationId": "statFile",
         "parameters": [
           {
             "in": "path",
             "name": "name",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "relative to the site's home; empty for the home itself",
+            "in": "query",
+            "name": "path",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -10498,7 +13162,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Entry"
+                }
               }
             },
             "description": "OK"
@@ -10524,17 +13190,80 @@
             ]
           }
         ],
+        "summary": "Get one file or folder",
         "tags": [
-          "sites"
+          "files"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "files:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "files:read"
+      }
+    },
+    "/api/v1/sites/{name}/files/touch": {
+      "post": {
+        "operationId": "createFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileOpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilesOK"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "files:write"
+            ]
+          }
+        ],
+        "summary": "Create an empty file (path)",
+        "tags": [
+          "files"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "files:write"
       }
     },
     "/api/v1/sites/{name}/files/upload": {
       "put": {
-        "operationId": "putSitesNameFilesUpload",
+        "operationId": "uploadChunk",
         "parameters": [
           {
             "in": "path",
@@ -10543,23 +13272,68 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "relative to the site's home; empty for the home itself",
+            "in": "query",
+            "name": "path",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1 to replace an existing file",
+            "in": "query",
+            "name": "overwrite",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
           "content": {
-            "application/json": {
+            "application/octet-stream": {
               "schema": {
-                "type": "object"
+                "format": "binary",
+                "type": "string"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Upload"
+                }
               }
             },
             "description": "OK"
@@ -10585,17 +13359,17 @@
             ]
           }
         ],
+        "summary": "Send one chunk (at most 8 MiB) of an upload",
         "tags": [
-          "sites"
+          "files"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "files:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "files:write"
       }
     },
-    "/api/v1/sites/{name}/files/zip": {
-      "get": {
-        "operationId": "getSitesNameFilesZip",
+    "/api/v1/sites/{name}/files/upload-cancel": {
+      "post": {
+        "operationId": "cancelUpload",
         "parameters": [
           {
             "in": "path",
@@ -10606,11 +13380,151 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileOpRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FilesOK"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "files:write"
+            ]
+          }
+        ],
+        "summary": "Cancel a chunked upload (path, id)",
+        "tags": [
+          "files"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "files:write"
+      }
+    },
+    "/api/v1/sites/{name}/files/upload-start": {
+      "post": {
+        "operationId": "startUpload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileOpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Upload"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "files:write"
+            ]
+          }
+        ],
+        "summary": "Start a chunked upload (path, size, overwrite, parents)",
+        "tags": [
+          "files"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "files:write"
+      }
+    },
+    "/api/v1/sites/{name}/files/zip": {
+      "get": {
+        "operationId": "downloadZip",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "an entry to include, relative to the site's home",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "description": "OK"
@@ -10636,86 +13550,17 @@
             ]
           }
         ],
+        "summary": "Download files and folders as one ZIP",
         "tags": [
-          "sites"
+          "files"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "files:read",
-        "x-hostashi-undescribed": true
-      }
-    },
-    "/api/v1/sites/{name}/files/{call}": {
-      "post": {
-        "operationId": "postSitesNameFilesCall",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "call",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            },
-            "description": "Error"
-          }
-        },
-        "security": [
-          {
-            "session": []
-          },
-          {
-            "token": [
-              "files:write"
-            ]
-          }
-        ],
-        "tags": [
-          "sites"
-        ],
-        "x-hostashi-access": "action",
-        "x-hostashi-action": "files:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "files:read"
       }
     },
     "/api/v1/sites/{name}/headers": {
       "get": {
-        "operationId": "getSitesNameHeaders",
+        "operationId": "getSiteHeaders",
         "parameters": [
           {
             "in": "path",
@@ -10730,7 +13575,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Headers"
+                }
               }
             },
             "description": "OK"
@@ -10756,15 +13603,15 @@
             ]
           }
         ],
+        "summary": "Get the site's security headers",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites:read"
       },
       "put": {
-        "operationId": "putSitesNameHeaders",
+        "operationId": "setSiteHeaders",
         "parameters": [
           {
             "in": "path",
@@ -10779,17 +13626,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/WebHeadersInput"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Headers"
+                }
               }
             },
             "description": "OK"
@@ -10815,12 +13664,12 @@
             ]
           }
         ],
+        "summary": "Set the site's security headers",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.headers:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.headers:write"
       }
     },
     "/api/v1/sites/{name}/hsts": {
@@ -10886,7 +13735,7 @@
     },
     "/api/v1/sites/{name}/limits": {
       "get": {
-        "operationId": "getSitesNameLimits",
+        "operationId": "getSiteLimits",
         "parameters": [
           {
             "in": "path",
@@ -10901,7 +13750,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SiteLimits"
+                }
               }
             },
             "description": "OK"
@@ -10927,15 +13778,15 @@
             ]
           }
         ],
+        "summary": "Get the site's limits and usage",
         "tags": [
-          "sites"
+          "limits"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "limits:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "limits:read"
       },
       "put": {
-        "operationId": "putSitesNameLimits",
+        "operationId": "setSiteLimits",
         "parameters": [
           {
             "in": "path",
@@ -10950,17 +13801,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/SiteLimitsInput"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SiteLimits"
+                }
               }
             },
             "description": "OK"
@@ -10986,12 +13839,12 @@
             ]
           }
         ],
+        "summary": "Set the site's limits or preset",
         "tags": [
-          "sites"
+          "limits"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "limits:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "limits:write"
       }
     },
     "/api/v1/sites/{name}/logs/{kind}": {
@@ -11075,7 +13928,7 @@
     },
     "/api/v1/sites/{name}/maintenance": {
       "put": {
-        "operationId": "putSitesNameMaintenance",
+        "operationId": "setSiteMaintenance",
         "parameters": [
           {
             "in": "path",
@@ -11090,17 +13943,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/MaintenanceRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
               }
             },
             "description": "OK"
@@ -11126,12 +13981,12 @@
             ]
           }
         ],
+        "summary": "Turn the site's maintenance page on or off",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.maintenance:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.maintenance:write"
       }
     },
     "/api/v1/sites/{name}/node": {
@@ -11199,7 +14054,7 @@
     },
     "/api/v1/sites/{name}/object-cache": {
       "get": {
-        "operationId": "getSitesNameObjectCache",
+        "operationId": "getSiteObjectCache",
         "parameters": [
           {
             "in": "path",
@@ -11214,7 +14069,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectCache"
+                }
               }
             },
             "description": "OK"
@@ -11240,15 +14097,15 @@
             ]
           }
         ],
+        "summary": "Get the site's object cache (Valkey)",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.objectcache:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.objectcache:read"
       },
       "put": {
-        "operationId": "putSitesNameObjectCache",
+        "operationId": "setSiteObjectCache",
         "parameters": [
           {
             "in": "path",
@@ -11263,17 +14120,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/ObjectCacheRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectCache"
+                }
               }
             },
             "description": "OK"
@@ -11299,17 +14158,17 @@
             ]
           }
         ],
+        "summary": "Turn the site's object cache on or off",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.objectcache:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.objectcache:write"
       }
     },
     "/api/v1/sites/{name}/object-cache/flush": {
       "post": {
-        "operationId": "postSitesNameObjectCacheFlush",
+        "operationId": "flushSiteObjectCache",
         "parameters": [
           {
             "in": "path",
@@ -11320,21 +14179,13 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectCacheFlush"
+                }
               }
             },
             "description": "OK"
@@ -11360,17 +14211,17 @@
             ]
           }
         ],
+        "summary": "Empty the site's object cache",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.objectcache:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.objectcache:write"
       }
     },
     "/api/v1/sites/{name}/object-cache/size": {
       "put": {
-        "operationId": "putSitesNameObjectCacheSize",
+        "operationId": "setSiteObjectCacheSize",
         "parameters": [
           {
             "in": "path",
@@ -11385,17 +14236,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/ObjectCacheSizeRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectCache"
+                }
               }
             },
             "description": "OK"
@@ -11421,17 +14274,17 @@
             ]
           }
         ],
+        "summary": "Set the memory of the site's object cache",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.objectcache.size:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.objectcache.size:write"
       }
     },
     "/api/v1/sites/{name}/page-cache": {
       "get": {
-        "operationId": "getSitesNamePageCache",
+        "operationId": "getSitePageCache",
         "parameters": [
           {
             "in": "path",
@@ -11446,7 +14299,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PageCache"
+                }
               }
             },
             "description": "OK"
@@ -11472,15 +14327,15 @@
             ]
           }
         ],
+        "summary": "Get the site's page cache (FastCGI cache)",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites:read"
       },
       "put": {
-        "operationId": "putSitesNamePageCache",
+        "operationId": "setSitePageCache",
         "parameters": [
           {
             "in": "path",
@@ -11495,17 +14350,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/PageCacheRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PageCache"
+                }
               }
             },
             "description": "OK"
@@ -11531,17 +14388,17 @@
             ]
           }
         ],
+        "summary": "Set the site's page cache",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.pagecache:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.pagecache:write"
       }
     },
     "/api/v1/sites/{name}/page-cache/purge": {
       "post": {
-        "operationId": "postSitesNamePageCachePurge",
+        "operationId": "purgeSitePageCache",
         "parameters": [
           {
             "in": "path",
@@ -11552,24 +14409,9 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -11592,17 +14434,17 @@
             ]
           }
         ],
+        "summary": "Empty the site's page cache",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.pagecache:purge",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.pagecache:purge"
       }
     },
     "/api/v1/sites/{name}/page-cache/size": {
       "put": {
-        "operationId": "putSitesNamePageCacheSize",
+        "operationId": "setSitePageCacheSize",
         "parameters": [
           {
             "in": "path",
@@ -11617,17 +14459,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/PageCacheSizeRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PageCache"
+                }
               }
             },
             "description": "OK"
@@ -11653,12 +14497,12 @@
             ]
           }
         ],
+        "summary": "Set the size of the site's page cache",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.pagecache.size:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.pagecache.size:write"
       }
     },
     "/api/v1/sites/{name}/park": {
@@ -12228,7 +15072,7 @@
     },
     "/api/v1/sites/{name}/snippets": {
       "get": {
-        "operationId": "getSitesNameSnippets",
+        "operationId": "getSiteSnippets",
         "parameters": [
           {
             "in": "path",
@@ -12243,7 +15087,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Snippets"
+                }
               }
             },
             "description": "OK"
@@ -12269,15 +15115,15 @@
             ]
           }
         ],
+        "summary": "Get the site's own nginx snippets",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites:read"
       },
       "put": {
-        "operationId": "putSitesNameSnippets",
+        "operationId": "setSiteSnippets",
         "parameters": [
           {
             "in": "path",
@@ -12292,20 +15138,32 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/SnippetsRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Snippets"
+                }
               }
             },
             "description": "OK"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnippetError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
           },
           "default": {
             "content": {
@@ -12328,12 +15186,12 @@
             ]
           }
         ],
+        "summary": "Set the site's own nginx snippets",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.snippets:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.snippets:write"
       }
     },
     "/api/v1/sites/{name}/ssh-keys": {
@@ -12695,7 +15553,7 @@
     },
     "/api/v1/sites/{name}/tls/certificate": {
       "delete": {
-        "operationId": "deleteSitesNameTlsCertificate",
+        "operationId": "deleteSiteCertificate",
         "parameters": [
           {
             "in": "path",
@@ -12710,7 +15568,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
               }
             },
             "description": "OK"
@@ -12736,15 +15596,15 @@
             ]
           }
         ],
+        "summary": "Remove the own certificate (HTTPS off only)",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.tls:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.tls:write"
       },
       "get": {
-        "operationId": "getSitesNameTlsCertificate",
+        "operationId": "getSiteCertificate",
         "parameters": [
           {
             "in": "path",
@@ -12759,7 +15619,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CertInfo"
+                }
               }
             },
             "description": "OK"
@@ -12785,15 +15647,15 @@
             ]
           }
         ],
+        "summary": "Get the live certificate and a pending CSR",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites:read"
       },
       "put": {
-        "operationId": "putSitesNameTlsCertificate",
+        "operationId": "uploadSiteCertificate",
         "parameters": [
           {
             "in": "path",
@@ -12808,17 +15670,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/CertUploadRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
               }
             },
             "description": "OK"
@@ -12844,17 +15708,17 @@
             ]
           }
         ],
+        "summary": "Upload an own certificate",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.tls:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.tls:write"
       }
     },
     "/api/v1/sites/{name}/tls/csr": {
       "post": {
-        "operationId": "postSitesNameTlsCsr",
+        "operationId": "createSiteCSR",
         "parameters": [
           {
             "in": "path",
@@ -12865,21 +15729,13 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Csr"
+                }
               }
             },
             "description": "OK"
@@ -12905,17 +15761,17 @@
             ]
           }
         ],
+        "summary": "Create a key and a certificate signing request",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.tls:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.tls:write"
       }
     },
     "/api/v1/sites/{name}/tls/renew": {
       "post": {
-        "operationId": "postSitesNameTlsRenew",
+        "operationId": "renewSiteCertificate",
         "parameters": [
           {
             "in": "path",
@@ -12926,24 +15782,16 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
               }
             },
-            "description": "OK"
+            "description": "Accepted"
           },
           "default": {
             "content": {
@@ -12966,17 +15814,17 @@
             ]
           }
         ],
+        "summary": "Ask for a new Let's Encrypt certificate now",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.tls:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.tls:write"
       }
     },
     "/api/v1/sites/{name}/tls/source": {
       "put": {
-        "operationId": "putSitesNameTlsSource",
+        "operationId": "setSiteTLSSource",
         "parameters": [
           {
             "in": "path",
@@ -12991,17 +15839,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/CertSourceRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
               }
             },
             "description": "OK"
@@ -13027,12 +15877,12 @@
             ]
           }
         ],
+        "summary": "Choose Let's Encrypt or an own certificate",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.tls:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.tls:write"
       }
     },
     "/api/v1/sites/{name}/web": {
@@ -13141,12 +15991,14 @@
     },
     "/api/v1/status-pages": {
       "get": {
-        "operationId": "getStatusPages",
+        "operationId": "listStatusPages",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PageList"
+                }
               }
             },
             "description": "OK"
@@ -13172,33 +16024,35 @@
             ]
           }
         ],
+        "summary": "List the maintenance and parking pages",
         "tags": [
-          "status"
+          "pages"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "pages:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "pages:read"
       },
       "post": {
-        "operationId": "postStatusPages",
+        "operationId": "createStatusPage",
         "requestBody": {
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/PageFormRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
               }
             },
-            "description": "OK"
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -13221,17 +16075,17 @@
             ]
           }
         ],
+        "summary": "Upload a new maintenance or parking page",
         "tags": [
-          "status"
+          "pages"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "pages:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "pages:write"
       }
     },
     "/api/v1/status-pages/{id}": {
       "delete": {
-        "operationId": "deleteStatusPagesId",
+        "operationId": "deleteStatusPage",
         "parameters": [
           {
             "in": "path",
@@ -13243,13 +16097,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -13272,15 +16121,15 @@
             ]
           }
         ],
+        "summary": "Delete an unused page",
         "tags": [
-          "status"
+          "pages"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "pages:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "pages:write"
       },
       "get": {
-        "operationId": "getStatusPagesId",
+        "operationId": "getStatusPage",
         "parameters": [
           {
             "in": "path",
@@ -13295,7 +16144,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
               }
             },
             "description": "OK"
@@ -13321,15 +16172,15 @@
             ]
           }
         ],
+        "summary": "Get a maintenance or parking page",
         "tags": [
-          "status"
+          "pages"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "pages:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "pages:read"
       },
       "put": {
-        "operationId": "putStatusPagesId",
+        "operationId": "updateStatusPage",
         "parameters": [
           {
             "in": "path",
@@ -13342,19 +16193,21 @@
         ],
         "requestBody": {
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/PageFormRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
               }
             },
             "description": "OK"
@@ -13380,12 +16233,12 @@
             ]
           }
         ],
+        "summary": "Rename a page or replace its file",
         "tags": [
-          "status"
+          "pages"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "pages:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "pages:write"
       }
     },
     "/api/v1/tokens": {

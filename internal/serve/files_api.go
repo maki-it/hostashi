@@ -23,6 +23,7 @@ import (
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/files"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -432,9 +433,40 @@ func selectionTo(q files.Request) (map[string]string, error) {
 	return d, err
 }
 
+// fileOpRequest is the body of the POST file operations: files.Request,
+// named for the API document. Each operation reads only its own fields.
+type fileOpRequest files.Request
+
+// filesOKJSON is the answer of a file operation without a result.
+type filesOKJSON struct {
+	OK bool `json:"ok"`
+}
+
+// fileOps are the POST operations in the API document, in filesCalls.
+var fileOps = []struct {
+	call, id, summary string
+	out               any
+	outContentType    string
+}{
+	{"mkdir", "createFolder", "Create a folder (path)", filesOKJSON{}, ""},
+	{"touch", "createFile", "Create an empty file (path)", filesOKJSON{}, ""},
+	{"rename", "renameFile", "Rename a file or folder (from, to)", filesOKJSON{}, ""},
+	{"move", "moveFiles", "Move files and folders into a folder (paths, to)", filesOKJSON{}, ""},
+	{"copy", "copyFiles", "Copy files and folders into a folder (paths, to)", files.CopyResult{}, ""},
+	{"delete", "deleteFiles", "Delete files and folders (paths)", filesOKJSON{}, ""},
+	{"chmod", "chmodFiles", "Change the mode of files and folders (paths, mode)", filesOKJSON{}, ""},
+	{"upload-start", "startUpload", "Start a chunked upload (path, size, overwrite, parents)", files.Upload{}, ""},
+	{"upload-cancel", "cancelUpload", "Cancel a chunked upload (path, id)", filesOKJSON{}, ""},
+	{"extract", "extractArchive", "Extract a ZIP or tar archive (path, to, overwrite); one JSON line per progress step", nil, "application/x-ndjson"},
+}
+
+var filePathParam = openapi.Param{Name: "path", Description: "relative to the site's home; empty for the home itself"}
+
 // registerFiles adds the file manager routes of a site (ADR-0040).
 func registerFiles(mux *routeMux, a authn, px *filesProxy) {
-	mux.HandleFunc("GET /api/v1/sites/{name}/files", a.allow("files:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/files", openapi.Operation{
+		ID: "listFiles", Tag: "files", Summary: "List a folder", Out: files.Listing{}, Query: []openapi.Param{filePathParam},
+	}, a.allow("files:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		path, ok := cleanQueryPath(w, r)
 		if !ok {
 			return
@@ -445,7 +477,9 @@ func registerFiles(mux *routeMux, a authn, px *filesProxy) {
 		}
 	}))
 
-	mux.HandleFunc("GET /api/v1/sites/{name}/files/stat", a.allow("files:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/files/stat", openapi.Operation{
+		ID: "statFile", Tag: "files", Summary: "Get one file or folder", Out: files.Entry{}, Query: []openapi.Param{filePathParam},
+	}, a.allow("files:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		path, ok := cleanQueryPath(w, r)
 		if !ok {
 			return
@@ -457,7 +491,10 @@ func registerFiles(mux *routeMux, a authn, px *filesProxy) {
 	}))
 
 	// Downloads are logged as one entry per request (ADR-0040).
-	mux.HandleFunc("GET /api/v1/sites/{name}/files/content", a.allow("files:read", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/files/content", openapi.Operation{
+		ID: "downloadFile", Tag: "files", Summary: "Download a file; X-Hostashi-Version names its version",
+		OutContentType: "application/octet-stream", Query: []openapi.Param{filePathParam},
+	}, a.allow("files:read", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		path, ok := cleanQueryPath(w, r)
 		if !ok {
 			return
@@ -475,7 +512,10 @@ func registerFiles(mux *routeMux, a authn, px *filesProxy) {
 
 	// Saving from the editor: ?version= is the version the editor opened;
 	// without it the file must not exist yet.
-	mux.HandleFunc("PUT /api/v1/sites/{name}/files/content", a.allow("files:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("PUT /api/v1/sites/{name}/files/content", openapi.Operation{
+		ID: "saveFile", Tag: "files", Summary: "Save a file from the editor", InContentType: "application/octet-stream", Out: files.Entry{},
+		Query: []openapi.Param{filePathParam, {Name: "version", Description: "the version the editor opened; without it the file must not exist yet"}},
+	}, a.allow("files:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		path, ok := cleanQueryPath(w, r)
 		if !ok {
 			return
@@ -505,7 +545,10 @@ func registerFiles(mux *routeMux, a authn, px *filesProxy) {
 	}))
 
 	// Several files and folders as one ZIP, built while streaming.
-	mux.HandleFunc("GET /api/v1/sites/{name}/files/zip", a.allow("files:read", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/files/zip", openapi.Operation{
+		ID: "downloadZip", Tag: "files", Summary: "Download files and folders as one ZIP", OutContentType: "application/zip",
+		Query: []openapi.Param{{Name: "path", Description: "an entry to include, relative to the site's home", Required: true, Repeated: true}},
+	}, a.allow("files:read", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		paths := r.URL.Query()["path"]
 
 		detail, err := selection(paths)
@@ -528,7 +571,16 @@ func registerFiles(mux *routeMux, a authn, px *filesProxy) {
 
 	// One chunk of an upload (8 MiB at most); upload-start is in the audit
 	// log, the chunks are not.
-	mux.HandleFunc("PUT /api/v1/sites/{name}/files/upload", a.allow("files:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("PUT /api/v1/sites/{name}/files/upload", openapi.Operation{
+		ID: "uploadChunk", Tag: "files", Summary: "Send one chunk (at most 8 MiB) of an upload", InContentType: "application/octet-stream", Out: files.Upload{},
+		Query: []openapi.Param{
+			filePathParam,
+			{Name: "id", Required: true},
+			{Name: "offset", Type: "integer", Required: true},
+			{Name: "size", Type: "integer", Required: true},
+			{Name: "overwrite", Description: "1 to replace an existing file"},
+		},
+	}, a.allow("files:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		path, ok := cleanQueryPath(w, r)
 		if !ok {
 			return
@@ -549,16 +601,16 @@ func registerFiles(mux *routeMux, a authn, px *filesProxy) {
 		px.forward(w, r, site, http.MethodPut, "upload", q, http.MaxBytesReader(w, r.Body, files.MaxChunk+1))
 	}))
 
-	mux.HandleFunc("POST /api/v1/sites/{name}/files/{call}", a.allow("files:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		call := r.PathValue("call")
+	for _, o := range fileOps {
+		mux.Op("POST /api/v1/sites/{name}/files/"+o.call, openapi.Operation{
+			ID: o.id, Tag: "files", Summary: o.summary, In: fileOpRequest{}, Out: o.out, OutContentType: o.outContentType,
+		}, a.allow("files:write", fileOp(px, o.call, filesCalls[o.call])))
+	}
+}
 
-		check, known := filesCalls[call]
-		if !known {
-			writeError(w, http.StatusNotFound, "not_found", "no such file operation")
-
-			return
-		}
-
+// fileOp runs one POST file operation: check, pass on, log.
+func fileOp(px *filesProxy, call string, check func(files.Request) (map[string]string, error)) func(http.ResponseWriter, *http.Request, auth.Principal) {
+	return func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var req files.Request
 		if !decodeJSON(w, r, &req) {
 			return
@@ -591,5 +643,5 @@ func registerFiles(mux *routeMux, a authn, px *filesProxy) {
 
 			px.audit(r, p, action, site, detail)
 		}
-	}))
+	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -54,7 +55,9 @@ func headersFail(log *slog.Logger, w http.ResponseWriter, err error, what string
 }
 
 func registerHeaders(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/sites/{name}/headers", a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/headers", openapi.Operation{
+		ID: "getSiteHeaders", Tag: "sites", Summary: "Get the site's security headers", Out: headersJSON{},
+	}, a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		h, err := svc.Headers(r.Context(), r.PathValue("name"))
 		if err != nil {
 			siteFail(log, w, err, "read security headers")
@@ -66,7 +69,9 @@ func registerHeaders(mux *routeMux, a authn, svc *hosting.Service, log *slog.Log
 	}))
 
 	// The body replaces all headers; a field left out is off.
-	mux.HandleFunc("PUT /api/v1/sites/{name}/headers", a.allow("sites.headers:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("PUT /api/v1/sites/{name}/headers", openapi.Operation{
+		ID: "setSiteHeaders", Tag: "sites", Summary: "Set the site's security headers", In: agentapi.WebHeaders{}, Out: headersJSON{},
+	}, a.allow("sites.headers:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in agentapi.WebHeaders
 		if !decodeJSON(w, r, &in) {
 			return

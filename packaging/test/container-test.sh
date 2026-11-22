@@ -313,7 +313,22 @@ done
 [ "$(x systemctl is-active mariadb.service)" = active ] || fail "mariadb did not come back after a crash"
 after=$(x systemctl show -p NRestarts --value mariadb.service)
 [ "$after" -gt "$before" ] || fail "NRestarts did not grow ($before -> $after)"
-x /usr/local/bin/hostashi service list | grep -Eq "^mariadb +- +active \(running\) +$after " || fail "service list does not show the restart"
+# The list reads systemd at the time of the call; MariaDB may still settle
+# (a second automatic restart, a passing state), so wait for the list and
+# systemd to agree instead of comparing two reads taken apart.
+shown=
+for _ in $(seq 1 30); do
+  after=$(x systemctl show -p NRestarts --value mariadb.service)
+  svc=$(x /usr/local/bin/hostashi service list)
+  if grep -Eq "^mariadb +- +active \(running\) +$after " <<<"$svc"; then shown=1; break; fi
+  sleep 1
+done
+if [ -z "$shown" ]; then
+  echo "$svc"
+  x systemctl show -p NRestarts,ActiveState,SubState,MainPID,ActiveEnterTimestamp mariadb.service || true
+  x journalctl --no-pager -u mariadb -n 30 || true
+  fail "service list does not show the restart (systemd counts $after)"
+fi
 curl_ok=$(x curl -fsS http://127.0.0.1:8080/api/v1/health) || fail "panel gone after the service actions"
 grep -q '"agent":"ok"' <<<"$curl_ok" || fail "panel cannot reach the agent after the service actions"
 
