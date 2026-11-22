@@ -7,37 +7,22 @@
 // (`hostashi node-install <major>`): it downloads the pinned .tar.gz from
 // nodejs.org, checks its SHA-256 against agentapi.NodeReleases before it
 // reads a byte of the archive, unpacks it below Dir/.new-<major> and swaps
-// that directory into Dir/<major>. No apt, no shell, nothing is run.
+// that directory into Dir/<major>. No apt, no shell, nothing is run. The
+// work is done by internal/rtinstall, which Python shares (ADR-0061).
 //
 // Manager serves node.install and node.status in the agent: it starts the
 // unit and reads the log the unit writes, like internal/phpinstall.
 package nodeinstall
 
 import (
-	"archive/tar"
-	"cmp"
-	"compress/gzip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
-	"log/slog"
 	"net/http"
-	"os"
-	"path"
-	"path/filepath"
 	"runtime"
-	"strings"
-	"sync"
-	"time"
-
-	"golang.org/x/sys/unix"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
-	"github.com/maki-it/hostashi/internal/phpinstall"
+	"github.com/maki-it/hostashi/internal/rtinstall"
 )
 
 // Paths on the server.
@@ -48,33 +33,72 @@ const (
 	// LogDir holds one log per line; the unit writes <LogDir>/<major>.log.
 	LogDir = "/var/lib/hostashi-agent/node-install"
 	// VersionFile, in a line's directory, names the installed release.
-	VersionFile = ".hostashi-version"
+	VersionFile = rtinstall.VersionFile
 	// DistURL is where nodejs.org publishes its builds.
 	DistURL = "https://nodejs.org/dist"
 )
 
-// Bounds of one archive [E: the 24.x linux-x64 .tar.gz is about 55 MB and
-// unpacks to about 200 MB in some 7,000 entries].
-const (
-	maxArchive = 256 << 20
-	maxUnpack  = 1 << 30
-	maxEntries = 50_000
-)
-
 var (
 	// ErrBusy: an installation is already running.
-	ErrBusy = errors.New("nodeinstall: an installation is already running")
+	ErrBusy = rtinstall.ErrBusy
 	// ErrInstalled: the pinned release of the line is installed already.
-	ErrInstalled = errors.New("nodeinstall: this Node.js release is already installed")
+	ErrInstalled = rtinstall.ErrInstalled
 	// ErrChecksum: the download is not the pinned build.
-	ErrChecksum = errors.New("nodeinstall: SHA-256 of the download does not match")
+	ErrChecksum = rtinstall.ErrChecksum
 	// ErrNotInstalled: the line is not installed.
-	ErrNotInstalled = errors.New("nodeinstall: this Node.js line is not installed")
+	ErrNotInstalled = rtinstall.ErrNotInstalled
 	// ErrInUse: an app still runs on the line.
-	ErrInUse = errors.New("nodeinstall: apps still run on this Node.js line")
+	ErrInUse = rtinstall.ErrInUse
 	// ErrArch: nodejs.org has no build Hostashi pins for this machine.
-	ErrArch = errors.New("nodeinstall: no pinned Node.js build for this architecture")
+	ErrArch = rtinstall.ErrArch
 )
+
+// Runtime describes the Node.js lines for internal/rtinstall.
+var Runtime = &rtinstall.Runtime{
+	Name: "node", Dir: Dir, LogDir: LogDir, Bin: "bin/node",
+	Releases: func() []rtinstall.Release { return releases(agentapi.NodeReleases) },
+	ErrLine:  agentapi.ErrNodeMajor,
+}
+
+func releases(rs []agentapi.NodeRelease) []rtinstall.Release {
+	out := make([]rtinstall.Release, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, rtinstall.Release{Line: r.Major, Version: r.Version})
+	}
+
+	return out
+}
+
+// Manager serves node.install, node.status and node.remove. Set Runtime
+// to Runtime (NewManager does).
+type Manager = rtinstall.Manager
+
+// Units starts and reads the install units.
+type Units = rtinstall.Units
+
+// NewManager returns the manager of the Node.js lines.
+func NewManager(u Units) *Manager { return &Manager{Runtime: Runtime, Units: u} }
+
+// Status converts a status of the shared core to the agent's type.
+func Status(s rtinstall.Status) agentapi.NodeStatus {
+	return agentapi.NodeStatus{Installed: Installed(s.Installed), Last: s.Last, State: s.State, Log: s.Log}
+}
+
+// Installed converts installed lines to the agent's type.
+func Installed(in []rtinstall.Installed) []agentapi.NodeInstalled {
+	out := make([]agentapi.NodeInstalled, 0, len(in))
+	for _, i := range in {
+		out = append(out, agentapi.NodeInstalled{Major: i.Line, Version: i.Version})
+	}
+
+	return out
+}
+
+// Unpack extracts a Node.js .tar.gz, see rtinstall.Unpack.
+func Unpack(r io.Reader, dir, top string) (int, error) { return rtinstall.Unpack(r, dir, top) }
+
+// ReadVersion returns the release installed in a line's directory.
+func ReadVersion(lineDir string) (string, error) { return rtinstall.ReadVersion(lineDir) }
 
 // Arch is the nodejs.org name of a Go architecture: x64 or arm64.
 func Arch(goarch string) (string, error) {
@@ -109,20 +133,6 @@ func (in *Installer) releaseOf(major string) (agentapi.NodeRelease, error) {
 	return agentapi.NodeReleaseOf(major)
 }
 
-func (in *Installer) dir() string {
-	if in.Root == "" {
-		return Dir
-	}
-
-	return filepath.Join(in.Root, Dir)
-}
-
-func (in *Installer) logf(format string, a ...any) {
-	if in.Out != nil {
-		fmt.Fprintf(in.Out, "node-install: "+format+"\n", a...)
-	}
-}
-
 // Install installs the pinned release of major, unless it is there
 // already. Its last line on success starts with agentapi.NodeDoneMarker.
 func (in *Installer) Install(ctx context.Context, major string) error {
@@ -146,646 +156,15 @@ func (in *Installer) Install(ctx context.Context, major string) error {
 		return fmt.Errorf("%w (%s)", ErrArch, arch)
 	}
 
-	dir := in.dir()
-	if v, _ := ReadVersion(filepath.Join(dir, major)); v == rel.Version {
-		in.logf("Node.js %s is already installed", rel.Version)
-		in.logf("done: %s", rel.Version)
-
-		return nil
-	}
-
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("nodeinstall: %w", err)
-	}
-
-	name := "node-v" + rel.Version + "-linux-" + arch
-
 	base := in.URL
 	if base == "" {
 		base = DistURL
 	}
 
-	in.logf("downloading %s/v%s/%s.tar.gz", base, rel.Version, name)
-
-	tmp, err := in.download(ctx, base+"/v"+rel.Version+"/"+name+".tar.gz", dir, sum)
-	if err != nil {
-		return err
-	}
-
-	defer os.Remove(tmp.Name())
-	defer tmp.Close()
-
-	in.logf("SHA-256 matches %s", sum)
-
-	stage := filepath.Join(dir, ".new-"+major)
-	if err := os.RemoveAll(stage); err != nil {
-		return fmt.Errorf("nodeinstall: %w", err)
-	}
-
-	defer os.RemoveAll(stage)
-
-	if err := os.Mkdir(stage, 0o755); err != nil {
-		return fmt.Errorf("nodeinstall: %w", err)
-	}
-
-	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
-		return fmt.Errorf("nodeinstall: %w", err)
-	}
-
-	n, err := Unpack(tmp, stage, name)
-	if err != nil {
-		return err
-	}
-
-	if _, err := os.Stat(filepath.Join(stage, "bin", "node")); err != nil {
-		return fmt.Errorf("nodeinstall: the archive has no bin/node: %w", err)
-	}
-
-	//nolint:gosec // the site users read it, like the rest of the tree
-	if err := os.WriteFile(filepath.Join(stage, VersionFile), []byte(rel.Version+"\n"), 0o644); err != nil {
-		return fmt.Errorf("nodeinstall: %w", err)
-	}
-
-	in.logf("unpacked %d entries", n)
-
-	if err := swap(stage, filepath.Join(dir, major)); err != nil {
-		return err
-	}
-
-	in.logf("installed in %s", filepath.Join(Dir, major))
-	in.logf("done: %s", rel.Version)
-
-	return nil
-}
-
-// download fetches url into a temporary file in dir and checks its
-// SHA-256 against sum.
-func (in *Installer) download(ctx context.Context, url, dir, sum string) (*os.File, error) {
-	client := in.Client
-	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Minute}
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("nodeinstall: %w", err)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("nodeinstall: download: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("nodeinstall: download: %s", resp.Status)
-	}
-
-	f, err := os.CreateTemp(dir, ".download-*")
-	if err != nil {
-		return nil, fmt.Errorf("nodeinstall: %w", err)
-	}
-
-	h := sha256.New()
-
-	n, err := io.Copy(io.MultiWriter(f, h), io.LimitReader(resp.Body, maxArchive+1))
-	if err == nil && n > maxArchive {
-		err = fmt.Errorf("nodeinstall: the download is larger than %d bytes", maxArchive)
-	}
-
-	if err == nil && hex.EncodeToString(h.Sum(nil)) != sum {
-		err = ErrChecksum
-	}
-
-	if err != nil {
-		_ = f.Close()
-		_ = os.Remove(f.Name())
-
-		return nil, fmt.Errorf("nodeinstall: download: %w", err)
-	}
-
-	return f, nil
-}
-
-// Unpack extracts a Node.js .tar.gz into dir, which must exist and be
-// empty. Every entry must lie below top/, which is cut off. It takes only
-// directories, regular files and symbolic links that stay below dir; modes
-// become 0755 for directories and executables and 0644 for other files,
-// so no setuid bit and nothing writable for others survives. It returns
-// the number of entries.
-func Unpack(r io.Reader, dir, top string) (int, error) {
-	zr, err := gzip.NewReader(r)
-	if err != nil {
-		return 0, fmt.Errorf("nodeinstall: %w", err)
-	}
-	defer zr.Close()
-
-	root, err := os.OpenRoot(dir)
-	if err != nil {
-		return 0, fmt.Errorf("nodeinstall: %w", err)
-	}
-	defer root.Close()
-
-	tr := tar.NewReader(zr)
-
-	var total int64
-
-	n := 0
-
-	for {
-		h, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-
-		if err != nil {
-			return n, fmt.Errorf("nodeinstall: archive: %w", err)
-		}
-
-		if n++; n > maxEntries {
-			return n, fmt.Errorf("nodeinstall: archive has more than %d entries", maxEntries)
-		}
-
-		name, err := entryName(h.Name, top)
-		if err != nil {
-			return n, err
-		}
-
-		if name == "" {
-			continue // top/ itself
-		}
-
-		switch h.Typeflag {
-		case tar.TypeDir:
-			if err := root.MkdirAll(name, 0o755); err != nil {
-				return n, fmt.Errorf("nodeinstall: %w", err)
-			}
-		case tar.TypeReg:
-			if total += h.Size; h.Size < 0 || total > maxUnpack {
-				return n, fmt.Errorf("nodeinstall: archive unpacks to more than %d bytes", maxUnpack)
-			}
-
-			if err := writeFile(root, name, h, tr); err != nil {
-				return n, err
-			}
-		case tar.TypeSymlink:
-			if err := linkInside(name, h.Linkname); err != nil {
-				return n, err
-			}
-
-			if err := mkParent(root, name); err != nil {
-				return n, err
-			}
-
-			if err := root.Symlink(h.Linkname, name); err != nil {
-				return n, fmt.Errorf("nodeinstall: %w", err)
-			}
-		case tar.TypeXGlobalHeader:
-			continue
-		default:
-			return n, fmt.Errorf("nodeinstall: archive entry %q has type %q", h.Name, h.Typeflag)
-		}
-	}
-
-	return n, nil
-}
-
-// entryName returns an entry's path below top, cleaned; "" for top
-// itself.
-func entryName(name, top string) (string, error) {
-	clean := path.Clean(strings.TrimSuffix(name, "/"))
-	if clean == top {
-		return "", nil
-	}
-
-	rest, ok := strings.CutPrefix(clean, top+"/")
-	if !ok || !fs.ValidPath(rest) {
-		return "", fmt.Errorf("nodeinstall: archive entry %q is not below %s/", name, top)
-	}
-
-	return rest, nil
-}
-
-// linkInside refuses an absolute link or one that leaves the tree.
-func linkInside(name, target string) error {
-	if target == "" || path.IsAbs(target) {
-		return fmt.Errorf("nodeinstall: link %q points to %q", name, target)
-	}
-
-	if !fs.ValidPath(path.Join(path.Dir(name), target)) {
-		return fmt.Errorf("nodeinstall: link %q points outside the archive", name)
-	}
-
-	// ".." only in front: after another link, ".." would leave from where
-	// that link points, which the lexical check above cannot see.
-	seen := false
-
-	for p := range strings.SplitSeq(target, "/") {
-		switch {
-		case p == "..":
-			if seen {
-				return fmt.Errorf("nodeinstall: link %q points to %q", name, target)
-			}
-		case p != "" && p != ".":
-			seen = true
-		}
-	}
-
-	return nil
-}
-
-func mkParent(root *os.Root, name string) error {
-	if d := path.Dir(name); d != "." {
-		if err := root.MkdirAll(d, 0o755); err != nil {
-			return fmt.Errorf("nodeinstall: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func writeFile(root *os.Root, name string, h *tar.Header, r io.Reader) error {
-	if err := mkParent(root, name); err != nil {
-		return err
-	}
-
-	mode := os.FileMode(0o644)
-	if h.Mode&0o111 != 0 {
-		mode = 0o755
-	}
-
-	f, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
-	if err != nil {
-		return fmt.Errorf("nodeinstall: %w", err)
-	}
-
-	if _, err := io.CopyN(f, r, h.Size); err != nil {
-		_ = f.Close()
-
-		return fmt.Errorf("nodeinstall: %s: %w", name, err)
-	}
-
-	if err := f.Chmod(mode); err != nil { // the umask may have cut bits
-		_ = f.Close()
-
-		return fmt.Errorf("nodeinstall: %w", err)
-	}
-
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("nodeinstall: %w", err)
-	}
-
-	return nil
-}
-
-// swap puts stage at dst. An existing dst is exchanged with stage in one
-// step (renameat2 RENAME_EXCHANGE), so a running app never sees a half
-// tree; the old tree is then at stage and is removed by the caller.
-func swap(stage, dst string) error {
-	if err := os.Chmod(stage, 0o755); err != nil {
-		return fmt.Errorf("nodeinstall: %w", err)
-	}
-
-	_, err := os.Lstat(dst)
-	switch {
-	case errors.Is(err, os.ErrNotExist):
-		err = os.Rename(stage, dst)
-	case err == nil:
-		err = unix.Renameat2(unix.AT_FDCWD, stage, unix.AT_FDCWD, dst, unix.RENAME_EXCHANGE)
-	}
-
-	if err != nil {
-		return fmt.Errorf("nodeinstall: install %s: %w", dst, err)
-	}
-
-	return nil
-}
-
-// ReadVersion returns the release installed in a line's directory, "" if
-// none.
-func ReadVersion(lineDir string) (string, error) {
-	b, err := os.ReadFile(filepath.Join(lineDir, VersionFile))
-	if err != nil {
-		return "", err
-	}
-
-	return strings.TrimSpace(string(b)), nil
-}
-
-// Units starts and reads the install units.
-type Units interface {
-	Start(ctx context.Context, major string) error
-	Active(ctx context.Context, major string) (bool, error)
-}
-
-// Manager serves node.install and node.status.
-type Manager struct {
-	Units Units
-	Root  string // prefixed to every path; empty means /
-	// Done runs after an installation of a line succeeded, from the panel
-	// or from Update: the agent restarts the apps of the line on it.
-	Done func(ctx context.Context, major string)
-	// Poll is how often a running installation is checked; 2 s unless set.
-	Poll time.Duration
-	Log  *slog.Logger
-
-	mu sync.Mutex
-}
-
-func (m *Manager) path(p string) string {
-	if m.Root == "" {
-		return p
-	}
-
-	return filepath.Join(m.Root, p)
-}
-
-// Installed lists the lines that have a release installed, oldest line
-// first.
-func (m *Manager) Installed() []agentapi.NodeInstalled {
-	out := []agentapi.NodeInstalled{}
-
-	for _, r := range agentapi.NodeReleases {
-		d := m.path(filepath.Join(Dir, r.Major))
-		if _, err := os.Stat(filepath.Join(d, "bin", "node")); err != nil {
-			continue
-		}
-
-		if v, err := ReadVersion(d); err == nil && v != "" {
-			out = append(out, agentapi.NodeInstalled{Major: r.Major, Version: v})
-		}
-	}
-
-	return out
-}
-
-// Start starts the installation of a line. Only one runs at a time; a
-// line whose pinned release is installed is refused.
-func (m *Manager) Start(ctx context.Context, major string) (agentapi.NodeStatus, error) {
-	rel, err := agentapi.NodeReleaseOf(major)
-	if err != nil {
-		return agentapi.NodeStatus{}, err
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for _, i := range m.Installed() {
-		if i.Major == major && i.Version == rel.Version {
-			return agentapi.NodeStatus{}, ErrInstalled
-		}
-	}
-
-	if busy, err := m.running(ctx); err != nil {
-		return agentapi.NodeStatus{}, err
-	} else if busy != "" {
-		return agentapi.NodeStatus{}, ErrBusy
-	}
-
-	if err := m.Units.Start(ctx, major); err != nil {
-		return agentapi.NodeStatus{}, err
-	}
-
-	// The panel does not wait for the unit; the agent follows it, so the
-	// apps of the line restart on the new release.
-	go m.follow(context.WithoutCancel(ctx), major)
-
-	return agentapi.NodeStatus{Installed: m.Installed(), Last: major, State: agentapi.PHPInstallRunning, Log: []string{}}, nil
-}
-
-// maxRun bounds how long follow waits: the unit's TimeoutStartSec.
-const maxRun = 15 * time.Minute
-
-// follow waits until the unit of a line ends and runs Done when it
-// installed the pinned release. It reports whether it did.
-func (m *Manager) follow(ctx context.Context, major string) bool {
-	ctx, cancel := context.WithTimeout(ctx, maxRun+time.Minute)
-	defer cancel()
-
-	poll := cmp.Or(m.Poll, 2*time.Second)
-
-	for {
-		active, err := m.Units.Active(ctx, major)
-		if err != nil {
-			m.log().ErrorContext(ctx, "node install state", "major", major, "err", err)
-
-			return false
-		}
-
-		if !active {
-			break
-		}
-
-		select {
-		case <-ctx.Done():
-			return false
-		case <-time.After(poll):
-		}
-	}
-
-	rel, err := agentapi.NodeReleaseOf(major)
-	if err != nil {
-		return false
-	}
-
-	for _, i := range m.Installed() {
-		if i.Major == major && i.Version == rel.Version {
-			m.log().InfoContext(ctx, "node line installed", "major", major, "version", rel.Version)
-
-			if m.Done != nil {
-				m.Done(ctx, major)
-			}
-
-			return true
-		}
-	}
-
-	m.log().WarnContext(ctx, "node install did not finish", "major", major)
-
-	return false
-}
-
-// Outdated lists the installed lines whose release is not the pinned one,
-// oldest line first.
-func (m *Manager) Outdated() []string {
-	var out []string
-
-	for _, i := range m.Installed() {
-		if rel, err := agentapi.NodeReleaseOf(i.Major); err == nil && i.Version != rel.Version {
-			out = append(out, i.Major)
-		}
-	}
-
-	return out
-}
-
-// Update installs the pinned release of every outdated line, one after the
-// other, as a Hostashi update brings new pins (ADR-0054: updates without a
-// click, Kim 2026-11-22). A line that fails is logged and left for the
-// panel and doctor; the next start of the agent tries again.
-func (m *Manager) Update(ctx context.Context) {
-	for _, major := range m.Outdated() {
-		if ctx.Err() != nil {
-			return
-		}
-
-		m.mu.Lock()
-
-		busy, err := m.running(ctx)
-		if err == nil && busy == "" {
-			err = m.Units.Start(ctx, major)
-		} else if err == nil {
-			err = ErrBusy
-		}
-
-		m.mu.Unlock()
-
-		if err != nil {
-			m.log().WarnContext(ctx, "node update not started", "major", major, "err", err)
-
-			continue
-		}
-
-		m.log().InfoContext(ctx, "node update started", "major", major)
-		m.follow(ctx, major)
-	}
-}
-
-func (m *Manager) log() *slog.Logger {
-	if m.Log != nil {
-		return m.Log
-	}
-
-	return slog.New(slog.DiscardHandler)
-}
-
-func (m *Manager) running(ctx context.Context) (string, error) {
-	for _, r := range agentapi.NodeReleases {
-		active, err := m.Units.Active(ctx, r.Major)
-		if err != nil {
-			return "", err
-		}
-
-		if active {
-			return r.Major, nil
-		}
-	}
-
-	return "", nil
-}
-
-func (m *Manager) logPath(major string) string {
-	return m.path(filepath.Join(LogDir, major+".log"))
-}
-
-// Status reports the installed lines and the last installation: a running
-// unit, else the line whose log is the newest. The lines are read last: the
-// unit swaps a line in before it writes its final line and ends, so a
-// finished installation is always listed (read first, a unit that ends in
-// between showed "succeeded" without its line).
-func (m *Manager) Status(ctx context.Context) (agentapi.NodeStatus, error) {
-	st, err := m.lastRun(ctx)
-	if err != nil {
-		return agentapi.NodeStatus{}, err
-	}
-
-	st.Installed = m.Installed()
-
-	return st, nil
-}
-
-func (m *Manager) lastRun(ctx context.Context) (agentapi.NodeStatus, error) {
-	st := agentapi.NodeStatus{State: agentapi.PHPInstallIdle, Log: []string{}}
-
-	busy, err := m.running(ctx)
-	if err != nil {
-		return agentapi.NodeStatus{}, err
-	}
-
-	if busy != "" {
-		lines, _ := phpinstall.TailLog(m.logPath(busy))
-		st.Last, st.State, st.Log = busy, agentapi.PHPInstallRunning, lines
-
-		return st, nil
-	}
-
-	var newest int64
-
-	for _, r := range agentapi.NodeReleases {
-		fi, err := os.Lstat(m.logPath(r.Major))
-		if err != nil || !fi.Mode().IsRegular() {
-			continue
-		}
-
-		if t := fi.ModTime().UnixNano(); st.Last == "" || t > newest {
-			st.Last, newest = r.Major, t
-		}
-	}
-
-	if st.Last == "" {
-		return st, nil
-	}
-
-	lines, err := phpinstall.TailLog(m.logPath(st.Last))
-	if err != nil {
-		return agentapi.NodeStatus{}, err
-	}
-
-	st.State, st.Log = agentapi.PHPInstallFailed, lines
-	if n := len(lines); n > 0 && strings.HasPrefix(lines[n-1], agentapi.NodeDoneMarker) {
-		st.State = agentapi.PHPInstallSucceeded
-	}
-
-	return st, nil
-}
-
-// Remove deletes an installed line. users are the sites whose app runs on
-// it (appunit.Manager.Users): a line in use is refused, so no app loses
-// its node. The tree is first renamed out of the way, so a half-removed
-// line never looks installed, and the line's install log goes with it.
-func (m *Manager) Remove(ctx context.Context, major string, users []string) (agentapi.NodeStatus, error) {
-	if err := agentapi.ValidateNodeMajor(major); err != nil {
-		return agentapi.NodeStatus{}, err
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if busy, err := m.running(ctx); err != nil {
-		return agentapi.NodeStatus{}, err
-	} else if busy != "" {
-		return agentapi.NodeStatus{}, ErrBusy
-	}
-
-	if len(users) > 0 {
-		return agentapi.NodeStatus{}, fmt.Errorf("%w: %s", ErrInUse, strings.Join(users, ", "))
-	}
-
-	dir := m.path(filepath.Join(Dir, major))
-	if fi, err := os.Lstat(dir); errors.Is(err, os.ErrNotExist) {
-		return agentapi.NodeStatus{}, ErrNotInstalled
-	} else if err != nil {
-		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: %w", err)
-	} else if !fi.IsDir() {
-		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: %s is not a directory", dir)
-	}
-
-	old := m.path(filepath.Join(Dir, ".old-"+major))
-	if err := os.RemoveAll(old); err != nil {
-		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: %w", err)
-	}
-
-	if err := os.Rename(dir, old); err != nil {
-		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: remove %s: %w", dir, err)
-	}
-
-	if err := os.RemoveAll(old); err != nil {
-		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: remove %s: %w", old, err)
-	}
-
-	if err := os.Remove(m.logPath(major)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: %w", err)
-	}
-
-	return m.Status(ctx)
+	name := "node-v" + rel.Version + "-linux-" + arch
+	ri := rtinstall.Installer{Runtime: Runtime, Root: in.Root, Client: in.Client, Out: in.Out}
+
+	return ri.Install(ctx, rtinstall.Release{Line: rel.Major, Version: rel.Version}, rtinstall.Archive{
+		URL: base + "/v" + rel.Version + "/" + name + ".tar.gz", SHA256: sum, Top: name,
+	})
 }

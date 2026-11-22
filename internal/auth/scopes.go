@@ -51,6 +51,7 @@ var scopeCatalog = map[string]ScopeInfo{
 	"firewall:write":          {Description: "Open ports and set the allowlists for SSH and the panel (a wrong list locks out until the rollback)", HighRisk: true},
 	"php:install":             {Description: "Install more PHP versions from sury.org (runs apt as root with a fixed package list)", HighRisk: true},
 	"node:install":            {Description: "Install the Node.js LTS builds Hostashi pins from nodejs.org (downloads and unpacks them as root, checked against a fixed SHA-256)", HighRisk: true},
+	"python:install":          {Description: "Install the CPython builds Hostashi pins from python-build-standalone (downloads and unpacks them as root, checked against a fixed SHA-256)", HighRisk: true},
 	"metrics:read":            {Description: "Read the Prometheus metrics endpoint"},
 	"migrations:read":         {Description: "List uploaded CloudPanel scan reports and read their migration plans"},
 	"migrations:write":        {Description: "Upload and delete CloudPanel scan reports"},

@@ -45,6 +45,7 @@ import (
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
 	"github.com/maki-it/hostashi/internal/phpinstall"
+	"github.com/maki-it/hostashi/internal/pythoninstall"
 	"github.com/maki-it/hostashi/internal/resticctl"
 	"github.com/maki-it/hostashi/internal/sitelogs"
 	"github.com/maki-it/hostashi/internal/sites"
@@ -183,6 +184,10 @@ type Config struct {
 	// install unit (ADR-0054). Run builds it; without it node.* answer
 	// failed_precondition.
 	NodeInstall *nodeinstall.Manager
+	// PythonInstall installs the pinned CPython builds through the fixed
+	// install unit (ADR-0061). Run builds it; without it python.* answer
+	// failed_precondition.
+	PythonInstall *pythoninstall.Manager
 
 	// PageCache keeps the sites' page cache directories (ADR-0046). Run
 	// builds it for nginx's worker user; without it a page cache is
@@ -348,6 +353,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	registerPHPInstall(s, cfg.PHPInstall, cfg.PHP)
 	registerPGClient(s, cfg.PGClient)
 	registerNodeInstall(s, cfg.NodeInstall, cfg.Apps)
+	registerPythonInstall(s, cfg.PythonInstall, nil)
 
 	svcLog := cfg.Log
 	if svcLog == nil {
@@ -1558,7 +1564,11 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if cfg.NodeInstall == nil {
-		cfg.NodeInstall = &nodeinstall.Manager{Units: phpctl.NodeInstallUnits{}, Log: cfg.Log}
+		cfg.NodeInstall = &nodeinstall.Manager{Runtime: nodeinstall.Runtime, Units: phpctl.NodeInstallUnits{}, Log: cfg.Log}
+	}
+
+	if cfg.PythonInstall == nil {
+		cfg.PythonInstall = &pythoninstall.Manager{Runtime: pythoninstall.Runtime, Units: phpctl.PythonInstallUnits{}, Log: cfg.Log}
 	}
 
 	if cfg.Firewall == nil {
@@ -1595,6 +1605,9 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	go cfg.NodeInstall.Update(ctx)
+	// Python lines follow a Hostashi update the same way (ADR-0061); no
+	// site runs on them yet, so nothing restarts.
+	go cfg.PythonInstall.Update(ctx)
 
 	if cfg.PHP != nil {
 		// Like the web server: a failure is logged, web.apply retries.

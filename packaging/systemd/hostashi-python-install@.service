@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Installs the pinned CPython build of line %i (ADR-0061). The agent
+# starts an instance when an admin installs a line in the panel. The binary
+# checks %i against its own list (agentapi.PythonReleases), downloads the
+# install_only_stripped .tar.gz of python-build-standalone from its GitHub
+# release, checks its SHA-256 against the pinned value and unpacks it into
+# /opt/hostashi/python/%i. Nothing it downloads is run.
+#
+# It needs the network (github.com and the host GitHub redirects release
+# downloads to) but no capability: root owns
+# /opt/hostashi/python, and the files it writes stay root's and read-only
+# for the site users.
+
+[Unit]
+Description=Install Python %i for Hostashi
+Documentation=https://github.com/maki-it/hostashi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/hostashi python-install %i
+TimeoutStartSec=15min
+# No core dumps (ADR-0033).
+LimitCORE=0
+# The agent reads this log for the panel (python.status); the installer
+# creates the directory.
+StandardOutput=truncate:/var/lib/hostashi-agent/python-install/%i.log
+StandardError=inherit
+UMask=0022
+
+ReadWritePaths=/opt/hostashi/python
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+# No RestrictSUIDSGID=: it makes openat2() fail with ENOSYS (os.Root).
+# The unpacker sets no setuid or setgid bit itself.
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+RemoveIPC=yes
+PrivateIPC=yes

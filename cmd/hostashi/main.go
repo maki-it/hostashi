@@ -30,6 +30,7 @@ import (
 	"github.com/maki-it/hostashi/internal/dbjob"
 	"github.com/maki-it/hostashi/internal/files"
 	"github.com/maki-it/hostashi/internal/nodeinstall"
+	"github.com/maki-it/hostashi/internal/pythoninstall"
 	"github.com/maki-it/hostashi/internal/reqid"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/serve"
@@ -136,6 +137,14 @@ commands:
             download, check and unpack the pinned Node.js build of MAJOR into
             /opt/hostashi/node/MAJOR (root; started by
             hostashi-node-install@MAJOR.service)
+  python status | python install LINE | python remove LINE
+            the installed Python lines and the last installation, start the
+            installation of a line (for example 3.13) or remove one that no
+            site uses, through the panel's API (ADR-0061)
+  python-install LINE
+            download, check and unpack the pinned CPython build of LINE into
+            /opt/hostashi/python/LINE (root; started by
+            hostashi-python-install@LINE.service)
   user recover [-public-url URL] NAME
             reset NAME's password and second factors, enable the account
             and print a new invitation link (root; the way back in when
@@ -379,6 +388,31 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 
 			return 2
 		}
+	case "python":
+		if fs.Parse(args) != nil {
+			return 2
+		}
+
+		err = pythonCmd(ctx, fs.Args(), stdout)
+		if errors.Is(err, errUsage) {
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+	case "python-install":
+		if fs.Parse(args) != nil || fs.NArg() != 1 {
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+
+		if euid != 0 {
+			err = errors.New("must run as root")
+
+			break
+		}
+
+		err = (&pythoninstall.Installer{Out: stdout}).Install(ctx, fs.Arg(0))
 	case "node-install":
 		if fs.Parse(args) != nil || fs.NArg() != 1 {
 			fmt.Fprint(stderr, usage)

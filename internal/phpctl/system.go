@@ -187,6 +187,41 @@ func ValkeyDefaultState(ctx context.Context) (active, file string, err error) {
 	return active, file, nil
 }
 
+// PythonInstallUnits starts and reads
+// hostashi-python-install@<line>.service, the fixed unit that installs a
+// pinned CPython build (ADR-0061). The line must be one of
+// agentapi.PythonReleases; `hostashi python-install` behind the unit checks
+// it again.
+type PythonInstallUnits struct{}
+
+func pythonInstallUnit(line string) (string, error) {
+	if err := agentapi.ValidatePythonLine(line); err != nil {
+		return "", err
+	}
+
+	return "hostashi-python-install@" + line + ".service", nil
+}
+
+// Start queues the unit (systemctl start --no-block).
+func (PythonInstallUnits) Start(ctx context.Context, line string) error {
+	unit, err := pythonInstallUnit(line)
+	if err != nil {
+		return err
+	}
+
+	return run(ctx, Systemctl, "start", "--no-block", unit)
+}
+
+// Active reports whether the unit is running or about to.
+func (PythonInstallUnits) Active(ctx context.Context, line string) (bool, error) {
+	unit, err := pythonInstallUnit(line)
+	if err != nil {
+		return false, err
+	}
+
+	return unitActive(ctx, unit)
+}
+
 // NodeInstallUnits starts and reads hostashi-node-install@<major>.service,
 // the fixed unit that installs a pinned Node.js build (ADR-0054). The
 // major must be one of agentapi.NodeReleases; `hostashi node-install`

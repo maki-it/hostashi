@@ -99,6 +99,8 @@ var table = map[Action]Rule{
 	"php.install:read":     server("sites:read"),
 	"node:install":         server("node:install"),
 	"node:remove":          server("node:install"),
+	"python:install":       server("python:install"),
+	"python:remove":        server("python:install"),
 	"services:read":        server("services:read"),
 	"services:write":       server("services:write"),
 	"system:read":          server("system:read"),
@@ -111,8 +113,10 @@ var table = map[Action]Rule{
 	"databases:list":    all("databases:read"),
 	"db_servers:list":   all("databases:read"),
 	"php.versions:read": all("sites:read"),
-	// The Node.js lines, for choosing a site's version (ADR-0054).
+	// The Node.js and Python lines, for choosing a site's version
+	// (ADR-0054, ADR-0061).
 	"node:read":         all("sites:read"),
+	"python:read":       all("sites:read"),
 	"ssh.hostkeys:read": all("ssh:read"),
 	"pages:read":        all("pages:read"),
 

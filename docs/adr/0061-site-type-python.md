@@ -103,3 +103,15 @@ None left.
 
 1. ~~Python from python-build-standalone (source C), every line that has not ended (today 3.11–3.15)?~~ Decided (Kim, 2026-11-22): yes, pinned by SHA-256 and checked with Sigstore.
 2. ~~Hostashi creates and owns `<home>/.venv` (environment A), and a line change rebuilds it?~~ Decided (Kim, 2026-11-22): yes, after a confirmation in which the site name to type is clearly highlighted.
+
+## Implementation notes: Python install (2026-11-22)
+
+Notes on how the Python source (option C) is built; they change no decision.
+
+- The download, checksum, unpack and swap code of `internal/nodeinstall` moved to `internal/rtinstall`, together with the manager that starts the install units, follows them, reports their logs and removes lines. `internal/nodeinstall` and `internal/pythoninstall` describe their runtime (directory, log directory, binary, pinned lines) and build the download URL; the rules of the Node.js notes in ADR-0054 apply to both unchanged [V: `internal/rtinstall`, the Node.js tests unchanged].
+- `internal/agentapi/python_versions.go` pins 3.11.18, 3.12.16, 3.13.18, 3.14.10 and 3.15.2 from python-build-standalone release `20261110`, with the SHA-256 of the `x86_64` and `aarch64` `install_only_stripped` archives from its `SHA256SUMS`, and the end of life of each line [V: SHA256SUMS of 20261110, `endoflife.date`].
+- `hostashi python-install <line>` runs in `hostashi-python-install@<line>.service` with the sandbox of the Node.js install unit, `/opt/hostashi/python` as its only writable path. It downloads `cpython-<version>%2B<tag>-<arch>-unknown-linux-gnu-install_only_stripped.tar.gz` from the release and unpacks the archive's `python/` into `/opt/hostashi/python/<line>` [V: real download of 3.13.18 on linux-x86_64: the checksum matched, 4,563 entries, `python3` runs with OpenSSL and SQLite].
+- A virtual environment made with it links `bin/python3` to `/opt/hostashi/python/<line>/bin/python3` and has pip from the build [V: `python3 -m venv`, `pyvenv.cfg` names the line's path], so a patch update of the line keeps every environment.
+- API: `GET /api/v1/python` (action `python:read`, scope `sites:read`, every role: the lines, their pinned release and end of life, what is installed, the last installation and its log), `POST /api/v1/python/install` and `POST /api/v1/python/remove` with `{"line":"3.13"}` (scope `python:install`, high risk, admin only, audited as `python.install` and `python.remove`). A refused request answers 409 `python_install_refused`. CLI through the API: `hostashi python status|install|remove`.
+- The agent installs newer pins of installed lines when it starts, like Node.js. Until Python sites exist, no line is in use and nothing restarts.
+- Not yet: the "Python versions" workflow, doctor `system.python`, the panel page, and the site type itself (next PRs).

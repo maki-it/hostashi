@@ -1856,6 +1856,50 @@ x runuser -u nobody -- env HOME=/tmp PATH="/opt/hostashi/node/$NODE_MAJOR/bin:/u
 out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the Node.js install changed something"; }
 
+step "Python from the CPython builds of python-build-standalone (ADR-0061)"
+expect_mode /opt/hostashi/python "755 root:root"
+expect_mode /var/lib/hostashi-agent/python-install "700 root:root"
+if x systemctl start hostashi-python-install@3.10.service 2>/dev/null; then fail "the unit installed Python 3.10"; fi
+[ -z "$(x ls -A /opt/hostashi/python)" ] || fail "Python installed without a request: $(x ls -A /opt/hostashi/python)"
+[ "$(api GET /api/v1/python)" = 200 ] || fail "python status: $(x cat /tmp/api.out)"
+x grep -q '"installed":\[\]' /tmp/api.out || fail "a Python line is installed already: $(x cat /tmp/api.out)"
+release=$(x grep -o '"line":"3\.[0-9]*","version":"[0-9.]*"' /tmp/api.out | tail -n 1)
+PY_LINE=$(sed -n 's/^"line":"\(3\.[0-9]*\)".*/\1/p' <<<"$release")
+PY_VERSION=$(sed -n 's/.*"version":"\([0-9.]*\)"$/\1/p' <<<"$release")
+[ -n "$PY_LINE" ] && [ -n "$PY_VERSION" ] || fail "no Python release in: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/python/install '{"line":"3.10"}')" = 422 ] || fail "python 3.10: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/python/install "{\"line\":\"$PY_LINE\"}")" = 202 ] || fail "python install: $(x cat /tmp/api.out)"
+state=""
+for _ in $(seq 1 150); do
+  [ "$(api GET /api/v1/python)" = 200 ] || fail "python status: $(x cat /tmp/api.out)"
+  state=$(x sed -n 's/.*"state":"\([a-z]*\)".*/\1/p' /tmp/api.out)
+  [ "$state" = running ] || break
+  sleep 2
+done
+[ "$state" = succeeded ] || fail "Python from the panel: $(x cat /tmp/api.out)"
+x grep -q "\"installed\":\\[{\"line\":\"$PY_LINE\",\"version\":\"$PY_VERSION\"}\\]" /tmp/api.out || fail "Python $PY_LINE not listed: $(x cat /tmp/api.out)"
+expect_mode "/opt/hostashi/python/$PY_LINE" "755 root:root"
+# Anyone may run it, nobody but root may change it; TLS and SQLite come
+# with the build.
+[ "$(x runuser -u nobody -- "/opt/hostashi/python/$PY_LINE/bin/python3" -c 'import platform; print(platform.python_version())')" = "$PY_VERSION" ] || fail "python3 as nobody"
+x runuser -u nobody -- "/opt/hostashi/python/$PY_LINE/bin/python3" -c 'import ssl, sqlite3, ctypes, venv' || fail "python3 modules as nobody"
+# A virtual environment links the line's interpreter by its path, so a
+# patch update of the line keeps it working (ADR-0061).
+x rm -rf /tmp/py-venv
+x runuser -u nobody -- "/opt/hostashi/python/$PY_LINE/bin/python3" -m venv /tmp/py-venv || fail "python3 -m venv as nobody"
+[ "$(x readlink /tmp/py-venv/bin/python3)" = "/opt/hostashi/python/$PY_LINE/bin/python3" ] || fail "venv interpreter: $(x readlink /tmp/py-venv/bin/python3)"
+x runuser -u nobody -- /tmp/py-venv/bin/python -m pip --version >/dev/null || fail "pip in the venv as nobody"
+x rm -rf /tmp/py-venv
+[ -z "$(x find /opt/hostashi/python ! -type l -perm /6022)" ] || fail "setuid or writable files: $(x find /opt/hostashi/python ! -type l -perm /6022 | head)"
+[ -z "$(x find /opt/hostashi/python ! -user root)" ] || fail "files not owned by root"
+[ "$(api POST /api/v1/python/install "{\"line\":\"$PY_LINE\"}")" = 409 ] || fail "second python install: $(x cat /tmp/api.out)"
+out=$(inst apply --yes)
+grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the Python install changed something"; }
+[ "$(api POST /api/v1/python/remove "{\"line\":\"$PY_LINE\"}")" = 200 ] || fail "python remove: $(x cat /tmp/api.out)"
+x test ! -e "/opt/hostashi/python/$PY_LINE" || fail "Python $PY_LINE left after removal"
+x test ! -e "/opt/hostashi/python/.old-$PY_LINE" || fail "removed tree of Python $PY_LINE left"
+[ "$(api POST /api/v1/python/remove "{\"line\":\"$PY_LINE\"}")" = 409 ] || fail "second python remove: $(x cat /tmp/api.out)"
+
 step "a Node.js site runs its app as the site user behind nginx (ADR-0054)"
 other_major=22; [ "$NODE_MAJOR" != 22 ] || other_major=24
 [ "$(api POST /api/v1/sites "{\"name\":\"nodeapp\",\"domains\":[\"nodeapp.example.com\"],\"type\":\"node\",\"node\":{\"version\":\"$other_major\"}}")" = 409 ] ||

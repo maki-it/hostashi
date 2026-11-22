@@ -298,7 +298,7 @@ func writeLog(t *testing.T, root, major, body string) {
 func TestManager(t *testing.T) {
 	root := t.TempDir()
 	u := &fakeUnits{active: map[string]bool{}}
-	m := &Manager{Units: u, Root: root}
+	m := &Manager{Runtime: Runtime, Units: u, Root: root}
 	ctx := context.Background()
 
 	st, err := m.Status(ctx)
@@ -364,7 +364,7 @@ func TestManager(t *testing.T) {
 func TestRemove(t *testing.T) {
 	root := t.TempDir()
 	u := &fakeUnits{active: map[string]bool{}}
-	m := &Manager{Units: u, Root: root}
+	m := &Manager{Runtime: Runtime, Units: u, Root: root}
 	ctx := context.Background()
 
 	rel, _ := agentapi.NodeReleaseOf("22")
@@ -489,7 +489,7 @@ func TestUpdate(t *testing.T) {
 
 	var done []string
 
-	m := &Manager{Units: u, Root: root, Poll: time.Millisecond, Done: func(_ context.Context, major string) {
+	m := &Manager{Runtime: Runtime, Units: u, Root: root, Poll: time.Millisecond, Done: func(_ context.Context, major string) {
 		mu.Lock()
 		defer mu.Unlock()
 
