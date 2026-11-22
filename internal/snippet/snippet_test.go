@@ -52,9 +52,13 @@ add_header Referrer-Policy strict-origin-when-cross-origin;`,
 
 func TestRejectsDangerousSnippets(t *testing.T) {
 	cases := map[string]struct{ src, want string }{
-		"access log path":   {`access_log /etc/cron.d/x;`, `only "access_log off"`},
-		"error log":         {`error_log /etc/passwd;`, `"error_log" is not allowed`},
-		"listen":            {`listen 8443;`, `"listen" is not allowed`},
+		"access log path": {`access_log /etc/cron.d/x;`, `only "access_log off"`},
+		"error log":       {`error_log /etc/passwd;`, `"error_log" is not allowed`},
+		"listen":          {`listen 8443;`, `"listen" is not allowed`},
+		// The real client address is a typed site setting (ADR-0059).
+		"real ip from":      {`set_real_ip_from 0.0.0.0/0;`, `"set_real_ip_from" is not allowed`},
+		"real ip header":    {`real_ip_header X-Forwarded-For;`, `"real_ip_header" is not allowed`},
+		"real ip loop":      {`real_ip_recursive on;`, `"real_ip_recursive" is not allowed`},
 		"server_name":       {`server_name other.example;`, `"server_name" is not allowed`},
 		"include":           {`include /etc/shadow;`, `"include" is not allowed`},
 		"ssl key":           {`ssl_certificate_key /etc/hostashi/secret.key;`, `"ssl_certificate_key" is not allowed`},
