@@ -1,0 +1,109 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Compares Cloudflare's published edge ranges with the shipped list once a
+# week (ADR-0059). When they changed it opens (or updates) a pull request
+# from the branch automation/proxy-ranges that rewrites
+# internal/agentapi/cloudflare.go. The tool refuses to change anything when
+# Cloudflare's plain lists and its API disagree, when the list looks
+# truncated, or when a range fails the checks of a site's own range.
+# Nothing is merged automatically: a maintainer reviews and merges.
+#
+# Pull requests opened with GITHUB_TOKEN start no pull_request workflows,
+# so this workflow starts the checks on the branch itself.
+name: Proxy ranges
+
+on:
+  schedule:
+    # Tuesdays 05:37 UTC, apart from the PHP versions run.
+    - cron: "37 5 * * 2"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/proxyranges/**"
+      - ".github/workflows/proxy-ranges.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proxy-ranges-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BRANCH: automation/proxy-ranges
+
+jobs:
+  check:
+    name: Check Cloudflare's ranges
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Only scheduled and manual runs push; pull requests only report.
+          persist-credentials: ${{ github.event_name != 'pull_request' }}
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check and update the list
+        run: |
+          go run ./tools/proxyranges -write -summary "$RUNNER_TEMP/summary.md"
+          cat "$RUNNER_TEMP/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          git diff --stat
+      - name: Run the tests the change affects
+        run: go test ./internal/agentapi/ ./internal/web/ ./tools/proxyranges/
+      - name: Open or update the pull request
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          if git diff --quiet; then
+            echo "Nothing to change."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git commit -q -s -a -m "agentapi: update Cloudflare's edge ranges" \
+            -m "Found by the weekly Proxy ranges workflow (ADR-0059)."
+          # The same change as on the open branch: do not push again, so the
+          # checks and reviews on it stay.
+          if git fetch -q origin "$BRANCH" 2>/dev/null && git diff --quiet FETCH_HEAD HEAD; then
+            echo "The branch already has this change."
+            exit 0
+          fi
+          git push -f origin "$BRANCH"
+
+          {
+            echo "## What"
+            echo
+            echo "The weekly Proxy ranges workflow found these changes in Cloudflare's edge ranges:"
+            echo
+            cat "$RUNNER_TEMP/summary.md"
+            echo
+            echo "Sources: www.cloudflare.com/ips-v4, www.cloudflare.com/ips-v6 and api.cloudflare.com/client/v4/ips, which agreed on $(date -u +%F)."
+            echo
+            echo "## Before merging"
+            echo
+            echo "- [ ] Cloudflare announced the change (for example on its IP ranges page or blog); an added range nobody announced is a reason to stop."
+            echo "- [ ] The Go runs on this branch are green."
+            echo
+            echo "Every server that trusts Cloudflare on a site trusts these ranges after the next release. This pull request is never merged automatically."
+          } > "$RUNNER_TEMP/body.md"
+
+          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -z "$pr" ]; then
+            gh pr create --repo "$REPO" --base main --head "$BRANCH" \
+              --title "agentapi: update Cloudflare's edge ranges" \
+              --body-file "$RUNNER_TEMP/body.md" --label security --assignee kimdre
+          else
+            gh pr edit "$pr" --repo "$REPO" --body-file "$RUNNER_TEMP/body.md"
+          fi
+
+          gh workflow run go.yml --repo "$REPO" --ref "$BRANCH"
