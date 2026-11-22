@@ -4,6 +4,7 @@ package plan_test
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"os"
@@ -12,6 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
+	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/cloudpanel/fixture"
 	"github.com/maki-it/hostashi/internal/cloudpanel/plan"
 	"github.com/maki-it/hostashi/internal/cloudpanel/scan"
@@ -136,7 +140,7 @@ func TestBuildSite(t *testing.T) {
 			s.RedirectFrom = []string{"www.shop.example.com"}
 			t.Panel = "www.shop.example.com"
 		}, plan.ActionSkip, "domain_reserved"},
-		{"nodejs", func(s *scan.Site, _ *plan.Target) { s.Type, s.Pool = "nodejs", nil }, plan.ActionSkip, "type_unsupported"},
+		{"python", func(s *scan.Site, _ *plan.Target) { s.Type, s.Pool = "python", nil }, plan.ActionSkip, "type_unsupported"},
 		{"php 5.6", func(s *scan.Site, _ *plan.Target) { s.Pool.Version = "5.6" }, plan.ActionSkip, "php_unsupported"},
 		{"php not installed", func(s *scan.Site, _ *plan.Target) { s.Pool.Version = "8.3" }, plan.ActionReview, "php_missing"},
 		{"php legacy", func(s *scan.Site, t *plan.Target) { s.Pool.Version, t.PHP = "7.4", []string{"7.4"} }, plan.ActionReview, "php_legacy"},
@@ -171,6 +175,94 @@ func TestBuildSite(t *testing.T) {
 				t.Fatalf("got %s %v, want %s with %s", got.Action, got.Reasons, tc.action, tc.code)
 			}
 		})
+	}
+}
+
+func TestBuildProxySite(t *testing.T) {
+	proxy := func(upstream string) scan.Site {
+		s := base()
+		s.Type, s.Pool, s.Upstream = "proxy", nil, upstream
+		s.Cron = []scan.CronJob{{Schedule: "@daily", Command: "true"}}
+		s.SSHKeys = []scan.SSHKey{{Public: testKey(t)}}
+		s.Usage = &scan.Usage{Bytes: 1 << 20, Inodes: 10}
+
+		return s
+	}
+
+	got := one(proxy("http://10.0.0.5:8080"), plan.Target{})
+	if got.Action != plan.ActionReview || got.Proxy != "http://10.0.0.5:8080" || got.PHP != "" || got.Node != "" ||
+		got.CronImport != 0 || got.SSHKeys != 0 || got.HomeBytes != 0 {
+		t.Fatalf("proxy: %+v", got)
+	}
+
+	for _, code := range []string{"cron_no_account", "ssh_keys_no_account"} {
+		if !hasCode(got, code) {
+			t.Errorf("proxy without %s: %v", code, got.Reasons)
+		}
+	}
+
+	if hasCode(got, "cron_not_carried") || hasCode(got, "proxy_tls_verify") {
+		t.Errorf("proxy reasons %v", got.Reasons)
+	}
+
+	if got := one(proxy("https://backend.example.net"), plan.Target{}); !hasCode(got, "proxy_tls_verify") {
+		t.Errorf("https target: %v", got.Reasons)
+	}
+
+	// Targets the panel refuses: this server, link-local, the site itself.
+	for _, u := range []string{"http://127.0.0.1:3000", "http://169.254.169.254", "https://shop.example.com", "unix:/run/app.sock"} {
+		if got := one(proxy(u), plan.Target{}); got.Action != plan.ActionSkip || !hasCode(got, "proxy_target") {
+			t.Errorf("%s: %s %v", u, got.Action, got.Reasons)
+		}
+	}
+
+	s := proxy("http://10.0.0.5")
+	s.Custom = []scan.Custom{{Raw: "add_header X-A b;"}}
+
+	if got := one(s, plan.Target{}); !hasCode(got, "custom_snippets_proxy") || hasCode(got, "custom_snippets") {
+		t.Errorf("snippets: %v", got.Reasons)
+	}
+}
+
+func testKey(t *testing.T) string {
+	t.Helper()
+
+	pub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pk, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pk)))
+}
+
+func TestBuildNodeSite(t *testing.T) {
+	s := base()
+	s.Type, s.Pool, s.Upstream = "nodejs", nil, "http://127.0.0.1:3000"
+	s.Status = scan.StatusReview
+	s.Findings = []scan.Finding{{Severity: scan.SevReview, Code: "app_process", Msg: "the app process is started outside nginx"}}
+
+	got := one(s, plan.Target{Node: []string{"22", "24"}})
+	if got.Action != plan.ActionReview || got.Node != "24" || got.PHP != "" || got.Proxy != "" {
+		t.Fatalf("node: %+v", got)
+	}
+
+	if !hasCode(got, "node_version") || !hasCode(got, "node_start") || hasCode(got, "app_process") || hasCode(got, "node_missing") {
+		t.Fatalf("reasons %v", got.Reasons)
+	}
+
+	if r := got.Reasons[len(got.Reasons)-1]; !strings.Contains(r.Msg, "instead of 3000") {
+		t.Errorf("port: %v", got.Reasons)
+	}
+
+	// Nothing installed: the newest pinned line, to be installed first.
+	got = one(s, plan.Target{})
+	if !hasCode(got, "node_missing") || got.Node != agentapi.NodeReleases[len(agentapi.NodeReleases)-1].Major {
+		t.Fatalf("none installed: %+v", got)
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/maki-it/hostashi/internal/cloudpanel/scan"
 	"github.com/maki-it/hostashi/internal/cpmigrate"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 const reportsPath = "/api/v1/migrations/cloudpanel/reports"
@@ -480,5 +481,75 @@ func TestCutoverOverHTTP(t *testing.T) {
 	read := bearerHeader(e.createToken(t, c, `{"name":"cut","scopes":["migrations:read"]}`).Token)
 	if rec := e.do(t, reqOpts{method: "POST", path: path, header: read}); rec.Code != http.StatusForbidden {
 		t.Fatalf("read scope starts: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestCloudPanelAppSitesOverHTTP: a Node.js site of the report becomes a
+// Node.js site with its app stopped, a reverse proxy one a proxy site
+// without an account (ADR-0054).
+func TestCloudPanelAppSitesOverHTTP(t *testing.T) {
+	ag := &stubAgent{}
+	e := newAPIWithAgent(t, ag)
+	apps := &stubApps{specs: map[string]agentapi.AppSpec{}}
+	e.sites.EnableApps(apps)
+
+	c := e.adminCookie(t)
+
+	site := func(user, typ, upstream string) scan.Site {
+		return scan.Site{
+			Name: user + ".example.com", User: user, Type: typ, Status: scan.StatusClean, Upstream: upstream,
+			Domains: []string{user + ".example.com"}, DocRoot: "/home/" + user + "/htdocs/" + user + ".example.com",
+			TLS: scan.TLS{Kind: "letsencrypt"}, Sources: []string{"/etc/nginx/sites-enabled/" + user + ".conf"},
+		}
+	}
+
+	b, err := json.Marshal(scan.Report{Format: scan.Format, Sites: []scan.Site{
+		site("api", "nodejs", "http://127.0.0.1:3000"), site("portal", "proxy", "http://10.0.0.5:8080"),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := e.do(t, reqOpts{method: "POST", path: reportsPath, cookie: c, body: string(b)})
+
+	var rep cloudPanelReportJSON
+	if rec.Code != http.StatusCreated || json.Unmarshal(rec.Body.Bytes(), &rep) != nil {
+		t.Fatalf("upload: %d %s", rec.Code, rec.Body)
+	}
+
+	if p := rep.Plan.Sites; len(p) != 2 || p[0].Node != "24" || p[1].Proxy != "http://10.0.0.5:8080" {
+		t.Fatalf("plan %+v", rep.Plan.Sites)
+	}
+
+	sites := reportsPath + "/" + rep.ID + "/sites/"
+
+	if rec := e.do(t, reqOpts{method: "POST", path: sites + "api", cookie: c, body: `{"reviewed":true,"node":"22"}`}); rec.Code != http.StatusConflict {
+		t.Fatalf("line not installed: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: sites + "api", cookie: c, body: `{"reviewed":true}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("node: %d %s", rec.Code, rec.Body)
+	}
+
+	s, err := e.sites.Get(t.Context(), "api")
+	if err != nil || s.Type != store.SiteTypeNode || s.App == nil || s.App.Node != "24" || s.App.Workdir != "htdocs" || s.App.StartKind != "" || !s.Account {
+		t.Fatalf("node site %+v %+v %v", s, s.App, err)
+	}
+
+	if a := apps.specs["api"]; !a.Stopped || a.Port != agentapi.MinAppPort {
+		t.Fatalf("app %+v", a)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: sites + "portal", cookie: c, body: `{"reviewed":true}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("proxy: %d %s", rec.Code, rec.Body)
+	}
+
+	s, err = e.sites.Get(t.Context(), "portal")
+	if err != nil || s.Type != store.SiteTypeProxy || s.Proxy == nil || s.Proxy.Target != "http://10.0.0.5:8080" || s.Account {
+		t.Fatalf("proxy site %+v %v", s, err)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: sites + "portal/import", cookie: c, body: `{}`}); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("import of a proxy: %d %s", rec.Code, rec.Body)
 	}
 }

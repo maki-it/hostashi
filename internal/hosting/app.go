@@ -118,6 +118,25 @@ func checkApp(a store.SiteApp, binary bool) (store.SiteApp, error) {
 	return a, nil
 }
 
+// NodeLines lists the Node.js lines installed here, none without apps.
+func (s *Service) NodeLines(ctx context.Context) ([]string, error) {
+	if s.apps == nil {
+		return nil, nil
+	}
+
+	st, err := s.apps.NodeStatus(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]string, 0, len(st.Installed))
+	for _, i := range st.Installed {
+		out = append(out, i.Major)
+	}
+
+	return out, nil
+}
+
 // checkNodeInstalled asks the agent whether the app's line is installed.
 func (s *Service) checkNodeInstalled(ctx context.Context, major string) error {
 	if s.apps == nil {

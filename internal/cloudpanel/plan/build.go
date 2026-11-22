@@ -21,6 +21,9 @@ type Target struct {
 	Panel string
 	// PHP lists the PHP versions installed here (agent php.versions).
 	PHP []string
+	// Node lists the Node.js lines installed here, for example "24"
+	// (ADR-0054).
+	Node []string
 }
 
 // Action of one site in the plan.
@@ -53,15 +56,20 @@ type Reason struct {
 
 // Site is the plan for one site of the report.
 type Site struct {
-	Name         string    `json:"name"` // new site name, the old site user
-	Type         string    `json:"type"`
-	Domains      []string  `json:"domains"`
-	RedirectFrom []string  `json:"redirectFrom"`
-	DocRoot      string    `json:"docRoot"` // on the old server
-	PHP          string    `json:"php"`
-	TLS          TLSAction `json:"tls"`
-	Custom       int       `json:"customSnippets"`
-	Cron         int       `json:"cronJobs"`
+	Name         string   `json:"name"` // new site name, the old site user
+	Type         string   `json:"type"`
+	Domains      []string `json:"domains"`
+	RedirectFrom []string `json:"redirectFrom"`
+	DocRoot      string   `json:"docRoot"` // on the old server
+	PHP          string   `json:"php"`
+	// Proxy is the target of a reverse proxy site, the old proxy_pass
+	// (ADR-0054); such a site gets no Linux account and no files.
+	Proxy string `json:"proxy,omitempty"`
+	// Node is the Node.js line of a Node.js site (ADR-0054).
+	Node   string    `json:"node,omitempty"`
+	TLS    TLSAction `json:"tls"`
+	Custom int       `json:"customSnippets"`
+	Cron   int       `json:"cronJobs"`
 	// CronImport of them are created paused with the site (ADR-0028).
 	CronImport int `json:"cronImport"`
 	// SSHKeys is how many of the site user's keys are carried over, as
@@ -105,9 +113,16 @@ type Plan struct {
 	Summary Summary `json:"summary"`
 }
 
+// Scanned site types the plan handles apart from static and PHP ones.
+const (
+	typeProxy = "proxy"
+	typeNode  = "nodejs"
+)
+
 // supportedTypes are the site types Hostashi can run today. WordPress is a
-// PHP site with an application profile (ADR-0017 Part 4).
-var supportedTypes = []string{"static", "php", "wordpress"}
+// PHP site with an application profile (ADR-0017 Part 4); nodejs becomes a
+// Node.js site and proxy a reverse proxy (ADR-0054). Python is not yet.
+var supportedTypes = []string{"static", "php", "wordpress", typeNode, typeProxy}
 
 // Build makes the plan. It never changes rep.
 func Build(rep *scan.Report, t Target) Plan {
@@ -158,8 +173,14 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 		ps.HomeBytes, ps.HomeInodes = s.Usage.Bytes, s.Usage.Inodes
 	}
 
-	if s.Pool != nil {
+	if s.Pool != nil && s.Type != typeProxy && s.Type != typeNode {
 		ps.PHP = s.Pool.Version
+	}
+
+	// A reverse proxy site has no Linux account: nothing of the old home,
+	// its cron jobs or its SSH keys comes with it.
+	if s.Type == typeProxy {
+		ps.CronImport, ps.SSHKeys, ps.ObjectCache, ps.HomeBytes, ps.HomeInodes = 0, 0, false, 0, 0
 	}
 
 	skip := func(code, msg string) { ps.Reasons = append(ps.Reasons, Reason{code, msg}); ps.Action = ActionSkip }
@@ -235,15 +256,30 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 		ps.TLS = TLSNone
 	}
 
-	if ps.Custom > 0 {
+	switch s.Type {
+	case typeProxy:
+		proxyPlan(&ps, s, skip, review)
+	case typeNode:
+		nodePlan(&ps, s, t, review)
+	}
+
+	switch {
+	case ps.Custom == 0:
+	case s.Type == typeProxy:
+		review("custom_snippets_proxy", fmt.Sprintf("%d nginx directives are not carried over: reverse proxy sites take no snippets yet", ps.Custom))
+	default:
 		review("custom_snippets", fmt.Sprintf("%d nginx directives need a one-time review (ADR-0017 Part 2)", ps.Custom))
+	}
+
+	if s.Type == typeProxy && ps.Cron > 0 {
+		review("cron_no_account", fmt.Sprintf("%d cron jobs stay behind: a reverse proxy site has no Linux account to run them", ps.Cron))
 	}
 
 	if ps.CronImport > 0 {
 		review("cron", fmt.Sprintf("%d cron jobs are created paused; start them after the DNS switch", ps.CronImport))
 	}
 
-	if n := ps.Cron - ps.CronImport; n > 0 {
+	if n := ps.Cron - ps.CronImport; n > 0 && s.Type != typeProxy {
 		review("cron_not_carried", fmt.Sprintf("%d cron jobs are not carried over (schedule or command not accepted, or more than %d); set them up by hand", n, cron.MaxJobsPerSite))
 	}
 
@@ -305,7 +341,8 @@ func cachePreset(siteType string) string {
 }
 
 // reviewCodesCovered are scan findings the plan already explains itself.
-var reviewCodesCovered = map[string]bool{"custom_directive": true}
+// app_process is the Node.js site's node_start; python sites are skipped.
+var reviewCodesCovered = map[string]bool{"custom_directive": true, "app_process": true}
 
 func nonNil(s []string) []string {
 	if s == nil {

@@ -978,6 +978,9 @@
       "CloudPanelSiteRequest": {
         "additionalProperties": false,
         "properties": {
+          "node": {
+            "type": "string"
+          },
           "pageCache": {
             "type": [
               "boolean",
@@ -4402,6 +4405,9 @@
           "name": {
             "type": "string"
           },
+          "node": {
+            "type": "string"
+          },
           "objectCache": {
             "type": "boolean"
           },
@@ -4419,6 +4425,9 @@
           },
           "phpSettingsOn": {
             "type": "boolean"
+          },
+          "proxy": {
+            "type": "string"
           },
           "reasons": {
             "items": {
