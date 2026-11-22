@@ -58,6 +58,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0052 | Service management and server dashboard | Accepted on 2026-11-21 ([adr/0052](adr/0052-service-management-and-server-dashboard.md)) | No |
 | 0053 | Site logs in the panel | Accepted on 2026-11-21 ([adr/0053](adr/0053-site-logs-in-the-panel.md)) | Done |
 | 0054 | Site types Node.js, reverse proxy and redirect | Accepted on 2026-11-22 ([adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md)) | No |
+| 0056 | Security headers per site | Proposed ([adr/0056](adr/0056-security-headers-per-site.md)) | **Yes** (defaults for new sites) |
 
 ---
 
@@ -388,3 +389,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0054 Site types Node.js, reverse proxy and redirect
 
 **Full text (status Accepted, 2026-11-22, by Kim):** [adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md). Summary: a `type` column for sites (`static`, `php`, `node`, `app`, `proxy`, `redirect`; changeable at any time, Addendum 3). Node.js from the official nodejs.org builds of the supported LTS lines, pinned with SHA-256 in Hostashi, installed by a fixed root unit to `/opt/hostashi/node/<major>`; the app runs as `hostashi-node@<site>` under the site user with a typed start command (`node <file>` or `npm run <script>`), encrypted environment variables and a Hostashi-assigned loopback port that nftables opens only for nginx and the site user. Reverse proxy to one http(s) URL, private networks allowed, loopback and link-local refused, certificate checked by default. Redirect with 301/302/307/308 and optional path. Proxy and redirect sites are created without a Linux account. Addendum 1: static sites with a document root folder below `htdocs` and a single-page-app switch. Addendum 2: own app as a binary (`hostashi-app@<site>`). CloudPanel import takes over `proxy` and `nodejs` sites. No new `os/exec` exception.
+
+## ADR-0056 Security headers per site
+
+**Full text (status Proposed, 2026-11-22):** [adr/0056](adr/0056-security-headers-per-site.md). Summary: typed switches per site for `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` and `Content-Security-Policy` (enforce or report only), next to the existing HSTS switch. Rendered with `always` at the server level for every site type and repeated in each location that sets its own headers (also fixes lost HSTS with a header snippet); a switched-on header replaces the application's own via `fastcgi_hide_header`/`proxy_hide_header`. Own values checked in panel and agent against nginx injection. Proposed default: new sites get `nosniff`, `SAMEORIGIN` and `strict-origin-when-cross-origin`; existing and imported sites unchanged. API `GET`/`PUT /api/v1/sites/{name}/headers`, action `sites.headers:write` for everyone with a grant for the site, migration 0047. No new agent operation, no new `os/exec` exception.
