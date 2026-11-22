@@ -128,8 +128,12 @@ func TestBuildDescribed(t *testing.T) {
 		t.Error("create has no 201")
 	}
 
-	if v := get(t, create, "requestBody", "content", "application/json", "schema", "$ref"); v != "#/components/schemas/CreateIn" {
+	if v := get(t, create, "requestBody", "content", "application/json", "schema", "$ref"); v != "#/components/schemas/CreateInInput" {
 		t.Errorf("request schema = %v", v)
+	}
+
+	if _, ok := get(t, doc, "components", "schemas", "CreateInInput").(map[string]any)["required"]; ok {
+		t.Error("a request schema should not require fields")
 	}
 
 	params, _ := json.Marshal(get(t, create, "parameters"))

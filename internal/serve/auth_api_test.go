@@ -166,6 +166,7 @@ func (e *apiEnv) do(t *testing.T, o reqOpts) *httptest.ResponseRecorder {
 
 	rec := httptest.NewRecorder()
 	e.h.ServeHTTP(rec, r)
+	checkResponse(t, r, rec)
 
 	return rec
 }

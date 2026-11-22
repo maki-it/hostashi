@@ -287,6 +287,15 @@ type scopeListJSON struct {
 	Scopes []auth.ScopeInfo `json:"scopes"`
 }
 
+// ipAllowlistJSON is the API's IP allowlist (ADR-0018); empty: no limit.
+type ipAllowlistJSON struct {
+	Entries []string `json:"entries"`
+}
+
+type ipAllowlistRequest struct {
+	Entries []string `json:"entries"`
+}
+
 func toTokenJSON(t store.APIToken) tokenJSON {
 	return tokenJSON{
 		ID: t.ID, Name: t.Name, Prefix: auth.TokenPrefix + t.Prefix, Scopes: t.Scopes, CreatedAt: t.CreatedAt,
@@ -410,7 +419,9 @@ func registerTokens(mux *routeMux, a authn) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	mux.HandleFunc("GET /api/v1/settings/api-ip-allowlist", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("GET /api/v1/settings/api-ip-allowlist", openapi.Operation{
+		ID: "getAPIAllowlist", Tag: "settings", Summary: "The addresses API tokens may be used from", Out: ipAllowlistJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := a.sessionAllow(w, r, authz.SettingsRead); !ok {
 			return
 		}
@@ -422,18 +433,18 @@ func registerTokens(mux *routeMux, a authn) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]string{"entries": list})
+		writeJSON(w, http.StatusOK, ipAllowlistJSON{Entries: list})
 	})
 
-	mux.HandleFunc("PUT /api/v1/settings/api-ip-allowlist", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("PUT /api/v1/settings/api-ip-allowlist", openapi.Operation{
+		ID: "setAPIAllowlist", Tag: "settings", Summary: "Set the addresses API tokens may be used from; empty: anywhere", In: ipAllowlistRequest{}, Out: ipAllowlistJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.sessionAllow(w, r, authz.SettingsWrite)
 		if !ok {
 			return
 		}
 
-		var in struct {
-			Entries []string `json:"entries"`
-		}
+		var in ipAllowlistRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -445,6 +456,6 @@ func registerTokens(mux *routeMux, a authn) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]string{"entries": list})
+		writeJSON(w, http.StatusOK, ipAllowlistJSON{Entries: list})
 	})
 }

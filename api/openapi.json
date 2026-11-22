@@ -1,6 +1,124 @@
 {
   "components": {
     "schemas": {
+      "Account": {
+        "additionalProperties": false,
+        "properties": {
+          "disabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "invitationExpiresAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "invited": {
+            "type": "boolean"
+          },
+          "passkeys": {
+            "type": "integer"
+          },
+          "requireSecondFactor": {
+            "type": "boolean"
+          },
+          "role": {
+            "type": "string"
+          },
+          "totpEnabled": {
+            "type": "boolean"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "disabled",
+          "id",
+          "invitationExpiresAt",
+          "invited",
+          "passkeys",
+          "requireSecondFactor",
+          "role",
+          "totpEnabled",
+          "username"
+        ],
+        "type": "object"
+      },
+      "AccountCreated": {
+        "additionalProperties": false,
+        "properties": {
+          "invitation": {
+            "$ref": "#/components/schemas/Invitation"
+          },
+          "user": {
+            "$ref": "#/components/schemas/Account"
+          }
+        },
+        "required": [
+          "invitation",
+          "user"
+        ],
+        "type": "object"
+      },
+      "AccountEmail": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "mail_enabled": {
+            "type": "boolean"
+          },
+          "pending": {
+            "type": "string"
+          },
+          "pending_expires": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "email",
+          "mail_enabled",
+          "pending"
+        ],
+        "type": "object"
+      },
+      "AccountEmailRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AccountList": {
+        "additionalProperties": false,
+        "properties": {
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/Account"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "users"
+        ],
+        "type": "object"
+      },
       "ApiError": {
         "additionalProperties": false,
         "properties": {
@@ -41,6 +159,161 @@
         ],
         "type": "object"
       },
+      "AuditActions": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "actions"
+        ],
+        "type": "object"
+      },
+      "AuditEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "detail": {},
+          "diff": {},
+          "id": {
+            "type": "integer"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "userId": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "actor",
+          "at",
+          "detail",
+          "diff",
+          "id",
+          "ip",
+          "target",
+          "userId"
+        ],
+        "type": "object"
+      },
+      "AuditPage": {
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEntry"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "entries",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Ceremony": {
+        "additionalProperties": false,
+        "properties": {
+          "ceremonyId": {
+            "type": "string"
+          },
+          "options": {}
+        },
+        "required": [
+          "ceremonyId",
+          "options"
+        ],
+        "type": "object"
+      },
+      "EmailConfirmRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "EmailConfirmed": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "type": "object"
+      },
+      "Grants": {
+        "additionalProperties": false,
+        "properties": {
+          "sites": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "sites"
+        ],
+        "type": "object"
+      },
+      "GrantsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "sites": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "Health": {
         "additionalProperties": false,
         "properties": {
@@ -65,6 +338,140 @@
         ],
         "type": "object"
       },
+      "Invitation": {
+        "additionalProperties": false,
+        "properties": {
+          "emailedTo": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expiresAt",
+          "token"
+        ],
+        "type": "object"
+      },
+      "InvitationAcceptRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "InvitationCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "type": "object"
+      },
+      "InvitationResult": {
+        "additionalProperties": false,
+        "properties": {
+          "invitation": {
+            "$ref": "#/components/schemas/Invitation"
+          }
+        },
+        "required": [
+          "invitation"
+        ],
+        "type": "object"
+      },
+      "InvitationTokenRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "IpAllowlist": {
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "entries"
+        ],
+        "type": "object"
+      },
+      "IpAllowlistRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "LogRetention": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "type": "integer"
+          },
+          "defaultDays": {
+            "type": "integer"
+          },
+          "maxDays": {
+            "type": "integer"
+          },
+          "minDays": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "days",
+          "defaultDays",
+          "maxDays",
+          "minDays"
+        ],
+        "type": "object"
+      },
+      "LogRetentionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "LoginRequest": {
         "additionalProperties": false,
         "properties": {
@@ -78,11 +485,111 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "MailSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "ca_pem": {
+            "type": "string"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "from": {
+            "type": "string"
+          },
+          "from_name": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "password_set": {
+            "type": "boolean"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "reply_to": {
+            "type": "string"
+          },
+          "tls": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
         "required": [
-          "password",
-          "totp",
+          "ca_pem",
+          "configured",
+          "from",
+          "from_name",
+          "host",
+          "password_set",
+          "port",
+          "reply_to",
+          "tls",
           "username"
         ],
+        "type": "object"
+      },
+      "MailSettingsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ca_pem": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "from_name": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "port": {
+            "type": "integer"
+          },
+          "reply_to": {
+            "type": "string"
+          },
+          "tls": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MailTest": {
+        "additionalProperties": false,
+        "properties": {
+          "sent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sent"
+        ],
+        "type": "object"
+      },
+      "MailTestRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "to": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "Me": {
@@ -132,6 +639,170 @@
         ],
         "type": "object"
       },
+      "MetricsSetting": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "MetricsSettingRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "Notifications": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/NotifyCategory"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "email": {
+            "type": "string"
+          },
+          "mail_enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "categories",
+          "email",
+          "mail_enabled"
+        ],
+        "type": "object"
+      },
+      "NotifyCategory": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "id"
+        ],
+        "type": "object"
+      },
+      "Passkey": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "lastUsedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAt",
+          "id",
+          "lastUsedAt",
+          "name"
+        ],
+        "type": "object"
+      },
+      "PasskeyList": {
+        "additionalProperties": false,
+        "properties": {
+          "passkeys": {
+            "items": {
+              "$ref": "#/components/schemas/Passkey"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "passkeys"
+        ],
+        "type": "object"
+      },
+      "PasskeyLoginRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ceremonyId": {
+            "type": "string"
+          },
+          "credential": {}
+        },
+        "type": "object"
+      },
+      "PasskeyRegisterRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ceremonyId": {
+            "type": "string"
+          },
+          "credential": {},
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Preferences": {
+        "additionalProperties": false,
+        "properties": {
+          "colorScheme": {
+            "type": "string"
+          },
+          "theme": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "colorScheme",
+          "theme"
+        ],
+        "type": "object"
+      },
+      "PreferencesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "colorScheme": {
+            "type": "string"
+          },
+          "theme": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Reason": {
         "additionalProperties": false,
         "properties": {
@@ -145,6 +816,24 @@
         "required": [
           "code",
           "msg"
+        ],
+        "type": "object"
+      },
+      "RecoveryCodes": {
+        "additionalProperties": false,
+        "properties": {
+          "recoveryCodes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "recoveryCodes"
         ],
         "type": "object"
       },
@@ -199,11 +888,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "password",
-          "token",
-          "username"
-        ],
         "type": "object"
       },
       "SetupStatus": {
@@ -215,6 +899,36 @@
         },
         "required": [
           "required"
+        ],
+        "type": "object"
+      },
+      "SiteLogs": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "more": {
+            "type": "boolean"
+          },
+          "rotated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cursor",
+          "lines",
+          "more",
+          "rotated"
         ],
         "type": "object"
       },
@@ -333,13 +1047,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "expiresInDays",
-          "name",
-          "scopes",
-          "sites",
-          "unlimited"
-        ],
         "type": "object"
       },
       "TokenCreated": {
@@ -449,6 +1156,43 @@
         ],
         "type": "object"
       },
+      "TotpConfirmRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TotpDisableRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TotpEnroll": {
+        "additionalProperties": false,
+        "properties": {
+          "secret": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret",
+          "uri"
+        ],
+        "type": "object"
+      },
       "User": {
         "additionalProperties": false,
         "properties": {
@@ -478,6 +1222,45 @@
           "role",
           "username"
         ],
+        "type": "object"
+      },
+      "UserCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UserUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "disabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "requireSecondFactor": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "role": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       }
     },
@@ -511,13 +1294,8 @@
       "delete": {
         "operationId": "deleteAccountEmail",
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -535,11 +1313,11 @@
             "session": []
           }
         ],
+        "summary": "Remove the caller's email address",
         "tags": [
           "account"
         ],
-        "x-hostashi-access": "session",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "session"
       },
       "get": {
         "operationId": "getAccountEmail",
@@ -547,7 +1325,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AccountEmail"
+                }
               }
             },
             "description": "OK"
@@ -568,29 +1348,31 @@
             "session": []
           }
         ],
+        "summary": "The caller's email address and a pending change",
         "tags": [
           "account"
         ],
-        "x-hostashi-access": "session",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "session"
       },
       "put": {
-        "operationId": "putAccountEmail",
+        "operationId": "setAccountEmail",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/AccountEmailRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AccountEmail"
+                }
               }
             },
             "description": "OK"
@@ -611,31 +1393,33 @@
             "session": []
           }
         ],
+        "summary": "Set a new email address; a confirmation link is sent there",
         "tags": [
           "account"
         ],
-        "x-hostashi-access": "session",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "session"
       }
     },
     "/api/v1/account/email/confirm": {
       "post": {
-        "operationId": "postAccountEmailConfirm",
+        "operationId": "confirmAccountEmail",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/EmailConfirmRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/EmailConfirmed"
+                }
               }
             },
             "description": "OK"
@@ -652,21 +1436,23 @@
           }
         },
         "security": [],
+        "summary": "Confirm an email address with the token from the link",
         "tags": [
           "account"
         ],
-        "x-hostashi-access": "public",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "public"
       }
     },
     "/api/v1/account/notifications": {
       "get": {
-        "operationId": "getAccountNotifications",
+        "operationId": "getNotifications",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Notifications"
+                }
               }
             },
             "description": "OK"
@@ -687,29 +1473,37 @@
             "session": []
           }
         ],
+        "summary": "Which email notifications the caller gets",
         "tags": [
           "account"
         ],
-        "x-hostashi-access": "session",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "session"
       },
       "put": {
-        "operationId": "putAccountNotifications",
+        "operationId": "setNotifications",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "additionalProperties": {
+                  "type": "boolean"
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Notifications"
+                }
               }
             },
             "description": "OK"
@@ -730,21 +1524,95 @@
             "session": []
           }
         ],
+        "summary": "Switch email notification categories on or off",
         "tags": [
           "account"
         ],
-        "x-hostashi-access": "session",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "session"
       }
     },
     "/api/v1/audit": {
       "get": {
-        "operationId": "getAudit",
+        "operationId": "listAudit",
+        "parameters": [
+          {
+            "description": "an action or a prefix of one, such as site.cert",
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "account name",
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "client address",
+            "in": "query",
+            "name": "ip",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "RFC 3339 time",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "RFC 3339 time",
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "cursor from next",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPage"
+                }
               }
             },
             "description": "OK"
@@ -770,22 +1638,24 @@
             ]
           }
         ],
+        "summary": "Audit log entries, newest first",
         "tags": [
           "audit"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "audit:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "audit:read"
       }
     },
     "/api/v1/audit/actions": {
       "get": {
-        "operationId": "getAuditActions",
+        "operationId": "listAuditActions",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AuditActions"
+                }
               }
             },
             "description": "OK"
@@ -811,22 +1681,91 @@
             ]
           }
         ],
+        "summary": "The action names that occur in the audit log",
         "tags": [
           "audit"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "audit:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "audit:read"
       }
     },
     "/api/v1/audit/export": {
       "get": {
-        "operationId": "getAuditExport",
+        "operationId": "exportAudit",
+        "parameters": [
+          {
+            "description": "an action or a prefix of one, such as site.cert",
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "account name",
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "client address",
+            "in": "query",
+            "name": "ip",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "RFC 3339 time",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "RFC 3339 time",
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "csv or json",
+            "in": "query",
+            "name": "format",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {}
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "description": "OK"
@@ -852,12 +1791,12 @@
             ]
           }
         ],
+        "summary": "Download the filtered audit log as CSV or JSON",
         "tags": [
           "audit"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "audit:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "audit:read"
       }
     },
     "/api/v1/auth/login": {
@@ -971,22 +1910,14 @@
     },
     "/api/v1/auth/passkey/login/begin": {
       "post": {
-        "operationId": "postAuthPasskeyLoginBegin",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
+        "operationId": "beginPasskeyLogin",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Ceremony"
+                }
               }
             },
             "description": "OK"
@@ -1003,31 +1934,33 @@
           }
         },
         "security": [],
+        "summary": "Start a passkey login (WebAuthn options for the browser)",
         "tags": [
-          "auth"
+          "passkeys"
         ],
-        "x-hostashi-access": "public",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "public"
       }
     },
     "/api/v1/auth/passkey/login/finish": {
       "post": {
-        "operationId": "postAuthPasskeyLoginFinish",
+        "operationId": "finishPasskeyLogin",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/PasskeyLoginRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
               }
             },
             "description": "OK"
@@ -1044,21 +1977,23 @@
           }
         },
         "security": [],
+        "summary": "Log in with a passkey and start a browser session",
         "tags": [
-          "auth"
+          "passkeys"
         ],
-        "x-hostashi-access": "public",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "public"
       }
     },
     "/api/v1/auth/passkeys": {
       "get": {
-        "operationId": "getAuthPasskeys",
+        "operationId": "listPasskeys",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyList"
+                }
               }
             },
             "description": "OK"
@@ -1079,31 +2014,23 @@
             "session": []
           }
         ],
+        "summary": "The caller's passkeys",
         "tags": [
-          "auth"
+          "passkeys"
         ],
-        "x-hostashi-access": "session",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "session"
       }
     },
     "/api/v1/auth/passkeys/register/begin": {
       "post": {
-        "operationId": "postAuthPasskeysRegisterBegin",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
+        "operationId": "beginPasskeyRegistration",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Ceremony"
+                }
               }
             },
             "description": "OK"
@@ -1124,34 +2051,36 @@
             "session": []
           }
         ],
+        "summary": "Start adding a passkey (WebAuthn options for the browser)",
         "tags": [
-          "auth"
+          "passkeys"
         ],
-        "x-hostashi-access": "session",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "session"
       }
     },
     "/api/v1/auth/passkeys/register/finish": {
       "post": {
-        "operationId": "postAuthPasskeysRegisterFinish",
+        "operationId": "finishPasskeyRegistration",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/PasskeyRegisterRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Passkey"
+                }
               }
             },
-            "description": "OK"
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -1169,16 +2098,16 @@
             "session": []
           }
         ],
+        "summary": "Store the new passkey",
         "tags": [
-          "auth"
+          "passkeys"
         ],
-        "x-hostashi-access": "session",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "session"
       }
     },
     "/api/v1/auth/passkeys/{id}": {
       "delete": {
-        "operationId": "deleteAuthPasskeysId",
+        "operationId": "deletePasskey",
         "parameters": [
           {
             "in": "path",
@@ -1190,13 +2119,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -1214,31 +2138,33 @@
             "session": []
           }
         ],
+        "summary": "Remove one of the caller's passkeys",
         "tags": [
-          "auth"
+          "passkeys"
         ],
-        "x-hostashi-access": "session",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "session"
       }
     },
     "/api/v1/auth/totp/confirm": {
       "post": {
-        "operationId": "postAuthTotpConfirm",
+        "operationId": "confirmTOTP",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/TotpConfirmRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodes"
+                }
               }
             },
             "description": "OK"
@@ -1259,34 +2185,29 @@
             "session": []
           }
         ],
+        "summary": "Confirm TOTP with a first code; returns recovery codes once",
         "tags": [
           "auth"
         ],
-        "x-hostashi-access": "session",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "session"
       }
     },
     "/api/v1/auth/totp/disable": {
       "post": {
-        "operationId": "postAuthTotpDisable",
+        "operationId": "disableTOTP",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/TotpDisableRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -1304,31 +2225,23 @@
             "session": []
           }
         ],
+        "summary": "Turn TOTP off with password and a current code",
         "tags": [
           "auth"
         ],
-        "x-hostashi-access": "session",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "session"
       }
     },
     "/api/v1/auth/totp/enroll": {
       "post": {
-        "operationId": "postAuthTotpEnroll",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
+        "operationId": "enrollTOTP",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TotpEnroll"
+                }
               }
             },
             "description": "OK"
@@ -1349,11 +2262,11 @@
             "session": []
           }
         ],
+        "summary": "Start setting up TOTP; returns the secret",
         "tags": [
           "auth"
         ],
-        "x-hostashi-access": "session",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "session"
       }
     },
     "/api/v1/backups": {
@@ -3208,22 +4121,24 @@
     },
     "/api/v1/invitations/accept": {
       "post": {
-        "operationId": "postInvitationsAccept",
+        "operationId": "acceptInvitation",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/InvitationAcceptRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
               }
             },
             "description": "OK"
@@ -3240,31 +4155,33 @@
           }
         },
         "security": [],
+        "summary": "Set the password of an invited account and log in",
         "tags": [
-          "invitations"
+          "users"
         ],
-        "x-hostashi-access": "public",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "public"
       }
     },
     "/api/v1/invitations/check": {
       "post": {
-        "operationId": "postInvitationsCheck",
+        "operationId": "checkInvitation",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/InvitationTokenRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationCheck"
+                }
               }
             },
             "description": "OK"
@@ -3281,11 +4198,11 @@
           }
         },
         "security": [],
+        "summary": "The account name of an invitation token",
         "tags": [
-          "invitations"
+          "users"
         ],
-        "x-hostashi-access": "public",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "public"
       }
     },
     "/api/v1/limit-presets": {
@@ -3539,22 +4456,24 @@
     },
     "/api/v1/me": {
       "patch": {
-        "operationId": "patchMe",
+        "operationId": "updatePreferences",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/PreferencesRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Preferences"
+                }
               }
             },
             "description": "OK"
@@ -3575,11 +4494,11 @@
             "session": []
           }
         ],
+        "summary": "Change how the panel looks for the caller",
         "tags": [
-          "me"
+          "auth"
         ],
-        "x-hostashi-access": "session",
-        "x-hostashi-undescribed": true
+        "x-hostashi-access": "session"
       }
     },
     "/api/v1/migrations/cloudpanel/imports": {
@@ -4682,9 +5601,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "string"
-                }
+                "schema": {}
               }
             },
             "description": "OK"
@@ -5906,12 +6823,14 @@
     },
     "/api/v1/settings/api-ip-allowlist": {
       "get": {
-        "operationId": "getSettingsApiIpAllowlist",
+        "operationId": "getAPIAllowlist",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/IpAllowlist"
+                }
               }
             },
             "description": "OK"
@@ -5932,30 +6851,32 @@
             "session": []
           }
         ],
+        "summary": "The addresses API tokens may be used from",
         "tags": [
           "settings"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "settings:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "settings:read"
       },
       "put": {
-        "operationId": "putSettingsApiIpAllowlist",
+        "operationId": "setAPIAllowlist",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/IpAllowlistRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/IpAllowlist"
+                }
               }
             },
             "description": "OK"
@@ -5976,22 +6897,24 @@
             "session": []
           }
         ],
+        "summary": "Set the addresses API tokens may be used from; empty: anywhere",
         "tags": [
           "settings"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "settings:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "settings:write"
       }
     },
     "/api/v1/settings/logs": {
       "get": {
-        "operationId": "getSettingsLogs",
+        "operationId": "getLogRetention",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/LogRetention"
+                }
               }
             },
             "description": "OK"
@@ -6012,30 +6935,32 @@
             "session": []
           }
         ],
+        "summary": "How long site logs are kept",
         "tags": [
           "settings"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "settings:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "settings:read"
       },
       "put": {
-        "operationId": "putSettingsLogs",
+        "operationId": "setLogRetention",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/LogRetentionRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/LogRetention"
+                }
               }
             },
             "description": "OK"
@@ -6056,25 +6981,20 @@
             "session": []
           }
         ],
+        "summary": "Set how long site logs are kept",
         "tags": [
           "settings"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "settings:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "settings:write"
       }
     },
     "/api/v1/settings/mail": {
       "delete": {
-        "operationId": "deleteSettingsMail",
+        "operationId": "deleteMailSettings",
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -6092,20 +7012,22 @@
             "session": []
           }
         ],
+        "summary": "Remove the SMTP relay; the panel sends no email",
         "tags": [
           "settings"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "settings:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "settings:write"
       },
       "get": {
-        "operationId": "getSettingsMail",
+        "operationId": "getMailSettings",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MailSettings"
+                }
               }
             },
             "description": "OK"
@@ -6126,30 +7048,32 @@
             "session": []
           }
         ],
+        "summary": "The SMTP relay settings (without the password)",
         "tags": [
           "settings"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "settings:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "settings:read"
       },
       "put": {
-        "operationId": "putSettingsMail",
+        "operationId": "setMailSettings",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/MailSettingsRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MailSettings"
+                }
               }
             },
             "description": "OK"
@@ -6170,32 +7094,34 @@
             "session": []
           }
         ],
+        "summary": "Set the SMTP relay",
         "tags": [
           "settings"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "settings:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "settings:write"
       }
     },
     "/api/v1/settings/mail/test": {
       "post": {
-        "operationId": "postSettingsMailTest",
+        "operationId": "testMail",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/MailTestRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MailTest"
+                }
               }
             },
             "description": "OK"
@@ -6216,22 +7142,24 @@
             "session": []
           }
         ],
+        "summary": "Send a test email through the relay",
         "tags": [
           "settings"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "settings:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "settings:write"
       }
     },
     "/api/v1/settings/metrics": {
       "get": {
-        "operationId": "getSettingsMetrics",
+        "operationId": "getMetricsSetting",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsSetting"
+                }
               }
             },
             "description": "OK"
@@ -6252,30 +7180,32 @@
             "session": []
           }
         ],
+        "summary": "Whether /metrics is on",
         "tags": [
           "settings"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "settings:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "settings:read"
       },
       "put": {
-        "operationId": "putSettingsMetrics",
+        "operationId": "setMetricsSetting",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/MetricsSettingRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsSetting"
+                }
               }
             },
             "description": "OK"
@@ -6296,12 +7226,12 @@
             "session": []
           }
         ],
+        "summary": "Switch /metrics on or off",
         "tags": [
           "settings"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "settings:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "settings:write"
       }
     },
     "/api/v1/setup": {
@@ -7958,7 +8888,7 @@
     },
     "/api/v1/sites/{name}/logs/{kind}": {
       "get": {
-        "operationId": "getSitesNameLogsKind",
+        "operationId": "readSiteLog",
         "parameters": [
           {
             "in": "path",
@@ -7975,13 +8905,33 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "last lines to read, default 200",
+            "in": "query",
+            "name": "lines",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "from an earlier answer; lines after it",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SiteLogs"
+                }
               }
             },
             "description": "OK"
@@ -8007,12 +8957,12 @@
             ]
           }
         ],
+        "summary": "The last lines of a site log, or the lines after a cursor",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "sites.logs:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "sites.logs:read"
       }
     },
     "/api/v1/sites/{name}/maintenance": {
@@ -8830,6 +9780,67 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites.php:write",
+        "x-hostashi-undescribed": true
+      }
+    },
+    "/api/v1/sites/{name}/proxy": {
+      "put": {
+        "operationId": "putSitesNameProxy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.proxy:write",
         "x-hostashi-undescribed": true
       }
     },
@@ -10303,12 +11314,14 @@
     },
     "/api/v1/users": {
       "get": {
-        "operationId": "getUsers",
+        "operationId": "listUsers",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AccountList"
+                }
               }
             },
             "description": "OK"
@@ -10329,33 +11342,35 @@
             "session": []
           }
         ],
+        "summary": "List the panel accounts",
         "tags": [
           "users"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "users:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "users:read"
       },
       "post": {
-        "operationId": "postUsers",
+        "operationId": "createUser",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/UserCreateRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AccountCreated"
+                }
               }
             },
-            "description": "OK"
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -10373,17 +11388,17 @@
             "session": []
           }
         ],
+        "summary": "Invite a new account",
         "tags": [
           "users"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "users:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "users:write"
       }
     },
     "/api/v1/users/{id}": {
       "delete": {
-        "operationId": "deleteUsersId",
+        "operationId": "deleteUser",
         "parameters": [
           {
             "in": "path",
@@ -10395,13 +11410,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -10419,15 +11429,15 @@
             "session": []
           }
         ],
+        "summary": "Delete an account",
         "tags": [
           "users"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "users:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "users:write"
       },
       "get": {
-        "operationId": "getUsersId",
+        "operationId": "getUser",
         "parameters": [
           {
             "in": "path",
@@ -10442,7 +11452,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
               }
             },
             "description": "OK"
@@ -10463,15 +11475,15 @@
             "session": []
           }
         ],
+        "summary": "Read one account",
         "tags": [
           "users"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "users:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "users:read"
       },
       "put": {
-        "operationId": "putUsersId",
+        "operationId": "updateUser",
         "parameters": [
           {
             "in": "path",
@@ -10486,17 +11498,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/UserUpdateRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
               }
             },
             "description": "OK"
@@ -10517,17 +11531,17 @@
             "session": []
           }
         ],
+        "summary": "Change role, disabled state or the second-factor rule of an account",
         "tags": [
           "users"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "users:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "users:write"
       }
     },
     "/api/v1/users/{id}/grants": {
       "get": {
-        "operationId": "getUsersIdGrants",
+        "operationId": "getUserGrants",
         "parameters": [
           {
             "in": "path",
@@ -10542,7 +11556,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Grants"
+                }
               }
             },
             "description": "OK"
@@ -10563,15 +11579,15 @@
             "session": []
           }
         ],
+        "summary": "The sites a user account may reach",
         "tags": [
           "users"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "users:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "users:read"
       },
       "put": {
-        "operationId": "putUsersIdGrants",
+        "operationId": "setUserGrants",
         "parameters": [
           {
             "in": "path",
@@ -10586,17 +11602,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/GrantsRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Grants"
+                }
               }
             },
             "description": "OK"
@@ -10617,17 +11635,17 @@
             "session": []
           }
         ],
+        "summary": "Set the sites a user account may reach; an empty list removes all",
         "tags": [
           "users"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "users:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "users:write"
       }
     },
     "/api/v1/users/{id}/reset": {
       "post": {
-        "operationId": "postUsersIdReset",
+        "operationId": "resetUser",
         "parameters": [
           {
             "in": "path",
@@ -10638,21 +11656,13 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationResult"
+                }
               }
             },
             "description": "OK"
@@ -10673,12 +11683,12 @@
             "session": []
           }
         ],
+        "summary": "Reset password and second factors and make a new invitation",
         "tags": [
           "users"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "users:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "users:write"
       }
     },
     "/api/v1/web/sync": {

@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/metrics"
@@ -68,6 +70,10 @@ func writeMetrics(w http.ResponseWriter, m *metrics.Metrics, log *slog.Logger) {
 // registerMetrics adds the scrape endpoint and its switch. The endpoint
 // takes only an API token with metrics:read; a browser session does not
 // open it, the panel's own graphs use the ring buffer (04-architecture 4.7).
+type metricsSettingRequest struct {
+	Enabled *bool `json:"enabled"`
+}
+
 func registerMetrics(mux *routeMux, a authn, m *metrics.Metrics, st Settings, log *slog.Logger) {
 	mux.HandleFunc("GET "+MetricsPath, func(w http.ResponseWriter, r *http.Request) {
 		on, err := metricsEnabled(r.Context(), st)
@@ -100,7 +106,9 @@ func registerMetrics(mux *routeMux, a authn, m *metrics.Metrics, st Settings, lo
 		Enabled bool `json:"enabled"`
 	}
 
-	mux.HandleFunc("GET /api/v1/settings/metrics", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("GET /api/v1/settings/metrics", openapi.Operation{
+		ID: "getMetricsSetting", Tag: "settings", Summary: "Whether /metrics is on", Out: metricsSettingJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := a.sessionAllow(w, r, authz.SettingsRead); !ok {
 			return
 		}
@@ -116,7 +124,9 @@ func registerMetrics(mux *routeMux, a authn, m *metrics.Metrics, st Settings, lo
 		writeJSON(w, http.StatusOK, metricsSettingJSON{Enabled: on})
 	})
 
-	mux.HandleFunc("PUT /api/v1/settings/metrics", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("PUT /api/v1/settings/metrics", openapi.Operation{
+		ID: "setMetricsSetting", Tag: "settings", Summary: "Switch /metrics on or off", In: metricsSettingRequest{}, Out: metricsSettingJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.sessionAllow(w, r, authz.SettingsWrite)
 		if !ok {
 			return
@@ -124,9 +134,7 @@ func registerMetrics(mux *routeMux, a authn, m *metrics.Metrics, st Settings, lo
 
 		uid := u.ID
 
-		var in struct {
-			Enabled *bool `json:"enabled"`
-		}
+		var in metricsSettingRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
