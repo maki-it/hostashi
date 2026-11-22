@@ -28,6 +28,7 @@ import {
   siteMessage,
   siteStatus,
   siteType,
+  siteTypeLabel,
   type PHPVersions,
   type Site,
 } from "./sites";
@@ -107,6 +108,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
             <span className="ui-mono">{site.domains[0]}</span>
             <Badge tone={status.tone}>{status.word}</Badge>
             <Badge tone={httpsTone(site.tls)}>{httpsLabel(site.tls)}</Badge>
+            <Badge tone="off">{siteTypeLabel(site)}</Badge>
           </p>
         </div>
       </div>

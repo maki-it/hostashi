@@ -471,6 +471,8 @@ describe("reverse proxy sites", () => {
     const tabs = await screen.findByRole("tablist", { name: "blog" });
     expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "Web", "Logs"]);
     expect(within(screen.getByLabelText("Details of blog")).getByText("http://10.0.0.5:8080")).toBeInTheDocument();
+    // The type sits next to the status and HTTPS in the page head.
+    expect(within(screen.getByRole("heading", { name: "blog", level: 1 }).parentElement!).getByText("Reverse proxy")).toBeInTheDocument();
 
     await user.click(within(tabs).getByRole("tab", { name: "Web" }));
     const card = within(screen.getByRole("region", { name: "Reverse proxy" }));
