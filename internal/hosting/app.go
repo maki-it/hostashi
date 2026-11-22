@@ -167,7 +167,8 @@ func (s *Service) applyApp(ctx context.Context, site store.Site) (agentapi.AppSt
 	return st, err
 }
 
-// syncApps sets up the apps of all active Node.js sites again, for Sync.
+// syncApps sets up the apps of all active Node.js and app sites again,
+// and removes those of the other sites with an account, for Sync.
 // Failures are logged; the next change of the site retries.
 func (s *Service) syncApps(ctx context.Context) {
 	if s.apps == nil {
@@ -182,7 +183,17 @@ func (s *Service) syncApps(ctx context.Context) {
 	}
 
 	for _, site := range all {
-		if site.State != store.SiteActive || !hasApp(site) {
+		if site.State != store.SiteActive || !site.Account {
+			continue
+		}
+
+		// The app of a former Node.js or app site, if a type change
+		// could not remove it (ADR-0054 addendum 3); nothing for others.
+		if !hasApp(site) {
+			if err := s.apps.AppRemove(ctx, site.Name); err != nil {
+				s.log.ErrorContext(ctx, "remove app", "site", site.Name, "err", err)
+			}
+
 			continue
 		}
 

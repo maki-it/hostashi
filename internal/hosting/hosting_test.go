@@ -84,7 +84,7 @@ func (f *fakeAgent) SiteDelete(_ context.Context, req agentapi.SiteDeleteRequest
 	}
 
 	for _, s := range f.web.Sites {
-		if s.User == req.User {
+		if s.User == req.User && (!req.AccountOnly || s.Redirect == nil && s.Proxy == nil) {
 			return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "site still has a virtual host"}
 		}
 	}
@@ -103,7 +103,8 @@ func (f *fakeAgent) WebApply(_ context.Context, req agentapi.WebApplyRequest) (a
 	}
 
 	for _, s := range req.Sites {
-		if !f.accounts[s.User] {
+		// Redirect and reverse proxy sites need no account (ADR-0054).
+		if !f.accounts[s.User] && s.Redirect == nil && s.Proxy == nil {
 			return agentapi.WebApplyResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site"}
 		}
 
