@@ -42,6 +42,13 @@ type Backups interface {
 	ImportJob(ctx context.Context, id string) (agentapi.DBJob, error)
 }
 
+// DatabaseJobs starts and reports imports into databases on external
+// servers (ADR-0041 addendum 1, ADR-0051); hosting.Service implements it.
+type DatabaseJobs interface {
+	ImportDatabase(ctx context.Context, actor int64, database, path string) (agentapi.DBJob, error)
+	RemoteJob(ctx context.Context, id string) (agentapi.DBJob, error)
+}
+
 // SiteDatabases lists a site's databases as the panel records them.
 type SiteDatabases func(ctx context.Context, site string) ([]store.Database, error)
 
@@ -147,7 +154,22 @@ func backupFail(log *slog.Logger, w http.ResponseWriter, err error, what string)
 // registerBackups adds the backup routes. Restores need the high-risk
 // scope backups:restore; nothing here returns a secret. dbs is nil when
 // the panel manages no sites; the dump import is then unavailable.
-func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, log *slog.Logger) {
+func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs DatabaseJobs, log *slog.Logger) {
+	// importJob finds an import job: on this machine's MariaDB, or else
+	// on an external server.
+	importJob := func(ctx context.Context, id string) (agentapi.DBJob, error) {
+		j, err := b.ImportJob(ctx, id)
+		if err == nil || jobs == nil {
+			return j, err
+		}
+
+		if rj, rerr := jobs.RemoteJob(ctx, id); rerr == nil {
+			return rj, nil
+		}
+
+		return j, err
+	}
+
 	// restoreSite and importSite name the site of a restore or of an import
 	// job, so a user follows only those of granted sites (ADR-0035).
 	restoreSite := func(r *http.Request) (string, bool) {
@@ -170,7 +192,7 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, log *
 			return "", false
 		}
 
-		job, err := b.ImportJob(r.Context(), id)
+		job, err := importJob(r.Context(), id)
 		if err != nil {
 			return "", false
 		}
@@ -360,7 +382,7 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, log *
 	// data that existed before it (ADR-0008, recommendation 7). The import
 	// itself is the agent's db.import, with a job user that holds rights on
 	// that database only.
-	mux.HandleFunc("POST /api/v1/backups/restores/{id}/import", a.allowSite("backups:restore", restoreSite, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.HandleFunc("POST /api/v1/backups/restores/{id}/import", a.allowSite("backups:restore", restoreSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		id := r.PathValue("id")
 		if (agentapi.BackupRestoreGetRequest{ID: id}).Validate() != nil {
 			writeError(w, http.StatusNotFound, "not_found", "no such snapshot or restore")
@@ -423,11 +445,42 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, log *
 			return
 		}
 
-		job, err := b.Import(r.Context(), target.Name, res.Dir+"/"+res.Database+".sql")
-		if err != nil {
-			backupFail(log, w, err, "import restored dump")
+		// The dump's file name gives its format; restores recorded
+		// before DumpFile existed hold a MariaDB dump.
+		file := res.DumpFile
+		if file == "" {
+			file = res.Database + ".sql"
+		}
+
+		if file != res.Database+".sql" && file != res.Database+agentapi.PGCustomSuffix {
+			writeError(w, http.StatusConflict, "not_a_dump", "this restore holds no database dump")
 
 			return
+		}
+
+		var job agentapi.DBJob
+
+		switch {
+		case target.Server != store.LocalDBServer && jobs != nil:
+			// hosting checks that the format fits the server: a .dump
+			// loads only into PostgreSQL.
+			job, err = jobs.ImportDatabase(r.Context(), p.User.ID, target.Name, res.Dir+"/"+file)
+			if err != nil {
+				dbFail(log, w, err, "import restored dump")
+
+				return
+			}
+		case target.Server != store.LocalDBServer || strings.HasSuffix(file, agentapi.PGCustomSuffix):
+			writeError(w, http.StatusConflict, "wrong_server", "this dump does not load into a database on this server")
+
+			return
+		default:
+			job, err = b.Import(r.Context(), target.Name, res.Dir+"/"+file)
+			if err != nil {
+				backupFail(log, w, err, "import restored dump")
+
+				return
+			}
 		}
 
 		log.InfoContext(r.Context(), "restored dump import started", "restore", res.ID, "database", target.Name, "job", job.ID)
@@ -442,7 +495,7 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, log *
 			return
 		}
 
-		job, err := b.ImportJob(r.Context(), id)
+		job, err := importJob(r.Context(), id)
 		if err != nil {
 			backupFail(log, w, err, "import status")
 

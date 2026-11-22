@@ -60,6 +60,8 @@ export type Restore = {
   kind: string;
   database?: string;
   dir: string;
+  /** The dump's file name in dir: <db>.sql, or <db>.dump for PostgreSQL. */
+  dumpFile?: string;
   state: "queued" | "running" | "done" | "failed";
   files: number;
   bytes: number;
@@ -82,8 +84,8 @@ export const siteSnapshots = async (site: string) =>
 export const startRestore = (site: string, snapshot: string) =>
   request<Restore>("POST", "/sites/" + encodeURIComponent(site) + "/backups/" + snapshot + "/restore");
 export const getRestore = (id: string) => request<Restore>("GET", "/backups/restores/" + id);
-export const createDatabase = (site: string, name: string) =>
-  request<unknown>("POST", "/sites/" + encodeURIComponent(site) + "/databases", { name });
+export const createDatabase = (site: string, name: string, server = "") =>
+  request<unknown>("POST", "/sites/" + encodeURIComponent(site) + "/databases", { name, ...(server ? { server } : {}) });
 export const importDump = (restore: string, database: string) =>
   request<ImportJob>("POST", "/backups/restores/" + restore + "/import", { database });
 export const getImport = (id: string) => request<ImportJob>("GET", "/backups/imports/" + id);

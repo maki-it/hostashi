@@ -328,6 +328,22 @@ func TestRestoreOverHTTP(t *testing.T) {
 		t.Fatalf("import: %d %s %v", rec.Code, rec.Body, lb.imports)
 	}
 
+	// A PostgreSQL dump (ADR-0051) does not load into this machine's
+	// MariaDB, and a file name that is not the database's dump is refused.
+	for file, code := range map[string]string{"blog_wp.dump": "wrong_server", "other.sql": "not_a_dump"} {
+		r.DumpFile = file
+
+		raw, _ := json.Marshal(r)
+		if err := os.WriteFile(filepath.Join(lb.a.StatusDir, "restore-"+r.ID+".json"), raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		rec := e.do(t, reqOpts{method: "POST", path: importPath, cookie: c, body: `{"database":"blog_new"}`})
+		if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), code) || len(lb.imports) != 1 {
+			t.Errorf("%s: %d %s", file, rec.Code, rec.Body)
+		}
+	}
+
 	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/backups/imports/0123456789abcdef", cookie: c}); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"state":"done"`) {
 		t.Errorf("import status: %d %s", rec.Code, rec.Body)
 	}

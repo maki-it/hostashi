@@ -133,6 +133,46 @@ describe("Backups", () => {
     expect(calls.find((c) => c.path.endsWith("/import"))?.body).toEqual({ database: "blog_wp_restored" });
   });
 
+  describe("a PostgreSQL dump", () => {
+    const local = { name: "localhost", local: true, default: true, engine: "MariaDB", state: "ok", databases: 1, tlsMode: "socket", tlsActive: false };
+    const pg1 = { ...local, name: "pg1", local: false, default: false, engine: "PostgreSQL", host: "pg.example.net", port: 5432 };
+    const pgRoutes = (servers: unknown[]) => {
+      const restore = { site: "blog", files: 1, bytes: 10, state: "done", id: "2222222222222222", kind: "db", database: "shop_pg", dir: "restore-2" };
+      return {
+        "GET /api/v1/backups": { body: ready },
+        "GET /api/v1/sites": { body: { sites: [{ name: "blog", state: "active" }] } },
+        "GET /api/v1/sites/blog/backups": { body: { snapshots: [{ id: snapDB, time: "2026-11-19T01:13:00Z", kind: "db", database: "shop_pg" }] } },
+        ["POST /api/v1/sites/blog/backups/" + snapDB + "/restore"]: { status: 202, body: { ...restore, state: "queued" } },
+        "GET /api/v1/backups/restores/2222222222222222": { body: { ...restore, dumpFile: "shop_pg.dump" } },
+        "GET /api/v1/db-servers": { body: { servers } },
+        "POST /api/v1/sites/blog/databases": { status: 201, body: { name: "shop_pg_restored" } },
+        "POST /api/v1/backups/restores/2222222222222222/import": { status: 202, body: { id: "3333333333333333", state: "running" } },
+        "GET /api/v1/backups/imports/3333333333333333": { body: { id: "3333333333333333", state: "done" } },
+      };
+    };
+
+    it("goes into a new database on a PostgreSQL server", async () => {
+      const user = userEvent.setup();
+      const calls = mockFetch(pgRoutes([local, pg1]));
+      render(<Harness />);
+      await user.click(await screen.findByRole("button", { name: /^Restore database shop_pg of / }));
+      await user.click(await screen.findByRole("button", { name: "Create and import" }));
+      expect(await screen.findByText(/The dump is in the new database/)).toBeInTheDocument();
+      // Only one PostgreSQL server: no choice to make.
+      expect(screen.queryByLabelText("On the server")).not.toBeInTheDocument();
+      expect(calls.find((c) => c.path === "/api/v1/sites/blog/databases")?.body).toEqual({ name: "shop_pg_restored", server: "pg1" });
+    });
+
+    it("asks for a PostgreSQL server when there is none", async () => {
+      const user = userEvent.setup();
+      mockFetch(pgRoutes([local]));
+      render(<Harness />);
+      await user.click(await screen.findByRole("button", { name: /^Restore database shop_pg of / }));
+      expect(await screen.findByText(/Add a PostgreSQL server under Databases/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Create and import" })).not.toBeInTheDocument();
+    });
+  });
+
   it("shows a failed backup with its badge and relative times", async () => {
     const failed: BackupInfo = { ...ready, status: { ...ready.status, ok: false, error: "target full", items: [{ kind: "files", site: "blog", error: "no space left", dataAdded: 0, files: 0, bytes: 0 }] } };
     mockFetch({ "GET /api/v1/backups": { body: failed }, "GET /api/v1/sites": { body: { sites: [] } } });

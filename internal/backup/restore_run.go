@@ -65,7 +65,7 @@ func RestoreOnce(ctx context.Context, cfg RunConfig, id string) error {
 
 	res, err := restore(ctx, cfg, r)
 
-	r.Files, r.Bytes, r.Skipped = res.files, res.bytes, res.skipped
+	r.Files, r.Bytes, r.Skipped, r.DumpFile = res.files, res.bytes, res.skipped, res.dumpFile
 	r.Finished = time.Now().UTC()
 	r.State = agentapi.RestoreDone
 
@@ -182,14 +182,21 @@ func restore(ctx context.Context, cfg RunConfig, r Restore) (extracted, error) {
 
 	derr := <-dumpErr
 
-	switch {
-	case err != nil:
-		return x.n, err
-	case derr != nil:
-		return x.n, derr
+	n := x.n
+	if r.Kind == KindDB {
+		// The dump's name tells its format: <db>.sql (MariaDB) or
+		// <db>.dump (PostgreSQL, ADR-0051).
+		n.dumpFile = path.Base(prefix)
 	}
 
-	return x.n, nil
+	switch {
+	case err != nil:
+		return n, err
+	case derr != nil:
+		return n, derr
+	}
+
+	return n, nil
 }
 
 // createRestoreDir makes home/name, root-owned and mode 0700, and returns
@@ -233,7 +240,10 @@ func createRestoreDir(home, name string, uid uint32) (int, error) {
 	return fd, nil
 }
 
-type extracted struct{ files, bytes, skipped int64 }
+type extracted struct {
+	files, bytes, skipped int64
+	dumpFile              string
+}
 
 // extractor writes a tar stream from restic dump below root. Every path is
 // resolved beneath root without following symlinks, files are created
