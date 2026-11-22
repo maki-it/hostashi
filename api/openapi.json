@@ -3447,6 +3447,9 @@
       "PHPInstallStatus": {
         "additionalProperties": false,
         "properties": {
+          "action": {
+            "type": "string"
+          },
           "log": {
             "items": {
               "type": "string"
@@ -4145,6 +4148,9 @@
       "PhpInstall": {
         "additionalProperties": false,
         "properties": {
+          "action": {
+            "type": "string"
+          },
           "log": {
             "items": {
               "type": "string"
@@ -4187,6 +4193,15 @@
           "confirmEol": {
             "type": "boolean"
           },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PhpRemoveRequest": {
+        "additionalProperties": false,
+        "properties": {
           "version": {
             "type": "string"
           }
@@ -5800,6 +5815,112 @@
           "review",
           "sites",
           "skip"
+        ],
+        "type": "object"
+      },
+      "SystemHostnameInput": {
+        "additionalProperties": false,
+        "properties": {
+          "hostname": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SystemInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "cloudInit": {
+            "type": "boolean"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "ntpSynchronized": {
+            "type": "boolean"
+          },
+          "rebootPackages": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "rebootRequired": {
+            "type": "boolean"
+          },
+          "time": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "transientHostname": {
+            "type": "string"
+          },
+          "uptimeSeconds": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "cloudInit",
+          "hostname",
+          "ntpSynchronized",
+          "rebootRequired",
+          "time",
+          "timezone",
+          "transientHostname",
+          "uptimeSeconds"
+        ],
+        "type": "object"
+      },
+      "SystemRebootInput": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SystemRebootResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "delaySeconds": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "delaySeconds"
+        ],
+        "type": "object"
+      },
+      "SystemTimezoneInput": {
+        "additionalProperties": false,
+        "properties": {
+          "zone": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SystemTimezones": {
+        "additionalProperties": false,
+        "properties": {
+          "zones": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "zones"
         ],
         "type": "object"
       },
@@ -10979,6 +11100,59 @@
         "x-hostashi-action": "node:install"
       }
     },
+    "/api/v1/node/remove": {
+      "post": {
+        "operationId": "removeNode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeInstallInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "node:install"
+            ]
+          }
+        ],
+        "summary": "Remove an installed Node.js line that no site's app runs on",
+        "tags": [
+          "node"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "node:remove"
+      }
+    },
     "/api/v1/openapi.json": {
       "get": {
         "operationId": "getOpenAPI",
@@ -11920,6 +12094,59 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "php:install"
+      }
+    },
+    "/api/v1/php/remove": {
+      "post": {
+        "operationId": "removePHP",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhpRemoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PHPInstallStatus"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "php:install"
+            ]
+          }
+        ],
+        "summary": "Remove a PHP version that no site uses",
+        "tags": [
+          "php"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "php:remove"
       }
     },
     "/api/v1/php/versions": {
@@ -17784,6 +18011,251 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "pages:write"
+      }
+    },
+    "/api/v1/system": {
+      "get": {
+        "operationId": "getSystem",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:read"
+            ]
+          }
+        ],
+        "summary": "The server's hostname, time zone, clock, uptime and pending reboot",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "system:read"
+      }
+    },
+    "/api/v1/system/hostname": {
+      "put": {
+        "operationId": "setHostname",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemHostnameInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:write"
+            ]
+          }
+        ],
+        "summary": "Set the server's hostname",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "system:write"
+      }
+    },
+    "/api/v1/system/reboot": {
+      "post": {
+        "operationId": "rebootServer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemRebootInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemRebootResponse"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:write"
+            ]
+          }
+        ],
+        "summary": "Reboot the server; confirm with its hostname",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "system:write"
+      }
+    },
+    "/api/v1/system/timezone": {
+      "put": {
+        "operationId": "setTimezone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemTimezoneInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:write"
+            ]
+          }
+        ],
+        "summary": "Set the server's time zone (site cron jobs follow it at once)",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "system:write"
+      }
+    },
+    "/api/v1/system/timezones": {
+      "get": {
+        "operationId": "listTimezones",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemTimezones"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:read"
+            ]
+          }
+        ],
+        "summary": "The time zones the server knows",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "system:read"
       }
     },
     "/api/v1/tokens": {

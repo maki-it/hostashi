@@ -10,6 +10,9 @@
 #                                    every recorded one) are set up, else 1
 #                                    with the reason on stdout
 #   php-install install VERSION...   set up sury.org and install the versions
+#   php-install remove VERSION       purge a version Hostashi installed; the
+#                                    distribution's default and a version
+#                                    with a running site pool are refused
 #   php-install update               apt-get update, waiting out sury.org's
 #                                    CDN (also used by install.sh)
 #
@@ -19,7 +22,9 @@
 # before anything is installed. The key is fetched with apt's own helper
 # and accepted only with exactly the pinned fingerprints; it is fetched
 # again when it expires within 60 days. Installed versions are recorded,
-# so the pin keeps covering them. Removing a version is not supported yet.
+# so the pin keeps covering them. A removed version leaves the record and
+# the pin; the sury.org source and key stay for the remaining versions (and
+# php-common).
 #
 # Exit codes: 0 ok, 1 not set up (check) or failed (install), 64 usage.
 # Test hooks (environment): HOSTASHI_STATE_DIR, HOSTASHI_OS_RELEASE,
@@ -254,7 +259,41 @@ install_versions() {
   say "done: PHP $* installed"
 }
 
-usage() { echo "usage: $0 check [VERSION...] | install VERSION... | update" >&2; exit 64; }
+# site_pools VERSION prints the running site pools of a version: the
+# agent refuses the removal first, this is the last check before apt.
+site_pools() {
+  [ -d /run/systemd/system ] || return 0
+  systemctl list-units --no-legend --plain --state=active,activating,reloading "hostashi-php-$1@*.service" 2>/dev/null | awk '{ print $1 }'
+}
+
+remove_version() {
+  local v=$1 def pools rest=() r pkgs=()
+  def=$(php_default) || def=""
+  say "removing PHP $v"
+  [ "$v" != "$def" ] || { say "REFUSED: PHP $v is the distribution's default"; return 1; }
+  grep -qx "$v" "$PHP_STATE" 2>/dev/null || { say "REFUSED: PHP $v was not installed by Hostashi"; return 1; }
+  pools=$(site_pools "$v")
+  [ -z "$pools" ] || { say "REFUSED: sites still run on PHP $v: $(tr '\n' ' ' <<<"$pools")"; return 1; }
+  # Every installed package of the version: the ones php_pkgs names and
+  # what they pulled in (common, opcache, readline).
+  mapfile -t pkgs < <(dpkg-query -W -f='${Package} ${db:Status-Abbrev}\n' "php$v-*" 2>/dev/null | awk '$2 ~ /^[ih]i/ { print $1 }')
+  if [ "${#pkgs[@]}" -gt 0 ]; then
+    apt-get purge "${APT_OPTS[@]}" "${pkgs[@]}" || return 1
+  fi
+  while IFS= read -r r; do
+    [ -z "$r" ] || [ "$r" = "$v" ] || rest+=("$r")
+  done <"$PHP_STATE"
+  # The pin keeps covering the remaining versions (and php-common).
+  sury_pin "${rest[@]}" | put "$SURY_PIN" 0644 || return 1
+  if [ "${#rest[@]}" -gt 0 ]; then
+    printf '%s\n' "${rest[@]}" | put "$PHP_STATE" 0600 || return 1
+  else
+    : | put "$PHP_STATE" 0600 || return 1
+  fi
+  say "done: PHP $v removed"
+}
+
+usage() { echo "usage: $0 check [VERSION...] | install VERSION... | remove VERSION | update" >&2; exit 64; }
 
 main() {
   local cmd=${1:-} v
@@ -266,6 +305,10 @@ main() {
       [ $# -gt 0 ] || usage
       [ "$(id -u)" = 0 ] || { echo "php-install: must run as root" >&2; exit 1; }
       install_versions "$@";;
+    remove)
+      [ $# = 1 ] || usage
+      [ "$(id -u)" = 0 ] || { echo "php-install: must run as root" >&2; exit 1; }
+      remove_version "$1";;
     update)
       [ $# = 0 ] || usage
       apt_update;;

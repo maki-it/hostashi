@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Removes PHP %i, a version Hostashi installed from sury.org that no site
+# uses (ADR-0036). The agent starts an instance when an admin removes a
+# version in the panel; the script checks %i against its own allowlist and
+# refuses the distribution's default and a version with a running site
+# pool. It runs apt, so it needs root and a writable system, like
+# hostashi-php-install@.service.
+
+[Unit]
+Description=Remove PHP %i for Hostashi
+Documentation=https://github.com/maki-it/hostashi
+Conflicts=hostashi-php-install@%i.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/hostashi/php-install remove %i
+TimeoutStartSec=15min
+# No core dumps (ADR-0033).
+LimitCORE=0
+PrivateTmp=yes
+# The same log as the installation: the panel shows the last run of a
+# version (php.install.status).
+StandardOutput=truncate:/var/lib/hostashi-agent/php-install/%i.log
+StandardError=inherit

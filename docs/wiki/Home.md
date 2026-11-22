@@ -1,6 +1,6 @@
 # Hostashi
 
-Hostashi is an open-source control panel for a single Linux server. It runs your websites with nginx, PHP-FPM, MariaDB and Let's Encrypt, takes backups with restic, and can move sites over from CloudPanel.
+Hostashi is an open-source control panel for a single Linux server. It runs PHP, Node.js, static, reverse proxy and redirect sites with nginx and Let's Encrypt certificates, manages MariaDB databases (also on external MariaDB, MySQL or PostgreSQL servers), takes backups with restic, and can move sites over from CloudPanel.
 
 > This wiki is generated from [`docs/wiki/`](https://github.com/maki-it/hostashi/tree/main/docs/wiki) in the repository. Changes go through a pull request; edits made here are overwritten.
 
@@ -9,8 +9,8 @@ Hostashi is an open-source control panel for a single Linux server. It runs your
 | You are … | You need | Start with |
 |-----------|----------|------------|
 | **Server admin** | root on the server | [Install](Install.md) |
-| **Panel admin** | the role `admin` in the panel | First steps (coming soon) |
-| **Manager** or **user** | an invitation to the panel | Sites (coming soon) |
+| **Panel admin** | the role `admin` in the panel | [First steps](First-steps.md) |
+| **Manager** or **user** | an invitation to the panel | [Sites](Sites.md) |
 
 ## What Hostashi does not do
 

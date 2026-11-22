@@ -141,8 +141,10 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/php/versions":                               "php.versions:read",
 	"GET /api/v1/php/install":                                "php.install:read",
 	"POST /api/v1/php/install":                               "php:install",
+	"POST /api/v1/php/remove":                                "php:remove",
 	"GET /api/v1/node":                                       "node:read",
 	"POST /api/v1/node/install":                              "node:install",
+	"POST /api/v1/node/remove":                               "node:remove",
 	"DELETE /api/v1/sites/{name}":                            "sites:delete",
 	"POST /api/v1/sites/{name}/park":                         "sites:park",
 	"GET /api/v1/panel/tls":                                  "panel.tls:read",
@@ -277,6 +279,11 @@ var routeAccess = map[string]authz.Action{
 	"POST /api/v1/services/{id}/{action}":              "services:write",
 	"POST /api/v1/sites/{name}/services/{id}/{action}": "services:write",
 	"GET /api/v1/dashboard":                            "services:read",
+	"GET /api/v1/system":                               "system:read",
+	"GET /api/v1/system/timezones":                     "system:read",
+	"PUT /api/v1/system/timezone":                      "system:write",
+	"PUT /api/v1/system/hostname":                      "system:write",
+	"POST /api/v1/system/reboot":                       "system:write",
 	"GET /metrics":                                     "metrics:read",
 }
 
@@ -302,7 +309,7 @@ func newFullAPIMux(t *testing.T) (*apiEnv, *routeMux) {
 		PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb,
 		CloudPanel: e.cp, CloudPanelSource: newStubSource(t), Metrics: e.metrics, Settings: e.settings,
 		Doctor: e.doctor.run, Pools: e.pools.list, Firewall: e.firewall, PHP: e.php, PGClient: e.pgclient, Node: e.node, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open, NotifyPrefs: e.st, AuditLog: e.st,
-		Monitor: e.monitor, Logs: e.logs,
+		Monitor: e.monitor, Logs: e.logs, System: e.system,
 	})
 
 	return e, mux

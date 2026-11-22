@@ -166,6 +166,10 @@ type Deps struct {
 	// disables their routes. Needs Auth and Settings (for the audit log).
 	Monitor ServerMonitor
 
+	// System serves the time zone, hostname and reboot (ADR-0060); nil
+	// disables their routes. Needs Auth and Settings (for the audit log).
+	System SystemAgent
+
 	// AuditLog reads the audit log for its page and export; nil disables
 	// its routes. Needs Auth.
 	AuditLog AuditLog
@@ -285,7 +289,12 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 		}
 
 		if deps.PHP != nil && deps.Settings != nil {
-			registerPHPInstall(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.PHP, deps.Settings, log)
+			var sites func(context.Context) ([]store.Site, error)
+			if deps.Sites != nil {
+				sites = deps.Sites.List
+			}
+
+			registerPHPInstall(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.PHP, deps.Settings, sites, log)
 		}
 
 		if deps.Node != nil && deps.Settings != nil {
@@ -331,6 +340,10 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		if deps.Monitor != nil && deps.Settings != nil {
 			registerServices(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Monitor, deps.Settings, log)
+		}
+
+		if deps.System != nil && deps.Settings != nil {
+			registerSystem(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.System, deps.Settings, log)
 		}
 
 		if deps.AuditLog != nil {
@@ -582,6 +595,7 @@ func Run(ctx context.Context, cfg Config) error {
 		Alerts: &notify.ServiceAlerts{Notifier: notifier, Log: cfg.Log},
 	}
 	deps.Monitor = mon
+	deps.System = RPCSystemAgent{C: client}
 
 	go mon.Run(ctx)
 

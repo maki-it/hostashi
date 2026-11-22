@@ -1735,7 +1735,36 @@ x systemctl is-active --quiet "hostashi-php-$NEWEST@next.service" || fail "PHP $
 exposure "hostashi-php-$NEWEST@next.service" 3.0
 body=$(x curl -fsS -H 'Host: next.example.com' http://127.0.0.1/index.php)
 [ "$body" = "php $NEWEST {\"ok\":true}" ] || fail "PHP $NEWEST site answered '$body'"
+[ "$(api POST /api/v1/php/remove "{\"version\":\"$NEWEST\"}")" = 409 ] || fail "removed PHP $NEWEST with a site on it: $(x cat /tmp/api.out)"
+x grep -q '"php_in_use"' /tmp/api.out || fail "PHP $NEWEST in use: $(x cat /tmp/api.out)"
 [ "$(api DELETE /api/v1/sites/next)" = 204 ] || fail "delete $NEWEST site: $(x cat /tmp/api.out)"
+# Removing a version from the panel (ADR-0036): the distribution's default
+# stays, a version no site uses is purged, and the pin and the record
+# follow, so the installer sees nothing to do.
+[ "$(api POST /api/v1/php/remove "{\"version\":\"$def\"}")" = 409 ] || fail "removed the default PHP $def: $(x cat /tmp/api.out)"
+if x systemctl start "hostashi-php-remove@$def.service" 2>/dev/null; then fail "the unit removed the default PHP $def"; fi
+x test -x "/usr/sbin/php-fpm$def" || fail "PHP $def gone after a refused removal"
+[ "$(api POST /api/v1/php/remove "{\"version\":\"$NEWEST\"}")" = 202 ] || fail "PHP $NEWEST remove: $(x cat /tmp/api.out)"
+state=""
+for _ in $(seq 1 150); do
+  [ "$(api GET /api/v1/php/install)" = 200 ] || fail "remove status: $(x cat /tmp/api.out)"
+  state=$(x sed -n 's/.*"state":"\([a-z]*\)".*/\1/p' /tmp/api.out)
+  [ "$state" = running ] || break
+  sleep 2
+done
+[ "$state" = succeeded ] || fail "PHP $NEWEST removal: $(x cat /tmp/api.out)"
+x grep -q '"action":"remove"' /tmp/api.out || fail "removal not reported as one: $(x cat /tmp/api.out)"
+! x test -e "/usr/sbin/php-fpm$NEWEST" || fail "php-fpm$NEWEST left after the removal"
+# shellcheck disable=SC2016 # a dpkg-query format
+[ -z "$(x dpkg-query -W -f='${Package} ${db:Status-Abbrev}\n' "php$NEWEST-*" 2>/dev/null | awk '$2 ~ /^[ih]i/')" ] || fail "packages of PHP $NEWEST left: $(x dpkg -l "php$NEWEST-*")"
+! x grep -q "php$NEWEST" /etc/apt/preferences.d/hostashi-sury-php || fail "pin still covers $NEWEST: $(x cat /etc/apt/preferences.d/hostashi-sury-php)"
+! x grep -qx "$NEWEST" /var/lib/hostashi-installer/php-versions || fail "PHP $NEWEST still recorded"
+[ "$(api GET /api/v1/php/versions)" = 200 ] || fail "php versions: $(x cat /tmp/api.out)"
+! x grep -q "\"installed\":\\[[^]]*\"$NEWEST\"" /tmp/api.out || fail "PHP $NEWEST still installed: $(x cat /tmp/api.out)"
+for v in 7.4 8.1 "$def"; do x test -x "/usr/sbin/php-fpm$v" || fail "PHP $v gone with $NEWEST"; done
+[ "$(api POST /api/v1/php/remove "{\"version\":\"$NEWEST\"}")" = 409 ] || fail "second removal of $NEWEST: $(x cat /tmp/api.out)"
+out=$(inst apply --yes)
+grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the panel's removal changed something"; }
 
 step "PostgreSQL client tools from apt.postgresql.org (ADR-0051)"
 # The installer only puts the script and its unit in place; nothing of
@@ -1867,6 +1896,17 @@ x systemctl is-active --quiet hostashi-node@nodeapp.service || fail "app not res
 [ "$(api DELETE /api/v1/sites/nodeapp)" = 204 ] || fail "delete node site: $(x cat /tmp/api.out)"
 x test ! -e /etc/systemd/system/hostashi-node@nodeapp.service.d || fail "app drop-ins left after delete"
 x systemctl is-active --quiet hostashi-node@nodeapp.service && fail "app runs after delete"
+# A line no app runs on can be removed; one in use cannot.
+[ "$(api POST /api/v1/sites "{\"name\":\"nodekeep\",\"domains\":[\"nodekeep.example.com\"],\"type\":\"node\",\"node\":{\"version\":\"$NODE_MAJOR\"}}")" = 201 ] ||
+  fail "create second node site: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/node/remove "{\"major\":\"$NODE_MAJOR\"}")" = 409 ] || fail "removed Node.js $NODE_MAJOR with a site on it: $(x cat /tmp/api.out)"
+x test -x "/opt/hostashi/node/$NODE_MAJOR/bin/node" || fail "Node.js $NODE_MAJOR gone after a refused removal"
+[ "$(api DELETE /api/v1/sites/nodekeep)" = 204 ] || fail "delete second node site: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/node/remove "{\"major\":\"$NODE_MAJOR\"}")" = 200 ] || fail "remove Node.js $NODE_MAJOR: $(x cat /tmp/api.out)"
+x grep -q '"installed":\[\]' /tmp/api.out || fail "Node.js still listed after removal: $(x cat /tmp/api.out)"
+x test ! -e "/opt/hostashi/node/$NODE_MAJOR" || fail "Node.js $NODE_MAJOR left after removal"
+x test ! -e "/opt/hostashi/node/.old-$NODE_MAJOR" || fail "removed tree of Node.js $NODE_MAJOR left"
+[ "$(api POST /api/v1/node/remove "{\"major\":\"$NODE_MAJOR\"}")" = 409 ] || fail "second removal of Node.js $NODE_MAJOR: $(x cat /tmp/api.out)"
 
 if [ -n "${PEBBLE_DIR:-}" ]; then
   step "a database on an external PostgreSQL server in the web database tool (ADR-0051)"

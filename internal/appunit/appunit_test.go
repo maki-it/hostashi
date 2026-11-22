@@ -235,6 +235,30 @@ func TestRemoveAndRecover(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if u, err := e.m.Users("24"); err != nil || !slices.Equal(u, []string{"blog", "shop"}) {
+		t.Errorf("Users(24) = %v, %v", u, err)
+	}
+
+	if u, err := e.m.Users("22"); err != nil || len(u) != 0 {
+		t.Errorf("Users(22) = %v, %v", u, err)
+	}
+
+	// A line installed again restarts its running apps only (blog is
+	// stopped).
+	e.ctl.calls = nil
+	e.m.RestartLine(ctx, "24")
+
+	if !slices.Equal(e.ctl.calls, []string{"restart hostashi-node@shop.service"}) {
+		t.Errorf("RestartLine(24): %v", e.ctl.calls)
+	}
+
+	e.ctl.calls = nil
+	e.m.RestartLine(ctx, "22")
+
+	if len(e.ctl.calls) != 0 {
+		t.Errorf("RestartLine(22): %v", e.ctl.calls)
+	}
+
 	// Lost drop-in: Recover writes it and starts only the running app.
 	dir := filepath.Join(e.root, "units", "hostashi-node@shop.service.d")
 	if err := os.Remove(filepath.Join(dir, AppDropIn)); err != nil {

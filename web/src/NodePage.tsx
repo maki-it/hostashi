@@ -3,12 +3,12 @@
 // The Node.js LTS lines Hostashi installs from the official nodejs.org
 // builds, each checked against its pinned checksum (ADR-0054).
 
-import { DownloadSimple } from "@phosphor-icons/react";
+import { DownloadSimple, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
-import { getNode, installNode, nodeMessage, type NodeRelease, type NodeStatus } from "./node";
+import { getNode, installNode, nodeMessage, removeNode, type NodeRelease, type NodeStatus } from "./node";
 import { daysUntil, todayUTC } from "./php";
 import { listSites, type Site } from "./sites";
-import { Badge, Button, Card, Notice, PageHead, Table, type Column } from "./ui";
+import { Badge, Button, Card, IconButton, Notice, PageHead, Table, type Column } from "./ui";
 
 type Row = NodeRelease & { installed: string; sites: number | null };
 
@@ -16,6 +16,9 @@ export function NodePage({ today = todayUTC(), poll = 3000 }: { today?: string; 
   const [status, setStatus] = useState<NodeStatus | null>(null);
   const [sites, setSites] = useState<Site[] | null>(null);
   const [error, setError] = useState("");
+  const [confirm, setConfirm] = useState<string | null>(null);
+  const [removed, setRemoved] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -41,11 +44,26 @@ export function NodePage({ today = todayUTC(), poll = 3000 }: { today?: string; 
   }, [running, load, poll]);
 
   const start = async (major: string) => {
+    setRemoved("");
     try {
       setStatus(await installNode(major));
       setError("");
     } catch (err) {
       setError(nodeMessage(err));
+    }
+  };
+
+  const remove = async (major: string) => {
+    setBusy(true);
+    try {
+      setStatus(await removeNode(major));
+      setError("");
+      setRemoved(major);
+    } catch (err) {
+      setError(nodeMessage(err));
+    } finally {
+      setBusy(false);
+      setConfirm(null);
     }
   };
 
@@ -112,16 +130,22 @@ export function NodePage({ today = todayUTC(), poll = 3000 }: { today?: string; 
     {
       key: "status",
       header: "Status",
-      cell: (r) =>
-        r.installed === r.version ? (
-          <Badge tone="ok">Installed</Badge>
-        ) : running && status.last === r.major ? (
-          <span aria-busy="true">Installing…</span>
-        ) : (
-          <Button icon={<DownloadSimple size={16} aria-hidden="true" />} disabled={running} onClick={() => void start(r.major)}>
-            {r.installed ? `Update to ${r.version}` : `Install Node.js ${r.major}`}
-          </Button>
-        ),
+      cell: (r) => (
+        <span className="ui-row">
+          {r.installed === r.version ? (
+            <Badge tone="ok">Installed</Badge>
+          ) : running && status.last === r.major ? (
+            <span aria-busy="true">Installing…</span>
+          ) : (
+            <Button icon={<DownloadSimple size={16} aria-hidden="true" />} disabled={running || busy} onClick={() => void start(r.major)}>
+              {r.installed ? `Update to ${r.version}` : `Install Node.js ${r.major}`}
+            </Button>
+          )}
+          {r.installed && r.sites === 0 && (
+            <IconButton label={"Remove Node.js " + r.major} icon={<Trash size={16} aria-hidden="true" />} danger disabled={running || busy} onClick={() => setConfirm(r.major)} />
+          )}
+        </span>
+      ),
     },
   ];
 
@@ -129,6 +153,21 @@ export function NodePage({ today = todayUTC(), poll = 3000 }: { today?: string; 
     <>
       {head}
       {error && <Notice tone="err" title={error} />}
+      {removed && <Notice tone="ok" title={"Node.js " + removed + " was removed."} />}
+      {confirm && (
+        <section className="ui-card ui-card-body ui-stack" role="alertdialog" aria-labelledby="node-remove-title">
+          <h2 id="node-remove-title" className="ui-flush">
+            Remove Node.js {confirm}?
+          </h2>
+          <p className="ui-flush">No site runs on it. Its files under /opt/hostashi/node are deleted; you can install it again later.</p>
+          <div className="ui-row">
+            <Button variant="danger" disabled={busy} onClick={() => void remove(confirm)}>
+              Remove
+            </Button>
+            <Button onClick={() => setConfirm(null)}>Cancel</Button>
+          </div>
+        </section>
+      )}
       {status.state !== "idle" && status.last && (
         <Card
           title={
@@ -152,7 +191,7 @@ export function NodePage({ today = todayUTC(), poll = 3000 }: { today?: string; 
       <Card padded={false}>
         <Table label="Node.js versions" columns={columns} rows={rows} rowKey={(r) => r.major} empty="No Node.js version is offered." />
       </Card>
-      <p className="ui-hint ui-flush">Apps of a site run on the version chosen on the site's Web tab.</p>
+      <p className="ui-hint ui-flush">Apps of a site run on the version chosen on the site's Web tab. A version can be removed once no site uses it.</p>
     </>
   );
 }

@@ -231,6 +231,66 @@ func AppDropInContent(nodeDir string, a agentapi.AppSpec, acct Site) ([]byte, er
 	return []byte(b.String()), nil
 }
 
+// Users lists the sites whose app runs on a Node.js line, sorted.
+func (m *Manager) Users(major string) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	st, err := m.load()
+	if err != nil {
+		return nil, err
+	}
+
+	out := []string{}
+
+	for site, e := range st {
+		if e.App.Node == major {
+			out = append(out, site)
+		}
+	}
+
+	slices.Sort(out)
+
+	return out, nil
+}
+
+// RestartLine restarts the running apps on a Node.js line, after it was
+// installed again with a newer release. Stopped apps stay stopped. A
+// failure is logged and the next app is restarted all the same.
+func (m *Manager) RestartLine(ctx context.Context, major string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	st, err := m.load()
+	if err != nil {
+		m.log().ErrorContext(ctx, "restart apps", "major", major, "err", err)
+
+		return
+	}
+
+	sites := make([]string, 0, len(st))
+
+	for site, e := range st {
+		if e.App.Node == major && !e.App.Stopped && e.App.StartKind != "" {
+			sites = append(sites, site)
+		}
+	}
+
+	slices.Sort(sites)
+
+	for _, site := range sites {
+		_ = m.Ctl.ResetFailed(ctx, Unit(site))
+
+		if err := m.Ctl.Restart(ctx, Unit(site)); err != nil {
+			m.log().ErrorContext(ctx, "restart app on the new node release", "site", site, "err", err)
+
+			continue
+		}
+
+		m.log().InfoContext(ctx, "app restarted on the new node release", "site", site, "major", major)
+	}
+}
+
 // installed reports whether a line's node binary is there.
 func (m *Manager) installed(major string) bool {
 	st, err := os.Stat(filepath.Join(m.nodeDir(), major, "bin", "node"))

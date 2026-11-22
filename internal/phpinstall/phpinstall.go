@@ -37,6 +37,9 @@ const (
 // DoneMarker starts the script's last line after a successful run.
 const DoneMarker = "php-install: done:"
 
+// RemoveMarker starts the first line of a removal.
+const RemoveMarker = "php-install: removing PHP "
+
 // LogLines is how many lines of the log the status returns.
 const LogLines = 50
 
@@ -45,6 +48,12 @@ var (
 	ErrBusy = errors.New("phpinstall: an installation is already running")
 	// ErrInstalled: the version is installed already.
 	ErrInstalled = errors.New("phpinstall: the version is already installed")
+	// ErrNotInstalled: the version is not installed.
+	ErrNotInstalled = errors.New("phpinstall: the version is not installed")
+	// ErrInUse: sites still run on the version.
+	ErrInUse = errors.New("phpinstall: sites still run on this PHP version")
+	// ErrNoRemove: removing versions is not set up on this server.
+	ErrNoRemove = errors.New("phpinstall: removing PHP versions is not available on this server")
 )
 
 // Units starts and reads the install units.
@@ -56,6 +65,8 @@ type Units interface {
 // Manager serves php.install and php.install.status.
 type Manager struct {
 	Units Units
+	// Removes starts and reads the remove units; nil: no removal.
+	Removes Units
 	// Installed lists the installed versions (phpctl.Installed).
 	Installed func() []string
 	Root      string // prefixed to every path; empty means /
@@ -84,38 +95,102 @@ func (m *Manager) Start(ctx context.Context, version string) (agentapi.PHPInstal
 		return agentapi.PHPInstallStatus{}, ErrInstalled
 	}
 
-	for _, v := range agentapi.PHPVersions {
-		active, err := m.Units.Active(ctx, v)
-		if err != nil {
-			return agentapi.PHPInstallStatus{}, err
-		}
-
-		if active {
-			return agentapi.PHPInstallStatus{}, ErrBusy
-		}
+	if v, _, err := m.busy(ctx); err != nil {
+		return agentapi.PHPInstallStatus{}, err
+	} else if v != "" {
+		return agentapi.PHPInstallStatus{}, ErrBusy
 	}
 
 	if err := m.Units.Start(ctx, version); err != nil {
 		return agentapi.PHPInstallStatus{}, err
 	}
 
-	return agentapi.PHPInstallStatus{Version: version, State: agentapi.PHPInstallRunning, Log: []string{}}, nil
+	return agentapi.PHPInstallStatus{Version: version, Action: agentapi.PHPActionInstall, State: agentapi.PHPInstallRunning, Log: []string{}}, nil
+}
+
+// Remove starts the removal of an installed version. users are the sites
+// whose pool runs on it: a version in use is refused. The script refuses
+// the distribution's default version itself.
+func (m *Manager) Remove(ctx context.Context, version string, users []string) (agentapi.PHPInstallStatus, error) {
+	if err := agentapi.ValidatePHPVersion(version); err != nil {
+		return agentapi.PHPInstallStatus{}, err
+	}
+
+	if m.Removes == nil {
+		return agentapi.PHPInstallStatus{}, ErrNoRemove
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Installed != nil && !slices.Contains(m.Installed(), version) {
+		return agentapi.PHPInstallStatus{}, ErrNotInstalled
+	}
+
+	if len(users) > 0 {
+		return agentapi.PHPInstallStatus{}, fmt.Errorf("%w: %s", ErrInUse, strings.Join(users, ", "))
+	}
+
+	if v, _, err := m.busy(ctx); err != nil {
+		return agentapi.PHPInstallStatus{}, err
+	} else if v != "" {
+		return agentapi.PHPInstallStatus{}, ErrBusy
+	}
+
+	if err := m.Removes.Start(ctx, version); err != nil {
+		return agentapi.PHPInstallStatus{}, err
+	}
+
+	return agentapi.PHPInstallStatus{Version: version, Action: agentapi.PHPActionRemove, State: agentapi.PHPInstallRunning, Log: []string{}}, nil
+}
+
+// busy returns the version and action of a running install or remove
+// unit, "" for none.
+func (m *Manager) busy(ctx context.Context) (string, string, error) {
+	for _, v := range agentapi.PHPVersions {
+		active, err := m.Units.Active(ctx, v)
+		if err != nil {
+			return "", "", err
+		}
+
+		if active {
+			return v, agentapi.PHPActionInstall, nil
+		}
+
+		if m.Removes == nil {
+			continue
+		}
+
+		if active, err = m.Removes.Active(ctx, v); err != nil {
+			return "", "", err
+		} else if active {
+			return v, agentapi.PHPActionRemove, nil
+		}
+	}
+
+	return "", "", nil
+}
+
+// actionOf tells from a log whether it is a removal's.
+func actionOf(lines []string) string {
+	for _, l := range lines {
+		if strings.HasPrefix(l, RemoveMarker) {
+			return agentapi.PHPActionRemove
+		}
+	}
+
+	return agentapi.PHPActionInstall
 }
 
 // Status reports the last installation: a running unit, else the version
 // whose log is the newest.
 func (m *Manager) Status(ctx context.Context) (agentapi.PHPInstallStatus, error) {
-	for _, v := range agentapi.PHPVersions {
-		active, err := m.Units.Active(ctx, v)
-		if err != nil {
-			return agentapi.PHPInstallStatus{}, err
-		}
+	if v, action, err := m.busy(ctx); err != nil {
+		return agentapi.PHPInstallStatus{}, err
+	} else if v != "" {
+		lines, _ := m.tail(v)
 
-		if active {
-			lines, _ := m.tail(v)
-
-			return agentapi.PHPInstallStatus{Version: v, State: agentapi.PHPInstallRunning, Log: lines}, nil
-		}
+		return agentapi.PHPInstallStatus{Version: v, Action: action, State: agentapi.PHPInstallRunning, Log: lines}, nil
 	}
 
 	last, newest := "", int64(0)
@@ -145,7 +220,7 @@ func (m *Manager) Status(ctx context.Context) (agentapi.PHPInstallStatus, error)
 		state = agentapi.PHPInstallSucceeded
 	}
 
-	return agentapi.PHPInstallStatus{Version: last, State: state, Log: lines}, nil
+	return agentapi.PHPInstallStatus{Version: last, Action: actionOf(lines), State: state, Log: lines}, nil
 }
 
 // maxLogBytes bounds what tail reads: apt's output for one version is a

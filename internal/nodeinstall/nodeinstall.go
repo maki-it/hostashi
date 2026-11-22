@@ -15,6 +15,7 @@ package nodeinstall
 
 import (
 	"archive/tar"
+	"cmp"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -23,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"os"
 	"path"
@@ -66,6 +68,10 @@ var (
 	ErrInstalled = errors.New("nodeinstall: this Node.js release is already installed")
 	// ErrChecksum: the download is not the pinned build.
 	ErrChecksum = errors.New("nodeinstall: SHA-256 of the download does not match")
+	// ErrNotInstalled: the line is not installed.
+	ErrNotInstalled = errors.New("nodeinstall: this Node.js line is not installed")
+	// ErrInUse: an app still runs on the line.
+	ErrInUse = errors.New("nodeinstall: apps still run on this Node.js line")
 	// ErrArch: nodejs.org has no build Hostashi pins for this machine.
 	ErrArch = errors.New("nodeinstall: no pinned Node.js build for this architecture")
 )
@@ -476,6 +482,12 @@ type Units interface {
 type Manager struct {
 	Units Units
 	Root  string // prefixed to every path; empty means /
+	// Done runs after an installation of a line succeeded, from the panel
+	// or from Update: the agent restarts the apps of the line on it.
+	Done func(ctx context.Context, major string)
+	// Poll is how often a running installation is checked; 2 s unless set.
+	Poll time.Duration
+	Log  *slog.Logger
 
 	mu sync.Mutex
 }
@@ -534,7 +546,117 @@ func (m *Manager) Start(ctx context.Context, major string) (agentapi.NodeStatus,
 		return agentapi.NodeStatus{}, err
 	}
 
+	// The panel does not wait for the unit; the agent follows it, so the
+	// apps of the line restart on the new release.
+	go m.follow(context.WithoutCancel(ctx), major)
+
 	return agentapi.NodeStatus{Installed: m.Installed(), Last: major, State: agentapi.PHPInstallRunning, Log: []string{}}, nil
+}
+
+// maxRun bounds how long follow waits: the unit's TimeoutStartSec.
+const maxRun = 15 * time.Minute
+
+// follow waits until the unit of a line ends and runs Done when it
+// installed the pinned release. It reports whether it did.
+func (m *Manager) follow(ctx context.Context, major string) bool {
+	ctx, cancel := context.WithTimeout(ctx, maxRun+time.Minute)
+	defer cancel()
+
+	poll := cmp.Or(m.Poll, 2*time.Second)
+
+	for {
+		active, err := m.Units.Active(ctx, major)
+		if err != nil {
+			m.log().ErrorContext(ctx, "node install state", "major", major, "err", err)
+
+			return false
+		}
+
+		if !active {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(poll):
+		}
+	}
+
+	rel, err := agentapi.NodeReleaseOf(major)
+	if err != nil {
+		return false
+	}
+
+	for _, i := range m.Installed() {
+		if i.Major == major && i.Version == rel.Version {
+			m.log().InfoContext(ctx, "node line installed", "major", major, "version", rel.Version)
+
+			if m.Done != nil {
+				m.Done(ctx, major)
+			}
+
+			return true
+		}
+	}
+
+	m.log().WarnContext(ctx, "node install did not finish", "major", major)
+
+	return false
+}
+
+// Outdated lists the installed lines whose release is not the pinned one,
+// oldest line first.
+func (m *Manager) Outdated() []string {
+	var out []string
+
+	for _, i := range m.Installed() {
+		if rel, err := agentapi.NodeReleaseOf(i.Major); err == nil && i.Version != rel.Version {
+			out = append(out, i.Major)
+		}
+	}
+
+	return out
+}
+
+// Update installs the pinned release of every outdated line, one after the
+// other, as a Hostashi update brings new pins (ADR-0054: updates without a
+// click, Kim 2026-11-22). A line that fails is logged and left for the
+// panel and doctor; the next start of the agent tries again.
+func (m *Manager) Update(ctx context.Context) {
+	for _, major := range m.Outdated() {
+		if ctx.Err() != nil {
+			return
+		}
+
+		m.mu.Lock()
+
+		busy, err := m.running(ctx)
+		if err == nil && busy == "" {
+			err = m.Units.Start(ctx, major)
+		} else if err == nil {
+			err = ErrBusy
+		}
+
+		m.mu.Unlock()
+
+		if err != nil {
+			m.log().WarnContext(ctx, "node update not started", "major", major, "err", err)
+
+			continue
+		}
+
+		m.log().InfoContext(ctx, "node update started", "major", major)
+		m.follow(ctx, major)
+	}
+}
+
+func (m *Manager) log() *slog.Logger {
+	if m.Log != nil {
+		return m.Log
+	}
+
+	return slog.New(slog.DiscardHandler)
 }
 
 func (m *Manager) running(ctx context.Context) (string, error) {
@@ -615,4 +737,55 @@ func (m *Manager) lastRun(ctx context.Context) (agentapi.NodeStatus, error) {
 	}
 
 	return st, nil
+}
+
+// Remove deletes an installed line. users are the sites whose app runs on
+// it (appunit.Manager.Users): a line in use is refused, so no app loses
+// its node. The tree is first renamed out of the way, so a half-removed
+// line never looks installed, and the line's install log goes with it.
+func (m *Manager) Remove(ctx context.Context, major string, users []string) (agentapi.NodeStatus, error) {
+	if err := agentapi.ValidateNodeMajor(major); err != nil {
+		return agentapi.NodeStatus{}, err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if busy, err := m.running(ctx); err != nil {
+		return agentapi.NodeStatus{}, err
+	} else if busy != "" {
+		return agentapi.NodeStatus{}, ErrBusy
+	}
+
+	if len(users) > 0 {
+		return agentapi.NodeStatus{}, fmt.Errorf("%w: %s", ErrInUse, strings.Join(users, ", "))
+	}
+
+	dir := m.path(filepath.Join(Dir, major))
+	if fi, err := os.Lstat(dir); errors.Is(err, os.ErrNotExist) {
+		return agentapi.NodeStatus{}, ErrNotInstalled
+	} else if err != nil {
+		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: %w", err)
+	} else if !fi.IsDir() {
+		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: %s is not a directory", dir)
+	}
+
+	old := m.path(filepath.Join(Dir, ".old-"+major))
+	if err := os.RemoveAll(old); err != nil {
+		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: %w", err)
+	}
+
+	if err := os.Rename(dir, old); err != nil {
+		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: remove %s: %w", dir, err)
+	}
+
+	if err := os.RemoveAll(old); err != nil {
+		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: remove %s: %w", old, err)
+	}
+
+	if err := os.Remove(m.logPath(major)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: %w", err)
+	}
+
+	return m.Status(ctx)
 }

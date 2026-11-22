@@ -47,7 +47,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 **Node.js (`node`)**
 
 - Like PHP: a Linux account, home, `htdocs`, slice, quota, SSH/SFTP, cron, file manager, databases and backups.
-- Versions: the LTS lines that are still supported (today 22, 24, 26). The list with the exact release and the SHA-256 of each build lives in `internal/agentapi/node_versions.go`. A weekly workflow (like "PHP versions", ADR-0036) checks nodejs.org, verifies `SHASUMS256.txt` against the release keys and opens a PR; Kim merges. A version is installed by the fixed root unit `hostashi-node-install@<major>`, which runs `hostashi node-install <major>`: Go downloads the pinned `.tar.gz`, checks the SHA-256 and unpacks it to `/opt/hostashi/node/<major>` (root, read-only for others). No apt, no shell, no new binary. Patch releases arrive through the next Hostashi update; the agent then restarts the apps of that line.
+- Versions: the LTS lines that are still supported (today 22, 24, 26). The list with the exact release and the SHA-256 of each build lives in `internal/agentapi/node_versions.go`. A daily workflow (Kim, 2026-11-22; "PHP versions", ADR-0036, runs weekly) checks nodejs.org, verifies `SHASUMS256.txt` against the release keys and opens a PR; Kim merges. A version is installed by the fixed root unit `hostashi-node-install@<major>`, which runs `hostashi node-install <major>`: Go downloads the pinned `.tar.gz`, checks the SHA-256 and unpacks it to `/opt/hostashi/node/<major>` (root, read-only for others). No apt, no shell, no new binary. Patch releases arrive through the next Hostashi update; the agent then restarts the apps of that line.
 - The app: unit `hostashi-node@<site>.service`, `User=<site>`, in the site's slice, `WorkingDirectory=` a folder in the home (default `htdocs`), `Restart=on-failure`, the same sandbox as the PHP units, `NODE_ENV=production`, `PORT=<port>`, `HOST=127.0.0.1`.
 - Start command, one of two typed forms, no free shell text in the panel: `script` (a `.js`/`.mjs`/`.cjs` file below the working directory, run as `node <file>`) or `npm` (`npm run <script>`, the script name matches `[a-z0-9:_-]{1,64}`). What `package.json` runs is the site's own code under the site user, as PHP files are.
 - Environment variables: name `[A-Z_][A-Z0-9_]{0,63}`, value up to 4 KiB, at most 100. Stored encrypted with `/etc/hostashi/secret.key` (like the TOTP seeds) [V: `internal/secrets`], written by the agent to a root-owned `0600` file that systemd reads. The panel shows names, values only on request (`sites:write`).
@@ -89,7 +89,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - nginx: three new branches in the site template (`node`, `proxy`, `redirect`), tested like the existing ones with `nginx -t`.
 - Firewall: one output rule set for the app ports in `hostashi.nft`.
 - CI: the installer test starts a small Node.js app and a proxy site on both distributions.
-- Workflow "Node versions" (weekly), like "PHP versions".
+- Workflow "Node versions" (daily), like "PHP versions".
 - Frontend: type choice in New site, per-type settings, app controls; screenshots to Kim before the UI PR.
 - User docs (ADR-0043): one wiki page "Site types".
 - Rough order of PRs: (1) type column and migration, (2) redirect, (3) reverse proxy, (4) Node.js install, (5) Node.js app unit and port filter, (6) import, (7) UI after screenshots, (8) wiki [E: 8 PRs].
@@ -181,7 +181,7 @@ Notes on how the Node.js source (option C) is built; they change no decision.
 - Unpacking takes only directories, regular files and relative symbolic links that stay inside the tree, with `..` only in front of a link's target; every entry must lie below the archive's top directory. Modes become 0755 or 0644, so no setuid bit and nothing writable for others survives. All writes go through `os.Root` [V: `internal/nodeinstall/nodeinstall_test.go`].
 - The new tree is swapped in with one `renameat2(RENAME_EXCHANGE)`, so a running app never sees a half-written line. `.hostashi-version` in the line's directory names the installed release.
 - API: `GET /api/v1/node` (scope `sites:read`, every role, so a site's version can be chosen: the lines, their pinned release and end of life, what is installed, the last installation and its log) and `POST /api/v1/node/install` `{"major":"24"}` (scope `node:install`, high risk, admin only, audited as `node.install`). A line whose pinned release is installed answers 409. CLI: `hostashi node status`, `hostashi node install <major>`.
-- Not yet: reinstalling a line on a Hostashi update that pins a newer release (comes with the app unit, which must restart the apps of that line), the weekly "Node versions" workflow, and the panel page (screenshots first).
+- Since built: reinstalling a line on a Hostashi update that pins a newer release, the daily "Node versions" workflow and the panel page (see the notes below).
 
 ## Implementation notes: Node.js app (2026-11-22)
 
@@ -194,4 +194,24 @@ Notes on how the app of a Node.js site is built; they change no decision.
 - Stdout and stderr go to `/var/log/hostashi/app/<site>/app.log` (log kind `app`, ADR-0053), opened by systemd as root, so the app cannot replace the file with a link. logrotate truncates it in place.
 - The app stays stopped while it has no start command, after a stop in the panel (until it is started again, also across reboots), and while the site is disabled. A crash restarts it after 2 seconds, at most 5 times a minute.
 - API: `type: "node"` with `node: {version, workdir, startKind, start}` on `POST /api/v1/sites`; `PUT /api/v1/sites/{name}/node`; `GET /api/v1/sites/{name}/app`; `POST /api/v1/sites/{name}/app/start|stop|restart` (scope `sites:write`, every role on its own sites: the app runs as the site user, like cron jobs). A line that is not installed answers 409 `node_missing`.
-- Not yet: environment variables for the app (encrypted, with their own migration), restarting the apps of a line after it is reinstalled on a newer release, the panel page, and type changes.
+- Not yet: environment variables for the app (encrypted, with their own migration) and type changes. Restarting the apps after a reinstall and the panel page are built (see below).
+
+## Implementation notes: removing a Node.js line (2026-11-22)
+
+- `POST /api/v1/node/remove {major}` (action `node:remove`, scope `node:install`, admin only, audit `node.remove`). The agent (`node.remove`) refuses a line that a site's app runs on (from its own app state, also for stopped apps), one that is not installed and one while an installation runs.
+- The agent renames `/opt/hostashi/node/<major>` out of the way before it deletes it, so a half-removed line never looks installed, and deletes the line's install log. It runs in the agent, no unit: nothing is downloaded or run.
+- The panel shows a remove button only for an installed line without sites, and asks first [V: container test].
+
+## Implementation notes: Node.js updates without a click (2026-11-22)
+
+- Kim (2026-11-22): new Node.js releases install themselves, like PHP through unattended-upgrades. A new release comes as a new pin with a Hostashi update; when the agent starts, it installs the pinned release of every installed line that runs an older one, one after the other, through the same unit `hostashi-node-install@<major>`. With `--auto-update` (ADR-0050) the whole chain runs without a click.
+- After a line was installed again, from the panel or by the agent, the agent restarts the running apps on it (`appunit.Manager.RestartLine`); stopped apps stay stopped.
+- Doctor `system.node` warns when an installed line does not run its pinned release (the update failed; the next start of the agent tries again) and when a line that sites run on ends within 180 days or has ended. It shows under Health and in the daily digest mail.
+
+## Implementation notes: Node versions workflow (2026-11-22)
+
+Notes on how the daily check of nodejs.org is built; they change no decision.
+
+- `.github/workflows/node-versions.yml` runs every day at 04:47 UTC and `go run ./tools/nodeversions -write`. The tool reads `nodejs.org/dist/index.json` and the release schedule of `nodejs/Release`, picks per major the newest LTS release whose end of life has not passed, and updates the pinned lines, their end dates and new LTS lines in `internal/agentapi/node_versions.go`. A line nodejs.org no longer supports stays: removing one is done by hand [V: `tools/nodeversions/update.go`].
+- For every new release the tool downloads `SHASUMS256.txt.asc` and checks its clear-text signature against the keys of the release team, kept in `tools/nodeversions/release-keys.asc` (from `nodejs/release-keys`). A release signed by any other key fails the run; a new release key is added by hand after checking it there. Only then does it take the SHA-256 of the `linux-x64` and `linux-arm64` builds [V: `tools/nodeversions/nodeversions_test.go`].
+- A change opens or updates one pull request from `automation/node-versions`, titled "node: security release from nodejs.org" when nodejs.org marks a release as a security release. It is never merged automatically; the next Hostashi release brings the new builds, and the agent installs them and restarts the apps.

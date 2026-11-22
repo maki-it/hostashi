@@ -43,7 +43,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 - `internal/phpctl` may start one more fixed unit pattern; its comment and tests name it. No new package with `os/exec`.
 - The installer step `phpversions` is reduced to calling the script; the container test installs one version through the panel API as well.
-- Removing a version that no site uses is a later addition with the same pattern (`hostashi-php-remove@<version>`) [A].
+- Removing a version that no site uses came in v1 after all (Kim, 2026-11-22), with the same pattern: the unit `hostashi-php-remove@<version>` runs `php-install remove`, see the implementation notes.
 - Doctor reports a failed installation and a sury.org key that expires within 60 days.
 - PHP 8.6 is the first version added this way (Kim, 2026-11-20): allowlist, dates and container test (installed through the panel API, one site served by it with mysqli, gd and intl, unit exposure as for the other versions) [V: container test].
 - New versions are found automatically, but still merged by hand (Kim, 2026-11-20). The weekly workflow `PHP versions` runs `tools/phpversions`: a version is proposed once `php.net/releases/active.php` lists it, `php.net/supported-versions.php` has its dates and sury.org ships the fixed package set for trixie and resolute on amd64 and arm64. It then opens a pull request that updates `agentapi.PHPVersions`, the dates, `install.sh`, `php-install` and `03-features`, and starts the checks on it; changed support dates of known versions come the same way. The container test always installs the newest version on the list, so that pull request tests exactly the new version. The legacy list and removals stay manual decisions. Nothing is merged automatically [V: tests in `tools/phpversions`].
@@ -58,5 +58,12 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 ## Open questions
 
 1. ~~Install from the panel through a fixed root unit (option A), admin only, with the scope `php:install`?~~ **Decided (Kim, 2026-11-20): yes.**
-2. ~~Should removing unused versions come in v1 as well, or later?~~ **Decided (Kim, 2026-11-20): later, after v1.**
+2. ~~Should removing unused versions come in v1 as well, or later?~~ **Decided (Kim, 2026-11-20): later, after v1.** Changed (Kim, 2026-11-22): in v1.
 3. ~~End-of-life versions: keep running with warnings and a confirmation on install and choice, never removed automatically?~~ **Decided (Kim, 2026-11-20): yes**, and newer versions from sury.org are shown greyed out with a note.
+
+## Implementation notes: removing a version (2026-11-22)
+
+- `POST /api/v1/php/remove {version}` (action `php:remove`, scope `php:install`, admin only, audit `php.remove`). The panel refuses the distribution's default (409 `php_default`) and a version that a site uses (409 `php_in_use`).
+- The agent (`php.remove`) refuses again when a site pool still runs on the version, when it is not installed or when an install or removal runs, and starts `hostashi-php-remove@<version>.service` through `phpctl.RemoveUnits`. No new `os/exec` exception.
+- `php-install remove VERSION` refuses the default version, a version it did not install and one with an active `hostashi-php-<version>@` unit, purges every installed `php<version>-*` package, and rewrites the pin and the record of installed versions. The sury.org source and key stay for the other versions and `php-common`.
+- The removal writes the same log as an installation; `php.install.status` reports it with `action: "remove"`. The panel shows a remove button only for an installed version that is not the distribution's and has no site, and asks first [V: container test removes the newest version through the API].

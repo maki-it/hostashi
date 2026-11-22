@@ -60,6 +60,11 @@ Approve only a login you started yourself: whoever started it gets a token for y
 |---------|--------------|
 | `hostashi service list` | Lists the services with their state and automatic restarts. `-json` prints JSON. |
 | `hostashi service ID [SITE] ACTION` | Runs an action, for example `hostashi service nginx reload` or `hostashi service php blog restart`. Only the actions of the [service catalog](Services-and-dashboard.md#services) work. |
+| `hostashi system info` | Shows the hostname, time zone, clock, uptime and a pending reboot as JSON. |
+| `hostashi system timezones` | Lists the time zones the server knows. |
+| `hostashi system timezone ZONE` | Sets the time zone, for example `hostashi system timezone Europe/Berlin`. |
+| `hostashi system hostname NAME` | Sets the hostname and updates `/etc/hosts` (see [System settings](System-settings.md)). |
+| `hostashi system reboot HOSTNAME` | Reboots the server; the hostname confirms it. |
 
 ## Sites
 

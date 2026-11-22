@@ -20,8 +20,23 @@ import (
 type stubPHP struct {
 	mu      sync.Mutex
 	started []string
+	removed []string
 	status  agentapi.PHPInstallStatus
 	refuse  bool
+}
+
+func (s *stubPHP) Remove(_ context.Context, v string) (agentapi.PHPInstallStatus, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.refuse {
+		return agentapi.PHPInstallStatus{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "phpinstall: an installation is already running"}
+	}
+
+	s.removed = append(s.removed, v)
+	s.status = agentapi.PHPInstallStatus{Version: v, Action: agentapi.PHPActionRemove, State: agentapi.PHPInstallRunning}
+
+	return s.status, nil
 }
 
 func (s *stubPHP) Versions(context.Context) (agentapi.PHPVersionsResponse, error) {
@@ -122,6 +137,70 @@ func TestPHPInstallAPI(t *testing.T) {
 
 	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/php/install", body: `{"version":"8.3"}`, header: h}); rec.Code != http.StatusForbidden {
 		t.Errorf("install with sites:read: %d", rec.Code)
+	}
+}
+
+func TestPHPRemoveAPI(t *testing.T) {
+	old := osReleasePath
+
+	t.Cleanup(func() { osReleasePath = old })
+
+	osReleasePath = filepath.Join(t.TempDir(), "os-release")
+	if err := os.WriteFile(osReleasePath, []byte("ID=ubuntu\nVERSION_ID=\"26.04\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	e := newAPIWithAgent(t, &stubAgent{})
+	c := e.adminCookie(t)
+	js := map[string]string{"Content-Type": "application/json"}
+	post := func(body string) (int, string) {
+		rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/php/remove", body: body, cookie: c, header: js})
+		if rec.Code >= 400 {
+			return rec.Code, errCode(t, rec)
+		}
+
+		return rec.Code, ""
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"blog","php":"8.4","domains":["blog.example.com"]}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	for _, body := range []string{`{"version":"8.0"}`, `{"version":"../8.1"}`, `{}`} {
+		if code, _ := post(body); code != http.StatusUnprocessableEntity {
+			t.Errorf("%s: %d", body, code)
+		}
+	}
+
+	if code, ec := post(`{"version":"8.5"}`); code != http.StatusConflict || ec != "php_default" {
+		t.Errorf("default: %d %s", code, ec)
+	}
+
+	if code, ec := post(`{"version":"8.4"}`); code != http.StatusConflict || ec != "php_in_use" {
+		t.Errorf("in use: %d %s", code, ec)
+	}
+
+	if code, _ := post(`{"version":"8.3"}`); code != http.StatusAccepted || !slices.Equal(e.php.removed, []string{"8.3"}) {
+		t.Errorf("remove 8.3: %d %v", code, e.php.removed)
+	}
+
+	e.php.refuse = true
+
+	if code, ec := post(`{"version":"8.2"}`); code != http.StatusConflict || ec != "php_install_refused" {
+		t.Errorf("busy: %d %s", code, ec)
+	}
+
+	var n int
+	if err := e.st.RawCount(t.Context(), `SELECT count(*) FROM audit_log WHERE action = ?`, "php.remove", &n); err != nil || n != 1 {
+		t.Errorf("audit: %d %v", n, err)
+	}
+
+	read := e.createToken(t, c, `{"name":"r","scopes":["sites:read"],"expiresInDays":1}`)
+	h := bearerHeader(read.Token)
+	h["Content-Type"] = "application/json"
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/php/remove", body: `{"version":"8.3"}`, header: h}); rec.Code != http.StatusForbidden {
+		t.Errorf("remove with sites:read: %d", rec.Code)
 	}
 }
 

@@ -1,0 +1,120 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Checks nodejs.org once a day for new releases of the Node.js LTS lines
+# Hostashi pins (ADR-0054): patch and security releases, new LTS lines and
+# changed end dates. Every new release's SHASUMS256.txt must carry a valid
+# signature of a Node.js release key (tools/nodeversions/release-keys.asc).
+# When it finds something it opens (or updates) a pull request from the
+# branch automation/node-versions that updates
+# internal/agentapi/node_versions.go. The installer test then installs the
+# newest line through the panel API. Nothing is merged automatically: a
+# maintainer reviews and merges, and the next Hostashi release brings the
+# new builds; the agent installs them by itself and restarts the apps.
+#
+# Daily, not weekly like PHP (Kim, 2026-11-22): a security release should
+# reach the servers within about a day.
+#
+# Pull requests opened with GITHUB_TOKEN start no pull_request workflows,
+# so this workflow starts the checks on the branch itself.
+name: Node versions
+
+on:
+  schedule:
+    # Every day at 04:47 UTC.
+    - cron: "47 4 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/nodeversions/**"
+      - ".github/workflows/node-versions.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: node-versions-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BRANCH: automation/node-versions
+
+jobs:
+  check:
+    name: Check nodejs.org
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Only scheduled and manual runs push; pull requests only report.
+          persist-credentials: ${{ github.event_name != 'pull_request' }}
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check and update the list
+        run: |
+          go run ./tools/nodeversions -write -summary "$RUNNER_TEMP/summary.md"
+          cat "$RUNNER_TEMP/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          git diff --stat
+      - name: Run the tests the change affects
+        run: go test ./internal/agentapi/ ./internal/nodeinstall/ ./tools/nodeversions/
+      - name: Open or update the pull request
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          if git diff --quiet; then
+            echo "Nothing to change."
+            exit 0
+          fi
+          title="node: update Node.js releases from nodejs.org"
+          if grep -q 'security release' "$RUNNER_TEMP/summary.md"; then
+            title="node: security release from nodejs.org"
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git commit -q -s -a -m "$title" -m "Found by the daily Node versions workflow (ADR-0054)."
+          # The same change as on the open branch: do not push again, so the
+          # checks and reviews on it stay.
+          if git fetch -q origin "$BRANCH" 2>/dev/null && git diff --quiet FETCH_HEAD HEAD; then
+            echo "The branch already has this change."
+            exit 0
+          fi
+          git push -f origin "$BRANCH"
+
+          {
+            echo "## What"
+            echo
+            echo "The daily Node versions workflow found:"
+            echo
+            cat "$RUNNER_TEMP/summary.md"
+            echo
+            echo "Sources: nodejs.org/dist/index.json, the release schedule of nodejs/Release and the signed SHASUMS256.txt of each new release, checked $(date -u +%F)."
+            echo
+            echo "## Before merging"
+            echo
+            echo "- [ ] The Go, Web, REUSE and Licenses runs on this branch are green, including both installer tests (they install the newest line through the panel API and run an app on it)."
+            echo "- [ ] For a new LTS line: add a line to ADR-0054."
+            echo "- [ ] Release Hostashi afterwards: the agent installs the new builds by itself and restarts the apps on them."
+            echo
+            echo "This pull request is never merged automatically."
+          } > "$RUNNER_TEMP/body.md"
+
+          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -z "$pr" ]; then
+            gh pr create --repo "$REPO" --base main --head "$BRANCH" \
+              --title "$title" --body-file "$RUNNER_TEMP/body.md" --label enhancement --assignee kimdre
+          else
+            gh pr edit "$pr" --repo "$REPO" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          fi
+
+          for wf in go.yml web.yml reuse.yml licenses.yml; do
+            gh workflow run "$wf" --repo "$REPO" --ref "$BRANCH"
+          done

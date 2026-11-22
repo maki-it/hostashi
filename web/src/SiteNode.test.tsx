@@ -116,3 +116,38 @@ describe("AppSettingsCard", () => {
     expect(await screen.findByText("Saved. The app was restarted with it.")).toBeInTheDocument();
   });
 });
+
+describe("NodePage removal", () => {
+  it("removes a line no site uses, after asking", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      "GET /api/v1/node": { body: idle },
+      "GET /api/v1/sites": { body: { sites: [{ name: "shop", node: { version: "24" } }] } },
+      "POST /api/v1/node/remove": { body: { ...idle, installed: [{ major: "24", version: "24.11.1" }] } },
+    });
+    render(<NodePage today="2026-11-22" />);
+    await screen.findByRole("button", { name: "Update to 22.21.1" });
+    expect(screen.queryByRole("button", { name: "Remove Node.js 24" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove Node.js 26" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Remove Node.js 22" }));
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ major: "22" });
+    expect(await screen.findByText("Node.js 22 was removed.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Install Node.js 22" })).toBeInTheDocument();
+  });
+
+  it("explains a refusal", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      "GET /api/v1/node": { body: idle },
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "POST /api/v1/node/remove": { status: 409, body: { error: { code: "node_install_refused", message: "nodeinstall: apps still run on this Node.js line: shop" } } },
+    });
+    render(<NodePage today="2026-11-22" />);
+    await user.click(await screen.findByRole("button", { name: "Remove Node.js 24" }));
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(await screen.findByText("Sites still run on this version. Move them to another version first.")).toBeInTheDocument();
+  });
+});

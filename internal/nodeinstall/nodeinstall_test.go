@@ -14,8 +14,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 )
@@ -251,18 +254,32 @@ func TestInstallRefuses(t *testing.T) {
 }
 
 type fakeUnits struct {
+	mu      sync.Mutex
 	active  map[string]bool
 	started []string
 }
 
 func (f *fakeUnits) Start(_ context.Context, major string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.started = append(f.started, major)
 
 	return nil
 }
 
 func (f *fakeUnits) Active(_ context.Context, major string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	return f.active[major], nil
+}
+
+func (f *fakeUnits) set(major string, active bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.active[major] = active
 }
 
 func writeLog(t *testing.T, root, major, body string) {
@@ -297,7 +314,7 @@ func TestManager(t *testing.T) {
 		t.Fatalf("Start = %v, %v", err, u.started)
 	}
 
-	u.active["24"] = true
+	u.set("24", true)
 
 	writeLog(t, root, "24", "node-install: downloading\n")
 
@@ -310,7 +327,7 @@ func TestManager(t *testing.T) {
 		t.Fatalf("Status running = %+v", st)
 	}
 
-	u.active["24"] = false
+	u.set("24", false)
 
 	rel, _ := agentapi.NodeReleaseOf("24")
 	writeLog(t, root, "24", "node-install: downloading\n"+agentapi.NodeDoneMarker+" "+rel.Version+"\n")
@@ -341,5 +358,194 @@ func TestManager(t *testing.T) {
 
 	if st, _ = m.Status(ctx); st.State != agentapi.PHPInstallFailed {
 		t.Fatalf("Status failed = %+v", st)
+	}
+}
+
+func TestRemove(t *testing.T) {
+	root := t.TempDir()
+	u := &fakeUnits{active: map[string]bool{}}
+	m := &Manager{Units: u, Root: root}
+	ctx := context.Background()
+
+	rel, _ := agentapi.NodeReleaseOf("22")
+	d := filepath.Join(root, Dir, "22")
+
+	if err := os.MkdirAll(filepath.Join(d, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(d, "bin", "node"), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(d, VersionFile), []byte(rel.Version+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	writeLog(t, root, "22", agentapi.NodeDoneMarker+" "+rel.Version+"\n")
+
+	if _, err := m.Remove(ctx, "25", nil); err == nil {
+		t.Error("removed 25")
+	}
+
+	if _, err := m.Remove(ctx, "24", nil); !errors.Is(err, ErrNotInstalled) {
+		t.Errorf("not installed: %v", err)
+	}
+
+	if _, err := m.Remove(ctx, "22", []string{"blog", "shop"}); !errors.Is(err, ErrInUse) || !strings.Contains(err.Error(), "blog, shop") {
+		t.Errorf("in use: %v", err)
+	}
+
+	u.set("24", true)
+
+	if _, err := m.Remove(ctx, "22", nil); !errors.Is(err, ErrBusy) {
+		t.Errorf("busy: %v", err)
+	}
+
+	u.set("24", false)
+
+	st, err := m.Remove(ctx, "22", nil)
+	if err != nil || len(st.Installed) != 0 || st.Last != "" || st.State != agentapi.PHPInstallIdle {
+		t.Fatalf("Remove = %+v, %v", st, err)
+	}
+
+	for _, p := range []string{d, filepath.Join(root, Dir, ".old-22"), filepath.Join(root, LogDir, "22.log")} {
+		if _, err := os.Lstat(p); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s left: %v", p, err)
+		}
+	}
+
+	// A file in place of the line is not followed.
+	if err := os.WriteFile(d, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := m.Remove(ctx, "22", nil); err == nil || errors.Is(err, ErrNotInstalled) {
+		t.Errorf("file: %v", err)
+	}
+}
+
+// installLine puts a release of a line in place, as the unit does.
+func installLine(t *testing.T, root, major, version string) {
+	t.Helper()
+
+	d := filepath.Join(root, Dir, major)
+	if err := os.MkdirAll(filepath.Join(d, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(d, "bin", "node"), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(d, VersionFile), []byte(version+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// unitsThatInstall installs the pinned release when started and is
+// active for a few polls.
+type unitsThatInstall struct {
+	mu      sync.Mutex
+	root    string
+	t       *testing.T
+	polls   map[string]int
+	started []string
+	fail    map[string]bool
+}
+
+func (u *unitsThatInstall) Start(_ context.Context, major string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	u.started = append(u.started, major)
+	u.polls[major] = 2
+
+	return nil
+}
+
+func (u *unitsThatInstall) Active(_ context.Context, major string) (bool, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	if u.polls[major] == 0 {
+		return false, nil
+	}
+
+	u.polls[major]--
+	if u.polls[major] == 0 && !u.fail[major] {
+		rel, _ := agentapi.NodeReleaseOf(major)
+		installLine(u.t, u.root, major, rel.Version)
+	}
+
+	return true, nil
+}
+
+func TestUpdate(t *testing.T) {
+	root := t.TempDir()
+	u := &unitsThatInstall{root: root, t: t, polls: map[string]int{}, fail: map[string]bool{"22": true}}
+
+	var mu sync.Mutex
+
+	var done []string
+
+	m := &Manager{Units: u, Root: root, Poll: time.Millisecond, Done: func(_ context.Context, major string) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		done = append(done, major)
+	}}
+
+	rel24, _ := agentapi.NodeReleaseOf("24")
+	rel26, _ := agentapi.NodeReleaseOf("26")
+
+	installLine(t, root, "22", "22.0.0")
+	installLine(t, root, "24", "24.0.0")
+	installLine(t, root, "26", rel26.Version)
+
+	if got := m.Outdated(); !slices.Equal(got, []string{"22", "24"}) {
+		t.Fatalf("Outdated = %v", got)
+	}
+
+	m.Update(t.Context())
+
+	// 22 failed: no Done, still outdated; 24 updated and done.
+	if !slices.Equal(u.started, []string{"22", "24"}) || !slices.Equal(done, []string{"24"}) {
+		t.Fatalf("started %v, done %v", u.started, done)
+	}
+
+	if got := m.Outdated(); !slices.Equal(got, []string{"22"}) {
+		t.Errorf("Outdated after = %v", got)
+	}
+
+	if v, _ := ReadVersion(filepath.Join(root, Dir, "24")); v != rel24.Version {
+		t.Errorf("24 at %s", v)
+	}
+
+	// An install from the panel is followed as well.
+	u.fail["22"] = false
+
+	if _, err := m.Start(t.Context(), "22"); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		n := len(done)
+		mu.Unlock()
+
+		if n == 2 {
+			break
+		}
+
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if !slices.Equal(done, []string{"24", "22"}) {
+		t.Errorf("done after panel install: %v", done)
 	}
 }
