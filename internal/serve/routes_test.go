@@ -110,6 +110,7 @@ var routeAccess = map[string]authz.Action{
 	"PUT /api/v1/sites/{name}/hsts":                          "sites.hsts:write",
 	"GET /api/v1/sites/{name}/headers":                       "sites:read",
 	"PUT /api/v1/sites/{name}/headers":                       "sites.headers:write",
+	"PUT /api/v1/sites/{name}/web":                           "sites.web:write",
 	"PUT /api/v1/sites/{name}/php-programs":                  "sites.programs:write",
 	"PUT /api/v1/sites/{name}/disabled":                      "sites.disabled:write",
 	"GET /api/v1/php/versions":                               "php.versions:read",

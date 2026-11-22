@@ -734,6 +734,16 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				Headers: webHeaders(headers, site),
 			}
 
+			// The static-site options are kept while the site runs PHP
+			// and only sent for a static site (ADR-0054).
+			ws.WebDir = site.WebDir
+			if site.Type == store.SiteTypeStatic {
+				ws.SPA, ws.AssetCache = site.SPA, site.AssetCache
+				if site.AssetCache {
+					ws.AssetCacheSeconds, ws.AssetCacheExts = site.AssetCacheSeconds, site.AssetCacheExts
+				}
+			}
+
 			if php != "" {
 				ws.PHPWorkers = phpWorkers(workers, site.ID)
 				ws.PHPPrograms = site.PHPPrograms

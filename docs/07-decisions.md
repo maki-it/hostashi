@@ -393,7 +393,7 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0055 Email notifications for service outages
 
-**Full text (status Accepted, 2026-11-22, by Kim):** [adr/0055](adr/0055-service-outage-notifications.md). Summary: a new notification category `services` on top of ADR-0044, fed by the service monitor of ADR-0052. Emails when a unit is `failed`, when it crashes 3 times within 15 minutes, when the agent is unreachable for about 3 minutes, and an all-clear when it is back (all-clear only for services, Kim 2026-11-22). Server units go to admins, site units (PHP, Valkey, Node.js, app) also to managers and users with a grant. No log lines in emails. New event kind `recovered` in `service_events` (migration 0047). No new `os/exec` exception, no new agent operation.
+**Full text (status Accepted, 2026-11-22, by Kim):** [adr/0055](adr/0055-service-outage-notifications.md). Summary: a new notification category `services` on top of ADR-0044, fed by the service monitor of ADR-0052. Emails when a unit is `failed`, when it crashes 3 times within 15 minutes, when the agent is unreachable for about 3 minutes, and an all-clear when it is back (all-clear only for services, Kim 2026-11-22). Server units go to admins, site units (PHP, Valkey, Node.js, app) also to managers and users with a grant. No log lines in emails. New event kind `recovered` in `service_events` (migration 0046). No new `os/exec` exception, no new agent operation.
 
 ## ADR-0056 Security headers per site
 

@@ -5,11 +5,16 @@ package servermon
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
+
+// Key names one unit of the catalog: the service ID, and "/<site>" for a
+// per-site service.
+func Key(id, site string) string { return key(id, site) }
 
 func key(id, site string) string {
 	if site == "" {
@@ -47,6 +52,10 @@ func Changes(prev *agentapi.ServiceState, cur agentapi.ServiceState, at time.Tim
 		ev(store.ServiceEventFailed, cur.Result, 0)
 	}
 
+	if cur.Active == "active" && prev.Active == "failed" {
+		ev(store.ServiceEventRecovered, "", 0)
+	}
+
 	return out
 }
 
@@ -57,14 +66,40 @@ func (m *Monitor) PollServices(ctx context.Context) {
 
 	states, err := m.Agent.Services(ctx, agentapi.ServicesStatusRequest{})
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			m.log().WarnContext(ctx, "servermon: service states", "err", err)
+		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+			return
+		}
+
+		m.log().WarnContext(ctx, "servermon: service states", "err", err)
+
+		if m.Alerts != nil {
+			m.Alerts.AgentUnreachable(ctx, m.now(), err)
 		}
 
 		return
 	}
 
 	m.record(ctx, states)
+
+	if m.Alerts == nil {
+		return
+	}
+
+	m.mu.Lock()
+	events := m.pending
+	m.pending = nil
+	m.mu.Unlock()
+
+	p := ServicePoll{At: m.now(), States: states, Events: events}
+
+	if slices.ContainsFunc(events, func(e store.ServiceEvent) bool { return e.Kind == store.ServiceEventCrashRestart }) {
+		p.Crashes, err = m.Store.CrashRestartsSince(ctx, p.At.Add(-CrashWindow))
+		if err != nil {
+			m.log().WarnContext(ctx, "servermon: crash restarts", "err", err)
+		}
+	}
+
+	m.Alerts.ServicesPolled(ctx, p)
 }
 
 func (m *Monitor) record(ctx context.Context, states []agentapi.ServiceState) {
@@ -100,6 +135,9 @@ func (m *Monitor) record(ctx context.Context, states []agentapi.ServiceState) {
 	}
 
 	m.units, m.lastSeen = next, at
+	if m.Alerts != nil {
+		m.pending = append(m.pending, events...)
+	}
 	m.mu.Unlock()
 
 	for _, e := range events {

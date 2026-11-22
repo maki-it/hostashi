@@ -562,7 +562,25 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			return agentapi.WebApplyResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site " + s.User}
 		}
 
-		site := web.Site{User: s.User, Domains: s.Domains, Root: home + "/" + sites.WebRootName, Disabled: s.Disabled}
+		// The document root folder must be a real folder below htdocs; one
+		// that does not exist yet is served with 404 (ADR-0054).
+		if _, err := sites.CheckWebDir(home, s.WebDir); err != nil {
+			if errors.Is(err, sites.ErrWebDirUnsafe) {
+				return agentapi.WebApplyResponse{}, &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "site " + s.User + ": the document root folder is a symbolic link or not a folder"}
+			}
+
+			return agentapi.WebApplyResponse{}, err
+		}
+
+		root := home + "/" + sites.WebRootName
+		if s.WebDir != "" {
+			root += "/" + s.WebDir
+		}
+
+		site := web.Site{
+			User: s.User, Domains: s.Domains, Root: root, Disabled: s.Disabled, SPA: s.SPA, AssetCache: s.AssetCache,
+			AssetCacheSeconds: s.AssetCacheSeconds, AssetCacheExts: s.AssetCacheExts,
+		}
 
 		if s.TLS {
 			if err := h.tlsFor(&site, s.Domains); err != nil {

@@ -29,7 +29,7 @@ export type ServiceEvent = {
   at: string;
   service: string;
   site?: string;
-  kind: "crash-restart" | "started" | "failed" | "action";
+  kind: "crash-restart" | "started" | "failed" | "action" | "recovered";
   detail?: string;
   restarts?: number;
   user?: string;
@@ -123,6 +123,8 @@ export function eventText(e: ServiceEvent): string {
       return "Started";
     case "failed":
       return e.detail ? `Failed (${e.detail})` : "Failed";
+    case "recovered":
+      return "Running again after a failure";
     case "action":
       return `${actionWords[e.detail as ServiceAction] ?? e.detail ?? "Action"}${e.user ? " by " + e.user : ""}`;
   }

@@ -7,6 +7,8 @@ import (
 	"database/sql"
 	"errors"
 	"io/fs"
+	"reflect"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -126,5 +128,70 @@ func TestSiteTypeBackfill(t *testing.T) {
 		if err := db.QueryRowContext(ctx, `SELECT type FROM sites WHERE name = ?`, name).Scan(&got); err != nil || got != want {
 			t.Errorf("%s: type %q %v, want %q", name, got, err, want)
 		}
+	}
+}
+
+func TestSiteWebOptions(t *testing.T) {
+	s := open(t, dbPath(t))
+	ctx := t.Context()
+	now := time.Unix(2_000_000, 0)
+
+	if _, err := s.CreateSite(ctx, "docs", "default", "", []string{"docs.example.com"}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.SiteByName(ctx, "docs")
+	if err != nil || got.WebDir != "" || got.SPA || got.AssetCache {
+		t.Fatalf("defaults: %+v %v", got, err)
+	}
+
+	want := WebOptions{Dir: "dist/site", SPA: true, AssetCache: true, AssetCacheSeconds: 3600, AssetCacheExts: []string{"css", "json"}}
+
+	old, err := s.SetSiteWebOptions(ctx, "docs", want, now)
+	if err != nil || !reflect.DeepEqual(old, WebOptions{}) {
+		t.Fatalf("set: %+v %v", old, err)
+	}
+
+	got, err = s.SiteByName(ctx, "docs")
+	if err != nil || !reflect.DeepEqual(WebOptions{got.WebDir, got.SPA, got.AssetCache, got.AssetCacheSeconds, got.AssetCacheExts}, want) {
+		t.Fatalf("got %+v %v", got, err)
+	}
+
+	// The column refuses what the panel's check refuses too.
+	for _, bad := range []string{"/etc", "dist/", "../x", "a/../b", strings.Repeat("a", 256)} {
+		if _, err := s.SetSiteWebOptions(ctx, "docs", WebOptions{Dir: bad}, now); err == nil {
+			t.Errorf("dir %q stored", bad)
+		}
+	}
+
+	for _, bad := range []WebOptions{{AssetCacheSeconds: 59}, {AssetCacheSeconds: 31536001}, {AssetCacheExts: []string{"c|s"}}, {AssetCacheExts: []string{"CSS"}}} {
+		if _, err := s.SetSiteWebOptions(ctx, "docs", bad, now); err == nil {
+			t.Errorf("%+v stored", bad)
+		}
+	}
+
+	if _, err := s.SetSiteWebOptions(ctx, "nope", want, now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown site: %v", err)
+	}
+
+	// The options survive a PHP round trip (ADR-0054 addendum 3).
+	if _, err := s.SetSitePHP(ctx, "docs", "8.4", now); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.SetSitePHP(ctx, "docs", "", now); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, _ := s.SiteByName(ctx, "docs"); !reflect.DeepEqual(WebOptions{got.WebDir, got.SPA, got.AssetCache, got.AssetCacheSeconds, got.AssetCacheExts}, want) {
+		t.Fatalf("after php round trip: %+v", got)
+	}
+
+	if _, err := s.w.ExecContext(ctx, `UPDATE sites SET type = 'redirect' WHERE name = 'docs'`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.SetSiteWebOptions(ctx, "docs", want, now); !errors.Is(err, ErrSiteType) {
+		t.Fatalf("redirect: %v", err)
 	}
 }

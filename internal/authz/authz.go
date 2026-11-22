@@ -141,6 +141,7 @@ var table = map[Action]Rule{
 	"sites.php:write":         ownSite("sites:write"),
 	"sites.hsts:write":        ownSite("sites:write"),
 	"sites.headers:write":     ownSite("sites:write"),
+	"sites.web:write":         ownSite("sites:write"),
 	"sites.maintenance:write": ownSite("sites.maintenance:write"),
 	"sites.pagecache:write":   ownSite("sites:write"),
 	"sites.pagecache:purge":   ownSite("pagecache:purge"),

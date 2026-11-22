@@ -17,7 +17,7 @@ import {
   type ServiceEvent,
   type ServiceRow,
 } from "./services";
-import { Badge, Button, Card, Field, IconButton, Notice, PageHead, RelTime, RowActions, Table, type Column } from "./ui";
+import { Badge, Button, Card, Field, IconButton, Notice, PageHead, RelTime, RowActions, Table, type Column, type Tone } from "./ui";
 
 const icons: Record<ServiceAction, Icon> = { start: Play, stop: Stop, restart: ArrowClockwise, reload: ArrowsCounterClockwise };
 
@@ -258,6 +258,14 @@ function ConfirmAction({ pending, busy, onRun, onCancel }: { pending: Pending; b
   );
 }
 
+const eventBadges: Record<ServiceEvent["kind"], { word: string; tone: Tone }> = {
+  failed: { word: "Failed", tone: "err" },
+  "crash-restart": { word: "Restart", tone: "warn" },
+  recovered: { word: "Running", tone: "ok" },
+  started: { word: "Started", tone: "off" },
+  action: { word: "Action", tone: "off" },
+};
+
 function Events({ events }: { events: ServiceEvent[] }) {
   return (
     <Card title="Recent events" padded={events.length === 0}>
@@ -267,9 +275,7 @@ function Events({ events }: { events: ServiceEvent[] }) {
         <ul className="ui-attention-list" aria-label="Recent events">
           {events.map((e, i) => (
             <li key={e.at + e.service + (e.site ?? "") + i}>
-              <Badge tone={e.kind === "failed" ? "err" : e.kind === "crash-restart" ? "warn" : "off"}>
-                {e.kind === "failed" ? "Failed" : e.kind === "crash-restart" ? "Restart" : e.kind === "started" ? "Started" : "Action"}
-              </Badge>
+              <Badge tone={eventBadges[e.kind].tone}>{eventBadges[e.kind].word}</Badge>
               <div className="ui-stack-tight">
                 <strong>
                   {serviceName(e.service)}
