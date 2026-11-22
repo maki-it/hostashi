@@ -4,7 +4,7 @@
 // and HTTPS with a Let's Encrypt certificate. The panel database is the
 // desired state; every change is applied to the web server at once.
 
-import type { NodeApp } from "./node";
+import type { NodeApp, ProgramApp } from "./node";
 import { ApiError, request } from "./api";
 import { formatBytes } from "./limits";
 
@@ -44,6 +44,8 @@ export type Site = {
   proxy?: SiteProxy | null;
   // The app of a Node.js site, null otherwise (ADR-0054).
   node?: NodeApp | null;
+  // The program of an app site (ADR-0054 addendum 2), null otherwise.
+  app?: ProgramApp | null;
   phpPrograms: boolean; // PHP may start programs (exec, system, ...)
   disabled: boolean; // answers 503, PHP stopped
   disabledPage: string; // maintenance page shown while disabled (ADR-0047)
@@ -155,10 +157,11 @@ export type NewSite = {
   domains: string[];
   tls: boolean;
   hsts: boolean;
-  type?: "redirect" | "proxy" | "node";
+  type?: "redirect" | "proxy" | "node" | "app";
   redirect?: SiteRedirect;
   proxy?: SiteProxy;
   node?: Pick<NodeApp, "version" | "workdir" | "startKind" | "start">;
+  app?: Pick<ProgramApp, "workdir" | "program" | "args">;
 };
 
 /** The target of a reverse proxy site (ADR-0054). */

@@ -16,7 +16,7 @@ export const logKinds: { id: LogKind; label: string; hint: string }[] = [
 ];
 
 /** The logs a site has: the app log for a Node.js site, the PHP log for the others. */
-export const siteLogKinds = (type: string) => logKinds.filter((k) => (type === "node" ? k.id !== "php" : k.id !== "app"));
+export const siteLogKinds = (type: string) => logKinds.filter((k) => (type === "node" || type === "app" ? k.id !== "php" : k.id !== "app"));
 
 export type LogChunk = { lines: string[]; cursor: string; rotated: boolean; more: boolean };
 

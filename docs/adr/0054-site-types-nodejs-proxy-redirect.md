@@ -205,7 +205,7 @@ Notes on how the app type of addendum 2 is built; they change no decision.
 - The agent writes `ExecStart=<home>/<program>` and every argument in double quotes, with `\` and `"` escaped and `%` and `$` doubled, so systemd neither splits, expands nor reads a lone `;` [V: `appunit.Quote`, container test with spaces, quotes, `$HOME`, `%`, `;` and a backslash].
 - Before it starts the program, the agent checks through `os.Root` that it is a regular file below the home, not a symbolic link, with an execute bit and owned by the site user. Otherwise the unit stays stopped and `GET /api/v1/sites/{name}/app` says why in `problem`; a start answers 409 with the same text. The check is for the message only: the site user may change the file at any time, and the program runs as the site user anyway.
 - The environment has `HOST=127.0.0.1`, `PORT`, `HOME`, `USER`, `LOGNAME` and a `PATH` without Node.js; no `NODE_ENV`. The unit `hostashi-app@<site>.service` has the sandbox of `hostashi-node@`, without `MemoryDenyWriteExecute=` for runtimes with a JIT.
-- Not yet: the panel page (screenshots first) and changing a site between the types.
+- Panel: New site offers the type App (program, arguments one per line, working directory); the Web tab shows the state, the command line and why the program does not start, with Start, Stop and Restart (screenshots approved by Kim, 2026-11-22). Not yet: changing a site between the types.
 
 ## Implementation notes: removing a Node.js line (2026-11-22)
 

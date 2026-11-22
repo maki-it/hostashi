@@ -28,6 +28,7 @@ import {
   type SiteRedirect,
 } from "./sites";
 import { newNodeApp, NodeFields, nodeProblem, useNodeStatus, type NodeValue } from "./SiteNode";
+import { newProgramApp, ProgramFields, programFieldsProblem, programRequest, type ProgramValue } from "./SiteApp";
 import { newProxy, ProxyFields } from "./SiteProxy";
 import { newestLine } from "./node";
 import { newRedirect, RedirectFields } from "./SiteRedirect";
@@ -146,7 +147,7 @@ export function Sites({ query, onQuery }: QueryProps) {
   if (query.get("new") === "1") {
     return (
       <>
-        <PageHead title="New site" description="A site answers for its domains: with PHP, static files or a Node.js app from its own Linux user and home, or as a redirect or reverse proxy." />
+        <PageHead title="New site" description="A site answers for its domains: with PHP, static files, a Node.js app or a program of its own from its own Linux user and home, or as a redirect or reverse proxy." />
         <CreateForm php={php} onChange={load} parked={query.get("domain") ?? ""} parkedTls={query.get("tls") !== "0"} />
       </>
     );
@@ -162,7 +163,7 @@ export function Sites({ query, onQuery }: QueryProps) {
     <>
       <PageHead
         title="Sites"
-        description="Every site has its domains and certificate. PHP, static and Node.js sites also have their own Linux user; redirect and reverse proxy sites have none."
+        description="Every site has its domains and certificate. PHP, static, Node.js and app sites also have their own Linux user; redirect and reverse proxy sites have none."
         actions={
           <a className="ui-btn ui-btn-primary" href={formatHash({ page: "sites", query: new URLSearchParams({ new: "1" }) })}>
             <Plus size={16} aria-hidden="true" />
@@ -214,7 +215,7 @@ export function Sites({ query, onQuery }: QueryProps) {
 
 // SiteTypeChoice picks the type of a site (ADR-0054). Only the types that
 // exist today are offered; the others come with their features.
-export type ChosenType = "static" | "php" | "node" | "proxy" | "redirect";
+export type ChosenType = "static" | "php" | "node" | "app" | "proxy" | "redirect";
 
 /** webOnly: types without a Linux account (ADR-0054). */
 const webOnly = (t: ChosenType) => t === "redirect" || t === "proxy";
@@ -237,10 +238,11 @@ export function SiteTypeChoice<T extends ChosenType>({
     { value: "php", label: "PHP", hint: "WordPress, Laravel, TYPO3 and other PHP software." },
     { value: "static", label: "Static", hint: "HTML, CSS and JavaScript, for example the build of Hugo, Astro or a single-page app. No PHP." },
     { value: "node", label: "Node.js", hint: "An app such as Next.js, Nuxt or Express that runs all the time as the site's user. Requests go to its port." },
+    { value: "app", label: "App", hint: "A program of your own, for example a Go or Rust service, that runs all the time as the site's user. Requests go to its port." },
     { value: "proxy", label: "Reverse proxy", hint: "Passes every request to another web server, for example an app in your network. No files, no Linux account." },
     { value: "redirect", label: "Redirect", hint: "Sends every address to another one, for example an old domain to the new one. No files, no Linux account." },
   ];
-  const choices = all.filter((c) => withRedirect || !(webOnly(c.value) || c.value === "node")) as { value: T; label: string; hint: string }[];
+  const choices = all.filter((c) => withRedirect || !(webOnly(c.value) || c.value === "node" || c.value === "app")) as { value: T; label: string; hint: string }[];
   return (
     <fieldset className="ui-fieldset ui-stack-tight">
       <legend>Type</legend>
@@ -292,6 +294,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   const nodeStatus = useNodeStatus();
   const [node, setNodeValue] = useState<NodeValue | null>(null);
   const nodeValue = node ?? newNodeApp(newestLine(nodeStatus));
+  const [program, setProgramValue] = useState<ProgramValue>(newProgramApp());
   const [tls, setTls] = useState(parked ? parkedTls : true);
   const [hsts, setHsts] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -323,7 +326,8 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
       domainsProblem(list) ||
       (kind === "redirect" ? redirectProblem(redirect.target, list) : "") ||
       (kind === "proxy" ? proxyProblem(proxy.target, list) : "") ||
-      (kind === "node" ? nodeProblem(nodeValue) : "");
+      (kind === "node" ? nodeProblem(nodeValue) : "") ||
+      (kind === "app" ? programFieldsProblem(program) : "");
     if (problem) {
       setError(problem);
       return;
@@ -347,6 +351,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         ...(kind === "redirect" && { type: "redirect" as const, redirect }),
         ...(kind === "proxy" && { type: "proxy" as const, proxy: { ...proxy, insecure: proxy.target.startsWith("https://") && proxy.insecure } }),
         ...(kind === "node" && { type: "node" as const, node: nodeValue }),
+        ...(kind === "app" && { type: "app" as const, app: programRequest(program) }),
       });
       setDone(
         s.tls.enabled && !s.tls.active
@@ -360,6 +365,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
       setRedirectValue(newRedirect());
       setProxyValue(newProxy());
       setNodeValue(null);
+      setProgramValue(newProgramApp());
       await onChange();
     } catch (err) {
       setError(siteMessage(err));
@@ -425,6 +431,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
           <p className="ui-hint ui-flush">The web root folder, a fallback for single-page apps and asset caching can be set on the site's Web tab.</p>
         )}
         {kind === "node" && <NodeFields value={nodeValue} onChange={setNodeValue} status={nodeStatus} disabled={busy} admin />}
+        {kind === "app" && <ProgramFields value={program} onChange={setProgramValue} disabled={busy} />}
         {kind === "proxy" && <ProxyFields value={proxy} onChange={setProxyValue} disabled={busy} />}
         {kind === "redirect" && <RedirectFields value={redirect} onChange={setRedirectValue} disabled={busy} />}
         <label className="ui-check">

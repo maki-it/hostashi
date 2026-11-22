@@ -6,6 +6,7 @@
 import { useState, type FormEvent } from "react";
 import { formatHash } from "./routes";
 import { AppCard, AppSettingsCard } from "./SiteNode";
+import { ProgramSettingsCard } from "./SiteApp";
 import { ProxyCard } from "./SiteProxy";
 import { RedirectCard } from "./SiteRedirect";
 import { PHPOptions, SiteTypeChoice } from "./Sites";
@@ -45,6 +46,16 @@ export function SiteWebSettings({ site, php, onChange, admin = false }: Props) {
         <AppCard site={site} onChange={onChange} />
         <AppSettingsCard site={site} onChange={onChange} admin={admin} />
         <p className="ui-hint ui-flush">Changing a Node.js site into a PHP or static site comes with the type switch in a later version.</p>
+      </>
+    );
+  }
+
+  if (siteType(site) === "app") {
+    return (
+      <>
+        <AppCard site={site} onChange={onChange} />
+        <ProgramSettingsCard site={site} onChange={onChange} />
+        <p className="ui-hint ui-flush">Changing an app site into another type comes with the type switch in a later version.</p>
       </>
     );
   }
