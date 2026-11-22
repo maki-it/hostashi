@@ -40,7 +40,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 **Common to all types**
 
-- New column `sites.type`: `static`, `php`, `node`, `proxy`, `redirect` (and `app`, Addendum 2). Migration 0045 sets `php` where `sites.php` is set, `static` otherwise. The type is fixed after create in v1 (change type: delete and create).
+- New column `sites.type`: `static`, `php`, `node`, `proxy`, `redirect` (and `app`, Addendum 2). Migration 0045 sets `php` where `sites.php` is set, `static` otherwise. The type can be changed at any time, see Addendum 3.
 - Every type keeps domains, aliases, HTTPS (Let's Encrypt or own certificate), HSTS, HTTP→HTTPS, ACME challenges, the health check, disable with status page (ADR-0047), maintenance (ADR-0027) and site logs (ADR-0053).
 - New site form: the type is the first choice; the form then shows only the fields of that type. The site's settings page hides tabs that do not apply.
 
@@ -72,7 +72,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 **Roles and API (ADR-0018, ADR-0035)**
 
-- `POST /api/v1/sites` takes `type` (default `static` or `php` from `php`, so old clients work) and one object per type: `node {version, workdir, start, env}`, `proxy {target, host_header, tls_verify}`, `redirect {target, status, keep_path}`. `PATCH /api/v1/sites/{name}` changes these fields, not `type`.
+- `POST /api/v1/sites` takes `type` (default `static` or `php` from `php`, so old clients work) and one object per type: `node {version, workdir, start, env}`, `proxy {target, host_header, tls_verify}`, `redirect {target, status, keep_path}`. `PATCH /api/v1/sites/{name}` changes these fields; changing `type` is its own endpoint (Addendum 3).
 - `POST /api/v1/sites/{name}/app/{start|stop|restart}` with `sites:write`. Installing Node.js versions: `node:install`, admin only (like `php:install`).
 - Proxy and redirect sites need the same `sites:create` as any site.
 
@@ -103,7 +103,7 @@ None left.
 2. ~~Reverse proxy: allow private networks, refuse loopback and link-local, as recommended?~~ Decided (Kim, 2026-11-22): yes; public addresses and host names are allowed too.
 3. ~~Proxy and redirect sites without a Linux account (no SSH, files, cron, backups)?~~ Decided (Kim, 2026-11-22): yes.
 
-## Addendum 1: static sites as a first-class type (Proposed, 2026-11-22)
+## Addendum 1: static sites as a first-class type (Accepted, Kim, 2026-11-22)
 
 **Context.** Kim needs static sites often (plain HTML, builds of Hugo, Astro and similar) and gives them high priority (Kim, 2026-11-22). A site without PHP already works today: "No PHP" in the New site form, no FPM pool, nginx serves `htdocs` with `try_files $uri $uri/ =404` and refuses `.php` files [V: `web/src/Sites.tsx`, `internal/web/nginx.go`]. What is missing: the form presents it as "PHP: none" rather than as a type, the document root is always `<home>/htdocs` [V: `sites.WebRootName`], and single-page apps have no fallback to `index.html`.
 
@@ -118,7 +118,7 @@ None left.
 
 **Order.** Right after the type column, before the redirect: (1) type column and migration, (1a) static type with document root folder and SPA switch, then redirect and the rest.
 
-## Addendum 2: own app as a binary (Proposed, 2026-11-22)
+## Addendum 2: own app as a binary (Accepted, Kim, 2026-11-22)
 
 **Context.** Kim wants a type for apps that are one executable, for example Go or Rust services (Kim, 2026-11-22). Technically this is the Node.js type without a runtime [A].
 
@@ -133,3 +133,19 @@ None left.
 - No new agent operation beyond those of Node.js (`site.app.apply`, `site.app.action` take the type), `phpctl` gets the unit pattern `hostashi-app@<site>.service`. No new `os/exec` exception.
 
 **Order.** After Node.js (it reuses the app unit, the port and the filter): static, redirect, proxy, Node.js, app, import, UI, wiki.
+
+## Addendum 3: change the type of a site at any time (Proposed, 2026-11-22)
+
+**Context.** Kim wants to change a site's type at any time after create (Kim, 2026-11-22). Types with an account (`static`, `php`, `node`, `app`) and types without one (`proxy`, `redirect`, decided in question 3) differ in what exists on the server.
+
+**Decision proposed.**
+
+- `POST /api/v1/sites/{name}/type {"type", <settings of the new type>}`, scope `sites:write`, audit action `site.type` with the old and new type and settings (diff as in the audit log). In the panel: "Change type" on the site's settings page, a dialog with the fields of the new type and a summary of what starts and stops.
+- Between types with an account, everything of the account stays: home, files, databases, cron jobs, SSH logins, backups, quota, limits. Only the runtime changes: the PHP pool, the Node.js or app unit and its port are stopped and removed, the new one is set up. Example: `php` → `static` stops the pool; `static` → `node` assigns a port and starts the app once its start command is set.
+- To `proxy` or `redirect` from a type with an account: the account and its files **stay** and keep working (SSH, files, cron, backups), only nginx serves the proxy or redirect. The settings page shows "This site still has a Linux account and files" with the action "Remove account and files" (danger zone, typed confirmation like delete, ADR-0048 style list of what goes). So no data is lost by a type change.
+- From `proxy` or `redirect` to a type with an account: the account and home are created as for a new site (pool and limits preset as on create).
+- Order, as in ADR-0048: store transaction with the new type and settings, then the new runtime is prepared (pool, unit, port filter), then one `web.apply` switches nginx, and only then the old runtime is stopped. If preparing or `web.apply` fails, the transaction is undone and the old type keeps running; the new runtime is removed again. A failure after the switch (stopping the old runtime) is logged and retried by the reconciler, the site already serves the new type.
+- Things that only make sense for one type are kept but inactive after a switch (page cache and PHP settings of a former `php` site, environment variables of a former `node` site), so switching back restores them. The page cache is turned off for non-PHP types.
+- No new agent operation, no new `os/exec` exception.
+
+**Order.** The endpoint comes with the type column PR series: after static (1a) the switch between `static` and `php` (1b); each later type PR adds its switch paths and tests.
