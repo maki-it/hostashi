@@ -47,8 +47,12 @@ func (s *Service) SetWebOptions(ctx context.Context, actor int64, name string, o
 		return store.Site{}, ErrState
 	}
 
-	if (o.SPA || o.AssetCache) && site.Type != store.SiteTypeStatic {
-		return store.Site{}, fmt.Errorf("%w: single-page app and asset caching are for static sites", ErrInvalid)
+	if o.SPA && site.Type != store.SiteTypeStatic {
+		return store.Site{}, fmt.Errorf("%w: single-page app is for static sites", ErrInvalid)
+	}
+
+	if o.AssetCache && site.Type != store.SiteTypeStatic && site.Type != store.SiteTypePHP {
+		return store.Site{}, fmt.Errorf("%w: asset caching is for static and PHP sites", ErrInvalid)
 	}
 
 	old, err := s.st.SetSiteWebOptions(ctx, name, o, s.now())

@@ -149,3 +149,16 @@ None left.
 - No new agent operation, no new `os/exec` exception.
 
 **Order.** The endpoint comes with the type column PR series: after static (1a) the switch between `static` and `php` (1b); each later type PR adds its switch paths and tests.
+
+## Addendum 4: asset caching for PHP sites too (Accepted, Kim, 2026-11-22)
+
+**Context.** Addendum 1 made asset caching a switch of static sites. Kim wants it for PHP sites as well, for example WordPress (Kim, 2026-11-22). Kim also wants the time and the file types configurable.
+
+**Decision.**
+
+- "Cache assets in the browser" is a switch of `static` and `php` sites; other types refuse it. The single-page app switch stays static only.
+- Time: 1 minute to 365 days, default 30 days. More than a year brings nothing, as HTTP caches cap freshness at one year in practice [A].
+- File types: a list of up to 40 extensions, letters and digits, without the dot. Default: css, js, mjs, woff, woff2, ttf, otf, eot, svg, svgz, png, jpg, jpeg, gif, webp, avif, ico, mp4, webm, ogg, ogv. `php` is refused: PHP answers change per request. HTML stays fresh unless listed.
+- nginx: one `map $uri` per site plus `expires` in the server block; PHP answers reach nginx through `index.php` and never match the map. WordPress and similar software change asset addresses with `?ver=` when a file changes, so a long time is safe there [A].
+- Not taken over, on purpose: `Access-Control-Allow-Origin: *` on all assets (lets every other site embed the files; maybe later as its own switch for fonts) and turning the access log off for assets (statistics and fail2ban need the log).
+- The settings are kept while the switch is off or the type has no asset cache, so turning it on again restores them.

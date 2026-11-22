@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"reflect"
 	"testing"
+
+	"github.com/maki-it/hostashi/internal/agentapi"
 )
 
 func TestSiteWebOptionsOverHTTP(t *testing.T) {
@@ -22,7 +24,7 @@ func TestSiteWebOptionsOverHTTP(t *testing.T) {
 	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/docs", cookie: c})
 
 	var fresh siteJSON
-	if err := json.Unmarshal(rec.Body.Bytes(), &fresh); err != nil || fresh.Web.AssetCacheSeconds != 2592000 || len(fresh.Web.AssetCacheExts) != 16 {
+	if err := json.Unmarshal(rec.Body.Bytes(), &fresh); err != nil || fresh.Web.AssetCacheSeconds != 2592000 || len(fresh.Web.AssetCacheExts) != len(agentapi.DefaultAssetCacheExts) {
 		t.Fatalf("defaults %+v %v", fresh.Web, err)
 	}
 
@@ -53,13 +55,13 @@ func TestSiteWebOptionsOverHTTP(t *testing.T) {
 		}
 	}
 
-	// With PHP the folder stays and is sent; SPA and asset caching are
-	// kept but not sent, and cannot be turned on.
+	// With PHP the folder and the asset cache stay and are sent; SPA is
+	// kept but not sent, and cannot be turned on (ADR-0054 addendum 4).
 	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/docs/php", cookie: c, body: `{"php":"8.4"}`}); rec.Code != http.StatusOK {
 		t.Fatalf("php: %d %s", rec.Code, rec.Body)
 	}
 
-	if ws := ag.web.Sites[0]; ws.WebDir != "dist" || ws.SPA || ws.AssetCache || ws.PHP != "8.4" {
+	if ws := ag.web.Sites[0]; ws.WebDir != "dist" || ws.SPA || !ws.AssetCache || ws.AssetCacheSeconds != 3600 || ws.PHP != "8.4" {
 		t.Fatalf("php web state %+v", ws)
 	}
 
@@ -68,7 +70,7 @@ func TestSiteWebOptionsOverHTTP(t *testing.T) {
 		t.Fatalf("spa with php: %d %s", rec.Code, rec.Body)
 	}
 
-	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/docs/web", cookie: c, body: `{"dir":"public","spa":false,"assetCache":false}`}); rec.Code != http.StatusOK || ag.web.Sites[0].WebDir != "public" {
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/docs/web", cookie: c, body: `{"dir":"public","spa":false,"assetCache":false}`}); rec.Code != http.StatusOK || ag.web.Sites[0].WebDir != "public" || ag.web.Sites[0].AssetCache {
 		t.Fatalf("php folder: %d %s", rec.Code, rec.Body)
 	}
 

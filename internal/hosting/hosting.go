@@ -712,14 +712,16 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				User: site.Name, Domains: site.Domains, PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
 			}
 
-			// The static-site options are kept while the site runs PHP
-			// and only sent for a static site (ADR-0054).
+			// SPA is kept while the site runs PHP and only sent for a
+			// static site; the asset cache serves static and PHP sites
+			// (ADR-0054 addenda 1 and 4).
 			ws.WebDir = site.WebDir
 			if site.Type == store.SiteTypeStatic {
-				ws.SPA, ws.AssetCache = site.SPA, site.AssetCache
-				if site.AssetCache {
-					ws.AssetCacheSeconds, ws.AssetCacheExts = site.AssetCacheSeconds, site.AssetCacheExts
-				}
+				ws.SPA = site.SPA
+			}
+
+			if site.AssetCache && (site.Type == store.SiteTypeStatic || site.Type == store.SiteTypePHP) {
+				ws.AssetCache, ws.AssetCacheSeconds, ws.AssetCacheExts = true, site.AssetCacheSeconds, site.AssetCacheExts
 			}
 
 			if php != "" {
