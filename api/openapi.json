@@ -4487,6 +4487,53 @@
         },
         "type": "object"
       },
+      "RealIP": {
+        "additionalProperties": false,
+        "properties": {
+          "cloudflare": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cloudflareDate": {
+            "type": "string"
+          },
+          "headers": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "maxRanges": {
+            "type": "integer"
+          },
+          "realIp": {
+            "$ref": "#/components/schemas/WebRealIP"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "cloudflare",
+          "cloudflareDate",
+          "headers",
+          "maxRanges",
+          "realIp"
+        ],
+        "type": "object"
+      },
       "Reason": {
         "additionalProperties": false,
         "properties": {
@@ -5917,6 +5964,48 @@
           },
           "referrerPolicy": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "WebRealIP": {
+        "additionalProperties": false,
+        "properties": {
+          "cloudflare": {
+            "type": "boolean"
+          },
+          "header": {
+            "type": "string"
+          },
+          "ranges": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "WebRealIPInput": {
+        "additionalProperties": false,
+        "properties": {
+          "cloudflare": {
+            "type": "boolean"
+          },
+          "header": {
+            "type": "string"
+          },
+          "ranges": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           }
         },
         "type": "object"
@@ -15551,6 +15640,120 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites.proxy:write"
+      }
+    },
+    "/api/v1/sites/{name}/real-ip": {
+      "get": {
+        "operationId": "getSiteRealIP",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealIP"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "Which proxies a site takes the client address from",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
+      },
+      "put": {
+        "operationId": "setSiteRealIP",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebRealIPInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealIP"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Set which proxies a site takes the client address from",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.realip:write"
       }
     },
     "/api/v1/sites/{name}/redirect": {
