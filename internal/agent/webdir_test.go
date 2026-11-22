@@ -43,6 +43,7 @@ func TestWebApplyRefusesUnsafeWebDir(t *testing.T) {
 	_, err := agentapi.WebApply.Call(ctx, c, agentapi.WebApplyRequest{Sites: []agentapi.WebSite{
 		{User: "blog", Domains: []string{"blog.example.com"}, WebDir: "dist"},
 	}})
+
 	var ae *agentrpc.Error
 	if errors.As(err, &ae) && ae.Code == agentrpc.CodeInvalidArgument {
 		t.Fatalf("missing folder refused: %v", err)

@@ -886,6 +886,7 @@ func (n *Nginx) Render(d Desired, gen int) (Files, error) {
 		if s.AssetCache && !s.Disabled && s.PHPSocket == "" {
 			data["Expires"] = "hostashi_expires_" + hex.EncodeToString([]byte(s.User))
 		}
+
 		if s.Maintenance != nil && !s.Disabled {
 			data["M"] = s.Maintenance
 			data["Open"] = "hostashi_open_" + hex.EncodeToString([]byte(s.User))
