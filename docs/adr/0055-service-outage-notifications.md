@@ -1,6 +1,6 @@
 # ADR-0055 Email notifications for service outages
 
-**Status:** Proposed. **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0044 (outgoing email through an SMTP relay), ADR-0052 (service management and server dashboard), ADR-0054 (site types: Node.js and app units), ADR-0035 (users and roles), [03-features](../03-features.md) section 3.8.
+**Status:** Accepted (2026-11-22, by Kim). **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0044 (outgoing email through an SMTP relay), ADR-0052 (service management and server dashboard), ADR-0054 (site types: Node.js and app units), ADR-0035 (users and roles), [03-features](../03-features.md) section 3.8.
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 

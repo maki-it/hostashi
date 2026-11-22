@@ -58,7 +58,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0052 | Service management and server dashboard | Accepted on 2026-11-21 ([adr/0052](adr/0052-service-management-and-server-dashboard.md)) | No |
 | 0053 | Site logs in the panel | Accepted on 2026-11-21 ([adr/0053](adr/0053-site-logs-in-the-panel.md)) | Done |
 | 0054 | Site types Node.js, reverse proxy and redirect | Accepted on 2026-11-22 ([adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md)) | No |
-| 0055 | Email notifications for service outages | Proposed ([adr/0055](adr/0055-service-outage-notifications.md)) | No |
+| 0055 | Email notifications for service outages | Accepted on 2026-11-22 ([adr/0055](adr/0055-service-outage-notifications.md)) | No |
 
 ---
 
@@ -392,4 +392,4 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0055 Email notifications for service outages
 
-**Full text (status Proposed, 2026-11-22):** [adr/0055](adr/0055-service-outage-notifications.md). Summary: a new notification category `services` on top of ADR-0044, fed by the service monitor of ADR-0052. Emails when a unit is `failed`, when it crashes 3 times within 15 minutes, when the agent is unreachable for about 3 minutes, and an all-clear when it is back (all-clear only for services, Kim 2026-11-22). Server units go to admins, site units (PHP, Valkey, Node.js, app) also to managers and users with a grant. No log lines in emails. New event kind `recovered` in `service_events` (migration 0047). No new `os/exec` exception, no new agent operation.
+**Full text (status Accepted, 2026-11-22, by Kim):** [adr/0055](adr/0055-service-outage-notifications.md). Summary: a new notification category `services` on top of ADR-0044, fed by the service monitor of ADR-0052. Emails when a unit is `failed`, when it crashes 3 times within 15 minutes, when the agent is unreachable for about 3 minutes, and an all-clear when it is back (all-clear only for services, Kim 2026-11-22). Server units go to admins, site units (PHP, Valkey, Node.js, app) also to managers and users with a grant. No log lines in emails. New event kind `recovered` in `service_events` (migration 0047). No new `os/exec` exception, no new agent operation.
