@@ -6,23 +6,28 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"strconv"
 	"text/tabwriter"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
-	"github.com/maki-it/hostashi/internal/agentrpc"
 )
 
-// serviceCmd runs "hostashi service": list the catalog's units, or run one
-// catalog action (ADR-0052). The agent checks everything again.
+// serviceCmd runs "hostashi service" through the panel's API (ADR-0052,
+// ADR-0058): list the catalog's units, or run one catalog action. Roles,
+// scopes and the audit log apply as in the panel.
 //
 //	service list [-json]
 //	service ID [SITE] ACTION
-func serviceCmd(ctx context.Context, c *agentrpc.Client, args []string, out io.Writer) error {
+func serviceCmd(ctx context.Context, args []string, out io.Writer) error {
 	switch {
 	case len(args) == 1 && args[0] == "list":
-		r, err := agentapi.ServicesStatus.Call(ctx, c, agentapi.ServicesStatusRequest{})
-		if err != nil {
+		var r struct {
+			Services []agentapi.ServiceState `json:"services"`
+		}
+
+		if err := apiDo(ctx, http.MethodGet, "/services", nil, &r); err != nil {
 			return err
 		}
 
@@ -30,13 +35,19 @@ func serviceCmd(ctx context.Context, c *agentrpc.Client, args []string, out io.W
 
 		return nil
 	case len(args) == 2 && args[0] == "list" && args[1] == "-json":
-		return printJSON[agentapi.ServicesStatusResponse](out)(agentapi.ServicesStatus.Call(ctx, c, agentapi.ServicesStatusRequest{}))
+		return apiPrint(ctx, out, http.MethodGet, "/services", nil)
 	case len(args) > 0 && args[0] == "list":
 		return errUsage
 	case len(args) == 2:
-		return printJSON[agentapi.ServiceState](out)(agentapi.ServiceAction.Call(ctx, c, agentapi.ServiceActionRequest{ID: args[0], Action: args[1]}))
+		// Naming the action on the command line is the confirmation the
+		// panel asks for with a typed "<action> <id>".
+		path := "/services/" + url.PathEscape(args[0]) + "/" + url.PathEscape(args[1])
+
+		return apiPrint(ctx, out, http.MethodPost, path, map[string]string{"confirm": args[1] + " " + args[0]})
 	case len(args) == 3:
-		return printJSON[agentapi.ServiceState](out)(agentapi.ServiceAction.Call(ctx, c, agentapi.ServiceActionRequest{ID: args[0], Site: args[1], Action: args[2]}))
+		path := "/sites/" + url.PathEscape(args[1]) + "/services/" + url.PathEscape(args[0]) + "/" + url.PathEscape(args[2])
+
+		return apiPrint(ctx, out, http.MethodPost, path, map[string]string{"confirm": args[2] + " " + args[0]})
 	}
 
 	return errUsage

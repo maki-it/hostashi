@@ -192,3 +192,41 @@ func opHelp(op *apicli.Op, w io.Writer) {
 
 	_ = tw.Flush()
 }
+
+// apiDo is one JSON call with the stored login, for the short commands
+// that call the API (ADR-0058).
+func apiDo(ctx context.Context, method, path string, in, out any) error {
+	c, err := apiClient()
+	if err != nil {
+		return err
+	}
+
+	err = c.Do(ctx, method, path, in, out)
+	if apiclient.Code(err) == "unauthenticated" {
+		return fmt.Errorf("%w; run hostashi login", err)
+	}
+
+	return err
+}
+
+// apiPrint is apiDo that prints the answer as indented JSON.
+func apiPrint(ctx context.Context, w io.Writer, method, path string, in any) error {
+	var raw json.RawMessage
+	if err := apiDo(ctx, method, path, in, &raw); err != nil {
+		return err
+	}
+
+	if len(raw) == 0 {
+		return nil
+	}
+
+	var out bytes.Buffer
+	if err := json.Indent(&out, raw, "", "  "); err != nil {
+		return err
+	}
+
+	_ = out.WriteByte('\n')
+	_, err := out.WriteTo(w)
+
+	return err
+}

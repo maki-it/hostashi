@@ -4,31 +4,29 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-
-	"github.com/maki-it/hostashi/internal/agentapi"
-	"github.com/maki-it/hostashi/internal/agentrpc"
+	"net/http"
 )
 
-var errRebootConfirm = errors.New("system reboot: pass the server's hostname to confirm")
-
-// systemCmd runs "hostashi system" (ADR-0060). The agent checks every
-// value again.
+// systemCmd runs "hostashi system" through the panel's API (ADR-0060,
+// ADR-0058).
 //
 //	system info
 //	system timezones
 //	system timezone ZONE
 //	system hostname NAME
 //	system reboot HOSTNAME
-func systemCmd(ctx context.Context, c *agentrpc.Client, args []string, out io.Writer) error {
+func systemCmd(ctx context.Context, args []string, out io.Writer) error {
 	switch {
 	case len(args) == 1 && args[0] == "info":
-		return printJSON[agentapi.SystemInfo](out)(agentapi.SystemInfoOp.Call(ctx, c, agentapi.SystemInfoRequest{}))
+		return apiPrint(ctx, out, http.MethodGet, "/system", nil)
 	case len(args) == 1 && args[0] == "timezones":
-		r, err := agentapi.SystemTimezonesOp.Call(ctx, c, agentapi.SystemTimezonesRequest{})
-		if err != nil {
+		var r struct {
+			Zones []string `json:"zones"`
+		}
+
+		if err := apiDo(ctx, http.MethodGet, "/system/timezones", nil, &r); err != nil {
 			return err
 		}
 
@@ -38,21 +36,16 @@ func systemCmd(ctx context.Context, c *agentrpc.Client, args []string, out io.Wr
 
 		return nil
 	case len(args) == 2 && args[0] == "timezone":
-		return printJSON[agentapi.SystemInfo](out)(agentapi.SystemTimezoneSet.Call(ctx, c, agentapi.SystemTimezoneRequest{Zone: args[1]}))
+		return apiPrint(ctx, out, http.MethodPut, "/system/timezone", map[string]string{"zone": args[1]})
 	case len(args) == 2 && args[0] == "hostname":
-		return printJSON[agentapi.SystemInfo](out)(agentapi.SystemHostnameSet.Call(ctx, c, agentapi.SystemHostnameRequest{Name: args[1]}))
+		return apiPrint(ctx, out, http.MethodPut, "/system/hostname", map[string]string{"hostname": args[1]})
 	case len(args) == 2 && args[0] == "reboot":
-		info, err := agentapi.SystemInfoOp.Call(ctx, c, agentapi.SystemInfoRequest{})
-		if err != nil {
-			return err
+		// The panel checks the hostname as the confirmation.
+		var r struct {
+			DelaySeconds int `json:"delaySeconds"`
 		}
 
-		if args[1] != info.Hostname {
-			return errRebootConfirm
-		}
-
-		r, err := agentapi.SystemReboot.Call(ctx, c, agentapi.SystemRebootRequest{})
-		if err != nil {
+		if err := apiDo(ctx, http.MethodPost, "/system/reboot", map[string]string{"confirm": args[1]}, &r); err != nil {
 			return err
 		}
 
