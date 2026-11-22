@@ -12,6 +12,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -83,6 +84,13 @@ type presetJSON struct {
 	Caches    presetCachesJSON `json:"caches"`
 	CreatedAt int64            `json:"createdAt"`
 	UpdatedAt int64            `json:"updatedAt"`
+}
+
+// presetListJSON names the server's CPUs too: the panel shows CPU
+// limits in cores (ADR-0037).
+type presetListJSON struct {
+	Presets []presetJSON `json:"presets"`
+	CPUs    int          `json:"cpus"`
 }
 
 func toPresetJSON(p store.LimitPreset) presetJSON {
@@ -224,7 +232,9 @@ func limitsFail(log *slog.Logger, w http.ResponseWriter, err error, what string)
 // registerLimits adds the limit presets and the limits of a site
 // (ADR-0015). Only administrators manage them.
 func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/limit-presets", a.allow("limits.presets:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/limit-presets", openapi.Operation{
+		ID: "listLimitPresets", Tag: "limits", Summary: "List the limit presets", Out: presetListJSON{},
+	}, a.allow("limits.presets:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ps, err := svc.LimitPresets(r.Context())
 		if err != nil {
 			limitsFail(log, w, err, "list limit presets")
@@ -239,10 +249,12 @@ func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 
 		// The panel shows CPU limits in cores and names how many the
 		// server has (ADR-0037).
-		writeJSON(w, http.StatusOK, map[string]any{"presets": out, "cpus": runtime.NumCPU()})
+		writeJSON(w, http.StatusOK, presetListJSON{Presets: out, CPUs: runtime.NumCPU()})
 	}))
 
-	mux.HandleFunc("GET /api/v1/limit-presets/{name}", a.allow("limits.presets:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/limit-presets/{name}", openapi.Operation{
+		ID: "getLimitPreset", Tag: "limits", Summary: "Get a limit preset", Out: presetJSON{},
+	}, a.allow("limits.presets:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		p, err := svc.LimitPreset(r.Context(), r.PathValue("name"))
 		if err != nil {
 			limitsFail(log, w, err, "get limit preset")
@@ -253,7 +265,9 @@ func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 		writeJSON(w, http.StatusOK, toPresetJSON(p))
 	}))
 
-	mux.HandleFunc("POST /api/v1/limit-presets", a.allow("limits.presets:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST /api/v1/limit-presets", openapi.Operation{
+		ID: "createLimitPreset", Tag: "limits", Summary: "Create a limit preset", In: presetInputJSON{}, Out: presetJSON{}, Status: http.StatusCreated,
+	}, a.allow("limits.presets:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in presetInputJSON
 		if !decodeJSON(w, r, &in) {
 			return
@@ -272,7 +286,9 @@ func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 	// PUT replaces name, values and default flag; the sites that follow the
 	// preset get the new values. "default": false keeps a default preset
 	// the default: another preset takes the flag over.
-	mux.HandleFunc("PUT /api/v1/limit-presets/{name}", a.allow("limits.presets:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("PUT /api/v1/limit-presets/{name}", openapi.Operation{
+		ID: "updateLimitPreset", Tag: "limits", Summary: "Change a limit preset", In: presetInputJSON{}, Out: presetJSON{},
+	}, a.allow("limits.presets:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in presetInputJSON
 		if !decodeJSON(w, r, &in) {
 			return
@@ -291,7 +307,9 @@ func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 		writeJSON(w, http.StatusOK, toPresetJSON(out))
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/limit-presets/{name}", a.allow("limits.presets:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("DELETE /api/v1/limit-presets/{name}", openapi.Operation{
+		ID: "deleteLimitPreset", Tag: "limits", Summary: "Delete an unused limit preset",
+	}, a.allow("limits.presets:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		if err := svc.DeleteLimitPreset(r.Context(), p.User.ID, r.PathValue("name")); err != nil {
 			limitsFail(log, w, err, "delete limit preset")
 
@@ -303,7 +321,9 @@ func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 
 	// The limits with the disk use as the server reports it. Without an
 	// answer of the agent the limits come without usage.
-	mux.HandleFunc("GET /api/v1/sites/{name}/limits", a.allow("limits:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/limits", openapi.Operation{
+		ID: "getSiteLimits", Tag: "limits", Summary: "Get the site's limits and usage", Out: siteLimitsJSON{},
+	}, a.allow("limits:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		site := r.PathValue("name")
 
 		v, err := svc.SiteLimits(r.Context(), site)
@@ -338,7 +358,9 @@ func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 	// PUT gives the site a preset or custom values. When the agent fails,
 	// the values stay as the site's desired state with the error recorded;
 	// the answer is the error and the same PUT retries.
-	mux.HandleFunc("PUT /api/v1/sites/{name}/limits", a.allow("limits:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("PUT /api/v1/sites/{name}/limits", openapi.Operation{
+		ID: "setSiteLimits", Tag: "limits", Summary: "Set the site's limits or preset", In: siteLimitsInputJSON{}, Out: siteLimitsJSON{},
+	}, a.allow("limits:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in siteLimitsInputJSON
 		if !decodeJSON(w, r, &in) {
 			return

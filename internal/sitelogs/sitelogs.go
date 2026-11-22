@@ -30,6 +30,8 @@ type Reader struct {
 	SiteLogDir string
 	// PHPLogDir holds <site>/error.log of PHP-FPM.
 	PHPLogDir string
+	// AppLogDir holds <site>/app.log of the site's app (ADR-0054).
+	AppLogDir string
 	// Owner is the uid every log file must have: 0 in production.
 	Owner uint32
 }
@@ -47,6 +49,12 @@ func (r *Reader) Path(site string, kind agentapi.LogKind) (string, error) {
 		return filepath.Join(r.SiteLogDir, site, "error.log"), nil
 	case agentapi.LogPHP:
 		return filepath.Join(r.PHPLogDir, site, "error.log"), nil
+	case agentapi.LogApp:
+		if r.AppLogDir == "" {
+			return "", fmt.Errorf("unknown log %q", kind)
+		}
+
+		return filepath.Join(r.AppLogDir, site, "app.log"), nil
 	default:
 		return "", fmt.Errorf("unknown log %q", kind)
 	}

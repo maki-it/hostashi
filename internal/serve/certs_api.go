@@ -12,6 +12,7 @@ import (
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -63,11 +64,41 @@ type certTarget struct {
 	renew   func(ctx context.Context, r *http.Request, actor int64) (any, error)
 	del     func(ctx context.Context, r *http.Request, actor int64) (any, error)
 	fail    func(log *slog.Logger, w http.ResponseWriter, err error, what string)
+	// tag, noun and out name the routes in the API document: noun goes
+	// into the operation ids (e.g. "Site" -> getSiteCertificate), out is
+	// a value of the JSON the change routes answer with.
+	tag, noun string
+	out       any
+}
+
+type csrJSON struct {
+	CSR string `json:"csr"`
+}
+
+type certUploadRequest struct {
+	Certificate    string `json:"certificate"`
+	Chain          string `json:"chain"`
+	Key            string `json:"key"`
+	AllowUntrusted bool   `json:"allowUntrusted"`
+}
+
+type certSourceRequest struct {
+	Source string `json:"source"`
+}
+
+// op is the operation record of a certificate route.
+func (t certTarget) op(verb, what, summary string, in, out any) openapi.Operation {
+	o := openapi.Operation{ID: verb + t.noun + what, Tag: t.tag, Summary: summary, In: in, Out: out}
+	if verb == "renew" {
+		o.Status = http.StatusAccepted
+	}
+
+	return o
 }
 
 // registerCertRoutes adds the certificate routes below prefix (ADR-0039).
 func registerCertRoutes(mux *routeMux, a authn, prefix string, readAction, writeAction authz.Action, t certTarget, log *slog.Logger) {
-	mux.HandleFunc("GET "+prefix+"/certificate", a.allow(readAction, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET "+prefix+"/certificate", t.op("get", "Certificate", "Get the live certificate and a pending CSR", nil, certInfoJSON{}), a.allow(readAction, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -83,13 +114,8 @@ func registerCertRoutes(mux *routeMux, a authn, prefix string, readAction, write
 
 	// Uploads an own certificate. Without "key", the key of the last CSR
 	// is used. The key is passed to the agent and not kept by the panel.
-	mux.HandleFunc("PUT "+prefix+"/certificate", a.allow(writeAction, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			Certificate    string `json:"certificate"`
-			Chain          string `json:"chain"`
-			Key            string `json:"key"`
-			AllowUntrusted bool   `json:"allowUntrusted"`
-		}
+	mux.Op("PUT "+prefix+"/certificate", t.op("upload", "Certificate", "Upload an own certificate", certUploadRequest{}, t.out), a.allow(writeAction, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in certUploadRequest
 		if !decodeJSONLimit(w, r, &in, maxCertBody) {
 			return
 		}
@@ -121,7 +147,7 @@ func registerCertRoutes(mux *routeMux, a authn, prefix string, readAction, write
 
 	if t.del != nil {
 		// Only with HTTPS off: nothing serves HTTPS without a certificate.
-		mux.HandleFunc("DELETE "+prefix+"/certificate", a.allow(writeAction, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		mux.Op("DELETE "+prefix+"/certificate", t.op("delete", "Certificate", "Remove the own certificate (HTTPS off only)", nil, t.out), a.allow(writeAction, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 			ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 			defer cancel()
 
@@ -137,7 +163,7 @@ func registerCertRoutes(mux *routeMux, a authn, prefix string, readAction, write
 	}
 
 	// Creates a key on the server and returns a CSR for the names.
-	mux.HandleFunc("POST "+prefix+"/csr", a.allow(writeAction, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST "+prefix+"/csr", t.op("create", "CSR", "Create a key and a certificate signing request", nil, csrJSON{}), a.allow(writeAction, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -148,13 +174,11 @@ func registerCertRoutes(mux *routeMux, a authn, prefix string, readAction, write
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]string{"csr": csr})
+		writeJSON(w, http.StatusOK, csrJSON{CSR: csr})
 	}))
 
-	mux.HandleFunc("PUT "+prefix+"/source", a.allow(writeAction, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			Source string `json:"source"`
-		}
+	mux.Op("PUT "+prefix+"/source", t.op("set", "TLSSource", "Choose Let's Encrypt or an own certificate", certSourceRequest{}, t.out), a.allow(writeAction, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in certSourceRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -171,7 +195,7 @@ func registerCertRoutes(mux *routeMux, a authn, prefix string, readAction, write
 
 	// Asks for a new Let's Encrypt certificate now; it comes in the
 	// background like the first one.
-	mux.HandleFunc("POST "+prefix+"/renew", a.allow(writeAction, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST "+prefix+"/renew", t.op("renew", "Certificate", "Ask for a new Let's Encrypt certificate now", nil, t.out), a.allow(writeAction, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		out, err := t.renew(r.Context(), r, p.User.ID)
 		if err != nil {
 			t.fail(log, w, err, "renew certificate")
@@ -214,7 +238,7 @@ func registerCerts(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		del: func(ctx context.Context, r *http.Request, actor int64) (any, error) {
 			return siteOut(svc.DeleteCert(ctx, actor, site(r)))
 		},
-		fail: siteFail,
+		fail: siteFail, tag: "sites", noun: "Site", out: siteJSON{},
 	}, log)
 
 	park := func(r *http.Request) string { return r.PathValue("domain") }
@@ -245,7 +269,7 @@ func registerCerts(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		del: func(ctx context.Context, r *http.Request, actor int64) (any, error) {
 			return parkOut(svc.DeleteParkedCert(ctx, actor, park(r)))
 		},
-		fail: pageFail,
+		fail: pageFail, tag: "parked", noun: "Parked", out: parkedJSON{},
 	}, log)
 
 	panelOut := func(p hosting.PanelTLS, err error) (any, error) {
@@ -274,6 +298,6 @@ func registerCerts(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		renew: func(ctx context.Context, _ *http.Request, actor int64) (any, error) {
 			return panelOut(svc.RenewPanelNow(ctx, actor))
 		},
-		fail: siteFail,
+		fail: siteFail, tag: "panel", noun: "Panel", out: panelTLSJSON{},
 	}, log)
 }

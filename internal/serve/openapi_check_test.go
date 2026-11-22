@@ -36,6 +36,13 @@ func specRoutes() (routers.Router, error) {
 			return
 		}
 
+		// Downloads and streams are checked by content type only.
+		for _, ct := range []string{"application/zip", "application/x-ndjson"} {
+			if openapi3filter.RegisteredBodyDecoder(ct) == nil {
+				openapi3filter.RegisterBodyDecoder(ct, openapi3filter.FileBodyDecoder)
+			}
+		}
+
 		doc.Servers = openapi3.Servers{{URL: "/"}}
 		specRouter, errSpec = legacy.NewRouter(doc)
 	})

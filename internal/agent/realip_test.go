@@ -3,12 +3,18 @@
 package agent
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"net/netip"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/f2bproxies"
 	"github.com/maki-it/hostashi/internal/web"
 )
 
@@ -47,4 +53,39 @@ func TestRealIPFor(t *testing.T) {
 	if err := h.realIPFor(&web.Site{}, nil); err != nil {
 		t.Errorf("no setting: %v", err)
 	}
+}
+
+// web.apply hands every trusted proxy of the live sites to fail2ban's
+// never-ban list and removes the file when no site trusts one.
+func TestSyncProxyIgnore(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hostashi-proxies.local")
+	reloads := 0
+	h := &siteOps{log: slog.New(slog.DiscardHandler), f2b: &f2bproxies.File{Path: path, Reload: func(context.Context) error { reloads++; return nil }}}
+
+	d := web.Desired{Sites: []web.Site{
+		{User: "cf", RealIP: agentapi.WebRealIP{Cloudflare: true}},
+		{User: "lb", RealIP: agentapi.WebRealIP{Ranges: []string{"10.0.0.2"}}},
+		{User: "plain"},
+	}}
+
+	h.syncProxyIgnore(t.Context(), d)
+
+	b, err := os.ReadFile(path)
+	if err != nil || reloads != 1 {
+		t.Fatalf("%v, %d reloads", err, reloads)
+	}
+
+	for _, want := range []string{"10.0.0.2/32", "173.245.48.0/20", "2a06:98c0::/29"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("never-ban list lacks %s:\n%s", want, b)
+		}
+	}
+
+	h.syncProxyIgnore(t.Context(), web.Desired{Sites: []web.Site{{User: "plain"}}})
+
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) || reloads != 2 {
+		t.Errorf("file after the last proxy site: %v, %d reloads", err, reloads)
+	}
+
+	(&siteOps{}).syncProxyIgnore(t.Context(), d) // no fail2ban: nothing to do
 }

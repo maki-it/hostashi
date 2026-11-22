@@ -233,6 +233,7 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		if deps.Sites != nil {
 			registerSites(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerApps(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerCerts(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDatabases(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDBServers(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
@@ -558,6 +559,7 @@ func Run(ctx context.Context, cfg Config) error {
 	go deps.Sites.ApplyPendingLimits(ctx)
 
 	deps.Sites.EnableObjectCache(hosting.RPCAgent{C: client})
+	deps.Sites.EnableApps(hosting.RPCAgent{C: client})
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
 	m.RegisterSites(siteStats(client), cfg.Log)

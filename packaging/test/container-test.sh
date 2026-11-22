@@ -313,7 +313,22 @@ done
 [ "$(x systemctl is-active mariadb.service)" = active ] || fail "mariadb did not come back after a crash"
 after=$(x systemctl show -p NRestarts --value mariadb.service)
 [ "$after" -gt "$before" ] || fail "NRestarts did not grow ($before -> $after)"
-x /usr/local/bin/hostashi service list | grep -Eq "^mariadb +- +active \(running\) +$after " || fail "service list does not show the restart"
+# The list reads systemd at the time of the call; MariaDB may still settle
+# (a second automatic restart, a passing state), so wait for the list and
+# systemd to agree instead of comparing two reads taken apart.
+shown=
+for _ in $(seq 1 30); do
+  after=$(x systemctl show -p NRestarts --value mariadb.service)
+  svc=$(x /usr/local/bin/hostashi service list)
+  if grep -Eq "^mariadb +- +active \(running\) +$after " <<<"$svc"; then shown=1; break; fi
+  sleep 1
+done
+if [ -z "$shown" ]; then
+  echo "$svc"
+  x systemctl show -p NRestarts,ActiveState,SubState,MainPID,ActiveEnterTimestamp mariadb.service || true
+  x journalctl --no-pager -u mariadb -n 30 || true
+  fail "service list does not show the restart (systemd counts $after)"
+fi
 curl_ok=$(x curl -fsS http://127.0.0.1:8080/api/v1/health) || fail "panel gone after the service actions"
 grep -q '"agent":"ok"' <<<"$curl_ok" || fail "panel cannot reach the agent after the service actions"
 
@@ -1794,6 +1809,64 @@ x runuser -u nobody -- env HOME=/tmp PATH="/opt/hostashi/node/$NODE_MAJOR/bin:/u
 [ "$(api POST /api/v1/node/install "{\"major\":\"$NODE_MAJOR\"}")" = 409 ] || fail "second node install: $(x cat /tmp/api.out)"
 out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the Node.js install changed something"; }
+
+step "a Node.js site runs its app as the site user behind nginx (ADR-0054)"
+other_major=22; [ "$NODE_MAJOR" != 22 ] || other_major=24
+[ "$(api POST /api/v1/sites "{\"name\":\"nodeapp\",\"domains\":[\"nodeapp.example.com\"],\"type\":\"node\",\"node\":{\"version\":\"$other_major\"}}")" = 409 ] ||
+  fail "node site on a line that is not installed: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites "{\"name\":\"nodeapp\",\"domains\":[\"nodeapp.example.com\"],\"type\":\"node\",\"node\":{\"version\":\"$NODE_MAJOR\"}}")" = 201 ] ||
+  fail "create node site: $(x cat /tmp/api.out)"
+x grep -q '"port":20000' /tmp/api.out || fail "node site port: $(x cat /tmp/api.out)"
+# No start command yet: set up but stopped, nginx answers 502.
+x systemctl is-active --quiet hostashi-node@nodeapp.service && fail "app runs without a start command"
+[ "$(x curl -s -o /dev/null -w '%{http_code}' -H 'Host: nodeapp.example.com' http://127.0.0.1/)" = 502 ] || fail "stopped app does not answer 502"
+xi runuser -u nodeapp -- sh -c 'cat >/home/nodeapp/htdocs/server.js' <<'JS'
+const http = require("http");
+http.createServer((req, res) => {
+  console.log("request " + req.url);
+  res.end("hello from node " + process.getuid() + " " + process.env.NODE_ENV + "\n");
+}).listen(Number(process.env.PORT), process.env.HOST);
+JS
+[ "$(api PUT /api/v1/sites/nodeapp/node "{\"version\":\"$NODE_MAJOR\",\"startKind\":\"script\",\"start\":\"server.js\"}")" = 200 ] ||
+  fail "set start command: $(x cat /tmp/api.out)"
+[ "$(api PUT /api/v1/sites/nodeapp/node "{\"version\":\"$NODE_MAJOR\",\"startKind\":\"npm\",\"start\":\"start && id\"}")" = 422 ] ||
+  fail "shell text in the start command: $(x cat /tmp/api.out)"
+uid=$(x id -u nodeapp)
+body=""
+for _ in $(seq 1 30); do
+  body=$(x curl -fsS -H 'Host: nodeapp.example.com' http://127.0.0.1/ 2>/dev/null || true)
+  [ -n "$body" ] && break
+  sleep 1
+done
+[ "$body" = "hello from node $uid production" ] || fail "node app answer: '$body' $(x journalctl -u hostashi-node@nodeapp.service -n 20 --no-pager; x tail -n 20 /var/log/hostashi/app/nodeapp/app.log)"
+x systemctl is-enabled --quiet hostashi-node@nodeapp.service || fail "app unit not enabled"
+[ "$(x systemctl show -p User --value hostashi-node@nodeapp.service)" = nodeapp ] || fail "app unit user"
+[ "$(x systemctl show -p ControlGroup --value hostashi-node@nodeapp.service)" = "$(x systemctl show -p ControlGroup --value hostashi-site-nodeapp.slice)/hostashi-node@nodeapp.service" ] ||
+  fail "app runs outside the site's slice: $(x systemctl show -p ControlGroup --value hostashi-node@nodeapp.service)"
+# The app sees its own home only.
+# shellcheck disable=SC2016 # expanded inside the container
+homes=$(x sh -c 'nsenter -t "$(systemctl show -p MainPID --value hostashi-node@nodeapp.service)" -m ls -A /home')
+[ "$homes" = nodeapp ] || fail "the app sees other homes: $homes"
+expect_mode /var/log/hostashi/app/nodeapp "700 root:root"
+x grep -q 'request /' /var/log/hostashi/app/nodeapp/app.log || fail "app log: $(x cat /var/log/hostashi/app/nodeapp/app.log)"
+[ "$(api GET '/api/v1/sites/nodeapp/logs/app?lines=10')" = 200 ] || fail "app log over the API: $(x cat /tmp/api.out)"
+x grep -q 'request /' /tmp/api.out || fail "app log over the API lacks the request: $(x cat /tmp/api.out)"
+[ "$(api GET /api/v1/sites/nodeapp/app)" = 200 ] || fail "app status: $(x cat /tmp/api.out)"
+x grep -q '"state":"active"' /tmp/api.out || fail "app not active: $(x cat /tmp/api.out)"
+# Stop lasts: the unit is disabled and nginx answers 502.
+[ "$(api POST /api/v1/sites/nodeapp/app/stop)" = 200 ] || fail "stop app: $(x cat /tmp/api.out)"
+x systemctl is-active --quiet hostashi-node@nodeapp.service && fail "app still runs after stop"
+x systemctl is-enabled --quiet hostashi-node@nodeapp.service && fail "stopped app stays enabled"
+[ "$(x curl -s -o /dev/null -w '%{http_code}' -H 'Host: nodeapp.example.com' http://127.0.0.1/)" = 502 ] || fail "stopped app does not answer 502"
+[ "$(api POST /api/v1/sites/nodeapp/app/start)" = 200 ] || fail "start app: $(x cat /tmp/api.out)"
+x systemctl is-active --quiet hostashi-node@nodeapp.service || fail "app not running after start"
+# A crash restarts it.
+x systemctl kill -s KILL hostashi-node@nodeapp.service
+for _ in $(seq 1 20); do x systemctl is-active --quiet hostashi-node@nodeapp.service && break; sleep 1; done
+x systemctl is-active --quiet hostashi-node@nodeapp.service || fail "app not restarted after a crash"
+[ "$(api DELETE /api/v1/sites/nodeapp)" = 204 ] || fail "delete node site: $(x cat /tmp/api.out)"
+x test ! -e /etc/systemd/system/hostashi-node@nodeapp.service.d || fail "app drop-ins left after delete"
+x systemctl is-active --quiet hostashi-node@nodeapp.service && fail "app runs after delete"
 
 if [ -n "${PEBBLE_DIR:-}" ]; then
   step "a database on an external PostgreSQL server in the web database tool (ADR-0051)"

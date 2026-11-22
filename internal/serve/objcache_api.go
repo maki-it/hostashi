@@ -11,6 +11,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/openapi"
 )
 
 // objectCacheJSON is a site's object cache (ADR-0045). Status is null when
@@ -31,6 +32,18 @@ type objectCacheStatusJSON struct {
 	State     string `json:"state"`
 	Paused    bool   `json:"paused"`
 	UsedBytes uint64 `json:"usedBytes"`
+}
+
+type objectCacheFlushJSON struct {
+	Status *objectCacheStatusJSON `json:"status"`
+}
+
+type objectCacheRequest struct {
+	Enabled *bool `json:"enabled"`
+}
+
+type objectCacheSizeRequest struct {
+	MemoryMB *int `json:"memoryMb"`
 }
 
 func toObjectCacheJSON(site string, v hosting.ObjectCacheView) objectCacheJSON {
@@ -66,7 +79,9 @@ func cacheFail(log *slog.Logger, w http.ResponseWriter, err error, what string) 
 // route of its own for admins and managers, because the cache's memory
 // counts against the site's limit.
 func registerObjectCache(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/sites/{name}/object-cache", a.allow("sites.objectcache:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/object-cache", openapi.Operation{
+		ID: "getSiteObjectCache", Tag: "sites", Summary: "Get the site's object cache (Valkey)", Out: objectCacheJSON{},
+	}, a.allow("sites.objectcache:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -82,10 +97,10 @@ func registerObjectCache(mux *routeMux, a authn, svc *hosting.Service, log *slog
 		writeJSON(w, http.StatusOK, toObjectCacheJSON(site, v))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/object-cache", a.allow("sites.objectcache:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			Enabled *bool `json:"enabled"`
-		}
+	mux.Op("PUT /api/v1/sites/{name}/object-cache", openapi.Operation{
+		ID: "setSiteObjectCache", Tag: "sites", Summary: "Turn the site's object cache on or off", In: objectCacheRequest{}, Out: objectCacheJSON{},
+	}, a.allow("sites.objectcache:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in objectCacheRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -111,10 +126,10 @@ func registerObjectCache(mux *routeMux, a authn, svc *hosting.Service, log *slog
 		writeJSON(w, http.StatusOK, toObjectCacheJSON(site, v))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/object-cache/size", a.allow("sites.objectcache.size:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			MemoryMB *int `json:"memoryMb"`
-		}
+	mux.Op("PUT /api/v1/sites/{name}/object-cache/size", openapi.Operation{
+		ID: "setSiteObjectCacheSize", Tag: "sites", Summary: "Set the memory of the site's object cache", In: objectCacheSizeRequest{}, Out: objectCacheJSON{},
+	}, a.allow("sites.objectcache.size:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in objectCacheSizeRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -148,7 +163,9 @@ func registerObjectCache(mux *routeMux, a authn, svc *hosting.Service, log *slog
 	}))
 
 	// A flush restarts the cache: it is empty afterwards.
-	mux.HandleFunc("POST /api/v1/sites/{name}/object-cache/flush", a.allow("sites.objectcache:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST /api/v1/sites/{name}/object-cache/flush", openapi.Operation{
+		ID: "flushSiteObjectCache", Tag: "sites", Summary: "Empty the site's object cache", Out: objectCacheFlushJSON{},
+	}, a.allow("sites.objectcache:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -159,6 +176,6 @@ func registerObjectCache(mux *routeMux, a authn, svc *hosting.Service, log *slog
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"status": toObjectCacheStatusJSON(st)})
+		writeJSON(w, http.StatusOK, objectCacheFlushJSON{Status: toObjectCacheStatusJSON(st)})
 	}))
 }

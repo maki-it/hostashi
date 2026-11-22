@@ -3,7 +3,9 @@
 package agent
 
 import (
+	"context"
 	"fmt"
+	"net/netip"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -35,4 +37,24 @@ func (h *siteOps) realIPFor(site *web.Site, r *agentapi.WebRealIP) error {
 	site.RealIP = *r
 
 	return nil
+}
+
+// syncProxyIgnore writes fail2ban's never-ban list from the trusted
+// proxies of the live sites. The web change is already live, so a failure
+// is only logged; the next web.apply tries again.
+func (h *siteOps) syncProxyIgnore(ctx context.Context, d web.Desired) {
+	if h.f2b == nil {
+		return
+	}
+
+	var ps []netip.Prefix
+	for _, s := range d.Sites {
+		ps = append(ps, s.RealIP.Prefixes()...)
+	}
+
+	if changed, err := h.f2b.Sync(ctx, ps); err != nil {
+		h.log.ErrorContext(ctx, "fail2ban never-ban list of trusted proxies", "err", err)
+	} else if changed {
+		h.log.InfoContext(ctx, "fail2ban never-ban list of trusted proxies updated", "prefixes", len(ps))
+	}
 }
