@@ -228,3 +228,25 @@ func (r DBUserPasswordRequest) Validate() error {
 
 // DBUserPassword replaces the password of a user.
 var DBUserPassword = agentrpc.Op[DBUserPasswordRequest, DBUserResponse]{Name: "db.user.password"}
+
+// DBSizesRequest has no parameters.
+type DBSizesRequest struct{}
+
+// Validate accepts the empty request.
+func (DBSizesRequest) Validate() error { return nil }
+
+// DBSize is the size of one database: data and indexes of its tables as
+// MariaDB's information_schema reports them (ADR-0015).
+type DBSize struct {
+	Name  string `json:"name"`
+	Bytes int64  `json:"bytes"`
+}
+
+// DBSizesResponse lists the agent's databases with their size, sorted by
+// name.
+type DBSizesResponse struct {
+	Databases []DBSize `json:"databases"`
+}
+
+// DBSizes measures the databases of the agent's registry. It only reads.
+var DBSizes = agentrpc.Op[DBSizesRequest, DBSizesResponse]{Name: "db.sizes"}

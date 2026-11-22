@@ -22,6 +22,9 @@ type databaseJSON struct {
 	Server    string    `json:"server"`
 	Users     []string  `json:"users"`
 	CreatedAt time.Time `json:"createdAt"`
+	// SizeBytes is the size of a local database (ADR-0015), absent for
+	// external ones and when the measurement failed.
+	SizeBytes *int64 `json:"sizeBytes,omitempty"`
 }
 
 func toDatabaseJSON(d store.Database) databaseJSON {
@@ -31,6 +34,30 @@ func toDatabaseJSON(d store.Database) databaseJSON {
 	}
 
 	return databaseJSON{Name: d.Name, Site: d.Site, Server: d.Server, Users: u, CreatedAt: d.CreatedAt}
+}
+
+// withSize adds the size of a local database from sizes.
+func (j databaseJSON) withSize(sizes hosting.DBSizes) databaseJSON {
+	if j.Server != store.LocalDBServer {
+		return j
+	}
+
+	if b, ok := sizes.Bytes[j.Name]; ok {
+		j.SizeBytes = &b
+	}
+
+	return j
+}
+
+// dbSizes measures the local databases for a response. A failure only
+// leaves the sizes out.
+func dbSizes(r *http.Request, svc *hosting.Service, log *slog.Logger) hosting.DBSizes {
+	z, err := svc.DatabaseSizes(r.Context())
+	if err != nil && !errors.Is(err, hosting.ErrNoDBSizes) {
+		log.WarnContext(r.Context(), "measure database sizes", "err", err)
+	}
+
+	return z
 }
 
 // dbFail maps the database errors and hands the rest to siteFail.
@@ -96,10 +123,12 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 			return
 		}
 
+		sizes := dbSizes(r, svc, log)
+
 		out := make([]databaseJSON, 0, len(dbs))
 		for _, d := range dbs {
 			if sees == nil || sees(d.Site) {
-				out = append(out, toDatabaseJSON(d))
+				out = append(out, toDatabaseJSON(d).withSize(sizes))
 			}
 		}
 
@@ -122,7 +151,7 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 			return
 		}
 
-		writeJSON(w, http.StatusOK, toDatabaseJSON(d))
+		writeJSON(w, http.StatusOK, toDatabaseJSON(d).withSize(dbSizes(r, svc, log)))
 	}))
 
 	mux.HandleFunc("POST /api/v1/sites/{name}/databases", a.allow("databases:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {

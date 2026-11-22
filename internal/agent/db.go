@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -129,6 +131,30 @@ func (h *siteOps) registerDB(s *agentrpc.Server) {
 		return agentapi.DBListResponse{Databases: out}, nil
 	})
 
+	agentrpc.Handle(s, agentapi.DBSizes, func(ctx context.Context, _ agentrpc.Caller, _ agentapi.DBSizesRequest) (agentapi.DBSizesResponse, error) {
+		out := []agentapi.DBSize{}
+		if h.db == nil {
+			return agentapi.DBSizesResponse{Databases: out}, nil
+		}
+
+		sizes, err := h.db.Sizes(ctx)
+		if err != nil {
+			return agentapi.DBSizesResponse{}, mapDBError(err)
+		}
+
+		for name, b := range sizes {
+			out = append(out, agentapi.DBSize{Name: name, Bytes: b})
+		}
+
+		slices.SortFunc(out, func(a, b agentapi.DBSize) int { return strings.Compare(a.Name, b.Name) })
+
+		if len(out) > agentapi.MaxDatabases {
+			out = out[:agentapi.MaxDatabases]
+		}
+
+		return agentapi.DBSizesResponse{Databases: out}, nil
+	})
+
 	agentrpc.Handle(s, agentapi.DBUserCreate, func(ctx context.Context, _ agentrpc.Caller, req agentapi.DBUserCreateRequest) (agentapi.DBUserResponse, error) {
 		if h.db == nil {
 			return agentapi.DBUserResponse{}, errNoDB
@@ -211,7 +237,7 @@ func mapDBError(err error) error {
 		return &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "database or database user already exists on the server"}
 	case errors.Is(err, mariadb.ErrInvalid):
 		return &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: "invalid database name, user or password"}
-	case errors.Is(err, mariadb.ErrUnavailable):
+	case errors.Is(err, mariadb.ErrUnavailable), errors.Is(err, mariadb.ErrNoQuery):
 		return errNoDB
 	case errors.Is(err, mariadb.ErrBusy):
 		return &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "another import or export of this database is running"}

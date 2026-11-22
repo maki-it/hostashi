@@ -3,7 +3,9 @@
 package serve
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -172,5 +174,73 @@ func TestDatabaseDumpsOverHTTP(t *testing.T) {
 		if rec := e.do(t, o); rec.Code != tc.code {
 			t.Errorf("%s %s %s: %d, want %d: %s", tc.method, tc.path, tc.body, rec.Code, tc.code, rec.Body)
 		}
+	}
+}
+
+type stubSizer struct {
+	sizes map[string]int64
+	err   error
+}
+
+func (s stubSizer) DBSizes(context.Context) (map[string]int64, error) { return s.sizes, s.err }
+
+func TestDatabaseSizeOverHTTP(t *testing.T) {
+	e := newAPIWithAgent(t, &stubAgent{})
+	c := e.adminCookie(t)
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"shop","domains":["shop.example.com"]}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("create site: %d %s", rec.Code, rec.Body)
+	}
+
+	for _, n := range []string{"shop_wp", "shop_new"} {
+		if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/shop/databases", cookie: c, body: `{"name":"` + n + `"}`}); rec.Code != http.StatusCreated {
+			t.Fatalf("create database: %d %s", rec.Code, rec.Body)
+		}
+	}
+
+	get := func(path string) string {
+		t.Helper()
+
+		rec := e.do(t, reqOpts{method: "GET", path: path, cookie: c})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", path, rec.Code, rec.Body)
+		}
+
+		return rec.Body.String()
+	}
+
+	// Not measured: no size, the list still works.
+	if b := get("/api/v1/databases"); strings.Contains(b, "sizeBytes") {
+		t.Fatalf("without sizes: %s", b)
+	}
+
+	// The agent fails: still no size, still 200.
+	e.sites.EnableDBSizes(stubSizer{err: errors.New("agent down")})
+
+	if b := get("/api/v1/databases/shop_wp"); strings.Contains(b, "sizeBytes") {
+		t.Fatalf("agent down: %s", b)
+	}
+
+	// shop_new is not in the agent's answer yet: no size for it.
+	e.sites.EnableDBSizes(stubSizer{sizes: map[string]int64{"shop_wp": 5 << 20}})
+
+	var list struct {
+		Databases []databaseJSON `json:"databases"`
+	}
+	if err := json.Unmarshal([]byte(get("/api/v1/sites/shop/databases")), &list); err != nil || len(list.Databases) != 2 {
+		t.Fatalf("%+v %v", list, err)
+	}
+
+	for _, d := range list.Databases {
+		switch {
+		case d.Name == "shop_wp" && (d.SizeBytes == nil || *d.SizeBytes != 5<<20):
+			t.Fatalf("shop_wp: %+v", d)
+		case d.Name == "shop_new" && d.SizeBytes != nil:
+			t.Fatalf("shop_new: %+v", d)
+		}
+	}
+
+	if b := get("/api/v1/databases/shop_wp"); !strings.Contains(b, `"sizeBytes":5242880`) {
+		t.Fatalf("get: %s", b)
 	}
 }

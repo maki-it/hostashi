@@ -161,6 +161,9 @@ type Service struct {
 	cache  CacheAgent  // nil: no object caches (ADR-0045)
 	dbs    DBServers   // nil: only the local database server (ADR-0041)
 
+	dbSizer DBSizeAgent // nil: database sizes are not measured (ADR-0015)
+	dbSizes dbSizeCache
+
 	resolver     Resolver   // nil: net.DefaultResolver
 	remoteJobsMu sync.Mutex // serializes dropping the users of remote jobs
 

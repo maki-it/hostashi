@@ -60,6 +60,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0054 | Site types Node.js, reverse proxy and redirect | Accepted on 2026-11-22 ([adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md)) | No |
 | 0055 | Email notifications for service outages | Accepted on 2026-11-22 ([adr/0055](adr/0055-service-outage-notifications.md)) | No |
 | 0056 | Security headers per site | Accepted on 2026-11-22 ([adr/0056](adr/0056-security-headers-per-site.md)) | No |
+| 0057 | Database size and connection limits per site | Proposed ([adr/0057](adr/0057-database-size-and-connection-limits.md)) | No |
 
 ---
 
@@ -398,3 +399,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0056 Security headers per site
 
 **Full text (status Accepted, 2026-11-22, by Kim):** [adr/0056](adr/0056-security-headers-per-site.md). Summary: typed switches per site for `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` and `Content-Security-Policy` (enforce or report only), next to the existing HSTS switch. Rendered with `always` at the server level for every site type and repeated in each location that sets its own headers (also fixes lost HSTS with a header snippet); a switched-on header replaces the application's own via `fastcgi_hide_header`/`proxy_hide_header`. Own values checked in panel and agent against nginx injection. Default (Kim, 2026-11-22): new sites get `nosniff`, `SAMEORIGIN` and `strict-origin-when-cross-origin`; existing and imported sites unchanged. API `GET`/`PUT /api/v1/sites/{name}/headers`, action `sites.headers:write` for everyone with a grant for the site, migration 0048. No new agent operation, no new `os/exec` exception.
+
+## ADR-0057 Database size and connection limits per site
+
+**Full text (status Proposed, 2026-11-22):** [adr/0057](adr/0057-database-size-and-connection-limits.md). Summary: closes the database gap of ADR-0015. Two new limit values in the presets and per site (Kim, 2026-11-22): a warning threshold for the size of a site's local databases (`warning` 80 %, `critical` 95 %, email at 90 %, no enforcement) and `MAX_USER_CONNECTIONS` for each database user of the site. Seeds small 2 GiB / 20, medium 5 GiB / 40, large 10 GiB / 80 [E]. Read-only agent operation `db.sizes` (information_schema, data plus indexes, cached five minutes in the panel) and `db.site.limits.set` (fixed `ALTER USER ... WITH MAX_USER_CONNECTIONS`). External database servers left out in v1. Migration 0049.
