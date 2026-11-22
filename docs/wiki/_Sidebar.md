@@ -2,9 +2,13 @@
 
 - [Home](Home.md)
 - [Install](Install.md)
+- [First steps](First-steps.md)
 
 **Sites**
 
+- [Sites](Sites.md)
+- [Domains and HTTPS](Domains-and-HTTPS.md)
+- [SSH and SFTP](SSH-and-SFTP.md)
 - [Parked domains](Parked-domains.md)
 - [PHP settings](PHP-settings.md)
 - [Object cache](Object-cache.md)
@@ -19,6 +23,7 @@
 
 **Server**
 
+- [Users and roles](Users-and-roles.md)
 - [Services and dashboard](Services-and-dashboard.md)
 - [System settings](System-settings.md)
 - [Email notifications](Email-notifications.md)
