@@ -28,6 +28,8 @@
 #   --no-db-tool         no web database tool (Adminer on port 8444, ADR-0038); removes it if present
 #   --php-versions LIST  more PHP versions from sury.org next to the distribution's, comma-separated
 #                        from 7.4, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6 (7.4, 8.1 and 8.2 are legacy). Kept for later runs
+#   --auto-update        also install new Hostashi versions from its apt repository automatically,
+#                        with the daily security updates (ADR-0050); off by default
 #   --no-apt             install no packages; a step that needs a missing one fails and names it.
 #                        For runs from the hostashi package, whose dependencies are installed (ADR-0050)
 #
@@ -41,7 +43,8 @@
 # distribution guards SSH and the panel logins (ADR-0021). Site users log in
 # over SSH and SFTP with keys only (ADR-0032). An nftables firewall lets in
 # only SSH, the web and the panel, and security updates are installed
-# every day without a reboot (ADR-0033). More PHP versions come from
+# every day without a reboot (ADR-0033); with --auto-update also new
+# Hostashi versions (ADR-0050). More PHP versions come from
 # sury.org only with --php-versions, with the distribution's PHP pinned as
 # the default (ADR-0019).
 #
@@ -81,7 +84,7 @@ OPTIONS_FILE=${HOSTASHI_OPTIONS_FILE:-/etc/hostashi/install.options}
 PKG_BIN=${HOSTASHI_PKG_BIN:-/usr/bin/hostashi}
 
 PHP_REQUEST=""
-MODE=plan YES=no BINARY="" PANEL_DOMAIN="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no NO_FIREWALL=no
+MODE=plan YES=no BINARY="" PANEL_DOMAIN="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no NO_FIREWALL=no AUTO_UPDATE=no
 FW_ALLOW=()
 NO_DB_TOOL=no DB_TOOL_PORT=8444 NO_APT=no
 PHP_REQUEST_SET=no
@@ -994,6 +997,10 @@ uu_origins() {
   # The PostgreSQL client tools from apt.postgresql.org (ADR-0051): the same,
   # and the pin keeps everything but the client packages away.
   printf '\t"origin=apt.postgresql.org,archive=${distro_codename}-pgdg";\n'
+  # New Hostashi versions only with --auto-update (ADR-0050). The pin lets
+  # this repository provide the hostashi package only; the package's
+  # postinst keeps a database copy, sets up and waits for the panel.
+  [ "$AUTO_UPDATE" = no ] || printf '\t"origin=Hostashi,codename=stable";\n'
 }
 uu_render() {
   local origins
@@ -1508,8 +1515,9 @@ parse_args() {
       --firewall-allow) shift; FW_ALLOW+=("${1:-}");;
       --no-db-tool) NO_DB_TOOL=yes;;
       --no-apt) NO_APT=yes;;
+      --auto-update) AUTO_UPDATE=yes;;
       --php-versions) shift; PHP_REQUEST=${1:-}; PHP_REQUEST_SET=yes;;
-      *) echo "usage: $0 [plan | apply --yes | upgrade] --binary PATH [--no-apt] [--panel-domain NAME] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall] [--no-db-tool] [--php-versions LIST]" >&2; exit 64;;
+      *) echo "usage: $0 [plan | apply --yes | upgrade] --binary PATH [--no-apt] [--panel-domain NAME] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall] [--no-db-tool] [--php-versions LIST] [--auto-update]" >&2; exit 64;;
     esac
     shift
   done
@@ -1531,6 +1539,7 @@ saved_options() {
   for a in "${FW_ALLOW[@]}"; do echo "--firewall-allow $a"; done
   [ "$NO_DB_TOOL" = no ] || echo "--no-db-tool"
   [ "$PHP_REQUEST_SET" = no ] || echo "--php-versions $PHP_REQUEST"
+  [ "$AUTO_UPDATE" = no ] || echo "--auto-update"
 }
 
 # load_options reads OPTIONS_FILE into SAVED_ARGS. It refuses a file that
@@ -1551,7 +1560,7 @@ load_options() {
     val=""
     [ "$opt" = "$line" ] || val=${line#* }
     case "$opt" in
-      --allow-untested|--no-quota|--no-firewall|--no-db-tool)
+      --allow-untested|--no-quota|--no-firewall|--no-db-tool|--auto-update)
         [ -z "$val" ] || { log "REFUSED: $OPTIONS_FILE: '$opt' takes no value"; exit 2; }
         SAVED_ARGS+=("$opt");;
       --listen|--panel-port|--panel-domain|--firewall-allow|--php-versions)

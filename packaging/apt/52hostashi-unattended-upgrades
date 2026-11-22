@@ -2,7 +2,9 @@
 //
 // Managed by Hostashi (ADR-0033); the installer overwrites changes.
 // Security updates of the distribution are installed every day, nothing
-// else: no point releases, no third-party sources. The server never
+// else: no point releases, no third-party sources (except sury.org and
+// apt.postgresql.org when used, and the Hostashi repository with the
+// installer option --auto-update, ADR-0050). The server never
 // reboots by itself; `hostashi doctor` reports when a reboot is needed.
 // This file sorts after the package's 20auto-upgrades and
 // 50unattended-upgrades, so its values win and the #clear lines drop the
