@@ -99,5 +99,5 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions for Kim
 
-1. Python from python-build-standalone (source C), every line that has not ended (today 3.11–3.15)?
+1. ~~Python from python-build-standalone (source C), every line that has not ended (today 3.11–3.15)?~~ Decided (Kim, 2026-11-22): yes, pinned by SHA-256 and checked with Sigstore.
 2. Hostashi creates and owns `<home>/.venv` (environment A), and a line change rebuilds it?
