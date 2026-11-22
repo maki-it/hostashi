@@ -109,16 +109,23 @@ describe("SiteWebSettings", () => {
     expect(calls[0]?.body).toEqual({ dir: "", spa: false, assetCache: false, assetCacheSeconds: 3600, assetCacheExts: ["css"] });
   });
 
-  it("offers no static options for a PHP site and never sends them", async () => {
+  it("offers the asset cache but no single-page app for a PHP site", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({ "PUT /api/v1/sites/docs/web": (b: unknown) => ({ body: { ...site, web: b } }) });
-    render(<SiteWebSettings site={{ ...site, type: "php", php: "8.4", web: { dir: "", spa: true, assetCache: true } }} php={php} onChange={async () => undefined} />);
+    render(<SiteWebSettings site={{ ...site, type: "php", php: "8.4", web: { dir: "", spa: true, assetCache: false } }} php={php} onChange={async () => undefined} />);
     const card = within(screen.getByRole("region", { name: "Web root" }));
     expect(card.queryByLabelText(/^Single-page app/)).not.toBeInTheDocument();
     await user.type(card.getByLabelText("Folder below htdocs"), "public");
+    await user.click(card.getByLabelText(/^Cache assets/));
     await user.click(card.getByRole("button", { name: "Save web root" }));
     await card.findByRole("status");
-    expect(calls[0]?.body).toEqual({ dir: "public", spa: false, assetCache: false });
+    expect(calls[0]?.body).toEqual({
+      dir: "public",
+      spa: false,
+      assetCache: true,
+      assetCacheSeconds: assetCacheDefaults.seconds,
+      assetCacheExts: assetCacheDefaults.exts,
+    });
   });
 
   it("turns a static site into a PHP site with the newest standard version", async () => {

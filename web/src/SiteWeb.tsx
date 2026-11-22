@@ -124,7 +124,7 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
   async function save(e: FormEvent) {
     e.preventDefault();
     const list = parseExts(exts);
-    const problem = webDirProblem(dir) || (isStatic && assets ? assetCacheProblem(seconds, list) : "");
+    const problem = webDirProblem(dir) || (assets ? assetCacheProblem(seconds, list) : "");
     if (problem) {
       setError(problem);
       return;
@@ -133,7 +133,7 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
     setError("");
     setDone("");
     try {
-      const cache = isStatic && assets;
+      const cache = assets;
       await setWebOptions(site.name, {
         dir,
         spa: isStatic && spa,
@@ -172,9 +172,10 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
             />
           </div>
         </Field>
-        {isStatic ? (
-          <fieldset className="ui-fieldset ui-stack-tight">
-            <legend>Static site</legend>
+        {!isStatic && <p className="ui-hint ui-flush">For Laravel and similar frameworks, enter public.</p>}
+        <fieldset className="ui-fieldset ui-stack-tight">
+          <legend>Options</legend>
+          {isStatic && (
             <label className="ui-check ui-check-hint">
               <input type="checkbox" checked={spa} disabled={busy} onChange={(e) => setSpa(e.target.checked)} />
               <span>
@@ -182,66 +183,64 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
                 <span className="ui-hint ui-flush">Addresses without a file get index.html instead of 404, for apps with their own routing (React, Vue, Svelte).</span>
               </span>
             </label>
-            <label className="ui-check ui-check-hint">
-              <input type="checkbox" checked={assets} disabled={busy} onChange={(e) => setAssets(e.target.checked)} />
-              <span>
-                Cache assets in the browser
-                <span className="ui-hint ui-flush">
-                  Browsers keep the listed file types for the chosen time without asking again. Turn it on only if file names change with their
-                  content, as with most build tools; otherwise visitors see old files after a deploy.
-                </span>
+          )}
+          <label className="ui-check ui-check-hint">
+            <input type="checkbox" checked={assets} disabled={busy} onChange={(e) => setAssets(e.target.checked)} />
+            <span>
+              Cache assets in the browser
+              <span className="ui-hint ui-flush">
+                Browsers keep the listed file types for the chosen time without asking again. Turn it on only if file names or addresses change with
+                their content, as with most build tools and WordPress; otherwise visitors see old files after a deploy.
               </span>
-            </label>
-            {assets && (
-              <div className="ui-stack ui-indent">
-                <Field label="Cache time" hint="Between 1 minute and 365 days. Default: 30 days.">
-                  <div className="ui-row ui-row-tight">
-                    <input
-                      className="ui-input ui-input-num"
-                      type="number"
-                      min={1}
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      aria-label="Cache time"
-                    />
-                    <select className="ui-select" value={unit} onChange={(e) => setUnit(Number(e.target.value))} aria-label="Unit">
-                      {assetCacheUnits.map((u) => (
-                        <option key={u.value} value={u.value}>
-                          {u.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </Field>
-                <Field label="File types" hint="Separated by spaces or commas, without the dot. HTML stays fresh unless you add html.">
-                  <textarea
-                    className="ui-input ui-textarea ui-mono"
-                    value={exts}
-                    onChange={(e) => setExts(e.target.value)}
-                    rows={2}
-                    autoComplete="off"
-                    spellCheck={false}
+            </span>
+          </label>
+          {assets && (
+            <div className="ui-stack ui-indent">
+              <Field label="Cache time" hint="Between 1 minute and 365 days. Default: 30 days.">
+                <div className="ui-row ui-row-tight">
+                  <input
+                    className="ui-input ui-input-num"
+                    type="number"
+                    min={1}
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    aria-label="Cache time"
                   />
-                </Field>
-                <div className="ui-row">
-                  <Button
-                    disabled={busy}
-                    onClick={() => {
-                      const d = splitSeconds(assetCacheDefaults.seconds);
-                      setAmount(String(d.amount));
-                      setUnit(d.unit);
-                      setExts(assetCacheDefaults.exts.join(" "));
-                    }}
-                  >
-                    Use the defaults
-                  </Button>
+                  <select className="ui-select" value={unit} onChange={(e) => setUnit(Number(e.target.value))} aria-label="Unit">
+                    {assetCacheUnits.map((u) => (
+                      <option key={u.value} value={u.value}>
+                        {u.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
+              </Field>
+              <Field label="File types" hint="Separated by spaces or commas, without the dot. HTML stays fresh unless you add html.">
+                <textarea
+                  className="ui-input ui-textarea ui-mono"
+                  value={exts}
+                  onChange={(e) => setExts(e.target.value)}
+                  rows={2}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </Field>
+              <div className="ui-row">
+                <Button
+                  disabled={busy}
+                  onClick={() => {
+                    const d = splitSeconds(assetCacheDefaults.seconds);
+                    setAmount(String(d.amount));
+                    setUnit(d.unit);
+                    setExts(assetCacheDefaults.exts.join(" "));
+                  }}
+                >
+                  Use the defaults
+                </Button>
               </div>
-            )}
-          </fieldset>
-        ) : (
-          <p className="ui-hint ui-flush">For Laravel and similar frameworks, enter public.</p>
-        )}
+            </div>
+          )}
+        </fieldset>
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">

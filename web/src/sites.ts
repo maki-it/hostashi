@@ -47,8 +47,8 @@ export type Site = {
 export type SiteType = "static" | "php" | "node" | "app" | "proxy" | "redirect";
 
 /**
- * dir: folder below htdocs, "" for htdocs itself. spa and assetCache: static
- * sites only. assetCacheSeconds and assetCacheExts are the effective values
+ * dir: folder below htdocs, "" for htdocs itself. spa: static sites only;
+ * assetCache: static and PHP sites. assetCacheSeconds and assetCacheExts are the effective values
  * (the defaults when the site keeps them); older answers lack them.
  */
 export type SiteWeb = { dir: string; spa: boolean; assetCache: boolean; assetCacheSeconds?: number; assetCacheExts?: string[] };
@@ -56,7 +56,7 @@ export type SiteWeb = { dir: string; spa: boolean; assetCache: boolean; assetCac
 // Mirror of agentapi's asset cache bounds and defaults (ADR-0054).
 export const assetCacheDefaults = {
   seconds: 30 * 24 * 3600,
-  exts: ["css", "js", "mjs", "woff", "woff2", "ttf", "otf", "eot", "svg", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico"],
+  exts: ["css", "js", "mjs", "woff", "woff2", "ttf", "otf", "eot", "svg", "svgz", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "mp4", "webm", "ogg", "ogv"],
 };
 export const assetCacheUnits = [
   { value: 60, label: "minutes" },
