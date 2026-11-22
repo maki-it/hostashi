@@ -1954,6 +1954,27 @@ done
 [ "$(api PUT /api/v1/sites/progapp/node "{\"version\":\"$NODE_MAJOR\"}")" = 409 ] || fail "Node.js settings on an app site: $(x cat /tmp/api.out)"
 [ "$(api POST /api/v1/sites/progapp/app/stop)" = 200 ] || fail "stop app: $(x cat /tmp/api.out)"
 x systemctl is-active --quiet hostashi-app@progapp.service && fail "app still runs after stop"
+
+step "a site changes its type, the account and its files stay (ADR-0054 addendum 3)"
+x runuser -u progapp -- sh -c 'echo static-page >/home/progapp/htdocs/index.html'
+[ "$(api POST /api/v1/sites/progapp/type '{"type":"static"}')" = 200 ] || fail "to static: $(x cat /tmp/api.out)"
+x test ! -e /etc/systemd/system/hostashi-app@progapp.service.d || fail "app drop-ins left after the change to static"
+[ "$(x curl -fsS -H 'Host: progapp.example.com' http://127.0.0.1/)" = static-page ] || fail "static answer after the change"
+[ "$(api POST /api/v1/sites/progapp/type '{"type":"redirect","redirect":{"target":"https://example.org/moved","status":302}}')" = 200 ] ||
+  fail "to redirect: $(x cat /tmp/api.out)"
+x grep -q '"account":true' /tmp/api.out || fail "redirect lost the account: $(x cat /tmp/api.out)"
+loc=$(x curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' -H 'Host: progapp.example.com' http://127.0.0.1/a)
+[ "$loc" = "302 https://example.org/moved" ] || fail "redirect after the change: $loc"
+x id progapp >/dev/null || fail "account gone with the change to redirect"
+x test -x /home/progapp/bin/server || fail "files gone with the change to redirect"
+[ "$(api POST /api/v1/sites/progapp/type '{"type":"app","app":{"program":"bin/server","args":["--back"]}}')" = 200 ] ||
+  fail "back to app: $(x cat /tmp/api.out)"
+for _ in $(seq 1 30); do
+  body=$(x curl -fsS -H 'Host: progapp.example.com' http://127.0.0.1/ 2>/dev/null || true)
+  [ "$body" = "{\"uid\":$uid,\"args\":[\"--back\"],\"env\":\"\"}" ] && break
+  sleep 1
+done
+[ "$body" = "{\"uid\":$uid,\"args\":[\"--back\"],\"env\":\"\"}" ] || fail "app after the change back: '$body'"
 [ "$(api DELETE /api/v1/sites/progapp)" = 204 ] || fail "delete app site: $(x cat /tmp/api.out)"
 x test ! -e /etc/systemd/system/hostashi-app@progapp.service.d || fail "app drop-ins left after delete"
 # A line no app runs on can be removed; one in use cannot.

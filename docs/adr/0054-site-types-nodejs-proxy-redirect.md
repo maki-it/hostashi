@@ -205,7 +205,17 @@ Notes on how the app type of addendum 2 is built; they change no decision.
 - The agent writes `ExecStart=<home>/<program>` and every argument in double quotes, with `\` and `"` escaped and `%` and `$` doubled, so systemd neither splits, expands nor reads a lone `;` [V: `appunit.Quote`, container test with spaces, quotes, `$HOME`, `%`, `;` and a backslash].
 - Before it starts the program, the agent checks through `os.Root` that it is a regular file below the home, not a symbolic link, with an execute bit and owned by the site user. Otherwise the unit stays stopped and `GET /api/v1/sites/{name}/app` says why in `problem`; a start answers 409 with the same text. The check is for the message only: the site user may change the file at any time, and the program runs as the site user anyway.
 - The environment has `HOST=127.0.0.1`, `PORT`, `HOME`, `USER`, `LOGNAME` and a `PATH` without Node.js; no `NODE_ENV`. The unit `hostashi-app@<site>.service` has the sandbox of `hostashi-node@`, without `MemoryDenyWriteExecute=` for runtimes with a JIT.
-- Panel: New site offers the type App (program, arguments one per line, working directory); the Web tab shows the state, the command line and why the program does not start, with Start, Stop and Restart (screenshots approved by Kim, 2026-11-22). Not yet: changing a site between the types.
+- Panel: New site offers the type App (program, arguments one per line, working directory); the Web tab shows the state, the command line and why the program does not start, with Start, Stop and Restart (screenshots approved by Kim, 2026-11-22).
+
+## Implementation notes: changing the type (2026-11-22)
+
+Notes on how addendum 3 is built; they change no decision.
+
+- `POST /api/v1/sites/{name}/type` takes `type` and the settings of that type with the fields of create: `php`, `redirect`, `proxy`, `node` or `app`; `static` takes none. Settings of another type, the type the site already has, and a missing setting answer 422. Action `sites.type:write` (scope `sites:write`) for admins and managers, not users: a change from a redirect or reverse proxy creates a Linux account, as a new site does. Audit `site.type` with the type and its settings before and after [V: `internal/serve/sitetype_api_test.go`].
+- The store writes the type, the PHP version (only for `php`, cleared otherwise), the account flag and the settings of the new type in one transaction (`store.SetSiteType`), and returns the old values for the undo. A Node.js or app site keeps its port when it changes between `node` and `app`; any other type frees it. Redirect, proxy and app settings stay stored while unused; the page cache and PHP settings of a former PHP site stay too, and are not sent without a PHP version.
+- Order: store, then the account (with the default limit preset, as on create) and the app, then one `web.apply`, then the old app is removed. If the account, the app or `web.apply` fails, the old type is stored again, the old app applied again or the new one removed, and a just created account removed again. A failed removal of the old app is logged; `POST /api/v1/web/sync` removes leftover apps of sites that no longer run one.
+- To remove a just created account while the site is still served as a redirect or proxy, `site.delete` gets `accountOnly`: the agent then allows it while the live web state serves the site only that way, and keeps the certificate. Not a new operation and no new `os/exec` exception [V: `internal/agent/redirect_test.go`].
+- Not yet: "Remove account and files" for a redirect or proxy site that kept its account, and the panel's "Change type" dialog.
 
 ## Implementation notes: removing a Node.js line (2026-11-22)
 

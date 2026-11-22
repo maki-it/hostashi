@@ -5634,6 +5634,58 @@
         },
         "type": "object"
       },
+      "SiteTypeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "app": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProgramAppInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "node": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeAppInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "php": {
+            "type": "string"
+          },
+          "proxy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProxyInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "redirect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RedirectInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "SiteWebRequest": {
         "additionalProperties": false,
         "properties": {
@@ -17800,6 +17852,69 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites.tls:write"
+      }
+    },
+    "/api/v1/sites/{name}/type": {
+      "post": {
+        "operationId": "setSiteType",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteTypeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Change the type of a site; the account and its files stay",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.type:write"
       }
     },
     "/api/v1/sites/{name}/web": {

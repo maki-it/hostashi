@@ -41,6 +41,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 | Site type reverse proxy | P0 | A | CP | |
 | Site type app (one executable, for example a Go or Rust service) | P1 | A | NEW | ADR-0054 addendum 2: own unit, port and filter like Node.js |
 | Site type redirect (all requests to one target URL) | P1 | B | NEW | Without webroot and without site user |
+| Change the type of a site at any time | P1 | A | NEW | ADR-0054 addendum 3: account and files stay |
 | Site type Python (WSGI/ASGI, venv) | P1 | B | CP | |
 | WordPress quick install (WP-CLI) | P1 | B | CP | |
 | Linux user per site, home layout, permission reset | P0 | A | CP | |

@@ -89,6 +89,11 @@ var SiteCreate = agentrpc.Op[SiteCreateRequest, SiteInfo]{Name: "site.create"}
 // SiteDeleteRequest names the site to remove.
 type SiteDeleteRequest struct {
 	User string `json:"user"`
+	// AccountOnly removes the account with its home, files and runtime
+	// but keeps the certificate, for a site that stays as a redirect or
+	// reverse proxy (ADR-0054 addendum 3). The live web state may serve
+	// the site only that way.
+	AccountOnly bool `json:"accountOnly,omitempty"`
 }
 
 // Validate checks the request.

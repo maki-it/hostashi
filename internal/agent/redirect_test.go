@@ -5,6 +5,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -50,4 +51,39 @@ func TestWebApplyRedirectNeedsNoAccount(t *testing.T) {
 		{User: "old", Domains: []string{"old.example.com"}, Redirect: &agentapi.WebRedirect{Target: "https://old.example.com", Status: 301}},
 	}})
 	wantCode(t, err, agentrpc.CodeInvalidArgument)
+}
+
+// A site that became a redirect keeps its account until it is removed on
+// its own; the redirect stays live (ADR-0054 addendum 3).
+func TestSiteDeleteAccountOnly(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "web")
+	c, pool := startSiteAgentWith(t, &web.Reconciler{Base: base})
+	ctx := context.Background()
+
+	if _, err := agentapi.SiteCreate.Call(ctx, c, agentapi.SiteCreateRequest{User: "old"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Served from its home: the account stays in any case.
+	fakeLiveGeneration(t, base, `{"sites":[{"user":"old","domains":["old.example.com"],"root":"/x"}]}`)
+
+	_, err := agentapi.SiteDelete.Call(ctx, c, agentapi.SiteDeleteRequest{User: "old", AccountOnly: true})
+	wantCode(t, err, agentrpc.CodePrecondition)
+
+	// Served as a redirect: only the account may go.
+	live := `{"sites":[{"user":"old","domains":["old.example.com"],"redirect":{"target":"https://new.example.com","status":301}}]}`
+	if err := os.WriteFile(filepath.Join(base, "generations", "1", "desired.json"), []byte(live), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = agentapi.SiteDelete.Call(ctx, c, agentapi.SiteDeleteRequest{User: "old"})
+	wantCode(t, err, agentrpc.CodePrecondition)
+
+	if _, err := agentapi.SiteDelete.Call(ctx, c, agentapi.SiteDeleteRequest{User: "old", AccountOnly: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Lstat(filepath.Join(pool, "old")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("home still there: %v", err)
+	}
 }
