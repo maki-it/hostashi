@@ -237,6 +237,14 @@ describe("Database list", () => {
     expect(within(within(table).getByRole("link", { name: "shop_db" }).closest("tr")!).getByText("No users")).toBeInTheDocument();
   });
 
+  it("shows the size of local databases and marks the ones without", async () => {
+    mockFetch({ ...sites, "GET /api/v1/databases": { body: { databases: [{ ...blogWp, sizeBytes: 3 * 1024 ** 2 }, shopDb] } } });
+    render(<Harness />);
+    const table = await screen.findByRole("table", { name: "Databases" });
+    expect(within(within(table).getByRole("link", { name: "blog_wp" }).closest("tr")!).getByText("3 MiB")).toBeInTheDocument();
+    expect(within(within(table).getByRole("link", { name: "shop_db" }).closest("tr")!).getByText("Not measured")).toBeInTheDocument();
+  });
+
   it("filters by text and site and sorts, keeping both in the address", async () => {
     const user = userEvent.setup();
     mockFetch({ ...sites, "GET /api/v1/databases": { body: { databases: [shopDb, blogWp] } } });

@@ -37,7 +37,9 @@ type Agent interface {
 	TLSDelete(ctx context.Context, user string) error
 	DBCreate(ctx context.Context, site, name string) error
 	DBDelete(ctx context.Context, name string) error
-	DBUserCreate(ctx context.Context, database, user, password string) error
+	// DBUserCreate creates a user with MAX_USER_CONNECTIONS maxConn, 0:
+	// unlimited (ADR-0057).
+	DBUserCreate(ctx context.Context, database, user, password string, maxConn uint32) error
 	DBUserDelete(ctx context.Context, user string) error
 	DBUserPassword(ctx context.Context, user, password string) error
 	DBImport(ctx context.Context, database, path string) (agentapi.DBJob, error)

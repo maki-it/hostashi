@@ -32,6 +32,8 @@ const small: Limits = {
   tasks: 128,
   cpuPriority: "normal",
   cpuQuotaPercent: 0,
+  databaseBytes: 2 * GiB,
+  databaseConnections: 20,
   unlimited: [],
 };
 const medium: Limits = { ...small, diskBytes: 25 * GiB, diskInodes: 1000000, memoryBytes: GiB, phpWorkers: 10, tasks: 256, cpuPriority: "high" };
@@ -76,6 +78,9 @@ describe("limits helpers", () => {
     expect(limitsOf({ ...f, cpuCores: "-1" })).toMatch(/CPU cores must be a number/);
     expect(limitsOf({ ...f, cpuCores: "0.125" })).toMatch(/CPU cores must be a number/);
     expect(limitsOf({ ...f, cpuCores: "1001" })).toMatch(/at most 1,000/);
+    expect(limitsOf({ ...f, dbGiB: "0" })).toMatch(/Database size must be between 1/);
+    expect(limitsOf({ ...f, dbConnections: "10001" })).toMatch(/Database connections must be between 1 and 10,000/);
+    expect(limitsOf({ ...f, dbUnlimited: true, dbConnectionsUnlimited: true })).toMatchObject({ databaseBytes: 0, databaseConnections: 0 });
     const half = limitsOf({ ...f, cpuCores: "1,5" });
     expect(typeof half === "object" && half.cpuQuotaPercent).toBe(150);
     expect(fieldsOf({ ...small, cpuQuotaPercent: 250 }).cpuCores).toBe("2.5");
@@ -95,7 +100,7 @@ describe("LimitSettings", () => {
     expect(facts.getByText("512 MiB")).toBeInTheDocument();
     expect(facts.getByText("Normal priority, no hard limit")).toBeInTheDocument();
     expect(screen.getByText("Filling up")).toBeInTheDocument();
-    expect(within(screen.getByLabelText("Disk use")).getByText(/9 GiB of 10 GiB \(90 %\)/)).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Use")).getByText(/9 GiB of 10 GiB \(90 %\)/)).toBeInTheDocument();
   });
 
   it("warns when a disk limit is almost reached", async () => {
@@ -104,6 +109,26 @@ describe("LimitSettings", () => {
     render(<LimitSettings site={site} />);
     expect(await screen.findByText("Almost full")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(/95 % or more/);
+  });
+
+  it("shows the size of the site's databases against the warning", async () => {
+    const withDB = { ...onSmall, databaseUsage: { bytes: 1.5 * GiB, databases: 2, percent: 75, level: "ok" as const, measuredAt: 1795600000 } };
+    mockFetch({ ...list, ["GET " + base]: { body: withDB } });
+    render(<LimitSettings site={site} />);
+    const facts = within(await screen.findByLabelText("Use"));
+    expect(facts.getByText(/1.5 GiB of 2 GiB \(75 %\)/)).toBeInTheDocument();
+    expect(facts.getByText(/in 2 databases/)).toBeInTheDocument();
+    const limits = within(screen.getByLabelText("Limits of blog"));
+    expect(limits.getByText("warning at 2 GiB")).toBeInTheDocument();
+    expect(limits.getByText("20 per database user")).toBeInTheDocument();
+  });
+
+  it("warns when the databases reach the warning size, and says nothing stops them", async () => {
+    const full = { ...onSmall, databaseUsage: { bytes: 2 * GiB, databases: 1, percent: 100, level: "critical" as const, measuredAt: 1795600000 } };
+    mockFetch({ ...list, ["GET " + base]: { body: full } });
+    render(<LimitSettings site={site} />);
+    expect(await screen.findByText("Above the warning")).toBeInTheDocument();
+    expect(screen.getByText(/keep growing and fill the server's disk/)).toBeInTheDocument();
   });
 
   it("marks unlimited values and says when disk limits are not enforced", async () => {

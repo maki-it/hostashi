@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -246,7 +247,14 @@ func (m *Manager) Delete(ctx context.Context, name string) error {
 // CreateUser creates a user that has all privileges on database and nothing
 // else, and can log in only through the local socket.
 func (m *Manager) CreateUser(ctx context.Context, database, user, password string) error {
-	if err := (agentapi.DBUserCreateRequest{Database: database, User: user, Password: password}).Validate(); err != nil {
+	return m.CreateUserLimited(ctx, database, user, password, 0)
+}
+
+// CreateUserLimited is CreateUser with MAX_USER_CONNECTIONS maxConn, 0 for
+// unlimited (ADR-0057).
+func (m *Manager) CreateUserLimited(ctx context.Context, database, user, password string, maxConn uint32) error {
+	req := agentapi.DBUserCreateRequest{Database: database, User: user, Password: password, MaxConnections: maxConn}
+	if err := req.Validate(); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 
@@ -278,7 +286,12 @@ func (m *Manager) CreateUser(ctx context.Context, database, user, password strin
 	}
 
 	// Without IF NOT EXISTS: an existing account must fail here.
-	if err := m.exec(ctx, "create user", "CREATE USER "+acct+" IDENTIFIED BY "+pw); err != nil {
+	create := "CREATE USER " + acct + " IDENTIFIED BY " + pw
+	if maxConn > 0 {
+		create += " WITH MAX_USER_CONNECTIONS " + strconv.FormatUint(uint64(maxConn), 10)
+	}
+
+	if err := m.exec(ctx, "create user", create); err != nil {
 		return err
 	}
 

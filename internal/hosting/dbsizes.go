@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 // dbSizesFor is how long a measurement of the database sizes is reused:
@@ -82,4 +83,43 @@ func (s *Service) DatabaseSizes(ctx context.Context) (DBSizes, error) {
 	c.last = DBSizes{Bytes: b, MeasuredAt: now}
 
 	return c.last, nil
+}
+
+// DatabaseUsage is the size of a site's local databases.
+type DatabaseUsage struct {
+	Bytes      int64
+	Databases  int // local databases counted
+	MeasuredAt time.Time
+}
+
+// SiteDatabaseUsage adds up the sizes of the site's local databases. A
+// site without local databases uses 0 bytes.
+func (s *Service) SiteDatabaseUsage(ctx context.Context, name string) (DatabaseUsage, error) {
+	site, err := s.Get(ctx, name)
+	if err != nil {
+		return DatabaseUsage{}, err
+	}
+
+	dbs, err := s.st.Databases(ctx, site.Name)
+	if err != nil {
+		return DatabaseUsage{}, err
+	}
+
+	z, err := s.DatabaseSizes(ctx)
+	if err != nil {
+		return DatabaseUsage{}, err
+	}
+
+	u := DatabaseUsage{MeasuredAt: z.MeasuredAt}
+
+	for _, d := range dbs {
+		if d.Server != store.LocalDBServer {
+			continue
+		}
+
+		u.Bytes += z.Bytes[d.Name]
+		u.Databases++
+	}
+
+	return u, nil
 }

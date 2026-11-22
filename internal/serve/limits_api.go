@@ -19,26 +19,39 @@ import (
 // phpWorkers; "unlimited" names every limit that is 0, so a client can mark
 // it visibly.
 type limitsJSON struct {
-	DiskBytes       int64    `json:"diskBytes"`
-	DiskInodes      int64    `json:"diskInodes"`
-	MemoryBytes     int64    `json:"memoryBytes"`
-	PHPWorkers      int64    `json:"phpWorkers"`
-	Tasks           int64    `json:"tasks"`
-	CPUPriority     string   `json:"cpuPriority"`     // low, normal, high
-	CPUQuotaPercent int64    `json:"cpuQuotaPercent"` // 0: no hard CPU limit
-	Unlimited       []string `json:"unlimited,omitempty"`
+	DiskBytes       int64  `json:"diskBytes"`
+	DiskInodes      int64  `json:"diskInodes"`
+	MemoryBytes     int64  `json:"memoryBytes"`
+	PHPWorkers      int64  `json:"phpWorkers"`
+	Tasks           int64  `json:"tasks"`
+	CPUPriority     string `json:"cpuPriority"`     // low, normal, high
+	CPUQuotaPercent int64  `json:"cpuQuotaPercent"` // 0: no hard CPU limit
+	// DatabaseBytes warns about the size of the site's local databases,
+	// it is not enforced (ADR-0057).
+	DatabaseBytes int64 `json:"databaseBytes"`
+	// DatabaseConnections is MAX_USER_CONNECTIONS of each database user.
+	DatabaseConnections int64    `json:"databaseConnections"`
+	Unlimited           []string `json:"unlimited,omitempty"`
 }
 
 func toLimitsJSON(l store.Limits) limitsJSON {
 	out := limitsJSON{
 		DiskBytes: l.DiskBytes, DiskInodes: l.DiskInodes, MemoryBytes: l.MemoryBytes, PHPWorkers: l.PHPWorkers,
-		Tasks: l.Tasks, CPUPriority: l.CPUPriority, CPUQuotaPercent: l.CPUQuotaPercent, Unlimited: []string{},
+		Tasks: l.Tasks, CPUPriority: l.CPUPriority, CPUQuotaPercent: l.CPUQuotaPercent,
+		DatabaseBytes: l.DatabaseBytes, DatabaseConnections: l.DatabaseConnections, Unlimited: []string{},
 	}
 
 	for _, u := range []struct {
 		name string
 		v    int64
-	}{{"diskBytes", l.DiskBytes}, {"diskInodes", l.DiskInodes}, {"memoryBytes", l.MemoryBytes}, {"tasks", l.Tasks}} {
+	}{
+		{"diskBytes", l.DiskBytes},
+		{"diskInodes", l.DiskInodes},
+		{"memoryBytes", l.MemoryBytes},
+		{"tasks", l.Tasks},
+		{"databaseBytes", l.DatabaseBytes},
+		{"databaseConnections", l.DatabaseConnections},
+	} {
 		if u.v == 0 {
 			out.Unlimited = append(out.Unlimited, u.name)
 		}
@@ -51,6 +64,7 @@ func (l limitsJSON) limits() store.Limits {
 	return store.Limits{
 		DiskBytes: l.DiskBytes, DiskInodes: l.DiskInodes, MemoryBytes: l.MemoryBytes, PHPWorkers: l.PHPWorkers,
 		Tasks: l.Tasks, CPUPriority: l.CPUPriority, CPUQuotaPercent: l.CPUQuotaPercent,
+		DatabaseBytes: l.DatabaseBytes, DatabaseConnections: l.DatabaseConnections,
 	}
 }
 
@@ -142,6 +156,32 @@ type siteLimitsJSON struct {
 	ApplyError string     `json:"applyError"` // why the last apply failed
 	UpdatedAt  int64      `json:"updatedAt"`
 	Usage      *usageJSON `json:"usage,omitempty"`
+	// DatabaseUsage is the size of the site's local databases (ADR-0057).
+	DatabaseUsage *dbUsageJSON `json:"databaseUsage,omitempty"`
+}
+
+type dbUsageJSON struct {
+	Bytes      int64  `json:"bytes"`
+	Databases  int    `json:"databases"`  // local databases counted
+	Percent    int    `json:"percent"`    // of databaseBytes; 0 without a threshold
+	Level      string `json:"level"`      // ok, warning, critical
+	MeasuredAt int64  `json:"measuredAt"` // Unix seconds
+}
+
+func toDBUsageJSON(u hosting.DatabaseUsage, threshold int64) dbUsageJSON {
+	out := dbUsageJSON{Bytes: u.Bytes, Databases: u.Databases, Level: "ok", MeasuredAt: u.MeasuredAt.Unix()}
+	if threshold > 0 && u.Bytes >= 0 {
+		out.Percent = percent(uint64(u.Bytes), uint64(threshold))
+	}
+
+	switch {
+	case out.Percent >= usageCriticalPercent:
+		out.Level = "critical"
+	case out.Percent >= usageWarnPercent:
+		out.Level = "warning"
+	}
+
+	return out
 }
 
 func toSiteLimitsJSON(v hosting.SiteLimitsView) siteLimitsJSON {
@@ -283,6 +323,13 @@ func registerLimits(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 			out.Usage = &u
 		} else if !errors.Is(err, hosting.ErrNoLimits) {
 			log.WarnContext(r.Context(), "site usage", "site", site, "err", err)
+		}
+
+		if du, err := svc.SiteDatabaseUsage(ctx, site); err == nil {
+			j := toDBUsageJSON(du, v.Limits.DatabaseBytes)
+			out.DatabaseUsage = &j
+		} else if !errors.Is(err, hosting.ErrNoDBSizes) {
+			log.WarnContext(r.Context(), "site database usage", "site", site, "err", err)
 		}
 
 		writeJSON(w, http.StatusOK, out)

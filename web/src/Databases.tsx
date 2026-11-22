@@ -36,6 +36,7 @@ import { poll } from "./backups";
 import { OpenToolDialog } from "./DBTool";
 import { ToolSessions } from "./DBToolSessions";
 import { getDBTool, type DBToolStatus } from "./dbtool";
+import { formatBytes } from "./limits";
 import { formatHash } from "./routes";
 import { Button, Card, Field, IconButton, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
 
@@ -87,6 +88,12 @@ const columns = (onOpen?: (db: string) => void): Column<Database>[] => [
     header: "Users",
     sortValue: (d) => d.users.length,
     cell: (d) => (d.users.length === 0 ? <span className="ui-hint">No users</span> : <span className="ui-mono">{d.users.join(", ")}</span>),
+  },
+  {
+    key: "size",
+    header: "Size",
+    sortValue: (d) => d.sizeBytes ?? -1,
+    cell: (d) => (d.sizeBytes === undefined ? <span className="ui-hint">Not measured</span> : formatBytes(d.sizeBytes)),
   },
   { key: "created", header: "Created", sortValue: (d) => d.createdAt, cell: (d) => <RelTime iso={d.createdAt} /> },
   {

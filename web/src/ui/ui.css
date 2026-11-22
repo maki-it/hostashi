@@ -248,6 +248,29 @@
   text-transform: var(--label-tf);
   color: var(--muted);
 }
+/* A group of form fields with a heading, one rule above each but the first */
+.ui-group {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+.ui-group:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+.ui-fieldset.ui-group > legend {
+  float: left;
+  width: 100%;
+  margin-bottom: 0;
+  font-family: var(--font-head);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: var(--head-ls);
+  text-transform: none;
+  color: var(--fg);
+}
+.ui-fieldset.ui-group > legend + * {
+  clear: both;
+}
 .ui-hint {
   margin: 0;
   font-size: 13px;

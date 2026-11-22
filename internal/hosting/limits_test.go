@@ -17,10 +17,28 @@ type fakeLimits struct {
 	quotas  map[string][2]uint64
 	noQuota bool
 	fail    error
+	// conns records db.site.connections.set; noDB answers it like a
+	// server without MariaDB, connFail fails it.
+	conns    map[string]uint32
+	noDB     bool
+	connFail error
 }
 
 func newFakeLimits() *fakeLimits {
-	return &fakeLimits{slices: map[string]agentapi.SiteLimits{}, quotas: map[string][2]uint64{}}
+	return &fakeLimits{slices: map[string]agentapi.SiteLimits{}, quotas: map[string][2]uint64{}, conns: map[string]uint32{}}
+}
+
+func (f *fakeLimits) DBSiteConnections(_ context.Context, site string, n uint32) error {
+	switch {
+	case f.noDB:
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "MariaDB is not available on this server"}
+	case f.connFail != nil:
+		return f.connFail
+	}
+
+	f.conns[site] = n
+
+	return nil
 }
 
 func (f *fakeLimits) SiteLimitsSet(_ context.Context, user string, l agentapi.SiteLimits) error {
@@ -397,5 +415,118 @@ func TestCreateWithUsage(t *testing.T) {
 
 	if v, _ := s.SiteLimits(ctx, "tiny"); v.Preset != "small" {
 		t.Errorf("small import should follow the default preset: %+v", v)
+	}
+}
+
+// The database connection limit (ADR-0057) goes out with the other limits
+// and with every new local database user.
+func TestDatabaseConnectionLimits(t *testing.T) {
+	s, fa, _ := newService(t)
+	ctx := t.Context()
+	ag := newFakeLimits()
+	s.EnableLimits(ag)
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "shop", Domains: []string{"shop.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if ag.conns["shop"] != 20 {
+		t.Fatalf("new site: %v", ag.conns)
+	}
+
+	if _, _, err := s.CreateDatabase(ctx, 1, NewDatabase{Site: "shop", Name: "shop_wp", User: "shop_wp"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if fa.userMax["shop_wp"] != 20 {
+		t.Fatalf("user: %v", fa.userMax)
+	}
+
+	custom := store.Limits{PHPWorkers: 5, CPUPriority: "normal", DatabaseConnections: 7}
+	if _, err := s.SetSiteLimits(ctx, 1, "shop", "", &custom); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.CreateDatabaseUser(ctx, 1, "shop_wp", "second", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if ag.conns["shop"] != 7 || fa.userMax["second"] != 7 {
+		t.Fatalf("custom: %v %v", ag.conns, fa.userMax)
+	}
+
+	// No MariaDB on the server: the other limits still count as applied.
+	ag.noDB = true
+
+	v, err := s.SetSiteLimits(ctx, 1, "shop", "small", nil)
+	if err != nil || v.AppliedAt.IsZero() || v.ApplyError != "" {
+		t.Fatalf("without MariaDB: %+v %v", v, err)
+	}
+
+	// A failure is recorded on the site.
+	ag.noDB, ag.connFail = false, errDown
+
+	if _, err := s.SetSiteLimits(ctx, 1, "shop", "medium", nil); err == nil {
+		t.Fatal("failure not reported")
+	}
+
+	if v, _ := s.SiteLimits(ctx, "shop"); !v.AppliedAt.IsZero() || v.ApplyError == "" {
+		t.Fatalf("failure not recorded: %+v", v)
+	}
+
+	if err := CheckLimits(store.Limits{PHPWorkers: 5, CPUPriority: "normal", DatabaseConnections: 10001}, false); !errors.Is(err, ErrInvalid) {
+		t.Errorf("too many connections: %v", err)
+	}
+
+	if err := CheckLimits(store.Limits{PHPWorkers: 5, CPUPriority: "normal", DatabaseBytes: -1}, false); !errors.Is(err, ErrInvalid) {
+		t.Errorf("negative size: %v", err)
+	}
+}
+
+func TestApplyPendingLimits(t *testing.T) {
+	s, _, st := newService(t)
+	ctx := t.Context()
+
+	s.ApplyPendingLimits(ctx) // without the agent part: nothing
+
+	ag := newFakeLimits()
+	s.EnableLimits(ag)
+
+	for _, n := range []string{"shop", "blog"} {
+		if _, err := s.Create(ctx, 1, CreateRequest{Name: n, Domains: []string{n + ".example.com"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	shop, _ := st.SiteByName(ctx, "shop")
+
+	// As after the migration: shop is pending, blog applied.
+	if err := st.MarkSiteLimits(ctx, shop.ID, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	ag.conns = map[string]uint32{}
+
+	s.ApplyPendingLimits(ctx)
+
+	if len(ag.conns) != 1 || ag.conns["shop"] != 20 {
+		t.Fatalf("applied %v", ag.conns)
+	}
+
+	if v, _ := s.SiteLimits(ctx, "shop"); v.AppliedAt.IsZero() {
+		t.Fatalf("not marked: %+v", v)
+	}
+
+	// A failure stays pending for the next start.
+	if err := st.MarkSiteLimits(ctx, shop.ID, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	ag.connFail = errDown
+
+	s.ApplyPendingLimits(ctx)
+
+	if v, _ := s.SiteLimits(ctx, "shop"); !v.AppliedAt.IsZero() || v.ApplyError == "" {
+		t.Fatalf("failure: %+v", v)
 	}
 }

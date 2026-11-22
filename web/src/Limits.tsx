@@ -28,6 +28,7 @@ import {
   type Limits,
   type Preset,
   type PresetCaches,
+  type DatabaseUsage,
   type SiteLimits,
   type Usage,
 } from "./limits";
@@ -35,7 +36,7 @@ import { cacheSizes } from "./objcache";
 import { formatSize } from "./pagecache";
 import { formatHash } from "./routes";
 import type { Site } from "./sites";
-import { Badge, Button, Card, Field, IconButton, IconLink, Notice, PageHead, RowActions, Table, type Column, type Sort } from "./ui";
+import { Badge, Button, Card, Field, IconButton, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
 
 const defaultLimits: Limits = {
   diskBytes: 0,
@@ -45,6 +46,8 @@ const defaultLimits: Limits = {
   tasks: 0,
   cpuPriority: "normal",
   cpuQuotaPercent: 0,
+  databaseBytes: 0,
+  databaseConnections: 0,
 };
 
 // messageOf shows a form's own check as it is and turns API errors into
@@ -79,13 +82,29 @@ export function LimitFacts({ limits, label }: { limits: Limits; label: string })
         {priorityLabel[limits.cpuPriority]} priority
         {limits.cpuQuotaPercent > 0 ? `, at most ${cpuCoresText(limits.cpuQuotaPercent)}` : ", no hard limit"}
       </dd>
+      <dt>Database size</dt>
+      <dd>{limits.databaseBytes ? `warning at ${formatBytes(limits.databaseBytes)}` : <Badge tone="off">No warning</Badge>}</dd>
+      <dt>Database connections</dt>
+      <dd>{limits.databaseConnections ? `${formatCount(limits.databaseConnections)} per database user` : <Unlimited />}</dd>
     </dl>
   );
 }
 
-function UsageFacts({ usage, limits }: { usage: Usage; limits: Limits }) {
-  if (!usage.enforced) {
-    return <p className="ui-hint ui-flush">Disk limits are not enforced on this server: its file system has no project quota.</p>;
+// UsageFacts shows the disk use and, when measured, the size of the site's
+// local databases (ADR-0057) in one list.
+function UsageFacts({ usage, db, limits }: { usage?: Usage | undefined; db?: DatabaseUsage | undefined; limits: Limits }) {
+  if (!usage?.enforced) {
+    return (
+      <>
+        {usage && <p className="ui-hint ui-flush">Disk limits are not enforced on this server: its file system has no project quota.</p>}
+        {db && (
+          <dl className="ui-facts" aria-label="Use">
+            {databaseRows(db, limits)}
+          </dl>
+        )}
+        {databaseNotice(db)}
+      </>
+    );
   }
   const badge =
     usage.level === "critical" ? (
@@ -95,7 +114,7 @@ function UsageFacts({ usage, limits }: { usage: Usage; limits: Limits }) {
     ) : null;
   return (
     <>
-      <dl className="ui-facts" aria-label="Disk use">
+      <dl className="ui-facts" aria-label="Use">
         <dt>Disk use</dt>
         <dd>
           {formatBytes(usage.bytes)}
@@ -106,13 +125,56 @@ function UsageFacts({ usage, limits }: { usage: Usage; limits: Limits }) {
           {formatCount(usage.inodes)}
           {limits.diskInodes > 0 && ` of ${formatCount(limits.diskInodes)} (${String(usage.inodesPercent)} %)`}
         </dd>
+        {db && databaseRows(db, limits)}
       </dl>
+      {databaseNotice(db)}
       {usage.level === "critical" && (
         <Notice tone="err" title="The site has used 95 % or more of a disk limit. When it is full, writing new files fails." />
       )}
     </>
   );
 }
+
+// databaseRows shows the size of the site's local databases against the
+// warning threshold (ADR-0057).
+function databaseRows(usage: DatabaseUsage, limits: Limits) {
+  const badge =
+    usage.level === "critical" ? (
+      <Badge tone="warn">Above the warning</Badge>
+    ) : usage.level === "warning" ? (
+      <Badge tone="warn">Growing</Badge>
+    ) : null;
+  return (
+    <>
+      <dt>Databases</dt>
+      <dd>
+        {usage.databases === 0 ? (
+          <span className="ui-hint">No local databases</span>
+        ) : (
+          <>
+            {formatBytes(usage.bytes)}
+            {limits.databaseBytes > 0 && ` of ${formatBytes(limits.databaseBytes)} (${String(usage.percent)} %)`} {badge}
+            <span className="ui-hint">
+              {" "}
+              in {String(usage.databases)} {usage.databases === 1 ? "database" : "databases"}, measured{" "}
+              <RelTime iso={new Date(usage.measuredAt * 1000).toISOString()} />
+            </span>
+          </>
+        )}
+      </dd>
+    </>
+  );
+}
+
+// databaseNotice: nothing stops a database at the threshold, so the notice
+// says what to do instead.
+const databaseNotice = (usage: DatabaseUsage | undefined) =>
+  usage?.level === "critical" ? (
+    <Notice
+      tone="warn"
+      title="The databases have reached 95 % of the warning size. They keep growing and fill the server's disk: clean them up or raise the value."
+    />
+  ) : null;
 
 // LimitInputs edits the fields of a limit set. Unlimited is a separate
 // checkbox per limit, so it is always an explicit choice.
@@ -150,51 +212,87 @@ function LimitInputs({
   );
   return (
     <>
-      {row(
-        "Disk space",
-        "GiB",
-        f.diskGiB,
-        (v) => set({ ...f, diskGiB: v }),
-        f.diskUnlimited,
-        (v) => set({ ...f, diskUnlimited: v }),
-      )}
-      {row(
-        "Files",
-        "files, directories and links",
-        f.inodes,
-        (v) => set({ ...f, inodes: v }),
-        f.inodesUnlimited,
-        (v) => set({ ...f, inodesUnlimited: v }),
-      )}
-      {row(
-        "Memory",
-        "MiB for PHP, cron jobs and other processes of the site",
-        f.memoryMiB,
-        (v) => set({ ...f, memoryMiB: v }),
-        f.memoryUnlimited,
-        (v) => set({ ...f, memoryUnlimited: v }),
-      )}
-      {row(
-        "Processes",
-        "",
-        f.tasks,
-        (v) => set({ ...f, tasks: v }),
-        f.tasksUnlimited,
-        (v) => set({ ...f, tasksUnlimited: v }),
-      )}
-      <Field label="PHP workers" hint={`Requests the site's PHP handles at the same time, ${String(bounds.workers.min)} to ${String(bounds.workers.max)}`}>
-        <input className="ui-input" inputMode="numeric" value={f.workers} onChange={(e) => set({ ...f, workers: e.target.value })} />
-      </Field>
-      <Field label="CPU priority" hint="The share of the CPU the site gets when the server is busy">
-        <select className="ui-select" value={f.cpuPriority} onChange={(e) => set({ ...f, cpuPriority: e.target.value as CPUPriority })}>
-          <option value="low">Low</option>
-          <option value="normal">Normal</option>
-          <option value="high">High</option>
-        </select>
-      </Field>
-      <Field label="CPU cores" hint={"Hard limit, such as 2 or 0.5; 0 for none." + (cpus ? ` This server has ${String(cpus)} ${cpus === 1 ? "core" : "cores"}.` : "")}>
-        <input className="ui-input" inputMode="decimal" value={f.cpuCores} onChange={(e) => set({ ...f, cpuCores: e.target.value })} />
-      </Field>
+      <fieldset className="ui-fieldset ui-group ui-stack">
+        <legend>Storage</legend>
+        <div className="ui-form-grid">
+          {row(
+            "Disk space",
+            "GiB",
+            f.diskGiB,
+            (v) => set({ ...f, diskGiB: v }),
+            f.diskUnlimited,
+            (v) => set({ ...f, diskUnlimited: v }),
+          )}
+          {row(
+            "Files",
+            "files, directories and links",
+            f.inodes,
+            (v) => set({ ...f, inodes: v }),
+            f.inodesUnlimited,
+            (v) => set({ ...f, inodesUnlimited: v }),
+          )}
+        </div>
+      </fieldset>
+      <fieldset className="ui-fieldset ui-group ui-stack">
+        <legend>Memory and processes</legend>
+        <div className="ui-form-grid">
+          {row(
+            "Memory",
+            "MiB for PHP, cron jobs and other processes of the site",
+            f.memoryMiB,
+            (v) => set({ ...f, memoryMiB: v }),
+            f.memoryUnlimited,
+            (v) => set({ ...f, memoryUnlimited: v }),
+          )}
+          {row(
+            "Processes",
+            "",
+            f.tasks,
+            (v) => set({ ...f, tasks: v }),
+            f.tasksUnlimited,
+            (v) => set({ ...f, tasksUnlimited: v }),
+          )}
+          <Field label="PHP workers" hint={`Requests the site's PHP handles at the same time, ${String(bounds.workers.min)} to ${String(bounds.workers.max)}`}>
+            <input className="ui-input" inputMode="numeric" value={f.workers} onChange={(e) => set({ ...f, workers: e.target.value })} />
+          </Field>
+        </div>
+      </fieldset>
+      <fieldset className="ui-fieldset ui-group ui-stack">
+        <legend>CPU</legend>
+        <div className="ui-form-grid">
+          <Field label="CPU priority" hint="The share of the CPU the site gets when the server is busy">
+            <select className="ui-select" value={f.cpuPriority} onChange={(e) => set({ ...f, cpuPriority: e.target.value as CPUPriority })}>
+              <option value="low">Low</option>
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+            </select>
+          </Field>
+          <Field label="CPU cores" hint={"Hard limit, such as 2 or 0.5. 0 means no hard limit: the site may use every free core, and only the CPU priority decides its share when the server is busy." + (cpus ? ` This server has ${String(cpus)} ${cpus === 1 ? "core" : "cores"}.` : "")}>
+            <input className="ui-input" inputMode="decimal" value={f.cpuCores} onChange={(e) => set({ ...f, cpuCores: e.target.value })} />
+          </Field>
+        </div>
+      </fieldset>
+      <fieldset className="ui-fieldset ui-group ui-stack">
+        <legend>Database</legend>
+        <div className="ui-form-grid">
+          {row(
+            "Database size",
+            "GiB for all local databases of the site. Only a warning: databases can grow past it",
+            f.dbGiB,
+            (v) => set({ ...f, dbGiB: v }),
+            f.dbUnlimited,
+            (v) => set({ ...f, dbUnlimited: v }),
+          )}
+          {row(
+            "Database connections",
+            "At the same time, per database user",
+            f.dbConnections,
+            (v) => set({ ...f, dbConnections: v }),
+            f.dbConnectionsUnlimited,
+            (v) => set({ ...f, dbConnectionsUnlimited: v }),
+          )}
+        </div>
+      </fieldset>
     </>
   );
 }
@@ -254,7 +352,7 @@ export function LimitSettings({ site }: { site: Site }) {
     setBusy(true);
     try {
       const s = custom ? await setSiteCustom(site.name, custom) : await setSitePreset(site.name, choice);
-      setState({ ...s, ...(state?.usage ? { usage: state.usage } : {}) });
+      setState({ ...s, ...(state?.usage ? { usage: state.usage } : {}), ...(state?.databaseUsage ? { databaseUsage: state.databaseUsage } : {}) });
       setDone(custom ? "Custom limits saved." : `${site.name} now uses the preset ${choice}.`);
       await load();
     } catch (err) {
@@ -276,7 +374,9 @@ export function LimitSettings({ site }: { site: Site }) {
           )
         ) : (
           <>
-            {state.usage && <UsageFacts usage={state.usage} limits={state.set ? state.limits : defaultLimits} />}
+            {(state.usage || state.databaseUsage) && (
+              <UsageFacts usage={state.usage} db={state.databaseUsage} limits={state.set ? state.limits : defaultLimits} />
+            )}
             {state.set ? (
               <>
                 <p className="ui-flush">{state.preset ? `Preset: ${state.preset}` : "Custom values"}</p>
@@ -644,6 +744,8 @@ function PresetForm({
         tasks: 128,
         cpuPriority: "normal",
         cpuQuotaPercent: 0,
+        databaseBytes: 2 * 1024 ** 3,
+        databaseConnections: 20,
       },
     ),
   );
@@ -692,35 +794,37 @@ function PresetForm({
       )}
       <LimitInputs f={fields} set={setFields} allowUnlimited={!isDefault && !initial?.default} cpus={cpus} />
       {unlimitedWarning(fields)}
-      <fieldset className="ui-stack">
-        <legend>Default for new sites</legend>
+      <fieldset className="ui-fieldset ui-group ui-stack">
+        <legend>Caches for new sites</legend>
         <p className="ui-hint">
           A site that gets this preset, when it is created, imported or switched to it, starts with these settings. Changing them here later
           only changes the size for sites that follow the preset and have the cache on; it never turns a cache on or off.
         </p>
-        <Field label="Object cache" hint="Valkey for the site's PHP, on a socket only the site can open. At most half of the memory limit.">
-          <select className="ui-select" value={objectCacheMb} onChange={(e) => setObjectCacheMb(Number(e.target.value))}>
-            <option value={0}>Off</option>
-            {cacheSizes.map((n) => (
-              <option key={n} value={n}>
-                {n} MiB
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field
-          label="Page cache"
-          hint="nginx keeps whole PHP pages, with the strict preset for any application. Cached pages count against the disk limit."
-        >
-          <select className="ui-select" value={pageCacheMb} onChange={(e) => setPageCacheMb(Number(e.target.value))}>
-            <option value={0}>Off</option>
-            {pageCacheSizes.map((n) => (
-              <option key={n} value={n}>
-                {formatSize(n)}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <div className="ui-form-grid">
+            <Field label="Object cache" hint="Valkey for the site's PHP, on a socket only the site can open. At most half of the memory limit.">
+              <select className="ui-select" value={objectCacheMb} onChange={(e) => setObjectCacheMb(Number(e.target.value))}>
+                <option value={0}>Off</option>
+                {cacheSizes.map((n) => (
+                  <option key={n} value={n}>
+                    {n} MiB
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              label="Page cache"
+              hint="nginx keeps whole PHP pages, with the strict preset for any application. Cached pages count against the disk limit."
+            >
+              <select className="ui-select" value={pageCacheMb} onChange={(e) => setPageCacheMb(Number(e.target.value))}>
+                <option value={0}>Off</option>
+                {pageCacheSizes.map((n) => (
+                  <option key={n} value={n}>
+                    {formatSize(n)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+        </div>
       </fieldset>
       <div className="ui-row">
         <Button variant="primary" type="submit" disabled={busy}>

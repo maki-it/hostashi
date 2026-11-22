@@ -540,6 +540,10 @@ func Run(ctx context.Context, cfg Config) error {
 
 	deps.Sites.EnableLimits(hosting.RPCAgent{C: client})
 	deps.Sites.EnableDBSizes(hosting.RPCAgent{C: client})
+
+	// Limits a migration changed or an earlier apply missed (ADR-0057).
+	go deps.Sites.ApplyPendingLimits(ctx)
+
 	deps.Sites.EnableObjectCache(hosting.RPCAgent{C: client})
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
