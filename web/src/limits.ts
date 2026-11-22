@@ -17,6 +17,8 @@ export type Limits = {
   tasks: number;
   cpuPriority: CPUPriority;
   cpuQuotaPercent: number; // 0: no hard CPU limit
+  databaseBytes: number; // warning threshold for the site's local databases (ADR-0057), 0: none
+  databaseConnections: number; // connections per database user, 0: unlimited
   unlimited?: string[]; // set by the server: the limits that are 0
 };
 
@@ -41,6 +43,15 @@ export type Usage = {
   level: "ok" | "warning" | "critical";
 };
 
+// DatabaseUsage is the size of the site's local databases (ADR-0057).
+export type DatabaseUsage = {
+  bytes: number;
+  databases: number;
+  percent: number; // of databaseBytes; 0 without a threshold
+  level: "ok" | "warning" | "critical";
+  measuredAt: number;
+};
+
 export type SiteLimits = {
   set: boolean; // false: a site from before limits existed
   preset: string; // "": custom values
@@ -49,6 +60,7 @@ export type SiteLimits = {
   applyError: string;
   updatedAt: number;
   usage?: Usage;
+  databaseUsage?: DatabaseUsage;
 };
 
 const presetPath = (name?: string) => "/limit-presets" + (name === undefined ? "" : "/" + encodeURIComponent(name));
@@ -110,6 +122,8 @@ export const bounds = {
   tasks: { min: 16, max: 2 ** 20 },
   workers: { min: 1, max: 500 },
   cpuQuota: { min: 0, max: 100000 }, // percent of one core; the form works in cores
+  dbGiB: { min: 1, max: 1024 * 1024 },
+  dbConnections: { min: 1, max: 10000 }, // agentapi.MaxDBUserConnections
 };
 
 export const presetNameProblem = (name: string) =>
@@ -130,6 +144,10 @@ export type LimitFields = {
   cpuPriority: CPUPriority;
   /** The hard CPU limit in cores, such as "1.5"; "0" for none. */
   cpuCores: string;
+  dbGiB: string;
+  dbUnlimited: boolean;
+  dbConnections: string;
+  dbConnectionsUnlimited: boolean;
 };
 
 export function fieldsOf(l: Limits): LimitFields {
@@ -145,6 +163,10 @@ export function fieldsOf(l: Limits): LimitFields {
     workers: String(l.phpWorkers || 5),
     cpuPriority: l.cpuPriority,
     cpuCores: formatCores(l.cpuQuotaPercent),
+    dbGiB: l.databaseBytes ? trim(l.databaseBytes / GiB) : "2",
+    dbUnlimited: l.databaseBytes === 0,
+    dbConnections: l.databaseConnections ? String(l.databaseConnections) : "20",
+    dbConnectionsUnlimited: l.databaseConnections === 0,
   };
 }
 
@@ -188,6 +210,10 @@ export function limitsOf(f: LimitFields, isDefault = false): Limits | string {
   if (typeof workers === "string") return workers;
   const quota = coresToPercent(f.cpuCores);
   if (typeof quota === "string") return quota;
+  const db = f.dbUnlimited ? 0 : whole(f.dbGiB, "Database size", bounds.dbGiB.min, bounds.dbGiB.max);
+  if (typeof db === "string") return db;
+  const conns = f.dbConnectionsUnlimited ? 0 : whole(f.dbConnections, "Database connections", bounds.dbConnections.min, bounds.dbConnections.max);
+  if (typeof conns === "string") return conns;
   return {
     diskBytes: disk * GiB,
     diskInodes: inodes,
@@ -196,6 +222,8 @@ export function limitsOf(f: LimitFields, isDefault = false): Limits | string {
     tasks,
     cpuPriority: f.cpuPriority,
     cpuQuotaPercent: quota,
+    databaseBytes: db * GiB,
+    databaseConnections: conns,
   };
 }
 

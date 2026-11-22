@@ -27,6 +27,11 @@ type Limits struct {
 	Tasks           int64
 	CPUPriority     string // low, normal or high
 	CPUQuotaPercent int64  // 0: no hard CPU limit
+	// DatabaseBytes is the warning threshold for the size of the site's
+	// local databases, not enforced (ADR-0057).
+	DatabaseBytes int64
+	// DatabaseConnections is MAX_USER_CONNECTIONS of each database user.
+	DatabaseConnections int64
 }
 
 // PresetCaches are the caches a site gets with a preset (ADR-0045). They
@@ -59,10 +64,14 @@ type SiteLimits struct {
 	UpdatedAt  time.Time
 }
 
-const limitColumns = `disk_bytes, disk_inodes, memory_bytes, php_workers, tasks, cpu_priority, cpu_quota_percent`
+const limitColumns = `disk_bytes, disk_inodes, memory_bytes, php_workers, tasks, cpu_priority, cpu_quota_percent, database_bytes, database_connections`
+
+// limitSet assigns limitArgs in an UPDATE.
+const limitSet = `disk_bytes = ?, disk_inodes = ?, memory_bytes = ?, php_workers = ?, tasks = ?, cpu_priority = ?, cpu_quota_percent = ?,
+	database_bytes = ?, database_connections = ?`
 
 func limitArgs(l Limits) []any {
-	return []any{l.DiskBytes, l.DiskInodes, l.MemoryBytes, l.PHPWorkers, l.Tasks, l.CPUPriority, l.CPUQuotaPercent}
+	return []any{l.DiskBytes, l.DiskInodes, l.MemoryBytes, l.PHPWorkers, l.Tasks, l.CPUPriority, l.CPUQuotaPercent, l.DatabaseBytes, l.DatabaseConnections}
 }
 
 func scanPreset(r scanner) (LimitPreset, error) {
@@ -74,7 +83,7 @@ func scanPreset(r scanner) (LimitPreset, error) {
 
 	l := &p.Limits
 	if err := r.Scan(&p.ID, &p.Name, &l.DiskBytes, &l.DiskInodes, &l.MemoryBytes, &l.PHPWorkers, &l.Tasks, &l.CPUPriority,
-		&l.CPUQuotaPercent, &p.Caches.ObjectCacheMB, &p.Caches.PageCacheMB, &def, &cre, &upd); err != nil {
+		&l.CPUQuotaPercent, &l.DatabaseBytes, &l.DatabaseConnections, &p.Caches.ObjectCacheMB, &p.Caches.PageCacheMB, &def, &cre, &upd); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return LimitPreset{}, ErrNotFound
 		}
@@ -163,7 +172,7 @@ func (s *Store) CreateLimitPreset(ctx context.Context, name string, l Limits, c 
 	args = append(args, c.ObjectCacheMB, c.PageCacheMB, boolInt(def), now.Unix(), now.Unix())
 
 	res, err := tx.ExecContext(ctx, `INSERT INTO limit_presets (name, `+limitColumns+`, object_cache_mb, page_cache_mb, is_default, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, args...)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, args...)
 	if isUnique(err) {
 		return LimitPreset{}, ErrPresetExists
 	}
@@ -215,8 +224,7 @@ func (s *Store) UpdateLimitPreset(ctx context.Context, id int64, name string, l 
 	args := append([]any{name}, limitArgs(l)...)
 	args = append(args, c.ObjectCacheMB, c.PageCacheMB, boolInt(def || old.Default), now.Unix(), id)
 
-	_, err = tx.ExecContext(ctx, `UPDATE limit_presets SET name = ?, disk_bytes = ?, disk_inodes = ?, memory_bytes = ?, php_workers = ?,
-		tasks = ?, cpu_priority = ?, cpu_quota_percent = ?, object_cache_mb = ?, page_cache_mb = ?, is_default = ?, updated_at = ? WHERE id = ?`, args...)
+	_, err = tx.ExecContext(ctx, `UPDATE limit_presets SET name = ?, `+limitSet+`, object_cache_mb = ?, page_cache_mb = ?, is_default = ?, updated_at = ? WHERE id = ?`, args...)
 	if isUnique(err) {
 		return LimitPreset{}, ErrPresetExists
 	}
@@ -239,8 +247,7 @@ func (s *Store) UpdateLimitPreset(ctx context.Context, id int64, name string, l 
 func setFollowers(ctx context.Context, tx *sql.Tx, presetID int64, l Limits, now time.Time) error {
 	args := append(limitArgs(l), now.Unix(), presetID)
 
-	if _, err := tx.ExecContext(ctx, `UPDATE site_limits SET disk_bytes = ?, disk_inodes = ?, memory_bytes = ?, php_workers = ?,
-		tasks = ?, cpu_priority = ?, cpu_quota_percent = ?, applied_at = 0, apply_error = '', updated_at = ? WHERE preset_id = ?`, args...); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE site_limits SET `+limitSet+`, applied_at = 0, apply_error = '', updated_at = ? WHERE preset_id = ?`, args...); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 
@@ -266,8 +273,7 @@ func (s *Store) RestoreLimitPreset(ctx context.Context, p LimitPreset, now time.
 	args := append([]any{p.Name}, limitArgs(p.Limits)...)
 	args = append(args, p.Caches.ObjectCacheMB, p.Caches.PageCacheMB, boolInt(p.Default), p.UpdatedAt.Unix(), p.ID)
 
-	if _, err := tx.ExecContext(ctx, `UPDATE limit_presets SET name = ?, disk_bytes = ?, disk_inodes = ?, memory_bytes = ?, php_workers = ?,
-		tasks = ?, cpu_priority = ?, cpu_quota_percent = ?, object_cache_mb = ?, page_cache_mb = ?, is_default = ?, updated_at = ? WHERE id = ?`, args...); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE limit_presets SET name = ?, `+limitSet+`, object_cache_mb = ?, page_cache_mb = ?, is_default = ?, updated_at = ? WHERE id = ?`, args...); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 
@@ -382,7 +388,7 @@ func (s *Store) SiteLimits(ctx context.Context, siteID int64) (SiteLimits, bool,
 	err := s.db.QueryRowContext(ctx, `SELECT site_id, preset_id, `+limitColumns+`, applied_at, apply_error, updated_at
 		FROM site_limits WHERE site_id = ?`, siteID).
 		Scan(&out.SiteID, &preset, &l.DiskBytes, &l.DiskInodes, &l.MemoryBytes, &l.PHPWorkers, &l.Tasks, &l.CPUPriority,
-			&l.CPUQuotaPercent, &applied, &out.ApplyError, &upd)
+			&l.CPUQuotaPercent, &l.DatabaseBytes, &l.DatabaseConnections, &applied, &out.ApplyError, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SiteLimits{SiteID: siteID}, false, nil
 	}
@@ -414,10 +420,11 @@ func (s *Store) SetSiteLimits(ctx context.Context, siteID, presetID int64, l Lim
 	args = append(args, now.Unix())
 
 	if _, err := s.w.ExecContext(ctx, `INSERT INTO site_limits (site_id, preset_id, `+limitColumns+`, applied_at, apply_error, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
 		ON CONFLICT (site_id) DO UPDATE SET preset_id = excluded.preset_id, disk_bytes = excluded.disk_bytes,
 			disk_inodes = excluded.disk_inodes, memory_bytes = excluded.memory_bytes, php_workers = excluded.php_workers,
 			tasks = excluded.tasks, cpu_priority = excluded.cpu_priority, cpu_quota_percent = excluded.cpu_quota_percent,
+			database_bytes = excluded.database_bytes, database_connections = excluded.database_connections,
 			applied_at = 0, apply_error = '', updated_at = excluded.updated_at`, args...); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
@@ -461,4 +468,32 @@ func (s *Store) MarkSiteLimits(ctx context.Context, siteID, appliedAt int64, app
 	}
 
 	return nil
+}
+
+// PendingSiteLimits returns the ids of the sites whose limits were not
+// applied: changed by a migration, or the last apply failed.
+func (s *Store) PendingSiteLimits(ctx context.Context) ([]int64, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT site_id FROM site_limits WHERE applied_at = 0 ORDER BY site_id`)
+	if err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+
+	defer rows.Close()
+
+	out := []int64{}
+
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("store: %w", err)
+		}
+
+		out = append(out, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+
+	return out, nil
 }

@@ -179,6 +179,9 @@ type DBUserCreateRequest struct {
 	Database string `json:"database"`
 	User     string `json:"user"`
 	Password string `json:"password"`
+	// MaxConnections is the user's MAX_USER_CONNECTIONS (ADR-0057), 0:
+	// unlimited.
+	MaxConnections uint32 `json:"max_connections,omitempty"`
 }
 
 // Validate checks the request.
@@ -191,7 +194,24 @@ func (r DBUserCreateRequest) Validate() error {
 		return err
 	}
 
+	if err := ValidateDBConnections(r.MaxConnections); err != nil {
+		return err
+	}
+
 	return ValidateDBPassword(r.Password)
+}
+
+// MaxDBUserConnections bounds the connection limit of a site's database
+// users (ADR-0057). MariaDB's own default max_connections is far lower.
+const MaxDBUserConnections = 10000
+
+// ValidateDBConnections accepts 0 (unlimited) up to MaxDBUserConnections.
+func ValidateDBConnections(n uint32) error {
+	if n > MaxDBUserConnections {
+		return fmt.Errorf("max_connections: must be 0 (unlimited) or between 1 and %d", MaxDBUserConnections)
+	}
+
+	return nil
 }
 
 // DBUserResponse is empty on success.
@@ -250,3 +270,29 @@ type DBSizesResponse struct {
 
 // DBSizes measures the databases of the agent's registry. It only reads.
 var DBSizes = agentrpc.Op[DBSizesRequest, DBSizesResponse]{Name: "db.sizes"}
+
+// DBSiteConnectionsRequest sets the connection limit of every database
+// user of a site (ADR-0057).
+type DBSiteConnectionsRequest struct {
+	Site           string `json:"site"`
+	MaxConnections uint32 `json:"max_connections"` // 0: unlimited
+}
+
+// Validate checks the request.
+func (r DBSiteConnectionsRequest) Validate() error {
+	if err := ValidateSiteUser(r.Site); err != nil {
+		return err
+	}
+
+	return ValidateDBConnections(r.MaxConnections)
+}
+
+// DBSiteConnectionsResponse names the users that got the limit.
+type DBSiteConnectionsResponse struct {
+	Users []string `json:"users"`
+}
+
+// DBSiteConnections runs ALTER USER ... WITH MAX_USER_CONNECTIONS for the
+// users of the site's databases in the agent's registry. A site without
+// databases is no error.
+var DBSiteConnections = agentrpc.Op[DBSiteConnectionsRequest, DBSiteConnectionsResponse]{Name: "db.site.connections.set"}
