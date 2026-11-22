@@ -143,3 +143,47 @@ func TestRealIPServed(t *testing.T) {
 		t.Errorf("access log: %q", line)
 	}
 }
+
+// The panel's own setting (ADR-0059) goes into each of its server blocks:
+// port 80, HTTPS and the database tool. Without it the panel trusts no
+// proxy.
+func TestRealIPPanelRender(t *testing.T) {
+	n := &Nginx{
+		Ctl: &testCtl{}, Listen: []string{"80"}, ListenTLS: []string{"443"},
+		PanelListen: []string{"8443"}, PanelUpstream: "/run/hostashi-panel.sock", DBToolListen: []string{"8444"}, DBToolRoot: "/usr/share/hostashi/adminer", DBToolSocket: "/run/php/hostashi-dbtool.sock",
+		ControlSocket: "/run/x.sock", PIDFile: "/run/x.pid", ErrorLog: "/var/log/x", MimeTypes: "/etc/x",
+	}
+
+	panel := &Panel{Domain: "cp.example.com", Cert: "/c.pem", Key: "/k.pem", DBTool: true, RealIP: agentapi.WebRealIP{Cloudflare: true, Ranges: []string{"10.0.0.9"}}}
+
+	f, err := n.Render(Desired{Panel: panel}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p := string(f.Content["sites/_panel.conf"])
+	if got := strings.Count(p, "set_real_ip_from 10.0.0.9/32;"); got != 3 {
+		t.Errorf("the panel trusts its proxy in %d server blocks:\n%s", got, p)
+	}
+
+	for _, want := range []string{"set_real_ip_from 173.245.48.0/20;", "real_ip_header X-Forwarded-For;", "real_ip_recursive on;", "proxy_set_header X-Real-IP $remote_addr;", `proxy_set_header X-Forwarded-For "";`} {
+		if !strings.Contains(p, want) {
+			t.Errorf("_panel.conf lacks %q", want)
+		}
+	}
+
+	panel.RealIP = agentapi.WebRealIP{}
+
+	if f, err = n.Render(Desired{Panel: panel}, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	if p := string(f.Content["sites/_panel.conf"]); strings.Contains(p, "real_ip") {
+		t.Errorf("the panel trusts a proxy without a setting:\n%s", p)
+	}
+
+	bad := &Panel{Domain: "cp.example.com", RealIP: agentapi.WebRealIP{Ranges: []string{"::1"}}}
+	if err := (Desired{Panel: bad}).Validate(); err == nil {
+		t.Error("loopback accepted for the panel")
+	}
+}

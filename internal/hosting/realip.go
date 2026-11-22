@@ -4,6 +4,7 @@ package hosting
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -156,4 +157,65 @@ func interfaceAddrs() ([]netip.Addr, error) {
 	}
 
 	return out, nil
+}
+
+// panelRealIPKey is the settings key of the panel's own setting (ADR-0059),
+// the JSON of an agentapi.WebRealIP; missing trusts nobody.
+const panelRealIPKey = "panel.realip"
+
+// PanelRealIP returns which proxies the panel's own host name takes the
+// client address from.
+func (s *Service) PanelRealIP(ctx context.Context) (agentapi.WebRealIP, error) {
+	v, ok, err := s.st.Setting(ctx, panelRealIPKey)
+	if err != nil || !ok {
+		return agentapi.WebRealIP{}, err
+	}
+
+	var r agentapi.WebRealIP
+	if err := json.Unmarshal([]byte(v), &r); err != nil {
+		return agentapi.WebRealIP{}, fmt.Errorf("hosting: %s: %w", panelRealIPKey, err)
+	}
+
+	return r, nil
+}
+
+// SetPanelRealIP replaces the panel's own setting, applies the web state
+// and restores the old setting if that fails. Only admins reach it.
+func (s *Service) SetPanelRealIP(ctx context.Context, actor int64, r agentapi.WebRealIP) (agentapi.WebRealIP, error) {
+	if err := s.checkRealIP(r); err != nil {
+		return agentapi.WebRealIP{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	old, err := s.PanelRealIP(ctx)
+	if err != nil {
+		return agentapi.WebRealIP{}, err
+	}
+
+	if err := s.savePanelRealIP(ctx, r); err != nil {
+		return agentapi.WebRealIP{}, err
+	}
+
+	if err := s.applyWeb(ctx); err != nil {
+		if rerr := s.savePanelRealIP(context.WithoutCancel(ctx), old); rerr != nil {
+			s.log.ErrorContext(ctx, "restore the panel's real IP setting after failed change", "err", rerr)
+		}
+
+		return agentapi.WebRealIP{}, err
+	}
+
+	s.auditChange(ctx, actor, "settings.panel_realip", "", nil, store.FieldsOf(old), store.FieldsOf(r))
+
+	return s.PanelRealIP(ctx)
+}
+
+func (s *Service) savePanelRealIP(ctx context.Context, r agentapi.WebRealIP) error {
+	b, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+
+	return s.st.SetSetting(ctx, panelRealIPKey, string(b))
 }

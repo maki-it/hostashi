@@ -83,6 +83,8 @@ var routeAccess = map[string]authz.Action{
 	"POST /api/v1/settings/mail/test":       authz.SettingsWrite,
 	"GET /api/v1/settings/logs":             authz.SettingsRead,
 	"PUT /api/v1/settings/logs":             authz.SettingsWrite,
+	"GET /api/v1/settings/panel-real-ip":    authz.SettingsRead,
+	"PUT /api/v1/settings/panel-real-ip":    authz.SettingsWrite,
 
 	"GET /api/v1/sites":        "sites:list",
 	"GET /api/v1/sites/{name}": "sites:read",
