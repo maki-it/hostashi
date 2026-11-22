@@ -106,6 +106,9 @@ func TestEnabledDefaults(t *testing.T) {
 		{"manager", map[string]bool{"backups": true}, Backups, false}, // server settings: admins only
 		{"user", map[string]bool{"doctor": true}, Doctor, false},
 		{"user", map[string]bool{"php": true}, PHP, true},
+		{"admin", nil, Services, true},
+		{"user", map[string]bool{"services": true}, Services, true},
+		{"manager", nil, Services, false},
 		{"admin", nil, Category("other"), false},
 	} {
 		if got := Enabled(c.role, c.prefs, c.cat); got != c.want {

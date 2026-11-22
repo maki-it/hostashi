@@ -26,14 +26,17 @@ const (
 	Doctor       Category = "doctor"
 	PHP          Category = "php"
 	Disk         Category = "disk"
+	// Services is ADR-0055: a service that is down or keeps crashing.
+	Services Category = "services"
 )
 
 // Categories lists every category in the order the page shows them.
-var Categories = []Category{Backups, Certificates, Doctor, PHP, Disk}
+var Categories = []Category{Backups, Certificates, Doctor, Services, PHP, Disk}
 
 // titles name a category in the footer of an email.
 var titles = map[Category]string{
 	Backups: "backups", Certificates: "certificates", Doctor: "server checks", PHP: "PHP versions", Disk: "disk space",
+	Services: "services",
 }
 
 // Known reports whether c is a category.
@@ -50,7 +53,7 @@ func Visible(role string, c Category) bool {
 	switch c {
 	case Backups, Doctor:
 		return authz.Role(role) == authz.RoleAdmin
-	case Certificates, PHP, Disk:
+	case Certificates, PHP, Disk, Services:
 		return true
 	default:
 		return false

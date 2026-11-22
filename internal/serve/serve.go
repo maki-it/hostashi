@@ -545,22 +545,27 @@ func Run(ctx context.Context, cfg Config) error {
 	m.RegisterTokenExpiry(svc.MetricsTokenExpiry, cfg.Log)
 
 	// Operations emails (ADR-0044) for the accounts that switched them on.
+	notifier := &notify.Notifier{
+		St: st, Outbox: outbox, Host: panelHost(cfg.PublicURL), Log: cfg.Log,
+		Link: func(f string) string { return panelLink(cfg.PublicURL, f) },
+	}
 	watcher := &notify.Watcher{
-		Notifier: &notify.Notifier{
-			St: st, Outbox: outbox, Host: panelHost(cfg.PublicURL), Log: cfg.Log,
-			Link: func(f string) string { return panelLink(cfg.PublicURL, f) },
-		},
-		Backups: deps.Backups.Status,
-		Certs:   notifyCerts(st, deps.Sites, PanelDomain(cfg.PublicURL)),
-		Doctor:  deps.Doctor,
-		Now:     time.Now,
-		Log:     cfg.Log,
+		Notifier: notifier,
+		Backups:  deps.Backups.Status,
+		Certs:    notifyCerts(st, deps.Sites, PanelDomain(cfg.PublicURL)),
+		Doctor:   deps.Doctor,
+		Now:      time.Now,
+		Log:      cfg.Log,
 	}
 
 	go watcher.Run(ctx)
 
 	// Service management and the dashboard (ADR-0052).
-	mon := &servermon.Monitor{Agent: RPCServerAgent{C: client}, Store: st, Log: cfg.Log}
+	// Service outages are emailed too (ADR-0055).
+	mon := &servermon.Monitor{
+		Agent: RPCServerAgent{C: client}, Store: st, Log: cfg.Log,
+		Alerts: &notify.ServiceAlerts{Notifier: notifier, Log: cfg.Log},
+	}
 	deps.Monitor = mon
 
 	go mon.Run(ctx)

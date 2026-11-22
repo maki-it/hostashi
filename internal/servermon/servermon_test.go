@@ -228,6 +228,11 @@ func TestChanges(t *testing.T) {
 		t.Fatalf("still failed %+v", ev)
 	}
 
+	ev = Changes(&failed, base, at)
+	if len(ev) != 1 || ev[0].Kind != store.ServiceEventRecovered {
+		t.Fatalf("recovered %+v", ev)
+	}
+
 	gone := agentapi.ServiceState{ID: "mariadb"}
 	if ev := Changes(&base, gone, at); ev != nil {
 		t.Fatalf("uninstalled %+v", ev)
@@ -312,5 +317,81 @@ func TestActionRecordsOnce(t *testing.T) {
 
 	if ev, _ := m.Events(ctx, store.ServiceEventFilter{}); len(ev) != 1 {
 		t.Fatalf("%+v", ev)
+	}
+}
+
+type fakeAlerts struct {
+	polls []ServicePoll
+	down  []error
+}
+
+func (f *fakeAlerts) ServicesPolled(_ context.Context, p ServicePoll) { f.polls = append(f.polls, p) }
+
+func (f *fakeAlerts) AgentUnreachable(_ context.Context, _ time.Time, err error) {
+	f.down = append(f.down, err)
+}
+
+func TestAlerts(t *testing.T) {
+	st := openStore(t)
+	now := time.Unix(2_000_000, 0).UTC()
+	start := now.Add(-time.Hour)
+	ag := &fakeAgent{states: []agentapi.ServiceState{
+		{ID: "nginx", Unit: "nginx.service", Installed: true, Active: "active", StartedAt: start},
+		{ID: "php", Site: "blog", Unit: "hostashi-php-8.4@blog.service", Installed: true, Active: "active", StartedAt: start},
+	}}
+	al := &fakeAlerts{}
+	m := &Monitor{Agent: ag, Store: st, Alerts: al, Now: func() time.Time { return now }}
+	ctx := t.Context()
+
+	m.PollServices(ctx)
+
+	if len(al.polls) != 1 || len(al.polls[0].Events) != 0 || len(al.polls[0].States) != 2 || al.polls[0].Crashes != nil {
+		t.Fatalf("first poll %+v", al.polls)
+	}
+
+	// PHP crashed twice; the services page read the states before the
+	// next poll, so the event reaches the alerter with that poll.
+	ag.states[1].NRestarts, ag.states[1].StartedAt = 2, now
+	now = now.Add(30 * time.Second)
+
+	if _, err := m.Services(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	ag.states[0].Active, ag.states[0].Result = "failed", "exit-code"
+	now = now.Add(30 * time.Second)
+
+	m.PollServices(ctx)
+
+	p := al.polls[1]
+	if len(p.Events) != 2 || p.Events[0].Kind != store.ServiceEventCrashRestart || p.Events[1].Kind != store.ServiceEventFailed {
+		t.Fatalf("events %+v", p.Events)
+	}
+
+	if p.Crashes["php/blog"] != 2 || !p.At.Equal(now) {
+		t.Fatalf("crashes %+v at %v", p.Crashes, p.At)
+	}
+
+	m.PollServices(ctx)
+
+	if len(al.polls[2].Events) != 0 {
+		t.Fatalf("events twice %+v", al.polls[2].Events)
+	}
+
+	ag.err = errors.New("dial unix: connection refused")
+
+	m.PollServices(ctx)
+
+	if len(al.down) != 1 || len(al.polls) != 3 {
+		t.Fatalf("agent down %v, polls %d", al.down, len(al.polls))
+	}
+
+	// A canceled poll (shutdown) is not an outage.
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	m.PollServices(cctx)
+
+	if len(al.down) != 1 {
+		t.Fatalf("canceled poll counted %v", al.down)
 	}
 }
