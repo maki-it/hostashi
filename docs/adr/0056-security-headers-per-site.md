@@ -1,6 +1,6 @@
 # ADR-0056 Security headers per site
 
-**Status:** Proposed. **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0005 (nginx), ADR-0017 (import and presets), ADR-0018 (API), ADR-0020 (nginx versions), ADR-0027 (maintenance pages), ADR-0029 (nginx snippets), ADR-0035 (roles), ADR-0046 (page cache), ADR-0047 (disabled sites), ADR-0054 (site types).
+**Status:** Accepted (Kim, 2026-11-22). **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0005 (nginx), ADR-0017 (import and presets), ADR-0018 (API), ADR-0020 (nginx versions), ADR-0027 (maintenance pages), ADR-0029 (nginx snippets), ADR-0035 (roles), ADR-0046 (page cache), ADR-0047 (disabled sites), ADR-0054 (site types).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
