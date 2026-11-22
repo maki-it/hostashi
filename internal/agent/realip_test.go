@@ -89,3 +89,28 @@ func TestSyncProxyIgnore(t *testing.T) {
 
 	(&siteOps{}).syncProxyIgnore(t.Context(), d) // no fail2ban: nothing to do
 }
+
+// The panel's own setting gets the same own-address check as a site's and
+// its proxies reach fail2ban's never-ban list too.
+func TestRealIPPanel(t *testing.T) {
+	h := &siteOps{localAddrs: func() ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("10.0.0.3")}, nil
+	}}
+
+	var rpcErr *agentrpc.Error
+
+	_, err := h.checkRealIP("panel", &agentapi.WebRealIP{Ranges: []string{"10.0.0.0/24"}})
+	if !errors.As(err, &rpcErr) || rpcErr.Code != agentrpc.CodeInvalidArgument || !strings.HasPrefix(rpcErr.Message, "panel: ") {
+		t.Errorf("own address for the panel: %v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "hostashi-proxies.local")
+	h.log = slog.New(slog.DiscardHandler)
+	h.f2b = &f2bproxies.File{Path: path, Reload: func(context.Context) error { return nil }}
+
+	h.syncProxyIgnore(t.Context(), web.Desired{Panel: &web.Panel{Domain: "cp.example.com", RealIP: agentapi.WebRealIP{Ranges: []string{"198.51.100.0/24"}}}})
+
+	if b, err := os.ReadFile(path); err != nil || !strings.Contains(string(b), "198.51.100.0/24") {
+		t.Errorf("never-ban list without the panel's proxy: %v\n%s", err, b)
+	}
+}

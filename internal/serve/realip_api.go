@@ -86,4 +86,52 @@ func registerRealIP(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 			siteFail(log, w, err, "set real IP setting")
 		}
 	}))
+
+	// The panel's own host name (ADR-0059): admins only, in the browser,
+	// like the other panel settings.
+	mux.Op("GET /api/v1/settings/panel-real-ip", openapi.Operation{
+		ID: "getPanelRealIP", Tag: "settings", Summary: "Which proxies the panel takes the client address from", Out: realIPJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := a.sessionAllow(w, r, authz.SettingsRead); !ok {
+			return
+		}
+
+		ri, err := svc.PanelRealIP(r.Context())
+		if err != nil {
+			log.ErrorContext(r.Context(), "read the panel's real IP setting", "err", err)
+			writeError(w, http.StatusInternalServerError, "internal", "internal error")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toRealIPJSON(store.SiteRealIP{RealIP: ri}))
+	})
+
+	mux.Op("PUT /api/v1/settings/panel-real-ip", openapi.Operation{
+		ID: "setPanelRealIP", Tag: "settings", Summary: "Set which proxies the panel takes the client address from", In: agentapi.WebRealIP{}, Out: realIPJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		u, ok := a.sessionAllow(w, r, authz.SettingsWrite)
+		if !ok {
+			return
+		}
+
+		var in agentapi.WebRealIP
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		ri, err := svc.SetPanelRealIP(ctx, u.ID, in)
+
+		switch {
+		case err == nil:
+			writeJSON(w, http.StatusOK, toRealIPJSON(store.SiteRealIP{RealIP: ri}))
+		case errors.Is(err, agentapi.ErrRealIPRejected):
+			writeError(w, http.StatusUnprocessableEntity, "real_ip_rejected", err.Error())
+		default:
+			siteFail(log, w, err, "set the panel's real IP setting")
+		}
+	})
 }
