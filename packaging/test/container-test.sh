@@ -1802,8 +1802,10 @@ homes=$(x sh -c 'nsenter -t "$(systemctl show -p MainPID --value hostashi-node@n
 [ "$homes" = nodeapp ] || fail "the app sees other homes: $homes"
 expect_mode /var/log/hostashi/app/nodeapp "750 root:root"
 x grep -q 'request /' /var/log/hostashi/app/nodeapp/app.log || fail "app log: $(x cat /var/log/hostashi/app/nodeapp/app.log)"
-[ "$(api GET '/api/v1/sites/nodeapp/logs/app?lines=10')" = 200 ] && x grep -q 'request /' /tmp/api.out || fail "app log over the API: $(x cat /tmp/api.out)"
-[ "$(api GET /api/v1/sites/nodeapp/app)" = 200 ] && x grep -q '"state":"active"' /tmp/api.out || fail "app status: $(x cat /tmp/api.out)"
+[ "$(api GET '/api/v1/sites/nodeapp/logs/app?lines=10')" = 200 ] || fail "app log over the API: $(x cat /tmp/api.out)"
+x grep -q 'request /' /tmp/api.out || fail "app log over the API lacks the request: $(x cat /tmp/api.out)"
+[ "$(api GET /api/v1/sites/nodeapp/app)" = 200 ] || fail "app status: $(x cat /tmp/api.out)"
+x grep -q '"state":"active"' /tmp/api.out || fail "app not active: $(x cat /tmp/api.out)"
 # Stop lasts: the unit is disabled and nginx answers 502.
 [ "$(api POST /api/v1/sites/nodeapp/app/stop)" = 200 ] || fail "stop app: $(x cat /tmp/api.out)"
 x systemctl is-active --quiet hostashi-node@nodeapp.service && fail "app still runs after stop"
