@@ -538,6 +538,7 @@ func Run(ctx context.Context, cfg Config) error {
 	go dbServerLoop(ctx, deps.Sites)
 
 	deps.Sites.EnableLimits(hosting.RPCAgent{C: client})
+	deps.Sites.EnableDBSizes(hosting.RPCAgent{C: client})
 	deps.Sites.EnableObjectCache(hosting.RPCAgent{C: client})
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)

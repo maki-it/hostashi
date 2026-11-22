@@ -151,3 +151,31 @@ func TestDBUnavailable(t *testing.T) {
 		wantCode(t, err, agentrpc.CodePrecondition)
 	})
 }
+
+func TestDBSizes(t *testing.T) {
+	t.Run("no manager", func(t *testing.T) {
+		c, _ := startSiteAgentCfg(t, Config{})
+		ctx := context.Background()
+
+		got, err := agentapi.DBSizes.Call(ctx, c, agentapi.DBSizesRequest{})
+		if err != nil || got.Databases == nil || len(got.Databases) != 0 {
+			t.Fatalf("sizes = %+v, %v", got, err)
+		}
+	})
+
+	t.Run("connection cannot read", func(t *testing.T) {
+		c, _ := startSiteAgentCfg(t, Config{DB: newDBManager(t, &recordingDB{})})
+		ctx := context.Background()
+
+		if _, err := agentapi.SiteCreate.Call(ctx, c, agentapi.SiteCreateRequest{User: "shop"}); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := agentapi.DBCreate.Call(ctx, c, agentapi.DBCreateRequest{Site: "shop", Name: "shop_wp"}); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := agentapi.DBSizes.Call(ctx, c, agentapi.DBSizesRequest{})
+		wantCode(t, err, agentrpc.CodePrecondition)
+	})
+}
