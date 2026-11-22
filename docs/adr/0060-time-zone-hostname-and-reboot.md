@@ -56,4 +56,3 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - A wrong time zone shifts every site's cron jobs; the panel shows the server time in the new zone before saving [A].
 - A reboot cuts every site off for the boot time [E: 30–90 s on a Hetzner cloud server]. Typing the hostname makes it hard to start one by accident.
 - Not in scope: NTP settings (systemd-timesyncd stays as installed), the pretty hostname, scheduled reboots, shutdown.
-
