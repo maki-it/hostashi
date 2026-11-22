@@ -50,6 +50,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0053](0053-site-logs-in-the-panel.md) | Site logs in the panel | Accepted |
 | [0054](0054-site-types-nodejs-proxy-redirect.md) | Site types Node.js, reverse proxy and redirect | Accepted (Addenda 1–3 too) |
 | [0055](0055-service-outage-notifications.md) | Email notifications for service outages | Accepted |
+| [0056](0056-security-headers-per-site.md) | Security headers per site | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 

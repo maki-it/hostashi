@@ -138,6 +138,8 @@ var (
 	ErrDomainReserved = errors.New("hosting: domain is the panel's address")
 	ErrNotFound       = errors.New("hosting: unknown site")
 	ErrState          = errors.New("hosting: the site is being created or deleted")
+	// ErrSiteType: the change does not fit the site's type (ADR-0054).
+	ErrSiteType = store.ErrSiteType
 	// ErrNoTLS means the panel has no ACME client configured.
 	ErrNoTLS = errors.New("hosting: certificates are not available")
 )
@@ -578,6 +580,12 @@ func (s *Service) SetPHP(ctx context.Context, actor int64, name, version string)
 		map[string]string{"php": old}, map[string]string{"php": version})
 
 	site.PHP = version
+	if site.Type == store.SiteTypeStatic || site.Type == store.SiteTypePHP {
+		site.Type = store.SiteTypeStatic
+		if version != "" {
+			site.Type = store.SiteTypePHP
+		}
+	}
 
 	return site, nil
 }

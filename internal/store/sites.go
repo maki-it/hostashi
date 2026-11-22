@@ -27,10 +27,12 @@ var (
 
 // Site is a stored site with its domains, the primary one first.
 type Site struct {
-	ID      int64
-	Name    string
-	Pool    string
-	State   string
+	ID    int64
+	Name  string
+	Pool  string
+	State string
+	// Type is one of the SiteType constants (ADR-0054).
+	Type    string
 	PHP     string // PHP version, empty for no PHP
 	Domains []string
 	TLS     bool // HTTPS wanted
@@ -78,7 +80,32 @@ const (
 	TLSCustom      = "custom"
 )
 
+// Site types (ADR-0054). Until the other types arrive, a site is static or
+// PHP, and the type follows its PHP version.
+const (
+	SiteTypeStatic   = "static"
+	SiteTypePHP      = "php"
+	SiteTypeNode     = "node"
+	SiteTypeApp      = "app"
+	SiteTypeProxy    = "proxy"
+	SiteTypeRedirect = "redirect"
+)
+
+// ErrSiteType: the change does not fit the site's type, for example a PHP
+// version for a reverse proxy.
+var ErrSiteType = errors.New("store: not possible for this type of site")
+
+// phpType is the type of a static or PHP site with this PHP version.
+func phpType(php string) string {
+	if php == "" {
+		return SiteTypeStatic
+	}
+
+	return SiteTypePHP
+}
+
 // CreateSite stores a new site in state creating together with its domains.
+// Its type is php with a PHP version and static without one.
 func (s *Store) CreateSite(ctx context.Context, name, pool, php string, domains []string, now time.Time) (Site, error) {
 	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
@@ -97,8 +124,8 @@ func (s *Store) CreateSite(ctx context.Context, name, pool, php string, domains 
 	}
 
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO sites (name, pool, state, php, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		name, pool, SiteCreating, php, now.Unix(), now.Unix())
+		`INSERT INTO sites (name, pool, state, type, php, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		name, pool, SiteCreating, phpType(php), php, now.Unix(), now.Unix())
 	if err != nil {
 		return Site{}, fmt.Errorf("store: %w", err)
 	}
@@ -118,7 +145,7 @@ func (s *Store) CreateSite(ctx context.Context, name, pool, php string, domains 
 
 	t := time.Unix(now.Unix(), 0).UTC()
 
-	return Site{ID: id, Name: name, Pool: pool, State: SiteCreating, PHP: php, Domains: domains, TLSDomains: []string{}, CreatedAt: t, UpdatedAt: t}, nil
+	return Site{ID: id, Name: name, Pool: pool, State: SiteCreating, Type: phpType(php), PHP: php, Domains: domains, TLSDomains: []string{}, CreatedAt: t, UpdatedAt: t}, nil
 }
 
 func insertDomains(ctx context.Context, tx *sql.Tx, siteID int64, domains []string) error {
@@ -164,6 +191,8 @@ func (s *Store) SetSiteState(ctx context.Context, name, state string, now time.T
 }
 
 // SetSitePHP sets the PHP version of a site and returns the previous one.
+// On a static or PHP site the type follows: a version makes it php, ""
+// makes it static. Other types have no PHP: ErrSiteType.
 func (s *Store) SetSitePHP(ctx context.Context, name, php string, now time.Time) (string, error) {
 	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
@@ -172,8 +201,8 @@ func (s *Store) SetSitePHP(ctx context.Context, name, php string, now time.Time)
 
 	defer func() { _ = tx.Rollback() }()
 
-	var old string
-	if err := tx.QueryRowContext(ctx, `SELECT php FROM sites WHERE name = ?`, name).Scan(&old); err != nil {
+	var old, typ string
+	if err := tx.QueryRowContext(ctx, `SELECT php, type FROM sites WHERE name = ?`, name).Scan(&old, &typ); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", ErrNotFound
 		}
@@ -181,7 +210,12 @@ func (s *Store) SetSitePHP(ctx context.Context, name, php string, now time.Time)
 		return "", fmt.Errorf("store: %w", err)
 	}
 
-	if _, err := tx.ExecContext(ctx, `UPDATE sites SET php = ?, updated_at = ? WHERE name = ?`, php, now.Unix(), name); err != nil {
+	if typ != SiteTypeStatic && typ != SiteTypePHP {
+		return "", ErrSiteType
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET php = ?, type = ?, updated_at = ? WHERE name = ?`,
+		php, phpType(php), now.Unix(), name); err != nil {
 		return "", fmt.Errorf("store: %w", err)
 	}
 
@@ -362,7 +396,7 @@ func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
 
 type scanner interface{ Scan(dest ...any) error }
 
-const siteColumns = `id, name, pool, state, php, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
+const siteColumns = `id, name, pool, state, type, php, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
 	maintenance, coalesce(maintenance_page, 0), maintenance_allow, coalesce(disabled_page, 0), tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
 	created_at, updated_at`
 
@@ -377,7 +411,7 @@ func scanSite(r scanner) (Site, error) {
 		renewAt                    int64
 	)
 
-	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.PHP, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
+	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
 		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err

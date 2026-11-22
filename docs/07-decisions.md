@@ -59,6 +59,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0053 | Site logs in the panel | Accepted on 2026-11-21 ([adr/0053](adr/0053-site-logs-in-the-panel.md)) | Done |
 | 0054 | Site types Node.js, reverse proxy and redirect | Accepted on 2026-11-22 ([adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md)) | No |
 | 0055 | Email notifications for service outages | Accepted on 2026-11-22 ([adr/0055](adr/0055-service-outage-notifications.md)) | No |
+| 0056 | Security headers per site | Accepted on 2026-11-22 ([adr/0056](adr/0056-security-headers-per-site.md)) | No |
 
 ---
 
@@ -393,3 +394,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0055 Email notifications for service outages
 
 **Full text (status Accepted, 2026-11-22, by Kim):** [adr/0055](adr/0055-service-outage-notifications.md). Summary: a new notification category `services` on top of ADR-0044, fed by the service monitor of ADR-0052. Emails when a unit is `failed`, when it crashes 3 times within 15 minutes, when the agent is unreachable for about 3 minutes, and an all-clear when it is back (all-clear only for services, Kim 2026-11-22). Server units go to admins, site units (PHP, Valkey, Node.js, app) also to managers and users with a grant. No log lines in emails. New event kind `recovered` in `service_events` (migration 0047). No new `os/exec` exception, no new agent operation.
+
+## ADR-0056 Security headers per site
+
+**Full text (status Accepted, 2026-11-22, by Kim):** [adr/0056](adr/0056-security-headers-per-site.md). Summary: typed switches per site for `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` and `Content-Security-Policy` (enforce or report only), next to the existing HSTS switch. Rendered with `always` at the server level for every site type and repeated in each location that sets its own headers (also fixes lost HSTS with a header snippet); a switched-on header replaces the application's own via `fastcgi_hide_header`/`proxy_hide_header`. Own values checked in panel and agent against nginx injection. Default (Kim, 2026-11-22): new sites get `nosniff`, `SAMEORIGIN` and `strict-origin-when-cross-origin`; existing and imported sites unchanged. API `GET`/`PUT /api/v1/sites/{name}/headers`, action `sites.headers:write` for everyone with a grant for the site, migration 0048. No new agent operation, no new `os/exec` exception.

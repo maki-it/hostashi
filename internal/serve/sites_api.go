@@ -21,6 +21,7 @@ type siteJSON struct {
 	Name     string `json:"name"`
 	Pool     string `json:"pool"`
 	State    string `json:"state"`
+	Type     string `json:"type"`     // static, php, node, app, proxy, redirect (ADR-0054)
 	PHP      string `json:"php"`      // PHP version, "" for no PHP
 	Disabled bool   `json:"disabled"` // answers 503, PHP stopped
 	// DisabledPage is the maintenance page shown while disabled (ADR-0047).
@@ -104,7 +105,7 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	}
 
 	return siteJSON{
-		Name: s.Name, Pool: s.Pool, State: s.State, PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, Maintenance: toMaintenanceJSON(s),
+		Name: s.Name, Pool: s.Pool, State: s.State, Type: s.Type, PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, Maintenance: toMaintenanceJSON(s),
 		TLS: tlsJSON{
 			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
@@ -149,6 +150,8 @@ func siteFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "not_letsencrypt", "only a site with HTTPS from Let's Encrypt can be renewed")
 	case errors.Is(err, hosting.ErrState):
 		writeError(w, http.StatusConflict, "site_busy", "the site is being created or deleted")
+	case errors.Is(err, hosting.ErrSiteType):
+		writeError(w, http.StatusConflict, "wrong_site_type", "not possible for this type of site")
 	case errors.As(err, &ae):
 		log.Warn(what+": agent refused", "code", ae.Code, "message", ae.Message)
 
