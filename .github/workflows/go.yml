@@ -50,9 +50,9 @@ jobs:
           files="$(git diff --name-only "$BASE" HEAD | grep -vE '\.md$' || true)"
           echo "$files"
           match() { if grep -qE "$1" <<<"$files"; then echo true; else echo false; fi; }
-          echo "go=$(match '(\.go$|^go\.(mod|sum)$|^\.golangci\.yml$|^(cmd|internal|packaging)/|^\.github/workflows/go\.yml$)')" >> "$GITHUB_OUTPUT"
-          echo "installer=$(match '(^go\.(mod|sum)$|^(cmd|internal|packaging)/|^\.github/workflows/go\.yml$)')" >> "$GITHUB_OUTPUT"
-          echo "package=$(match '(^\.goreleaser\.yaml$|^go\.(mod|sum)$|^(cmd|internal|packaging|web|tools/release-key)/|^\.github/workflows/go\.yml$)')" >> "$GITHUB_OUTPUT"
+          echo "go=$(match '(\.go$|^go\.(mod|sum)$|^\.golangci\.yml$|^(api|cmd|internal|packaging)/|^\.github/workflows/go\.yml$)')" >> "$GITHUB_OUTPUT"
+          echo "installer=$(match '(^go\.(mod|sum)$|^(api|cmd|internal|packaging)/|^\.github/workflows/go\.yml$)')" >> "$GITHUB_OUTPUT"
+          echo "package=$(match '(^\.goreleaser\.yaml$|^go\.(mod|sum)$|^(api|cmd|internal|packaging|web|tools/release-key)/|^\.github/workflows/go\.yml$)')" >> "$GITHUB_OUTPUT"
 
   test:
     needs: changes

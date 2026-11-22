@@ -15,6 +15,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/cloudpanel/plan"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -55,6 +56,25 @@ type meJSON struct {
 	SecondFactor         bool `json:"secondFactor"`
 	SecondFactorRequired bool `json:"secondFactorRequired"`
 	preferencesJSON
+}
+
+// setupStatusJSON is the answer of GET /api/v1/setup.
+type setupStatusJSON struct {
+	Required bool `json:"required"`
+}
+
+// setupRequest creates the first admin.
+type setupRequest struct {
+	Token    string `json:"token"` // from hostashi setup-token
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// loginRequest starts a session; TOTP is the code of an account with TOTP.
+type loginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	TOTP     string `json:"totp"`
 }
 
 // preferencesJSON is how the panel looks for the account (ADR-0037).
@@ -277,7 +297,9 @@ func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger)
 	fail := newFail(log)
 	a := authn{svc: svc, fail: fail}
 
-	mux.HandleFunc("GET /api/v1/setup", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("GET /api/v1/setup", openapi.Operation{
+		ID: "getSetup", Tag: "auth", Summary: "Whether the first admin still has to be set up", Out: setupStatusJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		req, err := svc.SetupRequired(r.Context())
 		if err != nil {
 			fail(w, err, "setup status")
@@ -285,15 +307,14 @@ func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger)
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]bool{"required": req})
+		writeJSON(w, http.StatusOK, setupStatusJSON{Required: req})
 	})
 
-	mux.HandleFunc("POST /api/v1/setup", func(w http.ResponseWriter, r *http.Request) {
-		var in struct {
-			Token    string `json:"token"`
-			Username string `json:"username"`
-			Password string `json:"password"`
-		}
+	mux.Op("POST /api/v1/setup", openapi.Operation{
+		ID: "setup", Tag: "auth", Summary: "Create the first admin with the one-time setup token",
+		In: setupRequest{}, Out: userJSON{}, Status: http.StatusCreated,
+	}, func(w http.ResponseWriter, r *http.Request) {
+		var in setupRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -308,12 +329,10 @@ func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger)
 		writeJSON(w, http.StatusCreated, userJSON{Username: u.Username, Role: u.Role})
 	})
 
-	mux.HandleFunc("POST /api/v1/auth/login", func(w http.ResponseWriter, r *http.Request) {
-		var in struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-			TOTP     string `json:"totp"`
-		}
+	mux.Op("POST /api/v1/auth/login", openapi.Operation{
+		ID: "login", Tag: "auth", Summary: "Log in and start a browser session (cookie)", In: loginRequest{}, Out: meJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		var in loginRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -329,7 +348,9 @@ func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger)
 		a.writeLoggedIn(w, r, u)
 	})
 
-	mux.HandleFunc("POST /api/v1/auth/logout", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("POST /api/v1/auth/logout", openapi.Operation{
+		ID: "logout", Tag: "auth", Summary: "End the browser session",
+	}, func(w http.ResponseWriter, r *http.Request) {
 		if err := svc.Logout(r.Context(), sessionToken(r)); err != nil {
 			fail(w, err, "logout")
 
@@ -406,7 +427,9 @@ func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger)
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	mux.HandleFunc("GET /api/v1/auth/me", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("GET /api/v1/auth/me", openapi.Operation{
+		ID: "getMe", Tag: "auth", Summary: "The caller's account, role and how it is logged in", Out: meJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		p, ok := a.principal(w, r)
 		if !ok {
 			return

@@ -11,6 +11,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/authz"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -261,6 +262,31 @@ type tokenJSON struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
+// tokenCreatedJSON is a new token with its secret.
+type tokenCreatedJSON struct {
+	tokenJSON
+
+	Token    string   `json:"token"` // the secret, shown only now
+	Warnings []string `json:"warnings"`
+}
+
+// tokenCreateRequest asks for a new API token.
+type tokenCreateRequest struct {
+	Name          string   `json:"name"`
+	Scopes        []string `json:"scopes"`
+	ExpiresInDays int      `json:"expiresInDays"`
+	Unlimited     bool     `json:"unlimited"`
+	Sites         []string `json:"sites"` // null or missing: every site
+}
+
+type tokenListJSON struct {
+	Tokens []tokenJSON `json:"tokens"`
+}
+
+type scopeListJSON struct {
+	Scopes []auth.ScopeInfo `json:"scopes"`
+}
+
 func toTokenJSON(t store.APIToken) tokenJSON {
 	return tokenJSON{
 		ID: t.ID, Name: t.Name, Prefix: auth.TokenPrefix + t.Prefix, Scopes: t.Scopes, CreatedAt: t.CreatedAt,
@@ -270,7 +296,9 @@ func toTokenJSON(t store.APIToken) tokenJSON {
 }
 
 func registerTokens(mux *routeMux, a authn) {
-	mux.HandleFunc("GET /api/v1/scopes", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("GET /api/v1/scopes", openapi.Operation{
+		ID: "listScopes", Tag: "tokens", Summary: "The token scopes the caller's role can use", Out: scopeListJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		p, ok := a.principal(w, r)
 		if !ok {
 			return
@@ -286,22 +314,19 @@ func registerTokens(mux *routeMux, a authn) {
 			}
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]auth.ScopeInfo{"scopes": out})
+		writeJSON(w, http.StatusOK, scopeListJSON{Scopes: out})
 	})
 
-	mux.HandleFunc("POST /api/v1/tokens", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("POST /api/v1/tokens", openapi.Operation{
+		ID: "createToken", Tag: "tokens", Summary: "Create an API token; the secret is shown only in this answer",
+		In: tokenCreateRequest{}, Out: tokenCreatedJSON{}, Status: http.StatusCreated,
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok || !a.secondFactorOK(w, r, u) {
 			return
 		}
 
-		var in struct {
-			Name          string   `json:"name"`
-			Scopes        []string `json:"scopes"`
-			ExpiresInDays int      `json:"expiresInDays"`
-			Unlimited     bool     `json:"unlimited"`
-			Sites         []string `json:"sites"` // null or missing: every site
-		}
+		var in tokenCreateRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -315,11 +340,7 @@ func registerTokens(mux *routeMux, a authn) {
 			return
 		}
 
-		out := struct {
-			tokenJSON
-			Token    string   `json:"token"` // the secret, shown only now
-			Warnings []string `json:"warnings"`
-		}{tokenJSON: toTokenJSON(nt.Token), Token: nt.Secret, Warnings: []string{}}
+		out := tokenCreatedJSON{tokenJSON: toTokenJSON(nt.Token), Token: nt.Secret, Warnings: []string{}}
 
 		if nt.Token.ExpiresAt == nil {
 			out.Warnings = append(out.Warnings, "never_expires: this token stays valid until it is revoked")
@@ -340,7 +361,9 @@ func registerTokens(mux *routeMux, a authn) {
 		writeJSON(w, http.StatusCreated, out)
 	})
 
-	mux.HandleFunc("GET /api/v1/tokens", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("GET /api/v1/tokens", openapi.Operation{
+		ID: "listTokens", Tag: "tokens", Summary: "The caller's API tokens", Out: tokenListJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok {
 			return
@@ -360,10 +383,12 @@ func registerTokens(mux *routeMux, a authn) {
 			out = append(out, j)
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]tokenJSON{"tokens": out})
+		writeJSON(w, http.StatusOK, tokenListJSON{Tokens: out})
 	})
 
-	mux.HandleFunc("DELETE /api/v1/tokens/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("DELETE /api/v1/tokens/{id}", openapi.Operation{
+		ID: "revokeToken", Tag: "tokens", Summary: "Revoke one of the caller's API tokens",
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok {
 			return
