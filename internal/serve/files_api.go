@@ -132,6 +132,12 @@ func (p *filesProxy) siteReady(w http.ResponseWriter, r *http.Request) (string, 
 		return "", false
 	}
 
+	if !site.Account {
+		siteFail(p.log, w, hosting.ErrSiteType, "files")
+
+		return "", false
+	}
+
 	return name, true
 }
 

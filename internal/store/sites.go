@@ -42,8 +42,14 @@ type Site struct {
 	// AssetCacheSeconds and AssetCacheExts: 0 and empty use the defaults.
 	AssetCacheSeconds int
 	AssetCacheExts    []string
-	Domains           []string
-	TLS               bool // HTTPS wanted
+	// Account: the site has a Linux account and home. A redirect site is
+	// created without one (ADR-0054).
+	Account bool
+	// Redirect is the redirect of a redirect site; it is kept after a
+	// type change (nil: never set).
+	Redirect *SiteRedirect
+	Domains  []string
+	TLS      bool // HTTPS wanted
 	// HSTS sends Strict-Transport-Security while the site is on HTTPS.
 	HSTS bool
 	// PHPPrograms lets the site's PHP start programs (ADR-0033).
@@ -99,6 +105,13 @@ const (
 	SiteTypeRedirect = "redirect"
 )
 
+// SiteRedirect is the target of a redirect site (ADR-0054).
+type SiteRedirect struct {
+	Target   string
+	Status   int
+	KeepPath bool
+}
+
 // ErrSiteType: the change does not fit the site's type, for example a PHP
 // version for a reverse proxy.
 var ErrSiteType = errors.New("store: not possible for this type of site")
@@ -115,6 +128,25 @@ func phpType(php string) string {
 // CreateSite stores a new site in state creating together with its domains.
 // Its type is php with a PHP version and static without one.
 func (s *Store) CreateSite(ctx context.Context, name, pool, php string, domains []string, now time.Time) (Site, error) {
+	return s.createSite(ctx, Site{Name: name, Pool: pool, Type: phpType(php), PHP: php, Account: true}, domains, now)
+}
+
+// CreateRedirectSite stores a new redirect site without a Linux account in
+// state creating together with its domains (ADR-0054).
+func (s *Store) CreateRedirectSite(ctx context.Context, name, pool string, r SiteRedirect, domains []string, now time.Time) (Site, error) {
+	return s.createSite(ctx, Site{Name: name, Pool: pool, Type: SiteTypeRedirect, Redirect: &r}, domains, now)
+}
+
+func (s *Store) createSite(ctx context.Context, site Site, domains []string, now time.Time) (Site, error) {
+	name, pool, php := site.Name, site.Pool, site.PHP
+
+	var r SiteRedirect
+	if site.Redirect != nil {
+		r = *site.Redirect
+	} else {
+		r.Status = 301
+	}
+
 	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return Site{}, fmt.Errorf("store: %w", err)
@@ -132,8 +164,9 @@ func (s *Store) CreateSite(ctx context.Context, name, pool, php string, domains 
 	}
 
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO sites (name, pool, state, type, php, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		name, pool, SiteCreating, phpType(php), php, now.Unix(), now.Unix())
+		`INSERT INTO sites (name, pool, state, type, php, account, redirect_target, redirect_status, redirect_keep_path, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		name, pool, SiteCreating, site.Type, php, boolInt(site.Account), r.Target, r.Status, boolInt(r.KeepPath), now.Unix(), now.Unix())
 	if err != nil {
 		return Site{}, fmt.Errorf("store: %w", err)
 	}
@@ -153,7 +186,9 @@ func (s *Store) CreateSite(ctx context.Context, name, pool, php string, domains 
 
 	t := time.Unix(now.Unix(), 0).UTC()
 
-	return Site{ID: id, Name: name, Pool: pool, State: SiteCreating, Type: phpType(php), PHP: php, Domains: domains, TLSDomains: []string{}, CreatedAt: t, UpdatedAt: t}, nil
+	site.ID, site.State, site.Domains, site.TLSDomains, site.CreatedAt, site.UpdatedAt = id, SiteCreating, domains, []string{}, t, t
+
+	return site, nil
 }
 
 func insertDomains(ctx context.Context, tx *sql.Tx, siteID int64, domains []string) error {
@@ -406,7 +441,7 @@ type scanner interface{ Scan(dest ...any) error }
 
 const siteColumns = `id, name, pool, state, type, php, web_dir, spa, asset_cache, asset_cache_seconds, asset_cache_exts, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
 	maintenance, coalesce(maintenance_page, 0), maintenance_allow, coalesce(disabled_page, 0), tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
-	created_at, updated_at`
+	account, redirect_target, redirect_status, redirect_keep_path, created_at, updated_at`
 
 func scanSite(r scanner) (Site, error) {
 	var (
@@ -419,10 +454,13 @@ func scanSite(r scanner) (Site, error) {
 		renewAt                    int64
 		spa, assets                int
 		exts                       string
+		account, keepPath          int
+		redirect                   SiteRedirect
 	)
 
 	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &st.WebDir, &spa, &assets, &st.AssetCacheSeconds, &exts, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
-		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced, &cre, &upd)
+		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced,
+		&account, &redirect.Target, &redirect.Status, &keepPath, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
 	}
@@ -434,6 +472,12 @@ func scanSite(r scanner) (Site, error) {
 	st.TLS, st.HSTS, st.Disabled, st.TLSLive = tls == 1, hsts == 1, disabled == 1, live == 1
 	st.PHPPrograms = progs == 1
 	st.SPA, st.AssetCache = spa == 1, assets == 1
+	st.Account = account == 1
+
+	if redirect.Target != "" {
+		redirect.KeepPath = keepPath == 1
+		st.Redirect = &redirect
+	}
 
 	if exts != "" {
 		st.AssetCacheExts = strings.Fields(exts)
@@ -757,4 +801,47 @@ func (s *Store) DeleteSite(ctx context.Context, name string) error {
 	}
 
 	return nil
+}
+
+// SetSiteRedirect changes the target of a redirect site and returns the
+// previous one. Other types refuse it with ErrSiteType.
+func (s *Store) SetSiteRedirect(ctx context.Context, name string, r SiteRedirect, now time.Time) (SiteRedirect, error) {
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return SiteRedirect{}, fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var (
+		old      SiteRedirect
+		typ      string
+		keepPath int
+	)
+
+	if err := tx.QueryRowContext(ctx, `SELECT type, redirect_target, redirect_status, redirect_keep_path FROM sites WHERE name = ?`, name).
+		Scan(&typ, &old.Target, &old.Status, &keepPath); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return SiteRedirect{}, ErrNotFound
+		}
+
+		return SiteRedirect{}, fmt.Errorf("store: %w", err)
+	}
+
+	if typ != SiteTypeRedirect {
+		return SiteRedirect{}, ErrSiteType
+	}
+
+	old.KeepPath = keepPath == 1
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET redirect_target = ?, redirect_status = ?, redirect_keep_path = ?, updated_at = ? WHERE name = ?`,
+		r.Target, r.Status, boolInt(r.KeepPath), now.Unix(), name); err != nil {
+		return SiteRedirect{}, fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return SiteRedirect{}, fmt.Errorf("store: %w", err)
+	}
+
+	return old, nil
 }

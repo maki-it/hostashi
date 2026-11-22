@@ -238,7 +238,7 @@ func (s *Service) UpdateLimitPreset(ctx context.Context, actor int64, name, newN
 				continue
 			}
 
-			if site.State != store.SiteActive {
+			if site.State != store.SiteActive || !site.Account {
 				continue
 			}
 
@@ -324,6 +324,10 @@ func (s *Service) SiteUsage(ctx context.Context, name string) (agentapi.SiteQuot
 		return agentapi.SiteQuota{}, err
 	}
 
+	if err := needAccount(site); err != nil {
+		return agentapi.SiteQuota{}, err
+	}
+
 	return s.limits.SiteQuotaGet(ctx, site.Name)
 }
 
@@ -356,6 +360,10 @@ func (s *Service) SetSiteLimits(ctx context.Context, actor int64, name, preset s
 
 	if site.State != store.SiteActive {
 		return SiteLimitsView{}, errLimitsNotActive
+	}
+
+	if err := needAccount(site); err != nil {
+		return SiteLimitsView{}, err
 	}
 
 	var (

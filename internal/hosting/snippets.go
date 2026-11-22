@@ -63,6 +63,11 @@ func (s *Service) SetSnippets(ctx context.Context, actor int64, name, server, ro
 		return store.SiteSnippets{}, ErrState
 	}
 
+	// A redirect site has no snippets (ADR-0054).
+	if site.Type == store.SiteTypeRedirect {
+		return store.SiteSnippets{}, ErrSiteType
+	}
+
 	res, err := s.ag.SnippetCheck(ctx, agentapi.SnippetCheckRequest{
 		User: site.Name, PHP: site.PHP != "", Snippets: agentapi.WebSnippets{Server: server, Root: root},
 	})
@@ -117,6 +122,10 @@ func (s *Service) SnippetTarget(ctx context.Context, name string) (snippetdraft.
 
 	if site.State != store.SiteActive {
 		return snippetdraft.Target{}, ErrState
+	}
+
+	if site.Type == store.SiteTypeRedirect {
+		return snippetdraft.Target{}, ErrSiteType
 	}
 
 	res, err := s.ag.SnippetCheck(ctx, agentapi.SnippetCheckRequest{User: site.Name, PHP: site.PHP != ""})
