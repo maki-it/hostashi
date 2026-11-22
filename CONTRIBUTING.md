@@ -81,7 +81,7 @@ Mail server, DNS server, billing, reseller features and multi-server are non-goa
 
 - Commit messages in English, imperative mood, short subject (about 72 characters), for example `Add threat model for agent RPC`.
 - One logical change per pull request. Fill in the PR template.
-- User documentation lives in [`docs/wiki/`](docs/wiki/) and is mirrored to the GitHub wiki after each merge ([ADR-0043](docs/adr/0043-user-documentation.md)). Change it there, not in the wiki. A pull request that changes what users see or do should update the matching page. Pages link each other as `Page.md`.
+- User documentation lives in [`docs/wiki/`](docs/wiki/) and is mirrored to the GitHub wiki after each merge ([ADR-0043](docs/adr/0043-user-documentation.md)). Change it there, not in the wiki. A pull request that changes what users see or do should update the matching page. Pages link each other as `Page.md`. Screenshots in `docs/wiki/images/` come from `cd web && npm run wiki-shots`, which serves the UI with the sample data in `web/e2e/wiki-fixtures.mjs`; renew them after UI changes instead of taking them by hand.
 - Documentation changes must pass the CI checks (Markdown lint and link check). Go changes must pass the Go workflow (golangci-lint format and lint, vet, tests with race detector, short fuzzing, govulncheck). The Go version is pinned in `go.mod`. To run the lint locally: `npx markdownlint-cli2 "**/*.md"`.
 - Do not commit secrets. `.env` files are ignored.
 

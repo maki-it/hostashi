@@ -15,6 +15,8 @@ Hostashi does not store database passwords and cannot show them again. If one is
 
 In the site's configuration, use `localhost` as the database host for the server's own MariaDB. For an external server, use the host name shown in the server list.
 
+![The Databases page](images/databases.png)
+
 ## Import and export
 
 Dumps are files in the site's home. Upload them first, for example with [SFTP](SSH-and-SFTP.md) or the [file manager](File-manager.md).

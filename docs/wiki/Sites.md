@@ -4,6 +4,8 @@
 
 A site is everything that answers for a set of domains: the web server configuration, the certificate and, for most types, its own Linux user with a home folder, its own PHP or Node.js processes, cron jobs, SSH access and limits. Sites cannot read each other's files.
 
+![The Sites page with six sample sites](images/sites.png)
+
 ## Site types
 
 | Type | For | Linux user and files |
@@ -28,6 +30,8 @@ A site without a Linux user has no files, cron jobs, SSH access or limits.
 The site is live right away. Until the certificate is there, it answers over HTTP.
 
 Upload your files with SFTP ([SSH and SFTP](SSH-and-SFTP.md)) or the [file manager](File-manager.md). For PHP and static sites, the web root is `/home/<name>/htdocs`; another folder can be set on the site's **Web** tab.
+
+![The form for a new site](images/site-new.png)
 
 ## The tabs of a site
 

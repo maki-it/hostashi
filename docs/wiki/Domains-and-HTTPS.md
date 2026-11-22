@@ -19,6 +19,8 @@ On the site's **Domains & HTTPS** tab, edit the list: one domain per line, the f
 
 A domain can belong to one site or parked domain only, and never be the panel's own host name.
 
+![The Domains tab of a site](images/site-domains.png)
+
 ## HTTPS
 
 With **HTTPS with a Let's Encrypt certificate** on, Hostashi gets a certificate for all domains of the site, renews it on its own and redirects HTTP to HTTPS. Sites are served with HTTP/2 and HTTP/3.

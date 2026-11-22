@@ -25,6 +25,8 @@ sudo hostashi backup key show
 
 Without them, the backups are useless if the server is lost. They are never shown in the panel or the API.
 
+![The Backups page with status and snapshots](images/backups.png)
+
 ## Data check
 
 Once a month Hostashi reads part of the stored data back and checks it, a different part each month. **Monthly data check reads 1 of N parts** sets how much; `0` turns it off. **Status** shows the last backup and the last data check.
