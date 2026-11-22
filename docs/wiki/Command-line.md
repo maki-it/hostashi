@@ -70,12 +70,19 @@ These commands go through the panel's API like [`hostashi api`](#using-the-api-f
 
 ## Sites
 
+`site create`, `site delete`, `site list` and `site limits` go through the panel's API and need `hostashi login`. `site files` talks to the agent and needs root on the server.
+
 | Command | What it does |
 |---------|--------------|
-| `hostashi site list` | Lists the site accounts. |
+| `hostashi site list` | Lists the sites with their type, pool, state and domains. |
+| `hostashi site create NAME DOMAIN[,DOMAIN...] [POOL]` | Creates a static site with its domains, for example `hostashi site create blog blog.example.com,www.blog.example.com`. Change it afterwards in the panel or with `hostashi api`. |
+| `hostashi site delete NAME` | Deletes a site with its files, databases and virtual host. |
 | `hostashi site files NAME` | Starts the file manager of a site and prints its socket. The panel does this by itself; the command is for checks. |
-| `hostashi site limits NAME` | Shows the CPU, memory and process limits of a site. |
-| `hostashi site limits NAME memory=BYTES tasks=N cpu-weight=N cpu-quota=PERCENT` | Sets them. A value you leave out means no limit. |
+| `hostashi site limits NAME` | Shows the preset and the limits of a site. |
+| `hostashi site limits NAME preset=PRESET` | Gives the site a limit preset. |
+| `hostashi site limits NAME KEY=VALUE ...` | Changes single limits, for example `hostashi site limits blog memory=536870912 cpu-priority=high`. Values you leave out stay as they are; 0 means no limit. |
+
+`site limits` goes through the panel's API, like in **Site → Limits**: it needs `hostashi login` and a token with `limits:read` (and `limits:write` to change). The keys are `memory` and `disk` (bytes), `inodes`, `tasks`, `php-workers`, `cpu-priority` (`low`, `normal` or `high`), `cpu-quota` (percent of one CPU), `db-size` (bytes, only warns) and `db-connections`.
 
 ## Storage pools
 
@@ -99,17 +106,28 @@ A site gets its pool when it is created and stays there. Its databases stay in M
 
 ## Databases
 
+These commands go through the panel's API, like **Site → Databases**, and need `hostashi login` with the `databases:…` scopes.
+
 | Command | What it does |
 |---------|--------------|
-| `hostashi db list` | Lists the databases. |
+| `hostashi db list` | Lists the databases with their site and users. |
+| `hostashi db create SITE NAME` | Creates a database for a site. |
+| `hostashi db delete NAME` | Deletes a database and its users. |
+| `hostashi db user create DATABASE USER` | Creates a database user. Reads the password from standard input; an empty line generates one and prints it once. |
 | `hostashi db import DATABASE FILE` | Loads a dump into a database. `FILE` is relative to the site's home and ends in `.sql` or `.sql.gz`. |
 | `hostashi db export DATABASE FILE` | Writes a dump of a database into the site's home. |
-| `hostashi db user password USER` | Sets a new password for a database user. Reads it from standard input; an empty line generates one. |
+| `hostashi db user password USER` | Sets a new password for a database user. Reads it from standard input; an empty line generates one and prints it once. |
+| `hostashi db user delete USER` | Removes a database user. |
 
 ## Backups
 
+These commands go through the panel's API and need `hostashi login`, except `backup key show`, which only root on the server can run.
+
 | Command | What it does |
 |---------|--------------|
+| `hostashi backup get` | Shows the backup settings, the public key and the state as JSON. |
+| `hostashi backup set` | Sets the target, retention and time window. Reads the settings as JSON from standard input. |
+| `hostashi backup hostkey` | Confirms the host key of the backup server. Reads one public key line from standard input. |
 | `hostashi backup start` | Starts a backup now. |
 | `hostashi backup status` | Shows the state of the last backup. |
 | `hostashi backup restore SITE SNAPSHOT` | Restores a snapshot into a new folder `restore-<time>` in the site's home. Nothing existing is overwritten. |

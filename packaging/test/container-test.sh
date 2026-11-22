@@ -405,7 +405,11 @@ if x /usr/local/bin/hostashi system reboot not-this-host >/dev/null 2>&1; then f
 [ "$(x systemctl is-system-running 2>/dev/null || true)" != stopping ] || fail "the container is shutting down"
 
 step "a site is served, with brotli"
-x /usr/local/bin/hostashi site create blog
+# The CLI creates the site through the panel's API (ADR-0058): account,
+# domains and virtual host in one go.
+x /usr/local/bin/hostashi site create blog blog.example.com,www.blog.example.com
+x /usr/local/bin/hostashi site list | grep $'^blog\ttype=static\t.*\tdomains=blog.example.com,www.blog.example.com$' >/dev/null ||
+  fail "site list: $(x /usr/local/bin/hostashi site list)"
 expect_mode /home/blog "750 blog:www-data"
 expect_mode /home/blog/htdocs "755 blog:blog"
 
@@ -505,15 +509,10 @@ x systemctl daemon-reload
 
 # shellcheck disable=SC2016 # expanded inside the container
 x sh -c 'echo "hello from blog" >/home/blog/htdocs/index.html; for i in $(seq 1 200); do echo ".c$i { color: red; }"; done >/home/blog/htdocs/app.css; chown blog:blog /home/blog/htdocs/*'
-web_apply() { docker exec -i "$NAME" /usr/local/bin/hostashi web apply <<<"$1"; }
-web_apply '{"sites":[{"user":"blog","domains":["blog.example.com","www.blog.example.com"]}]}'
 body=$(x curl -fsS -H 'Host: www.blog.example.com' http://127.0.0.1/)
 [ "$body" = "hello from blog" ] || fail "site answered '$body'"
 enc=$(x curl -fsS -o /dev/null -D - -H 'Accept-Encoding: br' -H 'Host: blog.example.com' http://127.0.0.1/app.css | tr -d '\r' | grep -i '^content-encoding:' || true)
 [ "$enc" = "Content-Encoding: br" ] || fail "no brotli response ($enc)"
-out=$(web_apply '{"sites":[{"user":"blog","domains":["blog.example.com","www.blog.example.com"]}]}')
-grep -q 'changed: false' <<<"$out" || fail "same web state applied again: $out"
-if x /usr/local/bin/hostashi site delete blog; then fail "site with a virtual host was deleted"; fi
 
 step "file manager helper runs as the site user (ADR-0040)"
 sock=$(x /usr/local/bin/hostashi site files blog)
@@ -560,8 +559,10 @@ body=$(x curl -fsS -H 'Host: blog.example.com' http://127.0.0.1/)
 [ "$body" = "hello from blog" ] || fail "site gone after the agent restarted: '$body'"
 
 step "remove the site"
-web_apply '{"sites":[]}'
 x /usr/local/bin/hostashi site delete blog
+x /usr/local/bin/hostashi site list | grep $'^blog\t' >/dev/null && fail "deleted site still listed"
+body=$(x curl -sS -H 'Host: blog.example.com' http://127.0.0.1/ 2>/dev/null || true)
+[ "$body" != "hello from blog" ] || fail "deleted site still served"
 x test ! -e /home/blog || fail "site home still there"
 x test ! -e /etc/systemd/system/hostashi-files@blog.service.d || fail "file manager drop-in left"
 x test ! -e /run/hostashi-files/blog.sock || fail "file manager socket left"
@@ -693,19 +694,6 @@ grep '^hostashi_site_php_memory_bytes' <<<"$metrics" || echo "note: no PHP memor
 # The site's PHP runs in its slice, and the slice takes the limits (ADR-0015).
 phpcg=$(x systemctl show -p ControlGroup --value "hostashi-php-$ver@wp.service")
 [ "$phpcg" = "/hostashi.slice/hostashi-site.slice/hostashi-site-wp.slice/hostashi-php-$ver@wp.service" ] || fail "PHP unit not in the site slice: $phpcg"
-x /usr/local/bin/hostashi site limits wp memory=268435456 tasks=64 cpu-weight=200
-x /usr/local/bin/hostashi site limits wp | grep -qx 'memory=268435456 tasks=64 cpu-weight=200 cpu-quota=0' || fail "limits not read back"
-for p in MemoryMax=268435456 MemoryHigh=241591905 TasksMax=64 CPUWeight=200; do
-  [ "$(x systemctl show -p "${p%%=*}" --value hostashi-site-wp.slice)" = "${p#*=}" ] || fail "slice ${p%%=*} not ${p#*=}"
-done
-sl=/sys/fs/cgroup/hostashi.slice/hostashi-site.slice/hostashi-site-wp.slice
-for f in memory.max=268435456 pids.max=64 cpu.weight=200; do
-  if x test -e "$sl/${f%%=*}"; then
-    [ "$(x cat "$sl/${f%%=*}")" = "${f#*=}" ] || fail "$sl/${f%%=*} is $(x cat "$sl/${f%%=*}"), want ${f#*=}"
-  else
-    echo "note: no ${f%%=*} in the container's cgroup (controller not delegated)"
-  fi
-done
 # PHP of a new site cannot start programs (ADR-0033); the switch per site
 # allows it and takes it back.
 xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/prog.php' <<'PHP'
@@ -739,6 +727,25 @@ wpuid=$(x id -u wp)
 expect_mode "/etc/systemd/system/user-$wpuid.slice.d/10-hostashi.conf" "644 root:root"
 for p in MemoryMax=536870912 TasksMax=96 CPUWeight=50; do
   [ "$(x systemctl show -p "${p%%=*}" --value "user-$wpuid.slice")" = "${p#*=}" ] || fail "user slice ${p%%=*} not ${p#*=}"
+done
+# The CLI changes single values through the API; the others stay
+# (ADR-0058).
+x /usr/local/bin/hostashi site limits wp memory=268435456 tasks=64 cpu-priority=high >/dev/null || fail "limits through the CLI"
+lim=$(x /usr/local/bin/hostashi site limits wp) || fail "limits not read back"
+case "$lim" in
+  "preset=custom memory=268435456 tasks=64 cpu-priority=high cpu-quota=0 disk=1073741824 inodes=10000 php-workers=7 "*) ;;
+  *) fail "limits read back: $lim" ;;
+esac
+for p in MemoryMax=268435456 MemoryHigh=241591905 TasksMax=64 CPUWeight=200; do
+  [ "$(x systemctl show -p "${p%%=*}" --value hostashi-site-wp.slice)" = "${p#*=}" ] || fail "slice ${p%%=*} not ${p#*=}"
+done
+sl=/sys/fs/cgroup/hostashi.slice/hostashi-site.slice/hostashi-site-wp.slice
+for f in memory.max=268435456 pids.max=64 cpu.weight=200; do
+  if x test -e "$sl/${f%%=*}"; then
+    [ "$(x cat "$sl/${f%%=*}")" = "${f#*=}" ] || fail "$sl/${f%%=*} is $(x cat "$sl/${f%%=*}"), want ${f#*=}"
+  else
+    echo "note: no ${f%%=*} in the container's cgroup (controller not delegated)"
+  fi
 done
 # PHP off: the pool goes away and PHP source is never sent.
 [ "$(api PUT /api/v1/sites/wp/php '{"php":""}')" = 200 ] || fail "PHP off: $(x cat /tmp/api.out)"
@@ -1206,7 +1213,7 @@ x mariadb -e "CREATE TABLE bk_db.t (v VARCHAR(20)); INSERT INTO bk_db.t VALUES (
 x systemctl start hostashi-backup.service || fail "backup run failed: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 x grep -q '"ok": true' /var/lib/hostashi-agent/backup/status.json || fail "status: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 x grep -q '"initialized": true' /var/lib/hostashi-agent/backup/status.json || fail "first run did not create the repository"
-x /usr/local/bin/hostashi backup status | grep '"ok": true' >/dev/null || fail "backup status through the agent"
+x /usr/local/bin/hostashi backup status | grep '"ok": true' >/dev/null || fail "backup status through the API"
 if [ "$(api GET /api/v1/sites/bk/backups)" != 200 ] || ! x grep -q '"kind":"db","database":"bk_db"' /tmp/api.out; then
   fail "site snapshots through the API: $(x cat /tmp/api.out)"
 fi

@@ -216,6 +216,11 @@ func apiPrint(ctx context.Context, w io.Writer, method, path string, in any) err
 		return err
 	}
 
+	return printIndented(w, raw)
+}
+
+// printIndented prints a JSON answer indented; an empty one prints nothing.
+func printIndented(w io.Writer, raw json.RawMessage) error {
 	if len(raw) == 0 {
 		return nil
 	}

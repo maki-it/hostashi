@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeAPI answers "METHOD /api/v1/path" with a fixed body and records the
@@ -116,9 +117,185 @@ func TestSystemOverAPI(t *testing.T) {
 func TestAliasesNeedLogin(t *testing.T) {
 	loginEnv(t)
 
-	for _, args := range [][]string{{"service", "list"}, {"system", "info"}} {
+	for _, args := range [][]string{{"service", "list"}, {"system", "info"}, {"site", "limits", "wp"}, {"backup", "get"}, {"db", "list"}, {"site", "list"}} {
 		if code, _, errOut := runCLI(t, "", args...); code != 1 || !strings.Contains(errOut, "not logged in") {
 			t.Errorf("%v = %d: %s", args, code, errOut)
 		}
+	}
+}
+
+func TestSiteLimitsOverAPI(t *testing.T) {
+	const cur = `{"set":true,"preset":"small","appliedAt":0,"applyError":"","updatedAt":0,"limits":{"diskBytes":1024,"diskInodes":10,` +
+		`"memoryBytes":512,"phpWorkers":5,"tasks":64,"cpuPriority":"normal","cpuQuotaPercent":0,"databaseBytes":0,"databaseConnections":0}}`
+
+	got := fakeAPI(t, map[string]string{
+		"GET /api/v1/sites/wp/limits": cur,
+		"PUT /api/v1/sites/wp/limits": cur,
+	})
+
+	code, out, errOut := runCLI(t, "", "site", "limits", "wp")
+	if code != 0 || out != "preset=small memory=512 tasks=64 cpu-priority=normal cpu-quota=0 disk=1024 inodes=10 php-workers=5 db-size=0 db-connections=0\n" {
+		t.Errorf("show = %d: %q %s", code, out, errOut)
+	}
+
+	// Values left out keep what the site has.
+	if code, _, errOut := runCLI(t, "", "site", "limits", "wp", "memory=256", "cpu-priority=high"); code != 0 {
+		t.Fatalf("set = %d: %s", code, errOut)
+	}
+
+	want := `{"custom":{"diskBytes":1024,"diskInodes":10,"memoryBytes":256,"phpWorkers":5,"tasks":64,"cpuPriority":"high",` +
+		`"cpuQuotaPercent":0,"databaseBytes":0,"databaseConnections":0}}`
+	if got["PUT /api/v1/sites/wp/limits"] != want {
+		t.Errorf("custom body = %s", got["PUT /api/v1/sites/wp/limits"])
+	}
+
+	if code, _, errOut := runCLI(t, "", "site", "limits", "wp", "preset=large"); code != 0 || got["PUT /api/v1/sites/wp/limits"] != `{"preset":"large"}` {
+		t.Errorf("preset = %d: %s %s", code, got["PUT /api/v1/sites/wp/limits"], errOut)
+	}
+
+	for _, bad := range [][]string{{"cpu-weight=200"}, {"memory"}, {"preset=large", "tasks=1"}} {
+		if code, _, _ := runCLI(t, "", append([]string{"site", "limits", "wp"}, bad...)...); code != 2 {
+			t.Errorf("%v = %d, want usage", bad, code)
+		}
+	}
+
+	if code, _, errOut := runCLI(t, "", "site", "limits", "wp", "tasks=x"); code != 1 || !strings.Contains(errOut, "tasks") {
+		t.Errorf("bad number = %d: %s", code, errOut)
+	}
+}
+
+func TestBackupOverAPI(t *testing.T) {
+	got := fakeAPI(t, map[string]string{
+		"GET /api/v1/backups":                       `{"ready":false,"publicKey":"ssh-ed25519 AAAA","hostKey":"","settings":{},"status":{"ok":true,"running":false}}`,
+		"PUT /api/v1/backups/settings":              `{"ready":false,"publicKey":"ssh-ed25519 AAAA"}`,
+		"PUT /api/v1/backups/hostkey":               `{"ready":true}`,
+		"POST /api/v1/backups/run":                  ``,
+		"POST /api/v1/sites/bk/backups/abc/restore": `{"id":"r1","state":"queued"}`,
+		"GET /api/v1/backups/restores/r1":           `{"id":"r1","state":"done"}`,
+	})
+
+	for _, c := range []struct {
+		in   string
+		args []string
+		want string
+	}{
+		{"", []string{"get"}, `"publicKey": "ssh-ed25519 AAAA"`},
+		{"", []string{"status"}, `"ok": true`},
+		{`{"version":1,"windowStart":2}`, []string{"set"}, `"ready": false`},
+		{"ssh-ed25519 KEY\n", []string{"hostkey"}, `"ready": true`},
+		{"", []string{"start"}, "backup started"},
+		{"", []string{"restore", "bk", "abc"}, `"state": "queued"`},
+		{"", []string{"restore-status", "r1"}, `"state": "done"`},
+	} {
+		code, out, errOut := runCLI(t, c.in, append([]string{"backup"}, c.args...)...)
+		if code != 0 || !strings.Contains(out, c.want) {
+			t.Errorf("%v = %d: %s %s", c.args, code, out, errOut)
+		}
+	}
+
+	if got["PUT /api/v1/backups/settings"] != `{"version":1,"windowStart":2}` || got["PUT /api/v1/backups/hostkey"] != `{"key":"ssh-ed25519 KEY"}` {
+		t.Errorf("bodies = %v", got)
+	}
+
+	if code, _, _ := runCLI(t, "not json", "backup", "set"); code != 1 {
+		t.Errorf("bad settings = %d", code)
+	}
+
+	if code, _, _ := runCLI(t, "", "backup", "nope"); code != 2 {
+		t.Errorf("usage = %d", code)
+	}
+}
+
+func TestDBOverAPI(t *testing.T) {
+	jobPoll = time.Millisecond
+
+	t.Cleanup(func() { jobPoll = time.Second })
+
+	got := fakeAPI(t, map[string]string{
+		"GET /api/v1/databases":                            `{"databases":[{"name":"wp_db","site":"wp","server":"","createdAt":"2026-11-22T00:00:00Z","users":["wp_user","wp_ro"]}]}`,
+		"POST /api/v1/sites/wp/databases":                  `{"name":"wp_db","site":"wp","server":"","createdAt":"2026-11-22T00:00:00Z","users":[]}`,
+		"DELETE /api/v1/databases/wp_db":                   ``,
+		"POST /api/v1/databases/wp_db/users":               `{"database":"wp_db","user":"wp_new","password":"generated-pw"}`,
+		"PUT /api/v1/databases/wp_db/users/wp_ro/password": `{"user":"wp_ro","password":""}`,
+		"DELETE /api/v1/databases/wp_db/users/wp_ro":       ``,
+		"POST /api/v1/databases/wp_db/export":              `{"id":"j1","database":"wp_db","kind":"export","path":"a.sql","started":"2026-11-22T00:00:00Z","state":"running"}`,
+		"GET /api/v1/databases/wp_db/jobs/j1":              `{"id":"j1","database":"wp_db","kind":"export","path":"a.sql","started":"2026-11-22T00:00:00Z","finished":"2026-11-22T00:00:03Z","state":"done"}`,
+		"POST /api/v1/databases/wp_db/import":              `{"id":"j2","database":"wp_db","kind":"import","path":"a.sql","started":"2026-11-22T00:00:00Z","state":"failed","error":"bad dump"}`,
+	})
+
+	for _, c := range []struct {
+		in   string
+		args []string
+		want string
+	}{
+		{"", []string{"list"}, "wp_db\tsite=wp\tusers=wp_user,wp_ro\n"},
+		{"", []string{"create", "wp", "wp_db"}, "created database wp_db for site wp"},
+		{"\n", []string{"user", "create", "wp_db", "wp_new"}, "password: generated-pw"},
+		{"Own-pass_12345\n", []string{"user", "password", "wp_ro"}, "changed the password of wp_ro\n"},
+		{"", []string{"user", "delete", "wp_ro"}, "deleted user wp_ro"},
+		{"", []string{"export", "wp_db", "a.sql"}, "export of wp_db done in 3s"},
+		{"", []string{"delete", "wp_db"}, "deleted database wp_db"},
+	} {
+		code, out, errOut := runCLI(t, c.in, append([]string{"db"}, c.args...)...)
+		if code != 0 || !strings.Contains(out, c.want) {
+			t.Errorf("%v = %d: %q %s", c.args, code, out, errOut)
+		}
+	}
+
+	for key, want := range map[string]string{
+		"POST /api/v1/sites/wp/databases":                  `{"name":"wp_db"}`,
+		"POST /api/v1/databases/wp_db/users":               `{"password":"","user":"wp_new"}`,
+		"PUT /api/v1/databases/wp_db/users/wp_ro/password": `{"password":"Own-pass_12345"}`,
+		"POST /api/v1/databases/wp_db/export":              `{"path":"a.sql"}`,
+	} {
+		if got[key] != want {
+			t.Errorf("%s body = %s, want %s", key, got[key], want)
+		}
+	}
+
+	if code, _, errOut := runCLI(t, "", "db", "import", "wp_db", "a.sql"); code != 1 || !strings.Contains(errOut, "bad dump") {
+		t.Errorf("failed import = %d: %s", code, errOut)
+	}
+
+	if code, _, errOut := runCLI(t, "", "db", "user", "delete", "nobody"); code != 1 || !strings.Contains(errOut, "no database has the user nobody") {
+		t.Errorf("unknown user = %d: %s", code, errOut)
+	}
+}
+
+func TestSiteOverAPI(t *testing.T) {
+	got := fakeAPI(t, map[string]string{
+		"GET /api/v1/sites":         `{"sites":[{"name":"blog","type":"static","pool":"default","state":"active","domains":["blog.example.com","www.blog.example.com"]}]}`,
+		"POST /api/v1/sites":        `{"name":"blog","type":"static","pool":"vol1","state":"active","domains":["blog.example.com","www.blog.example.com"]}`,
+		"DELETE /api/v1/sites/blog": ``,
+	})
+
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"list"}, "blog\ttype=static\tpool=default\tstate=active\tdomains=blog.example.com,www.blog.example.com\n"},
+		{[]string{"create", "blog", "blog.example.com,www.blog.example.com", "vol1"}, "created site blog (pool vol1, domains blog.example.com,www.blog.example.com)\n"},
+		{[]string{"delete", "blog"}, "deleted site blog\n"},
+	} {
+		code, out, errOut := runCLI(t, "", append([]string{"site"}, c.args...)...)
+		if code != 0 || out != c.want {
+			t.Errorf("%v = %d: %q %s", c.args, code, out, errOut)
+		}
+	}
+
+	if want := `{"name":"blog","domains":["blog.example.com","www.blog.example.com"],"pool":"vol1"}`; got["POST /api/v1/sites"] != want {
+		t.Errorf("create body = %s", got["POST /api/v1/sites"])
+	}
+
+	if code, _, errOut := runCLI(t, "", "site", "create", "blog"); code != 2 {
+		t.Errorf("create without a domain = %d: %s", code, errOut)
+	}
+
+	if _, _, errOut := runCLI(t, "", "site", "create", "blog", "blog.example.com"); errOut != "" {
+		t.Errorf("create without a pool: %s", errOut)
+	}
+
+	if got["POST /api/v1/sites"] != `{"name":"blog","domains":["blog.example.com"]}` {
+		t.Errorf("create body without a pool = %s", got["POST /api/v1/sites"])
 	}
 }
