@@ -50,7 +50,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 | `Content-Security-Policy` | off, enforce, report only; with an own policy text | off |
 | `Strict-Transport-Security` | stays the existing switch, unchanged | unchanged |
 
-- **Existing sites and imports keep their behaviour:** everything off after the migration, and the CloudPanel import starts with everything off. Defaults apply only to sites created in the panel or API [A: no surprise for running sites]. A later import step may turn known header lines of a CloudPanel vhost into switches; not in this ADR.
+- **Existing sites and imports keep their behaviour:** everything off after the migration, and the CloudPanel import starts with everything off. Defaults apply only to sites created in the panel or API [V: Kim, 2026-11-22]. A later import step may turn known header lines of a CloudPanel vhost into switches; not in this ADR.
 - **Own values** (`Permissions-Policy`, CSP) are checked in the panel and again in the agent: printable ASCII only, no `"`, `\`, `$`, `{`, `}` or control characters, at most 4096 bytes; CSP must look like `directive value...` separated by `;`, directive names from the CSP Level 3 list. Hostashi writes the value in double quotes itself. A check failure is `422 header_rejected` with the reason.
 - **Not in v1:** `X-XSS-Protection` (obsolete), `Cross-Origin-*-Policy`, HSTS options (`includeSubDomains`, `preload`, other max-age), CSP nonces and reporting endpoints run by Hostashi, headers per path.
 
@@ -81,4 +81,6 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions for Kim
 
-1. Should new sites get the three headers (`nosniff`, `SAMEORIGIN`, `strict-origin-when-cross-origin`) switched on by default, while existing and imported sites stay as they are? Recommendation: yes.
+None left.
+
+1. ~~Should new sites get the three headers (`nosniff`, `SAMEORIGIN`, `strict-origin-when-cross-origin`) switched on by default, while existing and imported sites stay as they are?~~ **Decided (Kim, 2026-11-22): yes.**

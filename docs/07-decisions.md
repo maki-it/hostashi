@@ -58,7 +58,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0052 | Service management and server dashboard | Accepted on 2026-11-21 ([adr/0052](adr/0052-service-management-and-server-dashboard.md)) | No |
 | 0053 | Site logs in the panel | Accepted on 2026-11-21 ([adr/0053](adr/0053-site-logs-in-the-panel.md)) | Done |
 | 0054 | Site types Node.js, reverse proxy and redirect | Accepted on 2026-11-22 ([adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md)) | No |
-| 0056 | Security headers per site | Proposed ([adr/0056](adr/0056-security-headers-per-site.md)) | **Yes** (defaults for new sites) |
+| 0056 | Security headers per site | Proposed ([adr/0056](adr/0056-security-headers-per-site.md)) | Accepted status only |
 
 ---
 
@@ -392,4 +392,4 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0056 Security headers per site
 
-**Full text (status Proposed, 2026-11-22):** [adr/0056](adr/0056-security-headers-per-site.md). Summary: typed switches per site for `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` and `Content-Security-Policy` (enforce or report only), next to the existing HSTS switch. Rendered with `always` at the server level for every site type and repeated in each location that sets its own headers (also fixes lost HSTS with a header snippet); a switched-on header replaces the application's own via `fastcgi_hide_header`/`proxy_hide_header`. Own values checked in panel and agent against nginx injection. Proposed default: new sites get `nosniff`, `SAMEORIGIN` and `strict-origin-when-cross-origin`; existing and imported sites unchanged. API `GET`/`PUT /api/v1/sites/{name}/headers`, action `sites.headers:write` for everyone with a grant for the site, migration 0048. No new agent operation, no new `os/exec` exception.
+**Full text (status Proposed, 2026-11-22):** [adr/0056](adr/0056-security-headers-per-site.md). Summary: typed switches per site for `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` and `Content-Security-Policy` (enforce or report only), next to the existing HSTS switch. Rendered with `always` at the server level for every site type and repeated in each location that sets its own headers (also fixes lost HSTS with a header snippet); a switched-on header replaces the application's own via `fastcgi_hide_header`/`proxy_hide_header`. Own values checked in panel and agent against nginx injection. Default (Kim, 2026-11-22): new sites get `nosniff`, `SAMEORIGIN` and `strict-origin-when-cross-origin`; existing and imported sites unchanged. API `GET`/`PUT /api/v1/sites/{name}/headers`, action `sites.headers:write` for everyone with a grant for the site, migration 0048. No new agent operation, no new `os/exec` exception.
