@@ -321,7 +321,10 @@ step "time zone, hostname and reboot (ADR-0060)"
 info=$(x /usr/local/bin/hostashi system info) || fail "system info: $info"
 echo "$info"
 grep -q '"timezone":' <<<"$info" || fail "system info has no time zone"
-x /usr/local/bin/hostashi system timezones | grep -qx Europe/Berlin || fail "time zone list has no Europe/Berlin"
+# Read the whole list first: grep -q would stop early and, with pipefail,
+# the SIGPIPE of the writer fails the pipe.
+zones=$(x /usr/local/bin/hostashi system timezones) || fail "system timezones"
+grep -qx Europe/Berlin <<<"$zones" || fail "time zone list has no Europe/Berlin"
 old_tz=$(x timedatectl show -p Timezone --value)
 x /usr/local/bin/hostashi system timezone Europe/Berlin | grep -q '"timezone": "Europe/Berlin"' || fail "time zone not set"
 [ "$(x readlink -f /etc/localtime)" = /usr/share/zoneinfo/Europe/Berlin ] || fail "/etc/localtime does not point to Europe/Berlin"
