@@ -226,13 +226,16 @@ export function SiteTypeChoice<T extends ChosenType>({
   name,
   disabled = false,
   withRedirect = false,
+  except,
 }: {
   value: T;
   onChange: (v: T) => void;
   name: string;
   disabled?: boolean;
-  /** Offers Node.js, redirect and reverse proxy; the type of a site cannot change to them yet. */
+  /** Offers Node.js, app, redirect and reverse proxy as well. */
   withRedirect?: boolean;
+  /** Leaves out this type, for example the site's current one. */
+  except?: ChosenType;
 }) {
   const all: { value: ChosenType; label: string; hint: string }[] = [
     { value: "php", label: "PHP", hint: "WordPress, Laravel, TYPO3 and other PHP software." },
@@ -242,7 +245,7 @@ export function SiteTypeChoice<T extends ChosenType>({
     { value: "proxy", label: "Reverse proxy", hint: "Passes every request to another web server, for example an app in your network. No files, no Linux account." },
     { value: "redirect", label: "Redirect", hint: "Sends every address to another one, for example an old domain to the new one. No files, no Linux account." },
   ];
-  const choices = all.filter((c) => withRedirect || !(webOnly(c.value) || c.value === "node" || c.value === "app")) as { value: T; label: string; hint: string }[];
+  const choices = all.filter((c) => c.value !== except && (withRedirect || !(webOnly(c.value) || c.value === "node" || c.value === "app"))) as { value: T; label: string; hint: string }[];
   return (
     <fieldset className="ui-fieldset ui-stack-tight">
       <legend>Type</legend>
