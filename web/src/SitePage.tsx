@@ -35,7 +35,7 @@ import {
 import { PageCacheSettings } from "./PageCache";
 import { PHPSettingsCard } from "./PHPSettings";
 import { Services } from "./Services";
-import { startCommand } from "./node";
+import { programCommand, startCommand } from "./node";
 import { SiteWebSettings } from "./SiteWeb";
 import { SnippetSettings } from "./Snippets";
 import { RealIPCard } from "./RealIP";
@@ -212,6 +212,15 @@ function Overview({ site, onChange, staff }: TabProps & { staff: boolean }) {
                 {" on Node.js "}
                 {site.node.version}
                 {site.node.stopped ? ", stopped" : ""}
+              </dd>
+            </>
+          )}
+          {site.app && (
+            <>
+              <dt>App</dt>
+              <dd>
+                {site.app.program ? <span className="ui-mono">{programCommand(site.app)}</span> : "No program yet"}
+                {site.app.stopped ? ", stopped" : ""}
               </dd>
             </>
           )}
