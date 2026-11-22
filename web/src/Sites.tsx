@@ -18,6 +18,7 @@ import {
   siteMessage,
   siteNameProblem,
   siteStatus,
+  siteTypeLabel,
   type PHPVersions,
   type Pool,
   type Site,
@@ -94,7 +95,7 @@ const columns: Column<Site>[] = [
       </div>
     ),
   },
-  { key: "php", header: "PHP", sortValue: (s) => s.php, cell: (s) => <span className="ui-mono">{s.php || "No PHP"}</span> },
+  { key: "type", header: "Type", sortValue: (s) => siteTypeLabel(s), cell: (s) => siteTypeLabel(s) },
   {
     key: "https",
     header: "HTTPS",
@@ -137,7 +138,7 @@ export function Sites({ query, onQuery }: QueryProps) {
   if (query.get("new") === "1") {
     return (
       <>
-        <PageHead title="New site" description="A site is a Linux user with its own home, PHP pool and domains." />
+        <PageHead title="New site" description="A site is a Linux user with its own home and domains, with PHP or as a static site." />
         <CreateForm php={php} onChange={load} parked={query.get("domain") ?? ""} parkedTls={query.get("tls") !== "0"} />
       </>
     );
@@ -153,7 +154,7 @@ export function Sites({ query, onQuery }: QueryProps) {
     <>
       <PageHead
         title="Sites"
-        description="Every site has its own Linux user, PHP pool, domains and certificate."
+        description="Every site has its own Linux user, domains and certificate, and a PHP pool if it runs PHP."
         actions={
           <a className="ui-btn ui-btn-primary" href={formatHash({ page: "sites", query: new URLSearchParams({ new: "1" }) })}>
             <Plus size={16} aria-hidden="true" />
@@ -203,12 +204,35 @@ export function Sites({ query, onQuery }: QueryProps) {
   );
 }
 
+// SiteTypeChoice picks the type of a site (ADR-0054). Only the types that
+// exist today are offered; the others come with their features.
+export function SiteTypeChoice({ value, onChange, name, disabled = false }: { value: "static" | "php"; onChange: (v: "static" | "php") => void; name: string; disabled?: boolean }) {
+  const choices = [
+    { value: "php" as const, label: "PHP", hint: "WordPress, Laravel, TYPO3 and other PHP software." },
+    { value: "static" as const, label: "Static", hint: "HTML, CSS and JavaScript, for example the build of Hugo, Astro or a single-page app. No PHP." },
+  ];
+  return (
+    <fieldset className="ui-fieldset ui-stack-tight">
+      <legend>Type</legend>
+      {choices.map((c) => (
+        <label key={c.value} className="ui-check ui-check-hint">
+          <input type="radio" name={name} value={c.value} checked={value === c.value} disabled={disabled} onChange={() => onChange(c.value)} />
+          <span>
+            {c.label}
+            <span className="ui-hint ui-flush">{c.hint}</span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
 // PHPOptions lists the installed versions, newest first, legacy ones marked.
 // A current version that is no longer installed stays selectable.
-export function PHPOptions({ php, current = "" }: { php: PHPVersions | null; current?: string }) {
+export function PHPOptions({ php, current = "", withoutNone = false }: { php: PHPVersions | null; current?: string; withoutNone?: boolean }) {
   return (
     <>
-      <option value="">No PHP</option>
+      {!withoutNone && <option value="">No PHP</option>}
       {phpChoices(php, current).map((v) => (
         <option key={v} value={v}>
           PHP {v}
@@ -232,6 +256,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   const [name, setName] = useState("");
   const [domains, setDomainsText] = useState(parked);
   const [version, setVersion] = useState<string | null>(null);
+  const [kind, setKind] = useState<"static" | "php">("php");
   const [tls, setTls] = useState(parked ? parkedTls : true);
   const [hsts, setHsts] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -267,7 +292,12 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
     setError("");
     setDone("");
     try {
-      const s = await createSite({ name, ...(choosePool && { pool }), php: phpValue, domains: list, tls, hsts: tls && hsts });
+      if (kind === "php" && !phpValue) {
+        setError("No PHP version is installed. Install one under PHP, or create a static site.");
+        setBusy(false);
+        return;
+      }
+      const s = await createSite({ name, ...(choosePool && { pool }), php: kind === "php" ? phpValue : "", domains: list, tls, hsts: tls && hsts });
       setDone(
         s.tls.enabled && !s.tls.active
           ? `Site ${s.name} created. It is served over HTTP until its certificate is there.`
@@ -315,17 +345,25 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
           </Field>
         )}
         {choosePool && poolNote(chosen) && <Notice tone="warn" title={poolNote(chosen)} />}
-        <Field label="PHP">
-          <select className="ui-select" value={phpValue} onChange={(e) => setVersion(e.target.value)}>
-            <PHPOptions php={php} />
-          </select>
-        </Field>
-        {php?.legacy.includes(phpValue) && (
-          <p className="ui-hint ui-flush">PHP {phpValue} gets no or only security fixes upstream. Use it only for software that needs it.</p>
+        <SiteTypeChoice value={kind} onChange={setKind} name="new-site-type" />
+        {kind === "php" && (
+          <>
+            <Field label="PHP version">
+              <select className="ui-select" value={phpValue} onChange={(e) => setVersion(e.target.value)}>
+                <PHPOptions php={php} withoutNone />
+              </select>
+            </Field>
+            {php?.legacy.includes(phpValue) && (
+              <p className="ui-hint ui-flush">PHP {phpValue} gets no or only security fixes upstream. Use it only for software that needs it.</p>
+            )}
+            <p className="ui-hint ui-flush">
+              Only installed versions are listed. <a href="#/php">Install more PHP versions</a>
+            </p>
+          </>
         )}
-        <p className="ui-hint ui-flush">
-          Only installed versions are listed. <a href="#/php">Install more PHP versions</a>
-        </p>
+        {kind === "static" && (
+          <p className="ui-hint ui-flush">The web root folder, a fallback for single-page apps and asset caching can be set on the site's Web tab.</p>
+        )}
         <label className="ui-check">
           <input type="checkbox" checked={tls} onChange={(e) => setTls(e.target.checked)} />
           HTTPS with a Let's Encrypt certificate
