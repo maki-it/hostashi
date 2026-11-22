@@ -68,8 +68,9 @@ export function SiteWebSettings({ site, php, onChange, admin = false, staff = fa
 
   return (
     <>
-      {change || <TypeCard site={site} php={php} onChange={onChange} />}
+      {!change && <TypeCard site={site} php={php} onChange={onChange} />}
       <WebRootCard site={site} onChange={onChange} />
+      {change}
     </>
   );
 }

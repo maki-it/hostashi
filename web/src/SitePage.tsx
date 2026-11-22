@@ -479,7 +479,14 @@ function DeleteSite({ site, canPark }: { site: Site; canPark: boolean }) {
             </>
           )}
           <div className="ui-narrow">
-            <Field label={`Type ${site.name} to confirm`} hint="The site is deleted with its files and its databases. This cannot be undone.">
+            <Field
+              label={
+                <>
+                  Type <code className="ui-confirm-phrase">{site.name}</code> to confirm
+                </>
+              }
+              hint="The site is deleted with its files and its databases. This cannot be undone."
+            >
               <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
             </Field>
           </div>

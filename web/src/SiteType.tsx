@@ -240,7 +240,14 @@ export function RemoveAccountCard({ site, onChange }: { site: Site; onChange: ()
               <p className="ui-hint ui-flush">The {what}, the domains and HTTPS stay. Backups stay until they expire.</p>
             </div>
             <div className="ui-narrow">
-              <Field label={`Type ${site.name} to confirm`} hint="This cannot be undone.">
+              <Field
+                label={
+                  <>
+                    Type <code className="ui-confirm-phrase">{site.name}</code> to confirm
+                  </>
+                }
+                hint="This cannot be undone."
+              >
                 <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
               </Field>
             </div>
