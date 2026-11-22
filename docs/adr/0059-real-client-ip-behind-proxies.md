@@ -1,6 +1,6 @@
 # ADR-0059 Real client IP behind CDNs and proxies
 
-**Status:** Proposed. **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0005 (nginx), ADR-0018 (API), ADR-0021 (fail2ban), ADR-0023 (panel HTTPS), ADR-0027 (maintenance pages), ADR-0029 (nginx snippets), ADR-0035 (roles), ADR-0036 (PHP versions workflow), ADR-0042 (panel on port 443), ADR-0053 (site logs), ADR-0054 (site types).
+**Status:** Accepted (Kim, 2026-11-22). **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0005 (nginx), ADR-0018 (API), ADR-0021 (fail2ban), ADR-0023 (panel HTTPS), ADR-0027 (maintenance pages), ADR-0029 (nginx snippets), ADR-0035 (roles), ADR-0036 (PHP versions workflow), ADR-0042 (panel on port 443), ADR-0053 (site logs), ADR-0054 (site types).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
