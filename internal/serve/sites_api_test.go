@@ -219,7 +219,7 @@ func TestSiteLifecycleOverHTTP(t *testing.T) {
 		t.Fatalf("set php: %d %s", rec.Code, rec.Body)
 	}
 
-	if err := json.Unmarshal(rec.Body.Bytes(), &site); err != nil || site.PHP != "8.4" {
+	if err := json.Unmarshal(rec.Body.Bytes(), &site); err != nil || site.PHP != "8.4" || site.Type != "php" {
 		t.Fatalf("site %+v %v", site, err)
 	}
 
