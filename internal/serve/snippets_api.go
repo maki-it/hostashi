@@ -110,7 +110,9 @@ func registerSnippets(mux *routeMux, a authn, svc *hosting.Service, log *slog.Lo
 // holds snippet text, which may carry credentials, so it is only built for
 // a site that exists here.
 func registerSnippetDraft(mux *routeMux, a authn, mig *cpmigrate.Service, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/migrations/cloudpanel/reports/{id}/sites/{name}/snippets-draft", a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/migrations/cloudpanel/reports/{id}/sites/{name}/snippets-draft", openapi.Operation{
+		ID: "getCloudPanelSnippetsDraft", Tag: "migrations", Summary: "Draft of the site's own nginx snippets from the report", Out: snippetdraft.Result{},
+	}, a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		site, err := mig.ReportSite(r.Context(), r.PathValue("id"), r.PathValue("name"))
 		if err != nil {
 			importFail(log, w, err, "snippet draft")

@@ -272,8 +272,6 @@ func TestBuildErrors(t *testing.T) {
 	}
 }
 
-type otherItemJSON struct{}
-
 func TestSchemaNameClash(t *testing.T) {
 	r := newReflector()
 	r.schema(reflect.TypeFor[itemJSON]())
@@ -286,8 +284,10 @@ func TestSchemaNameClash(t *testing.T) {
 		t.Error("two types named Item were accepted")
 	}
 
-	if n := schemaName(reflect.TypeFor[otherItemJSON]()); n != "OtherItem" {
-		t.Errorf("schemaName = %q", n)
+	for in, want := range map[string]string{"otherItemJSON": "OtherItem", "JSON": "JSON", "plan.Site": "PlanSite", "list[pkg.T]": "ListpkgT"} {
+		if n := schemaName(in); n != want {
+			t.Errorf("schemaName(%q) = %q, want %q", in, n, want)
+		}
 	}
 }
 
@@ -327,5 +327,32 @@ func TestBuildUpload(t *testing.T) {
 	raw, _ := json.Marshal(get(t, doc, "paths", "/raw", "put", "requestBody", "content", "application/octet-stream", "schema"))
 	if string(raw) != `{"format":"binary","type":"string"}` {
 		t.Errorf("raw body = %s", raw)
+	}
+}
+
+type item struct {
+	Kind string `json:"kind"`
+}
+
+func TestBuildSharedName(t *testing.T) {
+	for _, routes := range [][]Route{
+		{
+			{Pattern: "GET /a", Op: &Operation{ID: "a", Tag: "x", Out: item{}}, Access: Access{Kind: "public"}},
+			{Pattern: "GET /b", Op: &Operation{ID: "b", Tag: "x", Out: itemJSON{}}, Access: Access{Kind: "public"}},
+		},
+		{
+			{Pattern: "GET /b", Op: &Operation{ID: "b", Tag: "x", Out: itemJSON{}}, Access: Access{Kind: "public"}},
+			{Pattern: "GET /a", Op: &Operation{ID: "a", Tag: "x", Out: item{}}, Access: Access{Kind: "public"}},
+		},
+	} {
+		doc := build(t, routes...)
+
+		if v := get(t, doc, "paths", "/a", "get", "responses", "200", "content", "application/json", "schema", "$ref"); v != "#/components/schemas/OpenapiItem" {
+			t.Errorf("item = %v", v)
+		}
+
+		if v := get(t, doc, "paths", "/b", "get", "responses", "200", "content", "application/json", "schema", "$ref"); v != "#/components/schemas/Item" {
+			t.Errorf("itemJSON = %v", v)
+		}
 	}
 }

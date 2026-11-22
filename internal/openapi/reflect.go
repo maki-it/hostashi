@@ -6,6 +6,7 @@ import (
 	"encoding"
 	"encoding/json"
 	"fmt"
+	"path"
 	"reflect"
 	"slices"
 	"strings"
@@ -28,6 +29,11 @@ type reflector struct {
 	// input is set while a request body is reflected: no field is
 	// required there, as the decoder takes any subset.
 	input bool
+	// probe collects the types per name (byName) without checking for
+	// clashes; shared are the names a probe found for several types.
+	probe  bool
+	byName map[string]map[reflect.Type]bool
+	shared map[string]bool
 }
 
 type typeMode struct {
@@ -40,6 +46,7 @@ func newReflector() *reflector {
 		components: map[string]any{},
 		names:      map[typeMode]string{},
 		owners:     map[string]typeMode{},
+		byName:     map[string]map[reflect.Type]bool{},
 	}
 }
 
@@ -142,12 +149,28 @@ func (r *reflector) component(t reflect.Type) string {
 		return n
 	}
 
-	n := schemaName(t)
+	n := schemaName(t.Name())
+
+	if r.probe {
+		if r.byName[n] == nil {
+			r.byName[n] = map[reflect.Type]bool{}
+		}
+
+		r.byName[n][t] = true
+	}
+
+	// Of several types with one name, a panel API type (Go name ending in
+	// JSON) keeps it; the others are named with their package: plan.Site
+	// becomes PlanSite next to siteJSON.
+	if r.shared[n] && !strings.HasSuffix(t.Name(), "JSON") {
+		n = schemaName(path.Base(t.PkgPath()) + "." + t.Name())
+	}
+
 	if r.input && !strings.HasSuffix(n, "Request") && !strings.HasSuffix(n, "Input") {
 		n += "Input" // a response type that is also sent as a request
 	}
 
-	if other, taken := r.owners[n]; taken {
+	if other, taken := r.owners[n]; taken && !r.probe {
 		r.errs = append(r.errs, fmt.Errorf("schema name %q is used by %s and %s", n, other.t, t))
 	}
 
@@ -158,28 +181,48 @@ func (r *reflector) component(t reflect.Type) string {
 	return n
 }
 
-// schemaName is the Go name without a JSON suffix, starting upper case:
-// tokenJSON -> Token. Generic types are refused.
-func schemaName(t reflect.Type) string {
-	n := strings.TrimSuffix(t.Name(), "JSON")
-	if n == "" {
-		n = t.Name()
+// sharedNames are the names the probe found for more than one type.
+func (r *reflector) sharedNames() map[string]bool {
+	out := map[string]bool{}
+
+	for n, ts := range r.byName {
+		if len(ts) > 1 {
+			out[n] = true
+		}
 	}
 
-	if strings.ContainsAny(n, "[]") {
-		return strings.Map(func(r rune) rune {
-			if unicode.IsLetter(r) || unicode.IsDigit(r) {
-				return r
+	return out
+}
+
+// schemaName is a Go type name without a JSON suffix, starting upper case:
+// tokenJSON -> Token, plan.Site -> PlanSite. Generic types lose their
+// brackets.
+func schemaName(name string) string {
+	var b strings.Builder
+
+	for i, part := range strings.Split(name, ".") {
+		if i == strings.Count(name, ".") {
+			if p := strings.TrimSuffix(part, "JSON"); p != "" {
+				part = p
 			}
+		}
 
-			return -1
-		}, n)
+		rs := []rune(part)
+		if len(rs) == 0 {
+			continue
+		}
+
+		rs[0] = unicode.ToUpper(rs[0])
+		b.WriteString(string(rs))
 	}
 
-	rs := []rune(n)
-	rs[0] = unicode.ToUpper(rs[0])
+	return strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return r
+		}
 
-	return string(rs)
+		return -1
+	}, b.String())
 }
 
 type field struct {

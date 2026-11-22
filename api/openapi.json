@@ -303,31 +303,6 @@
         ],
         "type": "object"
       },
-      "BackupHostKey": {
-        "additionalProperties": false,
-        "properties": {
-          "fingerprint": {
-            "type": "string"
-          },
-          "key": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "fingerprint",
-          "key"
-        ],
-        "type": "object"
-      },
-      "BackupHostKeyRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "key": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "BackupItemResult": {
         "additionalProperties": false,
         "properties": {
@@ -791,6 +766,296 @@
         },
         "type": "object"
       },
+      "CloudPanelActivated": {
+        "additionalProperties": false,
+        "properties": {
+          "previous": {
+            "type": "string"
+          },
+          "site": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "previous",
+          "site"
+        ],
+        "type": "object"
+      },
+      "CloudPanelDBCredentials": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "sql": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "password",
+          "sql",
+          "user"
+        ],
+        "type": "object"
+      },
+      "CloudPanelDBMap": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "type": "object"
+      },
+      "CloudPanelDBMapInput": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CloudPanelImport": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "type": "integer"
+          },
+          "created": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "databases": {
+            "items": {
+              "$ref": "#/components/schemas/CloudPanelDBMap"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "deleted": {
+            "type": "integer"
+          },
+          "dir": {
+            "type": "string"
+          },
+          "docRoot": {
+            "type": "string"
+          },
+          "dumps": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "error": {
+            "type": "string"
+          },
+          "files": {
+            "type": "integer"
+          },
+          "finished": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "remoteUser": {
+            "type": "string"
+          },
+          "site": {
+            "type": "string"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "skippedPaths": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "started": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "unchanged": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bytes",
+          "created",
+          "deleted",
+          "dir",
+          "docRoot",
+          "files",
+          "id",
+          "remoteUser",
+          "site",
+          "skipped",
+          "state",
+          "unchanged"
+        ],
+        "type": "object"
+      },
+      "CloudPanelImportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "databases": {
+            "items": {
+              "$ref": "#/components/schemas/CloudPanelDBMapInput"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "CloudPanelReport": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Plan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sites": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "createdAt",
+          "id",
+          "sites"
+        ],
+        "type": "object"
+      },
+      "CloudPanelSiteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "pageCache": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "php": {
+            "type": "string"
+          },
+          "pool": {
+            "type": "string"
+          },
+          "reviewed": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "CloudPanelSource": {
+        "additionalProperties": false,
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "host",
+          "port"
+        ],
+        "type": "object"
+      },
+      "CloudPanelSourceInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "authorizedKeysLine": {
+            "type": "string"
+          },
+          "dbUser": {
+            "type": "string"
+          },
+          "hostKey": {
+            "type": "string"
+          },
+          "publicKey": {
+            "type": "string"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CloudPanelSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "hostKey",
+          "ready",
+          "source"
+        ],
+        "type": "object"
+      },
+      "CloudPanelSourceInput": {
+        "additionalProperties": false,
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "CopyResult": {
         "additionalProperties": false,
         "properties": {
@@ -941,6 +1206,69 @@
         },
         "required": [
           "csr"
+        ],
+        "type": "object"
+      },
+      "Cutover": {
+        "additionalProperties": false,
+        "properties": {
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/DomainAnswer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "checkedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deadline": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "doneAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": "string"
+          },
+          "server": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "site": {
+            "type": "string"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "answers",
+          "deadline",
+          "server",
+          "site",
+          "startedAt",
+          "state"
         ],
         "type": "object"
       },
@@ -1511,6 +1839,88 @@
         ],
         "type": "object"
       },
+      "DomainAnswer": {
+        "additionalProperties": false,
+        "properties": {
+          "addrs": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "domain": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "here": {
+            "type": "boolean"
+          },
+          "ttl": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "addrs",
+          "domain",
+          "here"
+        ],
+        "type": "object"
+      },
+      "DumpLoad": {
+        "additionalProperties": false,
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DBJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "database",
+          "path"
+        ],
+        "type": "object"
+      },
+      "DumpLoadList": {
+        "additionalProperties": false,
+        "properties": {
+          "loads": {
+            "items": {
+              "$ref": "#/components/schemas/DumpLoad"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "loads"
+        ],
+        "type": "object"
+      },
       "EmailConfirmRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1947,6 +2357,31 @@
         ],
         "type": "object"
       },
+      "HostKey": {
+        "additionalProperties": false,
+        "properties": {
+          "fingerprint": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fingerprint",
+          "key"
+        ],
+        "type": "object"
+      },
+      "HostKeyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "HostNetSample": {
         "additionalProperties": false,
         "properties": {
@@ -2033,6 +2468,24 @@
           "net",
           "swapTotal",
           "swapUsed"
+        ],
+        "type": "object"
+      },
+      "ImportList": {
+        "additionalProperties": false,
+        "properties": {
+          "imports": {
+            "items": {
+              "$ref": "#/components/schemas/CloudPanelImport"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "imports"
         ],
         "type": "object"
       },
@@ -2132,6 +2585,36 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "Item": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "context": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "slot": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "context",
+          "line",
+          "source"
+        ],
         "type": "object"
       },
       "Limits": {
@@ -3655,6 +4138,139 @@
         ],
         "type": "object"
       },
+      "Plan": {
+        "additionalProperties": false,
+        "properties": {
+          "sites": {
+            "items": {
+              "$ref": "#/components/schemas/PlanSite"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "summary": {
+            "$ref": "#/components/schemas/Summary"
+          }
+        },
+        "required": [
+          "sites",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "PlanSite": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "cronImport": {
+            "type": "integer"
+          },
+          "cronJobs": {
+            "type": "integer"
+          },
+          "customSnippets": {
+            "type": "integer"
+          },
+          "docRoot": {
+            "type": "string"
+          },
+          "domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "homeBytes": {
+            "type": "integer"
+          },
+          "homeInodes": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "objectCache": {
+            "type": "boolean"
+          },
+          "objectCacheOn": {
+            "type": "boolean"
+          },
+          "pageCache": {
+            "type": "string"
+          },
+          "php": {
+            "type": "string"
+          },
+          "phpSettings": {
+            "type": "integer"
+          },
+          "phpSettingsOn": {
+            "type": "boolean"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/Reason"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "redirectFrom": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "sshImport": {
+            "type": "integer"
+          },
+          "sshKeys": {
+            "type": "integer"
+          },
+          "tls": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "cronImport",
+          "cronJobs",
+          "customSnippets",
+          "docRoot",
+          "domains",
+          "name",
+          "objectCache",
+          "objectCacheOn",
+          "php",
+          "phpSettings",
+          "phpSettingsOn",
+          "reasons",
+          "redirectFrom",
+          "source",
+          "sshImport",
+          "sshKeys",
+          "tls",
+          "type"
+        ],
+        "type": "object"
+      },
       "PoolInfo": {
         "additionalProperties": false,
         "properties": {
@@ -3987,6 +4603,24 @@
         },
         "type": "object"
       },
+      "ReportList": {
+        "additionalProperties": false,
+        "properties": {
+          "reports": {
+            "items": {
+              "$ref": "#/components/schemas/CloudPanelReport"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "reports"
+        ],
+        "type": "object"
+      },
       "RestoreImportRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3994,6 +4628,32 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "Result": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "root": {
+            "type": "string"
+          },
+          "server": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "root",
+          "server"
+        ],
         "type": "object"
       },
       "SSHHostKey": {
@@ -4733,6 +5393,30 @@
         },
         "required": [
           "keys"
+        ],
+        "type": "object"
+      },
+      "Summary": {
+        "additionalProperties": false,
+        "properties": {
+          "import": {
+            "type": "integer"
+          },
+          "review": {
+            "type": "integer"
+          },
+          "sites": {
+            "type": "integer"
+          },
+          "skip": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "import",
+          "review",
+          "sites",
+          "skip"
         ],
         "type": "object"
       },
@@ -6382,7 +7066,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/BackupHostKeyRequest"
+                "$ref": "#/components/schemas/HostKeyRequest"
               }
             }
           },
@@ -6436,7 +7120,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BackupHostKey"
+                  "$ref": "#/components/schemas/HostKey"
                 }
               }
             },
@@ -8558,12 +9242,25 @@
     },
     "/api/v1/migrations/cloudpanel/imports": {
       "get": {
-        "operationId": "getMigrationsCloudpanelImports",
+        "operationId": "listCloudPanelImports",
+        "parameters": [
+          {
+            "description": "only the imports of this site",
+            "in": "query",
+            "name": "site",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ImportList"
+                }
               }
             },
             "description": "OK"
@@ -8589,17 +9286,17 @@
             ]
           }
         ],
+        "summary": "List the last imports",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:read"
       }
     },
     "/api/v1/migrations/cloudpanel/imports/{id}": {
       "get": {
-        "operationId": "getMigrationsCloudpanelImportsId",
+        "operationId": "getCloudPanelImport",
         "parameters": [
           {
             "in": "path",
@@ -8614,7 +9311,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CloudPanelImport"
+                }
               }
             },
             "description": "OK"
@@ -8640,17 +9339,17 @@
             ]
           }
         ],
+        "summary": "Get an import",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:read"
       }
     },
     "/api/v1/migrations/cloudpanel/imports/{id}/load": {
       "post": {
-        "operationId": "postMigrationsCloudpanelImportsIdLoad",
+        "operationId": "loadCloudPanelDumps",
         "parameters": [
           {
             "in": "path",
@@ -8661,24 +9360,16 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DumpLoadList"
+                }
               }
             },
-            "description": "OK"
+            "description": "Accepted"
           },
           "default": {
             "content": {
@@ -8701,17 +9392,17 @@
             ]
           }
         ],
+        "summary": "Start the dump loads of an import again",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:write"
       }
     },
     "/api/v1/migrations/cloudpanel/imports/{id}/loads": {
       "get": {
-        "operationId": "getMigrationsCloudpanelImportsIdLoads",
+        "operationId": "listCloudPanelDumpLoads",
         "parameters": [
           {
             "in": "path",
@@ -8726,7 +9417,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DumpLoadList"
+                }
               }
             },
             "description": "OK"
@@ -8752,22 +9445,24 @@
             ]
           }
         ],
+        "summary": "List the dump loads of an import",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:read"
       }
     },
     "/api/v1/migrations/cloudpanel/reports": {
       "get": {
-        "operationId": "getMigrationsCloudpanelReports",
+        "operationId": "listCloudPanelReports",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ReportList"
+                }
               }
             },
             "description": "OK"
@@ -8793,33 +9488,33 @@
             ]
           }
         ],
+        "summary": "List the uploaded CloudPanel reports",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:read"
       },
       "post": {
-        "operationId": "postMigrationsCloudpanelReports",
+        "operationId": "uploadCloudPanelReport",
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "type": "object"
-              }
+              "schema": {}
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CloudPanelReport"
+                }
               }
             },
-            "description": "OK"
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -8842,17 +9537,17 @@
             ]
           }
         ],
+        "summary": "Upload the JSON report of hostashi cloudpanel scan -json -full",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:write"
       }
     },
     "/api/v1/migrations/cloudpanel/reports/{id}": {
       "delete": {
-        "operationId": "deleteMigrationsCloudpanelReportsId",
+        "operationId": "deleteCloudPanelReport",
         "parameters": [
           {
             "in": "path",
@@ -8864,13 +9559,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -8893,15 +9583,15 @@
             ]
           }
         ],
+        "summary": "Delete a report",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:write"
       },
       "get": {
-        "operationId": "getMigrationsCloudpanelReportsId",
+        "operationId": "getCloudPanelReport",
         "parameters": [
           {
             "in": "path",
@@ -8916,7 +9606,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CloudPanelReport"
+                }
               }
             },
             "description": "OK"
@@ -8942,17 +9634,17 @@
             ]
           }
         ],
+        "summary": "Get a report with its import plan",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:read"
       }
     },
     "/api/v1/migrations/cloudpanel/reports/{id}/sites/{name}": {
       "post": {
-        "operationId": "postMigrationsCloudpanelReportsIdSitesName",
+        "operationId": "createCloudPanelSite",
         "parameters": [
           {
             "in": "path",
@@ -8975,20 +9667,22 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/CloudPanelSiteRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PlanSite"
+                }
               }
             },
-            "description": "OK"
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -9011,17 +9705,17 @@
             ]
           }
         ],
+        "summary": "Create a site from the report",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:write"
       }
     },
     "/api/v1/migrations/cloudpanel/reports/{id}/sites/{name}/import": {
       "post": {
-        "operationId": "postMigrationsCloudpanelReportsIdSitesNameImport",
+        "operationId": "startCloudPanelImport",
         "parameters": [
           {
             "in": "path",
@@ -9044,20 +9738,22 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/CloudPanelImportRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CloudPanelImport"
+                }
               }
             },
-            "description": "OK"
+            "description": "Accepted"
           },
           "default": {
             "content": {
@@ -9080,17 +9776,17 @@
             ]
           }
         ],
+        "summary": "Copy the site's files and databases from the old server",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:write"
       }
     },
     "/api/v1/migrations/cloudpanel/reports/{id}/sites/{name}/snippets-draft": {
       "get": {
-        "operationId": "getMigrationsCloudpanelReportsIdSitesNameSnippetsDraft",
+        "operationId": "getCloudPanelSnippetsDraft",
         "parameters": [
           {
             "in": "path",
@@ -9113,7 +9809,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Result"
+                }
               }
             },
             "description": "OK"
@@ -9139,17 +9837,17 @@
             ]
           }
         ],
+        "summary": "Draft of the site's own nginx snippets from the report",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:read"
       }
     },
     "/api/v1/migrations/cloudpanel/sites/{name}/activate": {
       "post": {
-        "operationId": "postMigrationsCloudpanelSitesNameActivate",
+        "operationId": "activateCloudPanelImport",
         "parameters": [
           {
             "in": "path",
@@ -9160,21 +9858,13 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CloudPanelActivated"
+                }
               }
             },
             "description": "OK"
@@ -9200,17 +9890,17 @@
             ]
           }
         ],
+        "summary": "Swap the imported files in as the web root",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:write"
       }
     },
     "/api/v1/migrations/cloudpanel/sites/{name}/cutover": {
       "delete": {
-        "operationId": "deleteMigrationsCloudpanelSitesNameCutover",
+        "operationId": "cancelCloudPanelCutover",
         "parameters": [
           {
             "in": "path",
@@ -9225,7 +9915,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Cutover"
+                }
               }
             },
             "description": "OK"
@@ -9251,15 +9943,15 @@
             ]
           }
         ],
+        "summary": "Stop a waiting cut-over",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:write"
       },
       "get": {
-        "operationId": "getMigrationsCloudpanelSitesNameCutover",
+        "operationId": "getCloudPanelCutover",
         "parameters": [
           {
             "in": "path",
@@ -9274,7 +9966,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Cutover"
+                }
               }
             },
             "description": "OK"
@@ -9300,15 +9994,15 @@
             ]
           }
         ],
+        "summary": "State of the DNS cut-over",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:read"
       },
       "post": {
-        "operationId": "postMigrationsCloudpanelSitesNameCutover",
+        "operationId": "startCloudPanelCutover",
         "parameters": [
           {
             "in": "path",
@@ -9319,24 +10013,16 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Cutover"
+                }
               }
             },
-            "description": "OK"
+            "description": "Accepted"
           },
           "default": {
             "content": {
@@ -9359,22 +10045,24 @@
             ]
           }
         ],
+        "summary": "Wait for the DNS switch, then turn HTTPS on",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:write"
       }
     },
     "/api/v1/migrations/cloudpanel/source": {
       "delete": {
-        "operationId": "deleteMigrationsCloudpanelSource",
+        "operationId": "deleteCloudPanelSource",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CloudPanelSourceInfo"
+                }
               }
             },
             "description": "OK"
@@ -9400,20 +10088,22 @@
             ]
           }
         ],
+        "summary": "Forget the old server and its key",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:write"
       },
       "get": {
-        "operationId": "getMigrationsCloudpanelSource",
+        "operationId": "getCloudPanelSource",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CloudPanelSourceInfo"
+                }
               }
             },
             "description": "OK"
@@ -9439,30 +10129,32 @@
             ]
           }
         ],
+        "summary": "Get the old CloudPanel server to import from",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:read",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:read"
       },
       "put": {
-        "operationId": "putMigrationsCloudpanelSource",
+        "operationId": "setCloudPanelSource",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/CloudPanelSourceInput"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CloudPanelSourceInfo"
+                }
               }
             },
             "description": "OK"
@@ -9488,32 +10180,24 @@
             ]
           }
         ],
+        "summary": "Set the old CloudPanel server's address and SSH user",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:write"
       }
     },
     "/api/v1/migrations/cloudpanel/source/database": {
       "post": {
-        "operationId": "postMigrationsCloudpanelSourceDatabase",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
+        "operationId": "createCloudPanelDBUser",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CloudPanelDBCredentials"
+                }
               }
             },
             "description": "OK"
@@ -9539,32 +10223,34 @@
             ]
           }
         ],
+        "summary": "Generate the database user for the old server (password shown once)",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:write"
       }
     },
     "/api/v1/migrations/cloudpanel/source/hostkey": {
       "put": {
-        "operationId": "putMigrationsCloudpanelSourceHostkey",
+        "operationId": "setCloudPanelHostKey",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/HostKeyRequest"
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CloudPanelSourceInfo"
+                }
               }
             },
             "description": "OK"
@@ -9590,32 +10276,24 @@
             ]
           }
         ],
+        "summary": "Trust a confirmed host key of the old server",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:write"
       }
     },
     "/api/v1/migrations/cloudpanel/source/hostkey/scan": {
       "post": {
-        "operationId": "postMigrationsCloudpanelSourceHostkeyScan",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": false
-        },
+        "operationId": "scanCloudPanelHostKey",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/HostKey"
+                }
               }
             },
             "description": "OK"
@@ -9641,12 +10319,12 @@
             ]
           }
         ],
+        "summary": "Read the host key the old server presents",
         "tags": [
           "migrations"
         ],
         "x-hostashi-access": "action",
-        "x-hostashi-action": "migrations:write",
-        "x-hostashi-undescribed": true
+        "x-hostashi-action": "migrations:write"
       }
     },
     "/api/v1/node": {
