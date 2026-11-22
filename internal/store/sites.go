@@ -32,10 +32,15 @@ type Site struct {
 	Pool  string
 	State string
 	// Type is one of the SiteType constants (ADR-0054).
-	Type    string
-	PHP     string // PHP version, empty for no PHP
-	Domains []string
-	TLS     bool // HTTPS wanted
+	Type string
+	PHP  string // PHP version, empty for no PHP
+	// WebDir is the document root folder below htdocs; SPA and AssetCache
+	// are the static-site options (ADR-0054 addendum 1).
+	WebDir     string
+	SPA        bool
+	AssetCache bool
+	Domains    []string
+	TLS        bool // HTTPS wanted
 	// HSTS sends Strict-Transport-Security while the site is on HTTPS.
 	HSTS bool
 	// PHPPrograms lets the site's PHP start programs (ADR-0033).
@@ -396,7 +401,7 @@ func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
 
 type scanner interface{ Scan(dest ...any) error }
 
-const siteColumns = `id, name, pool, state, type, php, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
+const siteColumns = `id, name, pool, state, type, php, web_dir, spa, asset_cache, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
 	maintenance, coalesce(maintenance_page, 0), maintenance_allow, coalesce(disabled_page, 0), tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
 	created_at, updated_at`
 
@@ -409,9 +414,10 @@ func scanSite(r scanner) (Site, error) {
 		tlsDomains, allow          string
 		notAfter, failed, cre, upd int64
 		renewAt                    int64
+		spa, assets                int
 	)
 
-	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
+	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &st.WebDir, &spa, &assets, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
 		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
@@ -423,6 +429,7 @@ func scanSite(r scanner) (Site, error) {
 
 	st.TLS, st.HSTS, st.Disabled, st.TLSLive = tls == 1, hsts == 1, disabled == 1, live == 1
 	st.PHPPrograms = progs == 1
+	st.SPA, st.AssetCache = spa == 1, assets == 1
 	st.Maintenance, st.MaintenanceAllow = maint == 1, strings.Fields(allow)
 	st.TLSDomains = strings.Fields(tlsDomains)
 	st.TLSNotAfter, st.TLSFailedAt = unixOrZero(notAfter), unixOrZero(failed)
@@ -503,6 +510,57 @@ func (s *Store) SetSiteHSTS(ctx context.Context, name string, on bool, now time.
 // returns the previous value.
 func (s *Store) SetSitePHPPrograms(ctx context.Context, name string, on bool, now time.Time) (bool, error) {
 	return s.setSiteFlag(ctx, `SELECT php_programs FROM sites WHERE name = ?`, `UPDATE sites SET php_programs = ?, updated_at = ? WHERE name = ?`, name, on, now)
+}
+
+// WebOptions are the document root folder and the static-site options of a
+// site (ADR-0054 addendum 1).
+type WebOptions struct {
+	Dir        string
+	SPA        bool
+	AssetCache bool
+}
+
+// SetSiteWebOptions sets the web options of a site and returns the
+// previous ones. Proxy and redirect sites have no files: ErrSiteType.
+// The folder's syntax is checked by the caller and by the column's CHECK.
+func (s *Store) SetSiteWebOptions(ctx context.Context, name string, o WebOptions, now time.Time) (WebOptions, error) {
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return WebOptions{}, fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var (
+		old         WebOptions
+		typ         string
+		spa, assets int
+	)
+
+	if err := tx.QueryRowContext(ctx, `SELECT type, web_dir, spa, asset_cache FROM sites WHERE name = ?`, name).Scan(&typ, &old.Dir, &spa, &assets); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return WebOptions{}, ErrNotFound
+		}
+
+		return WebOptions{}, fmt.Errorf("store: %w", err)
+	}
+
+	if typ == SiteTypeProxy || typ == SiteTypeRedirect {
+		return WebOptions{}, ErrSiteType
+	}
+
+	old.SPA, old.AssetCache = spa == 1, assets == 1
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET web_dir = ?, spa = ?, asset_cache = ?, updated_at = ? WHERE name = ?`,
+		o.Dir, boolInt(o.SPA), boolInt(o.AssetCache), now.Unix(), name); err != nil {
+		return WebOptions{}, fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return WebOptions{}, fmt.Errorf("store: %w", err)
+	}
+
+	return old, nil
 }
 
 // SetSiteDisabled sets whether a site is disabled and returns the previous

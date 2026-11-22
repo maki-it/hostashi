@@ -18,12 +18,15 @@ import (
 )
 
 type siteJSON struct {
-	Name     string `json:"name"`
-	Pool     string `json:"pool"`
-	State    string `json:"state"`
-	Type     string `json:"type"`     // static, php, node, app, proxy, redirect (ADR-0054)
-	PHP      string `json:"php"`      // PHP version, "" for no PHP
-	Disabled bool   `json:"disabled"` // answers 503, PHP stopped
+	Name  string `json:"name"`
+	Pool  string `json:"pool"`
+	State string `json:"state"`
+	Type  string `json:"type"` // static, php, node, app, proxy, redirect (ADR-0054)
+	// Web is the document root folder below htdocs and the static-site
+	// options (ADR-0054 addendum 1).
+	Web      webJSON `json:"web"`
+	PHP      string  `json:"php"`      // PHP version, "" for no PHP
+	Disabled bool    `json:"disabled"` // answers 503, PHP stopped
 	// DisabledPage is the maintenance page shown while disabled (ADR-0047).
 	DisabledPage string `json:"disabledPage"`
 	// Maintenance: other addresses get the page with 503 (ADR-0027).
@@ -34,6 +37,12 @@ type siteJSON struct {
 	PHPPrograms bool      `json:"phpPrograms"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type webJSON struct {
+	Dir        string `json:"dir"`
+	SPA        bool   `json:"spa"`
+	AssetCache bool   `json:"assetCache"`
 }
 
 // tlsJSON is the HTTPS state of a site: wanted (enabled), served (active),
@@ -105,7 +114,7 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	}
 
 	return siteJSON{
-		Name: s.Name, Pool: s.Pool, State: s.State, Type: s.Type, PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, Maintenance: toMaintenanceJSON(s),
+		Name: s.Name, Pool: s.Pool, State: s.State, Type: s.Type, Web: webJSON{Dir: s.WebDir, SPA: s.SPA, AssetCache: s.AssetCache}, PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, Maintenance: toMaintenanceJSON(s),
 		TLS: tlsJSON{
 			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
@@ -281,6 +290,36 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		s, err := svc.SetPHP(ctx, p.User.ID, r.PathValue("name"), *in.PHP)
 		if err != nil {
 			siteFail(log, w, err, "set php")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
+	}))
+
+	// The document root folder and the static-site options (ADR-0054).
+	mux.HandleFunc("PUT /api/v1/sites/{name}/web", a.allow("sites.web:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in struct {
+			Dir        *string `json:"dir"`
+			SPA        *bool   `json:"spa"`
+			AssetCache *bool   `json:"assetCache"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if in.Dir == nil || in.SPA == nil || in.AssetCache == nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", `"dir", "spa" and "assetCache" are required`)
+
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		s, err := svc.SetWebOptions(ctx, p.User.ID, r.PathValue("name"), store.WebOptions{Dir: *in.Dir, SPA: *in.SPA, AssetCache: *in.AssetCache})
+		if err != nil {
+			siteFail(log, w, err, "set web options")
 
 			return
 		}

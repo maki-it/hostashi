@@ -712,6 +712,13 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				User: site.Name, Domains: site.Domains, PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
 			}
 
+			// The static-site options are kept while the site runs PHP
+			// and only sent for a static site (ADR-0054).
+			ws.WebDir = site.WebDir
+			if site.Type == store.SiteTypeStatic {
+				ws.SPA, ws.AssetCache = site.SPA, site.AssetCache
+			}
+
 			if php != "" {
 				ws.PHPWorkers = phpWorkers(workers, site.ID)
 				ws.PHPPrograms = site.PHPPrograms

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"regexp"
 	"strings"
 
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -96,6 +97,49 @@ type WebSite struct {
 	// caches nothing. It needs PHP and is not used while the site is in
 	// maintenance.
 	PageCache *WebPageCache `json:"pageCache,omitempty"`
+	// WebDir is the document root below the site's htdocs (ADR-0054
+	// addendum 1), for example "public" or "dist"; empty serves htdocs.
+	WebDir string `json:"webDir,omitempty"`
+	// SPA answers unknown paths with /index.html instead of 404, for
+	// single-page apps. Static sites only.
+	SPA bool `json:"spa,omitempty"`
+	// AssetCache sends Cache-Control for 30 days on stylesheets, scripts,
+	// fonts and images. Static sites only.
+	AssetCache bool `json:"assetCache,omitempty"`
+}
+
+// MaxWebDir bounds the document root folder: length and number of levels.
+const (
+	MaxWebDir       = 255
+	MaxWebDirLevels = 4
+)
+
+var webDirSegment = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+
+// ValidateWebDir checks a document root folder below htdocs: relative,
+// at most MaxWebDirLevels segments of letters, digits, dot, underscore and
+// dash, no "." or "..", no empty segment. Empty is valid (htdocs itself).
+func ValidateWebDir(dir string) error {
+	if dir == "" {
+		return nil
+	}
+
+	if len(dir) > MaxWebDir {
+		return fmt.Errorf("document root folder is longer than %d bytes", MaxWebDir)
+	}
+
+	segs := strings.Split(dir, "/")
+	if len(segs) > MaxWebDirLevels {
+		return fmt.Errorf("document root folder has more than %d levels", MaxWebDirLevels)
+	}
+
+	for _, seg := range segs {
+		if seg == "." || seg == ".." || !webDirSegment.MatchString(seg) {
+			return fmt.Errorf("document root folder %q: use folder names of letters, digits, '.', '_' and '-', separated by '/'", dir)
+		}
+	}
+
+	return nil
 }
 
 // PHP workers of a site's pool (pm.max_children, ADR-0015).
@@ -279,6 +323,14 @@ func (r WebApplyRequest) Validate() error {
 			if err := ValidatePHPVersion(s.PHP); err != nil {
 				return fmt.Errorf("site %q: %w", s.User, err)
 			}
+		}
+
+		if err := ValidateWebDir(s.WebDir); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if (s.SPA || s.AssetCache) && s.PHP != "" {
+			return fmt.Errorf("site %q: single-page app and asset caching are for static sites", s.User)
 		}
 
 		if s.PHPWorkers < 0 || s.PHPWorkers > MaxPHPWorkers {
