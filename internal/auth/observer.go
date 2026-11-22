@@ -15,6 +15,7 @@ const (
 	KindTOTP     = "totp"
 	KindPasskey  = "passkey"
 	KindToken    = "token"
+	KindDevice   = "device"
 )
 
 // Observer learns about failed and throttled logins. It gets only the kind

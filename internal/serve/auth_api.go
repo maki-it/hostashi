@@ -269,6 +269,18 @@ type failFunc func(w http.ResponseWriter, err error, what string)
 func newFail(log *slog.Logger) failFunc {
 	return func(w http.ResponseWriter, err error, what string) {
 		switch {
+		case errors.Is(err, auth.ErrAuthorizationPending):
+			writeError(w, http.StatusBadRequest, "authorization_pending", "the login has not been approved yet")
+		case errors.Is(err, auth.ErrSlowDown):
+			writeError(w, http.StatusBadRequest, "slow_down", "poll less often")
+		case errors.Is(err, auth.ErrAccessDenied):
+			writeError(w, http.StatusBadRequest, "access_denied", "the login was denied")
+		case errors.Is(err, auth.ErrExpiredToken):
+			writeError(w, http.StatusBadRequest, "expired_token", "the device code has expired or was used; start the login again")
+		case errors.Is(err, auth.ErrDeviceNotFound):
+			writeError(w, http.StatusNotFound, "not_found", "no such login waiting; check the code or start the login again")
+		case errors.Is(err, auth.ErrInvalidClient):
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", err.Error())
 		case errors.Is(err, auth.ErrPasskeyUnavailable):
 			writeError(w, http.StatusNotImplemented, "passkeys_unavailable", "passkeys are not configured on this server (public URL missing)")
 		case errors.Is(err, auth.ErrPasskeyFailed):
