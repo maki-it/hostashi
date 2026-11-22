@@ -15,6 +15,7 @@ import {
   phpVersions,
   poolLabel,
   poolNote,
+  redirectProblem,
   siteMessage,
   siteNameProblem,
   siteStatus,
@@ -22,7 +23,9 @@ import {
   type PHPVersions,
   type Pool,
   type Site,
+  type SiteRedirect,
 } from "./sites";
+import { newRedirect, RedirectFields } from "./SiteRedirect";
 import { Badge, Button, Card, Field, IconLink, Notice, PageHead, RowActions, Table, type Column, type Sort } from "./ui";
 
 type QueryProps = {
@@ -138,7 +141,7 @@ export function Sites({ query, onQuery }: QueryProps) {
   if (query.get("new") === "1") {
     return (
       <>
-        <PageHead title="New site" description="A site is a Linux user with its own home and domains, with PHP or as a static site." />
+        <PageHead title="New site" description="A site answers for its domains: with PHP or static files from its own Linux user and home, or as a redirect." />
         <CreateForm php={php} onChange={load} parked={query.get("domain") ?? ""} parkedTls={query.get("tls") !== "0"} />
       </>
     );
@@ -154,7 +157,7 @@ export function Sites({ query, onQuery }: QueryProps) {
     <>
       <PageHead
         title="Sites"
-        description="Every site has its own Linux user, domains and certificate, and a PHP pool if it runs PHP."
+        description="Every site has its domains and certificate. PHP and static sites also have their own Linux user; redirect sites have none."
         actions={
           <a className="ui-btn ui-btn-primary" href={formatHash({ page: "sites", query: new URLSearchParams({ new: "1" }) })}>
             <Plus size={16} aria-hidden="true" />
@@ -206,11 +209,28 @@ export function Sites({ query, onQuery }: QueryProps) {
 
 // SiteTypeChoice picks the type of a site (ADR-0054). Only the types that
 // exist today are offered; the others come with their features.
-export function SiteTypeChoice({ value, onChange, name, disabled = false }: { value: "static" | "php"; onChange: (v: "static" | "php") => void; name: string; disabled?: boolean }) {
-  const choices = [
-    { value: "php" as const, label: "PHP", hint: "WordPress, Laravel, TYPO3 and other PHP software." },
-    { value: "static" as const, label: "Static", hint: "HTML, CSS and JavaScript, for example the build of Hugo, Astro or a single-page app. No PHP." },
+export type ChosenType = "static" | "php" | "redirect";
+
+export function SiteTypeChoice<T extends ChosenType>({
+  value,
+  onChange,
+  name,
+  disabled = false,
+  withRedirect = false,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  name: string;
+  disabled?: boolean;
+  /** Offers the redirect type; the type of a site cannot change to it yet. */
+  withRedirect?: boolean;
+}) {
+  const all: { value: ChosenType; label: string; hint: string }[] = [
+    { value: "php", label: "PHP", hint: "WordPress, Laravel, TYPO3 and other PHP software." },
+    { value: "static", label: "Static", hint: "HTML, CSS and JavaScript, for example the build of Hugo, Astro or a single-page app. No PHP." },
+    { value: "redirect", label: "Redirect", hint: "Sends every address to another one, for example an old domain to the new one. No files, no Linux account." },
   ];
+  const choices = all.filter((c) => withRedirect || c.value !== "redirect") as { value: T; label: string; hint: string }[];
   return (
     <fieldset className="ui-fieldset ui-stack-tight">
       <legend>Type</legend>
@@ -256,7 +276,8 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   const [name, setName] = useState("");
   const [domains, setDomainsText] = useState(parked);
   const [version, setVersion] = useState<string | null>(null);
-  const [kind, setKind] = useState<"static" | "php">("php");
+  const [kind, setKind] = useState<ChosenType>("php");
+  const [redirect, setRedirectValue] = useState<SiteRedirect>(newRedirect());
   const [tls, setTls] = useState(parked ? parkedTls : true);
   const [hsts, setHsts] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -283,7 +304,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   async function submit(e: FormEvent) {
     e.preventDefault();
     const list = parseDomains(domains);
-    const problem = siteNameProblem(name) || domainsProblem(list);
+    const problem = siteNameProblem(name) || domainsProblem(list) || (kind === "redirect" ? redirectProblem(redirect.target, list) : "");
     if (problem) {
       setError(problem);
       return;
@@ -297,7 +318,15 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         setBusy(false);
         return;
       }
-      const s = await createSite({ name, ...(choosePool && { pool }), php: kind === "php" ? phpValue : "", domains: list, tls, hsts: tls && hsts });
+      const s = await createSite({
+        name,
+        ...(choosePool && kind !== "redirect" && { pool }),
+        php: kind === "php" ? phpValue : "",
+        domains: list,
+        tls,
+        hsts: tls && hsts,
+        ...(kind === "redirect" && { type: "redirect" as const, redirect }),
+      });
       setDone(
         s.tls.enabled && !s.tls.active
           ? `Site ${s.name} created. It is served over HTTP until its certificate is there.`
@@ -307,6 +336,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
       setName("");
       setDomainsText("");
       setVersion(null);
+      setRedirectValue(newRedirect());
       await onChange();
     } catch (err) {
       setError(siteMessage(err));
@@ -319,7 +349,14 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
     <Card>
       <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
         {parked && !created && <Notice tone="info" title={`${parked} is parked. Its parking page ends when the site is live.`} />}
-        <Field label="Name" hint="Becomes the Linux user of the site. 2 to 32 characters: lowercase letters, digits, _ and -.">
+        <Field
+          label="Name"
+          hint={
+            kind === "redirect"
+              ? "The name of the site in the panel. 2 to 32 characters: lowercase letters, digits, _ and -."
+              : "Becomes the Linux user of the site. 2 to 32 characters: lowercase letters, digits, _ and -."
+          }
+        >
           <input className="ui-input" value={name} onChange={(e) => setName(e.target.value.trim())} required autoComplete="off" spellCheck={false} />
         </Field>
         <Field label="Domains" hint="One per line. The first one is the primary domain.">
@@ -333,7 +370,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
             spellCheck={false}
           />
         </Field>
-        {choosePool && (
+        {choosePool && kind !== "redirect" && (
           <Field label="Storage pool" hint="Where the site's home lives. A site stays on its pool.">
             <select className="ui-select" value={pool} onChange={(e) => setPool(e.target.value)}>
               {pools.map((p) => (
@@ -344,8 +381,8 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
             </select>
           </Field>
         )}
-        {choosePool && poolNote(chosen) && <Notice tone="warn" title={poolNote(chosen)} />}
-        <SiteTypeChoice value={kind} onChange={setKind} name="new-site-type" />
+        {choosePool && kind !== "redirect" && poolNote(chosen) && <Notice tone="warn" title={poolNote(chosen)} />}
+        <SiteTypeChoice value={kind} onChange={setKind} name="new-site-type" withRedirect />
         {kind === "php" && (
           <>
             <Field label="PHP version">
@@ -364,6 +401,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         {kind === "static" && (
           <p className="ui-hint ui-flush">The web root folder, a fallback for single-page apps and asset caching can be set on the site's Web tab.</p>
         )}
+        {kind === "redirect" && <RedirectFields value={redirect} onChange={setRedirectValue} disabled={busy} />}
         <label className="ui-check">
           <input type="checkbox" checked={tls} onChange={(e) => setTls(e.target.checked)} />
           HTTPS with a Let's Encrypt certificate

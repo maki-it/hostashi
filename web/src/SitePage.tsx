@@ -15,6 +15,7 @@ import {
   deleteAndPark,
   deleteSite,
   domainsProblem,
+  hasAccount,
   httpsLabel,
   httpsTone,
   parseDomains,
@@ -26,6 +27,7 @@ import {
   setTLS,
   siteMessage,
   siteStatus,
+  siteType,
   type PHPVersions,
   type Site,
 } from "./sites";
@@ -83,7 +85,15 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
   const status = siteStatus(site);
   const ready = site.state === "active";
   // The PHP tab only for sites with PHP; the type is changed on the Web tab.
-  const shown = tabs.filter((t) => t.id !== "php" || site.php !== "");
+  // A site without an account (a redirect) has no files, cron, SSH or
+  // limits, and a redirect no snippets (ADR-0054).
+  const noAccount = ["files", "php", "cron", "ssh", "limits"];
+  const shown = tabs.filter(
+    (t) =>
+      (t.id !== "php" || site.php !== "") &&
+      (hasAccount(site) || !noAccount.includes(t.id)) &&
+      (siteType(site) !== "redirect" || t.id !== "nginx"),
+  );
   const active = ready && shown.some((t) => t.id === tab) ? tab : "overview";
   const prefix = `site-${site.name}`;
 
@@ -108,7 +118,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
       {ready && <Tabs label={site.name} tabs={shown} active={active} onChange={(t) => onTab(t as SiteTab)} idPrefix={prefix} />}
       <div {...(ready ? tabPanelProps(prefix, active) : {})} className="ui-stack">
         {active === "overview" && <Overview site={site} onChange={load} staff={role === "admin" || role === "manager"} />}
-        {active === "overview" && role === "admin" && <Services site={site.name} />}
+        {active === "overview" && role === "admin" && hasAccount(site) && <Services site={site.name} />}
         {active === "domains" && <DomainsTab site={site} onChange={load} />}
         {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} />}
         {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
@@ -189,16 +199,32 @@ function Overview({ site, onChange, staff }: TabProps & { staff: boolean }) {
               <dd className="ui-mono">{aliases.join(", ")}</dd>
             </>
           )}
-          <dt>PHP</dt>
-          <dd>{site.php ? "PHP " + site.php + (site.disabled ? " (stopped)" : "") : "No PHP"}</dd>
+          {site.redirect ? (
+            <>
+              <dt>Redirect</dt>
+              <dd>
+                <span className="ui-mono">{site.redirect.target}</span> ({site.redirect.status}
+                {site.redirect.keepPath ? ", keeps the path" : ""})
+              </dd>
+            </>
+          ) : (
+            <>
+              <dt>PHP</dt>
+              <dd>{site.php ? "PHP " + site.php + (site.disabled ? " (stopped)" : "") : "No PHP"}</dd>
+            </>
+          )}
           <dt>HTTPS</dt>
           <dd>
             {httpsLabel(site.tls)}
             {site.tls.active && site.tls.hsts ? ", HSTS" : ""}
             {site.tls.active && site.tls.notAfter ? ", valid until " + site.tls.notAfter.slice(0, 10) : ""}
           </dd>
-          <dt>Storage pool</dt>
-          <dd className="ui-mono">{site.pool}</dd>
+          {hasAccount(site) && (
+            <>
+              <dt>Storage pool</dt>
+              <dd className="ui-mono">{site.pool}</dd>
+            </>
+          )}
         </dl>
       </Card>
       {site.state === "active" && (
@@ -364,7 +390,11 @@ function DeleteSite({ site, canPark }: { site: Site; canPark: boolean }) {
     <Card title="Delete site">
       {mode === "" ? (
         <div className="ui-stack">
-          <p className="ui-hint">Deletes the site with its files and its databases. Backups stay until they expire.</p>
+          <p className="ui-hint">
+            {hasAccount(site)
+              ? "Deletes the site with its files and its databases. Backups stay until they expire."
+              : "Deletes the site and its redirect. It has no files or databases."}
+          </p>
           {canPark && <p className="ui-hint ui-flush">To keep the domains answering, delete the site and park its domains in one step.</p>}
           <div className="ui-row">
             <Button variant="danger" onClick={() => setMode("delete")}>

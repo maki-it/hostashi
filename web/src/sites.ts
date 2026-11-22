@@ -34,6 +34,11 @@ export type Site = {
   php: string; // "" for no PHP
   // Document root folder below htdocs and the static-site options (ADR-0054).
   web?: SiteWeb;
+  // false for a redirect site, which has no Linux account and no files.
+  // Older answers lack it.
+  account?: boolean;
+  // The target of a redirect site, null otherwise (ADR-0054).
+  redirect?: SiteRedirect | null;
   phpPrograms: boolean; // PHP may start programs (exec, system, ...)
   disabled: boolean; // answers 503, PHP stopped
   disabledPage: string; // maintenance page shown while disabled (ADR-0047)
@@ -138,7 +143,52 @@ export type PHPVersions = {
   distro?: string;
 };
 
-export type NewSite = { name: string; pool?: string; php: string; domains: string[]; tls: boolean; hsts: boolean };
+export type NewSite = {
+  name: string;
+  pool?: string;
+  php: string;
+  domains: string[];
+  tls: boolean;
+  hsts: boolean;
+  type?: "redirect";
+  redirect?: SiteRedirect;
+};
+
+/** The target of a redirect site (ADR-0054). */
+export type SiteRedirect = { target: string; status: number; keepPath: boolean };
+
+export const redirectStatuses = [
+  { value: 301, label: "301 Moved permanently" },
+  { value: 302, label: "302 Found (temporary)" },
+  { value: 307, label: "307 Temporary, keeps the method" },
+  { value: 308, label: "308 Permanent, keeps the method" },
+];
+
+/** hasAccount: the site has a Linux account with files. */
+export const hasAccount = (s: Pick<Site, "account">) => s.account !== false;
+
+/**
+ * redirectProblem mirrors agentapi.ParseRedirectTarget: http(s), a host,
+ * an optional port and path, no user, query or fragment, not one of the
+ * site's own domains.
+ */
+export function redirectProblem(target: string, own: string[]): string {
+  if (!target) return "Enter the address to redirect to.";
+  if (target.length > 2048) return "The address is too long.";
+  if (!/^https?:\/\//.test(target)) return "The address must start with https:// or http://.";
+  if (!/^https?:\/\/[A-Za-z0-9.:[\]-]+(\/[A-Za-z0-9._~%!*+,=:@&()-]*)*$/.test(target))
+    return "Use a host and a path of letters, digits and - . _ ~ % ! * + , = : @ & ( ) / only, without ? or #.";
+  let host = "";
+  try {
+    host = new URL(target).hostname;
+  } catch {
+    return "This is not a valid address.";
+  }
+  if (!host) return "The address needs a host.";
+  if (/[A-Z]/.test(target.split("/")[2] ?? "")) return "Write the host in lower case.";
+  if (own.includes(host)) return "The address points to the site itself.";
+  return "";
+}
 
 // Pool is a storage pool for site homes (ADR-0016). Root adds pools on the
 // server (hostashi pool add); the panel only chooses one for a new site.
@@ -188,6 +238,7 @@ export const newSiteHash = (domain: string, tls: boolean) =>
   "#/sites?" + new URLSearchParams({ new: "1", domain, tls: tls ? "1" : "0" }).toString();
 export const setDomains = (name: string, domains: string[]) => request<Site>("PUT", sitePath(name) + "/domains", { domains });
 export const setPHP = (name: string, php: string) => request<Site>("PUT", sitePath(name) + "/php", { php });
+export const setRedirect = (name: string, r: SiteRedirect) => request<Site>("PUT", sitePath(name) + "/redirect", r);
 export const setWebOptions = (name: string, w: SiteWeb) => request<Site>("PUT", sitePath(name) + "/web", w);
 export const setTLS = (name: string, enabled: boolean) => request<Site>("PUT", sitePath(name) + "/tls", { enabled });
 // setDisabled switches a site off or on; page is the maintenance page a
