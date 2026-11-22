@@ -15,6 +15,7 @@ import (
 	"github.com/maki-it/hostashi/internal/certs"
 	"github.com/maki-it/hostashi/internal/doctor"
 	"github.com/maki-it/hostashi/internal/firewall"
+	"github.com/maki-it/hostashi/internal/nodeinstall"
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
 	"github.com/maki-it/hostashi/internal/updates"
@@ -53,10 +54,11 @@ type doctorOps struct {
 	h        *siteOps          // nil without the site operations
 	fw       *firewall.Manager // nil without the panel's firewall rules
 	dbTool   bool              // the web database tool is installed (ADR-0038)
+	node     *nodeinstall.Manager
 }
 
-func registerDoctor(s *agentrpc.Server, env DoctorEnv, stateDir string, h *siteOps, fw *firewall.Manager, dbTool bool) {
-	d := &doctorOps{env: env, stateDir: stateDir, h: h, fw: fw, dbTool: dbTool}
+func registerDoctor(s *agentrpc.Server, env DoctorEnv, stateDir string, h *siteOps, fw *firewall.Manager, node *nodeinstall.Manager, dbTool bool) {
+	d := &doctorOps{env: env, stateDir: stateDir, h: h, fw: fw, node: node, dbTool: dbTool}
 
 	agentrpc.Handle(s, agentapi.Doctor, func(ctx context.Context, _ agentrpc.Caller, _ agentapi.DoctorRequest) (agentapi.DoctorReport, error) {
 		return d.run(ctx), nil
@@ -162,6 +164,7 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	st, err := updates.Read(d.env.Updates)
 	out = append(out, doctor.Update(st, err, d.now())...)
 	out = append(out, d.valkey(ctx))
+	out = append(out, d.nodeChecks()...)
 
 	if d.h != nil {
 		out = append(out, d.sites(ctx)...)
@@ -169,6 +172,25 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	}
 
 	return agentapi.DoctorReport{Checks: out}
+}
+
+// nodeChecks checks the installed Node.js lines and the sites on them.
+func (d *doctorOps) nodeChecks() []agentapi.DoctorCheck {
+	if d.node == nil {
+		return nil
+	}
+
+	users := map[string][]string{}
+
+	if d.h != nil && d.h.apps != nil {
+		for _, i := range d.node.Installed() {
+			if u, err := d.h.apps.Users(i.Major); err == nil {
+				users[i.Major] = u
+			}
+		}
+	}
+
+	return doctor.Node(d.node.Installed(), users, d.now())
 }
 
 func (d *doctorOps) nginx(ctx context.Context) agentapi.DoctorCheck {
