@@ -4,13 +4,12 @@
 # repository at /apt and the install script at /install.sh, both taken
 # unchanged from the apt-repo.tar.gz of the latest stable release. This job
 # holds no key; it checks the repository's signature against the key in
-# packaging/keyring before it deploys. The Release workflow calls it after
-# publishing (a release published with the workflow token starts no other
-# workflow); run it by hand to deploy the latest release again.
+# packaging/keyring before it deploys. The Release workflow starts it on
+# main after publishing (the environment github-pages deploys from main
+# only); run it by hand to deploy the latest release again.
 name: Pages
 
 on:
-  workflow_call:
   workflow_dispatch:
 
 permissions: {}
