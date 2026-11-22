@@ -30,6 +30,7 @@ import (
 	"github.com/maki-it/hostashi/internal/cpsource"
 	"github.com/maki-it/hostashi/internal/cronjobs"
 	"github.com/maki-it/hostashi/internal/dbjob"
+	"github.com/maki-it/hostashi/internal/f2bproxies"
 	"github.com/maki-it/hostashi/internal/filesunit"
 	"github.com/maki-it/hostashi/internal/firewall"
 	"github.com/maki-it/hostashi/internal/hoststats"
@@ -150,6 +151,10 @@ type Config struct {
 	// LogRotate is the logrotate file that logs.retention.set writes;
 	// empty: the operation fails. LogRotateConfig fills in the paths.
 	LogRotate string
+	// ProxyIgnore keeps the sites' trusted proxies (ADR-0059) out of
+	// fail2ban's bans; nil leaves fail2ban alone. Run sets it when
+	// fail2ban's jail.d directory exists.
+	ProxyIgnore *f2bproxies.File
 
 	// Quota sets and reads the sites' disk limits (ADR-0015). Nil: the
 	// running kernel (KernelQuota).
@@ -300,7 +305,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, apps: cfg.Apps, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, apps: cfg.Apps, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, f2b: cfg.ProxyIgnore, log: log}
 		h.acl = cfg.panelACL
 
 		if cfg.PHP != nil && cfg.PHP.Hidden == nil {
@@ -377,8 +382,10 @@ type siteOps struct {
 	logs   *sitelogs.Reader
 	// logrotate is the file of logs.retention.set (ADR-0053).
 	logrotate string
-	log       *slog.Logger
-	mu        sync.Mutex
+	// f2b is fail2ban's never-ban file of trusted proxies (ADR-0059).
+	f2b *f2bproxies.File
+	log *slog.Logger
+	mu  sync.Mutex
 	// acl hands the panel allowlist to nginx on 443; nil for none.
 	acl *panelACL
 	// sweepMu keeps the background deletes of purged caches apart.
@@ -768,6 +775,7 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 	}
 
 	h.pruneParkCerts(ctx, d)
+	h.syncProxyIgnore(ctx, d)
 
 	return agentapi.WebApplyResponse{Generation: res.Generation, Changed: res.Changed}, nil
 }
@@ -1509,6 +1517,15 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.Services == nil {
 		cfg.Services = phpctl.Services{}
+	}
+
+	if cfg.ProxyIgnore == nil {
+		if fi, err := os.Stat(filepath.Dir(f2bproxies.DefaultPath)); err == nil && fi.IsDir() {
+			svc := cfg.Services
+			cfg.ProxyIgnore = &f2bproxies.File{Path: f2bproxies.DefaultPath, Reload: func(ctx context.Context) error {
+				return svc.Action(ctx, "fail2ban.service", agentapi.ServiceReload)
+			}}
+		}
 	}
 
 	if cfg.Host == nil {
