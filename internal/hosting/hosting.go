@@ -717,6 +717,9 @@ func (s *Service) applyWeb(ctx context.Context) error {
 			ws.WebDir = site.WebDir
 			if site.Type == store.SiteTypeStatic {
 				ws.SPA, ws.AssetCache = site.SPA, site.AssetCache
+				if site.AssetCache {
+					ws.AssetCacheSeconds, ws.AssetCacheExts = site.AssetCacheSeconds, site.AssetCacheExts
+				}
 			}
 
 			if php != "" {

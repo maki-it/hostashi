@@ -577,7 +577,10 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			root += "/" + s.WebDir
 		}
 
-		site := web.Site{User: s.User, Domains: s.Domains, Root: root, Disabled: s.Disabled, SPA: s.SPA, AssetCache: s.AssetCache}
+		site := web.Site{
+			User: s.User, Domains: s.Domains, Root: root, Disabled: s.Disabled, SPA: s.SPA, AssetCache: s.AssetCache,
+			AssetCacheSeconds: s.AssetCacheSeconds, AssetCacheExts: s.AssetCacheExts,
+		}
 
 		if s.TLS {
 			if err := h.tlsFor(&site, s.Domains); err != nil {

@@ -4,7 +4,9 @@ package serve
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"reflect"
 	"testing"
 )
 
@@ -17,17 +19,24 @@ func TestSiteWebOptionsOverHTTP(t *testing.T) {
 		t.Fatalf("create: %d %s", rec.Code, rec.Body)
 	}
 
-	rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/docs/web", cookie: c, body: `{"dir":"dist","spa":true,"assetCache":true}`})
+	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/docs", cookie: c})
+
+	var fresh siteJSON
+	if err := json.Unmarshal(rec.Body.Bytes(), &fresh); err != nil || fresh.Web.AssetCacheSeconds != 2592000 || len(fresh.Web.AssetCacheExts) != 16 {
+		t.Fatalf("defaults %+v %v", fresh.Web, err)
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/docs/web", cookie: c, body: `{"dir":"dist","spa":true,"assetCache":true,"assetCacheSeconds":3600,"assetCacheExts":["css","json"]}`})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("set: %d %s", rec.Code, rec.Body)
 	}
 
 	var site siteJSON
-	if err := json.Unmarshal(rec.Body.Bytes(), &site); err != nil || site.Type != "static" || site.Web != (webJSON{Dir: "dist", SPA: true, AssetCache: true}) {
+	if err := json.Unmarshal(rec.Body.Bytes(), &site); err != nil || site.Type != "static" || !reflect.DeepEqual(site.Web, webJSON{Dir: "dist", SPA: true, AssetCache: true, AssetCacheSeconds: 3600, AssetCacheExts: []string{"css", "json"}}) {
 		t.Fatalf("site %+v %v", site, err)
 	}
 
-	if ws := ag.web.Sites[0]; ws.WebDir != "dist" || !ws.SPA || !ws.AssetCache {
+	if ws := ag.web.Sites[0]; ws.WebDir != "dist" || !ws.SPA || !ws.AssetCache || ws.AssetCacheSeconds != 3600 || fmt.Sprint(ws.AssetCacheExts) != "[css json]" {
 		t.Fatalf("web state %+v", ws)
 	}
 
@@ -35,6 +44,9 @@ func TestSiteWebOptionsOverHTTP(t *testing.T) {
 		`{"dir":"../x","spa":false,"assetCache":false}`: "invalid_argument",
 		`{"dir":"/etc","spa":false,"assetCache":false}`: "invalid_argument",
 		`{"dir":"dist"}`: "invalid_argument",
+		`{"dir":"","spa":false,"assetCache":true,"assetCacheSeconds":10}`:         "invalid_argument",
+		`{"dir":"","spa":false,"assetCache":true,"assetCacheExts":[".css"]}`:      "invalid_argument",
+		`{"dir":"","spa":false,"assetCache":true,"assetCacheExts":["css","css"]}`: "invalid_argument",
 	} {
 		if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/docs/web", cookie: c, body: body}); rec.Code != http.StatusUnprocessableEntity || errCode(t, rec) != want {
 			t.Errorf("%s: %d %s", body, rec.Code, rec.Body)

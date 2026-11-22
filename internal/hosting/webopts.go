@@ -5,7 +5,9 @@ package hosting
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/store"
@@ -17,6 +19,20 @@ import (
 func (s *Service) SetWebOptions(ctx context.Context, actor int64, name string, o store.WebOptions) (store.Site, error) {
 	if err := agentapi.ValidateWebDir(o.Dir); err != nil {
 		return store.Site{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	if err := agentapi.ValidateAssetCache(o.AssetCacheSeconds, o.AssetCacheExts); err != nil {
+		return store.Site{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	// The default list is stored as empty, so a later change of the
+	// defaults reaches the site.
+	if slices.Equal(o.AssetCacheExts, agentapi.DefaultAssetCacheExts) {
+		o.AssetCacheExts = nil
+	}
+
+	if o.AssetCacheSeconds == agentapi.DefaultAssetCacheSeconds {
+		o.AssetCacheSeconds = 0
 	}
 
 	s.mu.Lock()
@@ -49,7 +65,10 @@ func (s *Service) SetWebOptions(ctx context.Context, actor int64, name string, o
 	}
 
 	view := func(w store.WebOptions) map[string]string {
-		return map[string]string{"dir": w.Dir, "spa": strconv.FormatBool(w.SPA), "assetCache": strconv.FormatBool(w.AssetCache)}
+		return map[string]string{
+			"dir": w.Dir, "spa": strconv.FormatBool(w.SPA), "assetCache": strconv.FormatBool(w.AssetCache),
+			"assetCacheSeconds": strconv.Itoa(w.AssetCacheSeconds), "assetCacheExts": strings.Join(w.AssetCacheExts, " "),
+		}
 	}
 
 	s.auditChange(ctx, actor, "site.web", name, nil, view(old), view(o))

@@ -16,6 +16,7 @@ func TestStaticOptionsRender(t *testing.T) {
 	f, err := n.Render(Desired{Sites: []Site{
 		{User: "app", Domains: []string{"app.example.com"}, Root: "/srv/app/htdocs/dist", SPA: true, AssetCache: true},
 		{User: "plain", Domains: []string{"plain.example.com"}, Root: "/srv/plain/htdocs"},
+		{User: "own", Domains: []string{"own.example.com"}, Root: "/srv/own/htdocs", AssetCache: true, AssetCacheSeconds: 3600, AssetCacheExts: []string{"html", "json"}},
 		{User: "off", Domains: []string{"off.example.com"}, Root: "/srv/off/htdocs", SPA: true, AssetCache: true, Disabled: true},
 	}}, 1)
 	if err != nil {
@@ -23,10 +24,17 @@ func TestStaticOptionsRender(t *testing.T) {
 	}
 
 	app := string(f.Content["sites/app.conf"])
-	for _, want := range []string{"root /srv/app/htdocs/dist;", "try_files $uri $uri/ /index.html;", "map $uri $hostashi_expires_617070 {", "expires $hostashi_expires_617070;"} {
+	for _, want := range []string{
+		"root /srv/app/htdocs/dist;", "try_files $uri $uri/ /index.html;", "map $uri $hostashi_expires_617070 {", "expires $hostashi_expires_617070;",
+		`"~*\.(?:css|js|mjs|woff|woff2|ttf|otf|eot|svg|png|jpg|jpeg|gif|webp|avif|ico)$" 2592000s;`,
+	} {
 		if !strings.Contains(app, want) {
 			t.Errorf("app.conf lacks %q:\n%s", want, app)
 		}
+	}
+
+	if own := string(f.Content["sites/own.conf"]); !strings.Contains(own, `"~*\.(?:html|json)$" 3600s;`) {
+		t.Errorf("own.conf:\n%s", own)
 	}
 
 	plain := string(f.Content["sites/plain.conf"])
@@ -42,6 +50,8 @@ func TestStaticOptionsRender(t *testing.T) {
 	for name, s := range map[string]Site{
 		"php spa":         {User: "p", Domains: []string{"p.example.com"}, Root: "/srv/p", PHPSocket: "/run/p.sock", SPA: true},
 		"php asset cache": {User: "q", Domains: []string{"q.example.com"}, Root: "/srv/q", PHPSocket: "/run/q.sock", AssetCache: true},
+		"bad extension":   {User: "r", Domains: []string{"r.example.com"}, Root: "/srv/r", AssetCache: true, AssetCacheExts: []string{`css)$" 1d; } server { #`}},
+		"short time":      {User: "u", Domains: []string{"u.example.com"}, Root: "/srv/u", AssetCache: true, AssetCacheSeconds: 1},
 	} {
 		if err := (Desired{Sites: []Site{s}}).Validate(); err == nil {
 			t.Errorf("%s accepted", name)
@@ -65,9 +75,20 @@ func TestStaticOptionsServed(t *testing.T) {
 	}
 
 	spa.SPA, spa.AssetCache = true, true
+
+	own := e.site(t, "own", "own index", "own.example.com")
+	if err := os.WriteFile(filepath.Join(own.Root, "data.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(own.Root, "app.js"), []byte("js"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	own.AssetCache, own.AssetCacheSeconds, own.AssetCacheExts = true, 3600, []string{"json"}
 	plain := e.site(t, "plain", "plain index", "plain.example.com")
 
-	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{spa, plain}}); err != nil {
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{spa, plain, own}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -81,6 +102,14 @@ func TestStaticOptionsServed(t *testing.T) {
 
 	if code, h, _ := e.fetchFull(t, "spa.example.com", "/"); code != http.StatusOK || h.Get("Cache-Control") != "" {
 		t.Errorf("index cached: %d %v", code, h)
+	}
+
+	if _, h, _ := e.fetchFull(t, "own.example.com", "/data.json"); h.Get("Cache-Control") != "max-age=3600" {
+		t.Errorf("own json: %v", h)
+	}
+
+	if _, h, _ := e.fetchFull(t, "own.example.com", "/app.js"); h.Get("Cache-Control") != "" {
+		t.Errorf("own js cached: %v", h)
 	}
 
 	if code, _ := e.fetchPath(t, "plain.example.com", "/some/route"); code != http.StatusNotFound {

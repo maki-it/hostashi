@@ -43,6 +43,23 @@ type webJSON struct {
 	Dir        string `json:"dir"`
 	SPA        bool   `json:"spa"`
 	AssetCache bool   `json:"assetCache"`
+	// AssetCacheSeconds and AssetCacheExts are the effective values: the
+	// defaults when the site keeps them.
+	AssetCacheSeconds int      `json:"assetCacheSeconds"`
+	AssetCacheExts    []string `json:"assetCacheExts"`
+}
+
+func toWebJSON(s store.Site) webJSON {
+	w := webJSON{Dir: s.WebDir, SPA: s.SPA, AssetCache: s.AssetCache, AssetCacheSeconds: s.AssetCacheSeconds, AssetCacheExts: s.AssetCacheExts}
+	if w.AssetCacheSeconds == 0 {
+		w.AssetCacheSeconds = agentapi.DefaultAssetCacheSeconds
+	}
+
+	if len(w.AssetCacheExts) == 0 {
+		w.AssetCacheExts = agentapi.DefaultAssetCacheExts
+	}
+
+	return w
 }
 
 // tlsJSON is the HTTPS state of a site: wanted (enabled), served (active),
@@ -114,7 +131,7 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	}
 
 	return siteJSON{
-		Name: s.Name, Pool: s.Pool, State: s.State, Type: s.Type, Web: webJSON{Dir: s.WebDir, SPA: s.SPA, AssetCache: s.AssetCache}, PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, Maintenance: toMaintenanceJSON(s),
+		Name: s.Name, Pool: s.Pool, State: s.State, Type: s.Type, Web: toWebJSON(s), PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, Maintenance: toMaintenanceJSON(s),
 		TLS: tlsJSON{
 			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
@@ -303,6 +320,9 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			Dir        *string `json:"dir"`
 			SPA        *bool   `json:"spa"`
 			AssetCache *bool   `json:"assetCache"`
+			// Optional: missing keeps the defaults.
+			AssetCacheSeconds int      `json:"assetCacheSeconds"`
+			AssetCacheExts    []string `json:"assetCacheExts"`
 		}
 		if !decodeJSON(w, r, &in) {
 			return
@@ -317,7 +337,9 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
-		s, err := svc.SetWebOptions(ctx, p.User.ID, r.PathValue("name"), store.WebOptions{Dir: *in.Dir, SPA: *in.SPA, AssetCache: *in.AssetCache})
+		s, err := svc.SetWebOptions(ctx, p.User.ID, r.PathValue("name"), store.WebOptions{
+			Dir: *in.Dir, SPA: *in.SPA, AssetCache: *in.AssetCache, AssetCacheSeconds: in.AssetCacheSeconds, AssetCacheExts: in.AssetCacheExts,
+		})
 		if err != nil {
 			siteFail(log, w, err, "set web options")
 

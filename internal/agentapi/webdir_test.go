@@ -53,3 +53,41 @@ func TestWebApplyStaticOptions(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateAssetCache(t *testing.T) {
+	for _, c := range []struct {
+		sec  int
+		exts []string
+	}{{0, nil}, {60, []string{"css"}}, {MaxAssetCacheSeconds, DefaultAssetCacheExts}, {3600, []string{"html", "json", "mp4"}}} {
+		if err := ValidateAssetCache(c.sec, c.exts); err != nil {
+			t.Errorf("%v: %v", c, err)
+		}
+	}
+
+	many := make([]string, MaxAssetCacheExts+1)
+	for i := range many {
+		many[i] = "e" + strings.Repeat("x", i%9) + string(rune('a'+i%26))
+	}
+
+	for _, c := range []struct {
+		sec  int
+		exts []string
+	}{
+		{59, nil},
+		{MaxAssetCacheSeconds + 1, nil},
+		{-1, nil},
+		{0, []string{".css"}},
+		{0, []string{"CSS"}},
+		{0, []string{"c s"}},
+		{0, []string{""}},
+		{0, []string{"abcdefghijk"}},
+		{0, []string{"css", "css"}},
+		{0, []string{"css|js"}},
+		{0, []string{"css)$"}},
+		{0, many},
+	} {
+		if err := ValidateAssetCache(c.sec, c.exts); err == nil {
+			t.Errorf("%v accepted", c)
+		}
+	}
+}

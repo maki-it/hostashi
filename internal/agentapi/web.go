@@ -103,9 +103,55 @@ type WebSite struct {
 	// SPA answers unknown paths with /index.html instead of 404, for
 	// single-page apps. Static sites only.
 	SPA bool `json:"spa,omitempty"`
-	// AssetCache sends Cache-Control for 30 days on stylesheets, scripts,
-	// fonts and images. Static sites only.
-	AssetCache bool `json:"assetCache,omitempty"`
+	// AssetCache sends Cache-Control with AssetCacheSeconds on files with
+	// one of AssetCacheExts (lowercase, without the dot); HTML stays fresh
+	// unless listed. Static sites only. Empty values use the defaults.
+	AssetCache        bool     `json:"assetCache,omitempty"`
+	AssetCacheSeconds int      `json:"assetCacheSeconds,omitempty"`
+	AssetCacheExts    []string `json:"assetCacheExts,omitempty"`
+}
+
+// Bounds and defaults of the asset cache (ADR-0054 addendum 1).
+const (
+	MinAssetCacheSeconds     = 60
+	MaxAssetCacheSeconds     = 365 * 24 * 3600
+	DefaultAssetCacheSeconds = 30 * 24 * 3600
+	MaxAssetCacheExts        = 40
+)
+
+// DefaultAssetCacheExts are the file types cached by default: stylesheets,
+// scripts, fonts and images.
+var DefaultAssetCacheExts = []string{"css", "js", "mjs", "woff", "woff2", "ttf", "otf", "eot", "svg", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico"}
+
+var assetExtRe = regexp.MustCompile(`^[a-z0-9]{1,10}$`)
+
+// ValidateAssetCache checks the duration (0: default) and the extensions
+// (empty: default): at most MaxAssetCacheExts, each 1 to 10 lowercase
+// letters or digits, no duplicates.
+func ValidateAssetCache(seconds int, exts []string) error {
+	if seconds != 0 && (seconds < MinAssetCacheSeconds || seconds > MaxAssetCacheSeconds) {
+		return fmt.Errorf("asset cache time must be between %d seconds and %d days", MinAssetCacheSeconds, MaxAssetCacheSeconds/86400)
+	}
+
+	if len(exts) > MaxAssetCacheExts {
+		return fmt.Errorf("at most %d file types can be cached", MaxAssetCacheExts)
+	}
+
+	seen := map[string]bool{}
+
+	for _, e := range exts {
+		if !assetExtRe.MatchString(e) {
+			return fmt.Errorf("file type %q: use 1 to 10 lowercase letters or digits, without the dot", e)
+		}
+
+		if seen[e] {
+			return fmt.Errorf("file type %q is listed twice", e)
+		}
+
+		seen[e] = true
+	}
+
+	return nil
 }
 
 // MaxWebDir bounds the document root folder: length and number of levels.
@@ -326,6 +372,10 @@ func (r WebApplyRequest) Validate() error {
 		}
 
 		if err := ValidateWebDir(s.WebDir); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if err := ValidateAssetCache(s.AssetCacheSeconds, s.AssetCacheExts); err != nil {
 			return fmt.Errorf("site %q: %w", s.User, err)
 		}
 

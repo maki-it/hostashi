@@ -39,8 +39,11 @@ type Site struct {
 	WebDir     string
 	SPA        bool
 	AssetCache bool
-	Domains    []string
-	TLS        bool // HTTPS wanted
+	// AssetCacheSeconds and AssetCacheExts: 0 and empty use the defaults.
+	AssetCacheSeconds int
+	AssetCacheExts    []string
+	Domains           []string
+	TLS               bool // HTTPS wanted
 	// HSTS sends Strict-Transport-Security while the site is on HTTPS.
 	HSTS bool
 	// PHPPrograms lets the site's PHP start programs (ADR-0033).
@@ -401,7 +404,7 @@ func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
 
 type scanner interface{ Scan(dest ...any) error }
 
-const siteColumns = `id, name, pool, state, type, php, web_dir, spa, asset_cache, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
+const siteColumns = `id, name, pool, state, type, php, web_dir, spa, asset_cache, asset_cache_seconds, asset_cache_exts, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
 	maintenance, coalesce(maintenance_page, 0), maintenance_allow, coalesce(disabled_page, 0), tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
 	created_at, updated_at`
 
@@ -415,9 +418,10 @@ func scanSite(r scanner) (Site, error) {
 		notAfter, failed, cre, upd int64
 		renewAt                    int64
 		spa, assets                int
+		exts                       string
 	)
 
-	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &st.WebDir, &spa, &assets, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
+	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &st.WebDir, &spa, &assets, &st.AssetCacheSeconds, &exts, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
 		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
@@ -430,6 +434,11 @@ func scanSite(r scanner) (Site, error) {
 	st.TLS, st.HSTS, st.Disabled, st.TLSLive = tls == 1, hsts == 1, disabled == 1, live == 1
 	st.PHPPrograms = progs == 1
 	st.SPA, st.AssetCache = spa == 1, assets == 1
+
+	if exts != "" {
+		st.AssetCacheExts = strings.Fields(exts)
+	}
+
 	st.Maintenance, st.MaintenanceAllow = maint == 1, strings.Fields(allow)
 	st.TLSDomains = strings.Fields(tlsDomains)
 	st.TLSNotAfter, st.TLSFailedAt = unixOrZero(notAfter), unixOrZero(failed)
@@ -515,9 +524,11 @@ func (s *Store) SetSitePHPPrograms(ctx context.Context, name string, on bool, no
 // WebOptions are the document root folder and the static-site options of a
 // site (ADR-0054 addendum 1).
 type WebOptions struct {
-	Dir        string
-	SPA        bool
-	AssetCache bool
+	Dir               string
+	SPA               bool
+	AssetCache        bool
+	AssetCacheSeconds int
+	AssetCacheExts    []string
 }
 
 // SetSiteWebOptions sets the web options of a site and returns the
@@ -535,9 +546,11 @@ func (s *Store) SetSiteWebOptions(ctx context.Context, name string, o WebOptions
 		old         WebOptions
 		typ         string
 		spa, assets int
+		exts        string
 	)
 
-	if err := tx.QueryRowContext(ctx, `SELECT type, web_dir, spa, asset_cache FROM sites WHERE name = ?`, name).Scan(&typ, &old.Dir, &spa, &assets); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT type, web_dir, spa, asset_cache, asset_cache_seconds, asset_cache_exts FROM sites WHERE name = ?`, name).
+		Scan(&typ, &old.Dir, &spa, &assets, &old.AssetCacheSeconds, &exts); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return WebOptions{}, ErrNotFound
 		}
@@ -551,8 +564,12 @@ func (s *Store) SetSiteWebOptions(ctx context.Context, name string, o WebOptions
 
 	old.SPA, old.AssetCache = spa == 1, assets == 1
 
-	if _, err := tx.ExecContext(ctx, `UPDATE sites SET web_dir = ?, spa = ?, asset_cache = ?, updated_at = ? WHERE name = ?`,
-		o.Dir, boolInt(o.SPA), boolInt(o.AssetCache), now.Unix(), name); err != nil {
+	if exts != "" {
+		old.AssetCacheExts = strings.Fields(exts)
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET web_dir = ?, spa = ?, asset_cache = ?, asset_cache_seconds = ?, asset_cache_exts = ?, updated_at = ? WHERE name = ?`,
+		o.Dir, boolInt(o.SPA), boolInt(o.AssetCache), o.AssetCacheSeconds, strings.Join(o.AssetCacheExts, " "), now.Unix(), name); err != nil {
 		return WebOptions{}, fmt.Errorf("store: %w", err)
 	}
 

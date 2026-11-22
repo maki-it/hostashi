@@ -65,6 +65,10 @@ type Site struct {
 	// of Cache-Control on assets (ADR-0054). Both only without PHPSocket.
 	SPA        bool `json:"spa,omitempty"`
 	AssetCache bool `json:"assetCache,omitempty"`
+	// AssetCacheSeconds and AssetCacheExts refine AssetCache; zero values
+	// use agentapi's defaults.
+	AssetCacheSeconds int      `json:"assetCacheSeconds,omitempty"`
+	AssetCacheExts    []string `json:"assetCacheExts,omitempty"`
 }
 
 // Bounds of BodyMax and FastCGIReadTimeout (ADR-0049).
@@ -228,6 +232,10 @@ func (d Desired) Validate() error {
 		}
 
 		if err := s.checkPHPLimits(); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if err := agentapi.ValidateAssetCache(s.AssetCacheSeconds, s.AssetCacheExts); err != nil {
 			return fmt.Errorf("site %q: %w", s.User, err)
 		}
 

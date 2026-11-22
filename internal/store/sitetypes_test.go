@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"io/fs"
+	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -144,15 +145,15 @@ func TestSiteWebOptions(t *testing.T) {
 		t.Fatalf("defaults: %+v %v", got, err)
 	}
 
-	want := WebOptions{Dir: "dist/site", SPA: true, AssetCache: true}
+	want := WebOptions{Dir: "dist/site", SPA: true, AssetCache: true, AssetCacheSeconds: 3600, AssetCacheExts: []string{"css", "json"}}
 
 	old, err := s.SetSiteWebOptions(ctx, "docs", want, now)
-	if err != nil || old != (WebOptions{}) {
+	if err != nil || !reflect.DeepEqual(old, WebOptions{}) {
 		t.Fatalf("set: %+v %v", old, err)
 	}
 
 	got, err = s.SiteByName(ctx, "docs")
-	if err != nil || (WebOptions{got.WebDir, got.SPA, got.AssetCache}) != want {
+	if err != nil || !reflect.DeepEqual(WebOptions{got.WebDir, got.SPA, got.AssetCache, got.AssetCacheSeconds, got.AssetCacheExts}, want) {
 		t.Fatalf("got %+v %v", got, err)
 	}
 
@@ -160,6 +161,12 @@ func TestSiteWebOptions(t *testing.T) {
 	for _, bad := range []string{"/etc", "dist/", "../x", "a/../b", strings.Repeat("a", 256)} {
 		if _, err := s.SetSiteWebOptions(ctx, "docs", WebOptions{Dir: bad}, now); err == nil {
 			t.Errorf("dir %q stored", bad)
+		}
+	}
+
+	for _, bad := range []WebOptions{{AssetCacheSeconds: 59}, {AssetCacheSeconds: 31536001}, {AssetCacheExts: []string{"c|s"}}, {AssetCacheExts: []string{"CSS"}}} {
+		if _, err := s.SetSiteWebOptions(ctx, "docs", bad, now); err == nil {
+			t.Errorf("%+v stored", bad)
 		}
 	}
 
@@ -176,7 +183,7 @@ func TestSiteWebOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got, _ := s.SiteByName(ctx, "docs"); (WebOptions{got.WebDir, got.SPA, got.AssetCache}) != want {
+	if got, _ := s.SiteByName(ctx, "docs"); !reflect.DeepEqual(WebOptions{got.WebDir, got.SPA, got.AssetCache, got.AssetCacheSeconds, got.AssetCacheExts}, want) {
 		t.Fatalf("after php round trip: %+v", got)
 	}
 
