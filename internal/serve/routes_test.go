@@ -135,6 +135,8 @@ var routeAccess = map[string]authz.Action{
 	"DELETE /api/v1/sites/{name}/account":                    "sites.account:delete",
 	"PUT /api/v1/sites/{name}/node":                          "sites.app:write",
 	"PUT /api/v1/sites/{name}/app":                           "sites.app:write",
+	"PUT /api/v1/sites/{name}/python":                        "sites.app:write",
+	"POST /api/v1/sites/{name}/python/venv":                  "sites.app:write",
 	"GET /api/v1/sites/{name}/app":                           "sites:read",
 	"POST /api/v1/sites/{name}/app/start":                    "sites.app:write",
 	"POST /api/v1/sites/{name}/app/stop":                     "sites.app:write",

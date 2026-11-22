@@ -28,7 +28,7 @@ type TypeRequest struct {
 // accountType reports whether sites of a type run on a Linux account.
 func accountType(typ string) bool {
 	switch typ {
-	case store.SiteTypeStatic, store.SiteTypePHP, store.SiteTypeNode, store.SiteTypeApp:
+	case store.SiteTypeStatic, store.SiteTypePHP, store.SiteTypeNode, store.SiteTypeApp, store.SiteTypePython:
 		return true
 	}
 
@@ -64,7 +64,7 @@ func (s *Service) checkType(ctx context.Context, site store.Site, req TypeReques
 		return c, err
 	}
 
-	if err := wrong("app", req.App != nil && req.Type != store.SiteTypeNode && req.Type != store.SiteTypeApp); err != nil {
+	if err := wrong("app", req.App != nil && !appType(req.Type)); err != nil {
 		return c, err
 	}
 
@@ -102,26 +102,18 @@ func (s *Service) checkType(ctx context.Context, site store.Site, req TypeReques
 
 		p := *req.Proxy
 		c.Proxy = &p
-	case store.SiteTypeNode, store.SiteTypeApp:
+	case store.SiteTypeNode, store.SiteTypeApp, store.SiteTypePython:
 		if req.App == nil {
 			return c, fmt.Errorf("%w: type %s needs an app", ErrInvalid, req.Type)
 		}
 
-		binary := req.Type == store.SiteTypeApp
-
-		a, err := checkApp(*req.App, binary)
+		a, err := checkApp(*req.App, req.Type)
 		if err != nil {
 			return c, err
 		}
 
-		if s.apps == nil {
-			return c, ErrNoApps
-		}
-
-		if !binary {
-			if err := s.checkNodeInstalled(ctx, a.Node); err != nil {
-				return c, err
-			}
+		if err := s.checkRuntime(ctx, req.Type, a); err != nil {
+			return c, err
 		}
 
 		a.Port, a.Stopped = 0, false

@@ -12,12 +12,15 @@ import (
 
 // The sites' apps (ADR-0054) go through the same exception as the PHP
 // units: systemctl by absolute path, fixed verbs, and unit names that
-// match appUnitRe (hostashi-node@ and hostashi-app@). The agent never runs
-// node, npm or an app itself; systemd starts
-// them as the site user from the fixed template and the agent's drop-in.
+// match appUnitRe (hostashi-node@, hostashi-app@ and hostashi-python@,
+// ADR-0061). The agent never runs node, npm, python or an app itself;
+// systemd starts them as the site user from the fixed template and the
+// agent's drop-in. The oneshot hostashi-python-venv@ that makes a site's
+// .venv is only ever run (venvUnitRe).
 var (
-	appUnitRe = regexp.MustCompile(`^hostashi-(?:node|app)@[a-z][a-z0-9_-]{1,31}\.service$`)
-	appPropRe = regexp.MustCompile(`^(?:ActiveState|SubState|MemoryCurrent|NRestarts|MainPID)$`)
+	appUnitRe  = regexp.MustCompile(`^hostashi-(?:node|app|python)@[a-z][a-z0-9_-]{1,31}\.service$`)
+	venvUnitRe = regexp.MustCompile(`^hostashi-python-venv@[a-z][a-z0-9_-]{1,31}\.service$`)
+	appPropRe  = regexp.MustCompile(`^(?:ActiveState|SubState|MemoryCurrent|NRestarts|MainPID)$`)
 )
 
 // AppController implements appunit.Controller.
@@ -56,9 +59,24 @@ func (AppController) Restart(ctx context.Context, unit string) error {
 }
 
 // ResetFailed clears a failed unit's state and its start limit, so a
-// fixed app may start again at once.
+// fixed app may start again at once; the venv unit's too.
 func (AppController) ResetFailed(ctx context.Context, unit string) error {
+	if venvUnitRe.MatchString(unit) {
+		return run(ctx, Systemctl, "reset-failed", unit)
+	}
+
 	return appctl(ctx, unit, "reset-failed")
+}
+
+// Run starts a site's venv unit and waits until it has finished:
+// systemctl start returns when a oneshot unit is done, and fails when it
+// failed.
+func (AppController) Run(ctx context.Context, unit string) error {
+	if !venvUnitRe.MatchString(unit) {
+		return fmt.Errorf("phpctl: refusing unit name %q", unit)
+	}
+
+	return run(ctx, Systemctl, "start", unit)
 }
 
 // Show returns properties of an app unit.

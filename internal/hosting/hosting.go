@@ -355,24 +355,18 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 
 	if req.App != nil {
 		if req.PHP != "" || req.PHPPrograms || req.Redirect != nil || req.Proxy != nil {
-			return store.Site{}, fmt.Errorf("%w: a Node.js or app site has no PHP and is no redirect or reverse proxy", ErrInvalid)
+			return store.Site{}, fmt.Errorf("%w: a Node.js, app or Python site has no PHP and is no redirect or reverse proxy", ErrInvalid)
 		}
 
-		binary := req.App.Node == ""
+		typ := appTypeOf(*req.App)
 
-		a, err := checkApp(*req.App, binary)
+		a, err := checkApp(*req.App, typ)
 		if err != nil {
 			return store.Site{}, err
 		}
 
-		if binary && s.apps == nil {
-			return store.Site{}, ErrNoApps
-		}
-
-		if !binary {
-			if err := s.checkNodeInstalled(ctx, a.Node); err != nil {
-				return store.Site{}, err
-			}
+		if err := s.checkRuntime(ctx, typ, a); err != nil {
+			return store.Site{}, err
 		}
 
 		a.Port, a.Stopped = 0, false
@@ -421,7 +415,9 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		created, err = s.st.CreateRedirectSite(ctx, req.Name, req.Pool, *req.Redirect, domains, s.now())
 	case req.Proxy != nil:
 		created, err = s.st.CreateProxySite(ctx, req.Name, req.Pool, *req.Proxy, domains, s.now())
-	case req.App != nil && req.App.Node == "":
+	case req.App != nil && appTypeOf(*req.App) == store.SiteTypePython:
+		created, err = s.st.CreatePythonSite(ctx, req.Name, req.Pool, *req.App, domains, s.now())
+	case req.App != nil && appTypeOf(*req.App) == store.SiteTypeApp:
 		created, err = s.st.CreateAppSite(ctx, req.Name, req.Pool, *req.App, domains, s.now())
 	case req.App != nil:
 		created, err = s.st.CreateNodeSite(ctx, req.Name, req.Pool, *req.App, domains, s.now())

@@ -77,6 +77,24 @@ func (h *siteOps) registerApps(s *agentrpc.Server) {
 		return st, mapAppError(err)
 	})
 
+	// site.python.venv holds h.mu like site.app.apply (ADR-0061).
+	agentrpc.Handle(s, agentapi.PythonVenvOp, func(ctx context.Context, _ agentrpc.Caller, req agentapi.PythonVenvRequest) (agentapi.AppStatus, error) {
+		if h.apps == nil {
+			return agentapi.AppStatus{}, errNoApps
+		}
+
+		h.mu.Lock()
+		defer h.mu.Unlock()
+
+		if _, _, err := h.site(req.Site); err != nil {
+			return agentapi.AppStatus{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site " + req.Site}
+		}
+
+		st, err := h.apps.Venv(ctx, req)
+
+		return st, mapAppError(err)
+	})
+
 	agentrpc.Handle(s, agentapi.AppStatusOp, func(ctx context.Context, _ agentrpc.Caller, req agentapi.AppStatusRequest) (agentapi.AppStatus, error) {
 		if h.apps == nil {
 			return agentapi.AppStatus{}, errNoApps
@@ -97,7 +115,8 @@ func mapAppError(err error) error {
 	case errors.Is(err, appunit.ErrProgram):
 		// The panel shows the problem itself.
 		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: strings.TrimPrefix(err.Error(), appunit.ErrProgram.Error()+": ")}
-	case errors.Is(err, appunit.ErrNodeMissing), errors.Is(err, appunit.ErrStopped), errors.Is(err, appunit.ErrPortTaken):
+	case errors.Is(err, appunit.ErrNodeMissing), errors.Is(err, appunit.ErrPythonMissing), errors.Is(err, appunit.ErrVenv),
+		errors.Is(err, appunit.ErrStopped), errors.Is(err, appunit.ErrPortTaken):
 		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: err.Error()}
 	}
 

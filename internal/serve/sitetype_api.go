@@ -15,8 +15,8 @@ import (
 
 // siteTypeRequest is a new type for a site with the settings of that type
 // (ADR-0054 addendum 3), the same fields as on create: php for php,
-// redirect for redirect, proxy for proxy, node for node, app for app;
-// static takes none.
+// redirect for redirect, proxy for proxy, node for node, app for app,
+// python for python; static takes none.
 type siteTypeRequest struct {
 	Type     string          `json:"type"`
 	PHP      string          `json:"php"`
@@ -24,6 +24,7 @@ type siteTypeRequest struct {
 	Proxy    *proxyJSON      `json:"proxy"`
 	Node     *nodeAppJSON    `json:"node"`
 	App      *programAppJSON `json:"app"`
+	Python   *pythonAppJSON  `json:"python"`
 }
 
 func (in siteTypeRequest) request() (hosting.TypeRequest, bool) {
@@ -37,8 +38,16 @@ func (in siteTypeRequest) request() (hosting.TypeRequest, bool) {
 		out.Proxy = &store.SiteProxy{Target: in.Proxy.Target, TargetHost: in.Proxy.TargetHost, Insecure: in.Proxy.Insecure}
 	}
 
+	n := 0
+
+	for _, set := range []bool{in.Node != nil, in.App != nil, in.Python != nil} {
+		if set {
+			n++
+		}
+	}
+
 	switch {
-	case in.Node != nil && in.App != nil:
+	case n > 1:
 		return out, false
 	case in.Node != nil:
 		if in.Type != store.SiteTypeNode || in.Node.Version == "" {
@@ -53,6 +62,13 @@ func (in siteTypeRequest) request() (hosting.TypeRequest, bool) {
 		}
 
 		a := in.App.app()
+		out.App = &a
+	case in.Python != nil:
+		if in.Type != store.SiteTypePython || in.Python.Version == "" {
+			return out, false
+		}
+
+		a := in.Python.app()
 		out.App = &a
 	}
 
@@ -73,7 +89,7 @@ func registerSiteType(mux *routeMux, a authn, svc *hosting.Service, log *slog.Lo
 
 		req, ok := in.request()
 		if !ok {
-			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "node needs type node and node.version, app needs type app")
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "node needs type node and node.version, app needs type app, python needs type python and python.version")
 
 			return
 		}

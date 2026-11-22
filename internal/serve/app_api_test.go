@@ -16,6 +16,20 @@ import (
 type stubApps struct {
 	mu    sync.Mutex
 	specs map[string]agentapi.AppSpec
+	venvs []agentapi.PythonVenvRequest
+}
+
+func (s *stubApps) PythonStatus(context.Context) (agentapi.PythonStatus, error) {
+	return agentapi.PythonStatus{Installed: []agentapi.PythonInstalled{{Line: "3.13"}, {Line: "3.14"}}}, nil
+}
+
+func (s *stubApps) PythonVenv(_ context.Context, req agentapi.PythonVenvRequest) (agentapi.AppStatus, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.venvs = append(s.venvs, req)
+
+	return agentapi.AppStatus{Site: req.Site, State: "active"}, nil
 }
 
 func (s *stubApps) NodeStatus(context.Context) (agentapi.NodeStatus, error) {

@@ -72,7 +72,7 @@ func TestSiteTypeRefusesPHPForOtherTypes(t *testing.T) {
 		}
 	}
 
-	for _, bad := range []string{"", "python", "PHP", "static "} {
+	for _, bad := range []string{"", "ruby", "PHP", "static "} {
 		if _, err := s.w.ExecContext(ctx, `UPDATE sites SET type = ? WHERE name = 'proxy'`, bad); err == nil {
 			t.Fatalf("type %q stored", bad)
 		}

@@ -1895,6 +1895,64 @@ x rm -rf /tmp/py-venv
 [ "$(api POST /api/v1/python/install "{\"line\":\"$PY_LINE\"}")" = 409 ] || fail "second python install: $(x cat /tmp/api.out)"
 out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the Python install changed something"; }
+
+step "a Python site runs its WSGI app with gunicorn from its .venv behind nginx (ADR-0061)"
+[ "$(api POST /api/v1/sites '{"name":"pyapp","domains":["pyapp.example.com"],"type":"python","python":{"version":"3.10"}}')" = 422 ] ||
+  fail "python site on 3.10: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites "{\"name\":\"pyapp\",\"domains\":[\"pyapp.example.com\"],\"type\":\"python\",\"python\":{\"version\":\"$PY_LINE\",\"startKind\":\"wsgi\",\"target\":\"app:application\",\"args\":[\"--bind\",\"0.0.0.0:80\"]}}")" = 422 ] ||
+  fail "bind address in the arguments: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites "{\"name\":\"pyapp\",\"domains\":[\"pyapp.example.com\"],\"type\":\"python\",\"python\":{\"version\":\"$PY_LINE\",\"startKind\":\"wsgi\",\"target\":\"app:application\",\"args\":[\"--workers\",\"2\"]}}")" = 201 ] ||
+  fail "create python site: $(x cat /tmp/api.out)"
+# Hostashi made .venv as the site user with the line's interpreter.
+[ "$(x stat -c %U /home/pyapp/.venv)" = pyapp ] || fail ".venv owner: $(x stat -c %U /home/pyapp/.venv)"
+[ "$(x readlink /home/pyapp/.venv/bin/python3)" = "/opt/hostashi/python/$PY_LINE/bin/python3" ] || fail ".venv interpreter: $(x readlink /home/pyapp/.venv/bin/python3)"
+expect_mode /var/log/hostashi/app/pyapp "700 root:root"
+x test -f /var/log/hostashi/app/pyapp/venv.log || fail "no venv.log"
+# gunicorn is not there yet: set up, not started, and the state says why.
+x systemctl is-active --quiet hostashi-python@pyapp.service && fail "app runs without gunicorn"
+[ "$(api GET /api/v1/sites/pyapp/app)" = 200 ] || fail "app status: $(x cat /tmp/api.out)"
+x grep -q '"problem":"gunicorn is not installed in .venv' /tmp/api.out || fail "no problem without gunicorn: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/pyapp/app/start)" = 409 ] || fail "start without gunicorn: $(x cat /tmp/api.out)"
+# Packages are the site's own, installed over its shell (from PyPI).
+x runuser -u pyapp -- /home/pyapp/.venv/bin/pip install --quiet --disable-pip-version-check --only-binary=:all: gunicorn ||
+  fail "pip install gunicorn as the site user"
+xi runuser -u pyapp -- sh -c 'cat >/home/pyapp/htdocs/app.py' <<'PY'
+import os, sys
+
+def application(environ, start_response):
+    print("request " + environ["PATH_INFO"])
+    start_response("200 OK", [("Content-Type", "text/plain")])
+    body = "hello from python %d %s %s\n" % (os.getuid(), sys.version.split()[0], os.environ.get("VIRTUAL_ENV", ""))
+    return [body.encode()]
+PY
+[ "$(api POST /api/v1/sites/pyapp/app/start)" = 200 ] || fail "start app: $(x cat /tmp/api.out)"
+uid=$(x id -u pyapp)
+want="hello from python $uid $PY_VERSION /home/pyapp/.venv"
+body=""
+for _ in $(seq 1 30); do
+  body=$(x curl -fsS -H 'Host: pyapp.example.com' http://127.0.0.1/ 2>/dev/null || true)
+  [ -n "$body" ] && break
+  sleep 1
+done
+[ "$body" = "$want" ] || fail "python app answer: '$body' $(x journalctl -u hostashi-python@pyapp.service -n 20 --no-pager; x tail -n 20 /var/log/hostashi/app/pyapp/app.log)"
+[ "$(x systemctl show -p User --value hostashi-python@pyapp.service)" = pyapp ] || fail "app unit user"
+[ "$(x systemctl show -p ControlGroup --value hostashi-python@pyapp.service)" = "$(x systemctl show -p ControlGroup --value hostashi-site-pyapp.slice)/hostashi-python@pyapp.service" ] ||
+  fail "app runs outside the site's slice"
+# gunicorn listens on loopback only, on the site's port.
+x grep -q 'ExecStart=/home/pyapp/.venv/bin/python -m gunicorn --bind 127.0.0.1:[0-9]* "--workers" "2" app:application$' /etc/systemd/system/hostashi-python@pyapp.service.d/60-hostashi-app.conf ||
+  fail "gunicorn command line: $(x cat /etc/systemd/system/hostashi-python@pyapp.service.d/60-hostashi-app.conf)"
+x grep -q 'request /' /var/log/hostashi/app/pyapp/app.log || fail "app log: $(x cat /var/log/hostashi/app/pyapp/app.log)"
+# The line cannot go while the site runs on it.
+[ "$(api POST /api/v1/python/remove "{\"line\":\"$PY_LINE\"}")" = 409 ] || fail "remove a line in use: $(x cat /tmp/api.out)"
+# Recreating .venv needs the site's name; the packages go, so the app
+# stops until gunicorn is installed again.
+[ "$(api POST /api/v1/sites/pyapp/python/venv '{"confirm":"other"}')" = 422 ] || fail "venv without confirm: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/pyapp/python/venv '{"confirm":"pyapp"}')" = 200 ] || fail "recreate venv: $(x cat /tmp/api.out)"
+x grep -q '"problem":"gunicorn is not installed in .venv' /tmp/api.out || fail "gunicorn after recreate: $(x cat /tmp/api.out)"
+x systemctl is-active --quiet hostashi-python@pyapp.service && fail "app runs on a new .venv without gunicorn"
+[ "$(api DELETE /api/v1/sites/pyapp)" = 204 ] || fail "delete python site: $(x cat /tmp/api.out)"
+x test ! -e /etc/systemd/system/hostashi-python@pyapp.service.d || fail "app drop-ins left after delete"
+x test ! -e /etc/systemd/system/hostashi-python-venv@pyapp.service.d || fail "venv drop-ins left after delete"
 [ "$(api POST /api/v1/python/remove "{\"line\":\"$PY_LINE\"}")" = 200 ] || fail "python remove: $(x cat /tmp/api.out)"
 x test ! -e "/opt/hostashi/python/$PY_LINE" || fail "Python $PY_LINE left after removal"
 x test ! -e "/opt/hostashi/python/.old-$PY_LINE" || fail "removed tree of Python $PY_LINE left"
