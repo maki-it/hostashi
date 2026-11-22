@@ -162,3 +162,13 @@ None left.
 - nginx: one `map $uri` per site plus `expires` in the server block; PHP answers reach nginx through `index.php` and never match the map. WordPress and similar software change asset addresses with `?ver=` when a file changes, so a long time is safe there [A].
 - Not taken over, on purpose: `Access-Control-Allow-Origin: *` on all assets (lets every other site embed the files; maybe later as its own switch for fonts) and turning the access log off for assets (statistics and fail2ban need the log).
 - The settings are kept while the switch is off or the type has no asset cache, so turning it on again restores them.
+
+## Implementation notes: reverse proxy (2026-11-22)
+
+Notes on how the reverse proxy decision above is built; they change no decision.
+
+- The agent has no network access (`IPAddressDeny=any`), so it cannot ask DNS. The panel resolves the target's name and sends the addresses with the web state; the agent checks every address again and also refuses the addresses of the server's own interfaces (a proxy to the server's public address would reach its services past the firewall). nginx gets the checked addresses in an `upstream` block and never resolves the name itself [V: `internal/agent/proxy.go`, `internal/web/nginx.go`].
+- The name is resolved when the site is saved (an error then refuses the change) and on every apply. A name that does not resolve on a later apply keeps the live addresses of the same target; a refused address leaves none, and the site answers 502. Neither stops the apply of the other sites. Like nginx's own lookup, a DNS change takes effect at the next apply [A: a periodic re-check may follow].
+- One refused address among several refuses the whole answer, as a sign of a name that points back here.
+- Request bodies go to the target as they arrive (`proxy_request_buffering off`) with no size limit in nginx; the target decides.
+- Site snippets for reverse proxy sites come later: the snippet check (ADR-0029) works on a site's home, which a proxy site does not have.

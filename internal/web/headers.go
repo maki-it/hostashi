@@ -121,3 +121,19 @@ func (n *Nginx) headers(data map[string]any, s Site) {
 		data["RootHdrs"] = &hdrView{Indent: "        ", Lines: lines}
 	}
 }
+
+// proxyHideLines drops the target's copy of every header Hostashi adds to
+// the answers of a reverse proxy site (ADR-0056), so the visitor gets one.
+func proxyHideLines(s Site) []string {
+	var l []string
+
+	if s.Cert != "" && s.HSTS {
+		l = append(l, "proxy_hide_header Strict-Transport-Security;")
+	}
+
+	for _, h := range s.Headers.List() {
+		l = append(l, "proxy_hide_header "+h.Name+";")
+	}
+
+	return l
+}

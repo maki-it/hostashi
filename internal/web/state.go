@@ -75,6 +75,12 @@ type Site struct {
 	// Redirect answers every address with a redirect (ADR-0054). Such a
 	// site has no Root, no PHP, no snippets and no caches.
 	Redirect *agentapi.WebRedirect `json:"redirect,omitempty"`
+	// Proxy passes every request to another web server (ADR-0054), with
+	// the same rules as Redirect. ProxyAddrs are the target's addresses
+	// ("ip:port"), resolved and checked by the agent; nginx connects only
+	// to them. Empty: the site answers 502.
+	Proxy      *agentapi.WebProxy `json:"proxy,omitempty"`
+	ProxyAddrs []string           `json:"proxyAddrs,omitempty"`
 }
 
 // Bounds of BodyMax and FastCGIReadTimeout (ADR-0049).
@@ -219,15 +225,22 @@ func (d Desired) Validate() error {
 			}
 		}
 
-		if r := s.Redirect; r != nil {
-			if s.Root != "" || s.Home != "" || s.PHPSocket != "" || s.SPA || s.AssetCache || s.PageCache != nil || !s.Snippets.IsZero() {
-				return fmt.Errorf("site %q: a redirect site has no root, PHP, snippets or caches", s.User)
+		switch {
+		case s.Redirect != nil || s.Proxy != nil:
+			if s.Redirect != nil && s.Proxy != nil {
+				return fmt.Errorf("site %q: redirect or reverse proxy, not both", s.User)
 			}
 
-			if err := r.Validate(s.Domains); err != nil {
+			if s.Root != "" || s.Home != "" || s.PHPSocket != "" || s.SPA || s.AssetCache || s.PageCache != nil || !s.Snippets.IsZero() {
+				return fmt.Errorf("site %q: a redirect or reverse proxy site has no root, PHP, snippets or caches", s.User)
+			}
+
+			if err := s.validateTarget(); err != nil {
 				return fmt.Errorf("site %q: %w", s.User, err)
 			}
-		} else if !rootRe.MatchString(s.Root) || path.Clean(s.Root) != s.Root {
+		case len(s.ProxyAddrs) > 0:
+			return fmt.Errorf("site %q: proxy addresses without a proxy", s.User)
+		case !rootRe.MatchString(s.Root) || path.Clean(s.Root) != s.Root:
 			return fmt.Errorf("site %q: invalid root %q", s.User, s.Root)
 		}
 
@@ -337,3 +350,30 @@ var (
 	// ErrBusy means another process holds the reconciler lock.
 	ErrBusy = errors.New("web: another reconcile run holds the lock")
 )
+
+// validateTarget checks the redirect or the proxy and its addresses.
+func (s Site) validateTarget() error {
+	if r := s.Redirect; r != nil {
+		if len(s.ProxyAddrs) > 0 {
+			return errors.New("proxy addresses without a proxy")
+		}
+
+		return r.Validate(s.Domains)
+	}
+
+	if err := s.Proxy.Validate(s.Domains); err != nil {
+		return err
+	}
+
+	if len(s.ProxyAddrs) > agentapi.MaxProxyAddrs {
+		return fmt.Errorf("more than %d proxy addresses", agentapi.MaxProxyAddrs)
+	}
+
+	for _, a := range s.ProxyAddrs {
+		if err := agentapi.ValidateProxyAddr(a); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}

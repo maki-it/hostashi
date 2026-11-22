@@ -151,7 +151,7 @@ func (s *Service) SetPHPPrograms(ctx context.Context, actor int64, name string, 
 		return store.Site{}, ErrState
 	}
 
-	if site.Type == store.SiteTypeRedirect {
+	if noFiles(site.Type) {
 		return store.Site{}, ErrSiteType
 	}
 

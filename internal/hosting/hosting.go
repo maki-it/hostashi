@@ -228,6 +228,9 @@ type CreateRequest struct {
 	// Redirect makes the site a redirect without a Linux account
 	// (ADR-0054); Status 0 is 301. PHP, programs and Usage must be unset.
 	Redirect *store.SiteRedirect
+	// Proxy makes the site a reverse proxy without a Linux account
+	// (ADR-0054), with the same rules as Redirect.
+	Proxy *store.SiteProxy
 }
 
 // checkRedirect normalizes and checks the redirect of a site with these
@@ -329,11 +332,19 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, fmt.Errorf("%w: programs need a PHP version", ErrInvalid)
 	}
 
-	if req.Redirect != nil {
-		if req.PHP != "" || req.Usage != nil {
-			return store.Site{}, fmt.Errorf("%w: a redirect site has no PHP and no files", ErrInvalid)
+	if req.Redirect != nil || req.Proxy != nil {
+		if req.PHP != "" || req.Usage != nil || req.PHPPrograms || req.Redirect != nil && req.Proxy != nil {
+			return store.Site{}, fmt.Errorf("%w: a redirect or reverse proxy site has no PHP and no files", ErrInvalid)
 		}
+	}
 
+	if req.Proxy != nil {
+		if err := s.checkProxy(ctx, *req.Proxy, domains); err != nil {
+			return store.Site{}, err
+		}
+	}
+
+	if req.Redirect != nil {
 		r, err := checkRedirect(*req.Redirect, domains)
 		if err != nil {
 			return store.Site{}, err
@@ -363,9 +374,13 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 	}
 
 	var created store.Site
-	if req.Redirect != nil {
+
+	switch {
+	case req.Redirect != nil:
 		created, err = s.st.CreateRedirectSite(ctx, req.Name, req.Pool, *req.Redirect, domains, s.now())
-	} else {
+	case req.Proxy != nil:
+		created, err = s.st.CreateProxySite(ctx, req.Name, req.Pool, *req.Proxy, domains, s.now())
+	default:
 		created, err = s.st.CreateSite(ctx, req.Name, req.Pool, req.PHP, domains, s.now())
 	}
 
@@ -391,7 +406,7 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, err
 	}
 
-	// A redirect site gets no account (ADR-0054).
+	// Redirect and reverse proxy sites get no account (ADR-0054).
 	if created.Account {
 		_, err = s.ag.SiteCreate(ctx, agentapi.SiteCreateRequest{User: req.Name, Pool: req.Pool})
 	}
@@ -435,6 +450,10 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 	}
 	if r := req.Redirect; r != nil {
 		detail["redirectTarget"], detail["redirectStatus"], detail["redirectKeepPath"] = r.Target, strconv.Itoa(r.Status), strconv.FormatBool(r.KeepPath)
+	}
+
+	if p := req.Proxy; p != nil {
+		detail["proxyTarget"], detail["proxyTargetHost"], detail["proxyInsecure"] = p.Target, strconv.FormatBool(p.TargetHost), strconv.FormatBool(p.Insecure)
 	}
 
 	s.audit(ctx, actor, "site.create", req.Name, detail)
@@ -580,10 +599,17 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 		return store.Site{}, err
 	}
 
-	// A redirect must not point to one of the new domains (ADR-0054).
+	// A redirect or proxy must not point to one of the new domains
+	// (ADR-0054).
 	if r := site.Redirect; r != nil && site.Type == store.SiteTypeRedirect {
 		if _, err := checkRedirect(*r, domains); err != nil {
 			return store.Site{}, err
+		}
+	}
+
+	if p := site.Proxy; p != nil && site.Type == store.SiteTypeProxy {
+		if _, err := agentapi.ParseProxyTarget(p.Target, domains); err != nil {
+			return store.Site{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
 	}
 
@@ -799,12 +825,16 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				Headers: webHeaders(headers, site),
 			}
 
-			// A redirect site sends only its target: no files, PHP,
-			// caches or snippets (ADR-0054).
-			if site.Type == store.SiteTypeRedirect {
+			// Redirect and reverse proxy sites send only their target: no
+			// files, PHP, caches or snippets (ADR-0054).
+			if noFiles(site.Type) {
 				ws.PHP = ""
-				if r := site.Redirect; r != nil {
+				if r := site.Redirect; r != nil && site.Type == store.SiteTypeRedirect {
 					ws.Redirect = &agentapi.WebRedirect{Target: r.Target, Status: r.Status, KeepPath: r.KeepPath}
+				}
+
+				if site.Type == store.SiteTypeProxy {
+					ws.Proxy, ws.ProxyAddrs = s.proxyWeb(ctx, site)
 				}
 
 				if err := s.addLifecycleWeb(ctx, &ws, site, onAgent); err != nil {

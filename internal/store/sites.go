@@ -48,8 +48,11 @@ type Site struct {
 	// Redirect is the redirect of a redirect site; it is kept after a
 	// type change (nil: never set).
 	Redirect *SiteRedirect
-	Domains  []string
-	TLS      bool // HTTPS wanted
+	// Proxy is the target of a reverse proxy site; it is kept after a
+	// type change (nil: never set).
+	Proxy   *SiteProxy
+	Domains []string
+	TLS     bool // HTTPS wanted
 	// HSTS sends Strict-Transport-Security while the site is on HTTPS.
 	HSTS bool
 	// PHPPrograms lets the site's PHP start programs (ADR-0033).
@@ -105,6 +108,15 @@ const (
 	SiteTypeRedirect = "redirect"
 )
 
+// SiteProxy is the target of a reverse proxy site (ADR-0054).
+type SiteProxy struct {
+	Target string
+	// TargetHost sends the target's host as Host.
+	TargetHost bool
+	// Insecure does not verify an https target's certificate.
+	Insecure bool
+}
+
 // SiteRedirect is the target of a redirect site (ADR-0054).
 type SiteRedirect struct {
 	Target   string
@@ -137,6 +149,12 @@ func (s *Store) CreateRedirectSite(ctx context.Context, name, pool string, r Sit
 	return s.createSite(ctx, Site{Name: name, Pool: pool, Type: SiteTypeRedirect, Redirect: &r}, domains, now)
 }
 
+// CreateProxySite stores a new reverse proxy site without a Linux account
+// in state creating together with its domains (ADR-0054).
+func (s *Store) CreateProxySite(ctx context.Context, name, pool string, p SiteProxy, domains []string, now time.Time) (Site, error) {
+	return s.createSite(ctx, Site{Name: name, Pool: pool, Type: SiteTypeProxy, Proxy: &p}, domains, now)
+}
+
 func (s *Store) createSite(ctx context.Context, site Site, domains []string, now time.Time) (Site, error) {
 	name, pool, php := site.Name, site.Pool, site.PHP
 
@@ -145,6 +163,11 @@ func (s *Store) createSite(ctx context.Context, site Site, domains []string, now
 		r = *site.Redirect
 	} else {
 		r.Status = 301
+	}
+
+	var p SiteProxy
+	if site.Proxy != nil {
+		p = *site.Proxy
 	}
 
 	tx, err := s.w.BeginTx(ctx, nil)
@@ -164,9 +187,11 @@ func (s *Store) createSite(ctx context.Context, site Site, domains []string, now
 	}
 
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO sites (name, pool, state, type, php, account, redirect_target, redirect_status, redirect_keep_path, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		name, pool, SiteCreating, site.Type, php, boolInt(site.Account), r.Target, r.Status, boolInt(r.KeepPath), now.Unix(), now.Unix())
+		`INSERT INTO sites (name, pool, state, type, php, account, redirect_target, redirect_status, redirect_keep_path,
+			proxy_target, proxy_target_host, proxy_insecure, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		name, pool, SiteCreating, site.Type, php, boolInt(site.Account), r.Target, r.Status, boolInt(r.KeepPath),
+		p.Target, boolInt(p.TargetHost), boolInt(p.Insecure), now.Unix(), now.Unix())
 	if err != nil {
 		return Site{}, fmt.Errorf("store: %w", err)
 	}
@@ -441,7 +466,7 @@ type scanner interface{ Scan(dest ...any) error }
 
 const siteColumns = `id, name, pool, state, type, php, web_dir, spa, asset_cache, asset_cache_seconds, asset_cache_exts, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
 	maintenance, coalesce(maintenance_page, 0), maintenance_allow, coalesce(disabled_page, 0), tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
-	account, redirect_target, redirect_status, redirect_keep_path, created_at, updated_at`
+	account, redirect_target, redirect_status, redirect_keep_path, proxy_target, proxy_target_host, proxy_insecure, created_at, updated_at`
 
 func scanSite(r scanner) (Site, error) {
 	var (
@@ -456,11 +481,13 @@ func scanSite(r scanner) (Site, error) {
 		exts                       string
 		account, keepPath          int
 		redirect                   SiteRedirect
+		proxy                      SiteProxy
+		proxyHost, insecure        int
 	)
 
 	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &st.WebDir, &spa, &assets, &st.AssetCacheSeconds, &exts, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
 		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced,
-		&account, &redirect.Target, &redirect.Status, &keepPath, &cre, &upd)
+		&account, &redirect.Target, &redirect.Status, &keepPath, &proxy.Target, &proxyHost, &insecure, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
 	}
@@ -477,6 +504,11 @@ func scanSite(r scanner) (Site, error) {
 	if redirect.Target != "" {
 		redirect.KeepPath = keepPath == 1
 		st.Redirect = &redirect
+	}
+
+	if proxy.Target != "" {
+		proxy.TargetHost, proxy.Insecure = proxyHost == 1, insecure == 1
+		st.Proxy = &proxy
 	}
 
 	if exts != "" {
@@ -841,6 +873,49 @@ func (s *Store) SetSiteRedirect(ctx context.Context, name string, r SiteRedirect
 
 	if err := tx.Commit(); err != nil {
 		return SiteRedirect{}, fmt.Errorf("store: %w", err)
+	}
+
+	return old, nil
+}
+
+// SetSiteProxy changes the target of a reverse proxy site and returns the
+// previous one. Other types refuse it with ErrSiteType.
+func (s *Store) SetSiteProxy(ctx context.Context, name string, p SiteProxy, now time.Time) (SiteProxy, error) {
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return SiteProxy{}, fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var (
+		old                 SiteProxy
+		typ                 string
+		targetHost, unverif int
+	)
+
+	if err := tx.QueryRowContext(ctx, `SELECT type, proxy_target, proxy_target_host, proxy_insecure FROM sites WHERE name = ?`, name).
+		Scan(&typ, &old.Target, &targetHost, &unverif); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return SiteProxy{}, ErrNotFound
+		}
+
+		return SiteProxy{}, fmt.Errorf("store: %w", err)
+	}
+
+	if typ != SiteTypeProxy {
+		return SiteProxy{}, ErrSiteType
+	}
+
+	old.TargetHost, old.Insecure = targetHost == 1, unverif == 1
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET proxy_target = ?, proxy_target_host = ?, proxy_insecure = ?, updated_at = ? WHERE name = ?`,
+		p.Target, boolInt(p.TargetHost), boolInt(p.Insecure), now.Unix(), name); err != nil {
+		return SiteProxy{}, fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return SiteProxy{}, fmt.Errorf("store: %w", err)
 	}
 
 	return old, nil
