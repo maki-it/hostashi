@@ -210,6 +210,32 @@ func TestUsage(t *testing.T) {
 	}
 }
 
+func TestDatabaseUsage(t *testing.T) {
+	for _, tc := range []struct {
+		used, limit uint64
+		status      string
+	}{
+		{1 << 40, 0, agentapi.DoctorOK},
+		{79, 100, agentapi.DoctorOK},
+		{80, 100, agentapi.DoctorWarn},
+		{95, 100, agentapi.DoctorFail},
+		{300, 100, agentapi.DoctorFail},
+	} {
+		c := DatabaseUsage("shop", tc.used, tc.limit)
+		if c.Status != tc.status || c.Site != "shop" || c.ID != "site.database" {
+			t.Errorf("%d of %d: %+v", tc.used, tc.limit, c)
+		}
+
+		if (c.Status == agentapi.DoctorOK) != (c.Hint == "") {
+			t.Errorf("%d of %d: hint %q", tc.used, tc.limit, c.Hint)
+		}
+	}
+
+	if c := DatabaseUsage("shop", 9<<30, 10<<30); c.Summary != "databases: 9.0 GiB of 10.0 GiB (90 %)" {
+		t.Errorf("summary %q", c.Summary)
+	}
+}
+
 func TestCert(t *testing.T) {
 	now := time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {
