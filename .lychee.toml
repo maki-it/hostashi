@@ -4,6 +4,11 @@
 exclude_all_private = true
 include_mail = false
 max_retries = 3
+# github.com answers 503 when many pages of this repository are fetched at
+# once (the wiki links to repository files by absolute URL). Fewer parallel
+# requests and a longer wait between retries keep the check from tripping it.
+max_concurrency = 8
+retry_wait_time = 10
 timeout = 20
 accept = ["200..=299", "429"]
 exclude = [
