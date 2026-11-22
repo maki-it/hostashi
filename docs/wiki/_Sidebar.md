@@ -7,6 +7,7 @@
 - [Parked domains](Parked-domains.md)
 - [PHP settings](PHP-settings.md)
 - [Security headers](Security-headers.md)
+- [Real visitor address](Real-visitor-address.md)
 - [Site logs](Site-logs.md)
 - [Audit log](Audit-log.md)
 - [Services and dashboard](Services-and-dashboard.md)
