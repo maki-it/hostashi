@@ -332,10 +332,11 @@ x /usr/local/bin/hostashi system timezone "${old_tz:-UTC}" >/dev/null || fail "t
 # nothing changes. Docker bind-mounts /etc/hostname and /etc/hosts, and a
 # rename over a mount point fails (EBUSY), so they become plain files first,
 # as on a real server.
+# shellcheck disable=SC2016 # expanded by bash in the container
 x bash -c 'for f in /etc/hostname /etc/hosts; do
   if findmnt -n "$f" >/dev/null; then cp "$f" "/tmp/${f##*/}"; umount "$f" && cp "/tmp/${f##*/}" "$f"; fi
 done' || fail "could not unmount docker's /etc/hostname and /etc/hosts"
-host=$(x hostname | tr 'A-Z' 'a-z')
+host=$(x hostname | tr '[:upper:]' '[:lower:]')
 if [[ "$host" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
   x /usr/local/bin/hostashi system hostname "$host" | grep -q "\"hostname\": \"$host\"" || fail "hostname not set"
   [ "$(x cat /etc/hostname)" = "$host" ] || fail "/etc/hostname is not $host"
