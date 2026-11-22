@@ -1,6 +1,6 @@
 # ADR-0060 Time zone, hostname and reboot from the panel
 
-**Status:** Proposed. **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0003 (stack, typed agent operations), ADR-0033 (hardening), ADR-0035 (roles), ADR-0052 (service management), ADR-0058 (OpenAPI and CLI parity).
+**Status:** Accepted (Kim, 2026-11-22). **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0003 (stack, typed agent operations), ADR-0033 (hardening), ADR-0035 (roles), ADR-0052 (service management), ADR-0058 (OpenAPI and CLI parity).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
