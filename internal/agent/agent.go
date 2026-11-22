@@ -340,7 +340,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	tool.units = cfg.DBToolUnits
 	tool.register(s)
 
-	registerDoctor(s, cfg.Doctor, cfg.StateDir, h, cfg.Firewall, cfg.DBToolPort > 0)
+	registerDoctor(s, cfg.Doctor, cfg.StateDir, h, cfg.Firewall, cfg.NodeInstall, cfg.DBToolPort > 0)
 	registerBackup(s, cfg.Backup)
 	registerCloudPanel(s, cfg.CloudPanel, cfg.CloudPanelImport)
 	registerDBJobs(s, cfg.DBJobs)
@@ -1550,7 +1550,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if cfg.NodeInstall == nil {
-		cfg.NodeInstall = &nodeinstall.Manager{Units: phpctl.NodeInstallUnits{}}
+		cfg.NodeInstall = &nodeinstall.Manager{Units: phpctl.NodeInstallUnits{}, Log: cfg.Log}
 	}
 
 	if cfg.Firewall == nil {
@@ -1578,6 +1578,15 @@ func Run(ctx context.Context, cfg Config) error {
 			cfg.Log.ErrorContext(ctx, "app recovery failed", "err", err)
 		}
 	}
+
+	// A line installed again restarts its apps; a Hostashi update with
+	// newer pins installs them without a click (ADR-0054).
+	if cfg.NodeInstall.Done == nil {
+		apps := cfg.Apps
+		cfg.NodeInstall.Done = apps.RestartLine
+	}
+
+	go cfg.NodeInstall.Update(ctx)
 
 	if cfg.PHP != nil {
 		// Like the web server: a failure is logged, web.apply retries.

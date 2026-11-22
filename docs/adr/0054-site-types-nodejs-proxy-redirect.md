@@ -201,3 +201,9 @@ Notes on how the app of a Node.js site is built; they change no decision.
 - `POST /api/v1/node/remove {major}` (action `node:remove`, scope `node:install`, admin only, audit `node.remove`). The agent (`node.remove`) refuses a line that a site's app runs on (from its own app state, also for stopped apps), one that is not installed and one while an installation runs.
 - The agent renames `/opt/hostashi/node/<major>` out of the way before it deletes it, so a half-removed line never looks installed, and deletes the line's install log. It runs in the agent, no unit: nothing is downloaded or run.
 - The panel shows a remove button only for an installed line without sites, and asks first [V: container test].
+
+## Implementation notes: Node.js updates without a click (2026-11-22)
+
+- Kim (2026-11-22): new Node.js releases install themselves, like PHP through unattended-upgrades. A new release comes as a new pin with a Hostashi update; when the agent starts, it installs the pinned release of every installed line that runs an older one, one after the other, through the same unit `hostashi-node-install@<major>`. With `--auto-update` (ADR-0050) the whole chain runs without a click.
+- After a line was installed again, from the panel or by the agent, the agent restarts the running apps on it (`appunit.Manager.RestartLine`); stopped apps stay stopped.
+- Doctor `system.node` warns when an installed line does not run its pinned release (the update failed; the next start of the agent tries again) and when a line that sites run on ends within 180 days or has ended. It shows under Health and in the daily digest mail.
