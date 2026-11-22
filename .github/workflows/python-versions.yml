@@ -40,7 +40,9 @@ concurrency:
 
 env:
   BRANCH: automation/python-versions
-  # The workflow that must have built and attested every archive.
+  # The workflow that must have built and attested every archive. It runs
+  # on Depot runners, which count as self-hosted, so
+  # --deny-self-hosted-runners would refuse every archive (ADR-0061 notes).
   SIGNER: astral-sh/python-build-standalone/.github/workflows/release.yml
 
 jobs:
@@ -85,8 +87,7 @@ jobs:
             echo "$sum  $RUNNER_TEMP/archive.tar.gz" | sha256sum --check --quiet
             gh attestation verify "$RUNNER_TEMP/archive.tar.gz" \
               --repo astral-sh/python-build-standalone \
-              --signer-workflow "$SIGNER" \
-              --deny-self-hosted-runners >/dev/null
+              --signer-workflow "$SIGNER" >/dev/null
             echo "verified $url"
             n=$((n + 1))
           done < "$RUNNER_TEMP/verify.txt"
