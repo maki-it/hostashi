@@ -112,6 +112,7 @@ const (
 	SiteTypeApp      = "app"
 	SiteTypeProxy    = "proxy"
 	SiteTypeRedirect = "redirect"
+	SiteTypePython   = "python"
 )
 
 // SiteProxy is the target of a reverse proxy site (ADR-0054).
@@ -123,17 +124,23 @@ type SiteProxy struct {
 	Insecure bool
 }
 
-// SiteApp is the app of a Node.js or app site (ADR-0054).
+// SiteApp is the app of a Node.js, app (ADR-0054) or Python site
+// (ADR-0061).
 type SiteApp struct {
-	// Node is the Node.js LTS line, for example "24"; "" for an app site.
+	// Node is the Node.js LTS line, for example "24"; "" for an app or
+	// Python site.
 	Node string
+	// Python is the Python line of a Python site, for example "3.13".
+	Python string
 	// Workdir is the working directory relative to the home.
 	Workdir string
 	// StartKind and Start: how the app starts (agentapi.AppStart*); both
-	// empty until set, and the app stays stopped until then.
+	// empty until set, and the app stays stopped until then. For a Python
+	// app Start is the wsgi/asgi target or the .py file.
 	StartKind string
 	Start     string
-	// Args are the arguments of an app site's program.
+	// Args are the arguments of an app site's program or the extra
+	// arguments of a Python app.
 	Args []string
 	// Port is the loopback port the panel assigned (unique).
 	Port int
@@ -186,9 +193,17 @@ func (s *Store) CreateNodeSite(ctx context.Context, name, pool string, a SiteApp
 // CreateAppSite stores a new app site (a binary, ADR-0054 addendum 2)
 // like CreateNodeSite.
 func (s *Store) CreateAppSite(ctx context.Context, name, pool string, a SiteApp, domains []string, now time.Time) (Site, error) {
-	a.Node = ""
+	a.Node, a.Python = "", ""
 
 	return s.createSite(ctx, Site{Name: name, Pool: pool, Type: SiteTypeApp, App: &a, Account: true}, domains, now)
+}
+
+// CreatePythonSite stores a new Python site (ADR-0061) like
+// CreateNodeSite; a.Python is its line.
+func (s *Store) CreatePythonSite(ctx context.Context, name, pool string, a SiteApp, domains []string, now time.Time) (Site, error) {
+	a.Node = ""
+
+	return s.createSite(ctx, Site{Name: name, Pool: pool, Type: SiteTypePython, App: &a, Account: true}, domains, now)
 }
 
 // CreateProxySite stores a new reverse proxy site without a Linux account
@@ -247,11 +262,11 @@ func (s *Store) createSite(ctx context.Context, site Site, domains []string, now
 
 	res, err := tx.ExecContext(ctx,
 		`INSERT INTO sites (name, pool, state, type, php, account, redirect_target, redirect_status, redirect_keep_path,
-			proxy_target, proxy_target_host, proxy_insecure, node_version, app_workdir, app_start_kind, app_start, app_args, app_port, app_stopped,
+			proxy_target, proxy_target_host, proxy_insecure, node_version, python_version, app_workdir, app_start_kind, app_start, app_args, app_port, app_stopped,
 			created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		name, pool, SiteCreating, site.Type, php, boolInt(site.Account), r.Target, r.Status, boolInt(r.KeepPath),
-		p.Target, boolInt(p.TargetHost), boolInt(p.Insecure), a.Node, a.Workdir, a.StartKind, a.Start, appArgs(a.Args), port, boolInt(a.Stopped),
+		p.Target, boolInt(p.TargetHost), boolInt(p.Insecure), a.Node, a.Python, a.Workdir, a.StartKind, a.Start, appArgs(a.Args), port, boolInt(a.Stopped),
 		now.Unix(), now.Unix())
 	if err != nil {
 		return Site{}, fmt.Errorf("store: %w", err)
@@ -562,7 +577,7 @@ type scanner interface{ Scan(dest ...any) error }
 const siteColumns = `id, name, pool, state, type, php, web_dir, spa, asset_cache, asset_cache_seconds, asset_cache_exts, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
 	maintenance, coalesce(maintenance_page, 0), maintenance_allow, coalesce(disabled_page, 0), tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
 	account, redirect_target, redirect_status, redirect_keep_path, proxy_target, proxy_target_host, proxy_insecure,
-	node_version, app_workdir, app_start_kind, app_start, app_args, coalesce(app_port, 0), app_stopped, created_at, updated_at`
+	node_version, python_version, app_workdir, app_start_kind, app_start, app_args, coalesce(app_port, 0), app_stopped, created_at, updated_at`
 
 func scanSite(r scanner) (Site, error) {
 	var (
@@ -587,7 +602,7 @@ func scanSite(r scanner) (Site, error) {
 	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &st.WebDir, &spa, &assets, &st.AssetCacheSeconds, &exts, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
 		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced,
 		&account, &redirect.Target, &redirect.Status, &keepPath, &proxy.Target, &proxyHost, &insecure,
-		&app.Node, &app.Workdir, &app.StartKind, &app.Start, &args, &app.Port, &appStopped, &cre, &upd)
+		&app.Node, &app.Python, &app.Workdir, &app.StartKind, &app.Start, &args, &app.Port, &appStopped, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
 	}
@@ -1035,7 +1050,7 @@ func (s *Store) SetSiteProxy(ctx context.Context, name string, p SiteProxy, now 
 	return old, nil
 }
 
-// SetSiteApp changes the app of a Node.js or app site and returns the
+// SetSiteApp changes the app of a Node.js, app or Python site and returns the
 // previous one: version, working directory, start command, arguments and
 // whether it is kept stopped. The port stays. Other types refuse it with ErrSiteType.
 func (s *Store) SetSiteApp(ctx context.Context, name string, a SiteApp, now time.Time) (SiteApp, error) {
@@ -1053,8 +1068,8 @@ func (s *Store) SetSiteApp(ctx context.Context, name string, a SiteApp, now time
 		args    string
 	)
 
-	if err := tx.QueryRowContext(ctx, `SELECT type, node_version, app_workdir, app_start_kind, app_start, app_args, coalesce(app_port, 0), app_stopped FROM sites WHERE name = ?`, name).
-		Scan(&typ, &old.Node, &old.Workdir, &old.StartKind, &old.Start, &args, &old.Port, &stopped); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT type, node_version, python_version, app_workdir, app_start_kind, app_start, app_args, coalesce(app_port, 0), app_stopped FROM sites WHERE name = ?`, name).
+		Scan(&typ, &old.Node, &old.Python, &old.Workdir, &old.StartKind, &old.Start, &args, &old.Port, &stopped); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return SiteApp{}, ErrNotFound
 		}
@@ -1062,7 +1077,7 @@ func (s *Store) SetSiteApp(ctx context.Context, name string, a SiteApp, now time
 		return SiteApp{}, fmt.Errorf("store: %w", err)
 	}
 
-	if typ != SiteTypeNode && typ != SiteTypeApp || old.Port == 0 {
+	if typ != SiteTypeNode && typ != SiteTypeApp && typ != SiteTypePython || old.Port == 0 {
 		return SiteApp{}, ErrSiteType
 	}
 
@@ -1076,12 +1091,17 @@ func (s *Store) SetSiteApp(ctx context.Context, name string, a SiteApp, now time
 		old.Args = nil
 	}
 
-	if typ == SiteTypeApp {
+	switch typ {
+	case SiteTypeApp:
+		a.Node, a.Python = "", ""
+	case SiteTypePython:
 		a.Node = ""
+	default:
+		a.Python = ""
 	}
 
-	if _, err := tx.ExecContext(ctx, `UPDATE sites SET node_version = ?, app_workdir = ?, app_start_kind = ?, app_start = ?, app_args = ?, app_stopped = ?, updated_at = ? WHERE name = ?`,
-		a.Node, a.Workdir, a.StartKind, a.Start, appArgs(a.Args), boolInt(a.Stopped), now.Unix(), name); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET node_version = ?, python_version = ?, app_workdir = ?, app_start_kind = ?, app_start = ?, app_args = ?, app_stopped = ?, updated_at = ? WHERE name = ?`,
+		a.Node, a.Python, a.Workdir, a.StartKind, a.Start, appArgs(a.Args), boolInt(a.Stopped), now.Unix(), name); err != nil {
 		return SiteApp{}, fmt.Errorf("store: %w", err)
 	}
 

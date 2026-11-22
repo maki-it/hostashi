@@ -353,7 +353,13 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	registerPHPInstall(s, cfg.PHPInstall, cfg.PHP)
 	registerPGClient(s, cfg.PGClient)
 	registerNodeInstall(s, cfg.NodeInstall, cfg.Apps)
-	registerPythonInstall(s, cfg.PythonInstall, nil)
+
+	var pythonUsers func(string) ([]string, error)
+	if cfg.Apps != nil {
+		pythonUsers = cfg.Apps.PythonUsers
+	}
+
+	registerPythonInstall(s, cfg.PythonInstall, pythonUsers)
 
 	svcLog := cfg.Log
 	if svcLog == nil {
@@ -1604,9 +1610,13 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.NodeInstall.Done = apps.RestartLine
 	}
 
+	if cfg.PythonInstall.Done == nil {
+		apps := cfg.Apps
+		cfg.PythonInstall.Done = apps.RestartPythonLine
+	}
+
 	go cfg.NodeInstall.Update(ctx)
-	// Python lines follow a Hostashi update the same way (ADR-0061); no
-	// site runs on them yet, so nothing restarts.
+	// Python lines follow a Hostashi update the same way (ADR-0061).
 	go cfg.PythonInstall.Update(ctx)
 
 	if cfg.PHP != nil {

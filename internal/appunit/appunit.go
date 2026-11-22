@@ -37,6 +37,8 @@ const (
 	DefaultUnitDir = "/etc/systemd/system"
 	// DefaultNodeDir holds the Node.js lines (internal/nodeinstall).
 	DefaultNodeDir = "/opt/hostashi/node"
+	// DefaultPythonDir holds the Python lines (internal/pythoninstall).
+	DefaultPythonDir = "/opt/hostashi/python"
 	// DefaultLogDir holds <site>/app.log, which systemd (as root) opens
 	// for the unit's output (StandardOutput=append: in the template).
 	DefaultLogDir = "/var/log/hostashi/app"
@@ -59,6 +61,10 @@ var (
 	ErrNoApp = errors.New("appunit: the site has no app")
 	// ErrNodeMissing: the app's Node.js line is not installed.
 	ErrNodeMissing = errors.New("appunit: this Node.js version is not installed")
+	// ErrPythonMissing: the app's Python line is not installed.
+	ErrPythonMissing = errors.New("appunit: this Python version is not installed")
+	// ErrVenv: the Python environment could not be made.
+	ErrVenv = errors.New("appunit: the Python environment could not be created")
 	// ErrStopped: the app is kept stopped (no start command, stopped in
 	// the panel or the site is disabled).
 	ErrStopped = errors.New("appunit: the app is stopped; start it in the panel")
@@ -77,6 +83,8 @@ type Controller interface {
 	Stop(ctx context.Context, unit string) error
 	Restart(ctx context.Context, unit string) error
 	ResetFailed(ctx context.Context, unit string) error
+	// Run starts a oneshot unit and waits until it has finished.
+	Run(ctx context.Context, unit string) error
 	Show(ctx context.Context, unit string, props ...string) (map[string]string, error)
 }
 
@@ -93,7 +101,9 @@ type Manager struct {
 	Dir     string
 	UnitDir string // default DefaultUnitDir
 	NodeDir string // default DefaultNodeDir
-	LogDir  string // default DefaultLogDir
+	// PythonDir holds the Python lines; default DefaultPythonDir.
+	PythonDir string
+	LogDir    string // default DefaultLogDir
 	// Site returns the account of a site user.
 	Site func(site string) (Site, error)
 	// Hidden returns the pools the unit must hide (sites.HiddenPaths).
@@ -115,8 +125,18 @@ func Unit(site string) string { return "hostashi-node@" + site + ".service" }
 // addendum 2).
 func BinaryUnit(site string) string { return "hostashi-app@" + site + ".service" }
 
+// PythonUnit is the systemd unit of a site's Python app (ADR-0061).
+func PythonUnit(site string) string { return "hostashi-python@" + site + ".service" }
+
+// VenvUnit is the oneshot unit that makes a site's Python environment.
+func VenvUnit(site string) string { return "hostashi-python-venv@" + site + ".service" }
+
 // UnitOf is the unit that runs a.
 func UnitOf(a agentapi.AppSpec) string {
+	if a.IsPython() {
+		return PythonUnit(a.Site)
+	}
+
 	if a.Binary() {
 		return BinaryUnit(a.Site)
 	}
@@ -126,7 +146,9 @@ func UnitOf(a agentapi.AppSpec) string {
 
 func (m *Manager) unitDir() string { return cmpOr(m.UnitDir, DefaultUnitDir) }
 func (m *Manager) nodeDir() string { return cmpOr(m.NodeDir, DefaultNodeDir) }
-func (m *Manager) logDir() string  { return cmpOr(m.LogDir, DefaultLogDir) }
+
+func (m *Manager) pythonDir() string { return cmpOr(m.PythonDir, DefaultPythonDir) }
+func (m *Manager) logDir() string    { return cmpOr(m.LogDir, DefaultLogDir) }
 
 func cmpOr(a, b string) string {
 	if a != "" {
@@ -195,6 +217,10 @@ func ExecStart(nodeDir, home string, a agentapi.AppSpec) (string, error) {
 		return "", err
 	}
 
+	if a.IsPython() {
+		return pythonExecStart(home, a)
+	}
+
 	if a.StartKind == agentapi.AppStartBinary {
 		var b strings.Builder
 
@@ -217,6 +243,39 @@ func ExecStart(nodeDir, home string, a agentapi.AppSpec) (string, error) {
 	}
 
 	return "", errors.New("appunit: the app has no start command")
+}
+
+// pythonExecStart is the command line of a Python app: the environment's
+// python with gunicorn, uvicorn or the .py file, the address Hostashi
+// sets, and the extra arguments, each quoted. The address comes first, so
+// the arguments cannot hide it; ValidatePythonArgs refuses a second one.
+func pythonExecStart(home string, a agentapi.AppSpec) (string, error) {
+	var b strings.Builder
+
+	b.WriteString(home + "/" + agentapi.PythonVenvDir + "/bin/python")
+
+	port := strconv.Itoa(a.Port)
+
+	switch a.StartKind {
+	case agentapi.AppStartWSGI:
+		b.WriteString(" -m gunicorn --bind 127.0.0.1:" + port)
+	case agentapi.AppStartASGI:
+		b.WriteString(" -m uvicorn --host 127.0.0.1 --port " + port)
+	case agentapi.AppStartScript:
+		b.WriteString(" " + a.Start)
+	default:
+		return "", errors.New("appunit: the app has no start command")
+	}
+
+	for _, arg := range a.Args {
+		b.WriteString(" " + Quote(arg))
+	}
+
+	if a.StartKind != agentapi.AppStartScript {
+		b.WriteString(" " + a.Start)
+	}
+
+	return b.String(), nil
 }
 
 // Quote makes s one word of a systemd command line, taken literally: in
@@ -283,11 +342,19 @@ func AppDropInContent(nodeDir string, a agentapi.AppSpec, acct Site, envFile str
 		w("ExecStart=/bin/false")
 	}
 
-	if a.Binary() {
+	switch {
+	case a.IsPython():
+		venv := acct.Home + "/" + agentapi.PythonVenvDir
+
+		w("Environment=HOST=127.0.0.1 PORT=", strconv.Itoa(a.Port), " PYTHONUNBUFFERED=1")
+		w("Environment=HOME=", acct.Home, " USER=", a.Site, " LOGNAME=", a.Site)
+		w("Environment=VIRTUAL_ENV=", venv)
+		w("Environment=PATH=", venv, "/bin:/usr/local/bin:/usr/bin:/bin")
+	case a.Binary():
 		w("Environment=HOST=127.0.0.1 PORT=", strconv.Itoa(a.Port))
 		w("Environment=HOME=", acct.Home, " USER=", a.Site, " LOGNAME=", a.Site)
 		w("Environment=PATH=/usr/local/bin:/usr/bin:/bin")
-	} else {
+	default:
 		w("Environment=NODE_ENV=production HOST=127.0.0.1 PORT=", strconv.Itoa(a.Port))
 		w("Environment=HOME=", acct.Home, " USER=", a.Site, " LOGNAME=", a.Site)
 		w("Environment=PATH=", path.Join(nodeDir, a.Node, "bin"), ":/usr/local/bin:/usr/bin:/bin")
@@ -340,6 +407,15 @@ func EnvFileContent(site string, env []agentapi.AppEnvVar) []byte {
 
 // Users lists the sites whose app runs on a Node.js line, sorted.
 func (m *Manager) Users(major string) ([]string, error) {
+	return m.users(func(a agentapi.AppSpec) bool { return a.Node == major })
+}
+
+// PythonUsers lists the sites whose app runs on a Python line, sorted.
+func (m *Manager) PythonUsers(line string) ([]string, error) {
+	return m.users(func(a agentapi.AppSpec) bool { return a.Python == line })
+}
+
+func (m *Manager) users(on func(agentapi.AppSpec) bool) ([]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -351,7 +427,7 @@ func (m *Manager) Users(major string) ([]string, error) {
 	out := []string{}
 
 	for site, e := range st {
-		if e.App.Node == major {
+		if on(e.App) {
 			out = append(out, site)
 		}
 	}
@@ -365,12 +441,23 @@ func (m *Manager) Users(major string) ([]string, error) {
 // installed again with a newer release. Stopped apps stay stopped. A
 // failure is logged and the next app is restarted all the same.
 func (m *Manager) RestartLine(ctx context.Context, major string) {
+	m.restartLine(ctx, "node", major, func(a agentapi.AppSpec) bool { return !a.Binary() && a.Node == major })
+}
+
+// RestartPythonLine restarts the running apps on a Python line after a
+// newer build of it was installed, like RestartLine. Their environments
+// link the line's interpreter by path and keep working (ADR-0061).
+func (m *Manager) RestartPythonLine(ctx context.Context, line string) {
+	m.restartLine(ctx, "python", line, func(a agentapi.AppSpec) bool { return a.Python == line })
+}
+
+func (m *Manager) restartLine(ctx context.Context, runtime, major string, on func(agentapi.AppSpec) bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	st, err := m.load()
 	if err != nil {
-		m.log().ErrorContext(ctx, "restart apps", "major", major, "err", err)
+		m.log().ErrorContext(ctx, "restart apps", "runtime", runtime, "line", major, "err", err)
 
 		return
 	}
@@ -378,7 +465,7 @@ func (m *Manager) RestartLine(ctx context.Context, major string) {
 	sites := make([]string, 0, len(st))
 
 	for site, e := range st {
-		if !e.App.Binary() && e.App.Node == major && !e.App.Stopped && e.App.StartKind != "" {
+		if on(e.App) && !e.App.Stopped && e.App.StartKind != "" {
 			sites = append(sites, site)
 		}
 	}
@@ -386,15 +473,17 @@ func (m *Manager) RestartLine(ctx context.Context, major string) {
 	slices.Sort(sites)
 
 	for _, site := range sites {
-		_ = m.Ctl.ResetFailed(ctx, Unit(site))
+		unit := UnitOf(st[site].App)
 
-		if err := m.Ctl.Restart(ctx, Unit(site)); err != nil {
-			m.log().ErrorContext(ctx, "restart app on the new node release", "site", site, "err", err)
+		_ = m.Ctl.ResetFailed(ctx, unit)
+
+		if err := m.Ctl.Restart(ctx, unit); err != nil {
+			m.log().ErrorContext(ctx, "restart app on the new release", "runtime", runtime, "site", site, "err", err)
 
 			continue
 		}
 
-		m.log().InfoContext(ctx, "app restarted on the new node release", "site", site, "major", major)
+		m.log().InfoContext(ctx, "app restarted on the new release", "runtime", runtime, "site", site, "line", major)
 	}
 }
 
@@ -403,6 +492,30 @@ func (m *Manager) installed(major string) bool {
 	st, err := os.Stat(filepath.Join(m.nodeDir(), major, "bin", "node"))
 
 	return err == nil && st.Mode().IsRegular()
+}
+
+// pythonInstalled reports whether a Python line's interpreter is there.
+func (m *Manager) pythonInstalled(line string) bool {
+	st, err := os.Stat(filepath.Join(m.pythonDir(), line, "bin", "python3"))
+
+	return err == nil && st.Mode().IsRegular()
+}
+
+// runtimeMissing reports a Node.js or Python line that a is set up for
+// but that is not installed.
+func (m *Manager) runtimeMissing(a agentapi.AppSpec) error {
+	switch {
+	case a.IsPython():
+		if !m.pythonInstalled(a.Python) {
+			return fmt.Errorf("%w: Python %s", ErrPythonMissing, a.Python)
+		}
+	case !a.Binary():
+		if !m.installed(a.Node) {
+			return fmt.Errorf("%w: Node.js %s", ErrNodeMissing, a.Node)
+		}
+	}
+
+	return nil
 }
 
 // owners lists the firewall entries of st.
@@ -439,8 +552,8 @@ func (m *Manager) Apply(ctx context.Context, a agentapi.AppSpec) (agentapi.AppSt
 		return agentapi.AppStatus{}, err
 	}
 
-	if !a.Binary() && !m.installed(a.Node) {
-		return agentapi.AppStatus{}, fmt.Errorf("%w: Node.js %s", ErrNodeMissing, a.Node)
+	if err := m.runtimeMissing(a); err != nil {
+		return agentapi.AppStatus{}, err
 	}
 
 	acct, err := m.Site(a.Site)
@@ -450,6 +563,14 @@ func (m *Manager) Apply(ctx context.Context, a agentapi.AppSpec) (agentapi.AppSt
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// A Python site gets its environment with its first app (ADR-0061); an
+	// existing one is kept, packages and all.
+	if a.IsPython() && !venvThere(acct) {
+		if err := m.makeVenv(ctx, a.Site, a.Python, acct, false); err != nil {
+			return agentapi.AppStatus{}, err
+		}
+	}
 
 	st, err := m.load()
 	if err != nil {
@@ -464,8 +585,8 @@ func (m *Manager) Apply(ctx context.Context, a agentapi.AppSpec) (agentapi.AppSt
 
 	prev, had := st[a.Site]
 
-	// A site that changes between Node.js and a binary leaves the other
-	// unit behind.
+	// A site that changes between Node.js, a binary and Python leaves the
+	// other unit behind.
 	if had && UnitOf(prev.App) != UnitOf(a) {
 		if err := m.removeUnit(ctx, prev.App); err != nil {
 			return agentapi.AppStatus{}, err
@@ -501,12 +622,12 @@ func (m *Manager) Apply(ctx context.Context, a agentapi.AppSpec) (agentapi.AppSt
 	}
 
 	unit := UnitOf(a)
-	problem := m.program(a, acct)
+	problem := m.problem(a, acct)
 
 	switch {
 	case a.Stopped || problem != "":
-		// A binary app whose program is not there yet waits for a start
-		// in the panel.
+		// A binary app whose program is not there yet, or a Python app
+		// without its app server, waits for a start in the panel.
 		err = m.Ctl.Stop(ctx, unit)
 	case changed || prev.App.Stopped:
 		_ = m.Ctl.ResetFailed(ctx, unit)
@@ -524,12 +645,21 @@ func (m *Manager) Apply(ctx context.Context, a agentapi.AppSpec) (agentapi.AppSt
 		return agentapi.AppStatus{}, fmt.Errorf("appunit: site %s: %w", a.Site, err)
 	}
 
-	m.log().InfoContext(ctx, "app applied", "site", a.Site, "node", a.Node, "port", a.Port, "stopped", a.Stopped, "problem", problem)
+	m.log().InfoContext(ctx, "app applied", "site", a.Site, "node", a.Node, "python", a.Python, "port", a.Port, "stopped", a.Stopped, "problem", problem)
 
 	out := m.status(ctx, a)
 	out.Problem = problem
 
 	return out, nil
+}
+
+// problem says why a that should run cannot start, "" if nothing is wrong.
+func (m *Manager) problem(a agentapi.AppSpec, acct Site) string {
+	if a.IsPython() {
+		return m.pythonProblem(a, acct)
+	}
+
+	return m.program(a, acct)
 }
 
 // program checks the program file of a binary app that should run and
@@ -586,6 +716,10 @@ func (m *Manager) removeUnit(ctx context.Context, a agentapi.AppSpec) error {
 
 	if err := os.Remove(dir); err != nil && !errors.Is(err, os.ErrNotExist) {
 		m.log().InfoContext(ctx, "app drop-in directory not empty, kept", "site", a.Site, "dir", dir)
+	}
+
+	if a.IsPython() {
+		return m.removeVenvUnit(a.Site)
 	}
 
 	return nil
@@ -752,7 +886,7 @@ func (m *Manager) Action(ctx context.Context, site, action string) (agentapi.App
 			return agentapi.AppStatus{}, err
 		}
 
-		if p := m.program(e.App, acct); p != "" {
+		if p := m.problem(e.App, acct); p != "" {
 			return agentapi.AppStatus{}, fmt.Errorf("%w: %s", ErrProgram, p)
 		}
 	}
@@ -799,7 +933,7 @@ func (m *Manager) Status(ctx context.Context, site string) (agentapi.AppStatus, 
 	out := m.status(ctx, e.App)
 
 	if acct, err := m.Site(site); err == nil {
-		out.Problem = m.program(e.App, acct)
+		out.Problem = m.problem(e.App, acct)
 	}
 
 	return out, nil
@@ -874,11 +1008,11 @@ func (m *Manager) Recover(ctx context.Context) error {
 
 	for _, s := range names {
 		a := st[s].App
-		if a.Stopped || !a.Binary() && !m.installed(a.Node) {
+		if a.Stopped || m.runtimeMissing(a) != nil {
 			continue
 		}
 
-		if acct, err := m.Site(s); err == nil && m.program(a, acct) != "" {
+		if acct, err := m.Site(s); err == nil && m.problem(a, acct) != "" {
 			continue
 		}
 

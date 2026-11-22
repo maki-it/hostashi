@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Oneshot unit that makes the Python environment <home>/.venv of one site
+# (ADR-0061). The agent writes two drop-ins, as for hostashi-python@:
+# 50-hostashi-slice.conf (slice and home) and 60-hostashi-venv.conf with
+# ExecStart=/opt/hostashi/python/<line>/bin/python3 -m venv [--clear]
+# <home>/.venv, from typed values it checked, and runs the unit with
+# systemctl start, which waits until it has finished. It runs as the site
+# user with the sandbox of the app unit; pip comes from the build's own
+# ensurepip, offline.
+
+[Unit]
+Description=Python environment of Hostashi site %i
+Documentation=https://github.com/maki-it/hostashi
+After=network.target
+
+[Service]
+Type=oneshot
+User=%i
+Group=%i
+# Replaced by the drop-in.
+ExecStart=/bin/false
+# venv with ensurepip takes a few seconds; the agent's systemctl call
+# gives up after 60 s, so systemd ends a stuck run before that.
+TimeoutStartSec=50s
+# No core dumps: they would hold keys, passwords and session data (ADR-0033).
+LimitCORE=0
+# The output of the last run, opened by systemd as root: the site user
+# can neither open nor change it. The agent creates the directory and
+# reports the end of it when the run fails.
+StandardOutput=truncate:/var/log/hostashi/app/%i/venv.log
+StandardError=inherit
+SyslogIdentifier=hostashi-python-venv-%i
+
+# A /tmp of its own.
+PrivateTmp=yes
+PrivateDevices=yes
+# The system is read only and /home is empty: the drop-in mounts the
+# site's own home back, writable (ADR-0033).
+ProtectSystem=strict
+ProtectHome=tmpfs
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Other users' processes are hidden in /proc.
+ProtectProc=invisible
+RemoveIPC=yes
+# No MemoryDenyWriteExecute=, as for hostashi-python@.
+
+# No [Install]: the agent runs it, it is never enabled.

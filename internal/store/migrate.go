@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 //go:embed migrations/*.sql
@@ -31,7 +32,16 @@ type migration struct {
 	version int
 	name    string
 	sql     string
+	// rebuild is set by a first line of fkOffMarker. The migration then
+	// runs with foreign keys off, as SQLite's procedure for rebuilding a
+	// table that other tables reference requires: with them on, DROP TABLE
+	// would delete the rows that reference it.
+	rebuild bool
 }
+
+// fkOffMarker starts a migration that rebuilds a referenced table. After the
+// migration, PRAGMA foreign_key_check must find no row, or it is rolled back.
+const fkOffMarker = "-- hostashi: foreign-keys-off\n"
 
 func loadMigrations(fsys fs.FS) ([]migration, error) {
 	entries, err := fs.ReadDir(fsys, "migrations")
@@ -57,7 +67,10 @@ func loadMigrations(fsys fs.FS) ([]migration, error) {
 			return nil, fmt.Errorf("store: %w", err)
 		}
 
-		out = append(out, migration{version: v, name: e.Name(), sql: string(b)})
+		out = append(out, migration{
+			version: v, name: e.Name(), sql: string(b),
+			rebuild: strings.HasPrefix(string(b), fkOffMarker),
+		})
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].version < out[j].version })
@@ -124,7 +137,25 @@ func migrate(ctx context.Context, db *sql.DB, fsys fs.FS) error {
 }
 
 func apply(ctx context.Context, db *sql.DB, m migration) error {
-	tx, err := db.BeginTx(ctx, nil)
+	// The pragma has no effect inside a transaction, so it is set on the
+	// connection before BEGIN and set back after it. The writer pool has
+	// one connection; a new one would get foreign keys on from the DSN.
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("store: migration %s: %w", m.name, err)
+	}
+
+	defer func() { _ = conn.Close() }()
+
+	if m.rebuild {
+		if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
+			return fmt.Errorf("store: migration %s: %w", m.name, err)
+		}
+
+		defer func() { _, _ = conn.ExecContext(context.WithoutCancel(ctx), "PRAGMA foreign_keys = ON") }()
+	}
+
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("store: migration %s: %w", m.name, err)
 	}
@@ -149,6 +180,12 @@ func apply(ctx context.Context, db *sql.DB, m migration) error {
 		return fmt.Errorf("store: migration %s: %w", m.name, err)
 	}
 
+	if m.rebuild {
+		if err := foreignKeysHold(ctx, tx); err != nil {
+			return fmt.Errorf("store: migration %s: %w", m.name, err)
+		}
+	}
+
 	// The version is an int from a validated file name, not user input.
 	if _, err := tx.ExecContext(ctx, "PRAGMA user_version = "+strconv.Itoa(m.version)); err != nil {
 		return fmt.Errorf("store: migration %s: %w", m.name, err)
@@ -159,4 +196,30 @@ func apply(ctx context.Context, db *sql.DB, m migration) error {
 	}
 
 	return nil
+}
+
+// foreignKeysHold reports the first row that PRAGMA foreign_key_check finds.
+func foreignKeysHold(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return err
+	}
+
+	defer func() { _ = rows.Close() }()
+
+	if rows.Next() {
+		var (
+			table, parent string
+			rowid         sql.NullInt64
+			fk            int
+		)
+
+		if err := rows.Scan(&table, &rowid, &parent, &fk); err != nil {
+			return err
+		}
+
+		return fmt.Errorf("foreign key violation: %s row %d references %s", table, rowid.Int64, parent)
+	}
+
+	return rows.Err()
 }

@@ -19,6 +19,8 @@ type fakeCtl struct {
 	calls  []string
 	reload int
 	fail   error
+	// run does the work of a oneshot unit.
+	run func(unit string) error
 }
 
 func (f *fakeCtl) DaemonReload(context.Context) error { f.reload++; return nil }
@@ -33,6 +35,18 @@ func (f *fakeCtl) Start(_ context.Context, u string) error   { return f.do("star
 func (f *fakeCtl) Stop(_ context.Context, u string) error    { return f.do("stop", u) }
 func (f *fakeCtl) Restart(_ context.Context, u string) error { return f.do("restart", u) }
 func (f *fakeCtl) ResetFailed(context.Context, string) error { return nil }
+
+func (f *fakeCtl) Run(_ context.Context, u string) error {
+	if err := f.do("run", u); err != nil {
+		return err
+	}
+
+	if f.run != nil {
+		return f.run(u)
+	}
+
+	return nil
+}
 
 func (f *fakeCtl) Show(context.Context, string, ...string) (map[string]string, error) {
 	return map[string]string{"ActiveState": "active", "SubState": "running", "NRestarts": "2", "MemoryCurrent": "1048576"}, nil

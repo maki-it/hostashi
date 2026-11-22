@@ -4910,6 +4910,81 @@
         ],
         "type": "object"
       },
+      "PythonApp": {
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "port": {
+            "type": "integer"
+          },
+          "startKind": {
+            "type": "string"
+          },
+          "stopped": {
+            "type": "boolean"
+          },
+          "target": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "workdir": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "args",
+          "port",
+          "startKind",
+          "stopped",
+          "target",
+          "version",
+          "workdir"
+        ],
+        "type": "object"
+      },
+      "PythonAppInput": {
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "port": {
+            "type": "integer"
+          },
+          "startKind": {
+            "type": "string"
+          },
+          "stopped": {
+            "type": "boolean"
+          },
+          "target": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "workdir": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "PythonInstalled": {
         "additionalProperties": false,
         "properties": {
@@ -4961,6 +5036,51 @@
           "line",
           "version"
         ],
+        "type": "object"
+      },
+      "PythonSetRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "confirm": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "startKind": {
+            "type": "string"
+          },
+          "stopped": {
+            "type": "boolean"
+          },
+          "target": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "workdir": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PythonVenvRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "RealIP": {
@@ -5506,6 +5626,16 @@
               }
             ]
           },
+          "python": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PythonApp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "redirect": {
             "anyOf": [
               {
@@ -5547,6 +5677,7 @@
           "phpPrograms",
           "pool",
           "proxy",
+          "python",
           "redirect",
           "state",
           "tls",
@@ -5630,6 +5761,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ProxyInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "python": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PythonAppInput"
               },
               {
                 "type": "null"
@@ -5873,6 +6014,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ProxyInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "python": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PythonAppInput"
               },
               {
                 "type": "null"
@@ -13611,7 +13762,7 @@
             ]
           }
         ],
-        "summary": "Create a site (static, PHP, Node.js, app, reverse proxy or redirect)",
+        "summary": "Create a site (static, PHP, Node.js, app, Python, reverse proxy or redirect)",
         "tags": [
           "sites"
         ],
@@ -17294,6 +17445,132 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites.proxy:write"
+      }
+    },
+    "/api/v1/sites/{name}/python": {
+      "put": {
+        "operationId": "setSitePython",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PythonSetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteApp"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Set the Python version, working directory, start form and arguments of a Python site; a new version rebuilds .venv",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.app:write"
+      }
+    },
+    "/api/v1/sites/{name}/python/venv": {
+      "post": {
+        "operationId": "recreateSitePythonVenv",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PythonVenvRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Recreate the .venv of a Python site; its installed packages go",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.app:write"
       }
     },
     "/api/v1/sites/{name}/real-ip": {

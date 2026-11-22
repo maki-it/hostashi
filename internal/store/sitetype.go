@@ -63,8 +63,8 @@ func (s *Store) SetSiteType(ctx context.Context, name string, c SiteTypeChange, 
 
 		port = p
 
-		if _, err := tx.ExecContext(ctx, `UPDATE sites SET node_version = ?, app_workdir = ?, app_start_kind = ?, app_start = ?, app_args = ?, app_stopped = ? WHERE name = ?`,
-			c.App.Node, c.App.Workdir, c.App.StartKind, c.App.Start, appArgs(c.App.Args), boolInt(c.App.Stopped), name); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE sites SET node_version = ?, python_version = ?, app_workdir = ?, app_start_kind = ?, app_start = ?, app_args = ?, app_stopped = ? WHERE name = ?`,
+			c.App.Node, c.App.Python, c.App.Workdir, c.App.StartKind, c.App.Start, appArgs(c.App.Args), boolInt(c.App.Stopped), name); err != nil {
 			return SiteTypeChange{}, fmt.Errorf("store: %w", err)
 		}
 	}
@@ -112,9 +112,9 @@ func siteTypeOf(ctx context.Context, tx *sql.Tx, name string) (SiteTypeChange, e
 
 	err := tx.QueryRowContext(ctx, `SELECT type, php, account, redirect_target, redirect_status, redirect_keep_path,
 		proxy_target, proxy_target_host, proxy_insecure,
-		node_version, app_workdir, app_start_kind, app_start, app_args, coalesce(app_port, 0), app_stopped FROM sites WHERE name = ?`, name).
+		node_version, python_version, app_workdir, app_start_kind, app_start, app_args, coalesce(app_port, 0), app_stopped FROM sites WHERE name = ?`, name).
 		Scan(&c.Type, &c.PHP, &account, &r.Target, &r.Status, &keepPath, &p.Target, &targetHost, &insecure,
-			&a.Node, &a.Workdir, &a.StartKind, &a.Start, &args, &a.Port, &stopped)
+			&a.Node, &a.Python, &a.Workdir, &a.StartKind, &a.Start, &args, &a.Port, &stopped)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SiteTypeChange{}, ErrNotFound
 	}

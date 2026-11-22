@@ -238,6 +238,7 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 		if deps.Sites != nil {
 			registerSites(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerApps(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerPythonSites(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSiteType(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerCerts(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDatabases(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)

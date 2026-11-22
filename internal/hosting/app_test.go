@@ -14,9 +14,31 @@ import (
 
 type fakeAppAgent struct {
 	installed []string
+	python    []string
 	specs     map[string]agentapi.AppSpec
 	actions   []string
+	venvs     []agentapi.PythonVenvRequest
 	applyErr  error
+	venvErr   error
+}
+
+func (f *fakeAppAgent) PythonStatus(context.Context) (agentapi.PythonStatus, error) {
+	st := agentapi.PythonStatus{}
+	for _, l := range f.python {
+		st.Installed = append(st.Installed, agentapi.PythonInstalled{Line: l})
+	}
+
+	return st, nil
+}
+
+func (f *fakeAppAgent) PythonVenv(_ context.Context, req agentapi.PythonVenvRequest) (agentapi.AppStatus, error) {
+	if f.venvErr != nil {
+		return agentapi.AppStatus{}, f.venvErr
+	}
+
+	f.venvs = append(f.venvs, req)
+
+	return agentapi.AppStatus{Site: req.Site, State: "active"}, nil
 }
 
 func (f *fakeAppAgent) NodeStatus(context.Context) (agentapi.NodeStatus, error) {
