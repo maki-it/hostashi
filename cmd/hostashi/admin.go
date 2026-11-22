@@ -28,33 +28,8 @@ func adminCmd(ctx context.Context, c *agentrpc.Client, cmd string, args []string
 	}
 
 	switch sub := cmd + " " + args[0]; {
-	case sub == "site create" && (len(args) == 2 || len(args) == 3):
-		req := agentapi.SiteCreateRequest{User: args[1]}
-		if len(args) == 3 {
-			req.Pool = args[2]
-		}
-
-		s, err := agentapi.SiteCreate.Call(ctx, c, req)
-		if err != nil {
-			return err
-		}
-
-		fmt.Fprintf(out, "created site %s (uid %d, pool %s)\n", s.User, s.UID, s.Pool)
-	case sub == "site delete" && len(args) == 2:
-		if _, err := agentapi.SiteDelete.Call(ctx, c, agentapi.SiteDeleteRequest{User: args[1]}); err != nil {
-			return err
-		}
-
-		fmt.Fprintf(out, "deleted site %s\n", args[1])
-	case sub == "site list" && len(args) == 1:
-		r, err := agentapi.SiteList.Call(ctx, c, agentapi.SiteListRequest{})
-		if err != nil {
-			return err
-		}
-
-		for _, s := range r.Sites {
-			fmt.Fprintf(out, "%s\tuid=%d\tpool=%s\n", s.User, s.UID, s.Pool)
-		}
+	case sub == "site create" || sub == "site delete" || sub == "site list":
+		return siteCmd(ctx, args, out)
 	case sub == "site files" && len(args) == 2:
 		r, err := agentapi.FilesOpen.Call(ctx, c, agentapi.FilesOpenRequest{Site: args[1]})
 		if err != nil {
@@ -88,7 +63,7 @@ func adminCmd(ctx context.Context, c *agentrpc.Client, cmd string, args []string
 			return err
 		}
 
-		fmt.Fprintf(out, "added pool %s at %s; new sites can use it (site create NAME %s)\n", p.Name, p.Path, p.Name)
+		fmt.Fprintf(out, "added pool %s at %s; new sites can use it (site create NAME DOMAIN %s)\n", p.Name, p.Path, p.Name)
 
 		if p.Quota != "enforced" {
 			fmt.Fprintf(out, "note: disk limits on %s are not enforced (quota %s); see the wiki page Command-line, storage pools\n",

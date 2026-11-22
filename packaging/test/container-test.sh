@@ -405,7 +405,11 @@ if x /usr/local/bin/hostashi system reboot not-this-host >/dev/null 2>&1; then f
 [ "$(x systemctl is-system-running 2>/dev/null || true)" != stopping ] || fail "the container is shutting down"
 
 step "a site is served, with brotli"
-x /usr/local/bin/hostashi site create blog
+# The CLI creates the site through the panel's API (ADR-0058): account,
+# domains and virtual host in one go.
+x /usr/local/bin/hostashi site create blog blog.example.com,www.blog.example.com
+x /usr/local/bin/hostashi site list | grep $'^blog\ttype=static\t.*\tdomains=blog.example.com,www.blog.example.com$' >/dev/null ||
+  fail "site list: $(x /usr/local/bin/hostashi site list)"
 expect_mode /home/blog "750 blog:www-data"
 expect_mode /home/blog/htdocs "755 blog:blog"
 
@@ -505,15 +509,10 @@ x systemctl daemon-reload
 
 # shellcheck disable=SC2016 # expanded inside the container
 x sh -c 'echo "hello from blog" >/home/blog/htdocs/index.html; for i in $(seq 1 200); do echo ".c$i { color: red; }"; done >/home/blog/htdocs/app.css; chown blog:blog /home/blog/htdocs/*'
-web_apply() { docker exec -i "$NAME" /usr/local/bin/hostashi web apply <<<"$1"; }
-web_apply '{"sites":[{"user":"blog","domains":["blog.example.com","www.blog.example.com"]}]}'
 body=$(x curl -fsS -H 'Host: www.blog.example.com' http://127.0.0.1/)
 [ "$body" = "hello from blog" ] || fail "site answered '$body'"
 enc=$(x curl -fsS -o /dev/null -D - -H 'Accept-Encoding: br' -H 'Host: blog.example.com' http://127.0.0.1/app.css | tr -d '\r' | grep -i '^content-encoding:' || true)
 [ "$enc" = "Content-Encoding: br" ] || fail "no brotli response ($enc)"
-out=$(web_apply '{"sites":[{"user":"blog","domains":["blog.example.com","www.blog.example.com"]}]}')
-grep -q 'changed: false' <<<"$out" || fail "same web state applied again: $out"
-if x /usr/local/bin/hostashi site delete blog; then fail "site with a virtual host was deleted"; fi
 
 step "file manager helper runs as the site user (ADR-0040)"
 sock=$(x /usr/local/bin/hostashi site files blog)
@@ -560,8 +559,10 @@ body=$(x curl -fsS -H 'Host: blog.example.com' http://127.0.0.1/)
 [ "$body" = "hello from blog" ] || fail "site gone after the agent restarted: '$body'"
 
 step "remove the site"
-web_apply '{"sites":[]}'
 x /usr/local/bin/hostashi site delete blog
+x /usr/local/bin/hostashi site list | grep $'^blog\t' >/dev/null && fail "deleted site still listed"
+body=$(x curl -sS -H 'Host: blog.example.com' http://127.0.0.1/ 2>/dev/null || true)
+[ "$body" != "hello from blog" ] || fail "deleted site still served"
 x test ! -e /home/blog || fail "site home still there"
 x test ! -e /etc/systemd/system/hostashi-files@blog.service.d || fail "file manager drop-in left"
 x test ! -e /run/hostashi-files/blog.sock || fail "file manager socket left"

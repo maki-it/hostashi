@@ -117,7 +117,7 @@ func TestSystemOverAPI(t *testing.T) {
 func TestAliasesNeedLogin(t *testing.T) {
 	loginEnv(t)
 
-	for _, args := range [][]string{{"service", "list"}, {"system", "info"}, {"site", "limits", "wp"}, {"backup", "get"}, {"db", "list"}} {
+	for _, args := range [][]string{{"service", "list"}, {"system", "info"}, {"site", "limits", "wp"}, {"backup", "get"}, {"db", "list"}, {"site", "list"}} {
 		if code, _, errOut := runCLI(t, "", args...); code != 1 || !strings.Contains(errOut, "not logged in") {
 			t.Errorf("%v = %d: %s", args, code, errOut)
 		}
@@ -259,5 +259,43 @@ func TestDBOverAPI(t *testing.T) {
 
 	if code, _, errOut := runCLI(t, "", "db", "user", "delete", "nobody"); code != 1 || !strings.Contains(errOut, "no database has the user nobody") {
 		t.Errorf("unknown user = %d: %s", code, errOut)
+	}
+}
+
+func TestSiteOverAPI(t *testing.T) {
+	got := fakeAPI(t, map[string]string{
+		"GET /api/v1/sites":         `{"sites":[{"name":"blog","type":"static","pool":"default","state":"active","domains":["blog.example.com","www.blog.example.com"]}]}`,
+		"POST /api/v1/sites":        `{"name":"blog","type":"static","pool":"vol1","state":"active","domains":["blog.example.com","www.blog.example.com"]}`,
+		"DELETE /api/v1/sites/blog": ``,
+	})
+
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"list"}, "blog\ttype=static\tpool=default\tstate=active\tdomains=blog.example.com,www.blog.example.com\n"},
+		{[]string{"create", "blog", "blog.example.com,www.blog.example.com", "vol1"}, "created site blog (pool vol1, domains blog.example.com,www.blog.example.com)\n"},
+		{[]string{"delete", "blog"}, "deleted site blog\n"},
+	} {
+		code, out, errOut := runCLI(t, "", append([]string{"site"}, c.args...)...)
+		if code != 0 || out != c.want {
+			t.Errorf("%v = %d: %q %s", c.args, code, out, errOut)
+		}
+	}
+
+	if want := `{"name":"blog","domains":["blog.example.com","www.blog.example.com"],"pool":"vol1"}`; got["POST /api/v1/sites"] != want {
+		t.Errorf("create body = %s", got["POST /api/v1/sites"])
+	}
+
+	if code, _, errOut := runCLI(t, "", "site", "create", "blog"); code != 2 {
+		t.Errorf("create without a domain = %d: %s", code, errOut)
+	}
+
+	if _, _, errOut := runCLI(t, "", "site", "create", "blog", "blog.example.com"); errOut != "" {
+		t.Errorf("create without a pool: %s", errOut)
+	}
+
+	if got["POST /api/v1/sites"] != `{"name":"blog","domains":["blog.example.com"]}` {
+		t.Errorf("create body without a pool = %s", got["POST /api/v1/sites"])
 	}
 }

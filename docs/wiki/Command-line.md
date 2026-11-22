@@ -70,9 +70,13 @@ These commands go through the panel's API like [`hostashi api`](#using-the-api-f
 
 ## Sites
 
+`site create`, `site delete`, `site list` and `site limits` go through the panel's API and need `hostashi login`. `site files` talks to the agent and needs root on the server.
+
 | Command | What it does |
 |---------|--------------|
-| `hostashi site list` | Lists the site accounts. |
+| `hostashi site list` | Lists the sites with their type, pool, state and domains. |
+| `hostashi site create NAME DOMAIN[,DOMAIN...] [POOL]` | Creates a static site with its domains, for example `hostashi site create blog blog.example.com,www.blog.example.com`. Change it afterwards in the panel or with `hostashi api`. |
+| `hostashi site delete NAME` | Deletes a site with its files, databases and virtual host. |
 | `hostashi site files NAME` | Starts the file manager of a site and prints its socket. The panel does this by itself; the command is for checks. |
 | `hostashi site limits NAME` | Shows the preset and the limits of a site. |
 | `hostashi site limits NAME preset=PRESET` | Gives the site a limit preset. |

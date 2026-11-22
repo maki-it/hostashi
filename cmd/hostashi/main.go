@@ -71,8 +71,10 @@ commands:
             show or change the server's time zone and hostname, or reboot it
             after typing its hostname, through the panel's API (needs
             hostashi login, ADR-0060)
-  site create NAME [POOL] | site delete NAME | site list
-            manage site accounts through the agent (root on the server)
+  site create NAME DOMAIN[,DOMAIN...] [POOL] | site delete NAME | site list
+            create a static site with its domains, delete a site with its
+            data, or list the sites, through the panel's API (needs
+            hostashi login)
   pool add NAME PATH | pool remove NAME | pool list
             storage pools for site homes (ADR-0016, root on the server):
             PATH is a mounted, empty ext4 or XFS volume with nosuid,nodev
