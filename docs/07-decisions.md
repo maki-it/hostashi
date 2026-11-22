@@ -57,7 +57,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0051 | External PostgreSQL servers | Accepted on 2026-11-21 ([adr/0051](adr/0051-external-postgresql-servers.md)) | Done |
 | 0052 | Service management and server dashboard | Accepted on 2026-11-21 ([adr/0052](adr/0052-service-management-and-server-dashboard.md)) | No |
 | 0053 | Site logs in the panel | Accepted on 2026-11-21 ([adr/0053](adr/0053-site-logs-in-the-panel.md)) | Done |
-| 0054 | Site types Node.js, reverse proxy and redirect | Proposed ([adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md)) | No |
+| 0054 | Site types Node.js, reverse proxy and redirect | Accepted on 2026-11-22 ([adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md)) | No |
 
 ---
 
@@ -387,4 +387,4 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0054 Site types Node.js, reverse proxy and redirect
 
-**Full text (status Proposed, 2026-11-22):** [adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md). Summary: a `type` column for sites (`static`, `php`, `node`, `proxy`, `redirect`, fixed after create). Node.js from the official nodejs.org builds of the supported LTS lines, pinned with SHA-256 in Hostashi, installed by a fixed root unit to `/opt/hostashi/node/<major>`; the app runs as `hostashi-node@<site>` under the site user with a typed start command (`node <file>` or `npm run <script>`), encrypted environment variables and a Hostashi-assigned loopback port that nftables opens only for nginx and the site user. Reverse proxy to one http(s) URL, private networks allowed, loopback and link-local refused, certificate checked by default. Redirect with 301/302/307/308 and optional path. Proxy and redirect sites have no Linux account. CloudPanel import takes over `proxy` and `nodejs` sites. No new `os/exec` exception.
+**Full text (status Accepted, 2026-11-22, by Kim):** [adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md). Summary: a `type` column for sites (`static`, `php`, `node`, `proxy`, `redirect`, fixed after create). Node.js from the official nodejs.org builds of the supported LTS lines, pinned with SHA-256 in Hostashi, installed by a fixed root unit to `/opt/hostashi/node/<major>`; the app runs as `hostashi-node@<site>` under the site user with a typed start command (`node <file>` or `npm run <script>`), encrypted environment variables and a Hostashi-assigned loopback port that nftables opens only for nginx and the site user. Reverse proxy to one http(s) URL, private networks allowed, loopback and link-local refused, certificate checked by default. Redirect with 301/302/307/308 and optional path. Proxy and redirect sites have no Linux account. CloudPanel import takes over `proxy` and `nodejs` sites. No new `os/exec` exception.

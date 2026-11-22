@@ -48,7 +48,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0051](0051-external-postgresql-servers.md) | External PostgreSQL servers | Accepted |
 | [0052](0052-service-management-and-server-dashboard.md) | Service management and server dashboard | Accepted |
 | [0053](0053-site-logs-in-the-panel.md) | Site logs in the panel | Accepted |
-| [0054](0054-site-types-nodejs-proxy-redirect.md) | Site types Node.js, reverse proxy and redirect | Proposed |
+| [0054](0054-site-types-nodejs-proxy-redirect.md) | Site types Node.js, reverse proxy and redirect | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 

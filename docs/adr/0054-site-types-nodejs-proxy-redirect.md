@@ -1,6 +1,6 @@
 # ADR-0054 Site types Node.js, reverse proxy and redirect
 
-**Status:** Proposed. **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0005 (nginx), ADR-0015 (resource limits), ADR-0017 (import and presets), ADR-0018 (API), ADR-0021 (site logs), ADR-0032 (SSH per site), ADR-0033 (hardening), ADR-0034 (firewall), ADR-0035 (roles), ADR-0036 (PHP versions from the panel), ADR-0037 (UI), ADR-0053 (site logs in the panel).
+**Status:** Accepted (Kim, 2026-11-22). **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0005 (nginx), ADR-0015 (resource limits), ADR-0017 (import and presets), ADR-0018 (API), ADR-0021 (site logs), ADR-0032 (SSH per site), ADR-0033 (hardening), ADR-0034 (firewall), ADR-0035 (roles), ADR-0036 (PHP versions from the panel), ADR-0037 (UI), ADR-0053 (site logs in the panel).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
