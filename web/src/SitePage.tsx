@@ -38,6 +38,7 @@ import { Services } from "./Services";
 import { startCommand } from "./node";
 import { SiteWebSettings } from "./SiteWeb";
 import { SnippetSettings } from "./Snippets";
+import { RealIPCard } from "./RealIP";
 import { SecurityHeadersCard } from "./SecurityHeaders";
 import { SSHSettings } from "./SSH";
 import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
@@ -123,7 +124,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
       <div {...(ready ? tabPanelProps(prefix, active) : {})} className="ui-stack">
         {active === "overview" && <Overview site={site} onChange={load} staff={role === "admin" || role === "manager"} />}
         {active === "overview" && role === "admin" && hasAccount(site) && <Services site={site.name} />}
-        {active === "domains" && <DomainsTab site={site} onChange={load} />}
+        {active === "domains" && <DomainsTab site={site} onChange={load} admin={role === "admin"} />}
         {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} admin={role === "admin"} />}
         {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
         {active === "logs" && <SiteLogs site={site} admin={role === "admin"} />}
@@ -484,7 +485,7 @@ function DeleteSite({ site, canPark }: { site: Site; canPark: boolean }) {
   );
 }
 
-function DomainsTab({ site, onChange }: TabProps) {
+function DomainsTab({ site, onChange, admin }: TabProps & { admin: boolean }) {
   const [domains, setDomainsText] = useState(site.domains.join("\n"));
   const d = useAction(onChange);
   const h = useAction(onChange);
@@ -549,6 +550,7 @@ function DomainsTab({ site, onChange }: TabProps) {
         </div>
       </Card>
       <SecurityHeadersCard site={site} />
+      <RealIPCard site={site} admin={admin} />
       <CertificateCard base={siteCertBase(site.name)} name={site.name} tls={site.tls} onChange={onChange} />
     </>
   );
