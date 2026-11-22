@@ -9,6 +9,7 @@ import { EnvCard } from "./SiteEnv";
 import { AppCard, AppSettingsCard } from "./SiteNode";
 import { ProgramSettingsCard } from "./SiteApp";
 import { ProxyCard } from "./SiteProxy";
+import { PythonSettingsCard, VenvCard } from "./SitePython";
 import { ChangeTypeCard } from "./SiteType";
 import { RedirectCard } from "./SiteRedirect";
 import { PHPOptions, SiteTypeChoice } from "./Sites";
@@ -56,6 +57,16 @@ export function SiteWebSettings({ site, php, onChange, admin = false, staff = fa
         <>
           <AppCard site={site} onChange={onChange} />
           <ProgramSettingsCard site={site} onChange={onChange} />
+          <EnvCard site={site} />
+          {change}
+        </>
+      );
+    case "python":
+      return (
+        <>
+          <AppCard site={site} onChange={onChange} />
+          <PythonSettingsCard site={site} onChange={onChange} admin={admin} />
+          <VenvCard site={site} onChange={onChange} />
           <EnvCard site={site} />
           {change}
         </>

@@ -28,6 +28,8 @@ import {
   type SiteRedirect,
 } from "./sites";
 import { newNodeApp, NodeFields, nodeProblem, useNodeStatus, type NodeValue } from "./SiteNode";
+import { newPythonApp, PythonFields, pythonFieldsProblem, pythonRequest, usePythonStatus, type PythonFieldsValue } from "./SitePython";
+import { newestPythonLine } from "./python";
 import { newProgramApp, ProgramFields, programFieldsProblem, programRequest, type ProgramValue } from "./SiteApp";
 import { newProxy, ProxyFields } from "./SiteProxy";
 import { newestLine } from "./node";
@@ -215,7 +217,7 @@ export function Sites({ query, onQuery }: QueryProps) {
 
 // SiteTypeChoice picks the type of a site (ADR-0054). Only the types that
 // exist today are offered; the others come with their features.
-export type ChosenType = "static" | "php" | "node" | "app" | "proxy" | "redirect";
+export type ChosenType = "static" | "php" | "node" | "python" | "app" | "proxy" | "redirect";
 
 /** webOnly: types without a Linux account (ADR-0054). */
 const webOnly = (t: ChosenType) => t === "redirect" || t === "proxy";
@@ -241,11 +243,12 @@ export function SiteTypeChoice<T extends ChosenType>({
     { value: "php", label: "PHP", hint: "WordPress, Laravel, TYPO3 and other PHP software." },
     { value: "static", label: "Static", hint: "HTML, CSS and JavaScript, for example the build of Hugo, Astro or a single-page app. No PHP." },
     { value: "node", label: "Node.js", hint: "An app such as Next.js, Nuxt or Express that runs all the time as the site's user. Requests go to its port." },
+    { value: "python", label: "Python", hint: "A Django, Flask or FastAPI app that runs all the time as the site's user, from its own environment .venv. Requests go to its port." },
     { value: "app", label: "App", hint: "A program of your own, for example a Go or Rust service, that runs all the time as the site's user. Requests go to its port." },
     { value: "proxy", label: "Reverse proxy", hint: "Passes every request to another web server, for example an app in your network. No files, no Linux account." },
     { value: "redirect", label: "Redirect", hint: "Sends every address to another one, for example an old domain to the new one. No files, no Linux account." },
   ];
-  const choices = all.filter((c) => c.value !== except && (withRedirect || !(webOnly(c.value) || c.value === "node" || c.value === "app"))) as { value: T; label: string; hint: string }[];
+  const choices = all.filter((c) => c.value !== except && (withRedirect || !(webOnly(c.value) || c.value === "node" || c.value === "python" || c.value === "app"))) as { value: T; label: string; hint: string }[];
   return (
     <fieldset className="ui-fieldset ui-stack-tight">
       <legend>Type</legend>
@@ -298,6 +301,9 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   const [node, setNodeValue] = useState<NodeValue | null>(null);
   const nodeValue = node ?? newNodeApp(newestLine(nodeStatus));
   const [program, setProgramValue] = useState<ProgramValue>(newProgramApp());
+  const pythonStatus = usePythonStatus();
+  const [python, setPythonValue] = useState<PythonFieldsValue | null>(null);
+  const pythonValue = python ?? newPythonApp(newestPythonLine(pythonStatus));
   const [tls, setTls] = useState(parked ? parkedTls : true);
   const [hsts, setHsts] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -330,7 +336,8 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
       (kind === "redirect" ? redirectProblem(redirect.target, list) : "") ||
       (kind === "proxy" ? proxyProblem(proxy.target, list) : "") ||
       (kind === "node" ? nodeProblem(nodeValue) : "") ||
-      (kind === "app" ? programFieldsProblem(program) : "");
+      (kind === "app" ? programFieldsProblem(program) : "") ||
+      (kind === "python" ? pythonFieldsProblem(pythonValue) : "");
     if (problem) {
       setError(problem);
       return;
@@ -355,6 +362,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         ...(kind === "proxy" && { type: "proxy" as const, proxy: { ...proxy, insecure: proxy.target.startsWith("https://") && proxy.insecure } }),
         ...(kind === "node" && { type: "node" as const, node: nodeValue }),
         ...(kind === "app" && { type: "app" as const, app: programRequest(program) }),
+        ...(kind === "python" && { type: "python" as const, python: pythonRequest(pythonValue) }),
       });
       setDone(
         s.tls.enabled && !s.tls.active
@@ -435,6 +443,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         )}
         {kind === "node" && <NodeFields value={nodeValue} onChange={setNodeValue} status={nodeStatus} disabled={busy} admin />}
         {kind === "app" && <ProgramFields value={program} onChange={setProgramValue} disabled={busy} />}
+        {kind === "python" && <PythonFields value={pythonValue} onChange={setPythonValue} status={pythonStatus} disabled={busy} admin />}
         {kind === "proxy" && <ProxyFields value={proxy} onChange={setProxyValue} disabled={busy} />}
         {kind === "redirect" && <RedirectFields value={redirect} onChange={setRedirectValue} disabled={busy} />}
         <label className="ui-check">

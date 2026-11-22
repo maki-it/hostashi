@@ -410,6 +410,33 @@ describe("redirect sites", () => {
     });
   });
 
+  it("creates a Python site with its WSGI app", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/node": { body: { installed: [], last: "", state: "idle", log: [], releases: [] } },
+      "GET /api/v1/python": {
+        body: { installed: [{ line: "3.13", version: "3.13.9", build: "20261111" }], last: "", state: "idle", log: [], releases: [{ line: "3.13", version: "3.13.9", build: "20261111", end: "2029-10-31" }] },
+      },
+      "POST /api/v1/sites": { status: 201, body: { ...blog, name: "dj", php: "", type: "python", tls: noTLS } },
+    });
+    render(<ListHarness initial="new=1" />);
+    await user.type(screen.getByLabelText(/^Name/), "dj");
+    await user.type(screen.getByLabelText(/^Domains/), "dj.example.com");
+    await user.click(screen.getByLabelText(/^Python/));
+    await user.click(await screen.findByLabelText(/WSGI with gunicorn/));
+    expect(screen.getByText("Runs: ~/.venv/bin/gunicorn --bind 127.0.0.1:PORT mysite.wsgi:application")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Site dj created.");
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
+      name: "dj",
+      php: "",
+      type: "python",
+      python: { version: "3.13", workdir: "htdocs", startKind: "wsgi", target: "mysite.wsgi:application", args: [] },
+    });
+  });
+
   it("shows only the tabs a redirect site has and saves its target", async () => {
     const user = userEvent.setup();
     const old = { ...blog, php: "", type: "redirect" as const, account: false, redirect: { target: "https://new.example.com", status: 301, keepPath: true } };

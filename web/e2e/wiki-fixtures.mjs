@@ -16,6 +16,7 @@ const site = (name, o) => ({
   redirect: null,
   proxy: null,
   node: null,
+  python: null,
   phpPrograms: false,
   disabled: false,
   disabledPage: "builtin-maintenance",
@@ -34,6 +35,12 @@ export const sites = [
     domains: ["app.example.com"],
     node: { version: "24", workdir: "htdocs", startKind: "npm", start: "start", port: 20000, stopped: false },
     tls: tls(["app.example.com"]),
+  }),
+  site("api", {
+    type: "python",
+    domains: ["api.example.com"],
+    python: { version: "3.12", workdir: "htdocs", startKind: "wsgi", target: "mysite.wsgi:application", args: ["--workers", "3"], port: 20001, stopped: false },
+    tls: tls(["api.example.com"]),
   }),
   site("intranet", { type: "proxy", account: false, domains: ["intranet.example.com"], proxy: { target: "http://10.0.0.5:8080", targetHost: false, insecure: false }, tls: tls(["intranet.example.com"]) }),
   site("old-domain", { type: "redirect", account: false, domains: ["example.net", "www.example.net"], redirect: { target: "https://www.example.com", status: 301, keepPath: true }, tls: tls(["example.net", "www.example.net"]) }),
@@ -82,6 +89,22 @@ const firewall = {
 
 const node = { installed: [{ major: "24", version: "24.11.1" }], last: "", state: "idle", log: [], releases: [{ major: "24", version: "24.11.1", codename: "Krypton", end: "2028-04-30" }] };
 
+const python = {
+  installed: [
+    { line: "3.13", version: "3.13.9", build: "20261111" },
+    { line: "3.12", version: "3.12.12", build: "20261014" },
+  ],
+  last: "",
+  state: "idle",
+  log: [],
+  releases: [
+    { line: "3.11", version: "3.11.14", build: "20261111", end: "2027-10-31" },
+    { line: "3.12", version: "3.12.12", build: "20261111", end: "2028-10-31" },
+    { line: "3.13", version: "3.13.9", build: "20261111", end: "2029-10-31" },
+    { line: "3.14", version: "3.14.0", build: "20261111", end: "2030-10-31" },
+  ],
+};
+
 const me = { username: "kim", role: "admin", secondFactor: true, secondFactorRequired: true, clientIp: "203.0.113.24" };
 
 const routes = [
@@ -94,6 +117,7 @@ const routes = [
   ["GET", /^\/parked-domains$/, () => ({ parkedDomains: [] })],
   ["GET", /^\/status-pages$/, () => ({ pages: [] })],
   ["GET", /^\/node$/, () => node],
+  ["GET", /^\/python$/, () => python],
   ["GET", /^\/users$/, () => ({ users: accounts })],
   ["GET", /^\/databases$/, () => ({ databases })],
   ["GET", /^\/db-servers$/, () => ({ servers: dbServers })],

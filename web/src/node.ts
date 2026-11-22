@@ -114,14 +114,14 @@ export function startCommand(a: Pick<NodeApp, "startKind" | "start">): string {
 
 export type AppView = { word: string; tone: "ok" | "warn" | "err" | "off" };
 
-/** appView says in words what the app of a Node.js or app site does. */
+/** appView says in words what the app of a Node.js, app or Python site does. */
 export function appView(site: Site, st: AppStatus | null): AppView {
-  const set = site.node ? site.node.startKind !== "" : !!site.app?.program;
+  const set = site.node ? site.node.startKind !== "" : site.python ? site.python.startKind !== "" : !!site.app?.program;
   if (!set) return { word: site.app ? "No program" : "No start command", tone: "off" };
   if (site.disabled) return { word: "Stopped: site disabled", tone: "off" };
-  if (site.node?.stopped || site.app?.stopped) return { word: "Stopped", tone: "off" };
+  if (site.node?.stopped || site.app?.stopped || site.python?.stopped) return { word: "Stopped", tone: "off" };
   if (!st) return { word: "Unknown", tone: "off" };
-  if (st.problem) return { word: "Waiting for the program", tone: "warn" };
+  if (st.problem) return { word: site.python ? "Waiting for its packages" : "Waiting for the program", tone: "warn" };
   switch (st.state) {
     case "active":
       return { word: "Running", tone: "ok" };
