@@ -64,6 +64,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0058 | OpenAPI specification and CLI parity | Accepted on 2026-11-22 ([adr/0058](adr/0058-openapi-spec-and-cli-parity.md)) | No |
 | 0059 | Real client IP behind CDNs and proxies | Accepted on 2026-11-22 ([adr/0059](adr/0059-real-client-ip-behind-proxies.md)) | No |
 | 0060 | Time zone, hostname and reboot from the panel | Accepted on 2026-11-22 ([adr/0060](adr/0060-time-zone-hostname-and-reboot.md)) | No |
+| 0061 | Site type Python | Accepted on 2026-11-22 ([adr/0061](adr/0061-site-type-python.md)) | No |
 
 ---
 
@@ -418,3 +419,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0060 Time zone, hostname and reboot from the panel
 
 **Full text (status Accepted, 2026-11-22, by Kim):** [adr/0060](adr/0060-time-zone-hostname-and-reboot.md). Summary: the agent talks to systemd-timedated, systemd-hostnamed and systemd-logind over D-Bus through one small package `internal/sysconf` (`godbus/dbus/v5`, the only importer per depguard) with four fixed calls. Typed operations `system.info`, `system.timezone.set`, `system.hostname.set`, `system.reboot`; zones from tzdata, hostnames as RFC 1123 labels. The agent also keeps `/etc/hosts` and cloud-init's `preserve_hostname` in line. Admin-only page "System", reboot after typing the hostname, audit entries with old and new values. No new `os/exec` exception, no change to the agent unit's hardening.
+
+## ADR-0061 Site type Python
+
+**Full text (status Accepted, 2026-11-22, by Kim):** [adr/0061](adr/0061-site-type-python.md). Summary: new site type `python`, built like `node`. CPython from python-build-standalone, every line that has not ended (today 3.11–3.15), pinned with SHA-256 in `internal/agentapi/python_versions.go` and installed by the fixed unit `hostashi-python-install@<line>` to `/opt/hostashi/python/<line>` with the Node.js unpack code; a daily workflow checks `SHA256SUMS` and the Sigstore build provenance and opens a PR. Hostashi creates `<home>/.venv` as the site user through a oneshot unit; packages are installed over SSH. The app runs in `hostashi-python@<site>` with typed start forms `wsgi` (gunicorn), `asgi` (uvicorn) or `script`, Hostashi adds the bind to `127.0.0.1:<port>`. Port, firewall filter, nginx branch, log and environment variables as for Node.js. CloudPanel Python sites are imported stopped, without a start command. No new binary, no new `os/exec` exception.
