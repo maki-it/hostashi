@@ -3,7 +3,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { webDirProblem, type Site } from "./sites";
+import { assetCacheDefaults, webDirProblem, type Site } from "./sites";
 import { SiteWebSettings } from "./SiteWeb";
 import { mockFetch } from "./test-utils";
 
@@ -52,7 +52,61 @@ describe("SiteWebSettings", () => {
     await user.click(card.getByLabelText(/^Cache assets/));
     await user.click(card.getByRole("button", { name: "Save web root" }));
     expect(await card.findByRole("status")).toHaveTextContent("The site serves htdocs/dist now.");
-    expect(calls.map((c) => [c.method, c.path, c.body])).toEqual([["PUT", "/api/v1/sites/docs/web", { dir: "dist", spa: true, assetCache: true }]]);
+    expect(calls.map((c) => [c.method, c.path, c.body])).toEqual([
+      [
+        "PUT",
+        "/api/v1/sites/docs/web",
+        { dir: "dist", spa: true, assetCache: true, assetCacheSeconds: 2592000, assetCacheExts: assetCacheDefaults.exts },
+      ],
+    ]);
+  });
+
+  it("saves a custom cache time and file types and refuses bad ones", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({ "PUT /api/v1/sites/docs/web": (b: unknown) => ({ body: { ...site, web: b } }) });
+    render(<SiteWebSettings site={{ ...site, web: { dir: "", spa: false, assetCache: true } }} php={php} onChange={async () => undefined} />);
+    const card = within(screen.getByRole("region", { name: "Web root" }));
+    const time = card.getByLabelText("Cache time");
+    const types = card.getByLabelText("File types");
+
+    await user.clear(time);
+    await user.type(time, "0");
+    await user.click(card.getByRole("button", { name: "Save web root" }));
+    expect(await card.findByRole("alert")).toHaveTextContent("between 1 minute and 365 days");
+
+    await user.clear(time);
+    await user.type(time, "12");
+    await user.selectOptions(card.getByLabelText("Unit"), "hours");
+    await user.clear(types);
+    await user.type(types, ".css, java script!");
+    await user.click(card.getByRole("button", { name: "Save web root" }));
+    expect(await card.findByRole("alert")).toHaveTextContent('"script!" is not a file type');
+    expect(calls).toEqual([]);
+
+    await user.clear(types);
+    await user.type(types, "css, js woff2");
+    await user.click(card.getByRole("button", { name: "Save web root" }));
+    await card.findByRole("status");
+    expect(calls[0]?.body).toEqual({ dir: "", spa: false, assetCache: true, assetCacheSeconds: 43200, assetCacheExts: ["css", "js", "woff2"] });
+  });
+
+  it("restores the defaults and keeps stored values while the cache is off", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({ "PUT /api/v1/sites/docs/web": (b: unknown) => ({ body: { ...site, web: b } }) });
+    const stored = { dir: "", spa: false, assetCache: true, assetCacheSeconds: 3600, assetCacheExts: ["css"] };
+    render(<SiteWebSettings site={{ ...site, web: stored }} php={php} onChange={async () => undefined} />);
+    const card = within(screen.getByRole("region", { name: "Web root" }));
+    expect(card.getByLabelText("Cache time")).toHaveValue(1);
+    expect(card.getByLabelText("Unit")).toHaveDisplayValue("hours");
+    await user.click(card.getByRole("button", { name: "Use the defaults" }));
+    expect(card.getByLabelText("Cache time")).toHaveValue(30);
+    expect(card.getByLabelText("File types")).toHaveValue(assetCacheDefaults.exts.join(" "));
+
+    await user.click(card.getByLabelText(/^Cache assets/));
+    expect(card.queryByLabelText("Cache time")).not.toBeInTheDocument();
+    await user.click(card.getByRole("button", { name: "Save web root" }));
+    await card.findByRole("status");
+    expect(calls[0]?.body).toEqual({ dir: "", spa: false, assetCache: false, assetCacheSeconds: 3600, assetCacheExts: ["css"] });
   });
 
   it("offers no static options for a PHP site and never sends them", async () => {

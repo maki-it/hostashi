@@ -6,7 +6,20 @@
 import { useState, type FormEvent } from "react";
 import { formatHash } from "./routes";
 import { PHPOptions, SiteTypeChoice } from "./Sites";
-import { setPHP, setWebOptions, siteMessage, siteType, webDirProblem, type PHPVersions, type Site } from "./sites";
+import {
+  assetCacheDefaults,
+  assetCacheProblem,
+  assetCacheUnits,
+  parseExts,
+  setPHP,
+  setWebOptions,
+  siteMessage,
+  siteType,
+  splitSeconds,
+  webDirProblem,
+  type PHPVersions,
+  type Site,
+} from "./sites";
 import { Button, Card, Field, Notice } from "./ui";
 
 type Props = { site: Site; php: PHPVersions | null; onChange: () => Promise<void> };
@@ -91,15 +104,27 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
   const [dir, setDir] = useState(web.dir);
   const [spa, setSpa] = useState(web.spa);
   const [assets, setAssets] = useState(web.assetCache);
+  const initial = splitSeconds(web.assetCacheSeconds ?? assetCacheDefaults.seconds);
+  const [amount, setAmount] = useState(String(initial.amount));
+  const [unit, setUnit] = useState(initial.unit);
+  const savedExts = (web.assetCacheExts ?? assetCacheDefaults.exts).join(" ");
+  const [exts, setExts] = useState(savedExts);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
 
-  const unchanged = dir === web.dir && spa === web.spa && assets === web.assetCache;
+  const seconds = Number(amount) * unit;
+  const unchanged =
+    dir === web.dir &&
+    spa === web.spa &&
+    assets === web.assetCache &&
+    seconds === (web.assetCacheSeconds ?? assetCacheDefaults.seconds) &&
+    parseExts(exts).join(" ") === savedExts;
 
   async function save(e: FormEvent) {
     e.preventDefault();
-    const problem = webDirProblem(dir);
+    const list = parseExts(exts);
+    const problem = webDirProblem(dir) || (isStatic && assets ? assetCacheProblem(seconds, list) : "");
     if (problem) {
       setError(problem);
       return;
@@ -108,7 +133,14 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
     setError("");
     setDone("");
     try {
-      await setWebOptions(site.name, { dir, spa: isStatic && spa, assetCache: isStatic && assets });
+      const cache = isStatic && assets;
+      await setWebOptions(site.name, {
+        dir,
+        spa: isStatic && spa,
+        assetCache: cache,
+        // Kept as they are while the cache is off, so turning it on again restores them.
+        ...(cache ? { assetCacheSeconds: seconds, assetCacheExts: list } : pick(web)),
+      });
       await onChange();
       setDone(dir ? `The site serves htdocs/${dir} now.` : "The site serves htdocs now.");
     } catch (err) {
@@ -153,13 +185,59 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
             <label className="ui-check ui-check-hint">
               <input type="checkbox" checked={assets} disabled={busy} onChange={(e) => setAssets(e.target.checked)} />
               <span>
-                Cache assets for 30 days
+                Cache assets in the browser
                 <span className="ui-hint ui-flush">
-                  Browsers keep stylesheets, scripts, fonts and images for 30 days; HTML is always fresh. Turn it on only if file names change with
-                  their content, as with most build tools.
+                  Browsers keep the listed file types for the chosen time without asking again. Turn it on only if file names change with their
+                  content, as with most build tools; otherwise visitors see old files after a deploy.
                 </span>
               </span>
             </label>
+            {assets && (
+              <div className="ui-stack ui-indent">
+                <Field label="Cache time" hint="Between 1 minute and 365 days. Default: 30 days.">
+                  <div className="ui-row ui-row-tight">
+                    <input
+                      className="ui-input ui-input-num"
+                      type="number"
+                      min={1}
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      aria-label="Cache time"
+                    />
+                    <select className="ui-select" value={unit} onChange={(e) => setUnit(Number(e.target.value))} aria-label="Unit">
+                      {assetCacheUnits.map((u) => (
+                        <option key={u.value} value={u.value}>
+                          {u.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </Field>
+                <Field label="File types" hint="Separated by spaces or commas, without the dot. HTML stays fresh unless you add html.">
+                  <textarea
+                    className="ui-input ui-textarea ui-mono"
+                    value={exts}
+                    onChange={(e) => setExts(e.target.value)}
+                    rows={2}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </Field>
+                <div className="ui-row">
+                  <Button
+                    disabled={busy}
+                    onClick={() => {
+                      const d = splitSeconds(assetCacheDefaults.seconds);
+                      setAmount(String(d.amount));
+                      setUnit(d.unit);
+                      setExts(assetCacheDefaults.exts.join(" "));
+                    }}
+                  >
+                    Use the defaults
+                  </Button>
+                </div>
+              </div>
+            )}
           </fieldset>
         ) : (
           <p className="ui-hint ui-flush">For Laravel and similar frameworks, enter public.</p>
@@ -174,4 +252,12 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
       </form>
     </Card>
   );
+}
+
+// pick keeps the stored cache values of a site when the cache is off.
+function pick(web: { assetCacheSeconds?: number; assetCacheExts?: string[] }) {
+  return {
+    ...(web.assetCacheSeconds !== undefined && { assetCacheSeconds: web.assetCacheSeconds }),
+    ...(web.assetCacheExts !== undefined && { assetCacheExts: web.assetCacheExts }),
+  };
 }

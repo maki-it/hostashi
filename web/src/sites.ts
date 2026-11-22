@@ -46,8 +46,48 @@ export type Site = {
 
 export type SiteType = "static" | "php" | "node" | "app" | "proxy" | "redirect";
 
-/** dir: folder below htdocs, "" for htdocs itself. spa and assetCache: static sites only. */
-export type SiteWeb = { dir: string; spa: boolean; assetCache: boolean };
+/**
+ * dir: folder below htdocs, "" for htdocs itself. spa and assetCache: static
+ * sites only. assetCacheSeconds and assetCacheExts are the effective values
+ * (the defaults when the site keeps them); older answers lack them.
+ */
+export type SiteWeb = { dir: string; spa: boolean; assetCache: boolean; assetCacheSeconds?: number; assetCacheExts?: string[] };
+
+// Mirror of agentapi's asset cache bounds and defaults (ADR-0054).
+export const assetCacheDefaults = {
+  seconds: 30 * 24 * 3600,
+  exts: ["css", "js", "mjs", "woff", "woff2", "ttf", "otf", "eot", "svg", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico"],
+};
+export const assetCacheUnits = [
+  { value: 60, label: "minutes" },
+  { value: 3600, label: "hours" },
+  { value: 86400, label: "days" },
+] as const;
+
+/** Splits a list of file types typed with spaces, commas or dots. */
+export const parseExts = (v: string): string[] =>
+  v
+    .toLowerCase()
+    .split(/[\s,;]+/)
+    .map((e) => e.replace(/^\*?\./, ""))
+    .filter((e) => e !== "");
+
+export function assetCacheProblem(seconds: number, exts: string[]): string {
+  if (!Number.isInteger(seconds) || seconds < 60 || seconds > 365 * 86400) return "Choose a time between 1 minute and 365 days.";
+  if (exts.length === 0) return "Enter at least one file type.";
+  if (exts.length > 40) return "Enter at most 40 file types.";
+  const bad = exts.find((e) => !/^[a-z0-9]{1,10}$/.test(e));
+  if (bad !== undefined) return `"${bad}" is not a file type. Use 1 to 10 letters or digits, without the dot.`;
+  const dup = exts.find((e, i) => exts.indexOf(e) !== i);
+  if (dup !== undefined) return `"${dup}" is listed twice.`;
+  return "";
+}
+
+/** The largest unit that divides the time evenly. */
+export function splitSeconds(seconds: number): { amount: number; unit: number } {
+  for (const u of [86400, 3600, 60]) if (seconds % u === 0) return { amount: seconds / u, unit: u };
+  return { amount: Math.max(1, Math.round(seconds / 60)), unit: 60 };
+}
 
 /** The type of a site; answers without the field follow the PHP version. */
 export const siteType = (s: Pick<Site, "type" | "php">): SiteType => s.type ?? (s.php ? "php" : "static");
