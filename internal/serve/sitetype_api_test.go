@@ -67,4 +67,18 @@ func TestSiteTypeOverHTTP(t *testing.T) {
 	if len(ag.deleted) != 0 {
 		t.Fatalf("account removed: %v", ag.deleted)
 	}
+
+	rec = e.do(t, reqOpts{method: "DELETE", path: "/api/v1/sites/shop/account", cookie: c})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("remove account: %d %s", rec.Code, rec.Body)
+	}
+
+	site = siteJSON{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &site); err != nil || site.Account || site.Type != "redirect" || len(ag.deleted) != 1 {
+		t.Fatalf("site %+v %v deleted %v", site, err, ag.deleted)
+	}
+
+	if rec := e.do(t, reqOpts{method: "DELETE", path: "/api/v1/sites/shop/account", cookie: c}); rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("second removal: %d %s", rec.Code, rec.Body)
+	}
 }

@@ -59,7 +59,8 @@ func (in siteTypeRequest) request() (hosting.TypeRequest, bool) {
 	return out, true
 }
 
-// registerSiteType adds the route that changes the type of a site.
+// registerSiteType adds the routes that change the type of a site and
+// remove the account a redirect or proxy site kept.
 func registerSiteType(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
 	mux.Op("POST /api/v1/sites/{name}/type", openapi.Operation{
 		ID: "setSiteType", Tag: "sites", Summary: "Change the type of a site; the account and its files stay",
@@ -83,6 +84,23 @@ func registerSiteType(mux *routeMux, a authn, svc *hosting.Service, log *slog.Lo
 		s, err := svc.SetType(ctx, p.User.ID, r.PathValue("name"), req)
 		if err != nil {
 			siteFail(log, w, err, "set site type")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
+	}))
+
+	mux.Op("DELETE /api/v1/sites/{name}/account", openapi.Operation{
+		ID: "removeSiteAccount", Tag: "sites", Summary: "Remove the Linux account, files and databases a redirect or reverse proxy site kept after a type change",
+		Out: siteJSON{},
+	}, a.allow("sites.account:delete", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		s, err := svc.RemoveAccount(ctx, p.User.ID, r.PathValue("name"))
+		if err != nil {
+			siteFail(log, w, err, "remove site account")
 
 			return
 		}

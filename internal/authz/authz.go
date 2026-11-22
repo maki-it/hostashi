@@ -134,7 +134,10 @@ var table = map[Action]Rule{
 	// A type change can create a Linux account, as a new site does
 	// (ADR-0054 addendum 3).
 	"sites.type:write": mgrSite("sites:write"),
-	"limits:write":     mgrSite("limits:write"),
+	// Removing the account of a redirect or proxy site removes its files
+	// and databases, like a delete.
+	"sites.account:delete": mgrSite("sites:delete"),
+	"limits:write":         mgrSite("limits:write"),
 	// The page cache size counts against the site's disk limit (ADR-0046).
 	"sites.pagecache.size:write": mgrSite("sites:write"),
 	// The cache's memory counts against the site's limit (ADR-0045).

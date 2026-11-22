@@ -151,3 +151,55 @@ func siteTypeOf(ctx context.Context, tx *sql.Tx, name string) (SiteTypeChange, e
 
 	return c, nil
 }
+
+// RemoveSiteAccount records that a redirect or reverse proxy site no
+// longer has its Linux account (ADR-0054 addendum 3), with what only
+// lived in the account: cron jobs, SSH keys, limits and the object cache.
+// Databases are removed before, one by one. Other types refuse it with
+// ErrSiteType.
+func (s *Store) RemoveSiteAccount(ctx context.Context, name string, now time.Time) error {
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var (
+		id  int64
+		typ string
+	)
+
+	if err := tx.QueryRowContext(ctx, `SELECT id, type FROM sites WHERE name = ?`, name).Scan(&id, &typ); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if typ != SiteTypeRedirect && typ != SiteTypeProxy {
+		return ErrSiteType
+	}
+
+	for _, q := range []string{
+		`DELETE FROM cron_jobs WHERE site_id = ?`,
+		`DELETE FROM ssh_keys WHERE site_id = ?`,
+		`DELETE FROM site_limits WHERE site_id = ?`,
+		`DELETE FROM site_object_cache WHERE site_id = ?`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, id); err != nil {
+			return fmt.Errorf("store: %w", err)
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET account = 0, updated_at = ? WHERE id = ?`, now.Unix(), id); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	return nil
+}
