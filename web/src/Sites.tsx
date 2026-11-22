@@ -15,6 +15,7 @@ import {
   phpVersions,
   poolLabel,
   poolNote,
+  proxyProblem,
   redirectProblem,
   siteMessage,
   siteNameProblem,
@@ -23,8 +24,10 @@ import {
   type PHPVersions,
   type Pool,
   type Site,
+  type SiteProxy,
   type SiteRedirect,
 } from "./sites";
+import { newProxy, ProxyFields } from "./SiteProxy";
 import { newRedirect, RedirectFields } from "./SiteRedirect";
 import { Badge, Button, Card, Field, IconLink, Notice, PageHead, RowActions, Table, type Column, type Sort } from "./ui";
 
@@ -141,7 +144,7 @@ export function Sites({ query, onQuery }: QueryProps) {
   if (query.get("new") === "1") {
     return (
       <>
-        <PageHead title="New site" description="A site answers for its domains: with PHP or static files from its own Linux user and home, or as a redirect." />
+        <PageHead title="New site" description="A site answers for its domains: with PHP or static files from its own Linux user and home, or as a redirect or reverse proxy." />
         <CreateForm php={php} onChange={load} parked={query.get("domain") ?? ""} parkedTls={query.get("tls") !== "0"} />
       </>
     );
@@ -157,7 +160,7 @@ export function Sites({ query, onQuery }: QueryProps) {
     <>
       <PageHead
         title="Sites"
-        description="Every site has its domains and certificate. PHP and static sites also have their own Linux user; redirect sites have none."
+        description="Every site has its domains and certificate. PHP and static sites also have their own Linux user; redirect and reverse proxy sites have none."
         actions={
           <a className="ui-btn ui-btn-primary" href={formatHash({ page: "sites", query: new URLSearchParams({ new: "1" }) })}>
             <Plus size={16} aria-hidden="true" />
@@ -209,7 +212,10 @@ export function Sites({ query, onQuery }: QueryProps) {
 
 // SiteTypeChoice picks the type of a site (ADR-0054). Only the types that
 // exist today are offered; the others come with their features.
-export type ChosenType = "static" | "php" | "redirect";
+export type ChosenType = "static" | "php" | "proxy" | "redirect";
+
+/** webOnly: types without a Linux account (ADR-0054). */
+const webOnly = (t: ChosenType) => t === "redirect" || t === "proxy";
 
 export function SiteTypeChoice<T extends ChosenType>({
   value,
@@ -222,15 +228,16 @@ export function SiteTypeChoice<T extends ChosenType>({
   onChange: (v: T) => void;
   name: string;
   disabled?: boolean;
-  /** Offers the redirect type; the type of a site cannot change to it yet. */
+  /** Offers redirect and reverse proxy; the type of a site cannot change to them yet. */
   withRedirect?: boolean;
 }) {
   const all: { value: ChosenType; label: string; hint: string }[] = [
     { value: "php", label: "PHP", hint: "WordPress, Laravel, TYPO3 and other PHP software." },
     { value: "static", label: "Static", hint: "HTML, CSS and JavaScript, for example the build of Hugo, Astro or a single-page app. No PHP." },
+    { value: "proxy", label: "Reverse proxy", hint: "Passes every request to another web server, for example an app in your network. No files, no Linux account." },
     { value: "redirect", label: "Redirect", hint: "Sends every address to another one, for example an old domain to the new one. No files, no Linux account." },
   ];
-  const choices = all.filter((c) => withRedirect || c.value !== "redirect") as { value: T; label: string; hint: string }[];
+  const choices = all.filter((c) => withRedirect || !webOnly(c.value)) as { value: T; label: string; hint: string }[];
   return (
     <fieldset className="ui-fieldset ui-stack-tight">
       <legend>Type</legend>
@@ -278,6 +285,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   const [version, setVersion] = useState<string | null>(null);
   const [kind, setKind] = useState<ChosenType>("php");
   const [redirect, setRedirectValue] = useState<SiteRedirect>(newRedirect());
+  const [proxy, setProxyValue] = useState<SiteProxy>(newProxy());
   const [tls, setTls] = useState(parked ? parkedTls : true);
   const [hsts, setHsts] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -304,7 +312,11 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   async function submit(e: FormEvent) {
     e.preventDefault();
     const list = parseDomains(domains);
-    const problem = siteNameProblem(name) || domainsProblem(list) || (kind === "redirect" ? redirectProblem(redirect.target, list) : "");
+    const problem =
+      siteNameProblem(name) ||
+      domainsProblem(list) ||
+      (kind === "redirect" ? redirectProblem(redirect.target, list) : "") ||
+      (kind === "proxy" ? proxyProblem(proxy.target, list) : "");
     if (problem) {
       setError(problem);
       return;
@@ -320,12 +332,13 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
       }
       const s = await createSite({
         name,
-        ...(choosePool && kind !== "redirect" && { pool }),
+        ...(choosePool && !webOnly(kind) && { pool }),
         php: kind === "php" ? phpValue : "",
         domains: list,
         tls,
         hsts: tls && hsts,
         ...(kind === "redirect" && { type: "redirect" as const, redirect }),
+        ...(kind === "proxy" && { type: "proxy" as const, proxy: { ...proxy, insecure: proxy.target.startsWith("https://") && proxy.insecure } }),
       });
       setDone(
         s.tls.enabled && !s.tls.active
@@ -337,6 +350,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
       setDomainsText("");
       setVersion(null);
       setRedirectValue(newRedirect());
+      setProxyValue(newProxy());
       await onChange();
     } catch (err) {
       setError(siteMessage(err));
@@ -352,7 +366,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         <Field
           label="Name"
           hint={
-            kind === "redirect"
+            webOnly(kind)
               ? "The name of the site in the panel. 2 to 32 characters: lowercase letters, digits, _ and -."
               : "Becomes the Linux user of the site. 2 to 32 characters: lowercase letters, digits, _ and -."
           }
@@ -370,7 +384,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
             spellCheck={false}
           />
         </Field>
-        {choosePool && kind !== "redirect" && (
+        {choosePool && !webOnly(kind) && (
           <Field label="Storage pool" hint="Where the site's home lives. A site stays on its pool.">
             <select className="ui-select" value={pool} onChange={(e) => setPool(e.target.value)}>
               {pools.map((p) => (
@@ -381,7 +395,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
             </select>
           </Field>
         )}
-        {choosePool && kind !== "redirect" && poolNote(chosen) && <Notice tone="warn" title={poolNote(chosen)} />}
+        {choosePool && !webOnly(kind) && poolNote(chosen) && <Notice tone="warn" title={poolNote(chosen)} />}
         <SiteTypeChoice value={kind} onChange={setKind} name="new-site-type" withRedirect />
         {kind === "php" && (
           <>
@@ -401,6 +415,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         {kind === "static" && (
           <p className="ui-hint ui-flush">The web root folder, a fallback for single-page apps and asset caching can be set on the site's Web tab.</p>
         )}
+        {kind === "proxy" && <ProxyFields value={proxy} onChange={setProxyValue} disabled={busy} />}
         {kind === "redirect" && <RedirectFields value={redirect} onChange={setRedirectValue} disabled={busy} />}
         <label className="ui-check">
           <input type="checkbox" checked={tls} onChange={(e) => setTls(e.target.checked)} />

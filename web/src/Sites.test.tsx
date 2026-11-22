@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 import type { SiteTab } from "./routes";
 import { SitePage } from "./SitePage";
 import { Sites } from "./Sites";
-import { compareVersions, domainsProblem, redirectProblem, httpsLabel, parseDomains, phpChoices, siteNameProblem, siteStatus, type Site, type SiteTLS } from "./sites";
+import { compareVersions, domainsProblem, proxyProblem,
+  redirectProblem, httpsLabel, parseDomains, phpChoices, siteNameProblem, siteStatus, type Site, type SiteTLS } from "./sites";
 import { mockFetch } from "./test-utils";
 
 const noTLS: SiteTLS = { enabled: false, active: false, hsts: false, domains: [], notAfter: null };
@@ -403,6 +404,81 @@ describe("redirect sites", () => {
     await user.click(card.getByRole("button", { name: "Save redirect" }));
     expect(await card.findByRole("status")).toHaveTextContent("now goes to https://new.example.com");
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ target: "https://new.example.com", status: 301, keepPath: false });
+  });
+});
+
+describe("reverse proxy sites", () => {
+  it.each(["http://10.0.0.5:8080", "https://app.internal.example.com/base", "http://192.168.1.20", "https://[2001:db8::5]:8443"])("accepts %s", (t) =>
+    expect(proxyProblem(t, ["app.example.com"])).toBe(""),
+  );
+  it.each([
+    "",
+    "10.0.0.5:8080",
+    "http://127.0.0.1:8444",
+    "http://0.0.0.0",
+    "http://169.254.169.254/latest",
+    "http://224.0.0.1",
+    "http://[::1]",
+    "http://[::ffff:127.0.0.1]",
+    "http://[fe80::1]",
+    "http://localhost:3000",
+    "http://app.localhost",
+    "https://app.example.com",
+    "http://10.0.0.5/?a=1",
+  ])("refuses %j", (t) => expect(proxyProblem(t, ["app.example.com"])).not.toBe(""));
+
+  it("creates a reverse proxy site and warns about an unverified certificate", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "POST /api/v1/sites": { status: 201, body: { ...blog, name: "app", php: "", type: "proxy", account: false, tls: noTLS } },
+    });
+    render(<ListHarness initial="new=1" />);
+    await user.type(screen.getByLabelText(/^Name/), "app");
+    await user.type(screen.getByLabelText(/^Domains/), "app.example.com");
+    await user.click(screen.getByRole("radio", { name: /^Reverse proxy/ }));
+    expect(screen.queryByLabelText("PHP version")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Do not verify/)).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/^Pass requests to/), "http://127.0.0.1:3000");
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("points to this server");
+
+    await user.clear(screen.getByLabelText(/^Pass requests to/));
+    await user.type(screen.getByLabelText(/^Pass requests to/), "https://10.0.0.5:8443");
+    await user.click(screen.getByLabelText(/^Do not verify/));
+    expect(screen.getByText(/encrypted but not verified/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Site app created.");
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
+      name: "app",
+      php: "",
+      type: "proxy",
+      proxy: { target: "https://10.0.0.5:8443", targetHost: false, insecure: true },
+    });
+  });
+
+  it("shows only the tabs a reverse proxy site has and saves its target", async () => {
+    const user = userEvent.setup();
+    const app = { ...blog, php: "", type: "proxy" as const, account: false, proxy: { target: "http://10.0.0.5:8080", targetHost: false, insecure: false } };
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [app] } },
+      "PUT /api/v1/sites/blog/proxy": (b: unknown) => ({ body: { ...app, proxy: b } }),
+    });
+    render(<PageHarness />);
+    const tabs = await screen.findByRole("tablist", { name: "blog" });
+    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "Web", "Logs"]);
+    expect(within(screen.getByLabelText("Details of blog")).getByText("http://10.0.0.5:8080")).toBeInTheDocument();
+
+    await user.click(within(tabs).getByRole("tab", { name: "Web" }));
+    const card = within(screen.getByRole("region", { name: "Reverse proxy" }));
+    expect(card.getByRole("button", { name: "Save reverse proxy" })).toBeDisabled();
+    await user.click(card.getByLabelText(/^Send the target's host/));
+    await user.click(card.getByRole("button", { name: "Save reverse proxy" }));
+    expect(await card.findByRole("status")).toHaveTextContent("now go to http://10.0.0.5:8080");
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ target: "http://10.0.0.5:8080", targetHost: true, insecure: false });
   });
 });
 
