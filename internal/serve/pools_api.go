@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
@@ -28,8 +30,14 @@ func RPCPools(c *agentrpc.Client) Pools {
 // registerPools adds GET /api/v1/pools for the pool choice in "New site".
 // Pools are added and removed only by root on the server (hostashi pool);
 // the panel only reads them. Who may create sites may read them.
+type poolListJSON struct {
+	Pools []agentapi.PoolInfo `json:"pools"`
+}
+
 func registerPools(mux *routeMux, a authn, list Pools, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/pools", a.allow("pools:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/pools", openapi.Operation{
+		ID: "listPools", Tag: "system", Summary: "The storage pools for site homes", Out: poolListJSON{},
+	}, a.allow("pools:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -50,6 +58,6 @@ func registerPools(mux *routeMux, a authn, list Pools, log *slog.Logger) {
 			pools = []agentapi.PoolInfo{}
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"pools": pools})
+		writeJSON(w, http.StatusOK, poolListJSON{Pools: pools})
 	}))
 }

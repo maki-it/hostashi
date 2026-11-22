@@ -48,6 +48,9 @@ type Operation struct {
 	// returned.
 	Status int
 	Query  []Param
+	// Errors are error answers whose body is not the shared error body,
+	// by status, e.g. {422: settingErrorJSON{}}.
+	Errors map[int]any
 }
 
 // Access says who may call a route (ADR-0035).
@@ -296,13 +299,26 @@ func operation(r *reflector, rt Route, method, path string, errRef map[string]an
 		success["content"] = map[string]any{"application/json": map[string]any{"schema": map[string]any{}}}
 	}
 
-	op["responses"] = map[string]any{
+	responses := map[string]any{
 		strconv.Itoa(status): success,
 		"default": map[string]any{
 			"description": "Error",
 			"content":     map[string]any{"application/json": map[string]any{"schema": errRef}},
 		},
 	}
+
+	for code, body := range o.Errors {
+		if code < 400 || code > 599 || code == status {
+			return nil, fmt.Errorf("error status %d is not an error", code)
+		}
+
+		responses[strconv.Itoa(code)] = map[string]any{
+			"description": http.StatusText(code),
+			"content":     map[string]any{"application/json": map[string]any{"schema": r.schema(typeOf(body))}},
+		}
+	}
+
+	op["responses"] = responses
 
 	return op, nil
 }

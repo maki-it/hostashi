@@ -16,3 +16,17 @@ func TestPGClientUnitName(t *testing.T) {
 		}
 	}
 }
+
+func TestAppUnitNames(t *testing.T) {
+	ctx := t.Context()
+
+	for _, u := range []string{"hostashi-node@.service", "hostashi-node@a.service", "hostashi-php-8.3@blog.service", "hostashi-node@blog.service.d", "hostashi-node@../x.service"} {
+		if err := appctl(ctx, u, "start"); err == nil {
+			t.Errorf("%q accepted", u)
+		}
+	}
+
+	if _, err := (AppController{}).Show(ctx, "hostashi-node@blog.service", "ExecStart"); err == nil {
+		t.Error("property ExecStart accepted")
+	}
+}

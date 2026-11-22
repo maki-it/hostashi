@@ -256,7 +256,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config ssh harden sysctl nginx php phpversions pgclient node valkey mariadb dbtool backup units service fail2ban firewall updates quota"
+STEPS="account dirs key binary config ssh harden sysctl system nginx php phpversions pgclient node valkey mariadb dbtool backup units service fail2ban firewall updates quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -457,6 +457,17 @@ do_sysctl() {
   [ -z "$drift" ] || { log "sysctl: values did not take: $drift"; return 1; }
 }
 
+# Time zone, hostname and reboot from the panel (ADR-0060): the agent asks
+# systemd-timedated, systemd-hostnamed and systemd-logind over the system
+# bus, so the bus must be there; timedated lists the zones from tzdata.
+SYSTEM_PKGS=(dbus tzdata)
+
+chk_system() {
+  local p
+  for p in "${SYSTEM_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
+}
+do_system() { apt_install "${SYSTEM_PKGS[@]}"; }
+
 # nginx and its brotli modules from the distribution (ADR-0020). The agent
 # renders the whole config; the package's default site is never used.
 # logrotate rotates the per-site logs with the panel's retention (ADR-0053).
@@ -601,17 +612,23 @@ do_pgclient() {
 NODE_DIR=/opt/hostashi/node
 NODE_UNIT=hostashi-node-install@.service
 NODE_LOGS=/var/lib/hostashi-agent/node-install
+# The apps' output, <site>/app.log, opened by systemd for the units
+# hostashi-node@<site> (ADR-0054).
+APP_LOGS=/var/log/hostashi/app
 
 chk_node() {
   dir_ok "${NODE_DIR%/*}" 755 root:root || { echo "${NODE_DIR%/*}"; return 1; }
   dir_ok "$NODE_DIR" 755 root:root || { echo "$NODE_DIR"; return 1; }
   dir_ok "$NODE_LOGS" 700 root:root || { echo "$NODE_LOGS"; return 1; }
+  dir_ok "$APP_LOGS" 750 root:root || { echo "$APP_LOGS"; return 1; }
   file_matches "/etc/systemd/system/$NODE_UNIT" 0644 root:root <"$UNIT_DIR/$NODE_UNIT" || { echo "$NODE_UNIT differs"; return 1; }
 }
 do_node() {
   local rc
   install -d -m 0755 -o root -g root "${NODE_DIR%/*}" "$NODE_DIR" || return 1
   install -d -m 0700 -o root -g root "$NODE_LOGS" || return 1
+  install -d -m 0755 -o root -g root "${APP_LOGS%/*}" || return 1
+  install -d -m 0750 -o root -g root "$APP_LOGS" || return 1
   write_file "/etc/systemd/system/$NODE_UNIT" 0644 root:root <"$UNIT_DIR/$NODE_UNIT"; rc=$?
   [ "$rc" -le 1 ] || return 1
   if [ "$rc" = 0 ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
@@ -873,6 +890,8 @@ FW_CHANGED=no
 # creates it empty once, so a re-run keeps the panel's rules.
 FW_PANEL_DIR=${HOSTASHI_FW_PANEL_DIR:-/var/lib/hostashi-agent/firewall}
 FW_PANEL_FILE=$FW_PANEL_DIR/panel.nft
+# The apps' loopback ports and their users (ADR-0054), also the agent's.
+FW_APPS_FILE=$FW_PANEL_DIR/apps.nft
 
 # fw_valid PORT/PROTO: a port from 1 to 65535 and tcp or udp.
 fw_valid() {
@@ -926,12 +945,16 @@ fw_render() {
   panel=(-e "s/@PANEL@/$ports/")
   [ -n "$ports" ] || panel=(-e "/@PANEL@/d")
   sed -e "s/@TCP@/$(fw_ports tcp)/" -e "s/@UDP@/$(fw_ports udp)/" -e "s/@SSH@/$ssh/" \
-    "${panel[@]}" -e "s#@PANEL_FILE@#$FW_PANEL_FILE#" "$FW_SRC/hostashi.nft"
+    "${panel[@]}" -e "s#@PANEL_FILE@#$FW_PANEL_FILE#" -e "s#@APPS_FILE@#$FW_APPS_FILE#" "$FW_SRC/hostashi.nft"
 }
 
 # fw_panel_file creates the panel's rules file if it is missing.
 fw_panel_file() {
   install -d -m 0700 -o root -g root "$FW_PANEL_DIR" || return 1
+  if [ ! -f "$FW_APPS_FILE" ]; then
+    printf '# Written by the Hostashi agent: the apps of Node.js sites (ADR-0054).\n' >"$FW_APPS_FILE.new" &&
+      chmod 0600 "$FW_APPS_FILE.new" && mv -f "$FW_APPS_FILE.new" "$FW_APPS_FILE" || return 1
+  fi
   [ -f "$FW_PANEL_FILE" ] && return 0
   printf '# Written by the Hostashi agent from the panel (ADR-0034).\n' >"$FW_PANEL_FILE.new" &&
     chmod 0600 "$FW_PANEL_FILE.new" && mv -f "$FW_PANEL_FILE.new" "$FW_PANEL_FILE"
@@ -948,6 +971,7 @@ chk_firewall() {
   pkg_installed nftables || { echo "nftables not installed"; return 1; }
   rules=$(fw_render 2>&1) || { echo "$rules"; return 1; }
   [ -f "$FW_PANEL_FILE" ] || { echo "$FW_PANEL_FILE missing"; return 1; }
+  [ -f "$FW_APPS_FILE" ] || { echo "$FW_APPS_FILE missing"; return 1; }
   file_matches "/etc/systemd/system/$FW_UNIT" 0644 root:root <"$FW_SRC/$FW_UNIT" || { echo "firewall unit differs"; return 1; }
   printf '%s\n' "$rules" | file_matches "$FW_FILE" 0644 root:root || { echo "firewall rules differ"; return 1; }
   [ "$FW_CHANGED" = no ] || { echo "reload needed after a change"; return 1; }
@@ -1060,7 +1084,7 @@ php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }
 
 chk_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-files@.service hostashi-files@.socket; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-files@.service hostashi-files@.socket; do
     file_matches "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u" || { echo "$u differs"; return 1; }
   done
   dir_ok "$(dirname "$NGINX_DROPIN")" 755 root:root || { echo "nginx drop-in directory"; return 1; }
@@ -1074,7 +1098,7 @@ chk_units() {
 }
 do_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-files@.service hostashi-files@.socket; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-files@.service hostashi-files@.socket; do
     write_file "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u"
     [ $? -le 1 ] || return 1
   done
