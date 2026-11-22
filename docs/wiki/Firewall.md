@@ -16,6 +16,8 @@ Under **Allowlists**, enter the addresses or networks (for example `203.0.113.7`
 
 If the panel runs on port 443 under its own host name, its allowlist is checked by nginx instead (see [Install](Install.md#panel-without-a-port)).
 
+![The Firewall page](images/firewall.png)
+
 ## Open more ports
 
 Under **Opened ports**, add a port or a range (`3000` or `6000-6010`), the protocol and, optionally, the addresses it is open to.

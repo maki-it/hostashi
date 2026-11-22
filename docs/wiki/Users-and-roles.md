@@ -12,6 +12,8 @@
 
 Server settings are only for admins: users, firewall, backups, PHP and Node.js versions, email, system settings, the CloudPanel import and the health checks.
 
+![The Users page](images/users.png)
+
 ### What a user may do on their sites
 
 | Allowed | Not allowed |
