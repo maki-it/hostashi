@@ -811,6 +811,49 @@ server {
         return 502;
         {{- end}}
     }
+    {{- else if .S.App}}
+    root {{.S.Root}};
+    # The app decides how large an upload may be.
+    client_max_body_size 0;
+    {{- with .M}}
+
+    # Maintenance (ADR-0027): the page's files for everyone, and the page
+    # with 503 instead of the app for addresses outside the allowlist.
+    error_page 503 {{$.Prefix}}{{.Page}}/index.html;
+
+    {{- template "pageloc" $.PL}}
+    {{- end}}
+
+    # App site (ADR-0054): every request goes to the site's app on its
+    # loopback port. Only nginx and the site's own user may connect to it
+    # (the firewall's app filter).
+    location / {
+        {{- if .M}}
+        if (${{.Open}} = 0) {
+            return 503;
+        }
+        {{- end}}
+        {{- with $.SnipRoot}}
+        {{- if $.RootHdrs}}
+        # The snippet adds headers, so nginx would drop the server's.
+        {{- template "sitehdrs" $.RootHdrs}}
+        {{- end}}
+        include {{.}};
+        {{- end}}
+        proxy_pass http://127.0.0.1:{{.S.App.Port}};
+        proxy_http_version 1.1;
+        proxy_request_buffering off;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $hostashi_connection_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        {{- range $.AppHide}}
+        {{.}}
+        {{- end}}
+    }
     {{- else}}
     root {{.S.Root}};
     {{- with $.Body}}
@@ -1080,6 +1123,10 @@ func (n *Nginx) Render(d Desired, gen int) (Files, error) {
 			}
 
 			data["Proxy"] = v
+		}
+
+		if s.App != nil {
+			data["AppHide"] = proxyHideLines(s)
 		}
 
 		if s.Maintenance != nil && !s.Disabled {

@@ -23,6 +23,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/appunit"
 	"github.com/maki-it/hostashi/internal/backup"
 	"github.com/maki-it/hostashi/internal/certs"
 	"github.com/maki-it/hostashi/internal/cpimport"
@@ -184,6 +185,9 @@ type Config struct {
 	// ObjectCache runs the sites' object caches (ADR-0045). Run builds it below
 	// StateDir; without it cache.* answer failed_precondition.
 	ObjectCache *objcache.Manager
+	// Apps runs the apps of Node.js sites (ADR-0054). Run builds it below
+	// StateDir; without it site.app.* answer failed_precondition.
+	Apps *appunit.Manager
 
 	// Files starts the sites' file manager sockets (ADR-0040). Run builds
 	// it; without it files.open answers failed_precondition.
@@ -291,7 +295,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, apps: cfg.Apps, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, log: log}
 		h.acl = cfg.panelACL
 
 		if cfg.PHP != nil && cfg.PHP.Hidden == nil {
@@ -362,6 +366,7 @@ type siteOps struct {
 	slices *siteslice.Manager
 	cache  *pagecache.Dirs
 	objc   *objcache.Manager
+	apps   *appunit.Manager
 	files  *filesunit.Manager
 	logs   *sitelogs.Reader
 	// logrotate is the file of logs.retention.set (ADR-0053).
@@ -426,6 +431,13 @@ func (h *siteOps) register(s *agentrpc.Server) {
 		if h.db != nil && h.db.SiteHasDatabases(req.User) {
 			return agentapi.SiteDeleteResponse{}, &agentrpc.Error{
 				Code: agentrpc.CodePrecondition, Message: "site still has databases, remove them with db.delete first",
+			}
+		}
+
+		// The app runs as the site user too (ADR-0054).
+		if h.apps != nil {
+			if err := h.apps.Remove(ctx, req.User); err != nil {
+				return agentapi.SiteDeleteResponse{}, fmt.Errorf("stop app of site %s: %w", req.User, err)
 			}
 		}
 
@@ -521,6 +533,7 @@ func (h *siteOps) register(s *agentrpc.Server) {
 	h.registerCron(s)
 
 	h.registerCache(s)
+	h.registerApps(s)
 	h.registerFiles(s)
 	h.registerLogs(s)
 
@@ -612,6 +625,10 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		site := web.Site{
 			User: s.User, Domains: s.Domains, Root: root, Disabled: s.Disabled, SPA: s.SPA, AssetCache: s.AssetCache,
 			AssetCacheSeconds: s.AssetCacheSeconds, AssetCacheExts: s.AssetCacheExts,
+		}
+
+		if a := s.App; a != nil {
+			site.App = &agentapi.WebApp{Port: a.Port}
 		}
 
 		if s.TLS {
@@ -1359,7 +1376,7 @@ const ServerLogDir = "/var/log/nginx/hostashi"
 // LogRotateConfig is the logrotate configuration of the logs above; the
 // panel only chooses the days.
 func LogRotateConfig() logrotate.Config {
-	return logrotate.Config{SiteLogDir: SiteLogDir, ServerLogDir: ServerLogDir, PHPLogDir: php.LogDir, NginxPID: "/run/nginx.pid", Days: logrotate.DefaultDays}
+	return logrotate.Config{SiteLogDir: SiteLogDir, ServerLogDir: ServerLogDir, PHPLogDir: php.LogDir, AppLogDir: appunit.DefaultLogDir, NginxPID: "/run/nginx.pid", Days: logrotate.DefaultDays}
 }
 
 // Run starts the agent and blocks until ctx is canceled.
@@ -1381,7 +1398,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if cfg.Logs == nil && cfg.Web != nil {
-		cfg.Logs = &sitelogs.Reader{SiteLogDir: SiteLogDir, PHPLogDir: php.LogDir}
+		cfg.Logs = &sitelogs.Reader{SiteLogDir: SiteLogDir, PHPLogDir: php.LogDir, AppLogDir: appunit.DefaultLogDir}
 		cfg.LogRotate = logrotate.File
 	}
 
@@ -1507,6 +1524,19 @@ func Run(ctx context.Context, cfg Config) error {
 	// rolled back here.
 	if err := cfg.Firewall.Recover(ctx); err != nil && cfg.Log != nil {
 		cfg.Log.ErrorContext(ctx, "firewall recovery failed", "err", err)
+	}
+
+	if cfg.Apps == nil {
+		cfg.Apps = &appunit.Manager{
+			Dir: filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "apps"), Site: appSite(cfg.Sites), Hidden: cfg.Sites.HiddenPaths,
+			Ctl: phpctl.AppController{}, Firewall: cfg.Firewall.SetApps, Log: cfg.Log,
+		}
+
+		// Like the object caches: a failure is logged, site.app.apply
+		// retries.
+		if err := cfg.Apps.Recover(ctx); err != nil && cfg.Log != nil {
+			cfg.Log.ErrorContext(ctx, "app recovery failed", "err", err)
+		}
 	}
 
 	if cfg.PHP != nil {

@@ -32,9 +32,11 @@ type siteJSON struct {
 	// Redirect is the target of a redirect site, null otherwise.
 	Redirect *redirectJSON `json:"redirect"`
 	// Proxy is the target of a reverse proxy site, null otherwise.
-	Proxy    *proxyJSON `json:"proxy"`
-	PHP      string     `json:"php"`      // PHP version, "" for no PHP
-	Disabled bool       `json:"disabled"` // answers 503, PHP stopped
+	Proxy *proxyJSON `json:"proxy"`
+	// Node is the app of a Node.js site, null otherwise.
+	Node     *nodeAppJSON `json:"node"`
+	PHP      string       `json:"php"`      // PHP version, "" for no PHP
+	Disabled bool         `json:"disabled"` // answers 503, PHP stopped
 	// DisabledPage is the maintenance page shown while disabled (ADR-0047).
 	DisabledPage string `json:"disabledPage"`
 	// Maintenance: other addresses get the page with 503 (ADR-0027).
@@ -167,7 +169,7 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	}
 
 	return siteJSON{
-		Name: s.Name, Pool: s.Pool, State: s.State, Type: s.Type, Web: toWebJSON(s), Account: s.Account, Redirect: toRedirectJSON(s), Proxy: toProxyJSON(s), PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, Maintenance: toMaintenanceJSON(s),
+		Name: s.Name, Pool: s.Pool, State: s.State, Type: s.Type, Web: toWebJSON(s), Account: s.Account, Redirect: toRedirectJSON(s), Proxy: toProxyJSON(s), Node: toNodeAppJSON(s), PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, Maintenance: toMaintenanceJSON(s),
 		TLS: tlsJSON{
 			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
@@ -212,6 +214,10 @@ func siteFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "not_letsencrypt", "only a site with HTTPS from Let's Encrypt can be renewed")
 	case errors.Is(err, hosting.ErrState):
 		writeError(w, http.StatusConflict, "site_busy", "the site is being created or deleted")
+	case errors.Is(err, hosting.ErrNodeMissing):
+		writeError(w, http.StatusConflict, "node_missing", err.Error())
+	case errors.Is(err, hosting.ErrNoApps):
+		writeError(w, http.StatusConflict, "apps_unavailable", "Node.js apps are not available on this panel")
 	case errors.Is(err, hosting.ErrSiteType):
 		writeError(w, http.StatusConflict, "wrong_site_type", "not possible for this type of site")
 	case errors.As(err, &ae):
@@ -286,10 +292,12 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			// the site gets agentapi.DefaultWebHeaders, {} sends none.
 			Headers *agentapi.WebHeaders `json:"headers"`
 			// Type is static or php (from php when left out), redirect
-			// with redirect set or proxy with proxy set (ADR-0054).
+			// with redirect set, proxy with proxy set or node with node
+			// set (ADR-0054).
 			Type     string        `json:"type"`
 			Redirect *redirectJSON `json:"redirect"`
 			Proxy    *proxyJSON    `json:"proxy"`
+			Node     *nodeAppJSON  `json:"node"`
 		}
 		if !decodeJSON(w, r, &in) {
 			return
@@ -298,7 +306,19 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		var (
 			redirect *store.SiteRedirect
 			proxy    *store.SiteProxy
+			app      *store.SiteApp
 		)
+
+		if (in.Node != nil) != (in.Type == store.SiteTypeNode) || in.Node != nil && (in.Redirect != nil || in.Proxy != nil) {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "a Node.js site needs type node and node, nothing else")
+
+			return
+		}
+
+		if in.Node != nil {
+			a := in.Node.app()
+			app = &a
+		}
 
 		switch {
 		case in.Type == store.SiteTypeRedirect && in.Redirect != nil && in.Proxy == nil:
@@ -317,8 +337,8 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "type and php do not fit: static has no PHP version, php needs one")
 
 			return
-		case in.Type != "" && in.Type != store.SiteTypeStatic && in.Type != store.SiteTypePHP:
-			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "type must be static, php, proxy or redirect")
+		case in.Type != "" && in.Type != store.SiteTypeStatic && in.Type != store.SiteTypePHP && in.Type != store.SiteTypeNode:
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "type must be static, php, node, proxy or redirect")
 
 			return
 		}
@@ -332,7 +352,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		defer cancel()
 
 		s, err := svc.Create(ctx, p.User.ID, hosting.CreateRequest{
-			Name: in.Name, Pool: in.Pool, PHP: in.PHP, Domains: in.Domains, TLS: in.TLS, HSTS: in.HSTS, Headers: in.Headers, Redirect: redirect, Proxy: proxy,
+			Name: in.Name, Pool: in.Pool, PHP: in.PHP, Domains: in.Domains, TLS: in.TLS, HSTS: in.HSTS, Headers: in.Headers, Redirect: redirect, Proxy: proxy, App: app,
 		})
 		if err != nil {
 			headersFail(log, w, err, "create site")

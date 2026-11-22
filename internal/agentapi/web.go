@@ -121,6 +121,10 @@ type WebSite struct {
 	// could not resolve the name, and the agent keeps the live addresses.
 	Proxy      *WebProxy `json:"proxy,omitempty"`
 	ProxyAddrs []string  `json:"proxyAddrs,omitempty"`
+	// App passes the site's requests to its app on a loopback port
+	// (Node.js, ADR-0054). The site has an account and files but no PHP
+	// and no static-site options.
+	App *WebApp `json:"app,omitempty"`
 }
 
 // accountless reports whether the site is a redirect or reverse proxy,
@@ -349,6 +353,7 @@ func (r WebApplyRequest) Validate() error {
 
 	users := make(map[string]bool, len(r.Sites))
 	domains := map[string]bool{}
+	ports := map[int]bool{}
 
 	for _, s := range r.Sites {
 		if err := ValidateSiteUser(s.User); err != nil {
@@ -412,6 +417,26 @@ func (r WebApplyRequest) Validate() error {
 
 			if s.PHP != "" || s.WebDir != "" || s.SPA || s.AssetCache || s.PageCache != nil || s.Snippets != nil || s.PHPWorkers != 0 || s.PHPPrograms || s.PHPSettings != nil {
 				return fmt.Errorf("site %q: a redirect or reverse proxy site has no files, PHP or snippets", s.User)
+			}
+		}
+
+		if a := s.App; a != nil {
+			if s.accountless() {
+				return fmt.Errorf("site %q: an app site is not a redirect or reverse proxy", s.User)
+			}
+
+			if err := ValidateAppPort(a.Port); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
+
+			if ports[a.Port] {
+				return fmt.Errorf("site %q: app port %d belongs to another site", s.User, a.Port)
+			}
+
+			ports[a.Port] = true
+
+			if s.PHP != "" || s.WebDir != "" || s.SPA || s.AssetCache || s.PageCache != nil || s.PHPWorkers != 0 || s.PHPPrograms || s.PHPSettings != nil {
+				return fmt.Errorf("site %q: an app site has no PHP and no static-site options", s.User)
 			}
 		}
 
