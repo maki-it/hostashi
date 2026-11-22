@@ -3,9 +3,6 @@
 package web
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/nginxconf"
 )
@@ -88,31 +85,7 @@ func (s Site) checkHeaders() error {
 		return err
 	}
 
-	list := s.Headers.List()
-	if len(list) == 0 {
-		return nil
-	}
-
-	server, root, err := s.checkSnippets()
-	if err != nil {
-		return err
-	}
-
-	for slot, ds := range map[string][]nginxconf.Directive{"server": server, "location /": root} {
-		for _, d := range ds {
-			if d.Name != "add_header" || len(d.Args) == 0 {
-				continue
-			}
-
-			for _, h := range list {
-				if strings.EqualFold(d.Args[0], h.Name) {
-					return fmt.Errorf("%w: the %s snippet sets %s, which is switched on as a security header", agentapi.ErrHeaderConflict, slot, h.Name)
-				}
-			}
-		}
-	}
-
-	return nil
+	return s.Headers.Conflict(s.Snippets.Server, s.Snippets.Root)
 }
 
 // addsHeaders reports whether directives set response headers themselves,

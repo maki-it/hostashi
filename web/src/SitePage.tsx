@@ -33,6 +33,7 @@ import { PageCacheSettings } from "./PageCache";
 import { PHPSettingsCard } from "./PHPSettings";
 import { Services } from "./Services";
 import { SnippetSettings } from "./Snippets";
+import { SecurityHeadersCard } from "./SecurityHeaders";
 import { SSHSettings } from "./SSH";
 import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
 
@@ -489,6 +490,7 @@ function DomainsTab({ site, onChange }: TabProps) {
           {h.result}
         </div>
       </Card>
+      <SecurityHeadersCard site={site} />
       <CertificateCard base={siteCertBase(site.name)} name={site.name} tls={site.tls} onChange={onChange} />
     </>
   );

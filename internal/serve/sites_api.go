@@ -246,19 +246,27 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			Domains []string `json:"domains"`
 			TLS     bool     `json:"tls"`  // ask for a certificate right away
 			HSTS    bool     `json:"hsts"` // sent once the site is on HTTPS
+			// Headers are the first security headers (ADR-0056); left out,
+			// the site gets agentapi.DefaultWebHeaders, {} sends none.
+			Headers *agentapi.WebHeaders `json:"headers"`
 		}
 		if !decodeJSON(w, r, &in) {
 			return
+		}
+
+		if in.Headers == nil {
+			d := agentapi.DefaultWebHeaders
+			in.Headers = &d
 		}
 
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
 		s, err := svc.Create(ctx, p.User.ID, hosting.CreateRequest{
-			Name: in.Name, Pool: in.Pool, PHP: in.PHP, Domains: in.Domains, TLS: in.TLS, HSTS: in.HSTS,
+			Name: in.Name, Pool: in.Pool, PHP: in.PHP, Domains: in.Domains, TLS: in.TLS, HSTS: in.HSTS, Headers: in.Headers,
 		})
 		if err != nil {
-			siteFail(log, w, err, "create site")
+			headersFail(log, w, err, "create site")
 
 			return
 		}

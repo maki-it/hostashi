@@ -86,7 +86,7 @@ func registerSnippets(mux *routeMux, a authn, svc *hosting.Service, log *slog.Lo
 		}
 
 		if err != nil {
-			siteFail(log, w, err, "set snippets")
+			headersFail(log, w, err, "set snippets")
 
 			return
 		}
