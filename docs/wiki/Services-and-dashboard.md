@@ -35,7 +35,9 @@ Open **Services** in the Server part of the menu. The table lists each service w
 
 Stopping a service always asks first. A site's own PHP and Valkey services are also shown on the site's **Overview** tab.
 
-**Recent events** below the table lists the last 30 days: automatic restarts after a crash, failures and every action someone took, with the account's name. Every action is also written to the [audit log](Audit-log.md).
+**Recent events** below the table lists the last 30 days: automatic restarts after a crash, failures, a failed service running again, and every action someone took, with the account's name. Every action is also written to the [audit log](Audit-log.md).
+
+With email set up, Hostashi also sends an email when a service is down or keeps crashing, and again when it runs; see [Email notifications](Email-notifications.md).
 
 nginx and MariaDB are restarted by systemd 5 seconds after a crash. The installer sets this up.
 

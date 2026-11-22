@@ -48,12 +48,37 @@ type Store interface {
 	PruneHostSamples(ctx context.Context, tier int, before time.Time) error
 }
 
+// CrashWindow is the span over which ServicePoll.Crashes counts crash
+// restarts (ADR-0055).
+const CrashWindow = 15 * time.Minute
+
+// ServicePoll is what one poll of the services found, for Alerter.
+type ServicePoll struct {
+	At     time.Time
+	States []agentapi.ServiceState
+	// Events are the events since the last poll, including those noticed
+	// when the services page read the states in between.
+	Events []store.ServiceEvent
+	// Crashes counts the crash restarts of the last CrashWindow by Key;
+	// nil when Events has no crash restart.
+	Crashes map[string]int
+}
+
+// Alerter is told about every services poll (ADR-0055); internal/notify
+// turns it into emails.
+type Alerter interface {
+	ServicesPolled(ctx context.Context, p ServicePoll)
+	// AgentUnreachable is called for each poll the agent did not answer.
+	AgentUnreachable(ctx context.Context, at time.Time, err error)
+}
+
 // Monitor keeps the dashboard's samples and watches the services.
 type Monitor struct {
-	Agent Agent
-	Store Store
-	Log   *slog.Logger
-	Now   func() time.Time // default time.Now
+	Agent  Agent
+	Store  Store
+	Alerts Alerter // nil: no alerts
+	Log    *slog.Logger
+	Now    func() time.Time // default time.Now
 
 	mu       sync.Mutex
 	prev     *raw
@@ -62,6 +87,7 @@ type Monitor struct {
 	units    map[string]agentapi.ServiceState
 	actions  map[string]time.Time
 	lastSeen time.Time // last successful services poll
+	pending  []store.ServiceEvent
 }
 
 type raw struct {

@@ -123,7 +123,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 
 | Feature | Prio | Phase | Source | Note |
 |---------|------|-------|--------|------|
-| Service health and disk warning | P1 | B | NEW | |
+| Service health and disk warning | P1 | B | NEW | Email when a service is down or keeps crashing, with an all-clear (ADR-0055); disk at 90 percent (ADR-0044) |
 | Notifications: email (SMTP), webhook, Telegram/Slack | P1 | B | NEW | |
 | Prometheus endpoint | P1 | 1 | NEW | Authenticated, off by default |
 | Uptime check per site | P2 | 2+ | NEW | |

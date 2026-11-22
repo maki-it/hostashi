@@ -54,7 +54,7 @@ The email names the service, the site if any, the systemd result (for example `e
 ### Where the state lives
 
 - `servermon.Changes` gets one more transition: `failed` → `active` gives a `recovered` event. It is stored in `service_events` like the others, so the history on the services page shows the outage ending too.
-- **Migration 0047** rebuilds the CHECK on `service_events.kind` to add `recovered`.
+- **Migration 0046** rebuilds the CHECK on `service_events.kind` to add `recovered`.
 - The monitor passes each new event to a small `notify` hook (an interface, so `servermon` does not import mail code). The crash counter for "keeps crashing" reads the last 15 minutes from `service_events`, so it survives a panel restart.
 - After a panel restart, the first poll has no previous state and sends nothing (as today). An outage that started and ended while the panel was down sends no email [A: acceptable, the services page still shows the restarts].
 
@@ -65,7 +65,7 @@ The automatic restore test (not in 1.0, see 03-features 3.0) will add its own ca
 ## Consequences
 
 - No new `os/exec` exception, no new agent operation, no new dependency.
-- One migration (0047), one new category, five new email templates (down, crashing, back, agent unreachable, agent back).
+- One migration (0046), one new category, five new email templates (down, crashing, back, agent unreachable, agent back).
 - Mail volume: rate limits of ADR-0044 still apply (10 per recipient and 100 per server per hour); a server with many failing sites may delay some emails to the next hour [V: `docs/wiki/Email-notifications.md`].
 - Wiki page `Email-notifications.md` gets a row "Services", and 03-features row "Service health and disk warning" moves to done for email.
 - An outage of the panel itself, of the whole server or of the network is not reported; that needs a check from outside (for example an uptime monitor). The wiki says so.

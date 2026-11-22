@@ -16,6 +16,8 @@ const (
 	ServiceEventStarted      = "started"
 	ServiceEventFailed       = "failed"
 	ServiceEventAction       = "action"
+	// ServiceEventRecovered: a failed unit is active again (ADR-0055).
+	ServiceEventRecovered = "recovered"
 )
 
 // Retention of service events.
