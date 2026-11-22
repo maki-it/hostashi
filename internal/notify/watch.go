@@ -33,7 +33,7 @@ const (
 
 // ownCategory lists the checks that have a category of their own, so the
 // daily digest leaves them out.
-var ownCategory = map[string]bool{"site.php": true, "site.disk": true, "system.disk": true, "site.tls": true}
+var ownCategory = map[string]bool{"site.php": true, "site.disk": true, "system.disk": true, "site.tls": true, "hostashi.update": true}
 
 // percent reads the "(NN %)" at the end of a disk check's summary.
 var percent = regexp.MustCompile(`\((\d{1,3}) %\)$`)
@@ -270,6 +270,14 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 				Category: Disk, Key: "disk:server:" + path, Fragment: "health",
 				Mail: mail.OpsEvent{Template: "disk-full", Subject: "The server's disk is almost full", Lines: []string{
 					"Free space on the server, " + c.Summary + ".", c.Hint,
+				}},
+			})
+		case c.ID == "hostashi.update" && c.Status == agentapi.DoctorWarn:
+			// One email per new version (ADR-0050): the summary names it.
+			out = append(out, Event{
+				Category: Doctor, Key: "hostashi-update:" + c.Summary, Window: 30 * 24 * time.Hour, Fragment: "health",
+				Mail: mail.OpsEvent{Template: "hostashi-update", Subject: "A new Hostashi version is available", Lines: []string{
+					c.Summary + ".", c.Hint,
 				}},
 			})
 		case c.Status == agentapi.DoctorFail && !ownCategory[c.ID]:
