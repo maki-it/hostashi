@@ -1877,7 +1877,7 @@ for _ in $(seq 1 150); do
   sleep 2
 done
 [ "$state" = succeeded ] || fail "Python from the panel: $(x cat /tmp/api.out)"
-x grep -q "\"installed\":\\[{\"line\":\"$PY_LINE\",\"version\":\"$PY_VERSION\"}\\]" /tmp/api.out || fail "Python $PY_LINE not listed: $(x cat /tmp/api.out)"
+x grep -q "\"installed\":\\[{\"line\":\"$PY_LINE\",\"version\":\"$PY_VERSION\",\"build\":\"[0-9]*\"}\\]" /tmp/api.out || fail "Python $PY_LINE not listed: $(x cat /tmp/api.out)"
 expect_mode "/opt/hostashi/python/$PY_LINE" "755 root:root"
 # Anyone may run it, nobody but root may change it; TLS and SQLite come
 # with the build.

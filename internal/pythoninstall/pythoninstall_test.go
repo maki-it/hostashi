@@ -122,7 +122,7 @@ func TestInstall(t *testing.T) {
 	}
 
 	d := filepath.Join(root, Dir, "3.99")
-	if v, err := rtinstall.ReadVersion(d); err != nil || v != "3.99.1" {
+	if v, err := rtinstall.ReadVersion(d); err != nil || v != "3.99.1+20991231" {
 		t.Fatalf("version %q, %v", v, err)
 	}
 
@@ -266,7 +266,7 @@ func TestManager(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(filepath.Join(d, rtinstall.VersionFile), []byte(rel.Version+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(d, rtinstall.VersionFile), []byte(rel.Version+"+"+rel.Tag+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -280,12 +280,21 @@ func TestManager(t *testing.T) {
 	}
 
 	st, _ = m.Status(ctx)
-	if out := Status(st); out.State != agentapi.PHPInstallSucceeded || out.Last != "3.13" || len(out.Installed) != 1 || out.Installed[0] != (agentapi.PythonInstalled{Line: "3.13", Version: rel.Version}) {
+	if out := Status(st); out.State != agentapi.PHPInstallSucceeded || out.Last != "3.13" || len(out.Installed) != 1 || out.Installed[0] != (agentapi.PythonInstalled{Line: "3.13", Version: rel.Version, Build: rel.Tag}) {
 		t.Fatalf("Status done = %+v", out)
 	}
 
 	if _, err := m.Start(ctx, "3.13"); !errors.Is(err, rtinstall.ErrInstalled) {
 		t.Fatalf("Start installed = %v", err)
+	}
+
+	// A new build of the same version is outdated.
+	if err := os.WriteFile(filepath.Join(d, rtinstall.VersionFile), []byte(rel.Version+"+20000101\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := m.Outdated(); len(got) != 1 || got[0] != "3.13" {
+		t.Fatalf("Outdated = %v", got)
 	}
 
 	if _, err := m.Remove(ctx, "3.13", []string{"shop"}); !errors.Is(err, rtinstall.ErrInUse) {

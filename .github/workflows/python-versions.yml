@@ -1,0 +1,149 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Checks python-build-standalone once a day for new CPython builds of the
+# Python lines Hostashi pins (ADR-0061): new patch versions, new builds of
+# the same version (newer OpenSSL or SQLite), new lines and changed end
+# dates from the Python release cycle. Before it changes anything it
+# downloads every new archive, checks it against SHA256SUMS and verifies
+# its Sigstore build provenance with `gh attestation verify`: only builds
+# made by python-build-standalone's release workflow are pinned. It then
+# opens (or updates) a pull request from the branch
+# automation/python-versions that updates
+# internal/agentapi/python_versions.go. The installer test installs the
+# newest line through the panel API. Nothing is merged automatically: a
+# maintainer reviews and merges, and the next Hostashi release brings the
+# new builds; the agent installs them by itself.
+#
+# Daily, like Node.js: a rebuild for an OpenSSL security release should
+# reach the servers within about a day.
+#
+# Pull requests opened with GITHUB_TOKEN start no pull_request workflows,
+# so this workflow starts the checks on the branch itself.
+name: Python versions
+
+on:
+  schedule:
+    # Every day at 05:17 UTC.
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/pythonversions/**"
+      - ".github/workflows/python-versions.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-versions-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BRANCH: automation/python-versions
+  # The workflow that must have built and attested every archive. It runs
+  # on Depot runners, which count as self-hosted, so
+  # --deny-self-hosted-runners would refuse every archive (ADR-0061 notes).
+  SIGNER: astral-sh/python-build-standalone/.github/workflows/release.yml
+
+jobs:
+  check:
+    name: Check python-build-standalone
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Only scheduled and manual runs push; pull requests only report.
+          persist-credentials: ${{ github.event_name != 'pull_request' }}
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check and update the list
+        env:
+          # A pull request has nothing new as a rule, so it checks the
+          # newest pinned line as well: the verification below runs on
+          # every change of this workflow.
+          SELF_TEST: ${{ github.event_name == 'pull_request' }}
+        run: |
+          flags=()
+          if [ "$SELF_TEST" = true ]; then flags+=(-verify-newest); fi
+          go run ./tools/pythonversions -write -summary "$RUNNER_TEMP/summary.md" -verify "$RUNNER_TEMP/verify.txt" "${flags[@]}"
+          cat "$RUNNER_TEMP/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          git diff --stat
+      - name: Verify the checksum and build provenance of every new archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          n=0
+          while read -r sum url; do
+            [ -n "$url" ] || continue
+            curl -fsSL --retry 3 -o "$RUNNER_TEMP/archive.tar.gz" "$url"
+            echo "$sum  $RUNNER_TEMP/archive.tar.gz" | sha256sum --check --quiet
+            gh attestation verify "$RUNNER_TEMP/archive.tar.gz" \
+              --repo astral-sh/python-build-standalone \
+              --signer-workflow "$SIGNER" >/dev/null
+            echo "verified $url"
+            n=$((n + 1))
+          done < "$RUNNER_TEMP/verify.txt"
+          rm -f "$RUNNER_TEMP/archive.tar.gz"
+          echo "$n archives verified." | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Run the tests the change affects
+        run: go test ./internal/agentapi/ ./internal/pythoninstall/ ./tools/pythonversions/
+      - name: Open or update the pull request
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          if git diff --quiet; then
+            echo "Nothing to change."
+            exit 0
+          fi
+          title="python: update CPython builds from python-build-standalone"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git commit -q -s -a -m "$title" -m "Found by the daily Python versions workflow (ADR-0061)."
+          # The same change as on the open branch: do not push again, so the
+          # checks and reviews on it stay.
+          if git fetch -q origin "$BRANCH" 2>/dev/null && git diff --quiet FETCH_HEAD HEAD; then
+            echo "The branch already has this change."
+            exit 0
+          fi
+          git push -f origin "$BRANCH"
+
+          {
+            echo "## What"
+            echo
+            echo "The daily Python versions workflow found:"
+            echo
+            cat "$RUNNER_TEMP/summary.md"
+            echo
+            echo "Sources: the Python release cycle (peps.python.org/api/release-cycle.json) and the SHA256SUMS of the newest python-build-standalone release, checked $(date -u +%F). Every new archive matched its checksum and has a Sigstore build provenance from \`$SIGNER\`."
+            echo
+            echo "## Before merging"
+            echo
+            echo "- [ ] The Go, Web, REUSE and Licenses runs on this branch are green, including both installer tests (they install the newest line through the panel API)."
+            echo "- [ ] For a new line: add it to ADR-0061."
+            echo "- [ ] Release Hostashi afterwards: the agent installs the new builds by itself."
+            echo
+            echo "This pull request is never merged automatically."
+          } > "$RUNNER_TEMP/body.md"
+
+          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -z "$pr" ]; then
+            gh pr create --repo "$REPO" --base main --head "$BRANCH" \
+              --title "$title" --body-file "$RUNNER_TEMP/body.md" --label enhancement --assignee kimdre
+          else
+            gh pr edit "$pr" --repo "$REPO" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          fi
+
+          for wf in go.yml web.yml reuse.yml licenses.yml; do
+            gh workflow run "$wf" --repo "$REPO" --ref "$BRANCH"
+          done

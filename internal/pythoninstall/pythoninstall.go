@@ -19,6 +19,7 @@ import (
 	"io"
 	"net/http"
 	"runtime"
+	"strings"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/rtinstall"
@@ -47,10 +48,17 @@ var Runtime = &rtinstall.Runtime{
 func releases(rs []agentapi.PythonRelease) []rtinstall.Release {
 	out := make([]rtinstall.Release, 0, len(rs))
 	for _, r := range rs {
-		out = append(out, rtinstall.Release{Line: r.Line, Version: r.Version})
+		out = append(out, release(r))
 	}
 
 	return out
+}
+
+// release names a build by version and python-build-standalone tag, so a
+// new build of the same CPython version (for example with a newer OpenSSL)
+// counts as outdated and is installed again.
+func release(r agentapi.PythonRelease) rtinstall.Release {
+	return rtinstall.Release{Line: r.Line, Version: r.Version + "+" + r.Tag}
 }
 
 // Manager serves python.install, python.status and python.remove.
@@ -63,7 +71,8 @@ func NewManager(u rtinstall.Units) *Manager { return &Manager{Runtime: Runtime, 
 func Status(s rtinstall.Status) agentapi.PythonStatus {
 	out := agentapi.PythonStatus{Installed: make([]agentapi.PythonInstalled, 0, len(s.Installed)), Last: s.Last, State: s.State, Log: s.Log}
 	for _, i := range s.Installed {
-		out.Installed = append(out.Installed, agentapi.PythonInstalled{Line: i.Line, Version: i.Version})
+		v, build, _ := strings.Cut(i.Version, "+")
+		out.Installed = append(out.Installed, agentapi.PythonInstalled{Line: i.Line, Version: v, Build: build})
 	}
 
 	if out.Log == nil {
@@ -149,5 +158,5 @@ func (in *Installer) Install(ctx context.Context, line string) error {
 
 	ri := rtinstall.Installer{Runtime: Runtime, Root: in.Root, Client: in.Client, Out: in.Out}
 
-	return ri.Install(ctx, rtinstall.Release{Line: rel.Line, Version: rel.Version}, a)
+	return ri.Install(ctx, release(rel), a)
 }

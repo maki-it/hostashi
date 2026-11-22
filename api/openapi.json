@@ -4913,6 +4913,9 @@
       "PythonInstalled": {
         "additionalProperties": false,
         "properties": {
+          "build": {
+            "type": "string"
+          },
           "line": {
             "type": "string"
           },
@@ -4921,6 +4924,7 @@
           }
         },
         "required": [
+          "build",
           "line",
           "version"
         ],
@@ -4938,6 +4942,9 @@
       "PythonRelease": {
         "additionalProperties": false,
         "properties": {
+          "build": {
+            "type": "string"
+          },
           "end": {
             "type": "string"
           },
@@ -4949,6 +4956,7 @@
           }
         },
         "required": [
+          "build",
           "end",
           "line",
           "version"

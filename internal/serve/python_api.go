@@ -43,6 +43,9 @@ type pythonReleaseJSON struct {
 	// Line is the Python line, for example "3.13".
 	Line    string `json:"line"`
 	Version string `json:"version"`
+	// Build is the python-build-standalone release, for example
+	// "20261110".
+	Build string `json:"build"`
 	// End is the line's end of life (YYYY-MM-DD).
 	End string `json:"end"`
 }
@@ -70,7 +73,7 @@ func pythonOut(s agentapi.PythonStatus) pythonJSON {
 	}
 
 	for _, r := range agentapi.PythonReleases {
-		out.Releases = append(out.Releases, pythonReleaseJSON{Line: r.Line, Version: r.Version, End: r.End})
+		out.Releases = append(out.Releases, pythonReleaseJSON{Line: r.Line, Version: r.Version, Build: r.Tag, End: r.End})
 	}
 
 	return out
