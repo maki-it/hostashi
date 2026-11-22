@@ -60,7 +60,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0054 | Site types Node.js, reverse proxy and redirect | Accepted on 2026-11-22 ([adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md)) | No |
 | 0055 | Email notifications for service outages | Accepted on 2026-11-22 ([adr/0055](adr/0055-service-outage-notifications.md)) | No |
 | 0056 | Security headers per site | Accepted on 2026-11-22 ([adr/0056](adr/0056-security-headers-per-site.md)) | No |
-| 0057 | Database size and connection limits per site | Proposed ([adr/0057](adr/0057-database-size-and-connection-limits.md)) | No |
+| 0057 | Database size and connection limits per site | Accepted on 2026-11-22 ([adr/0057](adr/0057-database-size-and-connection-limits.md)) | No |
 | 0058 | OpenAPI specification and CLI parity | Accepted on 2026-11-22 ([adr/0058](adr/0058-openapi-spec-and-cli-parity.md)) | No |
 
 ---
@@ -403,7 +403,7 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0057 Database size and connection limits per site
 
-**Full text (status Proposed, 2026-11-22):** [adr/0057](adr/0057-database-size-and-connection-limits.md). Summary: closes the database gap of ADR-0015. Two new limit values in the presets and per site (Kim, 2026-11-22): a warning threshold for the size of a site's local databases (`warning` 80 %, `critical` 95 %, email at 90 %, no enforcement) and `MAX_USER_CONNECTIONS` for each database user of the site. Seeds small 2 GiB / 20, medium 5 GiB / 40, large 10 GiB / 80 [E]. Read-only agent operation `db.sizes` (information_schema, data plus indexes, cached five minutes in the panel) and `db.site.connections.set` (fixed `ALTER USER ... WITH MAX_USER_CONNECTIONS`, the panel also passes the value with `db.user.create`). Only warnings, no hard size limit (Kim, 2026-11-22). External database servers left out in v1. Migration 0049.
+**Full text (status Accepted, 2026-11-22, by Kim):** [adr/0057](adr/0057-database-size-and-connection-limits.md). Summary: closes the database gap of ADR-0015. Two new limit values in the presets and per site (Kim, 2026-11-22): a warning threshold for the size of a site's local databases (`warning` 80 %, `critical` 95 %, email at 90 %, no enforcement) and `MAX_USER_CONNECTIONS` for each database user of the site. Seeds small 2 GiB / 20, medium 5 GiB / 40, large 10 GiB / 80 [E]. Read-only agent operation `db.sizes` (information_schema, data plus indexes, cached five minutes in the panel) and `db.site.connections.set` (fixed `ALTER USER ... WITH MAX_USER_CONNECTIONS`, the panel also passes the value with `db.user.create`). Only warnings, no hard size limit (Kim, 2026-11-22). External database servers left out in v1. Migration 0049.
 
 ## ADR-0058 OpenAPI specification and CLI parity
 

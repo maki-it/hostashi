@@ -1,6 +1,6 @@
 # ADR-0057 Database size and connection limits per site
 
-**Status:** Proposed. **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0015 (resource limits per site), ADR-0022 (metrics), ADR-0024 (MariaDB databases per site), ADR-0030 (database owner accounts), ADR-0038 (Adminer), ADR-0041 (external database servers), ADR-0044 (outgoing email).
+**Status:** Accepted (Kim, 2026-11-22). **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0015 (resource limits per site), ADR-0022 (metrics), ADR-0024 (MariaDB databases per site), ADR-0030 (database owner accounts), ADR-0038 (Adminer), ADR-0041 (external database servers), ADR-0044 (outgoing email).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -56,4 +56,4 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 - Positive: the gap of ADR-0015 is closed with the same model and page as the other limits. One site's runaway script can no longer take all of MariaDB's connections [A].
 - Negative: a site that legitimately needs more connections gets error 1226 until an admin raises the value; the panel shows the limit next to the users. InnoDB sizes are estimates, so the warning can be off by some percent [U].
 - Not planned: a hard size limit (Kim, 2026-11-22, see Context).
-- Follow-ups: migration 0049 (`limit_presets`, `site_limits`), API fields in the limit endpoints, panel fields on the limits pages, doctor check `site.database`, wiki page update.
+- Implemented: #364 (`db.sizes`, sizes in the API), #368 (limit values, migration 0049, `db.site.connections.set`, panel), #371 (check `site.database`, email warning, wiki page Database limits).
