@@ -4,6 +4,7 @@
 // and HTTPS with a Let's Encrypt certificate. The panel database is the
 // desired state; every change is applied to the web server at once.
 
+import type { NodeApp } from "./node";
 import { ApiError, request } from "./api";
 import { formatBytes } from "./limits";
 
@@ -41,6 +42,8 @@ export type Site = {
   redirect?: SiteRedirect | null;
   // The target of a reverse proxy site, null otherwise (ADR-0054).
   proxy?: SiteProxy | null;
+  // The app of a Node.js site, null otherwise (ADR-0054).
+  node?: NodeApp | null;
   phpPrograms: boolean; // PHP may start programs (exec, system, ...)
   disabled: boolean; // answers 503, PHP stopped
   disabledPage: string; // maintenance page shown while disabled (ADR-0047)
@@ -152,9 +155,10 @@ export type NewSite = {
   domains: string[];
   tls: boolean;
   hsts: boolean;
-  type?: "redirect" | "proxy";
+  type?: "redirect" | "proxy" | "node";
   redirect?: SiteRedirect;
   proxy?: SiteProxy;
+  node?: Pick<NodeApp, "version" | "workdir" | "startKind" | "start">;
 };
 
 /** The target of a reverse proxy site (ADR-0054). */
@@ -356,6 +360,10 @@ export function siteMessage(err: unknown): string {
         return "Turn HTTPS off before deleting the certificate.";
       case "not_letsencrypt":
         return "Only a certificate from Let's Encrypt can be renewed here. Upload a new own certificate instead.";
+      case "node_missing":
+        return "This Node.js version is not installed. An administrator installs it under Node.js versions.";
+      case "apps_unavailable":
+        return "Node.js apps are not available on this panel.";
       case "wrong_site_type":
         return "This is not possible for this type of site.";
       case "site_busy":

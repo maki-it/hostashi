@@ -19,6 +19,7 @@ import { Migrate } from "./Migrate";
 import { Pages } from "./Pages";
 import { Overview } from "./Overview";
 import { Parked } from "./Parked";
+import { NodePage } from "./NodePage";
 import { PHPPage } from "./PHP";
 import { SecondFactor } from "./SecondFactor";
 import { Services } from "./Services";
@@ -136,6 +137,7 @@ export function App() {
         {show("databases") && <Databases role={user.role} query={route.query} onQuery={replaceQuery} />}
         {show("backups") && <Backups query={route.query} onQuery={replaceQuery} />}
         {show("php") && <PHPPage query={route.query} onQuery={replaceQuery} />}
+        {show("node") && <NodePage />}
         {show("limits") && <Presets query={route.query} onQuery={replaceQuery} />}
         {show("health") && <Doctor query={route.query} onQuery={replaceQuery} />}
         {show("services") && <Services />}
