@@ -304,6 +304,30 @@ func toTokenJSON(t store.APIToken) tokenJSON {
 	}
 }
 
+// createdToken is the one answer with a new token's secret, with its
+// warnings.
+func (a authn) createdToken(nt auth.NewToken) tokenCreatedJSON {
+	out := tokenCreatedJSON{tokenJSON: toTokenJSON(nt.Token), Token: nt.Secret, Warnings: []string{}}
+
+	if nt.Token.ExpiresAt == nil {
+		out.Warnings = append(out.Warnings, "never_expires: this token stays valid until it is revoked")
+	}
+
+	if len(a.svc.TokenWarnings(nt.Token)) > 0 {
+		out.Warnings = append(out.Warnings, auth.WarnExpiresSoon+": a scrape with this token stops working within 30 days")
+	}
+
+	for _, s := range nt.Token.Scopes {
+		for _, info := range auth.Scopes() {
+			if info.Name == s && info.HighRisk {
+				out.Warnings = append(out.Warnings, "high_risk_scope: "+s)
+			}
+		}
+	}
+
+	return out
+}
+
 func registerTokens(mux *routeMux, a authn) {
 	mux.Op("GET /api/v1/scopes", openapi.Operation{
 		ID: "listScopes", Tag: "tokens", Summary: "The token scopes the caller's role can use", Out: scopeListJSON{},
@@ -349,23 +373,7 @@ func registerTokens(mux *routeMux, a authn) {
 			return
 		}
 
-		out := tokenCreatedJSON{tokenJSON: toTokenJSON(nt.Token), Token: nt.Secret, Warnings: []string{}}
-
-		if nt.Token.ExpiresAt == nil {
-			out.Warnings = append(out.Warnings, "never_expires: this token stays valid until it is revoked")
-		}
-
-		if len(a.svc.TokenWarnings(nt.Token)) > 0 {
-			out.Warnings = append(out.Warnings, auth.WarnExpiresSoon+": a scrape with this token stops working within 30 days")
-		}
-
-		for _, s := range nt.Token.Scopes {
-			for _, info := range auth.Scopes() {
-				if info.Name == s && info.HighRisk {
-					out.Warnings = append(out.Warnings, "high_risk_scope: "+s)
-				}
-			}
-		}
+		out := a.createdToken(nt)
 
 		writeJSON(w, http.StatusCreated, out)
 	})

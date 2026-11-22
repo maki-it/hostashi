@@ -6,6 +6,7 @@
 //   #/sites/<name>        a site, on its overview tab
 //   #/sites/<name>/<tab>  a tab of a site, for example #/sites/shop/php
 //   #/account             the logged-in account
+//   #/device?code=…       approve a login of the CLI
 // and may end in ?key=value pairs for a table's sort and filter, which
 // pages read with route.query.
 
@@ -27,6 +28,7 @@ export const pages = [
   "import",
   "audit",
   "account",
+  "device",
 ] as const;
 
 export type Page = (typeof pages)[number];
