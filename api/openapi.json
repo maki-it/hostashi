@@ -12765,6 +12765,90 @@
         "x-hostashi-action": "settings:write"
       }
     },
+    "/api/v1/settings/panel-real-ip": {
+      "get": {
+        "operationId": "getPanelRealIP",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealIP"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Which proxies the panel takes the client address from",
+        "tags": [
+          "settings"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "settings:read"
+      },
+      "put": {
+        "operationId": "setPanelRealIP",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebRealIPInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealIP"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Set which proxies the panel takes the client address from",
+        "tags": [
+          "settings"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "settings:write"
+      }
+    },
     "/api/v1/setup": {
       "get": {
         "operationId": "getSetup",

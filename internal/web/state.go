@@ -198,6 +198,10 @@ type Panel struct {
 	// agent sets it from the firewall's panel allowlist when the panel
 	// shares port 443 with the sites (ADR-0042).
 	Allow []string `json:"allow,omitempty"`
+	// RealIP takes the client address from a header of trusted proxies
+	// (ADR-0059); the zero value trusts nobody. The panel allowlist and
+	// the X-Real-IP the panel reads then see the real address.
+	RealIP agentapi.WebRealIP `json:"realIp,omitzero"`
 }
 
 // rootRe keeps nginx syntax out of the root path: no spaces, quotes,
@@ -318,6 +322,10 @@ func (d Desired) Validate() error {
 
 	if p := d.Panel; p != nil {
 		req.Panel = &agentapi.WebPanel{Domain: p.Domain}
+
+		if err := p.RealIP.Validate(); err != nil {
+			return fmt.Errorf("panel: %w", err)
+		}
 
 		for name, f := range map[string]string{"certificate": p.Cert, "key": p.Key} {
 			if f != "" && (!rootRe.MatchString(f) || path.Clean(f) != f) {

@@ -808,7 +808,12 @@ func (h *siteOps) panelFor(p agentapi.WebPanel) (*web.Panel, error) {
 		return nil, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the panel address is not available on this server"}
 	}
 
-	panel := &web.Panel{Domain: p.Domain}
+	realIP, err := h.checkRealIP("panel", p.RealIP)
+	if err != nil {
+		return nil, err
+	}
+
+	panel := &web.Panel{Domain: p.Domain, RealIP: realIP}
 	if !p.TLS {
 		return panel, nil
 	}
