@@ -57,6 +57,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0051 | External PostgreSQL servers | Accepted on 2026-11-21 ([adr/0051](adr/0051-external-postgresql-servers.md)) | Done |
 | 0052 | Service management and server dashboard | Accepted on 2026-11-21 ([adr/0052](adr/0052-service-management-and-server-dashboard.md)) | No |
 | 0053 | Site logs in the panel | Accepted on 2026-11-21 ([adr/0053](adr/0053-site-logs-in-the-panel.md)) | Done |
+| 0054 | Site types Node.js, reverse proxy and redirect | Accepted on 2026-11-22 ([adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md)) | No |
 
 ---
 
@@ -383,3 +384,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0053 Site logs in the panel
 
 **Full text (status Accepted, 2026-11-21, by Kim):** [adr/0053](adr/0053-site-logs-in-the-panel.md). Summary: build the per-site nginx logs of ADR-0021, move the PHP-FPM error log of each site from the journal into a root-owned file, rotate them with logrotate, retention set by admins in the panel (default 7 days, 1 to 365, Kim 2026-11-21), and read them through a typed agent operation `site.logs.read` (closed set of kinds, path built by the agent, cursor for live follow by polling every 2 s). Action `sites.logs:read` for everyone with a grant for the site, new token scope `logs:read`. No new `os/exec` exception, no migration.
+
+## ADR-0054 Site types Node.js, reverse proxy and redirect
+
+**Full text (status Accepted, 2026-11-22, by Kim):** [adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md). Summary: a `type` column for sites (`static`, `php`, `node`, `app`, `proxy`, `redirect`; changeable at any time, Addendum 3). Node.js from the official nodejs.org builds of the supported LTS lines, pinned with SHA-256 in Hostashi, installed by a fixed root unit to `/opt/hostashi/node/<major>`; the app runs as `hostashi-node@<site>` under the site user with a typed start command (`node <file>` or `npm run <script>`), encrypted environment variables and a Hostashi-assigned loopback port that nftables opens only for nginx and the site user. Reverse proxy to one http(s) URL, private networks allowed, loopback and link-local refused, certificate checked by default. Redirect with 301/302/307/308 and optional path. Proxy and redirect sites are created without a Linux account. Addendum 1: static sites with a document root folder below `htdocs` and a single-page-app switch. Addendum 2: own app as a binary (`hostashi-app@<site>`). CloudPanel import takes over `proxy` and `nodejs` sites. No new `os/exec` exception.
