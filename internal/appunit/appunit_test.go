@@ -235,6 +235,14 @@ func TestRemoveAndRecover(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if u, err := e.m.Users("24"); err != nil || !slices.Equal(u, []string{"blog", "shop"}) {
+		t.Errorf("Users(24) = %v, %v", u, err)
+	}
+
+	if u, err := e.m.Users("22"); err != nil || len(u) != 0 {
+		t.Errorf("Users(22) = %v, %v", u, err)
+	}
+
 	// Lost drop-in: Recover writes it and starts only the running app.
 	dir := filepath.Join(e.root, "units", "hostashi-node@shop.service.d")
 	if err := os.Remove(filepath.Join(dir, AppDropIn)); err != nil {

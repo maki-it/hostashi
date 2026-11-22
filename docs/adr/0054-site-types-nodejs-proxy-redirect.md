@@ -195,3 +195,9 @@ Notes on how the app of a Node.js site is built; they change no decision.
 - The app stays stopped while it has no start command, after a stop in the panel (until it is started again, also across reboots), and while the site is disabled. A crash restarts it after 2 seconds, at most 5 times a minute.
 - API: `type: "node"` with `node: {version, workdir, startKind, start}` on `POST /api/v1/sites`; `PUT /api/v1/sites/{name}/node`; `GET /api/v1/sites/{name}/app`; `POST /api/v1/sites/{name}/app/start|stop|restart` (scope `sites:write`, every role on its own sites: the app runs as the site user, like cron jobs). A line that is not installed answers 409 `node_missing`.
 - Not yet: environment variables for the app (encrypted, with their own migration), restarting the apps of a line after it is reinstalled on a newer release, the panel page, and type changes.
+
+## Implementation notes: removing a Node.js line (2026-11-22)
+
+- `POST /api/v1/node/remove {major}` (action `node:remove`, scope `node:install`, admin only, audit `node.remove`). The agent (`node.remove`) refuses a line that a site's app runs on (from its own app state, also for stopped apps), one that is not installed and one while an installation runs.
+- The agent renames `/opt/hostashi/node/<major>` out of the way before it deletes it, so a half-removed line never looks installed, and deletes the line's install log. It runs in the agent, no unit: nothing is downloaded or run.
+- The panel shows a remove button only for an installed line without sites, and asks first [V: container test].

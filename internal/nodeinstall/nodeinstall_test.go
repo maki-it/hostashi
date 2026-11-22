@@ -343,3 +343,67 @@ func TestManager(t *testing.T) {
 		t.Fatalf("Status failed = %+v", st)
 	}
 }
+
+func TestRemove(t *testing.T) {
+	root := t.TempDir()
+	u := &fakeUnits{active: map[string]bool{}}
+	m := &Manager{Units: u, Root: root}
+	ctx := context.Background()
+
+	rel, _ := agentapi.NodeReleaseOf("22")
+	d := filepath.Join(root, Dir, "22")
+
+	if err := os.MkdirAll(filepath.Join(d, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(d, "bin", "node"), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(d, VersionFile), []byte(rel.Version+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	writeLog(t, root, "22", agentapi.NodeDoneMarker+" "+rel.Version+"\n")
+
+	if _, err := m.Remove(ctx, "25", nil); err == nil {
+		t.Error("removed 25")
+	}
+
+	if _, err := m.Remove(ctx, "24", nil); !errors.Is(err, ErrNotInstalled) {
+		t.Errorf("not installed: %v", err)
+	}
+
+	if _, err := m.Remove(ctx, "22", []string{"blog", "shop"}); !errors.Is(err, ErrInUse) || !strings.Contains(err.Error(), "blog, shop") {
+		t.Errorf("in use: %v", err)
+	}
+
+	u.active["24"] = true
+
+	if _, err := m.Remove(ctx, "22", nil); !errors.Is(err, ErrBusy) {
+		t.Errorf("busy: %v", err)
+	}
+
+	u.active["24"] = false
+
+	st, err := m.Remove(ctx, "22", nil)
+	if err != nil || len(st.Installed) != 0 || st.Last != "" || st.State != agentapi.PHPInstallIdle {
+		t.Fatalf("Remove = %+v, %v", st, err)
+	}
+
+	for _, p := range []string{d, filepath.Join(root, Dir, ".old-22"), filepath.Join(root, LogDir, "22.log")} {
+		if _, err := os.Lstat(p); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s left: %v", p, err)
+		}
+	}
+
+	// A file in place of the line is not followed.
+	if err := os.WriteFile(d, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := m.Remove(ctx, "22", nil); err == nil || errors.Is(err, ErrNotInstalled) {
+		t.Errorf("file: %v", err)
+	}
+}

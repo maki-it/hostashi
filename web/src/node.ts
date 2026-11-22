@@ -19,6 +19,7 @@ export type NodeStatus = {
 
 export const getNode = () => request<NodeStatus>("GET", "/node");
 export const installNode = (major: string) => request<NodeStatus>("POST", "/node/install", { major });
+export const removeNode = (major: string) => request<NodeStatus>("POST", "/node/remove", { major });
 
 export type StartKind = "" | "script" | "npm";
 
@@ -102,6 +103,8 @@ export function nodeMessage(err: unknown): string {
       case "forbidden":
         return "Only administrators can install Node.js.";
       case "node_install_refused":
+        if (err.message.includes("apps still run")) return "Sites still run on this version. Move them to another version first.";
+        if (err.message.includes("not installed")) return "This version is not installed.";
         return err.message.includes("running") ? "Another installation is still running. Wait until it is done." : "The installation could not start.";
     }
   }

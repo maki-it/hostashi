@@ -345,9 +345,9 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	registerCloudPanel(s, cfg.CloudPanel, cfg.CloudPanelImport)
 	registerDBJobs(s, cfg.DBJobs)
 	registerFirewall(s, cfg.Firewall)
-	registerPHPInstall(s, cfg.PHPInstall)
+	registerPHPInstall(s, cfg.PHPInstall, cfg.PHP)
 	registerPGClient(s, cfg.PGClient)
-	registerNodeInstall(s, cfg.NodeInstall)
+	registerNodeInstall(s, cfg.NodeInstall, cfg.Apps)
 
 	svcLog := cfg.Log
 	if svcLog == nil {
@@ -1537,7 +1537,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if cfg.PHPInstall == nil {
-		cfg.PHPInstall = &phpinstall.Manager{Units: phpctl.InstallUnits{}, Installed: phpctl.Installed}
+		cfg.PHPInstall = &phpinstall.Manager{Units: phpctl.InstallUnits{}, Removes: phpctl.RemoveUnits{}, Installed: phpctl.Installed}
 	}
 
 	if cfg.PGClient == nil {

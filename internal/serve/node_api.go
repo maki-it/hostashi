@@ -18,6 +18,7 @@ import (
 type NodeInstaller interface {
 	Install(ctx context.Context, major string) (agentapi.NodeStatus, error)
 	Status(ctx context.Context) (agentapi.NodeStatus, error)
+	Remove(ctx context.Context, major string) (agentapi.NodeStatus, error)
 }
 
 // RPCNodeInstaller talks to the agent.
@@ -31,6 +32,11 @@ func (p RPCNodeInstaller) Install(ctx context.Context, major string) (agentapi.N
 // Status implements NodeInstaller.
 func (p RPCNodeInstaller) Status(ctx context.Context) (agentapi.NodeStatus, error) {
 	return agentapi.NodeStatusOp.Call(ctx, p.C, agentapi.NodeStatusRequest{})
+}
+
+// Remove implements NodeInstaller.
+func (p RPCNodeInstaller) Remove(ctx context.Context, major string) (agentapi.NodeStatus, error) {
+	return agentapi.NodeRemove.Call(ctx, p.C, agentapi.NodeRemoveRequest{Major: major})
 }
 
 type nodeReleaseJSON struct {
@@ -70,7 +76,8 @@ func nodeOut(s agentapi.NodeStatus) nodeJSON {
 	return out
 }
 
-// registerNode adds GET /api/v1/node and POST /api/v1/node/install.
+// registerNode adds GET /api/v1/node, POST /api/v1/node/install and
+// POST /api/v1/node/remove.
 func registerNode(mux *routeMux, a authn, p NodeInstaller, st Settings, log *slog.Logger) {
 	fail := func(w http.ResponseWriter, err error, what string) {
 		var ae *agentrpc.Error
@@ -142,5 +149,39 @@ func registerNode(mux *routeMux, a authn, p NodeInstaller, st Settings, log *slo
 
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, http.StatusAccepted, nodeOut(s))
+	}))
+	mux.Op("POST /api/v1/node/remove", openapi.Operation{
+		ID: "removeNode", Tag: "node", Summary: "Remove an installed Node.js line that no site's app runs on",
+		In: nodeInstallJSON{}, Out: nodeJSON{},
+	}, a.allow("node:remove", func(w http.ResponseWriter, r *http.Request, pr auth.Principal) {
+		var in nodeInstallJSON
+
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if err := agentapi.ValidateNodeMajor(in.Major); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "major must be one of the Node.js LTS lines Hostashi installs")
+
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		s, err := p.Remove(ctx, in.Major)
+		if err != nil {
+			fail(w, err, "node remove")
+
+			return
+		}
+
+		uid := pr.User.ID
+		if err := st.Audit(r.Context(), &uid, "node.remove", "", map[string]string{"major": in.Major}); err != nil {
+			log.ErrorContext(r.Context(), "audit log", "action", "node.remove", "err", err)
+		}
+
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, nodeOut(s))
 	}))
 }

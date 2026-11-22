@@ -529,14 +529,16 @@ do_php() {
 }
 
 # More PHP versions from sury.org (ADR-0019, ADR-0036). The step always
-# installs the script packaging/php/php-install and its unit
-# hostashi-php-install@.service, which the panel starts to install a
-# version; with --php-versions it also runs the script for those versions.
+# installs the script packaging/php/php-install and its units
+# hostashi-php-install@.service and hostashi-php-remove@.service, which the
+# panel starts to install or remove a version; with --php-versions it also
+# runs the script for those versions.
 # The script keeps the requested versions, so a later run without the
 # option keeps them, and pins the distribution's PHP as the default.
 PHP_INSTALL_SRC=${HOSTASHI_PHP_SRC:-$HERE/php}/php-install
 PHP_INSTALL_BIN=/usr/local/lib/hostashi/php-install
 PHP_INSTALL_UNIT=hostashi-php-install@.service
+PHP_REMOVE_UNIT=hostashi-php-remove@.service
 PHP_INSTALL_LOGS=/var/lib/hostashi-agent/php-install
 
 php_allowed() { local v; for v in "${PHP_VERSIONS[@]}"; do [ "$v" = "$1" ] && return 0; done; return 1; }
@@ -548,17 +550,20 @@ chk_phpversions() {
   dir_ok "$PHP_INSTALL_LOGS" 700 root:root || { echo "$PHP_INSTALL_LOGS"; return 1; }
   file_matches "$PHP_INSTALL_BIN" 0755 root:root <"$PHP_INSTALL_SRC" || { echo "php-install differs"; return 1; }
   file_matches "/etc/systemd/system/$PHP_INSTALL_UNIT" 0644 root:root <"$UNIT_DIR/$PHP_INSTALL_UNIT" || { echo "$PHP_INSTALL_UNIT differs"; return 1; }
+  file_matches "/etc/systemd/system/$PHP_REMOVE_UNIT" 0644 root:root <"$UNIT_DIR/$PHP_REMOVE_UNIT" || { echo "$PHP_REMOVE_UNIT differs"; return 1; }
   # shellcheck disable=SC2046 # one version per word
   why=$(HOSTASHI_STATE_DIR=$STATE_DIR HOSTASHI_OS_RELEASE=$OS_RELEASE "$PHP_INSTALL_SRC" check $(php_requested)) || { echo "$why"; return 1; }
 }
 do_phpversions() {
-  local rc
+  local rc rc2
   install -d -m 0755 -o root -g root "${PHP_INSTALL_BIN%/*}" || return 1
   install -d -m 0700 -o root -g root "$PHP_INSTALL_LOGS" || return 1
   write_file "$PHP_INSTALL_BIN" 0755 root:root <"$PHP_INSTALL_SRC"; [ $? -le 1 ] || return 1
   write_file "/etc/systemd/system/$PHP_INSTALL_UNIT" 0644 root:root <"$UNIT_DIR/$PHP_INSTALL_UNIT"; rc=$?
   [ "$rc" -le 1 ] || return 1
-  if [ "$rc" = 0 ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
+  write_file "/etc/systemd/system/$PHP_REMOVE_UNIT" 0644 root:root <"$UNIT_DIR/$PHP_REMOVE_UNIT"; rc2=$?
+  [ "$rc2" -le 1 ] || return 1
+  if [ "$rc" = 0 ] || [ "$rc2" = 0 ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
   # shellcheck disable=SC2046 # one version per word
   if ! HOSTASHI_STATE_DIR=$STATE_DIR HOSTASHI_OS_RELEASE=$OS_RELEASE "$PHP_INSTALL_BIN" check $(php_requested) >/dev/null; then
     [ -n "$PHP_REQUEST" ] || set -- $(cat "$STATE_DIR/php-versions" 2>/dev/null)

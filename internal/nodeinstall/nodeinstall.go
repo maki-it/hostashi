@@ -66,6 +66,10 @@ var (
 	ErrInstalled = errors.New("nodeinstall: this Node.js release is already installed")
 	// ErrChecksum: the download is not the pinned build.
 	ErrChecksum = errors.New("nodeinstall: SHA-256 of the download does not match")
+	// ErrNotInstalled: the line is not installed.
+	ErrNotInstalled = errors.New("nodeinstall: this Node.js line is not installed")
+	// ErrInUse: an app still runs on the line.
+	ErrInUse = errors.New("nodeinstall: apps still run on this Node.js line")
 	// ErrArch: nodejs.org has no build Hostashi pins for this machine.
 	ErrArch = errors.New("nodeinstall: no pinned Node.js build for this architecture")
 )
@@ -615,4 +619,55 @@ func (m *Manager) lastRun(ctx context.Context) (agentapi.NodeStatus, error) {
 	}
 
 	return st, nil
+}
+
+// Remove deletes an installed line. users are the sites whose app runs on
+// it (appunit.Manager.Users): a line in use is refused, so no app loses
+// its node. The tree is first renamed out of the way, so a half-removed
+// line never looks installed, and the line's install log goes with it.
+func (m *Manager) Remove(ctx context.Context, major string, users []string) (agentapi.NodeStatus, error) {
+	if err := agentapi.ValidateNodeMajor(major); err != nil {
+		return agentapi.NodeStatus{}, err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if busy, err := m.running(ctx); err != nil {
+		return agentapi.NodeStatus{}, err
+	} else if busy != "" {
+		return agentapi.NodeStatus{}, ErrBusy
+	}
+
+	if len(users) > 0 {
+		return agentapi.NodeStatus{}, fmt.Errorf("%w: %s", ErrInUse, strings.Join(users, ", "))
+	}
+
+	dir := m.path(filepath.Join(Dir, major))
+	if fi, err := os.Lstat(dir); errors.Is(err, os.ErrNotExist) {
+		return agentapi.NodeStatus{}, ErrNotInstalled
+	} else if err != nil {
+		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: %w", err)
+	} else if !fi.IsDir() {
+		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: %s is not a directory", dir)
+	}
+
+	old := m.path(filepath.Join(Dir, ".old-"+major))
+	if err := os.RemoveAll(old); err != nil {
+		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: %w", err)
+	}
+
+	if err := os.Rename(dir, old); err != nil {
+		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: remove %s: %w", dir, err)
+	}
+
+	if err := os.RemoveAll(old); err != nil {
+		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: remove %s: %w", old, err)
+	}
+
+	if err := os.Remove(m.logPath(major)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return agentapi.NodeStatus{}, fmt.Errorf("nodeinstall: %w", err)
+	}
+
+	return m.Status(ctx)
 }

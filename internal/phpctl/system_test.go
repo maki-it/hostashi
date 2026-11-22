@@ -30,3 +30,16 @@ func TestAppUnitNames(t *testing.T) {
 		t.Error("property ExecStart accepted")
 	}
 }
+
+func TestPHPRemoveUnitName(t *testing.T) {
+	got, err := removeUnit("8.2")
+	if err != nil || got != "hostashi-php-remove@8.2.service" {
+		t.Fatalf("8.2: %q %v", got, err)
+	}
+
+	for _, v := range []string{"", "8.0", "8.2.service", "8.2 ", "../8.2"} {
+		if _, err := removeUnit(v); err == nil {
+			t.Errorf("%q accepted", v)
+		}
+	}
+}

@@ -9,6 +9,8 @@ export type PHPInstallState = "idle" | "running" | "succeeded" | "failed";
 
 export type PHPInstall = {
   version?: string;
+  /** What the last run did; missing while idle. */
+  action?: "install" | "remove";
   state: PHPInstallState;
   log: string[];
   repository: boolean;
@@ -19,6 +21,8 @@ export const getPHPInstall = () => request<PHPInstall>("GET", "/php/install");
 
 export const installPHP = (version: string, confirmEol: boolean) =>
   request<PHPInstall>("POST", "/php/install", { version, confirmEol });
+
+export const removePHP = (version: string) => request<PHPInstall>("POST", "/php/remove", { version });
 
 export type Support = "active" | "security" | "eol";
 
@@ -48,7 +52,15 @@ export function phpMessage(err: unknown): string {
           ? "Another installation is still running. Wait until it is done."
           : err.message.includes("already installed")
             ? "This version is already installed."
-            : "The installation could not start.";
+            : err.message.includes("still run")
+              ? "Sites still run on this version. Move them to another version first."
+              : err.message.includes("not installed")
+                ? "This version is not installed."
+                : "The installation could not start.";
+      case "php_in_use":
+        return "Sites still run on this version. Move them to another version first.";
+      case "php_default":
+        return "The distribution's PHP stays installed.";
       case "agent_timeout":
       case "agent_unavailable":
         return "The server did not answer. Try again in a moment.";
