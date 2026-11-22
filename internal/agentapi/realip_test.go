@@ -107,8 +107,8 @@ func TestRealIPCheckOwn(t *testing.T) {
 		"cloudflare":      {Cloudflare: true},
 		"load balancer":   {Ranges: []string{"10.0.0.2"}},
 		"other network":   {Ranges: []string{"10.1.0.0/16"}},
-		"neighbor":       {Ranges: []string{"203.0.113.11"}},
-		"neighbor v6":    {Ranges: []string{"2001:db8::11"}},
+		"neighbor":        {Ranges: []string{"203.0.113.11"}},
+		"neighbor v6":     {Ranges: []string{"2001:db8::11"}},
 		"different block": {Ranges: []string{"198.51.100.0/24"}},
 	} {
 		if err := r.CheckOwn(own); err != nil {
