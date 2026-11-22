@@ -421,7 +421,9 @@ func (h *siteOps) register(s *agentrpc.Server) {
 				return agentapi.SiteDeleteResponse{}, err
 			}
 
-			if cur.Users()[req.User] {
+			// A site that stays as a redirect or reverse proxy does not
+			// use its account (ADR-0054 addendum 3).
+			if cur.Users()[req.User] && (!req.AccountOnly || !h.webOnlyIn(cur, req.User)) {
 				return agentapi.SiteDeleteResponse{}, &agentrpc.Error{
 					Code: agentrpc.CodePrecondition, Message: "site still has a virtual host, remove it with web.apply first",
 				}
@@ -464,7 +466,7 @@ func (h *siteOps) register(s *agentrpc.Server) {
 
 		// Redirect and reverse proxy sites have no account (ADR-0054): only
 		// the certificate is left to remove.
-		if _, ok := h.m.Home(req.User); !ok && h.certs != nil && req.User != agentapi.PanelCert && agentapi.ValidateParkName(req.User) != nil {
+		if _, ok := h.m.Home(req.User); !ok && !req.AccountOnly && h.certs != nil && req.User != agentapi.PanelCert && agentapi.ValidateParkName(req.User) != nil {
 			if err := h.certs.Remove(req.User); err != nil {
 				h.log.ErrorContext(ctx, "remove certificate of deleted site", "site", req.User, "err", err)
 			}
@@ -509,7 +511,7 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			}
 		}
 
-		if h.certs != nil {
+		if h.certs != nil && !req.AccountOnly {
 			if err := h.certs.Remove(req.User); err != nil {
 				h.log.ErrorContext(ctx, "remove certificate of deleted site", "site", req.User, "err", err)
 			}
@@ -925,7 +927,13 @@ func (h *siteOps) webOnly(name string) bool {
 		return false
 	}
 
-	for _, s := range cur.Sites {
+	return h.webOnlyIn(cur, name)
+}
+
+// webOnlyIn reports whether d serves the site only as a redirect or
+// reverse proxy.
+func (*siteOps) webOnlyIn(d web.Desired, name string) bool {
+	for _, s := range d.Sites {
 		if s.User == name && (s.Redirect != nil || s.Proxy != nil) {
 			return true
 		}
