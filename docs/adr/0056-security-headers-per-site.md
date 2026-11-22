@@ -67,7 +67,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 - Site settings get a card "Security headers" with one row per header (switch or choice, short help text, link to MDN), a CSP text field with "report only" as the first choice, and a warning that a wrong CSP breaks the site. UI as screenshots first.
 - API: `GET` and `PUT /api/v1/sites/{name}/headers` with typed fields; `PUT` replaces the whole set. Action `sites.headers:write` for everyone with a grant for the site, like HSTS and PHP settings, because the headers only change the site itself (ADR-0035). No new token scope: `sites:write` covers it, `sites:read` covers `GET`.
-- Storage: migration 0047 with one table `site_headers` (one row per site, typed columns); no row means all off.
+- Storage: migration 0048 with one table `site_headers` (one row per site, typed columns); no row means all off.
 - Agent: `web.Site` gets a typed `Headers` struct; `web.apply` checks it again and renders it. No new agent operation, no new `os/exec` exception, `nginx -t` with rollback as today.
 - Audit log: every change with the old and new values (as for every site setting).
 
