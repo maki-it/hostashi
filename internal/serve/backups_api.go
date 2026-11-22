@@ -16,6 +16,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/backup"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -129,6 +130,24 @@ type backupJSON struct {
 	Status agentapi.BackupStatus `json:"status"`
 }
 
+// backupHostKeyJSON is a host key the target presented, to confirm.
+type backupHostKeyJSON struct {
+	Key         string `json:"key"`
+	Fingerprint string `json:"fingerprint"`
+}
+
+type backupSnapshotListJSON struct {
+	Snapshots []agentapi.BackupSnapshot `json:"snapshots"`
+}
+
+type backupHostKeyRequest struct {
+	Key string `json:"key"`
+}
+
+type restoreImportRequest struct {
+	Database string `json:"database"`
+}
+
 func backupFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 	var ae *agentrpc.Error
 
@@ -222,7 +241,9 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 		writeJSON(w, code, backupJSON{BackupInfo: i, Status: st})
 	}
 
-	mux.HandleFunc("GET /api/v1/backups", a.allow("backups.server:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/backups", openapi.Operation{
+		ID: "getBackups", Tag: "backups", Summary: "Backup settings and the state of the last run", Out: backupJSON{},
+	}, a.allow("backups.server:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		i, err := b.Get(r.Context())
 		if err != nil {
 			backupFail(log, w, err, "backup settings")
@@ -233,7 +254,9 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 		info(w, r, http.StatusOK, i)
 	}))
 
-	mux.HandleFunc("PUT /api/v1/backups/settings", a.allow("backups.server:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("PUT /api/v1/backups/settings", openapi.Operation{
+		ID: "setBackupSettings", Tag: "backups", Summary: "Set the backup target, retention and window", In: agentapi.BackupSettings{}, Out: backupJSON{},
+	}, a.allow("backups.server:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		var s agentapi.BackupSettings
 		if !decodeJSON(w, r, &s) {
 			return
@@ -257,7 +280,9 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 
 	// The scan only reads what the server presents; nothing is trusted
 	// until PUT /hostkey with the key the administrator confirmed.
-	mux.HandleFunc("POST /api/v1/backups/hostkey/scan", a.allow("backups.server:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("POST /api/v1/backups/hostkey/scan", openapi.Operation{
+		ID: "scanBackupHostKey", Tag: "backups", Summary: "Read the host key the backup target presents", Out: backupHostKeyJSON{},
+	}, a.allow("backups.server:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		i, err := b.Get(r.Context())
 		if err != nil {
 			backupFail(log, w, err, "backup settings")
@@ -285,16 +310,16 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]string{
-			"key":         strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))),
-			"fingerprint": ssh.FingerprintSHA256(key),
+		writeJSON(w, http.StatusOK, backupHostKeyJSON{
+			Key:         strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))),
+			Fingerprint: ssh.FingerprintSHA256(key),
 		})
 	}))
 
-	mux.HandleFunc("PUT /api/v1/backups/hostkey", a.allow("backups.server:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
-		var in struct {
-			Key string `json:"key"`
-		}
+	mux.Op("PUT /api/v1/backups/hostkey", openapi.Operation{
+		ID: "setBackupHostKey", Tag: "backups", Summary: "Trust a confirmed host key of the backup target", In: backupHostKeyRequest{}, Out: backupJSON{},
+	}, a.allow("backups.server:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		var in backupHostKeyRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -315,7 +340,9 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 		info(w, r, http.StatusOK, i)
 	}))
 
-	mux.HandleFunc("POST /api/v1/backups/run", a.allow("backups.server:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("POST /api/v1/backups/run", openapi.Operation{
+		ID: "runBackup", Tag: "backups", Summary: "Start a backup now", Status: http.StatusAccepted,
+	}, a.allow("backups.server:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		if err := b.Run(r.Context()); err != nil {
 			backupFail(log, w, err, "start backup")
 
@@ -337,10 +364,12 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 			s = []agentapi.BackupSnapshot{}
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]agentapi.BackupSnapshot{"snapshots": s})
+		writeJSON(w, http.StatusOK, backupSnapshotListJSON{Snapshots: s})
 	}
 
-	mux.HandleFunc("GET /api/v1/sites/{name}/backups", a.allow("backups:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/backups", openapi.Operation{
+		ID: "listSiteBackups", Tag: "backups", Summary: "List the snapshots of a site", Out: backupSnapshotListJSON{},
+	}, a.allow("backups:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		name := r.PathValue("name")
 		if agentapi.ValidateSiteUser(name) != nil {
 			writeError(w, http.StatusNotFound, "not_found", "no such site")
@@ -351,14 +380,18 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 		snapshots(w, r, name)
 	}))
 
-	mux.HandleFunc("GET /api/v1/backups/panel", a.allow("backups.server:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/backups/panel", openapi.Operation{
+		ID: "listPanelBackups", Tag: "backups", Summary: "List the snapshots of the panel itself", Out: backupSnapshotListJSON{},
+	}, a.allow("backups.server:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		snapshots(w, r, "")
 	}))
 
 	// A restore writes a new directory restore-<time> into the site's
 	// home and never touches live files; it is still high-risk, because
 	// it puts old data back into reach of the site.
-	mux.HandleFunc("POST /api/v1/sites/{name}/backups/{snapshot}/restore", a.allow("backups:restore", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("POST /api/v1/sites/{name}/backups/{snapshot}/restore", openapi.Operation{
+		ID: "restoreSiteBackup", Tag: "backups", Summary: "Restore a snapshot into a new directory of the site", Out: agentapi.BackupRestore{}, Status: http.StatusAccepted,
+	}, a.allow("backups:restore", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		req := agentapi.BackupRestoreRequest{Site: r.PathValue("name"), Snapshot: r.PathValue("snapshot")}
 		if req.Validate() != nil {
 			writeError(w, http.StatusNotFound, "not_found", "no such snapshot or restore")
@@ -382,7 +415,9 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 	// data that existed before it (ADR-0008, recommendation 7). The import
 	// itself is the agent's db.import, with a job user that holds rights on
 	// that database only.
-	mux.HandleFunc("POST /api/v1/backups/restores/{id}/import", a.allowSite("backups:restore", restoreSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST /api/v1/backups/restores/{id}/import", openapi.Operation{
+		ID: "importRestoredDump", Tag: "backups", Summary: "Import a restored dump into a new database of the site", In: restoreImportRequest{}, Out: agentapi.DBJob{}, Status: http.StatusAccepted,
+	}, a.allowSite("backups:restore", restoreSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		id := r.PathValue("id")
 		if (agentapi.BackupRestoreGetRequest{ID: id}).Validate() != nil {
 			writeError(w, http.StatusNotFound, "not_found", "no such snapshot or restore")
@@ -390,9 +425,7 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 			return
 		}
 
-		var in struct {
-			Database string `json:"database"`
-		}
+		var in restoreImportRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -487,7 +520,9 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 		writeJSON(w, http.StatusAccepted, job)
 	}))
 
-	mux.HandleFunc("GET /api/v1/backups/imports/{id}", a.allowSite("backups:read", importSite, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/backups/imports/{id}", openapi.Operation{
+		ID: "getRestoreImport", Tag: "backups", Summary: "State of a restored dump import", Out: agentapi.DBJob{},
+	}, a.allowSite("backups:read", importSite, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		id := r.PathValue("id")
 		if (agentapi.DBJobRequest{ID: id}).Validate() != nil {
 			writeError(w, http.StatusNotFound, "not_found", "no such import")
@@ -505,7 +540,9 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 		writeJSON(w, http.StatusOK, job)
 	}))
 
-	mux.HandleFunc("GET /api/v1/backups/restores/{id}", a.allowSite("backups:read", restoreSite, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/backups/restores/{id}", openapi.Operation{
+		ID: "getRestore", Tag: "backups", Summary: "State of a restore", Out: agentapi.BackupRestore{},
+	}, a.allowSite("backups:read", restoreSite, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		id := r.PathValue("id")
 		if (agentapi.BackupRestoreGetRequest{ID: id}).Validate() != nil {
 			writeError(w, http.StatusNotFound, "not_found", "no such snapshot or restore")

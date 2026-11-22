@@ -14,6 +14,7 @@ import (
 	"github.com/maki-it/hostashi/internal/cloudpanel/snippetdraft"
 	"github.com/maki-it/hostashi/internal/cpmigrate"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -37,14 +38,21 @@ func toSnippetsJSON(sn store.SiteSnippets) snippetsJSON {
 // snippetErrorJSON answers rejected snippets with every problem per slot.
 type snippetErrorJSON struct {
 	Error    apiErrorBody                  `json:"error"`
-	Problems agentapi.SnippetCheckResponse `json:"problems"`
+	Problems agentapi.SnippetCheckResponse `json:"problems,omitzero"`
+}
+
+type snippetsRequest struct {
+	Server *string `json:"server"`
+	Root   *string `json:"root"`
 }
 
 // maxSnippetBody fits two snippets of the maximum size with JSON escaping.
 const maxSnippetBody = 4*agentapi.MaxSnippetBytes + 1024
 
 func registerSnippets(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/sites/{name}/snippets", a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/snippets", openapi.Operation{
+		ID: "getSiteSnippets", Tag: "sites", Summary: "Get the site's own nginx snippets", Out: snippetsJSON{},
+	}, a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		sn, err := svc.Snippets(r.Context(), r.PathValue("name"))
 		if err != nil {
 			siteFail(log, w, err, "read snippets")
@@ -55,11 +63,10 @@ func registerSnippets(mux *routeMux, a authn, svc *hosting.Service, log *slog.Lo
 		writeJSON(w, http.StatusOK, toSnippetsJSON(sn))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/snippets", a.allow("sites.snippets:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			Server *string `json:"server"`
-			Root   *string `json:"root"`
-		}
+	mux.Op("PUT /api/v1/sites/{name}/snippets", openapi.Operation{
+		ID: "setSiteSnippets", Tag: "sites", Summary: "Set the site's own nginx snippets", In: snippetsRequest{}, Out: snippetsJSON{}, Errors: map[int]any{http.StatusUnprocessableEntity: snippetErrorJSON{}},
+	}, a.allow("sites.snippets:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in snippetsRequest
 		if !decodeJSONLimit(w, r, &in, maxSnippetBody) {
 			return
 		}

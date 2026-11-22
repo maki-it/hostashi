@@ -13,6 +13,7 @@ import (
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/dbserver"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -25,6 +26,57 @@ type databaseJSON struct {
 	// SizeBytes is the size of a local database (ADR-0015), absent for
 	// external ones and when the measurement failed.
 	SizeBytes *int64 `json:"sizeBytes,omitempty"`
+}
+
+type databaseListJSON struct {
+	Databases []databaseJSON `json:"databases"`
+}
+
+// databaseCreatedJSON is a new database; Password is set when the panel
+// generated it.
+type databaseCreatedJSON struct {
+	databaseJSON
+
+	Password string `json:"password,omitempty"`
+}
+
+type dbUserCreatedJSON struct {
+	User     string `json:"user"`
+	Database string `json:"database"`
+	Password string `json:"password"`
+}
+
+type dbPasswordJSON struct {
+	User     string `json:"user"`
+	Password string `json:"password"`
+}
+
+type dbDumpRequest struct {
+	Path string `json:"path"`
+}
+
+type dbToolSessionListJSON struct {
+	Sessions []hosting.DBToolSessionView `json:"sessions"`
+}
+
+type databaseCreateRequest struct {
+	Name     string `json:"name"`
+	Server   string `json:"server"`   // optional, the default server if empty
+	User     string `json:"user"`     // optional first user
+	Password string `json:"password"` // optional, generated if empty
+}
+
+type dbUserCreateRequest struct {
+	User     string `json:"user"`
+	Password string `json:"password"`
+}
+
+type dbPasswordRequest struct {
+	Password string `json:"password"` // empty: generate one
+}
+
+type dbToolOpenRequest struct {
+	Minutes int `json:"minutes"`
 }
 
 func toDatabaseJSON(d store.Database) databaseJSON {
@@ -132,18 +184,24 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 			}
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]databaseJSON{"databases": out})
+		writeJSON(w, http.StatusOK, databaseListJSON{Databases: out})
 	}
 
-	mux.HandleFunc("GET /api/v1/databases", a.allow("databases:list", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("GET /api/v1/databases", openapi.Operation{
+		ID: "listDatabases", Tag: "databases", Summary: "List the databases of all visible sites", Out: databaseListJSON{},
+	}, a.allow("databases:list", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		list(w, r, p, "")
 	}))
 
-	mux.HandleFunc("GET /api/v1/sites/{name}/databases", a.allow("databases:read", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/databases", openapi.Operation{
+		ID: "listSiteDatabases", Tag: "databases", Summary: "List the databases of a site", Out: databaseListJSON{},
+	}, a.allow("databases:read", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		list(w, r, p, r.PathValue("name"))
 	}))
 
-	mux.HandleFunc("GET /api/v1/databases/{db}", a.allowSite("databases:read", dbSite, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/databases/{db}", openapi.Operation{
+		ID: "getDatabase", Tag: "databases", Summary: "Get a database", Out: databaseJSON{},
+	}, a.allowSite("databases:read", dbSite, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		d, err := svc.Database(r.Context(), r.PathValue("db"))
 		if err != nil {
 			dbFail(log, w, err, "get database")
@@ -154,13 +212,10 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		writeJSON(w, http.StatusOK, toDatabaseJSON(d).withSize(dbSizes(r, svc, log)))
 	}))
 
-	mux.HandleFunc("POST /api/v1/sites/{name}/databases", a.allow("databases:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			Name     string `json:"name"`
-			Server   string `json:"server"`   // optional, the default server if empty
-			User     string `json:"user"`     // optional first user
-			Password string `json:"password"` // optional, generated if empty
-		}
+	mux.Op("POST /api/v1/sites/{name}/databases", openapi.Operation{
+		ID: "createDatabase", Tag: "databases", Summary: "Create a database for a site", In: databaseCreateRequest{}, Out: databaseCreatedJSON{}, Status: http.StatusCreated,
+	}, a.allow("databases:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in databaseCreateRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -177,13 +232,12 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 			return
 		}
 
-		writeJSON(w, http.StatusCreated, struct {
-			databaseJSON
-			Password string `json:"password,omitempty"`
-		}{toDatabaseJSON(d), pw})
+		writeJSON(w, http.StatusCreated, databaseCreatedJSON{toDatabaseJSON(d), pw})
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/databases/{db}", a.allowSite("databases:delete", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("DELETE /api/v1/databases/{db}", openapi.Operation{
+		ID: "deleteDatabase", Tag: "databases", Summary: "Delete a database and its users",
+	}, a.allowSite("databases:delete", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -196,11 +250,10 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
-	mux.HandleFunc("POST /api/v1/databases/{db}/users", a.allowSite("databases:write", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			User     string `json:"user"`
-			Password string `json:"password"`
-		}
+	mux.Op("POST /api/v1/databases/{db}/users", openapi.Operation{
+		ID: "createDatabaseUser", Tag: "databases", Summary: "Add a user to a database", In: dbUserCreateRequest{}, Out: dbUserCreatedJSON{}, Status: http.StatusCreated,
+	}, a.allowSite("databases:write", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in dbUserCreateRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -215,13 +268,13 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 			return
 		}
 
-		writeJSON(w, http.StatusCreated, map[string]string{"user": in.User, "database": r.PathValue("db"), "password": pw})
+		writeJSON(w, http.StatusCreated, dbUserCreatedJSON{User: in.User, Database: r.PathValue("db"), Password: pw})
 	}))
 
-	mux.HandleFunc("PUT /api/v1/databases/{db}/users/{user}/password", a.allowSite("databases:write", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			Password string `json:"password"` // empty: generate one
-		}
+	mux.Op("PUT /api/v1/databases/{db}/users/{user}/password", openapi.Operation{
+		ID: "setDatabaseUserPassword", Tag: "databases", Summary: "Set or generate a database user's password", In: dbPasswordRequest{}, Out: dbPasswordJSON{},
+	}, a.allowSite("databases:write", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in dbPasswordRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -236,10 +289,12 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]string{"user": r.PathValue("user"), "password": pw})
+		writeJSON(w, http.StatusOK, dbPasswordJSON{User: r.PathValue("user"), Password: pw})
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/databases/{db}/users/{user}", a.allowSite("databases:write", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("DELETE /api/v1/databases/{db}/users/{user}", openapi.Operation{
+		ID: "deleteDatabaseUser", Tag: "databases", Summary: "Remove a database user",
+	}, a.allowSite("databases:write", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -257,9 +312,7 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 	// the site's home; an export never overwrites a file.
 	dump := func(name string, start func(context.Context, int64, string, string) (agentapi.DBJob, error)) func(http.ResponseWriter, *http.Request, auth.Principal) {
 		return func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-			var in struct {
-				Path string `json:"path"`
-			}
+			var in dbDumpRequest
 			if !decodeJSON(w, r, &in) {
 				return
 			}
@@ -278,12 +331,18 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		}
 	}
 
-	mux.HandleFunc("POST /api/v1/databases/{db}/import", a.allowSite("databases:write", dbSite, dump("import", svc.ImportDatabase)))
-	mux.HandleFunc("POST /api/v1/databases/{db}/export", a.allowSite("databases:write", dbSite, dump("export", svc.ExportDatabase)))
+	mux.Op("POST /api/v1/databases/{db}/import", openapi.Operation{
+		ID: "importDatabase", Tag: "databases", Summary: "Import a dump file from the site's home", In: dbDumpRequest{}, Out: agentapi.DBJob{}, Status: http.StatusAccepted,
+	}, a.allowSite("databases:write", dbSite, dump("import", svc.ImportDatabase)))
+	mux.Op("POST /api/v1/databases/{db}/export", openapi.Operation{
+		ID: "exportDatabase", Tag: "databases", Summary: "Export the database to a file in the site's home", In: dbDumpRequest{}, Out: agentapi.DBJob{}, Status: http.StatusAccepted,
+	}, a.allowSite("databases:write", dbSite, dump("export", svc.ExportDatabase)))
 
 	// The web database tool (ADR-0038): the answer is an address with a
 	// one-time ticket for a new tab. It is never cached.
-	mux.HandleFunc("GET /api/v1/dbtool", a.allow("databases:list", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/dbtool", openapi.Operation{
+		ID: "getDBTool", Tag: "databases", Summary: "State of the web database tool", Out: hosting.DBToolStatus{},
+	}, a.allow("databases:list", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		st, err := svc.DBTool(r.Context())
 		if err != nil {
 			dbFail(log, w, err, "database tool status")
@@ -294,10 +353,10 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		writeJSON(w, http.StatusOK, st)
 	}))
 
-	mux.HandleFunc("POST /api/v1/databases/{db}/tool", a.allowSite("databases:open", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			Minutes int `json:"minutes"`
-		}
+	mux.Op("POST /api/v1/databases/{db}/tool", openapi.Operation{
+		ID: "openDatabaseTool", Tag: "databases", Summary: "Open the database in the web database tool", In: dbToolOpenRequest{}, Out: hosting.DBToolSession{}, Status: http.StatusCreated,
+	}, a.allowSite("databases:open", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in dbToolOpenRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -318,7 +377,9 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 
 	// Open sessions of the tool (ADR-0038 addendum 1): whoever may open a
 	// database in the tool may see, extend and end its sessions.
-	mux.HandleFunc("GET /api/v1/databases/{db}/tool/sessions", a.allowSite("databases:open", dbSite, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/databases/{db}/tool/sessions", openapi.Operation{
+		ID: "listDatabaseToolSessions", Tag: "databases", Summary: "List open sessions of the database tool", Out: dbToolSessionListJSON{},
+	}, a.allowSite("databases:open", dbSite, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -329,10 +390,12 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"sessions": list})
+		writeJSON(w, http.StatusOK, dbToolSessionListJSON{Sessions: list})
 	}))
 
-	mux.HandleFunc("POST /api/v1/databases/{db}/tool/sessions/{id}/extend", a.allowSite("databases:open", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST /api/v1/databases/{db}/tool/sessions/{id}/extend", openapi.Operation{
+		ID: "extendDatabaseToolSession", Tag: "databases", Summary: "Extend a database tool session", Out: hosting.DBToolSessionView{},
+	}, a.allowSite("databases:open", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -346,7 +409,9 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		writeJSON(w, http.StatusOK, v)
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/databases/{db}/tool/sessions/{id}", a.allowSite("databases:open", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("DELETE /api/v1/databases/{db}/tool/sessions/{id}", openapi.Operation{
+		ID: "endDatabaseToolSession", Tag: "databases", Summary: "End a database tool session",
+	}, a.allowSite("databases:open", dbSite, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -359,7 +424,9 @@ func registerDatabases(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
-	mux.HandleFunc("GET /api/v1/databases/{db}/jobs/{id}", a.allowSite("databases:read", dbSite, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/databases/{db}/jobs/{id}", openapi.Operation{
+		ID: "getDatabaseJob", Tag: "databases", Summary: "State of an import or export job", Out: agentapi.DBJob{},
+	}, a.allowSite("databases:read", dbSite, func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 

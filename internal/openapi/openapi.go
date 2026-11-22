@@ -25,6 +25,8 @@ type Param struct {
 	// Type is a JSON Schema type: "string" (default), "integer" or "boolean".
 	Type     string
 	Required bool
+	// Repeated allows the parameter several times (?path=a&path=b).
+	Repeated bool
 }
 
 // Operation describes one route.
@@ -36,7 +38,9 @@ type Operation struct {
 	Summary string
 	// In is the JSON request body (a value of the Go type), nil for none.
 	In any
-	// InContentType replaces application/json for In, e.g. for uploads.
+	// InContentType replaces application/json, e.g. for uploads. With In
+	// set, In describes the body (e.g. the fields of multipart/form-data,
+	// with File for a file part); without, the body is raw binary.
 	InContentType string
 	// Out is the response body (a value of the Go type), nil for none.
 	Out any
@@ -233,7 +237,12 @@ func operation(r *reflector, rt Route, method, path string, errRef map[string]an
 			return nil, fmt.Errorf("query parameter %q: unknown type %q", q.Name, typ)
 		}
 
-		p := map[string]any{"name": q.Name, "in": "query", "required": q.Required, "schema": map[string]any{"type": typ}}
+		schema := map[string]any{"type": typ}
+		if q.Repeated {
+			schema = map[string]any{"type": "array", "items": schema}
+		}
+
+		p := map[string]any{"name": q.Name, "in": "query", "required": q.Required, "schema": schema}
 		if q.Description != "" {
 			p["description"] = q.Description
 		}
@@ -254,6 +263,11 @@ func operation(r *reflector, rt Route, method, path string, errRef map[string]an
 
 		if ct == "" {
 			ct = "application/json"
+		}
+
+		// A form (multipart or JSON) is described by In; any other
+		// content type is the raw upload.
+		if o.In != nil {
 			r.input = true
 			schema = r.schema(typeOf(o.In))
 			r.input = false

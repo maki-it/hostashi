@@ -156,7 +156,7 @@ func TestFilesOverHTTP(t *testing.T) {
 		{"delete", `{"paths":["nope"]}`, http.StatusNotFound, "files_not_found"},
 		{"rename", `{"from":"","to":"x"}`, http.StatusUnprocessableEntity, "invalid_argument"},
 		{"delete", `{"paths":["x"],"more":1}`, http.StatusBadRequest, "bad_request"},
-		{"exec", `{}`, http.StatusNotFound, "not_found"},
+		{"exec", `{}`, http.StatusNotFound, ""}, // no such route
 	} {
 		rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/shop/files/" + s.call, cookie: c, body: s.body})
 		if rec.Code != s.status || (s.code != "" && errCode(t, rec) != s.code) {
@@ -280,6 +280,24 @@ func TestFilesZipUploadExtract(t *testing.T) {
 		var n int
 		if err := e.st.RawCount(t.Context(), `SELECT count(*) FROM audit_log WHERE action = ?`, action, &n); err != nil || n != want {
 			t.Errorf("%s: %d audit entries, want %d", action, n, want)
+		}
+	}
+}
+
+func TestFileOpsCoverCalls(t *testing.T) {
+	seen := map[string]bool{}
+
+	for _, o := range fileOps {
+		if filesCalls[o.call] == nil {
+			t.Errorf("operation %s has no check", o.call)
+		}
+
+		seen[o.call] = true
+	}
+
+	for c := range filesCalls {
+		if !seen[c] {
+			t.Errorf("call %s has no route", c)
 		}
 	}
 }

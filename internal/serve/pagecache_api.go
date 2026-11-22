@@ -14,6 +14,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/hosting"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -33,6 +34,17 @@ type pageCacheJSON struct {
 		// MaxExclude is the most excluded paths a site may have.
 		MaxExclude int `json:"maxExclude"`
 	} `json:"choices"`
+}
+
+type pageCacheRequest struct {
+	Enabled *bool    `json:"enabled"`
+	Preset  string   `json:"preset"`
+	Minutes int      `json:"minutes"`
+	Exclude []string `json:"exclude"`
+}
+
+type pageCacheSizeRequest struct {
+	SizeMB int `json:"sizeMB"`
 }
 
 func toPageCacheJSON(c store.PageCache) pageCacheJSON {
@@ -60,7 +72,9 @@ func toPageCacheJSON(c store.PageCache) pageCacheJSON {
 // Purging has its own scope, so a CMS can hold a token that can do nothing
 // else, limited to its site.
 func registerPageCache(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/sites/{name}/page-cache", a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/page-cache", openapi.Operation{
+		ID: "getSitePageCache", Tag: "sites", Summary: "Get the site's page cache (FastCGI cache)", Out: pageCacheJSON{},
+	}, a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		c, err := svc.PageCache(r.Context(), r.PathValue("name"))
 		if err != nil {
 			siteFail(log, w, err, "read page cache")
@@ -71,13 +85,10 @@ func registerPageCache(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		writeJSON(w, http.StatusOK, toPageCacheJSON(c))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/page-cache", a.allow("sites.pagecache:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			Enabled *bool    `json:"enabled"`
-			Preset  string   `json:"preset"`
-			Minutes int      `json:"minutes"`
-			Exclude []string `json:"exclude"`
-		}
+	mux.Op("PUT /api/v1/sites/{name}/page-cache", openapi.Operation{
+		ID: "setSitePageCache", Tag: "sites", Summary: "Set the site's page cache", In: pageCacheRequest{}, Out: pageCacheJSON{},
+	}, a.allow("sites.pagecache:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in pageCacheRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -103,10 +114,10 @@ func registerPageCache(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		writeJSON(w, http.StatusOK, toPageCacheJSON(c))
 	}))
 
-	mux.HandleFunc("PUT /api/v1/sites/{name}/page-cache/size", a.allow("sites.pagecache.size:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			SizeMB int `json:"sizeMB"`
-		}
+	mux.Op("PUT /api/v1/sites/{name}/page-cache/size", openapi.Operation{
+		ID: "setSitePageCacheSize", Tag: "sites", Summary: "Set the size of the site's page cache", In: pageCacheSizeRequest{}, Out: pageCacheJSON{},
+	}, a.allow("sites.pagecache.size:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in pageCacheSizeRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -124,7 +135,9 @@ func registerPageCache(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		writeJSON(w, http.StatusOK, toPageCacheJSON(c))
 	}))
 
-	mux.HandleFunc("POST /api/v1/sites/{name}/page-cache/purge", a.allow("sites.pagecache:purge", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST /api/v1/sites/{name}/page-cache/purge", openapi.Operation{
+		ID: "purgeSitePageCache", Tag: "sites", Summary: "Empty the site's page cache",
+	}, a.allow("sites.pagecache:purge", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
