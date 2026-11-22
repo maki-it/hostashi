@@ -426,6 +426,14 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			}
 		}
 
+		// A redirect site has no account (ADR-0054): only its certificate
+		// is left to remove.
+		if _, ok := h.m.Home(req.User); !ok && h.certs != nil && req.User != agentapi.PanelCert && agentapi.ValidateParkName(req.User) != nil {
+			if err := h.certs.Remove(req.User); err != nil {
+				h.log.ErrorContext(ctx, "remove certificate of deleted site", "site", req.User, "err", err)
+			}
+		}
+
 		if err := m.Delete(ctx, req.User); err != nil {
 			return agentapi.SiteDeleteResponse{}, mapSiteError(err)
 		}
@@ -557,6 +565,19 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 	keep := map[string]bool{}
 
 	for _, s := range req.Sites {
+		// A redirect site needs no account (ADR-0054); one that kept its
+		// account after a type change does not use it here.
+		if s.Redirect != nil {
+			site, err := h.redirectSite(s)
+			if err != nil {
+				return agentapi.WebApplyResponse{}, err
+			}
+
+			d.Sites = append(d.Sites, site)
+
+			continue
+		}
+
 		home, ok := h.m.Home(s.User)
 		if !ok {
 			return agentapi.WebApplyResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site " + s.User}
@@ -772,16 +793,79 @@ func (h *siteOps) panelFor(p agentapi.WebPanel) (*web.Panel, error) {
 	return panel, nil
 }
 
-// knownCertName accepts the panel's certificate, a parked domain's or a
-// registered site.
+// redirectSite is the web state of a redirect site (ADR-0054): no root,
+// no PHP, no snippets; HTTPS, headers, maintenance and the disabled page
+// as for any site.
+func (h *siteOps) redirectSite(s agentapi.WebSite) (web.Site, error) {
+	r := *s.Redirect
+	site := web.Site{User: s.User, Domains: s.Domains, Disabled: s.Disabled, Redirect: &r}
+
+	if s.TLS {
+		if err := h.tlsFor(&site, s.Domains); err != nil {
+			return web.Site{}, err
+		}
+
+		site.HSTS = s.HSTS
+	}
+
+	if s.DisabledPage != nil && s.Disabled {
+		m, err := h.maintenanceFor(&agentapi.WebMaintenance{Page: s.DisabledPage.Page, Digest: s.DisabledPage.Digest})
+		if err != nil {
+			return web.Site{}, err
+		}
+
+		site.DisabledPage = &web.PageRef{Page: m.Page, Digest: m.Digest, Dir: m.Dir}
+	}
+
+	if s.Maintenance != nil && !s.Disabled {
+		m, err := h.maintenanceFor(s.Maintenance)
+		if err != nil {
+			return web.Site{}, err
+		}
+
+		site.Maintenance = m
+	}
+
+	if s.Headers != nil {
+		site.Headers = *s.Headers
+	}
+
+	return site, nil
+}
+
+// knownCertName accepts the panel's certificate, a parked domain's, a
+// registered site or a live site without an account (redirect, ADR-0054).
 func (h *siteOps) knownCertName(name string) bool {
 	if name == agentapi.PanelCert || agentapi.ValidateParkName(name) == nil {
 		return true
 	}
 
-	_, ok := h.m.Home(name)
+	if _, ok := h.m.Home(name); ok {
+		return true
+	}
 
-	return ok
+	return h.webOnly(name)
+}
+
+// webOnly reports whether the live web state has the site as one without
+// an account.
+func (h *siteOps) webOnly(name string) bool {
+	if h.web == nil {
+		return false
+	}
+
+	cur, _, err := h.web.Current()
+	if err != nil {
+		return false
+	}
+
+	for _, s := range cur.Sites {
+		if s.User == name && s.Redirect != nil {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (h *siteOps) tlsCSR(_ context.Context, _ agentrpc.Caller, req agentapi.TLSCSRRequest) (agentapi.TLSCSRResponse, error) {

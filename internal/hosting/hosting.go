@@ -225,6 +225,23 @@ type CreateRequest struct {
 	// none. The panel and the API pass agentapi.DefaultWebHeaders unless
 	// told otherwise, an import passes nil.
 	Headers *agentapi.WebHeaders
+	// Redirect makes the site a redirect without a Linux account
+	// (ADR-0054); Status 0 is 301. PHP, programs and Usage must be unset.
+	Redirect *store.SiteRedirect
+}
+
+// checkRedirect normalizes and checks the redirect of a site with these
+// domains.
+func checkRedirect(r store.SiteRedirect, domains []string) (store.SiteRedirect, error) {
+	if r.Status == 0 {
+		r.Status = agentapi.RedirectStatuses[0]
+	}
+
+	if err := (&agentapi.WebRedirect{Target: r.Target, Status: r.Status, KeepPath: r.KeepPath}).Validate(domains); err != nil {
+		return store.SiteRedirect{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	return r, nil
 }
 
 // checkPHP accepts a version from agentapi.PHPVersions or "" (no PHP).
@@ -312,6 +329,19 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, fmt.Errorf("%w: programs need a PHP version", ErrInvalid)
 	}
 
+	if req.Redirect != nil {
+		if req.PHP != "" || req.Usage != nil {
+			return store.Site{}, fmt.Errorf("%w: a redirect site has no PHP and no files", ErrInvalid)
+		}
+
+		r, err := checkRedirect(*req.Redirect, domains)
+		if err != nil {
+			return store.Site{}, err
+		}
+
+		req.Redirect = &r
+	}
+
 	if err := s.checkReserved(domains); err != nil {
 		return store.Site{}, err
 	}
@@ -332,7 +362,12 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, err
 	}
 
-	created, err := s.st.CreateSite(ctx, req.Name, req.Pool, req.PHP, domains, s.now())
+	var created store.Site
+	if req.Redirect != nil {
+		created, err = s.st.CreateRedirectSite(ctx, req.Name, req.Pool, *req.Redirect, domains, s.now())
+	} else {
+		created, err = s.st.CreateSite(ctx, req.Name, req.Pool, req.PHP, domains, s.now())
+	}
 
 	switch {
 	case errors.Is(err, store.ErrSiteExists):
@@ -356,7 +391,12 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, err
 	}
 
-	if _, err := s.ag.SiteCreate(ctx, agentapi.SiteCreateRequest{User: req.Name, Pool: req.Pool}); err != nil {
+	// A redirect site gets no account (ADR-0054).
+	if created.Account {
+		_, err = s.ag.SiteCreate(ctx, agentapi.SiteCreateRequest{User: req.Name, Pool: req.Pool})
+	}
+
+	if err != nil {
 		if derr := s.st.DeleteSite(undo, req.Name); derr != nil {
 			s.log.ErrorContext(ctx, "remove site row after failed create", "site", req.Name, "err", derr)
 		}
@@ -371,8 +411,16 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 	}
 
 	// Stored before the web state, so the PHP pool starts with the
-	// preset's workers.
-	limits, caches, hasLimits := s.storeDefaultLimits(ctx, created, req.Usage)
+	// preset's workers. A site without an account has no limits.
+	var (
+		limits    store.Limits
+		caches    store.PresetCaches
+		hasLimits bool
+	)
+
+	if created.Account {
+		limits, caches, hasLimits = s.storeDefaultLimits(ctx, created, req.Usage)
+	}
 
 	if err := s.applyWeb(ctx); err != nil {
 		s.removeAfterFailure(undo, req.Name)
@@ -381,10 +429,15 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, err
 	}
 
-	s.audit(ctx, actor, "site.create", req.Name, map[string]string{
-		"pool": req.Pool, "php": req.PHP, "domains": strings.Join(domains, " "),
+	detail := map[string]string{
+		"type": created.Type, "pool": req.Pool, "php": req.PHP, "domains": strings.Join(domains, " "),
 		"tls": strconv.FormatBool(req.TLS), "hsts": strconv.FormatBool(req.HSTS), "phpPrograms": strconv.FormatBool(req.PHPPrograms),
-	})
+	}
+	if r := req.Redirect; r != nil {
+		detail["redirectTarget"], detail["redirectStatus"], detail["redirectKeepPath"] = r.Target, strconv.Itoa(r.Status), strconv.FormatBool(r.KeepPath)
+	}
+
+	s.audit(ctx, actor, "site.create", req.Name, detail)
 
 	if req.TLS {
 		s.Kick()
@@ -525,6 +578,13 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 
 	if err := checkOwnCertDomains(site, domains); err != nil {
 		return store.Site{}, err
+	}
+
+	// A redirect must not point to one of the new domains (ADR-0054).
+	if r := site.Redirect; r != nil && site.Type == store.SiteTypeRedirect {
+		if _, err := checkRedirect(*r, domains); err != nil {
+			return store.Site{}, err
+		}
 	}
 
 	parked, err := s.parkedAmong(ctx, domains)
@@ -739,6 +799,23 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				Headers: webHeaders(headers, site),
 			}
 
+			// A redirect site sends only its target: no files, PHP,
+			// caches or snippets (ADR-0054).
+			if site.Type == store.SiteTypeRedirect {
+				ws.PHP = ""
+				if r := site.Redirect; r != nil {
+					ws.Redirect = &agentapi.WebRedirect{Target: r.Target, Status: r.Status, KeepPath: r.KeepPath}
+				}
+
+				if err := s.addLifecycleWeb(ctx, &ws, site, onAgent); err != nil {
+					return err
+				}
+
+				req.Sites = append(req.Sites, ws)
+
+				continue
+			}
+
 			// SPA is kept while the site runs PHP and only sent for a
 			// static site; the asset cache serves static and PHP sites
 			// (ADR-0054 addenda 1 and 4).
@@ -765,16 +842,8 @@ func (s *Service) applyWeb(ctx context.Context) error {
 			// maintenance; they are sent anyway so the state stays complete.
 			ws.Snippets = webSnippets(snippets, site)
 
-			if site.Maintenance && !site.Disabled {
-				if ws.Maintenance, err = s.maintenanceWeb(ctx, site, onAgent); err != nil {
-					return err
-				}
-			}
-
-			if site.Disabled {
-				if ws.DisabledPage, err = s.disabledWeb(ctx, site, onAgent); err != nil {
-					return err
-				}
+			if err := s.addLifecycleWeb(ctx, &ws, site, onAgent); err != nil {
+				return err
 			}
 
 			req.Sites = append(req.Sites, ws)
@@ -826,6 +895,25 @@ func (s *Service) applyWeb(ctx context.Context) error {
 
 	if res.Changed {
 		s.log.InfoContext(ctx, "web server state applied", "generation", res.Generation, "sites", len(req.Sites))
+	}
+
+	return nil
+}
+
+// addLifecycleWeb adds the maintenance page or the page of a disabled site.
+func (s *Service) addLifecycleWeb(ctx context.Context, ws *agentapi.WebSite, site store.Site, onAgent map[string]bool) error {
+	var err error
+
+	if site.Maintenance && !site.Disabled {
+		if ws.Maintenance, err = s.maintenanceWeb(ctx, site, onAgent); err != nil {
+			return err
+		}
+	}
+
+	if site.Disabled {
+		if ws.DisabledPage, err = s.disabledWeb(ctx, site, onAgent); err != nil {
+			return err
+		}
 	}
 
 	return nil

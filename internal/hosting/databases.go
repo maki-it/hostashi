@@ -109,6 +109,10 @@ func (s *Service) CreateDatabase(ctx context.Context, actor int64, req NewDataba
 		return store.Database{}, "", ErrState
 	}
 
+	if err := needAccount(site); err != nil {
+		return store.Database{}, "", err
+	}
+
 	if req.User != "" {
 		if _, err := s.st.DatabaseOfUser(ctx, req.User); err == nil {
 			return store.Database{}, "", ErrDatabaseExists

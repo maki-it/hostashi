@@ -111,6 +111,9 @@ type WebSite struct {
 	AssetCacheExts    []string `json:"assetCacheExts,omitempty"`
 	// Headers are the site's security headers (ADR-0056); nil sends none.
 	Headers *WebHeaders `json:"headers,omitempty"`
+	// Redirect makes the site a redirect (ADR-0054): it has no Linux
+	// account, and nothing that needs files or PHP may be set.
+	Redirect *WebRedirect `json:"redirect,omitempty"`
 }
 
 // Bounds and defaults of the asset cache (ADR-0054 addendum 1).
@@ -389,6 +392,16 @@ func (r WebApplyRequest) Validate() error {
 
 		if err := ValidateAssetCache(s.AssetCacheSeconds, s.AssetCacheExts); err != nil {
 			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if r := s.Redirect; r != nil {
+			if s.PHP != "" || s.WebDir != "" || s.SPA || s.AssetCache || s.PageCache != nil || s.Snippets != nil || s.PHPWorkers != 0 || s.PHPPrograms || s.PHPSettings != nil {
+				return fmt.Errorf("site %q: a redirect site has no files, PHP or snippets", s.User)
+			}
+
+			if err := r.Validate(s.Domains); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
 		}
 
 		if s.SPA && s.PHP != "" {

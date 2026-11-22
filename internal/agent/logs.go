@@ -21,7 +21,8 @@ func (h *siteOps) registerLogs(s *agentrpc.Server) {
 			return agentapi.SiteLogsReadResponse{}, errNoLogs
 		}
 
-		if _, ok := h.m.Home(req.Site); !ok {
+		// A redirect site has nginx logs but no account (ADR-0054).
+		if _, ok := h.m.Home(req.Site); !ok && !h.webOnly(req.Site) {
 			return agentapi.SiteLogsReadResponse{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site " + req.Site}
 		}
 

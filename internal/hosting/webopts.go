@@ -79,3 +79,14 @@ func (s *Service) SetWebOptions(ctx context.Context, actor int64, name string, o
 
 	return s.Get(ctx, name)
 }
+
+// needAccount refuses a site without a Linux account (a redirect site,
+// ADR-0054) for features that need its home: files, cron, SSH, limits,
+// databases, caches, snippets, backups.
+func needAccount(site store.Site) error {
+	if !site.Account {
+		return ErrSiteType
+	}
+
+	return nil
+}

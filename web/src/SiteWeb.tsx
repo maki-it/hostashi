@@ -5,6 +5,7 @@
 
 import { useState, type FormEvent } from "react";
 import { formatHash } from "./routes";
+import { RedirectCard } from "./SiteRedirect";
 import { PHPOptions, SiteTypeChoice } from "./Sites";
 import {
   assetCacheDefaults,
@@ -25,6 +26,17 @@ import { Button, Card, Field, Notice } from "./ui";
 type Props = { site: Site; php: PHPVersions | null; onChange: () => Promise<void> };
 
 export function SiteWebSettings({ site, php, onChange }: Props) {
+  if (siteType(site) === "redirect") {
+    return (
+      <>
+        <RedirectCard site={site} onChange={onChange} />
+        <p className="ui-hint ui-flush">
+          A redirect site has no files and no Linux account. Changing it into a PHP or static site comes with the type switch in a later version.
+        </p>
+      </>
+    );
+  }
+
   return (
     <>
       <TypeCard site={site} php={php} onChange={onChange} />

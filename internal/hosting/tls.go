@@ -151,6 +151,10 @@ func (s *Service) SetPHPPrograms(ctx context.Context, actor int64, name string, 
 		return store.Site{}, ErrState
 	}
 
+	if site.Type == store.SiteTypeRedirect {
+		return store.Site{}, ErrSiteType
+	}
+
 	old, err := s.st.SetSitePHPPrograms(ctx, name, on, s.now())
 	if err != nil {
 		return store.Site{}, err
