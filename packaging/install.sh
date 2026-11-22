@@ -256,7 +256,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config ssh harden sysctl nginx php phpversions pgclient node valkey mariadb dbtool backup units service fail2ban firewall updates quota"
+STEPS="account dirs key binary config ssh harden sysctl system nginx php phpversions pgclient node valkey mariadb dbtool backup units service fail2ban firewall updates quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -456,6 +456,17 @@ do_sysctl() {
   drift=$(sysctl_drift)
   [ -z "$drift" ] || { log "sysctl: values did not take: $drift"; return 1; }
 }
+
+# Time zone, hostname and reboot from the panel (ADR-0060): the agent asks
+# systemd-timedated, systemd-hostnamed and systemd-logind over the system
+# bus, so the bus must be there; timedated lists the zones from tzdata.
+SYSTEM_PKGS=(dbus tzdata)
+
+chk_system() {
+  local p
+  for p in "${SYSTEM_PKGS[@]}"; do pkg_installed "$p" || { echo "$p not installed"; return 1; }; done
+}
+do_system() { apt_install "${SYSTEM_PKGS[@]}"; }
 
 # nginx and its brotli modules from the distribution (ADR-0020). The agent
 # renders the whole config; the package's default site is never used.

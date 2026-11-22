@@ -51,6 +51,7 @@ import (
 	"github.com/maki-it/hostashi/internal/sitestats"
 	"github.com/maki-it/hostashi/internal/snippet"
 	"github.com/maki-it/hostashi/internal/sshaccess"
+	"github.com/maki-it/hostashi/internal/sysconf"
 	"github.com/maki-it/hostashi/internal/sysuser"
 	"github.com/maki-it/hostashi/internal/web"
 	"github.com/maki-it/hostashi/internal/webctl"
@@ -206,6 +207,10 @@ type Config struct {
 	// Run sets the production ones.
 	Services ServiceCtl
 	Host     HostReader
+
+	// System reaches timedated, hostnamed and logind (ADR-0060); nil turns
+	// the system.* operations off. Run sets the production one.
+	System SystemCtl
 }
 
 // DefaultPanelPort is the panel's HTTPS port (ADR-0023).
@@ -345,6 +350,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	}
 
 	registerServices(s, &serviceOps{ctl: cfg.Services, host: cfg.Host, h: h, web: cfg.Web, log: svcLog})
+	registerSystem(s, &systemOps{ctl: cfg.System, log: svcLog, now: time.Now, after: func(d time.Duration, f func()) { time.AfterFunc(d, f) }})
 
 	return s
 }
@@ -680,6 +686,10 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			site.Headers = *s.Headers
 		}
 
+		if err := h.realIPFor(&site, s.RealIP); err != nil {
+			return agentapi.WebApplyResponse{}, err
+		}
+
 		if s.PageCache != nil {
 			c, err := h.pageCacheFor(s.User, home, *s.PageCache)
 			if err != nil {
@@ -866,6 +876,10 @@ func (h *siteOps) accountlessSite(ctx context.Context, s agentapi.WebSite) (web.
 
 	if s.Headers != nil {
 		site.Headers = *s.Headers
+	}
+
+	if err := h.realIPFor(&site, s.RealIP); err != nil {
+		return web.Site{}, err
 	}
 
 	return site, nil
@@ -1499,6 +1513,10 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.Host == nil {
 		cfg.Host = hoststats.Reader{}
+	}
+
+	if cfg.System == nil {
+		cfg.System = sysconf.New()
 	}
 
 	if cfg.PHPInstall == nil {

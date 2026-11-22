@@ -81,6 +81,11 @@ func TestAdminUsage(t *testing.T) {
 		{"service", "nginx"},
 		{"service", "list", "-yaml", "x"},
 		{"service", "php", "blog", "reload", "now"},
+		{"system"},
+		{"system", "reboot"},
+		{"system", "hostname"},
+		{"system", "timezone", "UTC", "x"},
+		{"system", "info", "x"},
 	} {
 		var out, errOut bytes.Buffer
 		if code := run(t.Context(), args, 0, &out, &errOut); code != 2 {
