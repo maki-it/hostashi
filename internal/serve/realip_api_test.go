@@ -127,3 +127,65 @@ func TestRealIPOverHTTP(t *testing.T) {
 		t.Errorf("read with sites:read: %d", rec.Code)
 	}
 }
+
+// The panel's own setting (ADR-0059): admins in the browser only; it goes
+// to the agent with the panel's web state.
+func TestPanelRealIPOverHTTP(t *testing.T) {
+	ag := &stubAgent{}
+	e := newAPIWithAgent(t, ag)
+	c := e.adminCookie(t)
+
+	if err := e.sites.EnablePanel("cp.example.com"); err != nil {
+		t.Fatal(err)
+	}
+
+	const path = "/api/v1/settings/panel-real-ip"
+
+	rec := e.do(t, reqOpts{method: "GET", path: path, cookie: c})
+
+	var got realIPJSON
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &got) != nil || !got.RealIP.IsZero() || len(got.Cloudflare) == 0 {
+		t.Fatalf("get: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: path, cookie: c, body: `{"cloudflare":true,"ranges":["198.51.100.0/24"]}`})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"198.51.100.0/24"`) {
+		t.Fatalf("set: %d %s", rec.Code, rec.Body)
+	}
+
+	if p := ag.web.Panel; p == nil || p.RealIP == nil || !p.RealIP.Cloudflare || p.RealIP.Ranges[0] != "198.51.100.0/24" {
+		t.Fatalf("web state: %+v", p)
+	}
+
+	for _, body := range []string{`{"ranges":["127.0.0.0/8"]}`, `{"ranges":["0.0.0.0/0"]}`, `{"header":"True-Client-IP"}`} {
+		if rec := e.do(t, reqOpts{method: "PUT", path: path, cookie: c, body: body}); rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "real_ip_rejected") {
+			t.Errorf("%s: %d %s", body, rec.Code, rec.Body)
+		}
+	}
+
+	ag.webErr = errors.New("nginx refused")
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: path, cookie: c, body: `{}`}); rec.Code < 400 {
+		t.Fatalf("failed apply: %d", rec.Code)
+	}
+
+	ag.webErr = nil
+
+	if rec := e.do(t, reqOpts{method: "GET", path: path, cookie: c}); !strings.Contains(rec.Body.String(), `"198.51.100.0/24"`) {
+		t.Fatalf("not restored: %s", rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: path, cookie: c, body: `{}`}); rec.Code != http.StatusOK || ag.web.Panel.RealIP != nil {
+		t.Fatalf("off: %d %+v", rec.Code, ag.web.Panel)
+	}
+
+	mona, _ := matrixLogin(t, e, c, "mona", "manager")
+	if rec := e.do(t, reqOpts{method: "PUT", path: path, cookie: mona, body: `{"cloudflare":true}`}); rec.Code != http.StatusForbidden {
+		t.Errorf("manager: %d", rec.Code)
+	}
+
+	tok := e.createToken(t, c, `{"name":"all","scopes":["sites:write"]}`)
+	if rec := e.do(t, reqOpts{method: "PUT", path: path, header: bearerHeader(tok.Token), body: `{"cloudflare":true}`}); rec.Code != http.StatusForbidden {
+		t.Errorf("token: %d", rec.Code)
+	}
+}
