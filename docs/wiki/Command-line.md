@@ -11,6 +11,27 @@ Most work is done in the panel. The command line is for what the panel cannot do
 | `hostashi setup-token` | Prints the one-time token for the first login. |
 | `hostashi user recover [-public-url URL] NAME` | Removes the password and second factors of account `NAME`, enables it and prints a new invitation link. See [Recovery](Recovery.md). |
 
+## Using the API from the command line
+
+These commands work as any user and on any machine, not only on the server. They talk to the panel's API with an API token, so your role, the token's scopes and the audit log apply as in the panel.
+
+| Command | What it does |
+|---------|--------------|
+| `hostashi login [URL]` | Logs in through the browser. It prints a link and a code such as `WDJB-MJHT`. Open the link in a browser where you are logged in to the panel (with a passkey or a password and second factor), check that the panel shows the same code and the name of your computer, pick what the token may do and approve. The command then stores the token in `~/.config/hostashi/credentials.json` (only readable by you). `URL` is the panel's address, for example `https://panel.example.com`; on the server itself it defaults to `http://127.0.0.1:8080`. |
+| `hostashi login -token [URL]` | Reads an existing API token from stdin instead, for scripts (see below). |
+| `hostashi whoami` | Shows the account, its role and the token's scopes. |
+| `hostashi logout` | Removes the stored token. It stays valid until it expires; revoke it in the panel under your account if it may have leaked. |
+
+For example, with the token in a password manager:
+
+```sh
+pass show hostashi | hostashi login -token https://panel.example.com
+```
+
+`HOSTASHI_URL` and `HOSTASHI_TOKEN` override the stored login, for example in CI jobs. Plain `http://` is only accepted for the server itself (`127.0.0.1`, `::1`, `localhost`), so that a token never crosses a network unencrypted.
+
+Approve only a login you started yourself: whoever started it gets a token for your account. A code is valid for ten minutes.
+
 ## Checks
 
 | Command | What it does |
