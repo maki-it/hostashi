@@ -162,6 +162,9 @@
       "AppStatus": {
         "additionalProperties": false,
         "properties": {
+          "problem": {
+            "type": "string"
+          },
           "restarts": {
             "type": "integer"
           },
@@ -180,6 +183,7 @@
           }
         },
         "required": [
+          "problem",
           "restarts",
           "since",
           "state",
@@ -4654,6 +4658,67 @@
         ],
         "type": "object"
       },
+      "ProgramApp": {
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "port": {
+            "type": "integer"
+          },
+          "program": {
+            "type": "string"
+          },
+          "stopped": {
+            "type": "boolean"
+          },
+          "workdir": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "args",
+          "port",
+          "program",
+          "stopped",
+          "workdir"
+        ],
+        "type": "object"
+      },
+      "ProgramAppInput": {
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "port": {
+            "type": "integer"
+          },
+          "program": {
+            "type": "string"
+          },
+          "stopped": {
+            "type": "boolean"
+          },
+          "workdir": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Proxy": {
         "additionalProperties": false,
         "properties": {
@@ -5168,6 +5233,16 @@
           "account": {
             "type": "boolean"
           },
+          "app": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProgramApp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -5251,6 +5326,7 @@
         },
         "required": [
           "account",
+          "app",
           "createdAt",
           "disabled",
           "disabledPage",
@@ -5290,6 +5366,16 @@
       "SiteCreateRequest": {
         "additionalProperties": false,
         "properties": {
+          "app": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProgramAppInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "domains": {
             "items": {
               "type": "string"
@@ -13115,7 +13201,7 @@
             ]
           }
         ],
-        "summary": "Create a site (static, PHP, Node.js, reverse proxy or redirect)",
+        "summary": "Create a site (static, PHP, Node.js, app, reverse proxy or redirect)",
         "tags": [
           "sites"
         ],
@@ -13265,12 +13351,73 @@
             ]
           }
         ],
-        "summary": "The state of a Node.js site's app",
+        "summary": "The state of the app of a Node.js or app site",
         "tags": [
           "sites"
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites:read"
+      },
+      "put": {
+        "operationId": "setSiteApp",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProgramAppInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteApp"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Set the working directory, program and arguments of an app site",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.app:write"
       }
     },
     "/api/v1/sites/{name}/app/restart": {
@@ -13318,7 +13465,7 @@
             ]
           }
         ],
-        "summary": "Restart a Node.js site's app",
+        "summary": "Restart the app of a Node.js or app site",
         "tags": [
           "sites"
         ],
@@ -13371,7 +13518,7 @@
             ]
           }
         ],
-        "summary": "Start a Node.js site's app; it starts again after a reboot",
+        "summary": "Start the app of a Node.js or app site; it starts again after a reboot",
         "tags": [
           "sites"
         ],
@@ -13424,7 +13571,7 @@
             ]
           }
         ],
-        "summary": "Stop a Node.js site's app; it stays stopped until started",
+        "summary": "Stop the app of a Node.js or app site; it stays stopped until started",
         "tags": [
           "sites"
         ],

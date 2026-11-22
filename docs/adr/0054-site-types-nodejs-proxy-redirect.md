@@ -196,6 +196,17 @@ Notes on how the app of a Node.js site is built; they change no decision.
 - API: `type: "node"` with `node: {version, workdir, startKind, start}` on `POST /api/v1/sites`; `PUT /api/v1/sites/{name}/node`; `GET /api/v1/sites/{name}/app`; `POST /api/v1/sites/{name}/app/start|stop|restart` (scope `sites:write`, every role on its own sites: the app runs as the site user, like cron jobs). A line that is not installed answers 409 `node_missing`.
 - Not yet: environment variables for the app (encrypted, with their own migration) and type changes. Restarting the apps after a reinstall and the panel page are built (see below).
 
+## Implementation notes: app sites (2026-11-22)
+
+Notes on how the app type of addendum 2 is built; they change no decision.
+
+- `type: "app"` with `app: {workdir, program, args}` on `POST /api/v1/sites`; `PUT /api/v1/sites/{name}/app` changes it (scope `sites.app:write`, like the Node.js app). Start, stop, restart, state and log are the routes of the Node.js app. The arguments live in `sites.app_args` as a JSON array (migration 0054) [V: `internal/store/app_test.go`].
+- The program file is a path below the home with the rules of the document root folder; the working directory stays separate (`htdocs` by default). Each argument is at most 256 bytes of UTF-8 without NUL, newline or carriage return; at most 16.
+- The agent writes `ExecStart=<home>/<program>` and every argument in double quotes, with `\` and `"` escaped and `%` and `$` doubled, so systemd neither splits, expands nor reads a lone `;` [V: `appunit.Quote`, container test with spaces, quotes, `$HOME`, `%`, `;` and a backslash].
+- Before it starts the program, the agent checks through `os.Root` that it is a regular file below the home, not a symbolic link, with an execute bit and owned by the site user. Otherwise the unit stays stopped and `GET /api/v1/sites/{name}/app` says why in `problem`; a start answers 409 with the same text. The check is for the message only: the site user may change the file at any time, and the program runs as the site user anyway.
+- The environment has `HOST=127.0.0.1`, `PORT`, `HOME`, `USER`, `LOGNAME` and a `PATH` without Node.js; no `NODE_ENV`. The unit `hostashi-app@<site>.service` has the sandbox of `hostashi-node@`, without `MemoryDenyWriteExecute=` for runtimes with a JIT.
+- Not yet: the panel page (screenshots first) and changing a site between the types.
+
 ## Implementation notes: removing a Node.js line (2026-11-22)
 
 - `POST /api/v1/node/remove {major}` (action `node:remove`, scope `node:install`, admin only, audit `node.remove`). The agent (`node.remove`) refuses a line that a site's app runs on (from its own app state, also for stopped apps), one that is not installed and one while an installation runs.

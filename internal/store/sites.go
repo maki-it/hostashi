@@ -53,7 +53,7 @@ type Site struct {
 	// Proxy is the target of a reverse proxy site; it is kept after a
 	// type change (nil: never set).
 	Proxy *SiteProxy
-	// App is the app of a Node.js site (ADR-0054); nil for sites that
+	// App is the app of a Node.js or app site (ADR-0054); nil for sites that
 	// never had one. Kept after a type change, so switching back
 	// restores it.
 	App     *SiteApp
@@ -123,9 +123,9 @@ type SiteProxy struct {
 	Insecure bool
 }
 
-// SiteApp is the app of a Node.js site (ADR-0054).
+// SiteApp is the app of a Node.js or app site (ADR-0054).
 type SiteApp struct {
-	// Node is the Node.js LTS line, for example "24".
+	// Node is the Node.js LTS line, for example "24"; "" for an app site.
 	Node string
 	// Workdir is the working directory relative to the home.
 	Workdir string
@@ -133,6 +133,8 @@ type SiteApp struct {
 	// empty until set, and the app stays stopped until then.
 	StartKind string
 	Start     string
+	// Args are the arguments of an app site's program.
+	Args []string
 	// Port is the loopback port the panel assigned (unique).
 	Port int
 	// Stopped: stopped in the panel.
@@ -179,6 +181,14 @@ func (s *Store) CreateRedirectSite(ctx context.Context, name, pool string, r Sit
 // port of the app range (ADR-0054). a.Port is ignored.
 func (s *Store) CreateNodeSite(ctx context.Context, name, pool string, a SiteApp, domains []string, now time.Time) (Site, error) {
 	return s.createSite(ctx, Site{Name: name, Pool: pool, Type: SiteTypeNode, App: &a, Account: true}, domains, now)
+}
+
+// CreateAppSite stores a new app site (a binary, ADR-0054 addendum 2)
+// like CreateNodeSite.
+func (s *Store) CreateAppSite(ctx context.Context, name, pool string, a SiteApp, domains []string, now time.Time) (Site, error) {
+	a.Node = ""
+
+	return s.createSite(ctx, Site{Name: name, Pool: pool, Type: SiteTypeApp, App: &a, Account: true}, domains, now)
 }
 
 // CreateProxySite stores a new reverse proxy site without a Linux account
@@ -237,11 +247,11 @@ func (s *Store) createSite(ctx context.Context, site Site, domains []string, now
 
 	res, err := tx.ExecContext(ctx,
 		`INSERT INTO sites (name, pool, state, type, php, account, redirect_target, redirect_status, redirect_keep_path,
-			proxy_target, proxy_target_host, proxy_insecure, node_version, app_workdir, app_start_kind, app_start, app_port, app_stopped,
+			proxy_target, proxy_target_host, proxy_insecure, node_version, app_workdir, app_start_kind, app_start, app_args, app_port, app_stopped,
 			created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		name, pool, SiteCreating, site.Type, php, boolInt(site.Account), r.Target, r.Status, boolInt(r.KeepPath),
-		p.Target, boolInt(p.TargetHost), boolInt(p.Insecure), a.Node, a.Workdir, a.StartKind, a.Start, port, boolInt(a.Stopped),
+		p.Target, boolInt(p.TargetHost), boolInt(p.Insecure), a.Node, a.Workdir, a.StartKind, a.Start, appArgs(a.Args), port, boolInt(a.Stopped),
 		now.Unix(), now.Unix())
 	if err != nil {
 		return Site{}, fmt.Errorf("store: %w", err)
@@ -552,7 +562,7 @@ type scanner interface{ Scan(dest ...any) error }
 const siteColumns = `id, name, pool, state, type, php, web_dir, spa, asset_cache, asset_cache_seconds, asset_cache_exts, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
 	maintenance, coalesce(maintenance_page, 0), maintenance_allow, coalesce(disabled_page, 0), tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
 	account, redirect_target, redirect_status, redirect_keep_path, proxy_target, proxy_target_host, proxy_insecure,
-	node_version, app_workdir, app_start_kind, app_start, coalesce(app_port, 0), app_stopped, created_at, updated_at`
+	node_version, app_workdir, app_start_kind, app_start, app_args, coalesce(app_port, 0), app_stopped, created_at, updated_at`
 
 func scanSite(r scanner) (Site, error) {
 	var (
@@ -571,12 +581,13 @@ func scanSite(r scanner) (Site, error) {
 		proxyHost, insecure        int
 		app                        SiteApp
 		appStopped                 int
+		args                       string
 	)
 
 	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &st.WebDir, &spa, &assets, &st.AssetCacheSeconds, &exts, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
 		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced,
 		&account, &redirect.Target, &redirect.Status, &keepPath, &proxy.Target, &proxyHost, &insecure,
-		&app.Node, &app.Workdir, &app.StartKind, &app.Start, &app.Port, &appStopped, &cre, &upd)
+		&app.Node, &app.Workdir, &app.StartKind, &app.Start, &args, &app.Port, &appStopped, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
 	}
@@ -602,6 +613,15 @@ func scanSite(r scanner) (Site, error) {
 
 	if app.Port != 0 {
 		app.Stopped = appStopped == 1
+
+		if err := json.Unmarshal([]byte(args), &app.Args); err != nil {
+			return Site{}, fmt.Errorf("store: app arguments of %s: %w", st.Name, err)
+		}
+
+		if len(app.Args) == 0 {
+			app.Args = nil
+		}
+
 		st.App = &app
 	}
 
@@ -1015,9 +1035,9 @@ func (s *Store) SetSiteProxy(ctx context.Context, name string, p SiteProxy, now 
 	return old, nil
 }
 
-// SetSiteApp changes the app of a Node.js site and returns the previous
-// one: version, working directory, start command and whether it is kept
-// stopped. The port stays. Other types refuse it with ErrSiteType.
+// SetSiteApp changes the app of a Node.js or app site and returns the
+// previous one: version, working directory, start command, arguments and
+// whether it is kept stopped. The port stays. Other types refuse it with ErrSiteType.
 func (s *Store) SetSiteApp(ctx context.Context, name string, a SiteApp, now time.Time) (SiteApp, error) {
 	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
@@ -1030,10 +1050,11 @@ func (s *Store) SetSiteApp(ctx context.Context, name string, a SiteApp, now time
 		old     SiteApp
 		typ     string
 		stopped int
+		args    string
 	)
 
-	if err := tx.QueryRowContext(ctx, `SELECT type, node_version, app_workdir, app_start_kind, app_start, coalesce(app_port, 0), app_stopped FROM sites WHERE name = ?`, name).
-		Scan(&typ, &old.Node, &old.Workdir, &old.StartKind, &old.Start, &old.Port, &stopped); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT type, node_version, app_workdir, app_start_kind, app_start, app_args, coalesce(app_port, 0), app_stopped FROM sites WHERE name = ?`, name).
+		Scan(&typ, &old.Node, &old.Workdir, &old.StartKind, &old.Start, &args, &old.Port, &stopped); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return SiteApp{}, ErrNotFound
 		}
@@ -1041,14 +1062,26 @@ func (s *Store) SetSiteApp(ctx context.Context, name string, a SiteApp, now time
 		return SiteApp{}, fmt.Errorf("store: %w", err)
 	}
 
-	if typ != SiteTypeNode || old.Port == 0 {
+	if typ != SiteTypeNode && typ != SiteTypeApp || old.Port == 0 {
 		return SiteApp{}, ErrSiteType
 	}
 
 	old.Stopped = stopped == 1
 
-	if _, err := tx.ExecContext(ctx, `UPDATE sites SET node_version = ?, app_workdir = ?, app_start_kind = ?, app_start = ?, app_stopped = ?, updated_at = ? WHERE name = ?`,
-		a.Node, a.Workdir, a.StartKind, a.Start, boolInt(a.Stopped), now.Unix(), name); err != nil {
+	if err := json.Unmarshal([]byte(args), &old.Args); err != nil {
+		return SiteApp{}, fmt.Errorf("store: app arguments of %s: %w", name, err)
+	}
+
+	if len(old.Args) == 0 {
+		old.Args = nil
+	}
+
+	if typ == SiteTypeApp {
+		a.Node = ""
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET node_version = ?, app_workdir = ?, app_start_kind = ?, app_start = ?, app_args = ?, app_stopped = ?, updated_at = ? WHERE name = ?`,
+		a.Node, a.Workdir, a.StartKind, a.Start, appArgs(a.Args), boolInt(a.Stopped), now.Unix(), name); err != nil {
 		return SiteApp{}, fmt.Errorf("store: %w", err)
 	}
 
@@ -1057,4 +1090,18 @@ func (s *Store) SetSiteApp(ctx context.Context, name string, a SiteApp, now time
 	}
 
 	return old, nil
+}
+
+// appArgs is the JSON of an app's arguments for the app_args column.
+func appArgs(args []string) string {
+	if len(args) == 0 {
+		return "[]"
+	}
+
+	b, err := json.Marshal(args)
+	if err != nil { // strings always marshal
+		return "[]"
+	}
+
+	return string(b)
 }

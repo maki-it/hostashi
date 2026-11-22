@@ -12,10 +12,11 @@ import (
 
 // The sites' apps (ADR-0054) go through the same exception as the PHP
 // units: systemctl by absolute path, fixed verbs, and unit names that
-// match appUnitRe. The agent never runs node or npm itself; systemd starts
+// match appUnitRe (hostashi-node@ and hostashi-app@). The agent never runs
+// node, npm or an app itself; systemd starts
 // them as the site user from the fixed template and the agent's drop-in.
 var (
-	appUnitRe = regexp.MustCompile(`^hostashi-node@[a-z][a-z0-9_-]{1,31}\.service$`)
+	appUnitRe = regexp.MustCompile(`^hostashi-(?:node|app)@[a-z][a-z0-9_-]{1,31}\.service$`)
 	appPropRe = regexp.MustCompile(`^(?:ActiveState|SubState|MemoryCurrent|NRestarts|MainPID)$`)
 )
 

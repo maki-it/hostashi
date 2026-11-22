@@ -237,10 +237,10 @@ func (s *Service) SetDisabled(ctx context.Context, actor int64, name string, on 
 		return store.Site{}, err
 	}
 
-	// The app of a Node.js site stops with the site and starts with it
+	// The app of a Node.js or app site stops with the site and starts with it
 	// again. A failure leaves the web change in place: the app's state is
 	// on its page, and the next change or sync applies it again.
-	if site.Type == store.SiteTypeNode && site.App != nil && s.apps != nil {
+	if hasApp(site) && s.apps != nil {
 		next := site
 		next.Disabled = on
 

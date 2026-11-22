@@ -4,6 +4,7 @@ package hosting
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -62,15 +63,48 @@ func (a RPCAgent) AppStatus(ctx context.Context, site string) (agentapi.AppStatu
 // cannot be created and app calls answer ErrNoApps.
 func (s *Service) EnableApps(a AppAgent) { s.apps = a }
 
-// checkApp normalizes and checks the app of a Node.js site (ADR-0054): an
-// empty working directory is htdocs, the port is the store's.
-func checkApp(a store.SiteApp) (store.SiteApp, error) {
+// hasApp reports whether a site runs an app: a Node.js or an app site
+// (ADR-0054).
+func hasApp(site store.Site) bool {
+	return (site.Type == store.SiteTypeNode || site.Type == store.SiteTypeApp) && site.App != nil
+}
+
+// checkApp normalizes and checks the app of a Node.js site, or with binary
+// of an app site (ADR-0054): an empty working directory is htdocs, the
+// port is the store's.
+func checkApp(a store.SiteApp, binary bool) (store.SiteApp, error) {
 	if a.Workdir == "" {
 		a.Workdir = agentapi.DefaultAppWorkdir
 	}
 
-	if err := agentapi.ValidateNodeMajor(a.Node); err != nil {
-		return store.SiteApp{}, fmt.Errorf("%w: node: %w", ErrInvalid, err)
+	if len(a.Args) == 0 {
+		a.Args = nil
+	}
+
+	if binary {
+		if a.Node != "" {
+			return store.SiteApp{}, fmt.Errorf("%w: an app site runs no Node.js", ErrInvalid)
+		}
+
+		if a.StartKind != "" && a.StartKind != agentapi.AppStartBinary {
+			return store.SiteApp{}, fmt.Errorf("%w: an app site starts a program (startKind binary)", ErrInvalid)
+		}
+
+		if a.StartKind == "" && len(a.Args) > 0 {
+			return store.SiteApp{}, fmt.Errorf("%w: arguments need a program", ErrInvalid)
+		}
+
+		if err := agentapi.ValidateAppArgs(a.Args); err != nil {
+			return store.SiteApp{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+		}
+	} else {
+		if err := agentapi.ValidateNodeMajor(a.Node); err != nil {
+			return store.SiteApp{}, fmt.Errorf("%w: node: %w", ErrInvalid, err)
+		}
+
+		if a.StartKind == agentapi.AppStartBinary || len(a.Args) > 0 {
+			return store.SiteApp{}, fmt.Errorf("%w: a Node.js site starts a script or an npm script, without arguments", ErrInvalid)
+		}
 	}
 
 	if err := agentapi.ValidateAppWorkdir(a.Workdir); err != nil {
@@ -109,14 +143,15 @@ func appSpec(site store.Site) agentapi.AppSpec {
 	a := site.App
 
 	return agentapi.AppSpec{
-		Site: site.Name, Node: a.Node, Workdir: a.Workdir, StartKind: a.StartKind, Start: a.Start, Port: a.Port,
+		Site: site.Name, Node: a.Node, Workdir: a.Workdir, StartKind: a.StartKind, Start: a.Start, Args: a.Args, Port: a.Port,
 		Stopped: a.Stopped || a.StartKind == "" || site.Disabled,
 	}
 }
 
-// applyApp sets up the app of a Node.js site on the agent as it is stored.
+// applyApp sets up the app of a Node.js or app site on the agent as it is
+// stored.
 func (s *Service) applyApp(ctx context.Context, site store.Site) (agentapi.AppStatus, error) {
-	if site.Type != store.SiteTypeNode || site.App == nil {
+	if !hasApp(site) {
 		return agentapi.AppStatus{}, ErrSiteType
 	}
 
@@ -125,7 +160,7 @@ func (s *Service) applyApp(ctx context.Context, site store.Site) (agentapi.AppSt
 	}
 
 	st, err := s.apps.AppApply(ctx, appSpec(site))
-	if isCode(err, agentrpc.CodePrecondition) {
+	if site.Type == store.SiteTypeNode && isCode(err, agentrpc.CodePrecondition) {
 		return agentapi.AppStatus{}, fmt.Errorf("%w: %w", ErrNodeMissing, err)
 	}
 
@@ -147,7 +182,7 @@ func (s *Service) syncApps(ctx context.Context) {
 	}
 
 	for _, site := range all {
-		if site.State != store.SiteActive || site.Type != store.SiteTypeNode || site.App == nil {
+		if site.State != store.SiteActive || !hasApp(site) {
 			continue
 		}
 
@@ -157,15 +192,11 @@ func (s *Service) syncApps(ctx context.Context) {
 	}
 }
 
-// SetApp changes the app of an active Node.js site: version, working
-// directory, start command (ADR-0054). The running app restarts with it.
-// If the agent refuses, the previous app is stored again.
+// SetApp changes the app of an active Node.js or app site: version,
+// working directory, start command, arguments (ADR-0054). The running app
+// restarts with it. If the agent refuses, the previous app is stored
+// again.
 func (s *Service) SetApp(ctx context.Context, actor int64, name string, a store.SiteApp) (store.Site, agentapi.AppStatus, error) {
-	a, err := checkApp(a)
-	if err != nil {
-		return store.Site{}, agentapi.AppStatus{}, err
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -177,11 +208,16 @@ func (s *Service) SetApp(ctx context.Context, actor int64, name string, a store.
 	switch {
 	case site.State != store.SiteActive:
 		return store.Site{}, agentapi.AppStatus{}, ErrState
-	case site.Type != store.SiteTypeNode || site.App == nil:
+	case !hasApp(site):
 		return store.Site{}, agentapi.AppStatus{}, ErrSiteType
 	}
 
-	if a.Node != site.App.Node {
+	a, err = checkApp(a, site.Type == store.SiteTypeApp)
+	if err != nil {
+		return store.Site{}, agentapi.AppStatus{}, err
+	}
+
+	if site.Type == store.SiteTypeNode && a.Node != site.App.Node {
 		if err := s.checkNodeInstalled(ctx, a.Node); err != nil {
 			return store.Site{}, agentapi.AppStatus{}, err
 		}
@@ -221,7 +257,8 @@ func (s *Service) changeApp(ctx context.Context, actor int64, site store.Site, a
 	return out, st, err
 }
 
-// AppAction starts, stops or restarts the app of an active Node.js site.
+// AppAction starts, stops or restarts the app of an active Node.js or app
+// site.
 // Restart of a stopped app starts it.
 // Start and stop last: a stopped app stays stopped after a reboot, until
 // it is started again.
@@ -245,7 +282,7 @@ func (s *Service) AppAction(ctx context.Context, actor int64, name, action strin
 	switch {
 	case site.State != store.SiteActive:
 		return agentapi.AppStatus{}, ErrState
-	case site.Type != store.SiteTypeNode || site.App == nil:
+	case !hasApp(site):
 		return agentapi.AppStatus{}, ErrSiteType
 	case action != agentapi.AppActionStop && site.App.StartKind == "":
 		return agentapi.AppStatus{}, fmt.Errorf("%w: set the start command first", ErrInvalid)
@@ -272,14 +309,14 @@ func (s *Service) AppAction(ctx context.Context, actor int64, name, action strin
 	return st, nil
 }
 
-// AppStatus reports the app of a Node.js site.
+// AppStatus reports the app of a Node.js or app site.
 func (s *Service) AppStatus(ctx context.Context, name string) (agentapi.AppStatus, error) {
 	site, err := s.Get(ctx, name)
 	if err != nil {
 		return agentapi.AppStatus{}, err
 	}
 
-	if site.Type != store.SiteTypeNode || site.App == nil {
+	if !hasApp(site) {
 		return agentapi.AppStatus{}, ErrSiteType
 	}
 
@@ -295,8 +332,15 @@ func (s *Service) AppStatus(ctx context.Context, name string) (agentapi.AppStatu
 }
 
 func appAudit(a store.SiteApp) map[string]string {
-	return map[string]string{
+	out := map[string]string{
 		"node": a.Node, "workdir": a.Workdir, "startKind": a.StartKind, "start": a.Start,
 		"port": strconv.Itoa(a.Port), "stopped": strconv.FormatBool(a.Stopped),
 	}
+
+	if len(a.Args) > 0 {
+		b, _ := json.Marshal(a.Args)
+		out["args"] = string(b)
+	}
+
+	return out
 }

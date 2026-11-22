@@ -1896,6 +1896,66 @@ x systemctl is-active --quiet hostashi-node@nodeapp.service || fail "app not res
 [ "$(api DELETE /api/v1/sites/nodeapp)" = 204 ] || fail "delete node site: $(x cat /tmp/api.out)"
 x test ! -e /etc/systemd/system/hostashi-node@nodeapp.service.d || fail "app drop-ins left after delete"
 x systemctl is-active --quiet hostashi-node@nodeapp.service && fail "app runs after delete"
+
+step "an app site runs its own program with its arguments, no shell (ADR-0054 addendum 2)"
+# The program is a script with a #! line to Node.js: any executable will
+# do, and the test server needs no compiler.
+# shellcheck disable=SC2016 # a literal $HOME the app must get as it is
+args='["--name","a b","$HOME","100%",";","say \"hi\"","back\\slash"]'
+[ "$(api POST /api/v1/sites '{"name":"progapp","domains":["progapp.example.com"],"type":"app","app":{"program":"/bin/sh"}}')" = 422 ] ||
+  fail "absolute program: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites '{"name":"progapp","domains":["progapp.example.com"],"type":"app","app":{"program":"bin/x","args":["a\nExecStartPre=/bin/sh"]}}')" = 422 ] ||
+  fail "newline in an argument: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites "{\"name\":\"progapp\",\"domains\":[\"progapp.example.com\"],\"type\":\"app\",\"app\":{\"program\":\"bin/server\",\"args\":$args}}")" = 201 ] ||
+  fail "create app site: $(x cat /tmp/api.out)"
+# The program is not there yet: set up, not started, and the state says why.
+x systemctl is-active --quiet hostashi-app@progapp.service && fail "app runs without its program"
+[ "$(api GET /api/v1/sites/progapp/app)" = 200 ] || fail "app status: $(x cat /tmp/api.out)"
+x grep -q '"problem":"the program file bin/server does not exist' /tmp/api.out || fail "no problem for a missing program: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/progapp/app/start)" = 409 ] || fail "start without the program: $(x cat /tmp/api.out)"
+x runuser -u progapp -- mkdir -p /home/progapp/bin
+xi runuser -u progapp -- sh -c 'cat >/home/progapp/bin/server' <<JS
+#!/opt/hostashi/node/$NODE_MAJOR/bin/node
+const http = require("http");
+http.createServer((req, res) => {
+  console.log("request " + req.url);
+  res.end(JSON.stringify({uid: process.getuid(), args: process.argv.slice(2), env: process.env.NODE_ENV || ""}) + "\n");
+}).listen(Number(process.env.PORT), process.env.HOST);
+JS
+[ "$(api POST /api/v1/sites/progapp/app/start)" = 409 ] || fail "start of a program without its execute bit: $(x cat /tmp/api.out)"
+x grep -q 'not executable' /tmp/api.out || fail "execute bit message: $(x cat /tmp/api.out)"
+x chmod 0755 /home/progapp/bin/server
+x chown root:root /home/progapp/bin/server
+[ "$(api POST /api/v1/sites/progapp/app/start)" = 409 ] || fail "start of a program of root: $(x cat /tmp/api.out)"
+x chown progapp:progapp /home/progapp/bin/server
+[ "$(api POST /api/v1/sites/progapp/app/start)" = 200 ] || fail "start app: $(x cat /tmp/api.out)"
+uid=$(x id -u progapp)
+body=""
+for _ in $(seq 1 30); do
+  body=$(x curl -fsS -H 'Host: progapp.example.com' http://127.0.0.1/ 2>/dev/null || true)
+  [ -n "$body" ] && break
+  sleep 1
+done
+[ "$body" = "{\"uid\":$uid,\"args\":$args,\"env\":\"\"}" ] ||
+  fail "app answer: '$body' $(x journalctl -u hostashi-app@progapp.service -n 20 --no-pager; x tail -n 20 /var/log/hostashi/app/progapp/app.log)"
+x systemctl is-enabled --quiet hostashi-app@progapp.service || fail "app unit not enabled"
+[ "$(x systemctl show -p User --value hostashi-app@progapp.service)" = progapp ] || fail "app unit user"
+[ "$(x systemctl show -p ControlGroup --value hostashi-app@progapp.service)" = "$(x systemctl show -p ControlGroup --value hostashi-site-progapp.slice)/hostashi-app@progapp.service" ] ||
+  fail "app runs outside the site's slice"
+x test ! -e /etc/systemd/system/hostashi-node@progapp.service.d || fail "a Node.js unit for an app site"
+x grep -q 'request /' /var/log/hostashi/app/progapp/app.log || fail "app log: $(x cat /var/log/hostashi/app/progapp/app.log)"
+[ "$(api PUT /api/v1/sites/progapp/app '{"workdir":"htdocs","program":"bin/server","args":["--two"]}')" = 200 ] || fail "set arguments: $(x cat /tmp/api.out)"
+for _ in $(seq 1 30); do
+  body=$(x curl -fsS -H 'Host: progapp.example.com' http://127.0.0.1/ 2>/dev/null || true)
+  [ "$body" = "{\"uid\":$uid,\"args\":[\"--two\"],\"env\":\"\"}" ] && break
+  sleep 1
+done
+[ "$body" = "{\"uid\":$uid,\"args\":[\"--two\"],\"env\":\"\"}" ] || fail "app after new arguments: '$body'"
+[ "$(api PUT /api/v1/sites/progapp/node "{\"version\":\"$NODE_MAJOR\"}")" = 409 ] || fail "Node.js settings on an app site: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/progapp/app/stop)" = 200 ] || fail "stop app: $(x cat /tmp/api.out)"
+x systemctl is-active --quiet hostashi-app@progapp.service && fail "app still runs after stop"
+[ "$(api DELETE /api/v1/sites/progapp)" = 204 ] || fail "delete app site: $(x cat /tmp/api.out)"
+x test ! -e /etc/systemd/system/hostashi-app@progapp.service.d || fail "app drop-ins left after delete"
 # A line no app runs on can be removed; one in use cannot.
 [ "$(api POST /api/v1/sites "{\"name\":\"nodekeep\",\"domains\":[\"nodekeep.example.com\"],\"type\":\"node\",\"node\":{\"version\":\"$NODE_MAJOR\"}}")" = 201 ] ||
   fail "create second node site: $(x cat /tmp/api.out)"

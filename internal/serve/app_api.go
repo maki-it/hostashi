@@ -47,6 +47,51 @@ func toNodeAppJSON(s store.Site) *nodeAppJSON {
 	return &nodeAppJSON{Version: a.Node, Workdir: a.Workdir, StartKind: a.StartKind, Start: a.Start, Port: a.Port, Stopped: a.Stopped}
 }
 
+// programAppJSON is the app of an app site, a program of its own
+// (ADR-0054 addendum 2). On input the port and stopped are ignored.
+type programAppJSON struct {
+	// Workdir is the working directory below the home, "htdocs" when left
+	// out.
+	Workdir string `json:"workdir"`
+	// Program is the executable file below the home, e.g. "bin/server";
+	// "" while it is not set (the app stays stopped). It must be a regular
+	// file of the site user with an execute bit to start.
+	Program string `json:"program"`
+	// Args are the program's arguments, at most 16 of at most 256 bytes
+	// each, without NUL or line breaks. They reach the program as they are,
+	// without a shell.
+	Args []string `json:"args"`
+	// Port is the loopback port nginx passes requests to; the program
+	// finds it in PORT and should listen on HOST (127.0.0.1).
+	Port int `json:"port"`
+	// Stopped: stopped in the panel, it stays stopped until started.
+	Stopped bool `json:"stopped"`
+}
+
+func (a programAppJSON) app() store.SiteApp {
+	out := store.SiteApp{Workdir: a.Workdir, Start: a.Program, Args: a.Args}
+	if a.Program != "" {
+		out.StartKind = agentapi.AppStartBinary
+	}
+
+	return out
+}
+
+func toProgramAppJSON(s store.Site) *programAppJSON {
+	if s.Type != store.SiteTypeApp || s.App == nil {
+		return nil
+	}
+
+	a := s.App
+
+	args := a.Args
+	if args == nil {
+		args = []string{}
+	}
+
+	return &programAppJSON{Workdir: a.Workdir, Program: a.Start, Args: args, Port: a.Port, Stopped: a.Stopped}
+}
+
 // appStatusJSON is what runs of a site's app.
 type appStatusJSON struct {
 	// State is systemd's ActiveState (active, inactive, failed,
@@ -56,10 +101,13 @@ type appStatusJSON struct {
 	Restarts  int    `json:"restarts"`
 	UsedBytes uint64 `json:"usedBytes"`
 	Since     string `json:"since"`
+	// Problem says why the program of an app site that should run is not
+	// started, "" otherwise.
+	Problem string `json:"problem"`
 }
 
 func toAppStatusJSON(s agentapi.AppStatus) appStatusJSON {
-	return appStatusJSON{State: s.State, SubState: s.SubState, Restarts: s.Restarts, UsedBytes: s.UsedBytes, Since: s.Since}
+	return appStatusJSON{State: s.State, SubState: s.SubState, Restarts: s.Restarts, UsedBytes: s.UsedBytes, Since: s.Since, Problem: s.Problem}
 }
 
 type siteAppJSON struct {
@@ -67,8 +115,40 @@ type siteAppJSON struct {
 	Status appStatusJSON `json:"status"`
 }
 
-// registerApps adds the routes of Node.js apps (ADR-0054).
+// registerApps adds the routes of the apps of Node.js and app sites
+// (ADR-0054).
 func registerApps(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
+	mux.Op("PUT /api/v1/sites/{name}/app", openapi.Operation{
+		ID: "setSiteApp", Tag: "sites", Summary: "Set the working directory, program and arguments of an app site",
+		In: programAppJSON{}, Out: siteAppJSON{},
+	}, a.allow("sites.app:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in programAppJSON
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		s, err := svc.Get(ctx, r.PathValue("name"))
+		if err == nil && s.Type != store.SiteTypeApp {
+			err = hosting.ErrSiteType
+		}
+
+		var st agentapi.AppStatus
+		if err == nil {
+			s, st, err = svc.SetApp(ctx, p.User.ID, r.PathValue("name"), in.app())
+		}
+
+		if err != nil {
+			siteFail(log, w, err, "set app")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, siteAppJSON{Site: toSiteJSON(svc, s), Status: toAppStatusJSON(st)})
+	}))
+
 	mux.Op("PUT /api/v1/sites/{name}/node", openapi.Operation{
 		ID: "setSiteNode", Tag: "sites", Summary: "Set the Node.js version, working directory and start command of a Node.js site",
 		In: nodeAppJSON{}, Out: siteAppJSON{},
@@ -81,7 +161,16 @@ func registerApps(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
-		s, st, err := svc.SetApp(ctx, p.User.ID, r.PathValue("name"), in.app())
+		s, err := svc.Get(ctx, r.PathValue("name"))
+		if err == nil && s.Type != store.SiteTypeNode {
+			err = hosting.ErrSiteType
+		}
+
+		var st agentapi.AppStatus
+		if err == nil {
+			s, st, err = svc.SetApp(ctx, p.User.ID, r.PathValue("name"), in.app())
+		}
+
 		if err != nil {
 			siteFail(log, w, err, "set app")
 
@@ -92,7 +181,7 @@ func registerApps(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger
 	}))
 
 	mux.Op("GET /api/v1/sites/{name}/app", openapi.Operation{
-		ID: "getSiteApp", Tag: "sites", Summary: "The state of a Node.js site's app", Out: appStatusJSON{},
+		ID: "getSiteApp", Tag: "sites", Summary: "The state of the app of a Node.js or app site", Out: appStatusJSON{},
 	}, a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
@@ -110,9 +199,9 @@ func registerApps(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger
 
 	for _, action := range []string{agentapi.AppActionStart, agentapi.AppActionStop, agentapi.AppActionRestart} {
 		summary := map[string]string{
-			agentapi.AppActionStart:   "Start a Node.js site's app; it starts again after a reboot",
-			agentapi.AppActionStop:    "Stop a Node.js site's app; it stays stopped until started",
-			agentapi.AppActionRestart: "Restart a Node.js site's app",
+			agentapi.AppActionStart:   "Start the app of a Node.js or app site; it starts again after a reboot",
+			agentapi.AppActionStop:    "Stop the app of a Node.js or app site; it stays stopped until started",
+			agentapi.AppActionRestart: "Restart the app of a Node.js or app site",
 		}[action]
 
 		mux.Op("POST /api/v1/sites/{name}/app/"+action, openapi.Operation{

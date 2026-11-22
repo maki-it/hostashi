@@ -4,6 +4,7 @@ package store
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -32,7 +33,7 @@ func TestNodeSites(t *testing.T) {
 	}
 
 	got, err := st.SiteByName(ctx, "blog")
-	if err != nil || got.App == nil || *got.App != (SiteApp{Node: "22", Workdir: "app", Port: agentapi.MinAppPort + 1}) {
+	if err != nil || got.App == nil || !reflect.DeepEqual(*got.App, SiteApp{Node: "22", Workdir: "app", Port: agentapi.MinAppPort + 1}) {
 		t.Fatalf("read %+v %v", got.App, err)
 	}
 
@@ -52,7 +53,7 @@ func TestNodeSites(t *testing.T) {
 	}
 
 	got, _ = st.SiteByName(ctx, "blog")
-	if *got.App != (SiteApp{Node: "24", Workdir: "app", StartKind: agentapi.AppStartNPM, Start: "start", Port: agentapi.MinAppPort + 1, Stopped: true}) {
+	if !reflect.DeepEqual(*got.App, SiteApp{Node: "24", Workdir: "app", StartKind: agentapi.AppStartNPM, Start: "start", Port: agentapi.MinAppPort + 1, Stopped: true}) {
 		t.Errorf("after set %+v", got.App)
 	}
 
@@ -82,5 +83,44 @@ func TestNodeSites(t *testing.T) {
 
 	if _, err := st.SetSiteApp(ctx, "missing", a, now); !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing: %v", err)
+	}
+}
+
+func TestAppSites(t *testing.T) {
+	st := open(t, dbPath(t))
+	ctx := t.Context()
+	now := time.Unix(1_800_000_000, 0)
+
+	a := SiteApp{Node: "24", Workdir: "htdocs", StartKind: agentapi.AppStartBinary, Start: "bin/server", Args: []string{"--port", "a \"b\"", "ü"}}
+
+	s1, err := st.CreateAppSite(ctx, "svc", "default", a, []string{"svc.example.com"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if s1.Type != SiteTypeApp || !s1.Account || s1.App == nil || s1.App.Port != agentapi.MinAppPort || s1.App.Node != "" {
+		t.Fatalf("created %+v %+v", s1, s1.App)
+	}
+
+	got, err := st.SiteByName(ctx, "svc")
+	want := SiteApp{Workdir: "htdocs", StartKind: agentapi.AppStartBinary, Start: "bin/server", Args: a.Args, Port: agentapi.MinAppPort}
+
+	if err != nil || !reflect.DeepEqual(*got.App, want) {
+		t.Fatalf("read %+v %v", got.App, err)
+	}
+
+	old, err := st.SetSiteApp(ctx, "svc", SiteApp{Workdir: "srv", StartKind: agentapi.AppStartBinary, Start: "app"}, now)
+	if err != nil || !reflect.DeepEqual(old.Args, a.Args) {
+		t.Fatalf("set: %+v %v", old, err)
+	}
+
+	got, _ = st.SiteByName(ctx, "svc")
+	if got.App.Args != nil || got.App.Start != "app" || got.App.Workdir != "srv" {
+		t.Errorf("after set %+v", got.App)
+	}
+
+	// Arguments only with a program.
+	if _, err := st.SetSiteApp(ctx, "svc", SiteApp{Workdir: "srv", Args: []string{"x"}}, now); err == nil {
+		t.Error("arguments without a program accepted")
 	}
 }
