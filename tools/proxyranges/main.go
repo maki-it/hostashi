@@ -57,9 +57,11 @@ func main() {
 	flag.Parse()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
+	err := run(ctx, http.DefaultClient, *root, *write, *summary, time.Now().UTC())
 
-	if err := run(ctx, http.DefaultClient, *root, *write, *summary, time.Now().UTC()); err != nil {
+	cancel()
+
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "proxyranges:", err)
 		os.Exit(1)
 	}
@@ -77,7 +79,7 @@ func run(ctx context.Context, c *http.Client, root string, write bool, summary s
 	fmt.Print(report)
 
 	if summary != "" {
-		if err := os.WriteFile(summary, []byte(report), 0o644); err != nil {
+		if err := os.WriteFile(summary, []byte(report), 0o644); err != nil { //nolint:gosec // job summary, read by the next step
 			return err
 		}
 	}
@@ -86,7 +88,7 @@ func run(ctx context.Context, c *http.Client, root string, write bool, summary s
 		return nil
 	}
 
-	return os.WriteFile(filepath.Join(root, goFile), Render(got, now), 0o644)
+	return os.WriteFile(filepath.Join(root, goFile), Render(got, now), 0o644) //nolint:gosec // source file in the repository
 }
 
 // Fetch reads the plain lists and the API and returns the ranges, IPv4
