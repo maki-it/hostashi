@@ -21,6 +21,7 @@ export type PlanSite = {
   cronJobs: number;
   cronImport: number; // of cronJobs, created paused with the site
   pageCache?: string; // page cache preset proposed for a site that had a cache in front
+  homeBytes?: number; // what the old home uses, missing if not measured
   action: PlanAction;
   reasons: PlanReason[];
   source: string;
@@ -77,11 +78,12 @@ export const listReports = async () => (await request<{ reports: Report[] }>("GE
 export const getReport = (id: string) => request<Report>("GET", reportPath(id));
 export const deleteReport = (id: string) => request<void>("DELETE", reportPath(id));
 
-export const createFromPlan = (id: string, name: string, reviewed: boolean, php: string, pageCache?: boolean) =>
+export const createFromPlan = (id: string, name: string, reviewed: boolean, php: string, pageCache?: boolean, pool = "") =>
   request<PlanSite>("POST", sitePath(id, name), {
     reviewed,
     ...(php ? { php } : {}),
     ...(pageCache === undefined ? {} : { pageCache }),
+    ...(pool ? { pool } : {}),
   });
 export const startImport = (id: string, name: string, databases: DBMap[]) =>
   request<ImportJob>("POST", sitePath(id, name) + "/import", { databases });
@@ -242,6 +244,8 @@ export function migrationMessage(err: unknown): string {
         return "The import has not finished copying yet.";
       case "needs_review":
         return "Confirm that you checked this site first.";
+      case "pool_unusable":
+        return "The storage pool cannot take this site: its volume is missing or it has too little free space. Choose another pool.";
       case "skipped":
         return "The plan skips this site: " + err.message + ".";
       case "no_site":

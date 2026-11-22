@@ -310,6 +310,39 @@ describe("Migrate", () => {
     expect(status.queryByRole("button", { name: "Use imported files as web root" })).not.toBeInTheDocument();
   });
 
+  it("creates an imported site on a chosen storage pool", async () => {
+    const user = userEvent.setup();
+    const report = { id: "r1", sites: 1, createdAt: "2026-11-19T09:00:00Z" };
+    const GiB = 2 ** 30;
+    const calls = mockFetch({
+      [`GET ${base}/source`]: { body: readySource },
+      [`GET ${base}/reports`]: { body: { reports: [report] } },
+      [`GET ${base}/reports/r1`]: { body: { ...report, plan: plan([{ ...planSite("shop", "import"), php: "8.3", homeBytes: 20 * GiB }]) } },
+      "GET /api/v1/php/versions": { body: { installed: ["8.3"], supported: ["8.3"], legacy: [] } },
+      "GET /api/v1/pools": {
+        body: {
+          pools: [
+            { name: "default", path: "/home", sites: 22, available: true, quota: "enforced", freeBytes: 14 * GiB, totalBytes: 38 * GiB },
+            { name: "vol1", path: "/srv/vol1", sites: 0, available: true, quota: "enforced", freeBytes: 180 * GiB, totalBytes: 200 * GiB },
+          ],
+        },
+      },
+      [`POST ${base}/reports/r1/sites/shop`]: { status: 201, body: planSite("shop", "skip") },
+      "GET /api/v1/databases": { body: { databases: [] } },
+      [`GET ${base}/imports?site=shop`]: { body: { imports: [] } },
+      [`GET ${base}/sites/shop/cutover`]: noCutover,
+    });
+    render(<Harness initial="report=r1&site=shop" />);
+    const select = await screen.findByLabelText(/^Storage pool for shop/);
+    expect(screen.getByText("The old home uses 20.0 GiB.")).toBeInTheDocument();
+    // 14 GiB free on the default pool: too small for the old home.
+    expect(screen.getByText(/Pool default has less free space/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create shop" })).toBeDisabled();
+    await user.selectOptions(select, "vol1");
+    await user.click(screen.getByRole("button", { name: "Create shop" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ pool: "vol1" }));
+  });
+
   it("reviews the custom nginx of a created site and saves it as snippets", async () => {
     const user = userEvent.setup();
     const report = { id: "r1", sites: 1, createdAt: "2026-11-19T09:00:00Z" };

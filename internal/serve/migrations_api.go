@@ -71,6 +71,8 @@ func importFail(log *slog.Logger, w http.ResponseWriter, err error, what string)
 		writeError(w, http.StatusNotFound, "no_site", "the report has no importable site of this name")
 	case errors.Is(err, cpmigrate.ErrBadRequest):
 		writeError(w, http.StatusUnprocessableEntity, "invalid_argument", err.Error())
+	case errors.Is(err, cpmigrate.ErrPool):
+		writeError(w, http.StatusConflict, "pool_unusable", err.Error())
 	case errors.Is(err, cpmigrate.ErrNotDone):
 		writeError(w, http.StatusConflict, "not_done", "the import has not finished copying")
 	case errors.Is(err, cpmigrate.ErrNoImporter):
@@ -158,6 +160,7 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 			Reviewed  bool   `json:"reviewed"`
 			PHP       string `json:"php"`
 			PageCache *bool  `json:"pageCache"`
+			Pool      string `json:"pool"`
 		}
 		if !decodeJSON(w, r, &in) {
 			return
@@ -166,7 +169,9 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
-		site, err := svc.CreateSite(ctx, p.User.ID, r.PathValue("id"), r.PathValue("name"), cpmigrate.CreateOptions{Reviewed: in.Reviewed, PHP: in.PHP, PageCache: in.PageCache})
+		site, err := svc.CreateSite(ctx, p.User.ID, r.PathValue("id"), r.PathValue("name"), cpmigrate.CreateOptions{
+			Reviewed: in.Reviewed, PHP: in.PHP, PageCache: in.PageCache, Pool: in.Pool,
+		})
 		if err != nil {
 			importFail(log, w, err, "create site from cloudpanel report")
 
@@ -363,7 +368,7 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 	return func(ctx context.Context, actor int64, s cpmigrate.NewSite) (cpmigrate.Created, error) {
 		// The old site may call programs from PHP; it keeps that until the
 		// admin turns it off in the site's settings (ADR-0033).
-		req := hosting.CreateRequest{Name: s.Name, PHP: s.PHP, Domains: s.Domains, PHPPrograms: s.PHP != ""}
+		req := hosting.CreateRequest{Name: s.Name, Pool: s.Pool, PHP: s.PHP, Domains: s.Domains, PHPPrograms: s.PHP != ""}
 		if u := s.Usage; u != nil && u.Bytes >= 0 && u.Inodes >= 0 {
 			// Disk limits of at least the old use plus 50 % (ADR-0015), so
 			// the import does not stop at the quota.
