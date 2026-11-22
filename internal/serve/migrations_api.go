@@ -23,6 +23,7 @@ import (
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/sshkeys"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 type cloudPanelReportJSON struct {
@@ -49,6 +50,7 @@ type cloudPanelSiteRequest struct {
 	PHP       string `json:"php"`
 	PageCache *bool  `json:"pageCache"`
 	Pool      string `json:"pool"`
+	Node      string `json:"node"`
 }
 
 type cloudPanelImportRequest struct {
@@ -185,7 +187,8 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 
 	// Creating a site takes its name, domains and PHP version from the
 	// stored report; the body can only confirm a review, pick another
-	// PHP version or leave the proposed page cache off. No certificate is requested before the DNS switch.
+	// PHP version or Node.js line, a pool, or leave the proposed page cache
+	// off. No certificate is requested before the DNS switch.
 	mux.Op("POST "+base+"/{id}/sites/{name}", openapi.Operation{
 		ID: "createCloudPanelSite", Tag: "migrations", Summary: "Create a site from the report", In: cloudPanelSiteRequest{}, Out: plan.Site{}, Status: http.StatusCreated,
 	}, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
@@ -198,7 +201,7 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 		defer cancel()
 
 		site, err := svc.CreateSite(ctx, p.User.ID, r.PathValue("id"), r.PathValue("name"), cpmigrate.CreateOptions{
-			Reviewed: in.Reviewed, PHP: in.PHP, PageCache: in.PageCache, Pool: in.Pool,
+			Reviewed: in.Reviewed, PHP: in.PHP, PageCache: in.PageCache, Pool: in.Pool, Node: in.Node,
 		})
 		if err != nil {
 			importFail(log, w, err, "create site from cloudpanel report")
@@ -400,6 +403,10 @@ func migrationTarget(sites *hosting.Service) cpmigrate.TargetFunc {
 			return plan.Target{}, err
 		}
 
+		if t.Node, err = sites.NodeLines(ctx); err != nil {
+			return plan.Target{}, err
+		}
+
 		return t, nil
 	}
 }
@@ -415,6 +422,20 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 		// The old site may call programs from PHP; it keeps that until the
 		// admin turns it off in the site's settings (ADR-0033).
 		req := hosting.CreateRequest{Name: s.Name, Pool: s.Pool, PHP: s.PHP, Domains: s.Domains, PHPPrograms: s.PHP != ""}
+
+		// A reverse proxy site has no account: nothing else comes with it.
+		if s.Proxy != "" {
+			_, err := sites.Create(ctx, actor, hosting.CreateRequest{Name: s.Name, Domains: s.Domains, Proxy: &store.SiteProxy{Target: s.Proxy}})
+
+			return cpmigrate.Created{}, err
+		}
+
+		// A Node.js site's app stays stopped until its start command is set
+		// (ADR-0054); the files land in htdocs, its working directory.
+		if s.Node != "" {
+			req.App = &store.SiteApp{Node: s.Node, Workdir: agentapi.DefaultAppWorkdir}
+		}
+
 		if u := s.Usage; u != nil && u.Bytes >= 0 && u.Inodes >= 0 {
 			// Disk limits of at least the old use plus 50 % (ADR-0015), so
 			// the import does not stop at the quota.

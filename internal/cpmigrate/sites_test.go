@@ -77,7 +77,7 @@ func sitesReport(t *testing.T) []byte {
 			s.Pool.Settings = map[string]string{"php_admin_value[memory_limit]": "512M", "php_admin_value[open_basedir]": "/home/alpha/"}
 		}),
 		site("beta", "php", scan.StatusClean, "8.1", nil),
-		site("gamma", "nodejs", scan.StatusClean, "", nil),
+		site("gamma", "python", scan.StatusClean, "", nil),
 		{Name: "x", Status: scan.StatusBlocked, Findings: []scan.Finding{{Severity: scan.SevBlocker, Code: "path_escape", Msg: "no"}}},
 	}})
 	if err != nil {
@@ -216,6 +216,89 @@ func TestCreateSiteAndImport(t *testing.T) {
 
 	if g, err := svc.Import(t.Context(), "0123456789abcdef"); err != nil || g.ID != "0123456789abcdef" {
 		t.Fatalf("get: %v", err)
+	}
+}
+
+// TestCreateNodeAndProxySites: a Node.js site gets the newest installed
+// line or the chosen one, a reverse proxy site only its target (ADR-0054).
+func TestCreateNodeAndProxySites(t *testing.T) {
+	var existing []string
+
+	svc, _ := newService(t, func(context.Context) (plan.Target, error) {
+		return plan.Target{Sites: existing, PHP: []string{"8.4"}, Node: []string{"22", "24"}}, nil
+	})
+
+	site := func(user, typ, upstream string) scan.Site {
+		return scan.Site{
+			Name: user + ".example.com", User: user, Type: typ, Status: scan.StatusClean, Upstream: upstream,
+			Domains: []string{user + ".example.com"}, DocRoot: "/home/" + user + "/htdocs/" + user + ".example.com",
+			Sources: []string{"/etc/nginx/sites-enabled/" + user + ".conf"},
+			Cron:    []scan.CronJob{{Schedule: "@daily", Command: "true", Line: 1}},
+			Usage:   &scan.Usage{Bytes: 1 << 20, Inodes: 10},
+		}
+	}
+
+	b, err := json.Marshal(scan.Report{Format: scan.Format, Sites: []scan.Site{
+		site("api", "nodejs", "http://127.0.0.1:3000"), site("web", "nodejs", "http://127.0.0.1:3001"),
+		site("portal", "proxy", "http://10.0.0.5:8080"), site("local", "proxy", "http://127.0.0.1:8080"),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := svc.Upload(t.Context(), 1, bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var created []cpmigrate.NewSite
+
+	imp := &fakeImporter{}
+	svc.Connect(func(_ context.Context, _ int64, s cpmigrate.NewSite) (cpmigrate.Created, error) {
+		created = append(created, s)
+		existing = append(existing, s.Name)
+
+		return cpmigrate.Created{Cron: len(s.Cron)}, nil
+	}, imp)
+
+	ps, err := svc.CreateSite(t.Context(), 1, rep.ID, "api", cpmigrate.CreateOptions{Reviewed: true})
+	if err != nil || ps.Node != "24" || created[0].Node != "24" || created[0].PHP != "" || created[0].Proxy != "" || len(created[0].Cron) != 1 {
+		t.Fatalf("node: %+v %+v %v", ps, created, err)
+	}
+
+	for _, o := range []cpmigrate.CreateOptions{{Reviewed: true, Node: "19"}, {Reviewed: true, PHP: "8.4"}} {
+		if _, err := svc.CreateSite(t.Context(), 1, rep.ID, "web", o); !errors.Is(err, cpmigrate.ErrBadRequest) {
+			t.Errorf("%+v: %v", o, err)
+		}
+	}
+
+	if ps, err := svc.CreateSite(t.Context(), 1, rep.ID, "web", cpmigrate.CreateOptions{Reviewed: true, Node: "22"}); err != nil || ps.Node != "22" || created[1].Node != "22" {
+		t.Fatalf("chosen line: %+v %v", ps, err)
+	}
+
+	// A reverse proxy site: no pool, no home, no cron jobs, no files.
+	for _, o := range []cpmigrate.CreateOptions{{Reviewed: true, Pool: "vol1"}, {Reviewed: true, Node: "24"}} {
+		if _, err := svc.CreateSite(t.Context(), 1, rep.ID, "portal", o); !errors.Is(err, cpmigrate.ErrBadRequest) {
+			t.Errorf("proxy %+v: %v", o, err)
+		}
+	}
+
+	ps, err = svc.CreateSite(t.Context(), 1, rep.ID, "portal", cpmigrate.CreateOptions{Reviewed: true})
+	if c := created[2]; err != nil || c.Proxy != "http://10.0.0.5:8080" || c.Usage != nil || len(c.Cron) != 0 || c.Node != "" || ps.CronImport != 0 {
+		t.Fatalf("proxy: %+v %+v %v", ps, created, err)
+	}
+
+	if _, err := svc.StartImport(t.Context(), 1, rep.ID, "portal", nil); !errors.Is(err, cpmigrate.ErrBadRequest) || len(imp.got) != 0 {
+		t.Fatalf("import of a proxy: %v %v", err, imp.got)
+	}
+
+	if _, err := svc.ReportSite(t.Context(), rep.ID, "portal"); !errors.Is(err, cpmigrate.ErrBadRequest) {
+		t.Fatalf("snippets of a proxy: %v", err)
+	}
+
+	// A proxy to this server is skipped.
+	if _, err := svc.CreateSite(t.Context(), 1, rep.ID, "local", cpmigrate.CreateOptions{Reviewed: true}); !errors.Is(err, cpmigrate.ErrSkipped) {
+		t.Fatalf("local proxy: %v", err)
 	}
 }
 

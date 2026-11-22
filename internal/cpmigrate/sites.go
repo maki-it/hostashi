@@ -65,6 +65,12 @@ type NewSite struct {
 	// PHPSettings are the old pool's allowlisted PHP settings, clamped to
 	// the bounds; nil for none (ADR-0049).
 	PHPSettings *agentapi.PHPSettings
+	// Proxy makes the site a reverse proxy to this target, without a
+	// Linux account (ADR-0054); everything of the home above is empty.
+	Proxy string
+	// Node makes the site a Node.js site of this line; its app stays
+	// stopped until a start command is set (ADR-0054).
+	Node string
 }
 
 // Created counts what came with a new site.
@@ -114,6 +120,8 @@ type CreateOptions struct {
 	// Pool puts the site's home on this storage pool, "" for the default
 	// (ADR-0016).
 	Pool string
+	// Node replaces the plan's Node.js line, for a Node.js site.
+	Node string
 }
 
 // CreateSite creates the site of the report that the plan names, with the
@@ -153,6 +161,23 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		php = o.PHP
 	}
 
+	node := ps.Node
+	if o.Node != "" {
+		if ps.Node == "" {
+			return ps, fmt.Errorf("%w: the site is not a Node.js site", ErrBadRequest)
+		}
+
+		if err := agentapi.ValidateNodeMajor(o.Node); err != nil {
+			return ps, fmt.Errorf("%w: %w", ErrBadRequest, err)
+		}
+
+		node = o.Node
+	}
+
+	if ps.Proxy != "" {
+		return s.createProxy(ctx, actor, reportID, ps, o)
+	}
+
 	if err := s.checkPool(ctx, o.Pool, ps.HomeBytes); err != nil {
 		return ps, err
 	}
@@ -169,6 +194,7 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		PageCache:   cache,
 		ObjectCache: ps.ObjectCache && php != "",
 		PHPSettings: phpSettings(site, php),
+		Node:        node,
 	})
 	if err != nil {
 		return ps, err
@@ -179,12 +205,31 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		"pageCache":   strconv.FormatBool(n.PageCache),
 		"objectCache": strconv.FormatBool(n.ObjectCache),
 		"phpSettings": strconv.FormatBool(n.PHPSettings),
+		"node":        node,
 	})
 
-	ps.PHP, ps.CronImport, ps.SSHImport, ps.ObjectCacheOn, ps.PHPSettingsOn = php, n.Cron, n.SSHKeys, n.ObjectCache, n.PHPSettings
+	ps.PHP, ps.Node, ps.CronImport, ps.SSHImport, ps.ObjectCacheOn, ps.PHPSettingsOn = php, node, n.Cron, n.SSHKeys, n.ObjectCache, n.PHPSettings
 	if !n.PageCache {
 		ps.PageCache = ""
 	}
+
+	return ps, nil
+}
+
+// createProxy creates a reverse proxy site: no account, so no pool, no
+// files, cron jobs or SSH keys.
+func (s *Service) createProxy(ctx context.Context, actor int64, reportID string, ps plan.Site, o CreateOptions) (plan.Site, error) {
+	if o.Pool != "" || o.PageCache != nil && *o.PageCache {
+		return ps, fmt.Errorf("%w: a reverse proxy site has no home and no page cache", ErrBadRequest)
+	}
+
+	domains := append(slices.Clone(ps.Domains), ps.RedirectFrom...)
+
+	if _, err := s.create(ctx, actor, NewSite{Name: ps.Name, Domains: domains, Proxy: ps.Proxy}); err != nil {
+		return ps, err
+	}
+
+	s.audit(ctx, actor, "cloudpanel.site.create", ps.Name, map[string]string{"report": reportID, "proxy": ps.Proxy})
 
 	return ps, nil
 }
@@ -274,6 +319,10 @@ func (s *Service) StartImport(ctx context.Context, actor int64, reportID, name s
 		}
 	}
 
+	if ps.Proxy != "" {
+		return agentapi.CloudPanelImport{}, fmt.Errorf("%w: a reverse proxy site has no files to import", ErrBadRequest)
+	}
+
 	req := agentapi.CloudPanelImportRequest{Site: site.User, RemoteUser: site.User, DocRoot: site.DocRoot, Databases: dbs}
 	if err := req.Validate(); err != nil {
 		return agentapi.CloudPanelImport{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
@@ -356,6 +405,10 @@ func (s *Service) ReportSite(ctx context.Context, reportID, name string) (scan.S
 		if r.Code == "user_twice" {
 			return scan.Site{}, &PlanError{Err: ErrSkipped, Reasons: []plan.Reason{r}}
 		}
+	}
+
+	if ps.Proxy != "" {
+		return scan.Site{}, fmt.Errorf("%w: a reverse proxy site takes no snippets yet", ErrBadRequest)
 	}
 
 	return site, nil

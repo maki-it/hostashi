@@ -13,10 +13,11 @@ A site is everything that answers for a set of domains: the web server configura
 | **PHP** | WordPress, Laravel, TYPO3 and other PHP software | yes |
 | **Static** | HTML, CSS and JavaScript, for example the build of a static site generator or a single-page app | yes |
 | **Node.js** | an app such as Next.js, Nuxt or Express that runs all the time; requests go to its port | yes |
+| **App** | a program of your own, for example a Go or Rust service, that runs all the time; requests go to its port | yes |
 | **Reverse proxy** | passing every request to another web server, for example an app in your network | no |
 | **Redirect** | sending every address to another one, for example an old domain to the new one | no |
 
-A site without a Linux user has no files, cron jobs, SSH access or limits.
+A site without a Linux user has no files, cron jobs, SSH access or limits. [Site types](Site-types.md) describes each type and how to change it later.
 
 ## Create a site
 
@@ -39,7 +40,7 @@ Upload your files with SFTP ([SSH and SFTP](SSH-and-SFTP.md)) or the [file manag
 |-----|-------------------|
 | Overview | state, availability (enable, disable), delete |
 | Domains & HTTPS | domains, certificate, HSTS, [security headers](Security-headers.md), [real visitor address](Real-visitor-address.md) |
-| Web | site type, web root folder, single-page app fallback, asset caching |
+| Web | web root folder, single-page app fallback, asset caching; the app, proxy or redirect settings; [changing the type](Site-types.md#change-the-type) |
 | Files | the [file manager](File-manager.md) |
 | PHP | PHP version and [settings](PHP-settings.md) |
 | Cron | scheduled jobs |

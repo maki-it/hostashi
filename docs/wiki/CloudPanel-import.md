@@ -42,6 +42,12 @@ Do this site by site.
 4. **Final sync.** Shortly before the DNS switch, run the import again. Then choose **Use imported files as web root**.
 5. **DNS switch.** The panel shows the records to set for every domain: point them to this server and remove all other `A` and `AAAA` records. It checks what the domains resolve to and, once they point here, gets the certificate and turns on HTTPS. Lower long DNS TTLs to 300 seconds a day before, so the switch is quick.
 
+## Node.js and reverse proxy sites
+
+- A **Node.js** site becomes a Node.js site. It gets the newest Node.js line installed on this server (install one on the Node.js page first), or another line you choose. Its app gets a new port in `PORT` and stays stopped until you set the start command on the site's **Web** tab, after the final sync. The old process manager, for example pm2, is not taken over.
+- A **reverse proxy** site becomes a reverse proxy site to the same target. It has no Linux account here, so there are no files, databases, cron jobs or SSH keys to move: skip step 2. A target on the old server itself, such as `127.0.0.1`, cannot be taken over. An `https` target's certificate is checked; turn the check off in the site's settings if the target uses a self-signed certificate.
+- Python sites are not taken over yet.
+
 ## 5. Clean up
 
 When every site is switched:

@@ -29,8 +29,14 @@ export const sites = [
   site("blog", { type: "php", php: "8.4", domains: ["blog.example.com", "www.blog.example.com"], tls: tls(["blog.example.com", "www.blog.example.com"]) }),
   site("shop", { type: "php", php: "8.3", domains: ["shop.example.com"], tls: tls(["shop.example.com"]) }),
   site("docs", { type: "static", domains: ["docs.example.com"], web: { dir: "public", spa: false, cache: true }, tls: tls(["docs.example.com"]) }),
-  site("app", { type: "node", domains: ["app.example.com"], tls: tls(["app.example.com"]) }),
-  site("old-domain", { type: "redirect", account: false, domains: ["example.net", "www.example.net"], redirect: { to: "https://www.example.com", code: 301, keepPath: true }, tls: tls(["example.net", "www.example.net"]) }),
+  site("app", {
+    type: "node",
+    domains: ["app.example.com"],
+    node: { version: "24", workdir: "htdocs", startKind: "npm", start: "start", port: 20000, stopped: false },
+    tls: tls(["app.example.com"]),
+  }),
+  site("intranet", { type: "proxy", account: false, domains: ["intranet.example.com"], proxy: { target: "http://10.0.0.5:8080", targetHost: false, insecure: false }, tls: tls(["intranet.example.com"]) }),
+  site("old-domain", { type: "redirect", account: false, domains: ["example.net", "www.example.net"], redirect: { target: "https://www.example.com", status: 301, keepPath: true }, tls: tls(["example.net", "www.example.net"]) }),
   site("staging", { type: "php", php: "8.4", domains: ["staging.example.com"], tls: tls([], { active: false, hsts: false, notAfter: null, error: "staging.example.com has no DNS record pointing to this server", failedAt: day(0) }) }),
 ];
 
@@ -94,6 +100,7 @@ const routes = [
   ["GET", /^\/backups$/, () => backups],
   ["GET", /^\/firewall$/, () => firewall],
   ["GET", /^\/dbtool$/, () => ({ available: true, minutes: [30, 120] })],
+  ["GET", /^\/sites\/[^/]+\/app$/, () => ({ state: "active", subState: "running", restarts: 0, usedBytes: 86_000_000, since: day(1) })],
   ["GET", /^\/sites\/[^/]+\/backups$/, () => ({ snapshots })],
   ["GET", /^\/sites\/[^/]+\/headers$/, () => ({
     headers: { noSniff: true, frameOptions: "SAMEORIGIN", referrerPolicy: "strict-origin-when-cross-origin" },

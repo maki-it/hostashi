@@ -25,6 +25,18 @@ const shots = [
   { name: "sites", hash: "#/sites", ready: "table" },
   { name: "site-new", hash: "#/sites?new=1", ready: "form" },
   { name: "site-domains", hash: "#/sites/blog/domains", ready: "text=Domains" },
+  { name: "site-node", hash: "#/sites/app/web", ready: "text=Start command" },
+  { name: "site-proxy", hash: "#/sites/intranet/web", ready: "text=Pass requests to" },
+  {
+    name: "site-type-change",
+    hash: "#/sites/docs/web",
+    ready: "text=Change type",
+    act: async (page) => {
+      await page.getByRole("button", { name: "Change type" }).click();
+      await page.getByRole("radio", { name: /^PHP/ }).click();
+      await page.getByRole("heading", { name: "Change type" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
   { name: "users", hash: "#/users", ready: "table" },
   { name: "databases", hash: "#/databases", ready: "table" },
   { name: "backups", hash: "#/backups", ready: "text=Snapshots" },
