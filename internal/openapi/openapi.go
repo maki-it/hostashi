@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"regexp"
 	"sort"
@@ -51,7 +52,10 @@ type Operation struct {
 	// Status is the success status; 0 means 200, or 204 when nothing is
 	// returned.
 	Status int
-	Query  []Param
+	// AlsoStatus are further success statuses with the same body, e.g.
+	// 202 when a change goes on in the background.
+	AlsoStatus []int
+	Query      []Param
 	// Errors are error answers whose body is not the shared error body,
 	// by status, e.g. {422: settingErrorJSON{}}.
 	Errors map[int]any
@@ -336,6 +340,16 @@ func operation(r *reflector, rt Route, method, path string, errRef map[string]an
 			"description": "Error",
 			"content":     map[string]any{"application/json": map[string]any{"schema": errRef}},
 		},
+	}
+
+	for _, code := range o.AlsoStatus {
+		if code < 200 || code > 299 || code == status {
+			return nil, fmt.Errorf("status %d is not another success status", code)
+		}
+
+		also := maps.Clone(success)
+		also["description"] = http.StatusText(code)
+		responses[strconv.Itoa(code)] = also
 	}
 
 	for code, body := range o.Errors {

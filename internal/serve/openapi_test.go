@@ -89,20 +89,17 @@ func TestOpenAPIDocument(t *testing.T) {
 	}
 }
 
-// TestOpenAPIDescribed lists the routes without an operation record. It
-// does not fail yet; the list must be empty before 1.0 (ADR-0058).
+// TestOpenAPIDescribed fails for an API route without an operation record:
+// every route is in the document with its schemas, so the CLI can reach it
+// (ADR-0058). Register API routes with mux.Op.
 func TestOpenAPIDescribed(t *testing.T) {
 	_, mux := newFullAPIMux(t)
 
-	var missing []string
-
 	for _, p := range mux.patterns {
 		if _, ok := mux.ops[p]; !ok && strings.Contains(p, "/api/v1/") {
-			missing = append(missing, p)
+			t.Errorf("%s has no operation record; register it with mux.Op", p)
 		}
 	}
-
-	t.Logf("%d of %d routes have no operation record yet", len(missing), len(mux.patterns))
 }
 
 func TestOpenAPIServed(t *testing.T) {
