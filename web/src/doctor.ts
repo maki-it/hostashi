@@ -50,6 +50,8 @@ const titles: Record<string, string> = {
   "site.tls": "Certificate",
   "site.php": "PHP version",
   "site.cache": "Object cache",
+  "hostashi.update": "Hostashi version",
+  "hostashi.apt": "Hostashi package list",
 };
 
 export const checkTitle = (id: string) => titles[id] ?? id;

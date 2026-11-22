@@ -50,7 +50,7 @@ On **Your account → Email**, enter your address. Hostashi sends a link to it; 
 |---|---|
 | Backups | A backup failed or did not save everything. Once per run. |
 | Certificates | A renewal failed (at most once a day), or a certificate expires in 14 or in 3 days. |
-| Server checks | Once a day, when the checks on the Health page find errors. |
+| Server checks | Once a day, when the checks on the Health page find errors. Also once per new Hostashi version, when the server does not install it by itself (`--auto-update`). |
 | PHP versions | Once a week per site, when a site uses a PHP version that loses security fixes within 60 days or already has. |
 | Disk space | A disk of the server or a site's disk limit is 90 percent full or more. At most once a day. |
 

@@ -302,6 +302,7 @@ func TestWatcherDoctor(t *testing.T) {
 		{ID: "site.disk", Site: "blog", Status: agentapi.DoctorWarn, Summary: "files: 8.5 GB of 10 GB (85 %)"},
 		{ID: "site.php", Site: "shop", Status: agentapi.DoctorWarn, Summary: "PHP 8.1 gets no security fixes since 2025-12-31", Hint: "Move the site."},
 		{ID: "site.home", Site: "shop", Status: agentapi.DoctorFail, Summary: "home is world-readable"},
+		{ID: "hostashi.update", Status: agentapi.DoctorWarn, Summary: "hostashi 0.2.0 is available (installed: 0.1.0)", Hint: "Install it with: sudo apt upgrade."},
 	}}
 	w := &Watcher{
 		Notifier: n, Now: func() time.Time { return now }, Log: n.Log,
@@ -322,7 +323,7 @@ func TestWatcherDoctor(t *testing.T) {
 
 	// kim is an admin with every default; mona (manager) only opted into
 	// certificates and backups; uli (user, grant on shop) only certificates.
-	want := "The server's disk is almost full|The site shop is almost full|Old PHP version on the site shop|Server checks found errors"
+	want := "The server's disk is almost full|The site shop is almost full|Old PHP version on the site shop|A new Hostashi version is available|Server checks found errors"
 	if got := strings.Join(byTo["kim@example.com"], "|"); got != want {
 		t.Fatalf("kim:\n%s\nwant\n%s", got, want)
 	}

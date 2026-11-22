@@ -105,7 +105,7 @@ The installer refuses an options file that anyone but root could have written, o
 
 ### Updates with the package
 
-On a server set up this way, installing a newer `hostashi` package (`apt upgrade`) updates it by itself. Before the new files land, the package stops the panel and keeps a copy of the panel database in `/var/lib/hostashi-installer/upgrade/` (the three newest). Then it runs `install.sh upgrade`, which restarts agent and panel, and waits up to 60 seconds for the panel to answer. The output goes to `/var/log/hostashi-upgrade.log`.
+The Health page and the overview show when a newer version is in the Hostashi repository (from apt's package list, which apt refreshes every day), and admins get one email per new version. On a server set up this way, installing a newer `hostashi` package (`apt upgrade`) updates it by itself. Before the new files land, the package stops the panel and keeps a copy of the panel database in `/var/lib/hostashi-installer/upgrade/` (the three newest). Then it runs `install.sh upgrade`, which restarts agent and panel, and waits up to 60 seconds for the panel to answer. The output goes to `/var/log/hostashi-upgrade.log`.
 
 If that fails, the panel runs again as far as possible and apt reports an error; the package stays unconfigured. Fix the cause (the log says what failed), then run `sudo dpkg --configure -a`.
 

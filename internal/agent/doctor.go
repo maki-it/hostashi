@@ -17,6 +17,7 @@ import (
 	"github.com/maki-it/hostashi/internal/firewall"
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/phpctl"
+	"github.com/maki-it/hostashi/internal/updates"
 	"github.com/maki-it/hostashi/internal/web"
 )
 
@@ -41,6 +42,9 @@ type DoctorEnv struct {
 	// ValkeyBinary is where the installer put valkey-server; default
 	// /usr/bin/valkey-server.
 	ValkeyBinary string
+	// Updates are the apt and dpkg files of the update check (ADR-0050);
+	// the zero value reads the server's.
+	Updates updates.Paths
 }
 
 type doctorOps struct {
@@ -155,6 +159,8 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	}
 
 	out = append(out, hard.Updates(), hard.Reboot(), hard.PHP(), hard.Files(), hard.SSH(), hard.Sysctl())
+	st, err := updates.Read(d.env.Updates)
+	out = append(out, doctor.Update(st, err, d.now())...)
 	out = append(out, d.valkey(ctx))
 
 	if d.h != nil {

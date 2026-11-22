@@ -1,0 +1,275 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+// Package updates tells whether a newer hostashi package is available
+// (ADR-0050). It only reads files apt and dpkg keep: the installed version
+// from dpkg's status, the versions in the Hostashi repository from the
+// package lists that apt fetched last (apt-daily.timer, every day), and
+// whether unattended-upgrades installs them (--auto-update). It runs no
+// command and reaches no network.
+package updates
+
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// Package is the name of the package.
+const Package = "hostashi"
+
+// Paths are the files Read reads. The zero value reads the server's.
+type Paths struct {
+	DpkgStatus string // default /var/lib/dpkg/status
+	Sources    string // default /etc/apt/sources.list.d/hostashi.sources
+	Lists      string // default /var/lib/apt/lists
+	// Unattended is the installer's unattended-upgrades file; default
+	// /etc/apt/apt.conf.d/52hostashi-unattended-upgrades.
+	Unattended string
+}
+
+func (p Paths) withDefaults() Paths {
+	def := func(v *string, d string) {
+		if *v == "" {
+			*v = d
+		}
+	}
+	def(&p.DpkgStatus, "/var/lib/dpkg/status")
+	def(&p.Sources, "/etc/apt/sources.list.d/hostashi.sources")
+	def(&p.Lists, "/var/lib/apt/lists")
+	def(&p.Unattended, "/etc/apt/apt.conf.d/52hostashi-unattended-upgrades")
+
+	return p
+}
+
+// Status is what Read found.
+type Status struct {
+	// Installed is the installed version of the package; empty when the
+	// server was not set up from the package.
+	Installed string `json:"installed"`
+	// Available is the newest version in the Hostashi repository's list;
+	// empty when apt has no list of it (yet).
+	Available string `json:"available"`
+	// Update: Available is newer than Installed.
+	Update bool `json:"update"`
+	// Auto: unattended-upgrades installs new versions (--auto-update).
+	Auto bool `json:"auto"`
+	// Repository is the repository's address from the apt source.
+	Repository string `json:"repository"`
+	// ListedAt is when apt last fetched the repository's list; zero
+	// without a list.
+	ListedAt time.Time `json:"listedAt,omitzero"`
+}
+
+// Read reads the status. A missing file is no error: it leaves the fields
+// it would fill empty.
+func Read(p Paths) (Status, error) {
+	p = p.withDefaults()
+
+	var st Status
+
+	arch := ""
+
+	err := eachStanza(p.DpkgStatus, func(f map[string]string) bool {
+		if f["Package"] == Package && strings.HasSuffix(f["Status"], " installed") {
+			st.Installed, arch = f["Version"], f["Architecture"]
+
+			return false
+		}
+
+		return true
+	})
+	if err != nil || st.Installed == "" {
+		return st, err
+	}
+
+	src, err := source(p.Sources)
+	if err != nil || src.uri == "" {
+		return st, err
+	}
+
+	st.Repository = src.uri
+
+	st.Auto, err = auto(p.Unattended)
+	if err != nil {
+		return st, err
+	}
+
+	for _, a := range []string{arch, "all"} {
+		if a == "" {
+			continue
+		}
+
+		list := filepath.Join(p.Lists, listName(src.uri, src.suite, src.component, a))
+
+		fi, err := os.Stat(list)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return st, err
+		}
+
+		err = eachStanza(list, func(f map[string]string) bool {
+			if f["Package"] == Package && (st.Available == "" || Compare(f["Version"], st.Available) > 0) {
+				st.Available = f["Version"]
+			}
+
+			return true
+		})
+		if err != nil {
+			return st, err
+		}
+
+		if fi.ModTime().After(st.ListedAt) {
+			st.ListedAt = fi.ModTime().UTC()
+		}
+	}
+
+	st.Update = st.Available != "" && Compare(st.Available, st.Installed) > 0
+
+	return st, nil
+}
+
+type aptSource struct{ uri, suite, component string }
+
+// source reads the first URI, suite and component of the deb822 source
+// the install script writes.
+func source(path string) (aptSource, error) {
+	var s aptSource
+
+	err := eachStanza(path, func(f map[string]string) bool {
+		if s.uri != "" {
+			return false
+		}
+
+		first := func(v string) string { w, _, _ := strings.Cut(strings.TrimSpace(v), " "); return w }
+		if u := first(f["URIs"]); u != "" {
+			s = aptSource{uri: strings.TrimSuffix(u, "/"), suite: first(f["Suites"]), component: first(f["Components"])}
+		}
+
+		return true
+	})
+
+	if s.suite == "" || s.component == "" {
+		s = aptSource{}
+	}
+
+	return s, err
+}
+
+// auto reports whether the unattended-upgrades file lets the Hostashi
+// repository in (packaging/install.sh, uu_origins).
+func auto(path string) (bool, error) {
+	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+
+	return strings.Contains(string(b), `"origin=Hostashi,`), err
+}
+
+// listName is the file name apt gives a repository's package list
+// (URItoFileName: no scheme, no login, some characters quoted, / as _).
+func listName(uri, suite, component, arch string) string {
+	if i := strings.Index(uri, "://"); i >= 0 {
+		uri = uri[i+3:]
+	}
+
+	if at := strings.IndexByte(uri, '@'); at >= 0 && at < strings.IndexByte(uri+"/", '/') {
+		uri = uri[at+1:]
+	}
+
+	u := uri + "/dists/" + suite + "/" + component + "/binary-" + arch + "/Packages"
+
+	var b strings.Builder
+
+	for i := range len(u) {
+		c := u[i]
+
+		switch {
+		case c == '/':
+			_ = b.WriteByte('_')
+		case strings.IndexByte("\\|{}[]<>\"^~_=!@#$%^&*", c) >= 0 || c <= ' ' || c >= 0x7f:
+			fmt.Fprintf(&b, "%%%02x", c)
+		default:
+			_ = b.WriteByte(c)
+		}
+	}
+
+	return b.String()
+}
+
+// eachStanza calls fn with the fields of each deb822 stanza in the file
+// until fn returns false. Continuation lines are joined with a space. A
+// missing file has no stanzas.
+func eachStanza(path string, fn func(map[string]string) bool) error {
+	f, err := os.Open(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	return stanzas(f, fn)
+}
+
+// maxLine bounds one line of a list; a description longer than that is
+// not ours anyway.
+const maxLine = 1 << 20
+
+func stanzas(r io.Reader, fn func(map[string]string) bool) error {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 64<<10), maxLine)
+
+	cur := map[string]string{}
+	last := ""
+
+	flush := func() bool {
+		if len(cur) == 0 {
+			return true
+		}
+
+		more := fn(cur)
+		cur, last = map[string]string{}, ""
+
+		return more
+	}
+
+	for sc.Scan() {
+		line := sc.Text()
+
+		switch {
+		case strings.TrimSpace(line) == "":
+			if !flush() {
+				return nil
+			}
+		case strings.HasPrefix(line, "#"):
+		case line[0] == ' ' || line[0] == '\t':
+			if last != "" {
+				cur[last] += " " + strings.TrimSpace(line)
+			}
+		default:
+			k, v, ok := strings.Cut(line, ":")
+			if !ok {
+				continue
+			}
+
+			last = k
+			cur[k] = strings.TrimSpace(v)
+		}
+	}
+
+	if err := sc.Err(); err != nil {
+		return err
+	}
+
+	flush()
+
+	return nil
+}
