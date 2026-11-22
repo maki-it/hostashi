@@ -52,6 +52,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0055](0055-service-outage-notifications.md) | Email notifications for service outages | Accepted |
 | [0056](0056-security-headers-per-site.md) | Security headers per site | Accepted |
 | [0057](0057-database-size-and-connection-limits.md) | Database size and connection limits per site | Proposed |
+| [0058](0058-openapi-spec-and-cli-parity.md) | OpenAPI specification and CLI parity | Proposed |
 
 Only the project owner sets a status to `Accepted`.
 

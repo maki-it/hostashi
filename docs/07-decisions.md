@@ -61,6 +61,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0055 | Email notifications for service outages | Accepted on 2026-11-22 ([adr/0055](adr/0055-service-outage-notifications.md)) | No |
 | 0056 | Security headers per site | Accepted on 2026-11-22 ([adr/0056](adr/0056-security-headers-per-site.md)) | No |
 | 0057 | Database size and connection limits per site | Proposed ([adr/0057](adr/0057-database-size-and-connection-limits.md)) | No |
+| 0058 | OpenAPI specification and CLI parity | Proposed ([adr/0058](adr/0058-openapi-spec-and-cli-parity.md)) | No |
 
 ---
 
@@ -403,3 +404,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0057 Database size and connection limits per site
 
 **Full text (status Proposed, 2026-11-22):** [adr/0057](adr/0057-database-size-and-connection-limits.md). Summary: closes the database gap of ADR-0015. Two new limit values in the presets and per site (Kim, 2026-11-22): a warning threshold for the size of a site's local databases (`warning` 80 %, `critical` 95 %, email at 90 %, no enforcement) and `MAX_USER_CONNECTIONS` for each database user of the site. Seeds small 2 GiB / 20, medium 5 GiB / 40, large 10 GiB / 80 [E]. Read-only agent operation `db.sizes` (information_schema, data plus indexes, cached five minutes in the panel) and `db.site.limits.set` (fixed `ALTER USER ... WITH MAX_USER_CONNECTIONS`). External database servers left out in v1. Migration 0049.
+
+## ADR-0058 OpenAPI specification and CLI parity
+
+**Full text (status Proposed, 2026-11-22):** [adr/0058](adr/0058-openapi-spec-and-cli-parity.md). Summary: code-first OpenAPI 3.1. Each route gets an operation record (id, tag, summary, request and response Go types) next to its `HandleFunc`; a generator builds `api/openapi.json` from the records, the ADR-0035 route matrix and the Go types (`invopop/jsonschema`). CI fails on a route without a record or a stale file, and handler tests validate responses with `kin-openapi`. The CLI becomes an API client (`hostashi login`, token in `~/.config/hostashi/credentials.json`, `HOSTASHI_URL`/`HOSTASHI_TOKEN`) whose `hostashi api <tag> <verb>` commands are built from the embedded document, so parity holds by construction. Root-only commands without an API stay; duplicates that bypass the panel (`site create` …) are deprecated. No new agent operation, no new `os/exec` exception.
