@@ -54,6 +54,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0057](0057-database-size-and-connection-limits.md) | Database size and connection limits per site | Accepted |
 | [0058](0058-openapi-spec-and-cli-parity.md) | OpenAPI specification and CLI parity | Accepted |
 | [0059](0059-real-client-ip-behind-proxies.md) | Real client IP behind CDNs and proxies | Proposed |
+| [0060](0060-time-zone-hostname-and-reboot.md) | Time zone, hostname and reboot from the panel | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 
