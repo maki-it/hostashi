@@ -10,6 +10,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
@@ -63,6 +65,12 @@ type phpInstallJSON struct {
 }
 
 // registerPHPInstall adds GET and POST /api/v1/php/install (ADR-0036).
+type phpInstallRequest struct {
+	Version string `json:"version"`
+	// ConfirmEOL is needed for a version without security fixes.
+	ConfirmEOL bool `json:"confirmEol"`
+}
+
 func registerPHPInstall(mux *routeMux, a authn, p PHPInstaller, st Settings, log *slog.Logger) {
 	fail := func(w http.ResponseWriter, err error, what string) {
 		var ae *agentrpc.Error
@@ -83,7 +91,9 @@ func registerPHPInstall(mux *routeMux, a authn, p PHPInstaller, st Settings, log
 		}
 	}
 
-	mux.HandleFunc("GET /api/v1/php/install", a.allow("php.install:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/php/install", openapi.Operation{
+		ID: "getPHPInstall", Tag: "php", Summary: "Installed PHP versions and the state of a running installation", Out: phpInstallJSON{},
+	}, a.allow("php.install:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -114,12 +124,10 @@ func registerPHPInstall(mux *routeMux, a authn, p PHPInstaller, st Settings, log
 		writeJSON(w, http.StatusOK, out)
 	}))
 
-	mux.HandleFunc("POST /api/v1/php/install", a.allow("php:install", func(w http.ResponseWriter, r *http.Request, pr auth.Principal) {
-		var in struct {
-			Version string `json:"version"`
-			// ConfirmEOL is needed for a version without security fixes.
-			ConfirmEOL bool `json:"confirmEol"`
-		}
+	mux.Op("POST /api/v1/php/install", openapi.Operation{
+		ID: "installPHP", Tag: "php", Summary: "Install a PHP version", In: phpInstallRequest{}, Out: agentapi.PHPInstallStatus{}, Status: http.StatusAccepted,
+	}, a.allow("php:install", func(w http.ResponseWriter, r *http.Request, pr auth.Principal) {
+		var in phpInstallRequest
 
 		if !decodeJSON(w, r, &in) {
 			return

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
@@ -38,7 +40,9 @@ type PanelChecks func(ctx context.Context, now time.Time) ([]agentapi.DoctorChec
 // registerDoctor adds GET /api/v1/doctor. The report names paths and
 // services of the server, so only administrators read it. panel may be nil.
 func registerDoctor(mux *routeMux, a authn, run Doctor, panel PanelChecks, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/doctor", a.allow("doctor:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/doctor", openapi.Operation{
+		ID: "runDoctor", Tag: "system", Summary: "Check the server and every site without changing anything", Out: doctorJSON{},
+	}, a.allow("doctor:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 

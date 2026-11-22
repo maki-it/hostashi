@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/sshkeys"
@@ -72,9 +75,19 @@ func sshKeyID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 
 // registerSSH adds the SSH key routes of a site (ADR-0032). Every change
 // sends the site's complete list to the agent; a refused change is undone.
+type sshHostKeysJSON struct {
+	Keys []agentapi.SSHHostKey `json:"keys"`
+}
+
+type sshKeyListJSON struct {
+	Keys []sshKeyJSON `json:"keys"`
+}
+
 func registerSSH(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
 	// The server's host keys, which a user compares at the first login.
-	mux.HandleFunc("GET /api/v1/ssh/host-keys", a.allow("ssh.hostkeys:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/ssh/host-keys", openapi.Operation{
+		ID: "listSSHHostKeys", Tag: "ssh", Summary: "The server's SSH host keys, to compare at the first login", Out: sshHostKeysJSON{},
+	}, a.allow("ssh.hostkeys:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -85,10 +98,12 @@ func registerSSH(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger)
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
+		writeJSON(w, http.StatusOK, sshHostKeysJSON{Keys: keys})
 	}))
 
-	mux.HandleFunc("GET /api/v1/sites/{name}/ssh-keys", a.allow("ssh:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/ssh-keys", openapi.Operation{
+		ID: "listSSHKeys", Tag: "ssh", Summary: "The SSH keys of a site's login", Out: sshKeyListJSON{},
+	}, a.allow("ssh:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		keys, err := svc.SSHKeys(r.Context(), r.PathValue("name"))
 		if err != nil {
 			sshFail(log, w, err, "list SSH keys")
@@ -101,10 +116,12 @@ func registerSSH(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger)
 			out = append(out, toSSHKeyJSON(k))
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"keys": out})
+		writeJSON(w, http.StatusOK, sshKeyListJSON{Keys: out})
 	}))
 
-	mux.HandleFunc("GET /api/v1/sites/{name}/ssh-keys/{id}", a.allow("ssh:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/ssh-keys/{id}", openapi.Operation{
+		ID: "getSSHKey", Tag: "ssh", Summary: "One SSH key of a site", Out: sshKeyJSON{},
+	}, a.allow("ssh:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		id, ok := sshKeyID(w, r)
 		if !ok {
 			return
@@ -120,7 +137,9 @@ func registerSSH(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger)
 		writeJSON(w, http.StatusOK, toSSHKeyJSON(k))
 	}))
 
-	mux.HandleFunc("POST /api/v1/sites/{name}/ssh-keys", a.allow("ssh:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST /api/v1/sites/{name}/ssh-keys", openapi.Operation{
+		ID: "addSSHKey", Tag: "ssh", Summary: "Add an SSH key to a site (SFTP only by default)", In: sshKeyCreateJSON{}, Out: sshKeyJSON{}, Status: http.StatusCreated,
+	}, a.allow("ssh:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in sshKeyCreateJSON
 		if !decodeJSON(w, r, &in) {
 			return
@@ -142,7 +161,9 @@ func registerSSH(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger)
 	}))
 
 	// PUT changes label and access; a different key is a new entry.
-	mux.HandleFunc("PUT /api/v1/sites/{name}/ssh-keys/{id}", a.allow("ssh:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("PUT /api/v1/sites/{name}/ssh-keys/{id}", openapi.Operation{
+		ID: "updateSSHKey", Tag: "ssh", Summary: "Rename an SSH key or switch it between SFTP and shell", In: sshKeyChangeJSON{}, Out: sshKeyJSON{},
+	}, a.allow("ssh:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		id, ok := sshKeyID(w, r)
 		if !ok {
 			return
@@ -168,7 +189,9 @@ func registerSSH(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger)
 		writeJSON(w, http.StatusOK, toSSHKeyJSON(k))
 	}))
 
-	mux.HandleFunc("DELETE /api/v1/sites/{name}/ssh-keys/{id}", a.allow("ssh:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("DELETE /api/v1/sites/{name}/ssh-keys/{id}", openapi.Operation{
+		ID: "deleteSSHKey", Tag: "ssh", Summary: "Remove an SSH key from a site",
+	}, a.allow("ssh:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		id, ok := sshKeyID(w, r)
 		if !ok {
 			return

@@ -135,7 +135,7 @@ func (r *reflector) component(t reflect.Type) string {
 	}
 
 	n := schemaName(t)
-	if r.input && !strings.HasSuffix(n, "Request") {
+	if r.input && !strings.HasSuffix(n, "Request") && !strings.HasSuffix(n, "Input") {
 		n += "Input" // a response type that is also sent as a request
 	}
 
