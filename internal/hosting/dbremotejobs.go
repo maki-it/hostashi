@@ -199,6 +199,26 @@ func (s *Service) remoteDatabaseJob(ctx context.Context, database, id string) (a
 	return j, nil
 }
 
+// RemoteJob reports a job on an external server by its id alone, for the
+// import of a restored dump (whose page knows only the job), and drops the
+// job's user once it has ended.
+func (s *Service) RemoteJob(ctx context.Context, id string) (agentapi.DBJob, error) {
+	if (agentapi.DBJobRequest{ID: id}).Validate() != nil {
+		return agentapi.DBJob{}, ErrJobNotFound
+	}
+
+	j, err := s.ag.DBRemoteJob(ctx, id)
+	if isCode(err, agentrpc.CodeNotFound) {
+		return agentapi.DBJob{}, ErrJobNotFound
+	}
+
+	if err != nil {
+		return agentapi.DBJob{}, err
+	}
+
+	return s.remoteDatabaseJob(ctx, j.Database, id)
+}
+
 // FinishDBRemoteJobs drops the users of jobs that have ended. The panel
 // runs it with the server check, so a user does not outlive a job whose
 // page nobody watched or a restart of the panel.

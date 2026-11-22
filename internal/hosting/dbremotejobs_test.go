@@ -115,6 +115,19 @@ func TestRemoteExport(t *testing.T) {
 		t.Fatalf("rows %+v", rows)
 	}
 
+	// By id alone, as the import of a restored dump asks.
+	if got, err := s.RemoteJob(ctx, j.ID); err != nil || got.ID != j.ID || got.Database != "shop_wp" || len(jobUsers(f)) != 1 {
+		t.Fatalf("remote job %+v %v", got, err)
+	}
+
+	if _, err := s.RemoteJob(ctx, "fedcba9876543210"); !errors.Is(err, ErrJobNotFound) {
+		t.Fatalf("unknown remote job: %v", err)
+	}
+
+	if _, err := s.RemoteJob(ctx, "x"); !errors.Is(err, ErrJobNotFound) {
+		t.Fatalf("bad id: %v", err)
+	}
+
 	// Running: the user stays.
 	if got, err := s.DatabaseJob(ctx, "shop_wp", j.ID); err != nil || got.State != agentapi.JobRunning || len(jobUsers(f)) != 1 {
 		t.Fatalf("running job %+v %v, users %v", got, err, jobUsers(f))

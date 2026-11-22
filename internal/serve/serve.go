@@ -252,12 +252,16 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 		}
 
 		if deps.Backups != nil {
-			var dbs SiteDatabases
+			var (
+				dbs  SiteDatabases
+				jobs DatabaseJobs
+			)
+
 			if deps.Sites != nil {
-				dbs = deps.Sites.Databases
+				dbs, jobs = deps.Sites.Databases, deps.Sites
 			}
 
-			registerBackups(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Backups, dbs, log)
+			registerBackups(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Backups, dbs, jobs, log)
 		}
 
 		if deps.CloudPanel != nil {

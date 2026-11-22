@@ -310,7 +310,11 @@ type BackupRestore struct {
 	Kind     string `json:"kind"` // files or db
 	Database string `json:"database,omitempty"`
 	// Dir is the new directory, relative to the site's home.
-	Dir      string    `json:"dir"`
+	Dir string `json:"dir"`
+	// DumpFile is the name of a database dump in Dir once the restore
+	// ran: <database>.sql or, for PostgreSQL, <database>.dump. Empty for
+	// files and for restores made before it was recorded.
+	DumpFile string    `json:"dumpFile,omitempty"`
 	State    string    `json:"state"`
 	Created  time.Time `json:"created"`
 	Started  time.Time `json:"started,omitzero"`

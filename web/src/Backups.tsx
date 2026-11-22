@@ -23,6 +23,7 @@ import {
   type Site,
   type Snapshot,
 } from "./backups";
+import { isPostgres, listServers, type DBServer } from "./databases";
 import { Badge, Button, Card, exactTime, Field, IconButton, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort, type Tone } from "./ui";
 
 type QueryProps = {
@@ -408,7 +409,7 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
           {r?.state === "done" && (
             <Notice tone="ok" title="Restored">
               <p>
-                Restored {r.files} files into <code>{r.dir}</code>.
+                Restored {r.files} {r.files === 1 ? "file" : "files"} into <code>{r.dir}</code>.
               </p>
             </Notice>
           )}
@@ -434,17 +435,38 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
   );
 }
 
+// ImportForm loads a restored dump into a new database of the site. A
+// PostgreSQL dump (.dump, ADR-0051) needs a database on a PostgreSQL
+// server, a MariaDB dump one on this machine or a MariaDB/MySQL server.
 function ImportForm({ site, restore }: { site: string; restore: Restore }) {
+  const postgres = restore.dumpFile?.endsWith(".dump") ?? false;
   const [name, setName] = useState((restore.database ?? site) + "_restored");
+  const [servers, setServers] = useState<DBServer[] | null>(null);
+  const [server, setServer] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "done">("idle");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    listServers()
+      .then((all) => {
+        const fit = all.filter((s) => isPostgres(s) === postgres);
+        setServers(fit);
+        setServer((fit.find((s) => s.default) ?? fit[0])?.name ?? "");
+      })
+      // Without the list the default server takes the dump, as before.
+      .catch(() => setServers([]));
+  }, [postgres]);
+
+  if (postgres && servers && servers.length === 0) {
+    return <Notice tone="warn" title="This is a PostgreSQL dump. Add a PostgreSQL server under Databases to import it." />;
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setState("busy");
     setError("");
     try {
-      await createDatabase(site, name.trim());
+      await createDatabase(site, name.trim(), server);
       const job = await importDump(restore.id, name.trim());
       const end = await poll(() => getImport(job.id), (j) => j.state !== "running");
       if (end.state === "failed") throw new Error(end.error ?? "import failed");
@@ -466,8 +488,19 @@ function ImportForm({ site, restore }: { site: string; restore: Restore }) {
       <Field label="Import into a new database">
         <input className="ui-input" value={name} onChange={(e) => setName(e.target.value)} required />
       </Field>
+      {servers && servers.length > 1 && (
+        <Field label="On the server">
+          <select className="ui-select" value={server} onChange={(e) => setServer(e.target.value)}>
+            {servers.map((s) => (
+              <option key={s.name} value={s.name}>
+                {s.local ? "This machine (" + s.name + ")" : s.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
       {error && <Notice tone="err" title={error} />}
-      <Button variant="primary" type="submit" disabled={state === "busy"}>
+      <Button variant="primary" type="submit" disabled={state === "busy" || servers === null}>
         Create and import
       </Button>
     </form>
