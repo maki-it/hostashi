@@ -35,6 +35,7 @@ import {
 import { PageCacheSettings } from "./PageCache";
 import { PHPSettingsCard } from "./PHPSettings";
 import { Services } from "./Services";
+import { startCommand } from "./node";
 import { SiteWebSettings } from "./SiteWeb";
 import { SnippetSettings } from "./Snippets";
 import { SecurityHeadersCard } from "./SecurityHeaders";
@@ -123,7 +124,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
         {active === "overview" && <Overview site={site} onChange={load} staff={role === "admin" || role === "manager"} />}
         {active === "overview" && role === "admin" && hasAccount(site) && <Services site={site.name} />}
         {active === "domains" && <DomainsTab site={site} onChange={load} />}
-        {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} />}
+        {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} admin={role === "admin"} />}
         {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
         {active === "logs" && <SiteLogs site={site} admin={role === "admin"} />}
         {active === "php" && (
@@ -200,6 +201,17 @@ function Overview({ site, onChange, staff }: TabProps & { staff: boolean }) {
             <>
               <dt>Other domains</dt>
               <dd className="ui-mono">{aliases.join(", ")}</dd>
+            </>
+          )}
+          {site.node && (
+            <>
+              <dt>Node.js app</dt>
+              <dd>
+                {site.node.startKind ? <span className="ui-mono">{startCommand(site.node)}</span> : "No start command yet"}
+                {" on Node.js "}
+                {site.node.version}
+                {site.node.stopped ? ", stopped" : ""}
+              </dd>
             </>
           )}
           {site.proxy ? (

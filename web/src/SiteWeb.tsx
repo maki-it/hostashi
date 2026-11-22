@@ -5,6 +5,7 @@
 
 import { useState, type FormEvent } from "react";
 import { formatHash } from "./routes";
+import { AppCard, AppSettingsCard } from "./SiteNode";
 import { ProxyCard } from "./SiteProxy";
 import { RedirectCard } from "./SiteRedirect";
 import { PHPOptions, SiteTypeChoice } from "./Sites";
@@ -24,9 +25,9 @@ import {
 } from "./sites";
 import { Button, Card, Field, Notice } from "./ui";
 
-type Props = { site: Site; php: PHPVersions | null; onChange: () => Promise<void> };
+type Props = { site: Site; php: PHPVersions | null; onChange: () => Promise<void>; admin?: boolean };
 
-export function SiteWebSettings({ site, php, onChange }: Props) {
+export function SiteWebSettings({ site, php, onChange, admin = false }: Props) {
   if (siteType(site) === "proxy") {
     return (
       <>
@@ -34,6 +35,16 @@ export function SiteWebSettings({ site, php, onChange }: Props) {
         <p className="ui-hint ui-flush">
           A reverse proxy site has no files and no Linux account. Changing it into a PHP or static site comes with the type switch in a later version.
         </p>
+      </>
+    );
+  }
+
+  if (siteType(site) === "node") {
+    return (
+      <>
+        <AppCard site={site} onChange={onChange} />
+        <AppSettingsCard site={site} onChange={onChange} admin={admin} />
+        <p className="ui-hint ui-flush">Changing a Node.js site into a PHP or static site comes with the type switch in a later version.</p>
       </>
     );
   }

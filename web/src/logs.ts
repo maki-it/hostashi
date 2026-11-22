@@ -6,13 +6,17 @@
 
 import { ApiError, request } from "./api";
 
-export type LogKind = "access" | "error" | "php";
+export type LogKind = "access" | "error" | "php" | "app";
 
 export const logKinds: { id: LogKind; label: string; hint: string }[] = [
   { id: "access", label: "Access", hint: "Every request to the site, with the visitor's address." },
   { id: "error", label: "Web server errors", hint: "What nginx reports for the site, including PHP messages it receives." },
   { id: "php", label: "PHP errors", hint: "Warnings and errors of the site's PHP, written by PHP-FPM." },
+  { id: "app", label: "App", hint: "What the site's Node.js app writes to its output and error output." },
 ];
+
+/** The logs a site has: the app log for a Node.js site, the PHP log for the others. */
+export const siteLogKinds = (type: string) => logKinds.filter((k) => (type === "node" ? k.id !== "php" : k.id !== "app"));
 
 export type LogChunk = { lines: string[]; cursor: string; rotated: boolean; more: boolean };
 

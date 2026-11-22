@@ -83,7 +83,7 @@ func TestDecidedRules(t *testing.T) {
 // A user's actions on one site must be site actions, or a grant would not
 // limit them.
 func TestUserActionsAreSiteBound(t *testing.T) {
-	unbound := []authz.Action{"sites:list", "databases:list", "db_servers:list", "php.versions:read", "ssh.hostkeys:read", "pages:read"}
+	unbound := []authz.Action{"sites:list", "databases:list", "db_servers:list", "php.versions:read", "node:read", "ssh.hostkeys:read", "pages:read"}
 
 	for _, a := range authz.Actions() {
 		r, _ := authz.Lookup(a)
