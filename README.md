@@ -2,18 +2,18 @@
 
 A modern, **truly open source** hosting control panel for single Linux servers, as an alternative to [CloudPanel](https://www.cloudpanel.io/).
 
-> **Status:** early releases. [v0.1.0](https://github.com/maki-it/hostashi/releases) is out and installs from a signed apt repository. Hostashi is used on its maintainer's own servers first; expect changes before 1.0. Install it on a **fresh** Debian 13 or Ubuntu 26.04 server only.
+> **Status:** early releases. [v0.2.0](https://github.com/maki-it/hostashi/releases/tag/v0.2.0) is out and installs from a signed apt repository; updates come through apt, automatically if you choose `--auto-update`. Hostashi is used on its maintainer's own servers first; expect changes before 1.0. Install it on a **fresh** Debian 13 or Ubuntu 26.04 server only.
 
 ## What it does
 
-- **Sites:** PHP (several versions side by side), Node.js, static, reverse proxy and redirect sites on nginx. PHP, Node.js and static sites get their own Linux user, SSH/SFTP access, cron jobs, resource limits and logs.
+- **Sites:** PHP (several versions side by side), Node.js, static, reverse proxy and redirect sites on nginx, plus app sites that run a program of their own behind nginx. A site's type can be changed later. Sites that run code get their own Linux user, SSH/SFTP access, cron jobs, resource limits and logs; Node.js and app sites also get environment variables.
 - **HTTPS:** Let's Encrypt certificates for every domain, or your own certificate; HSTS and security headers per site.
 - **Databases:** MariaDB on the server, plus external MariaDB, MySQL and PostgreSQL servers; import, export and a web database tool.
 - **Backups:** daily restic backups of files and databases to a Hetzner Storage Box over SFTP, with restore from the panel.
 - **Server:** firewall that rolls back unconfirmed changes, fail2ban, services and dashboard, e-mail notifications, audit log.
 - **Users and roles:** admin, manager and user, with a second factor (TOTP or passkeys).
 - **Import from CloudPanel:** scan the old server, plan, transfer sites and databases, sync once more before you move DNS.
-- **API and command line:** a REST API under `/api/v1` described in [`api/openapi.json`](api/openapi.json), and the `hostashi` command for the same tasks.
+- **API and command line:** a REST API under `/api/v1` described in [`api/openapi.json`](api/openapi.json). The `hostashi` command uses the same API after `hostashi login` and can run every API operation.
 
 Not in scope for 1.0: mail server, DNS server, billing, resellers and more than one server.
 
