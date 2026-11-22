@@ -22,27 +22,36 @@ Pick a host name for the panel, such as `panel.example.com`, and create a DNS `A
 
 Without a host name the panel only listens on the server itself (`127.0.0.1:8080`), and you reach it through an SSH tunnel.
 
-## 1. Get Hostashi
+## 1. See what would change
 
-There is no release yet. Until there is, build the `hostashi` binary from the repository as described in [CONTRIBUTING.md](https://github.com/maki-it/hostashi/blob/main/CONTRIBUTING.md), and copy it to the server together with the `packaging/` folder.
-
-## 2. See what would change
-
-The installer has two modes. `plan` only reads and lists what it would do:
+Download the install script, read it, and run it without `--yes` first. It then only shows its plan:
 
 ```sh
-sudo ./packaging/install.sh plan --binary ./hostashi --panel-domain panel.example.com
+curl -fsSLO https://get.hostashi.com/install.sh
+less install.sh
+sudo bash install.sh --panel-domain panel.example.com
 ```
 
-## 3. Install
+The script adds the Hostashi apt repository (`get.hostashi.com/apt`), trusts its signing key for that repository only, installs the `hostashi` package and runs the installer that comes with it. It accepts every [installer option](#installer-options).
+
+## 2. Install
 
 ```sh
-sudo ./packaging/install.sh apply --yes --binary ./hostashi --panel-domain panel.example.com
+sudo bash install.sh --yes --panel-domain panel.example.com
 ```
 
 At the end it prints a **one-time setup token**, valid for 24 hours. Keep it for the first login.
 
-Running the installer again is safe: it only changes what is not set up yet, and says `Nothing to do.` when everything is in place. If a step fails, fix the cause and run the same command again.
+Running it again is safe: the installer only changes what is not set up yet, and says `Nothing to do.` when everything is in place. If a step fails, fix the cause and run the same command again. Later updates come with `sudo apt upgrade`; see [Updates with the package](#updates-with-the-package).
+
+### Without the apt repository
+
+To install a binary you built yourself (see [CONTRIBUTING.md](https://github.com/maki-it/hostashi/blob/main/CONTRIBUTING.md)), copy it to the server together with the repository's `packaging/` folder and run the installer directly. `plan` shows what would change, `apply --yes` does it:
+
+```sh
+sudo ./packaging/install.sh plan --binary ./hostashi --panel-domain panel.example.com
+sudo ./packaging/install.sh apply --yes --binary ./hostashi --panel-domain panel.example.com
+```
 
 ### Reboot for disk quota
 
@@ -52,9 +61,9 @@ On the first run the installer prepares disk quota and asks for **one reboot**:
 REBOOT REQUIRED: disk quota is prepared and becomes active after one reboot.
 ```
 
-It never reboots by itself. Reboot when it suits you, then run the same `apply` command again to check that quota is active.
+It never reboots by itself. Reboot when it suits you, then run the installer again to check that quota is active.
 
-## 4. First login
+## 3. First login
 
 Open the panel address (for example `https://panel.example.com:8443`), enter the setup token and create the first admin account. If you lost the token, print it again on the server:
 
@@ -67,12 +76,12 @@ sudo hostashi setup-token
 To open the panel as `https://cp.example.com/` instead of `https://cp.example.com:8443/`, install with port 443:
 
 ```sh
-sudo ./packaging/install.sh apply --yes --binary ./hostashi --panel-domain cp.example.com --panel-port 443
+sudo bash install.sh --yes --panel-domain cp.example.com --panel-port 443
 ```
 
 Before that, create a DNS record for the name that points to the server (`A`, and `AAAA` for IPv6), so that Let's Encrypt can check it. nginx then serves the panel on port 443 next to the sites and tells them apart by the host name. That name cannot be used for a site or a parked domain afterwards.
 
-To switch an installed server between 8443 and 443, run the same `apply` command again with the other `--panel-port`. The installer changes the settings and the firewall and restarts the panel.
+To switch an installed server between 8443 and 443, run the installer again with the other `--panel-port`. The installer changes the settings and the firewall and restarts the panel.
 
 Things to know:
 
