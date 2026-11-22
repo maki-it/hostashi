@@ -86,6 +86,11 @@ func TestAdminUsage(t *testing.T) {
 		{"system", "hostname"},
 		{"system", "timezone", "UTC", "x"},
 		{"system", "info", "x"},
+		{"python"},
+		{"python", "install"},
+		{"python", "remove", "3.13", "x"},
+		{"python", "status", "x"},
+		{"python-install"},
 	} {
 		var out, errOut bytes.Buffer
 		if code := run(t.Context(), args, 0, &out, &errOut); code != 2 {

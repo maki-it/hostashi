@@ -256,7 +256,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config ssh harden sysctl system nginx php phpversions pgclient node valkey mariadb dbtool backup units service fail2ban firewall updates quota"
+STEPS="account dirs key binary config ssh harden sysctl system nginx php phpversions pgclient node python valkey mariadb dbtool backup units service fail2ban firewall updates quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -635,6 +635,29 @@ do_node() {
   install -d -m 0755 -o root -g root "${APP_LOGS%/*}" || return 1
   install -d -m 0750 -o root -g root "$APP_LOGS" || return 1
   write_file "/etc/systemd/system/$NODE_UNIT" 0644 root:root <"$UNIT_DIR/$NODE_UNIT"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  if [ "$rc" = 0 ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
+}
+
+# Python from the CPython builds of python-build-standalone (ADR-0061).
+# Like Node.js, the step only sets up the unit
+# hostashi-python-install@.service, its log directory and
+# /opt/hostashi/python; the panel starts the unit when an admin installs a
+# line, and `hostashi python-install` checks the pinned SHA-256.
+PYTHON_DIR=/opt/hostashi/python
+PYTHON_UNIT=hostashi-python-install@.service
+PYTHON_LOGS=/var/lib/hostashi-agent/python-install
+
+chk_python() {
+  dir_ok "$PYTHON_DIR" 755 root:root || { echo "$PYTHON_DIR"; return 1; }
+  dir_ok "$PYTHON_LOGS" 700 root:root || { echo "$PYTHON_LOGS"; return 1; }
+  file_matches "/etc/systemd/system/$PYTHON_UNIT" 0644 root:root <"$UNIT_DIR/$PYTHON_UNIT" || { echo "$PYTHON_UNIT differs"; return 1; }
+}
+do_python() {
+  local rc
+  install -d -m 0755 -o root -g root "${PYTHON_DIR%/*}" "$PYTHON_DIR" || return 1
+  install -d -m 0700 -o root -g root "$PYTHON_LOGS" || return 1
+  write_file "/etc/systemd/system/$PYTHON_UNIT" 0644 root:root <"$UNIT_DIR/$PYTHON_UNIT"; rc=$?
   [ "$rc" -le 1 ] || return 1
   if [ "$rc" = 0 ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
 }

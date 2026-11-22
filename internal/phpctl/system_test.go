@@ -43,3 +43,16 @@ func TestPHPRemoveUnitName(t *testing.T) {
 		}
 	}
 }
+
+func TestPythonInstallUnitName(t *testing.T) {
+	got, err := pythonInstallUnit("3.13")
+	if err != nil || got != "hostashi-python-install@3.13.service" {
+		t.Fatalf("3.13: %q %v", got, err)
+	}
+
+	for _, v := range []string{"", "3.10", "3", "3.13.service", "3.13 ", "../3.13", "x"} {
+		if _, err := pythonInstallUnit(v); err == nil {
+			t.Errorf("%q accepted", v)
+		}
+	}
+}

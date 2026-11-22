@@ -4864,6 +4864,97 @@
         },
         "type": "object"
       },
+      "Python": {
+        "additionalProperties": false,
+        "properties": {
+          "installed": {
+            "items": {
+              "$ref": "#/components/schemas/PythonInstalled"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "last": {
+            "type": "string"
+          },
+          "log": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "releases": {
+            "items": {
+              "$ref": "#/components/schemas/PythonRelease"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "installed",
+          "last",
+          "log",
+          "releases",
+          "state"
+        ],
+        "type": "object"
+      },
+      "PythonInstalled": {
+        "additionalProperties": false,
+        "properties": {
+          "line": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "line",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PythonLineInput": {
+        "additionalProperties": false,
+        "properties": {
+          "line": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PythonRelease": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "type": "string"
+          },
+          "line": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "end",
+          "line",
+          "version"
+        ],
+        "type": "object"
+      },
       "RealIP": {
         "additionalProperties": false,
         "properties": {
@@ -12481,6 +12572,155 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "pools:read"
+      }
+    },
+    "/api/v1/python": {
+      "get": {
+        "operationId": "getPython",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Python"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "The Python lines Hostashi installs, what is installed and the last installation",
+        "tags": [
+          "python"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "python:read"
+      }
+    },
+    "/api/v1/python/install": {
+      "post": {
+        "operationId": "installPython",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PythonLineInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Python"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "python:install"
+            ]
+          }
+        ],
+        "summary": "Start the installation of the pinned CPython build of a Python line",
+        "tags": [
+          "python"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "python:install"
+      }
+    },
+    "/api/v1/python/remove": {
+      "post": {
+        "operationId": "removePython",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PythonLineInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Python"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "python:install"
+            ]
+          }
+        ],
+        "summary": "Remove an installed Python line that no site runs on",
+        "tags": [
+          "python"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "python:remove"
       }
     },
     "/api/v1/scopes": {

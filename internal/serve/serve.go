@@ -139,6 +139,9 @@ type Deps struct {
 	// Node installs the pinned Node.js builds (ADR-0054); nil disables its
 	// routes. Needs Auth and Settings.
 	Node NodeInstaller
+	// Python installs the pinned CPython builds (ADR-0061); nil disables
+	// its routes. Needs Auth and Settings.
+	Python PythonInstaller
 	// Mail is the SMTP relay (ADR-0044); nil disables its routes. Needs
 	// Auth, Settings and MailSend.
 	Mail     MailRelay
@@ -300,6 +303,10 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		if deps.Node != nil && deps.Settings != nil {
 			registerNode(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Node, deps.Settings, log)
+		}
+
+		if deps.Python != nil && deps.Settings != nil {
+			registerPython(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Python, deps.Settings, log)
 		}
 
 		if deps.PGClient != nil && deps.Settings != nil {
@@ -527,6 +534,7 @@ func Run(ctx context.Context, cfg Config) error {
 		PHP:         RPCPHPInstaller{C: client},
 		PGClient:    RPCPGClient{C: client},
 		Node:        RPCNodeInstaller{C: client},
+		Python:      RPCPythonInstaller{C: client},
 		Mail:        relay,
 		Outbox:      outbox,
 		NotifyPrefs: st,

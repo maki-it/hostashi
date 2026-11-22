@@ -151,6 +151,9 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/node":                                       "node:read",
 	"POST /api/v1/node/install":                              "node:install",
 	"POST /api/v1/node/remove":                               "node:remove",
+	"GET /api/v1/python":                                     "python:read",
+	"POST /api/v1/python/install":                            "python:install",
+	"POST /api/v1/python/remove":                             "python:remove",
 	"DELETE /api/v1/sites/{name}":                            "sites:delete",
 	"POST /api/v1/sites/{name}/park":                         "sites:park",
 	"GET /api/v1/panel/tls":                                  "panel.tls:read",
@@ -314,7 +317,7 @@ func newFullAPIMux(t *testing.T) (*apiEnv, *routeMux) {
 	e.h, mux = handler(Config{PublicURL: testPublicURL}, Deps{
 		PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb,
 		CloudPanel: e.cp, CloudPanelSource: newStubSource(t), Metrics: e.metrics, Settings: e.settings,
-		Doctor: e.doctor.run, Pools: e.pools.list, Firewall: e.firewall, PHP: e.php, PGClient: e.pgclient, Node: e.node, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open, NotifyPrefs: e.st, AuditLog: e.st,
+		Doctor: e.doctor.run, Pools: e.pools.list, Firewall: e.firewall, PHP: e.php, PGClient: e.pgclient, Node: e.node, Python: e.python, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open, NotifyPrefs: e.st, AuditLog: e.st,
 		Monitor: e.monitor, Logs: e.logs, System: e.system,
 	})
 

@@ -24,10 +24,10 @@ func registerNodeInstall(s *agentrpc.Server, m *nodeinstall.Manager, apps *appun
 
 		st, err := m.Start(ctx, req.Major)
 		if errors.Is(err, nodeinstall.ErrBusy) || errors.Is(err, nodeinstall.ErrInstalled) {
-			return st, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: err.Error()}
+			return nodeinstall.Status(st), &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: err.Error()}
 		}
 
-		return st, err
+		return nodeinstall.Status(st), err
 	})
 
 	agentrpc.Handle(s, agentapi.NodeStatusOp, func(ctx context.Context, _ agentrpc.Caller, _ agentapi.NodeStatusRequest) (agentapi.NodeStatus, error) {
@@ -35,7 +35,9 @@ func registerNodeInstall(s *agentrpc.Server, m *nodeinstall.Manager, apps *appun
 			return agentapi.NodeStatus{}, errNoNodeInstall
 		}
 
-		return m.Status(ctx)
+		st, err := m.Status(ctx)
+
+		return nodeinstall.Status(st), err
 	})
 
 	agentrpc.Handle(s, agentapi.NodeRemove, func(ctx context.Context, _ agentrpc.Caller, req agentapi.NodeRemoveRequest) (agentapi.NodeStatus, error) {
@@ -56,9 +58,9 @@ func registerNodeInstall(s *agentrpc.Server, m *nodeinstall.Manager, apps *appun
 
 		st, err := m.Remove(ctx, req.Major, users)
 		if errors.Is(err, nodeinstall.ErrBusy) || errors.Is(err, nodeinstall.ErrNotInstalled) || errors.Is(err, nodeinstall.ErrInUse) {
-			return st, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: err.Error()}
+			return nodeinstall.Status(st), &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: err.Error()}
 		}
 
-		return st, err
+		return nodeinstall.Status(st), err
 	})
 }

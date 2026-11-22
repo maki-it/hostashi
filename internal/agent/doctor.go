@@ -184,13 +184,13 @@ func (d *doctorOps) nodeChecks() []agentapi.DoctorCheck {
 
 	if d.h != nil && d.h.apps != nil {
 		for _, i := range d.node.Installed() {
-			if u, err := d.h.apps.Users(i.Major); err == nil {
-				users[i.Major] = u
+			if u, err := d.h.apps.Users(i.Line); err == nil {
+				users[i.Line] = u
 			}
 		}
 	}
 
-	return doctor.Node(d.node.Installed(), users, d.now())
+	return doctor.Node(nodeinstall.Installed(d.node.Installed()), users, d.now())
 }
 
 func (d *doctorOps) nginx(ctx context.Context) agentapi.DoctorCheck {
