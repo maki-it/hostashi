@@ -58,6 +58,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0052 | Service management and server dashboard | Accepted on 2026-11-21 ([adr/0052](adr/0052-service-management-and-server-dashboard.md)) | No |
 | 0053 | Site logs in the panel | Accepted on 2026-11-21 ([adr/0053](adr/0053-site-logs-in-the-panel.md)) | Done |
 | 0054 | Site types Node.js, reverse proxy and redirect | Accepted on 2026-11-22 ([adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md)) | No |
+| 0055 | Email notifications for service outages | Proposed ([adr/0055](adr/0055-service-outage-notifications.md)) | No |
 
 ---
 
@@ -388,3 +389,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0054 Site types Node.js, reverse proxy and redirect
 
 **Full text (status Accepted, 2026-11-22, by Kim):** [adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md). Summary: a `type` column for sites (`static`, `php`, `node`, `app`, `proxy`, `redirect`; changeable at any time, Addendum 3). Node.js from the official nodejs.org builds of the supported LTS lines, pinned with SHA-256 in Hostashi, installed by a fixed root unit to `/opt/hostashi/node/<major>`; the app runs as `hostashi-node@<site>` under the site user with a typed start command (`node <file>` or `npm run <script>`), encrypted environment variables and a Hostashi-assigned loopback port that nftables opens only for nginx and the site user. Reverse proxy to one http(s) URL, private networks allowed, loopback and link-local refused, certificate checked by default. Redirect with 301/302/307/308 and optional path. Proxy and redirect sites are created without a Linux account. Addendum 1: static sites with a document root folder below `htdocs` and a single-page-app switch. Addendum 2: own app as a binary (`hostashi-app@<site>`). CloudPanel import takes over `proxy` and `nodejs` sites. No new `os/exec` exception.
+
+## ADR-0055 Email notifications for service outages
+
+**Full text (status Proposed, 2026-11-22):** [adr/0055](adr/0055-service-outage-notifications.md). Summary: a new notification category `services` on top of ADR-0044, fed by the service monitor of ADR-0052. Emails when a unit is `failed`, when it crashes 3 times within 15 minutes, when the agent is unreachable for about 3 minutes, and an all-clear when it is back (all-clear only for services, Kim 2026-11-22). Server units go to admins, site units (PHP, Valkey, Node.js, app) also to managers and users with a grant. No log lines in emails. New event kind `recovered` in `service_events` (migration 0047). No new `os/exec` exception, no new agent operation.
