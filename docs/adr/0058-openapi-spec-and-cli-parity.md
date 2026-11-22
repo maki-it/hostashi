@@ -1,6 +1,6 @@
 # ADR-0058 OpenAPI specification and CLI parity
 
-**Status:** Proposed. **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0004 (web/agent privilege split), ADR-0018 (public REST API), ADR-0035 (roles and route matrix), ADR-0050 (releases).
+**Status:** Accepted (Kim, 2026-11-22). **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0003 (stack), ADR-0004 (web/agent privilege split), ADR-0018 (public REST API), ADR-0035 (roles and route matrix), ADR-0050 (releases).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
