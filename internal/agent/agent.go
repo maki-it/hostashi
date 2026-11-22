@@ -609,6 +609,10 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			site.FastCGIReadTimeout = ps.FastCGIReadTimeout()
 		}
 
+		if s.Headers != nil {
+			site.Headers = *s.Headers
+		}
+
 		if s.PageCache != nil {
 			c, err := h.pageCacheFor(s.User, home, *s.PageCache)
 			if err != nil {
