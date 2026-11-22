@@ -53,6 +53,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0056](0056-security-headers-per-site.md) | Security headers per site | Accepted |
 | [0057](0057-database-size-and-connection-limits.md) | Database size and connection limits per site | Accepted |
 | [0058](0058-openapi-spec-and-cli-parity.md) | OpenAPI specification and CLI parity | Accepted |
+| [0060](0060-time-zone-hostname-and-reboot.md) | Time zone, hostname and reboot from the panel | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 
