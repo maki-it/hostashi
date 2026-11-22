@@ -37,6 +37,7 @@ import { PHPSettingsCard } from "./PHPSettings";
 import { Services } from "./Services";
 import { programCommand, startCommand } from "./node";
 import { SiteWebSettings } from "./SiteWeb";
+import { RemoveAccountCard } from "./SiteType";
 import { SnippetSettings } from "./Snippets";
 import { RealIPCard } from "./RealIP";
 import { SecurityHeadersCard } from "./SecurityHeaders";
@@ -88,6 +89,8 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
   const status = siteStatus(site);
   const ready = site.state === "active";
   // The PHP tab only for sites with PHP; the type is changed on the Web tab.
+  // A redirect or reverse proxy that kept its account after a type change
+  // keeps these tabs.
   // A site without an account (redirect, reverse proxy) has no files,
   // cron, SSH or limits, and redirect and reverse proxy no snippets
   // (ADR-0054).
@@ -125,7 +128,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
         {active === "overview" && <Overview site={site} onChange={load} staff={role === "admin" || role === "manager"} />}
         {active === "overview" && role === "admin" && hasAccount(site) && <Services site={site.name} />}
         {active === "domains" && <DomainsTab site={site} onChange={load} admin={role === "admin"} />}
-        {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} admin={role === "admin"} />}
+        {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} admin={role === "admin"} staff={role === "admin" || role === "manager"} />}
         {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
         {active === "logs" && <SiteLogs site={site} admin={role === "admin"} />}
         {active === "php" && (
@@ -266,6 +269,7 @@ function Overview({ site, onChange, staff }: TabProps & { staff: boolean }) {
             <MaintenanceSettings site={site} onChange={onChange} />
           </Card>
           <Availability site={site} onChange={onChange} />
+          {staff && hasAccount(site) && ["redirect", "proxy"].includes(siteType(site)) && <RemoveAccountCard site={site} onChange={onChange} />}
           <DeleteSite site={site} canPark={staff} />
         </>
       )}

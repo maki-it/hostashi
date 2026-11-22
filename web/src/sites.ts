@@ -277,6 +277,71 @@ export const newSiteHash = (domain: string, tls: boolean) =>
   "#/sites?" + new URLSearchParams({ new: "1", domain, tls: tls ? "1" : "0" }).toString();
 export const setDomains = (name: string, domains: string[]) => request<Site>("PUT", sitePath(name) + "/domains", { domains });
 export const setPHP = (name: string, php: string) => request<Site>("PUT", sitePath(name) + "/php", { php });
+
+/** A new type with its settings (ADR-0054 addendum 3); static takes none. */
+export type SiteTypeRequest = {
+  type: SiteType;
+  php?: string;
+  redirect?: SiteRedirect;
+  proxy?: SiteProxy;
+  node?: Pick<NodeApp, "version" | "workdir" | "startKind" | "start">;
+  app?: Pick<ProgramApp, "workdir" | "program" | "args">;
+};
+export const setSiteType = (name: string, t: SiteTypeRequest) => request<Site>("POST", sitePath(name) + "/type", t);
+/** Removes the Linux account a redirect or proxy site kept, with its files and databases. */
+export const removeSiteAccount = (name: string) => request<Site>("DELETE", sitePath(name) + "/account");
+
+const accountTypes: SiteType[] = ["static", "php", "node", "app"];
+
+/**
+ * typeChange says what a change of the site to another type starts, stops
+ * and keeps, for the summary before the change.
+ */
+export function typeChange(s: Site, to: SiteTypeRequest): { starts: string[]; stops: string[]; stays: string[] } {
+  const from = siteType(s);
+  const starts: string[] = [];
+  const stops: string[] = [];
+  const stays: string[] = [];
+  const account = hasAccount(s);
+  const toAccount = accountTypes.includes(to.type);
+
+  if (from === "php") stops.push(`The PHP ${s.php} pool stops. The PHP settings and the page cache stay stored for a switch back.`);
+  // Between node and app the port stays (addendum 3).
+  const port = to.type === "node" || to.type === "app" ? " The new one keeps its port." : " Its port is freed.";
+  if (from === "node") stops.push("The Node.js app stops." + port);
+  if (from === "app") stops.push("The program stops." + port);
+  if (from === "proxy") stops.push(`nginx no longer passes requests to ${s.proxy?.target ?? "the target"}.`);
+  if (from === "redirect") stops.push(`nginx no longer redirects to ${s.redirect?.target ?? "the target"}.`);
+
+  if (toAccount && !account) starts.push(`A Linux account with its home is created in the pool ${s.pool}, with the default limits.`);
+  switch (to.type) {
+    case "static":
+      starts.push("nginx serves the files of htdocs" + (s.web?.dir ? "/" + s.web.dir : "") + " as they are, without PHP.");
+      break;
+    case "php":
+      starts.push(`A PHP ${to.php ?? ""} pool starts and serves the site's PHP files.`);
+      break;
+    case "node":
+      starts.push(to.node?.startKind ? `The Node.js ${to.node.version} app starts on its own port.` : "The Node.js app gets its own port. It starts once its start command is set.");
+      break;
+    case "app":
+      starts.push(to.app?.program ? `The program ${to.app.program} starts on its own port.` : "The app gets its own port. It starts once its program is set.");
+      break;
+    case "proxy":
+      starts.push(`nginx passes every request to ${to.proxy?.target ?? "the target"}.`);
+      break;
+    case "redirect":
+      starts.push(`nginx sends every address to ${to.redirect?.target ?? "the target"} with status ${to.redirect?.status ?? 301}.`);
+      break;
+  }
+
+  stays.push("The domains, HTTPS and the certificate.");
+  if (account && toAccount) stays.push("The Linux account with its files, databases, cron jobs, SSH logins, backups and limits.");
+  if (account && !toAccount)
+    stays.push("The Linux account with its files, databases, cron jobs, SSH logins and backups. You can remove them afterwards on the overview.");
+  return { starts, stops, stays };
+}
+
 export const setRedirect = (name: string, r: SiteRedirect) => request<Site>("PUT", sitePath(name) + "/redirect", r);
 export const setProxy = (name: string, p: SiteProxy) => request<Site>("PUT", sitePath(name) + "/proxy", p);
 export const setWebOptions = (name: string, w: SiteWeb) => request<Site>("PUT", sitePath(name) + "/web", w);

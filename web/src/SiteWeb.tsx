@@ -8,6 +8,7 @@ import { formatHash } from "./routes";
 import { AppCard, AppSettingsCard } from "./SiteNode";
 import { ProgramSettingsCard } from "./SiteApp";
 import { ProxyCard } from "./SiteProxy";
+import { ChangeTypeCard } from "./SiteType";
 import { RedirectCard } from "./SiteRedirect";
 import { PHPOptions, SiteTypeChoice } from "./Sites";
 import {
@@ -28,52 +29,46 @@ import { Button, Card, Field, Notice } from "./ui";
 
 type Props = { site: Site; php: PHPVersions | null; onChange: () => Promise<void>; admin?: boolean };
 
-export function SiteWebSettings({ site, php, onChange, admin = false }: Props) {
-  if (siteType(site) === "proxy") {
-    return (
-      <>
-        <ProxyCard site={site} onChange={onChange} />
-        <p className="ui-hint ui-flush">
-          A reverse proxy site has no files and no Linux account. Changing it into a PHP or static site comes with the type switch in a later version.
-        </p>
-      </>
-    );
-  }
-
-  if (siteType(site) === "node") {
-    return (
-      <>
-        <AppCard site={site} onChange={onChange} />
-        <AppSettingsCard site={site} onChange={onChange} admin={admin} />
-        <p className="ui-hint ui-flush">Changing a Node.js site into a PHP or static site comes with the type switch in a later version.</p>
-      </>
-    );
-  }
-
-  if (siteType(site) === "app") {
-    return (
-      <>
-        <AppCard site={site} onChange={onChange} />
-        <ProgramSettingsCard site={site} onChange={onChange} />
-        <p className="ui-hint ui-flush">Changing an app site into another type comes with the type switch in a later version.</p>
-      </>
-    );
-  }
-
-  if (siteType(site) === "redirect") {
-    return (
-      <>
-        <RedirectCard site={site} onChange={onChange} />
-        <p className="ui-hint ui-flush">
-          A redirect site has no files and no Linux account. Changing it into a PHP or static site comes with the type switch in a later version.
-        </p>
-      </>
-    );
+// staff (admins and managers) may change the type of any site (ADR-0054
+// addendum 3); users switch their own site between static and PHP.
+export function SiteWebSettings({ site, php, onChange, admin = false, staff = false }: Props & { staff?: boolean }) {
+  const change = staff && <ChangeTypeCard site={site} php={php} onChange={onChange} admin={admin} />;
+  switch (siteType(site)) {
+    case "proxy":
+      return (
+        <>
+          <ProxyCard site={site} onChange={onChange} />
+          {change}
+        </>
+      );
+    case "node":
+      return (
+        <>
+          <AppCard site={site} onChange={onChange} />
+          <AppSettingsCard site={site} onChange={onChange} admin={admin} />
+          {change}
+        </>
+      );
+    case "app":
+      return (
+        <>
+          <AppCard site={site} onChange={onChange} />
+          <ProgramSettingsCard site={site} onChange={onChange} />
+          {change}
+        </>
+      );
+    case "redirect":
+      return (
+        <>
+          <RedirectCard site={site} onChange={onChange} />
+          {change}
+        </>
+      );
   }
 
   return (
     <>
-      <TypeCard site={site} php={php} onChange={onChange} />
+      {change || <TypeCard site={site} php={php} onChange={onChange} />}
       <WebRootCard site={site} onChange={onChange} />
     </>
   );
@@ -130,7 +125,7 @@ function TypeCard({ site, php, onChange }: Props) {
           </p>
         )}
         <p className="ui-hint ui-flush">
-          More types (Node.js, own app) follow; reverse proxy and redirect are chosen when a site is created. <a href={formatHash({ page: "php" })}>Install PHP versions</a>
+          An administrator or manager can change the site to other types. <a href={formatHash({ page: "php" })}>Install PHP versions</a>
         </p>
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
