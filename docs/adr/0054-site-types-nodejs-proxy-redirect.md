@@ -172,3 +172,13 @@ Notes on how the reverse proxy decision above is built; they change no decision.
 - One refused address among several refuses the whole answer, as a sign of a name that points back here.
 - Request bodies go to the target as they arrive (`proxy_request_buffering off`) with no size limit in nginx; the target decides.
 - Site snippets for reverse proxy sites come later: the snippet check (ADR-0029) works on a site's home, which a proxy site does not have.
+
+## Implementation notes: Node.js install (2026-11-22)
+
+Notes on how the Node.js source (option C) is built; they change no decision.
+
+- `hostashi node-install <major>` runs in `hostashi-node-install@<major>.service` as root without any capability, with `ProtectSystem=strict` and `/opt/hostashi/node` as its only writable path. It downloads `node-v<version>-linux-<x64|arm64>.tar.gz`, at most 256 MB, into that directory and checks the SHA-256 from `agentapi.NodeReleases` before it opens the archive [V: `internal/nodeinstall`].
+- Unpacking takes only directories, regular files and relative symbolic links that stay inside the tree, with `..` only in front of a link's target; every entry must lie below the archive's top directory. Modes become 0755 or 0644, so no setuid bit and nothing writable for others survives. All writes go through `os.Root` [V: `internal/nodeinstall/nodeinstall_test.go`].
+- The new tree is swapped in with one `renameat2(RENAME_EXCHANGE)`, so a running app never sees a half-written line. `.hostashi-version` in the line's directory names the installed release.
+- API: `GET /api/v1/node` (scope `sites:read`: the lines, their pinned release and end of life, what is installed, the last installation and its log) and `POST /api/v1/node/install` `{"major":"24"}` (scope `node:install`, high risk, admin only, audited as `node.install`). A line whose pinned release is installed answers 409. CLI: `hostashi node status`, `hostashi node install <major>`.
+- Not yet: reinstalling a line on a Hostashi update that pins a newer release (comes with the app unit, which must restart the apps of that line), the weekly "Node versions" workflow, and the panel page (screenshots first).

@@ -1729,6 +1729,41 @@ done
 out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the PostgreSQL client install changed something"; }
 
+step "Node.js from the official nodejs.org builds (ADR-0054)"
+expect_mode /opt/hostashi/node "755 root:root"
+expect_mode /var/lib/hostashi-agent/node-install "700 root:root"
+if x systemctl start hostashi-node-install@25.service 2>/dev/null; then fail "the unit installed Node.js 25"; fi
+[ -z "$(x ls -A /opt/hostashi/node)" ] || fail "Node.js installed without a request: $(x ls -A /opt/hostashi/node)"
+[ "$(api GET /api/v1/node)" = 200 ] || fail "node status: $(x cat /tmp/api.out)"
+x grep -q '"installed":\[\]' /tmp/api.out || fail "a Node.js line is installed already: $(x cat /tmp/api.out)"
+release=$(x grep -o '"major":"[0-9]*","version":"[0-9.]*"' /tmp/api.out | tail -n 1)
+NODE_MAJOR=$(sed -n 's/^"major":"\([0-9]*\)".*/\1/p' <<<"$release")
+NODE_VERSION=$(sed -n 's/.*"version":"\([0-9.]*\)"$/\1/p' <<<"$release")
+[ -n "$NODE_MAJOR" ] && [ -n "$NODE_VERSION" ] || fail "no Node.js release in: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/node/install '{"major":"25"}')" = 422 ] || fail "node 25: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/node/install "{\"major\":\"$NODE_MAJOR\"}")" = 202 ] || fail "node install: $(x cat /tmp/api.out)"
+state=""
+for _ in $(seq 1 150); do
+  [ "$(api GET /api/v1/node)" = 200 ] || fail "node status: $(x cat /tmp/api.out)"
+  state=$(x sed -n 's/.*"state":"\([a-z]*\)".*/\1/p' /tmp/api.out)
+  [ "$state" = running ] || break
+  sleep 2
+done
+[ "$state" = succeeded ] || fail "Node.js from the panel: $(x cat /tmp/api.out)"
+x grep -q "\"installed\":\\[{\"major\":\"$NODE_MAJOR\",\"version\":\"$NODE_VERSION\"}\\]" /tmp/api.out || fail "Node.js $NODE_MAJOR not listed: $(x cat /tmp/api.out)"
+expect_mode "/opt/hostashi/node/$NODE_MAJOR" "755 root:root"
+expect_mode "/opt/hostashi/node/$NODE_MAJOR/bin/node" "755 root:root"
+# Anyone may run it, nobody but root may change it.
+[ "$(x runuser -u nobody -- "/opt/hostashi/node/$NODE_MAJOR/bin/node" --version)" = "v$NODE_VERSION" ] || fail "node --version as nobody"
+[ "$(x runuser -u nobody -- "/opt/hostashi/node/$NODE_MAJOR/bin/node" -e 'console.log(1+1)')" = 2 ] || fail "node -e as nobody"
+# npm starts with #!/usr/bin/env node.
+x runuser -u nobody -- env HOME=/tmp PATH="/opt/hostashi/node/$NODE_MAJOR/bin:/usr/bin:/bin" npm --version >/dev/null || fail "npm --version as nobody"
+[ -z "$(x find /opt/hostashi/node ! -type l -perm /6022)" ] || fail "setuid or writable files: $(x find /opt/hostashi/node ! -type l -perm /6022 | head)"
+[ -z "$(x find /opt/hostashi/node ! -user root)" ] || fail "files not owned by root"
+[ "$(api POST /api/v1/node/install "{\"major\":\"$NODE_MAJOR\"}")" = 409 ] || fail "second node install: $(x cat /tmp/api.out)"
+out=$(inst apply --yes)
+grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the Node.js install changed something"; }
+
 if [ -n "${PEBBLE_DIR:-}" ]; then
   step "a database on an external PostgreSQL server in the web database tool (ADR-0051)"
   # A PostgreSQL container on the host's network stands in for the

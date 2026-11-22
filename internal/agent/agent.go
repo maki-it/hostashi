@@ -35,6 +35,7 @@ import (
 	"github.com/maki-it/hostashi/internal/logrotate"
 	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/netaddrs"
+	"github.com/maki-it/hostashi/internal/nodeinstall"
 	"github.com/maki-it/hostashi/internal/objcache"
 	"github.com/maki-it/hostashi/internal/pagecache"
 	"github.com/maki-it/hostashi/internal/pages"
@@ -170,6 +171,11 @@ type Config struct {
 	// install unit (ADR-0051). Run builds it; without it pg.client.*
 	// answer failed_precondition.
 	PGClient *pgclient.Manager
+
+	// NodeInstall installs the pinned Node.js builds through the fixed
+	// install unit (ADR-0054). Run builds it; without it node.* answer
+	// failed_precondition.
+	NodeInstall *nodeinstall.Manager
 
 	// PageCache keeps the sites' page cache directories (ADR-0046). Run
 	// builds it for nginx's worker user; without it a page cache is
@@ -327,6 +333,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	registerFirewall(s, cfg.Firewall)
 	registerPHPInstall(s, cfg.PHPInstall)
 	registerPGClient(s, cfg.PGClient)
+	registerNodeInstall(s, cfg.NodeInstall)
 
 	svcLog := cfg.Log
 	if svcLog == nil {
@@ -1483,6 +1490,10 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.PGClient == nil {
 		cfg.PGClient = &pgclient.Manager{Units: phpctl.PGClientUnits{}}
+	}
+
+	if cfg.NodeInstall == nil {
+		cfg.NodeInstall = &nodeinstall.Manager{Units: phpctl.NodeInstallUnits{}}
 	}
 
 	if cfg.Firewall == nil {

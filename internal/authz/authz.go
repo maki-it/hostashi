@@ -96,6 +96,8 @@ var table = map[Action]Rule{
 	"panel.tls:write":      server("sites:write"),
 	"php:install":          server("php:install"),
 	"php.install:read":     server("sites:read"),
+	"node:install":         server("node:install"),
+	"node:read":            server("sites:read"),
 	"services:read":        server("services:read"),
 	"services:write":       server("services:write"),
 	"web:sync":             server("sites:write"),
