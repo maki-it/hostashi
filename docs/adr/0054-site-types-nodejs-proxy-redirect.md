@@ -40,7 +40,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 **Common to all types**
 
-- New column `sites.type`: `static`, `php`, `node`, `proxy`, `redirect`. Migration 0045 sets `php` where `sites.php` is set, `static` otherwise. The type is fixed after create in v1 (change type: delete and create).
+- New column `sites.type`: `static`, `php`, `node`, `proxy`, `redirect` (and `app`, Addendum 2). Migration 0045 sets `php` where `sites.php` is set, `static` otherwise. The type is fixed after create in v1 (change type: delete and create).
 - Every type keeps domains, aliases, HTTPS (Let's Encrypt or own certificate), HSTS, HTTP→HTTPS, ACME challenges, the health check, disable with status page (ADR-0047), maintenance (ADR-0027) and site logs (ADR-0053).
 - New site form: the type is the first choice; the form then shows only the fields of that type. The site's settings page hides tabs that do not apply.
 
@@ -117,3 +117,19 @@ None left.
 - No new agent operation beyond the docroot check, no new `os/exec` exception.
 
 **Order.** Right after the type column, before the redirect: (1) type column and migration, (1a) static type with document root folder and SPA switch, then redirect and the rest.
+
+## Addendum 2: own app as a binary (Proposed, 2026-11-22)
+
+**Context.** Kim wants a type for apps that are one executable, for example Go or Rust services (Kim, 2026-11-22). Technically this is the Node.js type without a runtime [A].
+
+**Decision proposed.**
+
+- New type `app`. Like `node`: Linux account, home, slice, quota, SSH/SFTP, files, cron, databases, backups.
+- Unit `hostashi-app@<site>.service` with the same sandbox, slice, restart policy, environment file, assigned loopback port (`PORT`, `HOST=127.0.0.1`), nftables filter, nginx proxy branch and app log as `hostashi-node@` (one shared template in the code, two unit files).
+- Start command, typed: a file below the home (relative path, rules as the document root folder of Addendum 1, must be a regular file with an execute bit and owned by the site user) plus at most 16 arguments, each up to 256 bytes, no NUL or newline. The agent writes them as a systemd `ExecStart=` with every argument quoted by Go code; no shell [A: systemd's own quoting rules are applied by a tested encoder, with tests for spaces, quotes, `$`, `%` and `\`].
+- The binary is the site's own code under the site user, like PHP files and Node.js apps; nothing about its content is checked.
+- Upload and update of the binary: SFTP or the file manager, then "Restart" in the panel. Git deploy (later thread) can build into the home.
+- Panel: start, stop, restart, state and app log, as for Node.js.
+- No new agent operation beyond those of Node.js (`site.app.apply`, `site.app.action` take the type), `phpctl` gets the unit pattern `hostashi-app@<site>.service`. No new `os/exec` exception.
+
+**Order.** After Node.js (it reuses the app unit, the port and the filter): static, redirect, proxy, Node.js, app, import, UI, wiki.
