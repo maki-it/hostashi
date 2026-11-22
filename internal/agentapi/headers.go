@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/maki-it/hostashi/internal/nginxconf"
 )
 
 // Security headers of a site (ADR-0056). The panel and the agent both check
@@ -241,6 +243,41 @@ func checkPermissionsPolicy(v string) error {
 		}
 
 		seen[name] = true
+	}
+
+	return nil
+}
+
+// Conflict refuses custom snippets (ADR-0029) that set, at their top level,
+// a header which is switched on here: the browser would get two values. A
+// snippet that does not parse is left to the snippet check.
+func (h WebHeaders) Conflict(server, root string) error {
+	list := h.List()
+	if len(list) == 0 {
+		return nil
+	}
+
+	for _, sn := range []struct{ slot, src string }{{"server", server}, {"location /", root}} {
+		if sn.src == "" {
+			continue
+		}
+
+		ds, err := nginxconf.Parse(sn.src)
+		if err != nil {
+			continue
+		}
+
+		for _, d := range nginxconf.Find(ds, "add_header") {
+			if len(d.Args) == 0 {
+				continue
+			}
+
+			for _, x := range list {
+				if strings.EqualFold(d.Args[0], x.Name) {
+					return fmt.Errorf("%w: the %s snippet sets %s, which is switched on as a security header", ErrHeaderConflict, sn.slot, x.Name)
+				}
+			}
+		}
 	}
 
 	return nil

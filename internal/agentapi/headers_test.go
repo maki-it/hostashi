@@ -99,3 +99,32 @@ func TestWebApplyRequestChecksHeaders(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestWebHeadersConflict(t *testing.T) {
+	h := DefaultWebHeaders
+
+	for name, sn := range map[string][2]string{
+		"server":        {"add_header x-frame-options DENY;\n", ""},
+		"root quoted":   {"", `add_header "X-Content-Type-Options" nosniff always;`},
+		"after comment": {"# own header\nexpires 1h;\nadd_header Referrer-Policy origin;", ""},
+	} {
+		if err := h.Conflict(sn[0], sn[1]); !errors.Is(err, ErrHeaderConflict) {
+			t.Errorf("%s: got %v", name, err)
+		}
+	}
+
+	for name, sn := range map[string][2]string{
+		"other header":    {"add_header X-Custom yes;", "add_header Permissions-Policy 'usb=()';"},
+		"nested location": {"location /api/ { add_header X-Frame-Options DENY; }", ""},
+		"empty":           {"", ""},
+		"unparsable":      {"add_header X-Frame-Options {", ""},
+	} {
+		if err := h.Conflict(sn[0], sn[1]); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+
+	if err := (WebHeaders{}).Conflict("add_header X-Frame-Options DENY;", ""); err != nil {
+		t.Errorf("no headers on: %v", err)
+	}
+}

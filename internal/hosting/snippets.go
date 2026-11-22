@@ -74,6 +74,16 @@ func (s *Service) SetSnippets(ctx context.Context, actor int64, name, server, ro
 		return store.SiteSnippets{}, &SnippetError{Problems: res}
 	}
 
+	// A header that is switched on must not come twice (ADR-0056).
+	hs, err := s.st.SiteHeaders(ctx, site.ID)
+	if err != nil {
+		return store.SiteSnippets{}, err
+	}
+
+	if err := hs.Headers.Conflict(server, root); err != nil {
+		return store.SiteSnippets{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
 	now := s.now()
 
 	old, err := s.st.SetSiteSnippets(ctx, store.SiteSnippets{SiteID: site.ID, Server: server, Root: root, UpdatedBy: actor}, now)

@@ -216,6 +216,10 @@ type CreateRequest struct {
 	// Usage is what the site's files take on the old server, for an
 	// import: the site's disk limits are raised to fit it (ImportLimits).
 	Usage *Usage
+	// Headers are the site's first security headers (ADR-0056); nil sends
+	// none. The panel and the API pass agentapi.DefaultWebHeaders unless
+	// told otherwise, an import passes nil.
+	Headers *agentapi.WebHeaders
 }
 
 // checkPHP accepts a version from agentapi.PHPVersions or "" (no PHP).
@@ -307,6 +311,12 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, err
 	}
 
+	if req.Headers != nil {
+		if err := req.Headers.Validate(); err != nil {
+			return store.Site{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+		}
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -331,7 +341,7 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 	// Cleanup must run even when the request was canceled meanwhile.
 	undo := context.WithoutCancel(ctx)
 
-	if err := s.storeTLSChoice(ctx, req); err != nil {
+	if err := s.storeTLSChoice(ctx, req, created.ID); err != nil {
 		if derr := s.st.DeleteSite(undo, req.Name); derr != nil {
 			s.log.ErrorContext(ctx, "remove site row after failed create", "site", req.Name, "err", derr)
 		}
@@ -392,10 +402,10 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 	return site, nil
 }
 
-// storeTLSChoice keeps the HTTPS settings and the PHP programs switch of a
-// new site, before its first web state. HTTPS changes nothing there before
-// the first certificate.
-func (s *Service) storeTLSChoice(ctx context.Context, req CreateRequest) error {
+// storeTLSChoice keeps the HTTPS settings, the PHP programs switch and the
+// security headers of a new site, before its first web state. HTTPS
+// changes nothing there before the first certificate.
+func (s *Service) storeTLSChoice(ctx context.Context, req CreateRequest, siteID int64) error {
 	if req.TLS {
 		if _, err := s.st.SetSiteTLS(ctx, req.Name, true, s.now()); err != nil {
 			return err
@@ -410,6 +420,12 @@ func (s *Service) storeTLSChoice(ctx context.Context, req CreateRequest) error {
 
 	if req.PHPPrograms {
 		if _, err := s.st.SetSitePHPPrograms(ctx, req.Name, true, s.now()); err != nil {
+			return err
+		}
+	}
+
+	if h := req.Headers; h != nil && !h.IsZero() {
+		if _, err := s.st.SetSiteHeaders(ctx, store.SiteHeaders{SiteID: siteID, Headers: *h}, s.now()); err != nil {
 			return err
 		}
 	}
@@ -686,6 +702,11 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		return err
 	}
 
+	headers, err := s.st.AllSiteHeaders(ctx)
+	if err != nil {
+		return err
+	}
+
 	workers, err := s.st.PHPWorkers(ctx)
 	if err != nil {
 		return err
@@ -710,6 +731,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 
 			ws := agentapi.WebSite{
 				User: site.Name, Domains: site.Domains, PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
+				Headers: webHeaders(headers, site),
 			}
 
 			if php != "" {
