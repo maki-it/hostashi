@@ -28,6 +28,8 @@
 
 - [Users and roles](Users-and-roles.md)
 - [Backups](Backups.md)
+- [Firewall](Firewall.md)
+- [Moving from CloudPanel](CloudPanel-import.md)
 - [Services and dashboard](Services-and-dashboard.md)
 - [System settings](System-settings.md)
 - [Email notifications](Email-notifications.md)
