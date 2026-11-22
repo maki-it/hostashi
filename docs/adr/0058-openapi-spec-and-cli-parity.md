@@ -66,6 +66,6 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions for Kim
 
-1. CLI as API client with login/token (recommended) instead of root access to the agent?
+1. ~~CLI as API client with login/token instead of root access to the agent?~~ Yes, CLI as API client (Kim, 2026-11-22).
 2. Serve `GET /api/v1/openapi.json` without login, or only for logged-in users?
 3. Remove the duplicate root commands (`site create` …) after parity, or keep them as aliases that call the API?
