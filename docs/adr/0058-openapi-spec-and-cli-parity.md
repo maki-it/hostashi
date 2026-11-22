@@ -70,7 +70,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 2. ~~Serve `GET /api/v1/openapi.json` without login, or only for logged-in users?~~ Only after login (Kim, 2026-11-22).
 3. ~~Remove the duplicate root commands (`site create` …) after parity, or keep them as aliases that call the API?~~ Keep them as aliases that call the API (Kim, 2026-11-22).
 
-## Addendum 1: browser login for the CLI (Proposed, 2026-11-22)
+## Addendum 1: browser login for the CLI (Accepted, Kim, 2026-11-22)
 
 **Context.** `hostashi login` as written above asks for name, password and TOTP in the terminal. A passkey cannot be used there: WebAuthn is bound to the panel's origin and needs a browser [U]. Accounts that log in only with a passkey (ADR-0035 allows them) could not log in at all. Kim wants passkeys to work for the CLI (2026-11-22). Typing the panel password into a terminal on a shared or remote machine is also a risk of its own [A].
 
@@ -82,7 +82,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 | **B. Device authorization grant (RFC 8628): the CLI shows a short code, the user approves it in the panel in any browser** | Works with every login method of the panel, also from a server without a browser; the CLI never sees a password | Three new endpoints; phishing risk of device codes (below) |
 | C. Local redirect to `http://127.0.0.1:<port>` (like OAuth for native apps) | No code to type | Needs a browser on the same machine; fails over SSH, which is the main use |
 
-**Decision (recommended).** Option B, with these rules:
+**Decision.** Option B, with these rules:
 
 1. `POST /api/v1/auth/device` (public, throttled per client IP like the login): the CLI sends a client name (e.g. `hostashi CLI on laptop`). The answer has a `deviceCode` (32 random bytes, only stored as a hash), a `userCode` of 8 characters from an alphabet without look-alikes, shown as `WDJB-MJHT`, the `verificationUri` (`<public URL>/#/device`) and `verificationUriComplete` with the code, `expiresIn` 600 seconds and `interval` 5 seconds [E].
 2. The panel page `#/device` needs a normal logged-in session, by passkey or by password and second factor, and the second-factor rules of ADR-0035. It shows the client name, the IP that asked for the code and the time, a warning to approve only a login the user started, and lets the user pick scopes (only those of the role), sites and the token's lifetime (default 90 days, the normal token limits apply) [E]. `POST /api/v1/auth/device/approve` (session only, `userCode`, `approve`, `scopes`, `sites`, `expiresInDays`) approves or denies. Wrong user codes are throttled per account.
