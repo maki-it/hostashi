@@ -25,6 +25,11 @@ table inet hostashi {
 	}
 	chain panel {
 	}
+	# The apps' loopback ports and their site users (ADR-0054), filled by
+	# the agent's file below: "port . uid".
+	set app_owners {
+		typeof tcp dport . meta skuid
+	}
 }
 
 # The panel's rules (ADR-0034), written by the agent. They can narrow SSH
@@ -32,6 +37,7 @@ table inet hostashi {
 # those are accepted below only if the panel chain did not drop them, and
 # the panel refuses rules for them.
 include "@PANEL_FILE@"
+include "@APPS_FILE@"
 
 table inet hostashi {
 	chain input {
@@ -54,5 +60,22 @@ table inet hostashi {
 		# SSH (every port sshd listens on), the web, the panel and --firewall-allow.
 		tcp dport { @TCP@ } accept
 		udp dport { @UDP@ } accept
+	}
+}
+
+# The apps of Node.js sites listen on a port from 20000-29999 on loopback
+# (ADR-0054), where every local user could connect. Only nginx (www-data),
+# the site's own user and root may: everything else gets a reset. Ports of
+# that range are never ephemeral (32768 and up), and only new connections
+# are checked.
+table inet hostashi {
+	chain app_output {
+		type filter hook output priority filter; policy accept;
+		oif "lo" tcp dport 20000-29999 ct state new jump app_ports
+	}
+	chain app_ports {
+		meta skuid { 0, "www-data" } accept
+		tcp dport . meta skuid @app_owners accept
+		reject with tcp reset
 	}
 }

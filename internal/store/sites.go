@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/maki-it/hostashi/internal/agentapi"
 )
 
 // Site states (see migration 0006).
@@ -50,7 +52,11 @@ type Site struct {
 	Redirect *SiteRedirect
 	// Proxy is the target of a reverse proxy site; it is kept after a
 	// type change (nil: never set).
-	Proxy   *SiteProxy
+	Proxy *SiteProxy
+	// App is the app of a Node.js site (ADR-0054); nil for sites that
+	// never had one. Kept after a type change, so switching back
+	// restores it.
+	App     *SiteApp
 	Domains []string
 	TLS     bool // HTTPS wanted
 	// HSTS sends Strict-Transport-Security while the site is on HTTPS.
@@ -117,6 +123,25 @@ type SiteProxy struct {
 	Insecure bool
 }
 
+// SiteApp is the app of a Node.js site (ADR-0054).
+type SiteApp struct {
+	// Node is the Node.js LTS line, for example "24".
+	Node string
+	// Workdir is the working directory relative to the home.
+	Workdir string
+	// StartKind and Start: how the app starts (agentapi.AppStart*); both
+	// empty until set, and the app stays stopped until then.
+	StartKind string
+	Start     string
+	// Port is the loopback port the panel assigned (unique).
+	Port int
+	// Stopped: stopped in the panel.
+	Stopped bool
+}
+
+// ErrNoAppPort: every port of the app range is taken.
+var ErrNoAppPort = errors.New("store: no free app port")
+
 // SiteRedirect is the target of a redirect site (ADR-0054).
 type SiteRedirect struct {
 	Target   string
@@ -149,6 +174,13 @@ func (s *Store) CreateRedirectSite(ctx context.Context, name, pool string, r Sit
 	return s.createSite(ctx, Site{Name: name, Pool: pool, Type: SiteTypeRedirect, Redirect: &r}, domains, now)
 }
 
+// CreateNodeSite stores a new Node.js site with a Linux account in state
+// creating together with its domains, and assigns its app the lowest free
+// port of the app range (ADR-0054). a.Port is ignored.
+func (s *Store) CreateNodeSite(ctx context.Context, name, pool string, a SiteApp, domains []string, now time.Time) (Site, error) {
+	return s.createSite(ctx, Site{Name: name, Pool: pool, Type: SiteTypeNode, App: &a, Account: true}, domains, now)
+}
+
 // CreateProxySite stores a new reverse proxy site without a Linux account
 // in state creating together with its domains (ADR-0054).
 func (s *Store) CreateProxySite(ctx context.Context, name, pool string, p SiteProxy, domains []string, now time.Time) (Site, error) {
@@ -170,6 +202,11 @@ func (s *Store) createSite(ctx context.Context, site Site, domains []string, now
 		p = *site.Proxy
 	}
 
+	a := SiteApp{Workdir: "htdocs"}
+	if site.App != nil {
+		a = *site.App
+	}
+
 	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return Site{}, fmt.Errorf("store: %w", err)
@@ -186,12 +223,26 @@ func (s *Store) createSite(ctx context.Context, site Site, domains []string, now
 		return Site{}, ErrSiteExists
 	}
 
+	var port any // NULL without an app
+
+	if site.App != nil {
+		a.Port, err = freeAppPort(ctx, tx)
+		if err != nil {
+			return Site{}, err
+		}
+
+		port = a.Port
+		site.App = &a
+	}
+
 	res, err := tx.ExecContext(ctx,
 		`INSERT INTO sites (name, pool, state, type, php, account, redirect_target, redirect_status, redirect_keep_path,
-			proxy_target, proxy_target_host, proxy_insecure, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			proxy_target, proxy_target_host, proxy_insecure, node_version, app_workdir, app_start_kind, app_start, app_port, app_stopped,
+			created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		name, pool, SiteCreating, site.Type, php, boolInt(site.Account), r.Target, r.Status, boolInt(r.KeepPath),
-		p.Target, boolInt(p.TargetHost), boolInt(p.Insecure), now.Unix(), now.Unix())
+		p.Target, boolInt(p.TargetHost), boolInt(p.Insecure), a.Node, a.Workdir, a.StartKind, a.Start, port, boolInt(a.Stopped),
+		now.Unix(), now.Unix())
 	if err != nil {
 		return Site{}, fmt.Errorf("store: %w", err)
 	}
@@ -214,6 +265,40 @@ func (s *Store) createSite(ctx context.Context, site Site, domains []string, now
 	site.ID, site.State, site.Domains, site.TLSDomains, site.CreatedAt, site.UpdatedAt = id, SiteCreating, domains, []string{}, t, t
 
 	return site, nil
+}
+
+// freeAppPort returns the lowest port of the app range no site has.
+func freeAppPort(ctx context.Context, tx *sql.Tx) (int, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT app_port FROM sites WHERE app_port IS NOT NULL ORDER BY app_port`)
+	if err != nil {
+		return 0, fmt.Errorf("store: %w", err)
+	}
+	defer rows.Close()
+
+	next := agentapi.MinAppPort
+
+	for rows.Next() {
+		var p int
+		if err := rows.Scan(&p); err != nil {
+			return 0, fmt.Errorf("store: %w", err)
+		}
+
+		if p > next {
+			break
+		}
+
+		next = p + 1
+	}
+
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("store: %w", err)
+	}
+
+	if next > agentapi.MaxAppPort {
+		return 0, ErrNoAppPort
+	}
+
+	return next, nil
 }
 
 func insertDomains(ctx context.Context, tx *sql.Tx, siteID int64, domains []string) error {
@@ -466,7 +551,8 @@ type scanner interface{ Scan(dest ...any) error }
 
 const siteColumns = `id, name, pool, state, type, php, web_dir, spa, asset_cache, asset_cache_seconds, asset_cache_exts, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
 	maintenance, coalesce(maintenance_page, 0), maintenance_allow, coalesce(disabled_page, 0), tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
-	account, redirect_target, redirect_status, redirect_keep_path, proxy_target, proxy_target_host, proxy_insecure, created_at, updated_at`
+	account, redirect_target, redirect_status, redirect_keep_path, proxy_target, proxy_target_host, proxy_insecure,
+	node_version, app_workdir, app_start_kind, app_start, coalesce(app_port, 0), app_stopped, created_at, updated_at`
 
 func scanSite(r scanner) (Site, error) {
 	var (
@@ -483,11 +569,14 @@ func scanSite(r scanner) (Site, error) {
 		redirect                   SiteRedirect
 		proxy                      SiteProxy
 		proxyHost, insecure        int
+		app                        SiteApp
+		appStopped                 int
 	)
 
 	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &st.WebDir, &spa, &assets, &st.AssetCacheSeconds, &exts, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
 		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced,
-		&account, &redirect.Target, &redirect.Status, &keepPath, &proxy.Target, &proxyHost, &insecure, &cre, &upd)
+		&account, &redirect.Target, &redirect.Status, &keepPath, &proxy.Target, &proxyHost, &insecure,
+		&app.Node, &app.Workdir, &app.StartKind, &app.Start, &app.Port, &appStopped, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
 	}
@@ -509,6 +598,11 @@ func scanSite(r scanner) (Site, error) {
 	if proxy.Target != "" {
 		proxy.TargetHost, proxy.Insecure = proxyHost == 1, insecure == 1
 		st.Proxy = &proxy
+	}
+
+	if app.Port != 0 {
+		app.Stopped = appStopped == 1
+		st.App = &app
 	}
 
 	if exts != "" {
@@ -608,7 +702,7 @@ type WebOptions struct {
 }
 
 // SetSiteWebOptions sets the web options of a site and returns the
-// previous ones. Proxy and redirect sites have no files: ErrSiteType.
+// previous ones. Only static and PHP sites have them: ErrSiteType.
 // The folder's syntax is checked by the caller and by the column's CHECK.
 func (s *Store) SetSiteWebOptions(ctx context.Context, name string, o WebOptions, now time.Time) (WebOptions, error) {
 	tx, err := s.w.BeginTx(ctx, nil)
@@ -634,7 +728,7 @@ func (s *Store) SetSiteWebOptions(ctx context.Context, name string, o WebOptions
 		return WebOptions{}, fmt.Errorf("store: %w", err)
 	}
 
-	if typ == SiteTypeProxy || typ == SiteTypeRedirect {
+	if typ != SiteTypeStatic && typ != SiteTypePHP {
 		return WebOptions{}, ErrSiteType
 	}
 
@@ -916,6 +1010,50 @@ func (s *Store) SetSiteProxy(ctx context.Context, name string, p SiteProxy, now 
 
 	if err := tx.Commit(); err != nil {
 		return SiteProxy{}, fmt.Errorf("store: %w", err)
+	}
+
+	return old, nil
+}
+
+// SetSiteApp changes the app of a Node.js site and returns the previous
+// one: version, working directory, start command and whether it is kept
+// stopped. The port stays. Other types refuse it with ErrSiteType.
+func (s *Store) SetSiteApp(ctx context.Context, name string, a SiteApp, now time.Time) (SiteApp, error) {
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return SiteApp{}, fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var (
+		old     SiteApp
+		typ     string
+		stopped int
+	)
+
+	if err := tx.QueryRowContext(ctx, `SELECT type, node_version, app_workdir, app_start_kind, app_start, coalesce(app_port, 0), app_stopped FROM sites WHERE name = ?`, name).
+		Scan(&typ, &old.Node, &old.Workdir, &old.StartKind, &old.Start, &old.Port, &stopped); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return SiteApp{}, ErrNotFound
+		}
+
+		return SiteApp{}, fmt.Errorf("store: %w", err)
+	}
+
+	if typ != SiteTypeNode || old.Port == 0 {
+		return SiteApp{}, ErrSiteType
+	}
+
+	old.Stopped = stopped == 1
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET node_version = ?, app_workdir = ?, app_start_kind = ?, app_start = ?, app_stopped = ?, updated_at = ? WHERE name = ?`,
+		a.Node, a.Workdir, a.StartKind, a.Start, boolInt(a.Stopped), now.Unix(), name); err != nil {
+		return SiteApp{}, fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return SiteApp{}, fmt.Errorf("store: %w", err)
 	}
 
 	return old, nil

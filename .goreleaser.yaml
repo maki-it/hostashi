@@ -70,6 +70,7 @@ nfpms:
     # installer picks it) and quota (only with disk quota, --no-quota).
     dependencies:
       - adduser
+      - dbus
       - fail2ban
       - libnginx-mod-http-brotli-filter
       - libnginx-mod-http-brotli-static
@@ -91,6 +92,7 @@ nfpms:
       - php-zip
       - python3-systemd
       - restic
+      - tzdata
       - unattended-upgrades
       - valkey-server
     recommends:

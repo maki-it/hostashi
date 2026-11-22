@@ -8,6 +8,7 @@ require (
 	github.com/go-acme/lego/v5 v5.6.0
 	github.com/go-sql-driver/mysql v1.10.2
 	github.com/go-webauthn/webauthn v0.18.2
+	github.com/godbus/dbus/v5 v5.2.4
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/pkg/sftp v1.13.12
 	github.com/prometheus/client_golang v1.25.0

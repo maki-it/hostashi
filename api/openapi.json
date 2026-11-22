@@ -159,6 +159,35 @@
         ],
         "type": "object"
       },
+      "AppStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "restarts": {
+            "type": "integer"
+          },
+          "since": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "subState": {
+            "type": "string"
+          },
+          "usedBytes": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "restarts",
+          "since",
+          "state",
+          "subState",
+          "usedBytes"
+        ],
+        "type": "object"
+      },
       "AuditActions": {
         "additionalProperties": false,
         "properties": {
@@ -2553,6 +2582,62 @@
         ],
         "type": "object"
       },
+      "NodeApp": {
+        "additionalProperties": false,
+        "properties": {
+          "port": {
+            "type": "integer"
+          },
+          "start": {
+            "type": "string"
+          },
+          "startKind": {
+            "type": "string"
+          },
+          "stopped": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
+          },
+          "workdir": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "port",
+          "start",
+          "startKind",
+          "stopped",
+          "version",
+          "workdir"
+        ],
+        "type": "object"
+      },
+      "NodeAppInput": {
+        "additionalProperties": false,
+        "properties": {
+          "port": {
+            "type": "integer"
+          },
+          "start": {
+            "type": "string"
+          },
+          "startKind": {
+            "type": "string"
+          },
+          "stopped": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
+          },
+          "workdir": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "NodeInstallInput": {
         "additionalProperties": false,
         "properties": {
@@ -4199,6 +4284,16 @@
           "name": {
             "type": "string"
           },
+          "node": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeApp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "php": {
             "type": "string"
           },
@@ -4253,6 +4348,7 @@
           "domains",
           "maintenance",
           "name",
+          "node",
           "php",
           "phpPrograms",
           "pool",
@@ -4263,6 +4359,22 @@
           "type",
           "updatedAt",
           "web"
+        ],
+        "type": "object"
+      },
+      "SiteApp": {
+        "additionalProperties": false,
+        "properties": {
+          "site": {
+            "$ref": "#/components/schemas/Site"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AppStatus"
+          }
+        },
+        "required": [
+          "site",
+          "status"
         ],
         "type": "object"
       },
@@ -11469,6 +11581,218 @@
         "x-hostashi-undescribed": true
       }
     },
+    "/api/v1/sites/{name}/app": {
+      "get": {
+        "operationId": "getSiteApp",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "The state of a Node.js site's app",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
+      }
+    },
+    "/api/v1/sites/{name}/app/restart": {
+      "post": {
+        "operationId": "restartSiteApp",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Restart a Node.js site's app",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.app:write"
+      }
+    },
+    "/api/v1/sites/{name}/app/start": {
+      "post": {
+        "operationId": "startSiteApp",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Start a Node.js site's app; it starts again after a reboot",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.app:write"
+      }
+    },
+    "/api/v1/sites/{name}/app/stop": {
+      "post": {
+        "operationId": "stopSiteApp",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Stop a Node.js site's app; it stays stopped until started",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.app:write"
+      }
+    },
     "/api/v1/sites/{name}/backups": {
       "get": {
         "operationId": "listSiteBackups",
@@ -13663,6 +13987,69 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites.maintenance:write"
+      }
+    },
+    "/api/v1/sites/{name}/node": {
+      "put": {
+        "operationId": "setSiteNode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeAppInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteApp"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Set the Node.js version, working directory and start command of a Node.js site",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.app:write"
       }
     },
     "/api/v1/sites/{name}/object-cache": {

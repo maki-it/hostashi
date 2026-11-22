@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Template for the Node.js app of one site (ADR-0054). The agent starts
+# hostashi-node@<site> and writes two drop-ins for it:
+# 50-hostashi-slice.conf puts the unit into the site's slice and mounts the
+# site's own home back (as for the PHP units), and 60-hostashi-app.conf sets
+# WorkingDirectory=, ExecStart= (node <file> or npm run <script> of the
+# site's Node.js line under /opt/hostashi/node) and the environment, all
+# from typed values the agent checked. The app is the site's own code and
+# runs as the site user, like its PHP.
+
+[Unit]
+Description=Node.js app of Hostashi site %i
+Documentation=https://github.com/maki-it/hostashi
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+# Replaced by the drop-in.
+ExecStart=/bin/false
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=20s
+# No core dumps: they would hold keys, passwords and session data (ADR-0033).
+LimitCORE=0
+# The app's output, opened by systemd as root before the app starts: the
+# site user can neither open nor change it; the panel reads it through
+# the agent (ADR-0053). The agent creates the directory.
+StandardOutput=append:/var/log/hostashi/app/%i/app.log
+StandardError=inherit
+SyslogIdentifier=hostashi-node-%i
+
+# A /tmp of its own.
+PrivateTmp=yes
+PrivateDevices=yes
+# The system is read only and /home is empty: the drop-in mounts the
+# site's own home back, writable (ADR-0033).
+ProtectSystem=strict
+ProtectHome=tmpfs
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Other users' processes are hidden in /proc.
+ProtectProc=invisible
+RemoveIPC=yes
+# No MemoryDenyWriteExecute=: V8 compiles JavaScript to machine code.
+
+[Install]
+WantedBy=multi-user.target

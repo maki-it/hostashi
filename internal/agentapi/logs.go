@@ -18,10 +18,11 @@ const (
 	LogAccess LogKind = "access" // nginx access log
 	LogError  LogKind = "error"  // nginx error log
 	LogPHP    LogKind = "php"    // PHP-FPM error log
+	LogApp    LogKind = "app"    // output of the site's app (ADR-0054)
 )
 
 // LogKinds lists the kinds in the order the panel shows them.
-var LogKinds = []LogKind{LogAccess, LogError, LogPHP}
+var LogKinds = []LogKind{LogAccess, LogError, LogPHP, LogApp}
 
 // Limits of site.logs.read. An answer stays well below agentrpc.MaxFrame
 // even when JSON escapes every byte.

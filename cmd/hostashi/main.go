@@ -52,6 +52,10 @@ commands:
             show the managed services with their state and restarts, or
             start, stop, restart or reload one where the service catalog
             allows it (root on the server, ADR-0052)
+  system info | system timezones | system timezone ZONE |
+  system hostname NAME | system reboot HOSTNAME
+            show or change the server's time zone and hostname, or reboot it
+            after typing its hostname (root on the server, ADR-0060)
   site create NAME [POOL] | site delete NAME | site list
             manage site accounts through the agent (root on the server)
   pool add NAME PATH | pool remove NAME | pool list
@@ -229,6 +233,17 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		}
 
 		err = serviceCmd(ctx, agentrpc.NewClient(*socket), fs.Args(), stdout)
+		if errors.Is(err, errUsage) {
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+	case "system":
+		if fs.Parse(args) != nil {
+			return 2
+		}
+
+		err = systemCmd(ctx, agentrpc.NewClient(*socket), fs.Args(), stdout)
 		if errors.Is(err, errUsage) {
 			fmt.Fprint(stderr, usage)
 

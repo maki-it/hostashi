@@ -162,7 +162,7 @@ func run(ctx context.Context, path string, args ...string) error {
 	if err := cmd.Run(); err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
-			return fmt.Errorf("phpctl: %s %s exited %d: %s", path, args[0], ee.ExitCode(), strings.TrimSpace(out.String()))
+			return &ExitError{Code: ee.ExitCode(), msg: fmt.Sprintf("phpctl: %s %s exited %d: %s", path, args[0], ee.ExitCode(), strings.TrimSpace(out.String()))}
 		}
 
 		return fmt.Errorf("phpctl: %s: %w", path, err)
@@ -170,6 +170,14 @@ func run(ctx context.Context, path string, args ...string) error {
 
 	return nil
 }
+
+// ExitError is a command that ran and exited with Code.
+type ExitError struct {
+	Code int
+	msg  string
+}
+
+func (e *ExitError) Error() string { return e.msg }
 
 // limitedWriter keeps the first max bytes and drops the rest.
 type limitedWriter struct {
