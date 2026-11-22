@@ -130,8 +130,8 @@ type backupJSON struct {
 	Status agentapi.BackupStatus `json:"status"`
 }
 
-// backupHostKeyJSON is a host key the target presented, to confirm.
-type backupHostKeyJSON struct {
+// hostKeyJSON is a host key an SSH server presented, to confirm.
+type hostKeyJSON struct {
 	Key         string `json:"key"`
 	Fingerprint string `json:"fingerprint"`
 }
@@ -140,7 +140,7 @@ type backupSnapshotListJSON struct {
 	Snapshots []agentapi.BackupSnapshot `json:"snapshots"`
 }
 
-type backupHostKeyRequest struct {
+type hostKeyRequest struct {
 	Key string `json:"key"`
 }
 
@@ -281,7 +281,7 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 	// The scan only reads what the server presents; nothing is trusted
 	// until PUT /hostkey with the key the administrator confirmed.
 	mux.Op("POST /api/v1/backups/hostkey/scan", openapi.Operation{
-		ID: "scanBackupHostKey", Tag: "backups", Summary: "Read the host key the backup target presents", Out: backupHostKeyJSON{},
+		ID: "scanBackupHostKey", Tag: "backups", Summary: "Read the host key the backup target presents", Out: hostKeyJSON{},
 	}, a.allow("backups.server:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		i, err := b.Get(r.Context())
 		if err != nil {
@@ -310,16 +310,16 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 			return
 		}
 
-		writeJSON(w, http.StatusOK, backupHostKeyJSON{
+		writeJSON(w, http.StatusOK, hostKeyJSON{
 			Key:         strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))),
 			Fingerprint: ssh.FingerprintSHA256(key),
 		})
 	}))
 
 	mux.Op("PUT /api/v1/backups/hostkey", openapi.Operation{
-		ID: "setBackupHostKey", Tag: "backups", Summary: "Trust a confirmed host key of the backup target", In: backupHostKeyRequest{}, Out: backupJSON{},
+		ID: "setBackupHostKey", Tag: "backups", Summary: "Trust a confirmed host key of the backup target", In: hostKeyRequest{}, Out: backupJSON{},
 	}, a.allow("backups.server:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
-		var in backupHostKeyRequest
+		var in hostKeyRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}

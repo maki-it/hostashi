@@ -93,7 +93,32 @@ var (
 // Build returns the document as indented JSON with sorted keys, so the
 // output is stable and can be compared with the file in the repository.
 func Build(info Info, routes []Route) ([]byte, error) {
+	// A first pass finds the names that more than one type would get, so
+	// the names do not depend on the order of the routes.
+	probe := newReflector()
+	probe.probe = true
+	describe(probe, info, routes)
+
 	r := newReflector()
+	r.shared = probe.sharedNames()
+
+	paths, errs := describe(r, info, routes)
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+
+	doc := document(info, paths, r.components)
+
+	out, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+
+	return append(out, '\n'), nil
+}
+
+// describe reflects every route with r and returns the paths object.
+func describe(r *reflector, info Info, routes []Route) (map[string]map[string]any, []error) {
 	paths := map[string]map[string]any{}
 	ids := map[string]string{}
 
@@ -133,12 +158,11 @@ func Build(info Info, routes []Route) ([]byte, error) {
 		paths[oapiPath][strings.ToLower(method)] = op
 	}
 
-	errs = append(errs, r.errs...)
-	if len(errs) > 0 {
-		return nil, errors.Join(errs...)
-	}
+	return paths, append(errs, r.errs...)
+}
 
-	doc := map[string]any{
+func document(info Info, paths map[string]map[string]any, schemas map[string]any) map[string]any {
+	return map[string]any{
 		"openapi": "3.1.0",
 		"info": map[string]any{
 			"title":       info.Title,
@@ -149,7 +173,7 @@ func Build(info Info, routes []Route) ([]byte, error) {
 		"jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
 		"paths":             paths,
 		"components": map[string]any{
-			"schemas": r.components,
+			"schemas": schemas,
 			"securitySchemes": map[string]any{
 				"session": map[string]any{
 					"type": "apiKey", "in": "cookie", "name": info.SessionCookie,
@@ -162,13 +186,6 @@ func Build(info Info, routes []Route) ([]byte, error) {
 			},
 		},
 	}
-
-	out, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-
-	return append(out, '\n'), nil
 }
 
 func operation(r *reflector, rt Route, method, path string, errRef map[string]any) (map[string]any, error) {

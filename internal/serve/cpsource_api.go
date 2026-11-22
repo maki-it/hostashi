@@ -15,6 +15,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/backup"
+	"github.com/maki-it/hostashi/internal/openapi"
 )
 
 // auditor writes the audit log (the store).
@@ -110,12 +111,16 @@ func registerCloudPanelSource(mux *routeMux, a authn, src CloudPanelSource, aud 
 		writeJSON(w, http.StatusOK, info)
 	}
 
-	mux.HandleFunc("GET "+base, a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET "+base, openapi.Operation{
+		ID: "getCloudPanelSource", Tag: "migrations", Summary: "Get the old CloudPanel server to import from", Out: agentapi.CloudPanelSourceInfo{},
+	}, a.allow("migrations:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		info, err := src.Get(r.Context())
 		reply(w, info, err, "read migration source")
 	}))
 
-	mux.HandleFunc("PUT "+base, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("PUT "+base, openapi.Operation{
+		ID: "setCloudPanelSource", Tag: "migrations", Summary: "Set the old CloudPanel server's address and SSH user", In: agentapi.CloudPanelSource{}, Out: agentapi.CloudPanelSourceInfo{},
+	}, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in agentapi.CloudPanelSource
 		if !decodeJSON(w, r, &in) {
 			return
@@ -138,7 +143,9 @@ func registerCloudPanelSource(mux *routeMux, a authn, src CloudPanelSource, aud 
 	// The scan only shows the key; nothing is pinned until PUT /hostkey
 	// with the key the administrator compared with the old server's own
 	// "ssh-keygen -lf" output.
-	mux.HandleFunc("POST "+base+"/hostkey/scan", a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("POST "+base+"/hostkey/scan", openapi.Operation{
+		ID: "scanCloudPanelHostKey", Tag: "migrations", Summary: "Read the host key the old server presents", Out: hostKeyJSON{},
+	}, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		info, err := src.Get(r.Context())
 		if err != nil {
 			sourceFail(log, w, err, "read migration source")
@@ -166,16 +173,16 @@ func registerCloudPanelSource(mux *routeMux, a authn, src CloudPanelSource, aud 
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]string{
-			"key":         strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))),
-			"fingerprint": ssh.FingerprintSHA256(key),
+		writeJSON(w, http.StatusOK, hostKeyJSON{
+			Key:         strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))),
+			Fingerprint: ssh.FingerprintSHA256(key),
 		})
 	}))
 
-	mux.HandleFunc("PUT "+base+"/hostkey", a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		var in struct {
-			Key string `json:"key"`
-		}
+	mux.Op("PUT "+base+"/hostkey", openapi.Operation{
+		ID: "setCloudPanelHostKey", Tag: "migrations", Summary: "Trust a confirmed host key of the old server", In: hostKeyRequest{}, Out: agentapi.CloudPanelSourceInfo{},
+	}, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in hostKeyRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -194,7 +201,9 @@ func registerCloudPanelSource(mux *routeMux, a authn, src CloudPanelSource, aud 
 		reply(w, info, err, "set migration host key")
 	}))
 
-	mux.HandleFunc("DELETE "+base, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("DELETE "+base, openapi.Operation{
+		ID: "deleteCloudPanelSource", Tag: "migrations", Summary: "Forget the old server and its key", Out: agentapi.CloudPanelSourceInfo{},
+	}, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		info, err := src.Delete(r.Context())
 		if err == nil {
 			audit(r, p.User.ID, "cloudpanel.source.delete", "")
@@ -206,7 +215,9 @@ func registerCloudPanelSource(mux *routeMux, a authn, src CloudPanelSource, aud 
 	// The password is in this answer only. The panel never stores it; the
 	// agent keeps it root-only for the import job. Asking again replaces
 	// it, so the SQL on the old server must then be run again.
-	mux.HandleFunc("POST "+base+"/database", a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST "+base+"/database", openapi.Operation{
+		ID: "createCloudPanelDBUser", Tag: "migrations", Summary: "Generate the database user for the old server (password shown once)", Out: agentapi.CloudPanelDBCredentials{},
+	}, a.allow("migrations:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		c, err := src.GenerateDB(r.Context())
 		if err == nil {
 			audit(r, p.User.ID, "cloudpanel.source.database", c.User)
