@@ -5803,6 +5803,112 @@
         ],
         "type": "object"
       },
+      "SystemHostnameInput": {
+        "additionalProperties": false,
+        "properties": {
+          "hostname": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SystemInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "cloudInit": {
+            "type": "boolean"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "ntpSynchronized": {
+            "type": "boolean"
+          },
+          "rebootPackages": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "rebootRequired": {
+            "type": "boolean"
+          },
+          "time": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "transientHostname": {
+            "type": "string"
+          },
+          "uptimeSeconds": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "cloudInit",
+          "hostname",
+          "ntpSynchronized",
+          "rebootRequired",
+          "time",
+          "timezone",
+          "transientHostname",
+          "uptimeSeconds"
+        ],
+        "type": "object"
+      },
+      "SystemRebootInput": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SystemRebootResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "delaySeconds": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "delaySeconds"
+        ],
+        "type": "object"
+      },
+      "SystemTimezoneInput": {
+        "additionalProperties": false,
+        "properties": {
+          "zone": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SystemTimezones": {
+        "additionalProperties": false,
+        "properties": {
+          "zones": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "zones"
+        ],
+        "type": "object"
+      },
       "Tls": {
         "additionalProperties": false,
         "properties": {
@@ -17784,6 +17890,251 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "pages:write"
+      }
+    },
+    "/api/v1/system": {
+      "get": {
+        "operationId": "getSystem",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:read"
+            ]
+          }
+        ],
+        "summary": "The server's hostname, time zone, clock, uptime and pending reboot",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "system:read"
+      }
+    },
+    "/api/v1/system/hostname": {
+      "put": {
+        "operationId": "setHostname",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemHostnameInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:write"
+            ]
+          }
+        ],
+        "summary": "Set the server's hostname",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "system:write"
+      }
+    },
+    "/api/v1/system/reboot": {
+      "post": {
+        "operationId": "rebootServer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemRebootInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemRebootResponse"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:write"
+            ]
+          }
+        ],
+        "summary": "Reboot the server; confirm with its hostname",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "system:write"
+      }
+    },
+    "/api/v1/system/timezone": {
+      "put": {
+        "operationId": "setTimezone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemTimezoneInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:write"
+            ]
+          }
+        ],
+        "summary": "Set the server's time zone (site cron jobs follow it at once)",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "system:write"
+      }
+    },
+    "/api/v1/system/timezones": {
+      "get": {
+        "operationId": "listTimezones",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemTimezones"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:read"
+            ]
+          }
+        ],
+        "summary": "The time zones the server knows",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "system:read"
       }
     },
     "/api/v1/tokens": {

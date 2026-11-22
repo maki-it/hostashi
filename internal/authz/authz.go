@@ -99,6 +99,8 @@ var table = map[Action]Rule{
 	"node:install":         server("node:install"),
 	"services:read":        server("services:read"),
 	"services:write":       server("services:write"),
+	"system:read":          server("system:read"),
+	"system:write":         server("system:write"),
 	"web:sync":             server("sites:write"),
 
 	// Read-only things everyone needs. The lists of sites and databases

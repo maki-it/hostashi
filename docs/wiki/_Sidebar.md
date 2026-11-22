@@ -11,6 +11,7 @@
 - [Site logs](Site-logs.md)
 - [Audit log](Audit-log.md)
 - [Services and dashboard](Services-and-dashboard.md)
+- [System settings](System-settings.md)
 
 **Reference**
 
