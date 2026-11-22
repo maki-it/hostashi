@@ -134,13 +134,13 @@ describe("Sites", () => {
     render(<ListHarness />);
     const table = await screen.findByRole("table", { name: "Sites" });
     const b = within(within(table).getByRole("link", { name: "blog" }).closest("tr")!);
-    expect(b.getByText("8.4")).toBeInTheDocument();
+    expect(b.getByText("PHP 8.4")).toBeInTheDocument();
     expect(b.getByText("HTTPS")).toBeInTheDocument();
     expect(b.getByText("Active")).toBeInTheDocument();
     expect(b.getByText("blog.example.com")).toBeInTheDocument();
     expect(b.getByRole("link", { name: "Settings of blog" })).toHaveAttribute("href", "#/sites/blog");
     const s = within(within(table).getByRole("link", { name: "shop" }).closest("tr")!);
-    expect(s.getByText("No PHP")).toBeInTheDocument();
+    expect(s.getByText("Static")).toBeInTheDocument();
     expect(s.getByText("Certificate failed")).toBeInTheDocument();
   });
 
@@ -194,7 +194,7 @@ describe("Sites", () => {
     expect(screen.getByRole("heading", { name: "New site" })).toBeInTheDocument();
     await user.type(screen.getByLabelText(/^Name/), "blog");
     await user.type(screen.getByLabelText(/^Domains/), "Blog.example.com\nwww.blog.example.com");
-    await waitFor(() => expect(screen.getByLabelText("PHP")).toHaveValue("8.4"));
+    await waitFor(() => expect(screen.getByLabelText("PHP version")).toHaveValue("8.4"));
     await user.click(screen.getByLabelText(/^HSTS/));
     await user.click(screen.getByRole("button", { name: "Create site" }));
 
@@ -247,7 +247,7 @@ describe("Sites", () => {
       "GET /api/v1/pools": { body: { pools: [{ name: "default", path: "/home", sites: 0, available: true, quota: "enforced" }] } },
     });
     render(<ListHarness initial="new=1" />);
-    await waitFor(() => expect(screen.getByLabelText("PHP")).toHaveValue("8.4"));
+    await waitFor(() => expect(screen.getByLabelText("PHP version")).toHaveValue("8.4"));
     expect(screen.queryByLabelText(/^Storage pool/)).not.toBeInTheDocument();
   });
 
@@ -259,10 +259,10 @@ describe("Sites", () => {
       "POST /api/v1/sites": { status: 201, body: { ...blog, tls: noTLS } },
     });
     render(<ListHarness initial="new=1" />);
-    await waitFor(() => expect(screen.getByLabelText("PHP")).toHaveValue("8.4"));
+    await waitFor(() => expect(screen.getByLabelText("PHP version")).toHaveValue("8.4"));
     await user.type(screen.getByLabelText(/^Name/), "blog");
     await user.type(screen.getByLabelText(/^Domains/), "blog.example.com");
-    await user.selectOptions(screen.getByLabelText("PHP"), "8.2");
+    await user.selectOptions(screen.getByLabelText("PHP version"), "8.2");
     expect(screen.getByText(/PHP 8.2 gets no or only security fixes/)).toBeInTheDocument();
     await user.click(screen.getByLabelText(/^HTTPS with/));
     expect(screen.queryByLabelText(/^HSTS/)).not.toBeInTheDocument();
@@ -312,11 +312,27 @@ describe("Sites", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("the panel's own address");
   });
 
-  it("offers no PHP when the versions cannot be read", async () => {
-    mockFetch({ "GET /api/v1/sites": { body: { sites: [] } }, "GET /api/v1/php/versions": { status: 503, body: { error: { code: "agent_unavailable" } } } });
+  it("asks for a static site when no PHP version can be read", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/php/versions": { status: 503, body: { error: { code: "agent_unavailable" } } },
+      "POST /api/v1/sites": { status: 201, body: { ...blog, php: "", type: "static", tls: noTLS } },
+    });
     render(<ListHarness initial="new=1" />);
-    const select = screen.getByLabelText("PHP");
-    await waitFor(() => expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["No PHP"]));
+    const select = screen.getByLabelText("PHP version");
+    await waitFor(() => expect(within(select).queryAllByRole("option")).toEqual([]));
+    await user.type(screen.getByLabelText(/^Name/), "blog");
+    await user.type(screen.getByLabelText(/^Domains/), "blog.example.com");
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("No PHP version is installed");
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+
+    await user.click(screen.getByLabelText(/^Static/));
+    expect(screen.queryByLabelText("PHP version")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Site blog created.");
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ name: "blog", php: "" });
   });
 });
 
@@ -340,6 +356,7 @@ describe("SitePage", () => {
     expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Overview",
       "Domains & HTTPS",
+      "Web",
       "Files",
       "PHP",
       "Cron",
@@ -510,10 +527,10 @@ describe("SitePage", () => {
     render(<PageHarness tab="php" />);
     const box = within(await screen.findByRole("region", { name: "PHP version" }));
     expect(box.getByRole("button", { name: "Save PHP version" })).toBeDisabled();
-    await user.selectOptions(box.getByLabelText("PHP of blog"), "");
+    await user.selectOptions(box.getByLabelText("PHP of blog"), "8.2");
     await user.click(box.getByRole("button", { name: "Save PHP version" }));
-    expect(await box.findByText("PHP is off for this site now.")).toBeInTheDocument();
-    expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([{ php: "" }]);
+    expect(await box.findByText("The site runs on PHP 8.2 now.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([{ php: "8.2" }]);
   });
 
   it("lets PHP of a site start programs, and forbids it again", async () => {
@@ -542,10 +559,12 @@ describe("SitePage", () => {
     ]);
   });
 
-  it("has no programs switch for a site without PHP", async () => {
-    mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [{ ...blog, php: "" }] } } });
+  it("has no PHP tab for a static site", async () => {
+    mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [{ ...blog, php: "", type: "static" }] } } });
     render(<PageHarness tab="php" />);
-    await screen.findByRole("region", { name: "PHP version" });
+    const tabs = await screen.findByRole("tablist", { name: "blog" });
+    expect(within(tabs).queryByRole("tab", { name: "PHP" })).not.toBeInTheDocument();
+    expect(within(tabs).getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("region", { name: "Programs from PHP" })).not.toBeInTheDocument();
   });
 
@@ -555,7 +574,6 @@ describe("SitePage", () => {
     const select = await screen.findByLabelText("PHP of blog");
     await waitFor(() =>
       expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual([
-        "No PHP",
         "PHP 8.4",
         "PHP 8.2 (legacy)",
         "PHP 7.4 (legacy) (not installed)",

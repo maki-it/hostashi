@@ -29,7 +29,11 @@ export type Site = {
   name: string;
   pool: string;
   state: "creating" | "active" | "deleting" | string;
+  // static, php, node, app, proxy or redirect (ADR-0054). Older answers lack it.
+  type?: SiteType;
   php: string; // "" for no PHP
+  // Document root folder below htdocs and the static-site options (ADR-0054).
+  web?: SiteWeb;
   phpPrograms: boolean; // PHP may start programs (exec, system, ...)
   disabled: boolean; // answers 503, PHP stopped
   disabledPage: string; // maintenance page shown while disabled (ADR-0047)
@@ -39,6 +43,45 @@ export type Site = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type SiteType = "static" | "php" | "node" | "app" | "proxy" | "redirect";
+
+/** dir: folder below htdocs, "" for htdocs itself. spa and assetCache: static sites only. */
+export type SiteWeb = { dir: string; spa: boolean; assetCache: boolean };
+
+/** The type of a site; answers without the field follow the PHP version. */
+export const siteType = (s: Pick<Site, "type" | "php">): SiteType => s.type ?? (s.php ? "php" : "static");
+
+/** The type as the panel shows it, with the PHP version. */
+export function siteTypeLabel(s: Pick<Site, "type" | "php">): string {
+  switch (siteType(s)) {
+    case "static":
+      return "Static";
+    case "php":
+      return s.php ? `PHP ${s.php}` : "PHP";
+    case "node":
+      return "Node.js";
+    case "app":
+      return "App";
+    case "proxy":
+      return "Reverse proxy";
+    case "redirect":
+      return "Redirect";
+  }
+}
+
+// Mirror of agentapi.ValidateWebDir: up to 4 folder names of letters,
+// digits, ".", "_" and "-", separated by "/". The server checks again.
+const webDirSegment = /^[A-Za-z0-9._-]{1,64}$/;
+
+export function webDirProblem(dir: string): string {
+  if (dir === "") return "";
+  const segs = dir.split("/");
+  if (dir.length > 255 || segs.length > 4) return "Use at most 4 folder levels.";
+  if (segs.some((seg) => seg === "." || seg === ".." || !webDirSegment.test(seg)))
+    return "Use folder names of letters, digits, '.', '_' and '-', separated by '/', without a leading or trailing '/'.";
+  return "";
+}
 
 // SiteMaintenance: while enabled, addresses outside allowIps get the page
 // with 503; the allowed ones see the site. PHP keeps running.
@@ -105,6 +148,7 @@ export const newSiteHash = (domain: string, tls: boolean) =>
   "#/sites?" + new URLSearchParams({ new: "1", domain, tls: tls ? "1" : "0" }).toString();
 export const setDomains = (name: string, domains: string[]) => request<Site>("PUT", sitePath(name) + "/domains", { domains });
 export const setPHP = (name: string, php: string) => request<Site>("PUT", sitePath(name) + "/php", { php });
+export const setWebOptions = (name: string, w: SiteWeb) => request<Site>("PUT", sitePath(name) + "/web", w);
 export const setTLS = (name: string, enabled: boolean) => request<Site>("PUT", sitePath(name) + "/tls", { enabled });
 // setDisabled switches a site off or on; page is the maintenance page a
 // disabled site shows (empty: the built-in page), only sent when disabling.
@@ -188,6 +232,8 @@ export function siteMessage(err: unknown): string {
         return "Turn HTTPS off before deleting the certificate.";
       case "not_letsencrypt":
         return "Only a certificate from Let's Encrypt can be renewed here. Upload a new own certificate instead.";
+      case "wrong_site_type":
+        return "This is not possible for this type of site.";
       case "site_busy":
         return "The site is being created or deleted. Reload the page in a moment.";
       case "not_found":

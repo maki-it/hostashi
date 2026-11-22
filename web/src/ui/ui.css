@@ -272,6 +272,26 @@
 .ui-input[aria-invalid="true"] {
   border-color: var(--err);
 }
+/* An input with a fixed text in front of it, such as a parent folder */
+.ui-input-prefix {
+  display: flex;
+  align-items: stretch;
+}
+.ui-input-prefix > span {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--muted);
+  background: var(--sunken);
+  border: 1px solid var(--control-border);
+  border-right: 0;
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+.ui-input-prefix > .ui-input {
+  flex: 1;
+  min-width: 0;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
 .ui-mono {
   font-family: var(--font-mono);
   font-size: 13px;
@@ -518,6 +538,18 @@ a.ui-btn {
   height: 16px;
   margin: 0;
   accent-color: var(--accent);
+}
+/* A radio button or checkbox whose label has a hint below it */
+.ui-check-hint {
+  align-items: flex-start;
+}
+.ui-check-hint input {
+  margin-top: 3px;
+}
+.ui-check-hint > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .ui-textarea {
   min-height: 0;

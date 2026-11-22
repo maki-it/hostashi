@@ -32,6 +32,7 @@ import {
 import { PageCacheSettings } from "./PageCache";
 import { PHPSettingsCard } from "./PHPSettings";
 import { Services } from "./Services";
+import { SiteWebSettings } from "./SiteWeb";
 import { SnippetSettings } from "./Snippets";
 import { SecurityHeadersCard } from "./SecurityHeaders";
 import { SSHSettings } from "./SSH";
@@ -42,6 +43,7 @@ import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
 const tabs: { id: SiteTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "domains", label: "Domains & HTTPS" },
+  { id: "web", label: "Web" },
   { id: "files", label: "Files" },
   { id: "php", label: "PHP" },
   { id: "cron", label: "Cron" },
@@ -80,7 +82,9 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
 
   const status = siteStatus(site);
   const ready = site.state === "active";
-  const active = ready && tabs.some((t) => t.id === tab) ? tab : "overview";
+  // The PHP tab only for sites with PHP; the type is changed on the Web tab.
+  const shown = tabs.filter((t) => t.id !== "php" || site.php !== "");
+  const active = ready && shown.some((t) => t.id === tab) ? tab : "overview";
   const prefix = `site-${site.name}`;
 
   return (
@@ -101,11 +105,12 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
           Last attempt failed: {site.tls.error}. Hostashi tries again within an hour.
         </Notice>
       )}
-      {ready && <Tabs label={site.name} tabs={tabs} active={active} onChange={(t) => onTab(t as SiteTab)} idPrefix={prefix} />}
+      {ready && <Tabs label={site.name} tabs={shown} active={active} onChange={(t) => onTab(t as SiteTab)} idPrefix={prefix} />}
       <div {...(ready ? tabPanelProps(prefix, active) : {})} className="ui-stack">
         {active === "overview" && <Overview site={site} onChange={load} staff={role === "admin" || role === "manager"} />}
         {active === "overview" && role === "admin" && <Services site={site.name} />}
         {active === "domains" && <DomainsTab site={site} onChange={load} />}
+        {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} />}
         {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
         {active === "logs" && <SiteLogs site={site} admin={role === "admin"} />}
         {active === "php" && (
@@ -521,14 +526,15 @@ function PHPTab({ site, php, onChange }: TabProps & { php: PHPVersions | null })
         <form className="ui-stack" onSubmit={savePHP} noValidate>
           <Field label={`PHP of ${site.name}`}>
             <select className="ui-select" value={version} onChange={(e) => setVersion(e.target.value)}>
-              <PHPOptions php={php} current={site.php} />
+              <PHPOptions php={php} current={site.php} withoutNone />
             </select>
           </Field>
           {php?.legacy.includes(version) && version !== site.php && (
             <p className="ui-hint">PHP {version} gets no or only security fixes upstream. Use it only for software that needs it.</p>
           )}
           <p className="ui-hint">
-            Only installed versions are listed. <a href={formatHash({ page: "php" })}>Install more PHP versions</a>
+            Only installed versions are listed. <a href={formatHash({ page: "php" })}>Install more PHP versions</a>. To turn PHP off, make
+            it a static site on the <a href={formatHash({ page: "sites", site: { name: site.name, tab: "web" } })}>Web</a> tab.
           </p>
           {v.result}
           <div className="ui-row">
