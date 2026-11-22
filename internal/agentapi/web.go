@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"regexp"
 	"strings"
 
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -96,8 +97,97 @@ type WebSite struct {
 	// caches nothing. It needs PHP and is not used while the site is in
 	// maintenance.
 	PageCache *WebPageCache `json:"pageCache,omitempty"`
+	// WebDir is the document root below the site's htdocs (ADR-0054
+	// addendum 1), for example "public" or "dist"; empty serves htdocs.
+	WebDir string `json:"webDir,omitempty"`
+	// SPA answers unknown paths with /index.html instead of 404, for
+	// single-page apps. Static sites only.
+	SPA bool `json:"spa,omitempty"`
+	// AssetCache sends Cache-Control with AssetCacheSeconds on files with
+	// one of AssetCacheExts (lowercase, without the dot); HTML stays fresh
+	// unless listed. Static sites only. Empty values use the defaults.
+	AssetCache        bool     `json:"assetCache,omitempty"`
+	AssetCacheSeconds int      `json:"assetCacheSeconds,omitempty"`
+	AssetCacheExts    []string `json:"assetCacheExts,omitempty"`
 	// Headers are the site's security headers (ADR-0056); nil sends none.
 	Headers *WebHeaders `json:"headers,omitempty"`
+}
+
+// Bounds and defaults of the asset cache (ADR-0054 addendum 1).
+const (
+	MinAssetCacheSeconds     = 60
+	MaxAssetCacheSeconds     = 365 * 24 * 3600
+	DefaultAssetCacheSeconds = 30 * 24 * 3600
+	MaxAssetCacheExts        = 40
+)
+
+// DefaultAssetCacheExts are the file types cached by default: stylesheets,
+// scripts, fonts and images.
+var DefaultAssetCacheExts = []string{"css", "js", "mjs", "woff", "woff2", "ttf", "otf", "eot", "svg", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico"}
+
+var assetExtRe = regexp.MustCompile(`^[a-z0-9]{1,10}$`)
+
+// ValidateAssetCache checks the duration (0: default) and the extensions
+// (empty: default): at most MaxAssetCacheExts, each 1 to 10 lowercase
+// letters or digits, no duplicates.
+func ValidateAssetCache(seconds int, exts []string) error {
+	if seconds != 0 && (seconds < MinAssetCacheSeconds || seconds > MaxAssetCacheSeconds) {
+		return fmt.Errorf("asset cache time must be between %d seconds and %d days", MinAssetCacheSeconds, MaxAssetCacheSeconds/86400)
+	}
+
+	if len(exts) > MaxAssetCacheExts {
+		return fmt.Errorf("at most %d file types can be cached", MaxAssetCacheExts)
+	}
+
+	seen := map[string]bool{}
+
+	for _, e := range exts {
+		if !assetExtRe.MatchString(e) {
+			return fmt.Errorf("file type %q: use 1 to 10 lowercase letters or digits, without the dot", e)
+		}
+
+		if seen[e] {
+			return fmt.Errorf("file type %q is listed twice", e)
+		}
+
+		seen[e] = true
+	}
+
+	return nil
+}
+
+// MaxWebDir bounds the document root folder: length and number of levels.
+const (
+	MaxWebDir       = 255
+	MaxWebDirLevels = 4
+)
+
+var webDirSegment = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+
+// ValidateWebDir checks a document root folder below htdocs: relative,
+// at most MaxWebDirLevels segments of letters, digits, dot, underscore and
+// dash, no "." or "..", no empty segment. Empty is valid (htdocs itself).
+func ValidateWebDir(dir string) error {
+	if dir == "" {
+		return nil
+	}
+
+	if len(dir) > MaxWebDir {
+		return fmt.Errorf("document root folder is longer than %d bytes", MaxWebDir)
+	}
+
+	segs := strings.Split(dir, "/")
+	if len(segs) > MaxWebDirLevels {
+		return fmt.Errorf("document root folder has more than %d levels", MaxWebDirLevels)
+	}
+
+	for _, seg := range segs {
+		if seg == "." || seg == ".." || !webDirSegment.MatchString(seg) {
+			return fmt.Errorf("document root folder %q: use folder names of letters, digits, '.', '_' and '-', separated by '/'", dir)
+		}
+	}
+
+	return nil
 }
 
 // PHP workers of a site's pool (pm.max_children, ADR-0015).
@@ -287,6 +377,18 @@ func (r WebApplyRequest) Validate() error {
 			if err := ValidatePHPVersion(s.PHP); err != nil {
 				return fmt.Errorf("site %q: %w", s.User, err)
 			}
+		}
+
+		if err := ValidateWebDir(s.WebDir); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if err := ValidateAssetCache(s.AssetCacheSeconds, s.AssetCacheExts); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if (s.SPA || s.AssetCache) && s.PHP != "" {
+			return fmt.Errorf("site %q: single-page app and asset caching are for static sites", s.User)
 		}
 
 		if s.PHPWorkers < 0 || s.PHPWorkers > MaxPHPWorkers {
