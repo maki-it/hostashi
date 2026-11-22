@@ -68,7 +68,11 @@ type Service struct {
 	userLimit  *Limiter
 	tokenLimit *Limiter
 	emailLimit *Limiter
-	notifyFn   func(context.Context, AccountEvent)
+	// deviceLimit counts device login starts per address and wrong user
+	// codes per account (ADR-0058 addendum 1).
+	deviceLimit *Limiter
+	devices     *deviceGrants
+	notifyFn    func(context.Context, AccountEvent)
 
 	wa  *webauthn.WebAuthn // nil: passkeys disabled
 	cer *ceremonies
@@ -114,7 +118,9 @@ func NewService(c Config) *Service {
 		tokenLimit: NewLimiter(30, 15*time.Minute, now),
 		// Confirmation emails per account, so nobody floods a stranger's
 		// mailbox through the relay.
-		emailLimit: NewLimiter(emailRequestsPerHour, time.Hour, now),
+		emailLimit:  NewLimiter(emailRequestsPerHour, time.Hour, now),
+		deviceLimit: NewLimiter(10, 15*time.Minute, now),
+		devices:     &deviceGrants{m: map[string]*deviceGrant{}},
 	}
 }
 

@@ -226,6 +226,7 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		registerAuth(mux, deps.Auth, m, log)
 		registerOpenAPI(mux, authn{svc: deps.Auth, fail: newFail(log)})
+		registerDevice(mux, authn{svc: deps.Auth, fail: newFail(log)}, cfg.PublicURL)
 
 		if deps.Sites != nil {
 			registerSites(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
