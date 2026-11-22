@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Audit } from "./Audit";
-import { actionGroups, auditQuery, detailPairs, exportUrl, localDay, type AuditEntry } from "./audit";
+import { actionGroups, auditQuery, detailPairs, diffRows, exportUrl, localDay, type AuditEntry } from "./audit";
 
 const entry = (id: number, over: Partial<AuditEntry> = {}): AuditEntry => ({
   id,
@@ -15,6 +15,8 @@ const entry = (id: number, over: Partial<AuditEntry> = {}): AuditEntry => ({
   action: "site.create",
   target: "shop",
   detail: {},
+  ip: "",
+  diff: {},
   ...over,
 });
 
@@ -54,14 +56,24 @@ describe("Audit", () => {
     const lists = stubAudit((q) =>
       q.get("before") === "2"
         ? { entries: [entry(1, { action: "login.failed", actor: "", userId: null, target: "=evil", detail: { ip: "192.0.2.7" } })], next: null }
-        : { entries: [entry(3, { actor: "anna", userId: null }), entry(2, { detail: { php: "8.4", ip: "192.0.2.1" } })], next: "2" },
+        : {
+            entries: [
+              entry(3, { actor: "anna", userId: null }),
+              entry(2, { detail: { php: "8.4", ip: "192.0.2.1" }, ip: "192.0.2.1", diff: { php: { old: "8.3", new: "8.4" }, hsts: { old: null, new: "true" } } }),
+            ],
+            next: "2",
+          },
     );
     render(<Harness />);
 
     await screen.findByRole("table", { name: "Audit log" });
     expect(rows()[0]).toContain("anna (deleted)");
-    expect(rows()[1]).toContain("ip192.0.2.1");
-    expect(rows()[1]).toContain("php8.4");
+    expect(rows()[1]).toContain("192.0.2.1");
+    // The address shows once, in its own column, not again in the details.
+    expect(rows()[1]).not.toContain("ip192.0.2.1");
+    const changes = within(screen.getByRole("table", { name: "Audit log" })).getByLabelText("Changes");
+    expect(changes.textContent).toContain("php8.3 →  changed to 8.4");
+    expect(changes.textContent).toContain("hsts(none) →  changed to true");
 
     await user.click(screen.getByRole("button", { name: "Show older entries" }));
     await waitFor(() => expect(rows()).toHaveLength(3));
@@ -74,10 +86,11 @@ describe("Audit", () => {
   it("filters through the address and exports the same filter", async () => {
     const user = userEvent.setup();
     const lists = stubAudit(() => ({ entries: [], next: null }));
-    render(<Harness initial="target=shop" />);
+    render(<Harness initial="target=shop&ip=192.0.2.9" />);
 
     expect(await screen.findByText("No entry matches the filters.")).toBeInTheDocument();
     expect(lists[0]?.get("target")).toBe("shop");
+    expect(lists[0]?.get("ip")).toBe("192.0.2.9");
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Action" }), "site");
     await waitFor(() => expect(lists.at(-1)?.get("action")).toBe("site"));
@@ -107,6 +120,14 @@ describe("audit helpers", () => {
     expect(q.has("target")).toBe(false);
     expect(auditQuery({ from: "21.11.2026" }).has("since")).toBe(false);
     expect(localDay("2026-12-31", 1)?.getFullYear()).toBe(2027);
+  });
+
+  it("orders the changes and fills a missing side", () => {
+    expect(diffRows({ z: { old: "1", new: null }, a: { old: null, new: "x" } })).toEqual([
+      { field: "a", old: "", new: "x" },
+      { field: "z", old: "1", new: "" },
+    ]);
+    expect(diffRows(undefined)).toEqual([]);
   });
 
   it("builds the export address", () => {
