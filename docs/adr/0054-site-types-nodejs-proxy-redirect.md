@@ -98,5 +98,5 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 ## Open questions for Kim
 
 1. ~~Node.js from the official nodejs.org builds (option C), LTS lines only?~~ Decided (Kim, 2026-11-22): yes.
-2. Reverse proxy: allow private networks, refuse loopback and link-local, as recommended?
+2. ~~Reverse proxy: allow private networks, refuse loopback and link-local, as recommended?~~ Decided (Kim, 2026-11-22): yes; public addresses and host names are allowed too.
 3. Proxy and redirect sites without a Linux account (no SSH, files, cron, backups)?
