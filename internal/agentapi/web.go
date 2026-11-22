@@ -325,6 +325,9 @@ type WebPanel struct {
 	// DBTool also serves the web database tool (ADR-0038) on its own port
 	// with the panel's certificate; only together with TLS.
 	DBTool bool `json:"dbTool,omitempty"`
+	// RealIP takes the client address from a header of trusted proxies
+	// (ADR-0059) in the panel's server blocks; nil trusts nobody.
+	RealIP *WebRealIP `json:"realIp,omitempty"`
 }
 
 // WebApplyRequest is the complete desired web server state. Sites that are
@@ -518,6 +521,12 @@ func (r WebApplyRequest) Validate() error {
 	if r.Panel != nil {
 		if err := ValidateDomain(r.Panel.Domain); err != nil {
 			return fmt.Errorf("panel: %w", err)
+		}
+
+		if ri := r.Panel.RealIP; ri != nil {
+			if err := ri.Validate(); err != nil {
+				return fmt.Errorf("panel: %w", err)
+			}
 		}
 
 		if domains[r.Panel.Domain] {

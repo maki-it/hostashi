@@ -142,8 +142,18 @@ func (s *Service) panelWeb(ctx context.Context) (*agentapi.WebPanel, error) {
 	}
 
 	tls := s.panelCovers(p, 0)
+	out := &agentapi.WebPanel{Domain: s.panelDomain, TLS: tls, DBTool: tls && s.dbTool != nil}
 
-	return &agentapi.WebPanel{Domain: s.panelDomain, TLS: tls, DBTool: tls && s.dbTool != nil}, nil
+	ri, err := s.PanelRealIP(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if !ri.IsZero() {
+		out.RealIP = &ri
+	}
+
+	return out, nil
 }
 
 // panelApplied records whether the accepted web state serves the panel over
