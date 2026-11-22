@@ -1774,7 +1774,7 @@ x grep -q '"port":20000' /tmp/api.out || fail "node site port: $(x cat /tmp/api.
 # No start command yet: set up but stopped, nginx answers 502.
 x systemctl is-active --quiet hostashi-node@nodeapp.service && fail "app runs without a start command"
 [ "$(x curl -s -o /dev/null -w '%{http_code}' -H 'Host: nodeapp.example.com' http://127.0.0.1/)" = 502 ] || fail "stopped app does not answer 502"
-x runuser -u nodeapp -- sh -c 'cat >/home/nodeapp/htdocs/server.js' <<'JS'
+xi runuser -u nodeapp -- sh -c 'cat >/home/nodeapp/htdocs/server.js' <<'JS'
 const http = require("http");
 http.createServer((req, res) => {
   console.log("request " + req.url);
@@ -1792,7 +1792,7 @@ for _ in $(seq 1 30); do
   [ -n "$body" ] && break
   sleep 1
 done
-[ "$body" = "hello from node $uid production" ] || fail "node app answer: '$body' $(x journalctl -u hostashi-node@nodeapp.service -n 20 --no-pager)"
+[ "$body" = "hello from node $uid production" ] || fail "node app answer: '$body' $(x journalctl -u hostashi-node@nodeapp.service -n 20 --no-pager; x tail -n 20 /var/log/hostashi/app/nodeapp/app.log)"
 x systemctl is-enabled --quiet hostashi-node@nodeapp.service || fail "app unit not enabled"
 [ "$(x systemctl show -p User --value hostashi-node@nodeapp.service)" = nodeapp ] || fail "app unit user"
 [ "$(x systemctl show -p ControlGroup --value hostashi-node@nodeapp.service)" = "$(x systemctl show -p ControlGroup --value hostashi-site-nodeapp.slice)/hostashi-node@nodeapp.service" ] ||
