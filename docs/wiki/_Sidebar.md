@@ -9,6 +9,8 @@
 - [Sites](Sites.md)
 - [Domains and HTTPS](Domains-and-HTTPS.md)
 - [SSH and SFTP](SSH-and-SFTP.md)
+- [Cron jobs](Cron-jobs.md)
+- [Limits](Limits.md)
 - [Parked domains](Parked-domains.md)
 - [PHP settings](PHP-settings.md)
 - [Object cache](Object-cache.md)
@@ -19,11 +21,13 @@
 
 **Databases**
 
+- [Databases](Databases.md)
 - [Database limits](Database-limits.md)
 
 **Server**
 
 - [Users and roles](Users-and-roles.md)
+- [Backups](Backups.md)
 - [Services and dashboard](Services-and-dashboard.md)
 - [System settings](System-settings.md)
 - [Email notifications](Email-notifications.md)
