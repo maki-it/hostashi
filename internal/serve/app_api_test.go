@@ -128,3 +128,74 @@ func TestNodeSiteOverHTTP(t *testing.T) {
 		t.Errorf("web options of a Node.js site: %d %s", rec.Code, rec.Body)
 	}
 }
+
+func TestAppSiteOverHTTP(t *testing.T) {
+	ag := &stubAgent{}
+	e := newAPIWithAgent(t, ag)
+	c := e.adminCookie(t)
+
+	apps := &stubApps{specs: map[string]agentapi.AppSpec{}}
+	e.sites.EnableApps(apps)
+
+	for body, want := range map[string]int{
+		`{"name":"svc","domains":["svc.example.com"],"type":"app"}`:                                            http.StatusUnprocessableEntity,
+		`{"name":"svc","domains":["svc.example.com"],"app":{}}`:                                                http.StatusUnprocessableEntity,
+		`{"name":"svc","domains":["svc.example.com"],"type":"app","app":{},"node":{"version":"24"}}`:           http.StatusUnprocessableEntity,
+		`{"name":"svc","domains":["svc.example.com"],"type":"node","node":{}}`:                                 http.StatusUnprocessableEntity,
+		`{"name":"svc","domains":["svc.example.com"],"type":"app","app":{"program":"/bin/sh"}}`:                http.StatusUnprocessableEntity,
+		`{"name":"svc","domains":["svc.example.com"],"type":"app","app":{"program":"../x"}}`:                   http.StatusUnprocessableEntity,
+		`{"name":"svc","domains":["svc.example.com"],"type":"app","app":{"program":"bin/x","args":["a\nb"]}}`:  http.StatusUnprocessableEntity,
+		`{"name":"svc","domains":["svc.example.com"],"type":"app","app":{"args":["--port"]}}`:                  http.StatusUnprocessableEntity,
+		`{"name":"svc","domains":["svc.example.com"],"type":"app","php":"8.4","app":{"program":"bin/x"}}`:      http.StatusUnprocessableEntity,
+		`{"name":"svc","domains":["svc.example.com"],"type":"app","app":{"program":"bin/x","workdir":"/etc"}}`: http.StatusUnprocessableEntity,
+	} {
+		if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: body}); rec.Code != want {
+			t.Errorf("%s: %d %s", body, rec.Code, rec.Body)
+		}
+	}
+
+	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"svc","domains":["svc.example.com"],"type":"app","app":{"program":"bin/server","args":["--log","$HOME 100%"]}}`})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	var site siteJSON
+	if err := json.Unmarshal(rec.Body.Bytes(), &site); err != nil || site.Type != "app" || !site.Account || site.App == nil || site.Node != nil ||
+		site.App.Program != "bin/server" || len(site.App.Args) != 2 || site.App.Workdir != "htdocs" || site.App.Port != agentapi.MinAppPort {
+		t.Fatalf("site %+v %+v %v", site, site.App, err)
+	}
+
+	spec := apps.specs["svc"]
+	if !spec.Binary() || spec.StartKind != agentapi.AppStartBinary || spec.Start != "bin/server" || len(spec.Args) != 2 || spec.Args[1] != "$HOME 100%" || spec.Stopped {
+		t.Fatalf("agent got %+v", spec)
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/svc/app", cookie: c, body: `{"workdir":"srv","program":"srv/app","args":[]}`})
+
+	var out siteAppJSON
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); rec.Code != http.StatusOK || err != nil || out.Site.App.Program != "srv/app" || len(out.Site.App.Args) != 0 {
+		t.Fatalf("set: %d %s", rec.Code, rec.Body)
+	}
+
+	// No program: the app stays stopped.
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/svc/app", cookie: c, body: `{"program":""}`}); rec.Code != http.StatusOK || !apps.specs["svc"].Stopped {
+		t.Errorf("unset: %d %s %+v", rec.Code, rec.Body, apps.specs["svc"])
+	}
+
+	// The routes of the other type refuse.
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/svc/node", cookie: c, body: `{"version":"24"}`}); rec.Code != http.StatusConflict {
+		t.Errorf("node route on an app site: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"shop","domains":["shop.example.com"],"type":"node","node":{"version":"24"}}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("node site: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/shop/app", cookie: c, body: `{"program":"bin/x"}`}); rec.Code != http.StatusConflict {
+		t.Errorf("app route on a Node.js site: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/svc/app", cookie: c}); rec.Code != http.StatusOK {
+		t.Errorf("status: %d %s", rec.Code, rec.Body)
+	}
+}

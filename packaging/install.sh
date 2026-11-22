@@ -618,7 +618,7 @@ NODE_DIR=/opt/hostashi/node
 NODE_UNIT=hostashi-node-install@.service
 NODE_LOGS=/var/lib/hostashi-agent/node-install
 # The apps' output, <site>/app.log, opened by systemd for the units
-# hostashi-node@<site> (ADR-0054).
+# hostashi-node@<site> and hostashi-app@<site> (ADR-0054).
 APP_LOGS=/var/log/hostashi/app
 
 chk_node() {
@@ -1089,7 +1089,7 @@ php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }
 
 chk_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-files@.service hostashi-files@.socket; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-app@.service hostashi-files@.service hostashi-files@.socket; do
     file_matches "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u" || { echo "$u differs"; return 1; }
   done
   dir_ok "$(dirname "$NGINX_DROPIN")" 755 root:root || { echo "nginx drop-in directory"; return 1; }
@@ -1103,7 +1103,7 @@ chk_units() {
 }
 do_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-files@.service hostashi-files@.socket; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-app@.service hostashi-files@.service hostashi-files@.socket; do
     write_file "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u"
     [ $? -le 1 ] || return 1
   done

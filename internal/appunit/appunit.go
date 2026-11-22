@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package appunit runs the apps of Node.js sites (ADR-0054): one systemd
-// unit hostashi-node@<site>.service per site, from a fixed template, as
-// the site user in the site's slice. This package writes two drop-ins for
+// Package appunit runs the apps of Node.js and app sites (ADR-0054): one
+// systemd unit hostashi-node@<site>.service or hostashi-app@<site>.service
+// per site, from a fixed template, as the site user in the site's slice. This package writes two drop-ins for
 // the unit, both from typed, checked values only: the slice and the home
 // (as for the PHP units), and the app's working directory, command line
 // and environment. It keeps the firewall's list of app ports and their
 // users, so only nginx and the site user reach an app's port. It starts,
-// restarts and stops the unit through a Controller and never runs node
-// itself.
+// restarts and stops the unit through a Controller and never runs node or
+// the app itself.
 package appunit
 
 import (
@@ -58,6 +58,9 @@ var (
 	ErrStopped = errors.New("appunit: the app is stopped; start it in the panel")
 	// ErrPortTaken: another site's app has the port.
 	ErrPortTaken = errors.New("appunit: the port belongs to another site's app")
+	// ErrProgram: the program file of a binary app is missing, not a
+	// regular file, not executable or not the site user's.
+	ErrProgram = errors.New("appunit: the program file cannot be started")
 )
 
 // Controller drives systemd (phpctl.AppController on a server).
@@ -99,8 +102,21 @@ type Manager struct {
 	mu sync.Mutex
 }
 
-// Unit is the systemd unit of a site's app.
+// Unit is the systemd unit of a site's Node.js app.
 func Unit(site string) string { return "hostashi-node@" + site + ".service" }
+
+// BinaryUnit is the systemd unit of a site's binary app (ADR-0054
+// addendum 2).
+func BinaryUnit(site string) string { return "hostashi-app@" + site + ".service" }
+
+// UnitOf is the unit that runs a.
+func UnitOf(a agentapi.AppSpec) string {
+	if a.Binary() {
+		return BinaryUnit(a.Site)
+	}
+
+	return Unit(a.Site)
+}
 
 func (m *Manager) unitDir() string { return cmpOr(m.UnitDir, DefaultUnitDir) }
 func (m *Manager) nodeDir() string { return cmpOr(m.NodeDir, DefaultNodeDir) }
@@ -122,8 +138,8 @@ func (m *Manager) log() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
-func (m *Manager) dropInDir(site string) string {
-	return filepath.Join(m.unitDir(), Unit(site)+".d")
+func (m *Manager) dropInDir(unit string) string {
+	return filepath.Join(m.unitDir(), unit+".d")
 }
 
 // entry is the stored app of a site with the uid it was set up for.
@@ -163,12 +179,26 @@ func (m *Manager) save(st map[string]entry) error {
 	return statefile.Write(m.Dir, stateFile, append(b, '\n'))
 }
 
-// ExecStart is the command line of an app: node or npm of the app's line.
-// The fields are checked by AppSpec.Validate: only letters, digits, '.',
-// '_', '-', ':' and '/', so nothing systemd would expand or split.
-func ExecStart(nodeDir string, a agentapi.AppSpec) (string, error) {
+// ExecStart is the command line of an app: node or npm of the app's line,
+// or the program file below home with its arguments. The fields but the
+// arguments are checked by AppSpec.Validate: only letters, digits, '.',
+// '_', '-', ':' and '/', so nothing systemd would expand or split. Every
+// argument is quoted with Quote.
+func ExecStart(nodeDir, home string, a agentapi.AppSpec) (string, error) {
 	if err := a.Validate(); err != nil {
 		return "", err
+	}
+
+	if a.StartKind == agentapi.AppStartBinary {
+		var b strings.Builder
+
+		b.WriteString(home + "/" + a.Start)
+
+		for _, arg := range a.Args {
+			b.WriteString(" " + Quote(arg))
+		}
+
+		return b.String(), nil
 	}
 
 	bin := path.Join(nodeDir, a.Node, "bin")
@@ -181,6 +211,28 @@ func ExecStart(nodeDir string, a agentapi.AppSpec) (string, error) {
 	}
 
 	return "", errors.New("appunit: the app has no start command")
+}
+
+// Quote makes s one word of a systemd command line, taken literally: in
+// double quotes, with '\\' and '"' escaped by a backslash, '%' (a unit
+// specifier) doubled and '$' (a variable) doubled. Tabs stay as they are;
+// AppSpec.Validate refuses NUL, newline and carriage return.
+func Quote(s string) string {
+	b := make([]byte, 0, len(s)+2)
+	b = append(b, '"')
+
+	for i := range len(s) {
+		switch c := s[i]; c {
+		case '\\', '"':
+			b = append(b, '\\', c)
+		case '%', '$':
+			b = append(b, c, c)
+		default:
+			b = append(b, c)
+		}
+	}
+
+	return string(append(b, '"'))
 }
 
 // SliceDropInContent puts the unit into the site's slice and mounts the
@@ -213,7 +265,7 @@ func AppDropInContent(nodeDir string, a agentapi.AppSpec, acct Site) ([]byte, er
 	w("ExecStart=")
 
 	if a.StartKind != "" {
-		exec, err := ExecStart(nodeDir, a)
+		exec, err := ExecStart(nodeDir, acct.Home, a)
 		if err != nil {
 			return nil, err
 		}
@@ -222,6 +274,14 @@ func AppDropInContent(nodeDir string, a agentapi.AppSpec, acct Site) ([]byte, er
 	} else {
 		// Never started (Stopped is set); systemd still wants a command.
 		w("ExecStart=/bin/false")
+	}
+
+	if a.Binary() {
+		w("Environment=HOST=127.0.0.1 PORT=", strconv.Itoa(a.Port))
+		w("Environment=HOME=", acct.Home, " USER=", a.Site, " LOGNAME=", a.Site)
+		w("Environment=PATH=/usr/local/bin:/usr/bin:/bin")
+
+		return []byte(b.String()), nil
 	}
 
 	w("Environment=NODE_ENV=production HOST=127.0.0.1 PORT=", strconv.Itoa(a.Port))
@@ -271,7 +331,7 @@ func (m *Manager) RestartLine(ctx context.Context, major string) {
 	sites := make([]string, 0, len(st))
 
 	for site, e := range st {
-		if e.App.Node == major && !e.App.Stopped && e.App.StartKind != "" {
+		if !e.App.Binary() && e.App.Node == major && !e.App.Stopped && e.App.StartKind != "" {
 			sites = append(sites, site)
 		}
 	}
@@ -332,7 +392,7 @@ func (m *Manager) Apply(ctx context.Context, a agentapi.AppSpec) (agentapi.AppSt
 		return agentapi.AppStatus{}, err
 	}
 
-	if !m.installed(a.Node) {
+	if !a.Binary() && !m.installed(a.Node) {
 		return agentapi.AppStatus{}, fmt.Errorf("%w: Node.js %s", ErrNodeMissing, a.Node)
 	}
 
@@ -356,6 +416,14 @@ func (m *Manager) Apply(ctx context.Context, a agentapi.AppSpec) (agentapi.AppSt
 	}
 
 	prev, had := st[a.Site]
+
+	// A site that changes between Node.js and a binary leaves the other
+	// unit behind.
+	if had && UnitOf(prev.App) != UnitOf(a) {
+		if err := m.removeUnit(ctx, prev.App); err != nil {
+			return agentapi.AppStatus{}, err
+		}
+	}
 
 	changed, err := m.writeUnit(ctx, a, acct)
 	if err != nil {
@@ -381,10 +449,13 @@ func (m *Manager) Apply(ctx context.Context, a agentapi.AppSpec) (agentapi.AppSt
 		return agentapi.AppStatus{}, err
 	}
 
-	unit := Unit(a.Site)
+	unit := UnitOf(a)
+	problem := m.program(a, acct)
 
 	switch {
-	case a.Stopped:
+	case a.Stopped || problem != "":
+		// A binary app whose program is not there yet waits for a start
+		// in the panel.
 		err = m.Ctl.Stop(ctx, unit)
 	case changed || prev.App.Stopped:
 		_ = m.Ctl.ResetFailed(ctx, unit)
@@ -402,9 +473,71 @@ func (m *Manager) Apply(ctx context.Context, a agentapi.AppSpec) (agentapi.AppSt
 		return agentapi.AppStatus{}, fmt.Errorf("appunit: site %s: %w", a.Site, err)
 	}
 
-	m.log().InfoContext(ctx, "app applied", "site", a.Site, "node", a.Node, "port", a.Port, "stopped", a.Stopped)
+	m.log().InfoContext(ctx, "app applied", "site", a.Site, "node", a.Node, "port", a.Port, "stopped", a.Stopped, "problem", problem)
 
-	return m.status(ctx, a.Site), nil
+	out := m.status(ctx, a)
+	out.Problem = problem
+
+	return out, nil
+}
+
+// program checks the program file of a binary app that should run and
+// returns what is wrong with it, "" if nothing is (or a is no binary app
+// that should run). The file must lie below the home without a symbolic
+// link at its end, be a regular file with an execute bit and belong to
+// the site user. The check is for the panel's message: the site user can
+// change the file at any time, and the app runs as the site user anyway.
+func (m *Manager) program(a agentapi.AppSpec, acct Site) string {
+	if !a.Binary() || a.Stopped || a.StartKind != agentapi.AppStartBinary {
+		return ""
+	}
+
+	root, err := os.OpenRoot(acct.Home)
+	if err != nil {
+		return "the home cannot be opened"
+	}
+	defer root.Close()
+
+	fi, err := root.Lstat(a.Start)
+
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return "the program file " + a.Start + " does not exist; upload it, then start the app"
+	case err != nil:
+		return "the program file " + a.Start + " cannot be read"
+	case fi.Mode()&os.ModeSymlink != 0:
+		return "the program file " + a.Start + " is a symbolic link; name the file itself"
+	case !fi.Mode().IsRegular():
+		return "the program file " + a.Start + " is not a regular file"
+	case fi.Mode().Perm()&0o100 == 0:
+		return "the program file " + a.Start + " is not executable; set its execute bit (chmod u+x)"
+	case fileUID(fi) != acct.UID:
+		return "the program file " + a.Start + " does not belong to the site user"
+	}
+
+	return ""
+}
+
+// removeUnit stops the unit of a and deletes its drop-ins.
+func (m *Manager) removeUnit(ctx context.Context, a agentapi.AppSpec) error {
+	unit := UnitOf(a)
+
+	if err := m.Ctl.Stop(ctx, unit); err != nil {
+		return err
+	}
+
+	dir := m.dropInDir(unit)
+	for _, f := range []string{SliceDropIn, AppDropIn} {
+		if err := os.Remove(filepath.Join(dir, f)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("appunit: %w", err)
+		}
+	}
+
+	if err := os.Remove(dir); err != nil && !errors.Is(err, os.ErrNotExist) {
+		m.log().InfoContext(ctx, "app drop-in directory not empty, kept", "site", a.Site, "dir", dir)
+	}
+
+	return nil
 }
 
 // writeUnit writes the log directory and both drop-ins and reports
@@ -431,7 +564,7 @@ func (m *Manager) writeUnit(ctx context.Context, a agentapi.AppSpec, acct Site) 
 		return false, fmt.Errorf("appunit: %w", err)
 	}
 
-	dir := m.dropInDir(a.Site)
+	dir := m.dropInDir(UnitOf(a))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return false, fmt.Errorf("appunit: %w", err)
 	}
@@ -471,23 +604,13 @@ func (m *Manager) Remove(ctx context.Context, site string) error {
 		return err
 	}
 
-	if _, ok := st[site]; !ok {
+	e, ok := st[site]
+	if !ok {
 		return nil
 	}
 
-	if err := m.Ctl.Stop(ctx, Unit(site)); err != nil {
+	if err := m.removeUnit(ctx, e.App); err != nil {
 		return err
-	}
-
-	dir := m.dropInDir(site)
-	for _, f := range []string{SliceDropIn, AppDropIn} {
-		if err := os.Remove(filepath.Join(dir, f)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("appunit: %w", err)
-		}
-	}
-
-	if err := os.Remove(dir); err != nil && !errors.Is(err, os.ErrNotExist) {
-		m.log().InfoContext(ctx, "app drop-in directory not empty, kept", "site", site, "dir", dir)
 	}
 
 	if err := m.Ctl.DaemonReload(ctx); err != nil {
@@ -533,7 +656,18 @@ func (m *Manager) Action(ctx context.Context, site, action string) (agentapi.App
 		return agentapi.AppStatus{}, ErrStopped
 	}
 
-	unit := Unit(site)
+	unit := UnitOf(e.App)
+
+	if action != agentapi.AppActionStop {
+		acct, err := m.Site(site)
+		if err != nil {
+			return agentapi.AppStatus{}, err
+		}
+
+		if p := m.program(e.App, acct); p != "" {
+			return agentapi.AppStatus{}, fmt.Errorf("%w: %s", ErrProgram, p)
+		}
+	}
 
 	switch action {
 	case agentapi.AppActionStop:
@@ -552,7 +686,7 @@ func (m *Manager) Action(ctx context.Context, site, action string) (agentapi.App
 
 	m.log().InfoContext(ctx, "app "+action, "site", site)
 
-	return m.status(ctx, site), nil
+	return m.status(ctx, e.App), nil
 }
 
 // Status reports a site's app; a site without one has State "".
@@ -569,19 +703,26 @@ func (m *Manager) Status(ctx context.Context, site string) (agentapi.AppStatus, 
 		return agentapi.AppStatus{}, err
 	}
 
-	if _, ok := st[site]; !ok {
+	e, ok := st[site]
+	if !ok {
 		return agentapi.AppStatus{Site: site}, nil
 	}
 
-	return m.status(ctx, site), nil
+	out := m.status(ctx, e.App)
+
+	if acct, err := m.Site(site); err == nil {
+		out.Problem = m.program(e.App, acct)
+	}
+
+	return out, nil
 }
 
-func (m *Manager) status(ctx context.Context, site string) agentapi.AppStatus {
-	out := agentapi.AppStatus{Site: site}
+func (m *Manager) status(ctx context.Context, a agentapi.AppSpec) agentapi.AppStatus {
+	out := agentapi.AppStatus{Site: a.Site}
 
-	props, err := m.Ctl.Show(ctx, Unit(site), "ActiveState", "SubState", "NRestarts", "MemoryCurrent")
+	props, err := m.Ctl.Show(ctx, UnitOf(a), "ActiveState", "SubState", "NRestarts", "MemoryCurrent")
 	if err != nil {
-		m.log().ErrorContext(ctx, "app state", "site", site, "err", err)
+		m.log().ErrorContext(ctx, "app state", "site", a.Site, "err", err)
 
 		return out
 	}
@@ -644,11 +785,16 @@ func (m *Manager) Recover(ctx context.Context) error {
 	}
 
 	for _, s := range names {
-		if st[s].App.Stopped || !m.installed(st[s].App.Node) {
+		a := st[s].App
+		if a.Stopped || !a.Binary() && !m.installed(a.Node) {
 			continue
 		}
 
-		if err := m.Ctl.Start(ctx, Unit(s)); err != nil {
+		if acct, err := m.Site(s); err == nil && m.program(a, acct) != "" {
+			continue
+		}
+
+		if err := m.Ctl.Start(ctx, UnitOf(a)); err != nil {
 			errs = append(errs, err)
 		}
 	}

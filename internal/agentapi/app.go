@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/maki-it/hostashi/internal/agentrpc"
 )
@@ -26,6 +28,15 @@ const (
 	AppStartScript = "script"
 	// AppStartNPM runs `npm run <script>`.
 	AppStartNPM = "npm"
+	// AppStartBinary runs an executable file below the home with its
+	// arguments (the app type, ADR-0054 addendum 2).
+	AppStartBinary = "binary"
+)
+
+// The bounds of a binary app's arguments (ADR-0054 addendum 2).
+const (
+	MaxAppArgs     = 16
+	MaxAppArgBytes = 256
 )
 
 // DefaultAppWorkdir is the working directory of a new app, below the home.
@@ -74,9 +85,42 @@ func ValidateAppStart(kind, start string) error {
 		}
 
 		return nil
+	case AppStartBinary:
+		if start == "" {
+			return errors.New("app: the program file is empty")
+		}
+
+		if err := ValidateWebDir(start); err != nil {
+			return fmt.Errorf("app program file: %w", err)
+		}
+
+		return nil
 	}
 
 	return fmt.Errorf("app: unknown start kind %q", kind)
+}
+
+// ValidateAppArgs checks the arguments of a binary app: at most
+// MaxAppArgs, each at most MaxAppArgBytes of UTF-8 without NUL, newline or
+// carriage return. Anything else is allowed; the agent quotes every
+// argument for systemd.
+func ValidateAppArgs(args []string) error {
+	if len(args) > MaxAppArgs {
+		return fmt.Errorf("app: at most %d arguments", MaxAppArgs)
+	}
+
+	for i, a := range args {
+		switch {
+		case len(a) > MaxAppArgBytes:
+			return fmt.Errorf("app: argument %d is longer than %d bytes", i+1, MaxAppArgBytes)
+		case !utf8.ValidString(a):
+			return fmt.Errorf("app: argument %d is not UTF-8", i+1)
+		case strings.ContainsAny(a, "\x00\n\r"):
+			return fmt.Errorf("app: argument %d holds a NUL, newline or carriage return", i+1)
+		}
+	}
+
+	return nil
 }
 
 // ValidateAppPort checks a port from the app range.
@@ -95,15 +139,21 @@ type WebApp struct {
 }
 
 // AppSpec is the app of one site, as the agent runs it in
-// hostashi-node@<site>.service.
+// hostashi-node@<site>.service (Node.js) or hostashi-app@<site>.service
+// (a binary, ADR-0054 addendum 2).
 type AppSpec struct {
 	Site string `json:"site"`
-	// Node is the Node.js line (NodeReleases) the app runs on.
+	// Node is the Node.js line (NodeReleases) the app runs on; "" for a
+	// binary app.
 	Node      string `json:"node"`
 	Workdir   string `json:"workdir"`
 	StartKind string `json:"startKind"`
-	Start     string `json:"start"`
-	Port      int    `json:"port"`
+	// Start is the script file or npm script below the working directory,
+	// or the program file of a binary app below the home.
+	Start string `json:"start"`
+	// Args are the arguments of a binary app.
+	Args []string `json:"args,omitempty"`
+	Port int      `json:"port"`
 	// Stopped keeps the app stopped (stopped in the panel, or no start
 	// command yet).
 	Stopped bool `json:"stopped,omitempty"`
@@ -115,8 +165,30 @@ func (a AppSpec) Validate() error {
 		return err
 	}
 
-	if err := ValidateNodeMajor(a.Node); err != nil {
-		return fmt.Errorf("app: %w", err)
+	if a.Binary() {
+		if a.StartKind != "" && a.StartKind != AppStartBinary {
+			return fmt.Errorf("app: a binary app cannot start with %q", a.StartKind)
+		}
+
+		if a.StartKind == "" && len(a.Args) > 0 {
+			return errors.New("app: arguments need a program")
+		}
+
+		if err := ValidateAppArgs(a.Args); err != nil {
+			return err
+		}
+	} else {
+		if err := ValidateNodeMajor(a.Node); err != nil {
+			return fmt.Errorf("app: %w", err)
+		}
+
+		if a.StartKind == AppStartBinary {
+			return errors.New("app: a Node.js app cannot start a binary")
+		}
+
+		if len(a.Args) > 0 {
+			return errors.New("app: only a binary app takes arguments")
+		}
 	}
 
 	if err := ValidateAppWorkdir(a.Workdir); err != nil {
@@ -133,6 +205,9 @@ func (a AppSpec) Validate() error {
 
 	return ValidateAppPort(a.Port)
 }
+
+// Binary reports whether the app is a binary (no Node.js line).
+func (a AppSpec) Binary() bool { return a.Node == "" }
 
 // AppApplyRequest sets up or changes a site's app (site.app.apply).
 type AppApplyRequest struct {
@@ -199,6 +274,9 @@ type AppStatus struct {
 	UsedBytes uint64 `json:"usedBytes,omitempty"`
 	// Since is when the unit entered its state (RFC 3339), "" unknown.
 	Since string `json:"since,omitempty"`
+	// Problem says why a binary app that should run is not started: its
+	// program file is missing, not executable or not the site user's.
+	Problem string `json:"problem,omitempty"`
 }
 
 // The app operations (ADR-0054).

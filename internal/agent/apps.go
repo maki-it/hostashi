@@ -5,6 +5,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -93,6 +94,9 @@ func mapAppError(err error) error {
 		return nil
 	case errors.Is(err, appunit.ErrNoApp):
 		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "the site has no app"}
+	case errors.Is(err, appunit.ErrProgram):
+		// The panel shows the problem itself.
+		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: strings.TrimPrefix(err.Error(), appunit.ErrProgram.Error()+": ")}
 	case errors.Is(err, appunit.ErrNodeMissing), errors.Is(err, appunit.ErrStopped), errors.Is(err, appunit.ErrPortTaken):
 		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: err.Error()}
 	}

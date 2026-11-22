@@ -251,3 +251,71 @@ func TestNodeSite(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAppSite(t *testing.T) {
+	s, ag, _ := newService(t)
+	ctx := t.Context()
+
+	// No Node.js line is installed: an app site does not need one.
+	apps := &fakeAppAgent{specs: map[string]agentapi.AppSpec{}}
+	s.EnableApps(apps)
+
+	prog := &store.SiteApp{StartKind: agentapi.AppStartBinary, Start: "bin/server", Args: []string{"--port", "x y"}}
+	req := CreateRequest{Name: "svc", Domains: []string{"svc.example.com"}, App: prog}
+
+	for name, r := range map[string]CreateRequest{
+		"php":          {Name: "svc", Domains: req.Domains, App: prog, PHP: "8.4"},
+		"script":       {Name: "svc", Domains: req.Domains, App: &store.SiteApp{StartKind: agentapi.AppStartScript, Start: "x.js"}},
+		"absolute":     {Name: "svc", Domains: req.Domains, App: &store.SiteApp{StartKind: agentapi.AppStartBinary, Start: "/bin/sh"}},
+		"args alone":   {Name: "svc", Domains: req.Domains, App: &store.SiteApp{Args: []string{"x"}}},
+		"newline arg":  {Name: "svc", Domains: req.Domains, App: &store.SiteApp{StartKind: agentapi.AppStartBinary, Start: "x", Args: []string{"a\nb"}}},
+		"node and arg": {Name: "svc", Domains: req.Domains, App: &store.SiteApp{Node: "24", Args: []string{"x"}}},
+	} {
+		if _, err := s.Create(ctx, 1, r); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+
+	site, err := s.Create(ctx, 1, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if site.Type != store.SiteTypeApp || site.App == nil || site.App.Node != "" || site.App.Port != agentapi.MinAppPort {
+		t.Fatalf("created %+v %+v", site, site.App)
+	}
+
+	if a := apps.specs["svc"]; !a.Binary() || a.Stopped || a.Start != "bin/server" || len(a.Args) != 2 {
+		t.Errorf("spec %+v", a)
+	}
+
+	if w, ok := webOf(ag, "svc"); !ok || w.App == nil || w.App.Port != agentapi.MinAppPort || w.PHP != "" {
+		t.Errorf("web %+v", w)
+	}
+
+	if _, err := s.SetPHP(ctx, 1, "svc", "8.4"); !errors.Is(err, ErrSiteType) {
+		t.Errorf("php: %v", err)
+	}
+
+	// A Node.js version is refused on an app site.
+	if _, _, err := s.SetApp(ctx, 1, "svc", store.SiteApp{Node: "24", StartKind: agentapi.AppStartScript, Start: "x.js"}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("node on an app site: %v", err)
+	}
+
+	site, _, err = s.SetApp(ctx, 1, "svc", store.SiteApp{StartKind: agentapi.AppStartBinary, Start: "srv/app"})
+	if err != nil || site.App.Start != "srv/app" || site.App.Args != nil {
+		t.Fatalf("set: %+v %v", site.App, err)
+	}
+
+	if _, err := s.AppAction(ctx, 1, "svc", agentapi.AppActionRestart); err != nil {
+		t.Errorf("restart: %v", err)
+	}
+
+	if _, err := s.SetDisabled(ctx, 1, "svc", true, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if !apps.specs["svc"].Stopped {
+		t.Error("disabled site's app runs")
+	}
+}

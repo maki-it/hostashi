@@ -240,7 +240,9 @@ type CreateRequest struct {
 	Proxy *store.SiteProxy
 	// App makes the site a Node.js site (ADR-0054): an account and files,
 	// no PHP, its app on a loopback port the store hands out. Its Node.js
-	// line must be installed. Port and Stopped are ignored.
+	// line must be installed. Port and Stopped are ignored. An App without
+	// Node makes an app site, which runs a program of its own instead
+	// (addendum 2).
 	App *store.SiteApp
 }
 
@@ -351,16 +353,24 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 
 	if req.App != nil {
 		if req.PHP != "" || req.PHPPrograms || req.Redirect != nil || req.Proxy != nil {
-			return store.Site{}, fmt.Errorf("%w: a Node.js site has no PHP and is no redirect or reverse proxy", ErrInvalid)
+			return store.Site{}, fmt.Errorf("%w: a Node.js or app site has no PHP and is no redirect or reverse proxy", ErrInvalid)
 		}
 
-		a, err := checkApp(*req.App)
+		binary := req.App.Node == ""
+
+		a, err := checkApp(*req.App, binary)
 		if err != nil {
 			return store.Site{}, err
 		}
 
-		if err := s.checkNodeInstalled(ctx, a.Node); err != nil {
-			return store.Site{}, err
+		if binary && s.apps == nil {
+			return store.Site{}, ErrNoApps
+		}
+
+		if !binary {
+			if err := s.checkNodeInstalled(ctx, a.Node); err != nil {
+				return store.Site{}, err
+			}
 		}
 
 		a.Port, a.Stopped = 0, false
@@ -409,6 +419,8 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		created, err = s.st.CreateRedirectSite(ctx, req.Name, req.Pool, *req.Redirect, domains, s.now())
 	case req.Proxy != nil:
 		created, err = s.st.CreateProxySite(ctx, req.Name, req.Pool, *req.Proxy, domains, s.now())
+	case req.App != nil && req.App.Node == "":
+		created, err = s.st.CreateAppSite(ctx, req.Name, req.Pool, *req.App, domains, s.now())
 	case req.App != nil:
 		created, err = s.st.CreateNodeSite(ctx, req.Name, req.Pool, *req.App, domains, s.now())
 	default:
@@ -903,9 +915,9 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				continue
 			}
 
-			// A Node.js site passes its requests to its app; it keeps its
-			// root and snippets, nothing of PHP or a static site.
-			if site.Type == store.SiteTypeNode && site.App != nil {
+			// A Node.js or app site passes its requests to its app; it
+			// keeps its root and snippets, nothing of PHP or a static site.
+			if hasApp(site) {
 				ws.PHP = ""
 				ws.App = &agentapi.WebApp{Port: site.App.Port}
 				ws.Snippets = webSnippets(snippets, site)
