@@ -91,7 +91,7 @@ func TestBuildDescribed(t *testing.T) {
 		},
 		Route{
 			Pattern: "POST /api/v1/items/{id}",
-			Op:      &Operation{ID: "createItem", Tag: "items", In: createIn{}, Out: itemJSON{}, Status: 201},
+			Op:      &Operation{ID: "createItem", Tag: "items", In: createIn{}, Out: itemJSON{}, Status: 201, AlsoStatus: []int{202}},
 			Access:  Access{Kind: "session"},
 		},
 		Route{
@@ -126,6 +126,10 @@ func TestBuildDescribed(t *testing.T) {
 	create := get(t, doc, "paths", "/api/v1/items/{id}", "post")
 	if _, ok := get(t, create, "responses").(map[string]any)["201"]; !ok {
 		t.Error("create has no 201")
+	}
+
+	if v := get(t, create, "responses", "202", "content", "application/json", "schema", "$ref"); v != "#/components/schemas/Item" {
+		t.Errorf("also status body = %v", v)
 	}
 
 	if v := get(t, create, "requestBody", "content", "application/json", "schema", "$ref"); v != "#/components/schemas/CreateInInput" {
@@ -257,6 +261,7 @@ func TestBuildErrors(t *testing.T) {
 		"query twice":    {{Pattern: "GET /a", Op: op(Operation{ID: "a", Tag: "x", Query: []Param{{Name: "q"}, {Name: "q"}}}), Access: Access{Kind: "public"}}},
 		"marshaler":      {{Pattern: "GET /a", Op: op(Operation{ID: "a", Tag: "x", Out: marshaler{}}), Access: Access{Kind: "public"}}},
 		"func":           {{Pattern: "GET /a", Op: op(Operation{ID: "a", Tag: "x", Out: withFunc{}}), Access: Access{Kind: "public"}}},
+		"also status":    {{Pattern: "GET /a", Op: op(Operation{ID: "a", Tag: "x", AlsoStatus: []int{404}}), Access: Access{Kind: "public"}}},
 		"error status":   {{Pattern: "GET /a", Op: op(Operation{ID: "a", Tag: "x", Errors: map[int]any{200: createIn{}}}), Access: Access{Kind: "public"}}},
 		"int map key":    {{Pattern: "GET /a", Op: op(Operation{ID: "a", Tag: "x", Out: map[int]string{}}), Access: Access{Kind: "public"}}},
 		"duplicate id": {
