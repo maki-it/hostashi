@@ -1776,6 +1776,119 @@
         ],
         "type": "object"
       },
+      "DeviceApproveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "approve": {
+            "type": "boolean"
+          },
+          "expiresInDays": {
+            "type": "integer"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "sites": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "userCode": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DeviceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "client": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "userCode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "client",
+          "createdAt",
+          "expiresAt",
+          "ip",
+          "userCode"
+        ],
+        "type": "object"
+      },
+      "DeviceStart": {
+        "additionalProperties": false,
+        "properties": {
+          "deviceCode": {
+            "type": "string"
+          },
+          "expiresIn": {
+            "type": "integer"
+          },
+          "interval": {
+            "type": "integer"
+          },
+          "userCode": {
+            "type": "string"
+          },
+          "verificationUri": {
+            "type": "string"
+          },
+          "verificationUriComplete": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deviceCode",
+          "expiresIn",
+          "interval",
+          "userCode",
+          "verificationUri",
+          "verificationUriComplete"
+        ],
+        "type": "object"
+      },
+      "DeviceStartRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "client": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DeviceTokenRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "deviceCode": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Doctor": {
         "additionalProperties": false,
         "properties": {
@@ -6814,6 +6927,179 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "audit:read"
+      }
+    },
+    "/api/v1/auth/device": {
+      "post": {
+        "operationId": "startDeviceLogin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceStart"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Start a browser login for the CLI: a code to approve in the panel",
+        "tags": [
+          "auth"
+        ],
+        "x-hostashi-access": "public"
+      }
+    },
+    "/api/v1/auth/device/approve": {
+      "post": {
+        "operationId": "approveDeviceLogin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceApproveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Approve or deny a browser login of the CLI",
+        "tags": [
+          "auth"
+        ],
+        "x-hostashi-access": "session"
+      }
+    },
+    "/api/v1/auth/device/token": {
+      "post": {
+        "operationId": "pollDeviceLogin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenCreated"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "The CLI's poll: the new API token once approved, else authorization_pending, slow_down, access_denied or expired_token",
+        "tags": [
+          "auth"
+        ],
+        "x-hostashi-access": "public"
+      }
+    },
+    "/api/v1/auth/device/{userCode}": {
+      "get": {
+        "operationId": "getDeviceLogin",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userCode",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRequest"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "A pending browser login of the CLI, for the approval page",
+        "tags": [
+          "auth"
+        ],
+        "x-hostashi-access": "session"
       }
     },
     "/api/v1/auth/login": {

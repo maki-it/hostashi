@@ -7,6 +7,7 @@ import { currentUser, needsSecondFactor, setupRequired, type User } from "./auth
 import { Audit } from "./Audit";
 import { Backups } from "./Backups";
 import { Databases } from "./Databases";
+import { Device } from "./Device";
 import { Doctor } from "./Doctor";
 import { Firewall } from "./Firewall";
 import { Home } from "./Home";
@@ -18,6 +19,7 @@ import { Migrate } from "./Migrate";
 import { Pages } from "./Pages";
 import { Overview } from "./Overview";
 import { Parked } from "./Parked";
+import { NodePage } from "./NodePage";
 import { PHPPage } from "./PHP";
 import { SecondFactor } from "./SecondFactor";
 import { Services } from "./Services";
@@ -101,7 +103,7 @@ export function App() {
   // refuses every other page until then.
   if (view.kind === "home" && !needsSecondFactor(view.user)) {
     const user = view.user;
-    const page: Page = route.page === "account" || canSee(user.role, route.page) ? route.page : "home";
+    const page: Page = route.page === "account" || route.page === "device" || canSee(user.role, route.page) ? route.page : "home";
     const show = (p: Page) => page === p;
     // replaceQuery changes the query of the address without a new history
     // entry, so that typing in a filter does not fill the back button.
@@ -135,6 +137,7 @@ export function App() {
         {show("databases") && <Databases role={user.role} query={route.query} onQuery={replaceQuery} />}
         {show("backups") && <Backups query={route.query} onQuery={replaceQuery} />}
         {show("php") && <PHPPage query={route.query} onQuery={replaceQuery} />}
+        {show("node") && <NodePage />}
         {show("limits") && <Presets query={route.query} onQuery={replaceQuery} />}
         {show("health") && <Doctor query={route.query} onQuery={replaceQuery} />}
         {show("services") && <Services />}
@@ -146,6 +149,7 @@ export function App() {
         {show("import") && <Migrate query={route.query} onQuery={replaceQuery} />}
         {show("audit") && <Audit query={route.query} onQuery={replaceQuery} />}
         {show("account") && <Account user={user} onScheme={onScheme} />}
+        {show("device") && <Device code={route.query.get("code") ?? ""} />}
       </Shell>
     );
   }

@@ -9,6 +9,7 @@ import {
   getLogRetention,
   lineTone,
   logKinds,
+  siteLogKinds,
   logMessage,
   retentionProblem,
   setLogRetention,
@@ -16,7 +17,7 @@ import {
   type LogKind,
   type LogRetention,
 } from "./logs";
-import type { Site } from "./sites";
+import { siteType, type Site } from "./sites";
 import { Button, Card, Field, Notice } from "./ui";
 
 // How often the view asks for new lines while it follows a log.
@@ -154,7 +155,7 @@ export function SiteLogs({ site, admin }: Props) {
         <div className="ui-stack">
           <div className="ui-row ui-log-tools">
             <div className="ui-seg" role="radiogroup" aria-label="Log">
-              {logKinds.map((k) => (
+              {siteLogKinds(siteType(site)).map((k) => (
                 <button key={k.id} type="button" role="radio" aria-checked={kind === k.id} className="ui-seg-btn" onClick={() => setKind(k.id)}>
                   {k.label}
                 </button>
@@ -259,7 +260,7 @@ function RetentionCard({ admin }: { admin: boolean }) {
     <Card title="Log retention">
       <form className="ui-stack" onSubmit={save} noValidate>
         <p className="ui-hint">
-          One value for every site on this server: access, web server and PHP logs, and nginx's logs of requests for no site. Logs are
+          One value for every site on this server: access, web server, PHP and app logs, and nginx's logs of requests for no site. Logs are
           rotated daily and deleted after this many days. Match it to what your privacy policy and data processing agreements promise.
         </p>
         {r && (
