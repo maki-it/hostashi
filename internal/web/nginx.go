@@ -731,6 +731,9 @@ server {
 
     {{- template "pageloc" $.PL}}
     {{- end}}
+    {{- with $.Expires}}
+    expires ${{.Var}};
+    {{- end}}
     {{- if .S.PHPSocket}}
     index index.php index.html index.htm;
 
@@ -794,9 +797,6 @@ server {
     }
     {{- else}}
     index index.html index.htm;
-    {{- with $.Expires}}
-    expires ${{.Var}};
-    {{- end}}
 
     location / {
         {{- if .M}}
@@ -911,7 +911,7 @@ func (n *Nginx) Render(d Desired, gen int) (Files, error) {
 		b.Reset()
 
 		data := map[string]any{"N": n, "S": s, "M": (*Maintenance)(nil), "D": (*PageRef)(nil), "C": (*cacheView)(nil)}
-		if s.AssetCache && !s.Disabled && s.PHPSocket == "" {
+		if s.AssetCache && !s.Disabled {
 			data["Expires"] = assetCacheView(s)
 		}
 

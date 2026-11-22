@@ -122,8 +122,8 @@ const (
 )
 
 // DefaultAssetCacheExts are the file types cached by default: stylesheets,
-// scripts, fonts and images.
-var DefaultAssetCacheExts = []string{"css", "js", "mjs", "woff", "woff2", "ttf", "otf", "eot", "svg", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico"}
+// scripts, fonts, images, video and audio.
+var DefaultAssetCacheExts = []string{"css", "js", "mjs", "woff", "woff2", "ttf", "otf", "eot", "svg", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "svgz", "mp4", "webm", "ogg", "ogv"}
 
 var assetExtRe = regexp.MustCompile(`^[a-z0-9]{1,10}$`)
 
@@ -144,6 +144,10 @@ func ValidateAssetCache(seconds int, exts []string) error {
 	for _, e := range exts {
 		if !assetExtRe.MatchString(e) {
 			return fmt.Errorf("file type %q: use 1 to 10 lowercase letters or digits, without the dot", e)
+		}
+
+		if e == "php" {
+			return errors.New("file type php cannot be cached: PHP answers change with every request")
 		}
 
 		if seen[e] {
@@ -387,8 +391,8 @@ func (r WebApplyRequest) Validate() error {
 			return fmt.Errorf("site %q: %w", s.User, err)
 		}
 
-		if (s.SPA || s.AssetCache) && s.PHP != "" {
-			return fmt.Errorf("site %q: single-page app and asset caching are for static sites", s.User)
+		if s.SPA && s.PHP != "" {
+			return fmt.Errorf("site %q: single-page app is for static sites", s.User)
 		}
 
 		if s.PHPWorkers < 0 || s.PHPWorkers > MaxPHPWorkers {

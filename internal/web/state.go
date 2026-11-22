@@ -246,8 +246,8 @@ func (d Desired) Validate() error {
 			return fmt.Errorf("site %q: %w", s.User, err)
 		}
 
-		if (s.SPA || s.AssetCache) && s.PHPSocket != "" {
-			return fmt.Errorf("site %q: single-page app and asset caching are for static sites", s.User)
+		if s.SPA && s.PHPSocket != "" {
+			return fmt.Errorf("site %q: single-page app is for static sites", s.User)
 		}
 
 		if c := s.PageCache; c != nil {

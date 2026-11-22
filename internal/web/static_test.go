@@ -17,6 +17,7 @@ func TestStaticOptionsRender(t *testing.T) {
 		{User: "app", Domains: []string{"app.example.com"}, Root: "/srv/app/htdocs/dist", SPA: true, AssetCache: true},
 		{User: "plain", Domains: []string{"plain.example.com"}, Root: "/srv/plain/htdocs"},
 		{User: "own", Domains: []string{"own.example.com"}, Root: "/srv/own/htdocs", AssetCache: true, AssetCacheSeconds: 3600, AssetCacheExts: []string{"html", "json"}},
+		{User: "wp", Domains: []string{"wp.example.com"}, Root: "/srv/wp/htdocs", PHPSocket: "/run/wp.sock", AssetCache: true},
 		{User: "off", Domains: []string{"off.example.com"}, Root: "/srv/off/htdocs", SPA: true, AssetCache: true, Disabled: true},
 	}}, 1)
 	if err != nil {
@@ -26,7 +27,7 @@ func TestStaticOptionsRender(t *testing.T) {
 	app := string(f.Content["sites/app.conf"])
 	for _, want := range []string{
 		"root /srv/app/htdocs/dist;", "try_files $uri $uri/ /index.html;", "map $uri $hostashi_expires_617070 {", "expires $hostashi_expires_617070;",
-		`"~*\.(?:css|js|mjs|woff|woff2|ttf|otf|eot|svg|png|jpg|jpeg|gif|webp|avif|ico)$" 2592000s;`,
+		`"~*\.(?:css|js|mjs|woff|woff2|ttf|otf|eot|svg|png|jpg|jpeg|gif|webp|avif|ico|svgz|mp4|webm|ogg|ogv)$" 2592000s;`,
 	} {
 		if !strings.Contains(app, want) {
 			t.Errorf("app.conf lacks %q:\n%s", want, app)
@@ -35,6 +36,12 @@ func TestStaticOptionsRender(t *testing.T) {
 
 	if own := string(f.Content["sites/own.conf"]); !strings.Contains(own, `"~*\.(?:html|json)$" 3600s;`) {
 		t.Errorf("own.conf:\n%s", own)
+	}
+
+	// A PHP site caches assets too (ADR-0054 addendum 4); PHP answers
+	// never match the map.
+	if wp := string(f.Content["sites/wp.conf"]); !strings.Contains(wp, "expires $hostashi_expires_7770;") || !strings.Contains(wp, "fastcgi_pass unix:/run/wp.sock;") {
+		t.Errorf("wp.conf:\n%s", wp)
 	}
 
 	plain := string(f.Content["sites/plain.conf"])
@@ -48,10 +55,9 @@ func TestStaticOptionsRender(t *testing.T) {
 	}
 
 	for name, s := range map[string]Site{
-		"php spa":         {User: "p", Domains: []string{"p.example.com"}, Root: "/srv/p", PHPSocket: "/run/p.sock", SPA: true},
-		"php asset cache": {User: "q", Domains: []string{"q.example.com"}, Root: "/srv/q", PHPSocket: "/run/q.sock", AssetCache: true},
-		"bad extension":   {User: "r", Domains: []string{"r.example.com"}, Root: "/srv/r", AssetCache: true, AssetCacheExts: []string{`css)$" 1d; } server { #`}},
-		"short time":      {User: "u", Domains: []string{"u.example.com"}, Root: "/srv/u", AssetCache: true, AssetCacheSeconds: 1},
+		"php spa":       {User: "p", Domains: []string{"p.example.com"}, Root: "/srv/p", PHPSocket: "/run/p.sock", SPA: true},
+		"bad extension": {User: "r", Domains: []string{"r.example.com"}, Root: "/srv/r", AssetCache: true, AssetCacheExts: []string{`css)$" 1d; } server { #`}},
+		"short time":    {User: "u", Domains: []string{"u.example.com"}, Root: "/srv/u", AssetCache: true, AssetCacheSeconds: 1},
 	} {
 		if err := (Desired{Sites: []Site{s}}).Validate(); err == nil {
 			t.Errorf("%s accepted", name)

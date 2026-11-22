@@ -37,6 +37,7 @@ func TestWebApplyStaticOptions(t *testing.T) {
 		"static spa":   site(func(s *WebSite) { s.SPA, s.AssetCache, s.WebDir = true, true, "dist" }),
 		"php with dir": site(func(s *WebSite) { s.PHP, s.WebDir = "8.4", "public" }),
 		"disabled spa": site(func(s *WebSite) { s.SPA, s.Disabled = true, true }),
+		"php assets":   site(func(s *WebSite) { s.PHP, s.AssetCache = "8.4", true }),
 	} {
 		if err := r.Validate(); err != nil {
 			t.Errorf("%s: %v", name, err)
@@ -44,9 +45,8 @@ func TestWebApplyStaticOptions(t *testing.T) {
 	}
 
 	for name, r := range map[string]WebApplyRequest{
-		"php spa":         site(func(s *WebSite) { s.PHP, s.SPA = "8.4", true }),
-		"php asset cache": site(func(s *WebSite) { s.PHP, s.AssetCache = "8.4", true }),
-		"bad dir":         site(func(s *WebSite) { s.WebDir = "../other" }),
+		"php spa": site(func(s *WebSite) { s.PHP, s.SPA = "8.4", true }),
+		"bad dir": site(func(s *WebSite) { s.WebDir = "../other" }),
 	} {
 		if err := r.Validate(); err == nil {
 			t.Errorf("%s accepted", name)
@@ -82,6 +82,7 @@ func TestValidateAssetCache(t *testing.T) {
 		{0, []string{""}},
 		{0, []string{"abcdefghijk"}},
 		{0, []string{"css", "css"}},
+		{0, []string{"css", "php"}},
 		{0, []string{"css|js"}},
 		{0, []string{"css)$"}},
 		{0, many},
