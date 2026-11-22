@@ -28,6 +28,7 @@ import {
   siteMessage,
   siteStatus,
   siteType,
+  siteTypeLabel,
   type PHPVersions,
   type Site,
 } from "./sites";
@@ -85,14 +86,15 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
   const status = siteStatus(site);
   const ready = site.state === "active";
   // The PHP tab only for sites with PHP; the type is changed on the Web tab.
-  // A site without an account (a redirect) has no files, cron, SSH or
-  // limits, and a redirect no snippets (ADR-0054).
+  // A site without an account (redirect, reverse proxy) has no files,
+  // cron, SSH or limits, and redirect and reverse proxy no snippets
+  // (ADR-0054).
   const noAccount = ["files", "php", "cron", "ssh", "limits"];
   const shown = tabs.filter(
     (t) =>
       (t.id !== "php" || site.php !== "") &&
       (hasAccount(site) || !noAccount.includes(t.id)) &&
-      (siteType(site) !== "redirect" || t.id !== "nginx"),
+      (!["redirect", "proxy"].includes(siteType(site)) || t.id !== "nginx"),
   );
   const active = ready && shown.some((t) => t.id === tab) ? tab : "overview";
   const prefix = `site-${site.name}`;
@@ -106,6 +108,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
             <span className="ui-mono">{site.domains[0]}</span>
             <Badge tone={status.tone}>{status.word}</Badge>
             <Badge tone={httpsTone(site.tls)}>{httpsLabel(site.tls)}</Badge>
+            <Badge tone="off">{siteTypeLabel(site)}</Badge>
           </p>
         </div>
       </div>
@@ -199,7 +202,15 @@ function Overview({ site, onChange, staff }: TabProps & { staff: boolean }) {
               <dd className="ui-mono">{aliases.join(", ")}</dd>
             </>
           )}
-          {site.redirect ? (
+          {site.proxy ? (
+            <>
+              <dt>Reverse proxy</dt>
+              <dd>
+                <span className="ui-mono">{site.proxy.target}</span>
+                {site.proxy.insecure ? " (certificate not verified)" : ""}
+              </dd>
+            </>
+          ) : site.redirect ? (
             <>
               <dt>Redirect</dt>
               <dd>
@@ -393,7 +404,7 @@ function DeleteSite({ site, canPark }: { site: Site; canPark: boolean }) {
           <p className="ui-hint">
             {hasAccount(site)
               ? "Deletes the site with its files and its databases. Backups stay until they expire."
-              : "Deletes the site and its redirect. It has no files or databases."}
+              : `Deletes the site and its ${site.proxy ? "reverse proxy" : "redirect"}. It has no files or databases.`}
           </p>
           {canPark && <p className="ui-hint ui-flush">To keep the domains answering, delete the site and park its domains in one step.</p>}
           <div className="ui-row">

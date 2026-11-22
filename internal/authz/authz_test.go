@@ -65,7 +65,7 @@ func TestDecidedRules(t *testing.T) {
 	userMay := []authz.Action{
 		"sites:list", "sites:read", "sites.php:write", "sites.maintenance:write", "limits:read",
 		"cron:write", "ssh:write", "databases:write", "databases:delete", "backups:read", "backups:restore",
-		"sites.pagecache:write", "sites.pagecache:purge", "sites.web:write", "sites.redirect:write", "sites.headers:write",
+		"sites.pagecache:write", "sites.pagecache:purge", "sites.web:write", "sites.redirect:write", "sites.proxy:write", "sites.headers:write",
 	}
 	for _, a := range userMay {
 		if !authz.Allowed(authz.RoleUser, a) {

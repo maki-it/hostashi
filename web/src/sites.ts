@@ -39,6 +39,8 @@ export type Site = {
   account?: boolean;
   // The target of a redirect site, null otherwise (ADR-0054).
   redirect?: SiteRedirect | null;
+  // The target of a reverse proxy site, null otherwise (ADR-0054).
+  proxy?: SiteProxy | null;
   phpPrograms: boolean; // PHP may start programs (exec, system, ...)
   disabled: boolean; // answers 503, PHP stopped
   disabledPage: string; // maintenance page shown while disabled (ADR-0047)
@@ -150,9 +152,13 @@ export type NewSite = {
   domains: string[];
   tls: boolean;
   hsts: boolean;
-  type?: "redirect";
+  type?: "redirect" | "proxy";
   redirect?: SiteRedirect;
+  proxy?: SiteProxy;
 };
+
+/** The target of a reverse proxy site (ADR-0054). */
+export type SiteProxy = { target: string; targetHost: boolean; insecure: boolean };
 
 /** The target of a redirect site (ADR-0054). */
 export type SiteRedirect = { target: string; status: number; keepPath: boolean };
@@ -163,6 +169,32 @@ export const redirectStatuses = [
   { value: 307, label: "307 Temporary, keeps the method" },
   { value: 308, label: "308 Permanent, keeps the method" },
 ];
+
+/**
+ * proxyProblem mirrors agentapi.ParseProxyTarget: the rules of a redirect
+ * target, and no address of this server (loopback, link-local such as the
+ * cloud metadata service, 0.0.0.0, multicast) or .localhost name. The
+ * server also checks the addresses a name resolves to.
+ */
+export function proxyProblem(target: string, own: string[]): string {
+  const problem = redirectProblem(target, own);
+  if (problem) return problem.replace("redirect to", "pass requests to");
+  const host = new URL(target).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost")) return "The address points to this server.";
+  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    if (a === 127 || a === 0) return "The address points to this server.";
+    if (a === 169 && b === 254) return "Link-local addresses (such as the cloud metadata service) are not allowed.";
+    if (a >= 224) return "Multicast and broadcast addresses are not allowed.";
+  }
+  if (host.includes(":")) {
+    if (host === "::1" || host === "::" || host.startsWith("::ffff:")) return "The address points to this server.";
+    if (/^fe[89ab]/.test(host)) return "Link-local addresses are not allowed.";
+    if (host.startsWith("ff")) return "Multicast addresses are not allowed.";
+  }
+  return "";
+}
 
 /** hasAccount: the site has a Linux account with files. */
 export const hasAccount = (s: Pick<Site, "account">) => s.account !== false;
@@ -239,6 +271,7 @@ export const newSiteHash = (domain: string, tls: boolean) =>
 export const setDomains = (name: string, domains: string[]) => request<Site>("PUT", sitePath(name) + "/domains", { domains });
 export const setPHP = (name: string, php: string) => request<Site>("PUT", sitePath(name) + "/php", { php });
 export const setRedirect = (name: string, r: SiteRedirect) => request<Site>("PUT", sitePath(name) + "/redirect", r);
+export const setProxy = (name: string, p: SiteProxy) => request<Site>("PUT", sitePath(name) + "/proxy", p);
 export const setWebOptions = (name: string, w: SiteWeb) => request<Site>("PUT", sitePath(name) + "/web", w);
 export const setTLS = (name: string, enabled: boolean) => request<Site>("PUT", sitePath(name) + "/tls", { enabled });
 // setDisabled switches a site off or on; page is the maintenance page a

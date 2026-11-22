@@ -4,6 +4,7 @@ package web
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -110,6 +111,9 @@ type Nginx struct {
 	DBToolSocket string
 	// DBToolRoot holds the tool's index.php.
 	DBToolRoot string
+	// CAFile verifies the https targets of reverse proxy sites; empty is
+	// SystemCAFile.
+	CAFile string
 
 	VerifyTimeout time.Duration
 }
@@ -128,6 +132,10 @@ func (n *Nginx) check() error {
 		if !listenRe.MatchString(l) {
 			return fmt.Errorf("web: invalid listen address %q", l)
 		}
+	}
+
+	if n.CAFile != "" && !confPathRe.MatchString(n.CAFile) {
+		return fmt.Errorf("web: invalid path %q", n.CAFile)
 	}
 
 	for _, p := range []string{n.ControlSocket, n.PIDFile, n.ErrorLog, n.MimeTypes} {
@@ -259,6 +267,12 @@ http {
     map $http_authorization $hostashi_cache_auth {
         "" 0;
         default 1;
+    }
+    # WebSocket upgrades through reverse proxy sites (ADR-0054); an empty
+    # Connection header otherwise.
+    map $http_upgrade $hostashi_connection_upgrade {
+        default upgrade;
+        "" "";
     }
     default_type application/octet-stream;
     sendfile on;
@@ -623,6 +637,16 @@ map $uri ${{.Var}} {
     "~*\.(?:{{.Exts}})$" {{.Seconds}}s;
 }
 {{- end}}
+{{- with .Proxy}}
+
+# Addresses of the reverse proxy's target, resolved and checked by the
+# agent (ADR-0054). nginx connects to these only.
+upstream {{.Upstream}} {
+    {{- range .Addrs}}
+    server {{.}};
+    {{- end}}
+}
+{{- end}}
 {{- if .M}}
 
 # Maintenance: 1 for the addresses that still see the site.
@@ -735,6 +759,57 @@ server {
         }
         {{- end}}
         return {{.S.Redirect.Status}} {{$.RedirectURL}};
+    }
+    {{- else if .S.Proxy}}
+    # The visitor's upload goes to the target as it arrives; the target
+    # decides how large it may be.
+    client_max_body_size 0;
+    {{- with .M}}
+
+    # Maintenance (ADR-0027): the page's files for everyone, and the page
+    # with 503 instead of the target for addresses outside the allowlist.
+    error_page 503 {{$.Prefix}}{{.Page}}/index.html;
+
+    {{- template "pageloc" $.PL}}
+    {{- end}}
+
+    # Reverse proxy site (ADR-0054): every request goes to {{.S.Proxy.Target}}.
+    location / {
+        {{- if .M}}
+        if (${{.Open}} = 0) {
+            return 503;
+        }
+        {{- end}}
+        {{- with $.Proxy}}
+        proxy_pass {{.Scheme}}://{{.Upstream}}{{.Path}};
+        proxy_http_version 1.1;
+        proxy_request_buffering off;
+        proxy_set_header Host {{.Host}};
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $hostashi_connection_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        {{- if .TLS}}
+        proxy_ssl_server_name on;
+        proxy_ssl_name {{.SNI}};
+        {{- if .Insecure}}
+        # The target's certificate is not verified (chosen in the panel).
+        proxy_ssl_verify off;
+        {{- else}}
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 4;
+        proxy_ssl_trusted_certificate {{.CAFile}};
+        {{- end}}
+        {{- end}}
+        {{- range .Hide}}
+        {{.}}
+        {{- end}}
+        {{- else}}
+        # The target has no address the proxy may reach (see the agent's log).
+        return 502;
+        {{- end}}
     }
     {{- else}}
     root {{.S.Root}};
@@ -897,6 +972,55 @@ func redirectURL(r agentapi.WebRedirect) string {
 	return strings.TrimSuffix(r.Target, "/") + "$request_uri"
 }
 
+// SystemCAFile holds the certificate authorities of the distribution;
+// reverse proxy sites verify https targets against it.
+const SystemCAFile = "/etc/ssl/certs/ca-certificates.crt"
+
+// proxyView is the reverse proxy of a site for the template.
+type proxyView struct {
+	Upstream string   // name of the upstream block
+	Addrs    []string // ip:port, checked by web.Site.Validate
+	Scheme   string
+	Path     string // path prefix of the target, "" or ending in "/"
+	Host     string // value of the Host header
+	TLS      bool
+	SNI      string // host name sent and verified on https
+	Insecure bool
+	CAFile   string
+	Hide     []string
+}
+
+func (n *Nginx) proxyView(s Site) (*proxyView, error) {
+	u, err := agentapi.ParseProxyTarget(s.Proxy.Target, s.Domains)
+	if err != nil {
+		return nil, err
+	}
+
+	v := &proxyView{
+		Upstream: "hostashi_proxy_" + hex.EncodeToString([]byte(s.User)),
+		Addrs:    s.ProxyAddrs,
+		Scheme:   u.Scheme,
+		Host:     "$host",
+		TLS:      u.Scheme == "https",
+		SNI:      u.Hostname(),
+		Insecure: s.Proxy.Insecure,
+		CAFile:   cmp.Or(n.CAFile, SystemCAFile),
+		Hide:     proxyHideLines(s),
+	}
+
+	// With a path in proxy_pass, nginx puts the request's path after it
+	// in place of "/"; the trailing slash keeps /a from becoming /prefixa.
+	if p := u.EscapedPath(); p != "" && p != "/" {
+		v.Path = strings.TrimSuffix(p, "/") + "/"
+	}
+
+	if s.Proxy.TargetHost {
+		v.Host = u.Host
+	}
+
+	return v, nil
+}
+
 // expiresView is the asset cache of a site for the template: the map
 // variable, the extensions joined for the regular expression (checked by
 // agentapi.ValidateAssetCache: letters and digits only) and the time.
@@ -947,6 +1071,15 @@ func (n *Nginx) Render(d Desired, gen int) (Files, error) {
 
 		if r := s.Redirect; r != nil {
 			data["RedirectURL"] = redirectURL(*r)
+		}
+
+		if p := s.Proxy; p != nil && len(s.ProxyAddrs) > 0 {
+			v, err := n.proxyView(s)
+			if err != nil {
+				return Files{}, fmt.Errorf("web: site %s: %w", s.User, err)
+			}
+
+			data["Proxy"] = v
 		}
 
 		if s.Maintenance != nil && !s.Disabled {

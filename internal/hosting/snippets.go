@@ -63,8 +63,8 @@ func (s *Service) SetSnippets(ctx context.Context, actor int64, name, server, ro
 		return store.SiteSnippets{}, ErrState
 	}
 
-	// A redirect site has no snippets (ADR-0054).
-	if site.Type == store.SiteTypeRedirect {
+	// Redirect and reverse proxy sites have no snippets (ADR-0054).
+	if noFiles(site.Type) {
 		return store.SiteSnippets{}, ErrSiteType
 	}
 
@@ -124,7 +124,7 @@ func (s *Service) SnippetTarget(ctx context.Context, name string) (snippetdraft.
 		return snippetdraft.Target{}, ErrState
 	}
 
-	if site.Type == store.SiteTypeRedirect {
+	if noFiles(site.Type) {
 		return snippetdraft.Target{}, ErrSiteType
 	}
 

@@ -40,53 +40,60 @@ var redirectRe = regexp.MustCompile(`^https?://[A-Za-z0-9.:\[\]-]+(/[A-Za-z0-9._
 // ParseRedirectTarget checks a target and returns it parsed. own lists the
 // domains of the site: a target on one of them would redirect to itself.
 func ParseRedirectTarget(target string, own []string) (*url.URL, error) {
+	return parseTarget("redirect target", target, own)
+}
+
+// parseTarget checks the URL of a redirect or reverse proxy site: http or
+// https, a host in lower case or an IP address, an optional port and path,
+// nothing else, and not one of the site's own domains.
+func parseTarget(what, target string, own []string) (*url.URL, error) {
 	if target == "" || len(target) > MaxRedirectTarget {
-		return nil, fmt.Errorf("redirect target: between 1 and %d characters", MaxRedirectTarget)
+		return nil, fmt.Errorf("%s: between 1 and %d characters", what, MaxRedirectTarget)
 	}
 
 	if !redirectRe.MatchString(target) {
-		return nil, errors.New("redirect target: use http:// or https://, a host and a path of letters, digits and - . _ ~ % ! * + , = : @ & ( ) / only")
+		return nil, errors.New(what + ": use http:// or https://, a host and a path of letters, digits and - . _ ~ % ! * + , = : @ & ( ) / only")
 	}
 
 	u, err := url.Parse(target)
 	if err != nil {
-		return nil, errors.New("redirect target: not a URL")
+		return nil, errors.New(what + ": not a URL")
 	}
 
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, errors.New("redirect target: must start with http:// or https://")
+		return nil, errors.New(what + ": must start with http:// or https://")
 	}
 
 	if u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || strings.ContainsAny(target, "?#") {
-		return nil, errors.New("redirect target: no user name, query or fragment")
+		return nil, errors.New(what + ": no user name, query or fragment")
 	}
 
 	host := u.Hostname()
 	if host == "" {
-		return nil, errors.New("redirect target: a host is required")
+		return nil, errors.New(what + ": a host is required")
 	}
 
 	if ip := net.ParseIP(host); ip == nil {
 		if err := ValidateDomain(strings.ToLower(host)); err != nil {
-			return nil, fmt.Errorf("redirect target: %w", err)
+			return nil, fmt.Errorf("%s: %w", what, err)
 		}
 
 		if host != strings.ToLower(host) {
-			return nil, errors.New("redirect target: write the host in lower case")
+			return nil, errors.New(what + ": write the host in lower case")
 		}
 	}
 
 	if p := u.Port(); p != "" {
 		n, err := strconv.Atoi(p)
 		if err != nil || n < 1 || n > 65535 || strconv.Itoa(n) != p {
-			return nil, errors.New("redirect target: port must be between 1 and 65535")
+			return nil, errors.New(what + ": port must be between 1 and 65535")
 		}
 	} else if strings.HasSuffix(u.Host, ":") {
-		return nil, errors.New("redirect target: empty port")
+		return nil, errors.New(what + ": empty port")
 	}
 
 	if slices.Contains(own, strings.ToLower(host)) {
-		return nil, errors.New("redirect target: points to one of the site's own domains")
+		return nil, errors.New(what + ": points to one of the site's own domains")
 	}
 
 	return u, nil

@@ -5,6 +5,7 @@
 
 import { useState, type FormEvent } from "react";
 import { formatHash } from "./routes";
+import { ProxyCard } from "./SiteProxy";
 import { RedirectCard } from "./SiteRedirect";
 import { PHPOptions, SiteTypeChoice } from "./Sites";
 import {
@@ -26,6 +27,17 @@ import { Button, Card, Field, Notice } from "./ui";
 type Props = { site: Site; php: PHPVersions | null; onChange: () => Promise<void> };
 
 export function SiteWebSettings({ site, php, onChange }: Props) {
+  if (siteType(site) === "proxy") {
+    return (
+      <>
+        <ProxyCard site={site} onChange={onChange} />
+        <p className="ui-hint ui-flush">
+          A reverse proxy site has no files and no Linux account. Changing it into a PHP or static site comes with the type switch in a later version.
+        </p>
+      </>
+    );
+  }
+
   if (siteType(site) === "redirect") {
     return (
       <>
@@ -96,7 +108,7 @@ function TypeCard({ site, php, onChange }: Props) {
           </p>
         )}
         <p className="ui-hint ui-flush">
-          More types (Node.js, own app, reverse proxy, redirect) follow. <a href={formatHash({ page: "php" })}>Install PHP versions</a>
+          More types (Node.js, own app) follow; reverse proxy and redirect are chosen when a site is created. <a href={formatHash({ page: "php" })}>Install PHP versions</a>
         </p>
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}

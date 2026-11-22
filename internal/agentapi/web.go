@@ -114,7 +114,18 @@ type WebSite struct {
 	// Redirect makes the site a redirect (ADR-0054): it has no Linux
 	// account, and nothing that needs files or PHP may be set.
 	Redirect *WebRedirect `json:"redirect,omitempty"`
+	// Proxy makes the site a reverse proxy (ADR-0054), with the same
+	// rules as Redirect. ProxyAddrs are the target's addresses ("ip:port")
+	// as the panel resolved them; the agent checks each one again (the
+	// agent itself has no network access to ask DNS). Empty: the panel
+	// could not resolve the name, and the agent keeps the live addresses.
+	Proxy      *WebProxy `json:"proxy,omitempty"`
+	ProxyAddrs []string  `json:"proxyAddrs,omitempty"`
 }
+
+// accountless reports whether the site is a redirect or reverse proxy,
+// which have no Linux account (ADR-0054).
+func (s WebSite) accountless() bool { return s.Redirect != nil || s.Proxy != nil }
 
 // Bounds and defaults of the asset cache (ADR-0054 addendum 1).
 const (
@@ -394,14 +405,30 @@ func (r WebApplyRequest) Validate() error {
 			return fmt.Errorf("site %q: %w", s.User, err)
 		}
 
-		if r := s.Redirect; r != nil {
-			if s.PHP != "" || s.WebDir != "" || s.SPA || s.AssetCache || s.PageCache != nil || s.Snippets != nil || s.PHPWorkers != 0 || s.PHPPrograms || s.PHPSettings != nil {
-				return fmt.Errorf("site %q: a redirect site has no files, PHP or snippets", s.User)
+		if s.accountless() {
+			if s.Redirect != nil && s.Proxy != nil {
+				return fmt.Errorf("site %q: redirect or reverse proxy, not both", s.User)
 			}
 
+			if s.PHP != "" || s.WebDir != "" || s.SPA || s.AssetCache || s.PageCache != nil || s.Snippets != nil || s.PHPWorkers != 0 || s.PHPPrograms || s.PHPSettings != nil {
+				return fmt.Errorf("site %q: a redirect or reverse proxy site has no files, PHP or snippets", s.User)
+			}
+		}
+
+		if r := s.Redirect; r != nil {
 			if err := r.Validate(s.Domains); err != nil {
 				return fmt.Errorf("site %q: %w", s.User, err)
 			}
+		}
+
+		if p := s.Proxy; p != nil {
+			if err := p.Validate(s.Domains); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
+		}
+
+		if len(s.ProxyAddrs) > MaxProxyAddrs || len(s.ProxyAddrs) > 0 && s.Proxy == nil {
+			return fmt.Errorf("site %q: proxy addresses only for a reverse proxy, at most %d", s.User, MaxProxyAddrs)
 		}
 
 		if s.SPA && s.PHP != "" {

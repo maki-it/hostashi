@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -364,6 +365,9 @@ type siteOps struct {
 	acl *panelACL
 	// sweepMu keeps the background deletes of purged caches apart.
 	sweepMu sync.Mutex
+	// localAddrs are the addresses a reverse proxy site must not reach
+	// (ADR-0054); nil uses the interfaces' addresses.
+	localAddrs func() ([]netip.Addr, error)
 }
 
 // register adds the operations. Only the errors listed in the map functions
@@ -426,8 +430,8 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			}
 		}
 
-		// A redirect site has no account (ADR-0054): only its certificate
-		// is left to remove.
+		// Redirect and reverse proxy sites have no account (ADR-0054): only
+		// the certificate is left to remove.
 		if _, ok := h.m.Home(req.User); !ok && h.certs != nil && req.User != agentapi.PanelCert && agentapi.ValidateParkName(req.User) != nil {
 			if err := h.certs.Remove(req.User); err != nil {
 				h.log.ErrorContext(ctx, "remove certificate of deleted site", "site", req.User, "err", err)
@@ -565,10 +569,10 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 	keep := map[string]bool{}
 
 	for _, s := range req.Sites {
-		// A redirect site needs no account (ADR-0054); one that kept its
-		// account after a type change does not use it here.
-		if s.Redirect != nil {
-			site, err := h.redirectSite(s)
+		// Redirect and reverse proxy sites need no account (ADR-0054); one
+		// that kept its account after a type change does not use it here.
+		if s.Redirect != nil || s.Proxy != nil {
+			site, err := h.accountlessSite(ctx, s)
 			if err != nil {
 				return agentapi.WebApplyResponse{}, err
 			}
@@ -793,12 +797,22 @@ func (h *siteOps) panelFor(p agentapi.WebPanel) (*web.Panel, error) {
 	return panel, nil
 }
 
-// redirectSite is the web state of a redirect site (ADR-0054): no root,
-// no PHP, no snippets; HTTPS, headers, maintenance and the disabled page
-// as for any site.
-func (h *siteOps) redirectSite(s agentapi.WebSite) (web.Site, error) {
-	r := *s.Redirect
-	site := web.Site{User: s.User, Domains: s.Domains, Disabled: s.Disabled, Redirect: &r}
+// accountlessSite is the web state of a redirect or reverse proxy site
+// (ADR-0054): no root, no PHP, no snippets; HTTPS, headers, maintenance
+// and the disabled page as for any site.
+func (h *siteOps) accountlessSite(ctx context.Context, s agentapi.WebSite) (web.Site, error) {
+	site := web.Site{User: s.User, Domains: s.Domains, Disabled: s.Disabled}
+
+	if r := s.Redirect; r != nil {
+		rc := *r
+		site.Redirect = &rc
+	}
+
+	if p := s.Proxy; p != nil {
+		pc := *p
+		site.Proxy = &pc
+		site.ProxyAddrs = h.proxyAddrs(ctx, s)
+	}
 
 	if s.TLS {
 		if err := h.tlsFor(&site, s.Domains); err != nil {
@@ -834,7 +848,8 @@ func (h *siteOps) redirectSite(s agentapi.WebSite) (web.Site, error) {
 }
 
 // knownCertName accepts the panel's certificate, a parked domain's, a
-// registered site or a live site without an account (redirect, ADR-0054).
+// registered site or a live site without an account (redirect or reverse
+// proxy, ADR-0054).
 func (h *siteOps) knownCertName(name string) bool {
 	if name == agentapi.PanelCert || agentapi.ValidateParkName(name) == nil {
 		return true
@@ -860,7 +875,7 @@ func (h *siteOps) webOnly(name string) bool {
 	}
 
 	for _, s := range cur.Sites {
-		if s.User == name && s.Redirect != nil {
+		if s.User == name && (s.Redirect != nil || s.Proxy != nil) {
 			return true
 		}
 	}
