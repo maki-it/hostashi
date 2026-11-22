@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import type { SiteTab } from "./routes";
 import { SitePage } from "./SitePage";
 import { Sites } from "./Sites";
-import { compareVersions, domainsProblem, httpsLabel, parseDomains, phpChoices, siteNameProblem, siteStatus, type Site, type SiteTLS } from "./sites";
+import { compareVersions, domainsProblem, redirectProblem, httpsLabel, parseDomains, phpChoices, siteNameProblem, siteStatus, type Site, type SiteTLS } from "./sites";
 import { mockFetch } from "./test-utils";
 
 const noTLS: SiteTLS = { enabled: false, active: false, hsts: false, domains: [], notAfter: null };
@@ -333,6 +333,76 @@ describe("Sites", () => {
     await user.click(screen.getByRole("button", { name: "Create site" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Site blog created.");
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ name: "blog", php: "" });
+  });
+});
+
+describe("redirect sites", () => {
+  it.each(["https://new.example.com", "http://new.example.com:8080/a/b", "https://10.0.0.5/x", "https://new.example.com/%C3%A4"])("accepts %s", (t) =>
+    expect(redirectProblem(t, ["old.example.com"])).toBe(""),
+  );
+  it.each([
+    "",
+    "new.example.com",
+    "ftp://new.example.com",
+    "https://new.example.com/?a=1",
+    "https://new.example.com/#x",
+    "https://new.example.com/a b",
+    "https://new.example.com/$host",
+    "https://user@new.example.com",
+    "https://New.example.com",
+    "https://old.example.com/x",
+  ])("refuses %j", (t) => expect(redirectProblem(t, ["old.example.com"])).not.toBe(""));
+
+  it("creates a redirect site without PHP", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "POST /api/v1/sites": { status: 201, body: { ...blog, name: "old", php: "", type: "redirect", account: false, tls: noTLS } },
+    });
+    render(<ListHarness initial="new=1" />);
+    await user.type(screen.getByLabelText(/^Name/), "old");
+    await user.type(screen.getByLabelText(/^Domains/), "old.example.com");
+    await user.click(screen.getByLabelText(/^Redirect/));
+    expect(screen.queryByLabelText("PHP version")).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/^Redirect to/), "https://old.example.com/x");
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("points to the site itself");
+
+    await user.clear(screen.getByLabelText(/^Redirect to/));
+    await user.type(screen.getByLabelText(/^Redirect to/), "https://new.example.com");
+    await user.selectOptions(screen.getByLabelText(/^Status code/), "308");
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Site old created.");
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
+      name: "old",
+      php: "",
+      type: "redirect",
+      redirect: { target: "https://new.example.com", status: 308, keepPath: true },
+    });
+  });
+
+  it("shows only the tabs a redirect site has and saves its target", async () => {
+    const user = userEvent.setup();
+    const old = { ...blog, php: "", type: "redirect" as const, account: false, redirect: { target: "https://new.example.com", status: 301, keepPath: true } };
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [old] } },
+      "PUT /api/v1/sites/blog/redirect": (b: unknown) => ({ body: { ...old, redirect: b } }),
+    });
+    render(<PageHarness />);
+    const tabs = await screen.findByRole("tablist", { name: "blog" });
+    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "Web", "Logs"]);
+    expect(within(screen.getByLabelText("Details of blog")).getByText("https://new.example.com")).toBeInTheDocument();
+
+    await user.click(within(tabs).getByRole("tab", { name: "Web" }));
+    const card = within(screen.getByRole("region", { name: "Redirect" }));
+    expect(card.getByRole("button", { name: "Save redirect" })).toBeDisabled();
+    await user.click(card.getByLabelText(/^Keep the path/));
+    await user.click(card.getByRole("button", { name: "Save redirect" }));
+    expect(await card.findByRole("status")).toHaveTextContent("now goes to https://new.example.com");
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ target: "https://new.example.com", status: 301, keepPath: false });
   });
 });
 

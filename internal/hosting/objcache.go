@@ -74,6 +74,10 @@ func (s *Service) cacheSite(ctx context.Context, name string) (store.Site, error
 		return store.Site{}, ErrState
 	}
 
+	if err := needAccount(site); err != nil {
+		return store.Site{}, err
+	}
+
 	return site, nil
 }
 

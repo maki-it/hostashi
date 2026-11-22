@@ -3,7 +3,9 @@
 package serve
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -63,5 +65,31 @@ func TestDoctorMailCheck(t *testing.T) {
 	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/doctor", cookie: c})
 	if !strings.Contains(rec.Body.String(), "1 email could not be sent in the last 24 hours (last: 550 5.1.1 no such user)") || !strings.Contains(rec.Body.String(), `"status":"warn"`) {
 		t.Fatalf("failed: %s", rec.Body)
+	}
+}
+
+func TestWithDatabaseChecks(t *testing.T) {
+	if withDatabaseChecks(nil, nil) != nil {
+		t.Fatal("no doctor: want nil")
+	}
+
+	agent := agentapi.DoctorReport{Checks: []agentapi.DoctorCheck{{ID: "system.os", Status: agentapi.DoctorOK}}}
+	run := func(context.Context) (agentapi.DoctorReport, error) { return agent, nil }
+	dbErr := error(nil)
+	db := func(context.Context, time.Time) ([]agentapi.DoctorCheck, error) {
+		return []agentapi.DoctorCheck{{ID: "site.database", Site: "shop", Status: agentapi.DoctorWarn}}, dbErr
+	}
+
+	rep, err := withDatabaseChecks(run, db)(t.Context())
+	if err != nil || len(rep.Checks) != 2 || rep.Checks[1].ID != "site.database" {
+		t.Fatalf("%+v %v", rep, err)
+	}
+
+	// A failed measurement keeps the agent's report.
+	dbErr = errors.New("agent down")
+
+	rep, err = withDatabaseChecks(run, db)(t.Context())
+	if err != nil || len(rep.Checks) != 1 {
+		t.Fatalf("measurement failed: %+v %v", rep, err)
 	}
 }

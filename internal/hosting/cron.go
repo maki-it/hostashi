@@ -94,6 +94,10 @@ func (s *Service) cronSite(ctx context.Context, name string) (store.Site, error)
 		return store.Site{}, errCronNotActive
 	}
 
+	if err := needAccount(site); err != nil {
+		return store.Site{}, err
+	}
+
 	return site, nil
 }
 
@@ -321,7 +325,7 @@ func (s *Service) SyncCron(ctx context.Context) error {
 	var errs []error
 
 	for _, site := range sites {
-		if site.State == store.SiteActive {
+		if site.State == store.SiteActive && site.Account {
 			if err := s.applyCron(ctx, site); err != nil {
 				errs = append(errs, fmt.Errorf("site %s: %w", site.Name, err))
 			}

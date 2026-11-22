@@ -396,6 +396,31 @@ func Usage(site, what string, used, limit uint64, format func(uint64) string) Ch
 	return c
 }
 
+// DatabaseUsage checks the size of a site's local databases against its
+// warning threshold (ADR-0057). Nothing stops a database at the
+// threshold, so a full one is a warning to act on, not a failed write.
+func DatabaseUsage(site string, used, limit uint64) Check {
+	const id = "site.database"
+
+	if limit == 0 {
+		return Check{ID: id, Site: site, Status: agentapi.DoctorOK, Summary: "databases: " + Bytes(used) + ", no threshold"}
+	}
+
+	pct := used * 100 / limit
+	summary := fmt.Sprintf("databases: %s of %s (%d %%)", Bytes(used), Bytes(limit), pct)
+	c := Check{ID: id, Site: site, Status: agentapi.DoctorOK, Summary: summary}
+	hint := "The databases keep growing past the threshold and fill the server's disk. Clean up old data (logs, sessions, revisions) or raise the threshold."
+
+	switch {
+	case pct >= UsageFailPercent:
+		c.Status, c.Hint = agentapi.DoctorFail, hint
+	case pct >= UsageWarnPercent:
+		c.Status, c.Hint = agentapi.DoctorWarn, hint
+	}
+
+	return c
+}
+
 // Cert checks when a site's certificate expires.
 func Cert(site string, notAfter, now time.Time) Check {
 	const id = "site.tls"

@@ -24,9 +24,14 @@ type siteJSON struct {
 	Type  string `json:"type"` // static, php, node, app, proxy, redirect (ADR-0054)
 	// Web is the document root folder below htdocs and the static-site
 	// options (ADR-0054 addendum 1).
-	Web      webJSON `json:"web"`
-	PHP      string  `json:"php"`      // PHP version, "" for no PHP
-	Disabled bool    `json:"disabled"` // answers 503, PHP stopped
+	Web webJSON `json:"web"`
+	// Account: the site has a Linux account with files; a redirect site
+	// has none (ADR-0054).
+	Account bool `json:"account"`
+	// Redirect is the target of a redirect site, null otherwise.
+	Redirect *redirectJSON `json:"redirect"`
+	PHP      string        `json:"php"`      // PHP version, "" for no PHP
+	Disabled bool          `json:"disabled"` // answers 503, PHP stopped
 	// DisabledPage is the maintenance page shown while disabled (ADR-0047).
 	DisabledPage string `json:"disabledPage"`
 	// Maintenance: other addresses get the page with 503 (ADR-0027).
@@ -37,6 +42,20 @@ type siteJSON struct {
 	PHPPrograms bool      `json:"phpPrograms"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type redirectJSON struct {
+	Target   string `json:"target"`
+	Status   int    `json:"status"`
+	KeepPath bool   `json:"keepPath"`
+}
+
+func toRedirectJSON(s store.Site) *redirectJSON {
+	if s.Type != store.SiteTypeRedirect || s.Redirect == nil {
+		return nil
+	}
+
+	return &redirectJSON{Target: s.Redirect.Target, Status: s.Redirect.Status, KeepPath: s.Redirect.KeepPath}
 }
 
 type webJSON struct {
@@ -131,7 +150,7 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	}
 
 	return siteJSON{
-		Name: s.Name, Pool: s.Pool, State: s.State, Type: s.Type, Web: toWebJSON(s), PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, Maintenance: toMaintenanceJSON(s),
+		Name: s.Name, Pool: s.Pool, State: s.State, Type: s.Type, Web: toWebJSON(s), Account: s.Account, Redirect: toRedirectJSON(s), PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, Maintenance: toMaintenanceJSON(s),
 		TLS: tlsJSON{
 			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
@@ -249,8 +268,31 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			// Headers are the first security headers (ADR-0056); left out,
 			// the site gets agentapi.DefaultWebHeaders, {} sends none.
 			Headers *agentapi.WebHeaders `json:"headers"`
+			// Type is static or php (from php when left out) or redirect
+			// with redirect set (ADR-0054).
+			Type     string        `json:"type"`
+			Redirect *redirectJSON `json:"redirect"`
 		}
 		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		var redirect *store.SiteRedirect
+
+		switch {
+		case in.Type == store.SiteTypeRedirect && in.Redirect != nil:
+			redirect = &store.SiteRedirect{Target: in.Redirect.Target, Status: in.Redirect.Status, KeepPath: in.Redirect.KeepPath}
+		case in.Redirect != nil || in.Type == store.SiteTypeRedirect:
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "a redirect site needs type redirect and a redirect")
+
+			return
+		case in.Type == store.SiteTypeStatic && in.PHP != "", in.Type == store.SiteTypePHP && in.PHP == "":
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "type and php do not fit: static has no PHP version, php needs one")
+
+			return
+		case in.Type != "" && in.Type != store.SiteTypeStatic && in.Type != store.SiteTypePHP:
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "type must be static, php or redirect")
+
 			return
 		}
 
@@ -263,7 +305,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		defer cancel()
 
 		s, err := svc.Create(ctx, p.User.ID, hosting.CreateRequest{
-			Name: in.Name, Pool: in.Pool, PHP: in.PHP, Domains: in.Domains, TLS: in.TLS, HSTS: in.HSTS, Headers: in.Headers,
+			Name: in.Name, Pool: in.Pool, PHP: in.PHP, Domains: in.Domains, TLS: in.TLS, HSTS: in.HSTS, Headers: in.Headers, Redirect: redirect,
 		})
 		if err != nil {
 			headersFail(log, w, err, "create site")
@@ -272,6 +314,29 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		}
 
 		writeJSON(w, http.StatusCreated, toSiteJSON(svc, s))
+	}))
+
+	mux.HandleFunc("PUT /api/v1/sites/{name}/redirect", a.allow("sites.redirect:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in struct {
+			Target   string `json:"target"`
+			Status   int    `json:"status"`
+			KeepPath bool   `json:"keepPath"`
+		}
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		s, err := svc.SetRedirect(ctx, p.User.ID, r.PathValue("name"), store.SiteRedirect{Target: in.Target, Status: in.Status, KeepPath: in.KeepPath})
+		if err != nil {
+			siteFail(log, w, err, "set redirect")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
 	}))
 
 	mux.HandleFunc("PUT /api/v1/sites/{name}/domains", a.allow("sites.domains:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {

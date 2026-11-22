@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/doctor"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -122,4 +124,60 @@ func (s *Service) SiteDatabaseUsage(ctx context.Context, name string) (DatabaseU
 	}
 
 	return u, nil
+}
+
+// DatabaseDoctor checks the size of each active site's local databases
+// against its threshold (ADR-0057): warning from 80 %, failed from 95 %.
+// Sites without a local database get no check. A server without
+// MariaDB, or a panel that cannot measure, reports nothing.
+func (s *Service) DatabaseDoctor(ctx context.Context, _ time.Time) ([]agentapi.DoctorCheck, error) {
+	z, err := s.DatabaseSizes(ctx)
+	if errors.Is(err, ErrNoDBSizes) || isCode(err, agentrpc.CodePrecondition) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	sites, err := s.st.Sites(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []agentapi.DoctorCheck
+
+	for _, site := range sites {
+		if site.State != store.SiteActive {
+			continue
+		}
+
+		dbs, err := s.st.Databases(ctx, site.Name)
+		if err != nil {
+			return out, err
+		}
+
+		var (
+			used  int64
+			local bool
+		)
+
+		for _, d := range dbs {
+			if d.Server == store.LocalDBServer {
+				used += z.Bytes[d.Name]
+				local = true
+			}
+		}
+
+		if !local {
+			continue
+		}
+
+		l, _, err := s.st.SiteLimits(ctx, site.ID)
+		if err != nil {
+			return out, err
+		}
+
+		out = append(out, doctor.DatabaseUsage(site.Name, uint64(max(used, 0)), uint64(max(l.Limits.DatabaseBytes, 0))))
+	}
+
+	return out, nil
 }

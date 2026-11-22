@@ -717,6 +717,25 @@ server {
         return 503 "<!doctype html><title>Temporarily unavailable</title><h1>Temporarily unavailable</h1><p>This site is not available at the moment. Please try again later.</p>\n";
     }
     {{- end}}
+    {{- else if .S.Redirect}}
+    {{- with .M}}
+
+    # Maintenance (ADR-0027): the page's files for everyone, and the page
+    # with 503 instead of the redirect for addresses outside the allowlist.
+    error_page 503 {{$.Prefix}}{{.Page}}/index.html;
+
+    {{- template "pageloc" $.PL}}
+    {{- end}}
+
+    # Redirect site (ADR-0054): every address goes to the target.
+    location / {
+        {{- if .M}}
+        if (${{.Open}} = 0) {
+            return 503;
+        }
+        {{- end}}
+        return {{.S.Redirect.Status}} {{$.RedirectURL}};
+    }
     {{- else}}
     root {{.S.Root}};
     {{- with $.Body}}
@@ -867,6 +886,17 @@ func phpLimits(data map[string]any, s Site) {
 	}
 }
 
+// redirectURL is the target of a redirect site for nginx's return. With
+// KeepPath the request's path and query follow; a trailing slash of the
+// target is dropped then, as $request_uri starts with one.
+func redirectURL(r agentapi.WebRedirect) string {
+	if !r.KeepPath {
+		return r.Target
+	}
+
+	return strings.TrimSuffix(r.Target, "/") + "$request_uri"
+}
+
 // expiresView is the asset cache of a site for the template: the map
 // variable, the extensions joined for the regular expression (checked by
 // agentapi.ValidateAssetCache: letters and digits only) and the time.
@@ -913,6 +943,10 @@ func (n *Nginx) Render(d Desired, gen int) (Files, error) {
 		data := map[string]any{"N": n, "S": s, "M": (*Maintenance)(nil), "D": (*PageRef)(nil), "C": (*cacheView)(nil)}
 		if s.AssetCache && !s.Disabled {
 			data["Expires"] = assetCacheView(s)
+		}
+
+		if r := s.Redirect; r != nil {
+			data["RedirectURL"] = redirectURL(*r)
 		}
 
 		if s.Maintenance != nil && !s.Disabled {
