@@ -29,6 +29,7 @@ import (
 	"github.com/maki-it/hostashi/internal/backup"
 	"github.com/maki-it/hostashi/internal/dbjob"
 	"github.com/maki-it/hostashi/internal/files"
+	"github.com/maki-it/hostashi/internal/nodeinstall"
 	"github.com/maki-it/hostashi/internal/reqid"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/serve"
@@ -101,6 +102,14 @@ commands:
   dbjob run ID | dbjob finish ID
             one import or export of a database on an external server and
             its cleanup (root; started by hostashi-dbjob@ID.service)
+  node status | node install MAJOR
+            the installed Node.js lines and the last installation, or start
+            the installation of an LTS line, through the agent (root on the
+            server, ADR-0054)
+  node-install MAJOR
+            download, check and unpack the pinned Node.js build of MAJOR into
+            /opt/hostashi/node/MAJOR (root; started by
+            hostashi-node-install@MAJOR.service)
   user recover [-public-url URL] NAME
             reset NAME's password and second factors, enable the account
             and print a new invitation link (root; the way back in when
@@ -302,6 +311,39 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 
 			return 2
 		}
+	case "node":
+		if fs.Parse(args) != nil {
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+
+		c := agentrpc.NewClient(*socket)
+
+		switch a := fs.Args(); {
+		case len(a) == 1 && a[0] == "status":
+			err = printJSON[agentapi.NodeStatus](stdout)(agentapi.NodeStatusOp.Call(ctx, c, agentapi.NodeStatusRequest{}))
+		case len(a) == 2 && a[0] == "install":
+			err = printJSON[agentapi.NodeStatus](stdout)(agentapi.NodeInstall.Call(ctx, c, agentapi.NodeInstallRequest{Major: a[1]}))
+		default:
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+	case "node-install":
+		if fs.Parse(args) != nil || fs.NArg() != 1 {
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+
+		if euid != 0 {
+			err = errors.New("must run as root")
+
+			break
+		}
+
+		err = (&nodeinstall.Installer{Out: stdout}).Install(ctx, fs.Arg(0))
 	case "user":
 		dbPath := fs.String("db", store.DefaultPath, "SQLite database path")
 		publicURL := fs.String("public-url", "", "panel address for the link (default: from "+envFile+")")

@@ -136,6 +136,9 @@ type Deps struct {
 	// PGClient installs the PostgreSQL client tools (ADR-0051); nil
 	// disables its routes. Needs Auth and Settings.
 	PGClient PGClient
+	// Node installs the pinned Node.js builds (ADR-0054); nil disables its
+	// routes. Needs Auth and Settings.
+	Node NodeInstaller
 	// Mail is the SMTP relay (ADR-0044); nil disables its routes. Needs
 	// Auth, Settings and MailSend.
 	Mail     MailRelay
@@ -280,6 +283,10 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		if deps.PHP != nil && deps.Settings != nil {
 			registerPHPInstall(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.PHP, deps.Settings, log)
+		}
+
+		if deps.Node != nil && deps.Settings != nil {
+			registerNode(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Node, deps.Settings, log)
 		}
 
 		if deps.PGClient != nil && deps.Settings != nil {
@@ -502,6 +509,7 @@ func Run(ctx context.Context, cfg Config) error {
 		Firewall:    RPCFirewall{C: client},
 		PHP:         RPCPHPInstaller{C: client},
 		PGClient:    RPCPGClient{C: client},
+		Node:        RPCNodeInstaller{C: client},
 		Mail:        relay,
 		Outbox:      outbox,
 		NotifyPrefs: st,

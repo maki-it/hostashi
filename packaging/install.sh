@@ -256,7 +256,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config ssh harden sysctl nginx php phpversions pgclient valkey mariadb dbtool backup units service fail2ban firewall updates quota"
+STEPS="account dirs key binary config ssh harden sysctl nginx php phpversions pgclient node valkey mariadb dbtool backup units service fail2ban firewall updates quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -592,6 +592,29 @@ do_pgclient() {
     pg_client "$PG_CLIENT_BIN" install "$@" 2>&1 | tee -a "$LOG" | grep -E 'REFUSED|cannot' >&2
     [ "${PIPESTATUS[0]}" = 0 ] || return 1
   fi
+}
+
+# Node.js from the official nodejs.org builds (ADR-0054). The step only
+# sets up the unit hostashi-node-install@.service, its log directory and
+# /opt/hostashi/node; the panel starts the unit when an admin installs a
+# line, and `hostashi node-install` checks the pinned SHA-256.
+NODE_DIR=/opt/hostashi/node
+NODE_UNIT=hostashi-node-install@.service
+NODE_LOGS=/var/lib/hostashi-agent/node-install
+
+chk_node() {
+  dir_ok "${NODE_DIR%/*}" 755 root:root || { echo "${NODE_DIR%/*}"; return 1; }
+  dir_ok "$NODE_DIR" 755 root:root || { echo "$NODE_DIR"; return 1; }
+  dir_ok "$NODE_LOGS" 700 root:root || { echo "$NODE_LOGS"; return 1; }
+  file_matches "/etc/systemd/system/$NODE_UNIT" 0644 root:root <"$UNIT_DIR/$NODE_UNIT" || { echo "$NODE_UNIT differs"; return 1; }
+}
+do_node() {
+  local rc
+  install -d -m 0755 -o root -g root "${NODE_DIR%/*}" "$NODE_DIR" || return 1
+  install -d -m 0700 -o root -g root "$NODE_LOGS" || return 1
+  write_file "/etc/systemd/system/$NODE_UNIT" 0644 root:root <"$UNIT_DIR/$NODE_UNIT"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  if [ "$rc" = 0 ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
 }
 
 # Valkey from the distribution for the sites' object caches (ADR-0045). The
