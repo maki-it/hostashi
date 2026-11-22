@@ -10,7 +10,7 @@ type ControlProps = {
 
 type FieldProps = {
   label: ReactNode;
-  hint?: string;
+  hint?: ReactNode;
   error?: string;
   /** One input, select or textarea; the field wires id, hint and error to it. */
   children: ReactElement<ControlProps>;
