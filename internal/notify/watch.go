@@ -33,10 +33,10 @@ const (
 
 // ownCategory lists the checks that have a category of their own, so the
 // daily digest leaves them out.
-var ownCategory = map[string]bool{"site.php": true, "site.disk": true, "system.disk": true, "site.tls": true, "hostashi.update": true}
+var ownCategory = map[string]bool{"site.php": true, "site.disk": true, "site.database": true, "system.disk": true, "site.tls": true, "hostashi.update": true}
 
 // percent reads the "(NN %)" at the end of a disk check's summary.
-var percent = regexp.MustCompile(`\((\d{1,3}) %\)$`)
+var percent = regexp.MustCompile(`\((\d{1,9}) %\)$`)
 
 // Expiry thresholds of ADR-0044, in days, largest first.
 var expiryDays = []int{14, 3}
@@ -239,8 +239,8 @@ func (w *Watcher) certEvents(c Cert) []Event {
 }
 
 // doctorEvents turns a report into one daily digest of errors for admins,
-// a weekly reminder per site on an old PHP version, and a note per disk
-// or site above 90 percent.
+// a weekly reminder per site on an old PHP version, and a note per disk,
+// site or site's databases above 90 percent.
 func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 	var (
 		out    []Event
@@ -261,6 +261,14 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 			out = append(out, Event{
 				Category: Disk, Site: c.Site, Key: "disk:" + c.Site + ":" + what, Fragment: "sites/" + c.Site + "/limits",
 				Mail: mail.OpsEvent{Template: "disk-full", Subject: "The site " + c.Site + " is almost full", Lines: []string{
+					"The site " + c.Site + ", " + c.Summary + ".", c.Hint,
+				}},
+			})
+		case c.ID == "site.database" && c.Site != "" && used(c, false) >= fullPercent:
+			// A warning threshold only (ADR-0057): the databases keep growing.
+			out = append(out, Event{
+				Category: Disk, Site: c.Site, Key: "database:" + c.Site, Fragment: "sites/" + c.Site + "/limits",
+				Mail: mail.OpsEvent{Template: "disk-full", Subject: "The databases of the site " + c.Site + " passed 90 % of their warning threshold", Lines: []string{
 					"The site " + c.Site + ", " + c.Summary + ".", c.Hint,
 				}},
 			})

@@ -2,6 +2,7 @@
 
 - [Home](Home.md)
 - [Install](Install.md)
+- [Database limits](Database-limits.md)
 - [File manager](File-manager.md)
 - [Parked domains](Parked-domains.md)
 - [PHP settings](PHP-settings.md)

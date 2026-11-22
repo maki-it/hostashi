@@ -7,6 +7,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/maki-it/hostashi/internal/agentrpc"
 )
 
 type fakeSizer struct {
@@ -73,5 +75,59 @@ func TestDatabaseSizes(t *testing.T) {
 
 	if z, err := s.DatabaseSizes(ctx); err != nil || z.Bytes == nil {
 		t.Fatalf("empty: %+v %v", z, err)
+	}
+}
+
+func TestDatabaseDoctor(t *testing.T) {
+	s, _, _ := newService(t)
+	ctx := t.Context()
+
+	s.EnableLimits(newFakeLimits())
+
+	if c, err := s.DatabaseDoctor(ctx, time.Now()); err != nil || c != nil {
+		t.Fatalf("without agent: %v %v", c, err)
+	}
+
+	for _, name := range []string{"shop", "blog"} {
+		if _, err := s.Create(ctx, 1, CreateRequest{Name: name, Domains: []string{name + ".example.com"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, _, err := s.CreateDatabase(ctx, 1, NewDatabase{Site: "shop", Name: "shop_wp", User: "shop_wp"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := s.CreateDatabase(ctx, 1, NewDatabase{Site: "shop", Name: "shop_log", User: "shop_log"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The small preset warns from 80 % of 2 GiB; both databases count.
+	f := &fakeSizer{sizes: map[string]int64{"shop_wp": 1 << 30, "shop_log": 700 << 20, "other": 5 << 30}}
+	s.EnableDBSizes(f)
+
+	checks, err := s.DatabaseDoctor(ctx, time.Now())
+	if err != nil || len(checks) != 1 {
+		t.Fatalf("%+v %v", checks, err)
+	}
+
+	c := checks[0]
+	if c.ID != "site.database" || c.Site != "shop" || c.Status != "warn" || c.Summary != "databases: 1.7 GiB of 2.0 GiB (84 %)" {
+		t.Fatalf("%+v", c)
+	}
+
+	// No MariaDB on the server: no checks, no error.
+	s.dbSizes = dbSizeCache{}
+	f.err = &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "MariaDB is not available on this server"}
+
+	if c, err := s.DatabaseDoctor(ctx, time.Now()); err != nil || c != nil {
+		t.Fatalf("without MariaDB: %v %v", c, err)
+	}
+
+	// The agent is down: an error, so the health page says a check failed.
+	f.err = errDown
+
+	if _, err := s.DatabaseDoctor(ctx, time.Now()); !errors.Is(err, errDown) {
+		t.Fatalf("agent down: %v", err)
 	}
 }

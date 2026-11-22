@@ -308,7 +308,7 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 		if deps.Doctor != nil {
 			var panel []PanelChecks
 			if deps.Sites != nil {
-				panel = append(panel, deps.Sites.DBServerDoctor)
+				panel = append(panel, deps.Sites.DBServerDoctor, deps.Sites.DatabaseDoctor)
 
 				if deps.PGClient != nil {
 					panel = append(panel, pgClientCheck(deps.Sites.DBServerList, deps.PGClient))
@@ -559,7 +559,7 @@ func Run(ctx context.Context, cfg Config) error {
 		Notifier: notifier,
 		Backups:  deps.Backups.Status,
 		Certs:    notifyCerts(st, deps.Sites, PanelDomain(cfg.PublicURL)),
-		Doctor:   deps.Doctor,
+		Doctor:   withDatabaseChecks(deps.Doctor, deps.Sites.DatabaseDoctor),
 		Now:      time.Now,
 		Log:      cfg.Log,
 	}

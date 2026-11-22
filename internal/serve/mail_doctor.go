@@ -87,3 +87,26 @@ func allPanelChecks(list []PanelChecks) PanelChecks {
 		return out, errs
 	}
 }
+
+// withDatabaseChecks adds the database size checks (ADR-0057) to the
+// report the warning emails read, so a site whose databases near the
+// threshold gets the same email as one whose disk fills up. A failed
+// measurement leaves the agent's report as it is.
+func withDatabaseChecks(run Doctor, db PanelChecks) Doctor {
+	if run == nil {
+		return nil
+	}
+
+	return func(ctx context.Context) (agentapi.DoctorReport, error) {
+		rep, err := run(ctx)
+		if err != nil {
+			return rep, err
+		}
+
+		if more, err := db(ctx, time.Now()); err == nil {
+			rep.Checks = append(rep.Checks, more...)
+		}
+
+		return rep, nil
+	}
+}

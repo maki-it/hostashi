@@ -46,6 +46,7 @@ const titles: Record<string, string> = {
   "service.valkey": "Object cache (Valkey)",
   "site.home": "Home directory",
   "site.disk": "Disk use",
+  "site.database": "Database size",
   "site.limits": "Resource limits",
   "site.tls": "Certificate",
   "site.php": "PHP version",
