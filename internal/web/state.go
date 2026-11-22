@@ -72,6 +72,9 @@ type Site struct {
 	// use agentapi's defaults.
 	AssetCacheSeconds int      `json:"assetCacheSeconds,omitempty"`
 	AssetCacheExts    []string `json:"assetCacheExts,omitempty"`
+	// Redirect answers every address with a redirect (ADR-0054). Such a
+	// site has no Root, no PHP, no snippets and no caches.
+	Redirect *agentapi.WebRedirect `json:"redirect,omitempty"`
 }
 
 // Bounds of BodyMax and FastCGIReadTimeout (ADR-0049).
@@ -216,7 +219,15 @@ func (d Desired) Validate() error {
 			}
 		}
 
-		if !rootRe.MatchString(s.Root) || path.Clean(s.Root) != s.Root {
+		if r := s.Redirect; r != nil {
+			if s.Root != "" || s.Home != "" || s.PHPSocket != "" || s.SPA || s.AssetCache || s.PageCache != nil || !s.Snippets.IsZero() {
+				return fmt.Errorf("site %q: a redirect site has no root, PHP, snippets or caches", s.User)
+			}
+
+			if err := r.Validate(s.Domains); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
+		} else if !rootRe.MatchString(s.Root) || path.Clean(s.Root) != s.Root {
 			return fmt.Errorf("site %q: invalid root %q", s.User, s.Root)
 		}
 

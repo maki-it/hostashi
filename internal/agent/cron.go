@@ -82,6 +82,10 @@ func (h *siteOps) cronDisabled(ctx context.Context, req agentapi.WebApplyRequest
 	}
 
 	for _, s := range req.Sites {
+		if _, ok := h.m.Home(s.User); !ok {
+			continue // a redirect site without an account (ADR-0054)
+		}
+
 		if err := h.cron.SetDisabled(ctx, s.User, s.Disabled); err != nil {
 			h.log.ErrorContext(ctx, "cron timers of site", "site", s.User, "disabled", s.Disabled, "err", err)
 		}

@@ -62,6 +62,10 @@ func (h *siteOps) cacheDisabled(ctx context.Context, req agentapi.WebApplyReques
 	}
 
 	for _, s := range req.Sites {
+		if _, ok := h.m.Home(s.User); !ok {
+			continue // a redirect site without an account (ADR-0054)
+		}
+
 		if err := h.objc.SetPaused(ctx, s.User, s.Disabled); err != nil {
 			h.log.ErrorContext(ctx, "object cache of site", "site", s.User, "disabled", s.Disabled, "err", err)
 		}
