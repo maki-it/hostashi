@@ -22,7 +22,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 | Manage services (start/stop/reload, status) | P0 | A | CP | Nginx, PHP-FPM, DB, Redis. systemd restarts crashed services automatically (`Restart=`), the panel shows restarts. Done ([ADR-0052](adr/0052-service-management-and-server-dashboard.md)) |
 | Dashboard with CPU/RAM/disk/network | P0 | A | CP | Local ring buffer, no external TSDB. Done ([ADR-0052](adr/0052-service-management-and-server-dashboard.md)) |
 | Firewall (nftables/UFW) with defaults | P0 | A | CP | SSH lockout protection (rollback timer) |
-| Time zone, hostname, reboot | P1 | B | CP | |
+| Time zone, hostname, reboot | P1 | B | CP | Done: page System, API, CLI `hostashi system` ([ADR-0060](adr/0060-time-zone-hostname-and-reboot.md)) |
 | Panel update in the UI with preflight and rollback | P1 | B | NEW | Notice in the panel when an update is available; optional automatic updates (channel and time window selectable) |
 | `hostashi doctor` (self-diagnosis) | P1 | B | NEW | |
 | Operation on IPv6-only servers | P1 | B | NEW | Test panel, ACME, backups and package sources without IPv4 |

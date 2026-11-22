@@ -9,6 +9,7 @@ import {
   Database,
   EnvelopeSimple,
   Gauge,
+  GearSix,
   Globe,
   Heartbeat,
   type Icon,
@@ -45,6 +46,7 @@ export const navGroups: readonly NavGroup[] = [
     items: [
       { page: "health", label: "Health", icon: Heartbeat, roles: admin },
       { page: "services", label: "Services", icon: Pulse, roles: admin },
+      { page: "system", label: "System", icon: GearSix, roles: admin },
       { page: "php", label: "PHP versions", icon: Code, roles: admin },
       { page: "backups", label: "Backups", icon: ClockCounterClockwise, roles: admin },
       { page: "firewall", label: "Firewall", icon: ShieldCheck, roles: admin },

@@ -241,7 +241,7 @@ func (h Hardening) Reboot() Check {
 		}
 	}
 
-	return warn(id, summary, "Reboot when it suits you: the server never reboots by itself.")
+	return warn(id, summary, "Reboot when it suits you, on the System page or with hostashi system reboot: the server never reboots by itself.")
 }
 
 var phpUnitRe = regexp.MustCompile(`/(hostashi-php-[0-9]\.[0-9]@([a-z][a-z0-9_-]{1,31})\.service)$`)
