@@ -6,7 +6,9 @@
 
 import { ApiError, request } from "./api";
 
-export type Database = { name: string; site: string; server: string; users: string[]; createdAt: string };
+// sizeBytes is the size of a local database (ADR-0057); external ones and
+// failed measurements have none.
+export type Database = { name: string; site: string; server: string; users: string[]; createdAt: string; sizeBytes?: number };
 
 // Credentials is what a page shows once after a password was generated.
 // host is what the site uses as DB_HOST.

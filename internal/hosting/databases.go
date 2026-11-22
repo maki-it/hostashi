@@ -33,8 +33,8 @@ func (a RPCAgent) DBDelete(ctx context.Context, name string) error {
 }
 
 // DBUserCreate calls db.user.create.
-func (a RPCAgent) DBUserCreate(ctx context.Context, database, user, password string) error {
-	_, err := agentapi.DBUserCreate.Call(ctx, a.C, agentapi.DBUserCreateRequest{Database: database, User: user, Password: password})
+func (a RPCAgent) DBUserCreate(ctx context.Context, database, user, password string, maxConn uint32) error {
+	_, err := agentapi.DBUserCreate.Call(ctx, a.C, agentapi.DBUserCreateRequest{Database: database, User: user, Password: password, MaxConnections: maxConn})
 
 	return err
 }
@@ -232,6 +232,16 @@ func (s *Service) CreateDatabaseUser(ctx context.Context, actor int64, database,
 }
 
 func (s *Service) createUser(ctx context.Context, actor int64, be dbBackend, database, user, pw string) error {
+	if a, ok := be.(agentDB); ok {
+		n, err := s.dbConnectionsOf(ctx, database)
+		if err != nil {
+			return err
+		}
+
+		a.maxConn = n
+		be = a
+	}
+
 	err := s.st.CreateDatabaseUser(ctx, database, user, s.now())
 	if errors.Is(err, store.ErrDatabaseUserExists) {
 		return ErrDatabaseExists
@@ -402,7 +412,7 @@ func (s *Service) backendFor(ctx context.Context, server string) (dbBackend, str
 	}
 
 	if srv.Local() {
-		return agentDB{s.ag}, srv.Name, nil
+		return agentDB{ag: s.ag}, srv.Name, nil
 	}
 
 	if s.dbs == nil {
@@ -428,9 +438,40 @@ func (s *Service) backendOf(ctx context.Context, database string) (dbBackend, er
 	return be, err
 }
 
+// dbConnectionsOf returns the connection limit of the site that owns the
+// local database (ADR-0057); 0 for a site without limits.
+func (s *Service) dbConnectionsOf(ctx context.Context, database string) (uint32, error) {
+	d, err := s.st.DatabaseByName(ctx, database)
+	if err != nil {
+		return 0, err
+	}
+
+	site, err := s.st.SiteByName(ctx, d.Site)
+	if err != nil {
+		return 0, err
+	}
+
+	l, ok, err := s.st.SiteLimits(ctx, site.ID)
+	if err != nil || !ok {
+		return 0, err
+	}
+
+	return dbConnections(l.Limits), nil
+}
+
+// dbConnections is the agent's value of a connection limit.
+func dbConnections(l store.Limits) uint32 {
+	return uint32(min(max(l.DatabaseConnections, 0), agentapi.MaxDBUserConnections))
+}
+
 // agentDB is the local server through the agent, which keeps its own
 // registry and drops a database's users with it.
-type agentDB struct{ ag Agent }
+type agentDB struct {
+	ag Agent
+	// maxConn is the site's database connection limit (ADR-0057), 0:
+	// unlimited.
+	maxConn uint32
+}
 
 func (a agentDB) create(ctx context.Context, site, name string) error {
 	return a.ag.DBCreate(ctx, site, name)
@@ -445,7 +486,7 @@ func (a agentDB) drop(ctx context.Context, name string, _ []string) error {
 }
 
 func (a agentDB) createUser(ctx context.Context, database, user, password string) error {
-	return a.ag.DBUserCreate(ctx, database, user, password)
+	return a.ag.DBUserCreate(ctx, database, user, password, a.maxConn)
 }
 
 func (a agentDB) dropUser(ctx context.Context, _, user string) error {

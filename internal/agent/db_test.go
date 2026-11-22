@@ -179,3 +179,50 @@ func TestDBSizes(t *testing.T) {
 		wantCode(t, err, agentrpc.CodePrecondition)
 	})
 }
+
+func TestDBSiteConnections(t *testing.T) {
+	t.Run("no manager", func(t *testing.T) {
+		c, _ := startSiteAgentCfg(t, Config{})
+		ctx := context.Background()
+
+		_, err := agentapi.DBSiteConnections.Call(ctx, c, agentapi.DBSiteConnectionsRequest{Site: "shop", MaxConnections: 20})
+		wantCode(t, err, agentrpc.CodePrecondition)
+	})
+
+	db := &recordingDB{}
+	c, _ := startSiteAgentCfg(t, Config{DB: newDBManager(t, db)})
+	ctx := context.Background()
+
+	if _, err := agentapi.SiteCreate.Call(ctx, c, agentapi.SiteCreateRequest{User: "shop"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := agentapi.DBCreate.Call(ctx, c, agentapi.DBCreateRequest{Site: "shop", Name: "shop_wp"}); err != nil {
+		t.Fatal(err)
+	}
+
+	req := agentapi.DBUserCreateRequest{Database: "shop_wp", User: "shop_wp", Password: "Secret-pass_12345", MaxConnections: 20}
+	if _, err := agentapi.DBUserCreate.Call(ctx, c, req); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := agentapi.DBSiteConnections.Call(ctx, c, agentapi.DBSiteConnectionsRequest{Site: "shop", MaxConnections: 40})
+	if err != nil || len(got.Users) != 1 || got.Users[0] != "shop_wp" {
+		t.Fatalf("set = %+v, %v", got, err)
+	}
+
+	_, err = agentapi.DBSiteConnections.Call(ctx, c, agentapi.DBSiteConnectionsRequest{Site: "shop", MaxConnections: agentapi.MaxDBUserConnections + 1})
+	wantCode(t, err, agentrpc.CodeInvalidArgument)
+
+	want := []string{"WITH MAX_USER_CONNECTIONS 20", "ALTER USER 'shop_wp'@'localhost' WITH MAX_USER_CONNECTIONS 40"}
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	all := strings.Join(db.stmts, "\n")
+	for _, w := range want {
+		if !strings.Contains(all, w) {
+			t.Errorf("missing %q in %q", w, db.stmts)
+		}
+	}
+}

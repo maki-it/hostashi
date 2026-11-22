@@ -40,6 +40,9 @@ type LimitsAgent interface {
 	SiteQuotaSet(ctx context.Context, user string, bytes, inodes uint64) (agentapi.SiteQuota, error)
 	SiteQuotaGet(ctx context.Context, user string) (agentapi.SiteQuota, error)
 	SiteLimitsSet(ctx context.Context, user string, l agentapi.SiteLimits) error
+	// DBSiteConnections sets the connection limit of the site's local
+	// database users (ADR-0057).
+	DBSiteConnections(ctx context.Context, site string, maxConn uint32) error
 }
 
 // SiteQuotaSet calls site.quota.set.
@@ -55,6 +58,13 @@ func (a RPCAgent) SiteQuotaGet(ctx context.Context, user string) (agentapi.SiteQ
 // SiteLimitsSet calls site.limits.set.
 func (a RPCAgent) SiteLimitsSet(ctx context.Context, user string, l agentapi.SiteLimits) error {
 	_, err := agentapi.SiteLimitsSet.Call(ctx, a.C, agentapi.SiteLimitsSetRequest{User: user, Limits: l})
+
+	return err
+}
+
+// DBSiteConnections calls db.site.connections.set.
+func (a RPCAgent) DBSiteConnections(ctx context.Context, site string, maxConn uint32) error {
+	_, err := agentapi.DBSiteConnections.Call(ctx, a.C, agentapi.DBSiteConnectionsRequest{Site: site, MaxConnections: maxConn})
 
 	return err
 }
@@ -76,8 +86,13 @@ func CheckLimits(l store.Limits, isDefault bool) error {
 		return bad("cpu priority must be low, normal or high")
 	}
 
-	if l.DiskBytes < 0 || l.DiskInodes < 0 || l.MemoryBytes < 0 || l.Tasks < 0 || l.CPUQuotaPercent < 0 {
+	if l.DiskBytes < 0 || l.DiskInodes < 0 || l.MemoryBytes < 0 || l.Tasks < 0 || l.CPUQuotaPercent < 0 ||
+		l.DatabaseBytes < 0 || l.DatabaseConnections < 0 {
 		return bad("limits must not be negative")
+	}
+
+	if l.DatabaseConnections > agentapi.MaxDBUserConnections {
+		return bad("database connections must be 0 (unlimited) or between 1 and %d", agentapi.MaxDBUserConnections)
 	}
 
 	if l.PHPWorkers < 1 || l.PHPWorkers > agentapi.MaxPHPWorkers {
@@ -119,7 +134,9 @@ func limitsAudit(l store.Limits) map[string]string {
 		"disk_bytes": strconv.FormatInt(l.DiskBytes, 10), "disk_inodes": strconv.FormatInt(l.DiskInodes, 10),
 		"memory_bytes": strconv.FormatInt(l.MemoryBytes, 10), "php_workers": strconv.FormatInt(l.PHPWorkers, 10),
 		"tasks": strconv.FormatInt(l.Tasks, 10), "cpu_priority": l.CPUPriority,
-		"cpu_quota_percent": strconv.FormatInt(l.CPUQuotaPercent, 10),
+		"cpu_quota_percent":    strconv.FormatInt(l.CPUQuotaPercent, 10),
+		"database_bytes":       strconv.FormatInt(l.DatabaseBytes, 10),
+		"database_connections": strconv.FormatInt(l.DatabaseConnections, 10),
 	}
 }
 
@@ -515,6 +532,14 @@ func (s *Service) applyLimits(ctx context.Context, site store.Site, l store.Limi
 		}
 	}
 
+	if err == nil {
+		err = s.limits.DBSiteConnections(ctx, site.Name, dbConnections(l))
+		if isCode(err, agentrpc.CodePrecondition) {
+			// No MariaDB on this server: nothing to limit.
+			err = nil
+		}
+	}
+
 	// The record must be written even when the request was canceled.
 	rec := context.WithoutCancel(ctx)
 
@@ -555,4 +580,55 @@ func siteLimitsAudit(l store.Limits, presetID int64) map[string]string {
 	}
 
 	return d
+}
+
+// ApplyPendingLimits applies the stored limits of every active site whose
+// last apply failed or that a migration changed (ADR-0057), so the server
+// catches up without an admin's change. It runs once at panel start;
+// failures are recorded on the site and logged.
+func (s *Service) ApplyPendingLimits(ctx context.Context) {
+	if s.limits == nil {
+		return
+	}
+
+	ids, err := s.st.PendingSiteLimits(ctx)
+	if err != nil || len(ids) == 0 {
+		if err != nil {
+			s.log.ErrorContext(ctx, "pending site limits", "err", err)
+		}
+
+		return
+	}
+
+	sites, err := s.st.Sites(ctx)
+	if err != nil {
+		s.log.ErrorContext(ctx, "pending site limits", "err", err)
+
+		return
+	}
+
+	byID := make(map[int64]store.Site, len(sites))
+	for _, st := range sites {
+		byID[st.ID] = st
+	}
+
+	for _, id := range ids {
+		site, ok := byID[id]
+		if !ok || site.State != store.SiteActive {
+			continue
+		}
+
+		s.mu.Lock()
+
+		l, set, err := s.st.SiteLimits(ctx, id)
+		if err == nil && set {
+			err = s.applyLimits(ctx, site, l.Limits)
+		}
+
+		s.mu.Unlock()
+
+		if err != nil {
+			s.log.WarnContext(ctx, "apply pending site limits", "site", site.Name, "err", err)
+		}
+	}
 }
