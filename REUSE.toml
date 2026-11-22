@@ -40,6 +40,8 @@ path = [
   "internal/statuspage/builtin/*.html",
   "internal/firewall/testdata/*.nft",
   "packaging/keyring/*.asc",
+  "tools/nodeversions/release-keys.asc",
+  "tools/nodeversions/testdata/*.asc",
   "api/openapi.json",
 ]
 precedence = "aggregate"
