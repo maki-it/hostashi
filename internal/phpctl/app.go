@@ -4,6 +4,7 @@ package phpctl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -31,9 +32,21 @@ func (AppController) Start(ctx context.Context, unit string) error {
 	return appctl(ctx, unit, "enable", "--now")
 }
 
-// Stop stops the unit now and disables it.
+// systemctlNotLoaded is systemctl's exit code for a unit it has not
+// loaded: an app that never ran.
+const systemctlNotLoaded = 5
+
+// Stop disables the unit and stops it now. A unit that was never loaded
+// (an app set up stopped) is stopped already.
 func (AppController) Stop(ctx context.Context, unit string) error {
-	return appctl(ctx, unit, "disable", "--now")
+	err := appctl(ctx, unit, "disable", "--now")
+
+	var ee *ExitError
+	if errors.As(err, &ee) && ee.Code == systemctlNotLoaded {
+		return nil
+	}
+
+	return err
 }
 
 // Restart restarts the unit (and starts a stopped one).

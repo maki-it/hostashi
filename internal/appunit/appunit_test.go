@@ -115,7 +115,7 @@ func TestApply(t *testing.T) {
 
 	app, _ := os.ReadFile(filepath.Join(dir, AppDropIn))
 	for _, want := range []string{
-		"WorkingDirectory=/home/shop/htdocs\n", "ExecStart=" + e.root + "/node/24/bin/node server.js\n",
+		"WorkingDirectory=/home/shop/htdocs\n", "ExecStart=\n", "ExecStart=" + e.root + "/node/24/bin/node server.js\n",
 		"Environment=NODE_ENV=production HOST=127.0.0.1 PORT=20001\n", "Environment=PATH=" + e.root + "/node/24/bin:/usr/local/bin:/usr/bin:/bin\n",
 	} {
 		if !strings.Contains(string(app), want) {
