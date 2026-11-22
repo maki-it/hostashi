@@ -169,7 +169,7 @@ func appSpec(site store.Site) agentapi.AppSpec {
 
 // applyApp sets up the app of a Node.js or app site on the agent as it is
 // stored.
-func (s *Service) applyApp(ctx context.Context, site store.Site) (agentapi.AppStatus, error) {
+func (s *Service) applyApp(ctx context.Context, site store.Site) (_ agentapi.AppStatus, err error) {
 	if !hasApp(site) {
 		return agentapi.AppStatus{}, ErrSiteType
 	}
@@ -178,7 +178,13 @@ func (s *Service) applyApp(ctx context.Context, site store.Site) (agentapi.AppSt
 		return agentapi.AppStatus{}, ErrNoApps
 	}
 
-	st, err := s.apps.AppApply(ctx, appSpec(site))
+	spec := appSpec(site)
+
+	if spec.Env, err = s.appEnv(ctx, site); err != nil {
+		return agentapi.AppStatus{}, err
+	}
+
+	st, err := s.apps.AppApply(ctx, spec)
 	if site.Type == store.SiteTypeNode && isCode(err, agentrpc.CodePrecondition) {
 		return agentapi.AppStatus{}, fmt.Errorf("%w: %w", ErrNodeMissing, err)
 	}

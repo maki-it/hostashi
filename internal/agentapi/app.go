@@ -157,6 +157,9 @@ type AppSpec struct {
 	// Stopped keeps the app stopped (stopped in the panel, or no start
 	// command yet).
 	Stopped bool `json:"stopped,omitempty"`
+	// Env are the app's own environment variables (ValidateAppEnv). The
+	// agent keeps them only in a root-only file that systemd reads.
+	Env []AppEnvVar `json:"env,omitempty"`
 }
 
 // Validate checks every field.
@@ -201,6 +204,10 @@ func (a AppSpec) Validate() error {
 
 	if a.StartKind == "" && !a.Stopped {
 		return errors.New("app: an app without a start command must stay stopped")
+	}
+
+	if err := ValidateAppEnv(a.Env); err != nil {
+		return err
 	}
 
 	return ValidateAppPort(a.Port)

@@ -100,6 +100,7 @@ const routes = [
   ["GET", /^\/backups$/, () => backups],
   ["GET", /^\/firewall$/, () => firewall],
   ["GET", /^\/dbtool$/, () => ({ available: true, minutes: [30, 120] })],
+  ["GET", /^\/sites\/[^/]+\/app\/env$/, () => ({ names: ["DATABASE_URL", "SESSION_SECRET"] })],
   ["GET", /^\/sites\/[^/]+\/app$/, () => ({ state: "active", subState: "running", restarts: 0, usedBytes: 86_000_000, since: day(1) })],
   ["GET", /^\/sites\/[^/]+\/backups$/, () => ({ snapshots })],
   ["GET", /^\/sites\/[^/]+\/headers$/, () => ({

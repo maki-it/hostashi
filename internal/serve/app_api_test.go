@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 
@@ -197,5 +198,63 @@ func TestAppSiteOverHTTP(t *testing.T) {
 
 	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/svc/app", cookie: c}); rec.Code != http.StatusOK {
 		t.Errorf("status: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestAppEnvOverHTTP(t *testing.T) {
+	e := newAPIWithAgent(t, &stubAgent{})
+	c := e.adminCookie(t)
+
+	apps := &stubApps{specs: map[string]agentapi.AppSpec{}}
+	e.sites.EnableApps(apps)
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"svc","domains":["svc.example.com"],"type":"app","app":{"program":"bin/server"}}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	for body, want := range map[string]int{
+		`{"variables":[{"name":"PORT","value":"80"}]}`:                                                        http.StatusUnprocessableEntity,
+		`{"variables":[{"name":"a-b","value":"x"}]}`:                                                          http.StatusUnprocessableEntity,
+		`{"variables":[{"name":"A","value":"x\ny"}]}`:                                                         http.StatusUnprocessableEntity,
+		`{"variables":[{"name":"A","value":"1"},{"name":"A","value":"2"}]}`:                                   http.StatusUnprocessableEntity,
+		`{"variables":[{"name":"DB_URL","value":"mysql://u:p@x/db"},{"name":"API_KEY","value":"s3cr3t $X"}]}`: http.StatusOK,
+	} {
+		if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/svc/app/env", cookie: c, body: body}); rec.Code != want {
+			t.Errorf("%s: %d %s", body, rec.Code, rec.Body)
+		}
+	}
+
+	if env := apps.specs["svc"].Env; len(env) != 2 || env[0].Name != "API_KEY" || env[0].Value != "s3cr3t $X" {
+		t.Fatalf("agent got %v", env)
+	}
+
+	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/svc/app/env", cookie: c})
+	if rec.Code != http.StatusOK || rec.Body.String() != `{"names":["API_KEY","DB_URL"]}`+"\n" {
+		t.Fatalf("names: %d %q", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/svc/app/env/values", cookie: c})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `{"name":"API_KEY","value":"s3cr3t $X"}`) || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("values: %d %s", rec.Code, rec.Body)
+	}
+
+	// Reading the site shows the names, not the values.
+	read := bearerHeader(e.createToken(t, c, `{"name":"r","scopes":["sites:read"]}`).Token)
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/svc/app/env", header: read}); rec.Code != http.StatusOK {
+		t.Errorf("names with sites:read: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/svc/app/env/values", header: read}); rec.Code != http.StatusForbidden || strings.Contains(rec.Body.String(), "s3cr3t") {
+		t.Errorf("values with sites:read: %d %s", rec.Code, rec.Body)
+	}
+
+	// The audit log names the variables only.
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/audit?action=site.app.env", cookie: c}); rec.Code != http.StatusOK ||
+		!strings.Contains(rec.Body.String(), "API_KEY") || strings.Contains(rec.Body.String(), "s3cr3t") || strings.Contains(rec.Body.String(), "mysql://") {
+		t.Errorf("audit: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/svc/app/env", cookie: c, body: `{"variables":[]}`}); rec.Code != http.StatusOK || len(apps.specs["svc"].Env) != 0 {
+		t.Fatalf("clear: %d %s", rec.Code, rec.Body)
 	}
 }

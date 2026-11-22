@@ -1910,6 +1910,29 @@ x systemctl is-active --quiet hostashi-node@nodeapp.service || fail "app not run
 x systemctl kill -s KILL hostashi-node@nodeapp.service
 for _ in $(seq 1 20); do x systemctl is-active --quiet hostashi-node@nodeapp.service && break; sleep 1; done
 x systemctl is-active --quiet hostashi-node@nodeapp.service || fail "app not restarted after a crash"
+# Environment variables reach the app literally, from a root-only file;
+# the unit's properties, which every user can read, do not show them.
+# shellcheck disable=SC2016 # literal $HOME and backticks the app must get as they are
+env_body='{"variables":[{"name":"API_KEY","value":"s3cr3t $HOME `id` \"q\" \\ 100%"},{"name":"NODE_ENV","value":"staging"}]}'
+[ "$(api PUT /api/v1/sites/nodeapp/app/env "$env_body")" = 200 ] || fail "set app environment: $(x cat /tmp/api.out)"
+[ "$(api PUT /api/v1/sites/nodeapp/app/env '{"variables":[{"name":"PORT","value":"80"}]}')" = 422 ] || fail "reserved variable: $(x cat /tmp/api.out)"
+env_file=/etc/systemd/system/hostashi-node@nodeapp.service.d/hostashi-app.env
+expect_mode "$env_file" "600 root:root"
+body=""
+for _ in $(seq 1 30); do
+  body=$(x curl -fsS -H 'Host: nodeapp.example.com' http://127.0.0.1/ 2>/dev/null || true)
+  [ "$body" = "hello from node $uid staging" ] && break
+  sleep 1
+done
+[ "$body" = "hello from node $uid staging" ] || fail "NODE_ENV from the environment: '$body'"
+# shellcheck disable=SC2016 # expanded inside the container
+got=$(x sh -c 'tr "\0" "\n" </proc/"$(systemctl show -p MainPID --value hostashi-node@nodeapp.service)"/environ | grep "^API_KEY="')
+# shellcheck disable=SC2016 # the literal value
+[ "$got" = 'API_KEY=s3cr3t $HOME `id` "q" \ 100%' ] || fail "API_KEY in the app: '$got'"
+x systemctl show hostashi-node@nodeapp.service | grep s3cr3t >/dev/null && fail "variable value in the unit's properties"
+x grep -rq s3cr3t /var/lib/hostashi /etc/systemd/system/hostashi-node@nodeapp.service.d/60-hostashi-app.conf && fail "variable value stored in the clear"
+[ "$(api GET /api/v1/sites/nodeapp/app/env)" = 200 ] || fail "app environment names: $(x cat /tmp/api.out)"
+x grep -q '"names":\["API_KEY","NODE_ENV"\]' /tmp/api.out || fail "app environment names: $(x cat /tmp/api.out)"
 [ "$(api DELETE /api/v1/sites/nodeapp)" = 204 ] || fail "delete node site: $(x cat /tmp/api.out)"
 x test ! -e /etc/systemd/system/hostashi-node@nodeapp.service.d || fail "app drop-ins left after delete"
 x systemctl is-active --quiet hostashi-node@nodeapp.service && fail "app runs after delete"
