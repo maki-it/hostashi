@@ -139,13 +139,15 @@ var table = map[Action]Rule{
 
 	// The day-to-day work on one's own site: everyone with a grant. All of
 	// it runs as the site's own Linux user inside its isolation.
-	"sites:read":              ownSite("sites:read"),
-	"sites.php:write":         ownSite("sites:write"),
-	"sites.hsts:write":        ownSite("sites:write"),
-	"sites.headers:write":     ownSite("sites:write"),
-	"sites.web:write":         ownSite("sites:write"),
-	"sites.redirect:write":    ownSite("sites:write"),
-	"sites.proxy:write":       ownSite("sites:write"),
+	"sites:read":           ownSite("sites:read"),
+	"sites.php:write":      ownSite("sites:write"),
+	"sites.hsts:write":     ownSite("sites:write"),
+	"sites.headers:write":  ownSite("sites:write"),
+	"sites.web:write":      ownSite("sites:write"),
+	"sites.redirect:write": ownSite("sites:write"),
+	"sites.proxy:write":    ownSite("sites:write"),
+	// The app runs as the site user inside its isolation (ADR-0054).
+	"sites.app:write":         ownSite("sites:write"),
 	"sites.maintenance:write": ownSite("sites.maintenance:write"),
 	"sites.pagecache:write":   ownSite("sites:write"),
 	"sites.pagecache:purge":   ownSite("pagecache:purge"),

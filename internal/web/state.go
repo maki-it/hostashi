@@ -86,6 +86,10 @@ type Site struct {
 	// to them. Empty: the site answers 502.
 	Proxy      *agentapi.WebProxy `json:"proxy,omitempty"`
 	ProxyAddrs []string           `json:"proxyAddrs,omitempty"`
+	// App passes every request to the site's app on 127.0.0.1:App.Port
+	// (Node.js, ADR-0054). The site keeps its Root and snippets; it has no
+	// PHP and no static-site options.
+	App *agentapi.WebApp `json:"app,omitempty"`
 }
 
 // Bounds of BodyMax and FastCGIReadTimeout (ADR-0049).
@@ -236,7 +240,7 @@ func (d Desired) Validate() error {
 				return fmt.Errorf("site %q: redirect or reverse proxy, not both", s.User)
 			}
 
-			if s.Root != "" || s.Home != "" || s.PHPSocket != "" || s.SPA || s.AssetCache || s.PageCache != nil || !s.Snippets.IsZero() {
+			if s.Root != "" || s.Home != "" || s.PHPSocket != "" || s.SPA || s.AssetCache || s.PageCache != nil || !s.Snippets.IsZero() || s.App != nil {
 				return fmt.Errorf("site %q: a redirect or reverse proxy site has no root, PHP, snippets or caches", s.User)
 			}
 
@@ -245,6 +249,10 @@ func (d Desired) Validate() error {
 			}
 		case len(s.ProxyAddrs) > 0:
 			return fmt.Errorf("site %q: proxy addresses without a proxy", s.User)
+		case s.App != nil && (s.PHPSocket != "" || s.SPA || s.AssetCache || s.PageCache != nil):
+			return fmt.Errorf("site %q: an app site has no PHP and no static-site options", s.User)
+		case s.App != nil && agentapi.ValidateAppPort(s.App.Port) != nil:
+			return fmt.Errorf("site %q: %w", s.User, agentapi.ValidateAppPort(s.App.Port))
 		case !rootRe.MatchString(s.Root) || path.Clean(s.Root) != s.Root:
 			return fmt.Errorf("site %q: invalid root %q", s.User, s.Root)
 		}

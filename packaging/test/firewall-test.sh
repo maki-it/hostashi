@@ -174,6 +174,29 @@ x systemctl reload hostashi-firewall.service || fail "empty panel file does not 
 must_open 22 2222 2200
 must_closed 3000 5000 6000
 
+step "app ports on loopback: only the owner, root and www-data connect (ADR-0054)"
+[ "$(x stat -c '%a %U:%G' /var/lib/hostashi-agent/firewall/apps.nft)" = "600 root:root" ] || fail "apps file has the wrong owner or mode"
+x sh -c 'getent passwd www-data >/dev/null || useradd -r www-data; useradd -u 1500 -M appowner; useradd -u 1501 -M appother'
+x systemd-run --quiet --unit=listen-app python3 -m http.server --bind 127.0.0.1 20001
+sleep 1
+# lo_connect USER: true if USER opens a TCP connection to 127.0.0.1:20001.
+lo_connect() { x runuser -u "$1" -- timeout 3 bash -c 'exec 3<>/dev/tcp/127.0.0.1/20001' 2>/dev/null; }
+x sh -c 'printf "add element inet hostashi app_owners { 20001 . 1500 }\n" >/var/lib/hostashi-agent/firewall/apps.nft'
+x systemctl reload hostashi-firewall.service || fail "firewall did not load the apps file"
+x nft list set inet hostashi app_owners | grep -q '20001 . 1500' || fail "owner not loaded: $(x nft list set inet hostashi app_owners)"
+lo_connect root || fail "root cannot reach the app"
+lo_connect www-data || fail "www-data cannot reach the app"
+lo_connect appowner || fail "the owner cannot reach its app"
+if lo_connect appother; then fail "another site user reached the app"; fi
+if lo_connect nobody; then fail "nobody reached the app"; fi
+# Ports outside the range stay open on loopback.
+x systemd-run --quiet --unit=listen-lo python3 -m http.server --bind 127.0.0.1 19999
+sleep 1
+x runuser -u appother -- timeout 3 bash -c 'exec 3<>/dev/tcp/127.0.0.1/19999' 2>/dev/null || fail "loopback port 19999 closed for other users"
+x sh -c 'printf "# empty\n" >/var/lib/hostashi-agent/firewall/apps.nft'
+x systemctl reload hostashi-firewall.service || fail "firewall did not load the empty apps file"
+if lo_connect appowner; then fail "the owner reached the app after it was removed"; fi
+
 step "--firewall-allow opens a port, a run without it closes it again"
 out=$(fw 'FW_ALLOW=(3000/tcp 5353/udp)') || fail "allow failed: $out"
 x grep -q 'tcp dport { 22, 80, 443, 2200, 2222, 3000, 8443, 8444 } accept' /etc/hostashi/firewall.nft || fail "3000/tcp not in the rules"
