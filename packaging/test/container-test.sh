@@ -329,13 +329,8 @@ if x /usr/local/bin/hostashi system timezone Europe/Atlantis >/dev/null 2>&1; th
 if x /usr/local/bin/hostashi system timezone ../../etc/passwd >/dev/null 2>&1; then fail "path accepted as time zone"; fi
 x /usr/local/bin/hostashi system timezone "${old_tz:-UTC}" >/dev/null || fail "time zone not set back"
 # The test sets the name the container already has: the whole path runs,
-# nothing changes. Docker bind-mounts /etc/hostname and /etc/hosts, and a
-# rename over a mount point fails (EBUSY), so they become plain files first,
-# as on a real server.
-# shellcheck disable=SC2016 # expanded by bash in the container
-x bash -c 'for f in /etc/hostname /etc/hosts; do
-  if findmnt -n "$f" >/dev/null; then cp "$f" "/tmp/${f##*/}"; umount "$f" && cp "/tmp/${f##*/}" "$f"; fi
-done' || fail "could not unmount docker's /etc/hostname and /etc/hosts"
+# nothing changes. Docker bind-mounts /etc/hostname and /etc/hosts; the
+# agent then rewrites /etc/hosts in place.
 host=$(x hostname | tr '[:upper:]' '[:lower:]')
 if [[ "$host" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
   x /usr/local/bin/hostashi system hostname "$host" | grep -q "\"hostname\": \"$host\"" || fail "hostname not set"
