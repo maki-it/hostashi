@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/mail"
 	"github.com/maki-it/hostashi/internal/store"
@@ -51,6 +53,27 @@ func mailSettingsOut(c mail.Config) mailSettingsJSON {
 }
 
 // window counts events in the last hour.
+type mailTestJSON struct {
+	Sent bool `json:"sent"`
+}
+
+type mailSettingsRequest struct {
+	Host     string       `json:"host"`
+	Port     int          `json:"port"`
+	TLS      mail.TLSMode `json:"tls"`
+	Username string       `json:"username"`
+	// Password nil keeps the stored one, "" removes it.
+	Password *string `json:"password"`
+	From     string  `json:"from"`
+	FromName string  `json:"from_name"`
+	ReplyTo  string  `json:"reply_to"`
+	CAPEM    string  `json:"ca_pem"`
+}
+
+type mailTestRequest struct {
+	To string `json:"to"`
+}
+
 type window struct {
 	mu    sync.Mutex
 	times []time.Time
@@ -100,7 +123,9 @@ func registerMail(mux *routeMux, a authn, relay MailRelay, send MailSender, st S
 		return c, true, true
 	}
 
-	mux.HandleFunc("GET /api/v1/settings/mail", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("GET /api/v1/settings/mail", openapi.Operation{
+		ID: "getMailSettings", Tag: "settings", Summary: "The SMTP relay settings (without the password)", Out: mailSettingsJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := a.sessionAllow(w, r, authz.SettingsRead); !ok {
 			return
 		}
@@ -119,24 +144,15 @@ func registerMail(mux *routeMux, a authn, relay MailRelay, send MailSender, st S
 		writeJSON(w, http.StatusOK, mailSettingsOut(c))
 	})
 
-	mux.HandleFunc("PUT /api/v1/settings/mail", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("PUT /api/v1/settings/mail", openapi.Operation{
+		ID: "setMailSettings", Tag: "settings", Summary: "Set the SMTP relay", In: mailSettingsRequest{}, Out: mailSettingsJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.sessionAllow(w, r, authz.SettingsWrite)
 		if !ok {
 			return
 		}
 
-		var in struct {
-			Host     string       `json:"host"`
-			Port     int          `json:"port"`
-			TLS      mail.TLSMode `json:"tls"`
-			Username string       `json:"username"`
-			// Password nil keeps the stored one, "" removes it.
-			Password *string `json:"password"`
-			From     string  `json:"from"`
-			FromName string  `json:"from_name"`
-			ReplyTo  string  `json:"reply_to"`
-			CAPEM    string  `json:"ca_pem"`
-		}
+		var in mailSettingsRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -203,7 +219,9 @@ func registerMail(mux *routeMux, a authn, relay MailRelay, send MailSender, st S
 		writeJSON(w, http.StatusOK, mailSettingsOut(saved))
 	})
 
-	mux.HandleFunc("DELETE /api/v1/settings/mail", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("DELETE /api/v1/settings/mail", openapi.Operation{
+		ID: "deleteMailSettings", Tag: "settings", Summary: "Remove the SMTP relay; the panel sends no email",
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.sessionAllow(w, r, authz.SettingsWrite)
 		if !ok {
 			return
@@ -222,15 +240,15 @@ func registerMail(mux *routeMux, a authn, relay MailRelay, send MailSender, st S
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	mux.HandleFunc("POST /api/v1/settings/mail/test", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("POST /api/v1/settings/mail/test", openapi.Operation{
+		ID: "testMail", Tag: "settings", Summary: "Send a test email through the relay", In: mailTestRequest{}, Out: mailTestJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.sessionAllow(w, r, authz.SettingsWrite)
 		if !ok {
 			return
 		}
 
-		var in struct {
-			To string `json:"to"`
-		}
+		var in mailTestRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -284,7 +302,7 @@ func registerMail(mux *routeMux, a authn, relay MailRelay, send MailSender, st S
 		detail["result"] = "sent"
 		_ = st.Audit(r.Context(), &uid, "settings.mail.test", c.Host, detail)
 
-		writeJSON(w, http.StatusOK, map[string]bool{"sent": true})
+		writeJSON(w, http.StatusOK, mailTestJSON{Sent: true})
 	})
 }
 

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/mail"
 )
@@ -38,6 +40,18 @@ func panelHost(publicURL string) string {
 	}
 
 	return ""
+}
+
+type emailConfirmedJSON struct {
+	Email string `json:"email"`
+}
+
+type accountEmailRequest struct {
+	Email string `json:"email"`
+}
+
+type emailConfirmRequest struct {
+	Token string `json:"token"`
 }
 
 type accountEmailJSON struct {
@@ -84,7 +98,9 @@ func registerAccountEmail(mux *routeMux, a authn, relay MailRelay, outbox MailOu
 		writeJSON(w, http.StatusOK, out)
 	}
 
-	mux.HandleFunc("GET /api/v1/account/email", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("GET /api/v1/account/email", openapi.Operation{
+		ID: "getAccountEmail", Tag: "account", Summary: "The caller's email address and a pending change", Out: accountEmailJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok || !a.secondFactorOK(w, r, u) {
 			return
@@ -93,15 +109,15 @@ func registerAccountEmail(mux *routeMux, a authn, relay MailRelay, outbox MailOu
 		state(w, r, u.ID)
 	})
 
-	mux.HandleFunc("PUT /api/v1/account/email", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("PUT /api/v1/account/email", openapi.Operation{
+		ID: "setAccountEmail", Tag: "account", Summary: "Set a new email address; a confirmation link is sent there", In: accountEmailRequest{}, Out: accountEmailJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok || !a.secondFactorOK(w, r, u) {
 			return
 		}
 
-		var in struct {
-			Email string `json:"email"`
-		}
+		var in accountEmailRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -153,7 +169,9 @@ func registerAccountEmail(mux *routeMux, a authn, relay MailRelay, outbox MailOu
 		state(w, r, u.ID)
 	})
 
-	mux.HandleFunc("DELETE /api/v1/account/email", func(w http.ResponseWriter, r *http.Request) {
+	mux.Op("DELETE /api/v1/account/email", openapi.Operation{
+		ID: "deleteAccountEmail", Tag: "account", Summary: "Remove the caller's email address",
+	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok || !a.secondFactorOK(w, r, u) {
 			return
@@ -170,10 +188,10 @@ func registerAccountEmail(mux *routeMux, a authn, relay MailRelay, outbox MailOu
 
 	// Public: the link may be opened in a browser without a session. The
 	// secret in the link is the proof.
-	mux.HandleFunc("POST /api/v1/account/email/confirm", func(w http.ResponseWriter, r *http.Request) {
-		var in struct {
-			Token string `json:"token"`
-		}
+	mux.Op("POST /api/v1/account/email/confirm", openapi.Operation{
+		ID: "confirmAccountEmail", Tag: "account", Summary: "Confirm an email address with the token from the link", In: emailConfirmRequest{}, Out: emailConfirmedJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		var in emailConfirmRequest
 		if !decodeJSON(w, r, &in) {
 			return
 		}
@@ -202,7 +220,7 @@ func registerAccountEmail(mux *routeMux, a authn, relay MailRelay, outbox MailOu
 			}
 		}
 
-		writeJSON(w, http.StatusOK, map[string]string{"email": address})
+		writeJSON(w, http.StatusOK, emailConfirmedJSON{Email: address})
 	})
 }
 

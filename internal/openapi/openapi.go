@@ -41,7 +41,8 @@ type Operation struct {
 	// Out is the response body (a value of the Go type), nil for none.
 	Out any
 	// OutContentType replaces application/json for Out, e.g.
-	// "text/event-stream" or "application/zip"; Out is then ignored.
+	// "text/event-stream" or "application/zip", or several separated by
+	// commas; Out is then ignored.
 	OutContentType string
 	// Status is the success status; 0 means 200, or 204 when nothing is
 	// returned.
@@ -250,7 +251,9 @@ func operation(r *reflector, rt Route, method, path string, errRef map[string]an
 
 		if ct == "" {
 			ct = "application/json"
+			r.input = true
 			schema = r.schema(typeOf(o.In))
+			r.input = false
 		}
 
 		op["requestBody"] = map[string]any{"required": true, "content": map[string]any{ct: map[string]any{"schema": schema}}}
@@ -273,7 +276,20 @@ func operation(r *reflector, rt Route, method, path string, errRef map[string]an
 
 	switch {
 	case o.OutContentType != "":
-		success["content"] = map[string]any{o.OutContentType: map[string]any{"schema": map[string]any{"type": "string"}}}
+		content := map[string]any{}
+
+		for _, ct := range strings.Split(o.OutContentType, ",") {
+			ct = strings.TrimSpace(ct)
+
+			schema := map[string]any{"type": "string"}
+			if strings.HasSuffix(ct, "json") {
+				schema = map[string]any{} // a JSON document of its own
+			}
+
+			content[ct] = map[string]any{"schema": schema}
+		}
+
+		success["content"] = content
 	case o.Out != nil:
 		success["content"] = map[string]any{"application/json": map[string]any{"schema": r.schema(typeOf(o.Out))}}
 	case !described:
