@@ -1622,6 +1622,15 @@ origins=$(x unattended-upgrade --dry-run -d 2>&1 | sed -n 's/^Allowed origins ar
 grep -qF "origin=deb.sury.org,archive=$codename" <<<"$origins" || fail "sury.org not in unattended-upgrades: $origins"
 out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run without --php-versions changed something"; }
+# New Hostashi versions automatically only with --auto-update (ADR-0050),
+# kept in the saved options for upgrade; a run without it turns it off.
+inst apply --yes --auto-update >/dev/null || fail "apply with --auto-update failed"
+origins=$(x unattended-upgrade --dry-run -d 2>&1 | sed -n 's/^Allowed origins are: //p' | head -1)
+grep -qF "origin=Hostashi,codename=stable" <<<"$origins" || fail "--auto-update: Hostashi not in unattended-upgrades: $origins"
+x grep -qx -- --auto-update /etc/hostashi/install.options || fail "--auto-update not saved: $(x cat /etc/hostashi/install.options)"
+inst apply --yes >/dev/null || fail "apply without --auto-update failed"
+origins=$(x unattended-upgrade --dry-run -d 2>&1 | sed -n 's/^Allowed origins are: //p' | head -1)
+! grep -qF "origin=Hostashi" <<<"$origins" || fail "Hostashi still in unattended-upgrades without --auto-update: $origins"
 # The unit the panel starts (ADR-0036): the script refuses what is not on
 # its list, and installs what is.
 expect_mode /usr/local/lib/hostashi/php-install "755 root:root"
