@@ -148,3 +148,48 @@ export function nodeMessage(err: unknown): string {
   }
   return siteMessage(err);
 }
+
+/** An environment variable of an app (ADR-0054). */
+export type EnvVar = { name: string; value: string };
+
+export const getAppEnvNames = async (name: string) => (await request<{ names: string[] }>("GET", sitePath(name) + "/app/env")).names;
+export const getAppEnv = async (name: string) => (await request<{ variables: EnvVar[] }>("GET", sitePath(name) + "/app/env/values")).variables;
+export const setAppEnv = (name: string, variables: EnvVar[]) =>
+  request<{ names: string[]; status: AppStatus }>("PUT", sitePath(name) + "/app/env", { variables });
+
+const envNameRe = /^[A-Z_][A-Z0-9_]{0,63}$/;
+/** Names Hostashi sets for every app (agentapi.reservedAppEnv). */
+export const reservedEnv = ["HOST", "PORT", "HOME", "USER", "LOGNAME", "PATH"];
+export const maxEnv = 100;
+export const maxEnvValue = 4096;
+
+/** formatEnv writes variables as the NAME=value lines the editor shows. */
+export const formatEnv = (vars: EnvVar[]) => vars.map((v) => v.name + "=" + v.value).join("\n");
+
+/**
+ * parseEnv reads NAME=value lines, mirroring agentapi.ValidateAppEnv.
+ * Empty lines and lines starting with # are skipped; a value is taken as
+ * written, quotes included.
+ */
+export function parseEnv(text: string): { vars: EnvVar[]; problem: string } {
+  const vars: EnvVar[] = [];
+  const seen = new Set<string>();
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = (lines[i] ?? "").replace(/\r$/, "");
+    if (line.trim() === "" || line.trimStart().startsWith("#")) continue;
+    const at = "Line " + (i + 1) + ": ";
+    const eq = line.indexOf("=");
+    if (eq < 0) return { vars, problem: at + "write NAME=value." };
+    const name = line.slice(0, eq).trim();
+    const value = line.slice(eq + 1);
+    if (!envNameRe.test(name)) return { vars, problem: at + "use A-Z, 0-9 and _ in the name, no digit first, at most 64 characters." };
+    if (reservedEnv.includes(name)) return { vars, problem: at + name + " is set by Hostashi." };
+    if (seen.has(name)) return { vars, problem: at + name + " is set twice." };
+    if (new TextEncoder().encode(value).length > maxEnvValue) return { vars, problem: at + "the value is longer than 4096 bytes." };
+    seen.add(name);
+    vars.push({ name, value });
+  }
+  if (vars.length > maxEnv) return { vars, problem: "At most " + maxEnv + " variables." };
+  return { vars, problem: "" };
+}

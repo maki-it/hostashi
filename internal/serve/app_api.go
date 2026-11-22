@@ -117,7 +117,35 @@ type siteAppJSON struct {
 
 // registerApps adds the routes of the apps of Node.js and app sites
 // (ADR-0054).
+// appEnvNamesJSON lists the names of an app's environment variables.
+type appEnvNamesJSON struct {
+	Names []string `json:"names"`
+}
+
+// appEnvVarJSON is one environment variable of an app (ADR-0054).
+type appEnvVarJSON struct {
+	// Name: A-Z, 0-9 and _, no digit first, at most 64 characters; HOST,
+	// PORT, HOME, USER, LOGNAME and PATH are set by Hostashi.
+	Name string `json:"name"`
+	// Value: at most 4096 bytes on one line.
+	Value string `json:"value"`
+}
+
+// appEnvJSON is all of an app's variables, at most 100 and 32 KiB as JSON.
+type appEnvJSON struct {
+	Variables []appEnvVarJSON `json:"variables"`
+}
+
+// appEnvSetJSON answers a change of the variables: their names and the
+// app's state after the restart.
+type appEnvSetJSON struct {
+	Names  []string      `json:"names"`
+	Status appStatusJSON `json:"status"`
+}
+
 func registerApps(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
+	registerAppEnv(mux, a, svc, log)
+
 	mux.Op("PUT /api/v1/sites/{name}/app", openapi.Operation{
 		ID: "setSiteApp", Tag: "sites", Summary: "Set the working directory, program and arguments of an app site",
 		In: programAppJSON{}, Out: siteAppJSON{},
@@ -220,4 +248,75 @@ func registerApps(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger
 			writeJSON(w, http.StatusOK, toAppStatusJSON(st))
 		}))
 	}
+}
+
+// registerAppEnv adds the routes of an app's environment variables
+// (ADR-0054). Reading the site shows the names; the values need the right
+// to change the app, as anyone who can change it can read them from it.
+func registerAppEnv(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
+	mux.Op("GET /api/v1/sites/{name}/app/env", openapi.Operation{
+		ID: "getSiteAppEnvNames", Tag: "sites", Summary: "The names of the environment variables of a Node.js or app site, without values", Out: appEnvNamesJSON{},
+	}, a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		names, err := svc.AppEnvNames(r.Context(), r.PathValue("name"))
+		if err != nil {
+			siteFail(log, w, err, "app environment names")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, appEnvNamesJSON{Names: names})
+	}))
+
+	mux.Op("GET /api/v1/sites/{name}/app/env/values", openapi.Operation{
+		ID: "getSiteAppEnv", Tag: "sites", Summary: "The environment variables of a Node.js or app site with their values", Out: appEnvJSON{},
+	}, a.allow("sites.app.env:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		env, err := svc.AppEnv(r.Context(), r.PathValue("name"))
+		if err != nil {
+			siteFail(log, w, err, "app environment")
+
+			return
+		}
+
+		out := appEnvJSON{Variables: make([]appEnvVarJSON, 0, len(env))}
+		for _, v := range env {
+			out.Variables = append(out.Variables, appEnvVarJSON{Name: v.Name, Value: v.Value})
+		}
+
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, out)
+	}))
+
+	mux.Op("PUT /api/v1/sites/{name}/app/env", openapi.Operation{
+		ID: "setSiteAppEnv", Tag: "sites", Summary: "Replace the environment variables of a Node.js or app site; a running app restarts",
+		In: appEnvJSON{}, Out: appEnvSetJSON{},
+	}, a.allow("sites.app:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in appEnvJSON
+		if !decodeJSONLimit(w, r, &in, 256<<10) {
+			return
+		}
+
+		env := make([]agentapi.AppEnvVar, 0, len(in.Variables))
+		for _, v := range in.Variables {
+			env = append(env, agentapi.AppEnvVar{Name: v.Name, Value: v.Value})
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		st, err := svc.SetAppEnv(ctx, p.User.ID, r.PathValue("name"), env)
+		if err != nil {
+			siteFail(log, w, err, "set app environment")
+
+			return
+		}
+
+		names, err := svc.AppEnvNames(ctx, r.PathValue("name"))
+		if err != nil {
+			siteFail(log, w, err, "app environment names")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, appEnvSetJSON{Names: names, Status: toAppStatusJSON(st)})
+	}))
 }

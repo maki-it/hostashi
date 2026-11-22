@@ -20,6 +20,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -159,12 +160,13 @@ type Service struct {
 
 	issuer Issuer
 	kick   chan struct{}
-	cron   CronAgent   // nil: no cron jobs
-	limits LimitsAgent // nil: no resource limits (ADR-0015)
-	ssh    SSHAgent    // nil: no SSH keys (ADR-0032)
-	cache  CacheAgent  // nil: no object caches (ADR-0045)
-	apps   AppAgent    // nil: no Node.js apps (ADR-0054)
-	dbs    DBServers   // nil: only the local database server (ADR-0041)
+	cron   CronAgent    // nil: no cron jobs
+	limits LimitsAgent  // nil: no resource limits (ADR-0015)
+	ssh    SSHAgent     // nil: no SSH keys (ADR-0032)
+	cache  CacheAgent   // nil: no object caches (ADR-0045)
+	apps   AppAgent     // nil: no Node.js apps (ADR-0054)
+	envBox *secrets.Box // nil: apps have no environment variables
+	dbs    DBServers    // nil: only the local database server (ADR-0041)
 
 	dbSizer DBSizeAgent // nil: database sizes are not measured (ADR-0015)
 	dbSizes dbSizeCache
