@@ -55,7 +55,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0058](0058-openapi-spec-and-cli-parity.md) | OpenAPI specification and CLI parity | Accepted |
 | [0059](0059-real-client-ip-behind-proxies.md) | Real client IP behind CDNs and proxies | Accepted |
 | [0060](0060-time-zone-hostname-and-reboot.md) | Time zone, hostname and reboot from the panel | Accepted |
-| [0061](0061-site-type-python.md) | Site type Python | Proposed |
+| [0061](0061-site-type-python.md) | Site type Python | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 

@@ -42,7 +42,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 | Site type app (one executable, for example a Go or Rust service) | P1 | A | NEW | ADR-0054 addendum 2: own unit, port and filter like Node.js |
 | Site type redirect (all requests to one target URL) | P1 | B | NEW | Without webroot and without site user |
 | Change the type of a site at any time | P1 | A | NEW | ADR-0054 addendum 3: account and files stay |
-| Site type Python (WSGI/ASGI, venv) | P1 | B | CP | |
+| Site type Python (WSGI/ASGI, venv) | P1 | B | CP | [ADR-0061](adr/0061-site-type-python.md): python-build-standalone 3.11–3.15, `.venv` per site, gunicorn/uvicorn/script |
 | WordPress quick install (WP-CLI) | P1 | B | CP | |
 | Linux user per site, home layout, permission reset | P0 | A | CP | |
 | Change the domain of a site | P1 | B | NEW | A site is identified internally by a fixed ID, never by its domain (applies from alpha). Vhost, certificate and optionally DB contents are carried along |

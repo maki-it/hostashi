@@ -1,6 +1,6 @@
 # ADR-0061 Site type Python
 
-**Status:** Proposed. **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0015 (resource limits), ADR-0017 (import and presets), ADR-0018 (API), ADR-0032 (SSH per site), ADR-0033 (hardening), ADR-0034 (firewall), ADR-0035 (roles), ADR-0050 (signed releases, auto-update), ADR-0053 (site logs), ADR-0054 (site types), ADR-0058 (OpenAPI and CLI).
+**Status:** Accepted (Kim, 2026-11-22). **Date drafted:** 2026-11-22. **Decides:** Kim. **Related:** ADR-0015 (resource limits), ADR-0017 (import and presets), ADR-0018 (API), ADR-0032 (SSH per site), ADR-0033 (hardening), ADR-0034 (firewall), ADR-0035 (roles), ADR-0050 (signed releases, auto-update), ADR-0053 (site logs), ADR-0054 (site types), ADR-0058 (OpenAPI and CLI).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
