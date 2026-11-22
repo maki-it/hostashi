@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -280,7 +281,40 @@ func (o *systemOps) writeHosts(name string) error {
 		return nil
 	}
 
-	return writeFileAtomic(p, next, mode)
+	err = writeFileAtomic(p, next, mode)
+	if errors.Is(err, syscall.EBUSY) {
+		// /etc/hosts is a bind mount (containers): a rename over it
+		// fails, so the file is rewritten in place.
+		return writeInPlace(p, next)
+	}
+
+	return err
+}
+
+// writeInPlace rewrites an existing file without replacing it.
+func writeInPlace(name string, data []byte) error {
+	f, err := os.OpenFile(name, os.O_WRONLY|os.O_TRUNC, 0)
+	if err != nil {
+		return fmt.Errorf("write %s: %w", name, err)
+	}
+
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+
+		return fmt.Errorf("write %s: %w", name, err)
+	}
+
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+
+		return fmt.Errorf("write %s: %w", name, err)
+	}
+
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("write %s: %w", name, err)
+	}
+
+	return nil
 }
 
 // writeCloudInit stops cloud-init from undoing the change, if it is
@@ -395,6 +429,9 @@ func (o *systemOps) reboot(ctx context.Context) (agentapi.SystemRebootResponse, 
 	return agentapi.SystemRebootResponse{DelaySeconds: int(RebootDelay / time.Second)}, nil
 }
 
+// renameFile is os.Rename; tests replace it.
+var renameFile = os.Rename
+
 // writeFileAtomic replaces name through a synced temporary file in the
 // same directory.
 func writeFileAtomic(name string, data []byte, mode fs.FileMode) error {
@@ -427,7 +464,7 @@ func writeFileAtomic(name string, data []byte, mode fs.FileMode) error {
 		return fmt.Errorf("write %s: %w", name, err)
 	}
 
-	if err := os.Rename(tmp.Name(), name); err != nil {
+	if err := renameFile(tmp.Name(), name); err != nil {
 		return fmt.Errorf("write %s: %w", name, err)
 	}
 

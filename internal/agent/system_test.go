@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -340,5 +341,33 @@ func TestSystemOpsOverRPC(t *testing.T) {
 
 	if len(f.calls) != 0 {
 		t.Fatalf("invalid requests reached systemd: %v", f.calls)
+	}
+}
+
+func TestWriteHostsOnBindMount(t *testing.T) {
+	f := &fakeSystem{}
+	o, root := newSystemOps(t, f)
+
+	writeTestFile(t, filepath.Join(root, etcHosts), "127.0.1.1 old\n")
+
+	renameFile = func(string, string) error { return &os.LinkError{Op: "rename", Err: syscall.EBUSY} }
+
+	t.Cleanup(func() { renameFile = os.Rename })
+
+	if _, err := o.setHostname(t.Context(), "web3"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := os.ReadFile(filepath.Join(root, etcHosts))
+	if string(got) != "127.0.1.1\tweb3\n" {
+		t.Fatalf("hosts %q", got)
+	}
+
+	// No temporary file is left behind.
+	entries, _ := os.ReadDir(filepath.Join(root, "etc"))
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".hosts.") {
+			t.Fatalf("left %s", e.Name())
+		}
 	}
 }
