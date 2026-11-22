@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
@@ -93,6 +95,21 @@ func writeServiceAgentError(w http.ResponseWriter, r *http.Request, log *slog.Lo
 	}
 }
 
+type serviceListJSON struct {
+	Services []servermon.Service `json:"services"`
+}
+
+type serviceEventsJSON struct {
+	Events []serviceEventJSON `json:"events"`
+}
+
+// dashboardJSON is the server's load over a range; step is in seconds.
+type dashboardJSON struct {
+	Range  string             `json:"range"`
+	Step   int                `json:"step"`
+	Points []store.HostSample `json:"points"`
+}
+
 // registerServices adds the service and dashboard routes (ADR-0052). The
 // states name units and the server's load, so admins only.
 func registerServices(mux *routeMux, a authn, m ServerMonitor, st Settings, log *slog.Logger) {
@@ -108,14 +125,18 @@ func registerServices(mux *routeMux, a authn, m ServerMonitor, st Settings, log 
 		}
 
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusOK, map[string]any{"services": rows})
+		writeJSON(w, http.StatusOK, serviceListJSON{Services: rows})
 	}
 
-	mux.HandleFunc("GET /api/v1/services", a.allow("services:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/services", openapi.Operation{
+		ID: "listServices", Tag: "services", Summary: "The managed services with state and restarts", Out: serviceListJSON{},
+	}, a.allow("services:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		list(w, r, "")
 	}))
 
-	mux.HandleFunc("GET /api/v1/sites/{name}/services", a.allow("services:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/services", openapi.Operation{
+		ID: "listSiteServices", Tag: "services", Summary: "The services of one site", Out: serviceListJSON{},
+	}, a.allow("services:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		site := r.PathValue("name")
 		if agentapi.ValidateSiteUser(site) != nil {
 			writeError(w, http.StatusNotFound, "not_found", "no such site")
@@ -126,7 +147,9 @@ func registerServices(mux *routeMux, a authn, m ServerMonitor, st Settings, log 
 		list(w, r, site)
 	}))
 
-	mux.HandleFunc("GET /api/v1/services/events", a.allow("services:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/services/events", openapi.Operation{
+		ID: "listServiceEvents", Tag: "services", Summary: "Recent service events: failures, restarts, actions", Out: serviceEventsJSON{}, Query: []openapi.Param{{Name: "service"}, {Name: "site"}, {Name: "limit", Type: "integer"}},
+	}, a.allow("services:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		q := r.URL.Query()
 		f := store.ServiceEventFilter{Service: q.Get("service"), Site: q.Get("site"), Since: time.Now().Add(-store.ServiceEventsKeep)}
 
@@ -162,7 +185,7 @@ func registerServices(mux *routeMux, a authn, m ServerMonitor, st Settings, log 
 		}
 
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusOK, map[string]any{"events": toServiceEvents(ev)})
+		writeJSON(w, http.StatusOK, serviceEventsJSON{Events: toServiceEvents(ev)})
 	}))
 
 	act := func(w http.ResponseWriter, r *http.Request, p auth.Principal, site string) {
@@ -215,11 +238,15 @@ func registerServices(mux *routeMux, a authn, m ServerMonitor, st Settings, log 
 		writeJSON(w, http.StatusOK, res)
 	}
 
-	mux.HandleFunc("POST /api/v1/services/{id}/{action}", a.allow("services:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST /api/v1/services/{id}/{action}", openapi.Operation{
+		ID: "serviceAction", Tag: "services", Summary: "Start, stop, restart or reload a service", In: serviceActionJSON{}, Out: agentapi.ServiceState{},
+	}, a.allow("services:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		act(w, r, p, "")
 	}))
 
-	mux.HandleFunc("POST /api/v1/sites/{name}/services/{id}/{action}", a.allow("services:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("POST /api/v1/sites/{name}/services/{id}/{action}", openapi.Operation{
+		ID: "siteServiceAction", Tag: "services", Summary: "Start, stop, restart or reload a service of a site", In: serviceActionJSON{}, Out: agentapi.ServiceState{},
+	}, a.allow("services:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		site := r.PathValue("name")
 		if agentapi.ValidateSiteUser(site) != nil {
 			writeError(w, http.StatusNotFound, "not_found", "no such site")
@@ -230,7 +257,9 @@ func registerServices(mux *routeMux, a authn, m ServerMonitor, st Settings, log 
 		act(w, r, p, site)
 	}))
 
-	mux.HandleFunc("GET /api/v1/dashboard", a.allow("services:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/dashboard", openapi.Operation{
+		ID: "getDashboard", Tag: "services", Summary: "CPU, memory, disk and load of the server over a range", Out: dashboardJSON{}, Query: []openapi.Param{{Name: "range", Description: "e.g. 1h, 24h, 7d"}},
+	}, a.allow("services:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		rng := r.URL.Query().Get("range")
 		if rng == "" {
 			rng = servermon.Range1h
@@ -251,6 +280,6 @@ func registerServices(mux *routeMux, a authn, m ServerMonitor, st Settings, log 
 		}
 
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusOK, map[string]any{"range": rng, "step": step, "points": pts})
+		writeJSON(w, http.StatusOK, dashboardJSON{Range: rng, Step: step, Points: pts})
 	}))
 }

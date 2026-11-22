@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/hosting"
@@ -84,11 +86,13 @@ func toPHPSettingsJSON(ps store.SitePHPSettings) phpSettingsJSON {
 // phpSettingErrorJSON names the rejected setting by its ini key.
 type phpSettingErrorJSON struct {
 	Error apiErrorBody `json:"error"`
-	Key   string       `json:"key"`
+	Key   string       `json:"key,omitempty"` // set when one setting was refused
 }
 
 func registerPHPSettings(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
-	mux.HandleFunc("GET /api/v1/sites/{name}/php/settings", a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/sites/{name}/php/settings", openapi.Operation{
+		ID: "getPHPSettings", Tag: "php", Summary: "A site's PHP ini settings", Out: phpSettingsJSON{},
+	}, a.allow("sites:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ps, err := svc.PHPSettings(r.Context(), r.PathValue("name"))
 		if err != nil {
 			siteFail(log, w, err, "read php settings")
@@ -108,7 +112,9 @@ func registerPHPSettings(mux *routeMux, a authn, svc *hosting.Service, log *slog
 
 	// The body replaces all settings; a field left out is the default.
 	// Unknown fields are refused, so only the allowlist gets through.
-	mux.HandleFunc("PUT /api/v1/sites/{name}/php/settings", a.allow("sites.php:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	mux.Op("PUT /api/v1/sites/{name}/php/settings", openapi.Operation{
+		ID: "setPHPSettings", Tag: "php", Summary: "Change a site's PHP ini settings", In: agentapi.PHPSettings{}, Out: phpSettingsJSON{}, Errors: map[int]any{http.StatusUnprocessableEntity: phpSettingErrorJSON{}},
+	}, a.allow("sites.php:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in agentapi.PHPSettings
 		if !decodeJSON(w, r, &in) {
 			return

@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/maki-it/hostashi/internal/openapi"
+
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
@@ -55,6 +57,11 @@ func pgClientOut(s agentapi.PGClientStatus) pgClientJSON {
 // registerPGClient adds GET and POST /api/v1/db-servers/postgresql-client
 // (ADR-0051). Both need db_servers:write: the client is installed for
 // external PostgreSQL servers, which only admins add.
+type pgClientInstallRequest struct {
+	// Major is empty for the newest.
+	Major string `json:"major"`
+}
+
 func registerPGClient(mux *routeMux, a authn, p PGClient, st Settings, log *slog.Logger) {
 	fail := func(w http.ResponseWriter, err error, what string) {
 		var ae *agentrpc.Error
@@ -75,7 +82,9 @@ func registerPGClient(mux *routeMux, a authn, p PGClient, st Settings, log *slog
 		}
 	}
 
-	mux.HandleFunc("GET /api/v1/db-servers/postgresql-client", a.allow("db_servers:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	mux.Op("GET /api/v1/db-servers/postgresql-client", openapi.Operation{
+		ID: "getPostgreSQLClient", Tag: "db-servers", Summary: "Installed PostgreSQL client versions", Out: pgClientJSON{},
+	}, a.allow("db_servers:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
@@ -90,11 +99,10 @@ func registerPGClient(mux *routeMux, a authn, p PGClient, st Settings, log *slog
 		writeJSON(w, http.StatusOK, pgClientOut(s))
 	}))
 
-	mux.HandleFunc("POST /api/v1/db-servers/postgresql-client", a.allow("db_servers:write", func(w http.ResponseWriter, r *http.Request, pr auth.Principal) {
-		var in struct {
-			// Major is empty for the newest.
-			Major string `json:"major"`
-		}
+	mux.Op("POST /api/v1/db-servers/postgresql-client", openapi.Operation{
+		ID: "installPostgreSQLClient", Tag: "db-servers", Summary: "Install a PostgreSQL client version", In: pgClientInstallRequest{}, Out: pgClientJSON{}, Status: http.StatusAccepted,
+	}, a.allow("db_servers:write", func(w http.ResponseWriter, r *http.Request, pr auth.Principal) {
+		var in pgClientInstallRequest
 
 		if !decodeJSON(w, r, &in) {
 			return
