@@ -102,3 +102,18 @@ None left.
 1. ~~Node.js from the official nodejs.org builds (option C), LTS lines only?~~ Decided (Kim, 2026-11-22): yes.
 2. ~~Reverse proxy: allow private networks, refuse loopback and link-local, as recommended?~~ Decided (Kim, 2026-11-22): yes; public addresses and host names are allowed too.
 3. ~~Proxy and redirect sites without a Linux account (no SSH, files, cron, backups)?~~ Decided (Kim, 2026-11-22): yes.
+
+## Addendum 1: static sites as a first-class type (Proposed, 2026-11-22)
+
+**Context.** Kim needs static sites often (plain HTML, builds of Hugo, Astro and similar) and gives them high priority (Kim, 2026-11-22). A site without PHP already works today: "No PHP" in the New site form, no FPM pool, nginx serves `htdocs` with `try_files $uri $uri/ =404` and refuses `.php` files [V: `web/src/Sites.tsx`, `internal/web/nginx.go`]. What is missing: the form presents it as "PHP: none" rather than as a type, the document root is always `<home>/htdocs` [V: `sites.WebRootName`], and single-page apps have no fallback to `index.html`.
+
+**Decision proposed.**
+
+- `static` is one of the types in the New site form, listed second after PHP; existing sites without PHP become `static` in migration 0045 (as above).
+- Document root: an optional folder below `htdocs` (for example `public`, `dist`, `build`), for `static` and also for `php` (Laravel's `public/`). Relative path, segments `[A-Za-z0-9._-]`, no `..`, at most 4 levels; the agent checks with `openat2`-style resolution that it stays below `htdocs` and is not a symlink out [A: same check as the file manager, ADR-0040]. A missing folder shows nginx's 404 and a warning in the panel, so a deploy can create it later.
+- Switch "Single-page app": `try_files $uri $uri/ /index.html` instead of `=404`. Off by default.
+- Static sites get long cache headers for fingerprinted assets only when the site asks for it: switch "Cache assets" (`expires 30d` for css, js, fonts, images), off by default [A: wrong caching of non-fingerprinted files is worse than none].
+- Everything else as for PHP sites without PHP today: account, SFTP/SSH, files, cron, backups, quota. Git deploy (later thread) will build into these folders.
+- No new agent operation beyond the docroot check, no new `os/exec` exception.
+
+**Order.** Right after the type column, before the redirect: (1) type column and migration, (1a) static type with document root folder and SPA switch, then redirect and the rest.
