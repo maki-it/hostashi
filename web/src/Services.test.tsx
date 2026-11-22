@@ -23,6 +23,7 @@ describe("services helpers", () => {
     expect(stateWord({ installed: true, active: "failed" }).tone).toBe("err");
     expect(eventText({ at: "", service: "nginx", kind: "action", detail: "reload", user: "kim" })).toBe("Reload by kim");
     expect(eventText({ at: "", service: "nginx", kind: "crash-restart", restarts: 3 })).toBe("Restarted by systemd 3 times after a crash");
+    expect(eventText({ at: "", service: "nginx", kind: "recovered" })).toBe("Running again after a failure");
     expect(bytes(52428800)).toBe("50 MiB");
     expect(bytes(1536)).toBe("1.5 KiB");
     expect(rate(125000)).toBe("1.0 Mbit/s");

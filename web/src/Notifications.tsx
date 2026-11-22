@@ -8,6 +8,7 @@ const labels: Record<NotifyCategory, { label: string; hint: string }> = {
   backups: { label: "Backups", hint: "A backup failed or did not save everything." },
   certificates: { label: "Certificates", hint: "A renewal failed, or a certificate expires in 14 or 3 days." },
   doctor: { label: "Server checks", hint: "Once a day, when the checks on the Health page find errors." },
+  services: { label: "Services", hint: "A service is down or keeps crashing, and again when it runs." },
   php: { label: "PHP versions", hint: "Once a week, when a site uses a PHP version near or past its end of life." },
   disk: { label: "Disk space", hint: "A disk or a site's quota is more than 90 percent full." },
 };
@@ -53,7 +54,7 @@ export function NotificationsCard() {
         {state.mail_enabled && state.email === "" && <Notice tone="info" title="Add and confirm an email address above to get notifications." />}
         <fieldset className="ui-stack-tight ui-fieldset" disabled={busy || off}>
           <legend className="ui-sr-only">Email me about</legend>
-          {state.categories.map((c) => (
+          {state.categories.filter((c) => c.id in labels).map((c) => (
             <label key={c.id} className="ui-check">
               <input type="checkbox" checked={c.enabled} onChange={(e) => void toggle(c.id, e.target.checked)} />
               <span>

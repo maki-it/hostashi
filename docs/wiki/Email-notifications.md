@@ -51,10 +51,13 @@ On **Your account → Email**, enter your address. Hostashi sends a link to it; 
 | Backups | A backup failed or did not save everything. Once per run. |
 | Certificates | A renewal failed (at most once a day), or a certificate expires in 14 or in 3 days. |
 | Server checks | Once a day, when the checks on the Health page find errors. Also once per new Hostashi version, when the server does not install it by itself (`--auto-update`). |
+| Services | A service is down (systemd gave up restarting it) or crashed 3 times within 15 minutes, or the panel cannot reach the Hostashi agent for about 3 minutes. Another email when it runs again. Server services go to admins; PHP and the object cache of a site also to managers and users of that site. |
 | PHP versions | Once a week per site, when a site uses a PHP version that loses security fixes within 60 days or already has. |
 | Disk space | A disk of the server or a site's disk limit is 90 percent full or more. At most once a day. |
 
 At most 10 emails per recipient and 100 per server go out each hour. Above that, notifications wait for the next hour; account emails are always sent.
+
+Hostashi itself sends these emails, so it cannot report an outage of the panel, of the whole server or of its network. Use a check from outside for that, for example an uptime monitor that opens your sites.
 
 ## When email does not arrive
 

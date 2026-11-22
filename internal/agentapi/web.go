@@ -109,6 +109,8 @@ type WebSite struct {
 	AssetCache        bool     `json:"assetCache,omitempty"`
 	AssetCacheSeconds int      `json:"assetCacheSeconds,omitempty"`
 	AssetCacheExts    []string `json:"assetCacheExts,omitempty"`
+	// Headers are the site's security headers (ADR-0056); nil sends none.
+	Headers *WebHeaders `json:"headers,omitempty"`
 }
 
 // Bounds and defaults of the asset cache (ADR-0054 addendum 1).
@@ -363,6 +365,12 @@ func (r WebApplyRequest) Validate() error {
 
 		if sn := s.Snippets; sn != nil && (len(sn.Server) > MaxSnippetBytes || len(sn.Root) > MaxSnippetBytes) {
 			return fmt.Errorf("site %q: a snippet is larger than %d bytes", s.User, MaxSnippetBytes)
+		}
+
+		if h := s.Headers; h != nil {
+			if err := h.Validate(); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
 		}
 
 		if s.PHP != "" {

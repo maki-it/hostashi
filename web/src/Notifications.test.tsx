@@ -33,6 +33,15 @@ describe("NotificationsCard", () => {
     expect(screen.getByRole("checkbox", { name: /Certificates/ })).toBeChecked();
   });
 
+  it("shows the services switch and skips a category it does not know", async () => {
+    const cats = [...admin.categories, { id: "services", enabled: true }, { id: "later", enabled: true }];
+    mockFetch({ "GET /api/v1/account/notifications": { body: { ...admin, categories: cats } } });
+    render(<NotificationsCard />);
+
+    expect(await screen.findByRole("checkbox", { name: /Services.*keeps crashing/ })).toBeChecked();
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+  });
+
   it("asks for a confirmed address first", async () => {
     mockFetch({ "GET /api/v1/account/notifications": { body: { ...admin, email: "" } } });
     render(<NotificationsCard />);

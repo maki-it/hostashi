@@ -54,6 +54,9 @@ type Site struct {
 	// PHPSocket and is left out while the site is disabled or in
 	// maintenance.
 	PageCache *PageCache `json:"pageCache,omitempty"`
+	// Headers are the site's security headers (ADR-0056), sent on every
+	// answer of the site. A snippet must not set one of them as well.
+	Headers agentapi.WebHeaders `json:"headers,omitzero"`
 	// BodyMax is the site's client_max_body_size in bytes, a whole number
 	// of MiB, and FastCGIReadTimeout its fastcgi_read_timeout in seconds;
 	// both follow the site's PHP settings (ADR-0049) and need PHPSocket.
@@ -228,6 +231,10 @@ func (d Desired) Validate() error {
 		}
 
 		if _, _, err := s.checkSnippets(); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if err := s.checkHeaders(); err != nil {
 			return fmt.Errorf("site %q: %w", s.User, err)
 		}
 
