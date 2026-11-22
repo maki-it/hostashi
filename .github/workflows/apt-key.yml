@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Monthly check of the apt signing key's expiry (ADR-0050). The approved
+# apt job of a stable release extends the key once less than a year is
+# left, and the servers get the renewed key with the release after that.
+# When the key in packaging/keyring expires within a year and no release
+# has renewed it, this opens an issue asking for a stable release. It holds
+# no key.
+name: apt key
+
+on:
+  schedule:
+    - cron: "41 6 3 * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  expiry:
+    name: Expiry of the apt signing key
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Open an issue a year before expiry
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          GNUPGHOME=$(mktemp -d)
+          export GNUPGHOME
+          exp=$(gpg --batch --with-colons --show-keys packaging/keyring/hostashi-archive-keyring.asc | awk -F: '$1 == "pub" { print $7; exit }')
+          [ -n "$exp" ] || { echo "::error::no expiry in packaging/keyring"; exit 1; }
+          day=$(date -u -d "@$exp" +%F)
+          echo "The apt signing key expires on $day." | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$exp" -lt $(( $(date +%s) + 365 * 86400 )) ] || exit 0
+          title="apt signing key expires on $day: make a stable release"
+          if [ -n "$(gh issue list --repo "$REPO" --state open --search "in:title \"apt signing key expires\"" --json number --jq '.[].number')" ]; then
+            echo "An issue is open already."
+            exit 0
+          fi
+          gh issue create --repo "$REPO" --title "$title" --assignee kimdre --body "$(cat <<TXT
+          The apt signing key in packaging/keyring expires on $day, in less than a year (ADR-0050).
+
+          1. Make a stable release and approve its apt job. That job extends the key by two years and opens a pull request with the renewed public key.
+          2. Merge that pull request.
+          3. Make the next stable release. The servers get the renewed key with apt upgrade.
+
+          Servers that still have the old key cannot update from get.hostashi.com after $day.
+
+          ---
+          _Opened by the monthly apt key workflow._
+          TXT
+          )"

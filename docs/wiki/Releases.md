@@ -29,6 +29,12 @@ The script creates the environment `release` (your approval, tags `v*` only), cr
 
 The script refuses to replace an existing key. A new key reaches servers only through a package update signed with the old one, so `--replace` is for a planned change or a leak.
 
+### Renew the key
+
+Nothing to do by hand. When the key has less than a year left, the approved apt job of the next stable release extends it by two years (same key, same fingerprint) and opens a pull request `packaging: extend the apt signing key by two years` with the renewed public key. Merge it; the release after that brings the renewed key to the servers with `apt upgrade`. The secret `APT_SIGNING_KEY` stays as it is.
+
+If no release comes along, the monthly workflow **apt key** opens an issue a year before expiry, asking for a stable release. Servers that still have the old key when it expires cannot update from `get.hostashi.com` until they get the new key by hand.
+
 ## Make a release
 
 1. Tag a commit on `main` and push the tag: `git tag v1.2.3 && git push origin v1.2.3`. A tag with a `-` (`v1.2.3-rc.1`) is a pre-release.
