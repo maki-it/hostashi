@@ -112,24 +112,12 @@ func TestWebApplyRejectsUnknownFields(t *testing.T) {
 func TestReadPassword(t *testing.T) {
 	t.Cleanup(func() { stdin = os.Stdin })
 
-	stdin = strings.NewReader("Secret-pass_12345\nignored\n")
+	for in, want := range map[string]string{"Secret-pass_12345\r\nignored\n": "Secret-pass_12345", "\n": "", "": ""} {
+		stdin = strings.NewReader(in)
 
-	pw, gen, err := readPassword()
-	if err != nil || gen || pw != "Secret-pass_12345" {
-		t.Fatalf("got %q %v %v", pw, gen, err)
-	}
-
-	stdin = strings.NewReader("\n")
-
-	pw, gen, err = readPassword()
-	if err != nil || !gen || len(pw) != 32 {
-		t.Fatalf("generated %q %v %v", pw, gen, err)
-	}
-
-	stdin = strings.NewReader("")
-
-	if _, gen, err := readPassword(); err != nil || !gen {
-		t.Fatalf("empty stdin: %v %v", gen, err)
+		if pw, err := readPassword(); err != nil || pw != want {
+			t.Errorf("%q: got %q %v", in, pw, err)
+		}
 	}
 }
 

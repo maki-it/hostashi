@@ -3,15 +3,12 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -84,7 +81,7 @@ func adminCmd(ctx context.Context, c *agentrpc.Client, cmd string, args []string
 
 		fmt.Fprintf(out, "generation %d live (changed: %v)\n", r.Generation, r.Changed)
 	case cmd == "db":
-		return dbCmd(ctx, c, args, out)
+		return dbCmd(ctx, args, out)
 	case sub == "pool add" && len(args) == 3:
 		p, err := agentapi.PoolAdd.Call(ctx, c, agentapi.PoolAddRequest{Name: args[1], Path: args[2]})
 		if err != nil {
@@ -115,132 +112,6 @@ func adminCmd(ctx context.Context, c *agentrpc.Client, cmd string, args []string
 	default:
 		return errUsage
 	}
-
-	return nil
-}
-
-// dbCmd runs "db ..." The panel keeps its own list of databases; use these
-// for the installer tests and for repairs, not next to the panel.
-func dbCmd(ctx context.Context, c *agentrpc.Client, args []string, out io.Writer) error {
-	switch {
-	case args[0] == "list" && len(args) == 1:
-		r, err := agentapi.DBList.Call(ctx, c, agentapi.DBListRequest{})
-		if err != nil {
-			return err
-		}
-
-		for _, d := range r.Databases {
-			fmt.Fprintf(out, "%s\tsite=%s\tusers=%s\n", d.Name, d.Site, strings.Join(d.Users, ","))
-		}
-	case args[0] == "create" && len(args) == 3:
-		if _, err := agentapi.DBCreate.Call(ctx, c, agentapi.DBCreateRequest{Site: args[1], Name: args[2]}); err != nil {
-			return err
-		}
-
-		fmt.Fprintf(out, "created database %s for site %s\n", args[2], args[1])
-	case args[0] == "delete" && len(args) == 2:
-		if _, err := agentapi.DBDelete.Call(ctx, c, agentapi.DBDeleteRequest{Name: args[1]}); err != nil {
-			return err
-		}
-
-		fmt.Fprintf(out, "deleted database %s and its users\n", args[1])
-	case len(args) == 4 && args[0] == "user" && args[1] == "create":
-		pw, generated, err := readPassword()
-		if err != nil {
-			return err
-		}
-
-		req := agentapi.DBUserCreateRequest{Database: args[2], User: args[3], Password: pw}
-		if _, err := agentapi.DBUserCreate.Call(ctx, c, req); err != nil {
-			return err
-		}
-
-		fmt.Fprintf(out, "created user %s for database %s\n", args[3], args[2])
-
-		if generated {
-			fmt.Fprintf(out, "password: %s\n", pw)
-		}
-	case len(args) == 3 && args[0] == "user" && args[1] == "password":
-		pw, generated, err := readPassword()
-		if err != nil {
-			return err
-		}
-
-		if _, err := agentapi.DBUserPassword.Call(ctx, c, agentapi.DBUserPasswordRequest{User: args[2], Password: pw}); err != nil {
-			return err
-		}
-
-		fmt.Fprintf(out, "changed the password of %s\n", args[2])
-
-		if generated {
-			fmt.Fprintf(out, "password: %s\n", pw)
-		}
-	case len(args) == 3 && (args[0] == "import" || args[0] == "export"):
-		return dumpCmd(ctx, c, args[0], args[1], args[2], out)
-	case len(args) == 3 && args[0] == "user" && args[1] == "delete":
-		if _, err := agentapi.DBUserDelete.Call(ctx, c, agentapi.DBUserDeleteRequest{User: args[2]}); err != nil {
-			return err
-		}
-
-		fmt.Fprintf(out, "deleted user %s\n", args[2])
-	default:
-		return errUsage
-	}
-
-	return nil
-}
-
-// readPassword reads one line from stdin, so a password never shows up in
-// the process list or the shell history. An empty line generates one.
-func readPassword() (pw string, generated bool, err error) {
-	line, err := bufio.NewReader(io.LimitReader(stdin, agentapi.MaxDBPasswordLen+2)).ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		return "", false, fmt.Errorf("read password from stdin: %w", err)
-	}
-
-	line = strings.TrimRight(line, "\r\n")
-	if line == "" {
-		return agentapi.GenerateDBPassword(), true, nil
-	}
-
-	return line, false, nil
-}
-
-// jobPoll is how often dumpCmd asks for the state of its job.
-var jobPoll = time.Second
-
-// dumpCmd starts an import or export and waits for it. The path is relative
-// to the home of the database's site.
-func dumpCmd(ctx context.Context, c *agentrpc.Client, kind, database, path string, out io.Writer) error {
-	op := agentapi.DBImport
-	if kind == "export" {
-		op = agentapi.DBExport
-	}
-
-	j, err := op.Call(ctx, c, agentapi.DBDumpRequest{Database: database, Path: path})
-	if err != nil {
-		return err
-	}
-
-	fmt.Fprintf(out, "%s of %s started (job %s)\n", kind, database, j.ID)
-
-	for j.State == agentapi.JobRunning {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("stopped waiting, the job keeps running: %w", ctx.Err())
-		case <-time.After(jobPoll):
-		}
-
-		if j, err = agentapi.DBJobStatus.Call(ctx, c, agentapi.DBJobRequest{ID: j.ID}); err != nil {
-			return err
-		}
-	}
-
-	if j.State == agentapi.JobFailed {
-		return fmt.Errorf("%s of %s failed: %s", kind, database, j.Error)
-	}
-
-	fmt.Fprintf(out, "%s of %s done in %s\n", kind, database, j.Finished.Sub(j.Started).Round(time.Second))
 
 	return nil
 }

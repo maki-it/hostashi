@@ -102,12 +102,18 @@ A site gets its pool when it is created and stays there. Its databases stay in M
 
 ## Databases
 
+These commands go through the panel's API, like **Site → Databases**, and need `hostashi login` with the `databases:…` scopes.
+
 | Command | What it does |
 |---------|--------------|
-| `hostashi db list` | Lists the databases. |
+| `hostashi db list` | Lists the databases with their site and users. |
+| `hostashi db create SITE NAME` | Creates a database for a site. |
+| `hostashi db delete NAME` | Deletes a database and its users. |
+| `hostashi db user create DATABASE USER` | Creates a database user. Reads the password from standard input; an empty line generates one and prints it once. |
 | `hostashi db import DATABASE FILE` | Loads a dump into a database. `FILE` is relative to the site's home and ends in `.sql` or `.sql.gz`. |
 | `hostashi db export DATABASE FILE` | Writes a dump of a database into the site's home. |
-| `hostashi db user password USER` | Sets a new password for a database user. Reads it from standard input; an empty line generates one. |
+| `hostashi db user password USER` | Sets a new password for a database user. Reads it from standard input; an empty line generates one and prints it once. |
+| `hostashi db user delete USER` | Removes a database user. |
 
 ## Backups
 
