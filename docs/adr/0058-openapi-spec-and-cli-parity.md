@@ -52,7 +52,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 1. `hostashi api` reads the embedded document and turns each operation into `hostashi api <tag> <verb>`, path parameters as arguments, query parameters as flags, the body from `-d '{…}'`, `-d @file.json` or `--set key=value`. Output is the JSON from the API; `-o table` for lists later.
 2. Login: `hostashi login [URL]` asks for name, password and TOTP once, creates a token with chosen scopes and expiry through the normal API and stores it in `~/.config/hostashi/credentials.json` (0600). `HOSTASHI_URL` and `HOSTASHI_TOKEN` override it for scripts. Default URL on the server is `http://127.0.0.1:8080`. No new way to log in, no root bypass of roles.
 3. Parity test: every operation in the document maps to a command, except a short, documented list that cannot work in a terminal (passkey ceremonies, SSE streams get a `--follow` mode later, browser downloads become `-O file`).
-4. The existing root commands stay where there is no API on purpose (`doctor`, `backup key show`, `user recover`, `cloudpanel scan`, the `*-run` helpers for systemd units, `agent`, `serve`, `setup-token`, `version`). Commands that duplicate the API and bypass the panel (`site create/delete/list`, `db …`, `site limits`, `backup get/set/…`, `service`) print a deprecation note pointing to `hostashi api`, and are removed after the CLI parity PRs [A].
+4. The existing root commands stay where there is no API on purpose (`doctor`, `backup key show`, `user recover`, `cloudpanel scan`, the `*-run` helpers for systemd units, `agent`, `serve`, `setup-token`, `version`). Commands that duplicate the API and bypass the panel (`site create/delete/list`, `db …`, `site limits`, `backup get/set/…`, `service`) stay as short aliases, but are rebuilt to call the API like `hostashi api`, so they no longer bypass the panel (Kim, 2026-11-22).
 5. A TypeScript client for the SPA from the same document (e.g. `openapi-typescript`) is useful, but not part of this ADR.
 
 ## Consequences
@@ -68,4 +68,4 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 1. ~~CLI as API client with login/token instead of root access to the agent?~~ Yes, CLI as API client (Kim, 2026-11-22).
 2. ~~Serve `GET /api/v1/openapi.json` without login, or only for logged-in users?~~ Only after login (Kim, 2026-11-22).
-3. Remove the duplicate root commands (`site create` …) after parity, or keep them as aliases that call the API?
+3. ~~Remove the duplicate root commands (`site create` …) after parity, or keep them as aliases that call the API?~~ Keep them as aliases that call the API (Kim, 2026-11-22).
