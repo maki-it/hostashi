@@ -29,8 +29,9 @@ type PythonRelease struct {
 
 // PythonReleases are the lines Hostashi installs, oldest first: every line
 // that has not ended. Checked on 2026-11-22 against
-// https://endoflife.date/api/python.json and the SHA256SUMS of
-// python-build-standalone release 20261110.
+// https://peps.python.org/api/release-cycle.json and the SHA256SUMS of
+// python-build-standalone release 20261110; the build provenance of each
+// new archive was verified with Sigstore.
 var PythonReleases = []PythonRelease{
 	{
 		Line: "3.11", Version: "3.11.18", Tag: "20261110", End: "2027-10-31",
@@ -129,6 +130,9 @@ func (PythonStatusRequest) Validate() error { return nil }
 type PythonInstalled struct {
 	Line    string `json:"line"`
 	Version string `json:"version"`
+	// Build is the python-build-standalone release of the build, for
+	// example "20261110".
+	Build string `json:"build"`
 }
 
 // PythonStatus lists the installed lines and the last installation, in the

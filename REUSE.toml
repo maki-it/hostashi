@@ -42,6 +42,7 @@ path = [
   "packaging/keyring/*.asc",
   "tools/nodeversions/release-keys.asc",
   "tools/nodeversions/testdata/*.asc",
+  "tools/pythonversions/testdata/*",
   "api/openapi.json",
 ]
 precedence = "aggregate"
