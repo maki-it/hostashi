@@ -693,19 +693,6 @@ grep '^hostashi_site_php_memory_bytes' <<<"$metrics" || echo "note: no PHP memor
 # The site's PHP runs in its slice, and the slice takes the limits (ADR-0015).
 phpcg=$(x systemctl show -p ControlGroup --value "hostashi-php-$ver@wp.service")
 [ "$phpcg" = "/hostashi.slice/hostashi-site.slice/hostashi-site-wp.slice/hostashi-php-$ver@wp.service" ] || fail "PHP unit not in the site slice: $phpcg"
-x /usr/local/bin/hostashi site limits wp memory=268435456 tasks=64 cpu-weight=200
-x /usr/local/bin/hostashi site limits wp | grep -qx 'memory=268435456 tasks=64 cpu-weight=200 cpu-quota=0' || fail "limits not read back"
-for p in MemoryMax=268435456 MemoryHigh=241591905 TasksMax=64 CPUWeight=200; do
-  [ "$(x systemctl show -p "${p%%=*}" --value hostashi-site-wp.slice)" = "${p#*=}" ] || fail "slice ${p%%=*} not ${p#*=}"
-done
-sl=/sys/fs/cgroup/hostashi.slice/hostashi-site.slice/hostashi-site-wp.slice
-for f in memory.max=268435456 pids.max=64 cpu.weight=200; do
-  if x test -e "$sl/${f%%=*}"; then
-    [ "$(x cat "$sl/${f%%=*}")" = "${f#*=}" ] || fail "$sl/${f%%=*} is $(x cat "$sl/${f%%=*}"), want ${f#*=}"
-  else
-    echo "note: no ${f%%=*} in the container's cgroup (controller not delegated)"
-  fi
-done
 # PHP of a new site cannot start programs (ADR-0033); the switch per site
 # allows it and takes it back.
 xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/prog.php' <<'PHP'
@@ -739,6 +726,25 @@ wpuid=$(x id -u wp)
 expect_mode "/etc/systemd/system/user-$wpuid.slice.d/10-hostashi.conf" "644 root:root"
 for p in MemoryMax=536870912 TasksMax=96 CPUWeight=50; do
   [ "$(x systemctl show -p "${p%%=*}" --value "user-$wpuid.slice")" = "${p#*=}" ] || fail "user slice ${p%%=*} not ${p#*=}"
+done
+# The CLI changes single values through the API; the others stay
+# (ADR-0058).
+x /usr/local/bin/hostashi site limits wp memory=268435456 tasks=64 cpu-priority=high >/dev/null || fail "limits through the CLI"
+lim=$(x /usr/local/bin/hostashi site limits wp) || fail "limits not read back"
+case "$lim" in
+  "preset=custom memory=268435456 tasks=64 cpu-priority=high cpu-quota=0 disk=1073741824 inodes=10000 php-workers=7 "*) ;;
+  *) fail "limits read back: $lim" ;;
+esac
+for p in MemoryMax=268435456 MemoryHigh=241591905 TasksMax=64 CPUWeight=200; do
+  [ "$(x systemctl show -p "${p%%=*}" --value hostashi-site-wp.slice)" = "${p#*=}" ] || fail "slice ${p%%=*} not ${p#*=}"
+done
+sl=/sys/fs/cgroup/hostashi.slice/hostashi-site.slice/hostashi-site-wp.slice
+for f in memory.max=268435456 pids.max=64 cpu.weight=200; do
+  if x test -e "$sl/${f%%=*}"; then
+    [ "$(x cat "$sl/${f%%=*}")" = "${f#*=}" ] || fail "$sl/${f%%=*} is $(x cat "$sl/${f%%=*}"), want ${f#*=}"
+  else
+    echo "note: no ${f%%=*} in the container's cgroup (controller not delegated)"
+  fi
 done
 # PHP off: the pool goes away and PHP source is never sent.
 [ "$(api PUT /api/v1/sites/wp/php '{"php":""}')" = 200 ] || fail "PHP off: $(x cat /tmp/api.out)"
@@ -1206,7 +1212,7 @@ x mariadb -e "CREATE TABLE bk_db.t (v VARCHAR(20)); INSERT INTO bk_db.t VALUES (
 x systemctl start hostashi-backup.service || fail "backup run failed: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 x grep -q '"ok": true' /var/lib/hostashi-agent/backup/status.json || fail "status: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 x grep -q '"initialized": true' /var/lib/hostashi-agent/backup/status.json || fail "first run did not create the repository"
-x /usr/local/bin/hostashi backup status | grep '"ok": true' >/dev/null || fail "backup status through the agent"
+x /usr/local/bin/hostashi backup status | grep '"ok": true' >/dev/null || fail "backup status through the API"
 if [ "$(api GET /api/v1/sites/bk/backups)" != 200 ] || ! x grep -q '"kind":"db","database":"bk_db"' /tmp/api.out; then
   fail "site snapshots through the API: $(x cat /tmp/api.out)"
 fi

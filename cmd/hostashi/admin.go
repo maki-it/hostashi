@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -67,7 +66,7 @@ func adminCmd(ctx context.Context, c *agentrpc.Client, cmd string, args []string
 
 		fmt.Fprintln(out, r.Socket)
 	case sub == "site limits" && len(args) >= 2:
-		return limitsCmd(ctx, c, args[1], args[2:], out)
+		return limitsCmd(ctx, args[1], args[2:], out)
 	case sub == "web apply" && len(args) == 1:
 		var req agentapi.WebApplyRequest
 
@@ -242,118 +241,6 @@ func dumpCmd(ctx context.Context, c *agentrpc.Client, kind, database, path strin
 	}
 
 	fmt.Fprintf(out, "%s of %s done in %s\n", kind, database, j.Finished.Sub(j.Started).Round(time.Second))
-
-	return nil
-}
-
-// backupAgentCmd runs the backup operations through the agent: set reads
-// the settings as JSON and hostkey one public key line from stdin.
-func backupAgentCmd(ctx context.Context, c *agentrpc.Client, args []string, out io.Writer) error {
-	var (
-		v   any
-		err error
-	)
-
-	switch {
-	case len(args) == 3 && args[0] == "restore":
-		v, err = agentapi.BackupRestoreStart.Call(ctx, c, agentapi.BackupRestoreRequest{Site: args[1], Snapshot: args[2]})
-	case len(args) == 2 && args[0] == "restore-status":
-		v, err = agentapi.BackupRestoreGet.Call(ctx, c, agentapi.BackupRestoreGetRequest{ID: args[1]})
-	default:
-		v, err = backupSimpleCmd(ctx, c, args)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	enc := json.NewEncoder(out)
-	enc.SetIndent("", "  ")
-
-	return enc.Encode(v)
-}
-
-func backupSimpleCmd(ctx context.Context, c *agentrpc.Client, args []string) (any, error) {
-	var (
-		v   any
-		err error
-	)
-
-	switch strings.Join(args, " ") {
-	case "get":
-		v, err = agentapi.BackupGet.Call(ctx, c, agentapi.BackupGetRequest{})
-	case "set":
-		var s agentapi.BackupSettings
-
-		dec := json.NewDecoder(io.LimitReader(stdin, 1<<16))
-		dec.DisallowUnknownFields()
-
-		if err := dec.Decode(&s); err != nil {
-			return nil, fmt.Errorf("read backup settings from stdin: %w", err)
-		}
-
-		v, err = agentapi.BackupSet.Call(ctx, c, agentapi.BackupSetRequest{Settings: s})
-	case "hostkey":
-		line, rerr := bufio.NewReader(io.LimitReader(stdin, agentapi.MaxHostKey)).ReadString('\n')
-		if rerr != nil && !errors.Is(rerr, io.EOF) {
-			return nil, fmt.Errorf("read host key from stdin: %w", rerr)
-		}
-
-		v, err = agentapi.BackupHostKey.Call(ctx, c, agentapi.BackupHostKeyRequest{Key: strings.TrimSpace(line)})
-	case "start":
-		v, err = agentapi.BackupRun.Call(ctx, c, agentapi.BackupRunRequest{})
-	case "status":
-		v, err = agentapi.BackupStatusGet.Call(ctx, c, agentapi.BackupStatusRequest{})
-	default:
-		return nil, errUsage
-	}
-
-	return v, err
-}
-
-// limitsCmd shows a site's limits, or sets them from key=value arguments.
-func limitsCmd(ctx context.Context, c *agentrpc.Client, site string, kv []string, out io.Writer) error {
-	var (
-		l   agentapi.SiteLimits
-		err error
-	)
-
-	if len(kv) == 0 {
-		l, err = agentapi.SiteLimitsGet.Call(ctx, c, agentapi.SiteLimitsGetRequest{User: site})
-	} else {
-		for _, a := range kv {
-			k, v, ok := strings.Cut(a, "=")
-			if !ok {
-				return errUsage
-			}
-
-			n, perr := strconv.ParseUint(v, 10, 64)
-			if perr != nil {
-				return fmt.Errorf("%s: %w", k, perr)
-			}
-
-			switch k {
-			case "memory":
-				l.MemoryMax = n
-			case "tasks":
-				l.TasksMax = n
-			case "cpu-weight":
-				l.CPUWeight = n
-			case "cpu-quota":
-				l.CPUQuotaPercent = n
-			default:
-				return errUsage
-			}
-		}
-
-		l, err = agentapi.SiteLimitsSet.Call(ctx, c, agentapi.SiteLimitsSetRequest{User: site, Limits: l})
-	}
-
-	if err != nil {
-		return err
-	}
-
-	fmt.Fprintf(out, "memory=%d tasks=%d cpu-weight=%d cpu-quota=%d\n", l.MemoryMax, l.TasksMax, l.CPUWeight, l.CPUQuotaPercent)
 
 	return nil
 }

@@ -80,9 +80,12 @@ commands:
   site files NAME
             start the file manager's socket of a site and print its path
             (ADR-0040)
-  site limits NAME [memory=BYTES] [tasks=N] [cpu-weight=N] [cpu-quota=PERCENT]
-            show or set the CPU, memory and process limits of a site's slice;
-            with values, every one left out means no limit (ADR-0015)
+  site limits NAME [preset=NAME | KEY=VALUE...]
+            show a site's limits, give it a preset, or change single values
+            through the panel's API (needs hostashi login, ADR-0015); keys:
+            memory, tasks, cpu-priority (low, normal, high), cpu-quota,
+            disk, inodes, php-workers, db-size, db-connections; 0 means no
+            limit, values left out stay as they are
   web apply read the complete web state as JSON from stdin and make it live,
             e.g. {"sites":[{"user":"blog","domains":["blog.example.com"]}]}
   db list | db create SITE NAME | db delete NAME
@@ -93,11 +96,12 @@ commands:
             password is read from stdin, an empty line generates one
   backup run   one backup now (root; normally started by hostashi-backup.service)
   backup get | backup set | backup hostkey | backup start | backup status
-            backup settings through the agent (root on the server); set
-            reads the settings as JSON and hostkey one public key from stdin
+            backup settings through the panel's API (needs hostashi login);
+            set reads the settings as JSON and hostkey one public key from
+            stdin; start runs a backup now
   backup restore SITE SNAPSHOT | backup restore-status ID
             restore a snapshot into a new directory restore-<time> in the
-            site's home, through the agent (root on the server)
+            site's home, through the panel's API (needs hostashi login)
   backup restore-run ID
             one restore (root; started by hostashi-restore@ID.service)
   backup key show
@@ -292,7 +296,7 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		case strings.Join(a, " ") == "key show":
 			err = showBackupKeys(euid, stdout)
 		default:
-			err = backupAgentCmd(ctx, agentrpc.NewClient(*socket), fs.Args(), stdout)
+			err = backupCmd(ctx, fs.Args(), stdout)
 			if errors.Is(err, errUsage) {
 				fmt.Fprint(stderr, usage)
 

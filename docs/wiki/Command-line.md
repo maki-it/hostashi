@@ -74,8 +74,11 @@ These commands go through the panel's API like [`hostashi api`](#using-the-api-f
 |---------|--------------|
 | `hostashi site list` | Lists the site accounts. |
 | `hostashi site files NAME` | Starts the file manager of a site and prints its socket. The panel does this by itself; the command is for checks. |
-| `hostashi site limits NAME` | Shows the CPU, memory and process limits of a site. |
-| `hostashi site limits NAME memory=BYTES tasks=N cpu-weight=N cpu-quota=PERCENT` | Sets them. A value you leave out means no limit. |
+| `hostashi site limits NAME` | Shows the preset and the limits of a site. |
+| `hostashi site limits NAME preset=PRESET` | Gives the site a limit preset. |
+| `hostashi site limits NAME KEY=VALUE ...` | Changes single limits, for example `hostashi site limits blog memory=536870912 cpu-priority=high`. Values you leave out stay as they are; 0 means no limit. |
+
+`site limits` goes through the panel's API, like in **Site → Limits**: it needs `hostashi login` and a token with `limits:read` (and `limits:write` to change). The keys are `memory` and `disk` (bytes), `inodes`, `tasks`, `php-workers`, `cpu-priority` (`low`, `normal` or `high`), `cpu-quota` (percent of one CPU), `db-size` (bytes, only warns) and `db-connections`.
 
 ## Storage pools
 
@@ -108,8 +111,13 @@ A site gets its pool when it is created and stays there. Its databases stay in M
 
 ## Backups
 
+These commands go through the panel's API and need `hostashi login`, except `backup key show`, which only root on the server can run.
+
 | Command | What it does |
 |---------|--------------|
+| `hostashi backup get` | Shows the backup settings, the public key and the state as JSON. |
+| `hostashi backup set` | Sets the target, retention and time window. Reads the settings as JSON from standard input. |
+| `hostashi backup hostkey` | Confirms the host key of the backup server. Reads one public key line from standard input. |
 | `hostashi backup start` | Starts a backup now. |
 | `hostashi backup status` | Shows the state of the last backup. |
 | `hostashi backup restore SITE SNAPSHOT` | Restores a snapshot into a new folder `restore-<time>` in the site's home. Nothing existing is overwritten. |
