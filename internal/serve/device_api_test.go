@@ -3,11 +3,15 @@
 package serve
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/maki-it/hostashi/internal/apiclient"
 )
 
 func TestDeviceLoginOverHTTP(t *testing.T) {
@@ -105,5 +109,39 @@ func TestDeviceLoginDenied(t *testing.T) {
 	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/device", body: `{"client":""}`})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("empty client: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestDeviceLoginWithCLIClient runs the CLI's client against the real
+// handler, so that both sides agree on the wire format.
+func TestDeviceLoginWithCLIClient(t *testing.T) {
+	e := newAPI(t)
+	c := e.adminCookie(t)
+
+	srv := httptest.NewServer(e.h)
+	defer srv.Close()
+
+	cli := apiclient.New(srv.URL, "", "test")
+
+	// The user approves in the panel as soon as the CLI shows the code.
+	approve := func(st apiclient.DeviceStart) {
+		rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/device/approve", cookie: c, body: `{"userCode":"` + st.UserCode + `","approve":true,"scopes":["sites:read"]}`})
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("approve: %d %s", rec.Code, rec.Body)
+		}
+	}
+
+	nt, err := cli.DeviceLogin(context.Background(), "hostashi CLI on test", approve, func(context.Context, time.Duration) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var me struct {
+		Username string   `json:"username"`
+		Scopes   []string `json:"scopes"`
+	}
+
+	if err := apiclient.New(srv.URL, nt.Token, "test").Do(context.Background(), http.MethodGet, "/auth/me", nil, &me); err != nil || me.Username != "kim" || len(me.Scopes) != 1 {
+		t.Errorf("me = %+v, %v", me, err)
 	}
 }
