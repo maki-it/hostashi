@@ -39,8 +39,9 @@ var routeAccess = map[string]authz.Action{
 	"POST /api/v1/auth/passkey/login/begin":  accessPublic,
 	"POST /api/v1/auth/passkey/login/finish": accessPublic,
 
-	"GET /api/v1/auth/me": accessAny,
-	"GET /api/v1/scopes":  accessAny,
+	"GET /api/v1/auth/me":      accessAny,
+	"GET /api/v1/openapi.json": accessAny,
+	"GET /api/v1/scopes":       accessAny,
 
 	"POST /api/v1/auth/totp/enroll":              accessSession,
 	"POST /api/v1/auth/totp/confirm":             accessSession,
@@ -258,19 +259,28 @@ var routeAccess = map[string]authz.Action{
 func newFullAPI(t *testing.T) (*apiEnv, []string) {
 	t.Helper()
 
+	e, mux := newFullAPIMux(t)
+
+	return e, mux.patterns
+}
+
+// newFullAPIMux is newFullAPI with the whole route mux.
+func newFullAPIMux(t *testing.T) (*apiEnv, *routeMux) {
+	t.Helper()
+
 	e, lb, _ := newBackupAPI(t)
 	ok := func(context.Context) error { return nil }
 
-	var patterns []string
+	var mux *routeMux
 
-	e.h, patterns = handler(Config{PublicURL: testPublicURL}, Deps{
+	e.h, mux = handler(Config{PublicURL: testPublicURL}, Deps{
 		PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb,
 		CloudPanel: e.cp, CloudPanelSource: newStubSource(t), Metrics: e.metrics, Settings: e.settings,
 		Doctor: e.doctor.run, Pools: e.pools.list, Firewall: e.firewall, PHP: e.php, PGClient: e.pgclient, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open, NotifyPrefs: e.st, AuditLog: e.st,
 		Monitor: e.monitor, Logs: e.logs,
 	})
 
-	return e, patterns
+	return e, mux
 }
 
 func TestRouteMatrixComplete(t *testing.T) {

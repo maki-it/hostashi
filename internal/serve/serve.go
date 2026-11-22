@@ -28,6 +28,7 @@ import (
 	"github.com/maki-it/hostashi/internal/mail"
 	"github.com/maki-it/hostashi/internal/metrics"
 	"github.com/maki-it/hostashi/internal/notify"
+	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/reqid"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/servermon"
@@ -176,22 +177,17 @@ func Handler(cfg Config, deps Deps) http.Handler {
 
 // handler also returns the registered route patterns, for the route
 // matrix test (ADR-0035).
-func handler(cfg Config, deps Deps) (http.Handler, []string) {
+func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 	log := cfg.Log
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
 
 	mux := newRouteMux()
-	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, r *http.Request) {
-		type health struct {
-			Status  string `json:"status"`
-			Agent   string `json:"agent"`
-			DB      string `json:"db"`
-			Version string `json:"version"`
-		}
-
-		h := health{Status: "ok", Agent: "ok", DB: "ok", Version: cfg.Version}
+	mux.Op("GET /api/v1/health", openapi.Operation{
+		ID: "getHealth", Tag: "system", Summary: "Liveness of the panel, its agent and its database", Out: healthJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		h := healthJSON{Status: "ok", Agent: "ok", DB: "ok", Version: cfg.Version}
 		code := http.StatusOK
 
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
@@ -226,6 +222,7 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 		}
 
 		registerAuth(mux, deps.Auth, m, log)
+		registerOpenAPI(mux, authn{svc: deps.Auth, fail: newFail(log)})
 
 		if deps.Sites != nil {
 			registerSites(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
@@ -342,7 +339,7 @@ func handler(cfg Config, deps Deps) (http.Handler, []string) {
 
 	// Both wrappers copy the request, so they stay outside Instrument, which
 	// reads the route pattern the mux sets on the request it sees.
-	return withRequestID(withAuditIP(h)), mux.patterns
+	return withRequestID(withAuditIP(h)), mux
 }
 
 // RequestIDHeader names the response header with the request's ID.

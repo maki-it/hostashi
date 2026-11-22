@@ -40,6 +40,7 @@ path = [
   "internal/statuspage/builtin/*.html",
   "internal/firewall/testdata/*.nft",
   "packaging/keyring/*.asc",
+  "api/openapi.json",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 The Hostashi contributors"
