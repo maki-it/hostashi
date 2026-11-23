@@ -46,6 +46,18 @@ Commands marked "panel only" refuse API tokens, for example creating tokens; use
 
 Approve only a login you started yourself: whoever started it gets a token for your account. A code is valid for ten minutes.
 
+## Tab completion
+
+The installer sets up tab completion for bash, zsh and fish. In a new shell, `hostashi si` and Tab completes to `hostashi site`, and `hostashi api sites create` and Tab shows the fields of that command. Completion knows the commands, their flags, the areas and commands of `hostashi api` and the keys of `hostashi site limits`. It needs no login and does not ask the panel, so it does not complete names of sites or databases.
+
+For bash, the package `bash-completion` must be installed (it is on most servers). On another machine, or for a shell the installer does not know, load the script yourself:
+
+```sh
+source <(hostashi completion bash)        # in ~/.bashrc
+source <(hostashi completion zsh)         # in ~/.zshrc, after compinit
+hostashi completion fish | source         # in ~/.config/fish/config.fish
+```
+
 ## Checks
 
 | Command | What it does |

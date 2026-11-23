@@ -256,7 +256,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary config ssh harden sysctl system nginx php phpversions pgclient node python valkey mariadb dbtool backup units service fail2ban firewall updates quota"
+STEPS="account dirs key binary completion config ssh harden sysctl system nginx php phpversions pgclient node python valkey mariadb dbtool backup units service fail2ban firewall updates quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -313,6 +313,28 @@ chk_binary() {
 }
 do_binary() {
   install -m 0755 -o root -g root "$BINARY" "$BIN.new" && mv -f "$BIN.new" "$BIN" && BINARY_CHANGED=yes
+}
+
+# Shell completion for the CLI. The scripts come from the installed binary
+# ("hostashi completion SHELL") and go next to it below /usr/local/share,
+# where bash-completion, zsh and fish look by default. They only call
+# "hostashi __complete", which reads the embedded API description and calls
+# nothing, so they need neither the panel nor a login.
+COMPLETION_FILES="bash:/usr/local/share/bash-completion/completions/hostashi zsh:/usr/local/share/zsh/site-functions/_hostashi fish:/usr/local/share/fish/vendor_completions.d/hostashi.fish"
+chk_completion() {
+  local f
+  for f in $COMPLETION_FILES; do
+    "$BIN" completion "${f%%:*}" 2>/dev/null | file_matches "${f#*:}" 0644 root:root || { echo "${f#*:} missing or differs"; return 1; }
+  done
+}
+do_completion() {
+  local f out
+  for f in $COMPLETION_FILES; do
+    out=$("$BIN" completion "${f%%:*}") || return 1
+    install -d -m 0755 -o root -g root "$(dirname "${f#*:}")" || return 1
+    printf '%s\n' "$out" | write_file "${f#*:}" 0644 root:root
+    [ $? -le 1 ] || return 1
+  done
 }
 
 env_file() {
