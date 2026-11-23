@@ -1081,3 +1081,75 @@ func (f *fakeAgent) PageCachePurge(_ context.Context, user string) error {
 
 	return nil
 }
+
+// TestSyncAtStart sends the stored state when the panel starts, so a new
+// release's nginx config is live after an upgrade, and waits for an agent
+// that is not up yet.
+func TestSyncAtStart(t *testing.T) {
+	s, ag, _ := newService(t)
+	ctx := t.Context()
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", Domains: []string{"blog.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	tries, pause := syncAtStartTries, syncAtStartPause
+
+	t.Cleanup(func() { syncAtStartTries, syncAtStartPause = tries, pause })
+
+	syncAtStartTries, syncAtStartPause = 3, time.Millisecond
+
+	// Up: one apply.
+	ag.mu.Lock()
+	before := ag.applies
+	ag.mu.Unlock()
+
+	s.SyncAtStart(ctx)
+
+	ag.mu.Lock()
+	if ag.applies != before+1 {
+		t.Fatalf("applies %d, want %d", ag.applies, before+1)
+	}
+
+	// Down for good: gives up after the tries, nothing applied.
+	ag.webErr = errDown
+	before = ag.applies
+	ag.mu.Unlock()
+
+	s.SyncAtStart(ctx)
+
+	ag.mu.Lock()
+	if ag.applies != before {
+		t.Fatalf("applied while down: %d", ag.applies)
+	}
+	ag.mu.Unlock()
+
+	// Down at first, then up: it keeps trying.
+	syncAtStartTries, syncAtStartPause = 1000, time.Millisecond
+	done := make(chan struct{})
+
+	go func() {
+		s.SyncAtStart(ctx)
+		close(done)
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+
+	ag.mu.Lock()
+	ag.webErr = nil
+	ag.mu.Unlock()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("SyncAtStart did not finish after the agent came up")
+	}
+
+	ag.mu.Lock()
+	applies := ag.applies
+	ag.mu.Unlock()
+
+	if live := ag.live(); applies != before+1 || live != "[blog=[blog.example.com]]" {
+		t.Fatalf("applies %d live %s", applies, live)
+	}
+}
