@@ -2,7 +2,7 @@
 
 **For:** panel admins and managers. Users see and change only the sites they were given.
 
-A site is everything that answers for a set of domains: the web server configuration, the certificate and, for most types, its own Linux user with a home folder, its own PHP or Node.js processes, cron jobs, SSH access and limits. Sites cannot read each other's files.
+A site is everything that answers for a set of domains: the web server configuration, the certificate and, for most types, its own Linux user with a home folder, its own PHP, Node.js or Python processes, cron jobs, SSH access and limits. Sites cannot read each other's files.
 
 ![The Sites page with six sample sites](images/sites.png)
 
@@ -13,6 +13,7 @@ A site is everything that answers for a set of domains: the web server configura
 | **PHP** | WordPress, Laravel, TYPO3 and other PHP software | yes |
 | **Static** | HTML, CSS and JavaScript, for example the build of a static site generator or a single-page app | yes |
 | **Node.js** | an app such as Next.js, Nuxt or Express that runs all the time; requests go to its port | yes |
+| **Python** | a Django, Flask or FastAPI app that runs all the time, from its own environment; requests go to its port | yes |
 | **App** | a program of your own, for example a Go or Rust service, that runs all the time; requests go to its port | yes |
 | **Reverse proxy** | passing every request to another web server, for example an app in your network | no |
 | **Redirect** | sending every address to another one, for example an old domain to the new one | no |

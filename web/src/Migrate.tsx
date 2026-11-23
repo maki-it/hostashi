@@ -39,6 +39,7 @@ import {
 import { listDatabases } from "./databases";
 import { formatHash } from "./routes";
 import { getNode, type NodeStatus } from "./node";
+import { getPython, type PythonStatus } from "./python";
 import { presetLabel, type Preset } from "./pagecache";
 import { listPools, phpVersions, poolLabel, poolNote, type Pool } from "./sites";
 import {
@@ -803,6 +804,9 @@ function PlanSiteView({ report, site, php, ready, back, onChange }: SiteViewProp
       {created && site.node && (
         <Notice tone="info" title="The app stays stopped. After the final sync, set its start command on the site's Web tab." />
       )}
+      {created && site.python && (
+        <Notice tone="info" title="The app stays stopped. After the final sync, install its packages into ~/.venv over SSH and set its start command on the site's Web tab." />
+      )}
       {created && !site.proxy && (
         <Card title="Files and databases">
           <ImportForm report={report} site={site} ready={ready} />
@@ -827,6 +831,8 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
   const [version, setVersion] = useState(site.php);
   const [line, setLine] = useState(site.node ?? "");
   const [node, setNode] = useState<NodeStatus | null>(null);
+  const [pyLine, setPyLine] = useState(site.python ?? "");
+  const [python, setPython] = useState<PythonStatus | null>(null);
   const [cache, setCache] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -848,6 +854,14 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
       .then(setNode)
       .catch(() => setNode(null));
   }, [site.node]);
+  useEffect(() => {
+    if (!site.python) return;
+    getPython()
+      .then(setPython)
+      .catch(() => setPython(null));
+  }, [site.python]);
+  const installedPy = python?.installed.map((i) => i.line) ?? [];
+  const pyLines = python?.releases.map((r) => r.line) ?? (site.python ? [site.python] : []);
   const installed = node?.installed.map((i) => i.major) ?? [];
   const lines = node?.releases.map((r) => r.major) ?? (site.node ? [site.node] : []);
   const choosePool = pools.length > 1;
@@ -872,6 +886,7 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
         site.pageCache ? cache : undefined,
         choosePool ? pool : "",
         line !== site.node ? line : "",
+        pyLine !== site.python ? pyLine : "",
       );
       await onChange();
     } catch (err) {
@@ -906,6 +921,20 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
                 <option key={v} value={v}>
                   Node.js {v}
                   {node && !installed.includes(v) ? " (not installed)" : ""}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      )}
+      {site.python && pyLines.length > 0 && (
+        <div className="ui-narrow">
+          <Field label={"Python for " + site.name} hint="The old Python version is not known. Hostashi makes the environment ~/.venv; install the packages into it after the copy. The app stays stopped until you set its start command.">
+            <select className="ui-select" value={pyLine} onChange={(e) => setPyLine(e.target.value)}>
+              {pyLines.map((v) => (
+                <option key={v} value={v}>
+                  Python {v}
+                  {python && !installedPy.includes(v) ? " (not installed)" : ""}
                 </option>
               ))}
             </select>

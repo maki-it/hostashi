@@ -9,6 +9,7 @@ Every site has one type. It decides what serves the site's domains. Domains, HTT
 | **Static** | the files in the web root | yes |
 | **PHP** | the files in the web root, PHP through the site's own PHP pool | yes |
 | **Node.js** | a Node.js app that runs all the time | yes |
+| **Python** | a Python app (Django, Flask, FastAPI) that runs all the time | yes |
 | **App** | a program of your own, for example a Go or Rust service | yes |
 | **Reverse proxy** | another web server, by passing every request on | no |
 | **Redirect** | nothing: every address goes to another one | no |
@@ -41,6 +42,28 @@ PATH=/opt/hostashi/node/24/bin:$PATH npm ci
 ```
 
 Then choose **Restart**. **Stop** keeps the app stopped, also after a reboot, until you start it again. After a crash it restarts by itself. Its output is in the **app** log on the **Logs** tab ([Site logs](Site-logs.md)). The site's [limits](Limits.md) apply to the app.
+
+## Python
+
+![The Web tab of a Python site](images/site-python.png)
+
+A Python site runs one app as the site's user, from its own environment `~/.venv`. nginx passes every request to it. It works like a Node.js site, with these differences:
+
+- **Python version.** Hostashi installs the supported lines of Python from the CPython builds of [python-build-standalone](https://github.com/astral-sh/python-build-standalone) under **Server → Python versions**, each download checked against a pinned checksum. Install one there before you create the site. A newer release or build of a line arrives with a Hostashi update; the environments stay and the apps restart by themselves. A line can be removed once no site uses it.
+- **Start command.** **WSGI with gunicorn** (`mysite.wsgi:application`, Django, Flask), **ASGI with uvicorn** (`main:app`, FastAPI) or a **Python file** (`app.py`). Until one is set, the app stays stopped. Under **Extra arguments**, one per line, you add options such as `--workers` and `3`. The address is Hostashi's: for gunicorn and uvicorn, `--bind`, `--host` and `--port` are refused. A Python file listens on `HOST` and `PORT` itself.
+- **Environment.** Hostashi creates `~/.venv` with the chosen version when the site is created. It does not install packages. Install them in the site's SSH shell, gunicorn or uvicorn included, for example:
+
+  ```sh
+  cd ~/htdocs
+  ~/.venv/bin/pip install -r requirements.txt gunicorn
+  ```
+
+  Until gunicorn or uvicorn is installed there, the app stays stopped and the **App** card says it is waiting for its packages.
+- **Port and environment variables** as for Node.js: the app gets `PORT` and `HOST=127.0.0.1`, plus `PYTHONUNBUFFERED=1`.
+
+![Changing the Python version of a site](images/site-python-version.png)
+
+**Changing the Python version** of a site builds `~/.venv` again, because an environment belongs to one version. Every package in it is gone, and the app stays stopped until you install them again. The panel asks you to type the site's name first. Your files stay. **Python environment → Recreate environment** does the same with the same version, for example when `.venv` is broken or was deleted.
 
 ## App
 
@@ -78,12 +101,12 @@ A redirect to one of the site's own domains is refused, as it would loop.
 
 Admins and managers can change the type at any time: **Web → Change type**. The panel shows the fields of the new type and what starts, stops and stays. The domains and HTTPS always stay.
 
-- Between static, PHP, Node.js and app, the Linux user with its files, databases, cron jobs, SSH logins, backups and limits stays. Only what serves the site changes. Between Node.js and app the port stays too.
+- Between static, PHP, Node.js, Python and app, the Linux user with its files, databases, cron jobs, SSH logins, backups and limits stays. Only what serves the site changes. Between Node.js, Python and app the port stays too. A change to Python makes `~/.venv`; a change away from it leaves the environment in the home.
 - From a reverse proxy or redirect to a type with files, the site gets a Linux user and home, as a new site does.
 - To a reverse proxy or redirect, the Linux user and its files **stay** and keep working (SSH, cron jobs, backups); nginx only serves the proxy or redirect. The site's **Overview** then shows **This site still has a Linux account and files**. **Remove account and files** deletes the user, its home, databases, cron jobs and SSH keys, after you type the site's name. Backups stay until they expire.
 
-If a change fails, for example because the new app's Node.js version is not installed, the site keeps its old type.
+If a change fails, for example because the new app's Node.js or Python version is not installed, the site keeps its old type.
 
 ## From CloudPanel
 
-The [CloudPanel import](CloudPanel-import.md) takes over Node.js and reverse proxy sites as these types. Python sites are not taken over yet.
+The [CloudPanel import](CloudPanel-import.md) takes over Node.js, Python and reverse proxy sites as these types.

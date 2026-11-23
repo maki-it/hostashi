@@ -51,6 +51,7 @@ type cloudPanelSiteRequest struct {
 	PageCache *bool  `json:"pageCache"`
 	Pool      string `json:"pool"`
 	Node      string `json:"node"`
+	Python    string `json:"python"`
 }
 
 type cloudPanelImportRequest struct {
@@ -201,7 +202,7 @@ func registerMigrations(mux *routeMux, a authn, svc *cpmigrate.Service, log *slo
 		defer cancel()
 
 		site, err := svc.CreateSite(ctx, p.User.ID, r.PathValue("id"), r.PathValue("name"), cpmigrate.CreateOptions{
-			Reviewed: in.Reviewed, PHP: in.PHP, PageCache: in.PageCache, Pool: in.Pool, Node: in.Node,
+			Reviewed: in.Reviewed, PHP: in.PHP, PageCache: in.PageCache, Pool: in.Pool, Node: in.Node, Python: in.Python,
 		})
 		if err != nil {
 			importFail(log, w, err, "create site from cloudpanel report")
@@ -407,6 +408,10 @@ func migrationTarget(sites *hosting.Service) cpmigrate.TargetFunc {
 			return plan.Target{}, err
 		}
 
+		if t.Python, err = sites.PythonLines(ctx); err != nil {
+			return plan.Target{}, err
+		}
+
 		return t, nil
 	}
 }
@@ -434,6 +439,11 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 		// (ADR-0054); the files land in htdocs, its working directory.
 		if s.Node != "" {
 			req.App = &store.SiteApp{Node: s.Node, Workdir: agentapi.DefaultAppWorkdir}
+		}
+
+		// The same for a Python site (ADR-0061); Hostashi makes its .venv.
+		if s.Python != "" {
+			req.App = &store.SiteApp{Python: s.Python, Workdir: agentapi.DefaultAppWorkdir}
 		}
 
 		if u := s.Usage; u != nil && u.Bytes >= 0 && u.Inodes >= 0 {

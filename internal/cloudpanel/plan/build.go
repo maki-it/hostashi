@@ -24,6 +24,9 @@ type Target struct {
 	// Node lists the Node.js lines installed here, for example "24"
 	// (ADR-0054).
 	Node []string
+	// Python lists the Python lines installed here, for example "3.13"
+	// (ADR-0061).
+	Python []string
 }
 
 // Action of one site in the plan.
@@ -66,7 +69,9 @@ type Site struct {
 	// (ADR-0054); such a site gets no Linux account and no files.
 	Proxy string `json:"proxy,omitempty"`
 	// Node is the Node.js line of a Node.js site (ADR-0054).
-	Node   string    `json:"node,omitempty"`
+	Node string `json:"node,omitempty"`
+	// Python is the Python line of a Python site (ADR-0061).
+	Python string    `json:"python,omitempty"`
 	TLS    TLSAction `json:"tls"`
 	Custom int       `json:"customSnippets"`
 	Cron   int       `json:"cronJobs"`
@@ -115,14 +120,16 @@ type Plan struct {
 
 // Scanned site types the plan handles apart from static and PHP ones.
 const (
-	typeProxy = "proxy"
-	typeNode  = "nodejs"
+	typeProxy  = "proxy"
+	typeNode   = "nodejs"
+	typePython = "python"
 )
 
 // supportedTypes are the site types Hostashi can run today. WordPress is a
 // PHP site with an application profile (ADR-0017 Part 4); nodejs becomes a
-// Node.js site and proxy a reverse proxy (ADR-0054). Python is not yet.
-var supportedTypes = []string{"static", "php", "wordpress", typeNode, typeProxy}
+// Node.js site, python a Python site (ADR-0061) and proxy a reverse proxy
+// (ADR-0054).
+var supportedTypes = []string{"static", "php", "wordpress", typeNode, typePython, typeProxy}
 
 // Build makes the plan. It never changes rep.
 func Build(rep *scan.Report, t Target) Plan {
@@ -173,7 +180,7 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 		ps.HomeBytes, ps.HomeInodes = s.Usage.Bytes, s.Usage.Inodes
 	}
 
-	if s.Pool != nil && s.Type != typeProxy && s.Type != typeNode {
+	if s.Pool != nil && s.Type != typeProxy && s.Type != typeNode && s.Type != typePython {
 		ps.PHP = s.Pool.Version
 	}
 
@@ -261,6 +268,8 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 		proxyPlan(&ps, s, skip, review)
 	case typeNode:
 		nodePlan(&ps, s, t, review)
+	case typePython:
+		pythonPlan(&ps, s, t, review)
 	}
 
 	switch {
@@ -341,7 +350,7 @@ func cachePreset(siteType string) string {
 }
 
 // reviewCodesCovered are scan findings the plan already explains itself.
-// app_process is the Node.js site's node_start; python sites are skipped.
+// app_process is the start command of a Node.js or Python site.
 var reviewCodesCovered = map[string]bool{"custom_directive": true, "app_process": true}
 
 func nonNil(s []string) []string {

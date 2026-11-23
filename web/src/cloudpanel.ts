@@ -18,6 +18,7 @@ export type PlanSite = {
   php: string;
   proxy?: string; // target of a reverse proxy site, which gets no account
   node?: string; // Node.js line of a Node.js site
+  python?: string; // Python line of a Python site
   tls: "none" | "reissue" | "copy";
   customSnippets: number;
   cronJobs: number;
@@ -80,11 +81,12 @@ export const listReports = async () => (await request<{ reports: Report[] }>("GE
 export const getReport = (id: string) => request<Report>("GET", reportPath(id));
 export const deleteReport = (id: string) => request<void>("DELETE", reportPath(id));
 
-export const createFromPlan = (id: string, name: string, reviewed: boolean, php: string, pageCache?: boolean, pool = "", node = "") =>
+export const createFromPlan = (id: string, name: string, reviewed: boolean, php: string, pageCache?: boolean, pool = "", node = "", python = "") =>
   request<PlanSite>("POST", sitePath(id, name), {
     reviewed,
     ...(php ? { php } : {}),
     ...(node ? { node } : {}),
+    ...(python ? { python } : {}),
     ...(pageCache === undefined ? {} : { pageCache }),
     ...(pool ? { pool } : {}),
   });

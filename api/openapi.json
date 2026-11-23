@@ -1094,6 +1094,9 @@
           "pool": {
             "type": "string"
           },
+          "python": {
+            "type": "string"
+          },
           "reviewed": {
             "type": "boolean"
           }
@@ -4528,6 +4531,9 @@
             "type": "boolean"
           },
           "proxy": {
+            "type": "string"
+          },
+          "python": {
             "type": "string"
           },
           "reasons": {
