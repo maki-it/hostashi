@@ -358,7 +358,7 @@ describe("Roles", () => {
       const { unmount } = render(<App />);
       await screen.findByRole("navigation", { name: "Main" });
       expect(screen.queryByText(/Hostashi v/)).not.toBeInTheDocument();
-      expect(calls.some((c) => c.path === "/api/v1/health")).toBe(false);
+      expect(calls.some((c) => c.path === "/api/v1/health" || c.path === "/api/v1/doctor" || c.path === "/api/v1/services")).toBe(false);
       unmount();
     }
   });
@@ -389,10 +389,16 @@ describe("Shell", () => {
       "GET /api/v1/users": { body: { users: [] } },
       "GET /api/v1/invitations": { body: { invitations: [] } },
       "GET /api/v1/health": { body: { status: "ok", version: "0.4.0" } },
+      "GET /api/v1/doctor": {
+        body: { status: "fail", checkedAt: "", counts: {}, checks: [{ id: "system.quota", status: "warn", summary: "" }, { id: "service.nginx", status: "fail", summary: "" }] },
+      },
+      "GET /api/v1/services": { body: { services: [{ id: "nginx", unit: "nginx.service", installed: true, active: "failed", actions: [], restarts24h: 0 }] } },
     });
     render(<App />);
     const nav = await screen.findByRole("navigation", { name: "Main" });
     expect(await screen.findByText("Hostashi v0.4.0")).toBeInTheDocument();
+    expect(await within(nav).findByRole("link", { name: "Health, 2 problems" })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: "Services, 1 problem" })).toBeInTheDocument();
     expect(within(nav).getAllByRole("heading").map((h) => h.textContent)).toEqual(["Hosting", "Server", "Administration"]);
     expect(within(nav).getByRole("link", { name: "Users" })).toHaveAttribute("aria-current", "page");
     const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });

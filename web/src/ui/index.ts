@@ -8,6 +8,7 @@ export { Button, IconButton, IconLink, RowActions, type ButtonVariant } from "./
 export { Card } from "./Card";
 export { LineChart, Meter, type Series } from "./Chart";
 export { Field } from "./Field";
+export { JobCard, useJobCard, type JobState } from "./JobCard";
 export { Notice, type NoticeTone } from "./Notice";
 export { PageHead } from "./PageHead";
 export { QRCode } from "./QRCode";

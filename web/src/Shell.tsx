@@ -4,6 +4,9 @@ import { CaretRight, List, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
 import { logout, type User } from "./auth";
 import { navFor, navItem } from "./nav";
+import { countLabel, healthCount, servicesCount, type NavCount } from "./navcounts";
+import { runDoctor } from "./doctor";
+import { listServices } from "./services";
 import { formatHash, type Route } from "./routes";
 import { isDark, saveColorScheme, type ColorScheme } from "./scheme";
 import { panelVersion, versionLabel } from "./system";
@@ -25,6 +28,16 @@ export function Mark() {
       <svg viewBox="0 0 32 32" width="18" height="18">
         <path d="M9 8v16M23 8v16M9 16h14" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" fill="none" />
       </svg>
+    </span>
+  );
+}
+
+/** NavBadge is the count beside a sidebar entry; its text says what it counts. */
+function NavBadge({ count }: { count: NavCount }) {
+  return (
+    <span className={`app-nav-count ui-tone-${count.tone}`} title={countLabel(count)}>
+      <span aria-hidden="true">{count.n}</span>
+      <span className="ui-sr-only">, {countLabel(count)}</span>
     </span>
   );
 }
@@ -69,6 +82,30 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
       live = false;
     };
   }, [isAdmin]);
+
+  // Counts beside Health and Services. The doctor runs real checks, so
+  // they load once, every five minutes, and when the admin leaves one of
+  // those pages (something may have been fixed there).
+  const [counts, setCounts] = useState<Partial<Record<"health" | "services", NavCount | null>>>({});
+  const onCountPage = route.page === "health" || route.page === "services" ? route.page : "";
+  useEffect(() => {
+    if (!isAdmin) return;
+    let live = true;
+    const load = () => {
+      runDoctor()
+        .then((r) => live && setCounts((c) => ({ ...c, health: healthCount(r) })))
+        .catch(() => undefined);
+      listServices()
+        .then((rows) => live && setCounts((c) => ({ ...c, services: servicesCount(rows) })))
+        .catch(() => undefined);
+    };
+    load();
+    const t = setInterval(load, 5 * 60 * 1000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [isAdmin, onCountPage]);
   const trail = crumbs(route);
 
   async function doLogout() {
@@ -134,6 +171,9 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
                       >
                         <Icon size={20} aria-hidden="true" />
                         {i.label}
+                        {(i.page === "health" || i.page === "services") && counts[i.page] && (
+                          <NavBadge count={counts[i.page]!} />
+                        )}
                       </a>
                     </li>
                   );

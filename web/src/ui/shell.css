@@ -103,6 +103,18 @@
   flex: none;
   color: var(--side-muted);
 }
+/* The number of problems beside Health and Services */
+.app-nav-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 10px;
+}
 .app-nav-item:hover {
   background: var(--side-active-bg);
 }
