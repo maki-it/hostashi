@@ -74,8 +74,8 @@ func TestFixtureCorpus(t *testing.T) {
 	rep := run(t, dir)
 
 	got := byVhost(rep)
-	if len(cases) != 22 || rep.Summary.Sites != 22 {
-		t.Fatalf("cases %d, sites %d, want 22", len(cases), rep.Summary.Sites)
+	if len(cases) != 23 || rep.Summary.Sites != 23 {
+		t.Fatalf("cases %d, sites %d, want 23", len(cases), rep.Summary.Sites)
 	}
 
 	for _, c := range cases {
@@ -161,6 +161,10 @@ func TestMappedDetails(t *testing.T) {
 
 	if s := got["alpha-shop.de.conf"]; s.ObjectCache {
 		t.Errorf("object cache on a site without a drop-in")
+	}
+
+	if s := got["omikron-api.de.conf"]; s.Type != "python" || s.Project != "requirements.txt" || !hasCode(s, "app_process") {
+		t.Errorf("python site: %+v", s)
 	}
 
 	if s := got["kappa-portal.de.conf"]; s.Upstream != "https://10.0.0.5:8080" {

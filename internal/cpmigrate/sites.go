@@ -71,6 +71,9 @@ type NewSite struct {
 	// Node makes the site a Node.js site of this line; its app stays
 	// stopped until a start command is set (ADR-0054).
 	Node string
+	// Python makes the site a Python site of this line; its app stays
+	// stopped until a start command is set (ADR-0061).
+	Python string
 }
 
 // Created counts what came with a new site.
@@ -122,6 +125,8 @@ type CreateOptions struct {
 	Pool string
 	// Node replaces the plan's Node.js line, for a Node.js site.
 	Node string
+	// Python replaces the plan's Python line, for a Python site.
+	Python string
 }
 
 // CreateSite creates the site of the report that the plan names, with the
@@ -174,6 +179,19 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		node = o.Node
 	}
 
+	python := ps.Python
+	if o.Python != "" {
+		if ps.Python == "" {
+			return ps, fmt.Errorf("%w: the site is not a Python site", ErrBadRequest)
+		}
+
+		if err := agentapi.ValidatePythonLine(o.Python); err != nil {
+			return ps, fmt.Errorf("%w: %w", ErrBadRequest, err)
+		}
+
+		python = o.Python
+	}
+
 	if ps.Proxy != "" {
 		return s.createProxy(ctx, actor, reportID, ps, o)
 	}
@@ -195,6 +213,7 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		ObjectCache: ps.ObjectCache && php != "",
 		PHPSettings: phpSettings(site, php),
 		Node:        node,
+		Python:      python,
 	})
 	if err != nil {
 		return ps, err
@@ -206,9 +225,10 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		"objectCache": strconv.FormatBool(n.ObjectCache),
 		"phpSettings": strconv.FormatBool(n.PHPSettings),
 		"node":        node,
+		"python":      python,
 	})
 
-	ps.PHP, ps.Node, ps.CronImport, ps.SSHImport, ps.ObjectCacheOn, ps.PHPSettingsOn = php, node, n.Cron, n.SSHKeys, n.ObjectCache, n.PHPSettings
+	ps.PHP, ps.Node, ps.Python, ps.CronImport, ps.SSHImport, ps.ObjectCacheOn, ps.PHPSettingsOn = php, node, python, n.Cron, n.SSHKeys, n.ObjectCache, n.PHPSettings
 	if !n.PageCache {
 		ps.PageCache = ""
 	}

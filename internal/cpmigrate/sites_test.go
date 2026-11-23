@@ -77,7 +77,7 @@ func sitesReport(t *testing.T) []byte {
 			s.Pool.Settings = map[string]string{"php_admin_value[memory_limit]": "512M", "php_admin_value[open_basedir]": "/home/alpha/"}
 		}),
 		site("beta", "php", scan.StatusClean, "8.1", nil),
-		site("gamma", "python", scan.StatusClean, "", nil),
+		site("gamma", "ruby", scan.StatusClean, "", nil),
 		{Name: "x", Status: scan.StatusBlocked, Findings: []scan.Finding{{Severity: scan.SevBlocker, Code: "path_escape", Msg: "no"}}},
 	}})
 	if err != nil {
@@ -216,6 +216,46 @@ func TestCreateSiteAndImport(t *testing.T) {
 
 	if g, err := svc.Import(t.Context(), "0123456789abcdef"); err != nil || g.ID != "0123456789abcdef" {
 		t.Fatalf("get: %v", err)
+	}
+}
+
+// TestCreatePythonSite: a Python site gets the newest installed line or the
+// chosen one (ADR-0061).
+func TestCreatePythonSite(t *testing.T) {
+	svc, _ := newService(t, func(context.Context) (plan.Target, error) {
+		return plan.Target{Python: []string{"3.12", "3.13"}}, nil
+	})
+
+	b, err := json.Marshal(scan.Report{Format: scan.Format, Sites: []scan.Site{{
+		Name: "blog.example.com", User: "blog", Type: "python", Status: scan.StatusClean, Upstream: "http://127.0.0.1:8000", Project: "requirements.txt",
+		Domains: []string{"blog.example.com"}, DocRoot: "/home/blog/htdocs/blog.example.com", Sources: []string{"/etc/nginx/sites-enabled/blog.conf"},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := svc.Upload(t.Context(), 1, bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var created []cpmigrate.NewSite
+
+	svc.Connect(func(_ context.Context, _ int64, s cpmigrate.NewSite) (cpmigrate.Created, error) {
+		created = append(created, s)
+
+		return cpmigrate.Created{}, nil
+	}, &fakeImporter{})
+
+	for _, o := range []cpmigrate.CreateOptions{{Reviewed: true, Python: "3.8"}, {Reviewed: true, Node: "24"}} {
+		if _, err := svc.CreateSite(t.Context(), 1, rep.ID, "blog", o); !errors.Is(err, cpmigrate.ErrBadRequest) {
+			t.Errorf("%+v: %v", o, err)
+		}
+	}
+
+	ps, err := svc.CreateSite(t.Context(), 1, rep.ID, "blog", cpmigrate.CreateOptions{Reviewed: true, Python: "3.12"})
+	if err != nil || ps.Python != "3.12" || len(created) != 1 || created[0].Python != "3.12" || created[0].Node != "" || created[0].PHP != "" {
+		t.Fatalf("python: %+v %+v %v", ps, created, err)
 	}
 }
 

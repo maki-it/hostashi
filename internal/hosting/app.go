@@ -243,6 +243,25 @@ func (s *Service) NodeLines(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
+// PythonLines lists the Python lines installed here, none without apps.
+func (s *Service) PythonLines(ctx context.Context) ([]string, error) {
+	if s.apps == nil {
+		return nil, nil
+	}
+
+	st, err := s.apps.PythonStatus(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]string, 0, len(st.Installed))
+	for _, i := range st.Installed {
+		out = append(out, i.Line)
+	}
+
+	return out, nil
+}
+
 // checkNodeInstalled asks the agent whether the app's line is installed.
 func (s *Service) checkNodeInstalled(ctx context.Context, major string) error {
 	if s.apps == nil {

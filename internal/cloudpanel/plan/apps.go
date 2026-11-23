@@ -67,3 +67,44 @@ func nodeLine(installed []string) string {
 
 	return agentapi.NodeReleases[len(agentapi.NodeReleases)-1].Major
 }
+
+// pythonPlan plans a Python site (ADR-0061). The scan does not see the old
+// Python version nor how the app was started, so the site gets the newest
+// Python line installed here (or the newest pinned one) and its app stays
+// stopped until a start command is set. Hostashi makes the environment
+// .venv; the packages are installed over SSH.
+func pythonPlan(ps *Site, s scan.Site, t Target, review func(code, msg string)) {
+	ps.Python = pythonLine(t.Python)
+
+	if slices.Contains(t.Python, ps.Python) {
+		review("python_version", "the old Python version is not scanned: the site gets Python "+ps.Python+"; check that the app runs on it")
+	} else {
+		review("python_missing", "no Python line is installed here: install Python "+ps.Python+" on the Python versions page before you create the site")
+	}
+
+	port := ""
+	if u, err := url.Parse(s.Upstream); err == nil && u.Port() != "" {
+		port = " instead of " + u.Port()
+	}
+
+	project := "the project's requirements"
+	if s.Project != "" {
+		project = s.Project
+	}
+
+	review("python_start", "the app stays stopped until its start command is set on the site's Web tab; it listens on the port in PORT"+port+
+		", and the old process manager is not carried over. After the files are copied, install "+project+" into ~/.venv over SSH")
+}
+
+// pythonLine is the Python line for an imported Python site: the newest of
+// the installed lines that Hostashi still pins, or the newest pinned line
+// if none is installed.
+func pythonLine(installed []string) string {
+	for i := len(agentapi.PythonReleases) - 1; i >= 0; i-- {
+		if l := agentapi.PythonReleases[i].Line; slices.Contains(installed, l) {
+			return l
+		}
+	}
+
+	return agentapi.PythonReleases[len(agentapi.PythonReleases)-1].Line
+}

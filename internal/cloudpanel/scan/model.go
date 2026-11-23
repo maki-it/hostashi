@@ -99,13 +99,16 @@ type SSHKey struct {
 
 // Site is the adopted view of one vhost.
 type Site struct {
-	Name          string    `json:"name"`
-	User          string    `json:"user"`
-	Type          string    `json:"type"` // static, php, wordpress, nodejs, python, proxy
-	Domains       []string  `json:"domains"`
-	RedirectFrom  []string  `json:"redirect_from,omitempty"` // hosts that only redirect to Domains[0]
-	DocRoot       string    `json:"doc_root"`
-	Upstream      string    `json:"upstream,omitempty"`
+	Name         string   `json:"name"`
+	User         string   `json:"user"`
+	Type         string   `json:"type"` // static, php, wordpress, nodejs, python, proxy
+	Domains      []string `json:"domains"`
+	RedirectFrom []string `json:"redirect_from,omitempty"` // hosts that only redirect to Domains[0]
+	DocRoot      string   `json:"doc_root"`
+	Upstream     string   `json:"upstream,omitempty"`
+	// Project is the file that made a Python site one: requirements.txt or
+	// pyproject.toml.
+	Project       string    `json:"project,omitempty"`
 	Pool          *Pool     `json:"pool,omitempty"`
 	TLS           TLS       `json:"tls"`
 	Cron          []CronJob `json:"cron,omitempty"`

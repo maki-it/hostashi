@@ -57,7 +57,7 @@ type ca struct {
 	key  *ecdsa.PrivateKey
 }
 
-// Build writes the tree to dir and returns the site cases (22, the same
+// Build writes the tree to dir and returns the site cases (23, the same
 // count as Kim's server web2; the mix of cases is invented).
 func Build(dir string, now time.Time) ([]Case, error) {
 	b := &builder{dir: dir, now: now, uid: 1001, port: 17001}
@@ -188,7 +188,7 @@ func (b *builder) cert(domain string, names []string, issuer *ca, notAfter time.
 
 // site describes one synthetic site; zero values give the common case.
 type site struct {
-	domain, user, kind   string // kind: php, wordpress, static, nodejs, proxy
+	domain, user, kind   string // kind: php, wordpress, static, nodejs, python, proxy
 	php                  string
 	www                  bool   // www alias that redirects to the apex
 	extraServer          string // directives appended inside the TLS server
@@ -243,6 +243,8 @@ func (b *builder) add(s site) {
 		}
 	case "nodejs":
 		b.write(root+"/package.json", "{}\n", 0o644)
+	case "python":
+		b.write(root+"/requirements.txt", "gunicorn\n", 0o644)
 	}
 
 	names := []string{s.domain}
@@ -298,7 +300,7 @@ func (b *builder) add(s site) {
 		fmt.Fprintf(&v, "  location / {\n    try_files $uri $uri/ /index.php?$args;\n  }\n  location ~ /\\. {\n    deny all;\n  }\n  location ~ \\.php$ {\n    include fastcgi_params;\n    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n    fastcgi_pass 127.0.0.1:%d;\n    fastcgi_read_timeout 300;\n  }\n", b.port)
 	case "static":
 		v.WriteString("  location / {\n    try_files $uri $uri/ =404;\n  }\n")
-	case "nodejs", "proxy":
+	case "nodejs", "python", "proxy":
 		fmt.Fprintf(&v, "  location / {\n    proxy_pass %s;\n    proxy_http_version 1.1;\n    proxy_set_header Host $host;\n    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n    proxy_set_header X-Forwarded-Proto $scheme;\n  }\n", s.upstream)
 	}
 
@@ -369,6 +371,7 @@ func (b *builder) sites() {
 
 	// Adoptable, but a human has to look.
 	b.add(site{domain: "my-api.de", user: "myapi", kind: "nodejs", upstream: "http://127.0.0.1:3000", want: "review", wantType: "nodejs", note: "Node.js app, process manager not scanned"})
+	b.add(site{domain: "omikron-api.de", user: "omikron", kind: "python", upstream: "http://127.0.0.1:8000", want: "review", wantType: "python", note: "Python app, process manager not scanned"})
 	b.add(site{
 		domain: "nu-magazin.de", kind: "wordpress", www: true,
 		extraServer:   "  add_header X-Frame-Options SAMEORIGIN;\n  add_header Referrer-Policy strict-origin-when-cross-origin;\n",

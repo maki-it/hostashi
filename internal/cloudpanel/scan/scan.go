@@ -624,6 +624,14 @@ func (s *scanner) siteType(site *Site, sv server, p string) {
 			site.Type = "nodejs"
 		case s.anyExists(site.DocRoot, home+"/htdocs", "requirements.txt", "pyproject.toml"):
 			site.Type = "python"
+
+			for _, f := range []string{"requirements.txt", "pyproject.toml"} {
+				if s.anyExists(site.DocRoot, home+"/htdocs", f) {
+					site.Project = f
+
+					break
+				}
+			}
 		default:
 			site.Type = "proxy"
 			site.Findings = append(site.Findings, Finding{SevReview, "proxy_local_unknown", "local upstream, but no Node.js or Python project found; the process manager is not adopted", p, sv.Line})

@@ -377,6 +377,56 @@ describe("Migrate", () => {
     await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ reviewed: true, node: "22" }));
   });
 
+  it("creates a Python site with another Python line", async () => {
+    const user = userEvent.setup();
+    const report = { id: "r1", sites: 1, createdAt: "2026-11-19T09:00:00Z" };
+    const blog: PlanSite = { ...planSite("blog", "review", [{ code: "python_start", msg: "the app stays stopped" }]), type: "python", php: "", python: "3.13", customSnippets: 0 };
+    const calls = mockFetch({
+      [`GET ${base}/source`]: { body: readySource },
+      [`GET ${base}/reports`]: { body: { reports: [report] } },
+      [`GET ${base}/reports/r1`]: { body: { ...report, plan: plan([blog]) } },
+      "GET /api/v1/php/versions": { body: { installed: ["8.3"], supported: ["8.3"], legacy: [] } },
+      "GET /api/v1/pools": { body: { pools: [] } },
+      "GET /api/v1/python": {
+        body: {
+          installed: [{ line: "3.12", version: "3.12.16", build: "20261110" }, { line: "3.13", version: "3.13.9", build: "20261110" }],
+          last: "",
+          state: "idle",
+          log: [],
+          releases: ["3.12", "3.13", "3.14"].map((line) => ({ line, version: line + ".0", build: "20261110", end: "2030-10-31" })),
+        },
+      },
+      [`POST ${base}/reports/r1/sites/blog`]: { status: 201, body: { ...blog, action: "skip", reasons: exists } },
+      "GET /api/v1/databases": { body: { databases: [] } },
+      [`GET ${base}/imports?site=blog`]: { body: { imports: [] } },
+      [`GET ${base}/sites/blog/cutover`]: noCutover,
+    });
+    render(<Harness initial="report=r1&site=blog" />);
+    expect(await screen.findByText("Python")).toBeInTheDocument();
+    const select = await screen.findByLabelText(/^Python for blog/);
+    expect(within(select).getByRole("option", { name: "Python 3.14 (not installed)" })).toBeInTheDocument();
+    await user.selectOptions(select, "3.12");
+    await user.click(screen.getByLabelText(/I checked the points above/));
+    await user.click(screen.getByRole("button", { name: "Create blog" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ reviewed: true, python: "3.12" }));
+  });
+
+  it("tells that a created Python site needs its packages", async () => {
+    const report = { id: "r1", sites: 1, createdAt: "2026-11-19T09:00:00Z" };
+    const blog: PlanSite = { ...planSite("blog", "skip", exists), type: "python", php: "", python: "3.13", customSnippets: 0 };
+    mockFetch({
+      [`GET ${base}/source`]: { body: readySource },
+      [`GET ${base}/reports`]: { body: { reports: [report] } },
+      [`GET ${base}/reports/r1`]: { body: { ...report, plan: plan([blog]) } },
+      "GET /api/v1/php/versions": { body: { installed: ["8.3"], supported: ["8.3"], legacy: [] } },
+      "GET /api/v1/databases": { body: { databases: [] } },
+      [`GET ${base}/imports?site=blog`]: { body: { imports: [] } },
+      [`GET ${base}/sites/blog/cutover`]: noCutover,
+    });
+    render(<Harness initial="report=r1&site=blog" />);
+    expect(await screen.findByText(/install its packages into ~\/\.venv over SSH/)).toBeInTheDocument();
+  });
+
   it("shows a created reverse proxy site without a file import", async () => {
     const report = { id: "r1", sites: 1, createdAt: "2026-11-19T09:00:00Z" };
     const portal: PlanSite = { ...planSite("portal", "skip", exists), type: "proxy", php: "", proxy: "http://10.0.0.5:8080", customSnippets: 1 };
