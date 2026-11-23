@@ -21,6 +21,7 @@ export const pages = [
   "system",
   "php",
   "node",
+  "python",
   "backups",
   "firewall",
   "limits",

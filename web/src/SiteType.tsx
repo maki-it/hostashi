@@ -7,6 +7,8 @@ import { useState, type FormEvent } from "react";
 import { newestLine } from "./node";
 import { newProgramApp, ProgramFields, programFieldsProblem, programRequest, programValue, type ProgramValue } from "./SiteApp";
 import { newNodeApp, NodeFields, nodeProblem, useNodeStatus, type NodeValue } from "./SiteNode";
+import { newPythonApp, PythonFields, pythonFieldsProblem, pythonFieldsValue, pythonRequest, usePythonStatus, type PythonFieldsValue } from "./SitePython";
+import { newestPythonLine } from "./python";
 import { newProxy, ProxyFields } from "./SiteProxy";
 import { newRedirect, RedirectFields } from "./SiteRedirect";
 import { PHPOptions, SiteTypeChoice, type ChosenType } from "./Sites";
@@ -32,6 +34,7 @@ const typeSites: Record<ChosenType, string> = {
   static: "a static site",
   php: "a PHP site",
   node: "a Node.js site",
+  python: "a Python site",
   app: "an app site",
   proxy: "a reverse proxy",
   redirect: "a redirect",
@@ -41,6 +44,7 @@ const typeNames: Record<ChosenType, string> = {
   static: "static",
   php: "PHP",
   node: "Node.js",
+  python: "Python",
   app: "app",
   proxy: "reverse proxy",
   redirect: "redirect",
@@ -61,6 +65,9 @@ export function ChangeTypeCard({ site, php, onChange, admin = false }: Props) {
   const [node, setNode] = useState<NodeValue | null>(null);
   const nodeValue = node ?? (site.node ? { version: site.node.version, workdir: site.node.workdir, startKind: site.node.startKind, start: site.node.start } : newNodeApp(newestLine(nodeStatus)));
   const [program, setProgram] = useState<ProgramValue>(site.app ? programValue(site.app) : newProgramApp());
+  const pythonStatus = usePythonStatus();
+  const [python, setPython] = useState<PythonFieldsValue | null>(null);
+  const pythonValue = python ?? (site.python ? pythonFieldsValue(site.python) : newPythonApp(newestPythonLine(pythonStatus)));
   const [proxy, setProxyValue] = useState<SiteProxy>(site.proxy ?? newProxy());
   const [redirect, setRedirectValue] = useState<SiteRedirect>(site.redirect ?? newRedirect());
   const [busy, setBusy] = useState(false);
@@ -71,6 +78,7 @@ export function ChangeTypeCard({ site, php, onChange, admin = false }: Props) {
   if (kind === "php") req.php = phpValue;
   if (kind === "node") req.node = nodeValue;
   if (kind === "app") req.app = programRequest(program);
+  if (kind === "python") req.python = pythonRequest(pythonValue);
   if (kind === "proxy") req.proxy = { ...proxy, insecure: proxy.target.startsWith("https://") && proxy.insecure };
   if (kind === "redirect") req.redirect = redirect;
   const change = typeChange(site, req);
@@ -83,6 +91,8 @@ export function ChangeTypeCard({ site, php, onChange, admin = false }: Props) {
         return nodeProblem(nodeValue);
       case "app":
         return programFieldsProblem(program);
+      case "python":
+        return pythonFieldsProblem(pythonValue);
       case "proxy":
         return proxyProblem(proxy.target, site.domains);
       case "redirect":
@@ -152,6 +162,7 @@ export function ChangeTypeCard({ site, php, onChange, admin = false }: Props) {
         )}
         {kind === "node" && <NodeFields value={nodeValue} onChange={setNode} status={nodeStatus} disabled={busy} admin={admin} />}
         {kind === "app" && <ProgramFields value={program} onChange={setProgram} disabled={busy} />}
+        {kind === "python" && <PythonFields value={pythonValue} onChange={setPython} status={pythonStatus} disabled={busy} admin={admin} />}
         {kind === "proxy" && <ProxyFields value={proxy} onChange={setProxyValue} disabled={busy} />}
         {kind === "redirect" && <RedirectFields value={redirect} onChange={setRedirectValue} disabled={busy} />}
         <section className="ui-stack-tight" aria-label="What changes">

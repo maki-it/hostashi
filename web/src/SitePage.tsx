@@ -36,6 +36,7 @@ import { PageCacheSettings } from "./PageCache";
 import { PHPSettingsCard } from "./PHPSettings";
 import { Services } from "./Services";
 import { programCommand, startCommand } from "./node";
+import { pythonCommand } from "./python";
 import { SiteWebSettings } from "./SiteWeb";
 import { RemoveAccountCard } from "./SiteType";
 import { SnippetSettings } from "./Snippets";
@@ -215,6 +216,17 @@ function Overview({ site, onChange, staff }: TabProps & { staff: boolean }) {
                 {" on Node.js "}
                 {site.node.version}
                 {site.node.stopped ? ", stopped" : ""}
+              </dd>
+            </>
+          )}
+          {site.python && (
+            <>
+              <dt>Python app</dt>
+              <dd>
+                {site.python.startKind ? <span className="ui-mono">{pythonCommand(site.python)}</span> : "No start command yet"}
+                {" on Python "}
+                {site.python.version}
+                {site.python.stopped ? ", stopped" : ""}
               </dd>
             </>
           )}

@@ -25,6 +25,7 @@ import {
   type StartKind,
 } from "./node";
 import { formatBytes } from "./limits";
+import { pythonCommand } from "./python";
 import { formatHash } from "./routes";
 import type { Site } from "./sites";
 import { Badge, Button, Card, Field, Notice } from "./ui";
@@ -147,7 +148,7 @@ export function NodeFields({
 
 const actionWord: Record<AppAction, string> = { start: "started", stop: "stopped", restart: "restarted" };
 
-/** AppCard shows what the app of a Node.js or app site does and starts, stops or restarts it. */
+/** AppCard shows what the app of a Node.js, app or Python site does and starts, stops or restarts it. */
 export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange: () => Promise<void>; poll?: number }) {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -155,6 +156,7 @@ export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange:
   const [done, setDone] = useState("");
   const node = site.node;
   const prog = site.app;
+  const py = site.python;
 
   const load = useCallback(async () => {
     try {
@@ -170,10 +172,10 @@ export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange:
     return () => clearInterval(t);
   }, [load, poll, site.updatedAt]);
 
-  const app = node ?? prog;
+  const app = node ?? py ?? prog;
   if (!app) return null;
   const view = appView(site, status);
-  const set = node ? node.startKind !== "" : !!prog?.program;
+  const set = node ? node.startKind !== "" : py ? py.startKind !== "" : !!prog?.program;
   const canRun = set && !site.disabled;
   const running = !app.stopped && canRun;
   const problem = running ? status?.problem : "";
@@ -202,13 +204,21 @@ export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange:
             <Badge tone={view.tone}>{view.word}</Badge>
           </dd>
           <dt>Runs</dt>
-          <dd className="ui-mono">{!set ? "nothing yet" : node ? startCommand(node) : prog ? programCommand(prog) : ""}</dd>
+          <dd className="ui-mono">{!set ? "nothing yet" : node ? startCommand(node) : py ? pythonCommand(py, py.port) : prog ? programCommand(prog) : ""}</dd>
           <dt>In</dt>
           <dd className="ui-mono">~/{app.workdir}</dd>
           {node && (
             <>
               <dt>Node.js</dt>
               <dd>{node.version}</dd>
+            </>
+          )}
+          {py && (
+            <>
+              <dt>Python</dt>
+              <dd>
+                {py.version}, environment <span className="ui-mono">~/.venv</span>
+              </dd>
             </>
           )}
           <dt>Port</dt>
@@ -226,9 +236,9 @@ export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange:
             </>
           )}
         </dl>
-        {!set && <Notice tone="info" title={node ? "Set a start command below, then the app starts." : "Set the program below, then the app starts."} />}
+        {!set && <Notice tone="info" title={node || py ? "Set a start command below, then the app starts." : "Set the program below, then the app starts."} />}
         {problem && (
-          <Notice tone="warn" title="The program is not started yet.">
+          <Notice tone="warn" title={py ? "The app is not started yet." : "The program is not started yet."}>
             {problem.charAt(0).toUpperCase() + problem.slice(1)}.
           </Notice>
         )}

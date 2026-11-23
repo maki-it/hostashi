@@ -5,6 +5,7 @@
 // desired state; every change is applied to the web server at once.
 
 import type { NodeApp, ProgramApp } from "./node";
+import type { PythonApp } from "./python";
 import { ApiError, request } from "./api";
 import { formatBytes } from "./limits";
 
@@ -30,7 +31,7 @@ export type Site = {
   name: string;
   pool: string;
   state: "creating" | "active" | "deleting" | string;
-  // static, php, node, app, proxy or redirect (ADR-0054). Older answers lack it.
+  // static, php, node, app, proxy or redirect (ADR-0054), python (ADR-0061). Older answers lack it.
   type?: SiteType;
   php: string; // "" for no PHP
   // Document root folder below htdocs and the static-site options (ADR-0054).
@@ -46,6 +47,8 @@ export type Site = {
   node?: NodeApp | null;
   // The program of an app site (ADR-0054 addendum 2), null otherwise.
   app?: ProgramApp | null;
+  // The app of a Python site (ADR-0061), null otherwise.
+  python?: PythonApp | null;
   phpPrograms: boolean; // PHP may start programs (exec, system, ...)
   disabled: boolean; // answers 503, PHP stopped
   disabledPage: string; // maintenance page shown while disabled (ADR-0047)
@@ -56,7 +59,7 @@ export type Site = {
   updatedAt: string;
 };
 
-export type SiteType = "static" | "php" | "node" | "app" | "proxy" | "redirect";
+export type SiteType = "static" | "php" | "node" | "app" | "python" | "proxy" | "redirect";
 
 /**
  * dir: folder below htdocs, "" for htdocs itself. spa: static sites only;
@@ -115,6 +118,8 @@ export function siteTypeLabel(s: Pick<Site, "type" | "php">): string {
       return "Node.js";
     case "app":
       return "App";
+    case "python":
+      return "Python";
     case "proxy":
       return "Reverse proxy";
     case "redirect":
@@ -157,11 +162,12 @@ export type NewSite = {
   domains: string[];
   tls: boolean;
   hsts: boolean;
-  type?: "redirect" | "proxy" | "node" | "app";
+  type?: "redirect" | "proxy" | "node" | "app" | "python";
   redirect?: SiteRedirect;
   proxy?: SiteProxy;
   node?: Pick<NodeApp, "version" | "workdir" | "startKind" | "start">;
   app?: Pick<ProgramApp, "workdir" | "program" | "args">;
+  python?: Pick<PythonApp, "version" | "workdir" | "startKind" | "target" | "args">;
 };
 
 /** The target of a reverse proxy site (ADR-0054). */
@@ -286,12 +292,13 @@ export type SiteTypeRequest = {
   proxy?: SiteProxy;
   node?: Pick<NodeApp, "version" | "workdir" | "startKind" | "start">;
   app?: Pick<ProgramApp, "workdir" | "program" | "args">;
+  python?: Pick<PythonApp, "version" | "workdir" | "startKind" | "target" | "args">;
 };
 export const setSiteType = (name: string, t: SiteTypeRequest) => request<Site>("POST", sitePath(name) + "/type", t);
 /** Removes the Linux account a redirect or proxy site kept, with its files and databases. */
 export const removeSiteAccount = (name: string) => request<Site>("DELETE", sitePath(name) + "/account");
 
-const accountTypes: SiteType[] = ["static", "php", "node", "app"];
+const accountTypes: SiteType[] = ["static", "php", "node", "app", "python"];
 
 /**
  * typeChange says what a change of the site to another type starts, stops
@@ -306,10 +313,11 @@ export function typeChange(s: Site, to: SiteTypeRequest): { starts: string[]; st
   const toAccount = accountTypes.includes(to.type);
 
   if (from === "php") stops.push(`The PHP ${s.php} pool stops. The PHP settings and the page cache stay stored for a switch back.`);
-  // Between node and app the port stays (addendum 3).
-  const port = to.type === "node" || to.type === "app" ? " The new one keeps its port." : " Its port is freed.";
+  // Between the app types the port stays (addendum 3).
+  const port = to.type === "node" || to.type === "app" || to.type === "python" ? " The new one keeps its port." : " Its port is freed.";
   if (from === "node") stops.push("The Node.js app stops." + port);
   if (from === "app") stops.push("The program stops." + port);
+  if (from === "python") stops.push("The Python app stops." + port + " The environment .venv stays in the home.");
   if (from === "proxy") stops.push(`nginx no longer passes requests to ${s.proxy?.target ?? "the target"}.`);
   if (from === "redirect") stops.push(`nginx no longer redirects to ${s.redirect?.target ?? "the target"}.`);
 
@@ -326,6 +334,11 @@ export function typeChange(s: Site, to: SiteTypeRequest): { starts: string[]; st
       break;
     case "app":
       starts.push(to.app?.program ? `The program ${to.app.program} starts on its own port.` : "The app gets its own port. It starts once its program is set.");
+      break;
+    case "python":
+      starts.push(
+        `Hostashi creates the environment .venv with Python ${to.python?.version ?? ""} if the home has none, and the app gets its own port. It starts once its start command is set and its packages are installed.`,
+      );
       break;
     case "proxy":
       starts.push(`nginx passes every request to ${to.proxy?.target ?? "the target"}.`);
@@ -431,7 +444,11 @@ export function siteMessage(err: unknown): string {
       case "node_missing":
         return "This Node.js version is not installed. An administrator installs it under Node.js versions.";
       case "apps_unavailable":
-        return "Node.js apps are not available on this panel.";
+        return "Apps are not available on this panel.";
+      case "python_missing":
+        return "This Python version is not installed. An administrator installs it under Python versions.";
+      case "confirm_required":
+        return "Type the site's name to confirm: this rebuilds .venv and its installed packages go.";
       case "wrong_site_type":
         return "This is not possible for this type of site.";
       case "site_busy":

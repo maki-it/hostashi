@@ -26,6 +26,39 @@ const shots = [
   { name: "site-new", hash: "#/sites?new=1", ready: "form" },
   { name: "site-domains", hash: "#/sites/blog/domains", ready: "text=Domains" },
   { name: "site-node", hash: "#/sites/app/web", ready: "text=Start command" },
+  { name: "site-python", hash: "#/sites/api/web", ready: "text=Start command" },
+  {
+    name: "site-python-version",
+    hash: "#/sites/api/web",
+    ready: "text=Start command",
+    act: async (page) => {
+      await page.getByLabel("Python version").selectOption("3.13");
+      await page.getByLabel(/to confirm/).fill("ap");
+      await page.getByText("The environment .venv is rebuilt").evaluate((h) => h.scrollIntoView({ block: "center" }));
+    },
+  },
+  {
+    name: "site-python-venv",
+    hash: "#/sites/api/web",
+    ready: "text=Recreate environment",
+    act: async (page) => {
+      await page.getByRole("button", { name: "Recreate environment" }).click();
+      await page.getByRole("heading", { name: "Python environment" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  {
+    name: "site-new-python",
+    hash: "#/sites?new=1",
+    ready: "form",
+    act: async (page) => {
+      await page.getByLabel(/^Name/).fill("api");
+      await page.getByLabel(/^Domains/).fill("api.example.com");
+      await page.getByRole("radio", { name: /^Python/ }).click();
+      await page.getByRole("radio", { name: /ASGI with uvicorn/ }).click();
+      await page.getByRole("radio", { name: /^Python A Django/ }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  { name: "python-versions", hash: "#/python", ready: "table" },
   { name: "site-proxy", hash: "#/sites/intranet/web", ready: "text=Pass requests to" },
   {
     name: "site-type-change",

@@ -20,6 +20,7 @@ import { Pages } from "./Pages";
 import { Overview } from "./Overview";
 import { Parked } from "./Parked";
 import { NodePage } from "./NodePage";
+import { PythonPage } from "./PythonPage";
 import { PHPPage } from "./PHP";
 import { SecondFactor } from "./SecondFactor";
 import { Services } from "./Services";
@@ -139,6 +140,7 @@ export function App() {
         {show("backups") && <Backups query={route.query} onQuery={replaceQuery} />}
         {show("php") && <PHPPage query={route.query} onQuery={replaceQuery} />}
         {show("node") && <NodePage />}
+        {show("python") && <PythonPage />}
         {show("limits") && <Presets query={route.query} onQuery={replaceQuery} />}
         {show("health") && <Doctor query={route.query} onQuery={replaceQuery} />}
         {show("services") && <Services />}
