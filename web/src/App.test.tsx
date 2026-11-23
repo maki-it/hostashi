@@ -348,6 +348,21 @@ describe("Roles", () => {
     expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual(["Overview", "Sites", "Databases"]);
   });
 
+  it("shows the panel version to admins only", async () => {
+    for (const role of ["user", "manager"]) {
+      const calls = mockFetch({
+        ...noSetup,
+        "GET /api/v1/auth/me": { body: { username: "uma", role, secondFactor: true, secondFactorRequired: false } },
+        "GET /api/v1/health": { body: { status: "ok", version: "0.4.0" } },
+      });
+      const { unmount } = render(<App />);
+      await screen.findByRole("navigation", { name: "Main" });
+      expect(screen.queryByText(/Hostashi v/)).not.toBeInTheDocument();
+      expect(calls.some((c) => c.path === "/api/v1/health")).toBe(false);
+      unmount();
+    }
+  });
+
   it("shows admins the users page", async () => {
     mockFetch({ ...noSetup, "GET /api/v1/auth/me": { body: { ...admin, secondFactor: true, secondFactorRequired: true } } });
     render(<App />);

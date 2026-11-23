@@ -58,13 +58,17 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
   const [version, setVersion] = useState("");
   const groups = navFor(user.role);
 
+  // Only admins see the running version; it tells others nothing they
+  // need and helps no one who probes the panel.
+  const isAdmin = user.role === "admin";
   useEffect(() => {
+    if (!isAdmin) return;
     let live = true;
     void panelVersion().then((v) => live && setVersion(v));
     return () => {
       live = false;
     };
-  }, []);
+  }, [isAdmin]);
   const trail = crumbs(route);
 
   async function doLogout() {
@@ -158,7 +162,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
             {error}
           </p>
         )}
-        {version && <p className="app-version">Hostashi {versionLabel(version)}</p>}
+        {isAdmin && version && <p className="app-version">Hostashi {versionLabel(version)}</p>}
       </aside>
       <div className="app-main">
         <header className="app-top">

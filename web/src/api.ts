@@ -63,6 +63,8 @@ export async function request<T>(method: "GET" | "POST" | "PUT" | "PATCH" | "DEL
   }
   const res = await fetch("/api/v1" + path, init);
   if (!res.ok) throw await toApiError(res);
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  // 204, and a 202 that only says "started", come without a body.
+  const text = await res.text();
+  if (text.trim() === "") return undefined as T;
+  return JSON.parse(text) as T;
 }

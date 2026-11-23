@@ -25,6 +25,16 @@ describe("request", () => {
     await expect(request("POST", "/x")).resolves.toBeUndefined();
   });
 
+  it("returns undefined for 202 without a body", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 202 })));
+    await expect(request("POST", "/backups/run")).resolves.toBeUndefined();
+  });
+
+  it("still parses a 202 with a body", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('{"id":"j1"}', { status: 202 })));
+    await expect(request("POST", "/x")).resolves.toEqual({ id: "j1" });
+  });
+
   it("turns the server error body into an ApiError", async () => {
     mockFetch({ "GET /api/v1/x": { status: 401, body: { error: { code: "unauthenticated", message: "not logged in" } } } });
     const err = await request("GET", "/x").catch((e: unknown) => e);
