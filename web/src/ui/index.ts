@@ -8,8 +8,10 @@ export { Button, IconButton, IconLink, RowActions, type ButtonVariant } from "./
 export { Card } from "./Card";
 export { LineChart, Meter, type Series } from "./Chart";
 export { Field } from "./Field";
+export { JobCard, useJobCard, type JobState } from "./JobCard";
 export { Notice, type NoticeTone } from "./Notice";
 export { PageHead } from "./PageHead";
+export { QRCode } from "./QRCode";
 export { nextSort, sortRows, Table, type Column, type Sort, type SortDir } from "./Table";
 export { tabPanelProps, Tabs, type Tab } from "./Tabs";
 export { exactTime, relativeTime, RelTime } from "./Time";

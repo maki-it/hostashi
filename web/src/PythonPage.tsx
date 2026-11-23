@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getPython, installPython, pythonMessage, removePython, sortPythonLines, type PythonRelease, type PythonStatus } from "./python";
 import { daysUntil, todayUTC } from "./php";
 import { listSites, type Site } from "./sites";
-import { Badge, Button, Card, IconButton, Notice, PageHead, Table, type Column } from "./ui";
+import { Badge, Button, Card, IconButton, JobCard, Notice, PageHead, Table, useJobCard, type Column } from "./ui";
 
 type Row = PythonRelease & { installed: string; installedBuild: string; sites: number | null };
 
@@ -38,6 +38,7 @@ export function PythonPage({ today = todayUTC(), poll = 3000 }: { today?: string
   }, [load]);
 
   const running = status?.state === "running";
+  const job = useJobCard(status?.state);
   useEffect(() => {
     if (!running) return;
     const t = setInterval(() => void load(), poll);
@@ -169,8 +170,8 @@ export function PythonPage({ today = todayUTC(), poll = 3000 }: { today?: string
           </div>
         </section>
       )}
-      {status.state !== "idle" && status.last && (
-        <Card
+      {job.show && status.last && (
+        <JobCard
           title={
             status.state === "running"
               ? "Installing Python " + status.last + "…"
@@ -178,16 +179,13 @@ export function PythonPage({ today = todayUTC(), poll = 3000 }: { today?: string
                 ? "Python " + status.last + " was installed"
                 : "Installing Python " + status.last + " failed"
           }
+          state={status.state}
+          log={status.log}
+          logLabel="Installation log"
+          onClose={job.close}
         >
-          <div className="ui-stack">
-            {status.state === "failed" && <Notice tone="err" title="The installation did not finish. The log shows why; you can try again." />}
-            {status.log.length > 0 && (
-              <pre className="ui-code" aria-label="Installation log">
-                {status.log.join("\n")}
-              </pre>
-            )}
-          </div>
-        </Card>
+          {status.state === "failed" && <Notice tone="err" title="The installation did not finish. The log shows why; you can try again." />}
+        </JobCard>
       )}
       <Card padded={false}>
         <Table label="Python versions" columns={columns} rows={rows} rowKey={(r) => r.line} empty="No Python version is offered." />

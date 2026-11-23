@@ -88,6 +88,35 @@ describe("PHPPage", () => {
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({ version: "8.3", confirmEol: false });
     expect(await screen.findByRole("heading", { name: "PHP 8.3 was installed" })).toBeInTheDocument();
     expect(screen.getByLabelText("Installation log")).toHaveTextContent("php-install: done: PHP 8.3 installed");
+    // A succeeded job folds its log away and can be closed.
+    expect(screen.getByLabelText("Installation log").closest("details")).not.toHaveAttribute("open");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("heading", { name: "PHP 8.3 was installed" })).not.toBeInTheDocument();
+  });
+
+  it("does not show a job that ended before the page opened", async () => {
+    mockFetch({
+      "GET /api/v1/php/versions": { body: versions },
+      "GET /api/v1/php/install": { body: { version: "8.3", action: "install", state: "succeeded", log: ["done"], repository: true, newer: [] } },
+      "GET /api/v1/sites": sites,
+    });
+    render(<PHPPage today={today} />);
+    await screen.findByRole("table", { name: "PHP versions" });
+    expect(screen.queryByRole("heading", { name: "PHP 8.3 was installed" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Installation log")).not.toBeInTheDocument();
+  });
+
+  it("shows a running job with its log folded and no close button, a failed one with the log open", async () => {
+    let state: unknown = { version: "8.3", action: "install", state: "running", log: ["fetching"], repository: true, newer: [] };
+    mockFetch({ "GET /api/v1/php/versions": { body: versions }, "GET /api/v1/php/install": () => ({ body: state }), "GET /api/v1/sites": sites });
+    render(<PHPPage today={today} poll={10} />);
+    expect(await screen.findByRole("heading", { name: "Installing PHP 8.3…" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
+    expect(screen.getByText("Show progress")).toBeInTheDocument();
+    state = { version: "8.3", action: "install", state: "failed", log: ["fetching", "E: 404"], repository: true, newer: [] };
+    expect(await screen.findByRole("heading", { name: "Installing PHP 8.3 failed" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Installation log").closest("details")).toHaveAttribute("open");
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 
   it("asks before an end-of-life version and explains a refusal", async () => {

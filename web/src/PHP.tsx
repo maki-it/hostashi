@@ -4,7 +4,7 @@ import { DownloadSimple, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 import { daysUntil, getPHPInstall, installPHP, phpMessage, removePHP, support, todayUTC, type PHPInstall, type Support } from "./php";
 import { listSites, phpVersions, type PHPVersions, type Site } from "./sites";
-import { Badge, Button, Card, IconButton, Notice, PageHead, Table, type Column, type Sort, type Tone } from "./ui";
+import { Badge, Button, Card, IconButton, JobCard, Notice, PageHead, Table, useJobCard, type Column, type Sort, type Tone } from "./ui";
 
 const supportLabel: Record<Support, string> = {
   active: "Supported",
@@ -60,6 +60,7 @@ export function PHPPage({
 
   // While an installation runs, follow it.
   const running = inst?.state === "running";
+  const job = useJobCard(inst?.state);
   useEffect(() => {
     if (!running) return;
     const t = setInterval(() => void load(), poll);
@@ -227,8 +228,8 @@ export function PHPPage({
         </section>
       )}
 
-      {inst.state !== "idle" && inst.version && (
-        <Card
+      {job.show && inst.version && (
+        <JobCard
           title={
             inst.action === "remove"
               ? inst.state === "running"
@@ -242,14 +243,15 @@ export function PHPPage({
                   ? "PHP " + inst.version + " was installed"
                   : "Installing PHP " + inst.version + " failed"
           }
+          state={inst.state}
+          log={inst.log}
+          logLabel={inst.action === "remove" ? "Removal log" : "Installation log"}
+          onClose={job.close}
         >
-          <div className="ui-stack">
-            {inst.state === "failed" && (
-              <Notice tone="err" title={(inst.action === "remove" ? "The removal" : "The installation") + " did not finish. The log shows why; you can try again."} />
-            )}
-            {inst.log.length > 0 && <pre className="ui-code" aria-label={inst.action === "remove" ? "Removal log" : "Installation log"}>{inst.log.join("\n")}</pre>}
-          </div>
-        </Card>
+          {inst.state === "failed" && (
+            <Notice tone="err" title={(inst.action === "remove" ? "The removal" : "The installation") + " did not finish. The log shows why; you can try again."} />
+          )}
+        </JobCard>
       )}
 
       <Card padded={false}>

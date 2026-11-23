@@ -101,7 +101,7 @@ try {
   await ok("an admin without a second factor sees only the setup");
 
   await page.getByRole("button", { name: "Set up an authenticator app" }).click();
-  const secret = (await page.locator("section code").first().textContent()).trim();
+  const secret = (await page.getByLabel("Authenticator key").textContent()).replace(/\s+/g, "");
   await page.getByLabel("One-time code").fill(totp(secret));
   await page.getByRole("button", { name: "Turn on" }).click();
   // allTextContents does not wait, so wait for the codes to be rendered first.

@@ -56,6 +56,9 @@
   --focus: #1f6b55;
   --primary: #ff6f61;
   --on-primary: #0d1f1a;
+  /* QR codes stay dark on white in both schemes: scanners need it. */
+  --qr-dark: #000;
+  --qr-light: #fff;
   --ok: #0e6f8c;
   --ok-bg: #e3f1f6;
   --warn: #a24b00;
