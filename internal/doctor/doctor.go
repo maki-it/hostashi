@@ -56,7 +56,7 @@ const (
 // System reads the server. The zero value reads the real paths.
 type System struct {
 	OSRelease string                                     // default /etc/os-release
-	MountInfo string                                     // default /proc/self/mountinfo
+	MountInfo string                                     // default /proc/1/mountinfo
 	Statfs    func(path string, st *unix.Statfs_t) error // default unix.Statfs
 }
 
@@ -68,9 +68,14 @@ func (s System) osRelease() string {
 	return s.OSRelease
 }
 
+// mountInfo is the mount table of PID 1, the one users log in to. The
+// agent's own table is not: ProtectKernelTunables= and
+// ProtectControlGroups= give the agent a fresh /proc without hidepid
+// (systemd 257, Debian 13), so /proc/self/mountinfo would report a /proc
+// that no site user ever sees.
 func (s System) mountInfo() string {
 	if s.MountInfo == "" {
-		return "/proc/self/mountinfo"
+		return "/proc/1/mountinfo"
 	}
 
 	return s.MountInfo

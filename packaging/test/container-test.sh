@@ -127,6 +127,7 @@ step "second apply changes nothing"
 out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com)
 echo "$out"
 grep -q 'changes=0' <<<"$out" || fail "second run changed something"
+grep -Eq '^  https://panel\.example\.com:8443/#/setup/[0-9a-f]{48}$' <<<"$out" || fail "no first-login link with the setup token"
 # The container's root is an overlay: the quota step must skip with a
 # warning and leave the system alone (packaging/test/quota-test.sh covers ext4).
 grep -q 'WARNING: disk quota is not available' <<<"$out" || fail "no warning about missing disk quota"
@@ -232,7 +233,8 @@ for id in system.os system.pool service.panel service.nginx service.mariadb serv
   grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"
 done
 grep -Eq "^  WARN  system.quota " <<<"$doc" || fail "doctor: no quota warning on an overlay root"
-for id in system.updates system.reboot system.php system.files system.sysctl; do
+# system.proc reads PID 1's mounts: the agent's own /proc has no hidepid.
+for id in system.updates system.reboot system.php system.files system.sysctl system.proc; do
   grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"
 done
 # This test passes --no-firewall (the container shares the host's network).

@@ -115,6 +115,34 @@ describe("Setup", () => {
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({ token: "tok123", username: "kim", password: "correct horse battery" });
   });
 
+  it("takes the token from the installer's link and removes it from the address", async () => {
+    const user = userEvent.setup();
+    const tok = "0123456789abcdef0123456789abcdef0123456789abcdef";
+    window.location.hash = `#/setup/${tok}`;
+    const calls = mockFetch({
+      "GET /api/v1/setup": { body: { required: true } },
+      "POST /api/v1/setup": { status: 201, body: admin },
+    });
+    render(<App />);
+    expect(await screen.findByLabelText("Setup token")).toHaveValue(tok);
+    expect(window.location.hash).toBe("");
+    expect(screen.getByText(/token from the installer's link is filled in/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Username"), "kim");
+    await user.type(screen.getByLabelText("Password"), "correct horse battery");
+    await user.type(screen.getByLabelText("Repeat password"), "correct horse battery");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Administrator account created");
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ token: tok, username: "kim", password: "correct horse battery" });
+  });
+
+  it("ignores a setup link with a malformed token", async () => {
+    window.location.hash = "#/setup/not-a-token";
+    mockFetch({ "GET /api/v1/setup": { body: { required: true } } });
+    render(<App />);
+    expect(await screen.findByLabelText("Setup token")).toHaveValue("");
+    window.location.hash = "";
+  });
+
   it("refuses different passwords without calling the server", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({ "GET /api/v1/setup": { body: { required: true } } });

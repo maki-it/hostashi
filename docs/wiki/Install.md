@@ -63,9 +63,18 @@ REBOOT REQUIRED: disk quota is prepared and becomes active after one reboot.
 
 It never reboots by itself. Reboot when it suits you, then run the installer again to check that quota is active.
 
+If `/home` is a file system of its own (a second disk or volume), the installer leaves quota to you and says so at the end. Enable project quota on it as described for [storage pools](Command-line.md#storage-pools) (ext4: `tune2fs -O project,quota -Q prjquota` while it is unmounted, then `prjquota` in `/etc/fstab`); the agent enforces the limits once it is mounted with it.
+
 ## 3. First login
 
-Open the panel address (for example `https://panel.example.com:8443`), enter the setup token and create the first admin account. If you lost the token, print it again on the server:
+At the end the installer prints a one-time link that contains the setup token:
+
+```text
+First login: open this link to create the administrator (one-time, valid 24 hours):
+  https://panel.example.com:8443/#/setup/3f9c…
+```
+
+Open it, choose a user name and a password and create the first admin account. The token is after the `#`, so the browser never sends it to the server, and the panel removes it from the address bar. If you lost the token, print it again on the server and open `https://panel.example.com:8443/#/setup/<token>` or type it in:
 
 ```sh
 sudo hostashi setup-token

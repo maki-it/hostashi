@@ -50,6 +50,9 @@ case "$*" in
   "-no SOURCE /") echo "$Q/dev/sda1";;
   "-no FSTYPE /") cat "$Q/fstype";;
   "-no OPTIONS /") cat "$Q/mountopts";;
+  "-no TARGET -T /home") if [ -e "$Q/home-mount" ]; then echo /home; else echo /; fi;;
+  "-no OPTIONS /home") cat "$Q/home-mount";;
+  "-no FSTYPE /home") echo ext4;;
   --verify*) [ ! -e "$Q/fail-verify" ];;
 esac'
   stub dumpe2fs 'echo "Filesystem features:      $(cat "$Q/features")"; echo "Inode size:	          $(cat "$Q/inode")"'
@@ -143,6 +146,17 @@ check "reason names both generators" grep -q "initramfs-tools nor dracut" <<<"$Q
 
 fresh; echo "/dev/sdb1 / ext4 defaults 0 1" >>"$T/etc/fstab"; quota_detect
 check "two root entries in fstab are unsupported" [ "$QUOTA" = unsupported ]
+
+fresh; echo rw,relatime >"$T/q/home-mount"; quota_detect
+check "a /home of its own without quota is unsupported" [ "$QUOTA" = unsupported ]
+check "reason names /home and the manual steps" grep -q "/home is on its own file system (/home, ext4).*tune2fs" <<<"$QUOTA_WHY"
+check "chk passes so the install goes on" chk_quota
+check "the root is not prepared for nothing" no_quota_files
+check "fstab untouched" fstab_unchanged
+
+fresh; echo rw,relatime,prjquota >"$T/q/home-mount"; quota_detect
+check "a /home of its own with prjquota is active" [ "$QUOTA" = active ]
+check "chk passes" chk_quota
 
 fresh; NO_QUOTA=yes; quota_detect
 check "--no-quota switches the step off" [ "$QUOTA" = off ]
