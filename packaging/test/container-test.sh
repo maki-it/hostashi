@@ -1552,8 +1552,9 @@ UNIT
   # no Host header, and the panel answered 400 (v0.2.0).
   if x curl -V | grep -q 'Features:.* HTTP3'; then
     out=$(p443 --http3-only -o /tmp/h3.out -w '%{http_code} %{http_version}' https://other.example.com/api/v1/health) || true
-    [ "$out" = "200 3" ] && x grep -q '"agent":"ok"' /tmp/h3.out ||
+    if [ "$out" != "200 3" ] || ! x grep -q '"agent":"ok"' /tmp/h3.out; then
       fail "panel over HTTP/3: '$out' '$(x cat /tmp/h3.out)'"
+    fi
   else
     echo "curl without HTTP/3, skipping the panel over QUIC"
   fi
