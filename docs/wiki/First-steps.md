@@ -4,7 +4,7 @@
 
 ## 1. Create the admin account
 
-Open the panel address, for example `https://panel.example.com:8443`. On a new server the panel shows **First-time setup**. Enter the setup token that the installer printed, choose a user name and a password.
+Open the link that the installer printed at the end, for example `https://panel.example.com:8443/#/setup/3f9c…`. On a new server the panel shows **First-time setup** with the setup token filled in. Choose a user name and a password. Without the link, open the panel address and enter the token by hand.
 
 Lost the token? On the server, `sudo hostashi setup-token` prints it again. It is valid for 24 hours after the install.
 

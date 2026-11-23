@@ -4,12 +4,13 @@ import { useState, type FormEvent } from "react";
 import { message, setup } from "./auth";
 import { Button, Card, Field, Notice } from "./ui";
 
-type Props = { onDone: () => void };
+type Props = { initialToken?: string; onDone: () => void };
 
 // Setup creates the first administrator. The token is in the file
-// "setup-token" next to the database and is printed by the installer.
-export function Setup({ onDone }: Props) {
-  const [token, setToken] = useState("");
+// "setup-token" next to the database and is printed by the installer, also
+// as a link that fills it in (initialToken).
+export function Setup({ initialToken = "", onDone }: Props) {
+  const [token, setToken] = useState(initialToken);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [repeat, setRepeat] = useState("");
@@ -37,7 +38,11 @@ export function Setup({ onDone }: Props) {
   return (
     <Card title="First-time setup">
       <div className="ui-stack">
-        <p className="ui-flush">Create the administrator account. You need the setup token from the server.</p>
+        <p className="ui-flush">
+          {initialToken
+            ? "Create the administrator account. The setup token from the installer's link is filled in."
+            : "Create the administrator account. You need the setup token from the server."}
+        </p>
         <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
           <Field label="Setup token">
             <input

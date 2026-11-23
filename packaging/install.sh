@@ -1273,7 +1273,20 @@ quota_detect() {
   QUOTA="" QUOTA_WHY="" Q_DEV="" Q_FEATURES=no Q_MOUNTED=no Q_FSTAB=no
   quota_initrd
   if [ "$NO_QUOTA" = yes ]; then QUOTA=off QUOTA_WHY="switched off with --no-quota"; return 0; fi
-  local src fstype opts head feats inode kver prepared rootopts
+  local src fstype opts head feats inode kver prepared rootopts home hometarget
+  # The sites live in /home (the default pool). The step prepares the root
+  # file system only, so a /home of its own needs project quota by hand;
+  # once it is mounted with it, the agent enforces the limits.
+  home=${POOL_DIRS[0]}
+  hometarget=$(findmnt -no TARGET -T "$home" 2>/dev/null)
+  if [ -n "$hometarget" ] && [ "$hometarget" != / ]; then
+    case ",$(findmnt -no OPTIONS "$hometarget" 2>/dev/null)," in
+      *,prjquota,*) QUOTA=active QUOTA_WHY="$hometarget has project quota"; return 0;;
+    esac
+    QUOTA=unsupported
+    QUOTA_WHY="$home is on its own file system ($hometarget, $(findmnt -no FSTYPE "$hometarget" 2>/dev/null || echo unknown)) without project quota; the installer prepares quota only on the root file system. Enable it by hand: https://github.com/maki-it/hostashi/wiki/Command-line#storage-pools (ext4: tune2fs -O project,quota -Q prjquota while unmounted, then prjquota in /etc/fstab)"
+    return 0
+  fi
   src=$(findmnt -no SOURCE / 2>/dev/null) fstype=$(findmnt -no FSTYPE / 2>/dev/null) opts=$(findmnt -no OPTIONS / 2>/dev/null)
   if [ "$fstype" != ext4 ]; then
     QUOTA=unsupported QUOTA_WHY="the root filesystem is '${fstype:-unknown}', only ext4 is supported"; return 0
@@ -1722,11 +1735,22 @@ main() {
     tok=""
     sleep 1
   done
-  if [ -n "$tok" ]; then
-    echo "First login: open the panel and use this one-time setup token (valid 24 hours):"
-    echo "  $tok"
-  fi
+  [ -z "$tok" ] || setup_link "$tok"
   exit 0
+}
+
+# setup_link prints the first-login link. The token goes in the fragment
+# (#/setup/TOKEN): browsers never send it, so it stays out of nginx's logs
+# and the Referer header, and the panel removes it from the address bar.
+setup_link() {
+  echo "First login: open this link to create the administrator (one-time, valid 24 hours):"
+  if [ -n "$PUBLIC_URL" ]; then
+    echo "  $PUBLIC_URL/#/setup/$1"
+  else
+    echo "  http://localhost:${LISTEN##*:}/#/setup/$1"
+    echo "  The panel listens on $LISTEN only; open an SSH tunnel first: ssh -L ${LISTEN##*:}:$LISTEN <user>@<this server>"
+  fi
+  echo "Setup token on its own: $1"
 }
 
 [ "${HOSTASHI_LIB:-}" = 1 ] || main "$@"

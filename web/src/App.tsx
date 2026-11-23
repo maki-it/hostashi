@@ -57,9 +57,24 @@ const inviteToken = (): string | null => {
   return m ? (m[1] ?? null) : null;
 };
 
+// linkSetupToken returns the token of the link the installer prints
+// (#/setup/<token>). The token sits in the fragment, so the browser never
+// sends it to the server and it does not land in nginx's logs.
+const linkSetupToken = (): string => {
+  const m = /^#\/setup\/([0-9a-f]{48})$/.exec(window.location.hash);
+  return m ? (m[1] ?? "") : "";
+};
+
 export function App() {
   const [view, setView] = useState<View>({ kind: "loading" });
-  const [route, setRoute] = useState(() => parseHash(window.location.hash));
+  const [setupToken] = useState(linkSetupToken);
+  const [route, setRoute] = useState(() => parseHash(setupToken ? "" : window.location.hash));
+
+  // The setup link leaves the address bar and the history right away, so
+  // the token is neither bookmarked nor shown to the next person.
+  useEffect(() => {
+    if (setupToken) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }, [setupToken]);
 
   useEffect(() => {
     const onHash = () => setRoute(parseHash(window.location.hash));
@@ -174,7 +189,10 @@ export function App() {
         </Notice>
       )}
       {view.kind === "setup" && (
-        <Setup onDone={() => setView({ kind: "login", notice: "Administrator account created. Log in now." })} />
+        <Setup
+          initialToken={setupToken}
+          onDone={() => setView({ kind: "login", notice: "Administrator account created. Log in now." })}
+        />
       )}
       {view.kind === "confirm-email" && <ConfirmEmail token={view.token} onDone={() => void boot()} />}
       {view.kind === "invite" && <Invite token={view.token} onDone={(user) => setView({ kind: "home", user })} />}
