@@ -153,6 +153,9 @@ commands:
             the file manager's helper for one site (the site user; started
             by hostashi-files@SITE.socket, ADR-0040)
   setup-token  print the one-time token for the first login (read as the serve user or root)
+  completion bash|zsh|fish
+            print the shell completion script; the installer puts it into
+            each shell's completion directory below /usr/local/share
   version [-schema]
             print the version, or with -schema the database schema
             version this binary migrates to (package scripts, ADR-0050)
@@ -195,6 +198,10 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		return apiWhoami(ctx, args, stdout, stderr)
 	case "api":
 		return apiCommand(ctx, args, stdout, stderr)
+	case "completion":
+		return completionCmd(args, stdout, stderr)
+	case "__complete":
+		return completeCmd(args, stdout)
 	}
 
 	switch cmd {

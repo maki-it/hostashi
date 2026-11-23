@@ -1,0 +1,41 @@
+#compdef hostashi
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# zsh completion for hostashi, printed by "hostashi completion zsh".
+# The candidates come from "hostashi __complete WORD... CURRENT".
+
+_hostashi() {
+  local -a lines plain waiting
+  local line value help
+  lines=("${(@f)$("${words[1]}" __complete "${(@)words[2,CURRENT-1]}" "${words[CURRENT]}" 2>/dev/null)}")
+
+  if [[ ${lines[1]} == :files ]]; then
+    _files
+    return
+  fi
+
+  for line in "${lines[@]}"; do
+    [[ -n $line ]] || continue
+    value=${line%%$'\t'*}
+    help=${line#*$'\t'}
+    [[ $help == "$line" ]] && help=
+    # _describe splits value and help at the first unescaped colon.
+    value=${value//:/\\:}
+    if [[ $value == *= ]]; then
+      waiting+=("$value${help:+:$help}")
+    else
+      plain+=("$value${help:+:$help}")
+    fi
+  done
+
+  (( ${#plain} )) && _describe -t commands hostashi plain
+  # A key= or -flag= waits for its value.
+  (( ${#waiting} )) && _describe -t parameters hostashi waiting -S ''
+  return 0
+}
+
+if [[ $funcstack[1] == _hostashi ]]; then
+  _hostashi "$@"
+else
+  compdef _hostashi hostashi
+fi

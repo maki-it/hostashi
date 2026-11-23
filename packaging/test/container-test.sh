@@ -132,6 +132,17 @@ grep -q 'changes=0' <<<"$out" || fail "second run changed something"
 grep -q 'WARNING: disk quota is not available' <<<"$out" || fail "no warning about missing disk quota"
 x test ! -e /etc/systemd/system/hostashi-quota-enforce.service || fail "quota unit installed on an overlay root"
 
+step "shell completion for the CLI"
+for f in bash-completion/completions/hostashi zsh/site-functions/_hostashi fish/vendor_completions.d/hostashi.fish; do
+  [ "$(x stat -c '%a %U:%G' "/usr/local/share/$f")" = "644 root:root" ] || fail "/usr/local/share/$f missing or with wrong mode"
+done
+# bash-completion finds the script below /usr/local/share by itself when it
+# is installed; the script itself only needs bash and the binary.
+# shellcheck disable=SC2016 # expands in the container's bash
+out=$(x bash -c 'source /usr/local/share/bash-completion/completions/hostashi
+  COMP_WORDS=(hostashi site li) COMP_CWORD=2; _hostashi; echo "${COMPREPLY[*]}"')
+[ "$out" = "list limits" ] || fail "bash completion of 'hostashi site li' gave '$out'"
+
 step "--no-apt installs nothing and names a missing package (ADR-0050)"
 out=$(x /opt/hostashi/install.sh apply --yes --no-apt --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com)
 grep -q 'changes=0' <<<"$out" || fail "--no-apt run on a set-up server changed something: $out"
