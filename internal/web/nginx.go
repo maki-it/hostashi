@@ -438,7 +438,10 @@ server {
     location / {
         proxy_pass http://unix:{{.N.PanelUpstream}}:;
         proxy_http_version 1.1;
-        proxy_set_header Host $http_host;
+        # $host, not the client's Host header: HTTP/3 requests carry only
+        # :authority and nginx makes no Host header from it (HTTP/2 does).
+        # The panel compares Origin with Host, so it keeps the panel's port.
+        proxy_set_header Host $host{{if not .N.PanelShared}}:{{.N.PanelPort}}{{end}};
         proxy_set_header Connection "";
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For "";
@@ -929,6 +932,8 @@ server {
         fastcgi_param SERVER_ADDR $server_addr;
         fastcgi_param SERVER_PORT $server_port;
         fastcgi_param SERVER_NAME $server_name;
+        # HTTP/3 requests have no Host header for nginx to pass on.
+        fastcgi_param HTTP_HOST $host;
         fastcgi_param REDIRECT_STATUS 200;
         # httpoxy: never pass a client's Proxy header on as HTTP_PROXY.
         fastcgi_param HTTP_PROXY "";
