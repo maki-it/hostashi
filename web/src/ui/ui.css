@@ -27,6 +27,7 @@
 .ui-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-2);
   min-height: var(--control-h);
   padding: 0 14px;
@@ -730,6 +731,20 @@ a.ui-btn {
   content: "";
   flex: 1;
   border-top: 1px solid var(--line);
+}
+/* A QR code: always dark on white with a quiet zone, also in dark mode */
+.ui-qr {
+  display: block;
+  width: 200px;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+}
+.ui-qr-bg {
+  fill: var(--qr-light);
+}
+.ui-qr-fg {
+  fill: var(--qr-dark);
 }
 /* A command or a piece of configuration to copy */
 .ui-code {

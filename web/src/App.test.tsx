@@ -305,7 +305,12 @@ describe("Second factor", () => {
     expect(screen.queryByRole("navigation", { name: "Main" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Set up an authenticator app" }));
-    expect(await screen.findByText("JBSWY3DPEHPK3PXP")).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "QR code for your authenticator app" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Authenticator key")).toHaveTextContent("JBSW Y3DP EHPK 3PXP");
+    expect(screen.getByRole("link", { name: "Open in an authenticator app" })).toHaveAttribute(
+      "href",
+      "otpauth://totp/Hostashi:kim?secret=JBSWY3DPEHPK3PXP",
+    );
     await user.type(screen.getByLabelText("One-time code"), "000000");
     await user.click(screen.getByRole("button", { name: "Turn on" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Wrong code");
@@ -364,9 +369,15 @@ describe("Shell", () => {
 
   it("groups the navigation and shows the page in the breadcrumbs", async () => {
     window.location.hash = "#/users";
-    mockFetch({ ...session, "GET /api/v1/users": { body: { users: [] } }, "GET /api/v1/invitations": { body: { invitations: [] } } });
+    mockFetch({
+      ...session,
+      "GET /api/v1/users": { body: { users: [] } },
+      "GET /api/v1/invitations": { body: { invitations: [] } },
+      "GET /api/v1/health": { body: { status: "ok", version: "0.4.0" } },
+    });
     render(<App />);
     const nav = await screen.findByRole("navigation", { name: "Main" });
+    expect(await screen.findByText("Hostashi v0.4.0")).toBeInTheDocument();
     expect(within(nav).getAllByRole("heading").map((h) => h.textContent)).toEqual(["Hosting", "Server", "Administration"]);
     expect(within(nav).getByRole("link", { name: "Users" })).toHaveAttribute("aria-current", "page");
     const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });

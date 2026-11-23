@@ -104,3 +104,23 @@ export async function waitForPanel(opts: {
   }
   return false;
 }
+
+/**
+ * panelVersion returns the version of the running panel from
+ * /api/v1/health, "" when it cannot be read. A degraded panel (503) still
+ * names its version.
+ */
+export async function panelVersion(): Promise<string> {
+  try {
+    const res = await fetch("/api/v1/health", { cache: "no-store", credentials: "same-origin", headers: { Accept: "application/json" } });
+    const body = (await res.json()) as { version?: unknown };
+    return typeof body.version === "string" ? body.version : "";
+  } catch {
+    return "";
+  }
+}
+
+/** versionLabel shows a release as "v0.4.0" and anything else unchanged. */
+export function versionLabel(v: string): string {
+  return /^\d+\.\d+\.\d+/.test(v) ? `v${v}` : v;
+}

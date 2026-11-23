@@ -158,6 +158,13 @@ a.app-user-name[aria-current="page"] {
   text-decoration: underline;
   text-decoration-thickness: 2px;
 }
+.app-version {
+  margin: -8px 0 0;
+  padding-left: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--side-muted);
+}
 .app-user-name small {
   font-size: 12px;
   font-weight: 400;

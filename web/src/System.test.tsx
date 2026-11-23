@@ -4,7 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { System } from "./System";
-import { hostnameError, uptime, waitForPanel, type SystemInfo } from "./system";
+import { hostnameError, panelVersion, uptime, versionLabel, waitForPanel, type SystemInfo } from "./system";
 import { mockFetch } from "./test-utils";
 
 const info: SystemInfo = {
@@ -20,6 +20,30 @@ const info: SystemInfo = {
 };
 
 const zones = { zones: ["Europe/Berlin", "UTC"] };
+
+describe("panel version", () => {
+  it("reads the version from the health answer, also when degraded", async () => {
+    mockFetch({ "GET /api/v1/health": { body: { status: "ok", version: "0.4.0" } } });
+    expect(await panelVersion()).toBe("0.4.0");
+    mockFetch({ "GET /api/v1/health": { status: 503, body: { status: "degraded", version: "0.4.0" } } });
+    expect(await panelVersion()).toBe("0.4.0");
+  });
+
+  it("gives up quietly", async () => {
+    mockFetch({ "GET /api/v1/health": { body: { status: "ok" } } });
+    expect(await panelVersion()).toBe("");
+    mockFetch({ "GET /api/v1/health": { body: { version: 4 } } });
+    expect(await panelVersion()).toBe("");
+    mockFetch({});
+    expect(await panelVersion()).toBe("");
+  });
+
+  it("labels releases with a v", () => {
+    expect(versionLabel("0.4.0")).toBe("v0.4.0");
+    expect(versionLabel("1.2.3-rc.1")).toBe("v1.2.3-rc.1");
+    expect(versionLabel("dev")).toBe("dev");
+  });
+});
 
 describe("system helpers", () => {
   it("checks hostnames like the server", () => {

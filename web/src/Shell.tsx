@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { CaretRight, List, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { logout, type User } from "./auth";
 import { navFor, navItem } from "./nav";
 import { formatHash, type Route } from "./routes";
 import { isDark, saveColorScheme, type ColorScheme } from "./scheme";
+import { panelVersion, versionLabel } from "./system";
 import { IconButton } from "./ui";
 
 type ShellProps = {
@@ -54,7 +55,16 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
   const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [version, setVersion] = useState("");
   const groups = navFor(user.role);
+
+  useEffect(() => {
+    let live = true;
+    void panelVersion().then((v) => live && setVersion(v));
+    return () => {
+      live = false;
+    };
+  }, []);
   const trail = crumbs(route);
 
   async function doLogout() {
@@ -148,6 +158,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
             {error}
           </p>
         )}
+        {version && <p className="app-version">Hostashi {versionLabel(version)}</p>}
       </aside>
       <div className="app-main">
         <header className="app-top">
