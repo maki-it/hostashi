@@ -1220,6 +1220,12 @@ func TestPanelSharedRender(t *testing.T) {
 		}
 	}
 
+	// HTTP/3 requests have no Host header, so $http_host would be empty
+	// and the panel would answer 400.
+	if !strings.Contains(conf, "proxy_set_header Host $host;\n") || strings.Contains(conf, "$http_host") {
+		t.Errorf("shared panel does not pass $host:\n%s", conf)
+	}
+
 	// The sites' default server already refuses unknown names; a second
 	// default_server on the same port would not load.
 	if strings.Contains(conf, "default_server") || strings.Contains(conf, "reuseport") {
@@ -1235,7 +1241,8 @@ func TestPanelSharedRender(t *testing.T) {
 	}
 
 	conf = string(f.Content["sites/_panel.conf"])
-	if !strings.Contains(conf, "return 301 https://$host:8443$request_uri;") || !strings.Contains(conf, "listen 8443 ssl default_server;") {
+	if !strings.Contains(conf, "return 301 https://$host:8443$request_uri;") || !strings.Contains(conf, "listen 8443 ssl default_server;") ||
+		!strings.Contains(conf, "proxy_set_header Host $host:8443;") {
 		t.Errorf("own port:\n%s", conf)
 	}
 
@@ -1821,5 +1828,34 @@ func TestDBToolServer(t *testing.T) {
 
 	if resp, _, err := get("/", nil); err != nil || resp.StatusCode != http.StatusOK {
 		t.Errorf("on the allowlist: %v %v", resp, err)
+	}
+}
+
+// TestNoHTTPHostOverHTTP3 keeps $http_host out of every rendered file:
+// nginx makes no Host header from an HTTP/3 request's :authority, so the
+// panel got none and answered 400, and PHP saw no HTTP_HOST.
+func TestNoHTTPHostOverHTTP3(t *testing.T) {
+	n := &Nginx{
+		Ctl: &testCtl{}, Listen: []string{"80"}, ListenTLS: []string{"443"}, HTTP3: true,
+		PanelListen: []string{"443"}, PanelUpstream: "/run/hostashi-panel.sock",
+		ControlSocket: "/run/x.sock", PIDFile: "/run/x.pid", ErrorLog: "/var/log/x", MimeTypes: "/etc/x",
+	}
+
+	f, err := n.Render(Desired{
+		Panel: &Panel{Domain: "cp.example.com", Cert: "/c.pem", Key: "/k.pem"},
+		Sites: []Site{{User: "alpha", Domains: []string{"a.example.com"}, Root: "/srv/a", Cert: "/c.pem", Key: "/k.pem", PHPSocket: "/run/php/alpha.sock"}},
+	}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, c := range f.Content {
+		if strings.Contains(string(c), "$http_host") {
+			t.Errorf("%s uses $http_host", name)
+		}
+	}
+
+	if alpha := string(f.Content["sites/alpha.conf"]); !strings.Contains(alpha, "fastcgi_param HTTP_HOST $host;") {
+		t.Errorf("PHP site without HTTP_HOST:\n%s", alpha)
 	}
 }

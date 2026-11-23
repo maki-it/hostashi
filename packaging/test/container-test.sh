@@ -1548,6 +1548,16 @@ UNIT
   done
   health=$(p443 -f https://other.example.com/api/v1/health) || fail "panel not served on 443"
   grep -q '"agent":"ok"' <<<"$health" || fail "panel on 443: $health"
+  # Browsers switch to HTTP/3 after the Alt-Svc header; those requests have
+  # no Host header, and the panel answered 400 (v0.2.0).
+  if x curl -V | grep -q 'Features:.* HTTP3'; then
+    out=$(p443 --http3-only -o /tmp/h3.out -w '%{http_code} %{http_version}' https://other.example.com/api/v1/health) || true
+    if [ "$out" != "200 3" ] || ! x grep -q '"agent":"ok"' /tmp/h3.out; then
+      fail "panel over HTTP/3: '$out' '$(x cat /tmp/h3.out)'"
+    fi
+  else
+    echo "curl without HTTP/3, skipping the panel over QUIC"
+  fi
   [ "$(p443 -f https://next.example.com/)" = "hello next" ] || fail "site not served next to the panel on 443"
   loc=$(x curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' -H 'Host: other.example.com' http://127.0.0.1/login)
   [ "$loc" = "301 https://other.example.com/login" ] || fail "panel HTTP redirect on 443: '$loc'"
