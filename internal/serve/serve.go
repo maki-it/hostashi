@@ -639,6 +639,10 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 	}
 
+	// After an upgrade the new release's nginx config reaches the server
+	// now, not with the next change (ADR-0042 panel on 443 needed this).
+	go deps.Sites.SyncAtStart(ctx)
+
 	h := Handler(cfg, deps)
 	srv := newServer(h)
 

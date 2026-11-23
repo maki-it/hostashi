@@ -823,6 +823,45 @@ func (s *Service) Sync(ctx context.Context) error {
 	return nil
 }
 
+// SyncAtStart sends the stored web state once when the panel starts, so
+// that what a new release renders differently (nginx templates, app units)
+// reaches the server after an upgrade instead of waiting for the next
+// change. The agent skips the reload when nothing changed. While the agent
+// is unavailable it tries again with a growing pause, up to syncAtStartTries
+// times.
+func (s *Service) SyncAtStart(ctx context.Context) {
+	pause := syncAtStartPause
+
+	for try := 1; ; try++ {
+		err := s.Sync(ctx)
+		if err == nil || ctx.Err() != nil {
+			return
+		}
+
+		if try == syncAtStartTries {
+			s.log.ErrorContext(ctx, "web state not sent at start; it goes out with the next change", "err", err)
+
+			return
+		}
+
+		s.log.WarnContext(ctx, "web state not sent at start, trying again", "err", err, "in", pause)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(pause):
+		}
+
+		pause = min(2*pause, time.Minute)
+	}
+}
+
+// Tries and first pause of SyncAtStart; variables for the tests.
+var (
+	syncAtStartTries = 10
+	syncAtStartPause = 2 * time.Second
+)
+
 // applyWeb sends the complete web state: every active site with its domains,
 // PHP version and HTTPS when its certificate covers all its domains. A
 // disabled site is sent without PHP, so its pool stops.
