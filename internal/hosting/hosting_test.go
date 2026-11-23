@@ -1094,6 +1094,7 @@ func TestSyncAtStart(t *testing.T) {
 	}
 
 	tries, pause := syncAtStartTries, syncAtStartPause
+
 	t.Cleanup(func() { syncAtStartTries, syncAtStartPause = tries, pause })
 
 	syncAtStartTries, syncAtStartPause = 3, time.Millisecond
