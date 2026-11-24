@@ -13,15 +13,16 @@ export type NavCount = { n: number; tone: "err" | "warn" };
  * when one failed, amber when there are only warnings.
  */
 export function healthCount(r: Pick<DoctorReport, "checks">): NavCount | null {
-  const fail = r.checks.filter((c) => c.status === "fail").length;
-  const warn = r.checks.filter((c) => c.status === "warn").length;
+  const checks = Array.isArray(r?.checks) ? r.checks : [];
+  const fail = checks.filter((c) => c.status === "fail").length;
+  const warn = checks.filter((c) => c.status === "warn").length;
   if (fail + warn === 0) return null;
   return { n: fail + warn, tone: fail > 0 ? "err" : "warn" };
 }
 
 /** servicesCount counts the services that failed. */
 export function servicesCount(rows: Pick<ServiceRow, "installed" | "active">[]): NavCount | null {
-  const n = rows.filter((r) => stateWord(r).tone === "err").length;
+  const n = (Array.isArray(rows) ? rows : []).filter((r) => stateWord(r).tone === "err").length;
   return n === 0 ? null : { n, tone: "err" };
 }
 

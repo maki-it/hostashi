@@ -45,6 +45,28 @@ export function updatePage(id: string, change: { name?: string; file?: File }) {
   return request<StatusPage>("PUT", pagePath(id), f);
 }
 
+/** previewLink returns a short-lived, sandboxed link that shows the page. */
+export const previewLink = (id: string) => request<{ url: string; expires: string }>("POST", pagePath(id) + "/preview");
+
+/**
+ * openPreview opens the page in a new tab. The tab opens at once, before
+ * the link is fetched, so popup blockers let it through; it loses its
+ * opener before it navigates. It returns an error text, "" on success.
+ */
+export async function openPreview(id: string, open: typeof window.open = window.open.bind(window)): Promise<string> {
+  const tab = open("", "_blank");
+  if (tab) tab.opener = null;
+  try {
+    const { url } = await previewLink(id);
+    if (!tab) return "The browser blocked the new tab. Allow pop-ups for the panel and try again.";
+    tab.location.href = url;
+    return "";
+  } catch (err) {
+    tab?.close();
+    return pageMessage(err);
+  }
+}
+
 export const deletePage = (id: string) => request<void>("DELETE", pagePath(id));
 
 export const setMaintenance = (site: string, m: SiteMaintenance) =>
