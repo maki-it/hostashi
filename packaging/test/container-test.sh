@@ -632,8 +632,10 @@ for _ in $(seq 1 120); do
 done
 [ "$(jget 'd["realtimeActive"]')" = True ] || fail "clamonacc not running: $(x cat /tmp/api.out); $(x journalctl --no-pager -n 30 -u clamav-daemon -u clamav-clamonacc)"
 x grep -q '^OnAccessIncludePath /home/blog$' /etc/hostashi/clamav/clamd.conf || fail "blog not watched"
-x grep -q -- '--move' /etc/systemd/system/clamav-clamonacc.service.d/50-hostashi.conf && fail "clamonacc would move files"
-x systemctl show -p ExecStart --value clamav-clamonacc.service | grep -q -- '--move' && fail "clamonacc runs with --move"
+# The unit systemd runs, after all drop-ins, must not move files.
+onacc_exec="$(x systemctl show -p ExecStart --value clamav-clamonacc.service)"
+case "$onacc_exec" in *--fdpass*) ;; *) fail "clamonacc does not run from the Hostashi drop-in: $onacc_exec";; esac
+case "$onacc_exec" in *--move*) fail "clamonacc would move files: $onacc_exec";; esac
 # shellcheck disable=SC2016 # the inner shell expands nothing either
 x sh -c 'printf "%s%s" "X5O!P%@AP[4\PZX54(P^)7CC)7}\$EICAR-STANDARD-" "ANTIVIRUS-TEST-FILE!\$H+H*" >/home/blog/htdocs/new.com; chown blog:blog /home/blog/htdocs/new.com'
 found=
