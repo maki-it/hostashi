@@ -108,9 +108,13 @@ Without project quota a pool works, but its sites get no disk limit. The agent s
 
 | Command | What it does |
 |---------|--------------|
-| `hostashi pool add NAME PATH` | Adds the mounted volume at PATH as pool NAME. It refuses, with the reason, a path that is not a mount point, not ext4 or XFS, not mounted with `nosuid,nodev`, not in `/etc/fstab`, not empty, inside a system directory or overlapping another pool. |
-| `hostashi pool list` | Lists the pools with their path, number of sites and quota state. |
-| `hostashi pool remove NAME` | Removes a pool without sites. Then you can unmount the volume. |
+| `hostashi pool add [-default] NAME PATH` | Adds the mounted volume at PATH as pool NAME. It refuses, with the reason, a path that is not a mount point, not ext4 or XFS, not mounted with `nosuid,nodev`, not in `/etc/fstab`, not empty, inside a system directory or overlapping another pool. With `-default`, new sites land on it when they name no pool. |
+| `hostashi pool list` | Lists the pools with their path, number of sites and quota state; the default pool ends with `default`. |
+| `hostashi pool rename NAME NEWNAME` | Gives a pool a new name. Its path, its sites and their files stay where they are. Goes through the panel's API (needs `hostashi login`). |
+| `hostashi pool default NAME` | Makes a pool the default for new sites that name no pool. Goes through the panel's API (needs `hostashi login`). |
+| `hostashi pool remove NAME` | Removes a pool without sites that is not the default. Then you can unmount the volume. |
+
+The panel shows the same under **Server → Storage pools**, where admins can also rename a pool and make it the default. Adding and removing a pool stay on the command line, because they need a mounted volume on the server.
 
 `hostashi doctor` fails a pool whose volume is not mounted or whose marker is missing, and warns when a pool's volume is mounted without `nosuid,nodev` or has no `/etc/fstab` entry. While a volume is missing, its sites do not start and cannot be changed; mount it and restart `hostashi-agent`.
 

@@ -99,6 +99,8 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	deps.Doctor = doc.run
 	pl := &stubPools{}
 	deps.Pools = pl.list
+	deps.PoolAdmin = pl
+	deps.PoolSites = st
 	fw := &stubFirewall{enabled: true}
 	deps.Firewall = fw
 	php := &stubPHP{}
@@ -131,6 +133,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	if ag != nil {
 		deps.Sites = hosting.New(st, ag, nil)
 		deps.Sites.EnableAppEnv(box)
+		deps.Sites.EnableGit(box)
 		deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), nil)
 		deps.CloudPanel.Connect(siteCreator(deps.Sites, nil), imports)
 		deps.CloudPanel.ConnectPools(cpmigrate.PoolLister(pl.list))

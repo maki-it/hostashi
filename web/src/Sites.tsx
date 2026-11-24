@@ -8,6 +8,7 @@ import {
   domainsProblem,
   httpsLabel,
   httpsTone,
+  defaultPool,
   listPools,
   listSites,
   parseDomains,
@@ -317,7 +318,10 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   // list, the site goes to the default pool as before.
   useEffect(() => {
     listPools()
-      .then(setPools)
+      .then((list) => {
+        setPools(list);
+        setPool(defaultPool(list));
+      })
       .catch(() => setPools([]));
   }, []);
   const choosePool = pools.length > 1;

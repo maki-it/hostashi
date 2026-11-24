@@ -2473,6 +2473,141 @@
         },
         "type": "object"
       },
+      "Git": {
+        "additionalProperties": false,
+        "properties": {
+          "auth": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "buildTimeoutMinutes": {
+            "type": "integer"
+          },
+          "commands": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "deployDir": {
+            "type": "string"
+          },
+          "hasToken": {
+            "type": "boolean"
+          },
+          "hostKey": {
+            "type": "string"
+          },
+          "keep": {
+            "type": "integer"
+          },
+          "publicKey": {
+            "type": "string"
+          },
+          "shared": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "submodules": {
+            "type": "boolean"
+          },
+          "tokenUser": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "webhook": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "auth",
+          "branch",
+          "buildTimeoutMinutes",
+          "commands",
+          "configured",
+          "deployDir",
+          "hasToken",
+          "hostKey",
+          "keep",
+          "publicKey",
+          "shared",
+          "submodules",
+          "tokenUser",
+          "updatedAt",
+          "url",
+          "webhook"
+        ],
+        "type": "object"
+      },
+      "GitInput": {
+        "additionalProperties": false,
+        "properties": {
+          "auth": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "buildTimeoutMinutes": {
+            "type": "integer"
+          },
+          "commands": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "deployDir": {
+            "type": "string"
+          },
+          "keep": {
+            "type": "integer"
+          },
+          "shared": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "submodules": {
+            "type": "boolean"
+          },
+          "token": {
+            "type": "string"
+          },
+          "tokenUser": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Grants": {
         "additionalProperties": false,
         "properties": {
@@ -4599,6 +4734,9 @@
           "available": {
             "type": "boolean"
           },
+          "default": {
+            "type": "boolean"
+          },
           "freeBytes": {
             "minimum": 0,
             "type": "integer"
@@ -4622,6 +4760,7 @@
         },
         "required": [
           "available",
+          "default",
           "name",
           "path",
           "sites"
@@ -4644,6 +4783,15 @@
         "required": [
           "pools"
         ],
+        "type": "object"
+      },
+      "PoolRenameInput": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "Preferences": {
@@ -4771,6 +4919,23 @@
         "required": [
           "cpus",
           "presets"
+        ],
+        "type": "object"
+      },
+      "PreviewLink": {
+        "additionalProperties": false,
+        "properties": {
+          "expires": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires",
+          "url"
         ],
         "type": "object"
       },
@@ -12739,6 +12904,122 @@
         "x-hostashi-action": "pools:read"
       }
     },
+    "/api/v1/pools/{name}/default": {
+      "post": {
+        "operationId": "setDefaultPool",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoolInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:write"
+            ]
+          }
+        ],
+        "summary": "Make a storage pool the default for new sites",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "pools:write"
+      }
+    },
+    "/api/v1/pools/{name}/rename": {
+      "post": {
+        "operationId": "renamePool",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PoolRenameInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoolInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:write"
+            ]
+          }
+        ],
+        "summary": "Give a storage pool a new name; its path and sites stay",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "pools:write"
+      }
+    },
     "/api/v1/python": {
       "get": {
         "operationId": "getPython",
@@ -16135,6 +16416,217 @@
         "x-hostashi-action": "files:read"
       }
     },
+    "/api/v1/sites/{name}/git": {
+      "delete": {
+        "operationId": "deleteSiteGit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Remove the Git setting of a site with its token, deploy key and webhook; the files stay",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      },
+      "get": {
+        "operationId": "getSiteGit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Git"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "The Git deploy setting of a site, without its token and private key",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
+      },
+      "put": {
+        "operationId": "setSiteGit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Git"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Set the repository, branch, shared paths and build commands of a site; SSH gets a deploy key",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      }
+    },
+    "/api/v1/sites/{name}/git/key": {
+      "post": {
+        "operationId": "newSiteGitKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Git"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Replace the deploy key of a site that deploys over SSH",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      }
+    },
     "/api/v1/sites/{name}/headers": {
       "get": {
         "operationId": "getSiteHeaders",
@@ -19134,6 +19626,59 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "pages:write"
+      }
+    },
+    "/api/v1/status-pages/{id}/preview": {
+      "post": {
+        "operationId": "previewStatusPage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewLink"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "pages:read"
+            ]
+          }
+        ],
+        "summary": "Get a short-lived link that shows a maintenance or parking page",
+        "tags": [
+          "pages"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "pages:read"
       }
     },
     "/api/v1/system": {

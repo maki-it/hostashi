@@ -93,10 +93,18 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     let live = true;
     const load = () => {
       runDoctor()
-        .then((r) => live && setCounts((c) => ({ ...c, health: healthCount(r) })))
+        .then((r) => {
+          // Counted here, not in the state updater: a bad answer must not
+          // take the whole frame down.
+          const health = healthCount(r);
+          if (live) setCounts((c) => ({ ...c, health }));
+        })
         .catch(() => undefined);
       listServices()
-        .then((rows) => live && setCounts((c) => ({ ...c, services: servicesCount(rows) })))
+        .then((rows) => {
+          const services = servicesCount(rows);
+          if (live) setCounts((c) => ({ ...c, services }));
+        })
         .catch(() => undefined);
     };
     load();

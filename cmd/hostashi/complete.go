@@ -95,9 +95,11 @@ var completionTree = &compNode{sub: cmds(
 		&compNode{name: "limits", help: "show or change a site's limits", args: limitKeys, argsFrom: 1},
 	)},
 	&compNode{name: "pool", help: "storage pools for site homes", sub: cmds(
-		leaf("add", "add a mounted volume as a pool"),
+		&compNode{name: "add", help: "add a mounted volume as a pool", flags: []string{"-default"}},
 		leaf("remove", "remove a pool"),
 		leaf("list", "list the pools"),
+		leaf("rename", "give a pool a new name"),
+		leaf("default", "make a pool the default for new sites"),
 	)},
 	&compNode{name: "web", help: "make the web state live", sub: cmds(leaf("apply", "read the web state as JSON from stdin"))},
 	&compNode{name: "db", help: "databases and database users", sub: cmds(
@@ -146,6 +148,7 @@ var completionTree = &compNode{sub: cmds(
 		leaf("remove", "remove a line no site uses"),
 	)},
 	&compNode{name: "python-install", hidden: true},
+	&compNode{name: "git-sync", hidden: true},
 	&compNode{name: "user", help: "recover a locked-out account", sub: cmds(
 		&compNode{name: "recover", help: "reset a user's password and second factors", flags: []string{"-public-url=", "-db="}},
 	)},

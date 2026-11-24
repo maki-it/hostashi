@@ -30,7 +30,7 @@ func TestComplete(t *testing.T) {
 		wantNil bool
 	}{
 		{name: "top level by prefix", words: []string{"si"}, want: []string{"site"}},
-		{name: "top level hides service commands", words: []string{""}, has: []string{"login", "api", "site", "completion"}, hasNot: []string{"serve", "agent", "files-helper", "dbjob", "node-install", "python-install", "__complete"}},
+		{name: "top level hides service commands", words: []string{""}, has: []string{"login", "api", "site", "completion"}, hasNot: []string{"serve", "agent", "files-helper", "dbjob", "node-install", "python-install", "git-sync", "__complete"}},
 		{name: "subcommands", words: []string{"db", ""}, want: []string{"list", "create", "delete", "user", "import", "export"}},
 		{name: "nested subcommands", words: []string{"db", "user", "p"}, want: []string{"password"}},
 		{name: "hidden subcommands", words: []string{"backup", "r"}, want: []string{"restore", "restore-status"}},

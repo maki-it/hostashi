@@ -62,6 +62,10 @@ type Config struct {
 	// DBToolPort is the HTTPS port of the web database tool (ADR-0038),
 	// served for the panel's host name; 0 turns the tool off.
 	DBToolPort int
+
+	// PagesDir is where the agent keeps the maintenance and parking pages,
+	// read for previews; empty means pages.DefaultDir.
+	PagesDir string
 }
 
 // DefaultChallengeDir is where nginx looks for HTTP-01 challenge files
@@ -130,6 +134,11 @@ type Deps struct {
 	// Pools lists the storage pools (ADR-0016); nil disables its route.
 	// Needs Auth.
 	Pools Pools
+	// PoolAdmin and PoolSites rename pools and pick the default one
+	// (ADR-0016 addendum 2); nil disables those routes. Need Auth, Pools
+	// and Settings.
+	PoolAdmin PoolAdmin
+	PoolSites PoolSites
 	// PHP installs more PHP versions (ADR-0036); nil disables its routes.
 	// Needs Auth and Settings.
 	PHP PHPInstaller
@@ -244,8 +253,10 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 			registerDatabases(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDBServers(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPages(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerPagePreview(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, newPreviews(cfg.PagesDir), log)
 			registerParked(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerCron(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerGit(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSSH(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPHPSettings(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
@@ -328,6 +339,10 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		if deps.Pools != nil {
 			registerPools(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Pools, log)
+
+			if deps.PoolAdmin != nil && deps.PoolSites != nil && deps.Settings != nil {
+				registerPoolAdmin(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Pools, deps.PoolAdmin, deps.PoolSites, deps.Settings, log)
+			}
 		}
 
 		if deps.Doctor != nil {
@@ -531,6 +546,8 @@ func Run(ctx context.Context, cfg Config) error {
 		Settings:    st,
 		Doctor:      RPCDoctor(client),
 		Pools:       RPCPools(client),
+		PoolAdmin:   RPCPoolAdmin{C: client},
+		PoolSites:   st,
 		Firewall:    RPCFirewall{C: client},
 		PHP:         RPCPHPInstaller{C: client},
 		PGClient:    RPCPGClient{C: client},
@@ -551,6 +568,11 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
 	deps.CloudPanel.Connect(siteCreator(deps.Sites, cfg.Log), RPCCloudPanelImports{C: client})
 	deps.CloudPanel.ConnectPools(cpmigrate.PoolLister(deps.Pools))
+	deps.Sites.ResolveDefaultPool(func(ctx context.Context) (string, error) {
+		pools, err := deps.Pools(ctx)
+
+		return DefaultPoolOf(pools), err
+	})
 	deps.CloudPanel.EnableLoads(ctx, deps.Sites, 0)
 	deps.CloudPanel.EnableCutover(deps.Sites, resolvConf("/etc/resolv.conf"), serverAddrs(client))
 
@@ -578,6 +600,7 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.Sites.EnableObjectCache(hosting.RPCAgent{C: client})
 	deps.Sites.EnableApps(hosting.RPCAgent{C: client})
 	deps.Sites.EnableAppEnv(box)
+	deps.Sites.EnableGit(box)
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
 	m.RegisterSites(siteStats(client), cfg.Log)
