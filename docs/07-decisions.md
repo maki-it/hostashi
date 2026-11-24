@@ -66,6 +66,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0060 | Time zone, hostname and reboot from the panel | Accepted on 2026-11-22 ([adr/0060](adr/0060-time-zone-hostname-and-reboot.md)) | No |
 | 0061 | Site type Python | Accepted on 2026-11-22 ([adr/0061](adr/0061-site-type-python.md)) | No |
 | 0062 | Git deploy per site | Accepted on 2026-11-24 ([adr/0062](adr/0062-git-deploy-per-site.md)) | No |
+| 0063 | Resource usage per site | Accepted on 2026-11-24 ([adr/0063](adr/0063-resource-usage-per-site.md)) | No |
 
 ---
 
@@ -428,3 +429,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0062 Git deploy per site
 
 **Full text (status Accepted, 2026-11-24, by Kim):** [adr/0062](adr/0062-git-deploy-per-site.md). Summary: Kim wants proper Git support in sites. Recommended: per site a repository (HTTPS with an optional sealed token, or SSH with an Ed25519 deploy key made by Hostashi and a pinned host key), a branch, shared paths and build commands. Each deploy checks the commit out into a new release directory with go-git in `hostashi git-sync`, run as the site user in a fixed sandboxed oneshot unit `hostashi-deploy@<site>`; build commands run there as cron commands do (ADR-0028); only a fully successful run is switched live by an atomic symlink swap, followed by a PHP reload or app restart and a cache purge. Rollback to a kept release, history and logs in the panel. Started by button, API, CLI or an optional signed webhook (GitHub, GitLab, Gitea/Forgejo, bearer token). No new `os/exec` exception. Decided by Kim on 2026-11-24: release directories with an atomic switch, go-git as the site user (no Git LFS in v1), build commands as for cron with presets, an optional webhook per site.
+
+## ADR-0063 Resource usage per site
+
+**Full text (status Accepted, 2026-11-24, by Kim):** [adr/0063](adr/0063-resource-usage-per-site.md). Summary: Kim wants CPU, memory and network per site to see which site uses the most. Recommended: the agent reads CPU, memory working set, tasks and disk I/O from each site's slice and its SSH user slice (read-only op `sites.stats`, `IOAccounting=yes` on the slices); web traffic (bytes in and out, requests) from a small extra nginx log per site without IPs or paths; the panel samples every 15 s and keeps tiers like the server dashboard (new table `site_samples`). UI: a "Sites by usage" ranking for admins and a "Usage" tab per site. Outgoing traffic of the site's processes through nftables counters comes later in an addendum. cgroups have no network counters, and SQL load in the shared database server is not counted per site. Decided by Kim on 2026-11-24: web traffic now, outgoing traffic later.

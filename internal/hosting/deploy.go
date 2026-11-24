@@ -160,10 +160,7 @@ func (s *Service) Deploy(ctx context.Context, actor int64, name, source string) 
 	req.ID = d.ID
 
 	if _, err := s.deploys.DeployStart(ctx, req); err != nil {
-		d.State, d.Error = store.DeployFailed, err.Error()
-		if ferr := s.st.FinishSiteDeploy(context.WithoutCancel(ctx), d, s.now()); ferr != nil {
-			s.log.ErrorContext(ctx, "mark deploy failed", "site", site.Name, "id", d.ID, "err", ferr)
-		}
+		s.finishDeploy(ctx, site.Name, d, store.DeployFailed, err.Error())
 
 		return store.SiteDeploy{}, err
 	}
@@ -252,7 +249,7 @@ func (s *Service) pollDeploys(ctx context.Context) {
 
 		site, ok := sites[d.SiteID]
 		if !ok {
-			s.finishDeploy(ctx, d, store.DeployFailed, "the site is gone")
+			s.finishDeploy(ctx, "", d, store.DeployFailed, "the site is gone")
 
 			continue
 		}
@@ -261,7 +258,7 @@ func (s *Service) pollDeploys(ctx context.Context) {
 			// A rollback runs within its request and takes seconds; one
 			// still active after rollbackGrace was cut short by a restart.
 			if s.now().Sub(d.Created) > rollbackGrace {
-				s.finishDeploy(ctx, d, store.DeployFailed, "the panel stopped during the rollback")
+				s.finishDeploy(ctx, site.Name, d, store.DeployFailed, "the panel stopped during the rollback")
 			}
 
 			continue
@@ -275,7 +272,7 @@ func (s *Service) pollDeploy(ctx context.Context, site store.Site, d store.SiteD
 	if d.State == store.DeployQueued {
 		// The panel stopped between the row and the agent's start.
 		if s.now().Sub(d.Created) > queuedGrace {
-			s.finishDeploy(ctx, d, store.DeployFailed, "the deploy did not start")
+			s.finishDeploy(ctx, site.Name, d, store.DeployFailed, "the deploy did not start")
 		}
 
 		return
@@ -292,12 +289,12 @@ func (s *Service) pollDeploy(ctx context.Context, site store.Site, d store.SiteD
 	case agentapi.DeployRunning:
 		return
 	case agentapi.DeployUnknown:
-		s.finishDeploy(ctx, d, store.DeployFailed, "the server lost track of this deploy")
+		s.finishDeploy(ctx, site.Name, d, store.DeployFailed, "the server lost track of this deploy")
 
 		return
 	case agentapi.DeployFailed:
 		d.Commit, d.Author, d.Message = st.Commit, st.Author, st.Message
-		s.finishDeploy(ctx, d, store.DeployFailed, st.Error)
+		s.finishDeploy(ctx, site.Name, d, store.DeployFailed, st.Error)
 
 		return
 	}
@@ -306,19 +303,19 @@ func (s *Service) pollDeploy(ctx context.Context, site store.Site, d store.SiteD
 
 	g, err := s.st.SiteGit(ctx, site.ID)
 	if err != nil {
-		s.finishDeploy(ctx, d, store.DeployFailed, "the Git setting of the site is gone")
+		s.finishDeploy(ctx, site.Name, d, store.DeployFailed, "the Git setting of the site is gone")
 
 		return
 	}
 
 	warn, err := s.goLive(ctx, site, g.DeployDir, d.Release)
 	if err != nil {
-		s.finishDeploy(ctx, d, store.DeployFailed, "the build succeeded, but the release could not go live: "+err.Error())
+		s.finishDeploy(ctx, site.Name, d, store.DeployFailed, "the build succeeded, but the release could not go live: "+err.Error())
 
 		return
 	}
 
-	s.finishDeploy(ctx, d, store.DeploySucceeded, warn)
+	s.finishDeploy(ctx, site.Name, d, store.DeploySucceeded, warn)
 	s.pruneReleases(ctx, site, g)
 }
 
@@ -364,7 +361,10 @@ func (s *Service) pruneReleases(ctx context.Context, site store.Site, g store.Si
 	}
 }
 
-func (s *Service) finishDeploy(ctx context.Context, d store.SiteDeploy, state, msg string) {
+// finishDeploy ends a run. A failed deploy of a site that still exists is
+// passed to the observer of ObserveFailedDeploys; a failed rollback is not,
+// the request that started it answers with the error.
+func (s *Service) finishDeploy(ctx context.Context, site string, d store.SiteDeploy, state, msg string) {
 	d.State, d.Error = state, msg
 	if err := s.st.FinishSiteDeploy(context.WithoutCancel(ctx), d, s.now()); err != nil && !errors.Is(err, store.ErrNotFound) {
 		s.log.ErrorContext(ctx, "finish deploy", "id", d.ID, "err", err)
@@ -373,6 +373,10 @@ func (s *Service) finishDeploy(ctx context.Context, d store.SiteDeploy, state, m
 	}
 
 	s.log.InfoContext(ctx, "deploy finished", "id", d.ID, "kind", d.Kind, "state", state, "commit", d.Commit, "error", msg)
+
+	if state == store.DeployFailed && d.Kind == store.DeployKindDeploy && site != "" && s.onDeployFailed != nil {
+		s.onDeployFailed(context.WithoutCancel(ctx), site, d)
+	}
 }
 
 // Rollback makes the release of an earlier successful deploy live again,
@@ -427,12 +431,12 @@ func (s *Service) Rollback(ctx context.Context, actor int64, name string, id int
 
 	warn, err := s.goLive(ctx, site, g.DeployDir, target.Release)
 	if err != nil {
-		s.finishDeploy(ctx, d, store.DeployFailed, err.Error())
+		s.finishDeploy(ctx, site.Name, d, store.DeployFailed, err.Error())
 
 		return store.SiteDeploy{}, err
 	}
 
-	s.finishDeploy(ctx, d, store.DeploySucceeded, warn)
+	s.finishDeploy(ctx, site.Name, d, store.DeploySucceeded, warn)
 	s.audit(ctx, actor, "site.deploy.rollback", site.Name, map[string]string{
 		"id": strconv.FormatInt(d.ID, 10), "to": strconv.FormatInt(target.ID, 10), "commit": target.Commit,
 	})

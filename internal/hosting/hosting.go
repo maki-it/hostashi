@@ -204,6 +204,8 @@ type Service struct {
 	panelServed string // panel domain of the last accepted web state; under mu
 
 	onApply func(ok bool, generation int) // nil: nobody listens
+	// onDeployFailed: see ObserveFailedDeploys; nil: nobody listens.
+	onDeployFailed func(ctx context.Context, site string, d store.SiteDeploy)
 
 	// localAddrs are the server's own addresses, which no trusted proxy
 	// range may hold (ADR-0059); nil reads the interfaces.

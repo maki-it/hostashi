@@ -577,6 +577,7 @@ describe("SitePage", () => {
       "Domains & HTTPS",
       "Web",
       "Files",
+      "Git",
       "PHP",
       "Cron",
       "SSH & SFTP",

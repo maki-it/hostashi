@@ -34,12 +34,13 @@ describe("NotificationsCard", () => {
   });
 
   it("shows the services switch and skips a category it does not know", async () => {
-    const cats = [...admin.categories, { id: "services", enabled: true }, { id: "later", enabled: true }];
+    const cats = [...admin.categories, { id: "services", enabled: true }, { id: "deploys", enabled: false }, { id: "later", enabled: true }];
     mockFetch({ "GET /api/v1/account/notifications": { body: { ...admin, categories: cats } } });
     render(<NotificationsCard />);
 
     expect(await screen.findByRole("checkbox", { name: /Services.*keeps crashing/ })).toBeChecked();
-    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    expect(screen.getByRole("checkbox", { name: /Git deploys.*failed/ })).not.toBeChecked();
+    expect(screen.getAllByRole("checkbox")).toHaveLength(4);
   });
 
   it("asks for a confirmed address first", async () => {

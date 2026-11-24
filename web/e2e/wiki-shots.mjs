@@ -20,7 +20,7 @@ const root = resolve(import.meta.dirname, "..");
 const out = resolve(root, "../docs/wiki/images");
 
 // Each shot opens a hash route, optionally does something, and takes the
-// page (or one element) as it is then.
+// page (or one element) as it is then; full takes the whole page.
 const shots = [
   { name: "sites", hash: "#/sites", ready: "table" },
   { name: "site-new", hash: "#/sites?new=1", ready: "form" },
@@ -68,6 +68,35 @@ const shots = [
       await page.getByRole("button", { name: "Change type" }).click();
       await page.getByRole("radio", { name: /^PHP/ }).click();
       await page.getByRole("heading", { name: "Change type" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  { name: "site-git", hash: "#/sites/app/git", ready: "text=Deploy now", full: true },
+  {
+    name: "site-git-log",
+    hash: "#/sites/app/git",
+    ready: "text=Deploy now",
+    act: async (page) => {
+      await page.getByRole("button", { name: "Show log" }).first().click();
+      await page.getByLabel("Log of deploy 14").waitFor();
+    },
+  },
+  { name: "site-git-setup", hash: "#/sites/docs/git", ready: "form", full: true },
+  {
+    name: "site-git-hostkey",
+    hash: "#/sites/app/git",
+    ready: "text=Deploy now",
+    act: async (page) => {
+      await page.getByRole("button", { name: "Read the host key again" }).click();
+      await page.getByRole("heading", { name: "Deploy key and host key" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  {
+    name: "site-git-webhook",
+    hash: "#/sites/app/git",
+    ready: "text=Deploy now",
+    act: async (page) => {
+      await page.getByRole("button", { name: "New secret" }).click();
+      await page.getByRole("heading", { name: "Webhook" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
     },
   },
   { name: "users", hash: "#/users", ready: "table" },
@@ -151,7 +180,7 @@ try {
     await page.waitForSelector(s.ready, { timeout: 10000 });
     if (s.act) await s.act(page);
     await page.waitForLoadState("networkidle");
-    await page.screenshot({ path: resolve(out, s.name + ".png"), animations: "disabled" });
+    await page.screenshot({ path: resolve(out, s.name + ".png"), animations: "disabled", fullPage: s.full === true });
     console.log("wrote images/" + s.name + ".png");
     if (errors.length) {
       failed = true;

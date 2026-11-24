@@ -157,6 +157,55 @@ const tokens = [
   { id: 1, name: "Old script", prefix: "hst_Zp1cVb", scopes: ["sites:read"], createdAt: day(200), expiresAt: "2027-05-01T00:00:00Z", neverExpires: false, lastUsedAt: day(150), lastUsedIp: "203.0.113.24", revokedAt: day(120), sites: null },
 ];
 
+const gitBase = {
+  configured: false, url: "", branch: "main", deployDir: "htdocs", shared: [], commands: [], keep: 5, buildTimeoutMinutes: 15, submodules: false,
+  auth: "none", tokenUser: "", hasToken: false, publicKey: "", hostKey: "", hostKeyFingerprint: "", webhook: false, webhookPath: "", updatedAt: "",
+};
+
+const git = {
+  app: {
+    ...gitBase,
+    configured: true,
+    url: "git@github.com:example/app.git",
+    shared: [".env", "uploads"],
+    commands: ["npm ci", "npm run build"],
+    auth: "ssh",
+    publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK8qX2mJt0vYz3cN5wR7uE1hB4dF6gL9pS2aQ8xV0nMc hostashi-app",
+    hostKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
+    hostKeyFingerprint: "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU",
+    webhook: true,
+    webhookPath: "/api/v1/hooks/deploy/3f9c2a7e1b5d48c6a0e9f7b2d4c61a8e",
+    updatedAt: day(3),
+  },
+};
+
+const at = (d, h, m) => new Date(Date.UTC(2026, 10, 22 - d, h, m)).toISOString();
+
+const deploys = {
+  app: [
+    { id: 14, release: "14", kind: "deploy", source: "webhook", commit: "9b1e4c7a2f6d3e8b5a0c1d2e3f4a5b6c7d8e9f01", author: "Alex", message: "Show the order date in the list", state: "succeeded", error: "", createdAt: at(0, 9, 41), startedAt: at(0, 9, 41), finishedAt: at(0, 9, 43) },
+    { id: 13, release: "13", kind: "deploy", source: "webhook", commit: "4d2a9e1c7b3f5a8e6d0c2b4a6e8f1a3c5e7b9d02", author: "Alex", message: "Update dependencies", state: "failed", error: "a step of the deploy failed", createdAt: at(1, 16, 5), startedAt: at(1, 16, 5), finishedAt: at(1, 16, 7) },
+    { id: 12, release: "12", kind: "deploy", source: "panel", commit: "e7c3b1a9d5f2e8c4a6b0d2f4e6a8c1b3d5f7e9a3", author: "Kim", message: "New start page", state: "succeeded", error: "", createdAt: at(4, 11, 20), startedAt: at(4, 11, 20), finishedAt: at(4, 11, 22) },
+    { id: 11, release: "11", kind: "deploy", source: "api", commit: "1a3c5e7b9d2f4a6c8e0b2d4f6a8c0e2b4d6f8a04", author: "Kim", message: "First version", state: "succeeded", error: "", createdAt: at(9, 8, 2), startedAt: at(9, 8, 2), finishedAt: at(9, 8, 5) },
+  ],
+};
+
+const deployLogText = [
+  "Fetching main from git@github.com:example/app.git",
+  "Commit 9b1e4c7 by Alex: Show the order date in the list",
+  "Wrote 214 files to .deploy/releases/14",
+  "Linked shared paths: .env uploads",
+  "$ npm ci",
+  "added 312 packages in 9s",
+  "$ npm run build",
+  "> app@1.4.0 build",
+  "> vite build",
+  "✓ 87 modules transformed.",
+  "dist/index.html  0.62 kB",
+  "✓ built in 2.31s",
+  "",
+].join("\n");
+
 const me = { username: "kim", role: "admin", secondFactor: true, secondFactorRequired: true, clientIp: "203.0.113.24" };
 
 const routes = [
@@ -183,6 +232,11 @@ const routes = [
   ["GET", /^\/backups$/, () => backups],
   ["GET", /^\/firewall$/, () => firewall],
   ["GET", /^\/dbtool$/, () => ({ available: true, minutes: [30, 120] })],
+  ["GET", /^\/sites\/([^/]+)\/git$/, (m) => git[m[1]] ?? gitBase],
+  ["GET", /^\/sites\/([^/]+)\/deploys$/, (m) => deploys[m[1]] ?? []],
+  ["GET", /^\/sites\/[^/]+\/deploys\/\d+\/log$/, () => ({ log: deployLogText, truncated: false })],
+  ["POST", /^\/sites\/[^/]+\/git\/hostkey\/scan$/, () => ({ key: git.app.hostKey, fingerprint: git.app.hostKeyFingerprint })],
+  ["POST", /^\/sites\/[^/]+\/git\/webhook$/, () => ({ id: "3f9c2a7e1b5d48c6a0e9f7b2d4c61a8e", path: git.app.webhookPath, secret: "q8Zt1vLx4mN7pR0sW3yB6cE9fH2jK5aD8gU1iO4lT7w" })],
   ["GET", /^\/sites\/[^/]+\/app\/env$/, () => ({ names: ["DATABASE_URL", "SESSION_SECRET"] })],
   ["GET", /^\/sites\/[^/]+\/app$/, () => ({ state: "active", subState: "running", restarts: 0, usedBytes: 86_000_000, since: day(1) })],
   ["GET", /^\/sites\/[^/]+\/backups$/, () => ({ snapshots })],

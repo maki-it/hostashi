@@ -98,7 +98,7 @@ export function accountEmailMessage(err: unknown): string {
   return "The request failed. Try again.";
 }
 
-export type NotifyCategory = "backups" | "certificates" | "doctor" | "services" | "php" | "disk";
+export type NotifyCategory = "backups" | "certificates" | "doctor" | "services" | "deploys" | "php" | "disk";
 
 export type Notifications = {
   /** The confirmed address; empty while there is none. */
