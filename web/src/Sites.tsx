@@ -309,8 +309,6 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   const [hsts, setHsts] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [done, setDone] = useState("");
-  const [created, setCreated] = useState("");
   const [pools, setPools] = useState<Pool[]>([]);
   const [pool, setPool] = useState("default");
 
@@ -348,7 +346,6 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
     }
     setBusy(true);
     setError("");
-    setDone("");
     try {
       if (kind === "php" && !phpValue) {
         setError("No PHP version is installed. Install one under PHP, or create a static site.");
@@ -368,20 +365,9 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         ...(kind === "app" && { type: "app" as const, app: programRequest(program) }),
         ...(kind === "python" && { type: "python" as const, python: pythonRequest(pythonValue) }),
       });
-      setDone(
-        s.tls.enabled && !s.tls.active
-          ? `Site ${s.name} created. It is served over HTTP until its certificate is there.`
-          : `Site ${s.name} created.`,
-      );
-      setCreated(s.name);
-      setName("");
-      setDomainsText("");
-      setVersion(null);
-      setRedirectValue(newRedirect());
-      setProxyValue(newProxy());
-      setNodeValue(null);
-      setProgramValue(newProgramApp());
       await onChange();
+      // Straight to the new site; its overview shows the certificate state.
+      window.location.hash = formatHash({ page: "sites", site: { name: s.name } });
     } catch (err) {
       setError(siteMessage(err));
     } finally {
@@ -392,7 +378,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   return (
     <Card>
       <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
-        {parked && !created && <Notice tone="info" title={`${parked} is parked. Its parking page ends when the site is live.`} />}
+        {parked && <Notice tone="info" title={`${parked} is parked. Its parking page ends when the site is live.`} />}
         <Field
           label="Name"
           hint={
@@ -462,11 +448,6 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         )}
         {tls && <p className="ui-hint ui-flush">The domains must point to this server, or the certificate cannot be issued.</p>}
         {error && <Notice tone="err" title={error} />}
-        {done && (
-          <Notice tone="ok" title={done}>
-            {created && <a href={formatHash({ page: "sites", site: { name: created } })}>Open {created}</a>}
-          </Notice>
-        )}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy}>
             {busy ? "Creating…" : "Create site"}

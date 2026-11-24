@@ -29,7 +29,7 @@ A site without a Linux user has no files, cron jobs, SSH access or limits. [Site
 5. **HTTPS with a Let's Encrypt certificate:** leave it on. The domains must already point to this server, see [Domains and HTTPS](Domains-and-HTTPS.md).
 6. If the server has more than one storage pool, choose where the site's home lives. A site stays on its pool.
 
-The site is live right away. Until the certificate is there, it answers over HTTP.
+Choose **Create site**. The panel opens the new site; it is live right away. Until the certificate is there, it answers over HTTP.
 
 Upload your files with SFTP ([SSH and SFTP](SSH-and-SFTP.md)) or the [file manager](File-manager.md). For PHP and static sites, the web root is `/home/<name>/htdocs`; another folder can be set on the site's **Web** tab.
 

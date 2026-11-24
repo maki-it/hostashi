@@ -199,8 +199,8 @@ describe("Sites", () => {
     await user.click(screen.getByLabelText(/^HSTS/));
     await user.click(screen.getByRole("button", { name: "Create site" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("served over HTTP until its certificate is there");
-    expect(screen.getByRole("link", { name: "Open blog" })).toHaveAttribute("href", "#/sites/blog");
+    // Straight to the new site.
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/blog"));
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({
       name: "blog",
       php: "8.4",
@@ -208,7 +208,7 @@ describe("Sites", () => {
       tls: true,
       hsts: true,
     });
-    expect(screen.getByLabelText(/^Name/)).toHaveValue("");
+    window.location.hash = "";
   });
 
   it("puts a site on a second storage pool", async () => {
@@ -237,7 +237,7 @@ describe("Sites", () => {
     await user.type(screen.getByLabelText(/^Name/), "blog");
     await user.type(screen.getByLabelText(/^Domains/), "blog.example.com");
     await user.click(screen.getByRole("button", { name: "Create site" }));
-    expect(await screen.findByText("Site blog created.")).toBeInTheDocument();
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/blog"));
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ name: "blog", pool: "vol1" });
   });
 
@@ -286,7 +286,7 @@ describe("Sites", () => {
     await user.click(screen.getByLabelText(/^HTTPS with/));
     expect(screen.queryByLabelText(/^HSTS/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create site" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Site blog created.");
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/blog"));
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ php: "8.2", tls: false, hsts: false });
   });
 
@@ -350,7 +350,7 @@ describe("Sites", () => {
     await user.click(screen.getByLabelText(/^Static/));
     expect(screen.queryByLabelText("PHP version")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create site" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Site blog created.");
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/blog"));
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ name: "blog", php: "" });
   });
 });
@@ -393,7 +393,7 @@ describe("redirect sites", () => {
     await user.type(screen.getByLabelText(/^Redirect to/), "https://new.example.com");
     await user.selectOptions(screen.getByLabelText(/^Status code/), "308");
     await user.click(screen.getByRole("button", { name: "Create site" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Site old created.");
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/old"));
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
       name: "old",
       php: "",
@@ -419,7 +419,7 @@ describe("redirect sites", () => {
     await user.type(screen.getByLabelText(/^Arguments/), "--listen{Enter}a b");
     expect(screen.getByText("Runs: ~/bin/server --listen 'a b'")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create site" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Site svc created.");
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/svc"));
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
       name: "svc",
       php: "",
@@ -446,7 +446,7 @@ describe("redirect sites", () => {
     await user.click(await screen.findByLabelText(/WSGI with gunicorn/));
     expect(screen.getByText("Runs: ~/.venv/bin/gunicorn --bind 127.0.0.1:PORT mysite.wsgi:application")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create site" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Site dj created.");
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/dj"));
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
       name: "dj",
       php: "",
@@ -521,7 +521,7 @@ describe("reverse proxy sites", () => {
     await user.click(screen.getByLabelText(/^Do not verify/));
     expect(screen.getByText(/encrypted but not verified/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create site" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Site app created.");
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/app"));
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
       name: "app",
       php: "",
