@@ -150,7 +150,7 @@ func TestBuildSite(t *testing.T) {
 		{"cron not accepted", func(s *scan.Site, _ *plan.Target) {
 			s.Cron = []scan.CronJob{{Schedule: "@reboot", Command: "true"}}
 		}, plan.ActionReview, "cron_not_carried"},
-		{"redirect", func(s *scan.Site, _ *plan.Target) { s.RedirectFrom = []string{"www.shop.example.com"} }, plan.ActionReview, "redirects"},
+		{"redirect", func(s *scan.Site, _ *plan.Target) { s.RedirectFrom = []string{"shop.example.net"} }, plan.ActionReview, "redirects"},
 		{"scan review finding", func(s *scan.Site, _ *plan.Target) {
 			s.Status = scan.StatusReview
 			s.Findings = []scan.Finding{{Severity: scan.SevReview, Code: "pool_env", Msg: "env"}}

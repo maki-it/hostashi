@@ -68,6 +68,9 @@ type NewSite struct {
 	// Proxy makes the site a reverse proxy to this target, without a
 	// Linux account (ADR-0054); everything of the home above is empty.
 	Proxy string
+	// WWWRedirect is the www redirect set after the site is created
+	// (ADR-0065), "" for none; both names are in Domains.
+	WWWRedirect string
 	// Node makes the site a Node.js site of this line; its app stays
 	// stopped until a start command is set (ADR-0054).
 	Node string
@@ -214,6 +217,7 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		PHPSettings: phpSettings(site, php),
 		Node:        node,
 		Python:      python,
+		WWWRedirect: ps.WWWRedirect,
 	})
 	if err != nil {
 		return ps, err
@@ -245,7 +249,7 @@ func (s *Service) createProxy(ctx context.Context, actor int64, reportID string,
 
 	domains := append(slices.Clone(ps.Domains), ps.RedirectFrom...)
 
-	if _, err := s.create(ctx, actor, NewSite{Name: ps.Name, Domains: domains, Proxy: ps.Proxy}); err != nil {
+	if _, err := s.create(ctx, actor, NewSite{Name: ps.Name, Domains: domains, Proxy: ps.Proxy, WWWRedirect: ps.WWWRedirect}); err != nil {
 		return ps, err
 	}
 

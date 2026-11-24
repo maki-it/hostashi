@@ -416,6 +416,18 @@ func migrationTarget(sites *hosting.Service) cpmigrate.TargetFunc {
 	}
 }
 
+// setWWW takes over the old site's www redirect (ADR-0065). The site
+// stands without it; the admin can set it on the site's page.
+func setWWW(ctx context.Context, sites *hosting.Service, log *slog.Logger, actor int64, s cpmigrate.NewSite) {
+	if s.WWWRedirect == "" {
+		return
+	}
+
+	if _, err := sites.SetWWWRedirect(ctx, actor, s.Name, s.WWWRedirect); err != nil {
+		log.WarnContext(ctx, "imported www redirect not set", "site", s.Name, "mode", s.WWWRedirect, "err", err)
+	}
+}
+
 // siteCreator creates a migrated site through the site service: no
 // certificate yet, DNS still points to the old server.
 func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator {
@@ -430,9 +442,13 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 
 		// A reverse proxy site has no account: nothing else comes with it.
 		if s.Proxy != "" {
-			_, err := sites.Create(ctx, actor, hosting.CreateRequest{Name: s.Name, Domains: s.Domains, Proxy: &store.SiteProxy{Target: s.Proxy}})
+			if _, err := sites.Create(ctx, actor, hosting.CreateRequest{Name: s.Name, Domains: s.Domains, Proxy: &store.SiteProxy{Target: s.Proxy}}); err != nil {
+				return cpmigrate.Created{}, err
+			}
 
-			return cpmigrate.Created{}, err
+			setWWW(ctx, sites, log, actor, s)
+
+			return cpmigrate.Created{}, nil
 		}
 
 		// A Node.js site's app stays stopped until its start command is set
@@ -455,6 +471,8 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 		if _, err := sites.Create(ctx, actor, req); err != nil {
 			return cpmigrate.Created{}, err
 		}
+
+		setWWW(ctx, sites, log, actor, s)
 
 		var n cpmigrate.Created
 

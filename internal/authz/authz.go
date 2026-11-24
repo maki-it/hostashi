@@ -175,6 +175,7 @@ var table = map[Action]Rule{
 	"sites.hsts:write":     ownSite("sites:write"),
 	"sites.headers:write":  ownSite("sites:write"),
 	"sites.realip:write":   ownSite("sites:write"),
+	"sites.access:write":   ownSite("sites:write"),
 	"sites.web:write":      ownSite("sites:write"),
 	"sites.redirect:write": ownSite("sites:write"),
 	"sites.proxy:write":    ownSite("sites:write"),

@@ -872,7 +872,8 @@ do_backup() { apt_install "${BACKUP_PKGS[@]}"; }
 
 # fail2ban from the distribution, on by default (ADR-0021): jails sshd,
 # hostashi-panel (the panel's auth.failed lines) and recidive, all reading
-# the journal, banning through nftables. python3-systemd is its journal
+# the journal, and hostashi-site-auth (failed site passwords, ADR-0066)
+# reading nginx's server error log, banning through nftables. python3-systemd is its journal
 # backend, nftables its ban action; neither is pulled in without recommends.
 F2B_SRC=${HOSTASHI_F2B_SRC:-$HERE/fail2ban}
 F2B_PKGS=(fail2ban python3-systemd nftables)
@@ -881,7 +882,7 @@ F2B_FILES=(
   "hostashi.conf:/etc/fail2ban/jail.d/hostashi.conf"
   "hostashi-panel.conf:/etc/fail2ban/filter.d/hostashi-panel.conf"
 )
-F2B_JAILS=(sshd hostashi-panel recidive)
+F2B_JAILS=(sshd hostashi-panel hostashi-site-auth recidive)
 F2B_CHANGED=no
 
 chk_fail2ban() {
@@ -906,6 +907,10 @@ do_fail2ban() {
     [ "$rc" -le 1 ] || return 1
     [ "$rc" = 0 ] && F2B_CHANGED=yes
   done
+  # hostashi-site-auth needs its log before nginx first writes to it.
+  if [ ! -e /var/log/nginx/hostashi/error.log ]; then
+    install -d -m 0750 -o root -g root /var/log/nginx/hostashi && install -m 0640 -o root -g root /dev/null /var/log/nginx/hostashi/error.log || return 1
+  fi
   # A broken file must not take down a running fail2ban.
   fail2ban-client -t >>"$LOG" 2>&1 || { log "fail2ban configuration test failed"; return 1; }
   systemctl enable fail2ban.service >>"$LOG" 2>&1 || return 1

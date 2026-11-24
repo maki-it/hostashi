@@ -748,7 +748,15 @@ function PlanSiteView({ report, site, php, ready, back, onChange }: SiteViewProp
           {site.redirectFrom.length > 0 && (
             <>
               <dt>Redirects</dt>
-              <dd>{site.redirectFrom.join(", ")}</dd>
+              <dd>
+                {site.redirectFrom.join(", ")}
+                {site.wwwRedirect && (
+                  <span className="ui-hint ui-flush">
+                    {" "}
+                    · taken over as the site's www redirect ({site.wwwRedirect === "to-www" ? "to the www name" : "to the name without www"})
+                  </span>
+                )}
+              </dd>
             </>
           )}
           <dt>Type</dt>
