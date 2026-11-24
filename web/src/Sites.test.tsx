@@ -241,6 +241,24 @@ describe("Sites", () => {
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ name: "blog", pool: "vol1" });
   });
 
+  it("preselects the pool the server marks as default", async () => {
+    mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/pools": {
+        body: {
+          pools: [
+            { name: "default", path: "/home", sites: 3, available: true, quota: "enforced", default: false },
+            { name: "fast", path: "/srv/vol1", sites: 0, available: true, quota: "enforced", default: true },
+          ],
+        },
+      },
+    });
+    render(<ListHarness initial="new=1" />);
+    const select = await screen.findByLabelText(/^Storage pool/);
+    await waitFor(() => expect(select).toHaveValue("fast"));
+  });
+
   it("shows no pool choice with only the default pool", async () => {
     mockFetch({
       ...php,
