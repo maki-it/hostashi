@@ -161,12 +161,10 @@ func (m *Manager) LogFile(site string, id int64) string {
 	return filepath.Join(m.logDir(), site, "deploy-"+strconv.FormatInt(id, 10)+".log")
 }
 
-// run is the stored last run of a site: its deploy id, the unit's
-// invocation before the start (a queued start keeps it) and when it was
+// run is the stored last run of a site: its deploy id and when it was
 // started.
 type run struct {
 	ID      int64     `json:"id"`
-	Before  string    `json:"before"`
 	Started time.Time `json:"started"`
 }
 
@@ -358,17 +356,13 @@ func (m *Manager) Start(ctx context.Context, req agentapi.DeployStartRequest) (a
 
 	unit := Unit(req.Site)
 
-	props, err := m.Ctl.Show(ctx, unit, "ActiveState", "InvocationID")
+	props, err := m.Ctl.Show(ctx, unit, "ActiveState")
 	if err != nil {
 		return agentapi.DeployStatus{}, err
 	}
 
-	if active(props["ActiveState"]) {
-		return agentapi.DeployStatus{}, ErrBusy
-	}
-
-	if r, ok := st[req.Site]; ok && props["InvocationID"] == r.Before && m.clock().Sub(r.Started) < startGrace {
-		// Queued, not started yet.
+	r, ok := st[req.Site]
+	if m.phase(props["ActiveState"], r, ok) == agentapi.DeployRunning {
 		return agentapi.DeployStatus{}, ErrBusy
 	}
 
@@ -394,9 +388,15 @@ func (m *Manager) Start(ctx context.Context, req agentapi.DeployStartRequest) (a
 		return agentapi.DeployStatus{}, err
 	}
 
+	// The last run stays active (RemainAfterExit=) or failed until the
+	// next one: stop it, so the start below runs again.
+	if err := m.Ctl.Stop(ctx, unit); err != nil {
+		return agentapi.DeployStatus{}, err
+	}
+
 	_ = m.Ctl.ResetFailed(ctx, unit)
 
-	st[req.Site] = run{ID: req.ID, Before: props["InvocationID"], Started: m.clock().UTC()}
+	st[req.Site] = run{ID: req.ID, Started: m.clock().UTC()}
 	if err := m.save(st); err != nil {
 		return agentapi.DeployStatus{}, err
 	}
@@ -411,8 +411,26 @@ func (m *Manager) Start(ctx context.Context, req agentapi.DeployStartRequest) (a
 	return agentapi.DeployStatus{Site: req.Site, ID: req.ID, State: agentapi.DeployRunning}, nil
 }
 
-func active(state string) bool {
-	return state == "activating" || state == "active" || state == "deactivating" || state == "reloading"
+// phase maps the unit's ActiveState to the state of the stored run r. The
+// template has RemainAfterExit=yes, so a finished run stays "active"
+// (succeeded) or "failed" until the next start stops it; systemd keeps
+// such a unit loaded. "inactive" is a start that is still queued, or one
+// that never ran once startGrace is over (DeployUnknown here).
+func (m *Manager) phase(state string, r run, ok bool) string {
+	switch state {
+	case "activating", "deactivating", "reloading":
+		return agentapi.DeployRunning
+	case "active":
+		return agentapi.DeploySucceeded
+	case "failed":
+		return agentapi.DeployFailed
+	}
+
+	if ok && m.clock().Sub(r.Started) < startGrace {
+		return agentapi.DeployRunning
+	}
+
+	return agentapi.DeployUnknown
 }
 
 // writeCreds writes the token or key of the run, root only, and removes
@@ -544,28 +562,22 @@ func (m *Manager) Status(ctx context.Context, req agentapi.DeployStatusRequest) 
 		return out, nil
 	}
 
-	props, err := m.Ctl.Show(ctx, Unit(req.Site), "ActiveState", "Result", "InvocationID")
+	props, err := m.Ctl.Show(ctx, Unit(req.Site), "ActiveState", "Result")
 	if err != nil {
 		return out, err
 	}
 
-	switch {
-	case props["InvocationID"] == r.Before:
-		if m.clock().Sub(r.Started) < startGrace {
-			out.State = agentapi.DeployRunning
-
-			return out, nil
-		}
-
-		out.State, out.Error = agentapi.DeployFailed, "the deploy did not start"
-	case active(props["ActiveState"]):
+	switch m.phase(props["ActiveState"], r, true) {
+	case agentapi.DeployRunning:
 		out.State = agentapi.DeployRunning
 
 		return out, nil
-	case props["ActiveState"] == "inactive" && props["Result"] == "success":
+	case agentapi.DeploySucceeded:
 		out.State = agentapi.DeploySucceeded
-	default:
+	case agentapi.DeployFailed:
 		out.State, out.Error = agentapi.DeployFailed, failReason(props["Result"])
+	default:
+		out.State, out.Error = agentapi.DeployFailed, "the deploy did not start"
 	}
 
 	m.removeCreds(req.Site)
@@ -654,21 +666,47 @@ func clip(s string, n int) string {
 	return s
 }
 
-// logTail is the end of a run's log, "" if there is none.
-func logTail(name string) string {
+// RunLog returns the log of a run (site.deploy.log).
+func (m *Manager) RunLog(_ context.Context, req agentapi.DeployStatusRequest) (agentapi.DeployLog, error) {
+	if err := req.Validate(); err != nil {
+		return agentapi.DeployLog{}, err
+	}
+
+	if _, err := m.Site(req.Site); err != nil {
+		return agentapi.DeployLog{}, err
+	}
+
+	s, cut := readTail(m.LogFile(req.Site, req.ID), agentapi.MaxDeployLog)
+
+	return agentapi.DeployLog{Log: s, Truncated: cut}, nil
+}
+
+// readTail is the end of a file, at most n bytes, and whether it was cut;
+// "" if there is none.
+func readTail(name string, n int64) (string, bool) {
 	f, err := os.Open(name)
 	if err != nil {
-		return ""
+		return "", false
 	}
 	defer f.Close()
 
-	if fi, err := f.Stat(); err == nil && fi.Size() > agentapi.MaxDeployLogTail {
-		_, _ = f.Seek(-agentapi.MaxDeployLogTail, io.SeekEnd)
+	cut := false
+
+	if fi, err := f.Stat(); err == nil && fi.Size() > n {
+		_, _ = f.Seek(-n, io.SeekEnd)
+		cut = true
 	}
 
-	b, _ := io.ReadAll(io.LimitReader(f, agentapi.MaxDeployLogTail))
+	b, _ := io.ReadAll(io.LimitReader(f, n))
 
-	return strings.ToValidUTF8(string(b), "?")
+	return strings.ToValidUTF8(string(b), "?"), cut
+}
+
+// logTail is the end of a run's log, "" if there is none.
+func logTail(name string) string {
+	s, _ := readTail(name, agentapi.MaxDeployLogTail)
+
+	return s
 }
 
 // pruneLogs keeps the newest keepLogs logs of a site and the current one.
@@ -748,13 +786,9 @@ func (m *Manager) Remove(ctx context.Context, site string) error {
 // running reports whether a run of the site is queued or running; m.mu is
 // held.
 func (m *Manager) running(ctx context.Context, site string) (bool, error) {
-	props, err := m.Ctl.Show(ctx, Unit(site), "ActiveState", "InvocationID")
+	props, err := m.Ctl.Show(ctx, Unit(site), "ActiveState")
 	if err != nil {
 		return false, err
-	}
-
-	if active(props["ActiveState"]) {
-		return true, nil
 	}
 
 	st, err := m.load()
@@ -764,7 +798,7 @@ func (m *Manager) running(ctx context.Context, site string) (bool, error) {
 
 	r, ok := st[site]
 
-	return ok && props["InvocationID"] == r.Before && m.clock().Sub(r.Started) < startGrace, nil
+	return m.phase(props["ActiveState"], r, ok) == agentapi.DeployRunning, nil
 }
 
 // ensureDir makes dir the agent's directory with the group gid, -1 to

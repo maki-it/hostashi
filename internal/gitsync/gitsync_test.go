@@ -334,3 +334,36 @@ func TestOnlyHTTPSAndSSH(t *testing.T) {
 		}
 	}
 }
+
+// The web server passes the deploy base as "other": a new base and one left
+// closed get the search bit, the cache stays private.
+func TestSyncBaseMode(t *testing.T) {
+	src := newSrc(t)
+	src.write("index.html", "hi", 0o644)
+	src.commit("First")
+
+	for _, existing := range []bool{false, true} {
+		base := filepath.Join(t.TempDir(), ".deploy")
+
+		if existing {
+			if err := os.Mkdir(base, 0o700); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if _, err := Sync(t.Context(), opts(t, src, base, "1")); err != nil {
+			t.Fatal(err)
+		}
+
+		for dir, want := range map[string]os.FileMode{base: BaseMode, filepath.Join(base, "repo"): 0o700} {
+			fi, err := os.Stat(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := fi.Mode().Perm(); got&0o001 != want&0o001 || (dir != base && got != want) {
+				t.Fatalf("existing %v: %s is %o", existing, dir, got)
+			}
+		}
+	}
+}

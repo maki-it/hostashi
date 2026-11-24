@@ -152,6 +152,8 @@ var table = map[Action]Rule{
 	"sites.programs:write": mgrSite("sites:write"),
 	// The repository and the build commands of a Git deploy (ADR-0062).
 	"sites.git:write": mgrSite("git:write"),
+	// A deploy or rollback runs only what an admin or manager stored.
+	"sites.deploy": ownSite("git:deploy"),
 
 	// nginx runs for every site, so snippets stay with admins (ADR-0029).
 	"sites.snippets:write": admSite("sites.snippets:write"),

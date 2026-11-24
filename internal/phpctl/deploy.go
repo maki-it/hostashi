@@ -17,7 +17,7 @@ import (
 // from the fixed template and the agent's drop-in.
 var (
 	deployUnitRe = regexp.MustCompile(`^hostashi-deploy@[a-z][a-z0-9_-]{1,31}\.service$`)
-	deployPropRe = regexp.MustCompile(`^(?:ActiveState|SubState|Result|InvocationID)$`)
+	deployPropRe = regexp.MustCompile(`^(?:ActiveState|SubState|Result)$`)
 )
 
 // DeployController implements deployunit.Controller.

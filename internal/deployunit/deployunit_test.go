@@ -153,7 +153,7 @@ func TestStartWritesRun(t *testing.T) {
 		t.Fatalf("second start: %v", err)
 	}
 
-	e.ctl.props = map[string]string{"ActiveState": "activating", "InvocationID": "abc"}
+	e.ctl.props = map[string]string{"ActiveState": "activating"}
 	if _, err := e.m.Start(t.Context(), startReq(8)); !errors.Is(err, ErrBusy) {
 		t.Fatalf("start while running: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestStartSSHAndNoCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	e.ctl.props = map[string]string{"ActiveState": "inactive", "Result": "success", "InvocationID": "one"}
+	e.ctl.props = map[string]string{"ActiveState": "active", "Result": "success"}
 
 	req := agentapi.DeployStartRequest{
 		Site: "blog", ID: 2, URL: "ssh://git@git.example.com/acme/site.git", Branch: "main",
@@ -229,7 +229,7 @@ func TestStatus(t *testing.T) {
 	e := newEnv(t)
 	ctx := t.Context()
 
-	e.ctl.props = map[string]string{"ActiveState": "inactive", "InvocationID": "old"}
+	e.ctl.props = map[string]string{"ActiveState": "inactive"}
 
 	if _, err := e.m.Start(ctx, startReq(5)); err != nil {
 		t.Fatal(err)
@@ -250,19 +250,20 @@ func TestStatus(t *testing.T) {
 		t.Fatalf("other id %+v", st)
 	}
 
-	// Queued: the invocation is still the old one.
+	// Queued: the unit has not left "inactive" yet.
 	if st := status(5); st.State != agentapi.DeployRunning {
 		t.Fatalf("queued %+v", st)
 	}
 
-	e.ctl.props = map[string]string{"ActiveState": "activating", "InvocationID": "new"}
+	e.ctl.props = map[string]string{"ActiveState": "activating"}
 
 	if st := status(5); st.State != agentapi.DeployRunning {
 		t.Fatalf("running %+v", st)
 	}
 
-	// Finished, but git-sync left no result.
-	e.ctl.props = map[string]string{"ActiveState": "inactive", "Result": "success", "InvocationID": "new"}
+	// Finished (RemainAfterExit keeps it active), but git-sync left no
+	// result.
+	e.ctl.props = map[string]string{"ActiveState": "active", "Result": "success"}
 	if err := os.WriteFile(e.m.LogFile("blog", 5), []byte("fetching\ndone\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -301,17 +302,18 @@ func TestStatus(t *testing.T) {
 		t.Fatalf("bad commit %+v", st)
 	}
 
-	e.ctl.props = map[string]string{"ActiveState": "failed", "Result": "timeout", "InvocationID": "new"}
+	e.ctl.props = map[string]string{"ActiveState": "failed", "Result": "timeout"}
 
 	if st := status(5); st.State != agentapi.DeployFailed || !strings.Contains(st.Error, "time limit") {
 		t.Fatalf("timeout %+v", st)
 	}
 
 	// A queued start that never ran.
-	e.ctl.props = map[string]string{"ActiveState": "inactive", "InvocationID": "new"}
 	if _, err := e.m.Start(ctx, startReq(6)); err != nil {
 		t.Fatal(err)
 	}
+
+	e.ctl.props = map[string]string{"ActiveState": "inactive"}
 
 	e.now = e.now.Add(10 * time.Minute)
 
@@ -363,12 +365,40 @@ func TestRemove(t *testing.T) {
 		}
 	}
 
-	if !slices.Equal(e.ctl.stopped, []string{"hostashi-deploy@blog.service"}) {
+	// Start stopped the last run, Remove the unit.
+	if !slices.Equal(e.ctl.stopped, []string{"hostashi-deploy@blog.service", "hostashi-deploy@blog.service"}) {
 		t.Fatalf("stopped %v", e.ctl.stopped)
 	}
 
 	st, _ := e.m.load()
 	if _, ok := st["blog"]; ok {
 		t.Fatal("state kept")
+	}
+}
+
+func TestLog(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+
+	if l, err := e.m.RunLog(ctx, agentapi.DeployStatusRequest{Site: "blog", ID: 3}); err != nil || l.Log != "" || l.Truncated {
+		t.Fatalf("missing log %+v %v", l, err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(e.m.LogDir, "blog"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	big := strings.Repeat("a", agentapi.MaxDeployLog) + "end\n"
+	if err := os.WriteFile(e.m.LogFile("blog", 3), []byte(big), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	l, err := e.m.RunLog(ctx, agentapi.DeployStatusRequest{Site: "blog", ID: 3})
+	if err != nil || !l.Truncated || len(l.Log) != agentapi.MaxDeployLog || !strings.HasSuffix(l.Log, "end\n") {
+		t.Fatalf("log %d %v %v", len(l.Log), l.Truncated, err)
+	}
+
+	if _, err := e.m.RunLog(ctx, agentapi.DeployStatusRequest{Site: "other", ID: 3}); err == nil {
+		t.Fatal("unknown site accepted")
 	}
 }

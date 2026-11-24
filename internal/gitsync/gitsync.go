@@ -291,6 +291,10 @@ func (a Auth) method(url string) (transport.AuthMethod, error) {
 func openCache(dir, url string) (*git.Repository, error) {
 	repo, err := git.PlainOpen(dir)
 	if errors.Is(err, git.ErrRepositoryNotExists) {
+		if err := mkdirBase(filepath.Dir(dir)); err != nil {
+			return nil, err
+		}
+
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, fmt.Errorf("gitsync: cache: %w", err)
 		}
@@ -317,9 +321,40 @@ func openCache(dir, url string) (*git.Repository, error) {
 	return repo, nil
 }
 
+// BaseMode is the mode of the deploy base <home>/.deploy: the web server
+// reaches the releases through it as "other" (the home's group is the web
+// server's, the base's group is the site's), but cannot list it. The cache
+// and the results below it stay 0700.
+const BaseMode = 0o711
+
+// mkdirBase creates the deploy base, or gives one that the web server
+// cannot pass through the search bit again.
+func mkdirBase(dir string) error {
+	if err := os.MkdirAll(dir, BaseMode); err != nil {
+		return fmt.Errorf("gitsync: %w", err)
+	}
+
+	fi, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("gitsync: %w", err)
+	}
+
+	if perm := fi.Mode().Perm(); perm&0o001 == 0 {
+		if err := os.Chmod(dir, perm|0o011); err != nil {
+			return fmt.Errorf("gitsync: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // writeRelease creates dir, which must be new, and writes the commit's tree
 // into it through an os.Root.
 func writeRelease(ctx context.Context, st storer.EncodedObjectStorer, c *object.Commit, dir string) (int, error) {
+	if err := mkdirBase(filepath.Dir(filepath.Dir(dir))); err != nil {
+		return 0, err
+	}
+
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return 0, fmt.Errorf("gitsync: release: %w", err)
 	}

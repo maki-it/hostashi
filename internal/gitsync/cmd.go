@@ -97,6 +97,10 @@ func Run(ctx context.Context, args []string, euid int, stderr io.Writer) error {
 		return fmt.Errorf("git-sync: %w", err)
 	}
 
+	if err := mkdirBase(filepath.Dir(filepath.Dir(f.result))); err != nil {
+		return err
+	}
+
 	if err := os.MkdirAll(filepath.Dir(f.result), 0o700); err != nil {
 		return fmt.Errorf("git-sync: result: %w", err)
 	}

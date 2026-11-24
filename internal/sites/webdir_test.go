@@ -50,3 +50,91 @@ func TestCheckWebDir(t *testing.T) {
 		t.Errorf("missing home: %v", err)
 	}
 }
+
+func TestCheckWebDirDeployLink(t *testing.T) {
+	home := t.TempDir()
+
+	for _, d := range []string{".deploy/releases/7/public", ".deploy/releases/8", "htdocs-real"} {
+		if err := os.MkdirAll(filepath.Join(home, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	link := func(target string) {
+		t.Helper()
+
+		_ = os.Remove(filepath.Join(home, "htdocs"))
+
+		if err := os.Symlink(target, filepath.Join(home, "htdocs")); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The link a deploy makes stands for its release.
+	link(".deploy/releases/7")
+
+	for dir, want := range map[string]bool{"": true, "public": true, "later": false} {
+		if got, err := CheckWebDir(home, dir); err != nil || got != want {
+			t.Errorf("%q: %v %v, want %v", dir, got, err, want)
+		}
+	}
+
+	// A link inside the release is still refused.
+	if err := os.Symlink("/etc", filepath.Join(home, ".deploy/releases/8/etc")); err != nil {
+		t.Fatal(err)
+	}
+
+	link(".deploy/releases/8")
+
+	if _, err := CheckWebDir(home, "etc"); !errors.Is(err, ErrWebDirUnsafe) {
+		t.Errorf("link in release: %v", err)
+	}
+
+	// Any other link target is refused.
+	outside := t.TempDir()
+
+	for _, target := range []string{"htdocs-real", ".deploy/releases/x", "../" + filepath.Base(home) + "/.deploy/releases/7", outside, ".deploy/releases/7/../8", "./.deploy/releases/7"} {
+		link(target)
+
+		if _, err := CheckWebDir(home, ""); !errors.Is(err, ErrWebDirUnsafe) {
+			t.Errorf("target %q: %v", target, err)
+		}
+	}
+
+	// The releases folder itself must not be a link out of the home.
+	if err := os.RemoveAll(filepath.Join(home, ".deploy")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(outside, "releases/7"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Symlink(outside, filepath.Join(home, ".deploy")); err != nil {
+		t.Fatal(err)
+	}
+
+	link(".deploy/releases/7")
+
+	if _, err := CheckWebDir(home, ""); !errors.Is(err, ErrWebDirUnsafe) {
+		t.Errorf("releases outside: %v", err)
+	}
+
+	// A deeper deploy directory links with ../.
+	home2 := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home2, ".deploy/releases/3"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(home2, "htdocs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Symlink("../.deploy/releases/3", filepath.Join(home2, "htdocs/app")); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := CheckWebDir(home2, "app"); err != nil || !got {
+		t.Errorf("nested: %v %v", got, err)
+	}
+}
