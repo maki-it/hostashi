@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Categories for the release notes that GitHub generates from the merged
+# pull requests. GoReleaser uses them through "changelog: use: github-native"
+# (.goreleaser.yaml). A pull request lands in the FIRST category whose labels
+# it has, so the order below is the order of importance: a breaking feature
+# shows up only under "Breaking changes". The old default labels (bug,
+# enhancement, documentation, security) are listed next to the Kind/* labels
+# for pull requests from before the switch.
+changelog:
+  exclude:
+    labels:
+      - skip-release-notes
+  categories:
+    - title: Breaking changes
+      labels:
+        - Kind/Breaking
+    - title: Security
+      labels:
+        - Kind/Security
+        - security
+    - title: New features
+      labels:
+        - Kind/Feature
+    - title: Improvements
+      labels:
+        - Kind/Enhancement
+        - enhancement
+    - title: Bug fixes
+      labels:
+        - Kind/Bug
+        - bug
+    - title: Decisions (ADRs)
+      labels:
+        - adr
+    - title: Documentation
+      labels:
+        - Kind/Documentation
+        - documentation
+    - title: Dependencies
+      labels:
+        - Kind/Dependency
+        - dependencies
+    - title: CI and tooling
+      labels:
+        - Kind/CICD
+        - ci
+    - title: Other changes
+      labels:
+        - "*"
