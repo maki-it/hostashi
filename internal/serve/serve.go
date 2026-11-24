@@ -615,6 +615,7 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
 	m.RegisterSites(siteStats(client), cfg.Log)
+	m.RegisterSiteUsage(siteUsage(client), cfg.Log)
 	m.RegisterTokenExpiry(svc.MetricsTokenExpiry, cfg.Log)
 
 	// Operations emails (ADR-0044) for the accounts that switched them on.
@@ -826,6 +827,27 @@ func siteStats(c *agentrpc.Client) func(context.Context) ([]metrics.Site, error)
 				PHPMemoryBytes: s.PHPMemoryBytes, PHPMemoryKnown: s.PHPMemoryKnown,
 				DiskUsedBytes: s.DiskUsedBytes, DiskMeasuredAt: s.DiskMeasuredAt,
 				CacheMB: s.CacheMB, CacheUp: s.CacheUp, CacheMemoryBytes: s.CacheMemoryBytes, CacheMemoryKnown: s.CacheMemoryKnown,
+			})
+		}
+
+		return out, nil
+	}
+}
+
+// siteUsage reads the sites' usage counters for /metrics (ADR-0063).
+func siteUsage(c *agentrpc.Client) func(context.Context) ([]metrics.SiteUsage, error) {
+	return func(ctx context.Context) ([]metrics.SiteUsage, error) {
+		res, err := agentapi.SitesStats.Call(ctx, c, agentapi.SitesStatsRequest{})
+		if err != nil {
+			return nil, err
+		}
+
+		out := make([]metrics.SiteUsage, 0, len(res.Sites))
+		for _, s := range res.Sites {
+			out = append(out, metrics.SiteUsage{
+				Name: s.Name, CPUUsec: s.CPUUsec, MemoryBytes: s.MemoryBytes, MemoryKnown: s.MemoryKnown, Tasks: s.Tasks,
+				IOReadBytes: s.IOReadBytes, IOWriteBytes: s.IOWriteBytes, IOKnown: s.IOKnown,
+				HTTPRequests: s.HTTPRequests, HTTPBytesIn: s.HTTPBytesIn, HTTPBytesOut: s.HTTPBytesOut,
 			})
 		}
 
