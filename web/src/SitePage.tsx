@@ -5,6 +5,8 @@ import { CertificateCard } from "./Certificate";
 import { siteCertBase } from "./certs";
 import { CronSettings } from "./Cron";
 import { FileManager } from "./Files";
+import { canDeploy } from "./git";
+import { GitSettings } from "./Git";
 import { LimitSettings } from "./Limits";
 import { SiteLogs } from "./Logs";
 import { ObjectCacheSettings } from "./ObjectCache";
@@ -52,6 +54,7 @@ const tabs: { id: SiteTab; label: string }[] = [
   { id: "domains", label: "Domains & HTTPS" },
   { id: "web", label: "Web" },
   { id: "files", label: "Files" },
+  { id: "git", label: "Git" },
   { id: "php", label: "PHP" },
   { id: "cron", label: "Cron" },
   { id: "ssh", label: "SSH & SFTP" },
@@ -99,6 +102,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
   const shown = tabs.filter(
     (t) =>
       (t.id !== "php" || site.php !== "") &&
+      (t.id !== "git" || canDeploy(site)) &&
       (hasAccount(site) || !noAccount.includes(t.id)) &&
       (!["redirect", "proxy"].includes(siteType(site)) || t.id !== "nginx"),
   );
@@ -140,6 +144,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
             {site.php && <PageCacheSettings site={site} canSize={role === "admin" || role === "manager"} />}
           </>
         )}
+        {active === "git" && <GitSettings site={site} canEdit={role === "admin" || role === "manager"} />}
         {active === "cron" && <CronSettings site={site} />}
         {active === "ssh" && <SSHSettings site={site} />}
         {active === "limits" && <LimitSettings site={site} />}

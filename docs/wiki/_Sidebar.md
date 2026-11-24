@@ -11,6 +11,7 @@
 - [Domains and HTTPS](Domains-and-HTTPS.md)
 - [SSH and SFTP](SSH-and-SFTP.md)
 - [Cron jobs](Cron-jobs.md)
+- [Git deploy](Git-deploy.md)
 - [Limits](Limits.md)
 - [Parked domains](Parked-domains.md)
 - [PHP settings](PHP-settings.md)

@@ -105,7 +105,7 @@ func TestWebhookOverHTTP(t *testing.T) {
 		t.Fatalf("webhook on: %d %s", rec.Code, rec.Body)
 	}
 
-	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/blog/git", cookie: c}); !strings.Contains(rec.Body.String(), `"webhook":true`) ||
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/blog/git", cookie: c}); !strings.Contains(rec.Body.String(), `"webhookPath":"`+hook.Path+`"`) ||
 		strings.Contains(rec.Body.String(), hook.Secret) {
 		t.Fatalf("setting: %s", rec.Body)
 	}

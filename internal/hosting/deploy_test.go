@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -115,6 +116,14 @@ func TestDeploy(t *testing.T) {
 	s, f, _ := deployService(t)
 	ctx := t.Context()
 
+	// Failed deploys reach the observer (ADR-0062 email); rollbacks and
+	// successful runs do not.
+	var failed []string
+
+	s.ObserveFailedDeploys(func(_ context.Context, site string, d store.SiteDeploy) {
+		failed = append(failed, site+":"+strconv.FormatInt(d.ID, 10)+":"+d.Error)
+	})
+
 	if _, err := s.Deploy(ctx, 1, "blog", store.DeploySourcePanel); !errors.Is(err, ErrGitNotConfigured) {
 		t.Fatalf("without git: %v", err)
 	}
@@ -185,6 +194,10 @@ func TestDeploy(t *testing.T) {
 		t.Fatalf("failed %+v", list[0])
 	}
 
+	if want := "blog:" + strconv.FormatInt(d2.ID, 10) + ":a step of the deploy failed"; !slices.Equal(failed, []string{want}) {
+		t.Fatalf("observed %v", failed)
+	}
+
 	// Rollback to the first; the failed one cannot be a target.
 	if _, err := s.Rollback(ctx, 1, "blog", d2.ID, store.DeploySourcePanel); !errors.Is(err, ErrNotDeployable) {
 		t.Fatalf("rollback to failed: %v", err)
@@ -212,6 +225,10 @@ func TestDeploy(t *testing.T) {
 
 	if list, _ := s.Deploys(ctx, "blog", 1); list[0].State != store.DeployFailed || list[0].Error != "release gone" {
 		t.Fatalf("failed rollback %+v", list[0])
+	}
+
+	if len(failed) != 1 {
+		t.Fatalf("rollback observed %v", failed)
 	}
 }
 

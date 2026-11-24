@@ -9,6 +9,7 @@ const labels: Record<NotifyCategory, { label: string; hint: string }> = {
   certificates: { label: "Certificates", hint: "A renewal failed, or a certificate expires in 14 or 3 days." },
   doctor: { label: "Server checks", hint: "Once a day, when the checks on the Health page find errors." },
   services: { label: "Services", hint: "A service is down or keeps crashing, and again when it runs." },
+  deploys: { label: "Git deploys", hint: "A Git deploy of a site failed. Off until you switch it on." },
   php: { label: "PHP versions", hint: "Once a week, when a site uses a PHP version near or past its end of life." },
   disk: { label: "Disk space", hint: "A disk or a site's quota is more than 90 percent full." },
 };

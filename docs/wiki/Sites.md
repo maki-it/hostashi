@@ -43,6 +43,7 @@ Upload your files with SFTP ([SSH and SFTP](SSH-and-SFTP.md)) or the [file manag
 | Domains & HTTPS | domains, certificate, HSTS, [security headers](Security-headers.md), [real visitor address](Real-visitor-address.md) |
 | Web | web root folder, single-page app fallback, asset caching; the app, proxy or redirect settings; [changing the type](Site-types.md#change-the-type) |
 | Files | the [file manager](File-manager.md) |
+| Git | [deploys from a Git repository](Git-deploy.md), rollbacks and the webhook |
 | PHP | PHP version and [settings](PHP-settings.md) |
 | Cron | scheduled jobs |
 | SSH & SFTP | keys for logging in as the site's user |

@@ -28,15 +28,18 @@ const (
 	Disk         Category = "disk"
 	// Services is ADR-0055: a service that is down or keeps crashing.
 	Services Category = "services"
+	// Deploys is ADR-0062: a Git deploy of a site failed. It is opt-in for
+	// every role.
+	Deploys Category = "deploys"
 )
 
 // Categories lists every category in the order the page shows them.
-var Categories = []Category{Backups, Certificates, Doctor, Services, PHP, Disk}
+var Categories = []Category{Backups, Certificates, Doctor, Services, Deploys, PHP, Disk}
 
 // titles name a category in the footer of an email.
 var titles = map[Category]string{
 	Backups: "backups", Certificates: "certificates", Doctor: "server checks", PHP: "PHP versions", Disk: "disk space",
-	Services: "services",
+	Services: "services", Deploys: "deploys",
 }
 
 // Known reports whether c is a category.
@@ -53,7 +56,7 @@ func Visible(role string, c Category) bool {
 	switch c {
 	case Backups, Doctor:
 		return authz.Role(role) == authz.RoleAdmin
-	case Certificates, PHP, Disk, Services:
+	case Certificates, PHP, Disk, Services, Deploys:
 		return true
 	default:
 		return false
@@ -61,7 +64,7 @@ func Visible(role string, c Category) bool {
 }
 
 // Enabled applies the default of the role to a switch the account never
-// set: on for admins, off for everyone else.
+// set: on for admins, off for everyone else; deploys are off for all.
 func Enabled(role string, prefs map[string]bool, c Category) bool {
 	if !Visible(role, c) {
 		return false
@@ -71,7 +74,7 @@ func Enabled(role string, prefs map[string]bool, c Category) bool {
 		return on
 	}
 
-	return authz.Role(role) == authz.RoleAdmin
+	return c != Deploys && authz.Role(role) == authz.RoleAdmin
 }
 
 // Event is one problem to report.
