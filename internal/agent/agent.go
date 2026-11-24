@@ -158,6 +158,10 @@ type Config struct {
 	// fail2ban's bans; nil leaves fail2ban alone. Run sets it when
 	// fail2ban's jail.d directory exists.
 	ProxyIgnore *f2bproxies.File
+	// AuthFiles writes the sites' password files (ADR-0066); nil refuses
+	// sites with password protection. Run sets it with the nginx workers'
+	// group.
+	AuthFiles *web.AuthFiles
 
 	// Quota sets and reads the sites' disk limits (ADR-0015). Nil: the
 	// running kernel (KernelQuota).
@@ -315,7 +319,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, apps: cfg.Apps, deploy: cfg.Deploy, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, f2b: cfg.ProxyIgnore, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, apps: cfg.Apps, deploy: cfg.Deploy, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, f2b: cfg.ProxyIgnore, auth: cfg.AuthFiles, log: log}
 		h.acl = cfg.panelACL
 
 		if cfg.PHP != nil && cfg.PHP.Hidden == nil {
@@ -407,8 +411,10 @@ type siteOps struct {
 	logrotate string
 	// f2b is fail2ban's never-ban file of trusted proxies (ADR-0059).
 	f2b *f2bproxies.File
-	log *slog.Logger
-	mu  sync.Mutex
+	// auth writes the sites' password files (ADR-0066).
+	auth *web.AuthFiles
+	log  *slog.Logger
+	mu   sync.Mutex
 	// acl hands the panel allowlist to nginx on 443; nil for none.
 	acl *panelACL
 	// sweepMu keeps the background deletes of purged caches apart.
@@ -729,6 +735,10 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			return agentapi.WebApplyResponse{}, err
 		}
 
+		if err := h.accessFor(&site, s.Access); err != nil {
+			return agentapi.WebApplyResponse{}, err
+		}
+
 		if s.PageCache != nil {
 			c, err := h.pageCacheFor(s.User, home, *s.PageCache)
 			if err != nil {
@@ -784,10 +794,16 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		return agentapi.WebApplyResponse{}, err
 	}
 
+	if err := h.writeAuthFiles(d); err != nil {
+		return agentapi.WebApplyResponse{}, err
+	}
+
 	res, err := h.web.Apply(ctx, d)
 	if err != nil {
 		return agentapi.WebApplyResponse{Generation: res.Generation}, mapWebError(err)
 	}
+
+	h.pruneAuthFiles(ctx, d)
 
 	h.applyCacheChanges(ctx, prev, d)
 
@@ -924,6 +940,10 @@ func (h *siteOps) accountlessSite(ctx context.Context, s agentapi.WebSite) (web.
 	}
 
 	if err := h.realIPFor(&site, s.RealIP); err != nil {
+		return web.Site{}, err
+	}
+
+	if err := h.accessFor(&site, s.Access); err != nil {
 		return web.Site{}, err
 	}
 
@@ -1365,6 +1385,7 @@ func openWeb(ctx context.Context, stateDir string, panelPort, dbToolPort int, lo
 			ListenTLS:     listenTLS,
 			HTTP3:         http3,
 			ACMERoot:      ACMERoot,
+			AuthDir:       AuthDir,
 			PanelListen:   listenPanel,
 			PanelUpstream: PanelSocket,
 			DBToolListen:  listenTool,
@@ -1433,6 +1454,11 @@ const WebControlSocket = "/run/hostashi-web/control.sock"
 // access.log and error.log (ADR-0021, ADR-0053), root:root 0750.
 const SiteLogDir = "/var/log/nginx/sites"
 
+// AuthDir holds the sites' password files (ADR-0066), root:www-data 0750.
+// It is neither below the agent's state (root 0700) nor the panel's
+// (hostashi 0750), because nginx's workers must reach it.
+const AuthDir = "/var/lib/hostashi-web-auth"
+
 // ServerLogDir holds nginx's server-wide access.log and error.log, for
 // requests of no site. It is not /var/log/nginx itself, whose *.log the
 // nginx package rotates with its own retention (ADR-0053).
@@ -1460,6 +1486,12 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.Web == nil {
 		cfg.Web = openWeb(ctx, cfg.StateDir, cfg.PanelPort, cfg.DBToolPort, cfg.Log)
+	}
+
+	if cfg.AuthFiles == nil && cfg.Web != nil {
+		if gid := webGID(cfg.Log); gid != 0 {
+			cfg.AuthFiles = &web.AuthFiles{Dir: AuthDir, GID: int(gid)}
+		}
 	}
 
 	if cfg.Logs == nil && cfg.Web != nil {

@@ -85,6 +85,9 @@ type Nginx struct {
 	// ListenTLS are the HTTPS listen addresses, e.g. "443" and "[::]:443";
 	// empty serves no site over HTTPS.
 	ListenTLS []string
+	// AuthDir holds the sites' password files (ADR-0066), written by
+	// AuthFiles; empty refuses sites with password protection (tests).
+	AuthDir string
 	// ACMERoot holds /.well-known/acme-challenge/<token> files of HTTP-01
 	// challenges; every site answers them on port 80. Empty: none.
 	ACMERoot string
@@ -669,6 +672,7 @@ geo ${{.Open}} {
     {{- end}}
 }
 {{- end}}
+{{- template "accessmap" .A}}
 server {
     {{- range .N.Listen}}
     listen {{.}};
@@ -676,6 +680,7 @@ server {
     listen unix:{{.N.ControlSocket}};
     server_name{{range .S.Domains}} {{.}}{{end}};
     {{- template "realip" $.RealIP}}
+    {{- template "access" $.A}}
     {{- if .N.SiteLogDir}}
     access_log {{.N.SiteLogDir}}/{{.S.User}}/access.log{{if $.RealIP}} hostashi_realip{{end}};
     access_log {{.N.SiteLogDir}}/{{.S.User}}/traffic.log hostashi_traffic buffer=32k flush=5s;
@@ -690,6 +695,7 @@ server {
 
     # HTTP-01 challenges of the panel's ACME client.
     location ^~ /.well-known/acme-challenge/ {
+        {{- template "accessopen" $.A}}
         root {{.N.ACMERoot}};
         default_type text/plain;
         try_files $uri =404;
@@ -700,6 +706,7 @@ server {
     # It never reaches the site's application, so a broken application does
     # not block configuration changes of other sites.
     location = /.hostashi/health {
+        {{- template "accessopen" $.A}}
         if ($remote_addr != "unix:") {
             return 404;
         }
@@ -726,6 +733,7 @@ server {
     {{- end}}
     server_name{{range .S.Domains}} {{.}}{{end}};
     {{- template "realip" $.RealIP}}
+    {{- template "access" $.A}}
     {{- if .N.SiteLogDir}}
     access_log {{.N.SiteLogDir}}/{{.S.User}}/access.log{{if $.RealIP}} hostashi_realip{{end}};
     access_log {{.N.SiteLogDir}}/{{.S.User}}/traffic.log hostashi_traffic buffer=32k flush=5s;
@@ -807,6 +815,9 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Host $host;
+        {{- with $.A}}{{if .Fwd}}
+        proxy_set_header Authorization ${{.Fwd}};
+        {{- end}}{{end}}
         {{- if .TLS}}
         proxy_ssl_server_name on;
         proxy_ssl_name {{.SNI}};
@@ -866,6 +877,9 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Host $host;
+        {{- with $.A}}{{if .Fwd}}
+        proxy_set_header Authorization ${{.Fwd}};
+        {{- end}}{{end}}
         {{- range $.AppHide}}
         {{.}}
         {{- end}}
@@ -942,6 +956,10 @@ server {
         fastcgi_param REDIRECT_STATUS 200;
         # httpoxy: never pass a client's Proxy header on as HTTP_PROXY.
         fastcgi_param HTTP_PROXY "";
+        {{- with $.A}}{{if .Fwd}}
+        # The visitor's password stays with nginx (ADR-0066).
+        fastcgi_param HTTP_AUTHORIZATION ${{.Fwd}} if_not_empty;
+        {{- end}}{{end}}
         {{- with $.ReadTimeout}}
         # Follows the site's max_execution_time (ADR-0049).
         fastcgi_read_timeout {{.}};
@@ -992,7 +1010,7 @@ server {
     {{- end}}
     {{- end}}
 }
-`).Parse(cacheSrc)).Parse(siteHdrsSrc)).Parse(realIPSrc))
+`).Parse(cacheSrc)).Parse(siteHdrsSrc)).Parse(realIPSrc + accessMapSrc + accessSrc + accessOpenSrc))
 
 // phpLimits sets the site's body size and read timeout (ADR-0049) unless
 // its server snippet, which is rendered at the server level, sets the same
@@ -1196,6 +1214,13 @@ func (n *Nginx) Render(d Desired, gen int) (Files, error) {
 		phpLimits(data, s)
 		n.headers(data, s)
 		data["RealIP"] = newRealIPView(s.RealIP)
+
+		av, err := n.newAccessView(s)
+		if err != nil {
+			return Files{}, fmt.Errorf("web: site %s: %w", s.User, err)
+		}
+
+		data["A"] = av
 
 		if err := siteTmpl.Execute(&b, data); err != nil {
 			return Files{}, fmt.Errorf("web: render site %s: %w", s.User, err)

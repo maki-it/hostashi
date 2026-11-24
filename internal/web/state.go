@@ -62,6 +62,10 @@ type Site struct {
 	// value trusts nobody. The agent has already refused ranges that hold
 	// one of its own addresses.
 	RealIP agentapi.WebRealIP `json:"realIp,omitzero"`
+	// Access is the site's IP rule and password protection (ADR-0066),
+	// rendered into every server block of the site; the zero value lets
+	// everybody in. A snippet must not use the same directives.
+	Access agentapi.WebAccess `json:"access,omitzero"`
 	// BodyMax is the site's client_max_body_size in bytes, a whole number
 	// of MiB, and FastCGIReadTimeout its fastcgi_read_timeout in seconds;
 	// both follow the site's PHP settings (ADR-0049) and need PHPSocket.
@@ -280,6 +284,14 @@ func (d Desired) Validate() error {
 		}
 
 		if err := s.RealIP.Validate(); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if err := s.Access.Validate(); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if err := s.Access.Conflict(s.Snippets.Server, s.Snippets.Root); err != nil {
 			return fmt.Errorf("site %q: %w", s.User, err)
 		}
 
