@@ -31,8 +31,10 @@ export const sites = [
     type: "php",
     php: "8.4",
     domains: ["blog.example.com", "www.blog.example.com"],
+    redirectDomains: ["blog.example.net"],
+    pendingDomains: null,
     www: { mode: "to-non-www", pairs: [{ bare: "blog.example.com", www: "www.blog.example.com" }], missing: [] },
-    tls: tls(["blog.example.com", "www.blog.example.com"]),
+    tls: tls(["blog.example.com", "www.blog.example.com", "blog.example.net"]),
   }),
   site("shop", { type: "php", php: "8.3", domains: ["shop.example.com"], www: { mode: "off", pairs: [], missing: ["www.shop.example.com"] }, tls: tls(["shop.example.com"]) }),
   site("docs", { type: "static", domains: ["docs.example.com"], web: { dir: "public", spa: false, cache: true }, tls: tls(["docs.example.com"]) }),
@@ -50,6 +52,22 @@ export const sites = [
   }),
   site("intranet", { type: "proxy", account: false, domains: ["intranet.example.com"], proxy: { target: "http://10.0.0.5:8080", targetHost: false, insecure: false }, tls: tls(["intranet.example.com"]) }),
   site("old-domain", { type: "redirect", account: false, domains: ["example.net", "www.example.net"], redirect: { target: "https://www.example.com", status: 301, keepPath: true }, tls: tls(["example.net", "www.example.net"]) }),
+  // A domain change that waits for its certificate (ADR-0068).
+  site("news", {
+    type: "php",
+    php: "8.4",
+    domains: ["news.example.com", "www.news.example.com"],
+    redirectDomains: [],
+    pendingDomains: {
+      domains: ["news.example.org", "www.news.example.org"],
+      redirectDomains: ["news.example.com", "www.news.example.com"],
+      requestedAt: day(0),
+      error: "acme: error: 400 :: urn:ietf:params:acme:error:dns :: DNS problem: NXDOMAIN looking up A for www.news.example.org",
+      failedAt: day(0),
+    },
+    www: { mode: "to-non-www", pairs: [{ bare: "news.example.com", www: "www.news.example.com" }], missing: [] },
+    tls: tls(["news.example.com", "www.news.example.com"]),
+  }),
   site("staging", { type: "php", php: "8.4", domains: ["staging.example.com"], tls: tls([], { active: false, hsts: false, notAfter: null, error: "staging.example.com has no DNS record pointing to this server", failedAt: day(0) }) }),
 ];
 

@@ -15,11 +15,28 @@ Hostashi does not run DNS. Let's Encrypt checks each name over HTTP on port 80, 
 
 ## Change the domains of a site
 
-On the site's **Domains & HTTPS** tab, edit the list: one domain per line, the first one is the primary domain. After saving, the site answers for the new names at once, over HTTP until the certificate covers them.
+On the site's **Domains & HTTPS** tab, edit the list: one domain per line, the first one is the primary domain. The site keeps its name, Linux user, files, databases, backups and settings; only the names it answers to change.
+
+**Redirect domains** answer every request with a permanent redirect (301) to the primary domain, path and query included. Use them for old names after a move, or for extra names that should not show the site themselves. They stay on the site's certificate, so their DNS records must keep pointing to this server; remove a name from the list once you no longer need it.
 
 A domain can belong to one site or parked domain only, and never be the panel's own host name.
 
 ![The Domains tab of a site](images/site-domains.png)
+
+### When the change takes effect
+
+- **Site on HTTPS with Let's Encrypt, new names:** the change waits until a certificate for all new names is there, usually less than a minute. Until then the site stays on HTTPS with its current domains. If a new name has no working DNS record yet, nothing changes: the tab shows the error, and the panel tries again within the hour. You can **Try again now**, **Change now without HTTPS** (the site is served over HTTP until the certificate is there; with HSTS on, browsers that know the site refuse that) or **Cancel change**. The new names are reserved for this site while the change waits.
+- **Everything else** (site on HTTP, own certificate, or the certificate already names every domain): at once.
+
+![A domain change waiting for its certificate](images/site-domain-pending.png)
+
+### Change the primary domain
+
+**Change primary domain** does the common move in one step: enter the new domain, choose whether its `www` name is added too, and whether the old domain (and its `www` name) becomes a redirect domain. The form shows the domains after the change before you save.
+
+The panel does not change what the site itself stores: addresses in the database (for WordPress run `wp search-replace 'https://old.example.com' 'https://example.com' --all-tables` over SSH, after a backup), values such as `APP_URL` in the app's environment or config files, and DNS. The form lists these with the command for your domains.
+
+![Changing the primary domain](images/site-domain-change.png)
 
 ## Redirect to or from www
 

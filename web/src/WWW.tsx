@@ -63,8 +63,9 @@ export function WWWCard({ site, onChange, onDomains }: { site: Site; onChange: (
   const add = (name: string) =>
     act(async () => {
       const list = [...site.domains, name];
-      await setDomains(site.name, list);
+      const s = await setDomains(site.name, list);
       onDomains(list);
+      if (s.pendingDomains) return `${name} is added as soon as its certificate is there. The site stays on HTTPS until then.`;
       return site.tls.enabled
         ? `${name} added. The site is served over HTTP until its certificate also names ${name}.`
         : `${name} added. You can choose the redirect now.`;
