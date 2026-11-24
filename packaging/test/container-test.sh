@@ -1713,7 +1713,8 @@ UNIT
   # an open tab learns both.
   [ "$(api GET /api/v1/databases/tooldb_wp/tool/sessions)" = 200 ] || fail "list tool sessions: $(x cat /tmp/api.out)"
   x grep -q "\"id\":\"$user\"" /tmp/api.out || fail "session not listed: $(x cat /tmp/api.out)"
-  grep -q "id='hostashi-extend'" <<<"$page" || fail "no way to extend the session from the tool"
+  grep -q "id='hostashi-extend' href='https://other.example.com/#/databases?db=tooldb_wp&amp;tool=extend&amp;session=$user'" <<<"$page" ||
+    fail "no way to extend the session from the tool: $(grep -o "id='hostashi-extend'[^>]*" <<<"$page")"
   before=$(x cat "/run/hostashi-adminer/sessions/$user") || fail "no session file"
   [ "$(api POST "/api/v1/databases/tooldb_wp/tool/sessions/$user/extend")" = 200 ] || fail "extend tool session: $(x cat /tmp/api.out)"
   after=$(x cat "/run/hostashi-adminer/sessions/$user")
@@ -1725,8 +1726,15 @@ UNIT
   [ "$(p8444 -o /dev/null -w '%{http_code}' "https://other.example.com:8444/?username=$user&db=tooldb_wp")" = 403 ] || fail "the tool kept an ended session"
   # Deleting the database ends any other session: the user is gone.
   [ "$(api POST /api/v1/databases/tooldb_wp/tool '{"minutes":30}')" = 201 ] || fail "open tool again: $(x cat /tmp/api.out)"
+  url=$(x sed -n 's/.*"url":"\([^"]*\)".*/\1/p' /tmp/api.out)
   user=$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User LIKE 'hostashi\_tool\_%'")
   [ -n "$user" ] || fail "no temporary database user"
+  # Adminer's logout sends the browser to the panel, which ends the
+  # session; the tool itself forgets the login.
+  p8444 -L -o /dev/null "$url&panel=443" || fail "tool did not answer the second ticket"
+  loc=$(p8444 -o /dev/null -w '%{http_code} %{redirect_url}' -d logout=1 "https://other.example.com:8444/?username=$user&db=tooldb_wp")
+  [ "$loc" = "303 https://other.example.com/#/databases?db=tooldb_wp&tool=end&session=$user" ] || fail "tool logout: '$loc'"
+  [ "$(p8444 -o /dev/null -w '%{http_code}' "https://other.example.com:8444/?username=$user&db=tooldb_wp")" = 403 ] || fail "the tool kept the login after the logout"
   [ "$(api DELETE /api/v1/sites/tooldb)" = 204 ] || fail "delete site: $(x cat /tmp/api.out)"
   [ -z "$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User = '$user'")" ] || fail "temporary user outlived its database"
 

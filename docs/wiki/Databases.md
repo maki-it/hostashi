@@ -28,6 +28,8 @@ In the site's configuration, use `localhost` as the database host for the server
 
 If the web database tool is installed, **Open in Adminer** opens the database in a new browser tab. Hostashi creates a temporary database user for it; that user and its connections end after the session length you choose. No password reaches your browser.
 
+The top bar in Adminer shows when the session ends. **+30 min** opens the panel in a new tab, where one click extends the session; the Adminer tab shows the new time when you go back to it. **Logout** in Adminer opens the panel, where one click ends the session: the temporary user is removed and its connections close. The database's page in the panel lists the open sessions with the same two actions.
+
 ## Delete a database
 
 On the database's page, **Delete database** removes it together with its users. This cannot be undone. Databases of a site are also deleted when the site is deleted.

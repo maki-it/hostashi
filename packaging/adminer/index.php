@@ -176,6 +176,16 @@ function session_end(mixed $user, mixed $expires): int
 }
 
 /**
+ * The panel's page that ends or extends this session with one click
+ * (action "end" or "extend"); the panel asks before it acts.
+ */
+function panel_session_link(array $login, string $action): string
+{
+    return $login['panel'] . '/#/databases?db=' . rawurlencode($login['database'])
+        . '&tool=' . $action . '&session=' . rawurlencode($login['user']);
+}
+
+/**
  * The look the panel asks for along with the ticket: the user's colour
  * scheme and the panel's port. Both only change how the page looks; the
  * panel's address is this server's own name, never taken from the request.
@@ -260,6 +270,20 @@ if ($login['expires'] < time()) {
     $_SESSION = [];
     session_destroy();
     stop(403, 'The session has ended. Open the database again from the Hostashi panel.');
+}
+
+// Adminer's logout only forgets this browser's login: the temporary user
+// and its connections would live on. Only the panel can end the session
+// (ADR-0038 addendum 1), so the logout goes there and asks to end it.
+if (isset($_POST['logout']) && !$ticketLogin) {
+    $_SESSION = [];
+    session_destroy();
+    if ($login['panel'] === '') {
+        stop(200, 'Logged out of this browser. End the session under Databases in the Hostashi panel; it also ends by itself at its time.');
+    }
+
+    header('Location: ' . panel_session_link($login, 'end'), true, 303);
+    exit;
 }
 
 // Adminer's own styles, scripts and images (?file=...) need no login; any

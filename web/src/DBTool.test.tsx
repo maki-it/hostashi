@@ -224,3 +224,65 @@ describe("Adminer sessions", () => {
     expect(await screen.findByText(/at most two hours ahead/)).toBeInTheDocument();
   });
 });
+
+describe("Adminer's +30 min and Log out", () => {
+  const id = "hostashi_tool_0123456789abcdef";
+  const path = "/api/v1/databases/blog_wp/tool/sessions";
+  const later = new Date(Date.now() + 55 * 60000).toISOString();
+
+  it("extends the session with one click", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...sites,
+      ...available,
+      "GET /api/v1/databases": { body: { databases: [blogWp] } },
+      ["GET " + path]: { body: { sessions: [] } },
+      ["POST " + path + "/" + id + "/extend"]: { body: { id, user: "kim", opened: new Date().toISOString(), expires: later } },
+    });
+    render(<Harness initial={`db=blog_wp&tool=extend&session=${id}`} />);
+    const dialog = await screen.findByRole("dialog", { name: "Extend the Adminer session on blog_wp" });
+    await user.click(within(dialog).getByRole("button", { name: "Extend by 30 minutes" }));
+    expect(await within(dialog).findByText("Extended by 30 minutes.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("ends the session after Adminer's logout", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...sites,
+      ...available,
+      "GET /api/v1/databases": { body: { databases: [blogWp] } },
+      ["GET " + path]: { body: { sessions: [] } },
+      ["DELETE " + path + "/" + id]: { status: 204 },
+    });
+    render(<Harness initial={`db=blog_wp&tool=end&session=${id}`} />);
+    const dialog = await screen.findByRole("dialog", { name: "End the Adminer session on blog_wp" });
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    await user.click(within(dialog).getByRole("button", { name: "End session" }));
+    expect(await within(dialog).findByText("Session ended.")).toBeInTheDocument();
+    expect(calls.some((c) => c.method === "DELETE" && c.path === path + "/" + id)).toBe(true);
+  });
+
+  it("says when the session has ended already", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      ...sites,
+      ...available,
+      "GET /api/v1/databases": { body: { databases: [blogWp] } },
+      ["GET " + path]: { body: { sessions: [] } },
+      ["DELETE " + path + "/" + id]: { status: 404, body: { error: { code: "not_found", message: "the session has ended" } } },
+    });
+    render(<Harness initial={`db=blog_wp&tool=end&session=${id}`} />);
+    await user.click(await screen.findByRole("button", { name: "End session" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("This session has ended already.");
+  });
+
+  it("ignores a malformed request", async () => {
+    mockFetch({ ...sites, ...available, "GET /api/v1/databases": { body: { databases: [blogWp] } }, ["GET " + path]: { body: { sessions: [] } } });
+    render(<Harness initial="db=blog_wp&tool=end&session=root" />);
+    expect(await screen.findByRole("button", { name: "Open in Adminer" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
