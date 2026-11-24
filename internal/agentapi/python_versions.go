@@ -28,44 +28,44 @@ type PythonRelease struct {
 }
 
 // PythonReleases are the lines Hostashi installs, oldest first: every line
-// that has not ended. Checked on 2026-11-22 against
+// that has not ended. Checked on 2026-11-24 against
 // https://peps.python.org/api/release-cycle.json and the SHA256SUMS of
-// python-build-standalone release 20261110; the build provenance of each
+// python-build-standalone release 20261123; the build provenance of each
 // new archive was verified with Sigstore.
 var PythonReleases = []PythonRelease{
 	{
-		Line: "3.11", Version: "3.11.18", Tag: "20261110", End: "2027-10-31",
+		Line: "3.11", Version: "3.11.18", Tag: "20261123", End: "2027-10-31",
 		SHA256: map[string]string{
-			"x86_64":  "3288c54cea3db350052019b3f8b558dd8a3da8afa6fda573f5fd2bcb37635b4a",
-			"aarch64": "7e71f26a003949b57757e287f4f4b6689da07e7a229f5bbee7919c19ed77155d",
+			"x86_64":  "75b92c55bc6a5f58fe4d08fc5261c983b2b17930192d62946fe7c9cf6fd66316",
+			"aarch64": "cc55f9298334bfd87f932368368dc33f88d608dacc01bd6602a05e01dc9e376f",
 		},
 	},
 	{
-		Line: "3.12", Version: "3.12.16", Tag: "20261110", End: "2028-10-31",
+		Line: "3.12", Version: "3.12.16", Tag: "20261123", End: "2028-10-31",
 		SHA256: map[string]string{
-			"x86_64":  "6a9e62dad033790aef722dbd370e0ce76ce17b73627ba3ae679f537049350b39",
-			"aarch64": "b6a41defec4975d94b4ff1950236e7383e5c02ba40ea48c9ec33c66087a35aab",
+			"x86_64":  "c85811d35971d06612585a057db3b71806378df6ea8476275fb16aa5c9fe56a0",
+			"aarch64": "97bca1d0960240b721b6e58ec2dc080519fcd11f979bf64356434ae9d0f96947",
 		},
 	},
 	{
-		Line: "3.13", Version: "3.13.18", Tag: "20261110", End: "2029-10-31",
+		Line: "3.13", Version: "3.13.18", Tag: "20261123", End: "2029-10-31",
 		SHA256: map[string]string{
-			"x86_64":  "f2d2199eb25880e07863b391cf7124e7ffa1338b0d65600dfcec117c4223a7fb",
-			"aarch64": "55c00325f7c1fddf325dfc621aabdfbbac4dc54adda224af88ec411dc12db239",
+			"x86_64":  "65d5c786e3cbd67533c346537ad0b8826ef158287b3cebaa34b30558cc330f59",
+			"aarch64": "9c9da4fc81fcdda1683ec8f97674bae46e3d246243ce8d781973817e13e2ec12",
 		},
 	},
 	{
-		Line: "3.14", Version: "3.14.10", Tag: "20261110", End: "2030-10-31",
+		Line: "3.14", Version: "3.14.10", Tag: "20261123", End: "2030-10-31",
 		SHA256: map[string]string{
-			"x86_64":  "c2ff2e97422f5d3896a16e0317fd212ba977bbf2688d93a6f7a03d817506bd30",
-			"aarch64": "38fd50f07170adc29d481913d1c30b17ecb538fbe290315fe1f83d84fdd5b694",
+			"x86_64":  "92102b15f5149d124b5b4b2f00f1ff2f827cf1a99dc1a22447ad52861bd80ace",
+			"aarch64": "f1641401210144ca2eeb2774ee531f8bf903fd7f05d198b7feed62b40cbf4ba8",
 		},
 	},
 	{
-		Line: "3.15", Version: "3.15.2", Tag: "20261110", End: "2031-10-31",
+		Line: "3.15", Version: "3.15.2", Tag: "20261123", End: "2031-10-31",
 		SHA256: map[string]string{
-			"x86_64":  "ad23d1b73fac26440b0306ae06911031344c49a90ec19716c8362e7fa40cae43",
-			"aarch64": "d1367a6c3cd86a9e35712072841f1376859f3b47a2a54e224421a0f9fd169047",
+			"x86_64":  "18c56e105ba7713602536f49976c69d14d73cea7d32cfe2cb68eb8a79568de47",
+			"aarch64": "89bb07630c7056f5fee066e5fffc7c9a8141f6f2a5a4402eb1c72b3358e26809",
 		},
 	},
 }

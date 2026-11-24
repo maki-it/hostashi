@@ -37,9 +37,9 @@
   ],
   "customManagers": [
     {
-      "description": "The reuse tool version in the REUSE workflow",
+      "description": "The reuse tool version in the Licenses workflow",
       "customType": "regex",
-      "managerFilePatterns": ["/^\\.github/workflows/reuse\\.yml$/"],
+      "managerFilePatterns": ["/^\\.github/workflows/licenses\\.yml$/"],
       "matchStrings": ["REUSE_VERSION: \"(?<currentValue>[^\"]+)\""],
       "datasourceTemplate": "pypi",
       "depNameTemplate": "reuse"
