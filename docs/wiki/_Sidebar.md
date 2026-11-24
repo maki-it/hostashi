@@ -19,6 +19,7 @@
 - [Security headers](Security-headers.md)
 - [Real visitor address](Real-visitor-address.md)
 - [File manager](File-manager.md)
+- [Reset permissions](Reset-permissions.md)
 - [Site logs](Site-logs.md)
 
 **Databases**

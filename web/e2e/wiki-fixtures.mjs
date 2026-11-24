@@ -208,7 +208,20 @@ const deployLogText = [
 
 const me = { username: "kim", role: "admin", secondFactor: true, secondFactorRequired: true, clientIp: "203.0.113.24" };
 
+const homeFiles = [
+  { name: ".ssh", type: "dir", size: 4096, modified: day(30), mode: "0700" },
+  { name: "htdocs", type: "dir", size: 4096, modified: day(1), mode: "0755" },
+  { name: "logs", type: "dir", size: 4096, modified: day(0), mode: "0755" },
+  { name: "backup.tar.gz", type: "file", size: 48_000_000, modified: day(3), mode: "0600" },
+];
+
 const routes = [
+  ["GET", /^\/sites\/([^/]+)\/files$/, () => ({ path: "", entries: homeFiles, truncated: false, unnamed: 0 })],
+  [
+    "POST",
+    /^\/sites\/([^/]+)\/permissions\/reset$/,
+    () => ({ checked: 18_342, changed: 211, skipped: 1, skippedPaths: [{ path: "htdocs/wp-content/uploads/nfs", reason: "on another file system" }] }),
+  ],
   ["GET", /^\/auth\/me$/, () => me],
   ["GET", /^\/setup$/, () => ({ required: false })],
   ["GET", /^\/sites$/, () => ({ sites })],
