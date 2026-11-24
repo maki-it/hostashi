@@ -71,7 +71,7 @@ None left.
 1. ~~May the page's own JavaScript run?~~ Decided (Kim, 2026-11-19): yes, from its files and inline, see the named conflict.
 2. ~~Should parked domains get HTTPS with Let's Encrypt?~~ Decided (Kim, 2026-11-19): yes.
 
-## Addendum 1: preview in the panel (Proposed; approach chosen by Kim, 2026-11-23)
+## Addendum 1: preview in the panel (Accepted by Kim, 2026-11-24)
 
 **Context.** Kim wants a Preview button on the maintenance pages (Kim, 2026-11-23). Uploaded pages live only on the agent side in `/var/lib/hostashi-pages/<id>.<digest>/`, a directory nginx reads and that is world-readable by design [V: `internal/agent/pages.go`, `internal/pages`]. The panel unit runs with `ProtectSystem=strict`, which leaves that directory readable [V: `packaging/systemd/hostashi.service`]. A page is HTML from the admin or copied from elsewhere; shown under the panel's own origin, a script in it could use the panel session [U: same-origin rules]. Session cookies are `SameSite=Strict` [V: `internal/serve/auth_api.go`].
 
