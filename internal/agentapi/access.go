@@ -144,6 +144,24 @@ func accessPrefixes(what string, list []string, limit int) ([]netip.Prefix, erro
 }
 
 func (u WebAuth) validate() error {
+	if err := u.validateRules(); err != nil {
+		return err
+	}
+
+	return u.validateUsers()
+}
+
+// ValidateRules checks the paths and bypass addresses without the users,
+// for a setting that is stored while password protection is off.
+func (u WebAuth) ValidateRules() error {
+	if err := u.validateRules(); err != nil {
+		return fmt.Errorf("%w: %w", ErrAccessRejected, err)
+	}
+
+	return nil
+}
+
+func (u WebAuth) validateRules() error {
 	if len(u.Paths) > MaxAccessPaths {
 		return fmt.Errorf("more than %d paths", MaxAccessPaths)
 	}
@@ -174,6 +192,10 @@ func (u WebAuth) validate() error {
 		}
 	}
 
+	return nil
+}
+
+func (u WebAuth) validateUsers() error {
 	if len(u.Users) == 0 {
 		return errors.New("password protection needs at least one user")
 	}
