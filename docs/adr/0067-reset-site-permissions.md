@@ -1,6 +1,6 @@
 # ADR-0067 Reset the file permissions of a site
 
-**Status:** Proposed. Mode policy decided by Kim (2026-11-24, see question 1). **Date drafted:** 2026-11-24. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0016 (storage pools), ADR-0032 (SSH per site), ADR-0035 (roles), ADR-0040 (file manager), ADR-0054 Addendum 5 (deploy link), ADR-0058 (OpenAPI and CLI), ADR-0062 (Git deploy), [03-features](../03-features.md) "Linux user per site, home layout, permission reset" (P0).
+**Status:** Accepted (Kim, 2026-11-24). **Date drafted:** 2026-11-24. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0016 (storage pools), ADR-0032 (SSH per site), ADR-0035 (roles), ADR-0040 (file manager), ADR-0054 Addendum 5 (deploy link), ADR-0058 (OpenAPI and CLI), ADR-0062 (Git deploy), [03-features](../03-features.md) "Linux user per site, home layout, permission reset" (P0).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -58,4 +58,4 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 ## Open questions for Kim
 
 1. ~~Modes: 1A, 1B or 1C?~~ Decided (Kim, 2026-11-24): 1A, directories `0755`, files `0644`, executable files stay `0755`.
-2. Accept the rest of this ADR (walk on fds, `.ssh`/`.gnupg` private, skips, scope `sites:write`)?
+2. ~~Accept the rest of this ADR (walk on fds, `.ssh`/`.gnupg` private, skips, scope `sites:write`)?~~ Accepted by Kim on 2026-11-24.
