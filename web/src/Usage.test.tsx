@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { mockFetch } from "./test-utils";
 import { SitesByUsage, SiteUsageCard } from "./Usage";
-import { cores, count, ofServer, percent, type SitePoint, type SiteTotal } from "./usage";
+import { cores, count, ofCores, percent, type SitePoint, type SiteTotal } from "./usage";
 
 const point = (at: string, cpu: number): SitePoint => ({
   at,
@@ -31,6 +31,7 @@ const total = (site: string, cpuAvg: number, memAvg: number, out: number): SiteT
   httpRequests: 1200,
   httpInBytes: 0,
   httpOutBytes: out,
+  cores: 4,
 });
 
 describe("usage helpers", () => {
@@ -38,8 +39,9 @@ describe("usage helpers", () => {
     expect(percent(0)).toBe("0 %");
     expect(percent(2.25)).toBe("2.3 %");
     expect(percent(37.5)).toBe("38 %");
-    expect(ofServer(150, 4)).toBe(37.5);
-    expect(ofServer(50, 0)).toBe(50);
+    expect(ofCores(150, 4)).toBe(37.5);
+    expect(ofCores(50, 0.5)).toBe(100);
+    expect(ofCores(50, 0)).toBe(50);
     expect(cores(0)).toBe("0 cores");
     expect(cores(25)).toBe("0.25 cores");
     expect(cores(100)).toBe("1.0 core");
@@ -54,18 +56,18 @@ describe("SiteUsageCard", () => {
   it("draws the site's charts against the server's cores and its limits, and switches the range", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({
-      "GET /api/v1/sites/shop/usage?range=1h": { body: { site: "shop", range: "1h", step: 15, cpus: 4, points: [point("2026-11-24T09:00:00Z", 20), point("2026-11-24T09:00:15Z", 80)] } },
-      "GET /api/v1/sites/shop/usage?range=30d": { body: { site: "shop", range: "30d", step: 3600, cpus: 4, points: [] } },
-      "GET /api/v1/sites/shop/limits": { body: { set: true, preset: "small", limits: { memoryBytes: 512 * 1024 ** 2, cpuQuotaPercent: 200 } } },
+      "GET /api/v1/sites/shop/usage?range=1h": { body: { site: "shop", range: "1h", step: 15, cpus: 4, cores: 2, points: [point("2026-11-24T09:00:00Z", 20), point("2026-11-24T09:00:15Z", 80)] } },
+      "GET /api/v1/sites/shop/usage?range=30d": { body: { site: "shop", range: "30d", step: 3600, cpus: 4, cores: 2, points: [] } },
+      "GET /api/v1/sites/shop/limits": { body: { set: true, preset: "small", limits: { memoryBytes: 512 * 1024 ** 2 } } },
     });
     render(<SiteUsageCard site="shop" />);
 
-    expect(await screen.findByRole("figure", { name: "CPU use in percent of the server" })).toBeInTheDocument();
-    expect(await screen.findByText(/100 % is all 4 cores of the server, limit 2\.0 cores \(50 %\)/)).toBeInTheDocument();
+    expect(await screen.findByRole("figure", { name: "CPU use in percent of the cores the site may use" })).toBeInTheDocument();
+    expect(screen.getByText(/100 % is the limit of 2\.0 cores/)).toBeInTheDocument();
     expect(screen.getByRole("figure", { name: "Web traffic" })).toBeInTheDocument();
     expect(screen.getByRole("figure", { name: "Disk reads and writes" })).toBeInTheDocument();
     expect(await screen.findByText("of 512 MiB limit")).toBeInTheDocument();
-    expect(screen.getByText(/0\.80 cores of 4 busy · 2\.5 requests\/s · 7 processes · 64 MiB file cache/)).toBeInTheDocument();
+    expect(screen.getByText(/0\.80 cores of 2\.0 cores busy · 2\.5 requests\/s · 7 processes · 64 MiB file cache/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "30d" }));
     expect(await screen.findByRole("heading", { name: "Usage, last 30 days" })).toBeInTheDocument();
@@ -88,7 +90,7 @@ describe("SitesByUsage", () => {
     const user = userEvent.setup();
     mockFetch({
       "GET /api/v1/usage/sites?range=24h&sort=cpu": {
-        body: { range: "24h", sort: "cpu", cpus: 4, sites: [total("shop", 80, 100 * 1024 ** 2, 5 * 1024 ** 3), total("blog", 5, 900 * 1024 ** 2, 1024)] },
+        body: { range: "24h", sort: "cpu", cpus: 4, sites: [total("shop", 80, 100 * 1024 ** 2, 5 * 1024 ** 3), { ...total("blog", 5, 900 * 1024 ** 2, 1024), cores: 0.5 }] },
       },
     });
     render(<SitesByUsage />);
@@ -98,9 +100,11 @@ describe("SitesByUsage", () => {
     expect(names()).toEqual(["shop", "blog"]);
     expect(within(table).getByRole("link", { name: "shop" })).toHaveAttribute("href", "#/sites/shop/usage");
     expect(within(table).getByText("5.0 GiB")).toBeInTheDocument();
-    // 80 % of one core on 4 cores is a fifth of the server.
-    expect(within(table).getByRole("button", { name: /CPU of 4 cores/ })).toBeInTheDocument();
+    // 80 % of one core on 4 cores is a fifth; 5 % of a core on a limit of
+    // half a core is a tenth of the limit.
     expect(within(table).getByText("20 %")).toBeInTheDocument();
+    expect(within(table).getByText("10 %")).toBeInTheDocument();
+    expect(within(table).getByText(/of 0\.50 cores \(limit\)/)).toBeInTheDocument();
 
     await user.click(within(table).getByRole("button", { name: /Memory/ }));
     await user.click(within(table).getByRole("button", { name: /Memory/ }));

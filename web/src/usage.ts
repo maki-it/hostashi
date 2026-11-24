@@ -19,9 +19,9 @@ export type SitePoint = {
   httpOut: number;
 };
 
-// cpus is the number of CPU cores of the server: cpu / cpus is the share
-// of the whole server.
-export type SiteUsage = { site: string; range: Range; step: number; cpus: number; points: SitePoint[] };
+// cpus is the number of CPU cores of the server, cores how many the site
+// may use: its CPU limit, else all of them. 100 % is cores.
+export type SiteUsage = { site: string; range: Range; step: number; cpus: number; cores: number; points: SitePoint[] };
 
 export type SiteTotal = {
   site: string;
@@ -34,6 +34,7 @@ export type SiteTotal = {
   httpRequests: number;
   httpInBytes: number;
   httpOutBytes: number;
+  cores: number; // as in SiteUsage
 };
 
 export type UsageSort = "cpu" | "memory" | "traffic" | "io";
@@ -49,8 +50,8 @@ export function percent(pct: number): string {
   return `${pct >= 10 || pct === 0 ? pct.toFixed(0) : pct.toFixed(1)} %`;
 }
 
-/** ofServer turns percent of one core into percent of the whole server. */
-export const ofServer = (pctOfCore: number, cpus: number) => pctOfCore / Math.max(1, cpus);
+/** ofCores turns percent of one core into percent of the cores a site may use. */
+export const ofCores = (pctOfCore: number, cores: number) => pctOfCore / (cores > 0 ? cores : 1);
 
 /** cores formats percent of one core as cores: 150 % is "1.5 cores". */
 export function cores(pctOfCore: number): string {

@@ -5,7 +5,7 @@ import { getSiteLimits } from "./limits";
 import { formatHash } from "./routes";
 import { bytes, rate, ranges, serviceMessage, type Range } from "./services";
 import { Card, LineChart, Notice, Table, type Column, type Sort } from "./ui";
-import { cores, count, getSiteUsage, ofServer, percent, rankSites, type SiteTotal, type SiteUsage } from "./usage";
+import { cores, count, getSiteUsage, ofCores, percent, rankSites, type SiteTotal, type SiteUsage } from "./usage";
 
 const rangeLabels: Record<Range, string> = { "1h": "1 hour", "24h": "24 hours", "7d": "7 days", "30d": "30 days" };
 
@@ -57,19 +57,17 @@ function usePolled<T>(range: Range, f: (r: Range) => Promise<T>, deps: readonly 
 export function SiteUsageCard({ site }: { site: string }) {
   const [range, setRange] = useState<Range>("1h");
   const { data, loading, error } = usePolled<SiteUsage>(range, (r) => getSiteUsage(site, r), [site]);
-  const [limit, setLimit] = useState({ mem: 0, cpu: 0 });
+  const [memLimit, setMemLimit] = useState(0);
 
   useEffect(() => {
     getSiteLimits(site).then(
-      (l) => setLimit({ mem: l.limits.memoryBytes, cpu: l.limits.cpuQuotaPercent }),
-      () => setLimit({ mem: 0, cpu: 0 }),
+      (l) => setMemLimit(l.limits.memoryBytes),
+      () => setMemLimit(0),
     );
   }, [site]);
 
-  const memLimit = limit.mem;
   const cpus = data?.cpus ?? 1;
-  // A hard CPU limit above the server's cores changes nothing.
-  const cpuLimit = limit.cpu > 0 && limit.cpu < cpus * 100 ? limit.cpu : 0;
+  const avail = data?.cores ?? cpus;
 
   const points = data?.points ?? [];
   const times = points.map((p) => p.at);
@@ -89,21 +87,16 @@ export function SiteUsageCard({ site }: { site: string }) {
                 CPU
                 <span className="ui-hint">
                   {" "}
-                  · 100 % is all {cpus} {cpus === 1 ? "core" : "cores"} of the server
-                  {cpuLimit > 0 && (
-                    <>
-                      , limit {cores(cpuLimit)} ({percent(ofServer(cpuLimit, cpus))})
-                    </>
-                  )}
+                  · 100 % is {avail < cpus ? `the limit of ${cores(avail * 100)}` : `all ${cores(cpus * 100)} of the server`}
                 </span>
               </h3>
               <LineChart
-                title="CPU use in percent of the server"
+                title="CPU use in percent of the cores the site may use"
                 times={times}
                 days={days}
                 max={100}
                 format={percent}
-                series={[{ label: "CPU", values: points.map((p) => ofServer(p.cpu, cpus)) }]}
+                series={[{ label: "CPU", values: points.map((p) => ofCores(p.cpu, avail)) }]}
               />
             </section>
             <section className="ui-stack-tight" aria-label="Memory">
@@ -146,7 +139,7 @@ export function SiteUsageCard({ site }: { site: string }) {
           </div>
           {last && (
             <p className="ui-hint ui-flush">
-              Now: {cores(last.cpu)} of {cpus} busy · {last.httpReq.toFixed(1)} requests/s · {last.tasks} processes · {bytes(last.cache)} file cache. Database queries run in the shared
+              Now: {cores(last.cpu)} of {cores(avail * 100)} busy · {last.httpReq.toFixed(1)} requests/s · {last.tasks} processes · {bytes(last.cache)} file cache. Database queries run in the shared
               database server and are not counted here.
             </p>
           )}
@@ -195,14 +188,19 @@ export function SitesByUsage() {
     },
     {
       key: "cpu",
-      header: `CPU of ${cpus} ${cpus === 1 ? "core" : "cores"} (avg · peak)`,
-      // The bar is the share of the whole server, not of the busiest site.
+      header: "CPU (avg · peak)",
+      // 100 % is the cores the site may use: its limit, else the server's.
       cell: (r) => (
-        <Bar value={ofServer(r.cpuAvg, cpus)} max={100}>
-          {percent(ofServer(r.cpuAvg, cpus))} <span className="ui-hint">· {percent(ofServer(r.cpuMax, cpus))}</span>
+        <Bar value={ofCores(r.cpuAvg, r.cores)} max={100}>
+          {percent(ofCores(r.cpuAvg, r.cores))} <span className="ui-hint">· {percent(ofCores(r.cpuMax, r.cores))}</span>
+          <span className="ui-hint">
+            {" "}
+            of {cores(r.cores * 100)}
+            {r.cores < cpus ? " (limit)" : ""}
+          </span>
         </Bar>
       ),
-      sortValue: (r) => r.cpuAvg,
+      sortValue: (r) => ofCores(r.cpuAvg, r.cores),
     },
     {
       key: "memory",

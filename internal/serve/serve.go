@@ -372,7 +372,7 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 		}
 
 		if deps.Usage != nil && deps.Sites != nil {
-			registerUsage(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Usage, hostingSiteExists(deps.Sites), log)
+			registerUsage(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Usage, hostingSiteCPU(deps.Sites), log)
 		}
 
 		if deps.System != nil && deps.Settings != nil {
