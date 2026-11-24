@@ -122,6 +122,11 @@ func (r *Reader) Read(req agentapi.SiteLogsReadRequest) (agentapi.SiteLogsReadRe
 	return resp, nil
 }
 
+// OpenFile opens p like the logs: read-only, no symbolic links anywhere in
+// the path, a regular file of the owner. The traffic counter of ADR-0063
+// reads its log through it.
+func (r *Reader) OpenFile(p string) (*os.File, *unix.Stat_t, error) { return r.open(p) }
+
 // open opens p read-only without following symbolic links anywhere in the
 // path and checks that it is a regular file of the owner.
 func (r *Reader) open(p string) (*os.File, *unix.Stat_t, error) {

@@ -52,6 +52,7 @@ import (
 	"github.com/maki-it/hostashi/internal/sites"
 	"github.com/maki-it/hostashi/internal/siteslice"
 	"github.com/maki-it/hostashi/internal/sitestats"
+	"github.com/maki-it/hostashi/internal/sitetraffic"
 	"github.com/maki-it/hostashi/internal/snippet"
 	"github.com/maki-it/hostashi/internal/sshaccess"
 	"github.com/maki-it/hostashi/internal/sysconf"
@@ -337,7 +338,12 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			root = sitestats.DefaultCgroupRoot
 		}
 
-		(&statsOps{h: h, disk: disk, cgroupRoot: root}).register(s)
+		var traffic *sitetraffic.Counter
+		if cfg.Logs != nil {
+			traffic = &sitetraffic.Counter{Dir: cfg.Logs.SiteLogDir, Open: cfg.Logs.OpenFile}
+		}
+
+		(&statsOps{h: h, disk: disk, cgroupRoot: root, traffic: traffic}).register(s)
 	}
 
 	toolLog := cfg.Log

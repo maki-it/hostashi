@@ -277,6 +277,9 @@ http {
     # Access log of a site behind a trusted proxy (ADR-0059): nginx's
     # "combined" plus the address of the proxy the request came through.
     log_format hostashi_realip '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" proxy=$realip_remote_addr';
+    # Web traffic per site (ADR-0063): time, status, bytes in, bytes out; no
+    # address, path or user agent.
+    log_format hostashi_traffic '$msec $status $request_length $bytes_sent';
     default_type application/octet-stream;
     sendfile on;
     tcp_nopush on;
@@ -675,6 +678,7 @@ server {
     {{- template "realip" $.RealIP}}
     {{- if .N.SiteLogDir}}
     access_log {{.N.SiteLogDir}}/{{.S.User}}/access.log{{if $.RealIP}} hostashi_realip{{end}};
+    access_log {{.N.SiteLogDir}}/{{.S.User}}/traffic.log hostashi_traffic buffer=32k flush=5s;
     error_log {{.N.SiteLogDir}}/{{.S.User}}/error.log warn;
     {{- end}}
     {{- if not .S.Cert}}
@@ -724,6 +728,7 @@ server {
     {{- template "realip" $.RealIP}}
     {{- if .N.SiteLogDir}}
     access_log {{.N.SiteLogDir}}/{{.S.User}}/access.log{{if $.RealIP}} hostashi_realip{{end}};
+    access_log {{.N.SiteLogDir}}/{{.S.User}}/traffic.log hostashi_traffic buffer=32k flush=5s;
     error_log {{.N.SiteLogDir}}/{{.S.User}}/error.log warn;
     {{- end}}
     ssl_certificate {{.S.Cert}};
