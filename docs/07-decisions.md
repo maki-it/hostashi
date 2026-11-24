@@ -65,6 +65,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0059 | Real client IP behind CDNs and proxies | Accepted on 2026-11-22 ([adr/0059](adr/0059-real-client-ip-behind-proxies.md)) | No |
 | 0060 | Time zone, hostname and reboot from the panel | Accepted on 2026-11-22 ([adr/0060](adr/0060-time-zone-hostname-and-reboot.md)) | No |
 | 0061 | Site type Python | Accepted on 2026-11-22 ([adr/0061](adr/0061-site-type-python.md)) | No |
+| 0062 | Git deploy per site | Proposed ([adr/0062](adr/0062-git-deploy-per-site.md)) | Yes |
 
 ---
 
@@ -423,3 +424,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0061 Site type Python
 
 **Full text (status Accepted, 2026-11-22, by Kim):** [adr/0061](adr/0061-site-type-python.md). Summary: new site type `python`, built like `node`. CPython from python-build-standalone, every line that has not ended (today 3.11–3.15), pinned with SHA-256 in `internal/agentapi/python_versions.go` and installed by the fixed unit `hostashi-python-install@<line>` to `/opt/hostashi/python/<line>` with the Node.js unpack code; a daily workflow checks `SHA256SUMS` and the Sigstore build provenance and opens a PR. Hostashi creates `<home>/.venv` as the site user through a oneshot unit; packages are installed over SSH. The app runs in `hostashi-python@<site>` with typed start forms `wsgi` (gunicorn), `asgi` (uvicorn) or `script`, Hostashi adds the bind to `127.0.0.1:<port>`. Port, firewall filter, nginx branch, log and environment variables as for Node.js. CloudPanel Python sites are imported stopped, without a start command. No new binary, no new `os/exec` exception.
+
+## ADR-0062 Git deploy per site
+
+**Full text (status Proposed):** [adr/0062](adr/0062-git-deploy-per-site.md). Summary: Kim wants proper Git support in sites. Recommended: per site a repository (HTTPS with an optional sealed token, or SSH with an Ed25519 deploy key made by Hostashi and a pinned host key), a branch, shared paths and build commands. Each deploy checks the commit out into a new release directory with go-git in `hostashi git-sync`, run as the site user in a fixed sandboxed oneshot unit `hostashi-deploy@<site>`; build commands run there as cron commands do (ADR-0028); only a fully successful run is switched live by an atomic symlink swap, followed by a PHP reload or app restart and a cache purge. Rollback to a kept release, history and logs in the panel. Started by button, API, CLI or an optional signed webhook (GitHub, GitLab, Gitea/Forgejo, bearer token). No new `os/exec` exception. Open: four questions for Kim.
