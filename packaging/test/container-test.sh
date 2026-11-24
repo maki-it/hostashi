@@ -227,7 +227,7 @@ for id in system.os system.pool service.panel service.nginx service.mariadb serv
 done
 grep -Eq "^  WARN  system.quota " <<<"$doc" || fail "doctor: no quota warning on an overlay root"
 # system.proc reads PID 1's mounts: the agent's own /proc has no hidepid.
-for id in system.updates system.reboot system.php system.files system.sysctl system.proc; do
+for id in system.updates system.reboot system.php system.files system.sysctl system.proc system.fstab; do
   grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"
 done
 # This test passes --no-firewall (the container shares the host's network).
