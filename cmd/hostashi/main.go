@@ -29,6 +29,7 @@ import (
 	"github.com/maki-it/hostashi/internal/backup"
 	"github.com/maki-it/hostashi/internal/dbjob"
 	"github.com/maki-it/hostashi/internal/files"
+	"github.com/maki-it/hostashi/internal/gitsync"
 	"github.com/maki-it/hostashi/internal/nodeinstall"
 	"github.com/maki-it/hostashi/internal/pythoninstall"
 	"github.com/maki-it/hostashi/internal/reqid"
@@ -149,6 +150,10 @@ commands:
             download, check and unpack the pinned CPython build of LINE into
             /opt/hostashi/python/LINE (root; started by
             hostashi-python-install@LINE.service)
+  git-sync -url URL -branch BRANCH -cache DIR -release DIR -result FILE [flags]
+            fetch a site's branch and write one commit into a new release
+            directory (the site user, never root; started by
+            hostashi-deploy@SITE.service, ADR-0062)
   user recover [-public-url URL] NAME
             reset NAME's password and second factors, enable the account
             and print a new invitation link (root; the way back in when
@@ -424,6 +429,9 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		}
 
 		err = (&pythoninstall.Installer{Out: stdout}).Install(ctx, fs.Arg(0))
+	case "git-sync":
+		// Runs in the deploy unit as the site user (ADR-0062).
+		err = gitsync.Run(ctx, args, euid, stderr)
 	case "node-install":
 		if fs.Parse(args) != nil || fs.NArg() != 1 {
 			fmt.Fprint(stderr, usage)
