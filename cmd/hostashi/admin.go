@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -57,18 +59,30 @@ func adminCmd(ctx context.Context, c *agentrpc.Client, cmd string, args []string
 		fmt.Fprintf(out, "generation %d live (changed: %v)\n", r.Generation, r.Changed)
 	case cmd == "db":
 		return dbCmd(ctx, args, out)
-	case sub == "pool add" && len(args) == 3:
-		p, err := agentapi.PoolAdd.Call(ctx, c, agentapi.PoolAddRequest{Name: args[1], Path: args[2]})
+	case sub == "pool add" && (len(args) == 3 || len(args) == 4 && args[1] == "-default"):
+		req := agentapi.PoolAddRequest{Name: args[len(args)-2], Path: args[len(args)-1], Default: len(args) == 4}
+
+		p, err := agentapi.PoolAdd.Call(ctx, c, req)
 		if err != nil {
 			return err
 		}
 
-		fmt.Fprintf(out, "added pool %s at %s; new sites can use it (site create NAME DOMAIN %s)\n", p.Name, p.Path, p.Name)
+		if req.Default {
+			fmt.Fprintf(out, "added pool %s at %s; new sites land on it by default\n", p.Name, p.Path)
+		} else {
+			fmt.Fprintf(out, "added pool %s at %s; new sites can use it (site create NAME DOMAIN %s)\n", p.Name, p.Path, p.Name)
+		}
 
 		if p.Quota != "enforced" {
 			fmt.Fprintf(out, "note: disk limits on %s are not enforced (quota %s); see the wiki page Command-line, storage pools\n",
 				p.Path, orUnknown(p.Quota))
 		}
+	case sub == "pool rename" && len(args) == 3:
+		// Through the panel's API, so the panel's sites follow the new name
+		// (ADR-0016 addendum 2).
+		return apiPrint(ctx, out, http.MethodPost, "/pools/"+url.PathEscape(args[1])+"/rename", map[string]string{"name": args[2]})
+	case sub == "pool default" && len(args) == 2:
+		return apiPrint(ctx, out, http.MethodPost, "/pools/"+url.PathEscape(args[1])+"/default", nil)
 	case sub == "pool remove" && len(args) == 2:
 		if _, err := agentapi.PoolRemove.Call(ctx, c, agentapi.PoolRemoveRequest{Name: args[1]}); err != nil {
 			return err
@@ -82,7 +96,12 @@ func adminCmd(ctx context.Context, c *agentrpc.Client, cmd string, args []string
 		}
 
 		for _, p := range r.Pools {
-			fmt.Fprintf(out, "%s\t%s\tsites=%d\tquota=%s\n", p.Name, p.Path, p.Sites, orUnknown(p.Quota))
+			mark := ""
+			if p.Default {
+				mark = "\tdefault"
+			}
+
+			fmt.Fprintf(out, "%s\t%s\tsites=%d\tquota=%s%s\n", p.Name, p.Path, p.Sites, orUnknown(p.Quota), mark)
 		}
 	default:
 		return errUsage

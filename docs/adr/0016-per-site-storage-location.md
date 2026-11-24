@@ -141,3 +141,27 @@ None at this level. Remaining before Accepted: Kim sets the status, and spike S9
 - Positive: a second volume can be used without editing state files, and every check of finding 3 runs before the first site lands there.
 - Negative: an admin who mounts a volume without `nosuid,nodev` or without an fstab entry is refused and has to fix the mount first. This is intended.
 - Open: XFS is accepted but not tested yet [U]; a reboot with a missing volume on a real host is not tested [U].
+
+## Addendum 2: rename pools and choose the default pool (Proposed)
+
+### Context
+
+- Kim wants to rename an existing pool and make a new or existing pool the default, both on the command line and in the panel, and to see the pools with their usage in the panel (Kim, 2026-11-23).
+- Today the default pool is fixed by name: a site that names no pool goes to the pool called `default` [V: `agentapi.DefaultPool`, `sites.Manager.Create`, `hosting.Service.Create`], and that pool cannot be removed [V: `sites.Manager.RemovePool`].
+- The pool name is stored twice: in the agent's registry (`sites.json`, pools and every site's pool) and in the panel's `sites.pool` column [V: `internal/sites/registry.go`, migration 0006]. Nothing on disk carries the name: the marker holds a random ID, unit files and drop-ins use the path [V: `sites.UnitIsolation`, marker in `pooladd.go`].
+- Addendum 1 kept every pool change on the command line because add and remove carry a path. Rename and default carry only names.
+
+### Decision (recommended)
+
+1. **The registry gets a default.** `sites.json` gains an optional `default` field, written only when the default is not `default`, so an older agent still reads a registry whose default was never changed [V: test `TestRegistryDefaultField`]. A default that names no registered pool makes the registry invalid. A site without a pool lands on the registry's default; the panel asks the agent for it before it writes the site row.
+2. **Two new typed agent operations without a path:** `pool.rename {name, newName}` and `pool.default {name}`. The agent accepts them from the panel as well as from root, since they change neither paths nor units. Rename changes the name of the pool and of every site on it in one atomic registry write; if the renamed pool was the default, the default follows.
+3. **Panel API, admins only:** `POST /api/v1/pools/{name}/rename` with `{"name": NEW}` and `POST /api/v1/pools/{name}/default`, permission `pools:write` (token scope `system:write`), both in the audit log with the old and the new value. Rename changes the agent first and then the panel's sites. If the second step fails, sending the same rename again finishes it (the agent answers "unknown pool", the panel sees the new name and updates its rows).
+4. **CLI:** `hostashi pool rename NAME NEWNAME` and `hostashi pool default NAME` go through the API like the other aliases of ADR-0058, so the panel's rows stay in step. `hostashi pool add -default NAME PATH` stays a root command and makes the new pool the default right away. `pool list` marks the default with a last column `default`.
+5. **Remove** refuses the current default pool, whatever its name; another pool has to become the default first. The pool called `default` can be removed once it is no longer the default and has no sites.
+6. **Panel page.** A page "Storage pools" under Server lists every pool with path, usage, free space, quota state, number of sites, availability and the default mark, with "Make default" and "Rename" for admins. The overview shows the pools' usage as well. Adding and removing stay on the command line (addendum 1).
+
+### Consequences
+
+- Positive: the default can move to a larger volume without naming the pool in every request, and names can be fixed after the fact without touching files or units.
+- Negative: after a rename, scripts and API clients that use the old name must change. The audit log keeps both names. A downgrade to an agent before this addendum fails to read a registry whose default was changed [V: `DisallowUnknownFields` in `Registry.load`]; set the default back to `default` before a downgrade.
+- Open: a rename that fails in the panel after the agent changed is finished by repeating it; there is no automatic repair [A: rare, the panel's step is one UPDATE on the local SQLite].

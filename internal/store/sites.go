@@ -1125,3 +1125,21 @@ func appArgs(args []string) string {
 
 	return string(b)
 }
+
+// RenameSitePool moves the pool name of every site from name to newName
+// after the agent renamed the pool (ADR-0016 addendum 2). It returns how
+// many sites changed; none is not an error, so a repeated call after a
+// failed first one can still finish the rename.
+func (s *Store) RenameSitePool(ctx context.Context, name, newName string, now time.Time) (int64, error) {
+	res, err := s.w.ExecContext(ctx, `UPDATE sites SET pool = ?, updated_at = ? WHERE pool = ?`, newName, now.Unix(), name)
+	if err != nil {
+		return 0, fmt.Errorf("store: %w", err)
+	}
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("store: %w", err)
+	}
+
+	return n, nil
+}

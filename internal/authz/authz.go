@@ -105,7 +105,9 @@ var table = map[Action]Rule{
 	"services:write":       server("services:write"),
 	"system:read":          server("system:read"),
 	"system:write":         server("system:write"),
-	"web:sync":             server("sites:write"),
+	// Rename a storage pool or make it the default (ADR-0016 addendum 2).
+	"pools:write": server("system:write"),
+	"web:sync":    server("sites:write"),
 
 	// Read-only things everyone needs. The lists of sites and databases
 	// are filtered to the sites a user may see.

@@ -174,6 +174,10 @@ type Service struct {
 	resolver     Resolver   // nil: net.DefaultResolver
 	remoteJobsMu sync.Mutex // serializes dropping the users of remote jobs
 
+	// defaultPool names the pool of a site whose request names none
+	// (ADR-0016 addendum 2); nil or an empty answer: agentapi.DefaultPool.
+	defaultPool func(ctx context.Context) (string, error)
+
 	dbTool     DBToolAgent // nil: no web database tool (ADR-0038)
 	dbToolPort int
 
@@ -210,6 +214,10 @@ func New(st *store.Store, ag Agent, log *slog.Logger) *Service {
 
 	return &Service{st: st, ag: ag, log: log, now: time.Now, kick: make(chan struct{}, 1)}
 }
+
+// ResolveDefaultPool sets how Create finds the default pool (ADR-0016
+// addendum 2), normally by asking the agent.
+func (s *Service) ResolveDefaultPool(f func(ctx context.Context) (string, error)) { s.defaultPool = f }
 
 // EnableTLS sets the ACME client. Without one, sites cannot get HTTPS.
 func (s *Service) EnableTLS(i Issuer) { s.issuer = i }
@@ -322,6 +330,15 @@ func (s *Service) Get(ctx context.Context, name string) (store.Site, error) {
 // host (agent). If the virtual host cannot go live, the account and the row
 // are removed again.
 func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (store.Site, error) {
+	if req.Pool == "" && s.defaultPool != nil {
+		name, err := s.defaultPool(ctx)
+		if err != nil {
+			return store.Site{}, fmt.Errorf("find the default storage pool: %w", err)
+		}
+
+		req.Pool = name
+	}
+
 	if req.Pool == "" {
 		req.Pool = agentapi.DefaultPool
 	}

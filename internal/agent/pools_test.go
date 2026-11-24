@@ -39,7 +39,7 @@ func TestPoolListThroughServer(t *testing.T) {
 	}
 
 	got.FreeBytes, got.TotalBytes = 0, 0
-	if got != (agentapi.PoolInfo{Name: "default", Path: pool, Sites: 1, Quota: "enforced", Available: true}) {
+	if got != (agentapi.PoolInfo{Name: "default", Path: pool, Sites: 1, Quota: "enforced", Available: true, Default: true}) {
 		t.Fatalf("pools %+v", r.Pools)
 	}
 }
@@ -58,7 +58,7 @@ func TestPoolListMissingVolume(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(r.Pools) != 1 || r.Pools[0] != (agentapi.PoolInfo{Name: "default", Path: pool}) {
+	if len(r.Pools) != 1 || r.Pools[0] != (agentapi.PoolInfo{Name: "default", Path: pool, Default: true}) {
 		t.Fatalf("pools %+v", r.Pools)
 	}
 }
@@ -154,4 +154,43 @@ func TestPoolAddRefusalsReachRoot(t *testing.T) {
 		_, err := agentapi.PoolAdd.Call(ctx, c, req)
 		wantCode(t, err, agentrpc.CodeInvalidArgument)
 	}
+}
+
+// TestPoolRenameAndDefaultFromPanel: rename and default carry no path, so
+// a caller other than root may send them (ADR-0016 addendum 2).
+func TestPoolRenameAndDefaultFromPanel(t *testing.T) {
+	c, pool := startSiteAgentCfg(t, Config{adminUID: uint32(os.Getuid()) + 1})
+	ctx := context.Background()
+
+	if _, err := agentapi.SiteCreate.Call(ctx, c, agentapi.SiteCreateRequest{User: "blog"}); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := agentapi.PoolRename.Call(ctx, c, agentapi.PoolRenameRequest{Name: "default", NewName: "system"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if p.Name != "system" || p.Path != pool || p.Sites != 1 || !p.Default {
+		t.Fatalf("renamed %+v", p)
+	}
+
+	l, err := agentapi.SiteList.Call(ctx, c, agentapi.SiteListRequest{})
+	if err != nil || len(l.Sites) != 1 || l.Sites[0].Pool != "system" {
+		t.Fatalf("sites %+v, %v", l, err)
+	}
+
+	_, err = agentapi.PoolRename.Call(ctx, c, agentapi.PoolRenameRequest{Name: "default", NewName: "x"})
+	wantCode(t, err, agentrpc.CodeNotFound)
+
+	_, err = agentapi.PoolRename.Call(ctx, c, agentapi.PoolRenameRequest{Name: "system", NewName: "Bad"})
+	wantCode(t, err, agentrpc.CodeInvalidArgument)
+
+	d, err := agentapi.PoolDefault.Call(ctx, c, agentapi.PoolDefaultRequest{Name: "system"})
+	if err != nil || !d.Default || d.Sites != 1 {
+		t.Fatalf("default %+v, %v", d, err)
+	}
+
+	_, err = agentapi.PoolDefault.Call(ctx, c, agentapi.PoolDefaultRequest{Name: "nope"})
+	wantCode(t, err, agentrpc.CodeNotFound)
 }

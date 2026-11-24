@@ -57,6 +57,10 @@ type state struct {
 	Version int    `json:"version"`
 	Pools   []Pool `json:"pools"`
 	Sites   []Site `json:"sites"`
+	// Default is the pool of a new site that names none. Written only when
+	// it is not agentapi.DefaultPool, so an older agent can still read a
+	// registry whose default was never changed.
+	Default string `json:"default,omitempty"`
 }
 
 // Registry is the persistent list of pools and sites. It is not safe for
@@ -65,6 +69,7 @@ type Registry struct {
 	path  string
 	pools map[string]Pool
 	sites map[string]Site
+	def   string // the default pool, always registered
 }
 
 // Errors of the registry.
@@ -96,6 +101,7 @@ func OpenRegistry(dir string, ownerUID uint32) (*Registry, error) {
 		path:  filepath.Join(dir, StateFile),
 		pools: map[string]Pool{},
 		sites: map[string]Site{},
+		def:   agentapi.DefaultPool,
 	}
 
 	raw, err := readStateFile(reg.path, ownerUID)
@@ -278,6 +284,15 @@ func (r *Registry) load(raw []byte) error {
 		r.sites[site.User] = site
 	}
 
+	r.def = agentapi.DefaultPool
+	if s.Default != "" {
+		r.def = s.Default
+	}
+
+	if _, ok := r.pools[r.def]; !ok {
+		return fmt.Errorf("%w: default pool %q is not registered", ErrStateInvalid, r.def)
+	}
+
 	return nil
 }
 
@@ -313,6 +328,10 @@ func validateSite(s Site) error {
 // directory. A crash leaves either the old or the new file.
 func (r *Registry) save() error {
 	s := state{Version: stateVersion, Pools: []Pool{}, Sites: []Site{}}
+
+	if r.def != agentapi.DefaultPool {
+		s.Default = r.def
+	}
 
 	for _, p := range r.pools {
 		s.Pools = append(s.Pools, p)
@@ -387,6 +406,10 @@ func (r *Registry) Pool(name string) (Pool, bool) {
 
 	return p, ok
 }
+
+// DefaultPool is the name of the pool a new site lands in when the request
+// names none.
+func (r *Registry) DefaultPool() string { return r.def }
 
 // Pools returns all registered pools sorted by name.
 func (r *Registry) Pools() []Pool {
@@ -500,4 +523,76 @@ func (r *Registry) removePool(name string) error {
 	}
 
 	return nil
+}
+
+// renamePool gives a pool a new name and moves its sites and, if it is the
+// default, the default along. The path, the marker and the files stay. On a
+// write failure memory is reverted.
+func (r *Registry) renamePool(name, newName string) (Pool, error) {
+	p, ok := r.pools[name]
+	if !ok {
+		return Pool{}, ErrNotFound
+	}
+
+	if _, taken := r.pools[newName]; taken {
+		return Pool{}, ErrPoolExists
+	}
+
+	oldPools, oldSites, oldDef := r.pools, r.sites, r.def
+
+	pools := make(map[string]Pool, len(r.pools))
+	for k, v := range r.pools {
+		pools[k] = v
+	}
+
+	delete(pools, name)
+
+	p.Name = newName
+	pools[newName] = p
+
+	sites := make(map[string]Site, len(r.sites))
+
+	for k, v := range r.sites {
+		if v.Pool == name {
+			v.Pool = newName
+		}
+
+		sites[k] = v
+	}
+
+	r.pools, r.sites = pools, sites
+	if r.def == name {
+		r.def = newName
+	}
+
+	if err := r.save(); err != nil {
+		r.pools, r.sites, r.def = oldPools, oldSites, oldDef
+
+		return Pool{}, err
+	}
+
+	return p, nil
+}
+
+// setDefault makes a registered pool the default and persists it.
+func (r *Registry) setDefault(name string) (Pool, error) {
+	p, ok := r.pools[name]
+	if !ok {
+		return Pool{}, ErrNotFound
+	}
+
+	if r.def == name {
+		return p, nil
+	}
+
+	old := r.def
+	r.def = name
+
+	if err := r.save(); err != nil {
+		r.def = old
+
+		return Pool{}, err
+	}
+
+	return p, nil
 }
