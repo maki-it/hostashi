@@ -21,6 +21,22 @@ A domain can belong to one site or parked domain only, and never be the panel's 
 
 ![The Domains tab of a site](images/site-domains.png)
 
+## Redirect to or from www
+
+Most sites should answer under one name only, either `example.com` or `www.example.com`, and send visitors on the other name there. Choose this in the **www redirect** card on the same tab:
+
+- **No redirect:** every domain shows the site. This is the default.
+- **Redirect to the name without www:** `www.example.com` sends visitors to `example.com`.
+- **Redirect to the www name:** `example.com` sends visitors to `www.example.com`.
+
+The redirect is a permanent one (301) and keeps the path and query, so `www.example.com/shop?page=2` goes to `example.com/shop?page=2`. With HTTPS on, it goes straight to HTTPS in one step, and HSTS and the security headers are sent on the redirect too.
+
+Both names must be domains of the site. If one is missing, the card offers a button such as **Add `www.example.com`**; it adds the name like the domain list above does, so create its DNS record first. With HTTPS on, the site is served over HTTP until the new certificate also names it. Hostashi never adds the other name on its own, because a name without a DNS record would stop the certificate for the whole site.
+
+The setting works on every pair of a domain and its `www` name, so a site with `example.com`, `www.example.com`, `example.de` and `www.example.de` redirects both pairs. Other domains of the site, such as `shop.example.com`, are not touched. Redirect sites do not have this card: they send every name to their target anyway.
+
+![The www redirect of a site](images/site-www.png)
+
 ## HTTPS
 
 With **HTTPS with a Let's Encrypt certificate** on, Hostashi gets a certificate for all domains of the site, renews it on its own and redirects HTTP to HTTPS. Sites are served with HTTP/2 and HTTP/3.

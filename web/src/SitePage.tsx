@@ -48,6 +48,7 @@ import { SSHSettings } from "./SSH";
 import { PermissionsResetCard } from "./PermissionsReset";
 import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
 import { SiteUsageCard } from "./Usage";
+import { WWWCard } from "./WWW";
 
 // The tabs that exist today (ADR-0037). Databases and backups per site
 // come with their features; their addresses show the overview.
@@ -577,6 +578,7 @@ function DomainsTab({ site, onChange, admin }: TabProps & { admin: boolean }) {
           </div>
         </form>
       </Card>
+      {siteType(site) !== "redirect" && <WWWCard site={site} onChange={onChange} onDomains={(l) => setDomainsText(l.join("\n"))} />}
       <Card title="HTTPS">
         <div className="ui-stack">
           <label className="ui-check">

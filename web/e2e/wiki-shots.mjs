@@ -47,6 +47,18 @@ const shots = [
       await page.getByRole("heading", { name: "Reset permissions" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
     },
   },
+  {
+    name: "site-www",
+    hash: "#/sites/blog/domains",
+    ready: "text=www redirect",
+    act: async (page) => page.getByRole("heading", { name: "www redirect" }).evaluate((h) => h.scrollIntoView({ block: "start" })),
+  },
+  {
+    name: "site-www-add",
+    hash: "#/sites/shop/domains",
+    ready: "text=www redirect",
+    act: async (page) => page.getByRole("heading", { name: "www redirect" }).evaluate((h) => h.scrollIntoView({ block: "start" })),
+  },
   { name: "site-node", hash: "#/sites/app/web", ready: "text=Start command" },
   { name: "site-python", hash: "#/sites/api/web", ready: "text=Start command" },
   {

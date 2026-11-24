@@ -27,8 +27,14 @@ const site = (name, o) => ({
 });
 
 export const sites = [
-  site("blog", { type: "php", php: "8.4", domains: ["blog.example.com", "www.blog.example.com"], tls: tls(["blog.example.com", "www.blog.example.com"]) }),
-  site("shop", { type: "php", php: "8.3", domains: ["shop.example.com"], tls: tls(["shop.example.com"]) }),
+  site("blog", {
+    type: "php",
+    php: "8.4",
+    domains: ["blog.example.com", "www.blog.example.com"],
+    www: { mode: "to-non-www", pairs: [{ bare: "blog.example.com", www: "www.blog.example.com" }], missing: [] },
+    tls: tls(["blog.example.com", "www.blog.example.com"]),
+  }),
+  site("shop", { type: "php", php: "8.3", domains: ["shop.example.com"], www: { mode: "off", pairs: [], missing: ["www.shop.example.com"] }, tls: tls(["shop.example.com"]) }),
   site("docs", { type: "static", domains: ["docs.example.com"], web: { dir: "public", spa: false, cache: true }, tls: tls(["docs.example.com"]) }),
   site("app", {
     type: "node",
