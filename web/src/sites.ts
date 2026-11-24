@@ -27,6 +27,15 @@ export type SiteTLS = {
   renewPending?: boolean;
 };
 
+// SiteWWW is the www redirect of a site (ADR-0065). It acts on pairs only:
+// a domain and its www name that are both domains of the site.
+export type WWWMode = "off" | "to-www" | "to-non-www";
+export type SiteWWW = {
+  mode: WWWMode;
+  pairs: { bare: string; www: string }[];
+  missing: string[]; // names whose adding would make a further pair
+};
+
 export type Site = {
   name: string;
   pool: string;
@@ -54,6 +63,9 @@ export type Site = {
   disabledPage: string; // maintenance page shown while disabled (ADR-0047)
   maintenance: SiteMaintenance;
   domains: string[]; // the first one is the primary domain
+  // The redirect between example.com and www.example.com (ADR-0065).
+  // Older answers lack it.
+  www?: SiteWWW;
   tls: SiteTLS;
   createdAt: string;
   updatedAt: string;
@@ -391,6 +403,7 @@ export const setTLS = (name: string, enabled: boolean) => request<Site>("PUT", s
 // disabled site shows (empty: the built-in page), only sent when disabling.
 export const setDisabled = (name: string, disabled: boolean, page?: string) =>
   request<Site>("PUT", sitePath(name) + "/disabled", disabled && page ? { disabled, page } : { disabled });
+export const setWWW = (name: string, mode: WWWMode) => request<Site>("PUT", sitePath(name) + "/www", { mode });
 export const setHSTS = (name: string, enabled: boolean) => request<Site>("PUT", sitePath(name) + "/hsts", { enabled });
 export const setPHPPrograms = (name: string, enabled: boolean) =>
   request<Site>("PUT", sitePath(name) + "/php-programs", { enabled });

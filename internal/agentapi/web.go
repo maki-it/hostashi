@@ -80,6 +80,10 @@ type WebSite struct {
 	// HSTS adds Strict-Transport-Security to HTTPS responses. Without TLS
 	// it has no effect.
 	HSTS bool `json:"hsts,omitempty"`
+	// WWWRedirect sends one name of each www pair of Domains to the other
+	// with 301 (ADR-0065): WWWRedirectToWWW or WWWRedirectToNonWWW; empty
+	// serves every domain. A redirect site has none.
+	WWWRedirect string `json:"wwwRedirect,omitempty"`
 	// Disabled answers every request of the site with 503 instead of
 	// serving its files. ACME challenges and HTTPS stay; PHP must be empty.
 	Disabled bool `json:"disabled,omitempty"`
@@ -115,6 +119,10 @@ type WebSite struct {
 	// (ADR-0059); nil trusts nobody. The agent also refuses ranges that
 	// contain one of its own addresses (CheckOwn).
 	RealIP *WebRealIP `json:"realIp,omitempty"`
+	// Access is the site's IP rule and password protection (ADR-0066);
+	// nil lets everybody in. The agent also refuses bypass addresses that
+	// contain one of its own addresses (CheckOwn).
+	Access *WebAccess `json:"access,omitempty"`
 	// Redirect makes the site a redirect (ADR-0054): it has no Linux
 	// account, and nothing that needs files or PHP may be set.
 	Redirect *WebRedirect `json:"redirect,omitempty"`
@@ -409,6 +417,12 @@ func (r WebApplyRequest) Validate() error {
 			}
 		}
 
+		if ac := s.Access; ac != nil {
+			if err := ac.Validate(); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
+		}
+
 		if s.PHP != "" {
 			if err := ValidatePHPVersion(s.PHP); err != nil {
 				return fmt.Errorf("site %q: %w", s.User, err)
@@ -417,6 +431,14 @@ func (r WebApplyRequest) Validate() error {
 
 		if err := ValidateWebDir(s.WebDir); err != nil {
 			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if err := ValidateWWWRedirect(s.WWWRedirect); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if s.WWWRedirect != WWWRedirectOff && s.Redirect != nil {
+			return fmt.Errorf("site %q: a redirect site has no www redirect", s.User)
 		}
 
 		if err := ValidateAssetCache(s.AssetCacheSeconds, s.AssetCacheExts); err != nil {

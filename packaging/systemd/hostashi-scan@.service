@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Oneshot unit that scans one site for malware with ClamAV (ADR-0064). The
+# agent writes one drop-in, 60-hostashi-scan.conf, from typed values it
+# checked: the site's home mounted back read only, the other pools hidden,
+# and ExecStart=/usr/bin/clamscan ... <home> with the fixed signature
+# directory. The agent starts it without waiting and asks for its state;
+# it reads the log of a finished run and checks every line against the
+# home. It runs as the site user, so a bug in libclamav reached through a
+# hostile file gains nothing that user could not do already.
+
+[Unit]
+Description=Malware scan of Hostashi site %i
+Documentation=https://github.com/maki-it/hostashi
+
+[Service]
+Type=oneshot
+# A finished run stays "active" (succeeded) or "failed" until the agent
+# stops it for the next run, as for hostashi-deploy@.
+RemainAfterExit=yes
+User=%i
+Group=%i
+# Replaced by the drop-in.
+ExecStart=/bin/false
+# clamscan: 1 = found something, 2 = some files could not be scanned.
+# The agent reads ExecMainStatus.
+SuccessExitStatus=1 2
+TimeoutStartSec=2h
+# Not the site's slice: its memory limit is below what ClamAV needs.
+Slice=hostashi-scan.slice
+Nice=19
+IOSchedulingClass=idle
+CPUSchedulingPolicy=batch
+# No core dumps: they would hold the site's files (ADR-0033).
+LimitCORE=0
+# The output of the last run, opened by systemd as root: the site user
+# can neither open nor change it. The agent creates the directory.
+StandardOutput=truncate:/var/log/hostashi/scan/%i.log
+StandardError=inherit
+SyslogIdentifier=hostashi-scan-%i
+
+# No network: the signatures are on disk, freshclam updates them.
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+PrivateTmp=yes
+PrivateDevices=yes
+# The system is read only and /home is empty: the drop-in mounts the
+# site's own home back, read only (ADR-0033).
+ProtectSystem=strict
+ProtectHome=tmpfs
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Other users' processes are hidden in /proc.
+ProtectProc=invisible
+ProcSubset=pid
+RemoveIPC=yes
+UMask=0077
+# No MemoryDenyWriteExecute=: libclamav may JIT its bytecode signatures.
+
+# No [Install]: the agent runs it, it is never enabled.

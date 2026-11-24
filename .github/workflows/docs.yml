@@ -69,5 +69,10 @@ jobs:
           persist-credentials: false
       - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
-          args: --config .lychee.toml --no-progress '*.md' 'docs/**/*.md' '.github/**/*.md'
+          # Links to files of this repository are checked against the
+          # checkout: github.com answers 503 to many of them in a row.
+          args: >-
+            --config .lychee.toml --no-progress
+            --remap '^https://github\.com/maki-it/hostashi/blob/main/(.+)$ file://${{ github.workspace }}/$1'
+            '*.md' 'docs/**/*.md' '.github/**/*.md'
           fail: true

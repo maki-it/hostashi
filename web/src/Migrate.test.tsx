@@ -404,7 +404,8 @@ describe("Migrate", () => {
     render(<Harness initial="report=r1&site=blog" />);
     expect(await screen.findByText("Python")).toBeInTheDocument();
     const select = await screen.findByLabelText(/^Python for blog/);
-    expect(within(select).getByRole("option", { name: "Python 3.14 (not installed)" })).toBeInTheDocument();
+    // The select shows before the Python versions have loaded.
+    expect(await within(select).findByRole("option", { name: "Python 3.14 (not installed)" })).toBeInTheDocument();
     await user.selectOptions(select, "3.12");
     await user.click(screen.getByLabelText(/I checked the points above/));
     await user.click(screen.getByRole("button", { name: "Create blog" }));

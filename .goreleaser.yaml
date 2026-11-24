@@ -127,6 +127,9 @@ nfpms:
       - src: packaging/apt/
         dst: /usr/share/hostashi/apt/
         type: tree
+      - src: packaging/clamav/
+        dst: /usr/share/hostashi/clamav/
+        type: tree
       - src: packaging/fail2ban/
         dst: /usr/share/hostashi/fail2ban/
         type: tree

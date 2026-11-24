@@ -34,3 +34,5 @@ The file manager needs the permissions `files:read` (browse, download) and `file
 The panel never touches the site's files itself. It talks to a small helper, `hostashi-files@<site>.service`, which systemd starts when the tab is used. The helper runs as the site's Linux user, inside the site's resource limits, with no network and no access outside the home folder. It stops 5 minutes after the last request. Files it writes belong to the site's user, just as with SFTP.
 
 `hostashi doctor` checks that the helper's units are installed, that no helper runs as root, and that none has run for more than a day.
+
+To give all files of a site back to its user and reset their modes at once, use [Reset permissions](Reset-permissions.md) below the file manager.

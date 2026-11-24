@@ -1,0 +1,425 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+package scanunit
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/maki-it/hostashi/internal/agentapi"
+)
+
+type fakeCtl struct {
+	props   map[string]string
+	started []string
+	stopped []string
+	reloads int
+}
+
+func (f *fakeCtl) DaemonReload(context.Context) error        { f.reloads++; return nil }
+func (f *fakeCtl) ResetFailed(context.Context, string) error { return nil }
+func (f *fakeCtl) Stop(_ context.Context, u string) error {
+	f.stopped = append(f.stopped, u)
+	return nil
+}
+
+func (f *fakeCtl) StartNoBlock(_ context.Context, u string) error {
+	f.started = append(f.started, u)
+	f.props["ActiveState"] = "activating"
+
+	return nil
+}
+
+func (f *fakeCtl) Show(_ context.Context, _ string, props ...string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, p := range props {
+		out[p] = f.props[p]
+	}
+
+	return out, nil
+}
+
+func newManager(t *testing.T) (*Manager, *fakeCtl, string) {
+	t.Helper()
+
+	base := t.TempDir()
+	home := filepath.Join(base, "home", "blog")
+
+	if err := os.MkdirAll(home, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	ctl := &fakeCtl{props: map[string]string{"ActiveState": "inactive"}}
+	m := &Manager{
+		Dir: filepath.Join(base, "state"), UnitDir: filepath.Join(base, "units"), LogDir: filepath.Join(base, "log"),
+		QuarantineDir: filepath.Join(base, "q"), DatabaseDir: "/var/lib/clamav",
+		Site: func(s string) (Site, error) {
+			if s != "blog" {
+				return Site{}, errors.New("unknown")
+			}
+
+			return Site{Home: home, UID: uint32(os.Getuid()), GID: uint32(os.Getgid())}, nil
+		},
+		Ctl: ctl,
+	}
+
+	return m, ctl, home
+}
+
+func sum(b string) string {
+	h := sha256.Sum256([]byte(b))
+
+	return hex.EncodeToString(h[:])
+}
+
+func TestDropInContent(t *testing.T) {
+	b, err := DropInContent("blog", Site{Home: "/home/blog.example"}, []string{"/srv/pool2"}, "/var/lib/clamav", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := string(b)
+	for _, want := range []string{
+		"RequiresMountsFor=/home/blog.example\n",
+		"TemporaryFileSystem=/srv/pool2:ro\n",
+		"BindReadOnlyPaths=/home/blog.example\n",
+		"ExecStart=\nExecStart=/usr/bin/clamscan --recursive --infected --no-summary --stdout --database=/var/lib/clamav \"--exclude-dir=^/home/blog\\\\.example/\\\\.cache$$\" \"/home/blog.example\"\n",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("drop-in lacks %q:\n%s", want, s)
+		}
+	}
+
+	if strings.Contains(s, "ReadWritePaths") || strings.Contains(s, "BindPaths=") {
+		t.Errorf("home must be read only:\n%s", s)
+	}
+
+	for _, bad := range []string{"/home/a b", "home/x", "/home/x/../y", "/home/$x", "/home/%i"} {
+		if _, err := DropInContent("blog", Site{Home: bad}, nil, "/var/lib/clamav", false); err == nil {
+			t.Errorf("home %q accepted", bad)
+		}
+	}
+
+	if _, err := DropInContent("Bad", Site{Home: "/home/x"}, nil, "/var/lib/clamav", false); err == nil {
+		t.Error("bad site accepted")
+	}
+
+	// With the real-time mode's clamd, clamdscan hands it the open files.
+	b, err = DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", true)
+	if err != nil || !strings.Contains(string(b), "ExecStart=\nExecStart=/usr/bin/clamdscan --config-file=/etc/hostashi/clamav/clamd.conf --fdpass --infected --no-summary --stdout \"/home/blog\"\n") {
+		t.Errorf("clamdscan drop-in: %v\n%s", err, b)
+	}
+}
+
+func TestStartAndStatus(t *testing.T) {
+	ctx := context.Background()
+	m, ctl, home := newManager(t)
+
+	st, err := m.Start(ctx, agentapi.ScanStartRequest{Site: "blog", ID: 7})
+	if err != nil || st.State != agentapi.ScanRunning {
+		t.Fatalf("start: %+v %v", st, err)
+	}
+
+	if len(ctl.started) != 1 || ctl.started[0] != "hostashi-scan@blog.service" {
+		t.Fatalf("started %v", ctl.started)
+	}
+
+	if _, err := os.Stat(filepath.Join(m.UnitDir, "hostashi-scan@blog.service.d", DropIn)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := m.Start(ctx, agentapi.ScanStartRequest{Site: "blog", ID: 8}); !errors.Is(err, ErrBusy) {
+		t.Fatalf("second start: %v", err)
+	}
+
+	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.State != agentapi.ScanRunning {
+		t.Fatalf("running: %+v", st)
+	}
+
+	// The run found one file.
+	if err := os.WriteFile(filepath.Join(home, "shell.php"), []byte("bad"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(m.LogFile("blog"), []byte(home+"/shell.php: Php.Webshell-1 FOUND\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctl.props["ActiveState"], ctl.props["ExecMainStatus"] = "active", "1"
+
+	st, err = m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7})
+	if err != nil || st.State != agentapi.ScanSucceeded || len(st.Findings) != 1 {
+		t.Fatalf("finished: %+v %v", st, err)
+	}
+
+	if f := st.Findings[0]; f.Path != "shell.php" || f.Signature != "Php.Webshell-1" || f.SHA256 != sum("bad") || f.Size != 3 {
+		t.Fatalf("finding %+v", f)
+	}
+
+	// Another id is not this run.
+	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 6}); st.State != agentapi.ScanUnknown {
+		t.Fatalf("other id: %+v", st)
+	}
+
+	// Some files could not be read: still the findings, with a note.
+	ctl.props["ExecMainStatus"] = "2"
+
+	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.State != agentapi.ScanSucceeded || st.Error == "" || len(st.Findings) != 1 {
+		t.Fatalf("partial: %+v", st)
+	}
+
+	// Exit 1 with no usable line is not "clean".
+	if err := os.WriteFile(m.LogFile("blog"), []byte("/etc/passwd: X FOUND\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctl.props["ExecMainStatus"] = "1"
+
+	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.State != agentapi.ScanSucceeded || st.Dropped != 1 {
+		t.Fatalf("dropped: %+v", st)
+	}
+
+	if err := os.WriteFile(m.LogFile("blog"), []byte("LibClamAV Warning: something\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.State != agentapi.ScanFailed {
+		t.Fatalf("exit 1 without findings: %+v", st)
+	}
+
+	ctl.props["ActiveState"], ctl.props["Result"] = "failed", "oom-kill"
+
+	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.State != agentapi.ScanFailed || !strings.Contains(st.Error, "memory") {
+		t.Fatalf("failed: %+v", st)
+	}
+
+	// A queued start that never ran.
+	ctl.props["ActiveState"] = "inactive"
+	m.now = func() time.Time { return time.Now().Add(time.Hour) }
+
+	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.State != agentapi.ScanFailed {
+		t.Fatalf("never ran: %+v", st)
+	}
+
+	if err := m.Remove(ctx, "blog"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(m.UnitDir, "hostashi-scan@blog.service.d")); !os.IsNotExist(err) {
+		t.Fatalf("drop-in left: %v", err)
+	}
+}
+
+func TestParseLogUntrusted(t *testing.T) {
+	_, _, home := func() (*Manager, *fakeCtl, string) { return newManager(t) }()
+
+	if err := os.MkdirAll(filepath.Join(home, "wp", "up"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	for n, c := range map[string]string{"wp/a.php": "aaa", "wp/up/b: c.php": "bb"} {
+		if err := os.WriteFile(filepath.Join(home, n), []byte(c), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := os.Symlink("/etc/passwd", filepath.Join(home, "link.php")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Symlink("wp", filepath.Join(home, "dirlink")); err != nil {
+		t.Fatal(err)
+	}
+
+	log := strings.Join([]string{
+		home + "/wp/a.php: Php.Shell-1 FOUND",
+		home + "/wp/a.php: Php.Shell-1 FOUND",       // duplicate
+		home + "/wp/up/b: c.php: Js.Inject-2 FOUND", // ": " in the name
+		home + "/link.php: X FOUND",                 // symlink out
+		home + "/dirlink/a.php: X FOUND",            // through a link: inside, allowed
+		home + "/../other/x.php: X FOUND",           // outside
+		"/etc/shadow: X FOUND",                      // outside
+		home + "/wp: X FOUND",                       // a directory
+		home + "/missing.php: X FOUND",              // gone
+		home + "/wp/a.php: bad sig$ FOUND",          // bad signature
+		"LibClamAV Warning: Bytecode run timed out",
+		"",
+	}, "\n")
+
+	f, d := ParseLog(strings.NewReader(log), home)
+
+	got := map[string]string{}
+	for _, x := range f {
+		got[x.Path] = x.Signature
+	}
+
+	want := map[string]string{"wp/a.php": "Php.Shell-1", "wp/up/b: c.php": "Js.Inject-2", "dirlink/a.php": "X"}
+	if len(got) != len(want) {
+		t.Fatalf("findings %v", f)
+	}
+
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s: got %q want %q", k, got[k], v)
+		}
+	}
+
+	if d != 7 {
+		t.Errorf("dropped %d, want 7", d)
+	}
+}
+
+func TestQuarantineRestore(t *testing.T) {
+	ctx := context.Background()
+	m, _, home := newManager(t)
+
+	if err := os.MkdirAll(filepath.Join(home, "wp"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	p := filepath.Join(home, "wp", "shell.php")
+	if err := os.WriteFile(p, []byte("evil"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := m.Quarantine(ctx, agentapi.ScanQuarantineRequest{Site: "blog", Path: "wp/shell.php", SHA256: sum("other")}); !errors.Is(err, ErrChanged) {
+		t.Fatalf("wrong hash: %v", err)
+	}
+
+	if _, err := os.Stat(p); err != nil {
+		t.Fatal("file removed on a hash mismatch")
+	}
+
+	it, err := m.Quarantine(ctx, agentapi.ScanQuarantineRequest{Site: "blog", Path: "wp/shell.php", SHA256: sum("evil")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(p); !os.IsNotExist(err) {
+		t.Fatal("file still there")
+	}
+
+	fi, err := os.Stat(filepath.Join(m.QuarantineDir, "blog", it.ID+".bin"))
+	if err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("quarantined copy: %v %v", fi, err)
+	}
+
+	if _, err := m.Quarantine(ctx, agentapi.ScanQuarantineRequest{Site: "blog", Path: "wp/shell.php", SHA256: sum("evil")}); !errors.Is(err, ErrChanged) {
+		t.Fatalf("gone: %v", err)
+	}
+
+	// Something in the way.
+	if err := os.WriteFile(p, []byte("new"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := m.Restore(ctx, agentapi.ScanRestoreRequest{Site: "blog", ID: it.ID}); !errors.Is(err, ErrExists) {
+		t.Fatalf("restore over a file: %v", err)
+	}
+
+	if err := os.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := m.Restore(ctx, agentapi.ScanRestoreRequest{Site: "blog", ID: it.ID})
+	if err != nil || res.Path != "wp/shell.php" {
+		t.Fatalf("restore: %+v %v", res, err)
+	}
+
+	b, err := os.ReadFile(p)
+	if err != nil || string(b) != "evil" {
+		t.Fatalf("restored %q %v", b, err)
+	}
+
+	if fi, _ := os.Stat(p); fi.Mode().Perm() != 0o640 {
+		t.Errorf("mode %v", fi.Mode())
+	}
+
+	if _, err := m.Restore(ctx, agentapi.ScanRestoreRequest{Site: "blog", ID: it.ID}); !errors.Is(err, ErrUnknownItem) {
+		t.Fatalf("restore twice: %v", err)
+	}
+
+	// A symlink is never followed out of the home.
+	if err := os.Symlink("/etc/hostname", filepath.Join(home, "l.php")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := m.Quarantine(ctx, agentapi.ScanQuarantineRequest{Site: "blog", Path: "l.php", SHA256: sum("x")}); !errors.Is(err, ErrChanged) {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	for _, bad := range []string{"../x", "/etc/passwd", "a/../b", "a\nb"} {
+		if _, err := m.Quarantine(ctx, agentapi.ScanQuarantineRequest{Site: "blog", Path: bad, SHA256: sum("x")}); err == nil {
+			t.Errorf("path %q accepted", bad)
+		}
+	}
+}
+
+type fakeEngine struct{ states map[string]string }
+
+func (f *fakeEngine) Start(_ context.Context, inst string) error {
+	f.states[inst] = "activating"
+
+	return nil
+}
+
+func (f *fakeEngine) State(_ context.Context, inst string) (string, error) {
+	return f.states[inst], nil
+}
+
+func TestEngine(t *testing.T) {
+	ctx := context.Background()
+	dir, db := t.TempDir(), t.TempDir()
+	ctl := &fakeEngine{states: map[string]string{"install": "inactive", "remove": "inactive"}}
+	e := &Engine{Dir: dir, DatabaseDir: db, Ctl: ctl}
+
+	if st, _ := e.Status(ctx); st.State != agentapi.ScanEngineOff {
+		t.Fatalf("off: %+v", st)
+	}
+
+	if st, _ := e.Set(ctx, agentapi.ScanEngineSetRequest{On: false}); st.State != agentapi.ScanEngineOff {
+		t.Fatalf("off again: %+v", st)
+	}
+
+	if st, err := e.Set(ctx, agentapi.ScanEngineSetRequest{On: true}); err != nil || st.State != agentapi.ScanEngineInstalling {
+		t.Fatalf("install: %+v %v", st, err)
+	}
+
+	if _, err := e.Set(ctx, agentapi.ScanEngineSetRequest{On: false}); !errors.Is(err, ErrEngineBusy) {
+		t.Fatalf("busy: %v", err)
+	}
+
+	ctl.states["install"] = "failed"
+
+	if err := os.WriteFile(filepath.Join(dir, "install.log"), []byte("E: Unable to locate package clamav\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if st, _ := e.Status(ctx); st.State != agentapi.ScanEngineFailed || !strings.Contains(st.Error, "clamav") {
+		t.Fatalf("failed: %+v", st)
+	}
+
+	ctl.states["install"] = "inactive"
+
+	for n, c := range map[string]string{"state": "on\n", "version": "1.4.6+dfsg-1~deb13u1\n"} {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte(c), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(db, "daily.cld"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	st, _ := e.Status(ctx)
+	if st.State != agentapi.ScanEngineOn || st.Version != "1.4.6+dfsg-1~deb13u1" || st.Signatures == "" || !e.On() {
+		t.Fatalf("on: %+v", st)
+	}
+}

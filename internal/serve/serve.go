@@ -261,13 +261,16 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 			registerCron(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerGit(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDeploys(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerScans(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerWebhook(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSSH(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPHPSettings(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerHeaders(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerRealIP(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerAccess(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPageCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerPermissions(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerLimits(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerObjectCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 
@@ -372,7 +375,7 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 		}
 
 		if deps.Usage != nil && deps.Sites != nil {
-			registerUsage(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Usage, hostingSiteExists(deps.Sites), log)
+			registerUsage(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Usage, hostingSiteCPU(deps.Sites), log)
 		}
 
 		if deps.System != nil && deps.Settings != nil {
@@ -611,6 +614,7 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.Sites.EnableAppEnv(box)
 	deps.Sites.EnableGit(box)
 	deps.Sites.EnableDeploys(hosting.RPCAgent{C: client})
+	deps.Sites.EnableScans(hosting.RPCAgent{C: client})
 
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
@@ -643,6 +647,16 @@ func Run(ctx context.Context, cfg Config) error {
 	})
 
 	go deps.Sites.RunDeploys(ctx)
+
+	// Malware scans run one at a time; new findings are emailed
+	// (ADR-0064).
+	deps.Sites.ObserveMalware(func(ctx context.Context, site string, run store.ScanRun, found []store.ScanFinding) {
+		if _, err := notifier.Notify(ctx, notify.MalwareFound(site, run, found)); err != nil {
+			cfg.Log.WarnContext(ctx, "notify malware", "site", site, "err", err)
+		}
+	})
+
+	go deps.Sites.RunScans(ctx)
 
 	// Service management and the dashboard (ADR-0052).
 	// Service outages are emailed too (ADR-0055).

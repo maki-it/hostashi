@@ -14,6 +14,8 @@ export type PlanSite = {
   type: string;
   domains: string[];
   redirectFrom: string[];
+  // The www redirect the new site gets for the old www host (ADR-0065).
+  wwwRedirect?: "to-www" | "to-non-www";
   docRoot: string;
   php: string;
   proxy?: string; // target of a reverse proxy site, which gets no account

@@ -101,6 +101,10 @@ var table = map[Action]Rule{
 	"node:remove":          server("node:install"),
 	"python:install":       server("python:install"),
 	"python:remove":        server("python:install"),
+	// ClamAV on the server (ADR-0064): apt as root with a fixed package
+	// list.
+	"malware.engine:read":  server("malware:read"),
+	"malware.engine:write": server("malware.engine:write"),
 	"services:read":        server("services:read"),
 	// All sites by their usage (ADR-0063): admins only, a site user never
 	// sees other sites' numbers.
@@ -136,8 +140,10 @@ var table = map[Action]Rule{
 	"sites:delete": mgrSite("sites:delete"),
 	// Delete a site and park domains of it (ADR-0048); the handler also
 	// asks for parked:write.
-	"sites:park":           mgrSite("sites:delete"),
-	"sites.domains:write":  mgrSite("sites:write"),
+	"sites:park":          mgrSite("sites:delete"),
+	"sites.domains:write": mgrSite("sites:write"),
+	// The www redirect decides which names of the site answer (ADR-0065).
+	"sites.www:write":      mgrSite("sites:write"),
 	"sites.tls:write":      mgrSite("sites:write"),
 	"sites.disabled:write": mgrSite("sites:write"),
 	// A type change can create a Linux account, as a new site does
@@ -173,6 +179,7 @@ var table = map[Action]Rule{
 	"sites.hsts:write":     ownSite("sites:write"),
 	"sites.headers:write":  ownSite("sites:write"),
 	"sites.realip:write":   ownSite("sites:write"),
+	"sites.access:write":   ownSite("sites:write"),
 	"sites.web:write":      ownSite("sites:write"),
 	"sites.redirect:write": ownSite("sites:write"),
 	"sites.proxy:write":    ownSite("sites:write"),
@@ -184,6 +191,9 @@ var table = map[Action]Rule{
 	"sites.maintenance:write": ownSite("sites.maintenance:write"),
 	"sites.pagecache:write":   ownSite("sites:write"),
 	"sites.pagecache:purge":   ownSite("pagecache:purge"),
+	// Runs as root but only hands the site's own home to the site user,
+	// without following links (ADR-0067).
+	"sites.permissions:reset": ownSite("sites:write"),
 	"limits:read":             ownSite("limits:read"),
 	"sites.objectcache:read":  ownSite("objectcache:read"),
 	"sites.objectcache:write": ownSite("objectcache:write"),
@@ -202,6 +212,13 @@ var table = map[Action]Rule{
 	// The file manager writes as the site user (ADR-0040).
 	"files:read":  ownSite("files:read"),
 	"files:write": ownSite("files:write"),
+	// The malware scan of a site (ADR-0064): everyone with the site sees
+	// the findings, starts a scan and quarantines a file; the schedule,
+	// false positives and putting a file back stay with admins and
+	// managers.
+	"sites.malware:read":   ownSite("malware:read"),
+	"sites.malware:scan":   ownSite("malware:write"),
+	"sites.malware:manage": mgrSite("malware:write"),
 	// The site's own logs (ADR-0053); they hold its visitors' addresses.
 	"sites.logs:read": ownSite("logs:read"),
 }

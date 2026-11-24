@@ -8,8 +8,8 @@
 
 Result of the v1 completeness check. Release 1.0 contains everything that is already built plus the following rows, which were missing or incomplete on 2026-11-21:
 
-- **P0 rows without code:** site types Node.js and reverse proxy; view and tail logs; view and export the audit log; OpenAPI 3.1 specification; CLI with parity; permission reset; www/non-www redirect as a setting.
-- **Chosen P1 rows:** site type redirect; site type Python; WordPress quick install; vhost templates; change the domain(s) of a site; Cloudflare real IP; staging/cloning; Git deploy (moved from P2); multilingual UI (EN, DE); time zone, hostname, reboot; basic auth and IP blocking per site as a switch.
+- **P0 rows without code:** site types Node.js and reverse proxy; view and tail logs; view and export the audit log; OpenAPI 3.1 specification; CLI with parity; www/non-www redirect as a setting.
+- **Chosen P1 rows:** site type redirect; site type Python; WordPress quick install; vhost templates; change the domain(s) of a site; Cloudflare real IP; staging/cloning; Git deploy (moved from P2); multilingual UI (EN, DE); time zone, hostname, reboot; basic auth and IP blocking per site as a switch; malware scan with ClamAV, opt-in, including the optional real-time mode ([ADR-0064](adr/0064-optional-malware-scan.md), added 2026-11-24).
 - **Databases:** MariaDB stays the only local engine; PostgreSQL only as external servers ([ADR-0051](adr/0051-external-postgresql-servers.md)).
 - **Not chosen for 1.0 (open, see below):** wildcard via DNS-01, remote DB access through an IP allowlist, zero-downtime deployments, export/apply state as YAML, automatic restore test, restore on a new server, notifications through webhook/Telegram/Slack.
 
@@ -21,6 +21,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 | Initial setup with a one-time token (no default credentials) | P0 | A | NEW | Prevents "first visitor becomes admin" |
 | Manage services (start/stop/reload, status) | P0 | A | CP | Nginx, PHP-FPM, DB, Redis. systemd restarts crashed services automatically (`Restart=`), the panel shows restarts. Done ([ADR-0052](adr/0052-service-management-and-server-dashboard.md)) |
 | Dashboard with CPU/RAM/disk/network | P0 | A | CP | Local ring buffer, no external TSDB. Done ([ADR-0052](adr/0052-service-management-and-server-dashboard.md)) |
+| Resource usage per site (CPU, RAM, disk I/O, web traffic) and ranking | P1 | B | NEW | cgroup per site plus a compact nginx log per site; 100 % CPU is the site's limit or all cores. Done ([ADR-0063](adr/0063-resource-usage-per-site.md)) |
 | Firewall (nftables/UFW) with defaults | P0 | A | CP | SSH lockout protection (rollback timer) |
 | Time zone, hostname, reboot | P1 | B | CP | Done: page System, API, CLI `hostashi system` ([ADR-0060](adr/0060-time-zone-hostname-and-reboot.md)) |
 | Panel update in the UI with preflight and rollback | P1 | B | NEW | Notice in the panel when an update is available; optional automatic updates (channel and time window selectable) |
@@ -107,7 +108,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 | fail2ban (SSH, panel, recidive) | P0 | A | NEW | On by default, ADR-0021 |
 | CrowdSec as opt-in | P2 | 2+ | NEW | Reports IPs to an external service, ADR-0021 |
 | Rate limiting and lockout at the panel login | P0 | A | NEW | |
-| Malware scan (ClamAV/Maldet) | P2 | 2+ | NEW | ClamAV, opt-in, scheduled and manual; optional real-time daemon (ADR-0064) |
+| Malware scan (ClamAV/Maldet) | P1 | A | NEW | ClamAV, opt-in, scheduled and manual; optional real-time daemon (ADR-0064) |
 
 ## 3.7 Backups and recovery
 

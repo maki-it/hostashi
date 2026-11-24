@@ -1,6 +1,197 @@
 {
   "components": {
     "schemas": {
+      "Access": {
+        "additionalProperties": false,
+        "properties": {
+          "bypass": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "clientAddress": {
+            "type": "string"
+          },
+          "ipMode": {
+            "type": "string"
+          },
+          "ips": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "limits": {
+            "$ref": "#/components/schemas/AccessLimits"
+          },
+          "password": {
+            "type": "boolean"
+          },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/AccessUser"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "bypass",
+          "clientAddress",
+          "ipMode",
+          "ips",
+          "limits",
+          "password",
+          "paths",
+          "users"
+        ],
+        "type": "object"
+      },
+      "AccessLimits": {
+        "additionalProperties": false,
+        "properties": {
+          "bypass": {
+            "type": "integer"
+          },
+          "ips": {
+            "type": "integer"
+          },
+          "maxPassword": {
+            "type": "integer"
+          },
+          "minPassword": {
+            "type": "integer"
+          },
+          "paths": {
+            "type": "integer"
+          },
+          "users": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bypass",
+          "ips",
+          "maxPassword",
+          "minPassword",
+          "paths",
+          "users"
+        ],
+        "type": "object"
+      },
+      "AccessPassword": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "AccessSettingsInput": {
+        "additionalProperties": false,
+        "properties": {
+          "bypass": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "ipMode": {
+            "type": "string"
+          },
+          "ips": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "password": {
+            "type": "boolean"
+          },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "AccessUser": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAt",
+          "name",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "AccessUserInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Account": {
         "additionalProperties": false,
         "properties": {
@@ -4421,6 +4612,52 @@
         },
         "type": "object"
       },
+      "PermissionsReset": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "type": "integer"
+          },
+          "checked": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "skippedPaths": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionsSkip"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "changed",
+          "checked",
+          "skipped",
+          "skippedPaths"
+        ],
+        "type": "object"
+      },
+      "PermissionsSkip": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "reason"
+        ],
+        "type": "object"
+      },
       "PgClient": {
         "additionalProperties": false,
         "properties": {
@@ -4798,6 +5035,9 @@
             "type": "string"
           },
           "type": {
+            "type": "string"
+          },
+          "wwwRedirect": {
             "type": "string"
           }
         },
@@ -5535,6 +5775,157 @@
         ],
         "type": "object"
       },
+      "ScanEngine": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "realtime": {
+            "type": "string"
+          },
+          "realtimeActive": {
+            "type": "boolean"
+          },
+          "signatures": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "realtime",
+          "realtimeActive",
+          "signatures",
+          "state",
+          "version"
+        ],
+        "type": "object"
+      },
+      "ScanEngineRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "realtime": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ScanFinding": {
+        "additionalProperties": false,
+        "properties": {
+          "decidedAt": {
+            "type": "string"
+          },
+          "firstSeen": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "lastSeen": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "signature": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "decidedAt",
+          "firstSeen",
+          "id",
+          "lastSeen",
+          "path",
+          "sha256",
+          "signature",
+          "size",
+          "state"
+        ],
+        "type": "object"
+      },
+      "ScanRun": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "dropped": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string"
+          },
+          "found": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "newFound": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAt",
+          "dropped",
+          "error",
+          "finishedAt",
+          "found",
+          "id",
+          "newFound",
+          "source",
+          "startedAt",
+          "state"
+        ],
+        "type": "object"
+      },
+      "ScanScheduleRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "schedule": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "ScopeInfo": {
         "additionalProperties": false,
         "properties": {
@@ -5928,6 +6319,9 @@
           },
           "web": {
             "$ref": "#/components/schemas/Web"
+          },
+          "www": {
+            "$ref": "#/components/schemas/Www"
           }
         },
         "required": [
@@ -5950,7 +6344,8 @@
           "tls",
           "type",
           "updatedAt",
-          "web"
+          "web",
+          "www"
         ],
         "type": "object"
       },
@@ -6303,53 +6698,43 @@
         ],
         "type": "object"
       },
-      "SiteTotal": {
+      "SiteScan": {
         "additionalProperties": false,
         "properties": {
-          "cpuAvg": {
-            "type": "number"
+          "engine": {
+            "type": "string"
           },
-          "cpuMax": {
-            "type": "number"
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ScanFinding"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
-          "httpInBytes": {
-            "type": "number"
+          "nextScheduled": {
+            "type": "string"
           },
-          "httpOutBytes": {
-            "type": "number"
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/ScanRun"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
-          "httpRequests": {
-            "type": "number"
-          },
-          "ioReadBytes": {
-            "type": "number"
-          },
-          "ioWriteBytes": {
-            "type": "number"
-          },
-          "memAvg": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "memMax": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "site": {
+          "schedule": {
             "type": "string"
           }
         },
         "required": [
-          "cpuAvg",
-          "cpuMax",
-          "httpInBytes",
-          "httpOutBytes",
-          "httpRequests",
-          "ioReadBytes",
-          "ioWriteBytes",
-          "memAvg",
-          "memMax",
-          "site"
+          "engine",
+          "findings",
+          "nextScheduled",
+          "runs",
+          "schedule"
         ],
         "type": "object"
       },
@@ -6418,6 +6803,12 @@
       "SiteUsage": {
         "additionalProperties": false,
         "properties": {
+          "cores": {
+            "type": "number"
+          },
+          "cpus": {
+            "type": "integer"
+          },
           "points": {
             "items": {
               "$ref": "#/components/schemas/SiteSample"
@@ -6438,6 +6829,8 @@
           }
         },
         "required": [
+          "cores",
+          "cpus",
           "points",
           "range",
           "site",
@@ -7220,12 +7613,15 @@
       "UsageRanking": {
         "additionalProperties": false,
         "properties": {
+          "cpus": {
+            "type": "integer"
+          },
           "range": {
             "type": "string"
           },
           "sites": {
             "items": {
-              "$ref": "#/components/schemas/SiteTotal"
+              "$ref": "#/components/schemas/UsageRow"
             },
             "type": [
               "array",
@@ -7237,9 +7633,64 @@
           }
         },
         "required": [
+          "cpus",
           "range",
           "sites",
           "sort"
+        ],
+        "type": "object"
+      },
+      "UsageRow": {
+        "additionalProperties": false,
+        "properties": {
+          "cores": {
+            "type": "number"
+          },
+          "cpuAvg": {
+            "type": "number"
+          },
+          "cpuMax": {
+            "type": "number"
+          },
+          "httpInBytes": {
+            "type": "number"
+          },
+          "httpOutBytes": {
+            "type": "number"
+          },
+          "httpRequests": {
+            "type": "number"
+          },
+          "ioReadBytes": {
+            "type": "number"
+          },
+          "ioWriteBytes": {
+            "type": "number"
+          },
+          "memAvg": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "memMax": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "site": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cores",
+          "cpuAvg",
+          "cpuMax",
+          "httpInBytes",
+          "httpOutBytes",
+          "httpRequests",
+          "ioReadBytes",
+          "ioWriteBytes",
+          "memAvg",
+          "memMax",
+          "site"
         ],
         "type": "object"
       },
@@ -7467,6 +7918,66 @@
         "required": [
           "result"
         ],
+        "type": "object"
+      },
+      "Www": {
+        "additionalProperties": false,
+        "properties": {
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "mode": {
+            "type": "string"
+          },
+          "pairs": {
+            "items": {
+              "$ref": "#/components/schemas/WwwPair"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "missing",
+          "mode",
+          "pairs"
+        ],
+        "type": "object"
+      },
+      "WwwPair": {
+        "additionalProperties": false,
+        "properties": {
+          "bare": {
+            "type": "string"
+          },
+          "www": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bare",
+          "www"
+        ],
+        "type": "object"
+      },
+      "WwwRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       }
     },
@@ -11010,6 +11521,100 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "limits.presets:write"
+      }
+    },
+    "/api/v1/malware-scan": {
+      "get": {
+        "operationId": "getMalwareScan",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanEngine"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:read"
+            ]
+          }
+        ],
+        "summary": "ClamAV on the server: installed or not, its version and how fresh its signatures are",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "malware.engine:read"
+      },
+      "put": {
+        "operationId": "setMalwareScan",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanEngineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanEngine"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware.engine:write"
+            ]
+          }
+        ],
+        "summary": "Install or remove ClamAV for the malware scan, or switch its real-time mode; the result follows in getMalwareScan",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "malware.engine:write"
       }
     },
     "/api/v1/me": {
@@ -14627,6 +15232,306 @@
         "x-hostashi-action": "sites:read"
       }
     },
+    "/api/v1/sites/{name}/access": {
+      "get": {
+        "operationId": "getSiteAccess",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Access"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "Get the site's IP rule, password protection and users",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
+      },
+      "put": {
+        "operationId": "setSiteAccess",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessSettingsInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Access"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Set the site's IP rule and password protection",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.access:write"
+      }
+    },
+    "/api/v1/sites/{name}/access/users": {
+      "post": {
+        "operationId": "addSiteAccessUser",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessUserInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessPassword"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Add a password protection user; without a password the panel generates one and returns it once",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.access:write"
+      }
+    },
+    "/api/v1/sites/{name}/access/users/{user}": {
+      "delete": {
+        "operationId": "deleteSiteAccessUser",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Remove a password protection user",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.access:write"
+      },
+      "put": {
+        "operationId": "setSiteAccessUserPassword",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessUserInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessPassword"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Set a new password for a password protection user; without one the panel generates it",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.access:write"
+      }
+    },
     "/api/v1/sites/{name}/account": {
       "delete": {
         "operationId": "removeSiteAccount",
@@ -17978,6 +18883,410 @@
         "x-hostashi-action": "sites.maintenance:write"
       }
     },
+    "/api/v1/sites/{name}/malware-findings/{id}/ignore": {
+      "post": {
+        "operationId": "ignoreSiteMalwareFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanFinding"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Mark a flagged file as a false positive: the same content with the same signature is not reported again",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:manage"
+      }
+    },
+    "/api/v1/sites/{name}/malware-findings/{id}/quarantine": {
+      "post": {
+        "operationId": "quarantineSiteMalwareFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanFinding"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Move a flagged file into the quarantine, only if it is unchanged since the scan",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:scan"
+      }
+    },
+    "/api/v1/sites/{name}/malware-findings/{id}/reopen": {
+      "post": {
+        "operationId": "reopenSiteMalwareFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanFinding"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Report an ignored file again",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:manage"
+      }
+    },
+    "/api/v1/sites/{name}/malware-findings/{id}/restore": {
+      "post": {
+        "operationId": "restoreSiteMalwareFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanFinding"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Put a quarantined file back where it was",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:manage"
+      }
+    },
+    "/api/v1/sites/{name}/malware-scan": {
+      "get": {
+        "operationId": "getSiteMalwareScan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteScan"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:read"
+            ]
+          }
+        ],
+        "summary": "The malware scan of a site: schedule, newest runs and flagged files",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:read"
+      },
+      "put": {
+        "operationId": "setSiteMalwareSchedule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Scan a site daily, weekly or only on request",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:manage"
+      }
+    },
+    "/api/v1/sites/{name}/malware-scans": {
+      "post": {
+        "operationId": "startSiteMalwareScan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanRun"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Scan a site now; it waits while another site is scanned",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:scan"
+      }
+    },
     "/api/v1/sites/{name}/node": {
       "put": {
         "operationId": "setSiteNode",
@@ -18548,6 +19857,59 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites:park"
+      }
+    },
+    "/api/v1/sites/{name}/permissions/reset": {
+      "post": {
+        "operationId": "resetSitePermissions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionsReset"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Give all files of the site back to its user and reset their modes",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.permissions:reset"
       }
     },
     "/api/v1/sites/{name}/php": {
@@ -20311,6 +21673,69 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites.web:write"
+      }
+    },
+    "/api/v1/sites/{name}/www": {
+      "put": {
+        "operationId": "setSiteWWWRedirect",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WwwRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Set the redirect between example.com and www.example.com",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.www:write"
       }
     },
     "/api/v1/ssh/host-keys": {

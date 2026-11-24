@@ -169,6 +169,14 @@ type Service struct {
 	gitBox     *secrets.Box  // nil: no Git deploy (ADR-0062)
 	deploys    DeployAgent   // nil: no deploy runs (ADR-0062)
 	deployKick chan struct{} // wakes RunDeploys
+	scans      ScanAgent     // nil: no malware scans (ADR-0064)
+	scanKick   chan struct{} // wakes RunScans
+	// rtCursor and rtPending belong to RunScans: where the real-time log
+	// was read to (0 after a start: the agent's log is read again, known
+	// findings are not reported twice) and the findings waiting for an
+	// email.
+	rtCursor  int64
+	rtPending map[string]*realtimeMail
 	// deployAgain holds the sites whose webhook fired while a run was
 	// active; RunDeploys starts one more run when it ends. In memory only.
 	deployAgainMu sync.Mutex
@@ -206,6 +214,8 @@ type Service struct {
 	onApply func(ok bool, generation int) // nil: nobody listens
 	// onDeployFailed: see ObserveFailedDeploys; nil: nobody listens.
 	onDeployFailed func(ctx context.Context, site string, d store.SiteDeploy)
+	// onMalware: see ObserveMalware; nil: nobody listens.
+	onMalware func(ctx context.Context, site string, run store.ScanRun, found []store.ScanFinding)
 
 	// localAddrs are the server's own addresses, which no trusted proxy
 	// range may hold (ADR-0059); nil reads the interfaces.
@@ -931,6 +941,16 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		return err
 	}
 
+	access, err := s.st.AllSiteAccess(ctx)
+	if err != nil {
+		return err
+	}
+
+	authUsers, err := s.st.AllAuthUsers(ctx)
+	if err != nil {
+		return err
+	}
+
 	workers, err := s.st.PHPWorkers(ctx)
 	if err != nil {
 		return err
@@ -956,6 +976,13 @@ func (s *Service) applyWeb(ctx context.Context) error {
 			ws := agentapi.WebSite{
 				User: site.Name, Domains: site.Domains, PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
 				Headers: webHeaders(headers, site), RealIP: webRealIP(realips, site),
+				Access: webAccess(access, authUsers, site),
+			}
+
+			// A redirect site sends every name to its target anyway; it
+			// keeps the setting for a later type change (ADR-0065).
+			if site.Type != store.SiteTypeRedirect {
+				ws.WWWRedirect = site.WWWRedirect
 			}
 
 			// Redirect and reverse proxy sites send only their target: no

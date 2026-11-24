@@ -67,6 +67,9 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0061 | Site type Python | Accepted on 2026-11-22 ([adr/0061](adr/0061-site-type-python.md)) | No |
 | 0062 | Git deploy per site | Accepted on 2026-11-24 ([adr/0062](adr/0062-git-deploy-per-site.md)) | No |
 | 0063 | Resource usage per site | Accepted on 2026-11-24 ([adr/0063](adr/0063-resource-usage-per-site.md)) | No |
+| 0065 | www/non-www redirect per site | Accepted on 2026-11-24 ([adr/0065](adr/0065-www-redirect-per-site.md)) | No |
+| 0066 | Password protection and IP rules per site | Accepted on 2026-11-24 ([adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md)) | No |
+| 0067 | Reset the file permissions of a site | Accepted on 2026-11-24 ([adr/0067](adr/0067-reset-site-permissions.md)) | Done |
 
 ---
 
@@ -433,3 +436,15 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0063 Resource usage per site
 
 **Full text (status Accepted, 2026-11-24, by Kim):** [adr/0063](adr/0063-resource-usage-per-site.md). Summary: Kim wants CPU, memory and network per site to see which site uses the most. Recommended: the agent reads CPU, memory working set, tasks and disk I/O from each site's slice and its SSH user slice (read-only op `sites.stats`, `IOAccounting=yes` on the slices); web traffic (bytes in and out, requests) from a small extra nginx log per site without IPs or paths; the panel samples every 15 s and keeps tiers like the server dashboard (new table `site_samples`). UI: a "Sites by usage" ranking for admins and a "Usage" tab per site. Outgoing traffic of the site's processes through nftables counters comes later in an addendum. cgroups have no network counters, and SQL load in the shared database server is not counted per site. Decided by Kim on 2026-11-24: web traffic now, outgoing traffic later.
+
+## ADR-0065 www/non-www redirect per site
+
+**Full text (status Accepted, 2026-11-24, by Kim):** [adr/0065](adr/0065-www-redirect-per-site.md). Summary: a per-site setting `wwwRedirect` (`off`, `to-www`, `to-non-www`) redirects with 301 between `d` and `www.d` when both are domains of the site; domains without a partner are served as before. The partner is never added implicitly, so domain checks and the certificate stay unchanged; the panel offers a button to add it. nginx gets an extra server block per redirected name with the site's certificate, ACME location, logs and headers. Not for redirect sites. The CloudPanel import maps `www` redirect hosts to the setting. Decided by Kim on 2026-11-24: both names listed explicitly.
+
+## ADR-0066 Password protection and IP rules per site
+
+**Full text (status Accepted, 2026-11-24, by Kim):** [adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md). Summary: basic auth and IP blocking per site are P1. Recommended: typed settings instead of snippets. An IP rule per site (off, only these addresses, or block these addresses; up to 256 entries) and password protection for the whole site or a list of path prefixes (case-insensitive, through `map $uri` and a variable `auth_basic`), with up to 50 users whose bcrypt hashes (cost 5, about 3.5 ms per request) the panel makes, and an optional list of addresses that skip the password. The ACME and health locations always stay open, nginx does not pass the `Authorization` header on to the application, and the password file lives outside the site's home (root:www-data 0640, named by its content so rollbacks stay consistent). Real IP (ADR-0059) applies first. A fail2ban jail on the site error logs bans on ports 80 and 443. Everyone with a grant for the site may change it; snippets with the same directives are refused while the setting is on.
+
+## ADR-0067 Reset the file permissions of a site
+
+**Full text (status Accepted, 2026-11-24, by Kim):** [adr/0067](adr/0067-reset-site-permissions.md). Summary: a typed agent op `site.permissions.reset` gives every entry below a site's home back to the site user (home `site:www-data 0750`), directories `0755`, files `0644` or `0755` if executable, setuid/setgid/sticky removed, `.ssh` and `.gnupg` private (`0700`/`0600`). It walks on file descriptors only, never follows a link (the Git deploy link stays), skips other file systems, device files and hard links to foreign files and reports them. API `POST /api/v1/sites/{name}/permissions/reset` (scope `sites:write`, own sites), audited, CLI `hostashi api sites reset-permissions`. No new `os/exec` exception.

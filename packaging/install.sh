@@ -30,6 +30,8 @@
 #                        from 7.4, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6 (7.4, 8.1 and 8.2 are legacy). Kept for later runs
 #   --auto-update        also install new Hostashi versions from its apt repository automatically,
 #                        with the daily security updates (ADR-0050); off by default
+#   --malware-scan       install ClamAV from the distribution for the malware scan (ADR-0064); the panel
+#                        switches it on and off later, so the option is not kept for later runs
 #   --no-apt             install no packages; a step that needs a missing one fails and names it.
 #                        For runs from the hostashi package, whose dependencies are installed (ADR-0050)
 #
@@ -84,7 +86,7 @@ OPTIONS_FILE=${HOSTASHI_OPTIONS_FILE:-/etc/hostashi/install.options}
 PKG_BIN=${HOSTASHI_PKG_BIN:-/usr/bin/hostashi}
 
 PHP_REQUEST=""
-MODE=plan YES=no BINARY="" PANEL_DOMAIN="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no NO_FIREWALL=no AUTO_UPDATE=no
+MODE=plan YES=no BINARY="" PANEL_DOMAIN="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no NO_FIREWALL=no AUTO_UPDATE=no MALWARE_SCAN=no
 FW_ALLOW=()
 NO_DB_TOOL=no DB_TOOL_PORT=8444 NO_APT=no
 PHP_REQUEST_SET=no
@@ -256,7 +258,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary completion config ssh harden sysctl system nginx php phpversions pgclient node python valkey mariadb dbtool backup units service fail2ban firewall updates quota"
+STEPS="account dirs key binary completion config ssh harden sysctl system nginx php phpversions pgclient malwarescan node python valkey mariadb dbtool backup units service fail2ban firewall updates quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -632,6 +634,52 @@ do_pgclient() {
   fi
 }
 
+# The malware scan (ADR-0064). The step installs the script
+# packaging/clamav/clamav-install and its unit
+# hostashi-clamav-install@.service; the panel starts the unit when an admin
+# switches the scan on or off. With --malware-scan it installs ClamAV now.
+# A server the script set up earlier is checked (and repaired) on every
+# run; the scan units themselves come with step units.
+CLAMAV_SRC=${HOSTASHI_CLAMAV_SRC:-$HERE/clamav}/clamav-install
+CLAMAV_BIN=/usr/local/lib/hostashi/clamav-install
+CLAMAV_UNIT=hostashi-clamav-install@.service
+CLAMAV_STATE=/var/lib/hostashi-agent/clamav-install
+SCAN_LOGS=/var/log/hostashi/scan
+
+clamav_state() { cat "$CLAMAV_STATE/state" 2>/dev/null || echo off; }
+
+chk_malwarescan() {
+  local why
+  dir_ok "$CLAMAV_STATE" 700 root:root || { echo "$CLAMAV_STATE"; return 1; }
+  dir_ok "$SCAN_LOGS" 700 root:root || { echo "$SCAN_LOGS"; return 1; }
+  file_matches "$CLAMAV_BIN" 0755 root:root <"$CLAMAV_SRC" || { echo "clamav-install differs"; return 1; }
+  file_matches "/etc/systemd/system/$CLAMAV_UNIT" 0644 root:root <"$UNIT_DIR/$CLAMAV_UNIT" || { echo "$CLAMAV_UNIT differs"; return 1; }
+  [ "$MALWARE_SCAN" = no ] || [ "$(clamav_state)" = on ] || { echo "ClamAV not installed"; return 1; }
+  why=$(HOSTASHI_CLAMAV_STATE_DIR=$CLAMAV_STATE "$CLAMAV_SRC" check) || { echo "$why"; return 1; }
+}
+do_malwarescan() {
+  local rc
+  install -d -m 0755 -o root -g root "${CLAMAV_BIN%/*}" || return 1
+  install -d -m 0700 -o root -g root "$CLAMAV_STATE" || return 1
+  install -d -m 0755 -o root -g root "${SCAN_LOGS%/*}" || return 1
+  install -d -m 0700 -o root -g root "$SCAN_LOGS" || return 1
+  write_file "$CLAMAV_BIN" 0755 root:root <"$CLAMAV_SRC"; [ $? -le 1 ] || return 1
+  write_file "/etc/systemd/system/$CLAMAV_UNIT" 0644 root:root <"$UNIT_DIR/$CLAMAV_UNIT"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  if [ "$rc" = 0 ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
+  local need=no
+  if [ "$(clamav_state)" = on ]; then
+    HOSTASHI_CLAMAV_STATE_DIR=$CLAMAV_STATE "$CLAMAV_BIN" check >/dev/null || need=yes
+  elif [ "$MALWARE_SCAN" = yes ]; then
+    need=yes
+  fi
+  if [ "$need" = yes ]; then
+    [ "$NO_APT" = no ] || { log "ClamAV is not installed and --no-apt is set: switch the malware scan on in the panel"; return 1; }
+    HOSTASHI_CLAMAV_STATE_DIR=$CLAMAV_STATE "$CLAMAV_BIN" install 2>&1 | tee -a "$LOG" | grep -E 'cannot' >&2
+    [ "${PIPESTATUS[0]}" = 0 ] || return 1
+  fi
+}
+
 # Node.js from the official nodejs.org builds (ADR-0054). The step only
 # sets up the unit hostashi-node-install@.service, its log directory and
 # /opt/hostashi/node; the panel starts the unit when an admin installs a
@@ -872,7 +920,8 @@ do_backup() { apt_install "${BACKUP_PKGS[@]}"; }
 
 # fail2ban from the distribution, on by default (ADR-0021): jails sshd,
 # hostashi-panel (the panel's auth.failed lines) and recidive, all reading
-# the journal, banning through nftables. python3-systemd is its journal
+# the journal, and hostashi-site-auth (failed site passwords, ADR-0066)
+# reading nginx's server error log, banning through nftables. python3-systemd is its journal
 # backend, nftables its ban action; neither is pulled in without recommends.
 F2B_SRC=${HOSTASHI_F2B_SRC:-$HERE/fail2ban}
 F2B_PKGS=(fail2ban python3-systemd nftables)
@@ -881,7 +930,7 @@ F2B_FILES=(
   "hostashi.conf:/etc/fail2ban/jail.d/hostashi.conf"
   "hostashi-panel.conf:/etc/fail2ban/filter.d/hostashi-panel.conf"
 )
-F2B_JAILS=(sshd hostashi-panel recidive)
+F2B_JAILS=(sshd hostashi-panel hostashi-site-auth recidive)
 F2B_CHANGED=no
 
 chk_fail2ban() {
@@ -906,6 +955,10 @@ do_fail2ban() {
     [ "$rc" -le 1 ] || return 1
     [ "$rc" = 0 ] && F2B_CHANGED=yes
   done
+  # hostashi-site-auth needs its log before nginx first writes to it.
+  if [ ! -e /var/log/nginx/hostashi/error.log ]; then
+    install -d -m 0750 -o root -g root /var/log/nginx/hostashi && install -m 0640 -o root -g root /dev/null /var/log/nginx/hostashi/error.log || return 1
+  fi
   # A broken file must not take down a running fail2ban.
   fail2ban-client -t >>"$LOG" 2>&1 || { log "fail2ban configuration test failed"; return 1; }
   systemctl enable fail2ban.service >>"$LOG" 2>&1 || return 1
@@ -1135,7 +1188,7 @@ php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }
 
 chk_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-app@.service hostashi-python@.service hostashi-python-venv@.service hostashi-deploy@.service hostashi-files@.service hostashi-files@.socket; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-app@.service hostashi-python@.service hostashi-python-venv@.service hostashi-deploy@.service hostashi-scan@.service hostashi-scan.slice hostashi-files@.service hostashi-files@.socket; do
     file_matches "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u" || { echo "$u differs"; return 1; }
   done
   dir_ok "$(dirname "$NGINX_DROPIN")" 755 root:root || { echo "nginx drop-in directory"; return 1; }
@@ -1149,7 +1202,7 @@ chk_units() {
 }
 do_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-app@.service hostashi-python@.service hostashi-python-venv@.service hostashi-deploy@.service hostashi-files@.service hostashi-files@.socket; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-app@.service hostashi-python@.service hostashi-python-venv@.service hostashi-deploy@.service hostashi-scan@.service hostashi-scan.slice hostashi-files@.service hostashi-files@.socket; do
     write_file "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u"
     [ $? -le 1 ] || return 1
   done
@@ -1627,8 +1680,9 @@ parse_args() {
       --no-db-tool) NO_DB_TOOL=yes;;
       --no-apt) NO_APT=yes;;
       --auto-update) AUTO_UPDATE=yes;;
+      --malware-scan) MALWARE_SCAN=yes;;
       --php-versions) shift; PHP_REQUEST=${1:-}; PHP_REQUEST_SET=yes;;
-      *) echo "usage: $0 [plan | apply --yes | upgrade] --binary PATH [--no-apt] [--panel-domain NAME] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall] [--no-db-tool] [--php-versions LIST] [--auto-update]" >&2; exit 64;;
+      *) echo "usage: $0 [plan | apply --yes | upgrade] --binary PATH [--no-apt] [--panel-domain NAME] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall] [--no-db-tool] [--php-versions LIST] [--auto-update] [--malware-scan]" >&2; exit 64;;
     esac
     shift
   done

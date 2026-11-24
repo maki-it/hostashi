@@ -112,6 +112,7 @@ Things to know:
 | `--no-db-tool` | Do not install the web database tool (Adminer on port 8444). Given on a server that has it, the installer removes it. |
 | `--no-quota` | Do not enable disk quota. Sites then have no disk limit. |
 | `--auto-update` | Also install new Hostashi versions automatically: unattended-upgrades takes them from `get.hostashi.com/apt` together with the daily security updates. Off by default; then `sudo apt upgrade` installs them. Each update keeps a copy of the panel database first. A later `apply` without the option turns it off again. |
+| `--malware-scan` | Install ClamAV from the distribution for the malware scan. Off by default; an admin can also switch it on and off in the panel later, so a later `apply` without the option leaves it as it is. A scan needs about 1.5 GB of RAM while it runs. |
 | `--allow-untested` | Accept an operating system release that is not on the supported list. |
 | `--no-apt` | Install no packages. A step that needs a missing package fails and names it. Meant for runs from the `hostashi` package, which brings its dependencies. |
 

@@ -8,6 +8,7 @@ import { FileManager } from "./Files";
 import { canDeploy } from "./git";
 import { GitSettings } from "./Git";
 import { LimitSettings } from "./Limits";
+import { SiteMalware } from "./Malware";
 import { SiteLogs } from "./Logs";
 import { ObjectCacheSettings } from "./ObjectCache";
 import { allowIpsProblem, clientIp, listPages, pageMessage, parseAllowIps, setMaintenance, type StatusPage } from "./pages";
@@ -42,23 +43,30 @@ import { pythonCommand } from "./python";
 import { SiteWebSettings } from "./SiteWeb";
 import { RemoveAccountCard } from "./SiteType";
 import { SnippetSettings } from "./Snippets";
+import { SiteAccess } from "./SiteAccess";
 import { RealIPCard } from "./RealIP";
 import { SecurityHeadersCard } from "./SecurityHeaders";
 import { SSHSettings } from "./SSH";
+import { PermissionsResetCard } from "./PermissionsReset";
 import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
+import { SiteUsageCard } from "./Usage";
+import { WWWCard } from "./WWW";
 
 // The tabs that exist today (ADR-0037). Databases and backups per site
 // come with their features; their addresses show the overview.
 const tabs: { id: SiteTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "domains", label: "Domains & HTTPS" },
+  { id: "access", label: "Access" },
   { id: "web", label: "Web" },
   { id: "files", label: "Files" },
   { id: "git", label: "Git" },
+  { id: "malware", label: "Virus scan" },
   { id: "php", label: "PHP" },
   { id: "cron", label: "Cron" },
   { id: "ssh", label: "SSH & SFTP" },
   { id: "limits", label: "Limits" },
+  { id: "usage", label: "Usage" },
   { id: "logs", label: "Logs" },
   { id: "nginx", label: "nginx" },
 ];
@@ -97,14 +105,16 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
   // keeps these tabs.
   // A site without an account (redirect, reverse proxy) has no files,
   // cron, SSH or limits, and redirect and reverse proxy no snippets
-  // (ADR-0054).
-  const noAccount = ["files", "php", "cron", "ssh", "limits"];
+  // (ADR-0054). A redirect answers before nginx checks access, so it has no
+  // access tab (ADR-0066).
+  const noAccount = ["files", "malware", "php", "cron", "ssh", "limits"];
   const shown = tabs.filter(
     (t) =>
       (t.id !== "php" || site.php !== "") &&
       (t.id !== "git" || canDeploy(site)) &&
       (hasAccount(site) || !noAccount.includes(t.id)) &&
-      (!["redirect", "proxy"].includes(siteType(site)) || t.id !== "nginx"),
+      (!["redirect", "proxy"].includes(siteType(site)) || t.id !== "nginx") &&
+      (siteType(site) !== "redirect" || t.id !== "access"),
   );
   const active = ready && shown.some((t) => t.id === tab) ? tab : "overview";
   const prefix = `site-${site.name}`;
@@ -133,8 +143,10 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
         {active === "overview" && <Overview site={site} onChange={load} staff={role === "admin" || role === "manager"} />}
         {active === "overview" && role === "admin" && hasAccount(site) && <Services site={site.name} />}
         {active === "domains" && <DomainsTab site={site} onChange={load} admin={role === "admin"} />}
+        {active === "access" && <SiteAccess site={site} />}
         {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} admin={role === "admin"} staff={role === "admin" || role === "manager"} />}
         {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
+        {active === "files" && site.state === "active" && <PermissionsResetCard site={site} />}
         {active === "logs" && <SiteLogs site={site} admin={role === "admin"} />}
         {active === "php" && (
           <>
@@ -145,9 +157,11 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
           </>
         )}
         {active === "git" && <GitSettings site={site} canEdit={role === "admin" || role === "manager"} />}
+        {active === "malware" && <SiteMalware site={site} canManage={role === "admin" || role === "manager"} admin={role === "admin"} />}
         {active === "cron" && <CronSettings site={site} />}
         {active === "ssh" && <SSHSettings site={site} />}
         {active === "limits" && <LimitSettings site={site} />}
+        {active === "usage" && <SiteUsageCard site={site.name} />}
         {active === "nginx" && <SnippetSettings site={site} />}
       </div>
     </>
@@ -572,6 +586,7 @@ function DomainsTab({ site, onChange, admin }: TabProps & { admin: boolean }) {
           </div>
         </form>
       </Card>
+      {siteType(site) !== "redirect" && <WWWCard site={site} onChange={onChange} onDomains={(l) => setDomainsText(l.join("\n"))} />}
       <Card title="HTTPS">
         <div className="ui-stack">
           <label className="ui-check">

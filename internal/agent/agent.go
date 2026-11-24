@@ -48,6 +48,7 @@ import (
 	"github.com/maki-it/hostashi/internal/phpinstall"
 	"github.com/maki-it/hostashi/internal/pythoninstall"
 	"github.com/maki-it/hostashi/internal/resticctl"
+	"github.com/maki-it/hostashi/internal/scanunit"
 	"github.com/maki-it/hostashi/internal/sitelogs"
 	"github.com/maki-it/hostashi/internal/sites"
 	"github.com/maki-it/hostashi/internal/siteslice"
@@ -158,6 +159,10 @@ type Config struct {
 	// fail2ban's bans; nil leaves fail2ban alone. Run sets it when
 	// fail2ban's jail.d directory exists.
 	ProxyIgnore *f2bproxies.File
+	// AuthFiles writes the sites' password files (ADR-0066); nil refuses
+	// sites with password protection. Run sets it with the nginx workers'
+	// group.
+	AuthFiles *web.AuthFiles
 
 	// Quota sets and reads the sites' disk limits (ADR-0015). Nil: the
 	// running kernel (KernelQuota).
@@ -204,6 +209,15 @@ type Config struct {
 	// Deploy runs the sites' Git deploys (ADR-0062). Run builds it below
 	// StateDir; without it site.deploy.* answer failed_precondition.
 	Deploy *deployunit.Manager
+	// Scan runs the sites' malware scans and Engine installs ClamAV
+	// (ADR-0064). Run builds both; without them site.scan.* and
+	// scan.engine.* answer failed_precondition.
+	Scan   *scanunit.Manager
+	Engine *scanunit.Engine
+	// Realtime keeps the optional real-time mode in step with the sites
+	// (ADR-0064); without it scan.realtime.poll answers
+	// failed_precondition.
+	Realtime *scanunit.Realtime
 
 	// Files starts the sites' file manager sockets (ADR-0040). Run builds
 	// it; without it files.open answers failed_precondition.
@@ -315,7 +329,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, apps: cfg.Apps, deploy: cfg.Deploy, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, f2b: cfg.ProxyIgnore, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, apps: cfg.Apps, deploy: cfg.Deploy, scan: cfg.Scan, engine: cfg.Engine, realtime: cfg.Realtime, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, f2b: cfg.ProxyIgnore, auth: cfg.AuthFiles, log: log}
 		h.acl = cfg.panelACL
 
 		if cfg.PHP != nil && cfg.PHP.Hidden == nil {
@@ -386,29 +400,34 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 // web.apply, so a site cannot lose its home while a virtual host or a PHP
 // pool is being built for it.
 type siteOps struct {
-	m      *sites.Manager
-	web    *web.Reconciler
-	php    *php.Manager
-	phpi   *phpinstall.Manager
-	certs  *certs.Store
-	db     *mariadb.Manager
-	pages  *pages.Store
-	cron   *cronjobs.Manager
-	ssh    *sshaccess.Manager
-	quota  QuotaFS
-	slices *siteslice.Manager
-	cache  *pagecache.Dirs
-	objc   *objcache.Manager
-	apps   *appunit.Manager
-	deploy *deployunit.Manager
-	files  *filesunit.Manager
-	logs   *sitelogs.Reader
+	m        *sites.Manager
+	web      *web.Reconciler
+	php      *php.Manager
+	phpi     *phpinstall.Manager
+	certs    *certs.Store
+	db       *mariadb.Manager
+	pages    *pages.Store
+	cron     *cronjobs.Manager
+	ssh      *sshaccess.Manager
+	quota    QuotaFS
+	slices   *siteslice.Manager
+	cache    *pagecache.Dirs
+	objc     *objcache.Manager
+	apps     *appunit.Manager
+	deploy   *deployunit.Manager
+	scan     *scanunit.Manager
+	engine   *scanunit.Engine
+	realtime *scanunit.Realtime
+	files    *filesunit.Manager
+	logs     *sitelogs.Reader
 	// logrotate is the file of logs.retention.set (ADR-0053).
 	logrotate string
 	// f2b is fail2ban's never-ban file of trusted proxies (ADR-0059).
 	f2b *f2bproxies.File
-	log *slog.Logger
-	mu  sync.Mutex
+	// auth writes the sites' password files (ADR-0066).
+	auth *web.AuthFiles
+	log  *slog.Logger
+	mu   sync.Mutex
 	// acl hands the panel allowlist to nginx on 443; nil for none.
 	acl *panelACL
 	// sweepMu keeps the background deletes of purged caches apart.
@@ -528,6 +547,12 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			}
 		}
 
+		if h.scan != nil {
+			if err := h.scan.Remove(ctx, req.User); err != nil {
+				h.log.ErrorContext(ctx, "remove scan unit of deleted site", "site", req.User, "err", err)
+			}
+		}
+
 		if h.objc != nil {
 			if err := h.objc.Remove(ctx, req.User); err != nil {
 				h.log.ErrorContext(ctx, "remove object cache of deleted site", "site", req.User, "err", err)
@@ -579,7 +604,9 @@ func (h *siteOps) register(s *agentrpc.Server) {
 	h.registerCache(s)
 	h.registerApps(s)
 	h.registerDeploy(s)
+	h.registerScan(s)
 	h.registerFiles(s)
+	h.registerPermissions(s)
 	h.registerLogs(s)
 
 	h.registerSSH(s)
@@ -668,7 +695,7 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		}
 
 		site := web.Site{
-			User: s.User, Domains: s.Domains, Root: root, Disabled: s.Disabled, SPA: s.SPA, AssetCache: s.AssetCache,
+			User: s.User, Domains: s.Domains, WWWRedirect: s.WWWRedirect, Root: root, Disabled: s.Disabled, SPA: s.SPA, AssetCache: s.AssetCache,
 			AssetCacheSeconds: s.AssetCacheSeconds, AssetCacheExts: s.AssetCacheExts,
 		}
 
@@ -729,6 +756,10 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			return agentapi.WebApplyResponse{}, err
 		}
 
+		if err := h.accessFor(&site, s.Access); err != nil {
+			return agentapi.WebApplyResponse{}, err
+		}
+
 		if s.PageCache != nil {
 			c, err := h.pageCacheFor(s.User, home, *s.PageCache)
 			if err != nil {
@@ -784,10 +815,16 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		return agentapi.WebApplyResponse{}, err
 	}
 
+	if err := h.writeAuthFiles(d); err != nil {
+		return agentapi.WebApplyResponse{}, err
+	}
+
 	res, err := h.web.Apply(ctx, d)
 	if err != nil {
 		return agentapi.WebApplyResponse{Generation: res.Generation}, mapWebError(err)
 	}
+
+	h.pruneAuthFiles(ctx, d)
 
 	h.applyCacheChanges(ctx, prev, d)
 
@@ -880,7 +917,7 @@ func (h *siteOps) panelFor(p agentapi.WebPanel) (*web.Panel, error) {
 // (ADR-0054): no root, no PHP, no snippets; HTTPS, headers, maintenance
 // and the disabled page as for any site.
 func (h *siteOps) accountlessSite(ctx context.Context, s agentapi.WebSite) (web.Site, error) {
-	site := web.Site{User: s.User, Domains: s.Domains, Disabled: s.Disabled}
+	site := web.Site{User: s.User, Domains: s.Domains, WWWRedirect: s.WWWRedirect, Disabled: s.Disabled}
 
 	if r := s.Redirect; r != nil {
 		rc := *r
@@ -924,6 +961,10 @@ func (h *siteOps) accountlessSite(ctx context.Context, s agentapi.WebSite) (web.
 	}
 
 	if err := h.realIPFor(&site, s.RealIP); err != nil {
+		return web.Site{}, err
+	}
+
+	if err := h.accessFor(&site, s.Access); err != nil {
 		return web.Site{}, err
 	}
 
@@ -1365,6 +1406,7 @@ func openWeb(ctx context.Context, stateDir string, panelPort, dbToolPort int, lo
 			ListenTLS:     listenTLS,
 			HTTP3:         http3,
 			ACMERoot:      ACMERoot,
+			AuthDir:       AuthDir,
 			PanelListen:   listenPanel,
 			PanelUpstream: PanelSocket,
 			DBToolListen:  listenTool,
@@ -1433,6 +1475,11 @@ const WebControlSocket = "/run/hostashi-web/control.sock"
 // access.log and error.log (ADR-0021, ADR-0053), root:root 0750.
 const SiteLogDir = "/var/log/nginx/sites"
 
+// AuthDir holds the sites' password files (ADR-0066), root:www-data 0750.
+// It is neither below the agent's state (root 0700) nor the panel's
+// (hostashi 0750), because nginx's workers must reach it.
+const AuthDir = "/var/lib/hostashi-web-auth"
+
 // ServerLogDir holds nginx's server-wide access.log and error.log, for
 // requests of no site. It is not /var/log/nginx itself, whose *.log the
 // nginx package rotates with its own retention (ADR-0053).
@@ -1460,6 +1507,12 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.Web == nil {
 		cfg.Web = openWeb(ctx, cfg.StateDir, cfg.PanelPort, cfg.DBToolPort, cfg.Log)
+	}
+
+	if cfg.AuthFiles == nil && cfg.Web != nil {
+		if gid := webGID(cfg.Log); gid != 0 {
+			cfg.AuthFiles = &web.AuthFiles{Dir: AuthDir, GID: int(gid)}
+		}
 	}
 
 	if cfg.Logs == nil && cfg.Web != nil {
@@ -1625,6 +1678,21 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.Deploy = &deployunit.Manager{
 			Dir: filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "deploy"), Site: deploySite(cfg.Sites), Hidden: cfg.Sites.HiddenPaths,
 			Ctl: phpctl.DeployController{}, Log: cfg.Log,
+		}
+	}
+
+	if cfg.Engine == nil {
+		cfg.Engine = &scanunit.Engine{Ctl: phpctl.ClamAVInstallUnits{}, Realtime: phpctl.ClamAVRealtimeUnits{}}
+	}
+
+	if cfg.Realtime == nil {
+		cfg.Realtime = &scanunit.Realtime{Ctl: phpctl.ClamAVRealtimeUnits{}}
+	}
+
+	if cfg.Scan == nil {
+		cfg.Scan = &scanunit.Manager{
+			Dir: filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "scan"), Site: scanSite(cfg.Sites), Hidden: cfg.Sites.HiddenPaths,
+			Clamd: clamdServes(cfg.Engine), Ctl: phpctl.ScanController{}, Log: cfg.Log,
 		}
 	}
 

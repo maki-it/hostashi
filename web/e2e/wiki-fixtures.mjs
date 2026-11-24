@@ -27,8 +27,14 @@ const site = (name, o) => ({
 });
 
 export const sites = [
-  site("blog", { type: "php", php: "8.4", domains: ["blog.example.com", "www.blog.example.com"], tls: tls(["blog.example.com", "www.blog.example.com"]) }),
-  site("shop", { type: "php", php: "8.3", domains: ["shop.example.com"], tls: tls(["shop.example.com"]) }),
+  site("blog", {
+    type: "php",
+    php: "8.4",
+    domains: ["blog.example.com", "www.blog.example.com"],
+    www: { mode: "to-non-www", pairs: [{ bare: "blog.example.com", www: "www.blog.example.com" }], missing: [] },
+    tls: tls(["blog.example.com", "www.blog.example.com"]),
+  }),
+  site("shop", { type: "php", php: "8.3", domains: ["shop.example.com"], www: { mode: "off", pairs: [], missing: ["www.shop.example.com"] }, tls: tls(["shop.example.com"]) }),
   site("docs", { type: "static", domains: ["docs.example.com"], web: { dir: "public", spa: false, cache: true }, tls: tls(["docs.example.com"]) }),
   site("app", {
     type: "node",
@@ -206,9 +212,43 @@ const deployLogText = [
   "",
 ].join("\n");
 
+const sha = (c) => c.repeat(64);
+
+// The malware scan of blog: one file flagged last night, one in the
+// quarantine, a false positive and a file that is gone (ADR-0064).
+const siteScan = {
+  engine: "on",
+  schedule: "weekly",
+  nextScheduled: "2026-11-27T02:37:00Z",
+  runs: [
+    { id: 9, source: "schedule", state: "succeeded", error: "", found: 3, newFound: 1, dropped: 0, createdAt: at(0, 1, 37), startedAt: at(0, 1, 37), finishedAt: at(0, 1, 44) },
+    { id: 8, source: "panel", state: "succeeded", error: "", found: 2, newFound: 2, dropped: 0, createdAt: at(2, 14, 3), startedAt: at(2, 14, 3), finishedAt: at(2, 14, 9) },
+    { id: 7, source: "schedule", state: "succeeded", error: "", found: 0, newFound: 0, dropped: 0, createdAt: at(7, 1, 37), startedAt: at(7, 1, 37), finishedAt: at(7, 1, 43) },
+  ],
+  findings: [
+    { id: 21, path: "htdocs/wp-content/uploads/2026/11/cache.php", signature: "Php.Webshell.Generic-9952106-0", sha256: sha("4"), size: 18_432, state: "open", firstSeen: at(0, 1, 44), lastSeen: at(0, 1, 44), decidedAt: "" },
+    { id: 18, path: "htdocs/wp-content/plugins/old-gallery/upload.php", signature: "Php.Malware.Mailer-6", sha256: sha("7"), size: 5_210, state: "quarantined", firstSeen: at(2, 14, 9), lastSeen: at(2, 14, 9), decidedAt: at(2, 14, 30) },
+    { id: 17, path: "htdocs/tools/eicar-test.txt", signature: "Eicar-Signature", sha256: sha("2"), size: 68, state: "ignored", firstSeen: at(2, 14, 9), lastSeen: at(0, 1, 44), decidedAt: at(2, 14, 31) },
+    { id: 12, path: "htdocs/tmp/x.php", signature: "Php.Trojan.Agent-1", sha256: sha("9"), size: 912, state: "gone", firstSeen: at(14, 1, 40), lastSeen: at(14, 1, 40), decidedAt: "" },
+  ],
+};
+
 const me = { username: "kim", role: "admin", secondFactor: true, secondFactorRequired: true, clientIp: "203.0.113.24" };
 
+const homeFiles = [
+  { name: ".ssh", type: "dir", size: 4096, modified: day(30), mode: "0700" },
+  { name: "htdocs", type: "dir", size: 4096, modified: day(1), mode: "0755" },
+  { name: "logs", type: "dir", size: 4096, modified: day(0), mode: "0755" },
+  { name: "backup.tar.gz", type: "file", size: 48_000_000, modified: day(3), mode: "0600" },
+];
+
 const routes = [
+  ["GET", /^\/sites\/([^/]+)\/files$/, () => ({ path: "", entries: homeFiles, truncated: false, unnamed: 0 })],
+  [
+    "POST",
+    /^\/sites\/([^/]+)\/permissions\/reset$/,
+    () => ({ checked: 18_342, changed: 211, skipped: 1, skippedPaths: [{ path: "htdocs/wp-content/uploads/nfs", reason: "on another file system" }] }),
+  ],
   ["GET", /^\/auth\/me$/, () => me],
   ["GET", /^\/setup$/, () => ({ required: false })],
   ["GET", /^\/sites$/, () => ({ sites })],
@@ -232,6 +272,10 @@ const routes = [
   ["GET", /^\/backups$/, () => backups],
   ["GET", /^\/firewall$/, () => firewall],
   ["GET", /^\/dbtool$/, () => ({ available: true, minutes: [30, 120] })],
+  ["GET", /^\/malware-scan$/, () => ({ state: "on", version: "1.4.6+dfsg-1", signatures: at(0, 13, 12), error: "", realtime: "off", realtimeActive: false })],
+  ["GET", /^\/sites\/[^/]+\/malware-scan$/, () => siteScan],
+  ["GET", /^\/system$/, () => ({ hostname: "web1", transientHostname: "web1", timezone: "Europe/Berlin", time: "2026-11-22T18:00:00Z", uptimeSeconds: 1_234_567, ntpSynchronized: true, rebootRequired: false, cloudInit: false })],
+  ["GET", /^\/system\/timezones$/, () => ({ zones: ["Europe/Berlin", "UTC"] })],
   ["GET", /^\/sites\/([^/]+)\/git$/, (m) => git[m[1]] ?? gitBase],
   ["GET", /^\/sites\/([^/]+)\/deploys$/, (m) => deploys[m[1]] ?? []],
   ["GET", /^\/sites\/[^/]+\/deploys\/\d+\/log$/, () => ({ log: deployLogText, truncated: false })],
@@ -247,6 +291,21 @@ const routes = [
     permissionsPolicyStrict: "camera=(), microphone=(), geolocation=()",
     maxValueBytes: 4096,
   })],
+  ["GET", /^\/sites\/[^/]+\/access$/, () => ({
+    ipMode: "deny",
+    ips: ["198.51.100.23", "203.0.113.0/26"],
+    password: true,
+    paths: ["/wp-admin", "/wp-login.php"],
+    bypass: ["192.0.2.0/28"],
+    users: [
+      { name: "kim", createdAt: day(12), updatedAt: day(12) },
+      { name: "office", createdAt: day(3), updatedAt: day(1) },
+    ],
+    limits: { ips: 256, paths: 20, bypass: 64, users: 50, minPassword: 12, maxPassword: 72 },
+    clientAddress: "192.0.2.10",
+    updatedAt: day(1),
+  })],
+  ["POST", /^\/sites\/[^/]+\/access\/users$/, () => ({ name: "agency", password: "Vq7mR2xK9pLt4Wz8Bn3sHc6J" })],
   ["GET", /^\/sites\/[^/]+\/real-ip$/, () => ({ realIp: {}, headers: ["X-Forwarded-For", "X-Real-IP"], cloudflare: [], cloudflareDate: "2026-11-16", maxRanges: 64 })],
   ["GET", /^\/sites\/([^/]+)\/tls\/certificate$/, (m) => {
     const t = sites.find((x) => x.name === m[1])?.tls;

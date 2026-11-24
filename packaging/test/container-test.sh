@@ -560,6 +560,120 @@ x systemd-analyze security hostashi-agent.service | tail -1
 exposure hostashi.service 2.0
 exposure hostashi-agent.service 4.5
 exposure hostashi-files@blog.service 1.0
+exposure hostashi-scan@blog.service 1.5
+
+step "malware scan: script and units only (ADR-0064)"
+# Without --malware-scan nothing of ClamAV is installed; the panel starts
+# the install unit when an admin switches the scan on.
+expect_mode /usr/local/lib/hostashi/clamav-install "755 root:root"
+expect_mode /var/lib/hostashi-agent/clamav-install "700 root:root"
+expect_mode /var/log/hostashi/scan "700 root:root"
+expect_mode /etc/systemd/system/hostashi-scan@.service "644 root:root"
+expect_mode /etc/systemd/system/hostashi-scan.slice "644 root:root"
+! x dpkg-query -W clamav >/dev/null 2>&1 || fail "ClamAV installed without --malware-scan"
+if x systemctl start hostashi-clamav-install@purge.service 2>/dev/null; then fail "the install unit accepted the instance purge"; fi
+x systemctl reset-failed hostashi-clamav-install@purge.service 2>/dev/null || true
+
+step "malware scan: switch on, scan, quarantine and restore through the API (ADR-0064)"
+# freshclam would fetch some 300 MB of signatures: it sleeps instead, and
+# one test signature (the EICAR test file by MD5) is all ClamAV knows.
+x mkdir -p /etc/systemd/system/clamav-freshclam.service.d
+x sh -c 'printf "[Service]\nExecStart=\nExecStart=/bin/sleep infinity\n" >/etc/systemd/system/clamav-freshclam.service.d/90-test.conf'
+x systemctl daemon-reload
+jget() { x cat /tmp/api.out | python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
+[ "$(api PUT /api/v1/malware-scan '{"on":true}')" = 202 ] || fail "switch the scan on: $(x cat /tmp/api.out)"
+state=
+for _ in $(seq 1 120); do
+  [ "$(api GET /api/v1/malware-scan)" = 200 ] || fail "engine state: $(x cat /tmp/api.out)"
+  state=$(jget 'd["state"]')
+  case "$state" in on|failed) break;; esac
+  sleep 2
+done
+[ "$state" = on ] || fail "ClamAV not on ($state): $(x cat /tmp/api.out)"
+x dpkg-query -W clamav >/dev/null || fail "clamav not installed"
+x dpkg-query -W clamav-daemon >/dev/null 2>&1 && fail "clamav-daemon installed in the base mode"
+x sh -c 'echo "44d88612fea8a8f36de82e1278abb02f:68:Hostashi.Test.EICAR" >/var/lib/clamav/hostashi-test.hdb; chown clamav:clamav /var/lib/clamav/hostashi-test.hdb'
+# The EICAR test file, built here so no file in the repository is flagged.
+# shellcheck disable=SC2016 # the inner shell expands nothing either
+x sh -c 'printf "%s%s" "X5O!P%@AP[4\PZX54(P^)7CC)7}\$EICAR-STANDARD-" "ANTIVIRUS-TEST-FILE!\$H+H*" >/home/blog/htdocs/eicar.com; chown blog:blog /home/blog/htdocs/eicar.com'
+[ "$(x md5sum /home/blog/htdocs/eicar.com | cut -d' ' -f1)" = 44d88612fea8a8f36de82e1278abb02f ] || fail "EICAR file differs"
+[ "$(api POST /api/v1/sites/blog/malware-scans)" = 202 ] || fail "start scan: $(x cat /tmp/api.out)"
+run=
+for _ in $(seq 1 60); do
+  [ "$(api GET /api/v1/sites/blog/malware-scan)" = 200 ] || fail "site scan: $(x cat /tmp/api.out)"
+  run=$(jget 'd["runs"][0]["state"]')
+  case "$run" in succeeded|failed) break;; esac
+  sleep 2
+done
+[ "$run" = succeeded ] || fail "scan did not succeed ($run): $(x cat /tmp/api.out)"
+# ClamAV names signatures of its own databases NAME.UNOFFICIAL.
+[ "$(jget '[f["path"]+" "+f["signature"].split(".UNOFFICIAL")[0]+" "+f["state"] for f in d["findings"]]')" = "['htdocs/eicar.com Hostashi.Test.EICAR open']" ] ||
+  fail "findings: $(x cat /tmp/api.out)"
+fid=$(jget 'd["findings"][0]["id"]')
+[ "$(x stat -c %U /var/log/hostashi/scan/blog.log)" = root ] || fail "scan log not root's"
+[ "$(api POST "/api/v1/sites/blog/malware-findings/$fid/quarantine")" = 200 ] || fail "quarantine: $(x cat /tmp/api.out)"
+x test ! -e /home/blog/htdocs/eicar.com || fail "quarantined file still in the site"
+[ "$(x find /var/lib/hostashi-agent/quarantine/blog -name '*.bin' | wc -l)" = 1 ] || fail "nothing in the quarantine"
+[ "$(api POST "/api/v1/sites/blog/malware-findings/$fid/restore")" = 200 ] || fail "restore: $(x cat /tmp/api.out)"
+[ "$(x stat -c '%U:%G' /home/blog/htdocs/eicar.com)" = blog:blog ] || fail "restored file has the wrong owner"
+x rm -f /home/blog/htdocs/eicar.com
+
+step "malware scan: real-time mode reports a new file (ADR-0064)"
+# clamd starts only once the official signatures are there; the test has
+# its one test signature, so a test drop-in drops that condition.
+x mkdir -p /etc/systemd/system/clamav-daemon.service.d
+x sh -c 'printf "[Unit]\nConditionPathExistsGlob=\nConditionPathExists=/etc/hostashi/clamav/clamd.conf\n" >/etc/systemd/system/clamav-daemon.service.d/90-test.conf'
+[ "$(api PUT /api/v1/malware-scan '{"realtime":true}')" = 202 ] || fail "switch real-time on: $(x cat /tmp/api.out)"
+for _ in $(seq 1 120); do
+  [ "$(api GET /api/v1/malware-scan)" = 200 ] || fail "engine state: $(x cat /tmp/api.out)"
+  [ "$(jget 'd["realtimeActive"]')" = True ] && break
+  [ "$(jget 'd["realtime"]')" = failed ] && break
+  sleep 2
+done
+[ "$(jget 'd["realtimeActive"]')" = True ] || fail "clamonacc not running: $(x cat /tmp/api.out); $(x journalctl --no-pager -n 30 -u clamav-daemon -u clamav-clamonacc)"
+x grep -q '^OnAccessIncludePath /home/blog$' /etc/hostashi/clamav/clamd.conf || fail "blog not watched"
+# The unit systemd runs, after all drop-ins, must not move files.
+onacc_exec="$(x systemctl show -p ExecStart --value clamav-clamonacc.service)"
+case "$onacc_exec" in *--fdpass*) ;; *) fail "clamonacc does not run from the Hostashi drop-in: $onacc_exec";; esac
+case "$onacc_exec" in *--move*) fail "clamonacc would move files: $onacc_exec";; esac
+# shellcheck disable=SC2016 # the inner shell expands nothing either
+x sh -c 'printf "%s%s" "X5O!P%@AP[4\PZX54(P^)7CC)7}\$EICAR-STANDARD-" "ANTIVIRUS-TEST-FILE!\$H+H*" >/home/blog/htdocs/new.com; chown blog:blog /home/blog/htdocs/new.com'
+found=
+for _ in $(seq 1 60); do
+  [ "$(api GET /api/v1/sites/blog/malware-scan)" = 200 ] || fail "site scan: $(x cat /tmp/api.out)"
+  found=$(jget '[f["state"] for f in d["findings"] if f["path"] == "htdocs/new.com"]')
+  [ "$found" = "['open']" ] && break
+  sleep 2
+done
+[ "$found" = "['open']" ] || fail "real-time mode did not report the new file: $(x cat /tmp/api.out); $(x cat /var/log/hostashi/scan/realtime.log)"
+[ "$(jget 'd["runs"][0]["source"]')" = realtime ] || fail "no real-time run: $(x cat /tmp/api.out)"
+x test -e /home/blog/htdocs/new.com || fail "the real-time mode moved the file"
+# A scan now goes through clamd with clamdscan.
+[ "$(api POST /api/v1/sites/blog/malware-scans)" = 202 ] || fail "start scan: $(x cat /tmp/api.out)"
+for _ in $(seq 1 60); do
+  [ "$(api GET /api/v1/sites/blog/malware-scan)" = 200 ] || fail "site scan: $(x cat /tmp/api.out)"
+  run=$(jget '[r["state"] for r in d["runs"] if r["source"] == "panel"][0]')
+  case "$run" in succeeded|failed) break;; esac
+  sleep 2
+done
+[ "$run" = succeeded ] || fail "clamdscan run did not succeed ($run): $(x cat /tmp/api.out)"
+x grep -q 'clamdscan' /etc/systemd/system/hostashi-scan@blog.service.d/60-hostashi-scan.conf || fail "scan did not use clamdscan"
+x rm -f /home/blog/htdocs/new.com /etc/systemd/system/clamav-daemon.service.d/90-test.conf
+[ "$(api PUT /api/v1/malware-scan '{"on":false}')" = 202 ] || fail "switch the scan off: $(x cat /tmp/api.out)"
+for _ in $(seq 1 120); do
+  [ "$(api GET /api/v1/malware-scan)" = 200 ] || fail "engine state: $(x cat /tmp/api.out)"
+  state=$(jget 'd["state"]')
+  case "$state" in off|failed) break;; esac
+  sleep 2
+done
+[ "$state" = off ] || fail "ClamAV not off ($state): $(x cat /tmp/api.out)"
+# shellcheck disable=SC2016 # a dpkg-query format, not a shell expansion
+! x dpkg-query -W -f='${Status}' clamav 2>/dev/null | grep 'install ok installed' >/dev/null || fail "clamav still installed"
+# shellcheck disable=SC2016 # a dpkg-query format, not a shell expansion
+! x dpkg-query -W -f='${Status}' clamav-daemon 2>/dev/null | grep 'install ok installed' >/dev/null || fail "clamav-daemon still installed"
+x test ! -e /etc/systemd/system/clamav-clamonacc.service.d/50-hostashi.conf || fail "clamonacc drop-in left"
+x rm -rf /etc/systemd/system/clamav-freshclam.service.d
+x systemctl daemon-reload
 
 step "changed setting is applied and the panel restarts"
 out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com)
@@ -581,7 +695,7 @@ x test ! -e /etc/systemd/system/hostashi-files@blog.service.d || fail "file mana
 x test ! -e /run/hostashi-files/blog.sock || fail "file manager socket left"
 
 step "fail2ban reads the panel's failed logins"
-for j in sshd hostashi-panel recidive; do
+for j in sshd hostashi-panel hostashi-site-auth recidive; do
   x fail2ban-client status "$j" >/dev/null || fail "fail2ban jail $j is not running"
 done
 expect_mode /etc/fail2ban/jail.d/hostashi.conf "644 root:root"

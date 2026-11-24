@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"runtime"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/auth"
@@ -32,33 +33,58 @@ type siteUsageJSON struct {
 	Site   string             `json:"site"`
 	Range  string             `json:"range"`
 	Step   int                `json:"step"`
+	CPUs   int                `json:"cpus"`  // cpu is percent of one core; this many make the server
+	Cores  float64            `json:"cores"` // cores the site may use: its CPU limit, else cpus
 	Points []store.SiteSample `json:"points"`
 }
 
 type usageRankingJSON struct {
-	Range string            `json:"range"`
-	Sort  string            `json:"sort"`
-	Sites []store.SiteTotal `json:"sites"`
+	Range string         `json:"range"`
+	Sort  string         `json:"sort"`
+	CPUs  int            `json:"cpus"` // as in siteUsageJSON
+	Sites []usageRowJSON `json:"sites"`
 }
 
-// siteExists answers 404 for a site that is not in the store.
-type siteExists func(ctx context.Context, name string) (bool, error)
+// usageRowJSON is one site of the ranking with the cores it may use.
+type usageRowJSON struct {
+	store.SiteTotal
 
-// hostingSiteExists is siteExists over the hosting service.
-func hostingSiteExists(svc *hosting.Service) siteExists {
-	return func(ctx context.Context, name string) (bool, error) {
-		_, err := svc.Get(ctx, name)
+	Cores float64 `json:"cores"` // as in siteUsageJSON
+}
+
+// siteCPU returns a site's hard CPU limit in percent of one core (0: none),
+// and false for a site that is not in the store.
+type siteCPU func(ctx context.Context, name string) (quota int64, ok bool, err error)
+
+// hostingSiteCPU is siteCPU over the hosting service.
+func hostingSiteCPU(svc *hosting.Service) siteCPU {
+	return func(ctx context.Context, name string) (int64, bool, error) {
+		l, err := svc.SiteLimits(ctx, name)
 		if errors.Is(err, hosting.ErrNotFound) {
-			return false, nil
+			return 0, false, nil
 		}
 
-		return err == nil, err
+		if err != nil {
+			return 0, false, err
+		}
+
+		return l.Limits.CPUQuotaPercent, true, nil
 	}
+}
+
+// coresFor is how many cores a site may use: its CPU limit when that is
+// below the server's cores (ADR-0015), else all of them.
+func coresFor(quota int64, cpus int) float64 {
+	if quota > 0 && float64(quota)/100 < float64(cpus) {
+		return float64(quota) / 100
+	}
+
+	return float64(cpus)
 }
 
 // registerUsage adds the usage routes (ADR-0063): one site's points for
 // everyone who sees the site, the ranking of all sites for admins.
-func registerUsage(mux *routeMux, a authn, u SiteUsage, exists siteExists, log *slog.Logger) {
+func registerUsage(mux *routeMux, a authn, u SiteUsage, cpuOf siteCPU, log *slog.Logger) {
 	rangeOf := func(r *http.Request) string {
 		if rng := r.URL.Query().Get("range"); rng != "" {
 			return rng
@@ -73,7 +99,7 @@ func registerUsage(mux *routeMux, a authn, u SiteUsage, exists siteExists, log *
 	}, a.allow("sites.usage:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		site := r.PathValue("name")
 
-		ok, err := exists(r.Context(), site)
+		quota, ok, err := cpuOf(r.Context(), site)
 		if err != nil {
 			log.ErrorContext(r.Context(), "site usage: look up site", "err", err)
 			writeError(w, http.StatusInternalServerError, "internal", "internal error")
@@ -103,8 +129,10 @@ func registerUsage(mux *routeMux, a authn, u SiteUsage, exists siteExists, log *
 			return
 		}
 
+		cpus := runtime.NumCPU()
+
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusOK, siteUsageJSON{Site: site, Range: rng, Step: step, Points: pts})
+		writeJSON(w, http.StatusOK, siteUsageJSON{Site: site, Range: rng, Step: step, CPUs: cpus, Cores: coresFor(quota, cpus), Points: pts})
 	}))
 
 	mux.Op("GET /api/v1/usage/sites", openapi.Operation{
@@ -136,7 +164,23 @@ func registerUsage(mux *routeMux, a authn, u SiteUsage, exists siteExists, log *
 			return
 		}
 
+		cpus := runtime.NumCPU()
+		rows := make([]usageRowJSON, 0, len(list))
+
+		for _, t := range list {
+			// A site gone since the sample counts with no limit.
+			quota, _, err := cpuOf(r.Context(), t.Site)
+			if err != nil {
+				log.ErrorContext(r.Context(), "usage ranking: look up limits", "site", t.Site, "err", err)
+				writeError(w, http.StatusInternalServerError, "internal", "internal error")
+
+				return
+			}
+
+			rows = append(rows, usageRowJSON{SiteTotal: t, Cores: coresFor(quota, cpus)})
+		}
+
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusOK, usageRankingJSON{Range: rng, Sort: by, Sites: list})
+		writeJSON(w, http.StatusOK, usageRankingJSON{Range: rng, Sort: by, CPUs: cpus, Sites: rows})
 	}))
 }
