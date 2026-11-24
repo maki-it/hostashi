@@ -197,10 +197,12 @@ func AuthFileName(s Site) string {
 }
 
 // AuthFiles writes and removes the password files below Dir. Dir is
-// root:GID 0750 and each file root:GID 0640: nginx's workers (group GID)
-// read them on every protected request, site users cannot.
+// UID:GID 0750 and each file UID:GID 0640: nginx's workers (group GID)
+// read them on every protected request, site users cannot. UID is 0 (root)
+// on a server; tests that do not run as root pass their own.
 type AuthFiles struct {
 	Dir string
+	UID int
 	GID int
 }
 
@@ -211,7 +213,7 @@ func (a AuthFiles) Write(sites []Site) error {
 		return fmt.Errorf("web: password files: %w", err)
 	}
 
-	if err := os.Chown(a.Dir, 0, a.GID); err != nil {
+	if err := os.Chown(a.Dir, a.UID, a.GID); err != nil {
 		return fmt.Errorf("web: password files: %w", err)
 	}
 
@@ -248,7 +250,7 @@ func (a AuthFiles) write(p string, b []byte) error {
 
 	_, werr := f.Write(b)
 	if werr == nil {
-		werr = f.Chown(0, a.GID)
+		werr = f.Chown(a.UID, a.GID)
 	}
 
 	if werr == nil {

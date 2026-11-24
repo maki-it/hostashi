@@ -36,7 +36,7 @@ func TestAccessFor(t *testing.T) {
 		t.Errorf("IP rule: %v %+v", err, site.Access)
 	}
 
-	h.auth = &web.AuthFiles{Dir: filepath.Join(t.TempDir(), "web-auth"), GID: os.Getgid()}
+	h.auth = &web.AuthFiles{Dir: filepath.Join(t.TempDir(), "web-auth"), UID: os.Getuid(), GID: os.Getgid()}
 	h.log = slog.New(slog.DiscardHandler)
 
 	site = web.Site{User: "blog"}

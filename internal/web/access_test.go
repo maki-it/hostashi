@@ -153,7 +153,7 @@ func TestAuthFileContentAndName(t *testing.T) {
 func TestAuthFilesWriteAndPrune(t *testing.T) {
 	users := accessUsers(t)
 	dir := filepath.Join(t.TempDir(), "web-auth")
-	a := AuthFiles{Dir: dir, GID: os.Getgid()}
+	a := AuthFiles{Dir: dir, UID: os.Getuid(), GID: os.Getgid()}
 
 	one := Site{User: "one", Access: agentapi.WebAccess{Auth: &agentapi.WebAuth{Users: users}}}
 	two := Site{User: "two", Access: agentapi.WebAccess{Auth: &agentapi.WebAuth{Users: users}}}
@@ -214,7 +214,7 @@ func TestAccessServed(t *testing.T) {
 	authDir := filepath.Join(e.dir, "web-auth")
 	e.r.Driver.AuthDir = authDir
 	e.r.Driver.SiteLogDir = filepath.Join(e.dir, "logs")
-	files := AuthFiles{Dir: authDir, GID: os.Getgid()}
+	files := AuthFiles{Dir: authDir, UID: os.Getuid(), GID: os.Getgid()}
 
 	if err := e.r.Driver.PrepareLogs(map[string]bool{"wp": true, "blocked": true, "only": true, "px": true}); err != nil {
 		t.Fatal(err)
@@ -354,7 +354,7 @@ func TestAccessServedFastCGI(t *testing.T) {
 	php.Access = agentapi.WebAccess{Auth: &agentapi.WebAuth{Paths: []string{"/admin.php"}, Users: accessUsers(t)}}
 
 	d := Desired{Sites: []Site{php}}
-	if err := (AuthFiles{Dir: authDir, GID: os.Getgid()}).Write(d.Sites); err != nil {
+	if err := (AuthFiles{Dir: authDir, UID: os.Getuid(), GID: os.Getgid()}).Write(d.Sites); err != nil {
 		t.Fatal(err)
 	}
 
