@@ -67,6 +67,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0061 | Site type Python | Accepted on 2026-11-22 ([adr/0061](adr/0061-site-type-python.md)) | No |
 | 0062 | Git deploy per site | Accepted on 2026-11-24 ([adr/0062](adr/0062-git-deploy-per-site.md)) | No |
 | 0063 | Resource usage per site | Accepted on 2026-11-24 ([adr/0063](adr/0063-resource-usage-per-site.md)) | No |
+| 0065 | www/non-www redirect per site | Accepted on 2026-11-24 ([adr/0065](adr/0065-www-redirect-per-site.md)) | No |
 | 0066 | Password protection and IP rules per site | Accepted on 2026-11-24 ([adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md)) | No |
 
 ---
@@ -434,6 +435,10 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0063 Resource usage per site
 
 **Full text (status Accepted, 2026-11-24, by Kim):** [adr/0063](adr/0063-resource-usage-per-site.md). Summary: Kim wants CPU, memory and network per site to see which site uses the most. Recommended: the agent reads CPU, memory working set, tasks and disk I/O from each site's slice and its SSH user slice (read-only op `sites.stats`, `IOAccounting=yes` on the slices); web traffic (bytes in and out, requests) from a small extra nginx log per site without IPs or paths; the panel samples every 15 s and keeps tiers like the server dashboard (new table `site_samples`). UI: a "Sites by usage" ranking for admins and a "Usage" tab per site. Outgoing traffic of the site's processes through nftables counters comes later in an addendum. cgroups have no network counters, and SQL load in the shared database server is not counted per site. Decided by Kim on 2026-11-24: web traffic now, outgoing traffic later.
+
+## ADR-0065 www/non-www redirect per site
+
+**Full text (status Accepted, 2026-11-24, by Kim):** [adr/0065](adr/0065-www-redirect-per-site.md). Summary: a per-site setting `wwwRedirect` (`off`, `to-www`, `to-non-www`) redirects with 301 between `d` and `www.d` when both are domains of the site; domains without a partner are served as before. The partner is never added implicitly, so domain checks and the certificate stay unchanged; the panel offers a button to add it. nginx gets an extra server block per redirected name with the site's certificate, ACME location, logs and headers. Not for redirect sites. The CloudPanel import maps `www` redirect hosts to the setting. Decided by Kim on 2026-11-24: both names listed explicitly.
 
 ## ADR-0066 Password protection and IP rules per site
 
