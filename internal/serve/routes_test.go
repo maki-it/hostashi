@@ -242,6 +242,16 @@ var routeAccess = map[string]authz.Action{
 	"POST /api/v1/sites/{name}/deploys/{id}/rollback": "sites.deploy",
 	"GET /api/v1/sites/{name}/deploys/{id}/log":       "sites.deploy",
 
+	"GET /api/v1/malware-scan":                                   "malware.engine:read",
+	"PUT /api/v1/malware-scan":                                   "malware.engine:write",
+	"GET /api/v1/sites/{name}/malware-scan":                      "sites.malware:read",
+	"PUT /api/v1/sites/{name}/malware-scan":                      "sites.malware:manage",
+	"POST /api/v1/sites/{name}/malware-scans":                    "sites.malware:scan",
+	"POST /api/v1/sites/{name}/malware-findings/{id}/quarantine": "sites.malware:scan",
+	"POST /api/v1/sites/{name}/malware-findings/{id}/restore":    "sites.malware:manage",
+	"POST /api/v1/sites/{name}/malware-findings/{id}/ignore":     "sites.malware:manage",
+	"POST /api/v1/sites/{name}/malware-findings/{id}/reopen":     "sites.malware:manage",
+
 	"GET /api/v1/ssh/host-keys":                 "ssh.hostkeys:read",
 	"GET /api/v1/sites/{name}/ssh-keys":         "ssh:read",
 	"GET /api/v1/sites/{name}/ssh-keys/{id}":    "ssh:read",

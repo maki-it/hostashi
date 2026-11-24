@@ -5775,6 +5775,143 @@
         ],
         "type": "object"
       },
+      "ScanEngine": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "signatures": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "signatures",
+          "state",
+          "version"
+        ],
+        "type": "object"
+      },
+      "ScanEngineRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ScanFinding": {
+        "additionalProperties": false,
+        "properties": {
+          "decidedAt": {
+            "type": "string"
+          },
+          "firstSeen": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "lastSeen": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "signature": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "decidedAt",
+          "firstSeen",
+          "id",
+          "lastSeen",
+          "path",
+          "sha256",
+          "signature",
+          "size",
+          "state"
+        ],
+        "type": "object"
+      },
+      "ScanRun": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "dropped": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string"
+          },
+          "found": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "newFound": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAt",
+          "dropped",
+          "error",
+          "finishedAt",
+          "found",
+          "id",
+          "newFound",
+          "source",
+          "startedAt",
+          "state"
+        ],
+        "type": "object"
+      },
+      "ScanScheduleRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "schedule": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "ScopeInfo": {
         "additionalProperties": false,
         "properties": {
@@ -6544,6 +6681,46 @@
           "ioWrite",
           "mem",
           "tasks"
+        ],
+        "type": "object"
+      },
+      "SiteScan": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ScanFinding"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "nextScheduled": {
+            "type": "string"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/ScanRun"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "schedule": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "engine",
+          "findings",
+          "nextScheduled",
+          "runs",
+          "schedule"
         ],
         "type": "object"
       },
@@ -11330,6 +11507,100 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "limits.presets:write"
+      }
+    },
+    "/api/v1/malware-scan": {
+      "get": {
+        "operationId": "getMalwareScan",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanEngine"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:read"
+            ]
+          }
+        ],
+        "summary": "ClamAV on the server: installed or not, its version and how fresh its signatures are",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "malware.engine:read"
+      },
+      "put": {
+        "operationId": "setMalwareScan",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanEngineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanEngine"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware.engine:write"
+            ]
+          }
+        ],
+        "summary": "Install or remove ClamAV for the malware scan; the result follows in getMalwareScan",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "malware.engine:write"
       }
     },
     "/api/v1/me": {
@@ -18596,6 +18867,410 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites.maintenance:write"
+      }
+    },
+    "/api/v1/sites/{name}/malware-findings/{id}/ignore": {
+      "post": {
+        "operationId": "ignoreSiteMalwareFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanFinding"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Mark a flagged file as a false positive: the same content with the same signature is not reported again",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:manage"
+      }
+    },
+    "/api/v1/sites/{name}/malware-findings/{id}/quarantine": {
+      "post": {
+        "operationId": "quarantineSiteMalwareFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanFinding"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Move a flagged file into the quarantine, only if it is unchanged since the scan",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:scan"
+      }
+    },
+    "/api/v1/sites/{name}/malware-findings/{id}/reopen": {
+      "post": {
+        "operationId": "reopenSiteMalwareFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanFinding"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Report an ignored file again",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:manage"
+      }
+    },
+    "/api/v1/sites/{name}/malware-findings/{id}/restore": {
+      "post": {
+        "operationId": "restoreSiteMalwareFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanFinding"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Put a quarantined file back where it was",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:manage"
+      }
+    },
+    "/api/v1/sites/{name}/malware-scan": {
+      "get": {
+        "operationId": "getSiteMalwareScan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteScan"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:read"
+            ]
+          }
+        ],
+        "summary": "The malware scan of a site: schedule, newest runs and flagged files",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:read"
+      },
+      "put": {
+        "operationId": "setSiteMalwareSchedule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Scan a site daily, weekly or only on request",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:manage"
+      }
+    },
+    "/api/v1/sites/{name}/malware-scans": {
+      "post": {
+        "operationId": "startSiteMalwareScan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanRun"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Scan a site now; it waits while another site is scanned",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:scan"
       }
     },
     "/api/v1/sites/{name}/node": {
