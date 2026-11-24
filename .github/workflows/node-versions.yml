@@ -115,6 +115,6 @@ jobs:
             gh pr edit "$pr" --repo "$REPO" --title "$title" --body-file "$RUNNER_TEMP/body.md"
           fi
 
-          for wf in go.yml web.yml reuse.yml licenses.yml; do
+          for wf in go.yml web.yml licenses.yml; do
             gh workflow run "$wf" --repo "$REPO" --ref "$BRANCH"
           done
