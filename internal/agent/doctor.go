@@ -109,6 +109,7 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	}
 
 	out = append(out, poolCheck...)
+	out = append(out, sys.FstabDevices())
 
 	disk := d.env.Disk
 	if disk == nil {

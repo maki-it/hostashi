@@ -30,6 +30,7 @@ const titles: Record<string, string> = {
   "system.proc": "Process privacy",
   "system.pool": "Home directories",
   "system.pool.volume": "Storage pools",
+  "system.fstab": "Mount table",
   "service.panel": "Panel",
   "panel.mail": "Email",
   "service.nginx": "Web server",
