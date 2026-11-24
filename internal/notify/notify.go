@@ -31,15 +31,17 @@ const (
 	// Deploys is ADR-0062: a Git deploy of a site failed. It is opt-in for
 	// every role.
 	Deploys Category = "deploys"
+	// Malware is ADR-0064: a malware scan of a site flagged new files.
+	Malware Category = "malware"
 )
 
 // Categories lists every category in the order the page shows them.
-var Categories = []Category{Backups, Certificates, Doctor, Services, Deploys, PHP, Disk}
+var Categories = []Category{Backups, Certificates, Doctor, Services, Malware, Deploys, PHP, Disk}
 
 // titles name a category in the footer of an email.
 var titles = map[Category]string{
 	Backups: "backups", Certificates: "certificates", Doctor: "server checks", PHP: "PHP versions", Disk: "disk space",
-	Services: "services", Deploys: "deploys",
+	Services: "services", Deploys: "deploys", Malware: "malware scan",
 }
 
 // Known reports whether c is a category.
@@ -56,7 +58,7 @@ func Visible(role string, c Category) bool {
 	switch c {
 	case Backups, Doctor:
 		return authz.Role(role) == authz.RoleAdmin
-	case Certificates, PHP, Disk, Services, Deploys:
+	case Certificates, PHP, Disk, Services, Deploys, Malware:
 		return true
 	default:
 		return false

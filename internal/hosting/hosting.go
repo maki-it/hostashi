@@ -169,6 +169,8 @@ type Service struct {
 	gitBox     *secrets.Box  // nil: no Git deploy (ADR-0062)
 	deploys    DeployAgent   // nil: no deploy runs (ADR-0062)
 	deployKick chan struct{} // wakes RunDeploys
+	scans      ScanAgent     // nil: no malware scans (ADR-0064)
+	scanKick   chan struct{} // wakes RunScans
 	// deployAgain holds the sites whose webhook fired while a run was
 	// active; RunDeploys starts one more run when it ends. In memory only.
 	deployAgainMu sync.Mutex
@@ -206,6 +208,8 @@ type Service struct {
 	onApply func(ok bool, generation int) // nil: nobody listens
 	// onDeployFailed: see ObserveFailedDeploys; nil: nobody listens.
 	onDeployFailed func(ctx context.Context, site string, d store.SiteDeploy)
+	// onMalware: see ObserveMalware; nil: nobody listens.
+	onMalware func(ctx context.Context, site string, run store.ScanRun, found []store.ScanFinding)
 
 	// localAddrs are the server's own addresses, which no trusted proxy
 	// range may hold (ADR-0059); nil reads the interfaces.

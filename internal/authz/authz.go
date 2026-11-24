@@ -101,6 +101,10 @@ var table = map[Action]Rule{
 	"node:remove":          server("node:install"),
 	"python:install":       server("python:install"),
 	"python:remove":        server("python:install"),
+	// ClamAV on the server (ADR-0064): apt as root with a fixed package
+	// list.
+	"malware.engine:read":  server("malware:read"),
+	"malware.engine:write": server("malware.engine:write"),
 	"services:read":        server("services:read"),
 	// All sites by their usage (ADR-0063): admins only, a site user never
 	// sees other sites' numbers.
@@ -208,6 +212,13 @@ var table = map[Action]Rule{
 	// The file manager writes as the site user (ADR-0040).
 	"files:read":  ownSite("files:read"),
 	"files:write": ownSite("files:write"),
+	// The malware scan of a site (ADR-0064): everyone with the site sees
+	// the findings, starts a scan and quarantines a file; the schedule,
+	// false positives and putting a file back stay with admins and
+	// managers.
+	"sites.malware:read":   ownSite("malware:read"),
+	"sites.malware:scan":   ownSite("malware:write"),
+	"sites.malware:manage": mgrSite("malware:write"),
 	// The site's own logs (ADR-0053); they hold its visitors' addresses.
 	"sites.logs:read": ownSite("logs:read"),
 }

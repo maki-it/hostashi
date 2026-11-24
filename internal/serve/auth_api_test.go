@@ -140,6 +140,10 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 			deps.Sites.EnableDeploys(da)
 		}
 
+		if sa, ok := ag.(hosting.ScanAgent); ok {
+			deps.Sites.EnableScans(sa)
+		}
+
 		deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), nil)
 		deps.CloudPanel.Connect(siteCreator(deps.Sites, nil), imports)
 		deps.CloudPanel.ConnectPools(cpmigrate.PoolLister(pl.list))
