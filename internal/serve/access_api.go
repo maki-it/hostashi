@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -109,9 +110,9 @@ type accessPasswordJSON struct {
 func accessFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 	switch {
 	case errors.Is(err, agentapi.ErrAccessConflict):
-		writeError(w, http.StatusUnprocessableEntity, "access_conflict", err.Error())
+		writeError(w, http.StatusUnprocessableEntity, "access_conflict", reason(err, agentapi.ErrAccessConflict))
 	case errors.Is(err, agentapi.ErrAccessRejected):
-		writeError(w, http.StatusUnprocessableEntity, "access_rejected", err.Error())
+		writeError(w, http.StatusUnprocessableEntity, "access_rejected", reason(err, agentapi.ErrAccessRejected))
 	case errors.Is(err, hosting.ErrAuthUserExists):
 		writeError(w, http.StatusConflict, "user_exists", "the site already has this user")
 	case errors.Is(err, hosting.ErrAuthUserNotFound):
@@ -119,6 +120,16 @@ func accessFail(log *slog.Logger, w http.ResponseWriter, err error, what string)
 	default:
 		siteFail(log, w, err, what)
 	}
+}
+
+// reason is the part of err after kind, the text a person can act on.
+func reason(err, kind error) string {
+	msg, k := err.Error(), kind.Error()+": "
+	if i := strings.Index(msg, k); i >= 0 {
+		return msg[i+len(k):]
+	}
+
+	return msg
 }
 
 func registerAccess(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger) {
