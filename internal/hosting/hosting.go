@@ -931,6 +931,16 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		return err
 	}
 
+	access, err := s.st.AllSiteAccess(ctx)
+	if err != nil {
+		return err
+	}
+
+	authUsers, err := s.st.AllAuthUsers(ctx)
+	if err != nil {
+		return err
+	}
+
 	workers, err := s.st.PHPWorkers(ctx)
 	if err != nil {
 		return err
@@ -956,6 +966,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 			ws := agentapi.WebSite{
 				User: site.Name, Domains: site.Domains, PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
 				Headers: webHeaders(headers, site), RealIP: webRealIP(realips, site),
+				Access: webAccess(access, authUsers, site),
 			}
 
 			// A redirect site sends every name to its target anyway; it
