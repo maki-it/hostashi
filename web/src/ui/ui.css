@@ -1263,6 +1263,25 @@ a.ui-btn {
 .ui-meter-err .ui-meter-fill {
   background: var(--err);
 }
+/* A value with a small bar relative to the largest in its column (ADR-0063). */
+.ui-usage-cell {
+  display: grid;
+  gap: 4px;
+  min-width: 120px;
+}
+.ui-usage-bar {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--sunken);
+  overflow: hidden;
+}
+.ui-usage-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--series-1);
+}
 .ui-chart-title {
   margin: 0;
   font-size: 14px;

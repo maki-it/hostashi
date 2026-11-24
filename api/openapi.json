@@ -6303,56 +6303,6 @@
         ],
         "type": "object"
       },
-      "SiteTotal": {
-        "additionalProperties": false,
-        "properties": {
-          "cpuAvg": {
-            "type": "number"
-          },
-          "cpuMax": {
-            "type": "number"
-          },
-          "httpInBytes": {
-            "type": "number"
-          },
-          "httpOutBytes": {
-            "type": "number"
-          },
-          "httpRequests": {
-            "type": "number"
-          },
-          "ioReadBytes": {
-            "type": "number"
-          },
-          "ioWriteBytes": {
-            "type": "number"
-          },
-          "memAvg": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "memMax": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "site": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "cpuAvg",
-          "cpuMax",
-          "httpInBytes",
-          "httpOutBytes",
-          "httpRequests",
-          "ioReadBytes",
-          "ioWriteBytes",
-          "memAvg",
-          "memMax",
-          "site"
-        ],
-        "type": "object"
-      },
       "SiteTypeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -6418,6 +6368,12 @@
       "SiteUsage": {
         "additionalProperties": false,
         "properties": {
+          "cores": {
+            "type": "number"
+          },
+          "cpus": {
+            "type": "integer"
+          },
           "points": {
             "items": {
               "$ref": "#/components/schemas/SiteSample"
@@ -6438,6 +6394,8 @@
           }
         },
         "required": [
+          "cores",
+          "cpus",
           "points",
           "range",
           "site",
@@ -7220,12 +7178,15 @@
       "UsageRanking": {
         "additionalProperties": false,
         "properties": {
+          "cpus": {
+            "type": "integer"
+          },
           "range": {
             "type": "string"
           },
           "sites": {
             "items": {
-              "$ref": "#/components/schemas/SiteTotal"
+              "$ref": "#/components/schemas/UsageRow"
             },
             "type": [
               "array",
@@ -7237,9 +7198,64 @@
           }
         },
         "required": [
+          "cpus",
           "range",
           "sites",
           "sort"
+        ],
+        "type": "object"
+      },
+      "UsageRow": {
+        "additionalProperties": false,
+        "properties": {
+          "cores": {
+            "type": "number"
+          },
+          "cpuAvg": {
+            "type": "number"
+          },
+          "cpuMax": {
+            "type": "number"
+          },
+          "httpInBytes": {
+            "type": "number"
+          },
+          "httpOutBytes": {
+            "type": "number"
+          },
+          "httpRequests": {
+            "type": "number"
+          },
+          "ioReadBytes": {
+            "type": "number"
+          },
+          "ioWriteBytes": {
+            "type": "number"
+          },
+          "memAvg": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "memMax": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "site": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cores",
+          "cpuAvg",
+          "cpuMax",
+          "httpInBytes",
+          "httpOutBytes",
+          "httpRequests",
+          "ioReadBytes",
+          "ioWriteBytes",
+          "memAvg",
+          "memMax",
+          "site"
         ],
         "type": "object"
       },

@@ -46,6 +46,7 @@ import { RealIPCard } from "./RealIP";
 import { SecurityHeadersCard } from "./SecurityHeaders";
 import { SSHSettings } from "./SSH";
 import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
+import { SiteUsageCard } from "./Usage";
 
 // The tabs that exist today (ADR-0037). Databases and backups per site
 // come with their features; their addresses show the overview.
@@ -59,6 +60,7 @@ const tabs: { id: SiteTab; label: string }[] = [
   { id: "cron", label: "Cron" },
   { id: "ssh", label: "SSH & SFTP" },
   { id: "limits", label: "Limits" },
+  { id: "usage", label: "Usage" },
   { id: "logs", label: "Logs" },
   { id: "nginx", label: "nginx" },
 ];
@@ -148,6 +150,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
         {active === "cron" && <CronSettings site={site} />}
         {active === "ssh" && <SSHSettings site={site} />}
         {active === "limits" && <LimitSettings site={site} />}
+        {active === "usage" && <SiteUsageCard site={site.name} />}
         {active === "nginx" && <SnippetSettings site={site} />}
       </div>
     </>

@@ -34,6 +34,7 @@
 - [Firewall](Firewall.md)
 - [Moving from CloudPanel](CloudPanel-import.md)
 - [Services and dashboard](Services-and-dashboard.md)
+- [Site usage](Site-usage.md)
 - [System settings](System-settings.md)
 - [Email notifications](Email-notifications.md)
 - [Audit log](Audit-log.md)

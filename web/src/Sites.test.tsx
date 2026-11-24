@@ -465,7 +465,7 @@ describe("redirect sites", () => {
     });
     render(<PageHarness />);
     const tabs = await screen.findByRole("tablist", { name: "blog" });
-    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "Web", "Logs"]);
+    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "Web", "Usage", "Logs"]);
     expect(within(screen.getByLabelText("Details of blog")).getByText("https://new.example.com")).toBeInTheDocument();
 
     await user.click(within(tabs).getByRole("tab", { name: "Web" }));
@@ -540,7 +540,7 @@ describe("reverse proxy sites", () => {
     });
     render(<PageHarness />);
     const tabs = await screen.findByRole("tablist", { name: "blog" });
-    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "Web", "Logs"]);
+    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "Web", "Usage", "Logs"]);
     expect(within(screen.getByLabelText("Details of blog")).getByText("http://10.0.0.5:8080")).toBeInTheDocument();
     // The type sits next to the status and HTTPS in the page head.
     expect(within(screen.getByRole("heading", { name: "blog", level: 1 }).parentElement!).getByText("Reverse proxy")).toBeInTheDocument();
@@ -582,6 +582,7 @@ describe("SitePage", () => {
       "Cron",
       "SSH & SFTP",
       "Limits",
+      "Usage",
       "Logs",
       "nginx",
     ]);
