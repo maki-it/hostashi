@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect, useState } from "react";
 import { describe, expect, it } from "vitest";
 import { Databases } from "./Databases";
-import { defaultDumpPath, dumpFormats, formatOf, nameProblem, pathProblem, withFormat } from "./databases";
+import { defaultDumpPath, dumpFormats, formatOf, nameProblem, pathProblem, uploadPath, withFormat } from "./databases";
 import { parseHash } from "./routes";
 import { mockFetch } from "./test-utils";
 
@@ -268,6 +268,23 @@ describe("Database list", () => {
   });
 });
 
+describe("uploadPath", () => {
+  const now = new Date("2026-11-24T08:09:10Z");
+  it("keeps the ending and cleans the name", () => {
+    expect(uploadPath("My Shop.sql", now)).toBe("hostashi-imports/2026-11-24-08-09-10-My_Shop.sql");
+    expect(uploadPath("backup.SQL.GZ", now)).toBe("hostashi-imports/2026-11-24-08-09-10-backup.sql.gz");
+    expect(uploadPath("..-.sql", now)).toBe("hostashi-imports/2026-11-24-08-09-10.sql");
+  });
+  it("accepts .dump only for PostgreSQL", () => {
+    expect(uploadPath("db.dump", now)).toBe("");
+    expect(uploadPath("db.dump", now, true)).toBe("hostashi-imports/2026-11-24-08-09-10-db.dump");
+  });
+  it("refuses other files", () => {
+    expect(uploadPath("photo.png", now)).toBe("");
+    expect(uploadPath("dump.gz", now)).toBe("");
+  });
+});
+
 describe("pathProblem", () => {
   it.each([
     ["shop.sql", ""],
@@ -383,11 +400,47 @@ describe("Database dumps", () => {
     render(<Harness initial="db=blog_wp" />);
     await user.click(await screen.findByLabelText("Import a file"));
     expect(screen.getByText(/Import into an empty database/)).toBeInTheDocument();
+    await user.click(screen.getByLabelText("The home of site blog"));
     const path = screen.getByLabelText(/File in the home of site blog/);
     await user.clear(path);
     await user.type(path, "in.sql");
     await user.click(screen.getByRole("button", { name: "Start import" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Import failed: SQL error at line 12 (1064)");
+  });
+
+  it("imports a file from the computer and removes the uploaded copy", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...sites,
+      "GET /api/v1/databases": { body: { databases: [blogWp] } },
+      "POST /api/v1/sites/blog/files/upload-start": { body: { id: "u1", received: 7, done: true } },
+      "POST /api/v1/databases/blog_wp/import": (b) => ({ status: 202, body: { ...job, kind: "import", path: (b as { path: string }).path, state: "running" } }),
+      "GET /api/v1/databases/blog_wp/jobs/0123456789abcdef": () => ({
+        body: { ...job, kind: "import", path: (calls.find((c) => c.path.endsWith("/import"))?.body as { path: string }).path, state: "done" },
+      }),
+      "POST /api/v1/sites/blog/files/delete": { body: {} },
+    });
+    render(<Harness initial="db=blog_wp" />);
+    await user.click(await screen.findByLabelText("Import a file"));
+    expect(screen.getByLabelText("My computer")).toBeChecked();
+    await user.upload(screen.getByLabelText(/Dump file/), new File(["SELECT 1;"], "My Shop.sql", { type: "application/sql" }));
+    await user.click(screen.getByRole("button", { name: "Start import" }));
+    expect(await screen.findByText(/Imported My Shop.sql into blog_wp/)).toBeInTheDocument();
+    const start = calls.find((c) => c.path.endsWith("/upload-start"))?.body as { path: string; parents: boolean };
+    expect(start.path).toMatch(/^hostashi-imports\/\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-My_Shop\.sql$/);
+    expect(start.parents).toBe(true);
+    expect(calls.find((c) => c.path.endsWith("/import"))?.body).toEqual({ path: start.path });
+    await waitFor(() => expect(calls.find((c) => c.path.endsWith("/delete"))?.body).toEqual({ paths: [start.path] }));
+  });
+
+  it("asks for a file before uploading", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({ ...sites, "GET /api/v1/databases": { body: { databases: [blogWp] } } });
+    render(<Harness initial="db=blog_wp" />);
+    await user.click(await screen.findByLabelText("Import a file"));
+    await user.click(screen.getByRole("button", { name: "Start import" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Choose a file.");
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
   });
 
   it("refuses a path outside the home before asking the server", async () => {

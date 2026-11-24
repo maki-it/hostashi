@@ -262,3 +262,26 @@ export function serverNameProblem(v: string): string {
   if (v === LOCAL_SERVER) return "This name is reserved for the local server.";
   return "";
 }
+
+// The folder in the site's home that takes a dump uploaded for an import;
+// the panel removes the file after the import.
+export const uploadDir = "hostashi-imports";
+
+/**
+ * uploadPath names the file an uploaded dump gets in the site's home:
+ * hostashi-imports/<time>-<name>, with the name reduced to the characters
+ * a dump path allows. "" when the file's ending is not one the database
+ * takes.
+ */
+export function uploadPath(fileName: string, now = new Date(), postgres = false): string {
+  const lower = fileName.toLowerCase();
+  const ext = [".sql.gz", ".sql", ...(postgres ? [".dump"] : [])].find((e) => lower.endsWith(e));
+  if (!ext) return "";
+  const stem = fileName
+    .slice(0, fileName.length - ext.length)
+    .replace(/[^A-Za-z0-9._-]+/g, "_")
+    .replace(/^[._-]+/, "")
+    .slice(0, 80);
+  const stamp = now.toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  return `${uploadDir}/${stamp}${stem ? "-" + stem : ""}${ext}`;
+}
