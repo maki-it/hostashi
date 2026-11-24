@@ -17,7 +17,7 @@
   width: var(--side-w);
   height: 100vh;
   padding: 18px 12px 16px;
-  overflow-y: auto;
+  overflow: hidden;
   color: var(--side-fg);
   background: var(--side-bg);
   border-right: 1px solid var(--side-line);
@@ -64,8 +64,21 @@
   margin-left: auto;
 }
 
+/* Only the nav scrolls; brand and the account footer stay in view. */
 .app-nav {
   display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  margin: 0 -12px;
+  padding: 0 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.app-foot {
+  display: flex;
+  flex: none;
   flex-direction: column;
   gap: 18px;
 }
@@ -132,7 +145,6 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: auto;
   padding: 10px 2px 0 10px;
   border-top: 1px solid var(--side-line);
 }
@@ -266,6 +278,14 @@ a.app-user-name[aria-current="page"] {
   .app-side[data-open="false"] .app-nav,
   .app-side[data-open="false"] .app-user {
     display: none;
+  }
+  /* An open menu fits the screen: the nav scrolls, the account stays. */
+  .app-side[data-open="true"] {
+    max-height: 100vh;
+    max-height: 100dvh;
+  }
+  .app-foot {
+    gap: 12px;
   }
   .app-top {
     min-height: 48px;
