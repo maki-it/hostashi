@@ -26,6 +26,8 @@ const (
 	ScanSourcePanel    = "panel"
 	ScanSourceAPI      = "api"
 	ScanSourceSchedule = "schedule"
+	// ScanSourceRealtime holds the findings of the real-time mode.
+	ScanSourceRealtime = "realtime"
 
 	FindingOpen        = "open"
 	FindingIgnored     = "ignored"

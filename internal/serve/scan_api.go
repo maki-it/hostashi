@@ -37,7 +37,7 @@ type scanEngineRequest struct {
 // scanRunJSON is one malware scan of a site.
 type scanRunJSON struct {
 	ID int64 `json:"id"`
-	// Source is "panel", "api" or "schedule".
+	// Source is "panel", "api", "schedule" or "realtime".
 	Source string `json:"source"`
 	// State is "queued", "running", "succeeded" or "failed".
 	State string `json:"state"`
