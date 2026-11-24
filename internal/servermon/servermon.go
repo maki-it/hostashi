@@ -81,8 +81,8 @@ type Monitor struct {
 	// for either turns it off.
 	SiteAgent SiteAgent
 	SiteStore SiteStore
-	Log    *slog.Logger
-	Now    func() time.Time // default time.Now
+	Log       *slog.Logger
+	Now       func() time.Time // default time.Now
 
 	mu       sync.Mutex
 	prev     *raw

@@ -189,7 +189,9 @@ func (m *Monitor) SampleSites(ctx context.Context) {
 			continue
 		}
 
-		r := append(s.ring[u.Name], p)
+		r := s.ring[u.Name]
+
+		r = append(r, p)
 		if len(r) > RingSize {
 			r = append(r[:0], r[len(r)-RingSize:]...)
 		}

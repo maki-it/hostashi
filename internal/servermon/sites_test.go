@@ -96,6 +96,7 @@ func TestSampleSites(t *testing.T) {
 			agentapi.SiteUsage{Name: "shop", CPUUsec: uint64(i) * 3_750_000, MemoryBytes: 300, MemoryKnown: true, HTTPRequests: uint64(i) * 15, HTTPBytesOut: uint64(i) * 30_000},
 		)
 		m.SampleSites(ctx)
+
 		now = now.Add(SampleEvery)
 	}
 
@@ -157,6 +158,7 @@ func TestSampleSites(t *testing.T) {
 
 	// An agent error keeps the last state.
 	ag.err = errors.New("down")
+
 	m.SampleSites(ctx)
 
 	if pts, _, _ := m.SiteSeries(ctx, "blog", Range1h); len(pts) == 0 {

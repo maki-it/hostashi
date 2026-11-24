@@ -42,6 +42,7 @@ func TestSiteUsageAPI(t *testing.T) {
 
 	for range 3 {
 		e.monitor.SampleSites(t.Context())
+
 		now = now.Add(15 * time.Second)
 	}
 
