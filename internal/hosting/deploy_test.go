@@ -304,3 +304,72 @@ func TestDeployFailures(t *testing.T) {
 		t.Fatalf("no agent: %v", err)
 	}
 }
+
+func TestWebhookDeploy(t *testing.T) {
+	s, f, _ := deployService(t)
+	ctx := t.Context()
+
+	if _, err := s.GitWebhook(ctx, strings.Repeat("a", 32)); !errors.Is(err, ErrWebhookNotFound) {
+		t.Fatalf("unknown: %v", err)
+	}
+
+	if _, err := s.SetGit(ctx, 1, "blog", gitInput("https://github.com/acme/blog.git", agentapi.GitAuthNone)); err != nil {
+		t.Fatal(err)
+	}
+
+	hook, err := s.SetGitWebhook(ctx, 1, "blog")
+	if err != nil || len(hook.ID) != 32 || hook.Secret == "" {
+		t.Fatalf("on %+v %v", hook, err)
+	}
+
+	tgt, err := s.GitWebhook(ctx, hook.ID)
+	if err != nil || tgt.Site != "blog" || tgt.Branch != "main" || string(tgt.Secret) != hook.Secret {
+		t.Fatalf("target %+v %v", tgt, err)
+	}
+
+	if started, err := s.WebhookDeploy(ctx, "blog"); err != nil || !started {
+		t.Fatalf("first %v %v", started, err)
+	}
+
+	// Two pushes during the build give one more run, after it.
+	for range 2 {
+		if started, err := s.WebhookDeploy(ctx, "blog"); err != nil || started {
+			t.Fatalf("while running %v %v", started, err)
+		}
+	}
+
+	first := f.started[0].ID
+	f.finish(first, agentapi.DeployStatus{State: agentapi.DeploySucceeded, Commit: strings.Repeat("ab", 20)})
+	s.pollDeploys(ctx)
+	s.pollDeploys(ctx)
+	s.pollDeploys(ctx)
+
+	if len(f.started) != 2 {
+		t.Fatalf("started %d runs", len(f.started))
+	}
+
+	list, err := s.Deploys(ctx, "blog", 10)
+	if err != nil || len(list) != 2 || list[0].Source != store.DeploySourceWebhook || list[0].Actor != 0 {
+		t.Fatalf("history %+v %v", list, err)
+	}
+
+	// A new secret keeps the id; off removes it.
+	again, err := s.SetGitWebhook(ctx, 1, "blog")
+	if err != nil || again.ID != hook.ID || again.Secret == hook.Secret {
+		t.Fatalf("renew %+v %v", again, err)
+	}
+
+	if err := s.DeleteGitWebhook(ctx, 1, "blog"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.GitWebhook(ctx, hook.ID); !errors.Is(err, ErrWebhookNotFound) {
+		t.Fatalf("after off: %v", err)
+	}
+
+	// The webhook's deploys are in the audit log without a user.
+	es, _, err := s.st.AuditEntries(ctx, store.AuditFilter{Action: "site.deploy"}, 0, 10)
+	if err != nil || len(es) < 2 {
+		t.Fatalf("audit %d %v", len(es), err)
+	}
+}

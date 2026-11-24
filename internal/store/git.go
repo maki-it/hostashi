@@ -146,3 +146,29 @@ func nilIfEmpty(b []byte) any {
 
 	return b
 }
+
+// SiteGitByWebhook returns the Git setting whose webhook has this id and
+// the name of its site, or ErrNotFound.
+func (s *Store) SiteGitByWebhook(ctx context.Context, id string) (SiteGit, string, error) {
+	if id == "" {
+		return SiteGit{}, "", ErrNotFound
+	}
+
+	var (
+		siteID int64
+		name   string
+	)
+
+	err := s.db.QueryRowContext(ctx, `SELECT g.site_id, s.name FROM site_git g JOIN sites s ON s.id = g.site_id WHERE g.webhook_id = ?`, id).Scan(&siteID, &name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return SiteGit{}, "", ErrNotFound
+	}
+
+	if err != nil {
+		return SiteGit{}, "", fmt.Errorf("store: %w", err)
+	}
+
+	g, err := s.SiteGit(ctx, siteID)
+
+	return g, name, err
+}

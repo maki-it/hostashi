@@ -1195,6 +1195,29 @@ x grep -q 'echo built' /tmp/api.out || fail "log without the build command: $(x 
 [ "$(api POST "/api/v1/sites/gitsite/deploys/$did/rollback")" = 200 ] || fail "rollback: $(x cat /tmp/api.out)"
 x grep -q '"kind":"rollback"' /tmp/api.out || fail "rollback answer: $(x cat /tmp/api.out)"
 [ "$(x readlink /home/gitsite/htdocs)" = ".deploy/releases/$did" ] || fail "rollback moved the link"
+# The webhook: a push to the branch deploys, a wrong secret is refused and
+# logged for fail2ban.
+[ "$(api POST /api/v1/sites/gitsite/git/webhook)" = 200 ] || fail "webhook on: $(x cat /tmp/api.out)"
+hpath=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["path"])')
+hsecret=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["secret"])')
+hcode=$(x curl -sS -o /tmp/hook.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Gitlab-Event: Push Hook' \
+  -H 'X-Gitlab-Token: wrong' --data '{"ref":"refs/heads/master"}' "http://127.0.0.1:8080$hpath")
+[ "$hcode" = 401 ] || fail "webhook with a wrong token: $hcode $(x cat /tmp/hook.out)"
+hcode=$(x curl -sS -o /tmp/hook.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Gitlab-Event: Push Hook' \
+  -H "X-Gitlab-Token: $hsecret" --data '{"ref":"refs/heads/master"}' "http://127.0.0.1:8080$hpath")
+[ "$hcode" = 202 ] || fail "webhook push: $hcode $(x cat /tmp/hook.out)"
+x grep -q '"started"' /tmp/hook.out || fail "webhook push did not start a deploy: $(x cat /tmp/hook.out)"
+for _ in $(seq 1 90); do
+  api GET /api/v1/sites/gitsite/deploys >/dev/null
+  dstate=$(x cat /tmp/api.out | python3 -c 'import json,sys; d=json.load(sys.stdin)[0]; print(d["state"] if d["source"]=="webhook" else "none")')
+  case $dstate in succeeded | failed | none) break ;; esac
+  sleep 2
+done
+[ "$dstate" = succeeded ] || fail "webhook deploy ended $dstate: $(x cat /tmp/api.out)"
+did=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["id"])')
+[ "$(x readlink /home/gitsite/htdocs)" = ".deploy/releases/$did" ] || fail "the webhook deploy did not go live"
+x journalctl -u hostashi.service --no-pager -o cat | grep -F '"msg":"auth.failed","kind":"webhook"' >/dev/null ||
+  fail "no fail2ban line for the wrong webhook token"
 # A failing build never goes live.
 [ "$(api PUT /api/v1/sites/gitsite/git '{"url":"https://github.com/octocat/Hello-World.git","branch":"master","auth":"none","deployDir":"htdocs","keep":2,"buildTimeoutMinutes":5,"commands":["false"]}')" = 200 ] ||
   fail "set failing build: $(x cat /tmp/api.out)"

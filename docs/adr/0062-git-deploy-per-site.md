@@ -164,3 +164,14 @@ Notes on pinning the host key of an SSH repository; they change no decision.
 - Nothing is pinned without that confirmation: the UI shows the scanned fingerprint next to the ones GitHub, GitLab and Codeberg publish (UI PR).
 - `git-sync` offers an RSA host key with `rsa-sha2-512` and `rsa-sha2-256` only; before, it asked for `ssh-rsa` (SHA-1), which current servers refuse [A: OpenSSH has refused SHA-1 RSA signatures by default since 8.8].
 - The installer test scans a second sshd on the machine's own address, compares the fingerprint with `ssh-keygen -lf` of its Ed25519 host key and pins it; a deploy before that answers 409 `host_key_unconfirmed` [A: needs the CI run].
+
+## Implementation notes: webhook (2026-11-24)
+
+Notes on the deploy webhook; they change no decision.
+
+- `POST /api/v1/sites/{name}/git/webhook` (`sites.git:write`) turns the webhook on or gives it a new secret and shows `{id, path, secret}` once; the id (128 bits, hex) stays on renewal, so the address in the Git host stays. `DELETE` turns it off. The secret (256 bits, base64url) is sealed bound to the site; the audit log (`site.git.webhook`) says only on, new secret or off [V: `internal/hosting/deploy_test.go`, `internal/serve/webhook_api_test.go`].
+- `POST /api/v1/hooks/deploy/{id}` needs no login. It counts every call against 10 per minute and webhook (then 429) and reads at most 1 MiB. The first proof present must be valid: `X-Hub-Signature-256` (`sha256=` and the HMAC-SHA256 of the body), `X-Gitea-Signature`, `X-Forgejo-Signature`, `X-Gitlab-Token` or `Authorization: Bearer`, all compared in constant time. An unknown id and a wrong proof answer alike (401) and write the `auth.failed` line with `"kind":"webhook"`, which the fail2ban filter `hostashi-panel` now matches too (ADR-0021).
+- Only the pushed `ref` is read from the body. A push to the configured branch deploys (202 `started`); a ping from GitHub answers 200 `pong`; other events, tags and other branches answer 202 `ignored`. A call without a body and without an event header (a script with the bearer token) deploys the branch.
+- A push during an active run is not lost: it is noted (202 `queued`) and `RunDeploys` starts one more run after that run ends; more pushes in that time still give one run. The note is kept in memory only, so a panel restart in that window drops it.
+- A webhook deploy has no user (`actor` empty in the history, no user in the audit log); `source` is `webhook`.
+- The installer test turns the webhook on, checks that a wrong GitLab token gets 401 and the fail2ban line, and that a push with the right one deploys and goes live [A: needs the CI run].
