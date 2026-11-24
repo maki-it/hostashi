@@ -125,7 +125,7 @@ export function findingWord(s: FindingState): { word: string; tone: Tone } {
     case "ignored":
       return { word: "False positive", tone: "off" };
     case "restored":
-      return { word: "Put back", tone: "warn" };
+      return { word: "Restored", tone: "warn" };
     default:
       return { word: "Gone", tone: "off" };
   }
@@ -141,9 +141,9 @@ export function scanMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case "scan_unavailable":
-        return "The malware scan is not available on this panel: the agent does not answer.";
+        return "The virus scan is not available on this panel: the agent does not answer.";
       case "scan_off":
-        return "The malware scan is off on this server. An administrator switches it on under System.";
+        return "The virus scan is off on this server. An administrator switches it on under System.";
       case "scan_running":
         return "A scan of this site is waiting or running. Wait until it ends.";
       case "finding_not_found":

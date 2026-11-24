@@ -153,7 +153,7 @@ const shots = [
     name: "system-malware",
     hash: "#/system",
     ready: "text=ClamAV 1.4.6+dfsg-1",
-    act: async (page) => page.getByRole("heading", { name: "Malware scan" }).evaluate((h) => h.scrollIntoView({ block: "start" })),
+    act: async (page) => page.getByRole("heading", { name: "Virus scan" }).evaluate((h) => h.scrollIntoView({ block: "start" })),
   },
   { name: "users", hash: "#/users", ready: "table" },
   { name: "databases", hash: "#/databases", ready: "table" },

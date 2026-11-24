@@ -61,7 +61,7 @@ const tabs: { id: SiteTab; label: string }[] = [
   { id: "web", label: "Web" },
   { id: "files", label: "Files" },
   { id: "git", label: "Git" },
-  { id: "malware", label: "Malware scan" },
+  { id: "malware", label: "Virus scan" },
   { id: "php", label: "PHP" },
   { id: "cron", label: "Cron" },
   { id: "ssh", label: "SSH & SFTP" },
