@@ -35,7 +35,7 @@ Without a confirmation the rules roll back after the time shown on the page. The
 
 ## Blocked after failed logins
 
-Independent of these rules, fail2ban blocks addresses for a while after repeated failed SSH or panel logins.
+Independent of these rules, fail2ban blocks addresses for a while after repeated failed SSH or panel logins, and after repeated wrong passwords on a site with [access protection](Access-protection.md).
 
 ## Without the Hostashi firewall
 

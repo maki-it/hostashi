@@ -266,6 +266,21 @@ const routes = [
     permissionsPolicyStrict: "camera=(), microphone=(), geolocation=()",
     maxValueBytes: 4096,
   })],
+  ["GET", /^\/sites\/[^/]+\/access$/, () => ({
+    ipMode: "deny",
+    ips: ["198.51.100.23", "203.0.113.0/26"],
+    password: true,
+    paths: ["/wp-admin", "/wp-login.php"],
+    bypass: ["192.0.2.0/28"],
+    users: [
+      { name: "kim", createdAt: day(12), updatedAt: day(12) },
+      { name: "office", createdAt: day(3), updatedAt: day(1) },
+    ],
+    limits: { ips: 256, paths: 20, bypass: 64, users: 50, minPassword: 12, maxPassword: 72 },
+    clientAddress: "192.0.2.10",
+    updatedAt: day(1),
+  })],
+  ["POST", /^\/sites\/[^/]+\/access\/users$/, () => ({ name: "agency", password: "Vq7mR2xK9pLt4Wz8Bn3sHc6J" })],
   ["GET", /^\/sites\/[^/]+\/real-ip$/, () => ({ realIp: {}, headers: ["X-Forwarded-For", "X-Real-IP"], cloudflare: [], cloudflareDate: "2026-11-16", maxRanges: 64 })],
   ["GET", /^\/sites\/([^/]+)\/tls\/certificate$/, (m) => {
     const t = sites.find((x) => x.name === m[1])?.tls;

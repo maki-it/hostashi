@@ -17,7 +17,11 @@ import { createServer } from "vite";
 import { answer } from "./wiki-fixtures.mjs";
 
 const root = resolve(import.meta.dirname, "..");
-const out = resolve(root, "../docs/wiki/images");
+// SHOTS_OUT, SHOTS_SCHEME (light, dark) and SHOTS_WIDTH take previews of
+// the same pages elsewhere, for example dark or at phone width.
+const out = process.env.SHOTS_OUT ? resolve(process.env.SHOTS_OUT) : resolve(root, "../docs/wiki/images");
+const scheme = process.env.SHOTS_SCHEME === "dark" ? "dark" : "light";
+const width = Number(process.env.SHOTS_WIDTH) || 1280;
 
 // Each shot opens a hash route, optionally does something, and takes the
 // page (or one element) as it is then; full takes the whole page.
@@ -58,6 +62,17 @@ const shots = [
     hash: "#/sites/shop/domains",
     ready: "text=www redirect",
     act: async (page) => page.getByRole("heading", { name: "www redirect" }).evaluate((h) => h.scrollIntoView({ block: "start" })),
+  },
+  { name: "site-access", hash: "#/sites/blog/access", ready: "text=Access protection", full: true },
+  {
+    name: "site-access-password",
+    hash: "#/sites/blog/access",
+    ready: "text=Access protection",
+    act: async (page) => {
+      await page.getByRole("textbox", { name: "User name" }).fill("agency");
+      await page.getByRole("button", { name: "Add user" }).click();
+      await page.getByRole("heading", { name: "Save this password now" }).waitFor();
+    },
   },
   { name: "site-node", hash: "#/sites/app/web", ready: "text=Start command" },
   { name: "site-python", hash: "#/sites/api/web", ready: "text=Start command" },
@@ -187,7 +202,7 @@ const browser = await chromium.launch({
   ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
   args: [`--host-resolver-rules=MAP ${host} 127.0.0.1`],
 });
-const context = await browser.newContext({ viewport: { width: 1280, height: 820 }, deviceScaleFactor: 2, colorScheme: "light", locale: "en-GB", timezoneId: "Europe/Berlin" });
+const context = await browser.newContext({ viewport: { width, height: width < 600 ? 844 : 820 }, deviceScaleFactor: 2, colorScheme: scheme, locale: "en-GB", timezoneId: "Europe/Berlin" });
 const missing = new Set();
 await context.route("**/api/v1/**", async (route) => {
   const req = route.request();

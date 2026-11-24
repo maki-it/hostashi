@@ -29,7 +29,8 @@ Hostashi's firewall lets in only these ports, plus what you open in the panel or
 | `/run/hostashi-valkey/<site>/valkey.sock` | the object cache (Valkey) of a site, if it is on. Only the site's own user can open it; it holds nothing worth keeping and is empty after a restart. |
 | `/var/log/nginx/sites/<site>/` | access and error logs of a site, readable only by root and in the panel |
 | `/var/log/hostashi/php/<site>/` | PHP error log of a site, readable only by root and in the panel |
-| `/var/log/nginx/hostashi/` | access and error logs of requests for no site |
+| `/var/log/nginx/hostashi/` | access and error logs of requests for no site; `error.log` also gets the failed site passwords that fail2ban reads |
+| `/var/lib/hostashi-web-auth/` | the password files of sites with [access protection](Access-protection.md): user names and password hashes, readable by root and the web server only |
 | `/etc/logrotate.d/hostashi` | daily rotation of these logs; the panel sets how many days are kept (default 7) |
 | `/var/log/hostashi-install.log` | the installer's log |
 | `/usr/share/hostashi/adminer/` | the database tool: the pinned Adminer (its build with all drivers; Hostashi's front lets only the MySQL and PostgreSQL drivers run), Hostashi's front for it, and `adminer.css` with the panel's fonts for the panel's look |
