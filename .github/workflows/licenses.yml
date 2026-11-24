@@ -4,6 +4,11 @@
 # has a license compatible with AGPL-3.0-or-later (ADR-0002): the Go modules
 # the binary imports and the npm packages bundled into the embedded frontend.
 # Build and test tools are not distributed and are not checked.
+#
+# It also checks that every file has copyright and license information
+# (REUSE specification, see REUSE.toml). That job runs on every pull
+# request because a new file anywhere can break it, and it takes only
+# seconds.
 
 name: Licenses
 
@@ -28,8 +33,20 @@ env:
   # Keep in sync with ALLOWED in web/scripts/check-licenses.mjs. That script
   # also allows OFL-1.1, for the font packages under @fontsource/ only.
   ALLOWED: "0BSD,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,MIT,MPL-2.0"
+  # Updated by Renovate (customManagers in renovate.json).
+  REUSE_VERSION: "6.3.0"
 
 jobs:
+  reuse:
+    name: REUSE lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: reuse lint
+        run: pipx run "reuse==${REUSE_VERSION}" lint
+
   # Pull requests run a check only when its dependency files changed. Push to
   # main and manual runs always run everything. A skipped job counts as passed.
   changes:

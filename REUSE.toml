@@ -3,7 +3,7 @@
 # REUSE (https://reuse.software) metadata for files that cannot carry a
 # header or do not need one. Source files carry their own
 # "SPDX-License-Identifier" header; the copyright line for every file comes
-# from the first annotation. "reuse lint" runs in CI (.github/workflows/reuse.yml).
+# from the first annotation. "reuse lint" runs in CI (.github/workflows/licenses.yml).
 #
 # When several annotations match a file, the LAST one wins, so keep the
 # general entries first and the specific ones after them.
