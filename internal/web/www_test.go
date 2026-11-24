@@ -159,7 +159,7 @@ func TestWWWServed(t *testing.T) {
 		Timeout:       3 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}, //nolint:gosec // self-signed test certificate
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12},
 			DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
 				var d net.Dialer
 
@@ -168,7 +168,7 @@ func TestWWWServed(t *testing.T) {
 		},
 	}
 
-	get := func(u string) *http.Response {
+	get := func(u string) (int, http.Header) {
 		t.Helper()
 
 		resp, err := client.Get(u)
@@ -178,16 +178,16 @@ func TestWWWServed(t *testing.T) {
 
 		_ = resp.Body.Close()
 
-		return resp
+		return resp.StatusCode, resp.Header
 	}
 
-	if r := get("https://example.com/p"); r.StatusCode != http.StatusMovedPermanently || r.Header.Get("Location") != "https://www.example.com/p" || r.Header.Get("Strict-Transport-Security") == "" {
-		t.Errorf("https example.com: %d %v", r.StatusCode, r.Header)
+	if code, h := get("https://example.com/p"); code != http.StatusMovedPermanently || h.Get("Location") != "https://www.example.com/p" || h.Get("Strict-Transport-Security") == "" {
+		t.Errorf("https example.com: %d %v", code, h)
 	}
 
 	for _, u := range []string{"https://www.example.com/", "https://shop.example.com/"} {
-		if r := get(u); r.StatusCode != http.StatusOK {
-			t.Errorf("%s: %d", u, r.StatusCode)
+		if code, _ := get(u); code != http.StatusOK {
+			t.Errorf("%s: %d", u, code)
 		}
 	}
 }

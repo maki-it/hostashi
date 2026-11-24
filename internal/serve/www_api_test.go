@@ -23,19 +23,19 @@ func TestWWWRedirectOverHTTP(t *testing.T) {
 		t.Fatalf("site: %s", rec.Body)
 	}
 
-	put := func(body string) *http.Response {
+	put := func(body string) int {
 		t.Helper()
 
-		return e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/www", cookie: c, body: body}).Result()
+		return e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/www", cookie: c, body: body}).Code
 	}
 
-	if r := put(`{"mode":"to-www"}`); r.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("no pair: %d", r.StatusCode)
+	if code := put(`{"mode":"to-www"}`); code != http.StatusUnprocessableEntity {
+		t.Fatalf("no pair: %d", code)
 	}
 
 	for _, body := range []string{`{}`, `{"mode":""}`, `{"mode":"both"}`, `{"mode":"TO-WWW"}`} {
-		if r := put(body); r.StatusCode != http.StatusUnprocessableEntity {
-			t.Errorf("%s: %d", body, r.StatusCode)
+		if code := put(body); code != http.StatusUnprocessableEntity {
+			t.Errorf("%s: %d", body, code)
 		}
 	}
 

@@ -32,8 +32,10 @@ func TestWWWPairs(t *testing.T) {
 		{[]string{"www.example.com"}, nil},
 		{[]string{"www.example.com", "example.com"}, []WWWPair{{"example.com", "www.example.com"}}},
 		// Several pairs, and a domain without a partner.
-		{[]string{"example.com", "shop.example.com", "example.de", "www.example.de", "www.example.com"},
-			[]WWWPair{{"example.com", "www.example.com"}, {"example.de", "www.example.de"}}},
+		{
+			[]string{"example.com", "shop.example.com", "example.de", "www.example.de", "www.example.com"},
+			[]WWWPair{{"example.com", "www.example.com"}, {"example.de", "www.example.de"}},
+		},
 		// www.www.* is never part of a pair: no chains.
 		{[]string{"example.com", "www.example.com", "www.www.example.com"}, []WWWPair{{"example.com", "www.example.com"}}},
 		// A sub domain pairs with its own www name only.
@@ -79,10 +81,16 @@ func TestSplitWWW(t *testing.T) {
 		redir []WWWName
 	}{
 		{"", d, nil},
-		{"to-www", []string{"www.example.com", "shop.example.com", "www.example.de"},
-			[]WWWName{{"example.com", "www.example.com"}, {"example.de", "www.example.de"}}},
-		{"to-non-www", []string{"example.com", "shop.example.com", "example.de"},
-			[]WWWName{{"www.example.com", "example.com"}, {"www.example.de", "example.de"}}},
+		{
+			"to-www",
+			[]string{"www.example.com", "shop.example.com", "www.example.de"},
+			[]WWWName{{"example.com", "www.example.com"}, {"example.de", "www.example.de"}},
+		},
+		{
+			"to-non-www",
+			[]string{"example.com", "shop.example.com", "example.de"},
+			[]WWWName{{"www.example.com", "example.com"}, {"www.example.de", "example.de"}},
+		},
 	}
 
 	for _, c := range cases {
@@ -120,6 +128,7 @@ func TestWebApplyRequestChecksWWWRedirect(t *testing.T) {
 	}
 
 	r.Sites[0].WWWRedirect = "to-non-www"
+
 	r.Sites[0].Redirect = &WebRedirect{Target: "https://example.org/", Status: 301}
 	if err := r.Validate(); err == nil || !strings.Contains(err.Error(), "www redirect") {
 		t.Errorf("redirect site: got %v", err)
