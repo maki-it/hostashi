@@ -219,6 +219,10 @@ var routeAccess = map[string]authz.Action{
 	"PUT /api/v1/sites/{name}/cron/{id}":           "cron:write",
 	"DELETE /api/v1/sites/{name}/cron/{id}":        "cron:write",
 	"POST /api/v1/sites/{name}/cron/{id}/run":      "cron:write",
+	"GET /api/v1/sites/{name}/git":                 "sites:read",
+	"PUT /api/v1/sites/{name}/git":                 "sites.git:write",
+	"DELETE /api/v1/sites/{name}/git":              "sites.git:write",
+	"POST /api/v1/sites/{name}/git/key":            "sites.git:write",
 
 	"GET /api/v1/ssh/host-keys":                 "ssh.hostkeys:read",
 	"GET /api/v1/sites/{name}/ssh-keys":         "ssh:read",
