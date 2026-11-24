@@ -1,0 +1,89 @@
+#!/bin/bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Installs or removes ClamAV from the distribution for the malware scan
+# (ADR-0064). The panel starts it through the unit
+# hostashi-clamav-install@<install|remove>.service when an admin switches
+# the scan on or off, the installer with --malware-scan; neither the panel
+# nor the agent can change what this script does (root, 0755).
+#
+#   clamav-install check     read-only: exit 0 if the recorded state holds
+#                            (on: packages installed and freshclam enabled;
+#                            off or no record: nothing to do), else 1 with
+#                            the reason on stdout
+#   clamav-install install   install clamav and clamav-freshclam, enable
+#                            freshclam, record "on" and the version
+#   clamav-install remove    purge both and the signatures, record "off"
+#
+# Only these packages, without recommends: no clamav-daemon (ADR-0064,
+# the base mode needs no daemon). ClamAV is GPL-2.0 and stays a separate
+# program from the distribution; Hostashi does not ship or link it.
+#
+# The state lives in STATE_DIR (the agent reads it): state, version,
+# install.log (the unit's output).
+#
+# Exit codes: 0 ok, 1 not set up (check) or failed, 64 usage.
+# Test hooks (environment): HOSTASHI_CLAMAV_STATE_DIR.
+set -u
+set -o pipefail
+umask 022
+
+STATE_DIR=${HOSTASHI_CLAMAV_STATE_DIR:-/var/lib/hostashi-agent/clamav-install}
+PKGS=(clamav clamav-freshclam)
+PURGE=(clamav clamav-freshclam clamav-base)
+FRESHCLAM=clamav-freshclam.service
+export DEBIAN_FRONTEND=noninteractive
+# apt waits for the dpkg lock (unattended-upgrades) instead of failing.
+APT_OPTS=(-o DPkg::Lock::Timeout=600 -y -qq --no-install-recommends)
+
+say() { echo "clamav-install: $*"; }
+
+installed() { [ "$(dpkg-query -W -f='${Status}' "$1" 2>/dev/null)" = "install ok installed" ]; }
+
+record() {
+  install -d -m 0700 -o root -g root "$STATE_DIR" || return 1
+  printf '%s\n' "$1" >"$STATE_DIR/state.tmp" && mv -f "$STATE_DIR/state.tmp" "$STATE_DIR/state"
+}
+
+state() { cat "$STATE_DIR/state" 2>/dev/null || echo off; }
+
+check() {
+  local p
+  case "$(state)" in
+    on)
+      for p in "${PKGS[@]}"; do installed "$p" || { echo "$p not installed"; return 1; }; done
+      [ "$(systemctl is-enabled "$FRESHCLAM" 2>/dev/null)" = enabled ] || { echo "$FRESHCLAM not enabled"; return 1; }
+      ;;
+    off) ;;
+    *) echo "unknown state $(state)"; return 1;;
+  esac
+}
+
+do_install() {
+  say "installing ${PKGS[*]}"
+  apt-get "${APT_OPTS[@]}" update || { say "cannot update the package lists"; return 1; }
+  apt-get "${APT_OPTS[@]}" install "${PKGS[@]}" || { say "cannot install ${PKGS[*]}"; return 1; }
+  systemctl enable --now "$FRESHCLAM" || { say "cannot start $FRESHCLAM"; return 1; }
+  dpkg-query -W -f='${Version}\n' clamav >"$STATE_DIR/version.tmp" && mv -f "$STATE_DIR/version.tmp" "$STATE_DIR/version"
+  record on || return 1
+  say "done: ClamAV $(cat "$STATE_DIR/version"), signatures follow from freshclam"
+}
+
+do_remove() {
+  local p have=()
+  say "removing ClamAV"
+  for p in "${PURGE[@]}"; do installed "$p" && have+=("$p"); done
+  if [ "${#have[@]}" -gt 0 ]; then
+    apt-get "${APT_OPTS[@]}" purge "${have[@]}" || { say "cannot remove ${have[*]}"; return 1; }
+  fi
+  rm -f "$STATE_DIR/version"
+  record off || return 1
+  say "done: removed"
+}
+
+case "${1:-}" in
+  check) [ $# = 1 ] || exit 64; check || exit 1;;
+  install) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_install || exit 1;;
+  remove) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_remove || exit 1;;
+  *) echo "usage: $0 check | install | remove" >&2; exit 64;;
+esac

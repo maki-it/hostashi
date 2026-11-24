@@ -66,7 +66,7 @@ grep -q 'assets/index-' /usr/bin/hostashi || fail "frontend not embedded"
 # The installer and every data directory it reads ($HERE/<dir> in install.sh).
 share=/usr/share/hostashi
 [ -x "$share/install.sh" ] || fail "install.sh missing or not executable"
-for d in adminer apt fail2ban firewall mariadb php postgresql ssh sysctl systemd; do
+for d in adminer apt clamav fail2ban firewall mariadb php postgresql ssh sysctl systemd; do
   [ -d "$share/$d" ] || fail "$share/$d missing"
   # Same files as in the source tree, byte for byte.
   diff -r "/src/packaging/$d" "$share/$d" >/dev/null || fail "$share/$d differs from packaging/$d"
@@ -74,6 +74,7 @@ done
 cmp -s /src/packaging/install.sh "$share/install.sh" || fail "install.sh differs"
 [ -x "$share/php/php-install" ] || fail "php-install lost its mode"
 [ -x "$share/postgresql/pg-client-install" ] || fail "pg-client-install lost its mode"
+[ -x "$share/clamav/clamav-install" ] || fail "clamav-install lost its mode"
 [ -x "$share/apt/php-restart" ] || fail "php-restart lost its mode"
 [ ! -e "$share/test" ] || fail "test scripts must not ship"
 [ -f /usr/share/doc/hostashi/copyright ] || fail "copyright missing"

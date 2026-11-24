@@ -48,6 +48,7 @@ import (
 	"github.com/maki-it/hostashi/internal/phpinstall"
 	"github.com/maki-it/hostashi/internal/pythoninstall"
 	"github.com/maki-it/hostashi/internal/resticctl"
+	"github.com/maki-it/hostashi/internal/scanunit"
 	"github.com/maki-it/hostashi/internal/sitelogs"
 	"github.com/maki-it/hostashi/internal/sites"
 	"github.com/maki-it/hostashi/internal/siteslice"
@@ -208,6 +209,11 @@ type Config struct {
 	// Deploy runs the sites' Git deploys (ADR-0062). Run builds it below
 	// StateDir; without it site.deploy.* answer failed_precondition.
 	Deploy *deployunit.Manager
+	// Scan runs the sites' malware scans and Engine installs ClamAV
+	// (ADR-0064). Run builds both; without them site.scan.* and
+	// scan.engine.* answer failed_precondition.
+	Scan   *scanunit.Manager
+	Engine *scanunit.Engine
 
 	// Files starts the sites' file manager sockets (ADR-0040). Run builds
 	// it; without it files.open answers failed_precondition.
@@ -319,7 +325,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, apps: cfg.Apps, deploy: cfg.Deploy, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, f2b: cfg.ProxyIgnore, auth: cfg.AuthFiles, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, apps: cfg.Apps, deploy: cfg.Deploy, scan: cfg.Scan, engine: cfg.Engine, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, f2b: cfg.ProxyIgnore, auth: cfg.AuthFiles, log: log}
 		h.acl = cfg.panelACL
 
 		if cfg.PHP != nil && cfg.PHP.Hidden == nil {
@@ -405,6 +411,8 @@ type siteOps struct {
 	objc   *objcache.Manager
 	apps   *appunit.Manager
 	deploy *deployunit.Manager
+	scan   *scanunit.Manager
+	engine *scanunit.Engine
 	files  *filesunit.Manager
 	logs   *sitelogs.Reader
 	// logrotate is the file of logs.retention.set (ADR-0053).
@@ -534,6 +542,12 @@ func (h *siteOps) register(s *agentrpc.Server) {
 			}
 		}
 
+		if h.scan != nil {
+			if err := h.scan.Remove(ctx, req.User); err != nil {
+				h.log.ErrorContext(ctx, "remove scan unit of deleted site", "site", req.User, "err", err)
+			}
+		}
+
 		if h.objc != nil {
 			if err := h.objc.Remove(ctx, req.User); err != nil {
 				h.log.ErrorContext(ctx, "remove object cache of deleted site", "site", req.User, "err", err)
@@ -585,6 +599,7 @@ func (h *siteOps) register(s *agentrpc.Server) {
 	h.registerCache(s)
 	h.registerApps(s)
 	h.registerDeploy(s)
+	h.registerScan(s)
 	h.registerFiles(s)
 	h.registerPermissions(s)
 	h.registerLogs(s)
@@ -1659,6 +1674,17 @@ func Run(ctx context.Context, cfg Config) error {
 			Dir: filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "deploy"), Site: deploySite(cfg.Sites), Hidden: cfg.Sites.HiddenPaths,
 			Ctl: phpctl.DeployController{}, Log: cfg.Log,
 		}
+	}
+
+	if cfg.Scan == nil {
+		cfg.Scan = &scanunit.Manager{
+			Dir: filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "scan"), Site: scanSite(cfg.Sites), Hidden: cfg.Sites.HiddenPaths,
+			Ctl: phpctl.ScanController{}, Log: cfg.Log,
+		}
+	}
+
+	if cfg.Engine == nil {
+		cfg.Engine = &scanunit.Engine{Ctl: phpctl.ClamAVInstallUnits{}}
 	}
 
 	// A line installed again restarts its apps; a Hostashi update with
