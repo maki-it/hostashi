@@ -4421,6 +4421,52 @@
         },
         "type": "object"
       },
+      "PermissionsReset": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "type": "integer"
+          },
+          "checked": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "skippedPaths": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionsSkip"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "changed",
+          "checked",
+          "skipped",
+          "skippedPaths"
+        ],
+        "type": "object"
+      },
+      "PermissionsSkip": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "reason"
+        ],
+        "type": "object"
+      },
       "PgClient": {
         "additionalProperties": false,
         "properties": {
@@ -18564,6 +18610,59 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites:park"
+      }
+    },
+    "/api/v1/sites/{name}/permissions/reset": {
+      "post": {
+        "operationId": "resetSitePermissions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionsReset"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Give all files of the site back to its user and reset their modes",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.permissions:reset"
       }
     },
     "/api/v1/sites/{name}/php": {

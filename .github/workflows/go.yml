@@ -86,6 +86,8 @@ jobs:
           # The installer creates the site users' SSH group (ADR-0032).
           sudo groupadd -f hostashi-sites
           sudo env "PATH=$PATH" go test -race -count=1 -run '^TestRoot' -v ./internal/sysuser/
+      - name: Permission reset as root (foreign owners, hard links, mounts)
+        run: sudo env "PATH=$PATH" go test -race -count=1 -run '^TestRoot' -v ./internal/sites/
 
   quota:
     needs: changes
