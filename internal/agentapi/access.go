@@ -406,3 +406,6 @@ func (a WebAccess) Conflict(server, root string) error {
 
 	return nil
 }
+
+// GenerateAccessPassword returns a random password of n letters and digits.
+func GenerateAccessPassword(n int) string { return randomAlnum(n) }

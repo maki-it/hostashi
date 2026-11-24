@@ -89,6 +89,16 @@ func (s *Service) SetSnippets(ctx context.Context, actor int64, name, server, ro
 		return store.SiteSnippets{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 
+	// Access directives belong to the site's access protection (ADR-0066).
+	ac, err := s.st.SiteAccess(ctx, site.ID)
+	if err != nil {
+		return store.SiteSnippets{}, err
+	}
+
+	if err := webAccessOf(ac.Settings, nil).Conflict(server, root); err != nil {
+		return store.SiteSnippets{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
 	now := s.now()
 
 	old, err := s.st.SetSiteSnippets(ctx, store.SiteSnippets{SiteID: site.ID, Server: server, Root: root, UpdatedBy: actor}, now)
