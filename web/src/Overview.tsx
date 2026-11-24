@@ -10,15 +10,16 @@ import { checkTitle, runDoctor, type DoctorReport } from "./doctor";
 import { canSee } from "./nav";
 import { listParked, type ParkedDomain } from "./parked";
 import { formatHash } from "./routes";
-import { listSites, type Site } from "./sites";
-import { Badge, Card, Notice, PageHead, RelTime, type Tone } from "./ui";
+import { bytes } from "./services";
+import { listPools, listSites, poolUsed, type Pool, type Site } from "./sites";
+import { Badge, Card, Meter, Notice, PageHead, RelTime, type Tone } from "./ui";
 
 // Item is one thing that needs someone to act, with a link to where they can.
 type Item = { key: string; tone: Tone; word: string; title: string; detail?: string; href: string; link: string };
 
 // What the overview could load; a part the role may not see, or that
 // failed to load, stays undefined and is left out.
-type Data = { sites?: Site[]; doctor?: DoctorReport; backups?: BackupInfo; parked?: ParkedDomain[] };
+type Data = { sites?: Site[]; doctor?: DoctorReport; backups?: BackupInfo; parked?: ParkedDomain[]; pools?: Pool[] };
 
 const ignore = () => undefined;
 
@@ -133,13 +134,15 @@ export function Overview({ user }: { user: User }) {
       opt(canSee(user.role, "health"), runDoctor),
       opt(canSee(user.role, "backups"), getBackups),
       opt(canSee(user.role, "parked"), listParked),
-    ]).then(([sites, doctor, backups, parked]) => {
+      opt(canSee(user.role, "pools"), listPools),
+    ]).then(([sites, doctor, backups, parked, pools]) => {
       if (!live) return;
       setData({
         ...(sites ? { sites } : {}),
         ...(doctor ? { doctor } : {}),
         ...(backups ? { backups } : {}),
         ...(parked ? { parked } : {}),
+        ...(pools ? { pools } : {}),
       });
     });
     return () => {
@@ -219,6 +222,7 @@ export function Overview({ user }: { user: User }) {
           </Stat>
         )}
       </div>
+      {may("pools") && data.pools && data.pools.length > 0 && <PoolUsage pools={data.pools} />}
       {may("services") && <ServerDashboard />}
       {!data.sites && <Notice tone="err" title="The sites could not be loaded. Reload the page." />}
     </>
@@ -234,6 +238,50 @@ function Stat({ title, href, link, children }: { title: string; href: string; li
           {link}
           <ArrowRight size={14} aria-hidden="true" />
         </a>
+      </div>
+    </Card>
+  );
+}
+
+// PoolUsage shows how full each storage pool is (ADR-0016 addendum 2).
+function PoolUsage({ pools }: { pools: Pool[] }) {
+  return (
+    <Card
+      title="Storage pools"
+      actions={
+        <a className="ui-stat-link" href={formatHash({ page: "pools" })}>
+          Open storage pools
+          <ArrowRight size={14} aria-hidden="true" />
+        </a>
+      }
+    >
+      <div className="ui-stack">
+        {pools.map((p) => {
+          const used = poolUsed(p);
+          const label = `${p.name}${p.default ? " (default)" : ""}`;
+          const sites = p.sites === 1 ? "1 site" : `${p.sites} sites`;
+          if (used === null || !p.totalBytes) {
+            return (
+              <div className="ui-meter" key={p.name}>
+                <div className="ui-meter-head">
+                  <strong>{label}</strong>
+                  <span>
+                    <Badge tone="err">Not available</Badge> {sites}
+                  </span>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <Meter
+              key={p.name}
+              label={label}
+              value={used}
+              max={p.totalBytes}
+              detail={`${bytes(used)} of ${bytes(p.totalBytes)} used, ${bytes(p.freeBytes ?? 0)} free · ${sites}`}
+            />
+          );
+        })}
       </div>
     </Card>
   );

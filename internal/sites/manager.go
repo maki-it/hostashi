@@ -89,12 +89,12 @@ func (m *Manager) Create(ctx context.Context, user, pool string) (Site, error) {
 		return Site{}, err
 	}
 
-	if pool == "" {
-		pool = agentapi.DefaultPool
-	}
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if pool == "" {
+		pool = m.reg.DefaultPool()
+	}
 
 	p, ok := m.reg.Pool(pool)
 	if !ok {

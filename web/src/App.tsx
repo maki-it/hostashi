@@ -26,6 +26,7 @@ import { SecondFactor } from "./SecondFactor";
 import { Services } from "./Services";
 import { Setup } from "./Setup";
 import { Sites } from "./Sites";
+import { Pools } from "./Pools";
 import { System } from "./System";
 import { canSee } from "./nav";
 import { formatHash, parseHash, type Page } from "./routes";
@@ -160,6 +161,7 @@ export function App() {
         {show("health") && <Doctor query={route.query} onQuery={replaceQuery} />}
         {show("services") && <Services />}
         {show("system") && <System />}
+        {show("pools") && <Pools />}
         {show("firewall") && <Firewall />}
         {show("parked") && <Parked query={route.query} onQuery={replaceQuery} />}
         {show("pages") && <Pages query={route.query} onQuery={replaceQuery} />}

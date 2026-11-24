@@ -1078,6 +1078,22 @@ if x /usr/local/bin/hostashi pool remove vol1 >/dev/null 2>&1; then fail "a pool
 doc=$(x /usr/local/bin/hostashi doctor || true)
 grep -Eq "^  ok    system.pool.volume +pool vol1 \(/srv/vol1\) is mounted with its marker" <<<"$doc" || fail "doctor on vol1: $doc"
 grep -Eq "^  ok    system.quota +/srv/vol1: disk limits are enforced" <<<"$doc" || [ "$volquota" = off ] || fail "doctor quota on vol1: $doc"
+# Rename and default (ADR-0016 addendum 2): through the API, so the
+# panel's site follows; the path and the home stay.
+x /usr/local/bin/hostashi pool rename vol1 fast >/dev/null || fail "pool rename"
+pl=$(x /usr/local/bin/hostashi pool list)
+grep "^fast	/srv/vol1	sites=1	" <<<"$pl" >/dev/null || fail "pool list after rename: $pl"
+[ "$(api GET /api/v1/sites/big)" = 200 ] || fail "get big: $(x cat /tmp/api.out)"
+x grep '"pool":"fast"' /tmp/api.out >/dev/null || fail "big after rename: $(x cat /tmp/api.out)"
+[ "$(x curl -fsS -H 'Host: big.example.com' http://127.0.0.1/)" = "big on vol1" ] || fail "big does not answer after the rename"
+x /usr/local/bin/hostashi pool default fast >/dev/null || fail "pool default"
+pl=$(x /usr/local/bin/hostashi pool list)
+grep "^fast	/srv/vol1	sites=1	quota=[a-z]*	default$" <<<"$pl" >/dev/null || fail "pool list after default: $pl"
+[ "$(api POST /api/v1/sites '{"name":"dflt","domains":["dflt.example.com"]}')" = 201 ] || fail "create site on the default pool: $(x cat /tmp/api.out)"
+x test -d /srv/vol1/dflt || fail "a site without a pool did not land on the default pool"
+[ "$(api DELETE /api/v1/sites/dflt)" = 204 ] || fail "delete site dflt: $(x cat /tmp/api.out)"
+x /usr/local/bin/hostashi pool default default >/dev/null || fail "pool default back"
+[ "$(api POST /api/v1/pools/fast/rename '{"name":"vol1"}')" = 200 ] || fail "rename back: $(x cat /tmp/api.out)"
 [ "$(api DELETE /api/v1/sites/big)" = 204 ] || fail "delete site big: $(x cat /tmp/api.out)"
 # A missing volume (as after a boot without it): doctor fails the pool and
 # does not report the root disk's free space for its path.

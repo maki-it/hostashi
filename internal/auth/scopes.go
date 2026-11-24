@@ -46,7 +46,7 @@ var scopeCatalog = map[string]ScopeInfo{
 	"services:read":           {Description: "Read the state and restarts of the server's services and the dashboard's CPU, memory, disk and network figures"},
 	"services:write":          {Description: "Start, stop, restart and reload the server's services where the service catalog allows it", HighRisk: true},
 	"system:read":             {Description: "Read the server's hostname, time zone, clock, uptime and whether a reboot is pending"},
-	"system:write":            {Description: "Change the server's time zone and hostname and reboot the server", HighRisk: true},
+	"system:write":            {Description: "Change the server's time zone and hostname, rename storage pools or pick the default one, and reboot the server", HighRisk: true},
 	"firewall:read":           {Description: "Read the firewall's opened ports and the allowlists for SSH and the panel"},
 	"firewall:write":          {Description: "Open ports and set the allowlists for SSH and the panel (a wrong list locks out until the rollback)", HighRisk: true},
 	"php:install":             {Description: "Install more PHP versions from sury.org (runs apt as root with a fixed package list)", HighRisk: true},

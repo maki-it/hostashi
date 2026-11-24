@@ -275,14 +275,16 @@ var routeAccess = map[string]authz.Action{
 	"DELETE /api/v1/migrations/cloudpanel/source":                                "migrations:write",
 	"POST /api/v1/migrations/cloudpanel/source/database":                         "migrations:write",
 
-	"GET /api/v1/firewall":          "firewall:read",
-	"PUT /api/v1/firewall":          "firewall:write",
-	"POST /api/v1/firewall/confirm": "firewall:write",
-	"GET /api/v1/doctor":            "doctor:read",
-	"GET /api/v1/pools":             "pools:read",
-	"GET /api/v1/audit":             "audit:read",
-	"GET /api/v1/audit/actions":     "audit:read",
-	"GET /api/v1/audit/export":      "audit:read",
+	"GET /api/v1/firewall":              "firewall:read",
+	"PUT /api/v1/firewall":              "firewall:write",
+	"POST /api/v1/firewall/confirm":     "firewall:write",
+	"GET /api/v1/doctor":                "doctor:read",
+	"GET /api/v1/pools":                 "pools:read",
+	"POST /api/v1/pools/{name}/rename":  "pools:write",
+	"POST /api/v1/pools/{name}/default": "pools:write",
+	"GET /api/v1/audit":                 "audit:read",
+	"GET /api/v1/audit/actions":         "audit:read",
+	"GET /api/v1/audit/export":          "audit:read",
 
 	"GET /api/v1/services":                             "services:read",
 	"GET /api/v1/sites/{name}/services":                "services:read",
@@ -319,7 +321,7 @@ func newFullAPIMux(t *testing.T) (*apiEnv, *routeMux) {
 	e.h, mux = handler(Config{PublicURL: testPublicURL}, Deps{
 		PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb,
 		CloudPanel: e.cp, CloudPanelSource: newStubSource(t), Metrics: e.metrics, Settings: e.settings,
-		Doctor: e.doctor.run, Pools: e.pools.list, Firewall: e.firewall, PHP: e.php, PGClient: e.pgclient, Node: e.node, Python: e.python, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open, NotifyPrefs: e.st, AuditLog: e.st,
+		Doctor: e.doctor.run, Pools: e.pools.list, PoolAdmin: e.pools, PoolSites: e.st, Firewall: e.firewall, PHP: e.php, PGClient: e.pgclient, Node: e.node, Python: e.python, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open, NotifyPrefs: e.st, AuditLog: e.st,
 		Monitor: e.monitor, Logs: e.logs, System: e.system,
 	})
 

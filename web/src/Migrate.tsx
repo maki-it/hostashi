@@ -41,7 +41,7 @@ import { formatHash } from "./routes";
 import { getNode, type NodeStatus } from "./node";
 import { getPython, type PythonStatus } from "./python";
 import { presetLabel, type Preset } from "./pagecache";
-import { listPools, phpVersions, poolLabel, poolNote, type Pool } from "./sites";
+import { defaultPool, listPools, phpVersions, poolLabel, poolNote, type Pool } from "./sites";
 import {
   Badge,
   Button,
@@ -845,7 +845,10 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
   useEffect(() => {
     if (site.proxy) return;
     listPools()
-      .then(setPools)
+      .then((list) => {
+        setPools(list);
+        setPool(defaultPool(list));
+      })
       .catch(() => setPools([]));
   }, [site.proxy]);
   useEffect(() => {

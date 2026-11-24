@@ -90,6 +90,14 @@ describe("Overview", () => {
       "GET /api/v1/doctor": { body: doctor },
       "GET /api/v1/backups": { body: backups(true) },
       "GET /api/v1/parked-domains": { body: { parkedDomains: [] } },
+      "GET /api/v1/pools": {
+        body: {
+          pools: [
+            { name: "default", path: "/home", sites: 2, available: true, quota: "enforced", freeBytes: 10 * 2 ** 30, totalBytes: 40 * 2 ** 30, default: true },
+            { name: "vol1", path: "/srv/vol1", sites: 1, available: false, default: false },
+          ],
+        },
+      },
     });
     render(<Overview user={{ username: "kim", role: "admin", secondFactor: true } as never} />);
     const list = within(await screen.findByRole("region", { name: "Needs attention" }));
@@ -99,6 +107,10 @@ describe("Overview", () => {
     expect(sites.getByText("3")).toBeInTheDocument();
     expect(sites.getByText("1 disabled")).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Backups" })).getByText("OK")).toBeInTheDocument();
+    const pools = within(screen.getByRole("region", { name: "Storage pools" }));
+    expect(pools.getByRole("meter", { name: "default (default)" })).toHaveAttribute("aria-valuenow", "75");
+    expect(pools.getByText("Not available")).toBeInTheDocument();
+    expect(pools.getByRole("link", { name: "Open storage pools" })).toHaveAttribute("href", "#/pools");
   });
 
   it("asks only for what a user may see", async () => {
