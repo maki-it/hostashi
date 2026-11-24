@@ -125,6 +125,12 @@ func (s *Service) SetAccess(ctx context.Context, actor int64, name string, a sto
 		return SiteAccessView{}, err
 	}
 
+	// A redirect answers in nginx's rewrite phase, before the access phase
+	// would check anything.
+	if site.Type == store.SiteTypeRedirect && (a.IPMode != "" || a.Password) {
+		return SiteAccessView{}, ErrSiteType
+	}
+
 	users, err := s.st.AuthUsers(ctx, site.ID)
 	if err != nil {
 		return SiteAccessView{}, err
@@ -345,10 +351,12 @@ func (s *Service) applyIfPassword(ctx context.Context, siteID int64) error {
 	return s.applyWeb(ctx)
 }
 
-// webAccess is the setting sent with web.apply; nil for none.
+// webAccess is the setting sent with web.apply; nil for none and for a
+// redirect site, which keeps its setting after a type change but answers
+// before nginx checks access.
 func webAccess(all map[int64]store.SiteAccess, users map[int64][]store.AuthUser, site store.Site) *agentapi.WebAccess {
 	a, ok := all[site.ID]
-	if !ok {
+	if !ok || site.Type == store.SiteTypeRedirect {
 		return nil
 	}
 

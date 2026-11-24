@@ -45,3 +45,37 @@ func TestCheckAccess(t *testing.T) {
 		t.Errorf("password off sends rules: %+v", w)
 	}
 }
+
+func TestAccessOnRedirectSite(t *testing.T) {
+	s, _, _ := newService(t)
+	ctx := t.Context()
+
+	redirect := &store.SiteRedirect{Target: "https://example.com", Status: 302}
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "old", Domains: []string{"old.example.com"}, Redirect: redirect}); err != nil {
+		t.Fatal(err)
+	}
+
+	deny := store.AccessSettings{IPMode: agentapi.AccessIPDeny, IPs: []string{"192.0.2.1"}}
+	if _, err := s.SetAccess(ctx, 1, "old", deny); !errors.Is(err, ErrSiteType) {
+		t.Fatalf("IP rule on a redirect: %v", err)
+	}
+
+	if _, err := s.SetAccess(ctx, 1, "old", store.AccessSettings{Password: true}); !errors.Is(err, ErrSiteType) {
+		t.Fatalf("password on a redirect: %v", err)
+	}
+
+	// Switching everything off stays possible.
+	if _, err := s.SetAccess(ctx, 1, "old", store.AccessSettings{}); err != nil {
+		t.Fatalf("off on a redirect: %v", err)
+	}
+
+	// A setting kept from before a type change is not sent for a redirect.
+	all := map[int64]store.SiteAccess{7: {SiteID: 7, Settings: deny}}
+	if w := webAccess(all, nil, store.Site{ID: 7, Type: store.SiteTypeRedirect}); w != nil {
+		t.Fatalf("redirect: %+v", w)
+	}
+
+	if w := webAccess(all, nil, store.Site{ID: 7, Type: store.SiteTypeStatic}); w == nil || w.IPMode != agentapi.AccessIPDeny {
+		t.Fatalf("static: %+v", w)
+	}
+}
