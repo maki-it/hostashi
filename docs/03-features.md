@@ -107,7 +107,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 | fail2ban (SSH, panel, recidive) | P0 | A | NEW | On by default, ADR-0021 |
 | CrowdSec as opt-in | P2 | 2+ | NEW | Reports IPs to an external service, ADR-0021 |
 | Rate limiting and lockout at the panel login | P0 | A | NEW | |
-| Malware scan (ClamAV/Maldet) | P2 | 2+ | NEW | |
+| Malware scan (ClamAV/Maldet) | P2 | 2+ | NEW | ClamAV, opt-in, scheduled and manual; optional real-time daemon (ADR-0064) |
 
 ## 3.7 Backups and recovery
 
