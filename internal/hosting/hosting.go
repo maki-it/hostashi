@@ -166,6 +166,7 @@ type Service struct {
 	cache  CacheAgent   // nil: no object caches (ADR-0045)
 	apps   AppAgent     // nil: no Node.js apps (ADR-0054)
 	envBox *secrets.Box // nil: apps have no environment variables
+	gitBox *secrets.Box // nil: no Git deploy (ADR-0062)
 	dbs    DBServers    // nil: only the local database server (ADR-0041)
 
 	dbSizer DBSizeAgent // nil: database sizes are not measured (ADR-0015)

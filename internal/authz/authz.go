@@ -148,6 +148,8 @@ var table = map[Action]Rule{
 	"sites.objectcache.size:write": mgrSite("objectcache:write"),
 	// Letting PHP start programs undoes a hardening default (ADR-0033).
 	"sites.programs:write": mgrSite("sites:write"),
+	// The repository and the build commands of a Git deploy (ADR-0062).
+	"sites.git:write": mgrSite("git:write"),
 
 	// nginx runs for every site, so snippets stay with admins (ADR-0029).
 	"sites.snippets:write": admSite("sites.snippets:write"),
