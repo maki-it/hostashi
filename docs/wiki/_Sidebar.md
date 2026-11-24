@@ -12,6 +12,7 @@
 - [SSH and SFTP](SSH-and-SFTP.md)
 - [Cron jobs](Cron-jobs.md)
 - [Git deploy](Git-deploy.md)
+- [Virus scan](Virus-scan.md)
 - [Limits](Limits.md)
 - [Parked domains](Parked-domains.md)
 - [PHP settings](PHP-settings.md)

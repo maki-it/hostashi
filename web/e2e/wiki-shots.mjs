@@ -148,6 +148,13 @@ const shots = [
       await page.getByRole("heading", { name: "Webhook" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
     },
   },
+  { name: "site-malware", hash: "#/sites/blog/malware", ready: "text=Flagged files", full: true },
+  {
+    name: "system-malware",
+    hash: "#/system",
+    ready: "text=ClamAV 1.4.6+dfsg-1",
+    act: async (page) => page.getByRole("heading", { name: "Virus scan" }).evaluate((h) => h.scrollIntoView({ block: "start" })),
+  },
   { name: "users", hash: "#/users", ready: "table" },
   { name: "databases", hash: "#/databases", ready: "table" },
   { name: "backups", hash: "#/backups", ready: "text=Snapshots" },
