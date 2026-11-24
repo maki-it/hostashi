@@ -229,7 +229,7 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0016 Per-site storage location (storage pools)
 
-**Full text (status Accepted, 2026-11-21):** [adr/0016-per-site-storage-location.md](adr/0016-per-site-storage-location.md). Summary: the storage location can be chosen through named **storage pools** (for example a second volume), never through a free path from the API. The agent checks mount point, marker file and quota per pool, so that an unmounted volume does not fill the root disk. The site's home directory lives directly in the pool, without symlinks. Hostashi does not format or partition disks. Moving between pools is a later, separate operation. All mechanisms are unverified, spike S9 clarifies this.
+**Full text (status Accepted, 2026-11-21):** [adr/0016-per-site-storage-location.md](adr/0016-per-site-storage-location.md). Summary: the storage location can be chosen through named **storage pools** (for example a second volume), never through a free path from the API. The agent checks mount point, marker file and quota per pool, so that an unmounted volume does not fill the root disk. The site's home directory lives directly in the pool, without symlinks. Hostashi does not format or partition disks. Moving between pools is a later, separate operation. All mechanisms are unverified, spike S9 clarifies this. Addendum 2 (Accepted, Kim, 2026-11-24): admins can rename a pool and choose the default pool in the panel and the CLI; adding and removing stay root-only.
 
 ## ADR-0017 CloudPanel import as migration, presets
 
