@@ -109,6 +109,8 @@ func TestEnabledDefaults(t *testing.T) {
 		{"admin", nil, Services, true},
 		{"user", map[string]bool{"services": true}, Services, true},
 		{"manager", nil, Services, false},
+		{"admin", nil, Deploys, false}, // opt-in for everyone (ADR-0062)
+		{"user", map[string]bool{"deploys": true}, Deploys, true},
 		{"admin", nil, Category("other"), false},
 	} {
 		if got := Enabled(c.role, c.prefs, c.cat); got != c.want {

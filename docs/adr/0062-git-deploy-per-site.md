@@ -175,3 +175,11 @@ Notes on the deploy webhook; they change no decision.
 - A push during an active run is not lost: it is noted (202 `queued`) and `RunDeploys` starts one more run after that run ends; more pushes in that time still give one run. The note is kept in memory only, so a panel restart in that window drops it.
 - A webhook deploy has no user (`actor` empty in the history, no user in the audit log); `source` is `webhook`.
 - The installer test turns the webhook on, checks that a wrong GitLab token gets 401 and the fail2ban line, and that a push with the right one deploys and goes live [A: needs the CI run].
+
+## Implementation notes: email on a failed deploy (2026-11-24)
+
+Notes on the email of a failed deploy; they change no decision.
+
+- ADR-0044 has no `sites` category, so the event got its own switch, `deploys` ("Git deploys" under Account, Notifications). It is off by default for every role, admins too, as the decision says opt-in; every role that may see the site can switch it on, and the email goes only to accounts with access to the site [V: `internal/notify/notify_test.go`, `internal/serve/notifications_api_test.go`].
+- Every failed deploy run sends one email per recipient (key `deploy-failed:<site>:<id>`): a failed build, a release that could not go live, a run the agent refused or lost, a queued run that never started. A failed rollback does not; the request that started it shows the error [V: `internal/hosting/deploy_test.go`].
+- The email names the run, the commit (12 characters and the first line of its message), who started it (panel, API token or webhook) and the first line of the error, and links to the site's Git tab; the log itself stays in the panel [V: `internal/notify/deploys_test.go`].

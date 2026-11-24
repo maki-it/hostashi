@@ -7,12 +7,19 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 // ObserveApply calls fn after every web.apply with whether the agent
 // accepted the state and, if it did, the live generation. Set it before
 // the first change.
 func (s *Service) ObserveApply(fn func(ok bool, generation int)) { s.onApply = fn }
+
+// ObserveFailedDeploys calls fn with the site and the run after a Git
+// deploy failed (ADR-0062). Set it before RunDeploys.
+func (s *Service) ObserveFailedDeploys(fn func(ctx context.Context, site string, d store.SiteDeploy)) {
+	s.onDeployFailed = fn
+}
 
 // CertExpiry is the end of one live certificate. Cert is the agent's
 // certificate name: the site's system name, or agentapi.PanelCert for the

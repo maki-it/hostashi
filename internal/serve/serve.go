@@ -605,9 +605,6 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.Sites.EnableGit(box)
 	deps.Sites.EnableDeploys(hosting.RPCAgent{C: client})
 
-	// Deploy runs are followed in the panel; a restart picks them up.
-	go deps.Sites.RunDeploys(ctx)
-
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
 	m.RegisterSites(siteStats(client), cfg.Log)
@@ -628,6 +625,16 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	go watcher.Run(ctx)
+
+	// A failed Git deploy is emailed (ADR-0062). Deploy runs are followed
+	// in the panel; a restart picks them up.
+	deps.Sites.ObserveFailedDeploys(func(ctx context.Context, site string, d store.SiteDeploy) {
+		if _, err := notifier.Notify(ctx, notify.DeployFailed(site, d)); err != nil {
+			cfg.Log.WarnContext(ctx, "notify failed deploy", "site", site, "err", err)
+		}
+	})
+
+	go deps.Sites.RunDeploys(ctx)
 
 	// Service management and the dashboard (ADR-0052).
 	// Service outages are emailed too (ADR-0055).
