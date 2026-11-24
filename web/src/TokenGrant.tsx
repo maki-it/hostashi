@@ -27,7 +27,7 @@ const scopeGroups: { id: string; label: string; areas: string[] }[] = [
   {
     id: "sites",
     label: "Sites",
-    areas: ["sites", "sites.maintenance", "sites.snippets", "files", "logs", "cron", "ssh", "pages", "pagecache", "objectcache", "limits"],
+    areas: ["sites", "sites.maintenance", "sites.snippets", "files", "git", "logs", "cron", "ssh", "pages", "pagecache", "objectcache", "limits"],
   },
   { id: "databases", label: "Databases", areas: ["databases", "db_servers"] },
   { id: "backups", label: "Backups", areas: ["backups"] },

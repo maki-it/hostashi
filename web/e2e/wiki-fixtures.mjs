@@ -124,6 +124,7 @@ const scopes = [
   { name: "firewall:write", description: "Open ports and set the allowlists for SSH and the panel (a wrong list locks out until the rollback)", highRisk: true },
   { name: "limits:read", description: "Read the limit presets and the resource limits and disk use of sites", highRisk: false },
   { name: "limits:write", description: "Change the limit presets and the resource limits of sites", highRisk: false },
+  { name: "git:write", description: "Set the Git repository, token, deploy key and build commands of sites (the commands run as the site user)", highRisk: true },
   { name: "logs:read", description: "Read and follow the access, error and PHP logs of sites (they hold visitors' IP addresses)", highRisk: false },
   { name: "metrics:read", description: "Read the Prometheus metrics endpoint", highRisk: false },
   { name: "migrations:read", description: "List uploaded CloudPanel scan reports and read their migration plans", highRisk: false },
