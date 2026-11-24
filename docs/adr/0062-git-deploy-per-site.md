@@ -107,5 +107,5 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 1. ~~Release directories with an atomic switch and rollback (1B) instead of a working tree in place (1A)?~~ Decided (Kim, 2026-11-24): release directories with an atomic symlink switch (1B).
 2. ~~Git through go-git as the site user (2A), accepting no Git LFS in v1?~~ Decided (Kim, 2026-11-24): go-git as the site user (2A), no Git LFS in v1.
-3. Build commands as free command lines like cron, with presets (4B)?
+3. ~~Build commands as free command lines like cron, with presets (4B)?~~ Decided (Kim, 2026-11-24): free command lines as for cron, with presets (4B).
 4. Webhook for GitHub, GitLab, Gitea/Forgejo and a generic bearer token (3A)?
