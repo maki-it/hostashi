@@ -29,7 +29,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 | Option | Pro | Contra |
 |--------|-----|--------|
-| **A. Typed agent op in Go on file descriptors (`openat2` with `O_PATH|O_NOFOLLOW`, `fchownat`/`fchmodat2` with `AT_EMPTY_PATH`)** | No link is ever followed, no race between check and change, no other file system; no new `os/exec` exception | Own code (about 300 lines) |
+| **A. Typed agent op in Go on file descriptors (`openat2` with `O_PATH` and `O_NOFOLLOW`, `fchownat`/`fchmodat2` with `AT_EMPTY_PATH`)** | No link is ever followed, no race between check and change, no other file system; no new `os/exec` exception | Own code (about 300 lines) |
 | B. `chown -R` / `chmod -R` / `find` | Short | Needs an `os/exec` exception; `chown -R` follows links given on the command line, and races between `find` and `chmod` can be steered by the site user [U] |
 
 ## Recommendation
