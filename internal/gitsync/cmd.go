@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -94,6 +95,10 @@ func Run(ctx context.Context, args []string, euid int, stderr io.Writer) error {
 	b, err := json.Marshal(res)
 	if err != nil {
 		return fmt.Errorf("git-sync: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(f.result), 0o700); err != nil {
+		return fmt.Errorf("git-sync: result: %w", err)
 	}
 
 	if err := os.WriteFile(f.result, append(b, '\n'), 0o600); err != nil {
