@@ -21,6 +21,8 @@ export type ScanEngine = {
   realtime: EngineState;
   /** Whether clamonacc watches the sites now. */
   realtimeActive: boolean;
+  /** The server's RAM in bytes, 0 if unknown. */
+  memTotal: number;
 };
 
 export type ScanSchedule = "off" | "daily" | "weekly";

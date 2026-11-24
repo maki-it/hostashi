@@ -356,7 +356,7 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 		if deps.Doctor != nil {
 			var panel []PanelChecks
 			if deps.Sites != nil {
-				panel = append(panel, deps.Sites.DBServerDoctor, deps.Sites.DatabaseDoctor)
+				panel = append(panel, deps.Sites.DBServerDoctor, deps.Sites.DatabaseDoctor, deps.Sites.MalwareDoctor)
 
 				if deps.PGClient != nil {
 					panel = append(panel, pgClientCheck(deps.Sites.DBServerList, deps.PGClient))

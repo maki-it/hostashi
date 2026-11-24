@@ -53,6 +53,21 @@ func clamdServes(e *scanunit.Engine) func(context.Context) bool {
 	}
 }
 
+// memTotal is the server's RAM in bytes for the page's hint, 0 when it
+// cannot be read.
+func (h *siteOps) memTotal() uint64 {
+	if h.host == nil {
+		return 0
+	}
+
+	st, err := h.host.Read(nil)
+	if err != nil {
+		return 0
+	}
+
+	return st.Memory.TotalBytes
+}
+
 // registerScan serves scan.engine.* and site.scan.* (ADR-0064). Start and
 // the quarantine hold h.mu like site.deploy.start, so a site cannot be
 // deleted meanwhile; the scan itself goes on in its unit.
@@ -62,7 +77,12 @@ func (h *siteOps) registerScan(s *agentrpc.Server) {
 			return agentapi.ScanEngineStatus{}, errNoScan
 		}
 
-		return h.engine.Status(ctx)
+		st, err := h.engine.Status(ctx)
+		if err == nil {
+			st.MemTotal = h.memTotal()
+		}
+
+		return st, err
 	})
 
 	agentrpc.Handle(s, agentapi.ScanEngineSet, func(ctx context.Context, _ agentrpc.Caller, req agentapi.ScanEngineSetRequest) (agentapi.ScanEngineStatus, error) {

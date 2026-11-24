@@ -329,7 +329,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, apps: cfg.Apps, deploy: cfg.Deploy, scan: cfg.Scan, engine: cfg.Engine, realtime: cfg.Realtime, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, f2b: cfg.ProxyIgnore, auth: cfg.AuthFiles, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, apps: cfg.Apps, deploy: cfg.Deploy, scan: cfg.Scan, engine: cfg.Engine, realtime: cfg.Realtime, host: cfg.Host, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, f2b: cfg.ProxyIgnore, auth: cfg.AuthFiles, log: log}
 		h.acl = cfg.panelACL
 
 		if cfg.PHP != nil && cfg.PHP.Hidden == nil {
@@ -418,6 +418,7 @@ type siteOps struct {
 	scan     *scanunit.Manager
 	engine   *scanunit.Engine
 	realtime *scanunit.Realtime
+	host     HostReader // for the RAM hint of the malware scan
 	files    *filesunit.Manager
 	logs     *sitelogs.Reader
 	// logrotate is the file of logs.retention.set (ADR-0053).
