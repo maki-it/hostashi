@@ -15,15 +15,19 @@ export type ScanEngine = {
   version: string;
   /** When the newest signature file was written; "" before the first download. */
   signatures: string;
-  /** The end of the install log when state is "failed". */
+  /** The end of the install log when state or realtime is "failed". */
   error: string;
+  /** The real-time mode (clamd and clamonacc), "off" while ClamAV is off. */
+  realtime: EngineState;
+  /** Whether clamonacc watches the sites now. */
+  realtimeActive: boolean;
 };
 
 export type ScanSchedule = "off" | "daily" | "weekly";
 
 export type ScanRun = {
   id: number;
-  source: "panel" | "api" | "schedule";
+  source: "panel" | "api" | "schedule" | "realtime";
   state: "queued" | "running" | "succeeded" | "failed";
   error: string;
   found: number;
@@ -61,6 +65,8 @@ export type SiteScan = {
 export const getScanEngine = () => request<ScanEngine>("GET", "/malware-scan");
 
 export const setScanEngine = (on: boolean) => request<ScanEngine>("PUT", "/malware-scan", { on });
+
+export const setScanRealtime = (realtime: boolean) => request<ScanEngine>("PUT", "/malware-scan", { realtime });
 
 const path = (site: string) => "/sites/" + encodeURIComponent(site);
 
@@ -114,7 +120,7 @@ export function runWord(r: ScanRun): { word: string; tone: Tone } {
 
 export const runActive = (r: ScanRun) => r.state === "queued" || r.state === "running";
 
-export const sourceLabel = (s: ScanRun["source"]) => ({ panel: "Panel", api: "API", schedule: "Schedule" })[s] ?? s;
+export const sourceLabel = (s: ScanRun["source"]) => ({ panel: "Panel", api: "API", schedule: "Schedule", realtime: "Real time, today" })[s] ?? s;
 
 export function findingWord(s: FindingState): { word: string; tone: Tone } {
   switch (s) {
@@ -148,6 +154,8 @@ export function scanMessage(err: unknown): string {
         return "A scan of this site is waiting or running. Wait until it ends.";
       case "finding_not_found":
         return "This finding is no longer there. Reload the page.";
+      case "scan_engine_busy":
+        return "ClamAV is being installed or removed. Wait until that ends.";
       case "finding_state":
         return "The finding changed in the meantime. Reload the page.";
     }

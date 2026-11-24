@@ -27,6 +27,9 @@ var (
 	ErrNoScans = errors.New("hosting: the malware scan is not available")
 	// ErrScanEngineOff: ClamAV is not installed.
 	ErrScanEngineOff = errors.New("hosting: switch the malware scan on first")
+	// ErrScanEngineBusy: ClamAV or its real-time mode is being installed
+	// or removed.
+	ErrScanEngineBusy = errors.New("hosting: ClamAV is being installed or removed")
 	// ErrScanBusy: a scan of the site is queued or running.
 	ErrScanBusy = store.ErrScanBusy
 	// ErrFindingNotFound: the site has no finding with this id.
@@ -40,7 +43,8 @@ var (
 // ScanAgent is the part of the agent scans use.
 type ScanAgent interface {
 	ScanEngineStatus(ctx context.Context) (agentapi.ScanEngineStatus, error)
-	ScanEngineSet(ctx context.Context, on bool) (agentapi.ScanEngineStatus, error)
+	ScanEngineSet(ctx context.Context, req agentapi.ScanEngineSetRequest) (agentapi.ScanEngineStatus, error)
+	ScanRealtimePoll(ctx context.Context, req agentapi.ScanRealtimePollRequest) (agentapi.ScanRealtimeFindings, error)
 	ScanStart(ctx context.Context, req agentapi.ScanStartRequest) (agentapi.ScanStatus, error)
 	ScanStatus(ctx context.Context, req agentapi.ScanStatusRequest) (agentapi.ScanStatus, error)
 	ScanQuarantine(ctx context.Context, req agentapi.ScanQuarantineRequest) (agentapi.QuarantineItem, error)
@@ -53,8 +57,13 @@ func (a RPCAgent) ScanEngineStatus(ctx context.Context) (agentapi.ScanEngineStat
 }
 
 // ScanEngineSet calls scan.engine.set.
-func (a RPCAgent) ScanEngineSet(ctx context.Context, on bool) (agentapi.ScanEngineStatus, error) {
-	return agentapi.ScanEngineSet.Call(ctx, a.C, agentapi.ScanEngineSetRequest{On: on})
+func (a RPCAgent) ScanEngineSet(ctx context.Context, req agentapi.ScanEngineSetRequest) (agentapi.ScanEngineStatus, error) {
+	return agentapi.ScanEngineSet.Call(ctx, a.C, req)
+}
+
+// ScanRealtimePoll calls scan.realtime.poll.
+func (a RPCAgent) ScanRealtimePoll(ctx context.Context, req agentapi.ScanRealtimePollRequest) (agentapi.ScanRealtimeFindings, error) {
+	return agentapi.ScanRealtimePoll.Call(ctx, a.C, req)
 }
 
 // ScanStart calls site.scan.start.
@@ -125,14 +134,47 @@ func (s *Service) SetScanEngine(ctx context.Context, actor int64, on bool) (agen
 		return agentapi.ScanEngineStatus{}, ErrNoScans
 	}
 
-	st, err := s.scans.ScanEngineSet(ctx, on)
+	st, err := s.scans.ScanEngineSet(ctx, agentapi.ScanEngineSetRequest{On: on})
 	if err != nil {
-		return st, err
+		return st, scanAgentError(err)
 	}
 
 	s.audit(ctx, actor, "malware_scan.engine", "", map[string]string{"on": strconv.FormatBool(on)})
 
 	return st, nil
+}
+
+// SetScanRealtime switches the real-time mode (clamd and clamonacc) on or
+// off. ClamAV must be on.
+func (s *Service) SetScanRealtime(ctx context.Context, actor int64, on bool) (agentapi.ScanEngineStatus, error) {
+	if s.scans == nil {
+		return agentapi.ScanEngineStatus{}, ErrNoScans
+	}
+
+	st, err := s.scans.ScanEngineSet(ctx, agentapi.ScanEngineSetRequest{Realtime: &on})
+	if err != nil {
+		return st, scanAgentError(err)
+	}
+
+	s.audit(ctx, actor, "malware_scan.realtime", "", map[string]string{"on": strconv.FormatBool(on)})
+
+	return st, nil
+}
+
+// scanAgentError turns the agent's refusals of a switch into the
+// service's errors.
+func scanAgentError(err error) error {
+	var re *agentrpc.Error
+	if errors.As(err, &re) {
+		switch re.Code {
+		case agentrpc.CodeConflict:
+			return ErrScanEngineBusy
+		case agentrpc.CodePrecondition:
+			return ErrScanEngineOff
+		}
+	}
+
+	return err
 }
 
 // SiteScan is the malware scan of one site.
@@ -309,6 +351,10 @@ func (s *Service) pollScans(ctx context.Context) {
 		s.queueScheduledScans(ctx, all)
 	}
 
+	if eng.State == agentapi.ScanEngineOn && eng.Realtime == agentapi.ScanEngineOn {
+		s.pollRealtime(ctx, all)
+	}
+
 	active, err := s.st.ActiveScanRuns(ctx)
 	if err != nil {
 		s.log.ErrorContext(ctx, "list active scans", "err", err)
@@ -422,6 +468,97 @@ func (s *Service) pollScan(ctx context.Context, site store.Site, r store.ScanRun
 	}
 
 	return false
+}
+
+// realtimeMailEvery is how often the real-time mode emails a site's new
+// findings at most; findings in between wait for the next email.
+const realtimeMailEvery = time.Hour
+
+// pollRealtime tells the agent which sites the real-time mode watches and
+// stores what it found since the last poll. Only RunScans calls it.
+func (s *Service) pollRealtime(ctx context.Context, all []store.Site) {
+	names := make([]string, 0, len(all))
+	byName := make(map[string]store.Site, len(all))
+
+	for _, site := range all {
+		if site.Account && site.State == store.SiteActive {
+			names = append(names, site.Name)
+			byName[site.Name] = site
+		}
+	}
+
+	if len(names) > agentapi.MaxRealtimeSites {
+		names = names[:agentapi.MaxRealtimeSites]
+	}
+
+	res, err := s.scans.ScanRealtimePoll(ctx, agentapi.ScanRealtimePollRequest{Sites: names, Cursor: s.rtCursor})
+	if err != nil {
+		s.log.WarnContext(ctx, "real-time scan poll", "err", err)
+
+		return
+	}
+
+	s.rtCursor = res.Cursor
+
+	files := map[string][]store.FoundFile{}
+	for _, f := range res.Findings {
+		files[f.Site] = append(files[f.Site], store.FoundFile{Path: f.Path, Signature: f.Signature, SHA256: f.SHA256, Size: f.Size})
+	}
+
+	now := s.now()
+
+	if s.rtPending == nil {
+		s.rtPending = map[string]*realtimeMail{}
+	}
+
+	for name, fs := range files {
+		site, ok := byName[name]
+		if !ok {
+			continue
+		}
+
+		run, fresh, err := s.st.RecordRealtimeFindings(ctx, site.ID, fs, now)
+		if err != nil {
+			s.log.ErrorContext(ctx, "store real-time findings", "site", name, "err", err)
+
+			continue
+		}
+
+		s.log.InfoContext(ctx, "real-time scan found files", "site", name, "found", len(fs), "new", len(fresh))
+
+		if len(fresh) > 0 {
+			p := s.rtPending[name]
+			if p == nil {
+				p = &realtimeMail{}
+				s.rtPending[name] = p
+			}
+
+			p.run = run
+			p.found = append(p.found, fresh...)
+		}
+	}
+
+	for name, p := range s.rtPending {
+		if len(p.found) == 0 || now.Sub(p.sent) < realtimeMailEvery {
+			continue
+		}
+
+		if s.onMalware != nil {
+			r := p.run
+			r.NewFound = len(p.found)
+			s.onMalware(context.WithoutCancel(ctx), name, r, p.found)
+		}
+
+		p.sent, p.found = now, nil
+	}
+}
+
+// realtimeMail holds a site's new real-time findings until they are
+// emailed.
+type realtimeMail struct {
+	run   store.ScanRun
+	found []store.ScanFinding
+	sent  time.Time
 }
 
 func (s *Service) failScan(ctx context.Context, r store.ScanRun, msg string) {

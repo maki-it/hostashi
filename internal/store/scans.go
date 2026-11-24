@@ -256,6 +256,39 @@ func (s *Store) FinishScanRun(ctx context.Context, run ScanRun, files []FoundFil
 	}
 	defer tx.Rollback() //nolint:errcheck // a committed transaction ignores it
 
+	fresh, err := upsertFindings(ctx, tx, run, files, now)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE scan_findings SET state = 'gone' WHERE site_id = ? AND state = 'open' AND (last_run IS NULL OR last_run <> ?)`,
+		run.SiteID, run.ID); err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+
+	res, err := tx.ExecContext(ctx, `UPDATE scan_runs SET state = 'succeeded', error = ?, found = ?, new_found = ?, dropped = ?, finished_at = ?
+WHERE id = ? AND state = 'running'`, clipText(run.Error, 4096), len(files), len(fresh), run.Dropped, now.Unix(), run.ID)
+	if err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, ErrNotFound
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+
+	return fresh, nil
+}
+
+// upsertFindings records the files of a run: a file seen before keeps its
+// row (an ignored one stays ignored), one that was quarantined, gone or
+// restored is open again, a new one is open unless the same content with
+// the same signature is ignored elsewhere in the site. It returns the
+// findings that are newly open.
+func upsertFindings(ctx context.Context, tx *sql.Tx, run ScanRun, files []FoundFile, now time.Time) ([]ScanFinding, error) {
 	var fresh []ScanFinding
 
 	for _, f := range files {
@@ -318,26 +351,66 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, run.SiteID, f.Path, f.Signature, f.SHA256, 
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, `UPDATE scan_findings SET state = 'gone' WHERE site_id = ? AND state = 'open' AND (last_run IS NULL OR last_run <> ?)`,
-		run.SiteID, run.ID); err != nil {
-		return nil, fmt.Errorf("store: %w", err)
-	}
+	return fresh, nil
+}
 
-	res, err := tx.ExecContext(ctx, `UPDATE scan_runs SET state = 'succeeded', error = ?, found = ?, new_found = ?, dropped = ?, finished_at = ?
-WHERE id = ? AND state = 'running'`, clipText(run.Error, 4096), len(files), len(fresh), run.Dropped, now.Unix(), run.ID)
+// RecordRealtimeFindings stores files the real-time mode flagged in the
+// site's real-time run of the day (one per local day, created on the first
+// finding) and returns the run and the findings that are newly open. Open
+// findings it does not name stay open: the real-time mode only sees the
+// files that change.
+func (s *Store) RecordRealtimeFindings(ctx context.Context, siteID int64, files []FoundFile, now time.Time) (ScanRun, []ScanFinding, error) {
+	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("store: %w", err)
+		return ScanRun{}, nil, fmt.Errorf("store: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // a committed transaction ignores it
+
+	local := now.In(time.Local)
+	day := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.Local)
+
+	run, err := scanScanRun(tx.QueryRowContext(ctx, `SELECT `+scanRunColumns+` FROM scan_runs
+WHERE site_id = ? AND source = 'realtime' AND created_at >= ? ORDER BY id DESC LIMIT 1`, siteID, day.Unix()))
+	if errors.Is(err, sql.ErrNoRows) {
+		res, err := tx.ExecContext(ctx, `INSERT INTO scan_runs (site_id, source, state, created_at, started_at, finished_at)
+VALUES (?, 'realtime', 'succeeded', ?, ?, ?)`, siteID, now.Unix(), now.Unix(), now.Unix())
+		if err != nil {
+			return ScanRun{}, nil, fmt.Errorf("store: %w", err)
+		}
+
+		id, err := res.LastInsertId()
+		if err != nil {
+			return ScanRun{}, nil, fmt.Errorf("store: %w", err)
+		}
+
+		if _, err := tx.ExecContext(ctx, `DELETE FROM scan_runs WHERE site_id = ? AND id NOT IN
+(SELECT id FROM scan_runs WHERE site_id = ? ORDER BY id DESC LIMIT ?)`, siteID, siteID, MaxScanHistory); err != nil {
+			return ScanRun{}, nil, fmt.Errorf("store: %w", err)
+		}
+
+		run = ScanRun{ID: id, SiteID: siteID, Source: ScanSourceRealtime, State: ScanSucceeded, Created: now, Started: now, Finished: now}
+	} else if err != nil {
+		return ScanRun{}, nil, fmt.Errorf("store: %w", err)
 	}
 
-	if n, _ := res.RowsAffected(); n == 0 {
-		return nil, ErrNotFound
+	fresh, err := upsertFindings(ctx, tx, run, files, now)
+	if err != nil {
+		return ScanRun{}, nil, err
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE scan_runs SET found = found + ?, new_found = new_found + ?, finished_at = ? WHERE id = ?`,
+		len(files), len(fresh), now.Unix(), run.ID); err != nil {
+		return ScanRun{}, nil, fmt.Errorf("store: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("store: %w", err)
+		return ScanRun{}, nil, fmt.Errorf("store: %w", err)
 	}
 
-	return fresh, nil
+	run.Found += len(files)
+	run.NewFound += len(fresh)
+
+	return run, fresh, nil
 }
 
 // ScanRuns lists the runs of a site, newest first, at most limit.
@@ -351,9 +424,10 @@ func (s *Store) ActiveScanRuns(ctx context.Context) ([]ScanRun, error) {
 	return s.queryScanRuns(ctx, `SELECT `+scanRunColumns+` FROM scan_runs WHERE state IN ('queued', 'running') ORDER BY id`)
 }
 
-// LastScanRuns returns the newest run of every site.
+// LastScanRuns returns the newest scan of every site; the real-time
+// mode's runs do not count.
 func (s *Store) LastScanRuns(ctx context.Context) (map[int64]ScanRun, error) {
-	list, err := s.queryScanRuns(ctx, `SELECT `+scanRunColumns+` FROM scan_runs WHERE id IN (SELECT max(id) FROM scan_runs GROUP BY site_id)`)
+	list, err := s.queryScanRuns(ctx, `SELECT `+scanRunColumns+` FROM scan_runs WHERE id IN (SELECT max(id) FROM scan_runs WHERE source <> 'realtime' GROUP BY site_id)`)
 	if err != nil {
 		return nil, err
 	}

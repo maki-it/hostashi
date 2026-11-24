@@ -32,12 +32,16 @@ func (a *scanAgent) ScanEngineStatus(context.Context) (agentapi.ScanEngineStatus
 	return agentapi.ScanEngineStatus{State: agentapi.ScanEngineOff}, nil
 }
 
-func (a *scanAgent) ScanEngineSet(_ context.Context, on bool) (agentapi.ScanEngineStatus, error) {
+func (a *scanAgent) ScanEngineSet(_ context.Context, req agentapi.ScanEngineSetRequest) (agentapi.ScanEngineStatus, error) {
+	if req.Realtime != nil {
+		return agentapi.ScanEngineStatus{State: agentapi.ScanEngineOn, Realtime: agentapi.ScanEngineInstalling}, nil
+	}
+
 	a.mu.Lock()
-	a.on = on
+	a.on = req.On
 	a.mu.Unlock()
 
-	if on {
+	if req.On {
 		return agentapi.ScanEngineStatus{State: agentapi.ScanEngineInstalling}, nil
 	}
 
@@ -54,6 +58,10 @@ func (*scanAgent) ScanStatus(_ context.Context, req agentapi.ScanStatusRequest) 
 
 func (*scanAgent) ScanQuarantine(context.Context, agentapi.ScanQuarantineRequest) (agentapi.QuarantineItem, error) {
 	return agentapi.QuarantineItem{}, nil
+}
+
+func (*scanAgent) ScanRealtimePoll(context.Context, agentapi.ScanRealtimePollRequest) (agentapi.ScanRealtimeFindings, error) {
+	return agentapi.ScanRealtimeFindings{}, nil
 }
 
 func (*scanAgent) ScanRestore(context.Context, agentapi.ScanRestoreRequest) (agentapi.ScanRestored, error) {
@@ -78,6 +86,14 @@ func TestMalwareScanOverHTTP(t *testing.T) {
 
 	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/malware-scan", cookie: c, body: `{}`}); rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("engine without on: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/malware-scan", cookie: c, body: `{"on":true,"realtime":true}`}); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("both: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/malware-scan", cookie: c, body: `{"realtime":true}`}); rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"realtime":"installing"`) {
+		t.Fatalf("real-time on: %d %s", rec.Code, rec.Body)
 	}
 
 	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/malware-scan", cookie: c, body: `{"on":true}`}); rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"state":"installing"`) {

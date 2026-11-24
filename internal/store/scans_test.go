@@ -164,3 +164,43 @@ func TestScanRunsAndFindings(t *testing.T) {
 		t.Fatalf("findings after delete %+v", all)
 	}
 }
+
+func TestRealtimeFindings(t *testing.T) {
+	s := open(t, dbPath(t))
+	ctx := t.Context()
+	now := time.Date(2026, 11, 24, 10, 0, 0, 0, time.Local)
+
+	site, err := s.CreateSite(ctx, "blog", "default", "8.4", []string{"blog.example.com"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	a := FoundFile{Path: "a.php", Signature: "Php.Shell-1", SHA256: strings.Repeat("a", 64), Size: 3}
+	b := FoundFile{Path: "b.php", Signature: "Php.Shell-1", SHA256: strings.Repeat("b", 64), Size: 4}
+
+	r1, fresh, err := s.RecordRealtimeFindings(ctx, site.ID, []FoundFile{a}, now)
+	if err != nil || len(fresh) != 1 || r1.Source != ScanSourceRealtime || r1.State != ScanSucceeded || r1.Found != 1 {
+		t.Fatalf("first %+v %+v %v", r1, fresh, err)
+	}
+
+	// The same day: the same run; a stays open although not named again.
+	r2, fresh, err := s.RecordRealtimeFindings(ctx, site.ID, []FoundFile{b, a}, now.Add(time.Hour))
+	if err != nil || r2.ID != r1.ID || len(fresh) != 1 || fresh[0].Path != "b.php" {
+		t.Fatalf("second %+v %+v %v", r2, fresh, err)
+	}
+
+	runs, _ := s.ScanRuns(ctx, site.ID, 10)
+	if len(runs) != 1 || runs[0].Found != 3 || runs[0].NewFound != 2 {
+		t.Fatalf("runs %+v", runs)
+	}
+
+	// The next day: a new run.
+	if r3, _, err := s.RecordRealtimeFindings(ctx, site.ID, []FoundFile{b}, now.Add(24*time.Hour)); err != nil || r3.ID == r1.ID {
+		t.Fatalf("next day %+v %v", r3, err)
+	}
+
+	// A running scheduled scan is not disturbed by the real-time run.
+	if _, err := s.CreateScanRun(ctx, site.ID, ScanSourcePanel, 0, now); err != nil {
+		t.Fatal(err)
+	}
+}

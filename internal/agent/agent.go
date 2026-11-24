@@ -214,6 +214,10 @@ type Config struct {
 	// scan.engine.* answer failed_precondition.
 	Scan   *scanunit.Manager
 	Engine *scanunit.Engine
+	// Realtime keeps the optional real-time mode in step with the sites
+	// (ADR-0064); without it scan.realtime.poll answers
+	// failed_precondition.
+	Realtime *scanunit.Realtime
 
 	// Files starts the sites' file manager sockets (ADR-0040). Run builds
 	// it; without it files.open answers failed_precondition.
@@ -325,7 +329,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 			log = slog.New(slog.DiscardHandler)
 		}
 
-		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, apps: cfg.Apps, deploy: cfg.Deploy, scan: cfg.Scan, engine: cfg.Engine, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, f2b: cfg.ProxyIgnore, auth: cfg.AuthFiles, log: log}
+		h = &siteOps{m: cfg.Sites, web: cfg.Web, php: cfg.PHP, certs: cfg.Certs, db: cfg.DB, pages: cfg.Pages, cron: cfg.Cron, ssh: cfg.SSH, quota: cfg.Quota, slices: cfg.Slices, phpi: cfg.PHPInstall, cache: cfg.PageCache, objc: cfg.ObjectCache, apps: cfg.Apps, deploy: cfg.Deploy, scan: cfg.Scan, engine: cfg.Engine, realtime: cfg.Realtime, files: cfg.Files, logs: cfg.Logs, logrotate: cfg.LogRotate, f2b: cfg.ProxyIgnore, auth: cfg.AuthFiles, log: log}
 		h.acl = cfg.panelACL
 
 		if cfg.PHP != nil && cfg.PHP.Hidden == nil {
@@ -396,25 +400,26 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 // web.apply, so a site cannot lose its home while a virtual host or a PHP
 // pool is being built for it.
 type siteOps struct {
-	m      *sites.Manager
-	web    *web.Reconciler
-	php    *php.Manager
-	phpi   *phpinstall.Manager
-	certs  *certs.Store
-	db     *mariadb.Manager
-	pages  *pages.Store
-	cron   *cronjobs.Manager
-	ssh    *sshaccess.Manager
-	quota  QuotaFS
-	slices *siteslice.Manager
-	cache  *pagecache.Dirs
-	objc   *objcache.Manager
-	apps   *appunit.Manager
-	deploy *deployunit.Manager
-	scan   *scanunit.Manager
-	engine *scanunit.Engine
-	files  *filesunit.Manager
-	logs   *sitelogs.Reader
+	m        *sites.Manager
+	web      *web.Reconciler
+	php      *php.Manager
+	phpi     *phpinstall.Manager
+	certs    *certs.Store
+	db       *mariadb.Manager
+	pages    *pages.Store
+	cron     *cronjobs.Manager
+	ssh      *sshaccess.Manager
+	quota    QuotaFS
+	slices   *siteslice.Manager
+	cache    *pagecache.Dirs
+	objc     *objcache.Manager
+	apps     *appunit.Manager
+	deploy   *deployunit.Manager
+	scan     *scanunit.Manager
+	engine   *scanunit.Engine
+	realtime *scanunit.Realtime
+	files    *filesunit.Manager
+	logs     *sitelogs.Reader
 	// logrotate is the file of logs.retention.set (ADR-0053).
 	logrotate string
 	// f2b is fail2ban's never-ban file of trusted proxies (ADR-0059).
@@ -1676,15 +1681,19 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 	}
 
+	if cfg.Engine == nil {
+		cfg.Engine = &scanunit.Engine{Ctl: phpctl.ClamAVInstallUnits{}, Realtime: phpctl.ClamAVRealtimeUnits{}}
+	}
+
+	if cfg.Realtime == nil {
+		cfg.Realtime = &scanunit.Realtime{Ctl: phpctl.ClamAVRealtimeUnits{}}
+	}
+
 	if cfg.Scan == nil {
 		cfg.Scan = &scanunit.Manager{
 			Dir: filepath.Join(cmp.Or(cfg.StateDir, DefaultStateDir), "scan"), Site: scanSite(cfg.Sites), Hidden: cfg.Sites.HiddenPaths,
-			Ctl: phpctl.ScanController{}, Log: cfg.Log,
+			Clamd: clamdServes(cfg.Engine), Ctl: phpctl.ScanController{}, Log: cfg.Log,
 		}
-	}
-
-	if cfg.Engine == nil {
-		cfg.Engine = &scanunit.Engine{Ctl: phpctl.ClamAVInstallUnits{}}
 	}
 
 	// A line installed again restarts its apps; a Hostashi update with

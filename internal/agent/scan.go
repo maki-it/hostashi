@@ -15,6 +15,7 @@ import (
 var (
 	errNoScan       = &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "malware scans are not available on this server"}
 	errEngineNotOn  = &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "ClamAV is not installed; switch the malware scan on first"}
+	errRealtimeOff  = &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the real-time mode of the malware scan is off"}
 	errScanNotFound = &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "unknown site"}
 )
 
@@ -35,6 +36,20 @@ func scanSite(m *sites.Manager) func(string) (scanunit.Site, error) {
 		}
 
 		return scanunit.Site{}, sites.ErrNotFound
+	}
+}
+
+// clamdServes reports whether scans go through the real-time mode's clamd:
+// the mode is on and clamd runs or its socket starts it.
+func clamdServes(e *scanunit.Engine) func(context.Context) bool {
+	return func(ctx context.Context) bool {
+		if !e.RealtimeOn() || e.Realtime == nil {
+			return false
+		}
+
+		st, err := e.Realtime.State(ctx, scanunit.ClamdUnit)
+
+		return err == nil && st != "failed"
 	}
 }
 
@@ -100,6 +115,38 @@ func (h *siteOps) registerScan(s *agentrpc.Server) {
 		return it, mapScanError(err)
 	})
 
+	agentrpc.Handle(s, agentapi.ScanRealtimePoll, func(ctx context.Context, _ agentrpc.Caller, req agentapi.ScanRealtimePollRequest) (agentapi.ScanRealtimeFindings, error) {
+		if h.realtime == nil || h.engine == nil {
+			return agentapi.ScanRealtimeFindings{}, errNoScan
+		}
+
+		if !h.engine.RealtimeOn() {
+			return agentapi.ScanRealtimeFindings{}, errRealtimeOff
+		}
+
+		// The homes of the sites the panel names; unknown ones are skipped.
+		lookup := scanSite(h.m)
+		homes := make(map[string]string, len(req.Sites))
+		list := make([]string, 0, len(req.Sites))
+
+		for _, site := range req.Sites {
+			if acct, err := lookup(site); err == nil {
+				homes[site] = acct.Home
+				list = append(list, acct.Home)
+			}
+		}
+
+		active, err := h.realtime.Sync(ctx, list)
+		if err != nil {
+			return agentapi.ScanRealtimeFindings{}, err
+		}
+
+		out, err := h.realtime.Poll(homes, req.Cursor)
+		out.Active = active
+
+		return out, err
+	})
+
 	agentrpc.Handle(s, agentapi.ScanRestore, func(ctx context.Context, _ agentrpc.Caller, req agentapi.ScanRestoreRequest) (agentapi.ScanRestored, error) {
 		if h.scan == nil {
 			return agentapi.ScanRestored{}, errNoScan
@@ -122,6 +169,8 @@ func mapScanError(err error) error {
 		return errScanNotFound
 	case errors.Is(err, scanunit.ErrUnknownItem):
 		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: err.Error()}
+	case errors.Is(err, scanunit.ErrEngineOff):
+		return errEngineNotOn
 	case errors.Is(err, scanunit.ErrBusy), errors.Is(err, scanunit.ErrEngineBusy):
 		return &agentrpc.Error{Code: agentrpc.CodeConflict, Message: err.Error()}
 	case errors.Is(err, scanunit.ErrChanged), errors.Is(err, scanunit.ErrExists), errors.Is(err, scanunit.ErrNoParent), errors.Is(err, scanunit.ErrNotRegular):

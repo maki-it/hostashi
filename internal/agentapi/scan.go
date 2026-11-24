@@ -27,6 +27,7 @@ var (
 	ScanStatusOp       = agentrpc.Op[ScanStatusRequest, ScanStatus]{Name: "site.scan.status"}
 	ScanQuarantine     = agentrpc.Op[ScanQuarantineRequest, QuarantineItem]{Name: "site.scan.quarantine"}
 	ScanRestore        = agentrpc.Op[ScanRestoreRequest, ScanRestored]{Name: "site.scan.restore"}
+	ScanRealtimePoll   = agentrpc.Op[ScanRealtimePollRequest, ScanRealtimeFindings]{Name: "scan.realtime.poll"}
 )
 
 // The states of the scan engine (ClamAV on the server).
@@ -44,9 +45,12 @@ type ScanEngineStatusRequest struct{}
 // Validate implements agentrpc's request check.
 func (ScanEngineStatusRequest) Validate() error { return nil }
 
-// ScanEngineSetRequest installs (On) or removes ClamAV.
+// ScanEngineSetRequest installs (On) or removes ClamAV. With Realtime set
+// it switches the real-time mode instead (clamd and clamonacc), and On is
+// not looked at.
 type ScanEngineSetRequest struct {
-	On bool `json:"on"`
+	On       bool  `json:"on"`
+	Realtime *bool `json:"realtime,omitempty"`
 }
 
 // Validate implements agentrpc's request check.
@@ -62,6 +66,11 @@ type ScanEngineStatus struct {
 	Signatures string `json:"signatures,omitempty"`
 	// Error is the end of the install log when State is failed.
 	Error string `json:"error,omitempty"`
+	// Realtime is the state of the real-time mode, with the same words as
+	// State; "" or off while it is off.
+	Realtime string `json:"realtime,omitempty"`
+	// RealtimeActive reports whether clamonacc runs.
+	RealtimeActive bool `json:"realtimeActive,omitempty"`
 }
 
 // ScanStartRequest starts a scan of a site (site.scan.start).
@@ -206,4 +215,52 @@ func (r ScanRestoreRequest) Validate() error {
 // ScanRestored names the restored file.
 type ScanRestored struct {
 	Path string `json:"path"`
+}
+
+// MaxRealtimeSites is how many sites one real-time poll names.
+const MaxRealtimeSites = 4096
+
+// ScanRealtimePollRequest names the sites the real-time mode watches and
+// asks for the findings logged since Cursor (scan.realtime.poll). Cursor
+// -1 skips what is logged already. The agent rewrites clamonacc's
+// configuration when the sites changed.
+type ScanRealtimePollRequest struct {
+	Sites  []string `json:"sites"`
+	Cursor int64    `json:"cursor"`
+}
+
+// Validate implements agentrpc's request check.
+func (r ScanRealtimePollRequest) Validate() error {
+	if len(r.Sites) > MaxRealtimeSites {
+		return fmt.Errorf("at most %d sites", MaxRealtimeSites)
+	}
+
+	if r.Cursor < -1 {
+		return fmt.Errorf("invalid cursor %d", r.Cursor)
+	}
+
+	for _, s := range r.Sites {
+		if err := ValidateSiteUser(s); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// RealtimeFinding is a file the real-time mode flagged.
+type RealtimeFinding struct {
+	Site string `json:"site"`
+	ScanFinding
+}
+
+// ScanRealtimeFindings answers scan.realtime.poll.
+type ScanRealtimeFindings struct {
+	// Active reports whether clamonacc runs.
+	Active   bool              `json:"active"`
+	Findings []RealtimeFinding `json:"findings"`
+	// Dropped counts lines that were not accepted as findings.
+	Dropped int `json:"dropped"`
+	// Cursor is where the next poll goes on.
+	Cursor int64 `json:"cursor"`
 }

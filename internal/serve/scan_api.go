@@ -25,13 +25,23 @@ type scanEngineJSON struct {
 	// Signatures is when the newest signature file was written, RFC 3339;
 	// "" before freshclam's first download.
 	Signatures string `json:"signatures"`
-	// Error is the end of the install log when State is "failed".
+	// Error is the end of the install log when State or Realtime is
+	// "failed".
 	Error string `json:"error"`
+	// Realtime is the real-time mode (clamd and clamonacc), with the words
+	// of State; "off" while ClamAV is off.
+	Realtime string `json:"realtime"`
+	// RealtimeActive reports whether clamonacc watches the sites now.
+	RealtimeActive bool `json:"realtimeActive"`
 }
 
 type scanEngineRequest struct {
-	// On installs ClamAV (true) or removes it (false).
-	On *bool `json:"on"`
+	// On installs ClamAV (true) or removes it (false), with the real-time
+	// mode.
+	On *bool `json:"on,omitempty"`
+	// Realtime switches the real-time mode; ClamAV must be on. Give either
+	// on or realtime.
+	Realtime *bool `json:"realtime,omitempty"`
 }
 
 // scanRunJSON is one malware scan of a site.
@@ -86,7 +96,12 @@ type scanScheduleRequest struct {
 }
 
 func toScanEngineJSON(s agentapi.ScanEngineStatus) scanEngineJSON {
-	return scanEngineJSON{State: s.State, Version: s.Version, Signatures: s.Signatures, Error: s.Error}
+	rt := s.Realtime
+	if rt == "" {
+		rt = agentapi.ScanEngineOff
+	}
+
+	return scanEngineJSON{State: s.State, Version: s.Version, Signatures: s.Signatures, Error: s.Error, Realtime: rt, RealtimeActive: s.RealtimeActive}
 }
 
 func toScanRunJSON(r store.ScanRun) scanRunJSON {
@@ -118,6 +133,8 @@ func scanFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "scan_unavailable", "the malware scan is not available on this panel")
 	case errors.Is(err, hosting.ErrScanEngineOff):
 		writeError(w, http.StatusConflict, "scan_off", "switch the malware scan on first")
+	case errors.Is(err, hosting.ErrScanEngineBusy):
+		writeError(w, http.StatusConflict, "scan_engine_busy", "ClamAV is being installed or removed; wait until that ends")
 	case errors.Is(err, hosting.ErrScanBusy):
 		writeError(w, http.StatusConflict, "scan_running", "a scan of this site is queued or running")
 	case errors.Is(err, hosting.ErrFindingNotFound):
@@ -158,7 +175,7 @@ func registerScans(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 	}))
 
 	mux.Op("PUT /api/v1/malware-scan", openapi.Operation{
-		ID: "setMalwareScan", Tag: "malware", Summary: "Install or remove ClamAV for the malware scan; the result follows in getMalwareScan",
+		ID: "setMalwareScan", Tag: "malware", Summary: "Install or remove ClamAV for the malware scan, or switch its real-time mode; the result follows in getMalwareScan",
 		In: scanEngineRequest{}, Out: scanEngineJSON{}, Status: http.StatusAccepted,
 	}, a.allow("malware.engine:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in scanEngineRequest
@@ -166,13 +183,23 @@ func registerScans(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			return
 		}
 
-		if in.On == nil {
-			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "on is required")
+		if (in.On == nil) == (in.Realtime == nil) {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "give either on or realtime")
 
 			return
 		}
 
-		st, err := svc.SetScanEngine(r.Context(), p.User.ID, *in.On)
+		var (
+			st  agentapi.ScanEngineStatus
+			err error
+		)
+
+		if in.Realtime != nil {
+			st, err = svc.SetScanRealtime(r.Context(), p.User.ID, *in.Realtime)
+		} else {
+			st, err = svc.SetScanEngine(r.Context(), p.User.ID, *in.On)
+		}
+
 		if err != nil {
 			scanFail(log, w, err, "set scan engine")
 
