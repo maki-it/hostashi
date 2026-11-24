@@ -76,10 +76,14 @@ commands:
             create a static site with its domains, delete a site with its
             data, or list the sites, through the panel's API (needs
             hostashi login)
-  pool add NAME PATH | pool remove NAME | pool list
+  pool add [-default] NAME PATH | pool remove NAME | pool list
             storage pools for site homes (ADR-0016, root on the server):
             PATH is a mounted, empty ext4 or XFS volume with nosuid,nodev
-            and an /etc/fstab entry; Hostashi never formats or mounts
+            and an /etc/fstab entry; Hostashi never formats or mounts;
+            -default makes the new pool the default for new sites
+  pool rename NAME NEWNAME | pool default NAME
+            rename a pool (its path and sites stay) or make it the default
+            for new sites, through the panel's API (needs hostashi login)
   site files NAME
             start the file manager's socket of a site and print its path
             (ADR-0040)

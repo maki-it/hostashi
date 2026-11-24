@@ -109,14 +109,11 @@ func (m *Manager) AddPool(name, dir string) (Pool, error) {
 }
 
 // RemovePool unregisters a pool no site uses and deletes its marker, so the
-// volume can be unmounted or added again. The default pool stays.
+// volume can be unmounted or added again. The default pool stays: another
+// pool has to become the default first.
 func (m *Manager) RemovePool(name string) error {
 	if err := agentapi.ValidatePoolName(name); err != nil {
 		return fmt.Errorf("%w: %w", ErrPoolRefused, err)
-	}
-
-	if name == agentapi.DefaultPool {
-		return fmt.Errorf("%w: the default pool cannot be removed", ErrPoolRefused)
 	}
 
 	m.mu.Lock()
@@ -125,6 +122,10 @@ func (m *Manager) RemovePool(name string) error {
 	p, ok := m.reg.Pool(name)
 	if !ok {
 		return ErrNotFound
+	}
+
+	if name == m.reg.DefaultPool() {
+		return fmt.Errorf("%w: %s is the default pool; make another pool the default first", ErrPoolRefused, name)
 	}
 
 	for _, s := range m.reg.List() {
@@ -155,6 +156,69 @@ func (m *Manager) RemovePool(name string) error {
 	m.opt.Log.Info("storage pool removed", "pool", name, "path", p.Path)
 
 	return nil
+}
+
+// RenamePool gives a pool a new name (ADR-0016 addendum 2). Only the
+// registry changes: the path, the marker and the site homes stay where they
+// are, so no unit has to be written again.
+func (m *Manager) RenamePool(name, newName string) (Pool, error) {
+	for _, n := range []string{name, newName} {
+		if err := agentapi.ValidatePoolName(n); err != nil {
+			return Pool{}, fmt.Errorf("%w: %w", ErrPoolRefused, err)
+		}
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if name == newName {
+		if p, ok := m.reg.Pool(name); ok {
+			return p, nil
+		}
+
+		return Pool{}, ErrNotFound
+	}
+
+	p, err := m.reg.renamePool(name, newName)
+	if err != nil {
+		if errors.Is(err, ErrPoolExists) {
+			return Pool{}, fmt.Errorf("%w: %s", ErrPoolExists, newName)
+		}
+
+		return Pool{}, err
+	}
+
+	m.opt.Log.Info("storage pool renamed", "pool", name, "name", newName)
+
+	return p, nil
+}
+
+// SetDefaultPool makes a registered pool the one new sites land in when
+// they name none (ADR-0016 addendum 2).
+func (m *Manager) SetDefaultPool(name string) (Pool, error) {
+	if err := agentapi.ValidatePoolName(name); err != nil {
+		return Pool{}, fmt.Errorf("%w: %w", ErrPoolRefused, err)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	p, err := m.reg.setDefault(name)
+	if err != nil {
+		return Pool{}, err
+	}
+
+	m.opt.Log.Info("default storage pool set", "pool", name)
+
+	return p, nil
+}
+
+// DefaultPool is the name of the current default pool.
+func (m *Manager) DefaultPool() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.reg.DefaultPool()
 }
 
 // placeAllowed refuses system trees and paths inside or around another

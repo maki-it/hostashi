@@ -4,6 +4,7 @@ package agentapi
 
 import (
 	"errors"
+	"fmt"
 	"path"
 	"regexp"
 
@@ -28,6 +29,8 @@ type PoolInfo struct {
 	Available  bool   `json:"available"`
 	FreeBytes  uint64 `json:"freeBytes,omitempty"`
 	TotalBytes uint64 `json:"totalBytes,omitempty"`
+	// Default: new sites that name no pool land here.
+	Default bool `json:"default"`
 }
 
 // PoolAddRequest registers a mounted volume as a pool. It carries a path,
@@ -36,6 +39,8 @@ type PoolInfo struct {
 type PoolAddRequest struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
+	// Default makes the new pool the default right away.
+	Default bool `json:"default,omitempty"`
 }
 
 // Validate checks the request; the agent checks the directory itself.
@@ -73,9 +78,41 @@ type PoolListResponse struct {
 	Pools []PoolInfo `json:"pools"`
 }
 
-// Operations of the storage pools. Add and remove are for root only.
+// PoolRenameRequest gives a pool a new name. It carries no path, so the
+// panel may send it (ADR-0016 addendum 2).
+type PoolRenameRequest struct {
+	Name    string `json:"name"`
+	NewName string `json:"newName"`
+}
+
+// Validate checks both names.
+func (r PoolRenameRequest) Validate() error {
+	if err := ValidatePoolName(r.Name); err != nil {
+		return err
+	}
+
+	if err := ValidatePoolName(r.NewName); err != nil {
+		return fmt.Errorf("new name: %w", err)
+	}
+
+	return nil
+}
+
+// PoolDefaultRequest makes a pool the default for new sites. It carries no
+// path, so the panel may send it (ADR-0016 addendum 2).
+type PoolDefaultRequest struct {
+	Name string `json:"name"`
+}
+
+// Validate checks the name.
+func (r PoolDefaultRequest) Validate() error { return ValidatePoolName(r.Name) }
+
+// Operations of the storage pools. Add and remove are for root only;
+// rename and default also for the panel.
 var (
-	PoolAdd    = agentrpc.Op[PoolAddRequest, PoolInfo]{Name: "pool.add"}
-	PoolRemove = agentrpc.Op[PoolRemoveRequest, PoolRemoveResponse]{Name: "pool.remove"}
-	PoolList   = agentrpc.Op[PoolListRequest, PoolListResponse]{Name: "pool.list"}
+	PoolRename  = agentrpc.Op[PoolRenameRequest, PoolInfo]{Name: "pool.rename"}
+	PoolDefault = agentrpc.Op[PoolDefaultRequest, PoolInfo]{Name: "pool.default"}
+	PoolAdd     = agentrpc.Op[PoolAddRequest, PoolInfo]{Name: "pool.add"}
+	PoolRemove  = agentrpc.Op[PoolRemoveRequest, PoolRemoveResponse]{Name: "pool.remove"}
+	PoolList    = agentrpc.Op[PoolListRequest, PoolListResponse]{Name: "pool.list"}
 )

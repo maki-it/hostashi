@@ -299,3 +299,24 @@ func TestSiteOverAPI(t *testing.T) {
 		t.Errorf("create body without a pool = %s", got["POST /api/v1/sites"])
 	}
 }
+
+func TestPoolRenameAndDefaultOverAPI(t *testing.T) {
+	got := fakeAPI(t, map[string]string{
+		"POST /api/v1/pools/vol1/rename":  `{"name":"fast","path":"/srv/vol1","sites":2,"available":true,"default":false}`,
+		"POST /api/v1/pools/fast/default": `{"name":"fast","path":"/srv/vol1","sites":2,"available":true,"default":true}`,
+	})
+
+	if code, out, _ := runCLI(t, "", "pool", "rename", "vol1", "fast"); code != 0 || !strings.Contains(out, `"name": "fast"`) || got["POST /api/v1/pools/vol1/rename"] != `{"name":"fast"}` {
+		t.Errorf("rename = %d: %s %v", code, out, got)
+	}
+
+	if code, out, _ := runCLI(t, "", "pool", "default", "fast"); code != 0 || !strings.Contains(out, `"default": true`) {
+		t.Errorf("default = %d: %s", code, out)
+	}
+
+	for _, args := range [][]string{{"pool", "rename", "vol1"}, {"pool", "default"}, {"pool", "add", "-x", "a", "/b"}} {
+		if code, _, _ := runCLI(t, "", args...); code != 2 {
+			t.Errorf("%v = %d", args, code)
+		}
+	}
+}

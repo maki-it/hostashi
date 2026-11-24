@@ -4734,6 +4734,9 @@
           "available": {
             "type": "boolean"
           },
+          "default": {
+            "type": "boolean"
+          },
           "freeBytes": {
             "minimum": 0,
             "type": "integer"
@@ -4757,6 +4760,7 @@
         },
         "required": [
           "available",
+          "default",
           "name",
           "path",
           "sites"
@@ -4779,6 +4783,15 @@
         "required": [
           "pools"
         ],
+        "type": "object"
+      },
+      "PoolRenameInput": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "Preferences": {
@@ -12872,6 +12885,122 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "pools:read"
+      }
+    },
+    "/api/v1/pools/{name}/default": {
+      "post": {
+        "operationId": "setDefaultPool",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoolInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:write"
+            ]
+          }
+        ],
+        "summary": "Make a storage pool the default for new sites",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "pools:write"
+      }
+    },
+    "/api/v1/pools/{name}/rename": {
+      "post": {
+        "operationId": "renamePool",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PoolRenameInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoolInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:write"
+            ]
+          }
+        ],
+        "summary": "Give a storage pool a new name; its path and sites stay",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "pools:write"
       }
     },
     "/api/v1/python": {

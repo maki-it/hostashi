@@ -235,8 +235,9 @@ export function redirectProblem(target: string, own: string[]): string {
   return "";
 }
 
-// Pool is a storage pool for site homes (ADR-0016). Root adds pools on the
-// server (hostashi pool add); the panel only chooses one for a new site.
+// Pool is a storage pool for site homes (ADR-0016). Root adds and removes
+// pools on the server (hostashi pool add); admins rename them in the panel
+// and choose the default (addendum 2).
 export type Pool = {
   name: string;
   path: string;
@@ -246,9 +247,36 @@ export type Pool = {
   quota?: "off" | "counting" | "enforced";
   freeBytes?: number;
   totalBytes?: number;
+  // New sites that name no pool land here.
+  default: boolean;
 };
 
 export const listPools = () => request<{ pools: Pool[] }>("GET", "/pools").then((r) => r.pools);
+export const renamePool = (name: string, newName: string) =>
+  request<Pool>("POST", "/pools/" + encodeURIComponent(name) + "/rename", { name: newName });
+export const setDefaultPool = (name: string) => request<Pool>("POST", "/pools/" + encodeURIComponent(name) + "/default");
+
+/** The name of the default pool; "default" for an agent that marks none. */
+export function defaultPool(pools: readonly Pool[]): string {
+  return pools.find((p) => p.default)?.name ?? "default";
+}
+
+// Pool names as the agent accepts them (poolNameRe in internal/agentapi).
+const poolName = /^[a-z][a-z0-9-]{0,31}$/;
+
+/** Why a new pool name cannot be used, or "". */
+export function poolNameProblem(name: string, pools: readonly Pool[], current: string): string {
+  if (name === "") return "Enter a name.";
+  if (!poolName.test(name)) return "Lowercase letters, digits and hyphens, starting with a letter, at most 32 characters.";
+  if (name !== current && pools.some((p) => p.name === name)) return "Another pool already has this name.";
+  return "";
+}
+
+/** The used share of a pool's volume, or null without sizes. */
+export function poolUsed(p: Pool): number | null {
+  if (!p.available || !p.totalBytes || p.freeBytes === undefined) return null;
+  return Math.max(0, p.totalBytes - p.freeBytes);
+}
 
 /** The text of a pool in the choice: name, path and free space. */
 export function poolLabel(p: Pool): string {

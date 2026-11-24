@@ -130,6 +130,11 @@ type Deps struct {
 	// Pools lists the storage pools (ADR-0016); nil disables its route.
 	// Needs Auth.
 	Pools Pools
+	// PoolAdmin and PoolSites rename pools and pick the default one
+	// (ADR-0016 addendum 2); nil disables those routes. Need Auth, Pools
+	// and Settings.
+	PoolAdmin PoolAdmin
+	PoolSites PoolSites
 	// PHP installs more PHP versions (ADR-0036); nil disables its routes.
 	// Needs Auth and Settings.
 	PHP PHPInstaller
@@ -329,6 +334,10 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		if deps.Pools != nil {
 			registerPools(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Pools, log)
+
+			if deps.PoolAdmin != nil && deps.PoolSites != nil && deps.Settings != nil {
+				registerPoolAdmin(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Pools, deps.PoolAdmin, deps.PoolSites, deps.Settings, log)
+			}
 		}
 
 		if deps.Doctor != nil {
@@ -532,6 +541,8 @@ func Run(ctx context.Context, cfg Config) error {
 		Settings:    st,
 		Doctor:      RPCDoctor(client),
 		Pools:       RPCPools(client),
+		PoolAdmin:   RPCPoolAdmin{C: client},
+		PoolSites:   st,
 		Firewall:    RPCFirewall{C: client},
 		PHP:         RPCPHPInstaller{C: client},
 		PGClient:    RPCPGClient{C: client},
@@ -552,6 +563,11 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
 	deps.CloudPanel.Connect(siteCreator(deps.Sites, cfg.Log), RPCCloudPanelImports{C: client})
 	deps.CloudPanel.ConnectPools(cpmigrate.PoolLister(deps.Pools))
+	deps.Sites.ResolveDefaultPool(func(ctx context.Context) (string, error) {
+		pools, err := deps.Pools(ctx)
+
+		return DefaultPoolOf(pools), err
+	})
 	deps.CloudPanel.EnableLoads(ctx, deps.Sites, 0)
 	deps.CloudPanel.EnableCutover(deps.Sites, resolvConf("/etc/resolv.conf"), serverAddrs(client))
 

@@ -99,6 +99,8 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	deps.Doctor = doc.run
 	pl := &stubPools{}
 	deps.Pools = pl.list
+	deps.PoolAdmin = pl
+	deps.PoolSites = st
 	fw := &stubFirewall{enabled: true}
 	deps.Firewall = fw
 	php := &stubPHP{}
