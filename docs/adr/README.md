@@ -56,7 +56,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0059](0059-real-client-ip-behind-proxies.md) | Real client IP behind CDNs and proxies | Accepted |
 | [0060](0060-time-zone-hostname-and-reboot.md) | Time zone, hostname and reboot from the panel | Accepted |
 | [0061](0061-site-type-python.md) | Site type Python | Accepted |
-| [0064](0064-optional-malware-scan.md) | Optional malware scan per site | Proposed |
+| [0064](0064-optional-malware-scan.md) | Optional malware scan per site | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 
