@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/client"
 	"github.com/go-git/go-git/v5/plumbing/transport/server"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 )
@@ -365,5 +367,15 @@ func TestSyncBaseMode(t *testing.T) {
 				t.Fatalf("existing %v: %s is %o", existing, dir, got)
 			}
 		}
+	}
+}
+
+func TestHostKeyAlgorithms(t *testing.T) {
+	if got := hostKeyAlgorithms(ssh.KeyAlgoRSA); !slices.Equal(got, []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}) {
+		t.Fatalf("rsa %v", got)
+	}
+
+	if got := hostKeyAlgorithms(ssh.KeyAlgoED25519); !slices.Equal(got, []string{ssh.KeyAlgoED25519}) {
+		t.Fatalf("ed25519 %v", got)
 	}
 }

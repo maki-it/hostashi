@@ -58,11 +58,30 @@ func TestGitOverHTTP(t *testing.T) {
 		t.Fatalf("new key: %d %s", rec.Code, rec.Body)
 	}
 
+	// The host key: a bad one is refused, a confirmed one is pinned with
+	// its fingerprint.
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/git/hostkey", cookie: c, body: `{"key":"ssh-ed25519 AAAA"}`}); rec.Code != http.StatusBadRequest ||
+		!strings.Contains(rec.Body.String(), "invalid_host_key") {
+		t.Fatalf("bad host key: %d %s", rec.Code, rec.Body)
+	}
+
+	hk := strings.Fields(k.PublicKey)[0] + " " + strings.Fields(k.PublicKey)[1]
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/git/hostkey", cookie: c, body: `{"key":"` + hk + `"}`})
+	if err := json.Unmarshal(rec.Body.Bytes(), &v); rec.Code != http.StatusOK || err != nil || v.HostKey != hk || !strings.HasPrefix(v.HostKeyFingerprint, "SHA256:") {
+		t.Fatalf("host key: %d %s", rec.Code, rec.Body)
+	}
+
 	// A token is accepted and never shown.
 	body := `{"url":"https://github.com/acme/blog.git","auth":"token","tokenUser":"x-access-token","token":"ghp_s3cr3t",` + base + `}`
 	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/git", cookie: c, body: body}); rec.Code != http.StatusOK ||
 		strings.Contains(rec.Body.String(), "s3cr3t") || !strings.Contains(rec.Body.String(), `"hasToken":true`) {
 		t.Fatalf("token: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/git/hostkey/scan", cookie: c}); rec.Code != http.StatusConflict ||
+		!strings.Contains(rec.Body.String(), "not_ssh") {
+		t.Fatalf("scan over https: %d %s", rec.Code, rec.Body)
 	}
 
 	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/audit?action=site.git", cookie: c}); rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "s3cr3t") {

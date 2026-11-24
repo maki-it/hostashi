@@ -223,6 +223,8 @@ var routeAccess = map[string]authz.Action{
 	"PUT /api/v1/sites/{name}/git":                    "sites.git:write",
 	"DELETE /api/v1/sites/{name}/git":                 "sites.git:write",
 	"POST /api/v1/sites/{name}/git/key":               "sites.git:write",
+	"POST /api/v1/sites/{name}/git/hostkey/scan":      "sites.git:write",
+	"PUT /api/v1/sites/{name}/git/hostkey":            "sites.git:write",
 	"GET /api/v1/sites/{name}/deploys":                "sites:read",
 	"POST /api/v1/sites/{name}/deploys":               "sites.deploy",
 	"POST /api/v1/sites/{name}/deploys/{id}/rollback": "sites.deploy",

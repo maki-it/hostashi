@@ -72,9 +72,11 @@ type GitView struct {
 	PublicKey string
 	// HostKey is the confirmed host key of an SSH repository, empty until
 	// it is confirmed.
-	HostKey   string
-	Webhook   bool
-	UpdatedAt time.Time
+	HostKey string
+	// HostKeyFingerprint is its SHA-256 fingerprint, empty without one.
+	HostKeyFingerprint string
+	Webhook            bool
+	UpdatedAt          time.Time
 }
 
 // gitSiteTypes can deploy from Git: the types whose files Hostashi serves
@@ -113,7 +115,7 @@ func toGitView(g store.SiteGit) GitView {
 		Shared: slices.Clone(g.Shared), Commands: slices.Clone(g.Commands),
 		Keep: g.Keep, BuildTimeout: g.BuildTimeout, Submodules: g.Submodules,
 		Auth: g.Auth, TokenUser: g.TokenUser, HasToken: len(g.Token) > 0,
-		PublicKey: g.SSHPublic, HostKey: g.HostKey, Webhook: g.WebhookID != "", UpdatedAt: g.UpdatedAt,
+		PublicKey: g.SSHPublic, HostKey: g.HostKey, HostKeyFingerprint: hostKeyFingerprint(g.HostKey), Webhook: g.WebhookID != "", UpdatedAt: g.UpdatedAt,
 	}
 }
 
