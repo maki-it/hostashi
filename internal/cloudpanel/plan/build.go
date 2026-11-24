@@ -66,8 +66,8 @@ type Site struct {
 	// WWWRedirect is the www redirect of the new site that takes over
 	// RedirectFrom's www host (ADR-0065), "" for none.
 	WWWRedirect string `json:"wwwRedirect,omitempty"`
-	DocRoot      string   `json:"docRoot"` // on the old server
-	PHP          string   `json:"php"`
+	DocRoot     string `json:"docRoot"` // on the old server
+	PHP         string `json:"php"`
 	// Proxy is the target of a reverse proxy site, the old proxy_pass
 	// (ADR-0054); such a site gets no Linux account and no files.
 	Proxy string `json:"proxy,omitempty"`
