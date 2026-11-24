@@ -92,7 +92,8 @@ func (c *Counter) Read(site string) (Totals, error) {
 	if err != nil {
 		return s.tot, err
 	}
-	defer f.Close() //nolint:errcheck // read-only
+
+	defer f.Close()
 
 	if !s.known {
 		s.ino, s.off, s.known = st.Ino, st.Size, true
@@ -120,7 +121,7 @@ func (c *Counter) finishRotated(p string, s *state) {
 	if err != nil {
 		return
 	}
-	defer f.Close() //nolint:errcheck // read-only
+	defer f.Close()
 
 	if st.Ino != s.ino || st.Size < s.off {
 		return

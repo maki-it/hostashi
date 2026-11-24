@@ -19,7 +19,7 @@ func newCounter(t *testing.T) (*Counter, string) {
 		t.Fatal(err)
 	}
 
-	r := &sitelogs.Reader{SiteLogDir: dir, Owner: uint32(os.Getuid())} //nolint:gosec // test uid
+	r := &sitelogs.Reader{SiteLogDir: dir, Owner: uint32(os.Getuid())}
 
 	return &Counter{Dir: dir, Open: r.OpenFile}, filepath.Join(dir, "shop", FileName)
 }
