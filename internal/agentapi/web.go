@@ -80,6 +80,10 @@ type WebSite struct {
 	// HSTS adds Strict-Transport-Security to HTTPS responses. Without TLS
 	// it has no effect.
 	HSTS bool `json:"hsts,omitempty"`
+	// WWWRedirect sends one name of each www pair of Domains to the other
+	// with 301 (ADR-0065): WWWRedirectToWWW or WWWRedirectToNonWWW; empty
+	// serves every domain. A redirect site has none.
+	WWWRedirect string `json:"wwwRedirect,omitempty"`
 	// Disabled answers every request of the site with 503 instead of
 	// serving its files. ACME challenges and HTTPS stay; PHP must be empty.
 	Disabled bool `json:"disabled,omitempty"`
@@ -417,6 +421,14 @@ func (r WebApplyRequest) Validate() error {
 
 		if err := ValidateWebDir(s.WebDir); err != nil {
 			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if err := ValidateWWWRedirect(s.WWWRedirect); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if s.WWWRedirect != WWWRedirectOff && s.Redirect != nil {
+			return fmt.Errorf("site %q: a redirect site has no www redirect", s.User)
 		}
 
 		if err := ValidateAssetCache(s.AssetCacheSeconds, s.AssetCacheExts); err != nil {
