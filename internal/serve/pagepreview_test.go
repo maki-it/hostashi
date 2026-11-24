@@ -124,6 +124,7 @@ func TestPreviewTokens(t *testing.T) {
 	}
 
 	*now = now.Add(previewTTL)
+
 	if rec := get(mux, previewPrefix+tok+"/"); rec.Code != http.StatusNotFound {
 		t.Fatalf("expired token: %d", rec.Code)
 	}

@@ -44,6 +44,7 @@ func ReadFile(dir, id, digest, rel string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("pages: %w", err)
 	}
+
 	defer root.Close()
 
 	fi, err := root.Lstat(rel)
