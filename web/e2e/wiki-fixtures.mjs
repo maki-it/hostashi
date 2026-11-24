@@ -105,6 +105,58 @@ const python = {
   ],
 };
 
+// The scope catalog of internal/auth/scopes.go, as an admin gets it.
+const scopes = [
+  { name: "audit:read", description: "Read and export the audit log of the panel (every account, site, action and the IP addresses involved)", highRisk: false },
+  { name: "backups:read", description: "Read backup settings, status and snapshots", highRisk: false },
+  { name: "backups:restore", description: "Restore a site's backups into its home", highRisk: true },
+  { name: "backups:write", description: "Change backup settings, confirm the target's host key, start a backup", highRisk: false },
+  { name: "cron:read", description: "List the cron jobs of sites with their last and next runs", highRisk: false },
+  { name: "cron:write", description: "Create, change, pause, run and delete cron jobs (they run commands as the site user)", highRisk: true },
+  { name: "databases:delete", description: "Delete databases and their data", highRisk: true },
+  { name: "databases:read", description: "List databases and their users", highRisk: false },
+  { name: "databases:write", description: "Create databases and users, set passwords, remove users", highRisk: false },
+  { name: "db_servers:write", description: "Add, check and remove external database servers (stores their administrator password)", highRisk: true },
+  { name: "doctor:read", description: "Run the read-only checks of hostashi doctor and read their results", highRisk: false },
+  { name: "files:read", description: "List and download the files of sites", highRisk: false },
+  { name: "files:write", description: "Upload, change, move, copy and delete the files of sites (this changes the sites' code)", highRisk: true },
+  { name: "firewall:read", description: "Read the firewall's opened ports and the allowlists for SSH and the panel", highRisk: false },
+  { name: "firewall:write", description: "Open ports and set the allowlists for SSH and the panel (a wrong list locks out until the rollback)", highRisk: true },
+  { name: "limits:read", description: "Read the limit presets and the resource limits and disk use of sites", highRisk: false },
+  { name: "limits:write", description: "Change the limit presets and the resource limits of sites", highRisk: false },
+  { name: "git:write", description: "Set the Git repository, token, deploy key and build commands of sites (the commands run as the site user)", highRisk: true },
+  { name: "logs:read", description: "Read and follow the access, error and PHP logs of sites (they hold visitors' IP addresses)", highRisk: false },
+  { name: "metrics:read", description: "Read the Prometheus metrics endpoint", highRisk: false },
+  { name: "migrations:read", description: "List uploaded CloudPanel scan reports and read their migration plans", highRisk: false },
+  { name: "migrations:write", description: "Upload and delete CloudPanel scan reports", highRisk: false },
+  { name: "node:install", description: "Install the Node.js LTS builds Hostashi pins from nodejs.org (downloads and unpacks them as root, checked against a fixed SHA-256)", highRisk: true },
+  { name: "objectcache:read", description: "Read the object cache of sites: size, state and memory use", highRisk: false },
+  { name: "objectcache:write", description: "Turn the object cache of sites on or off, flush it, and (admins and managers) change its size", highRisk: false },
+  { name: "pagecache:purge", description: "Empty the page cache of sites, and nothing else (for a CMS that purges on save)", highRisk: false },
+  { name: "pages:read", description: "List maintenance and parking pages and their files", highRisk: false },
+  { name: "pages:write", description: "Upload, replace and delete maintenance and parking pages", highRisk: false },
+  { name: "php:install", description: "Install more PHP versions from sury.org (runs apt as root with a fixed package list)", highRisk: true },
+  { name: "python:install", description: "Install the CPython builds Hostashi pins from python-build-standalone (downloads and unpacks them as root, checked against a fixed SHA-256)", highRisk: true },
+  { name: "services:read", description: "Read the state and restarts of the server's services and the dashboard's CPU, memory, disk and network figures", highRisk: false },
+  { name: "services:write", description: "Start, stop, restart and reload the server's services where the service catalog allows it", highRisk: true },
+  { name: "sites.maintenance:write", description: "Switch the maintenance mode of sites and park domains", highRisk: false },
+  { name: "sites.snippets:write", description: "Change the custom nginx snippets of sites (checked against an allowlist)", highRisk: true },
+  { name: "sites:delete", description: "Delete sites and their files", highRisk: true },
+  { name: "sites:read", description: "List and read sites", highRisk: false },
+  { name: "sites:write", description: "Create and change sites", highRisk: false },
+  { name: "ssh:read", description: "List the SSH keys of sites with their fingerprints and access", highRisk: false },
+  { name: "ssh:write", description: "Add, change and delete SSH keys of sites (a key with shell access is a login as the site user)", highRisk: true },
+  { name: "system:read", description: "Read the server's hostname, time zone, clock, uptime and whether a reboot is pending", highRisk: false },
+  { name: "system:write", description: "Change the server's time zone and hostname and reboot the server", highRisk: true },
+]
+
+const tokens = [
+  { id: 4, name: "Deploy from CI", prefix: "hst_q7Lx2B", scopes: ["sites:read", "files:write", "pagecache:purge"], createdAt: day(20), expiresAt: "2027-02-20T00:00:00Z", neverExpires: false, lastUsedAt: day(0), lastUsedIp: "198.51.100.40", sites: ["blog"] },
+  { id: 3, name: "Uptime monitoring", prefix: "hst_Mf09aZ", scopes: ["metrics:read"], createdAt: day(60), expiresAt: null, neverExpires: true, lastUsedAt: day(0), lastUsedIp: "203.0.113.80", sites: null },
+  { id: 2, name: "hostashi CLI on laptop", prefix: "hst_Rk4pTe", scopes: ["sites:read", "sites:write", "databases:read", "backups:read", "services:read", "system:read"], createdAt: day(80), expiresAt: "2026-12-10T00:00:00Z", neverExpires: false, lastUsedAt: day(3), lastUsedIp: "203.0.113.24", sites: null },
+  { id: 1, name: "Old script", prefix: "hst_Zp1cVb", scopes: ["sites:read"], createdAt: day(200), expiresAt: "2027-05-01T00:00:00Z", neverExpires: false, lastUsedAt: day(150), lastUsedIp: "203.0.113.24", revokedAt: day(120), sites: null },
+];
+
 const me = { username: "kim", role: "admin", secondFactor: true, secondFactorRequired: true, clientIp: "203.0.113.24" };
 
 const routes = [
@@ -118,6 +170,11 @@ const routes = [
   ["GET", /^\/status-pages$/, () => ({ pages: [] })],
   ["GET", /^\/node$/, () => node],
   ["GET", /^\/python$/, () => python],
+  ["GET", /^\/tokens$/, () => ({ tokens })],
+  ["GET", /^\/scopes$/, () => ({ scopes })],
+  ["POST", /^\/tokens$/, () => ({ ...tokens[0], id: 5, name: "Backup check", scopes: ["backups:read"], sites: null, lastUsedAt: null, lastUsedIp: "", token: "hst_8bXk2mQv7RtLp0wZ4nYc1sDf6gHj9aEuKo3iTq5Vx2M", warnings: [] })],
+  ["GET", /^\/account\/email$/, () => ({ email: "kim@example.com", pending: "", mail_enabled: true })],
+  ["GET", /^\/account\/notifications$/, () => ({ mail_enabled: true, email: "kim@example.com", categories: [{ id: "backups", enabled: true }, { id: "certificates", enabled: true }, { id: "services", enabled: true }] })],
   ["GET", /^\/users$/, () => ({ users: accounts })],
   ["GET", /^\/databases$/, () => ({ databases })],
   ["GET", /^\/db-servers$/, () => ({ servers: dbServers })],

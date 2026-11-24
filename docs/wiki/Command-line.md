@@ -24,7 +24,7 @@ These commands work as any user and on any machine, not only on the server. They
 | `hostashi api AREA` | Lists the commands of an area with their arguments. |
 | `hostashi api AREA COMMAND -h` | Explains a command: the request it sends, the token scope it needs and its fields. |
 | `hostashi api AREA COMMAND ARGS` | Runs it and prints the answer as JSON, or a download as it is. |
-| `hostashi logout` | Removes the stored token. It stays valid until it expires; revoke it in the panel under your account if it may have leaked. |
+| `hostashi logout` | Removes the stored token. It stays valid until it expires; revoke it in the panel under **Your account → API tokens** if it may have leaked. |
 
 For example, with the token in a password manager:
 
@@ -40,7 +40,7 @@ Every operation of the API is a command of `hostashi api`, so anything the panel
 - the whole body with `-d JSON`, `-d @FILE` or `-d -` for stdin
 - a file for an upload as `key=@FILE`: `hostashi api pages create-status name=sorry kind=maintenance file=@sorry.html`
 
-Commands marked "panel only" refuse API tokens, for example creating tokens; use the panel for them.
+Commands marked "panel only" refuse API tokens, for example creating tokens; use the panel for them (see [API tokens](API-tokens.md)).
 
 `HOSTASHI_URL` and `HOSTASHI_TOKEN` override the stored login, for example in CI jobs. Plain `http://` is only accepted for the server itself (`127.0.0.1`, `::1`, `localhost`), so that a token never crosses a network unencrypted.
 

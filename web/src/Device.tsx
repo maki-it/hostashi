@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useState, type FormEvent } from "react";
-import { approveDeviceLogin, deviceMessage, getDeviceLogin, listScopes, normalizeCode, type DeviceLogin, type Scope } from "./device";
-import { listSites, type Site } from "./sites";
-import { Badge, Button, Card, Field, Notice, PageHead, RelTime } from "./ui";
+import { approveDeviceLogin, deviceMessage, getDeviceLogin, normalizeCode, type DeviceLogin } from "./device";
+import { GrantFields, grantReady, useGrant } from "./TokenGrant";
+import { Button, Card, Field, Notice, PageHead, RelTime } from "./ui";
 
 // Device approves the code that "hostashi login" shows (ADR-0058 addendum 1).
 // The CLI then gets an API token with the scopes, sites and lifetime chosen
@@ -42,7 +42,7 @@ export function Device({ code: initial }: { code: string }) {
       <PageHead title="Log in a device" description="Approve the code that hostashi login shows in your terminal." />
       {done === "approved" && (
         <Notice tone="ok" title="Login approved">
-          Return to your terminal: the CLI has its token within a few seconds. You can revoke the token under Account.
+          Return to your terminal: the CLI has its token within a few seconds. You can see and revoke the token under Your account.
         </Notice>
       )}
       {done === "denied" && <Notice tone="info" title="Login denied. The CLI gets no token." />}
@@ -75,35 +75,13 @@ export function Device({ code: initial }: { code: string }) {
 }
 
 function Approve({ login, onDone }: { login: DeviceLogin; onDone: (d: "approved" | "denied") => void }) {
-  const [scopes, setScopes] = useState<Scope[] | null>(null);
-  const [sites, setSites] = useState<Site[]>([]);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [allSites, setAllSites] = useState(true);
-  const [pickedSites, setPickedSites] = useState<Set<string>>(new Set());
-  const [days, setDays] = useState("90");
+  const { scopes, sites, error: loadError, grant, setGrant } = useGrant();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    listScopes()
-      .then((s) => {
-        setScopes(s);
-        // Everything but the high-risk scopes is ticked; those must be
-        // chosen on purpose.
-        setPicked(new Set(s.filter((x) => !x.highRisk).map((x) => x.name)));
-      })
-      .catch((err: unknown) => setError(deviceMessage(err)));
-    listSites()
-      .then(setSites)
-      .catch(() => setSites([]));
-  }, []);
-
-  const toggle = (set: Set<string>, name: string, on: boolean) => {
-    const next = new Set(set);
-    if (on) next.add(name);
-    else next.delete(name);
-    return next;
-  };
+    if (loadError) setError(deviceMessage(loadError));
+  }, [loadError]);
 
   async function answer(approve: boolean) {
     setBusy(true);
@@ -112,9 +90,9 @@ function Approve({ login, onDone }: { login: DeviceLogin; onDone: (d: "approved"
       await approveDeviceLogin(
         login.userCode,
         approve,
-        [...picked],
-        allSites ? null : [...pickedSites],
-        Number(days),
+        [...grant.scopes],
+        grant.allSites ? null : [...grant.sites],
+        Number(grant.days),
       );
       onDone(approve ? "approved" : "denied");
     } catch (err) {
@@ -146,44 +124,10 @@ function Approve({ login, onDone }: { login: DeviceLogin; onDone: (d: "approved"
         <Notice tone="warn" title="Approve only a login you started yourself">
           Whoever started it gets an API token for your account. If you did not just run hostashi login, deny it.
         </Notice>
-        <fieldset className="ui-fieldset ui-stack-tight">
-          <legend>What the token may do</legend>
-          {scopes === null && !error && <p aria-busy="true">Loading…</p>}
-          {scopes?.map((s) => (
-            <label key={s.name} className="ui-check">
-              <input type="checkbox" checked={picked.has(s.name)} onChange={(e) => setPicked(toggle(picked, s.name, e.target.checked))} />
-              <span>
-                <code>{s.name}</code> {s.description} {s.highRisk && <Badge tone="warn">high risk</Badge>}
-              </span>
-            </label>
-          ))}
-        </fieldset>
-        <fieldset className="ui-fieldset ui-stack-tight">
-          <legend>Sites</legend>
-          <label className="ui-check">
-            <input type="checkbox" checked={allSites} onChange={(e) => setAllSites(e.target.checked)} />
-            Every site I can reach, also later ones
-          </label>
-          {!allSites &&
-            sites.map((s) => (
-              <label key={s.name} className="ui-check">
-                <input
-                  type="checkbox"
-                  checked={pickedSites.has(s.name)}
-                  onChange={(e) => setPickedSites(toggle(pickedSites, s.name, e.target.checked))}
-                />
-                {s.name}
-              </label>
-            ))}
-        </fieldset>
-        <div className="ui-narrow">
-          <Field label="Valid for (days)" hint="1 to 365. The token stops working after that.">
-            <input className="ui-input" type="number" min={1} max={365} value={days} onChange={(e) => setDays(e.target.value)} />
-          </Field>
-        </div>
+        <GrantFields scopes={loadError ? [] : scopes} sites={sites} grant={grant} onChange={setGrant} />
         {error && <Notice tone="err" title={error} />}
         <div className="ui-row">
-          <Button type="submit" variant="primary" disabled={busy || picked.size === 0 || (!allSites && pickedSites.size === 0)}>
+          <Button type="submit" variant="primary" disabled={busy || !grantReady(grant)}>
             Approve
           </Button>
           <Button type="button" disabled={busy} onClick={() => void answer(false)}>

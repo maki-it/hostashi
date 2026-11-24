@@ -74,6 +74,36 @@ const shots = [
   { name: "databases", hash: "#/databases", ready: "table" },
   { name: "backups", hash: "#/backups", ready: "text=Snapshots" },
   { name: "firewall", hash: "#/firewall", ready: "text=Allowlists" },
+  {
+    name: "account-tokens",
+    hash: "#/account",
+    ready: "table",
+    act: async (page) => {
+      await page.getByRole("heading", { name: "API tokens" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  {
+    name: "account-token-new",
+    hash: "#/account",
+    ready: "table",
+    act: async (page) => {
+      await page.getByRole("button", { name: "New token" }).click();
+      await page.getByLabel(/^Name/).fill("Backup check");
+      await page.getByRole("button", { name: "Only reading" }).click();
+      await page.getByRole("heading", { name: "New API token" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  {
+    name: "account-token-created",
+    hash: "#/account",
+    ready: "table",
+    act: async (page) => {
+      await page.getByRole("button", { name: "New token" }).click();
+      await page.getByLabel(/^Name/).fill("Backup check");
+      await page.getByRole("button", { name: "Create token" }).click();
+      await page.getByRole("heading", { name: "Save this token now" }).waitFor();
+    },
+  },
 ];
 
 const only = process.argv.slice(2);
