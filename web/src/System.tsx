@@ -2,6 +2,7 @@
 
 import { Power } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
+import { MalwareEngineCard } from "./Malware";
 import { formatHash } from "./routes";
 import { serviceMessage } from "./services";
 import {
@@ -84,6 +85,7 @@ export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) 
           <Overview info={info} />
           <HostnameCard info={info} onDone={(n) => changed(n, `The hostname is now ${n.hostname}.`)} onError={setError} />
           <TimezoneCard info={info} zones={zones} onDone={(n) => changed(n, `The time zone is now ${n.timezone}.`)} onError={setError} />
+          <MalwareEngineCard />
           <RebootCard info={info} busy={reboot.phase === "going-down" || reboot.phase === "starting"} onReboot={(c) => void startReboot(c)} />
         </>
       )}

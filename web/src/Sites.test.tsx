@@ -579,6 +579,7 @@ describe("SitePage", () => {
       "Web",
       "Files",
       "Git",
+      "Malware scan",
       "PHP",
       "Cron",
       "SSH & SFTP",

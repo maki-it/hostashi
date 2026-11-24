@@ -8,6 +8,7 @@ import { FileManager } from "./Files";
 import { canDeploy } from "./git";
 import { GitSettings } from "./Git";
 import { LimitSettings } from "./Limits";
+import { SiteMalware } from "./Malware";
 import { SiteLogs } from "./Logs";
 import { ObjectCacheSettings } from "./ObjectCache";
 import { allowIpsProblem, clientIp, listPages, pageMessage, parseAllowIps, setMaintenance, type StatusPage } from "./pages";
@@ -60,6 +61,7 @@ const tabs: { id: SiteTab; label: string }[] = [
   { id: "web", label: "Web" },
   { id: "files", label: "Files" },
   { id: "git", label: "Git" },
+  { id: "malware", label: "Malware scan" },
   { id: "php", label: "PHP" },
   { id: "cron", label: "Cron" },
   { id: "ssh", label: "SSH & SFTP" },
@@ -105,7 +107,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
   // cron, SSH or limits, and redirect and reverse proxy no snippets
   // (ADR-0054). A redirect answers before nginx checks access, so it has no
   // access tab (ADR-0066).
-  const noAccount = ["files", "php", "cron", "ssh", "limits"];
+  const noAccount = ["files", "malware", "php", "cron", "ssh", "limits"];
   const shown = tabs.filter(
     (t) =>
       (t.id !== "php" || site.php !== "") &&
@@ -155,6 +157,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
           </>
         )}
         {active === "git" && <GitSettings site={site} canEdit={role === "admin" || role === "manager"} />}
+        {active === "malware" && <SiteMalware site={site} canManage={role === "admin" || role === "manager"} admin={role === "admin"} />}
         {active === "cron" && <CronSettings site={site} />}
         {active === "ssh" && <SSHSettings site={site} />}
         {active === "limits" && <LimitSettings site={site} />}

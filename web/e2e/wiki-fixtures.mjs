@@ -212,6 +212,27 @@ const deployLogText = [
   "",
 ].join("\n");
 
+const sha = (c) => c.repeat(64);
+
+// The malware scan of blog: one file flagged last night, one in the
+// quarantine, a false positive and a file that is gone (ADR-0064).
+const siteScan = {
+  engine: "on",
+  schedule: "weekly",
+  nextScheduled: "2026-11-27T02:37:00Z",
+  runs: [
+    { id: 9, source: "schedule", state: "succeeded", error: "", found: 3, newFound: 1, dropped: 0, createdAt: at(0, 1, 37), startedAt: at(0, 1, 37), finishedAt: at(0, 1, 44) },
+    { id: 8, source: "panel", state: "succeeded", error: "", found: 2, newFound: 2, dropped: 0, createdAt: at(2, 14, 3), startedAt: at(2, 14, 3), finishedAt: at(2, 14, 9) },
+    { id: 7, source: "schedule", state: "succeeded", error: "", found: 0, newFound: 0, dropped: 0, createdAt: at(7, 1, 37), startedAt: at(7, 1, 37), finishedAt: at(7, 1, 43) },
+  ],
+  findings: [
+    { id: 21, path: "htdocs/wp-content/uploads/2026/11/cache.php", signature: "Php.Webshell.Generic-9952106-0", sha256: sha("4"), size: 18_432, state: "open", firstSeen: at(0, 1, 44), lastSeen: at(0, 1, 44), decidedAt: "" },
+    { id: 18, path: "htdocs/wp-content/plugins/old-gallery/upload.php", signature: "Php.Malware.Mailer-6", sha256: sha("7"), size: 5_210, state: "quarantined", firstSeen: at(2, 14, 9), lastSeen: at(2, 14, 9), decidedAt: at(2, 14, 30) },
+    { id: 17, path: "htdocs/tools/eicar-test.txt", signature: "Eicar-Signature", sha256: sha("2"), size: 68, state: "ignored", firstSeen: at(2, 14, 9), lastSeen: at(0, 1, 44), decidedAt: at(2, 14, 31) },
+    { id: 12, path: "htdocs/tmp/x.php", signature: "Php.Trojan.Agent-1", sha256: sha("9"), size: 912, state: "gone", firstSeen: at(14, 1, 40), lastSeen: at(14, 1, 40), decidedAt: "" },
+  ],
+};
+
 const me = { username: "kim", role: "admin", secondFactor: true, secondFactorRequired: true, clientIp: "203.0.113.24" };
 
 const homeFiles = [
@@ -251,6 +272,10 @@ const routes = [
   ["GET", /^\/backups$/, () => backups],
   ["GET", /^\/firewall$/, () => firewall],
   ["GET", /^\/dbtool$/, () => ({ available: true, minutes: [30, 120] })],
+  ["GET", /^\/malware-scan$/, () => ({ state: "on", version: "1.4.6+dfsg-1", signatures: at(0, 13, 12), error: "" })],
+  ["GET", /^\/sites\/[^/]+\/malware-scan$/, () => siteScan],
+  ["GET", /^\/system$/, () => ({ hostname: "web1", transientHostname: "web1", timezone: "Europe/Berlin", time: "2026-11-22T18:00:00Z", uptimeSeconds: 1_234_567, ntpSynchronized: true, rebootRequired: false, cloudInit: false })],
+  ["GET", /^\/system\/timezones$/, () => ({ zones: ["Europe/Berlin", "UTC"] })],
   ["GET", /^\/sites\/([^/]+)\/git$/, (m) => git[m[1]] ?? gitBase],
   ["GET", /^\/sites\/([^/]+)\/deploys$/, (m) => deploys[m[1]] ?? []],
   ["GET", /^\/sites\/[^/]+\/deploys\/\d+\/log$/, () => ({ log: deployLogText, truncated: false })],
