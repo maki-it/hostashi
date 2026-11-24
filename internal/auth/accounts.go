@@ -413,3 +413,44 @@ func (s *Service) HasSiteGrant(ctx context.Context, userID int64, site string) (
 
 	return ok, nil
 }
+
+// ChangePassword sets a new password for the logged-in user. It needs the
+// current password, so a stolen session alone cannot take the account
+// over, and ends every other session of the account; the session with the
+// token keep stays.
+func (s *Service) ChangePassword(ctx context.Context, userID int64, current, next, keep, ip string) error {
+	u, err := s.st.UserByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
+
+	key := "user:" + u.Username
+	if s.userLimit.Blocked(key) {
+		return ErrRateLimited
+	}
+
+	ok, verr := VerifyPassword(u.PasswordHash, current)
+	if verr != nil || !ok {
+		s.userLimit.Fail(key)
+
+		return ErrInvalidCredentials
+	}
+
+	if err := ValidatePassword(next); err != nil {
+		return err
+	}
+
+	hash, err := HashPassword(next)
+	if err != nil {
+		return err
+	}
+
+	if err := s.st.SetPassword(ctx, u.ID, hash, hashToken(keep)); err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
+
+	_ = s.st.Audit(ctx, &u.ID, "password.change", u.Username, map[string]string{"ip": ip})
+	s.notify(ctx, AccountEvent{UserID: u.ID, Kind: EventPasswordChanged, IP: ip})
+
+	return nil
+}

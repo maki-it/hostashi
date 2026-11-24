@@ -74,3 +74,63 @@ export async function getAssertion(options: unknown): Promise<AssertionJSON> {
   if (!(cred instanceof PublicKeyCredential)) throw new Error("no passkey returned");
   return assertionToJSON(cred);
 }
+
+type JSONCreationOptions = {
+  challenge: string;
+  rp: PublicKeyCredentialRpEntity;
+  user: { id: string; name: string; displayName: string };
+  pubKeyCredParams: PublicKeyCredentialParameters[];
+  timeout?: number;
+  excludeCredentials?: JSONCredentialDescriptor[];
+  authenticatorSelection?: AuthenticatorSelectionCriteria;
+  attestation?: AttestationConveyancePreference;
+};
+
+// toCreationOptions converts the server's {publicKey: {...}} into what
+// navigator.credentials.create expects. Unknown fields are dropped.
+export function toCreationOptions(options: unknown): PublicKeyCredentialCreationOptions {
+  const pk = (options as { publicKey?: JSONCreationOptions } | null)?.publicKey;
+  if (!pk || typeof pk.challenge !== "string" || !pk.user || typeof pk.user.id !== "string" || !pk.rp) {
+    throw new Error("invalid passkey options from server");
+  }
+  const out: PublicKeyCredentialCreationOptions = {
+    challenge: base64urlToBytes(pk.challenge),
+    rp: pk.rp,
+    user: { id: base64urlToBytes(pk.user.id), name: pk.user.name, displayName: pk.user.displayName },
+    pubKeyCredParams: pk.pubKeyCredParams ?? [],
+  };
+  if (pk.timeout !== undefined) out.timeout = pk.timeout;
+  if (pk.authenticatorSelection !== undefined) out.authenticatorSelection = pk.authenticatorSelection;
+  if (pk.attestation !== undefined) out.attestation = pk.attestation;
+  if (pk.excludeCredentials) {
+    out.excludeCredentials = pk.excludeCredentials.map((c) => {
+      const d: PublicKeyCredentialDescriptor = { id: base64urlToBytes(c.id), type: c.type };
+      if (c.transports) d.transports = c.transports;
+      return d;
+    });
+  }
+  return out;
+}
+
+export type AttestationJSON = {
+  id: string;
+  rawId: string;
+  type: string;
+  response: { attestationObject: string; clientDataJSON: string; transports?: string[] };
+};
+
+export function attestationToJSON(cred: PublicKeyCredential): AttestationJSON {
+  const r = cred.response as AuthenticatorAttestationResponse;
+  const response: AttestationJSON["response"] = {
+    attestationObject: bytesToBase64url(r.attestationObject),
+    clientDataJSON: bytesToBase64url(r.clientDataJSON),
+  };
+  if (typeof r.getTransports === "function") response.transports = r.getTransports();
+  return { id: cred.id, rawId: bytesToBase64url(cred.rawId), type: cred.type, response };
+}
+
+export async function createCredential(options: unknown): Promise<AttestationJSON> {
+  const cred = await navigator.credentials.create({ publicKey: toCreationOptions(options) });
+  if (!(cred instanceof PublicKeyCredential)) throw new Error("no passkey returned");
+  return attestationToJSON(cred);
+}

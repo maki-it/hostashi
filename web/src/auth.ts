@@ -2,7 +2,7 @@
 
 import { ApiError, request } from "./api";
 import type { ColorScheme } from "./scheme";
-import { getAssertion } from "./webauthn";
+import { createCredential, getAssertion } from "./webauthn";
 
 // secondFactorRequired without secondFactor: the account must set up TOTP
 // or a passkey before the panel answers anything else (ADR-0035).
@@ -12,6 +12,8 @@ export type User = {
   clientIp?: string;
   secondFactor?: boolean;
   secondFactorRequired?: boolean;
+  /** Whether an authenticator app (TOTP) is set up. */
+  totp?: boolean;
   /** How the panel looks for the account (ADR-0037); missing means the system's scheme. */
   colorScheme?: ColorScheme;
   theme?: string;
@@ -53,11 +55,40 @@ export async function totpConfirm(code: string): Promise<string[]> {
   return r.recoveryCodes;
 }
 
+type Ceremony = { ceremonyId: string; options: unknown };
+
+/** totpDisable turns TOTP off; it needs the password and a current or recovery code. */
+export function totpDisable(password: string, code: string): Promise<void> {
+  return request<void>("POST", "/auth/totp/disable", { password, code });
+}
+
+/** changePassword sets a new password; the other sessions of the account end. */
+export function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  return request<void>("POST", "/auth/password", { currentPassword, newPassword });
+}
+
+export type Passkey = { id: number; name: string; createdAt: string; lastUsedAt: string | null };
+
+export async function listPasskeys(): Promise<Passkey[]> {
+  const r = await request<{ passkeys: Passkey[] }>("GET", "/auth/passkeys");
+  return Array.isArray(r.passkeys) ? r.passkeys : [];
+}
+
+/** addPasskey asks the browser for a new passkey and stores it under name. */
+export async function addPasskey(name: string): Promise<Passkey> {
+  const begin = await request<Ceremony>("POST", "/auth/passkeys/register/begin");
+  const credential = await createCredential(begin.options);
+  return request<Passkey>("POST", "/auth/passkeys/register/finish", { ceremonyId: begin.ceremonyId, name, credential });
+}
+
+export function deletePasskey(id: number): Promise<void> {
+  return request<void>("DELETE", "/auth/passkeys/" + id);
+}
+
 export function logout(): Promise<void> {
   return request<void>("POST", "/auth/logout");
 }
 
-type Ceremony = { ceremonyId: string; options: unknown };
 
 export async function loginWithPasskey(): Promise<User> {
   const begin = await request<Ceremony>("POST", "/auth/passkey/login/begin");

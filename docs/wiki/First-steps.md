@@ -13,7 +13,7 @@ Lost the token? On the server, `sudo hostashi setup-token` prints it again. It i
 Admins and managers must have a second factor. Until you add one, the panel lets you do nothing else.
 
 - **Authenticator app (TOTP):** scan the QR code with an app such as Aegis, 2FAS or your password manager, and enter the current code. The panel then shows **recovery codes**. Each one works once, in place of a code from the app. Store them outside the server, for example in your password manager.
-- **Passkey:** add one under your account. A passkey replaces the password and the code: you log in with your device's fingerprint, face or PIN. Passkeys need the panel to run under its host name (`--panel-domain`).
+- **Passkey:** add one under **Your account → Sign-in and security**. A passkey replaces the password and the code: you log in with your device's fingerprint, face or PIN. Passkeys need the panel to run under its host name (`--panel-domain`).
 
 If you ever lose both, see [Recovery](Recovery.md).
 

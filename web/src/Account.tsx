@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { EmailCard } from "./AccountEmail";
+import { SecurityCard } from "./AccountSecurity";
 import { NotificationsCard } from "./Notifications";
 import type { User } from "./auth";
 import { saveColorScheme, type ColorScheme } from "./scheme";
@@ -15,8 +16,9 @@ const choices: { value: ColorScheme; label: string; hint: string }[] = [
 ];
 
 // Account is the page of the logged-in account: how the panel looks
-// (ADR-0037), which follows the account to every browser, and its email
-// address (ADR-0044) and its API tokens (ADR-0018).
+// (ADR-0037), which follows the account to every browser, how it logs in
+// (password, authenticator app, passkeys), its email address (ADR-0044)
+// and its API tokens (ADR-0018).
 export function Account({ user, onScheme }: { user: User; onScheme: (s: ColorScheme) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -59,6 +61,7 @@ export function Account({ user, onScheme }: { user: User; onScheme: (s: ColorSch
           {saved && !error && <Notice tone="ok" title="Saved. The panel looks like this in every browser you log in with." />}
         </div>
       </Card>
+      <SecurityCard user={user} />
       <EmailCard />
       <NotificationsCard />
       <TokensCard />
