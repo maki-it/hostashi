@@ -61,6 +61,9 @@ type Site struct {
 	TLS     bool // HTTPS wanted
 	// HSTS sends Strict-Transport-Security while the site is on HTTPS.
 	HSTS bool
+	// WWWRedirect is the site's www redirect (ADR-0065): "", "to-www" or
+	// "to-non-www".
+	WWWRedirect string
 	// PHPPrograms lets the site's PHP start programs (ADR-0033).
 	PHPPrograms bool
 	// Disabled: the web server answers with 503 and PHP is stopped; the
@@ -574,7 +577,7 @@ func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
 
 type scanner interface{ Scan(dest ...any) error }
 
-const siteColumns = `id, name, pool, state, type, php, web_dir, spa, asset_cache, asset_cache_seconds, asset_cache_exts, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
+const siteColumns = `id, name, pool, state, type, php, web_dir, spa, asset_cache, asset_cache_seconds, asset_cache_exts, tls, hsts, www_redirect, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
 	maintenance, coalesce(maintenance_page, 0), maintenance_allow, coalesce(disabled_page, 0), tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
 	account, redirect_target, redirect_status, redirect_keep_path, proxy_target, proxy_target_host, proxy_insecure,
 	node_version, python_version, app_workdir, app_start_kind, app_start, app_args, coalesce(app_port, 0), app_stopped, created_at, updated_at`
@@ -599,7 +602,7 @@ func scanSite(r scanner) (Site, error) {
 		args                       string
 	)
 
-	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &st.WebDir, &spa, &assets, &st.AssetCacheSeconds, &exts, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
+	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &st.WebDir, &spa, &assets, &st.AssetCacheSeconds, &exts, &tls, &hsts, &st.WWWRedirect, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
 		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced,
 		&account, &redirect.Target, &redirect.Status, &keepPath, &proxy.Target, &proxyHost, &insecure,
 		&app.Node, &app.Python, &app.Workdir, &app.StartKind, &app.Start, &args, &app.Port, &appStopped, &cre, &upd)
@@ -718,6 +721,36 @@ func (s *Store) SetSiteCert(ctx context.Context, name string, domains []string, 
 // SetSiteHSTS sets whether a site sends HSTS and returns the previous value.
 func (s *Store) SetSiteHSTS(ctx context.Context, name string, on bool, now time.Time) (bool, error) {
 	return s.setSiteFlag(ctx, `SELECT hsts FROM sites WHERE name = ?`, `UPDATE sites SET hsts = ?, updated_at = ? WHERE name = ?`, name, on, now)
+}
+
+// SetSiteWWWRedirect sets the www redirect of a site and returns the
+// previous one.
+func (s *Store) SetSiteWWWRedirect(ctx context.Context, name, mode string, now time.Time) (string, error) {
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var old string
+	if err := tx.QueryRowContext(ctx, `SELECT www_redirect FROM sites WHERE name = ?`, name).Scan(&old); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET www_redirect = ?, updated_at = ? WHERE name = ?`, mode, now.Unix(), name); err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	return old, nil
 }
 
 // SetSitePHPPrograms sets whether a site's PHP may start programs and

@@ -136,8 +136,10 @@ var table = map[Action]Rule{
 	"sites:delete": mgrSite("sites:delete"),
 	// Delete a site and park domains of it (ADR-0048); the handler also
 	// asks for parked:write.
-	"sites:park":           mgrSite("sites:delete"),
-	"sites.domains:write":  mgrSite("sites:write"),
+	"sites:park":          mgrSite("sites:delete"),
+	"sites.domains:write": mgrSite("sites:write"),
+	// The www redirect decides which names of the site answer (ADR-0065).
+	"sites.www:write":      mgrSite("sites:write"),
 	"sites.tls:write":      mgrSite("sites:write"),
 	"sites.disabled:write": mgrSite("sites:write"),
 	// A type change can create a Linux account, as a new site does

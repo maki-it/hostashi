@@ -958,6 +958,12 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				Headers: webHeaders(headers, site), RealIP: webRealIP(realips, site),
 			}
 
+			// A redirect site sends every name to its target anyway; it
+			// keeps the setting for a later type change (ADR-0065).
+			if site.Type != store.SiteTypeRedirect {
+				ws.WWWRedirect = site.WWWRedirect
+			}
+
 			// Redirect and reverse proxy sites send only their target: no
 			// files, PHP, caches or snippets (ADR-0054).
 			if noFiles(site.Type) {
