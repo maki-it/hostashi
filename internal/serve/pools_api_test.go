@@ -236,6 +236,7 @@ func TestPoolRenameAPI(t *testing.T) {
 
 	// The agent does not answer.
 	e.pools.adminErr = errors.New("down")
+
 	if rec := rename("fast", `{"name":"slow"}`); rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("agent down: %d", rec.Code)
 	}

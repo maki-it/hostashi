@@ -15,6 +15,7 @@ func TestCreateOnTheDefaultPool(t *testing.T) {
 	ctx := t.Context()
 
 	def, err := "vol1", error(nil)
+
 	s.ResolveDefaultPool(func(context.Context) (string, error) { return def, err })
 
 	site, cerr := s.Create(ctx, 1, CreateRequest{Name: "blog", Domains: []string{"blog.example.com"}})
