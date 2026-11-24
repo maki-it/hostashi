@@ -560,6 +560,19 @@ x systemd-analyze security hostashi-agent.service | tail -1
 exposure hostashi.service 2.0
 exposure hostashi-agent.service 4.5
 exposure hostashi-files@blog.service 1.0
+exposure hostashi-scan@blog.service 1.5
+
+step "malware scan: script and units only (ADR-0064)"
+# Without --malware-scan nothing of ClamAV is installed; the panel starts
+# the install unit when an admin switches the scan on.
+expect_mode /usr/local/lib/hostashi/clamav-install "755 root:root"
+expect_mode /var/lib/hostashi-agent/clamav-install "700 root:root"
+expect_mode /var/log/hostashi/scan "700 root:root"
+expect_mode /etc/systemd/system/hostashi-scan@.service "644 root:root"
+expect_mode /etc/systemd/system/hostashi-scan.slice "644 root:root"
+! x dpkg-query -W clamav >/dev/null 2>&1 || fail "ClamAV installed without --malware-scan"
+if x systemctl start hostashi-clamav-install@purge.service 2>/dev/null; then fail "the install unit accepted the instance purge"; fi
+x systemctl reset-failed hostashi-clamav-install@purge.service 2>/dev/null || true
 
 step "changed setting is applied and the panel restarts"
 out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com)

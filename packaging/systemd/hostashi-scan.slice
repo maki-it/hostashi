@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# The malware scans (ADR-0064). ClamAV holds its signatures in memory,
+# about 1 to 1.5 GB, far more than a site's own memory limit (ADR-0015):
+# the scans run here instead of in the site's slice. The panel starts one
+# scan at a time. Live traffic wins: little CPU weight and idle I/O in the
+# unit.
+
+[Unit]
+Description=Hostashi malware scans
+Documentation=https://github.com/maki-it/hostashi
+Before=slices.target
+
+[Slice]
+MemoryMax=2G
+MemorySwapMax=0
+CPUWeight=20
+IOWeight=10
