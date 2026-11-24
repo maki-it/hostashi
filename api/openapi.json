@@ -2610,6 +2610,9 @@
           },
           "webhook": {
             "type": "boolean"
+          },
+          "webhookPath": {
+            "type": "string"
           }
         },
         "required": [
@@ -2629,7 +2632,8 @@
           "tokenUser",
           "updatedAt",
           "url",
-          "webhook"
+          "webhook",
+          "webhookPath"
         ],
         "type": "object"
       },

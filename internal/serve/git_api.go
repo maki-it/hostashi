@@ -58,6 +58,9 @@ type gitJSON struct {
 	HostKeyFingerprint string `json:"hostKeyFingerprint"`
 	// Webhook: the webhook is on.
 	Webhook bool `json:"webhook"`
+	// WebhookPath is the webhook's address below the panel's origin, empty
+	// while it is off; its secret is shown only when it is set.
+	WebhookPath string `json:"webhookPath"`
 	// UpdatedAt is RFC 3339; empty while not configured.
 	UpdatedAt string `json:"updatedAt"`
 }
@@ -86,6 +89,10 @@ func toGitJSON(v hosting.GitView) gitJSON {
 		BuildTimeoutMinutes: int(v.BuildTimeout / time.Minute), Submodules: v.Submodules,
 		Auth: v.Auth, TokenUser: v.TokenUser, HasToken: v.HasToken,
 		PublicKey: v.PublicKey, HostKey: v.HostKey, HostKeyFingerprint: v.HostKeyFingerprint, Webhook: v.Webhook,
+	}
+
+	if v.WebhookID != "" {
+		out.WebhookPath = webhookPath + v.WebhookID
 	}
 
 	if out.Shared == nil {
