@@ -25,6 +25,18 @@ const shots = [
   { name: "sites", hash: "#/sites", ready: "table" },
   { name: "site-new", hash: "#/sites?new=1", ready: "form" },
   { name: "site-domains", hash: "#/sites/blog/domains", ready: "text=Domains" },
+  {
+    name: "site-www",
+    hash: "#/sites/blog/domains",
+    ready: "text=www redirect",
+    act: async (page) => page.getByRole("heading", { name: "www redirect" }).evaluate((h) => h.scrollIntoView({ block: "start" })),
+  },
+  {
+    name: "site-www-add",
+    hash: "#/sites/shop/domains",
+    ready: "text=www redirect",
+    act: async (page) => page.getByRole("heading", { name: "www redirect" }).evaluate((h) => h.scrollIntoView({ block: "start" })),
+  },
   { name: "site-node", hash: "#/sites/app/web", ready: "text=Start command" },
   { name: "site-python", hash: "#/sites/api/web", ready: "text=Start command" },
   {
