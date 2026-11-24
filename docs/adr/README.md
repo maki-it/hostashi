@@ -56,6 +56,8 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0059](0059-real-client-ip-behind-proxies.md) | Real client IP behind CDNs and proxies | Accepted |
 | [0060](0060-time-zone-hostname-and-reboot.md) | Time zone, hostname and reboot from the panel | Accepted |
 | [0061](0061-site-type-python.md) | Site type Python | Accepted |
+| [0062](0062-git-deploy-per-site.md) | Git deploy per site | Accepted |
+| [0063](0063-resource-usage-per-site.md) | Resource usage per site | Proposed |
 
 Only the project owner sets a status to `Accepted`.
 
