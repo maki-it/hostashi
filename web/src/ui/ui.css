@@ -620,6 +620,12 @@ a.ui-btn {
 .ui-scope-col {
   display: none;
 }
+/* On a phone one column in list order; the rows set inline are for two columns */
+@media (max-width: 719.98px) {
+  .ui-scope-grid > .ui-check {
+    grid-row: auto !important;
+  }
+}
 /* Side by side: reading scopes on the left, the ones that change on the right */
 @media (min-width: 720px) {
   .ui-scope-grid {
@@ -635,11 +641,9 @@ a.ui-btn {
   }
   .ui-scope-read {
     grid-column: 1;
-    grid-row: var(--scope-row);
   }
   .ui-scope-change {
     grid-column: 2;
-    grid-row: var(--scope-row);
   }
 }
 /* Two allowlists side by side, stacked on a phone */

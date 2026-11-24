@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { listScopes, type Scope } from "./device";
 import { listSites, type Site } from "./sites";
 import { Badge, Button, Field, Notice } from "./ui";
@@ -170,7 +170,7 @@ export function GrantFields({
                   <label
                     key={s.name}
                     className={"ui-check ui-check-hint " + (isReading(s) ? "ui-scope-read" : "ui-scope-change")}
-                    style={{ "--scope-row": row } as CSSProperties}
+                    style={{ gridRow: row }}
                   >
                     <input
                       type="checkbox"
