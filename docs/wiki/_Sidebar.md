@@ -20,6 +20,7 @@
 - [Real visitor address](Real-visitor-address.md)
 - [Access protection](Access-protection.md)
 - [File manager](File-manager.md)
+- [Reset permissions](Reset-permissions.md)
 - [Site logs](Site-logs.md)
 
 **Databases**

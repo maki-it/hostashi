@@ -30,6 +30,28 @@ const shots = [
   { name: "site-new", hash: "#/sites?new=1", ready: "form" },
   { name: "site-domains", hash: "#/sites/blog/domains", ready: "text=Domains" },
   {
+    name: "site-permissions",
+    hash: "#/sites/blog/files",
+    ready: "text=Reset permissions",
+    act: async (page) => {
+      await page.getByRole("button", { name: "Reset permissions" }).click();
+      await page.getByLabel(/to confirm/).fill("blog");
+      await page.getByRole("heading", { name: "Reset permissions" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  {
+    name: "site-permissions-done",
+    hash: "#/sites/blog/files",
+    ready: "text=Reset permissions",
+    act: async (page) => {
+      await page.getByRole("button", { name: "Reset permissions" }).click();
+      await page.getByLabel(/to confirm/).fill("blog");
+      await page.getByRole("button", { name: "Reset permissions of blog" }).click();
+      await page.getByRole("list", { name: "Skipped entries" }).waitFor();
+      await page.getByRole("heading", { name: "Reset permissions" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  {
     name: "site-www",
     hash: "#/sites/blog/domains",
     ready: "text=www redirect",

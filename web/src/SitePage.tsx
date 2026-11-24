@@ -46,6 +46,7 @@ import { SiteAccess } from "./SiteAccess";
 import { RealIPCard } from "./RealIP";
 import { SecurityHeadersCard } from "./SecurityHeaders";
 import { SSHSettings } from "./SSH";
+import { PermissionsResetCard } from "./PermissionsReset";
 import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
 import { SiteUsageCard } from "./Usage";
 import { WWWCard } from "./WWW";
@@ -143,6 +144,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
         {active === "access" && <SiteAccess site={site} />}
         {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} admin={role === "admin"} staff={role === "admin" || role === "manager"} />}
         {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
+        {active === "files" && site.state === "active" && <PermissionsResetCard site={site} />}
         {active === "logs" && <SiteLogs site={site} admin={role === "admin"} />}
         {active === "php" && (
           <>
