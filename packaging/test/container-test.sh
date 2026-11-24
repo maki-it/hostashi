@@ -1454,8 +1454,8 @@ restore() {
   x grep -o '"dir":"restore-[0-9-]*"' /tmp/api.out | cut -d'"' -f4
 }
 [ "$(api GET /api/v1/sites/bk/backups)" = 200 ] || fail "snapshot list"
-files_snap=$(x grep -m1 -o '"id":"[0-9a-f]\{64\}","time":"[^"]*","kind":"files"' /tmp/api.out | cut -d'"' -f4)
-db_snap=$(x grep -m1 -o '"id":"[0-9a-f]\{64\}","time":"[^"]*","kind":"db"' /tmp/api.out | cut -d'"' -f4)
+files_snap=$(x grep -o '"id":"[0-9a-f]\{64\}","time":"[^"]*","kind":"files"' /tmp/api.out | sed -n 1p | cut -d'"' -f4)
+db_snap=$(x grep -o '"id":"[0-9a-f]\{64\}","time":"[^"]*","kind":"db"' /tmp/api.out | sed -n 1p | cut -d'"' -f4)
 [ -n "$files_snap" ] && [ -n "$db_snap" ] || fail "no snapshot ids in $(x cat /tmp/api.out)"
 dir=$(restore "$files_snap")
 [ "$(x cat "/home/bk/$dir/htdocs/index.html")" = "backed up" ] || fail "restored file"
