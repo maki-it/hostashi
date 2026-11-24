@@ -89,4 +89,6 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions for Kim
 
-1. Network: web traffic from a small nginx log now and outgoing traffic of the site's processes later (2A), or both at once (2B), or none (2D)?
+None left.
+
+1. ~~Network: web traffic from a small nginx log now and outgoing traffic of the site's processes later (2A), or both at once (2B), or none (2D)?~~ Decided (Kim, 2026-11-24): web traffic now, outgoing traffic later (2A).
