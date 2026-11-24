@@ -56,7 +56,7 @@ func doctorEnv(t *testing.T) DoctorEnv {
 	}
 
 	return DoctorEnv{
-		System:         doctor.System{OSRelease: osr, MountInfo: mi},
+		System:         doctor.System{OSRelease: osr, MountInfo: mi, Fstab: filepath.Join(dir, "fstab-missing"), DevDir: dir},
 		PanelSocket:    filepath.Join(sockDir, "panel-missing"),
 		Fail2banSocket: f2b,
 		Disk:           []string{dir},
@@ -128,6 +128,7 @@ func TestDoctor(t *testing.T) {
 		"system.proc":        agentapi.DoctorOK,
 		"system.pool":        agentapi.DoctorWarn, // the test pool is 0700, not root 0711
 		"system.pool.volume": agentapi.DoctorOK,
+		"system.fstab":       agentapi.DoctorOK,
 		"service.panel":      agentapi.DoctorFail, // no panel socket
 		"service.nginx":      agentapi.DoctorFail, // no web reconciler
 		"service.mariadb":    agentapi.DoctorWarn, // no database manager
