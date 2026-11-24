@@ -617,3 +617,83 @@ func TestChangePasswordEndpoint(t *testing.T) {
 		t.Fatalf("login with the new password: %d %s", rec.Code, rec.Body)
 	}
 }
+
+func TestTOTPReplaceEndpoints(t *testing.T) {
+	e := newAPI(t)
+	e.setupAdmin(t)
+
+	for _, p := range []string{"replace", "replace/confirm"} {
+		rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/totp/" + p, body: `{"code":"123456","password":"x"}`})
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("%s without session: %d", p, rec.Code)
+		}
+	}
+
+	c := sessionCookieOf(t, e.login(t, `{"username":"kim","password":"`+apiPassword+`"}`))
+
+	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/totp/enroll", cookie: c})
+
+	var enr struct {
+		Secret string `json:"secret"`
+		URI    string `json:"uri"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &enr); err != nil {
+		t.Fatal(err)
+	}
+
+	seed, _ := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(enr.Secret)
+
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/totp/confirm", cookie: c, body: `{"code":"` + auth.TOTPCode(seed, auth.TOTPStep(time.Now())) + `"}`})
+
+	var conf struct {
+		RecoveryCodes []string `json:"recoveryCodes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &conf); err != nil || len(conf.RecoveryCodes) != 8 {
+		t.Fatalf("confirm: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/totp/replace", cookie: c,
+		body: `{"password":"wrong password!!","code":"` + conf.RecoveryCodes[0] + `"}`,
+	})
+	if rec.Code != http.StatusUnauthorized || errCode(t, rec) != "invalid_credentials" {
+		t.Fatalf("replace with wrong password: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/totp/replace/confirm", cookie: c, body: `{"code":"123456"}`})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "totp_state" {
+		t.Fatalf("confirm without start: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/totp/replace", cookie: c,
+		body: `{"password":"` + apiPassword + `","code":"` + conf.RecoveryCodes[1] + `"}`,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("replace: %d %s", rec.Code, rec.Body)
+	}
+
+	if err := json.Unmarshal(rec.Body.Bytes(), &enr); err != nil || !strings.HasPrefix(enr.URI, "otpauth://") {
+		t.Fatalf("%s %v", rec.Body, err)
+	}
+
+	next, _ := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(enr.Secret)
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/totp/replace/confirm", cookie: c,
+		body: `{"code":"` + auth.TOTPCode(next, auth.TOTPStep(time.Now())) + `"}`,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("replace confirm: %d %s", rec.Code, rec.Body)
+	}
+
+	if err := json.Unmarshal(rec.Body.Bytes(), &conf); err != nil || len(conf.RecoveryCodes) != 8 {
+		t.Fatalf("%s %v", rec.Body, err)
+	}
+
+	// The old recovery codes are gone, the new ones log in.
+	rec = e.login(t, `{"username":"kim","password":"`+apiPassword+`","totp":"`+conf.RecoveryCodes[0]+`"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login with a new recovery code: %d %s", rec.Code, rec.Body)
+	}
+}

@@ -325,7 +325,7 @@ func (s *Store) ResetAccount(ctx context.Context, id int64, inv Invitation) erro
 	defer func() { _ = tx.Rollback() }()
 
 	res, err := tx.ExecContext(ctx,
-		`UPDATE users SET password_hash = '', totp_secret = NULL, totp_enabled = 0, totp_last_step = 0 WHERE id = ?`, id)
+		`UPDATE users SET password_hash = '', totp_secret = NULL, totp_pending_secret = NULL, totp_enabled = 0, totp_last_step = 0 WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}

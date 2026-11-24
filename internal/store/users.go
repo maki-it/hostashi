@@ -279,6 +279,85 @@ func (s *Store) EnableTOTP(ctx context.Context, userID, step int64, codeHashes [
 	return nil
 }
 
+// SetReplacementTOTP stores the encrypted seed of a new device next to the
+// active one. It replaces an unconfirmed replacement and fails with
+// ErrTOTPState if TOTP is off.
+func (s *Store) SetReplacementTOTP(ctx context.Context, userID int64, sealed []byte) error {
+	res, err := s.w.ExecContext(ctx,
+		`UPDATE users SET totp_pending_secret = ? WHERE id = ? AND totp_enabled = 1`, sealed, userID)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrTOTPState
+	}
+
+	return nil
+}
+
+// ReplacementTOTP returns the encrypted seed waiting for its first code, or
+// ErrTOTPState if there is none.
+func (s *Store) ReplacementTOTP(ctx context.Context, userID int64) ([]byte, error) {
+	var sealed []byte
+
+	err := s.db.QueryRowContext(ctx,
+		`SELECT totp_pending_secret FROM users WHERE id = ? AND totp_enabled = 1`, userID).Scan(&sealed)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrTOTPState
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+
+	if len(sealed) == 0 {
+		return nil, ErrTOTPState
+	}
+
+	return sealed, nil
+}
+
+// ReplaceTOTP makes the waiting seed the active one, records the accepted
+// step and replaces the recovery codes, in one transaction. sealed must be
+// the seed the code was checked against, so a replacement started again in
+// between is not swapped in unchecked.
+func (s *Store) ReplaceTOTP(ctx context.Context, userID int64, sealed []byte, step int64, codeHashes [][]byte) error {
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx,
+		`UPDATE users SET totp_secret = totp_pending_secret, totp_pending_secret = NULL, totp_last_step = ?
+		  WHERE id = ? AND totp_enabled = 1 AND totp_pending_secret = ?`, step, userID, sealed)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrTOTPState
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM recovery_codes WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	for _, h := range codeHashes {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO recovery_codes (user_id, code_hash) VALUES (?, ?)`, userID, h); err != nil {
+			return fmt.Errorf("store: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	return nil
+}
+
 // AcceptTOTPStep records step as used. It returns false if this step or a
 // later one was already accepted, which blocks replay of a captured code.
 func (s *Store) AcceptTOTPStep(ctx context.Context, userID, step int64) (bool, error) {
@@ -316,7 +395,7 @@ func (s *Store) DisableTOTP(ctx context.Context, userID int64) error {
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE users SET totp_secret = NULL, totp_enabled = 0, totp_last_step = 0 WHERE id = ?`, userID); err != nil {
+		`UPDATE users SET totp_secret = NULL, totp_pending_secret = NULL, totp_enabled = 0, totp_last_step = 0 WHERE id = ?`, userID); err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
 
