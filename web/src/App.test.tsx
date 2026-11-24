@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -187,6 +187,22 @@ describe("Login", () => {
     expect(calls.find((c) => c.path === "/api/v1/auth/login")?.body).toEqual({ username: "kim", password: "correct horse", totp: "" });
     await user.click(screen.getByRole("button", { name: "Log out" }));
     expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
+  });
+
+  it("draws a line under the brand once the nav scrolls", async () => {
+    const user = userEvent.setup();
+    mockFetch({ ...noSetup, ...loggedOut, "POST /api/v1/auth/login": { body: admin } });
+    render(<App />);
+    await fillLogin(user);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    const side = nav.closest("aside");
+    expect(side).toHaveAttribute("data-scrolled", "false");
+    nav.scrollTop = 40;
+    fireEvent.scroll(nav);
+    expect(side).toHaveAttribute("data-scrolled", "true");
+    nav.scrollTop = 0;
+    fireEvent.scroll(nav);
+    expect(side).toHaveAttribute("data-scrolled", "false");
   });
 
   it("shows wrong credentials", async () => {

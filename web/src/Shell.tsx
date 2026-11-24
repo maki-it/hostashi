@@ -142,9 +142,12 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     }
   }
 
+  // navScrolled draws a line under the brand once the nav scrolls under it.
+  const [navScrolled, setNavScrolled] = useState(false);
+
   return (
     <div className="ui-root app">
-      <aside className="app-side" data-open={menuOpen}>
+      <aside className="app-side" data-open={menuOpen} data-scrolled={navScrolled}>
         <div className="app-brand">
           <Mark />
           <span className="app-brand-name">
@@ -162,7 +165,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
             />
           </span>
         </div>
-        <nav aria-label="Main" id="app-nav" className="app-nav">
+        <nav aria-label="Main" id="app-nav" className="app-nav" onScroll={(e) => setNavScrolled(e.currentTarget.scrollTop > 0)}>
           {groups.map((g) => (
             <div className="app-nav-group" key={g.label ?? "top"}>
               {g.label && <h2 className="app-nav-label">{g.label}</h2>}
@@ -190,27 +193,30 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
             </div>
           ))}
         </nav>
-        <div className="app-user">
-          <span className="app-avatar" aria-hidden="true">
-            {user.username.slice(0, 2).toUpperCase()}
-          </span>
-          <a
-            className="app-user-name"
-            href={formatHash({ page: "account" })}
-            aria-current={route.page === "account" ? "page" : undefined}
-            onClick={() => setMenuOpen(false)}
-          >
-            {user.username}
-            <small>{user.role}</small>
-          </a>
-          <IconButton label="Log out" icon={<SignOut size={20} />} disabled={busy} onClick={() => void doLogout()} />
+        {/* The account, logout and version stay in view while the nav scrolls. */}
+        <div className="app-foot">
+          <div className="app-user">
+            <span className="app-avatar" aria-hidden="true">
+              {user.username.slice(0, 2).toUpperCase()}
+            </span>
+            <a
+              className="app-user-name"
+              href={formatHash({ page: "account" })}
+              aria-current={route.page === "account" ? "page" : undefined}
+              onClick={() => setMenuOpen(false)}
+            >
+              {user.username}
+              <small>{user.role}</small>
+            </a>
+            <IconButton label="Log out" icon={<SignOut size={20} />} disabled={busy} onClick={() => void doLogout()} />
+          </div>
+          {error && (
+            <p role="alert" className="app-user-error">
+              {error}
+            </p>
+          )}
+          {isAdmin && version && <p className="app-version">Hostashi {versionLabel(version)}</p>}
         </div>
-        {error && (
-          <p role="alert" className="app-user-error">
-            {error}
-          </p>
-        )}
-        {isAdmin && version && <p className="app-version">Hostashi {versionLabel(version)}</p>}
       </aside>
       <div className="app-main">
         <header className="app-top">
