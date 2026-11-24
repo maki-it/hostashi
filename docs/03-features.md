@@ -9,7 +9,7 @@
 Result of the v1 completeness check. Release 1.0 contains everything that is already built plus the following rows, which were missing or incomplete on 2026-11-21:
 
 - **P0 rows without code:** site types Node.js and reverse proxy; view and tail logs; view and export the audit log; OpenAPI 3.1 specification; CLI with parity; www/non-www redirect as a setting.
-- **Chosen P1 rows:** site type redirect; site type Python; WordPress quick install; vhost templates; change the domain(s) of a site; Cloudflare real IP; staging/cloning; Git deploy (moved from P2); multilingual UI (EN, DE); time zone, hostname, reboot; basic auth and IP blocking per site as a switch.
+- **Chosen P1 rows:** site type redirect; site type Python; WordPress quick install; vhost templates; change the domain(s) of a site; Cloudflare real IP; staging/cloning; Git deploy (moved from P2); multilingual UI (EN, DE); time zone, hostname, reboot; basic auth and IP blocking per site as a switch; malware scan with ClamAV, opt-in, including the optional real-time mode ([ADR-0064](adr/0064-optional-malware-scan.md), added 2026-11-24).
 - **Databases:** MariaDB stays the only local engine; PostgreSQL only as external servers ([ADR-0051](adr/0051-external-postgresql-servers.md)).
 - **Not chosen for 1.0 (open, see below):** wildcard via DNS-01, remote DB access through an IP allowlist, zero-downtime deployments, export/apply state as YAML, automatic restore test, restore on a new server, notifications through webhook/Telegram/Slack.
 
@@ -108,7 +108,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 | fail2ban (SSH, panel, recidive) | P0 | A | NEW | On by default, ADR-0021 |
 | CrowdSec as opt-in | P2 | 2+ | NEW | Reports IPs to an external service, ADR-0021 |
 | Rate limiting and lockout at the panel login | P0 | A | NEW | |
-| Malware scan (ClamAV/Maldet) | P2 | 2+ | NEW | ClamAV, opt-in, scheduled and manual; optional real-time daemon (ADR-0064) |
+| Malware scan (ClamAV/Maldet) | P1 | A | NEW | ClamAV, opt-in, scheduled and manual; optional real-time daemon (ADR-0064) |
 
 ## 3.7 Backups and recovery
 
