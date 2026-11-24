@@ -62,6 +62,10 @@ type Config struct {
 	// DBToolPort is the HTTPS port of the web database tool (ADR-0038),
 	// served for the panel's host name; 0 turns the tool off.
 	DBToolPort int
+
+	// PagesDir is where the agent keeps the maintenance and parking pages,
+	// read for previews; empty means pages.DefaultDir.
+	PagesDir string
 }
 
 // DefaultChallengeDir is where nginx looks for HTTP-01 challenge files
@@ -249,6 +253,7 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 			registerDatabases(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDBServers(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPages(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerPagePreview(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, newPreviews(cfg.PagesDir), log)
 			registerParked(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerCron(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSSH(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)

@@ -18,7 +18,7 @@ import (
 // PagesDir holds the maintenance and parking pages (ADR-0027). It is not
 // below DefaultStateDir: that one is 0700, and the nginx workers read the
 // pages.
-const PagesDir = "/var/lib/hostashi-pages"
+const PagesDir = pages.DefaultDir
 
 var errNoPages = &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "pages are not available on this server"}
 

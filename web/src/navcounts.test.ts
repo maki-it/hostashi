@@ -9,6 +9,9 @@ describe("nav counts", () => {
   it("counts failed and warning checks, red when one failed", () => {
     expect(healthCount({ checks: [check("ok")] })).toBeNull();
     expect(healthCount({ checks: [] })).toBeNull();
+    // A broken answer counts nothing instead of throwing.
+    expect(healthCount({} as never)).toBeNull();
+    expect(servicesCount(undefined as never)).toBeNull();
     expect(healthCount({ checks: [check("warn"), check("warn"), check("ok")] })).toEqual({ n: 2, tone: "warn" });
     expect(healthCount({ checks: [check("warn"), check("fail")] })).toEqual({ n: 2, tone: "err" });
   });

@@ -4787,6 +4787,23 @@
         ],
         "type": "object"
       },
+      "PreviewLink": {
+        "additionalProperties": false,
+        "properties": {
+          "expires": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires",
+          "url"
+        ],
+        "type": "object"
+      },
       "ProgramApp": {
         "additionalProperties": false,
         "properties": {
@@ -19263,6 +19280,59 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "pages:write"
+      }
+    },
+    "/api/v1/status-pages/{id}/preview": {
+      "post": {
+        "operationId": "previewStatusPage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewLink"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "pages:read"
+            ]
+          }
+        ],
+        "summary": "Get a short-lived link that shows a maintenance or parking page",
+        "tags": [
+          "pages"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "pages:read"
       }
     },
     "/api/v1/system": {

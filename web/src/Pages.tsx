@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ArrowLeft, GearSix, Plus, Trash } from "@phosphor-icons/react";
+import { ArrowLeft, Eye, GearSix, Plus, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   createPage,
@@ -11,6 +11,7 @@ import {
   listPages,
   pageMessage,
   pageNameProblem,
+  openPreview,
   updatePage,
   type PageKind,
   type StatusPage,
@@ -220,6 +221,7 @@ export function Pages({ query = new URLSearchParams(), onQuery = () => undefined
       srHeader: true,
       cell: (p) => (
         <RowActions>
+          <IconButton label={`Preview ${p.name}`} icon={<Eye size={16} />} onClick={() => void openPreview(p.id).then(setError)} />
           <IconLink label={`Manage ${p.name}`} icon={<GearSix size={16} />} href={pagesHash({ page: p.id })} />
           {!p.builtin && (
             <IconButton
@@ -408,7 +410,14 @@ function PageView({ page, back, deleteDialog, onDelete, onChanged, done }: ViewP
             {page.builtin && <Badge tone="off">Built-in</Badge>}
           </span>
         }
-        actions={back}
+        actions={
+          <span className="ui-row">
+            <Button icon={<Eye size={16} aria-hidden="true" />} onClick={() => void openPreview(page.id).then(setError)}>
+              Preview
+            </Button>
+            {back}
+          </span>
+        }
       />
       {done && <Notice tone="ok" title={done} />}
       {error && <Notice tone="err" title={error} />}

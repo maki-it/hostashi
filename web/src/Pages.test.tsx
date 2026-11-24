@@ -3,9 +3,9 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Pages } from "./Pages";
-import { allowIpsProblem, fileProblem, parseAllowIps, type StatusPage } from "./pages";
+import { allowIpsProblem, fileProblem, openPreview, parseAllowIps, type StatusPage } from "./pages";
 import { mockFetch } from "./test-utils";
 
 const builtin: StatusPage = {
@@ -132,5 +132,27 @@ describe("Pages", () => {
     expect(await screen.findByText("Page “Summer break” deleted.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Summer break" })).not.toBeInTheDocument();
     expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
+  });
+});
+
+describe("openPreview", () => {
+  it("opens a tab first, drops its opener and sends it to the link", async () => {
+    mockFetch({ "POST /api/v1/status-pages/p7/preview": { body: { url: "/api/page-preview/tok/", expires: "2026-11-24T10:15:00Z" } } });
+    const tab = { opener: {} as unknown, location: { href: "" }, close: vi.fn() };
+    const open = vi.fn(() => tab as unknown as Window);
+    expect(await openPreview("p7", open)).toBe("");
+    expect(open).toHaveBeenCalledWith("", "_blank");
+    expect(tab.opener).toBeNull();
+    expect(tab.location.href).toBe("/api/page-preview/tok/");
+  });
+
+  it("closes the tab when the link cannot be had, and explains a blocked tab", async () => {
+    mockFetch({ "POST /api/v1/status-pages/p7/preview": { status: 404, body: { error: { code: "not_found", message: "unknown page" } } } });
+    const tab = { opener: {}, location: { href: "" }, close: vi.fn() };
+    expect(await openPreview("p7", () => tab as unknown as Window)).not.toBe("");
+    expect(tab.close).toHaveBeenCalled();
+
+    mockFetch({ "POST /api/v1/status-pages/p7/preview": { body: { url: "/x/", expires: "" } } });
+    expect(await openPreview("p7", () => null)).toMatch(/blocked/);
   });
 });
