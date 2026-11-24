@@ -2578,6 +2578,9 @@
           "hostKey": {
             "type": "string"
           },
+          "hostKeyFingerprint": {
+            "type": "string"
+          },
           "keep": {
             "type": "integer"
           },
@@ -2618,6 +2621,7 @@
           "deployDir",
           "hasToken",
           "hostKey",
+          "hostKeyFingerprint",
           "keep",
           "publicKey",
           "shared",
@@ -16927,6 +16931,122 @@
           }
         ],
         "summary": "Set the repository, branch, shared paths and build commands of a site; SSH gets a deploy key",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      }
+    },
+    "/api/v1/sites/{name}/git/hostkey": {
+      "put": {
+        "operationId": "setSiteGitHostKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Git"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Trust a confirmed host key of the SSH repository's server",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      }
+    },
+    "/api/v1/sites/{name}/git/hostkey/scan": {
+      "post": {
+        "operationId": "scanSiteGitHostKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostKey"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Read the host key the SSH repository's server presents",
         "tags": [
           "git"
         ],

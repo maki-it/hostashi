@@ -174,8 +174,9 @@ type Service struct {
 	dbSizer DBSizeAgent // nil: database sizes are not measured (ADR-0015)
 	dbSizes dbSizeCache
 
-	resolver     Resolver   // nil: net.DefaultResolver
-	remoteJobsMu sync.Mutex // serializes dropping the users of remote jobs
+	resolver     Resolver       // nil: net.DefaultResolver
+	hostKeyScan  HostKeyScanner // nil: backup.FetchHostKeyAt
+	remoteJobsMu sync.Mutex     // serializes dropping the users of remote jobs
 
 	// defaultPool names the pool of a site whose request names none
 	// (ADR-0016 addendum 2); nil or an empty answer: agentapi.DefaultPool.

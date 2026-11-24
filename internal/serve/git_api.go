@@ -6,7 +6,10 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/hosting"
@@ -50,6 +53,9 @@ type gitJSON struct {
 	// HostKey is the confirmed host key of an SSH repository; empty until
 	// it is confirmed.
 	HostKey string `json:"hostKey"`
+	// HostKeyFingerprint is the SHA-256 fingerprint of the confirmed host
+	// key, to compare with the one the Git host publishes.
+	HostKeyFingerprint string `json:"hostKeyFingerprint"`
 	// Webhook: the webhook is on.
 	Webhook bool `json:"webhook"`
 	// UpdatedAt is RFC 3339; empty while not configured.
@@ -79,7 +85,7 @@ func toGitJSON(v hosting.GitView) gitJSON {
 		Shared: v.Shared, Commands: v.Commands, Keep: v.Keep,
 		BuildTimeoutMinutes: int(v.BuildTimeout / time.Minute), Submodules: v.Submodules,
 		Auth: v.Auth, TokenUser: v.TokenUser, HasToken: v.HasToken,
-		PublicKey: v.PublicKey, HostKey: v.HostKey, Webhook: v.Webhook,
+		PublicKey: v.PublicKey, HostKey: v.HostKey, HostKeyFingerprint: v.HostKeyFingerprint, Webhook: v.Webhook,
 	}
 
 	if out.Shared == nil {
@@ -104,6 +110,12 @@ func gitFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "git_unavailable", "Git deploy is not available on this panel")
 	case errors.Is(err, hosting.ErrGitNotConfigured):
 		writeError(w, http.StatusNotFound, "git_not_configured", "the site has no Git repository")
+	case errors.Is(err, hosting.ErrNotSSH):
+		writeError(w, http.StatusConflict, "not_ssh", "the site does not deploy over SSH")
+	case errors.Is(err, hosting.ErrHostKeyUnreachable):
+		writeError(w, http.StatusBadGateway, "unreachable", "the repository's server did not answer over SSH")
+	case errors.Is(err, hosting.ErrBadHostKey):
+		writeError(w, http.StatusBadRequest, "invalid_host_key", "not a usable host key (Ed25519, ECDSA or RSA with at least 3072 bits)")
 	default:
 		siteFail(log, w, err, what)
 	}
@@ -168,6 +180,42 @@ func registerGit(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger)
 		v, err := svc.NewGitKey(r.Context(), p.User.ID, r.PathValue("name"))
 		if err != nil {
 			gitFail(log, w, err, "new git key")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toGitJSON(v))
+	}))
+
+	// The scan only reads what the server presents; nothing is trusted
+	// until PUT .../git/hostkey with the key the administrator confirmed.
+	mux.Op("POST /api/v1/sites/{name}/git/hostkey/scan", openapi.Operation{
+		ID: "scanSiteGitHostKey", Tag: "git", Summary: "Read the host key the SSH repository's server presents", Out: hostKeyJSON{},
+	}, a.allow("sites.git:write", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		key, err := svc.ScanGitHostKey(r.Context(), r.PathValue("name"))
+		if err != nil {
+			gitFail(log, w, err, "scan git host key")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, hostKeyJSON{
+			Key:         strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))),
+			Fingerprint: ssh.FingerprintSHA256(key),
+		})
+	}))
+
+	mux.Op("PUT /api/v1/sites/{name}/git/hostkey", openapi.Operation{
+		ID: "setSiteGitHostKey", Tag: "git", Summary: "Trust a confirmed host key of the SSH repository's server", In: hostKeyRequest{}, Out: gitJSON{},
+	}, a.allow("sites.git:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in hostKeyRequest
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		v, err := svc.SetGitHostKey(r.Context(), p.User.ID, r.PathValue("name"), in.Key)
+		if err != nil {
+			gitFail(log, w, err, "set git host key")
 
 			return
 		}

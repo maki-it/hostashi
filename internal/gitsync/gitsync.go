@@ -278,12 +278,23 @@ func (a Auth) method(url string) (transport.AuthMethod, error) {
 
 			return nil
 		}
-		keys.HostKeyAlgorithms = []string{hk.Type()}
+		keys.HostKeyAlgorithms = hostKeyAlgorithms(hk.Type())
 
 		return keys, nil
 	default:
 		return nil, fmt.Errorf("gitsync: unknown auth %q", a.Kind)
 	}
+}
+
+// hostKeyAlgorithms are the signature algorithms offered for a confirmed
+// key of this type: an RSA key signs with SHA-2 only, as servers refuse
+// ssh-rsa (SHA-1) signatures.
+func hostKeyAlgorithms(keyType string) []string {
+	if keyType == ssh.KeyAlgoRSA {
+		return []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}
+	}
+
+	return []string{keyType}
 }
 
 // openCache opens the bare cache, or creates it, and points its remote at

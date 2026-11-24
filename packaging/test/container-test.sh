@@ -1207,6 +1207,21 @@ for _ in $(seq 1 90); do
 done
 [ "$dstate" = failed ] || fail "failing build ended $dstate"
 [ "$(x readlink /home/gitsite/htdocs)" = ".deploy/releases/$did" ] || fail "a failed build went live"
+# The host key of an SSH repository: the panel reads what the server
+# presents (here a second sshd on the machine's own address) and pins the
+# key the administrator confirms.
+x sh -c "mkdir -p /run/sshd && /usr/sbin/sshd -p 2296 -o ListenAddress=$ext_ip"
+[ "$(api PUT /api/v1/sites/gitsite/git "{\"url\":\"ssh://git@$ext_ip:2296/acme/site.git\",\"branch\":\"master\",\"auth\":\"ssh\",\"deployDir\":\"htdocs\",\"keep\":2,\"buildTimeoutMinutes\":5}")" = 200 ] ||
+  fail "set SSH Git: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/gitsite/deploys)" = 409 ] || fail "deploy without a confirmed host key: $(x cat /tmp/api.out)"
+x grep -q host_key_unconfirmed /tmp/api.out || fail "deploy without host key: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/gitsite/git/hostkey/scan)" = 200 ] || fail "scan host key: $(x cat /tmp/api.out)"
+hkfp=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["fingerprint"])')
+hkey=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["key"])')
+[ "$hkfp" = "$(x ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub | awk '{print $2}')" ] || fail "scanned fingerprint $hkfp is not the server's"
+[ "$(api PUT /api/v1/sites/gitsite/git/hostkey "{\"key\":\"$hkey\"}")" = 200 ] || fail "confirm host key: $(x cat /tmp/api.out)"
+x grep -q "\"hostKeyFingerprint\":\"$hkfp\"" /tmp/api.out || fail "confirmed host key not shown: $(x cat /tmp/api.out)"
+x pkill -f 'sshd -p 2296' || true
 [ "$(api DELETE /api/v1/sites/gitsite)" = 204 ] || fail "delete Git site: $(x cat /tmp/api.out)"
 x test ! -e /etc/systemd/system/hostashi-deploy@gitsite.service.d || fail "deploy drop-ins left after delete"
 x test ! -e /var/lib/hostashi-deploy/gitsite || fail "build script left after delete"
