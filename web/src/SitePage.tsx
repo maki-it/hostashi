@@ -42,6 +42,7 @@ import { pythonCommand } from "./python";
 import { SiteWebSettings } from "./SiteWeb";
 import { RemoveAccountCard } from "./SiteType";
 import { SnippetSettings } from "./Snippets";
+import { SiteAccess } from "./SiteAccess";
 import { RealIPCard } from "./RealIP";
 import { SecurityHeadersCard } from "./SecurityHeaders";
 import { SSHSettings } from "./SSH";
@@ -54,6 +55,7 @@ import { WWWCard } from "./WWW";
 const tabs: { id: SiteTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "domains", label: "Domains & HTTPS" },
+  { id: "access", label: "Access" },
   { id: "web", label: "Web" },
   { id: "files", label: "Files" },
   { id: "git", label: "Git" },
@@ -100,14 +102,16 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
   // keeps these tabs.
   // A site without an account (redirect, reverse proxy) has no files,
   // cron, SSH or limits, and redirect and reverse proxy no snippets
-  // (ADR-0054).
+  // (ADR-0054). A redirect answers before nginx checks access, so it has no
+  // access tab (ADR-0066).
   const noAccount = ["files", "php", "cron", "ssh", "limits"];
   const shown = tabs.filter(
     (t) =>
       (t.id !== "php" || site.php !== "") &&
       (t.id !== "git" || canDeploy(site)) &&
       (hasAccount(site) || !noAccount.includes(t.id)) &&
-      (!["redirect", "proxy"].includes(siteType(site)) || t.id !== "nginx"),
+      (!["redirect", "proxy"].includes(siteType(site)) || t.id !== "nginx") &&
+      (siteType(site) !== "redirect" || t.id !== "access"),
   );
   const active = ready && shown.some((t) => t.id === tab) ? tab : "overview";
   const prefix = `site-${site.name}`;
@@ -136,6 +140,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
         {active === "overview" && <Overview site={site} onChange={load} staff={role === "admin" || role === "manager"} />}
         {active === "overview" && role === "admin" && hasAccount(site) && <Services site={site.name} />}
         {active === "domains" && <DomainsTab site={site} onChange={load} admin={role === "admin"} />}
+        {active === "access" && <SiteAccess site={site} />}
         {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} admin={role === "admin"} staff={role === "admin" || role === "manager"} />}
         {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
         {active === "logs" && <SiteLogs site={site} admin={role === "admin"} />}

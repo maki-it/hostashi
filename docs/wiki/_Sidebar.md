@@ -18,6 +18,7 @@
 - [Object cache](Object-cache.md)
 - [Security headers](Security-headers.md)
 - [Real visitor address](Real-visitor-address.md)
+- [Access protection](Access-protection.md)
 - [File manager](File-manager.md)
 - [Site logs](Site-logs.md)
 
