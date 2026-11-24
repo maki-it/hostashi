@@ -218,6 +218,8 @@ func (s *Service) pollDeploys(ctx context.Context) {
 	}
 
 	if len(active) == 0 {
+		s.startDeploysAgain(ctx, nil, nil)
+
 		return
 	}
 
@@ -229,9 +231,19 @@ func (s *Service) pollDeploys(ctx context.Context) {
 	}
 
 	sites := map[int64]store.Site{}
+	ids := map[string]int64{}
+
 	for _, site := range all {
 		sites[site.ID] = site
+		ids[site.Name] = site.ID
 	}
+
+	busy := map[int64]bool{}
+	for _, d := range active {
+		busy[d.SiteID] = true
+	}
+
+	defer s.startDeploysAgain(ctx, busy, ids)
 
 	for _, d := range active {
 		if ctx.Err() != nil {
