@@ -36,7 +36,7 @@ import {
 import { DBServersView, serversHref } from "./DBServers";
 import { poll } from "./backups";
 import { OpenToolDialog } from "./DBTool";
-import { ToolSessions } from "./DBToolSessions";
+import { ToolActionDialog, toolAction, ToolSessions } from "./DBToolSessions";
 import { getDBTool, type DBToolStatus } from "./dbtool";
 import { formatBytes } from "./limits";
 import { remove as removeFiles, uploadFile } from "./files";
@@ -209,6 +209,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
   const one = query.get("db");
   if (one !== null) {
     const db = dbs.find((d) => d.name === one);
+    const asked = toolAction(query);
     return (
       <>
         <PageHead
@@ -239,6 +240,18 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
         />
         {notice}
         {toolDialog}
+        {db && asked && (
+          <ToolActionDialog
+            key={asked.action + asked.session}
+            db={db.name}
+            action={asked.action}
+            session={asked.session}
+            onClose={() => {
+              set({ tool: "", session: "" });
+              setToolClosed((n) => n + 1);
+            }}
+          />
+        )}
         {db && toolMinutes && <ToolSessions db={db.name} reload={toolClosed} />}
         {error && <Notice tone="err" title={error} />}
         {db ? (

@@ -59,6 +59,31 @@ class Tool extends \Adminer\Adminer
                 };
                 tick();
                 setInterval(tick, 20000);
+
+                // After "+30 min" the panel moved the end: read it again
+                // from this database's start page when the tab is back.
+                const extend = document.getElementById('hostashi-extend');
+                const home = document.getElementById('h1');
+                let asked = false;
+                if (extend) extend.addEventListener('click', () => { asked = true; });
+                const refresh = async () => {
+                    if (!asked || document.visibilityState !== 'visible' || !home) return;
+                    asked = false;
+                    try {
+                        const r = await fetch(home.href, { credentials: 'same-origin', redirect: 'error' });
+                        if (!r.ok) return;
+                        const doc = new DOMParser().parseFromString(await r.text(), 'text/html');
+                        const at = doc.getElementById('hostashi-ends')?.dataset.expires;
+                        if (at && /^[0-9]+$/.test(at)) {
+                            end.dataset.expires = at;
+                            tick();
+                        }
+                    } catch {
+                        // The next page load shows the end anyway.
+                    }
+                };
+                addEventListener('focus', refresh);
+                document.addEventListener('visibilitychange', refresh);
             });
 
             // Adminer's breadcrumb is "driver » server » db » … » page", as
@@ -144,10 +169,13 @@ class Tool extends \Adminer\Adminer
         echo "<div id='hostashi-bar'><span id='hostashi-ends' data-expires='", (int) LOGIN['expires'], "'>",
             "<span class='ends-word'>Session ends in </span>$left min</span>";
         if (LOGIN['panel'] !== '') {
-            // The panel extends the session (ADR-0038 addendum 1); the
-            // tool itself has no way to.
+            // Only the panel extends or ends the session (ADR-0038
+            // addendum 1); the tool itself has no way to.
+            // The panel extends the session with one click and this page
+            // picks up the new end when it gets the focus back.
             $back = \Adminer\h(LOGIN['panel'] . '/#/databases?db=' . rawurlencode(LOGIN['database']));
-            echo "<a id='hostashi-extend' href='$back' target='_blank' rel='noopener' title='Extend this session in the panel'>+30 min</a>",
+            $extend = \Adminer\h(panel_session_link(LOGIN, 'extend'));
+            echo "<a id='hostashi-extend' href='$extend' target='_blank' rel='noopener' title='Extend this session by 30 minutes in the panel'>+30 min</a>",
                 "<a id='hostashi-panel' href='$back'>Back to panel</a>";
         }
         echo "</div>\n";
