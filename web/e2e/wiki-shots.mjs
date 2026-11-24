@@ -75,6 +75,14 @@ const shots = [
   { name: "backups", hash: "#/backups", ready: "text=Snapshots" },
   { name: "firewall", hash: "#/firewall", ready: "text=Allowlists" },
   {
+    name: "firewall-api-tokens",
+    hash: "#/firewall",
+    ready: "text=Allowed addresses",
+    act: async (page) => {
+      await page.getByRole("heading", { name: "API tokens" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  {
     name: "account-tokens",
     hash: "#/account",
     ready: "table",

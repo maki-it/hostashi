@@ -18,6 +18,8 @@ If the panel runs on port 443 under its own host name, its allowlist is checked 
 
 ![The Firewall page](images/firewall.png)
 
+Where API tokens are accepted from is set on the same page, in its own card; see [API tokens](API-tokens.md#limit-where-tokens-are-accepted-from).
+
 ## Open more ports
 
 Under **Opened ports**, add a port or a range (`3000` or `6000-6010`), the protocol and, optionally, the addresses it is open to.
