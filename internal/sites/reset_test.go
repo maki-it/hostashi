@@ -108,6 +108,7 @@ func giveToSite(t *testing.T, dir string) {
 	t.Helper()
 
 	uid, gid := testIDs()
+
 	must(t, filepath.WalkDir(dir, func(p string, _ os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -300,6 +301,7 @@ func TestRootResetPermissions(t *testing.T) {
 
 	// Another file system inside the home (when mounting is allowed here).
 	mounted := false
+
 	must(t, os.Mkdir(j("mnt"), 0o755))
 
 	if err := unix.Mount("tmpfs", j("mnt"), "tmpfs", 0, "mode=0777"); err == nil {
