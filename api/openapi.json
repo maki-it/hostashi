@@ -5781,6 +5781,12 @@
           "error": {
             "type": "string"
           },
+          "realtime": {
+            "type": "string"
+          },
+          "realtimeActive": {
+            "type": "boolean"
+          },
           "signatures": {
             "type": "string"
           },
@@ -5793,6 +5799,8 @@
         },
         "required": [
           "error",
+          "realtime",
+          "realtimeActive",
           "signatures",
           "state",
           "version"
@@ -5803,6 +5811,12 @@
         "additionalProperties": false,
         "properties": {
           "on": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "realtime": {
             "type": [
               "boolean",
               "null"
@@ -11595,7 +11609,7 @@
             ]
           }
         ],
-        "summary": "Install or remove ClamAV for the malware scan; the result follows in getMalwareScan",
+        "summary": "Install or remove ClamAV for the malware scan, or switch its real-time mode; the result follows in getMalwareScan",
         "tags": [
           "malware"
         ],

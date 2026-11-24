@@ -617,6 +617,46 @@ x test ! -e /home/blog/htdocs/eicar.com || fail "quarantined file still in the s
 [ "$(api POST "/api/v1/sites/blog/malware-findings/$fid/restore")" = 200 ] || fail "restore: $(x cat /tmp/api.out)"
 [ "$(x stat -c '%U:%G' /home/blog/htdocs/eicar.com)" = blog:blog ] || fail "restored file has the wrong owner"
 x rm -f /home/blog/htdocs/eicar.com
+
+step "malware scan: real-time mode reports a new file (ADR-0064)"
+# clamd starts only once the official signatures are there; the test has
+# its one test signature, so a test drop-in drops that condition.
+x mkdir -p /etc/systemd/system/clamav-daemon.service.d
+x sh -c 'printf "[Unit]\nConditionPathExistsGlob=\nConditionPathExists=/etc/hostashi/clamav/clamd.conf\n" >/etc/systemd/system/clamav-daemon.service.d/90-test.conf'
+[ "$(api PUT /api/v1/malware-scan '{"realtime":true}')" = 202 ] || fail "switch real-time on: $(x cat /tmp/api.out)"
+for _ in $(seq 1 120); do
+  [ "$(api GET /api/v1/malware-scan)" = 200 ] || fail "engine state: $(x cat /tmp/api.out)"
+  [ "$(jget 'd["realtimeActive"]')" = True ] && break
+  [ "$(jget 'd["realtime"]')" = failed ] && break
+  sleep 2
+done
+[ "$(jget 'd["realtimeActive"]')" = True ] || fail "clamonacc not running: $(x cat /tmp/api.out); $(x journalctl --no-pager -n 30 -u clamav-daemon -u clamav-clamonacc)"
+x grep -q '^OnAccessIncludePath /home/blog$' /etc/hostashi/clamav/clamd.conf || fail "blog not watched"
+x grep -q -- '--move' /etc/systemd/system/clamav-clamonacc.service.d/50-hostashi.conf && fail "clamonacc would move files"
+x systemctl show -p ExecStart --value clamav-clamonacc.service | grep -q -- '--move' && fail "clamonacc runs with --move"
+# shellcheck disable=SC2016 # the inner shell expands nothing either
+x sh -c 'printf "%s%s" "X5O!P%@AP[4\PZX54(P^)7CC)7}\$EICAR-STANDARD-" "ANTIVIRUS-TEST-FILE!\$H+H*" >/home/blog/htdocs/new.com; chown blog:blog /home/blog/htdocs/new.com'
+found=
+for _ in $(seq 1 60); do
+  [ "$(api GET /api/v1/sites/blog/malware-scan)" = 200 ] || fail "site scan: $(x cat /tmp/api.out)"
+  found=$(jget '[f["state"] for f in d["findings"] if f["path"] == "htdocs/new.com"]')
+  [ "$found" = "['open']" ] && break
+  sleep 2
+done
+[ "$found" = "['open']" ] || fail "real-time mode did not report the new file: $(x cat /tmp/api.out); $(x cat /var/log/hostashi/scan/realtime.log)"
+[ "$(jget 'd["runs"][0]["source"]')" = realtime ] || fail "no real-time run: $(x cat /tmp/api.out)"
+x test -e /home/blog/htdocs/new.com || fail "the real-time mode moved the file"
+# A scan now goes through clamd with clamdscan.
+[ "$(api POST /api/v1/sites/blog/malware-scans)" = 202 ] || fail "start scan: $(x cat /tmp/api.out)"
+for _ in $(seq 1 60); do
+  [ "$(api GET /api/v1/sites/blog/malware-scan)" = 200 ] || fail "site scan: $(x cat /tmp/api.out)"
+  run=$(jget '[r["state"] for r in d["runs"] if r["source"] == "panel"][0]')
+  case "$run" in succeeded|failed) break;; esac
+  sleep 2
+done
+[ "$run" = succeeded ] || fail "clamdscan run did not succeed ($run): $(x cat /tmp/api.out)"
+x grep -q 'clamdscan' /etc/systemd/system/hostashi-scan@blog.service.d/60-hostashi-scan.conf || fail "scan did not use clamdscan"
+x rm -f /home/blog/htdocs/new.com /etc/systemd/system/clamav-daemon.service.d/90-test.conf
 [ "$(api PUT /api/v1/malware-scan '{"on":false}')" = 202 ] || fail "switch the scan off: $(x cat /tmp/api.out)"
 for _ in $(seq 1 120); do
   [ "$(api GET /api/v1/malware-scan)" = 200 ] || fail "engine state: $(x cat /tmp/api.out)"
@@ -627,6 +667,9 @@ done
 [ "$state" = off ] || fail "ClamAV not off ($state): $(x cat /tmp/api.out)"
 # shellcheck disable=SC2016 # a dpkg-query format, not a shell expansion
 ! x dpkg-query -W -f='${Status}' clamav 2>/dev/null | grep 'install ok installed' >/dev/null || fail "clamav still installed"
+# shellcheck disable=SC2016 # a dpkg-query format, not a shell expansion
+! x dpkg-query -W -f='${Status}' clamav-daemon 2>/dev/null | grep 'install ok installed' >/dev/null || fail "clamav-daemon still installed"
+x test ! -e /etc/systemd/system/clamav-clamonacc.service.d/50-hostashi.conf || fail "clamonacc drop-in left"
 x rm -rf /etc/systemd/system/clamav-freshclam.service.d
 x systemctl daemon-reload
 

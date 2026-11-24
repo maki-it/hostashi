@@ -17,7 +17,9 @@ import (
 // hostashi-clamav-install@<install|remove>.service runs the script
 // clamav-install, which installs or purges exactly clamav and
 // clamav-freshclam and records the result in EngineDir: "state" (on or
-// off), "version" (the package version) and "install.log".
+// off), "version" (the package version) and "install.log". The instances
+// realtime-on and realtime-off do the same for the real-time mode and
+// record "realtime".
 const (
 	// DefaultEngineDir is the script's state directory.
 	DefaultEngineDir = "/var/lib/hostashi-agent/clamav-install"
@@ -26,8 +28,12 @@ const (
 	EngineRemove  = "remove"
 )
 
-// ErrEngineBusy: an install or removal is running.
-var ErrEngineBusy = errors.New("scanunit: ClamAV is being installed or removed")
+var (
+	// ErrEngineBusy: an install or removal is running.
+	ErrEngineBusy = errors.New("scanunit: ClamAV is being installed or removed")
+	// ErrEngineOff: the real-time mode needs ClamAV switched on first.
+	ErrEngineOff = errors.New("scanunit: switch the malware scan on first")
+)
 
 // EngineController starts and reads the install unit
 // (phpctl.ClamAVInstallUnits).
@@ -43,6 +49,8 @@ type Engine struct {
 	Dir         string // default DefaultEngineDir
 	DatabaseDir string // default DefaultDatabaseDir
 	Ctl         EngineController
+	// Realtime reads clamonacc's state; nil reports it as not running.
+	Realtime RealtimeController
 }
 
 func (e *Engine) dir() string   { return or(e.Dir, DefaultEngineDir) }
@@ -59,6 +67,37 @@ func (e *Engine) read(name string) string {
 
 // On reports whether ClamAV is installed and switched on.
 func (e *Engine) On() bool { return e.read("state") == agentapi.ScanEngineOn }
+
+// RealtimeOn reports whether the real-time mode is installed and on.
+func (e *Engine) RealtimeOn() bool { return e.On() && e.read("realtime") == agentapi.ScanEngineOn }
+
+// realtimeState is the state of the real-time mode from its install unit
+// and the script's record.
+func (e *Engine) realtimeState(ctx context.Context) (state, errText string, err error) {
+	for _, inst := range []string{EngineRealtimeOn, EngineRealtimeOff} {
+		st, err := e.Ctl.State(ctx, inst)
+		if err != nil {
+			return "", "", err
+		}
+
+		switch st {
+		case "activating", "active", "reloading", "deactivating":
+			if inst == EngineRealtimeOn {
+				return agentapi.ScanEngineInstalling, "", nil
+			}
+
+			return agentapi.ScanEngineRemoving, "", nil
+		case "failed":
+			return agentapi.ScanEngineFailed, tail(filepath.Join(e.dir(), "install.log")), nil
+		}
+	}
+
+	if e.RealtimeOn() {
+		return agentapi.ScanEngineOn, "", nil
+	}
+
+	return agentapi.ScanEngineOff, "", nil
+}
 
 // Status reports the engine (scan.engine.status).
 func (e *Engine) Status(ctx context.Context) (agentapi.ScanEngineStatus, error) {
@@ -89,6 +128,21 @@ func (e *Engine) Status(ctx context.Context) (agentapi.ScanEngineStatus, error) 
 		out.Signatures = t.UTC().Format(time.RFC3339)
 	}
 
+	rt, rtErr, err := e.realtimeState(ctx)
+	if err != nil {
+		return agentapi.ScanEngineStatus{}, err
+	}
+
+	out.Realtime = rt
+	if rt == agentapi.ScanEngineFailed {
+		out.Error = rtErr
+	}
+
+	if rt == agentapi.ScanEngineOn && e.Realtime != nil {
+		st, err := e.Realtime.State(ctx, ClamonaccUnit)
+		out.RealtimeActive = err == nil && st == "active"
+	}
+
 	return out, nil
 }
 
@@ -103,6 +157,13 @@ func (e *Engine) Set(ctx context.Context, req agentapi.ScanEngineSetRequest) (ag
 	switch cur.State {
 	case agentapi.ScanEngineInstalling, agentapi.ScanEngineRemoving:
 		return cur, ErrEngineBusy
+	}
+
+	if req.Realtime != nil {
+		return e.setRealtime(ctx, cur, *req.Realtime)
+	}
+
+	switch cur.State {
 	case agentapi.ScanEngineOn:
 		if req.On {
 			return cur, nil
@@ -123,6 +184,39 @@ func (e *Engine) Set(ctx context.Context, req agentapi.ScanEngineSetRequest) (ag
 	}
 
 	return agentapi.ScanEngineStatus{State: state}, nil
+}
+
+// setRealtime switches the real-time mode; ClamAV must be on.
+func (e *Engine) setRealtime(ctx context.Context, cur agentapi.ScanEngineStatus, on bool) (agentapi.ScanEngineStatus, error) {
+	switch cur.Realtime {
+	case agentapi.ScanEngineInstalling, agentapi.ScanEngineRemoving:
+		return cur, ErrEngineBusy
+	case agentapi.ScanEngineOn:
+		if on {
+			return cur, nil
+		}
+	case agentapi.ScanEngineOff, "":
+		if !on {
+			return cur, nil
+		}
+	}
+
+	if on && cur.State != agentapi.ScanEngineOn {
+		return cur, ErrEngineOff
+	}
+
+	inst, state := EngineRealtimeOff, agentapi.ScanEngineRemoving
+	if on {
+		inst, state = EngineRealtimeOn, agentapi.ScanEngineInstalling
+	}
+
+	if err := e.Ctl.Start(ctx, inst); err != nil {
+		return cur, err
+	}
+
+	cur.Realtime, cur.RealtimeActive = state, false
+
+	return cur, nil
 }
 
 // newestSignature is the newest modification time of ClamAV's signature

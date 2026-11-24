@@ -15,11 +15,14 @@ import (
 // that match scanUnitRe or clamavInstallRe. The agent never runs clamscan
 // or apt itself; systemd runs clamscan as the site user from the fixed
 // template and the agent's drop-in, and the fixed script clamav-install as
-// root with one of two instances.
+// root with one of four instances.
 var (
 	scanUnitRe      = regexp.MustCompile(`^hostashi-scan@[a-z][a-z0-9_-]{1,31}\.service$`)
 	scanPropRe      = regexp.MustCompile(`^(?:ActiveState|SubState|Result|ExecMainStatus)$`)
-	clamavInstallRe = regexp.MustCompile(`^hostashi-clamav-install@(?:install|remove)\.service$`)
+	clamavInstallRe = regexp.MustCompile(`^hostashi-clamav-install@(?:install|remove|realtime-on|realtime-off)\.service$`)
+	// The real-time mode: clamd and clamonacc from the distribution, with
+	// the drop-ins clamav-install writes.
+	clamavRealtimeRe = regexp.MustCompile(`^clamav-(?:daemon|clamonacc)\.service$`)
 )
 
 // ScanController implements scanunit.Controller.
@@ -70,7 +73,7 @@ func scanctl(ctx context.Context, unit string, args ...string) error {
 }
 
 // ClamAVInstallUnits implements scanunit.EngineController: the fixed unit
-// hostashi-clamav-install@<install|remove>.service.
+// hostashi-clamav-install@<install|remove|realtime-on|realtime-off>.service.
 type ClamAVInstallUnits struct{}
 
 func clamavUnit(instance string) (string, error) {
@@ -90,7 +93,7 @@ func (ClamAVInstallUnits) Start(ctx context.Context, instance string) error {
 		return err
 	}
 
-	for _, other := range []string{"install", "remove"} {
+	for _, other := range []string{"install", "remove", "realtime-on", "realtime-off"} {
 		u, _ := clamavUnit(other)
 		_ = run(ctx, Systemctl, "reset-failed", u)
 	}
@@ -139,4 +142,33 @@ func show(ctx context.Context, unit string, allowed *regexp.Regexp, props []stri
 	}
 
 	return m, nil
+}
+
+// ClamAVRealtimeUnits implements scanunit.RealtimeController: restart and
+// state of clamav-daemon.service and clamav-clamonacc.service.
+type ClamAVRealtimeUnits struct{}
+
+// Restart restarts the unit, for example after its configuration changed.
+func (ClamAVRealtimeUnits) Restart(ctx context.Context, unit string) error {
+	if !clamavRealtimeRe.MatchString(unit) {
+		return fmt.Errorf("phpctl: refusing unit name %q", unit)
+	}
+
+	_ = run(ctx, Systemctl, "reset-failed", unit)
+
+	return run(ctx, Systemctl, "restart", "--no-block", unit)
+}
+
+// State returns the unit's ActiveState.
+func (ClamAVRealtimeUnits) State(ctx context.Context, unit string) (string, error) {
+	if !clamavRealtimeRe.MatchString(unit) {
+		return "", fmt.Errorf("phpctl: refusing unit name %q", unit)
+	}
+
+	out, err := output(ctx, Systemctl, "show", "--property=ActiveState", "--value", unit)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(out), nil
 }

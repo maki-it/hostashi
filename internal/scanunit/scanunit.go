@@ -112,8 +112,11 @@ type Manager struct {
 	Site func(site string) (Site, error)
 	// Hidden returns the pools the unit must hide (sites.HiddenPaths).
 	Hidden func() []string
-	Ctl    Controller
-	Log    *slog.Logger
+	// Clamd reports whether the real-time mode's clamd serves scans; nil
+	// is never.
+	Clamd func(ctx context.Context) bool
+	Ctl   Controller
+	Log   *slog.Logger
 	// now is time.Now; tests set it.
 	now func() time.Time
 
@@ -209,9 +212,11 @@ func safePath(p string) bool {
 }
 
 // DropInContent ties the unit to the site's home, read only, and sets the
-// scan: clamscan over the home with the fixed signature directory. The
+// scan: clamscan over the home with the fixed signature directory, or with
+// clamd true clamdscan, which hands each open file to the running clamd
+// of the real-time mode (its configuration excludes the same folders). The
 // template holds the sandbox, the slice, the log and the exit codes.
-func DropInContent(site string, acct Site, hidden []string, dbDir string) ([]byte, error) {
+func DropInContent(site string, acct Site, hidden []string, dbDir string, clamd bool) ([]byte, error) {
 	if err := agentapi.ValidateSiteUser(site); err != nil {
 		return nil, err
 	}
@@ -238,6 +243,10 @@ func DropInContent(site string, acct Site, hidden []string, dbDir string) ([]byt
 	cmd := []string{Clamscan, "--recursive", "--infected", "--no-summary", "--stdout", "--database=" + dbDir}
 	for _, d := range Excluded {
 		cmd = append(cmd, appunit.Quote("--exclude-dir=^"+regexp.QuoteMeta(acct.Home+"/"+d)+"$"))
+	}
+
+	if clamd {
+		cmd = []string{Clamdscan, "--config-file=" + DefaultRealtimeConfig, "--fdpass", "--infected", "--no-summary", "--stdout"}
 	}
 
 	cmd = append(cmd, appunit.Quote(acct.Home))
@@ -284,7 +293,7 @@ func (m *Manager) Start(ctx context.Context, req agentapi.ScanStartRequest) (age
 		hidden = m.Hidden()
 	}
 
-	content, err := DropInContent(req.Site, acct, hidden, m.dbDir())
+	content, err := DropInContent(req.Site, acct, hidden, m.dbDir(), m.Clamd != nil && m.Clamd(ctx))
 	if err != nil {
 		return agentapi.ScanStatus{}, err
 	}

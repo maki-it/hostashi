@@ -80,7 +80,7 @@ func sum(b string) string {
 }
 
 func TestDropInContent(t *testing.T) {
-	b, err := DropInContent("blog", Site{Home: "/home/blog.example"}, []string{"/srv/pool2"}, "/var/lib/clamav")
+	b, err := DropInContent("blog", Site{Home: "/home/blog.example"}, []string{"/srv/pool2"}, "/var/lib/clamav", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,13 +102,19 @@ func TestDropInContent(t *testing.T) {
 	}
 
 	for _, bad := range []string{"/home/a b", "home/x", "/home/x/../y", "/home/$x", "/home/%i"} {
-		if _, err := DropInContent("blog", Site{Home: bad}, nil, "/var/lib/clamav"); err == nil {
+		if _, err := DropInContent("blog", Site{Home: bad}, nil, "/var/lib/clamav", false); err == nil {
 			t.Errorf("home %q accepted", bad)
 		}
 	}
 
-	if _, err := DropInContent("Bad", Site{Home: "/home/x"}, nil, "/var/lib/clamav"); err == nil {
+	if _, err := DropInContent("Bad", Site{Home: "/home/x"}, nil, "/var/lib/clamav", false); err == nil {
 		t.Error("bad site accepted")
+	}
+
+	// With the real-time mode's clamd, clamdscan hands it the open files.
+	b, err = DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", true)
+	if err != nil || !strings.Contains(string(b), "ExecStart=\nExecStart=/usr/bin/clamdscan --config-file=/etc/hostashi/clamav/clamd.conf --fdpass --infected --no-summary --stdout \"/home/blog\"\n") {
+		t.Errorf("clamdscan drop-in: %v\n%s", err, b)
 	}
 }
 

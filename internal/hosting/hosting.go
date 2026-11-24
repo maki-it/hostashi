@@ -171,6 +171,12 @@ type Service struct {
 	deployKick chan struct{} // wakes RunDeploys
 	scans      ScanAgent     // nil: no malware scans (ADR-0064)
 	scanKick   chan struct{} // wakes RunScans
+	// rtCursor and rtPending belong to RunScans: where the real-time log
+	// was read to (0 after a start: the agent's log is read again, known
+	// findings are not reported twice) and the findings waiting for an
+	// email.
+	rtCursor  int64
+	rtPending map[string]*realtimeMail
 	// deployAgain holds the sites whose webhook fired while a run was
 	// active; RunDeploys starts one more run when it ends. In memory only.
 	deployAgainMu sync.Mutex

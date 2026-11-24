@@ -32,9 +32,26 @@ func TestScanUnitNames(t *testing.T) {
 		}
 	}
 
-	for _, inst := range []string{"install", "remove"} {
+	for _, inst := range []string{"install", "remove", "realtime-on", "realtime-off"} {
 		if _, err := clamavUnit(inst); err != nil {
 			t.Errorf("instance %q refused: %v", inst, err)
+		}
+	}
+
+	rt := ClamAVRealtimeUnits{}
+	for _, u := range []string{"clamav-freshclam.service", "clamav-daemon.socket", "clamav-daemon", "nginx.service", "clamav-daemon.service x"} {
+		if err := rt.Restart(ctx, u); err == nil {
+			t.Errorf("restart %q accepted", u)
+		}
+
+		if _, err := rt.State(ctx, u); err == nil {
+			t.Errorf("state %q accepted", u)
+		}
+	}
+
+	for _, u := range []string{"clamav-daemon.service", "clamav-clamonacc.service"} {
+		if !clamavRealtimeRe.MatchString(u) {
+			t.Errorf("%q refused", u)
 		}
 	}
 }

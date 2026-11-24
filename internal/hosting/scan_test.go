@@ -23,20 +23,47 @@ type fakeScans struct {
 	quarantined []agentapi.ScanQuarantineRequest
 	restored    []agentapi.ScanRestoreRequest
 	qErr        error
+	realtime    string
+	rtPolls     []agentapi.ScanRealtimePollRequest
+	rtFound     []agentapi.RealtimeFinding
 }
 
 func (f *fakeScans) ScanEngineStatus(context.Context) (agentapi.ScanEngineStatus, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return agentapi.ScanEngineStatus{State: f.engine}, nil
+	return agentapi.ScanEngineStatus{State: f.engine, Realtime: f.realtime}, nil
 }
 
-func (f *fakeScans) ScanEngineSet(_ context.Context, on bool) (agentapi.ScanEngineStatus, error) {
+func (f *fakeScans) ScanRealtimePoll(_ context.Context, req agentapi.ScanRealtimePollRequest) (agentapi.ScanRealtimeFindings, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if on {
+	f.rtPolls = append(f.rtPolls, req)
+	out := agentapi.ScanRealtimeFindings{Active: true, Findings: f.rtFound, Cursor: req.Cursor + int64(len(f.rtFound))}
+	f.rtFound = nil
+
+	return out, nil
+}
+
+func (f *fakeScans) ScanEngineSet(_ context.Context, req agentapi.ScanEngineSetRequest) (agentapi.ScanEngineStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if req.Realtime != nil {
+		if f.engine != agentapi.ScanEngineOn {
+			return agentapi.ScanEngineStatus{}, &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "off"}
+		}
+
+		f.realtime = agentapi.ScanEngineOff
+		if *req.Realtime {
+			f.realtime = agentapi.ScanEngineOn
+		}
+
+		return agentapi.ScanEngineStatus{State: f.engine, Realtime: f.realtime}, nil
+	}
+
+	if req.On {
 		f.engine = agentapi.ScanEngineOn
 	} else {
 		f.engine = agentapi.ScanEngineOff
@@ -380,5 +407,88 @@ func TestScanSlots(t *testing.T) {
 
 	if lastScanSlot("blog", store.ScanScheduleDaily, now) != lastScanSlot("blog", store.ScanScheduleDaily, now.Add(time.Hour)) {
 		t.Error("slot moves within a day")
+	}
+}
+
+func TestScanRealtime(t *testing.T) {
+	s, f := scanService(t)
+	ctx := t.Context()
+	now := time.Date(2026, 11, 24, 12, 0, 0, 0, time.Local)
+	s.now = func() time.Time { return now }
+
+	var mails []string
+
+	s.ObserveMalware(func(_ context.Context, site string, r store.ScanRun, found []store.ScanFinding) {
+		if r.Source != store.ScanSourceRealtime {
+			t.Errorf("run %+v", r)
+		}
+
+		for _, x := range found {
+			mails = append(mails, site+":"+x.Path)
+		}
+	})
+
+	if _, err := s.SetScanRealtime(ctx, 1, true); !errors.Is(err, ErrScanEngineOff) {
+		t.Fatalf("real-time without ClamAV: %v", err)
+	}
+
+	if _, err := s.SetScanEngine(ctx, 1, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without the real-time mode nothing is polled.
+	s.pollScans(ctx)
+
+	if len(f.rtPolls) != 0 {
+		t.Fatalf("polled while off: %+v", f.rtPolls)
+	}
+
+	if st, err := s.SetScanRealtime(ctx, 1, true); err != nil || st.Realtime != agentapi.ScanEngineOn {
+		t.Fatalf("on: %+v %v", st, err)
+	}
+
+	finding := func(site, path, sha string) agentapi.RealtimeFinding {
+		return agentapi.RealtimeFinding{Site: site, ScanFinding: agentapi.ScanFinding{Path: path, Signature: "Php.Shell-1", SHA256: sha, Size: 3}}
+	}
+
+	f.rtFound = []agentapi.RealtimeFinding{finding("blog", "a.php", shaA), finding("gone", "x.php", shaA)}
+
+	s.pollScans(ctx)
+
+	if len(f.rtPolls) != 1 || strings.Join(f.rtPolls[0].Sites, ",") != "blog,shop" || f.rtPolls[0].Cursor != 0 {
+		t.Fatalf("poll %+v", f.rtPolls)
+	}
+
+	if strings.Join(mails, ",") != "blog:a.php" {
+		t.Fatalf("mails %v", mails)
+	}
+
+	// Within the hour a new finding waits for the next email.
+	f.rtFound = []agentapi.RealtimeFinding{finding("blog", "b.php", shaB)}
+	now = now.Add(10 * time.Minute)
+
+	s.pollScans(ctx)
+
+	if f.rtPolls[1].Cursor != 2 || len(mails) != 1 {
+		t.Fatalf("second poll %+v, mails %v", f.rtPolls[1], mails)
+	}
+
+	now = now.Add(time.Hour)
+
+	s.pollScans(ctx)
+
+	if strings.Join(mails, ",") != "blog:a.php,blog:b.php" {
+		t.Fatalf("mails %v", mails)
+	}
+
+	v, err := s.SiteScan(ctx, "blog")
+	if err != nil || len(v.Runs) != 1 || v.Runs[0].Source != store.ScanSourceRealtime || len(v.Findings) != 2 {
+		t.Fatalf("site scan %+v %v", v, err)
+	}
+
+	// Real-time runs do not stand in for the schedule: blog's weekly scan
+	// is still due at its slot.
+	if last, _ := s.st.LastScanRuns(ctx); len(last) != 0 {
+		t.Fatalf("last scans %+v", last)
 	}
 }
