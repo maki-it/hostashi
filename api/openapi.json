@@ -2473,6 +2473,141 @@
         },
         "type": "object"
       },
+      "Git": {
+        "additionalProperties": false,
+        "properties": {
+          "auth": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "buildTimeoutMinutes": {
+            "type": "integer"
+          },
+          "commands": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "deployDir": {
+            "type": "string"
+          },
+          "hasToken": {
+            "type": "boolean"
+          },
+          "hostKey": {
+            "type": "string"
+          },
+          "keep": {
+            "type": "integer"
+          },
+          "publicKey": {
+            "type": "string"
+          },
+          "shared": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "submodules": {
+            "type": "boolean"
+          },
+          "tokenUser": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "webhook": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "auth",
+          "branch",
+          "buildTimeoutMinutes",
+          "commands",
+          "configured",
+          "deployDir",
+          "hasToken",
+          "hostKey",
+          "keep",
+          "publicKey",
+          "shared",
+          "submodules",
+          "tokenUser",
+          "updatedAt",
+          "url",
+          "webhook"
+        ],
+        "type": "object"
+      },
+      "GitInput": {
+        "additionalProperties": false,
+        "properties": {
+          "auth": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "buildTimeoutMinutes": {
+            "type": "integer"
+          },
+          "commands": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "deployDir": {
+            "type": "string"
+          },
+          "keep": {
+            "type": "integer"
+          },
+          "shared": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "submodules": {
+            "type": "boolean"
+          },
+          "token": {
+            "type": "string"
+          },
+          "tokenUser": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Grants": {
         "additionalProperties": false,
         "properties": {
@@ -16279,6 +16414,217 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "files:read"
+      }
+    },
+    "/api/v1/sites/{name}/git": {
+      "delete": {
+        "operationId": "deleteSiteGit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Remove the Git setting of a site with its token, deploy key and webhook; the files stay",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      },
+      "get": {
+        "operationId": "getSiteGit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Git"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "The Git deploy setting of a site, without its token and private key",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
+      },
+      "put": {
+        "operationId": "setSiteGit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Git"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Set the repository, branch, shared paths and build commands of a site; SSH gets a deploy key",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      }
+    },
+    "/api/v1/sites/{name}/git/key": {
+      "post": {
+        "operationId": "newSiteGitKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Git"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Replace the deploy key of a site that deploys over SSH",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
       }
     },
     "/api/v1/sites/{name}/headers": {
