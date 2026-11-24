@@ -72,7 +72,7 @@ Goal: trustworthy enough for production servers.
 
 ## Phase 4 and later (not planned, options only)
 
-Multi-server (controller + agents), resellers and packages, mail integration (Mailcow/Stalwart), Docker Compose apps, Git deploy, Terraform provider, plugin system, LXC operation, cloud provider integrations (Hetzner Cloud and Robot, snapshots, firewalls), web terminal, malware scan.
+Multi-server (controller + agents), resellers and packages, mail integration (Mailcow/Stalwart), Docker Compose apps, Git deploy, Terraform provider, plugin system, LXC operation, cloud provider integrations (Hetzner Cloud and Robot, snapshots, firewalls), web terminal.
 
 ## Test strategy
 
