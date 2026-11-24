@@ -119,6 +119,10 @@ type WebSite struct {
 	// (ADR-0059); nil trusts nobody. The agent also refuses ranges that
 	// contain one of its own addresses (CheckOwn).
 	RealIP *WebRealIP `json:"realIp,omitempty"`
+	// Access is the site's IP rule and password protection (ADR-0066);
+	// nil lets everybody in. The agent also refuses bypass addresses that
+	// contain one of its own addresses (CheckOwn).
+	Access *WebAccess `json:"access,omitempty"`
 	// Redirect makes the site a redirect (ADR-0054): it has no Linux
 	// account, and nothing that needs files or PHP may be set.
 	Redirect *WebRedirect `json:"redirect,omitempty"`
@@ -409,6 +413,12 @@ func (r WebApplyRequest) Validate() error {
 
 		if ri := s.RealIP; ri != nil {
 			if err := ri.Validate(); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
+		}
+
+		if ac := s.Access; ac != nil {
+			if err := ac.Validate(); err != nil {
 				return fmt.Errorf("site %q: %w", s.User, err)
 			}
 		}
