@@ -1,6 +1,6 @@
 # ADR-0062 Git deploy per site
 
-**Status:** Proposed. **Date drafted:** 2026-11-24. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0015 (resource limits), ADR-0016 (storage pools), ADR-0018 (API), ADR-0024 (sealed secrets), ADR-0028 (cron jobs), ADR-0032 (SSH per site), ADR-0033 (hardening), ADR-0035 (roles), ADR-0042 (panel on 443), ADR-0044 (email), ADR-0046 (FastCGI cache), ADR-0054 (site types), ADR-0058 (OpenAPI and CLI), ADR-0061 (Python).
+**Status:** Accepted (Kim, 2026-11-24). **Date drafted:** 2026-11-24. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0015 (resource limits), ADR-0016 (storage pools), ADR-0018 (API), ADR-0024 (sealed secrets), ADR-0028 (cron jobs), ADR-0032 (SSH per site), ADR-0033 (hardening), ADR-0035 (roles), ADR-0042 (panel on 443), ADR-0044 (email), ADR-0046 (FastCGI cache), ADR-0054 (site types), ADR-0058 (OpenAPI and CLI), ADR-0061 (Python).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
