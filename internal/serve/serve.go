@@ -177,6 +177,9 @@ type Deps struct {
 	// Monitor serves service management and the dashboard (ADR-0052); nil
 	// disables their routes. Needs Auth and Settings (for the audit log).
 	Monitor ServerMonitor
+	// Usage serves the resource usage per site (ADR-0063); nil disables
+	// its routes. Needs Sites.
+	Usage SiteUsage
 
 	// System serves the time zone, hostname and reboot (ADR-0060); nil
 	// disables their routes. Needs Auth and Settings (for the audit log).
@@ -366,6 +369,10 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		if deps.Monitor != nil && deps.Settings != nil {
 			registerServices(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Monitor, deps.Settings, log)
+		}
+
+		if deps.Usage != nil && deps.Sites != nil {
+			registerUsage(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Usage, hostingSiteExists(deps.Sites), log)
 		}
 
 		if deps.System != nil && deps.Settings != nil {
@@ -640,9 +647,11 @@ func Run(ctx context.Context, cfg Config) error {
 	// Service outages are emailed too (ADR-0055).
 	mon := &servermon.Monitor{
 		Agent: RPCServerAgent{C: client}, Store: st, Log: cfg.Log,
-		Alerts: &notify.ServiceAlerts{Notifier: notifier, Log: cfg.Log},
+		Alerts:    &notify.ServiceAlerts{Notifier: notifier, Log: cfg.Log},
+		SiteAgent: RPCServerAgent{C: client}, SiteStore: st,
 	}
 	deps.Monitor = mon
+	deps.Usage = mon
 	deps.System = RPCSystemAgent{C: client}
 
 	go mon.Run(ctx)

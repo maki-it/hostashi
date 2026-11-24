@@ -77,6 +77,10 @@ type Monitor struct {
 	Agent  Agent
 	Store  Store
 	Alerts Alerter // nil: no alerts
+	// SiteAgent and SiteStore feed the usage per site (ADR-0063); nil
+	// for either turns it off.
+	SiteAgent SiteAgent
+	SiteStore SiteStore
 	Log    *slog.Logger
 	Now    func() time.Time // default time.Now
 
@@ -88,6 +92,7 @@ type Monitor struct {
 	actions  map[string]time.Time
 	lastSeen time.Time // last successful services poll
 	pending  []store.ServiceEvent
+	sites    sites
 }
 
 type raw struct {
@@ -114,6 +119,7 @@ func (m *Monitor) log() *slog.Logger {
 // Run polls until ctx ends.
 func (m *Monitor) Run(ctx context.Context) {
 	m.Sample(ctx)
+	m.SampleSites(ctx)
 	m.PollServices(ctx)
 
 	samples := time.NewTicker(SampleEvery)
@@ -131,6 +137,7 @@ func (m *Monitor) Run(ctx context.Context) {
 			return
 		case <-samples.C:
 			m.Sample(ctx)
+			m.SampleSites(ctx)
 		case <-services.C:
 			m.PollServices(ctx)
 		case <-prune.C:
@@ -154,4 +161,6 @@ func (m *Monitor) Prune(ctx context.Context) {
 	if err := m.Store.PruneHostSamples(ctx, store.HostTier1h, now.Add(-Keep1h)); err != nil {
 		m.log().WarnContext(ctx, "servermon: prune samples", "err", err)
 	}
+
+	m.pruneSites(ctx, now)
 }
