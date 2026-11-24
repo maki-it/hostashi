@@ -44,6 +44,7 @@ const pairs: [string, string, number][] = [
   ["--fg", "--bg", 4.5],
   ["--fg", "--surface", 4.5],
   ["--fg", "--sunken", 4.5],
+  ["--fg", "--selection", 4.5],
   ["--muted", "--surface", 4.5],
   ["--muted", "--sunken", 4.5],
   ["--accent", "--surface", 4.5],
