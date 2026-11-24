@@ -59,4 +59,4 @@ Admins can allow tokens only from known addresses, for example the office, the V
 
 The list applies to the tokens of every account, at once. It is not a firewall rule, so it works without the Hostashi firewall and has no rollback; logins in the browser are not affected, so a wrong list cannot lock you out of the panel. A token used from another address gets `403 ip_not_allowed`, and the attempt is written to the audit log.
 
-The `hostashi` command on the server itself talks to the panel from `127.0.0.1`. Click **Add this server** to keep it working; the panel warns while the list leaves it out.
+The server itself, `127.0.0.1` and `::1`, is always allowed, so the `hostashi` command on it keeps working whatever the list says. A token is still needed from there, so a local user of the server (for example a site's SSH account) gets no more than with any other address.

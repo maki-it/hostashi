@@ -83,37 +83,9 @@ export function tokenMessage(err: unknown): string {
 
 // The addresses API tokens may be used from (ADR-0018). It is one list for
 // the whole panel, kept by admins; an empty list accepts tokens from
-// anywhere. Browser logins are not affected.
+// anywhere. 127.0.0.1 and ::1 are always allowed. Browser logins are not
+// affected.
 export const getTokenAllowlist = () => request<{ entries: string[] }>("GET", "/settings/api-ip-allowlist").then((r) => r.entries);
 
 export const setTokenAllowlist = (entries: string[]) =>
   request<{ entries: string[] }>("PUT", "/settings/api-ip-allowlist", { entries }).then((r) => r.entries);
-
-function ipv4(s: string): number | null {
-  const parts = s.split(".");
-  if (parts.length !== 4) return null;
-  let n = 0;
-  for (const p of parts) {
-    if (!/^\d{1,3}$/.test(p) || Number(p) > 255) return null;
-    n = n * 256 + Number(p);
-  }
-  return n;
-}
-
-/**
- * allowsLoopback reports whether an allowlist lets the hostashi command on
- * the server itself through: it talks to http://127.0.0.1:8080 by default.
- * An empty list allows everything.
- */
-export function allowsLoopback(entries: string[]): boolean {
-  if (entries.length === 0) return true;
-  const lo = ipv4("127.0.0.1")!;
-  return entries.some((e) => {
-    const [addr = "", bits = "32"] = e.split("/");
-    const base = ipv4(addr);
-    const n = Number(bits);
-    if (base === null || !Number.isInteger(n) || n < 0 || n > 32) return false;
-    const size = 2 ** (32 - n);
-    return Math.floor(base / size) === Math.floor(lo / size);
-  });
-}

@@ -3,13 +3,14 @@
 import { Plus } from "@phosphor-icons/react";
 import { useEffect, useState, type FormEvent } from "react";
 import { parseList } from "./firewall";
-import { allowsLoopback, getTokenAllowlist, setTokenAllowlist, tokenMessage } from "./tokens";
+import { getTokenAllowlist, setTokenAllowlist, tokenMessage } from "./tokens";
 import { Button, Card, Field, Notice } from "./ui";
 
 // TokenAllowlistCard limits where API tokens may be used from (ADR-0018).
 // It is not part of the firewall: it applies at once, has no rollback and
 // works when Hostashi's firewall is off. Browser logins are not affected, so
-// a wrong list cannot lock an admin out of the panel.
+// a wrong list cannot lock an admin out of the panel. The server itself is
+// always allowed.
 export function TokenAllowlistCard({ clientIp }: { clientIp?: string | undefined }) {
   const [saved, setSaved] = useState<string[] | null>(null);
   const [text, setText] = useState("");
@@ -30,10 +31,8 @@ export function TokenAllowlistCard({ clientIp }: { clientIp?: string | undefined
   const list = parseList(text);
   const changed = saved !== null && list.join("\n") !== saved.join("\n");
 
-  const add = (...entries: string[]) => {
-    const next = [...list];
-    for (const e of entries) if (!next.includes(e)) next.push(e);
-    setText(next.join("\n"));
+  const add = (entry: string) => {
+    if (!list.includes(entry)) setText([...list, entry].join("\n"));
     setDone(false);
   };
 
@@ -62,7 +61,8 @@ export function TokenAllowlistCard({ clientIp }: { clientIp?: string | undefined
         <form className="ui-stack" onSubmit={(e) => void save(e)}>
           <p className="ui-hint ui-flush">
             Addresses API tokens are accepted from, one IP address or CIDR range per line. An empty list accepts them from anywhere. This
-            is not a firewall rule: it applies at once, to every account&apos;s tokens, and logins in the browser keep working.
+            is not a firewall rule: it applies at once, to every account&apos;s tokens, and logins in the browser keep working. The server
+            itself (127.0.0.1 and ::1) is always allowed, so the hostashi command on it keeps working.
           </p>
           <div className="ui-narrow">
             <Field label="Allowed addresses">
@@ -79,27 +79,16 @@ export function TokenAllowlistCard({ clientIp }: { clientIp?: string | undefined
               />
             </Field>
           </div>
-          <div className="ui-row">
-            {clientIp && (
+          {clientIp && (
+            <div className="ui-row">
               <Button icon={<Plus size={16} aria-hidden="true" />} onClick={() => add(clientIp)}>
                 Add my address
               </Button>
-            )}
-            {!allowsLoopback(list) && (
-              <Button icon={<Plus size={16} aria-hidden="true" />} onClick={() => add("127.0.0.1", "::1")}>
-                Add this server
-              </Button>
-            )}
-          </div>
-          {!allowsLoopback(list) && (
-            <Notice tone="warn" title="The hostashi command on this server stops working">
-              It uses a token from 127.0.0.1, which this list does not include. Add this server unless you never use the command line
-              there.
-            </Notice>
+            </div>
           )}
           {error && <Notice tone="err" title={error} />}
           {done && !changed && (
-            <Notice tone="ok" title={saved?.length ? "Saved. Tokens now work only from these addresses." : "Saved. Tokens work from anywhere."} />
+            <Notice tone="ok" title={saved?.length ? "Saved. Tokens now work only from these addresses and the server itself." : "Saved. Tokens work from anywhere."} />
           )}
           <div className="ui-row">
             <Button type="submit" variant="primary" disabled={busy || !changed}>
