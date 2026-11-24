@@ -184,6 +184,9 @@ var table = map[Action]Rule{
 	"sites.maintenance:write": ownSite("sites.maintenance:write"),
 	"sites.pagecache:write":   ownSite("sites:write"),
 	"sites.pagecache:purge":   ownSite("pagecache:purge"),
+	// Runs as root but only hands the site's own home to the site user,
+	// without following links (ADR-0067).
+	"sites.permissions:reset": ownSite("sites:write"),
 	"limits:read":             ownSite("limits:read"),
 	"sites.objectcache:read":  ownSite("objectcache:read"),
 	"sites.objectcache:write": ownSite("objectcache:write"),
