@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"runtime"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/auth"
@@ -32,12 +33,14 @@ type siteUsageJSON struct {
 	Site   string             `json:"site"`
 	Range  string             `json:"range"`
 	Step   int                `json:"step"`
+	CPUs   int                `json:"cpus"` // cpu is percent of one core; this many make the server
 	Points []store.SiteSample `json:"points"`
 }
 
 type usageRankingJSON struct {
 	Range string            `json:"range"`
 	Sort  string            `json:"sort"`
+	CPUs  int               `json:"cpus"` // as in siteUsageJSON
 	Sites []store.SiteTotal `json:"sites"`
 }
 
@@ -104,7 +107,7 @@ func registerUsage(mux *routeMux, a authn, u SiteUsage, exists siteExists, log *
 		}
 
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusOK, siteUsageJSON{Site: site, Range: rng, Step: step, Points: pts})
+		writeJSON(w, http.StatusOK, siteUsageJSON{Site: site, Range: rng, Step: step, CPUs: runtime.NumCPU(), Points: pts})
 	}))
 
 	mux.Op("GET /api/v1/usage/sites", openapi.Operation{
@@ -137,6 +140,6 @@ func registerUsage(mux *routeMux, a authn, u SiteUsage, exists siteExists, log *
 		}
 
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusOK, usageRankingJSON{Range: rng, Sort: by, Sites: list})
+		writeJSON(w, http.StatusOK, usageRankingJSON{Range: rng, Sort: by, CPUs: runtime.NumCPU(), Sites: list})
 	}))
 }

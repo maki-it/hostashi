@@ -53,7 +53,7 @@ func TestSiteUsageAPI(t *testing.T) {
 		t.Fatalf("usage: %d %s", rec.Code, rec.Body)
 	}
 
-	if one.Site != "alpha" || one.Range != "1h" || one.Step != 15 || len(one.Points) != 2 || one.Points[0].CPU != 50 || one.Points[0].HTTPReq != 2 {
+	if one.Site != "alpha" || one.Range != "1h" || one.Step != 15 || one.CPUs < 1 || len(one.Points) != 2 || one.Points[0].CPU != 50 || one.Points[0].HTTPReq != 2 {
 		t.Fatalf("usage body %s", rec.Body)
 	}
 

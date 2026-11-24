@@ -6418,6 +6418,9 @@
       "SiteUsage": {
         "additionalProperties": false,
         "properties": {
+          "cpus": {
+            "type": "integer"
+          },
           "points": {
             "items": {
               "$ref": "#/components/schemas/SiteSample"
@@ -6438,6 +6441,7 @@
           }
         },
         "required": [
+          "cpus",
           "points",
           "range",
           "site",
@@ -7220,6 +7224,9 @@
       "UsageRanking": {
         "additionalProperties": false,
         "properties": {
+          "cpus": {
+            "type": "integer"
+          },
           "range": {
             "type": "string"
           },
@@ -7237,6 +7244,7 @@
           }
         },
         "required": [
+          "cpus",
           "range",
           "sites",
           "sort"

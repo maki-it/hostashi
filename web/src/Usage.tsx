@@ -5,7 +5,7 @@ import { getSiteLimits } from "./limits";
 import { formatHash } from "./routes";
 import { bytes, rate, ranges, serviceMessage, type Range } from "./services";
 import { Card, LineChart, Notice, Table, type Column, type Sort } from "./ui";
-import { cores, count, getSiteUsage, rankSites, type SiteTotal, type SiteUsage } from "./usage";
+import { cores, count, getSiteUsage, ofServer, percent, rankSites, type SiteTotal, type SiteUsage } from "./usage";
 
 const rangeLabels: Record<Range, string> = { "1h": "1 hour", "24h": "24 hours", "7d": "7 days", "30d": "30 days" };
 
@@ -57,14 +57,19 @@ function usePolled<T>(range: Range, f: (r: Range) => Promise<T>, deps: readonly 
 export function SiteUsageCard({ site }: { site: string }) {
   const [range, setRange] = useState<Range>("1h");
   const { data, loading, error } = usePolled<SiteUsage>(range, (r) => getSiteUsage(site, r), [site]);
-  const [memLimit, setMemLimit] = useState(0);
+  const [limit, setLimit] = useState({ mem: 0, cpu: 0 });
 
   useEffect(() => {
     getSiteLimits(site).then(
-      (l) => setMemLimit(l.limits.memoryBytes),
-      () => setMemLimit(0),
+      (l) => setLimit({ mem: l.limits.memoryBytes, cpu: l.limits.cpuQuotaPercent }),
+      () => setLimit({ mem: 0, cpu: 0 }),
     );
   }, [site]);
+
+  const memLimit = limit.mem;
+  const cpus = data?.cpus ?? 1;
+  // A hard CPU limit above the server's cores changes nothing.
+  const cpuLimit = limit.cpu > 0 && limit.cpu < cpus * 100 ? limit.cpu : 0;
 
   const points = data?.points ?? [];
   const times = points.map((p) => p.at);
@@ -81,9 +86,25 @@ export function SiteUsageCard({ site }: { site: string }) {
           <div className="ui-charts">
             <section className="ui-stack-tight" aria-label="CPU">
               <h3 className="ui-chart-title">
-                CPU<span className="ui-hint"> · 100 % is one core</span>
+                CPU
+                <span className="ui-hint">
+                  {" "}
+                  · 100 % is all {cpus} {cpus === 1 ? "core" : "cores"} of the server
+                  {cpuLimit > 0 && (
+                    <>
+                      , limit {cores(cpuLimit)} ({percent(ofServer(cpuLimit, cpus))})
+                    </>
+                  )}
+                </span>
               </h3>
-              <LineChart title="CPU use in percent of one core" times={times} days={days} format={cores} series={[{ label: "CPU", values: points.map((p) => p.cpu) }]} />
+              <LineChart
+                title="CPU use in percent of the server"
+                times={times}
+                days={days}
+                max={100}
+                format={percent}
+                series={[{ label: "CPU", values: points.map((p) => ofServer(p.cpu, cpus)) }]}
+              />
             </section>
             <section className="ui-stack-tight" aria-label="Memory">
               <h3 className="ui-chart-title">Memory{memLimit > 0 && <span className="ui-hint"> of {bytes(memLimit)} limit</span>}</h3>
@@ -125,7 +146,7 @@ export function SiteUsageCard({ site }: { site: string }) {
           </div>
           {last && (
             <p className="ui-hint ui-flush">
-              Now: {last.httpReq.toFixed(1)} requests/s · {last.tasks} processes · {bytes(last.cache)} file cache. Database queries run in the shared
+              Now: {cores(last.cpu)} of {cpus} busy · {last.httpReq.toFixed(1)} requests/s · {last.tasks} processes · {bytes(last.cache)} file cache. Database queries run in the shared
               database server and are not counted here.
             </p>
           )}
@@ -155,11 +176,11 @@ function Bar({ value, max, children }: { value: number; max: number; children: R
 export function SitesByUsage() {
   const [range, setRange] = useState<Range>("24h");
   const [sort, setSort] = useState<Sort>({ key: "cpu", dir: "desc" });
-  const { data, loading, error } = usePolled<SiteTotal[]>(range, (r) => rankSites(r));
-  const rows = data ?? [];
+  const { data, loading, error } = usePolled(range, (r) => rankSites(r));
+  const rows = data?.sites ?? [];
+  const cpus = data?.cpus ?? 1;
 
   const top = {
-    cpu: Math.max(0, ...rows.map((r) => r.cpuAvg)),
     mem: Math.max(0, ...rows.map((r) => r.memAvg)),
     traffic: Math.max(0, ...rows.map(traffic)),
     io: Math.max(0, ...rows.map(io)),
@@ -174,10 +195,11 @@ export function SitesByUsage() {
     },
     {
       key: "cpu",
-      header: "CPU (avg · peak)",
+      header: `CPU of ${cpus} ${cpus === 1 ? "core" : "cores"} (avg · peak)`,
+      // The bar is the share of the whole server, not of the busiest site.
       cell: (r) => (
-        <Bar value={r.cpuAvg} max={top.cpu}>
-          {cores(r.cpuAvg)} <span className="ui-hint">· {cores(r.cpuMax)}</span>
+        <Bar value={ofServer(r.cpuAvg, cpus)} max={100}>
+          {percent(ofServer(r.cpuAvg, cpus))} <span className="ui-hint">· {percent(ofServer(r.cpuMax, cpus))}</span>
         </Bar>
       ),
       sortValue: (r) => r.cpuAvg,
