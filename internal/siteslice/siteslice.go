@@ -145,7 +145,7 @@ func RenderUser(user string, l Limits) ([]byte, error) {
 }
 
 func writeSliceProps(b *bytes.Buffer, l Limits) {
-	fmt.Fprint(b, "MemoryAccounting=yes\nTasksAccounting=yes\n")
+	fmt.Fprint(b, "MemoryAccounting=yes\nTasksAccounting=yes\nIOAccounting=yes\n")
 
 	for _, p := range l.properties() {
 		if p == "CPUQuota=" {

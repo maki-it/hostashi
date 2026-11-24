@@ -11,10 +11,11 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/sites"
+	"github.com/maki-it/hostashi/internal/siteslice"
 	"github.com/maki-it/hostashi/internal/sitestats"
 )
 
-// statsOps serves metrics.snapshot (ADR-0022).
+// statsOps serves metrics.snapshot (ADR-0022) and sites.stats (ADR-0063).
 type statsOps struct {
 	h          *siteOps
 	disk       *sitestats.DiskCache
@@ -25,6 +26,44 @@ func (o *statsOps) register(s *agentrpc.Server) {
 	agentrpc.Handle(s, agentapi.MetricsSnapshot, func(ctx context.Context, _ agentrpc.Caller, _ agentapi.MetricsSnapshotRequest) (agentapi.MetricsSnapshotResponse, error) {
 		return o.snapshot(ctx), nil
 	})
+	agentrpc.Handle(s, agentapi.SitesStats, func(ctx context.Context, _ agentrpc.Caller, _ agentapi.SitesStatsRequest) (agentapi.SitesStatsResponse, error) {
+		return o.usage(ctx), nil
+	})
+}
+
+// usage reads the counters of every site's slice and its user slice
+// (ADR-0063). A cgroup that cannot be read is logged and counts as empty,
+// so one odd site never hides the others.
+func (o *statsOps) usage(ctx context.Context) agentapi.SitesStatsResponse {
+	all := o.h.m.List()
+	if len(all) > agentapi.MaxSites {
+		all = all[:agentapi.MaxSites]
+	}
+
+	out := agentapi.SitesStatsResponse{At: time.Now().UTC(), Sites: make([]agentapi.SiteUsage, 0, len(all))}
+
+	for _, site := range all {
+		u, err := sitestats.ReadUsage(sitestats.SliceCgroup(o.cgroupRoot, site.User))
+		if err != nil {
+			o.h.log.WarnContext(ctx, "usage: read site slice", "site", site.User, "err", err)
+		}
+
+		if site.UID >= siteslice.MinUserUID {
+			s, err := sitestats.ReadUsage(sitestats.UserSliceCgroup(o.cgroupRoot, site.UID))
+			if err != nil {
+				o.h.log.WarnContext(ctx, "usage: read user slice", "site", site.User, "err", err)
+			}
+
+			u = u.Add(s)
+		}
+
+		out.Sites = append(out.Sites, agentapi.SiteUsage{
+			Name: site.User, CPUUsec: u.CPUUsec, MemoryBytes: u.MemoryBytes, CacheBytes: u.CacheBytes, MemoryKnown: u.MemoryKnown,
+			Tasks: u.Tasks, IOReadBytes: u.IOReadBytes, IOWriteBytes: u.IOWriteBytes, IOKnown: u.IOKnown,
+		})
+	}
+
+	return out
 }
 
 func (o *statsOps) snapshot(ctx context.Context) agentapi.MetricsSnapshotResponse {
