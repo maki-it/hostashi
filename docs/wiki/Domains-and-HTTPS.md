@@ -31,7 +31,7 @@ Most sites should answer under one name only, either `example.com` or `www.examp
 
 The redirect is a permanent one (301) and keeps the path and query, so `www.example.com/shop?page=2` goes to `example.com/shop?page=2`. With HTTPS on, it goes straight to HTTPS in one step, and HSTS and the security headers are sent on the redirect too.
 
-Both names must be domains of the site. If one is missing, the card offers a button such as **Add www.example.com**; it adds the name like the domain list above does, so create its DNS record first. With HTTPS on, the site is served over HTTP until the new certificate also names it. Hostashi never adds the other name on its own, because a name without a DNS record would stop the certificate for the whole site.
+Both names must be domains of the site. If one is missing, the card offers a button such as **Add `www.example.com`**; it adds the name like the domain list above does, so create its DNS record first. With HTTPS on, the site is served over HTTP until the new certificate also names it. Hostashi never adds the other name on its own, because a name without a DNS record would stop the certificate for the whole site.
 
 The setting works on every pair of a domain and its `www` name, so a site with `example.com`, `www.example.com`, `example.de` and `www.example.de` redirects both pairs. Other domains of the site, such as `shop.example.com`, are not touched. Redirect sites do not have this card: they send every name to their target anyway.
 
