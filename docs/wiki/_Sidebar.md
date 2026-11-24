@@ -28,6 +28,7 @@
 **Server**
 
 - [Users and roles](Users-and-roles.md)
+- [API tokens](API-tokens.md)
 - [Backups](Backups.md)
 - [Firewall](Firewall.md)
 - [Moving from CloudPanel](CloudPanel-import.md)
