@@ -148,6 +148,7 @@ var completionTree = &compNode{sub: cmds(
 		leaf("remove", "remove a line no site uses"),
 	)},
 	&compNode{name: "python-install", hidden: true},
+	&compNode{name: "git-sync", hidden: true},
 	&compNode{name: "user", help: "recover a locked-out account", sub: cmds(
 		&compNode{name: "recover", help: "reset a user's password and second factors", flags: []string{"-public-url=", "-db="}},
 	)},
