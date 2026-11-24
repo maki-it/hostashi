@@ -48,6 +48,8 @@ type siteJSON struct {
 	Maintenance maintenanceJSON `json:"maintenance"`
 	Domains     []string        `json:"domains"` // the first one is the primary domain
 	TLS         tlsJSON         `json:"tls"`
+	// WWW is the www redirect between d and www.d (ADR-0065).
+	WWW wwwJSON `json:"www"`
 	// PHPPrograms: the site's PHP may start programs (ADR-0033).
 	PHPPrograms bool      `json:"phpPrograms"`
 	CreatedAt   time.Time `json:"createdAt"`
@@ -234,6 +236,43 @@ type siteParkRequest struct {
 	Confirm string   `json:"confirm"`
 }
 
+// wwwJSON is the www redirect of a site (ADR-0065).
+type wwwJSON struct {
+	// Mode is "off", "to-www" or "to-non-www".
+	Mode string `json:"mode"`
+	// Pairs are the bare and www names that are both domains of the site;
+	// the mode acts on these only. A redirect site never uses the mode.
+	Pairs []wwwPairJSON `json:"pairs"`
+	// Missing are the names whose adding would make a further pair.
+	Missing []string `json:"missing"`
+}
+
+type wwwPairJSON struct {
+	Bare string `json:"bare"`
+	WWW  string `json:"www"`
+}
+
+type wwwRequest struct {
+	Mode *string `json:"mode"` // "off", "to-www" or "to-non-www"
+}
+
+func toWWWJSON(s store.Site) wwwJSON {
+	out := wwwJSON{Mode: "off", Pairs: []wwwPairJSON{}, Missing: agentapi.WWWMissing(s.Domains)}
+	if s.WWWRedirect != agentapi.WWWRedirectOff {
+		out.Mode = s.WWWRedirect
+	}
+
+	for _, p := range agentapi.WWWPairs(s.Domains) {
+		out.Pairs = append(out.Pairs, wwwPairJSON(p))
+	}
+
+	if out.Missing == nil {
+		out.Missing = []string{}
+	}
+
+	return out
+}
+
 func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	d := s.Domains
 	if d == nil {
@@ -246,7 +285,7 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	}
 
 	return siteJSON{
-		Name: s.Name, Pool: s.Pool, State: s.State, Type: s.Type, Web: toWebJSON(s), Account: s.Account, Redirect: toRedirectJSON(s), Proxy: toProxyJSON(s), Node: toNodeAppJSON(s), App: toProgramAppJSON(s), Python: toPythonAppJSON(s), PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, Maintenance: toMaintenanceJSON(s),
+		Name: s.Name, Pool: s.Pool, State: s.State, Type: s.Type, Web: toWebJSON(s), Account: s.Account, Redirect: toRedirectJSON(s), Proxy: toProxyJSON(s), Node: toNodeAppJSON(s), App: toProgramAppJSON(s), Python: toPythonAppJSON(s), PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, Maintenance: toMaintenanceJSON(s), WWW: toWWWJSON(s),
 		TLS: tlsJSON{
 			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
@@ -619,6 +658,46 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		}
 
 		writeJSON(w, code, toSiteJSON(svc, s))
+	}))
+
+	// The www redirect sends one name of each pair of d and www.d to the
+	// other (ADR-0065).
+	mux.Op("PUT /api/v1/sites/{name}/www", openapi.Operation{
+		ID: "setSiteWWWRedirect", Tag: "sites", Summary: "Set the redirect between example.com and www.example.com", In: wwwRequest{}, Out: siteJSON{},
+	}, a.allow("sites.www:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in wwwRequest
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if in.Mode == nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", `"mode" is required`)
+
+			return
+		}
+
+		mode := *in.Mode
+		switch mode {
+		case "off":
+			mode = agentapi.WWWRedirectOff
+		case agentapi.WWWRedirectToWWW, agentapi.WWWRedirectToNonWWW:
+		default:
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", `"mode" must be "off", "to-www" or "to-non-www"`)
+
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		s, err := svc.SetWWWRedirect(ctx, p.User.ID, r.PathValue("name"), mode)
+		if err != nil {
+			siteFail(log, w, err, "set www redirect")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
 	}))
 
 	// HSTS can be set before HTTPS is active; it is sent only over HTTPS.

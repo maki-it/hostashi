@@ -59,7 +59,9 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0062](0062-git-deploy-per-site.md) | Git deploy per site | Accepted |
 | [0063](0063-resource-usage-per-site.md) | Resource usage per site | Accepted |
 | [0064](0064-optional-malware-scan.md) | Optional malware scan per site | Accepted |
+| [0065](0065-www-redirect-per-site.md) | www/non-www redirect per site | Accepted |
 | [0066](0066-basic-auth-and-ip-rules-per-site.md) | Password protection and IP rules per site | Accepted |
+| [0067](0067-reset-site-permissions.md) | Reset the file permissions of a site | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 

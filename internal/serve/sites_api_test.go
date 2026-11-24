@@ -25,6 +25,19 @@ type stubAgent struct {
 	created []string
 	pages   []agentapi.PageVersion
 	purges  []string
+	resets  []string
+}
+
+func (a *stubAgent) SitePermissionsReset(_ context.Context, user string) (agentapi.SitePermissionsResetResponse, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.resets = append(a.resets, user)
+
+	return agentapi.SitePermissionsResetResponse{
+		Checked: 12, Changed: 3, Skipped: 1,
+		SkippedPaths: []agentapi.PermissionsSkip{{Path: "htdocs/mnt", Reason: "on another file system"}},
+	}, nil
 }
 
 func (a *stubAgent) PageCachePurge(_ context.Context, user string) error {

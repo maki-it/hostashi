@@ -127,6 +127,7 @@ var routeAccess = map[string]authz.Action{
 	"PUT /api/v1/sites/{name}/tls/source":                    "sites.tls:write",
 	"POST /api/v1/sites/{name}/tls/renew":                    "sites.tls:write",
 	"PUT /api/v1/sites/{name}/hsts":                          "sites.hsts:write",
+	"PUT /api/v1/sites/{name}/www":                           "sites.www:write",
 	"GET /api/v1/sites/{name}/headers":                       "sites:read",
 	"PUT /api/v1/sites/{name}/headers":                       "sites.headers:write",
 	"GET /api/v1/sites/{name}/real-ip":                       "sites:read",
@@ -250,6 +251,8 @@ var routeAccess = map[string]authz.Action{
 	"PUT /api/v1/sites/{name}/page-cache":        "sites.pagecache:write",
 	"PUT /api/v1/sites/{name}/page-cache/size":   "sites.pagecache.size:write",
 	"POST /api/v1/sites/{name}/page-cache/purge": "sites.pagecache:purge",
+
+	"POST /api/v1/sites/{name}/permissions/reset": "sites.permissions:reset",
 
 	"GET /api/v1/limit-presets":           "limits.presets:read",
 	"GET /api/v1/limit-presets/{name}":    "limits.presets:read",

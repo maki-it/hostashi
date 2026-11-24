@@ -33,6 +33,10 @@ type Site struct {
 	// HSTS adds Strict-Transport-Security to the HTTPS responses (one year,
 	// without includeSubDomains or preload). Ignored without a certificate.
 	HSTS bool `json:"hsts,omitempty"`
+	// WWWRedirect sends one name of each www pair of Domains to the other
+	// with 301 (ADR-0065), in server blocks of their own; empty serves
+	// every domain. A redirect site has none.
+	WWWRedirect string `json:"wwwRedirect,omitempty"`
 	// Disabled answers every request with 503 and never serves Root.
 	// ACME challenges, the health check and the HTTPS redirect stay.
 	Disabled bool `json:"disabled,omitempty"`
@@ -217,6 +221,14 @@ func (d Desired) Validate() error {
 	req := agentapi.WebApplyRequest{Sites: make([]agentapi.WebSite, 0, len(d.Sites))}
 	for _, s := range d.Sites {
 		req.Sites = append(req.Sites, agentapi.WebSite{User: s.User, Domains: s.Domains})
+
+		if err := agentapi.ValidateWWWRedirect(s.WWWRedirect); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if s.WWWRedirect != agentapi.WWWRedirectOff && s.Redirect != nil {
+			return fmt.Errorf("site %q: a redirect site has no www redirect", s.User)
+		}
 
 		if m := s.Maintenance; m != nil {
 			if err := (agentapi.WebMaintenance{Page: m.Page, Digest: m.Digest, AllowIPs: m.AllowIPs}).Validate(); err != nil {

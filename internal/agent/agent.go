@@ -586,6 +586,7 @@ func (h *siteOps) register(s *agentrpc.Server) {
 	h.registerApps(s)
 	h.registerDeploy(s)
 	h.registerFiles(s)
+	h.registerPermissions(s)
 	h.registerLogs(s)
 
 	h.registerSSH(s)
@@ -674,7 +675,7 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 		}
 
 		site := web.Site{
-			User: s.User, Domains: s.Domains, Root: root, Disabled: s.Disabled, SPA: s.SPA, AssetCache: s.AssetCache,
+			User: s.User, Domains: s.Domains, WWWRedirect: s.WWWRedirect, Root: root, Disabled: s.Disabled, SPA: s.SPA, AssetCache: s.AssetCache,
 			AssetCacheSeconds: s.AssetCacheSeconds, AssetCacheExts: s.AssetCacheExts,
 		}
 
@@ -896,7 +897,7 @@ func (h *siteOps) panelFor(p agentapi.WebPanel) (*web.Panel, error) {
 // (ADR-0054): no root, no PHP, no snippets; HTTPS, headers, maintenance
 // and the disabled page as for any site.
 func (h *siteOps) accountlessSite(ctx context.Context, s agentapi.WebSite) (web.Site, error) {
-	site := web.Site{User: s.User, Domains: s.Domains, Disabled: s.Disabled}
+	site := web.Site{User: s.User, Domains: s.Domains, WWWRedirect: s.WWWRedirect, Disabled: s.Disabled}
 
 	if r := s.Redirect; r != nil {
 		rc := *r
