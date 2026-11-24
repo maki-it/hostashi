@@ -26,6 +26,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -316,9 +317,13 @@ func openCache(dir, url string) (*git.Repository, error) {
 	return repo, nil
 }
 
-// writeRelease creates dir and writes the commit's tree into it through an
-// os.Root.
+// writeRelease creates dir, which must be new, and writes the commit's tree
+// into it through an os.Root.
 func writeRelease(ctx context.Context, st storer.EncodedObjectStorer, c *object.Commit, dir string) (int, error) {
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+		return 0, fmt.Errorf("gitsync: release: %w", err)
+	}
+
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		return 0, fmt.Errorf("gitsync: release: %w", err)
 	}
