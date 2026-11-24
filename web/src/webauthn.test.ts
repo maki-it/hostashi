@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it } from "vitest";
-import { base64urlToBytes, bytesToBase64url, toRequestOptions } from "./webauthn";
+import { base64urlToBytes, bytesToBase64url, toCreationOptions, toRequestOptions } from "./webauthn";
 
 describe("base64url", () => {
   it("round-trips every byte value and length", () => {
@@ -50,5 +50,36 @@ describe("toRequestOptions", () => {
     expect(() => toRequestOptions(null)).toThrow();
     expect(() => toRequestOptions({})).toThrow();
     expect(() => toRequestOptions({ publicKey: { challenge: 1 } })).toThrow();
+  });
+});
+
+describe("toCreationOptions", () => {
+  it("decodes challenge, user id and excluded credentials", () => {
+    const o = toCreationOptions({
+      publicKey: {
+        challenge: "AQID",
+        rp: { id: "panel.example.com", name: "Hostashi" },
+        user: { id: "BAU", name: "kim", displayName: "kim" },
+        pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+        timeout: 60000,
+        excludeCredentials: [{ id: "Bgc", type: "public-key" }],
+        authenticatorSelection: { residentKey: "required", userVerification: "required" },
+        attestation: "none",
+        extra: "ignored",
+      },
+    });
+    expect(Array.from(new Uint8Array(o.challenge as ArrayBuffer))).toEqual([1, 2, 3]);
+    expect(Array.from(new Uint8Array(o.user.id as ArrayBuffer))).toEqual([4, 5]);
+    expect(o.user.name).toBe("kim");
+    expect(o.rp.id).toBe("panel.example.com");
+    expect(o.pubKeyCredParams).toEqual([{ type: "public-key", alg: -7 }]);
+    expect(Array.from(new Uint8Array(o.excludeCredentials?.[0]?.id as ArrayBuffer))).toEqual([6, 7]);
+    expect(o.authenticatorSelection?.residentKey).toBe("required");
+    expect(o).not.toHaveProperty("extra");
+  });
+
+  it("rejects options without a challenge or user", () => {
+    expect(() => toCreationOptions(null)).toThrow();
+    expect(() => toCreationOptions({ publicKey: { challenge: "AQID", rp: { name: "x" } } })).toThrow();
   });
 });

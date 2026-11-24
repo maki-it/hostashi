@@ -3424,6 +3424,9 @@
           "theme": {
             "type": "string"
           },
+          "totp": {
+            "type": "boolean"
+          },
           "username": {
             "type": "string"
           }
@@ -3434,6 +3437,7 @@
           "secondFactor",
           "secondFactorRequired",
           "theme",
+          "totp",
           "username"
         ],
         "type": "object"
@@ -4392,6 +4396,18 @@
           },
           "credential": {},
           "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PasswordChangeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "newPassword": {
             "type": "string"
           }
         },
@@ -8306,6 +8322,46 @@
         "summary": "Remove one of the caller's passkeys",
         "tags": [
           "passkeys"
+        ],
+        "x-hostashi-access": "session"
+      }
+    },
+    "/api/v1/auth/password": {
+      "post": {
+        "operationId": "changePassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Change the caller's password; ends the other sessions",
+        "tags": [
+          "auth"
         ],
         "x-hostashi-access": "session"
       }

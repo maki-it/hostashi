@@ -7,11 +7,12 @@ import "context"
 // Security events of an account that its owner hears about by email
 // (ADR-0044, account emails).
 const (
-	EventTOTPEnabled    = "totp-enabled"
-	EventTOTPDisabled   = "totp-disabled"
-	EventPasskeyAdded   = "passkey-added"
-	EventPasskeyRemoved = "passkey-removed"
-	EventTokenCreated   = "token-created"
+	EventTOTPEnabled     = "totp-enabled"
+	EventTOTPDisabled    = "totp-disabled"
+	EventPasskeyAdded    = "passkey-added"
+	EventPasskeyRemoved  = "passkey-removed"
+	EventTokenCreated    = "token-created"
+	EventPasswordChanged = "password-changed"
 )
 
 // AccountEvent is a change to an account's login or access.

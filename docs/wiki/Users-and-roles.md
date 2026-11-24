@@ -41,6 +41,16 @@ For the role `user`, choose which sites the account gets on the account's page. 
 
 Admins and managers always need a second factor (authenticator app or passkey). For users it is optional; you can require it per account under **Sign-in**.
 
+## Your own password, authenticator app and passkeys
+
+Under **Your account → Sign-in and security** every account manages its own login:
+
+- **Password:** enter the current one and the new one twice. Your other sessions are logged out; the browser you are in stays logged in.
+- **Authenticator app (TOTP):** set it up, or turn it off with your password and a current code or recovery code. To move to another phone, turn it off and set it up again. Admins and managers must keep a second factor, so add a passkey first.
+- **Passkeys:** add one with a name (for example the device), or remove one. A passkey counts as a second factor.
+
+If an email address is set, Hostashi sends a note for each of these changes.
+
 ## When someone is locked out
 
 On the account's page, **Reset password and second factor** removes both, ends the account's sessions and makes a new invitation link. If you are the last admin and locked out yourself, see [Recovery](Recovery.md).

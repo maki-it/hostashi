@@ -50,6 +50,7 @@ var routeAccess = map[string]authz.Action{
 	"POST /api/v1/auth/totp/enroll":              accessSession,
 	"POST /api/v1/auth/totp/confirm":             accessSession,
 	"POST /api/v1/auth/totp/disable":             accessSession,
+	"POST /api/v1/auth/password":                 accessSession,
 	"POST /api/v1/tokens":                        accessSession,
 	"GET /api/v1/tokens":                         accessSession,
 	"DELETE /api/v1/tokens/{id}":                 accessSession,

@@ -330,3 +330,34 @@ func (s *Store) DisableTOTP(ctx context.Context, userID int64) error {
 
 	return nil
 }
+
+// SetPassword replaces the password hash of the user and ends every other
+// session of the account; keep is the token hash of the session that made
+// the change, which stays.
+func (s *Store) SetPassword(ctx context.Context, userID int64, hash string, keep []byte) error {
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE id = ?`, hash, userID)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ? AND token_hash != ?`, userID, keep); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	return nil
+}

@@ -566,3 +566,54 @@ func TestTOTPEndpoints(t *testing.T) {
 		t.Fatalf("password login with only a passkey: %d %s", rec.Code, rec.Body)
 	}
 }
+
+func TestChangePasswordEndpoint(t *testing.T) {
+	e := newAPI(t)
+	e.setupAdmin(t)
+
+	const next = "another long passphrase"
+
+	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/password", body: `{"currentPassword":"x","newPassword":"y"}`})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("without session: %d", rec.Code)
+	}
+
+	c := sessionCookieOf(t, e.login(t, `{"username":"kim","password":"`+apiPassword+`"}`))
+	other := sessionCookieOf(t, e.login(t, `{"username":"kim","password":"`+apiPassword+`"}`))
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/password", cookie: c,
+		body: `{"currentPassword":"wrong password!!","newPassword":"` + next + `"}`,
+	})
+	if rec.Code != http.StatusUnauthorized || errCode(t, rec) != "invalid_credentials" {
+		t.Fatalf("wrong current password: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/password", cookie: c,
+		body: `{"currentPassword":"` + apiPassword + `","newPassword":"short"}`,
+	})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("weak password: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/password", cookie: c,
+		body: `{"currentPassword":"` + apiPassword + `","newPassword":"` + next + `"}`,
+	})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("change: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/auth/me", cookie: c}); rec.Code != http.StatusOK {
+		t.Fatalf("own session after the change: %d", rec.Code)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/auth/me", cookie: other}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("other session after the change: %d", rec.Code)
+	}
+
+	if rec := e.login(t, `{"username":"kim","password":"`+next+`"}`); rec.Code != http.StatusOK {
+		t.Fatalf("login with the new password: %d %s", rec.Code, rec.Body)
+	}
+}
