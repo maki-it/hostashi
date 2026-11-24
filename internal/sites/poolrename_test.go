@@ -136,3 +136,14 @@ func TestRegistryDefaultField(t *testing.T) {
 
 	wantErr(t, reg.load(bad), ErrStateInvalid)
 }
+
+// TestRegistryWithoutDefaultPool: a registry from before addendum 2 whose
+// pools do not include one called "default" still loads.
+func TestRegistryWithoutDefaultPool(t *testing.T) {
+	reg := &Registry{pools: map[string]Pool{}, sites: map[string]Site{}}
+	must(t, reg.load([]byte(`{"version":1,"pools":[{"name":"main","path":"/srv/main"}],"sites":[]}`)))
+
+	if reg.DefaultPool() != "default" {
+		t.Errorf("default %q", reg.DefaultPool())
+	}
+}

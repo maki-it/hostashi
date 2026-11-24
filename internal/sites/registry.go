@@ -284,13 +284,16 @@ func (r *Registry) load(raw []byte) error {
 		r.sites[site.User] = site
 	}
 
+	// Without the field the default is the pool called "default", as
+	// before addendum 2, even if no such pool exists (then a site must
+	// name its pool). A default set explicitly must be registered.
 	r.def = agentapi.DefaultPool
 	if s.Default != "" {
-		r.def = s.Default
-	}
+		if _, ok := r.pools[s.Default]; !ok {
+			return fmt.Errorf("%w: default pool %q is not registered", ErrStateInvalid, s.Default)
+		}
 
-	if _, ok := r.pools[r.def]; !ok {
-		return fmt.Errorf("%w: default pool %q is not registered", ErrStateInvalid, r.def)
+		r.def = s.Default
 	}
 
 	return nil
