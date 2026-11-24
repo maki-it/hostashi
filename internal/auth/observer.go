@@ -16,6 +16,9 @@ const (
 	KindPasskey  = "passkey"
 	KindToken    = "token"
 	KindDevice   = "device"
+	// KindWebhook is a deploy webhook call (ADR-0062) with an unknown id
+	// or a wrong proof.
+	KindWebhook = "webhook"
 )
 
 // Observer learns about failed and throttled logins. It gets only the kind
@@ -52,4 +55,11 @@ func (s *Service) failed(ctx context.Context, kind, ip string) {
 	addr = addr.Unmap().WithZone("")
 
 	s.flog.Log(ctx, slog.LevelWarn, FailedEvent, "kind", kind, "ip", addr.String())
+}
+
+// WebhookFailed records a webhook call from ip with an unknown id or a
+// wrong proof, with the same log line as a failed login, so fail2ban bans
+// an address that guesses.
+func (s *Service) WebhookFailed(ctx context.Context, ip string) {
+	s.failed(ctx, KindWebhook, ip)
 }

@@ -53,7 +53,7 @@ func TestObserverSeesKindsOnly(t *testing.T) {
 
 // failLine is the contract with fail2ban's hostashi-panel filter (ADR-0021).
 // Change it only together with packaging's filter.
-var failLine = regexp.MustCompile(`^\{"time":"[^"]+","level":"WARN","msg":"auth\.failed","kind":"(password|totp|passkey|token)","ip":"([0-9a-f.:]+)"(,"request_id":"[0-9a-f]+")?\}$`)
+var failLine = regexp.MustCompile(`^\{"time":"[^"]+","level":"WARN","msg":"auth\.failed","kind":"(password|totp|passkey|token|webhook)","ip":"([0-9a-f.:]+)"(,"request_id":"[0-9a-f]+")?\}$`)
 
 func TestFailedLoginLogLine(t *testing.T) {
 	e := newEnv(t)
@@ -78,6 +78,7 @@ func TestFailedLoginLogLine(t *testing.T) {
 	// Inside a request the logger adds the request ID at the end.
 	e.svc.flog = slog.New(reqid.Handler(slog.NewJSONHandler(&buf, nil)))
 	_, _ = e.svc.AuthenticateToken(reqid.With(ctx, reqid.New()), "hst_nothing", "203.0.113.9")
+	e.svc.WebhookFailed(reqid.With(ctx, reqid.New()), "198.51.100.20")
 
 	if _, _, err := e.svc.Login(ctx, "kim", testPassword, "", "192.0.2.50"); err != nil {
 		t.Fatal(err)
@@ -90,6 +91,7 @@ func TestFailedLoginLogLine(t *testing.T) {
 		{"password", "fe80::1"},
 		{"token", "2001:db8::1"},
 		{"token", "203.0.113.9"},
+		{"webhook", "198.51.100.20"},
 	}
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")

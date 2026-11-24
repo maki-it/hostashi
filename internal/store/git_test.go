@@ -65,6 +65,16 @@ func TestSiteGit(t *testing.T) {
 		t.Fatalf("replaced: got %+v\nwant %+v", got, want)
 	}
 
+	if byHook, name, err := s.SiteGitByWebhook(ctx, g.WebhookID); err != nil || byHook.SiteID != site.ID || name != site.Name {
+		t.Fatalf("by webhook %+v %q %v", byHook, name, err)
+	}
+
+	for _, id := range []string{"", "fedcba9876543210fedcba9876543210"} {
+		if _, _, err := s.SiteGitByWebhook(ctx, id); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("webhook %q: %v", id, err)
+		}
+	}
+
 	// The schema refuses what the panel never stores.
 	for name, bad := range map[string]func(*SiteGit){
 		"token without token": func(b *SiteGit) { b.Token = nil },

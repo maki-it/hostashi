@@ -169,7 +169,11 @@ type Service struct {
 	gitBox     *secrets.Box  // nil: no Git deploy (ADR-0062)
 	deploys    DeployAgent   // nil: no deploy runs (ADR-0062)
 	deployKick chan struct{} // wakes RunDeploys
-	dbs        DBServers     // nil: only the local database server (ADR-0041)
+	// deployAgain holds the sites whose webhook fired while a run was
+	// active; RunDeploys starts one more run when it ends. In memory only.
+	deployAgainMu sync.Mutex
+	deployAgain   map[string]bool
+	dbs           DBServers // nil: only the local database server (ADR-0041)
 
 	dbSizer DBSizeAgent // nil: database sizes are not measured (ADR-0015)
 	dbSizes dbSizeCache
@@ -1099,7 +1103,13 @@ func (s *Service) audit(ctx context.Context, actor int64, action, target string,
 // auditChange writes an entry for an update with the fields that differ
 // between before and after (store.DiffOf). Neither may hold secrets.
 func (s *Service) auditChange(ctx context.Context, actor int64, action, target string, detail, before, after map[string]string) {
-	if err := s.st.AuditChange(ctx, &actor, action, target, detail, store.DiffOf(before, after)); err != nil {
+	// Actor 0 is no user, such as a webhook.
+	var by *int64
+	if actor != 0 {
+		by = &actor
+	}
+
+	if err := s.st.AuditChange(ctx, by, action, target, detail, store.DiffOf(before, after)); err != nil {
 		s.log.ErrorContext(ctx, "audit log", "action", action, "err", err)
 	}
 }
