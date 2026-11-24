@@ -1,6 +1,6 @@
 # ADR-0065 www/non-www redirect per site
 
-**Status:** Proposed. **Date drafted:** 2026-11-24. **Decides:** Kim. **Related:** ADR-0005 (nginx), ADR-0017 (import and presets), ADR-0018 (API), ADR-0026 (CloudPanel transfer), ADR-0039 (certificate management), ADR-0054 (site types), ADR-0056 (security headers), ADR-0058 (OpenAPI and CLI parity).
+**Status:** Accepted (Kim, 2026-11-24). **Date drafted:** 2026-11-24. **Decides:** Kim. **Related:** ADR-0005 (nginx), ADR-0017 (import and presets), ADR-0018 (API), ADR-0026 (CloudPanel transfer), ADR-0039 (certificate management), ADR-0054 (site types), ADR-0056 (security headers), ADR-0058 (OpenAPI and CLI parity).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -33,7 +33,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Recommendation
 
-**Option A with C.**
+**Option A with C.** Decided by Kim on 2026-11-24: both names are listed explicitly, the panel offers a button to add the missing one.
 
 1. **Setting `wwwRedirect` per site** with three values: `off` (default, today's behaviour), `to-www` (`example.com` → `www.example.com`) and `to-non-www` (`www.example.com` → `example.com`). Store column `sites.www_redirect` (migration 0060), empty for `off`.
 2. **Pairs:** a domain `d` that does not start with `www.` and `www.d` are a pair when both are domains of the site. With `to-www` the name `d` redirects, with `to-non-www` the name `www.d`. Domains without a partner are served as today. `www.www.example.com` is never part of a pair, so there are no chains. A site may have several pairs (`example.com`, `example.de` and their `www` names).
