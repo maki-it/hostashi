@@ -238,7 +238,7 @@ func ValidateAccessPath(p string) error {
 	}
 
 	for _, c := range []byte(p) {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.IndexByte("._~/-", c) >= 0) {
+		if !isAlnum(c) && strings.IndexByte("._~/-", c) < 0 {
 			return fmt.Errorf("path %q may only contain letters, digits and . _ ~ / -", p)
 		}
 	}
@@ -278,7 +278,7 @@ func ValidateAccessUserName(n string) error {
 	}
 
 	for _, c := range []byte(n) {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.IndexByte("._@-", c) >= 0) {
+		if !isAlnum(c) && strings.IndexByte("._@-", c) < 0 {
 			return fmt.Errorf("user name %q may only contain letters, digits and . _ @ -", n)
 		}
 	}
@@ -302,6 +302,10 @@ func ValidateAccessPassword(pw string) error {
 	return nil
 }
 
+func isAlnum(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
+}
+
 // validBcrypt checks the form "$2b$05$" + 53 characters of bcrypt's base64,
 // so a hash can never carry a newline or a colon into the password file.
 func validBcrypt(h string) error {
@@ -315,7 +319,7 @@ func validBcrypt(h string) error {
 	}
 
 	for _, c := range []byte(h[7:]) {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '/') {
+		if !isAlnum(c) && c != '.' && c != '/' {
 			return errors.New("hash is not a bcrypt hash")
 		}
 	}

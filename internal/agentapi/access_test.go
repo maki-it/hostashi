@@ -65,6 +65,7 @@ func TestWebAccessValidateRefuses(t *testing.T) {
 			for i := range MaxAccessUsers + 1 {
 				u = append(u, WebAuthUser{Name: "u" + string(rune('a'+i%26)) + strings.Repeat("x", i), Hash: h})
 			}
+
 			return u
 		}()}},
 		"duplicate user":    {Auth: &WebAuth{Users: []WebAuthUser{{Name: "kim", Hash: h}, {Name: "kim", Hash: h}}}},
