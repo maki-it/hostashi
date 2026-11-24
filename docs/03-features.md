@@ -11,6 +11,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 - **P0 rows without code:** site types Node.js and reverse proxy; view and tail logs; view and export the audit log; OpenAPI 3.1 specification; CLI with parity; www/non-www redirect as a setting.
 - **Chosen P1 rows:** site type redirect; site type Python; WordPress quick install; vhost templates; change the domain(s) of a site; Cloudflare real IP; staging/cloning; Git deploy (moved from P2); multilingual UI (EN, DE); time zone, hostname, reboot; basic auth and IP blocking per site as a switch; malware scan with ClamAV, opt-in, including the optional real-time mode ([ADR-0064](adr/0064-optional-malware-scan.md), added 2026-11-24).
 - **Databases:** MariaDB stays the only local engine; PostgreSQL only as external servers ([ADR-0051](adr/0051-external-postgresql-servers.md)).
+- **Status on 2026-11-25:** all rows above are built except changing the domain of a site (in progress), WordPress quick install, vhost templates, staging/cloning and the multilingual UI.
 - **Not chosen for 1.0 (open, see below):** wildcard via DNS-01, remote DB access through an IP allowlist, zero-downtime deployments, export/apply state as YAML, automatic restore test, restore on a new server, notifications through webhook/Telegram/Slack.
 
 ## 3.1 Server and platform
@@ -38,17 +39,17 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 |---------|------|-------|--------|------|
 | Site type static | P0 | A | CP | |
 | Site type PHP (several versions in parallel, 7.4–8.6) | P0 | A | CP | FPM pool per site, Unix socket |
-| Site type Node.js (systemd service, selectable versions) | P0 | A | CP | |
-| Site type reverse proxy | P0 | A | CP | |
-| Site type app (one executable, for example a Go or Rust service) | P1 | A | NEW | ADR-0054 addendum 2: own unit, port and filter like Node.js |
-| Site type redirect (all requests to one target URL) | P1 | B | NEW | Without webroot and without site user |
-| Change the type of a site at any time | P1 | A | NEW | ADR-0054 addendum 3: account and files stay |
-| Site type Python (WSGI/ASGI, venv) | P1 | B | CP | [ADR-0061](adr/0061-site-type-python.md): python-build-standalone 3.11–3.15, `.venv` per site, gunicorn/uvicorn/script |
+| Site type Node.js (systemd service, selectable versions) | P0 | A | CP | Done ([ADR-0054](adr/0054-site-types-nodejs-proxy-redirect.md)) |
+| Site type reverse proxy | P0 | A | CP | Done ([ADR-0054](adr/0054-site-types-nodejs-proxy-redirect.md)) |
+| Site type app (one executable, for example a Go or Rust service) | P1 | A | NEW | ADR-0054 addendum 2: own unit, port and filter like Node.js. Done |
+| Site type redirect (all requests to one target URL) | P1 | B | NEW | Without webroot and without site user. Done ([ADR-0054](adr/0054-site-types-nodejs-proxy-redirect.md)) |
+| Change the type of a site at any time | P1 | A | NEW | ADR-0054 addendum 3: account and files stay. Done |
+| Site type Python (WSGI/ASGI, venv) | P1 | B | CP | [ADR-0061](adr/0061-site-type-python.md): python-build-standalone 3.11–3.15, `.venv` per site, gunicorn/uvicorn/script. Done |
 | WordPress quick install (WP-CLI) | P1 | B | CP | |
-| Linux user per site, home layout, permission reset | P0 | A | CP | |
+| Linux user per site, home layout, permission reset | P0 | A | CP | Permission reset done ([ADR-0067](adr/0067-reset-site-permissions.md)) |
 | Change the domain of a site | P1 | B | NEW | A site is identified internally by a fixed ID, never by its domain (applies from alpha). Vhost, certificate and optionally DB contents are carried along |
 | Disable a site, maintenance and parking pages | P1 | B | NEW | Store custom HTML pages once in the panel and enable them per site with a switch (UI, API, CLI), without an extra site and without manual vhost edits. Parking pages also for domains without a site of their own. Optional access for allowed IPs during maintenance |
-| Aliases, redirects, www/non-www, HTTP→HTTPS | P0 | A | CP | |
+| Aliases, redirects, www/non-www, HTTP→HTTPS | P0 | A | CP | www/non-www redirect per site done ([ADR-0065](adr/0065-www-redirect-per-site.md)) |
 | Vhost templates (Laravel, Symfony, WP, Magento, Shopware, …) | P1 | B | CP | Custom templates, YAML-based, preview |
 | Vhost editor with `nginx -t` and rollback | P0 | A | CP | Custom snippets in include files |
 | Per-site PHP settings (memory_limit, …) | P0 | A | CP | Through the pool config, not through `PHP_VALUE` in Nginx. Allowlist of twelve settings as `php_value` defaults (ADR-0049, accepted). PHP version visible in the site overview; unused PHP versions can be switched off |
@@ -58,7 +59,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 | Docker Compose apps as a site type | P2 | 2+ | NEW | Evaluate rootless Podman as an option |
 | Staging/cloning a site | P1 | 1 | NEW | Files + DB, domain rewrite |
 | Zero-downtime deployments (releases, symlink, rollback) | P1 | 1 | CP (dploy) | Own implementation or dploy integration (MIT) |
-| Git deploy via webhook | P1 | 1 | NEW | In 1.0 (Kim, 2026-11-21) |
+| Git deploy via webhook | P1 | 1 | NEW | In 1.0 (Kim, 2026-11-21). Done ([ADR-0062](adr/0062-git-deploy-per-site.md)) |
 
 ## 3.3 TLS and domains
 
@@ -67,7 +68,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 | Let's Encrypt (HTTP-01), auto-renew | P0 | A | CP | Built-in ACME client (for example lego). New aliases and subdomains get a certificate automatically |
 | Wildcard via DNS-01 | P1 | B | NEW | Providers: INWX, Cloudflare, Hetzner DNS, Route53 first |
 | Import custom certificates | P0 | A | CP | |
-| Cloudflare origin certificates and real IP handling | P1 | B | CP | |
+| Cloudflare origin certificates and real IP handling | P1 | B | CP | Real IP done ([ADR-0059](adr/0059-real-client-ip-behind-proxies.md)); origin certificates through custom certificates ([ADR-0039](adr/0039-certificate-management.md)) |
 | Panel under its own domain with a valid certificate | P0 | A | CP | |
 | DNS record management through provider API | P2 | 2+ | NEW | |
 
@@ -91,7 +92,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 | Classic FTP | P2 | 2+ | CP | Off by default, SFTP preferred |
 | File manager in the browser | P1 | B | CP | Operations through the agent with path confinement. Implemented as a per-site helper unit ([ADR-0040](adr/0040-file-manager.md)) |
 | Cron jobs per site (validator instead of deny lists) | P0 | A | CP | systemd timers as an option. Pause jobs individually and run them immediately |
-| View/tail logs (access, error, PHP, app) | P0 | A | CP | Logrotate per site |
+| View/tail logs (access, error, PHP, app) | P0 | A | CP | Logrotate per site. Done ([ADR-0053](adr/0053-site-logs-in-the-panel.md)) |
 | Web terminal | P2 | 2+ | NEW | Only with strong auth and audit |
 
 ## 3.6 Security and access to the panel
@@ -104,7 +105,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 | OIDC SSO | P2 | 1 | NEW | |
 | API tokens with scopes, expiry date | P0 | A | NEW | |
 | Audit log (who, what, when, diff) | P0 | A | CP | Immutable (append-only), exportable. Page and CSV/JSON export, admins only |
-| IP/bot blocking, basic auth per site | P1 | B | CP | |
+| IP/bot blocking, basic auth per site | P1 | B | CP | Password protection and IP rules per site done ([ADR-0066](adr/0066-basic-auth-and-ip-rules-per-site.md)) |
 | fail2ban (SSH, panel, recidive) | P0 | A | NEW | On by default, ADR-0021 |
 | CrowdSec as opt-in | P2 | 2+ | NEW | Reports IPs to an external service, ADR-0021 |
 | Rate limiting and lockout at the panel login | P0 | A | NEW | |
@@ -144,8 +145,8 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 
 | Feature | Prio | Phase | Source | Note |
 |---------|------|-------|--------|------|
-| REST API (OpenAPI 3.1) | P0 | A | NEW | The UI uses the same API, no feature only in the UI, details in [ADR-0018](adr/0018-public-rest-api.md) |
-| CLI (`hostashi`) with parity to `clpctl` | P0 | A | CP | |
+| REST API (OpenAPI 3.1) | P0 | A | NEW | The UI uses the same API, no feature only in the UI, details in [ADR-0018](adr/0018-public-rest-api.md). Done: `api/openapi.json` describes every route ([ADR-0058](adr/0058-openapi-spec-and-cli-parity.md)) |
+| CLI (`hostashi`) with parity to `clpctl` | P0 | A | CP | Done: the CLI is an API client, `hostashi api` covers every route ([ADR-0058](adr/0058-openapi-spec-and-cli-parity.md)) |
 | Export/apply state as YAML | P1 | 1 | NEW | Basis for GitOps |
 | CloudPanel importer | P1 | 1 | NEW | See below and ADR-0017 (migration, spike S6) |
 | Presets per site type (WordPress, TYPO3, PHP, static …) | P1 | 1 | NEW | Typed hardening and cache building blocks instead of vhost text, ADR-0017 |
