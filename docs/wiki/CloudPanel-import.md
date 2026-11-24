@@ -36,7 +36,7 @@ The report lists every site and what can be taken over. **Show plan** shows what
 
 Do this site by site.
 
-1. **Create the site.** The site gets the old domains, its PHP version and settings, cron jobs and SSH keys (as SFTP only; switch a key to Shell afterwards if needed). It has no certificate yet; HTTPS follows after the DNS switch.
+1. **Create the site.** The site gets the old domains, its PHP version and settings, cron jobs and SSH keys (as SFTP only; switch a key to Shell afterwards if needed). It has no certificate yet; HTTPS follows after the DNS switch. If the old site sent `www.example.com` to `example.com` (or the other way round), the new site gets the same [www redirect](Domains-and-HTTPS.md#redirect-to-or-from-www); other redirect hosts become plain domains of the site, and the plan says so.
 2. **Files and databases.** Start the import. The old files land in `cloudpanel-import` in the site's home, and the web root stays as it is. Map each old database to a database of the site (create those on the [Databases](Databases.md) page first). The dumps are loaded into the databases shortly after.
 3. **Custom nginx.** Directives from the old site are shown once for checking. Check every line, then save them; they are active right away.
 4. **Final sync.** Shortly before the DNS switch, run the import again. Then choose **Use imported files as web root**.
