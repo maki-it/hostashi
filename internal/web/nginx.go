@@ -685,6 +685,11 @@ server {
     access_log {{.N.SiteLogDir}}/{{.S.User}}/access.log{{if $.RealIP}} hostashi_realip{{end}};
     access_log {{.N.SiteLogDir}}/{{.S.User}}/traffic.log hostashi_traffic buffer=32k flush=5s;
     error_log {{.N.SiteLogDir}}/{{.S.User}}/error.log warn;
+    {{- if and $.A $.A.Realm $.N.ErrorLog}}
+    # Failed passwords also go to the server log, which fail2ban's jail
+    # hostashi-site-auth reads (ADR-0066).
+    error_log {{$.N.ErrorLog}} warn;
+    {{- end}}
     {{- end}}
     {{- if not .S.Cert}}
     # Headers here apply to every response of the site (ADR-0056); a
@@ -738,6 +743,11 @@ server {
     access_log {{.N.SiteLogDir}}/{{.S.User}}/access.log{{if $.RealIP}} hostashi_realip{{end}};
     access_log {{.N.SiteLogDir}}/{{.S.User}}/traffic.log hostashi_traffic buffer=32k flush=5s;
     error_log {{.N.SiteLogDir}}/{{.S.User}}/error.log warn;
+    {{- if and $.A $.A.Realm $.N.ErrorLog}}
+    # Failed passwords also go to the server log, which fail2ban's jail
+    # hostashi-site-auth reads (ADR-0066).
+    error_log {{$.N.ErrorLog}} warn;
+    {{- end}}
     {{- end}}
     ssl_certificate {{.S.Cert}};
     ssl_certificate_key {{.S.Key}};

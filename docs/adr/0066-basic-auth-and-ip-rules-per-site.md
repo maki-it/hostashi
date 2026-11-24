@@ -67,7 +67,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ### fail2ban
 
-A jail `hostashi-site-auth` with fail2ban's `nginx-http-auth` filter over `/var/log/nginx/sites/*/error.log`, 10 failures in 10 minutes, ban on ports 80 and 443 only (a mistyped site password should not lock a customer out of SSH). Trusted proxy ranges are already in `ignoreip` (ADR-0059). Behind a CDN the ban blocks the real address on the firewall, which has no effect because the connection comes from the CDN; the panel says so next to the setting.
+A jail `hostashi-site-auth` with fail2ban's `nginx-http-auth` filter (implementation note, 2026-11-24: over nginx's server error log `/var/log/nginx/hostashi/error.log`, which protected sites write to as well; a glob over the site logs would miss sites created after fail2ban started), 10 failures in 10 minutes, ban on ports 80 and 443 only (a mistyped site password should not lock a customer out of SSH). Trusted proxy ranges are already in `ignoreip` (ADR-0059). Behind a CDN the ban blocks the real address on the firewall, which has no effect because the connection comes from the CDN; the panel says so next to the setting.
 
 ### Panel, API, roles, storage
 

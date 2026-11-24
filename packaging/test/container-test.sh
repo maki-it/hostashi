@@ -581,7 +581,7 @@ x test ! -e /etc/systemd/system/hostashi-files@blog.service.d || fail "file mana
 x test ! -e /run/hostashi-files/blog.sock || fail "file manager socket left"
 
 step "fail2ban reads the panel's failed logins"
-for j in sshd hostashi-panel recidive; do
+for j in sshd hostashi-panel hostashi-site-auth recidive; do
   x fail2ban-client status "$j" >/dev/null || fail "fail2ban jail $j is not running"
 done
 expect_mode /etc/fail2ban/jail.d/hostashi.conf "644 root:root"

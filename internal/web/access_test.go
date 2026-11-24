@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -95,6 +96,25 @@ func TestAccessRender(t *testing.T) {
 	if p := string(f.Content["sites/plain.conf"]); strings.Contains(p, "auth_basic") || strings.Contains(p, "allow ") {
 		t.Errorf("plain.conf:\n%s", p)
 	}
+
+	// With site logs, failed passwords also reach the server log that
+	// fail2ban reads; sites without a password do not write there.
+	n.SiteLogDir = "/var/log/nginx/sites"
+
+	f, err = n.Render(Desired{Sites: sites}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := strings.Count(string(f.Content["sites/wp.conf"]), "error_log /var/log/x warn;"); got != 1 {
+		t.Errorf("wp.conf writes the server log %d times:\n%s", got, f.Content["sites/wp.conf"])
+	}
+
+	if strings.Contains(string(f.Content["sites/tls.conf"]), "error_log /var/log/x") {
+		t.Errorf("tls.conf writes the server log:\n%s", f.Content["sites/tls.conf"])
+	}
+
+	n.SiteLogDir = ""
 
 	// Without a directory for password files nothing is rendered.
 	n.AuthDir = ""
@@ -193,7 +213,12 @@ func TestAccessServed(t *testing.T) {
 
 	authDir := filepath.Join(e.dir, "web-auth")
 	e.r.Driver.AuthDir = authDir
+	e.r.Driver.SiteLogDir = filepath.Join(e.dir, "logs")
 	files := AuthFiles{Dir: authDir, GID: os.Getgid()}
+
+	if err := e.r.Driver.PrepareLogs(map[string]bool{"wp": true, "blocked": true, "only": true, "px": true}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := e.r.Recover(ctx); err != nil {
 		t.Fatal(err)
@@ -258,6 +283,22 @@ func TestAccessServed(t *testing.T) {
 		if code != c.code || (c.body != "" && body != c.body) {
 			t.Errorf("%s%s: %d %q, want %d %q", c.host, c.path, code, body, c.code, c.body)
 		}
+	}
+
+	// fail2ban's jail reads the failed password from the server log.
+	var logged bool
+
+	for range 50 {
+		raw, _ := os.ReadFile(e.r.Driver.ErrorLog)
+		if logged = strings.Contains(string(raw), `user "kim": password mismatch`); logged {
+			break
+		}
+
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if !logged {
+		t.Error("no failed password in the server error log")
 	}
 
 	if err := files.Prune(d.Sites); err != nil {
