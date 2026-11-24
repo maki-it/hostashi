@@ -4,7 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { GitSettings } from "./Git";
-import { canDeploy, hostOf, inputProblem, isSSHURL, liveRelease, type Deploy, type GitInput, type GitSetting } from "./git";
+import { canDeploy, commitURL, hostOf, inputProblem, isSSHURL, liveRelease, type Deploy, type GitInput, type GitSetting } from "./git";
 import type { Site } from "./sites";
 import { mockFetch } from "./test-utils";
 
@@ -82,6 +82,18 @@ describe("git helpers", () => {
     expect(hostOf("https://gitlab.com/a/b.git")).toBe("gitlab.com");
   });
 
+  it("links a commit at the Git host", () => {
+    const sha = "ab".repeat(20);
+    expect(commitURL("https://github.com/acme/blog.git", sha)).toBe("https://github.com/acme/blog/commit/" + sha);
+    expect(commitURL("git@github.com:acme/blog.git", sha)).toBe("https://github.com/acme/blog/commit/" + sha);
+    expect(commitURL("ssh://git@git.example.com:2222/acme/blog.git", sha)).toBe("https://git.example.com/acme/blog/commit/" + sha);
+    expect(commitURL("https://git.example.com:3000/acme/blog", sha)).toBe("https://git.example.com:3000/acme/blog/commit/" + sha);
+    expect(commitURL("https://gitlab.com/group/sub/blog.git", sha)).toBe("https://gitlab.com/group/sub/blog/-/commit/" + sha);
+    expect(commitURL("git@bitbucket.org:acme/blog.git", sha)).toBe("https://bitbucket.org/acme/blog/commits/" + sha);
+    expect(commitURL("https://github.com/acme/blog.git", "not a sha")).toBe("");
+    expect(commitURL("file:///srv/blog.git", sha)).toBe("");
+  });
+
   it("checks the form like the server", () => {
     const ok: GitInput = { url: "https://github.com/a/b.git", branch: "main", deployDir: "htdocs", shared: [], commands: [], keep: 5, buildTimeoutMinutes: 15, submodules: false, auth: "none", tokenUser: "", token: "" };
     expect(inputProblem(ok, false)).toBe("");
@@ -154,6 +166,12 @@ describe("GitSettings", () => {
 
     await userEvent.click(box.getByRole("button", { name: /trust this key/ }));
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ key: "ssh-ed25519 AAAAhost" });
+
+    // Replacing the deploy key asks first.
+    await userEvent.click(screen.getByRole("button", { name: "Replace deploy key" }));
+    const ask = within(screen.getByRole("alertdialog", { name: "Replace the deploy key" }));
+    await userEvent.click(ask.getByRole("button", { name: "Cancel" }));
+    expect(calls.some((c) => c.path === base + "/git/key")).toBe(false);
   });
 
   it("deploys, shows the log and rolls back", async () => {
@@ -169,6 +187,7 @@ describe("GitSettings", () => {
 
     const list = within(await screen.findByLabelText("Deploys of blog"));
     expect(list.getByText("Live")).toBeInTheDocument();
+    expect(list.getAllByRole("link", { name: /^Commit abababa/ })[0]).toHaveAttribute("href", "https://github.com/acme/blog/commit/" + "ab".repeat(20));
     expect(list.getByText("Failed")).toBeInTheDocument();
     expect(list.getByText("a step of the deploy failed")).toBeInTheDocument();
     // Only an older successful release can be a target.

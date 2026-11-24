@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
+  commitURL,
   deleteGit,
   deleteWebhook,
   deployLog,
@@ -157,6 +158,7 @@ function DeploysCard({ site, git, deploys, onChange }: { site: Site; git: GitSet
               <DeployRow
                 key={d.id}
                 site={site}
+                repo={git.url}
                 deploy={d}
                 live={d.state === "succeeded" && d.release === live && deploys.find((x) => x.state === "succeeded") === d}
                 canRollBack={!active && d.kind === "deploy" && d.state === "succeeded" && d.release !== live}
@@ -173,8 +175,22 @@ function DeploysCard({ site, git, deploys, onChange }: { site: Site; git: GitSet
   );
 }
 
+// CommitLink opens the commit at the Git host, when its address gives a
+// web page; otherwise it is the short id alone.
+function CommitLink({ repo, sha }: { repo: string; sha: string }) {
+  const href = commitURL(repo, sha);
+  const code = <code title={sha}>{shortCommit(sha)}</code>;
+  if (!href) return code;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" aria-label={"Commit " + shortCommit(sha) + " at the Git host"}>
+      {code}
+    </a>
+  );
+}
+
 function DeployRow(p: {
   site: Site;
+  repo: string;
   deploy: Deploy;
   live: boolean;
   canRollBack: boolean;
@@ -213,7 +229,7 @@ function DeployRow(p: {
       <div className="ui-row">
         <strong>#{d.id}</strong>
         <Badge tone={p.live ? "ok" : w.tone === "ok" ? "off" : w.tone}>{p.live ? "Live" : w.tone === "ok" ? (d.kind === "rollback" ? "Rollback" : "Kept") : w.word}</Badge>
-        {d.commit && <code title={d.commit}>{shortCommit(d.commit)}</code>}
+        {d.commit && <CommitLink repo={p.repo} sha={d.commit} />}
         {d.message && <span>{d.message}</span>}
       </div>
       <p className="ui-hint ui-flush">
@@ -474,6 +490,7 @@ function KeysCard({ site, git, onChange }: { site: Site; git: GitSetting; onChan
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
+  const [replacing, setReplacing] = useState(false);
   const host = hostOf(git.url);
   const published = publishedFingerprints.find((p) => p.host === host);
 
@@ -506,11 +523,34 @@ function KeysCard({ site, git, onChange }: { site: Site; git: GitSetting; onChan
         </Field>
         <div className="ui-row">
           <Button onClick={() => void copy()}>Copy deploy key</Button>
-          <Button disabled={busy} onClick={() => void act(async () => { await newGitKey(site.name); await onChange(); })}>
-            Make a new key
-          </Button>
+          {!replacing && (
+            <Button disabled={busy} onClick={() => setReplacing(true)}>
+              Replace deploy key
+            </Button>
+          )}
           {copied && <span className="ui-hint">{copied}</span>}
         </div>
+        {replacing && (
+          <div className="ui-row" role="alertdialog" aria-label="Replace the deploy key">
+            <span>The current key stops working at once. Add the new key to the repository before the next deploy.</span>
+            <Button
+              variant="danger"
+              disabled={busy}
+              onClick={() =>
+                void act(async () => {
+                  await newGitKey(site.name);
+                  setReplacing(false);
+                  await onChange();
+                })
+              }
+            >
+              Replace key
+            </Button>
+            <Button disabled={busy} onClick={() => setReplacing(false)}>
+              Cancel
+            </Button>
+          </div>
+        )}
         <div className="ui-stack-tight">
           <strong>Host key of {host || "the server"}</strong>
           {git.hostKey ? (

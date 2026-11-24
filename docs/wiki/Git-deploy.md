@@ -42,7 +42,7 @@ With a deploy key, Hostashi makes a key for the site. Copy it with **Copy deploy
 - GitHub, Gitea and Forgejo: the repository's **Settings → Deploy keys**,
 - GitLab: **Settings → Repository → Deploy keys**.
 
-**Make a new key** replaces it; the old key stops working at once, so add the new one to the Git host right after.
+**Replace deploy key** makes a new one after you confirm; the old key stops working at once, so add the new one to the Git host right after.
 
 ### Confirm the host key
 

@@ -174,6 +174,39 @@ export function liveRelease(list: readonly Deploy[]): string {
 
 export const shortCommit = (c: string) => c.slice(0, 7);
 
+/**
+ * commitURL is the web page of a commit at the Git host, or "" when the
+ * address gives none. SSH addresses become https on the same host without
+ * the SSH port. GitLab (a host named gitlab…) uses /-/commit/, Bitbucket
+ * /commits/; GitHub, Gitea, Forgejo and others /commit/.
+ */
+export function commitURL(repo: string, sha: string): string {
+  if (!/^[0-9a-f]{7,64}$/i.test(sha)) return "";
+  const u = repo.trim();
+  let host = "";
+  let path = "";
+  const scp = /^[^@/\s]+@([^:/\s]+):(.+)$/.exec(u);
+  if (scp && !u.includes("://")) {
+    host = scp[1]!;
+    path = scp[2]!;
+  } else {
+    let parsed: URL;
+    try {
+      parsed = new URL(u);
+    } catch {
+      return "";
+    }
+    if (parsed.protocol !== "https:" && parsed.protocol !== "ssh:") return "";
+    host = parsed.protocol === "https:" ? parsed.host : parsed.hostname;
+    path = parsed.pathname;
+  }
+  path = path.replace(/^\/+/, "").replace(/\.git\/?$/, "").replace(/\/+$/, "");
+  if (!host || !path || path.split("/").some((x) => x === "" || x === "." || x === "..")) return "";
+  const name = host.toLowerCase();
+  const kind = name.startsWith("gitlab") ? "/-/commit/" : name === "bitbucket.org" ? "/commits/" : "/commit/";
+  return "https://" + host + "/" + path + kind + sha.toLowerCase();
+}
+
 export function deployWord(d: Deploy): { word: string; tone: "ok" | "warn" | "err" | "off" } {
   switch (d.state) {
     case "succeeded":
