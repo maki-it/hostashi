@@ -26,6 +26,8 @@ import {
   resetPassword,
   startDump,
   suggestUser,
+  uploadDir,
+  uploadPath,
   type Credentials,
   type Database,
   type DBServer,
@@ -37,6 +39,7 @@ import { OpenToolDialog } from "./DBTool";
 import { ToolSessions } from "./DBToolSessions";
 import { getDBTool, type DBToolStatus } from "./dbtool";
 import { formatBytes } from "./limits";
+import { remove as removeFiles, uploadFile } from "./files";
 import { formatHash } from "./routes";
 import { Button, Card, Field, IconButton, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
 
@@ -714,34 +717,65 @@ function AddUser({
   );
 }
 
-// DumpForm imports a dump file from the site's home into the database or
-// exports the database into a new file there (ADR-0025).
+// DumpForm imports a dump into the database, from the user's computer or
+// from a file in the site's home, or exports the database into a new file
+// there (ADR-0025). An uploaded dump goes through the file manager into
+// hostashi-imports/ in the site's home and is removed after the import.
 // For a database on an external server, the job connects to that server
 // with a temporary user (ADR-0041 addendum 1).
 function DumpForm({ db, site, server, postgres }: { db: string; site: string; server: string; postgres: boolean }) {
   const [kind, setKind] = useState<"export" | "import">("export");
+  const [source, setSource] = useState<"upload" | "home">("upload");
+  const [file, setFile] = useState<File | null>(null);
+  const [sent, setSent] = useState<number | null>(null);
   const [path, setPath] = useState(() => defaultDumpPath(db, new Date(), postgres));
   const [job, setJob] = useState<DumpJob | null>(null);
   const [error, setError] = useState("");
 
-  const running = job?.state === "running";
+  const uploading = sent !== null;
+  const running = uploading || job?.state === "running";
+  const fromComputer = kind === "import" && source === "upload";
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const problem = pathProblem(path, postgres);
-    if (problem) {
-      setError(problem);
-      return;
+    let target = path;
+    if (fromComputer) {
+      if (!file) {
+        setError("Choose a file.");
+        return;
+      }
+      target = uploadPath(file.name, new Date(), postgres);
+      if (target === "") {
+        setError(postgres ? "The file must end in .dump, .sql or .sql.gz." : "The file must end in .sql or .sql.gz.");
+        return;
+      }
+    } else {
+      const problem = pathProblem(path, postgres);
+      if (problem) {
+        setError(problem);
+        return;
+      }
     }
     setError("");
     setJob(null);
+    let uploaded = false;
     try {
-      const started = await startDump(db, kind, path);
+      if (fromComputer && file) {
+        setSent(0);
+        await uploadFile(site, target, file, { parents: true, onProgress: setSent });
+        uploaded = true;
+        setSent(null);
+      }
+      const started = await startDump(db, kind, target);
       setJob(started);
       setJob(await poll(() => getDumpJob(db, started.id), (j) => j.state !== "running"));
     } catch (err) {
       setJob(null);
       setError(databaseMessage(err));
+    } finally {
+      setSent(null);
+      // The uploaded copy has done its job, or is of no use after a failure.
+      if (uploaded) await removeFiles(site, [target]).catch(() => undefined);
     }
   }
 
@@ -758,6 +792,19 @@ function DumpForm({ db, site, server, postgres }: { db: string; site: string; se
           Import a file
         </label>
       </fieldset>
+      {kind === "import" && (
+        <fieldset className="ui-fieldset ui-stack-tight">
+          <legend>File from</legend>
+          <label className="ui-check">
+            <input type="radio" name={"dump-src-" + db} checked={source === "upload"} onChange={() => setSource("upload")} />
+            My computer
+          </label>
+          <label className="ui-check">
+            <input type="radio" name={"dump-src-" + db} checked={source === "home"} onChange={() => setSource("home")} />
+            The home of site {site}
+          </label>
+        </fieldset>
+      )}
       {kind === "export" && (
         <Field label="Format">
           <select
@@ -774,17 +821,34 @@ function DumpForm({ db, site, server, postgres }: { db: string; site: string; se
           </select>
         </Field>
       )}
-      <Field
-        label={`File in the home of site ${site}`}
-        hint={
-          (postgres
-            ? "Relative to the home, ending in .dump (pg_dump custom format), .sql or .sql.gz. "
-            : "Relative to the home, ending in .sql or .sql.gz. ") +
-          (kind === "export" ? "An existing file is never replaced." : "Upload it first, for example over SFTP.")
-        }
-      >
-        <input className="ui-input ui-mono" value={path} onChange={(e) => setPath(e.target.value.trim())} autoComplete="off" spellCheck={false} />
-      </Field>
+      {fromComputer ? (
+        <Field
+          label="Dump file"
+          hint={
+            (postgres ? "A .dump (pg_dump custom format), .sql or .sql.gz file. " : "A .sql or .sql.gz file. ") +
+            `It is uploaded into the home of site ${site} and removed after the import; it counts towards the site's disk space meanwhile.`
+          }
+        >
+          <input
+            className="ui-input"
+            type="file"
+            accept={postgres ? ".sql,.gz,.dump" : ".sql,.gz"}
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+        </Field>
+      ) : (
+        <Field
+          label={`File in the home of site ${site}`}
+          hint={
+            (postgres
+              ? "Relative to the home, ending in .dump (pg_dump custom format), .sql or .sql.gz. "
+              : "Relative to the home, ending in .sql or .sql.gz. ") +
+            (kind === "export" ? "An existing file is never replaced." : "Upload it first, for example over SFTP.")
+          }
+        >
+          <input className="ui-input ui-mono" value={path} onChange={(e) => setPath(e.target.value.trim())} autoComplete="off" spellCheck={false} />
+        </Field>
+      )}
       {server !== LOCAL_SERVER && (
         <p className="ui-hint ui-flush">
           The data goes between this machine and {server} with a temporary database user that the panel removes after the job.
@@ -799,9 +863,17 @@ function DumpForm({ db, site, server, postgres }: { db: string; site: string; se
         ) : (
           <Notice tone="warn" title={`The statements in the file run in ${db}. Import into an empty database: a failed import is not rolled back.`} />
         ))}
-      {running && <p aria-busy="true">{job.kind === "import" ? "Importing…" : "Exporting…"}</p>}
+      {uploading && file && (
+        <p aria-busy="true">
+          Uploading… {Math.floor(((sent ?? 0) / Math.max(file.size, 1)) * 100)} %
+        </p>
+      )}
+      {!uploading && job?.state === "running" && <p aria-busy="true">{job.kind === "import" ? "Importing…" : "Exporting…"}</p>}
       {job?.state === "done" && (
-        <Notice tone="ok" title={job.kind === "import" ? `Imported ${job.path} into ${db}.` : `Exported ${db} into ${job.path}.`} />
+        <Notice
+          tone="ok"
+          title={job.kind === "import" ? `Imported ${file && job.path.startsWith(uploadDir + "/") ? file.name : job.path} into ${db}.` : `Exported ${db} into ${job.path}.`}
+        />
       )}
       {job?.state === "failed" && <Notice tone="err" title={(job.kind === "import" ? "Import" : "Export") + " failed: " + (job.error ?? "unknown error")} />}
       {error && <Notice tone="err" title={error} />}
