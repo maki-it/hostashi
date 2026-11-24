@@ -33,6 +33,10 @@ type scanEngineJSON struct {
 	Realtime string `json:"realtime"`
 	// RealtimeActive reports whether clamonacc watches the sites now.
 	RealtimeActive bool `json:"realtimeActive"`
+	// MemTotal is the server's RAM in bytes, 0 if unknown. A scan needs
+	// about 1.5 GB while it runs, the real-time mode about as much all
+	// the time.
+	MemTotal uint64 `json:"memTotal"`
 }
 
 type scanEngineRequest struct {
@@ -101,7 +105,7 @@ func toScanEngineJSON(s agentapi.ScanEngineStatus) scanEngineJSON {
 		rt = agentapi.ScanEngineOff
 	}
 
-	return scanEngineJSON{State: s.State, Version: s.Version, Signatures: s.Signatures, Error: s.Error, Realtime: rt, RealtimeActive: s.RealtimeActive}
+	return scanEngineJSON{State: s.State, Version: s.Version, Signatures: s.Signatures, Error: s.Error, Realtime: rt, RealtimeActive: s.RealtimeActive, MemTotal: s.MemTotal}
 }
 
 func toScanRunJSON(r store.ScanRun) scanRunJSON {

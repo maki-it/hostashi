@@ -12,7 +12,7 @@ The scan is off on a new server. An admin switches it on under **System → Viru
 
 ![Switching the virus scan on](images/system-malware.png)
 
-ClamAV needs memory while it scans: plan for about 1.5 GB of free RAM while a site is scanned. Only one site is scanned at a time on the whole server, so this is paid once, not per site, and it does not count against a site's [memory limit](Limits.md). The signatures take about 300 MB on disk and are updated several times a day.
+ClamAV needs memory while it scans: plan for about 1.5 GB of free RAM while a site is scanned. The card shows the server's memory and warns below 2 GB. Only one site is scanned at a time on the whole server, so this is paid once, not per site, and it does not count against a site's [memory limit](Limits.md). The signatures take about 300 MB on disk and are updated several times a day.
 
 **Switch virus scan off…** removes ClamAV and its signatures again. Findings, the history and the quarantine stay.
 
@@ -24,7 +24,7 @@ With the virus scan on, an admin can also switch on the **Real-time scan** under
 
 The real-time scan only reports. It does not block, move or delete a file: flagged files show up in the site's **Virus scan** tab as **Real time, today**, and you quarantine them as usual. Admins get at most one email per site and hour.
 
-It keeps the ClamAV daemon running all the time, so it needs about 1.5 GB of RAM permanently, not only during a scan. Switch it on only on servers with enough memory. While it is on, scheduled and manual scans use the daemon too.
+It keeps the ClamAV daemon running all the time, so it needs about 1.5 GB of RAM permanently, not only during a scan. Switch it on only on servers with enough memory; the card warns below 4 GB. While it is on, scheduled and manual scans use the daemon too.
 
 **Switch real-time scan off** stops the daemon and removes its package. Findings stay.
 
@@ -41,7 +41,7 @@ ClamAV reads every file in the site's home, read only and without network, as th
 
 ## Flagged files
 
-Each flagged file shows its path, the name of the signature that matched, its size and when it was first seen.
+Each flagged file shows its path, the name of the signature that matched, its size and when it was first seen. **Open folder** opens its folder in the [file manager](File-manager.md).
 
 | Action | What it does |
 |---|---|
@@ -53,6 +53,8 @@ Each flagged file shows its path, the name of the signature that matched, its si
 A flagged file that is not there in a later scan is listed as gone; **Show files that are gone** shows those too.
 
 When a scan flags files it had not reported before, admins get an email (see [Email notifications](Email-notifications.md)).
+
+The **Health** page lists each site with open findings, and warns when the signatures are older than three days: then freshclam can no longer update them.
 
 ## Command line and API
 

@@ -71,6 +71,9 @@ type ScanEngineStatus struct {
 	Realtime string `json:"realtime,omitempty"`
 	// RealtimeActive reports whether clamonacc runs.
 	RealtimeActive bool `json:"realtimeActive,omitempty"`
+	// MemTotal is the server's RAM in bytes (ADR-0064: the page warns
+	// below 2 GB, and below 4 GB for the real-time mode); 0 if unknown.
+	MemTotal uint64 `json:"memTotal,omitempty"`
 }
 
 // ScanStartRequest starts a scan of a site (site.scan.start).

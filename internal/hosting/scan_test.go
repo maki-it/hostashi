@@ -26,13 +26,14 @@ type fakeScans struct {
 	realtime    string
 	rtPolls     []agentapi.ScanRealtimePollRequest
 	rtFound     []agentapi.RealtimeFinding
+	signatures  string
 }
 
 func (f *fakeScans) ScanEngineStatus(context.Context) (agentapi.ScanEngineStatus, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return agentapi.ScanEngineStatus{State: f.engine, Realtime: f.realtime}, nil
+	return agentapi.ScanEngineStatus{State: f.engine, Realtime: f.realtime, Version: "1.4.6", Signatures: f.signatures}, nil
 }
 
 func (f *fakeScans) ScanRealtimePoll(_ context.Context, req agentapi.ScanRealtimePollRequest) (agentapi.ScanRealtimeFindings, error) {
@@ -490,5 +491,81 @@ func TestScanRealtime(t *testing.T) {
 	// is still due at its slot.
 	if last, _ := s.st.LastScanRuns(ctx); len(last) != 0 {
 		t.Fatalf("last scans %+v", last)
+	}
+}
+
+func TestMalwareDoctor(t *testing.T) {
+	s, f := scanService(t)
+	ctx := t.Context()
+	now := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return now }
+
+	checks := func() string {
+		t.Helper()
+
+		got, err := s.MalwareDoctor(ctx, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var out []string
+		for _, c := range got {
+			out = append(out, c.ID+"/"+c.Site+"/"+c.Status+"/"+c.Summary)
+		}
+
+		return strings.Join(out, "; ")
+	}
+
+	if got := checks(); got != "" {
+		t.Fatalf("off: %s", got)
+	}
+
+	if _, err := s.SetScanEngine(ctx, 1, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := checks(); got != "panel.malware//warn/ClamAV 1.4.6 has no signatures yet" {
+		t.Fatalf("no signatures: %s", got)
+	}
+
+	f.signatures = now.Add(-5 * time.Hour).Format(time.RFC3339)
+
+	if got := checks(); got != "panel.malware//ok/ClamAV 1.4.6, signatures from 2026-11-24 07:00 UTC" {
+		t.Fatalf("fresh: %s", got)
+	}
+
+	f.signatures = now.Add(-4*24*time.Hour - time.Hour).Format(time.RFC3339)
+
+	if got := checks(); got != "panel.malware//warn/ClamAV 1.4.6: the signatures are 4 days old" {
+		t.Fatalf("stale: %s", got)
+	}
+
+	f.signatures = now.Format(time.RFC3339)
+
+	f.rtFound = []agentapi.RealtimeFinding{
+		{Site: "blog", ScanFinding: agentapi.ScanFinding{Path: "a.php", Signature: "Php.Shell-1", SHA256: shaA, Size: 3}},
+		{Site: "blog", ScanFinding: agentapi.ScanFinding{Path: "b.php", Signature: "Php.Shell-1", SHA256: shaB, Size: 3}},
+		{Site: "shop", ScanFinding: agentapi.ScanFinding{Path: "c.php", Signature: "Php.Shell-1", SHA256: shaA, Size: 3}},
+	}
+
+	if _, err := s.SetScanRealtime(ctx, 1, true); err != nil {
+		t.Fatal(err)
+	}
+
+	s.pollScans(ctx)
+
+	want := "panel.malware//ok/ClamAV 1.4.6, signatures from 2026-11-24 12:00 UTC; " +
+		"site.malware/blog/warn/2 open virus scan findings; site.malware/shop/warn/1 open virus scan finding"
+	if got := checks(); got != want {
+		t.Fatalf("findings:\n got %s\nwant %s", got, want)
+	}
+
+	// Findings stay on the Health page after ClamAV is switched off.
+	if _, err := s.SetScanEngine(ctx, 1, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := checks(); got != "site.malware/blog/warn/2 open virus scan findings; site.malware/shop/warn/1 open virus scan finding" {
+		t.Fatalf("off with findings: %s", got)
 	}
 }

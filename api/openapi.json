@@ -5781,6 +5781,10 @@
           "error": {
             "type": "string"
           },
+          "memTotal": {
+            "minimum": 0,
+            "type": "integer"
+          },
           "realtime": {
             "type": "string"
           },
@@ -5799,6 +5803,7 @@
         },
         "required": [
           "error",
+          "memTotal",
           "realtime",
           "realtimeActive",
           "signatures",
