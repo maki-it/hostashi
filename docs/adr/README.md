@@ -62,6 +62,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0065](0065-www-redirect-per-site.md) | www/non-www redirect per site | Accepted |
 | [0066](0066-basic-auth-and-ip-rules-per-site.md) | Password protection and IP rules per site | Accepted |
 | [0067](0067-reset-site-permissions.md) | Reset the file permissions of a site | Accepted |
+| [0069](0069-application-profiles-and-wordpress-install.md) | Application profiles (vhost templates) and WordPress quick install | Proposed |
 
 Only the project owner sets a status to `Accepted`.
 

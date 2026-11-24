@@ -70,6 +70,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0065 | www/non-www redirect per site | Accepted on 2026-11-24 ([adr/0065](adr/0065-www-redirect-per-site.md)) | No |
 | 0066 | Password protection and IP rules per site | Accepted on 2026-11-24 ([adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md)) | No |
 | 0067 | Reset the file permissions of a site | Accepted on 2026-11-24 ([adr/0067](adr/0067-reset-site-permissions.md)) | Done |
+| 0069 | Application profiles (vhost templates) and WordPress quick install | Proposed (draft: [adr/0069](adr/0069-application-profiles-and-wordpress-install.md)) | **Yes** |
 
 ---
 
@@ -448,3 +449,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0067 Reset the file permissions of a site
 
 **Full text (status Accepted, 2026-11-24, by Kim):** [adr/0067](adr/0067-reset-site-permissions.md). Summary: a typed agent op `site.permissions.reset` gives every entry below a site's home back to the site user (home `site:www-data 0750`), directories `0755`, files `0644` or `0755` if executable, setuid/setgid/sticky removed, `.ssh` and `.gnupg` private (`0700`/`0600`). It walks on file descriptors only, never follows a link (the Git deploy link stays), skips other file systems, device files and hard links to foreign files and reports them. API `POST /api/v1/sites/{name}/permissions/reset` (scope `sites:write`, own sites), audited, CLI `hostashi api sites reset-permissions`. No new `os/exec` exception.
+
+## ADR-0069 Application profiles (vhost templates) and WordPress quick install
+
+**Full text (status Proposed, drafted 2026-11-25):** [adr/0069](adr/0069-application-profiles-and-wordpress-install.md). Summary: vhost templates become typed application profiles of the PHP type (ADR-0017 Part 4): web root, front controller, presets, PHP defaults and suggested cron jobs, never nginx text. Recommended: built-in profiles (Generic PHP, WordPress, WooCommerce, Laravel, Symfony, Shopware 6, TYPO3, Drupal; Magento 2 later) plus own profiles as typed data with YAML import/export and a read-only preview; extra rules only through the ADR-0029 snippet slots. WordPress quick install through a pinned WP-CLI in a oneshot unit `hostashi-wp@<site>` as the site user, started by a Go runner with fixed sub-commands and secrets on stdin; this needs a new, narrow `os/exec` exception `internal/wpcli`. Open for Kim: own profiles yes or no, WP-CLI with the exception or pure Go, the list of built-in profiles.
