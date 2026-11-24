@@ -116,6 +116,7 @@ func unescapeFstab(s string) string {
 		if s[i] == '\\' && i+3 < len(s) {
 			if v, err := strconv.ParseUint(s[i+1:i+4], 8, 8); err == nil {
 				b.WriteByte(byte(v))
+
 				i += 3
 
 				continue
@@ -178,6 +179,7 @@ func (s System) FstabDevices() Check {
 	if err != nil {
 		return warn(id, "cannot read "+s.fstab()+": "+describe(err), "")
 	}
+
 	defer f.Close()
 
 	var waiting, optional []string

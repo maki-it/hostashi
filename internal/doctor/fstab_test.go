@@ -89,7 +89,7 @@ func fakeDev(t *testing.T, names ...string) string {
 	return dev
 }
 
-// TestFstabDevices: the incident on a server where a volume labelled web
+// TestFstabDevices: the incident on a server where a volume labeled web
 // was formatted again (now without a label), but /etc/fstab still mounted
 // LABEL=web on /home without nofail, so every login waited 90 seconds.
 func TestFstabDevices(t *testing.T) {
