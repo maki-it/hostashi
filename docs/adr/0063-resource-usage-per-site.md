@@ -1,6 +1,6 @@
 # ADR-0063 Resource usage per site
 
-**Status:** Proposed. **Date drafted:** 2026-11-24. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0015 (resource limits), ADR-0022 (metrics), ADR-0032 (SSH per site), ADR-0034 (firewall), ADR-0035 (roles), ADR-0052 (server dashboard), ADR-0053 (site logs), ADR-0058 (OpenAPI and CLI).
+**Status:** Accepted (Kim, 2026-11-24). **Date drafted:** 2026-11-24. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0015 (resource limits), ADR-0022 (metrics), ADR-0032 (SSH per site), ADR-0034 (firewall), ADR-0035 (roles), ADR-0052 (server dashboard), ADR-0053 (site logs), ADR-0058 (OpenAPI and CLI).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 

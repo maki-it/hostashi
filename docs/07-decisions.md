@@ -66,7 +66,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0060 | Time zone, hostname and reboot from the panel | Accepted on 2026-11-22 ([adr/0060](adr/0060-time-zone-hostname-and-reboot.md)) | No |
 | 0061 | Site type Python | Accepted on 2026-11-22 ([adr/0061](adr/0061-site-type-python.md)) | No |
 | 0062 | Git deploy per site | Accepted on 2026-11-24 ([adr/0062](adr/0062-git-deploy-per-site.md)) | No |
-| 0063 | Resource usage per site | Proposed ([adr/0063](adr/0063-resource-usage-per-site.md)) | No |
+| 0063 | Resource usage per site | Accepted on 2026-11-24 ([adr/0063](adr/0063-resource-usage-per-site.md)) | No |
 
 ---
 
@@ -432,4 +432,4 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0063 Resource usage per site
 
-**Full text (status Proposed):** [adr/0063](adr/0063-resource-usage-per-site.md). Summary: Kim wants CPU, memory and network per site to see which site uses the most. Recommended: the agent reads CPU, memory working set, tasks and disk I/O from each site's slice and its SSH user slice (read-only op `sites.stats`, `IOAccounting=yes` on the slices); web traffic (bytes in and out, requests) from a small extra nginx log per site without IPs or paths; the panel samples every 15 s and keeps tiers like the server dashboard (new table `site_samples`). UI: a "Sites by usage" ranking for admins and a "Usage" tab per site. Outgoing traffic of the site's processes through nftables counters comes later in an addendum. cgroups have no network counters, and SQL load in the shared database server is not counted per site.
+**Full text (status Accepted, 2026-11-24, by Kim):** [adr/0063](adr/0063-resource-usage-per-site.md). Summary: Kim wants CPU, memory and network per site to see which site uses the most. Recommended: the agent reads CPU, memory working set, tasks and disk I/O from each site's slice and its SSH user slice (read-only op `sites.stats`, `IOAccounting=yes` on the slices); web traffic (bytes in and out, requests) from a small extra nginx log per site without IPs or paths; the panel samples every 15 s and keeps tiers like the server dashboard (new table `site_samples`). UI: a "Sites by usage" ranking for admins and a "Usage" tab per site. Outgoing traffic of the site's processes through nftables counters comes later in an addendum. cgroups have no network counters, and SQL load in the shared database server is not counted per site. Decided by Kim on 2026-11-24: web traffic now, outgoing traffic later.
