@@ -58,6 +58,8 @@ type System struct {
 	OSRelease string                                     // default /etc/os-release
 	MountInfo string                                     // default /proc/1/mountinfo
 	Statfs    func(path string, st *unix.Statfs_t) error // default unix.Statfs
+	Fstab     string                                     // default /etc/fstab
+	DevDir    string                                     // default /dev
 }
 
 func (s System) osRelease() string {

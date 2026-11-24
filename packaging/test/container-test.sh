@@ -146,9 +146,9 @@ if out=$(x /opt/hostashi/install.sh apply --yes --no-apt --binary /opt/hostashi/
 fi
 grep -q 'missing package(s) with --no-apt: restic' <<<"$out" || fail "--no-apt did not name restic: $out"
 x grep -q 'missing package(s) with --no-apt: restic' /var/log/hostashi-install.log || fail "--no-apt did not log restic"
-x dpkg-query -W -f "\${Status}" restic 2>/dev/null | grep -q 'install ok installed' && fail "--no-apt installed restic"
+x dpkg-query -W -f "\${Status}" restic 2>/dev/null | grep 'install ok installed' >/dev/null && fail "--no-apt installed restic"
 x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com >/dev/null || fail "apply did not bring restic back"
-x dpkg-query -W -f "\${Status}" restic | grep -q 'install ok installed' || fail "restic not reinstalled"
+x dpkg-query -W -f "\${Status}" restic | grep 'install ok installed' >/dev/null || fail "restic not reinstalled"
 
 step "apply saves its options, upgrade reuses them (ADR-0050)"
 [ "$(x stat -c '%a %U:%G' /etc/hostashi/install.options)" = "600 root:root" ] || fail "install.options owner or mode"
@@ -227,14 +227,14 @@ for id in system.os system.pool service.panel service.nginx service.mariadb serv
 done
 grep -Eq "^  WARN  system.quota " <<<"$doc" || fail "doctor: no quota warning on an overlay root"
 # system.proc reads PID 1's mounts: the agent's own /proc has no hidepid.
-for id in system.updates system.reboot system.php system.files system.sysctl system.proc; do
+for id in system.updates system.reboot system.php system.files system.sysctl system.proc system.fstab; do
   grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"
 done
 # This test passes --no-firewall (the container shares the host's network).
 grep -Eq "^  WARN  system.firewall .*--no-firewall" <<<"$doc" || fail "doctor: no warning for --no-firewall"
 grep -Eq "^  (ok  |WARN)  system.ssh " <<<"$doc" || fail "doctor: no SSH check"
 [ "$rc" = 0 ] || fail "doctor exited $rc"
-x /usr/local/bin/hostashi doctor -json | grep -q '"id": "service.nginx"' || fail "doctor -json"
+x /usr/local/bin/hostashi doctor -json | grep '"id": "service.nginx"' >/dev/null || fail "doctor -json"
 
 expect_mode() {
   local got
@@ -335,14 +335,14 @@ echo "$svc"
 for id in nginx mariadb fail2ban panel agent adminer; do
   grep -Eq "^$id +- +active " <<<"$svc" || fail "service list: $id is not active"
 done
-x /usr/local/bin/hostashi service list -json | grep -q '"unit": "hostashi-agent.service"' || fail "service list -json"
+x /usr/local/bin/hostashi service list -json | grep '"unit": "hostashi-agent.service"' >/dev/null || fail "service list -json"
 for u in nginx.service mariadb.service; do
   [ "$(x systemctl show -p Restart --value $u)" = on-failure ] || fail "$u does not restart after a failure"
 done
 expect_mode /etc/systemd/system/mariadb.service.d/hostashi.conf "644 root:root"
 x /usr/local/bin/hostashi service nginx reload >/dev/null || fail "nginx reload through the API"
-x /usr/local/bin/hostashi service nginx restart | grep -q '"active": "active"' || fail "nginx restart through the API"
-x /usr/local/bin/hostashi service mariadb restart | grep -q '"active": "active"' || fail "mariadb restart through the API"
+x /usr/local/bin/hostashi service nginx restart | grep '"active": "active"' >/dev/null || fail "nginx restart through the API"
+x /usr/local/bin/hostashi service mariadb restart | grep '"active": "active"' >/dev/null || fail "mariadb restart through the API"
 for a in "nginx stop" "agent restart" "panel stop" "ssh stop" "firewall stop"; do
   # shellcheck disable=SC2086 # two words on purpose
   if x /usr/local/bin/hostashi service $a >/dev/null 2>&1; then fail "service $a was allowed"; fi
@@ -388,7 +388,7 @@ grep -q '"timezone":' <<<"$info" || fail "system info has no time zone"
 zones=$(x /usr/local/bin/hostashi system timezones) || fail "system timezones"
 grep -qx Europe/Berlin <<<"$zones" || fail "time zone list has no Europe/Berlin"
 old_tz=$(x timedatectl show -p Timezone --value)
-x /usr/local/bin/hostashi system timezone Europe/Berlin | grep -q '"timezone": "Europe/Berlin"' || fail "time zone not set"
+x /usr/local/bin/hostashi system timezone Europe/Berlin | grep '"timezone": "Europe/Berlin"' >/dev/null || fail "time zone not set"
 [ "$(x readlink -f /etc/localtime)" = /usr/share/zoneinfo/Europe/Berlin ] || fail "/etc/localtime does not point to Europe/Berlin"
 if x /usr/local/bin/hostashi system timezone Europe/Atlantis >/dev/null 2>&1; then fail "unknown time zone accepted"; fi
 if x /usr/local/bin/hostashi system timezone ../../etc/passwd >/dev/null 2>&1; then fail "path accepted as time zone"; fi
@@ -398,7 +398,7 @@ x /usr/local/bin/hostashi system timezone "${old_tz:-UTC}" >/dev/null || fail "t
 # agent then rewrites /etc/hosts in place.
 host=$(x hostname | tr '[:upper:]' '[:lower:]')
 if [[ "$host" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
-  x /usr/local/bin/hostashi system hostname "$host" | grep -q "\"hostname\": \"$host\"" || fail "hostname not set"
+  x /usr/local/bin/hostashi system hostname "$host" | grep "\"hostname\": \"$host\"" >/dev/null || fail "hostname not set"
   [ "$(x cat /etc/hostname)" = "$host" ] || fail "/etc/hostname is not $host"
   x grep -Eq "^127\.0\.1\.1[[:space:]]+$host\$" /etc/hosts || fail "/etc/hosts has no 127.0.1.1 line for $host"
 else
@@ -420,7 +420,7 @@ expect_mode /home/blog "750 blog:www-data"
 expect_mode /home/blog/htdocs "755 blog:blog"
 
 step "site users log in over SSH with keys from the agent's file only"
-x id -nG blog | grep -qw hostashi-sites || fail "site user is not in hostashi-sites"
+x id -nG blog | grep -w hostashi-sites >/dev/null || fail "site user is not in hostashi-sites"
 expect_mode /etc/hostashi-ssh/keys "755 root:root"
 expect_mode /etc/ssh/sshd_config.d/10-hostashi.conf "644 root:root"
 site_sshd=$(x /usr/sbin/sshd -T -C user=blog,host=client,addr=127.0.0.1)
@@ -439,13 +439,13 @@ x sh -c 'install -d -o blog -g blog -m 700 /home/blog/.ssh && install -o blog -g
 x /usr/sbin/sshd -p 2297 -o ListenAddress=127.0.0.1
 sshopt=(-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 x sh -c 'echo pwd >/root/t/batch'
-x sftp "${sshopt[@]}" -P 2297 -i /root/t/k -b /root/t/batch blog@127.0.0.1 | grep -q '/home/blog' || fail "SFTP with the site's key failed"
-if x ssh "${sshopt[@]}" -p 2297 -i /root/t/k blog@127.0.0.1 id 2>/dev/null | grep -q uid=; then fail "an SFTP-only key ran a command"; fi
+x sftp "${sshopt[@]}" -P 2297 -i /root/t/k -b /root/t/batch blog@127.0.0.1 | grep '/home/blog' >/dev/null || fail "SFTP with the site's key failed"
+if x ssh "${sshopt[@]}" -p 2297 -i /root/t/k blog@127.0.0.1 id 2>/dev/null | grep uid= >/dev/null; then fail "an SFTP-only key ran a command"; fi
 if x sftp "${sshopt[@]}" -P 2297 -i /root/t/r -b /root/t/batch blog@127.0.0.1 >/dev/null 2>&1; then fail "a key from the site's home was accepted"; fi
 # Hardening that comes with SSH (ADR-0032): the pool cannot be listed, and
 # /proc shows a site user only its own processes.
 expect_mode /home "711 root:root"
-x findmnt -no OPTIONS /proc | tr , '\n' | grep -qx hidepid=invisible || fail "/proc without hidepid: $(x findmnt -no OPTIONS /proc)"
+x findmnt -no OPTIONS /proc | tr , '\n' | grep -x hidepid=invisible >/dev/null || fail "/proc without hidepid: $(x findmnt -no OPTIONS /proc)"
 x grep -qE '^proc[[:space:]]+/proc[[:space:]]+proc[[:space:]]+defaults,hidepid=invisible,gid=[0-9]+' /etc/fstab || fail "no /proc line in fstab"
 x runuser -u blog -- ls /home >/dev/null 2>&1 && fail "a site user can list /home"
 x runuser -u blog -- test -d /home/blog/htdocs || fail "a site user cannot reach its own home"
@@ -526,7 +526,7 @@ sock=$(x /usr/local/bin/hostashi site files blog)
 expect_mode "$sock" "660 root:hostashi"
 expect_mode /etc/systemd/system/hostashi-files@blog.service.d/50-hostashi-site.conf "644 root:root"
 fm() { x curl -fsS --unix-socket "$sock" "http://files$1" "${@:2}"; }
-fm '/v1/list?path=htdocs' | grep -q '"name":"index.html"' || fail "helper does not list the web root"
+fm '/v1/list?path=htdocs' | grep '"name":"index.html"' >/dev/null || fail "helper does not list the web root"
 [ "$(fm '/v1/file?path=htdocs/index.html')" = "hello from blog" ] || fail "helper download differs"
 fm /v1/mkdir -X POST -d '{"path":"htdocs/fm"}' >/dev/null || fail "helper mkdir failed"
 fm '/v1/file?path=htdocs/fm/new.txt' -X PUT --data-binary 'from the panel' >/dev/null || fail "helper write failed"
@@ -926,7 +926,7 @@ grep -q "/user.slice/user-$wpuid.slice/" <<<"$out" || fail "SSH session not in u
 # Back to SFTP only: no shell, and commands are refused.
 [ "$(api PUT "/api/v1/sites/wp/ssh-keys/$keyid" '{"label":"laptop","access":"sftp"}')" = 200 ] || fail "change SSH key: $(x cat /tmp/api.out)"
 [ "$(x getent passwd wp | cut -d: -f7)" = /usr/sbin/nologin ] || fail "wp kept its login shell without a shell key"
-if x ssh "${sshopt[@]}" -p 2297 -i /root/t/k wp@127.0.0.1 id 2>/dev/null | grep -q uid=; then fail "an SFTP-only key ran a command"; fi
+if x ssh "${sshopt[@]}" -p 2297 -i /root/t/k wp@127.0.0.1 id 2>/dev/null | grep uid= >/dev/null; then fail "an SFTP-only key ran a command"; fi
 [ "$(api DELETE "/api/v1/sites/wp/ssh-keys/$keyid")" = 204 ] || fail "delete SSH key: $(x cat /tmp/api.out)"
 x grep -q '^restrict' /etc/hostashi-ssh/keys/wp && fail "deleted key still in the key file"
 if x sftp "${sshopt[@]}" -P 2297 -i /root/t/k -b /dev/null wp@127.0.0.1 >/dev/null 2>&1; then fail "a deleted key still logs in"; fi
@@ -1019,7 +1019,7 @@ x mariadb -e 'CREATE TABLE wp_ext.t (i INT); INSERT INTO wp_ext.t VALUES (11)'
 api_job wp_ext
 expect_mode /home/wp/ext.sql.gz "600 wp:wp"
 # mariadb-dump 11 writes the rows of an INSERT on lines of their own.
-x sh -c 'zcat /home/wp/ext.sql.gz | grep -q "CREATE TABLE .t." && zcat /home/wp/ext.sql.gz | grep -q "(11)"' ||
+x sh -c 'zcat /home/wp/ext.sql.gz | grep "CREATE TABLE .t." >/dev/null && zcat /home/wp/ext.sql.gz | grep "(11)" >/dev/null' ||
   fail "external export lacks the table or its row: $(x sh -c 'zcat /home/wp/ext.sql.gz | grep -v "^/\*" | head -n 40')"
 x mariadb -e 'DROP TABLE wp_ext.t'
 [ "$(api POST /api/v1/databases/wp_ext/import '{"path":"ext.sql.gz"}')" = 202 ] || fail "external import: $(x cat /tmp/api.out)"
@@ -1029,7 +1029,7 @@ api_job wp_ext
 ! x sh -c 'grep -rq password /var/lib/hostashi-agent/dbjobs/' || fail "a job record kept the password"
 [ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User LIKE 'hostashi\\_job\\_%'")" ] || fail "temporary job user left behind"
 # The unit reached the server only through its drop-in.
-x sh -c "grep -h '^IPAddressAllow=' /etc/systemd/system/hostashi-dbjob@*.service.d/job.conf | grep -qx 'IPAddressAllow=$ext_ip'" ||
+x sh -c "grep -h '^IPAddressAllow=' /etc/systemd/system/hostashi-dbjob@*.service.d/job.conf | grep -x 'IPAddressAllow=$ext_ip' >/dev/null" ||
   fail "job drop-in: $(x sh -c 'cat /etc/systemd/system/hostashi-dbjob@*.service.d/job.conf')"
 [ "$(api DELETE /api/v1/databases/wp_ext)" = 204 ] || fail "delete external database: $(x cat /tmp/api.out)"
 [ "$(api DELETE /api/v1/db-servers/ext)" = 204 ] || fail "remove external server: $(x cat /tmp/api.out)"
@@ -1102,14 +1102,14 @@ for sock in /run/hostashi-php/shop/php-fpm.sock /run/hostashi-panel.sock /run/ho
   [ "$rc" = 7 ] || fail "wp connects to $sock (curl exit $rc)"
 done
 # Processes: hidepid hides shop's processes from wp.
-pid=$(x pgrep -u shop -x sleep | head -1)
+pid=$(x pgrep -o -u shop -x sleep)
 [ -n "$pid" ] || fail "no process of shop to look for"
 if as_wp pgrep -u shop >/dev/null; then fail "wp sees shop's processes"; fi
 if as_wp test -e "/proc/$pid"; then fail "wp sees /proc/$pid of shop"; fi
 # Databases: wp's own login reaches only its own database, and the socket
 # does not let the system user wp in.
 if x mariadb -u wp_api "-p$dbpw" -Nse 'SELECT 1' shop_db 2>/dev/null; then fail "wp's database user opens shop_db"; fi
-x mariadb -u wp_api "-p$dbpw" -Nse 'SHOW DATABASES' | grep -qx shop_db && fail "wp's database user lists shop_db"
+x mariadb -u wp_api "-p$dbpw" -Nse 'SHOW DATABASES' | grep -x shop_db >/dev/null && fail "wp's database user lists shop_db"
 if as_wp mariadb -Nse 'SELECT 1' 2>/dev/null; then fail "system user wp logs in to MariaDB over the socket"; fi
 # The same from wp's PHP code.
 xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/iso.php' <<'PHP'
@@ -1165,7 +1165,7 @@ done
 x /usr/local/bin/hostashi pool add vol1 /srv/vol1 || fail "pool add"
 expect_mode /srv/vol1 "711 root:root"
 expect_mode /srv/vol1/.hostashi-pool "644 root:root"
-x /usr/local/bin/hostashi pool list | grep -q "^vol1	/srv/vol1	sites=0	quota=$volquota$" || fail "pool list: $(x /usr/local/bin/hostashi pool list)"
+x /usr/local/bin/hostashi pool list | grep "^vol1	/srv/vol1	sites=0	quota=$volquota$" >/dev/null || fail "pool list: $(x /usr/local/bin/hostashi pool list)"
 # The running PHP master of wp got the new pool hidden right away.
 wpunit="hostashi-php-$ver@wp.service"
 x grep -qx 'TemporaryFileSystem=/srv/vol1:ro' "/etc/systemd/system/$wpunit.d/50-hostashi-slice.conf" || fail "wp's drop-in does not hide vol1"
@@ -1176,8 +1176,8 @@ expect_mode /srv/vol1/big "750 big:www-data"
 xi runuser -u big -- sh -c 'cat >/srv/vol1/big/htdocs/index.php' <<<'<?php echo "big on vol1";'
 [ "$(x curl -fsS -H 'Host: big.example.com' http://127.0.0.1/)" = "big on vol1" ] || fail "site on vol1 does not answer"
 bigunit="hostashi-php-$ver@big.service"
-x systemctl show -p RequiresMountsFor --value "$bigunit" | grep -qw /srv/vol1/big || fail "big's PHP unit does not require its volume"
-x systemctl show -p After --value "$bigunit" | grep -qw srv-vol1.mount || fail "big's PHP unit is not ordered after its volume"
+x systemctl show -p RequiresMountsFor --value "$bigunit" | grep -w /srv/vol1/big >/dev/null || fail "big's PHP unit does not require its volume"
+x systemctl show -p After --value "$bigunit" | grep -w srv-vol1.mount >/dev/null || fail "big's PHP unit is not ordered after its volume"
 # Each master sees only its own home, on either pool.
 seen=$(x sh -c "ls -A /proc/\$(systemctl show -p MainPID --value $wpunit)/root/srv/vol1")
 [ -z "$seen" ] || fail "wp's PHP master sees on vol1: $seen"
@@ -1402,7 +1402,7 @@ want=$(x sh -c "ssh-keyscan -p $bk_port -t ed25519 $bk_host 2>/dev/null | grep -
 x grep -q '"ready":true' /tmp/api.out || fail "not ready after the host key: $(x cat /tmp/api.out)"
 rm -f /tmp/bk.$$
 [ "$(x systemctl is-enabled hostashi-backup.timer)" = enabled ] || fail "backup timer not on after setup"
-x systemctl cat hostashi-backup.timer | grep -q '^OnCalendar=\*-\*-\* 02:00:00$' || fail "timer window not applied"
+x systemctl cat hostashi-backup.timer | grep '^OnCalendar=\*-\*-\* 02:00:00$' >/dev/null || fail "timer window not applied"
 x /usr/local/bin/hostashi backup key show | grep '^restic password: ' >/dev/null || fail "backup key show"
 r() { x env "RESTIC_REPOSITORY=sftp://$bk_user@$bk_host:$bk_port/$bk_path" RESTIC_PASSWORD_FILE=/etc/hostashi-agent/backup/password \
   restic -o 'sftp.args=-F /dev/null -i /etc/hostashi-agent/backup/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/hostashi-agent/backup/known_hosts' --no-cache "$@"; }
@@ -1454,8 +1454,8 @@ restore() {
   x grep -o '"dir":"restore-[0-9-]*"' /tmp/api.out | cut -d'"' -f4
 }
 [ "$(api GET /api/v1/sites/bk/backups)" = 200 ] || fail "snapshot list"
-files_snap=$(x grep -o '"id":"[0-9a-f]\{64\}","time":"[^"]*","kind":"files"' /tmp/api.out | head -1 | cut -d'"' -f4)
-db_snap=$(x grep -o '"id":"[0-9a-f]\{64\}","time":"[^"]*","kind":"db"' /tmp/api.out | head -1 | cut -d'"' -f4)
+files_snap=$(x grep -o '"id":"[0-9a-f]\{64\}","time":"[^"]*","kind":"files"' /tmp/api.out | sed -n 1p | cut -d'"' -f4)
+db_snap=$(x grep -o '"id":"[0-9a-f]\{64\}","time":"[^"]*","kind":"db"' /tmp/api.out | sed -n 1p | cut -d'"' -f4)
 [ -n "$files_snap" ] && [ -n "$db_snap" ] || fail "no snapshot ids in $(x cat /tmp/api.out)"
 dir=$(restore "$files_snap")
 [ "$(x cat "/home/bk/$dir/htdocs/index.html")" = "backed up" ] || fail "restored file"
@@ -1677,9 +1677,9 @@ UNIT
   [ "$(api PUT /api/v1/sites/secure/hsts '{"enabled":true}')" = 200 ] || fail "HSTS on: $(x cat /tmp/api.out)"
   [ "$(hdr strict-transport-security)" = "strict-transport-security: max-age=31536000" ] ||
     fail "HSTS header: '$(hdr strict-transport-security)'"
-  if x sh -c 'nginx -V 2>&1' | grep -q -- --with-http_v3_module; then
+  if x sh -c 'nginx -V 2>&1' | grep -- --with-http_v3_module >/dev/null; then
     [ "$(hdr alt-svc)" = 'alt-svc: h3=":443"; ma=86400' ] || fail "Alt-Svc header: '$(hdr alt-svc)'"
-    if x curl -V | grep -q 'Features:.* HTTP3'; then
+    if x curl -V | grep 'Features:.* HTTP3' >/dev/null; then
       out=$(x curl -fsSk --http3-only -o /tmp/h3.out -w '%{http_version}' --resolve www.secure.example.com:443:127.0.0.1 https://www.secure.example.com/)
       [ "$out" = 3 ] && [ "$(x cat /tmp/h3.out)" = "hello over https" ] || fail "HTTP/3 answered '$out' '$(x cat /tmp/h3.out)'"
       # Unknown names over QUIC get no certificate either.
@@ -1753,7 +1753,7 @@ UNIT
   grep -q '"agent":"ok"' <<<"$health" || fail "panel on 443: $health"
   # Browsers switch to HTTP/3 after the Alt-Svc header; those requests have
   # no Host header, and the panel answered 400 (v0.2.0).
-  if x curl -V | grep -q 'Features:.* HTTP3'; then
+  if x curl -V | grep 'Features:.* HTTP3' >/dev/null; then
     out=$(p443 --http3-only -o /tmp/h3.out -w '%{http_code} %{http_version}' https://other.example.com/api/v1/health) || true
     if [ "$out" != "200 3" ] || ! x grep -q '"agent":"ok"' /tmp/h3.out; then
       fail "panel over HTTP/3: '$out' '$(x cat /tmp/h3.out)'"
@@ -1808,7 +1808,7 @@ UNIT
   [ "$(p8444 -o /dev/null -w '%{http_code}' https://other.example.com:8444/tool.php)" = 404 ] || fail "tool.php reachable"
   x test -z "$(x ls -A /run/hostashi-adminer/tickets)" || fail "used ticket kept"
   [ "$(p8444 -o /dev/null -w '%{http_code}' https://other.example.com:8444/adminer.php)" = 404 ] || fail "adminer.php reachable"
-  rp=$(p8444 -o /dev/null -D - "https://other.example.com:8444/?username=$user&db=tooldb_wp" | tr -d '\r' | grep -i '^referrer-policy:' | head -n1)
+  rp=$(p8444 -o /dev/null -D - "https://other.example.com:8444/?username=$user&db=tooldb_wp" | tr -d '\r' | grep -i -m1 '^referrer-policy:')
   [ "$rp" = "referrer-policy: no-referrer" ] || fail "tool referrer policy: '$rp'"
   if x curl -sSk -o /dev/null --resolve unknown.example.com:8444:127.0.0.1 https://unknown.example.com:8444/ 2>/dev/null; then
     fail "tool port answered an unknown name"
@@ -1923,7 +1923,7 @@ x systemctl start hostashi-php-install@8.2.service || { x journalctl -u hostashi
 x /usr/local/lib/hostashi/php-install check 8.2 || fail "PHP 8.2 not set up after the unit ran"
 # The agent reads this log for the panel (ADR-0036).
 expect_mode /var/lib/hostashi-agent/php-install "700 root:root"
-x tail -n 1 /var/lib/hostashi-agent/php-install/8.2.log | grep -q '^php-install: done:' || fail "no final line in the unit's log: $(x tail -n 5 /var/lib/hostashi-agent/php-install/8.2.log)"
+x tail -n 1 /var/lib/hostashi-agent/php-install/8.2.log | grep '^php-install: done:' >/dev/null || fail "no final line in the unit's log: $(x tail -n 5 /var/lib/hostashi-agent/php-install/8.2.log)"
 x grep -qx 'Package: php-common php7.4\* php8.1\* php8.2\*' /etc/apt/preferences.d/hostashi-sury-php || fail "pin does not cover 8.2: $(x cat /etc/apt/preferences.d/hostashi-sury-php)"
 out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the panel's install changed something"; }
@@ -2028,7 +2028,7 @@ done
 [ "$state" = succeeded ] || fail "PostgreSQL client from the panel: $(x cat /tmp/api.out)"
 x grep -q "\"installed\":\\[\"$PG_NEWEST\"\\]" /tmp/api.out || fail "PostgreSQL client $PG_NEWEST not listed: $(x cat /tmp/api.out)"
 for b in pg_dump pg_restore psql; do
-  x "/usr/lib/postgresql/$PG_NEWEST/bin/$b" --version | grep -q "(PostgreSQL) $PG_NEWEST\." || fail "$b is not from PostgreSQL $PG_NEWEST"
+  x "/usr/lib/postgresql/$PG_NEWEST/bin/$b" --version | grep "(PostgreSQL) $PG_NEWEST\." >/dev/null || fail "$b is not from PostgreSQL $PG_NEWEST"
 done
 expect_mode /usr/share/keyrings/hostashi-pgdg.asc "644 root:root"
 expect_mode /etc/apt/preferences.d/hostashi-pgdg "644 root:root"
@@ -2037,7 +2037,7 @@ for p in "postgresql-client-$PG_NEWEST" libpq5; do
   case "$(origin "$p")" in *apt.postgresql.org*) ;; *) fail "$p does not come from apt.postgresql.org: $(origin "$p")";; esac
 done
 # shellcheck disable=SC2016 # a dpkg-query format
-! x dpkg-query -W -f='${Status}' "postgresql-$PG_NEWEST" 2>/dev/null | grep -q 'install ok installed' || fail "the PostgreSQL server was installed"
+! x dpkg-query -W -f='${Status}' "postgresql-$PG_NEWEST" 2>/dev/null | grep 'install ok installed' >/dev/null || fail "the PostgreSQL server was installed"
 [ "$(api POST /api/v1/db-servers/postgresql-client '{}')" = 409 ] || fail "second pg client install: $(x cat /tmp/api.out)"
 out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the PostgreSQL client install changed something"; }
@@ -2410,7 +2410,7 @@ if [ -n "${PEBBLE_DIR:-}" ]; then
     grep -o "class='error'>[^<]*" <<<"$page" || true
     docker logs --tail 30 "$pgname" 2>&1 || true
     x journalctl -u hostashi-adminer.service --no-pager -n 30 || true
-    pgca=$(x find /etc/hostashi-adminer/servers -name 'ca-*.pem' | head -n 1)
+    pgca=$(x find /etc/hostashi-adminer/servers -name 'ca-*.pem' -print -quit)
     pgconn="host=$ext_ip port=55433 dbname=toolpg_db user=pgadmin sslmode=verify-full sslrootcert=$pgca gssencmode=disable"
     x env PGPASSWORD=Pg-admin-pw-1234 "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
     x runuser -u hostashi-adminer -- env PGPASSWORD=Pg-admin-pw-1234 "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true

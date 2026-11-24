@@ -50,7 +50,7 @@ echo "--- build an initramfs with the module"
 IMG=$T/initrd.img-$KVER
 # --no-hostonly: the container's root is not a block device.
 check "dracut builds the image" dracut --force --no-hostonly --kver "$KVER" "$IMG"
-check "the module is in the image" bash -c "lsinitrd -m '$IMG' | grep -qx hostashi-quota"
+check "the module is in the image" bash -c "lsinitrd -m '$IMG' | grep -x hostashi-quota >/dev/null"
 check "image passes the installer's check" quota_initrd_ok "$IMG"
 conf=$(lsinitrd -f etc/hostashi-quota.conf "$IMG")
 check "the device is in the image" [ "$conf" = "DEVICE=/dev/disk/by-uuid/0b9a1c2e-1111-2222-3333-444455556666" ]
@@ -66,7 +66,7 @@ done
 echo "--- without the configuration, dracut leaves the module out"
 mv "$QUOTA_DRACUT_CONF" "$T/conf"
 check "dracut builds the image" dracut --force --no-hostonly --kver "$KVER" "$T/plain.img"
-check "the module is not in the image" bash -c "! lsinitrd -m '$T/plain.img' | grep -qx hostashi-quota"
+check "the module is not in the image" bash -c "! lsinitrd -m '$T/plain.img' | grep -x hostashi-quota >/dev/null"
 mv "$T/conf" "$QUOTA_DRACUT_CONF"
 
 echo "--- the hook from the image sets the features on a real ext4"
