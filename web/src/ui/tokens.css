@@ -61,6 +61,7 @@
   --qr-light: #fff;
   --ok: #0e6f8c;
   --ok-bg: #e3f1f6;
+  --selection: #b6d8ee;
   --warn: #a24b00;
   --warn-bg: #fbece0;
   --err: #b42318;
@@ -98,6 +99,7 @@
   --on-primary: #0d1f1a;
   --ok: #5bc0de;
   --ok-bg: #0f2c36;
+  --selection: #24506a;
   --warn: #f0a15a;
   --warn-bg: #3a2210;
   --err: #ff8f84;
@@ -134,6 +136,7 @@
     --on-primary: #0d1f1a;
     --ok: #5bc0de;
     --ok-bg: #0f2c36;
+    --selection: #24506a;
     --warn: #f0a15a;
     --warn-bg: #3a2210;
     --err: #ff8f84;

@@ -93,9 +93,14 @@ const theme = EditorView.theme({
   ".cm-content": { caretColor: "var(--fg)" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--fg)" },
   "&.cm-focused": { outline: "none" },
-  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": { backgroundColor: "var(--ok-bg)" },
+  // A clear selection colour; the active line is half transparent, since
+  // CodeMirror paints it over the selection layer.
+  // The selectors match CodeMirror's base theme, which would win otherwise
+  // with its fixed light colour (unreadable in the dark scheme).
+  "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, & > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-content ::selection":
+    { backgroundColor: "var(--selection)" },
   ".cm-gutters": { backgroundColor: "var(--sunken)", color: "var(--muted)", borderRight: "1px solid var(--line)" },
-  ".cm-activeLine": { backgroundColor: "var(--sunken)" },
+  ".cm-activeLine": { backgroundColor: "color-mix(in srgb, var(--sunken) 50%, transparent)" },
   ".cm-activeLineGutter": { backgroundColor: "var(--line)", color: "var(--fg)" },
   ".cm-matchingBracket": { outline: "1px solid var(--accent)", backgroundColor: "transparent" },
   ".cm-searchMatch": { backgroundColor: "var(--warn-bg)", outline: "1px solid var(--warn)" },
