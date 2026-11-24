@@ -258,6 +258,7 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 			registerCron(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerGit(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDeploys(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerWebhook(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSSH(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPHPSettings(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)

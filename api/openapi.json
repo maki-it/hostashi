@@ -7274,6 +7274,38 @@
           }
         },
         "type": "object"
+      },
+      "Webhook": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "path",
+          "secret"
+        ],
+        "type": "object"
+      },
+      "WebhookResult": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -10329,6 +10361,59 @@
         "summary": "Liveness of the panel, its agent and its database",
         "tags": [
           "system"
+        ],
+        "x-hostashi-access": "public"
+      }
+    },
+    "/api/v1/hooks/deploy/{id}": {
+      "post": {
+        "operationId": "callDeployWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookResult"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Deploy a site's branch on a push (called by the Git host, with a signature or token instead of a login)",
+        "tags": [
+          "git"
         ],
         "x-hostashi-access": "public"
       }
@@ -17100,6 +17185,103 @@
           }
         ],
         "summary": "Replace the deploy key of a site that deploys over SSH",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      }
+    },
+    "/api/v1/sites/{name}/git/webhook": {
+      "delete": {
+        "operationId": "deleteSiteGitWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Turn the deploy webhook of a site off",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      },
+      "post": {
+        "operationId": "setSiteGitWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Webhook"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Turn the deploy webhook of a site on, or give it a new secret; the secret is shown only here",
         "tags": [
           "git"
         ],
