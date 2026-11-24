@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Trash } from "@phosphor-icons/react";
 import { ApiError } from "./api";
-import { addPasskey, changePassword, deletePasskey, listPasskeys, message, totpDisable, type Passkey, type User } from "./auth";
+import { addPasskey, changePassword, deletePasskey, listPasskeys, message, totpDisable, totpReplace, totpReplaceConfirm, type Passkey, type User } from "./auth";
 import { TotpEnrolment } from "./SecondFactor";
 import { Button, Card, Field, IconButton, Notice, RelTime } from "./ui";
 import { passkeysSupported } from "./webauthn";
@@ -97,28 +97,46 @@ function PasswordSection() {
 
 function TotpSection({ user }: { user: User }) {
   const [on, setOn] = useState(!!user.totp);
-  const [mode, setMode] = useState<"" | "setup" | "off">("");
+  const [mode, setMode] = useState<"" | "setup" | "off" | "move">("");
+  const [moving, setMoving] = useState<{ secret: string; uri: string } | null>(null);
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
 
-  async function turnOff(e: FormEvent) {
+  function open(next: "setup" | "off" | "move") {
+    setError("");
+    setNote("");
+    setMoving(null);
+    setMode(next);
+  }
+
+  function close() {
+    setMoving(null);
+    setMode("");
+  }
+
+  // verify sends password and code for turning off or for moving.
+  async function verify(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError("");
     try {
-      await totpDisable(password, code.trim());
-      setOn(false);
-      setMode("");
-      setNote("The authenticator app is off. Its recovery codes no longer work.");
+      if (mode === "move") {
+        setMoving(await totpReplace(password, code.trim()));
+      } else {
+        await totpDisable(password, code.trim());
+        setOn(false);
+        setMode("");
+        setNote("The authenticator app is off. Its recovery codes no longer work.");
+      }
     } catch (err) {
       setError(securityMessage(err));
-      setCode("");
     } finally {
       setBusy(false);
       setPassword("");
+      setCode("");
     }
   }
 
@@ -139,12 +157,34 @@ function TotpSection({ user }: { user: User }) {
             }}
           />
           <div className="ui-row">
-            <Button onClick={() => setMode("")}>Cancel</Button>
+            <Button onClick={close}>Cancel</Button>
           </div>
         </>
-      ) : mode === "off" ? (
-        <form className="ui-stack ui-narrow" onSubmit={(e) => void turnOff(e)} noValidate>
-          <p className="ui-flush">To turn it off, enter your password and a current code from the app or a recovery code.</p>
+      ) : mode === "move" && moving ? (
+        <>
+          <p className="ui-flush">Your old app keeps working until the new one shows its first code here.</p>
+          <TotpEnrolment
+            intro=""
+            initial={moving}
+            confirm={totpReplaceConfirm}
+            submitLabel="Use the new app"
+            doneTitle="The new app is in use. Codes from the old app and the old recovery codes no longer work. Keep these new recovery codes somewhere safe; each one works once."
+            onDone={() => {
+              close();
+              setNote("The authenticator app was moved to the new device.");
+            }}
+          />
+          <div className="ui-row">
+            <Button onClick={close}>Cancel</Button>
+          </div>
+        </>
+      ) : mode === "off" || mode === "move" ? (
+        <form className="ui-stack ui-narrow" onSubmit={(e) => void verify(e)} noValidate>
+          <p className="ui-flush">
+            {mode === "move"
+              ? "To move to a new phone or app, enter your password and a current code from the old app. If the old phone is gone, use a recovery code."
+              : "To turn it off, enter your password and a current code from the app or a recovery code."}
+          </p>
           <Field label="Your password">
             <input className="ui-input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </Field>
@@ -153,10 +193,10 @@ function TotpSection({ user }: { user: User }) {
           </Field>
           {error && <Notice tone="err" title={error} />}
           <div className="ui-row">
-            <Button type="submit" variant="danger" disabled={busy || password === "" || code.trim() === ""}>
-              Turn off
+            <Button type="submit" variant={mode === "move" ? "primary" : "danger"} disabled={busy || password === "" || code.trim() === ""}>
+              {mode === "move" ? "Continue" : "Turn off"}
             </Button>
-            <Button disabled={busy} onClick={() => setMode("")}>
+            <Button disabled={busy} onClick={close}>
               Cancel
             </Button>
           </div>
@@ -166,32 +206,17 @@ function TotpSection({ user }: { user: User }) {
           <p className="ui-flush">
             {on ? "On. Logging in with your password asks for a code from the app." : "Off. Logging in with your password asks for nothing else."}
           </p>
-          {on && (
-            <p className="ui-flush ui-hint">
-              To move to another app or phone, turn it off and set it up again. If your role needs a second factor, add a passkey first.
-            </p>
-          )}
           {note && <Notice tone="ok" title={note} />}
           <div className="ui-row">
             {on ? (
-              <Button
-                variant="danger"
-                onClick={() => {
-                  setError("");
-                  setNote("");
-                  setMode("off");
-                }}
-              >
-                Turn off
-              </Button>
+              <>
+                <Button onClick={() => open("move")}>Move to a new device</Button>
+                <Button variant="danger" onClick={() => open("off")}>
+                  Turn off
+                </Button>
+              </>
             ) : (
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setNote("");
-                  setMode("setup");
-                }}
-              >
+              <Button variant="primary" onClick={() => open("setup")}>
                 Set up an authenticator app
               </Button>
             )}
@@ -201,7 +226,6 @@ function TotpSection({ user }: { user: User }) {
     </section>
   );
 }
-
 function PasskeySection() {
   const [keys, setKeys] = useState<Passkey[] | null>(null);
   const [name, setName] = useState("");

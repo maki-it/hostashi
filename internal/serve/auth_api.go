@@ -473,6 +473,56 @@ func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger)
 		w.WriteHeader(http.StatusNoContent)
 	})
 
+	// Moving TOTP to a new device needs the password and a current or
+	// recovery code; the old app works until the new one is confirmed.
+	mux.Op("POST /api/v1/auth/totp/replace", openapi.Operation{
+		ID: "replaceTOTP", Tag: "auth", Summary: "Start moving TOTP to a new device with password and a current code; returns the new secret",
+		In: totpDisableRequest{}, Out: totpEnrollJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		u, ok := current(w, r)
+		if !ok {
+			return
+		}
+
+		var in totpDisableRequest
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		secret, uri, err := svc.TOTPReplaceStart(r.Context(), u.ID, in.Password, in.Code)
+		if err != nil {
+			fail(w, err, "totp replace")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, totpEnrollJSON{Secret: secret, URI: uri})
+	})
+
+	mux.Op("POST /api/v1/auth/totp/replace/confirm", openapi.Operation{
+		ID: "confirmTOTPReplace", Tag: "auth", Summary: "Confirm the new device with a first code; returns new recovery codes once",
+		In: totpConfirmRequest{}, Out: recoveryCodesJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		u, ok := current(w, r)
+		if !ok {
+			return
+		}
+
+		var in totpConfirmRequest
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		codes, err := svc.TOTPReplaceConfirm(r.Context(), u.ID, in.Code)
+		if err != nil {
+			fail(w, err, "totp replace confirm")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, recoveryCodesJSON{RecoveryCodes: codes})
+	})
+
 	// The password changes only with the current one, from a browser
 	// session; the other sessions of the account end.
 	mux.Op("POST /api/v1/auth/password", openapi.Operation{

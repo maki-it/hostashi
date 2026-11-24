@@ -46,7 +46,8 @@ Admins and managers always need a second factor (authenticator app or passkey). 
 Under **Your account → Sign-in and security** every account manages its own login:
 
 - **Password:** enter the current one and the new one twice. Your other sessions are logged out; the browser you are in stays logged in.
-- **Authenticator app (TOTP):** set it up, or turn it off with your password and a current code or recovery code. To move to another phone, turn it off and set it up again. Admins and managers must keep a second factor, so add a passkey first.
+- **Authenticator app (TOTP):** set it up, or turn it off with your password and a current code or recovery code. Admins and managers must keep a second factor, so they can turn it off only while they have a passkey.
+- **Move to a new device:** for a new phone or another app, choose **Move to a new device**. Enter your password and a current code from the old app, or a recovery code if the old phone is gone. Scan the new QR code and enter the first code of the new app. Until then the old app keeps working. After that, the old app and the old recovery codes stop working, and you get new recovery codes.
 - **Passkeys:** add one with a name (for example the device), or remove one. A passkey counts as a second factor.
 
 If an email address is set, Hostashi sends a note for each of these changes.

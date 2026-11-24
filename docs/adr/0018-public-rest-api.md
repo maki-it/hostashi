@@ -42,7 +42,7 @@ Option A, with these rules:
 
 ### Reachability
 
-The API is served on the panel's own address and port, no separate listener. An optional IP allowlist restricts bearer-token access; browser sessions are not affected by it [V: Kim, thread, 2026-11-18].
+The API is served on the panel's own address and port, no separate listener. An optional IP allowlist restricts bearer-token access; browser sessions are not affected by it [V: Kim, thread, 2026-11-18]. 127.0.0.1 and ::1 are always allowed, so the `hostashi` command on the server keeps working [V: Kim, thread, 2026-11-24].
 
 ### Security boundary
 

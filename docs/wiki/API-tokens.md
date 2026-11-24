@@ -50,3 +50,13 @@ The list shows when and from which address each token was last used, so a token 
 Every new token and every revocation is written to the [audit log](Audit-log.md), and you get an email about a new token if you have [an address set](Email-notifications.md).
 
 There can be up to 100 working tokens per account.
+
+## Limit where tokens are accepted from
+
+Admins can allow tokens only from known addresses, for example the office, the VPN and the CI runners. Open **Firewall**, go to the card **API tokens** and enter one IP address or CIDR range per line. An empty list accepts tokens from anywhere.
+
+![Where API tokens are accepted from](images/firewall-api-tokens.png)
+
+The list applies to the tokens of every account, at once. It is not a firewall rule, so it works without the Hostashi firewall and has no rollback; logins in the browser are not affected, so a wrong list cannot lock you out of the panel. A token used from another address gets `403 ip_not_allowed`, and the attempt is written to the audit log.
+
+The server itself, `127.0.0.1` and `::1`, is always allowed, so the `hostashi` command on it keeps working whatever the list says. A token is still needed from there, so a local user of the server (for example a site's SSH account) gets no more than with any other address.

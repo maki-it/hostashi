@@ -20,9 +20,12 @@ const status = (state: Partial<FirewallState> = {}, extra: Partial<FirewallStatu
   ...extra,
 });
 
+// The API token card on the page loads its own list.
+const allow = { "GET /api/v1/settings/api-ip-allowlist": { body: { entries: [] } } };
+
 describe("Firewall", () => {
   it("explains a server installed without the firewall", async () => {
-    mockFetch({ "GET /api/v1/firewall": { body: status({}, { enabled: false }) } });
+    mockFetch({ ...allow, "GET /api/v1/firewall": { body: status({}, { enabled: false }) } });
     render(<Firewall />);
     expect(await screen.findByText(/installed with --no-firewall/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Apply rules" })).not.toBeInTheDocument();
@@ -31,7 +34,7 @@ describe("Firewall", () => {
   it("opens a port and keeps it when the panel still answers", async () => {
     const user = userEvent.setup();
     let current = status();
-    const calls = mockFetch({
+    const calls = mockFetch({ ...allow,
       "GET /api/v1/firewall": () => ({ body: current }),
       "PUT /api/v1/firewall": (body) => {
         const { state } = body as { state: FirewallState };
@@ -70,7 +73,7 @@ describe("Firewall", () => {
 
   it("refuses a port it cannot read", async () => {
     const user = userEvent.setup();
-    const calls = mockFetch({ "GET /api/v1/firewall": { body: status() } });
+    const calls = mockFetch({ ...allow, "GET /api/v1/firewall": { body: status() } });
     render(<Firewall />);
     await user.click(await screen.findByRole("button", { name: "Add port" }));
     await user.type(screen.getByLabelText("Port or range"), "http");
@@ -82,7 +85,7 @@ describe("Firewall", () => {
   it("asks before an allowlist without the admin's address, and waits for the SSH test", async () => {
     const user = userEvent.setup();
     let current = status();
-    const calls = mockFetch({
+    const calls = mockFetch({ ...allow,
       "GET /api/v1/firewall": () => ({ body: current }),
       "PUT /api/v1/firewall": (body) => {
         const { state, otherWay } = body as { state: FirewallState; otherWay: boolean };
@@ -122,7 +125,7 @@ describe("Firewall", () => {
 
   it("adds the admin's address", async () => {
     const user = userEvent.setup();
-    mockFetch({ "GET /api/v1/firewall": { body: status({ panelAllow: ["192.0.2.1"] }) } });
+    mockFetch({ ...allow, "GET /api/v1/firewall": { body: status({ panelAllow: ["192.0.2.1"] }) } });
     render(<Firewall />);
     await user.click(await screen.findByRole("button", { name: "Add my address to the panel" }));
     expect(screen.getByLabelText("Panel")).toHaveValue("192.0.2.1\n198.51.100.7");
@@ -131,7 +134,7 @@ describe("Firewall", () => {
   });
 
   it("reports a rollback and a change another browser waits for", async () => {
-    mockFetch({
+    mockFetch({ ...allow,
       "GET /api/v1/firewall": {
         body: status({}, { rolledBack: "2026-11-20T10:00:00Z", pending: { deadline: inTwoMinutes() } }),
       },
@@ -144,7 +147,7 @@ describe("Firewall", () => {
 
   it("says when the change was rolled back before the confirmation", async () => {
     const user = userEvent.setup();
-    mockFetch({
+    mockFetch({ ...allow,
       "GET /api/v1/firewall": { body: status() },
       "PUT /api/v1/firewall": { body: status({}, { pending: { id: ID, deadline: inTwoMinutes() } }) },
       "POST /api/v1/firewall/confirm": { status: 404, body: { error: { code: "not_pending", message: "x" } } },
