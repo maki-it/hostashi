@@ -142,9 +142,12 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     }
   }
 
+  // navScrolled draws a line under the brand once the nav scrolls under it.
+  const [navScrolled, setNavScrolled] = useState(false);
+
   return (
     <div className="ui-root app">
-      <aside className="app-side" data-open={menuOpen}>
+      <aside className="app-side" data-open={menuOpen} data-scrolled={navScrolled}>
         <div className="app-brand">
           <Mark />
           <span className="app-brand-name">
@@ -162,7 +165,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
             />
           </span>
         </div>
-        <nav aria-label="Main" id="app-nav" className="app-nav">
+        <nav aria-label="Main" id="app-nav" className="app-nav" onScroll={(e) => setNavScrolled(e.currentTarget.scrollTop > 0)}>
           {groups.map((g) => (
             <div className="app-nav-group" key={g.label ?? "top"}>
               {g.label && <h2 className="app-nav-label">{g.label}</h2>}

@@ -25,9 +25,17 @@
 
 .app-brand {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 10px;
-  padding: 4px 8px 6px;
+  margin: 0 -12px;
+  padding: 4px 20px 6px;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+/* A line under the brand once the nav scrolls under it */
+.app-side[data-scrolled="true"] .app-brand {
+  border-bottom-color: var(--side-line);
 }
 .app-mark {
   display: grid;
