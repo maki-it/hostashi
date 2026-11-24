@@ -84,6 +84,21 @@ func (h *siteOps) registerDeploy(s *agentrpc.Server) {
 
 		return res, mapDeployError(err)
 	})
+
+	h.registerDeployLog(s)
+}
+
+// registerDeployLog serves site.deploy.log.
+func (h *siteOps) registerDeployLog(s *agentrpc.Server) {
+	agentrpc.Handle(s, agentapi.DeployLogOp, func(ctx context.Context, _ agentrpc.Caller, req agentapi.DeployStatusRequest) (agentapi.DeployLog, error) {
+		if h.deploy == nil {
+			return agentapi.DeployLog{}, errNoDeploy
+		}
+
+		res, err := h.deploy.RunLog(ctx, req)
+
+		return res, mapDeployError(err)
+	})
 }
 
 func mapDeployError(err error) error {

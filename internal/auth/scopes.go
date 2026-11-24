@@ -30,6 +30,7 @@ var scopeCatalog = map[string]ScopeInfo{
 	"cron:read":               {Description: "List the cron jobs of sites with their last and next runs"},
 	"cron:write":              {Description: "Create, change, pause, run and delete cron jobs (they run commands as the site user)", HighRisk: true},
 	"git:write":               {Description: "Set the Git repository, token, deploy key and build commands of sites (the commands run as the site user)", HighRisk: true},
+	"git:deploy":              {Description: "Start a Git deploy of sites, roll back to a kept release and read the deploy logs (runs the stored build commands as the site user)"},
 	"ssh:read":                {Description: "List the SSH keys of sites with their fingerprints and access"},
 	"ssh:write":               {Description: "Add, change and delete SSH keys of sites (a key with shell access is a login as the site user)", HighRisk: true},
 	"limits:read":             {Description: "Read the limit presets and the resource limits and disk use of sites"},

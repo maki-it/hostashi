@@ -1156,6 +1156,61 @@ x test ! -e /home/wp || fail "PHP site home still there"
 [ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User='wp_api'")" ] || fail "database user of a deleted site still there"
 [ -z "$(x mariadb -Nse "SHOW DATABASES LIKE 'wp\_api'")" ] || fail "database of a deleted site still there"
 
+step "Git deploy of a site (ADR-0062)"
+[ "$(api POST /api/v1/sites '{"name":"gitsite","domains":["gitsite.example.com"]}')" = 201 ] || fail "create Git site: $(x cat /tmp/api.out)"
+x sh -c 'echo before > /home/gitsite/htdocs/before.txt && chown gitsite:gitsite /home/gitsite/htdocs/before.txt' || fail "seed the deploy directory"
+# A small public repository on GitHub, fetched with depth 1 by go-git.
+[ "$(api PUT /api/v1/sites/gitsite/git '{"url":"https://github.com/octocat/Hello-World.git","branch":"master","auth":"none","deployDir":"htdocs","keep":2,"buildTimeoutMinutes":5,"shared":[".env"],"commands":["test -f README","echo built > built.txt"]}')" = 200 ] ||
+  fail "set Git: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/gitsite/deploys)" = 202 ] || fail "start deploy: $(x cat /tmp/api.out)"
+did=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+[ "$(api POST /api/v1/sites/gitsite/deploys)" = 409 ] || fail "second deploy while one runs: $(x cat /tmp/api.out)"
+dstate=""
+for _ in $(seq 1 90); do
+  [ "$(api GET /api/v1/sites/gitsite/deploys)" = 200 ] || fail "list deploys: $(x cat /tmp/api.out)"
+  dstate=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["state"])')
+  case $dstate in succeeded | failed) break ;; esac
+  sleep 2
+done
+[ "$dstate" = succeeded ] || fail "deploy $did ended $dstate: $(x cat /tmp/api.out); log: $(x cat "/var/log/hostashi/app/gitsite/deploy-$did.log")"
+x grep -q '"commit":"[0-9a-f]\{40\}"' /tmp/api.out || fail "deploy without a commit: $(x cat /tmp/api.out)"
+[ "$(x readlink /home/gitsite/htdocs)" = ".deploy/releases/$did" ] || fail "htdocs is not the link to release $did: $(x ls -la /home/gitsite)"
+x test -f /home/gitsite/htdocs/README || fail "README not deployed"
+[ "$(x stat -c '%U' "/home/gitsite/.deploy/releases/$did/built.txt")" = gitsite ] || fail "build command did not run as the site user"
+[ "$(x stat -c '%U' /home/gitsite/htdocs)" = gitsite ] || fail "the deploy link is not the site user's"
+x test -f /home/gitsite/.deploy/releases/0-initial/before.txt || fail "the files from before the first deploy were not kept"
+x test -L /home/gitsite/htdocs/.env || fail "shared .env is no link"
+x test ! -e /home/gitsite/htdocs/.git || fail "release has a .git"
+body=$(x curl -fsS -H 'Host: gitsite.example.com' http://127.0.0.1/built.txt) || fail "nginx does not serve the release"
+[ "$body" = built ] || fail "release served '$body'"
+# The web server's settings apply again with the deploy link in place.
+[ "$(api PUT /api/v1/sites/gitsite/disabled '{"disabled":true}')" = 200 ] || fail "disable Git site: $(x cat /tmp/api.out)"
+[ "$(api PUT /api/v1/sites/gitsite/disabled '{"disabled":false}')" = 200 ] || fail "enable Git site: $(x cat /tmp/api.out)"
+expect_mode /var/lib/hostashi-deploy/gitsite/build.sh "640 root:gitsite"
+x test ! -e /run/hostashi-deploy/gitsite/token || fail "credentials left after the run"
+[ "$(api GET "/api/v1/sites/gitsite/deploys/$did/log")" = 200 ] || fail "deploy log: $(x cat /tmp/api.out)"
+x grep -q 'echo built' /tmp/api.out || fail "log without the build command: $(x cat /tmp/api.out)"
+# Rollback to the files from before is not offered; back to the deploy
+# itself is a switch without a build.
+[ "$(api POST "/api/v1/sites/gitsite/deploys/$did/rollback")" = 200 ] || fail "rollback: $(x cat /tmp/api.out)"
+x grep -q '"kind":"rollback"' /tmp/api.out || fail "rollback answer: $(x cat /tmp/api.out)"
+[ "$(x readlink /home/gitsite/htdocs)" = ".deploy/releases/$did" ] || fail "rollback moved the link"
+# A failing build never goes live.
+[ "$(api PUT /api/v1/sites/gitsite/git '{"url":"https://github.com/octocat/Hello-World.git","branch":"master","auth":"none","deployDir":"htdocs","keep":2,"buildTimeoutMinutes":5,"commands":["false"]}')" = 200 ] ||
+  fail "set failing build: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/gitsite/deploys)" = 202 ] || fail "start failing deploy: $(x cat /tmp/api.out)"
+for _ in $(seq 1 90); do
+  api GET /api/v1/sites/gitsite/deploys >/dev/null
+  dstate=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["state"])')
+  case $dstate in succeeded | failed) break ;; esac
+  sleep 2
+done
+[ "$dstate" = failed ] || fail "failing build ended $dstate"
+[ "$(x readlink /home/gitsite/htdocs)" = ".deploy/releases/$did" ] || fail "a failed build went live"
+[ "$(api DELETE /api/v1/sites/gitsite)" = 204 ] || fail "delete Git site: $(x cat /tmp/api.out)"
+x test ! -e /etc/systemd/system/hostashi-deploy@gitsite.service.d || fail "deploy drop-ins left after delete"
+x test ! -e /var/lib/hostashi-deploy/gitsite || fail "build script left after delete"
+
 step "backups with restic (ADR-0008)"
 [ "$(x restic version | cut -d' ' -f1)" = restic ] || fail "restic not installed"
 [ "$(x systemctl is-enabled hostashi-backup.timer)" = disabled ] || fail "backup timer on without a target"

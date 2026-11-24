@@ -257,6 +257,7 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 			registerParked(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerCron(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerGit(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerDeploys(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSSH(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPHPSettings(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
@@ -601,6 +602,11 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.Sites.EnableApps(hosting.RPCAgent{C: client})
 	deps.Sites.EnableAppEnv(box)
 	deps.Sites.EnableGit(box)
+	deps.Sites.EnableDeploys(hosting.RPCAgent{C: client})
+
+	// Deploy runs are followed in the panel; a restart picks them up.
+	go deps.Sites.RunDeploys(ctx)
+
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
 	m.RegisterSites(siteStats(client), cfg.Log)

@@ -23,6 +23,7 @@ var (
 	DeployStatusOp = agentrpc.Op[DeployStatusRequest, DeployStatus]{Name: "site.deploy.status"}
 	DeploySwitch   = agentrpc.Op[DeploySwitchRequest, DeploySwitchResult]{Name: "site.deploy.switch"}
 	DeployPrune    = agentrpc.Op[DeployPruneRequest, DeployReleases]{Name: "site.deploy.prune"}
+	DeployLogOp    = agentrpc.Op[DeployStatusRequest, DeployLog]{Name: "site.deploy.log"}
 )
 
 // The deploy files of a site below its home, all the site user's: the
@@ -211,4 +212,16 @@ func (r DeployPruneRequest) Validate() error {
 type DeployReleases struct {
 	Releases []string `json:"releases"`
 	Live     string   `json:"live"`
+}
+
+// MaxDeployLog is how much of a run's log site.deploy.log returns: its
+// end.
+const MaxDeployLog = 256 << 10
+
+// DeployLog is the log of a run (site.deploy.log), its end when it is
+// longer than MaxDeployLog; Truncated says so. A run without a log has
+// an empty one.
+type DeployLog struct {
+	Log       string `json:"log"`
+	Truncated bool   `json:"truncated"`
 }

@@ -372,3 +372,30 @@ func TestRemove(t *testing.T) {
 		t.Fatal("state kept")
 	}
 }
+
+func TestLog(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+
+	if l, err := e.m.RunLog(ctx, agentapi.DeployStatusRequest{Site: "blog", ID: 3}); err != nil || l.Log != "" || l.Truncated {
+		t.Fatalf("missing log %+v %v", l, err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(e.m.LogDir, "blog"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	big := strings.Repeat("a", agentapi.MaxDeployLog) + "end\n"
+	if err := os.WriteFile(e.m.LogFile("blog", 3), []byte(big), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	l, err := e.m.RunLog(ctx, agentapi.DeployStatusRequest{Site: "blog", ID: 3})
+	if err != nil || !l.Truncated || len(l.Log) != agentapi.MaxDeployLog || !strings.HasSuffix(l.Log, "end\n") {
+		t.Fatalf("log %d %v %v", len(l.Log), l.Truncated, err)
+	}
+
+	if _, err := e.m.RunLog(ctx, agentapi.DeployStatusRequest{Site: "other", ID: 3}); err == nil {
+		t.Fatal("unknown site accepted")
+	}
+}

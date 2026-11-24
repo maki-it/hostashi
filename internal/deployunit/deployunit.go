@@ -654,21 +654,47 @@ func clip(s string, n int) string {
 	return s
 }
 
-// logTail is the end of a run's log, "" if there is none.
-func logTail(name string) string {
+// RunLog returns the log of a run (site.deploy.log).
+func (m *Manager) RunLog(_ context.Context, req agentapi.DeployStatusRequest) (agentapi.DeployLog, error) {
+	if err := req.Validate(); err != nil {
+		return agentapi.DeployLog{}, err
+	}
+
+	if _, err := m.Site(req.Site); err != nil {
+		return agentapi.DeployLog{}, err
+	}
+
+	s, cut := readTail(m.LogFile(req.Site, req.ID), agentapi.MaxDeployLog)
+
+	return agentapi.DeployLog{Log: s, Truncated: cut}, nil
+}
+
+// readTail is the end of a file, at most n bytes, and whether it was cut;
+// "" if there is none.
+func readTail(name string, n int64) (string, bool) {
 	f, err := os.Open(name)
 	if err != nil {
-		return ""
+		return "", false
 	}
 	defer f.Close()
 
-	if fi, err := f.Stat(); err == nil && fi.Size() > agentapi.MaxDeployLogTail {
-		_, _ = f.Seek(-agentapi.MaxDeployLogTail, io.SeekEnd)
+	cut := false
+
+	if fi, err := f.Stat(); err == nil && fi.Size() > n {
+		_, _ = f.Seek(-n, io.SeekEnd)
+		cut = true
 	}
 
-	b, _ := io.ReadAll(io.LimitReader(f, agentapi.MaxDeployLogTail))
+	b, _ := io.ReadAll(io.LimitReader(f, n))
 
-	return strings.ToValidUTF8(string(b), "?")
+	return strings.ToValidUTF8(string(b), "?"), cut
+}
+
+// logTail is the end of a run's log, "" if there is none.
+func logTail(name string) string {
+	s, _ := readTail(name, agentapi.MaxDeployLogTail)
+
+	return s
 }
 
 // pruneLogs keeps the newest keepLogs logs of a site and the current one.
