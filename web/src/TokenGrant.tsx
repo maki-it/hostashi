@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { listScopes, type Scope } from "./device";
 import { listSites, type Site } from "./sites";
 import { Badge, Button, Field, Notice } from "./ui";
@@ -19,6 +19,74 @@ export type Grant = {
 export function grantReady(g: Grant): boolean {
   const d = Number(g.days);
   return g.scopes.size > 0 && (g.allSites || g.sites.size > 0) && (g.unlimited || (Number.isInteger(d) && d >= 1 && d <= 365));
+}
+
+// scopeGroups sorts the scope catalog into areas by the part before the
+// colon. A scope no group names lands in "Other", so a new one never hides.
+const scopeGroups: { id: string; label: string; areas: string[] }[] = [
+  {
+    id: "sites",
+    label: "Sites",
+    areas: ["sites", "sites.maintenance", "sites.snippets", "files", "logs", "cron", "ssh", "pages", "pagecache", "objectcache", "limits"],
+  },
+  { id: "databases", label: "Databases", areas: ["databases", "db_servers"] },
+  { id: "backups", label: "Backups", areas: ["backups"] },
+  { id: "server", label: "Server", areas: ["services", "system", "firewall", "doctor", "metrics", "php", "node", "python"] },
+  { id: "panel", label: "Panel", areas: ["audit", "migrations"] },
+];
+
+const actionOrder = ["read", "write", "purge", "install", "restore", "delete"];
+
+const areaOf = (s: Scope) => s.name.split(":")[0] ?? "";
+
+const isReading = (s: Scope) => s.name.endsWith(":read");
+
+/**
+ * scopeRows places each area on rows of its own: its reading scopes on the
+ * left, the ones that change on the right, so that sites:read and
+ * sites:write share a row and an area never shares one with the next.
+ * Row 1 holds the column headings.
+ */
+export function scopeRows(scopes: Scope[]): { scope: Scope; row: number }[] {
+  const out: { scope: Scope; row: number }[] = [];
+  let row = 2;
+  for (let i = 0; i < scopes.length; ) {
+    let j = i;
+    while (j < scopes.length && areaOf(scopes[j]!) === areaOf(scopes[i]!)) j++;
+    const area = scopes.slice(i, j);
+    const reads = area.filter(isReading);
+    const changes = area.filter((s) => !isReading(s));
+    reads.forEach((s, k) => out.push({ scope: s, row: row + k }));
+    changes.forEach((s, k) => out.push({ scope: s, row: row + k }));
+    row += Math.max(reads.length, changes.length);
+    i = j;
+  }
+  return out;
+}
+
+export type ScopeGroup = { id: string; label: string; scopes: Scope[] };
+
+/** groupScopes puts scopes into areas, each area's reading scope first. Empty groups are left out. */
+export function groupScopes(scopes: Scope[]): ScopeGroup[] {
+  const area = areaOf;
+  const rank = (list: string[], v: string) => (list.includes(v) ? list.indexOf(v) : list.length);
+  const out: ScopeGroup[] = scopeGroups.map((g) => ({ id: g.id, label: g.label, scopes: [] }));
+  const other: ScopeGroup = { id: "other", label: "Other", scopes: [] };
+  for (const s of scopes) {
+    const i = scopeGroups.findIndex((g) => g.areas.includes(area(s)));
+    (i >= 0 ? out[i]! : other).scopes.push(s);
+  }
+  out.push(other);
+  for (const [i, g] of out.entries()) {
+    const areas = scopeGroups[i]?.areas ?? [];
+    g.scopes.sort(
+      (a, b) =>
+        rank(areas, area(a)) - rank(areas, area(b)) ||
+        area(a).localeCompare(area(b)) ||
+        rank(actionOrder, a.name.split(":")[1] ?? "") - rank(actionOrder, b.name.split(":")[1] ?? ""),
+    );
+  }
+  return out.filter((g) => g.scopes.length > 0);
 }
 
 function toggle(set: Set<string>, name: string, on: boolean): Set<string> {
@@ -82,18 +150,44 @@ export function GrantFields({
             <Button onClick={() => pick(() => false)}>None</Button>
           </div>
         )}
-        {scopes?.map((s) => (
-          <label key={s.name} className="ui-check">
-            <input
-              type="checkbox"
-              checked={grant.scopes.has(s.name)}
-              onChange={(e) => onChange({ ...grant, scopes: toggle(grant.scopes, s.name, e.target.checked) })}
-            />
-            <span>
-              <code>{s.name}</code> {s.description} {s.highRisk && <Badge tone="warn">high risk</Badge>}
-            </span>
-          </label>
-        ))}
+        {scopes !== null &&
+          groupScopes(scopes).map((g) => (
+            <div key={g.label} className="ui-scope-group" role="group" aria-labelledby={"scope-group-" + g.id}>
+              <div className="ui-scope-head">
+                <h3 id={"scope-group-" + g.id}>{g.label}</h3>
+                <span className="ui-hint">
+                  {g.scopes.filter((s) => grant.scopes.has(s.name)).length} of {g.scopes.length}
+                </span>
+              </div>
+              <div className="ui-scope-grid">
+                <span className="ui-scope-col" aria-hidden="true">
+                  Read
+                </span>
+                <span className="ui-scope-col" aria-hidden="true">
+                  Change
+                </span>
+                {scopeRows(g.scopes).map(({ scope: s, row }) => (
+                  <label
+                    key={s.name}
+                    className={"ui-check ui-check-hint " + (isReading(s) ? "ui-scope-read" : "ui-scope-change")}
+                    style={{ "--scope-row": row } as CSSProperties}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={grant.scopes.has(s.name)}
+                      onChange={(e) => onChange({ ...grant, scopes: toggle(grant.scopes, s.name, e.target.checked) })}
+                    />
+                    <span>
+                      <span>
+                        <code>{s.name}</code> {s.highRisk && <Badge tone="warn">high risk</Badge>}
+                      </span>
+                      <span className="ui-hint">{s.description}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
       </fieldset>
       <fieldset className="ui-fieldset ui-stack-tight">
         <legend>Sites</legend>

@@ -579,6 +579,7 @@ a.ui-btn {
   align-items: flex-start;
 }
 .ui-check-hint input {
+  flex-shrink: 0;
   margin-top: 3px;
 }
 .ui-check-hint > span {
@@ -594,6 +595,52 @@ a.ui-btn {
 /* A card that needs an answer now, such as a change that rolls back */
 .ui-attention {
   border: 2px solid var(--accent);
+}
+/* Token scopes by area: a heading per area, the scopes in columns */
+.ui-scope-group {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+.ui-scope-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.ui-scope-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.ui-scope-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3) var(--space-5);
+}
+.ui-scope-col {
+  display: none;
+}
+/* Side by side: reading scopes on the left, the ones that change on the right */
+@media (min-width: 720px) {
+  .ui-scope-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ui-scope-col {
+    display: block;
+    font-family: var(--label-font);
+    font-size: var(--label-size);
+    letter-spacing: var(--label-ls);
+    text-transform: var(--label-tf);
+    color: var(--muted);
+  }
+  .ui-scope-read {
+    grid-column: 1;
+    grid-row: var(--scope-row);
+  }
+  .ui-scope-change {
+    grid-column: 2;
+    grid-row: var(--scope-row);
+  }
 }
 /* Two allowlists side by side, stacked on a phone */
 .ui-allow {
