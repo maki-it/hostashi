@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/maki-it/hostashi/internal/cpmigrate"
 )
 
 func TestWWWRedirectOverHTTP(t *testing.T) {
@@ -61,5 +63,38 @@ func TestWWWRedirectOverHTTP(t *testing.T) {
 
 	if r := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/nope/www", cookie: c, body: `{"mode":"off"}`}); r.Code != http.StatusNotFound && r.Code != http.StatusForbidden {
 		t.Errorf("unknown site: %d", r.Code)
+	}
+}
+
+// The CloudPanel import sets the www redirect of a created site; a site
+// without a pair stays as it is.
+func TestSiteCreatorSetsWWW(t *testing.T) {
+	e := newAPIWithAgent(t, &stubAgent{})
+	ctx := t.Context()
+	create := siteCreator(e.sites, nil)
+
+	if _, err := create(ctx, 1, cpmigrate.NewSite{Name: "shop", Domains: []string{"shop.example.com", "www.shop.example.com"}, WWWRedirect: "to-non-www"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if s, err := e.sites.Get(ctx, "shop"); err != nil || s.WWWRedirect != "to-non-www" {
+		t.Fatalf("shop: %q %v", s.WWWRedirect, err)
+	}
+
+	if _, err := create(ctx, 1, cpmigrate.NewSite{Name: "intra", Domains: []string{"intra.example.com", "www.intra.example.com"}, Proxy: "http://10.0.0.5:8080", WWWRedirect: "to-www"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if s, err := e.sites.Get(ctx, "intra"); err != nil || s.WWWRedirect != "to-www" {
+		t.Fatalf("proxy: %q %v", s.WWWRedirect, err)
+	}
+
+	// No pair: the site stands, the mode is not set.
+	if _, err := create(ctx, 1, cpmigrate.NewSite{Name: "lone", Domains: []string{"lone.example.com"}, WWWRedirect: "to-www"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if s, err := e.sites.Get(ctx, "lone"); err != nil || s.WWWRedirect != "" {
+		t.Fatalf("lone: %q %v", s.WWWRedirect, err)
 	}
 }

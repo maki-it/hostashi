@@ -63,6 +63,9 @@ type Site struct {
 	Type         string   `json:"type"`
 	Domains      []string `json:"domains"`
 	RedirectFrom []string `json:"redirectFrom"`
+	// WWWRedirect is the www redirect of the new site that takes over
+	// RedirectFrom's www host (ADR-0065), "" for none.
+	WWWRedirect string `json:"wwwRedirect,omitempty"`
 	DocRoot      string   `json:"docRoot"` // on the old server
 	PHP          string   `json:"php"`
 	// Proxy is the target of a reverse proxy site, the old proxy_pass
@@ -317,8 +320,13 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 		}
 	}
 
-	if len(ps.RedirectFrom) > 0 {
-		review("redirects", "redirect hosts are served as aliases until typed redirects exist")
+	// The www host becomes the site's www redirect (ADR-0065); other
+	// redirect hosts are served as aliases.
+	www, rest := WWWRedirect(ps.Domains, ps.RedirectFrom)
+	ps.WWWRedirect = www
+
+	if len(rest) > 0 {
+		review("redirects", "redirect hosts are served as aliases: "+strings.Join(rest, ", "))
 	}
 
 	for _, f := range s.Findings {
