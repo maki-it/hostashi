@@ -18,6 +18,16 @@ ClamAV needs memory while it scans: plan for about 1.5 GB of free RAM while a si
 
 You can also install it with the server: `install.sh apply --malware-scan` (see [Install](Install.md)).
 
+## Real-time scan
+
+With the virus scan on, an admin can also switch on the **Real-time scan** under **System → Virus scan**. ClamAV then watches the sites' homes and checks every file right after it is written or changed, for example an upload through a form, SFTP or the [file manager](File-manager.md).
+
+The real-time scan only reports. It does not block, move or delete a file: flagged files show up in the site's **Virus scan** tab as **Real time, today**, and you quarantine them as usual. Admins get at most one email per site and hour.
+
+It keeps the ClamAV daemon running all the time, so it needs about 1.5 GB of RAM permanently, not only during a scan. Switch it on only on servers with enough memory. While it is on, scheduled and manual scans use the daemon too.
+
+**Switch real-time scan off** stops the daemon and removes its package. Findings stay.
+
 ## Scan a site
 
 Open the site's **Virus scan** tab.
@@ -51,6 +61,7 @@ Everything on this page is in the API and the [command line](Command-line.md):
 ```sh
 hostashi api malware get-scan
 hostashi api malware set-scan on=true
+hostashi api malware set-scan realtime=true
 hostashi api malware start-site-scan blog
 hostashi api malware get-site-scan blog
 hostashi api malware quarantine-site-finding blog 21
