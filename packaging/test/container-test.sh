@@ -954,6 +954,11 @@ x grep -q 'hostashi-log-probe=shop' /var/log/nginx/sites/shop/access.log || fail
 if x grep -q 'hostashi-log-probe=shop' /var/log/nginx/sites/wp/access.log 2>/dev/null; then fail "shop's request in wp's access log"; fi
 [ "$(x stat -c '%U:%G %a' /var/log/nginx/sites/shop)" = "root:root 750" ] || fail "shop's log directory: $(x stat -c '%U:%G %a' /var/log/nginx/sites/shop)"
 if x runuser -u shop -- sh -c 'echo x >>/var/log/nginx/sites/shop/access.log' 2>/dev/null; then fail "shop writes its own access log"; fi
+# Web traffic per site (ADR-0063): nginx flushes the compact log within 5 s;
+# a line is "msec status request_length bytes_sent", without address or path.
+for _ in $(seq 20); do x test -s /var/log/nginx/sites/shop/traffic.log && break; sleep 0.5; done
+x grep -Eq '^[0-9]+\.[0-9]{3} 200 [0-9]+ [0-9]+$' /var/log/nginx/sites/shop/traffic.log || fail "shop's traffic log: $(x tail -n 3 /var/log/nginx/sites/shop/traffic.log 2>&1)"
+if x grep -q 'hostashi-log-probe' /var/log/nginx/sites/shop/traffic.log; then fail "shop's traffic log holds a path"; fi
 # PHP's errors land in shop's own file (ADR-0053).
 xi runuser -u shop -- sh -c 'cat >/home/shop/htdocs/warn.php' <<'PHP'
 <?php error_log("hostashi-log-probe"); echo "ok";
@@ -966,7 +971,7 @@ if as_wp cat /var/log/hostashi/php/shop/error.log >/dev/null 2>&1; then fail "wp
 if x runuser -u shop -- sh -c 'echo x >>/var/log/hostashi/php/shop/error.log' 2>/dev/null; then fail "shop writes its PHP log directly"; fi
 x logrotate --debug /etc/logrotate.d/hostashi >/tmp/logrotate.out 2>&1 || fail "logrotate rejects its file: $(x cat /tmp/logrotate.out)"
 x grep -q '^    rotate 7$' /etc/logrotate.d/hostashi || fail "logrotate retention is not the default 7 days"
-for log in /var/log/nginx/hostashi/access.log /var/log/nginx/hostashi/error.log /var/log/nginx/sites/shop/access.log /var/log/nginx/sites/shop/error.log; do
+for log in /var/log/nginx/hostashi/access.log /var/log/nginx/hostashi/error.log /var/log/nginx/sites/shop/access.log /var/log/nginx/sites/shop/error.log /var/log/nginx/sites/shop/traffic.log; do
   x test -f "$log" || fail "no $log"
   if as_wp cat "$log" >/dev/null 2>&1; then fail "wp reads $log"; fi
   if as_wp sh -c "echo x >>$log" 2>/dev/null; then fail "wp writes $log"; fi

@@ -13,6 +13,7 @@ import (
 	"github.com/maki-it/hostashi/internal/sites"
 	"github.com/maki-it/hostashi/internal/siteslice"
 	"github.com/maki-it/hostashi/internal/sitestats"
+	"github.com/maki-it/hostashi/internal/sitetraffic"
 )
 
 // statsOps serves metrics.snapshot (ADR-0022) and sites.stats (ADR-0063).
@@ -20,6 +21,7 @@ type statsOps struct {
 	h          *siteOps
 	disk       *sitestats.DiskCache
 	cgroupRoot string
+	traffic    *sitetraffic.Counter // nil: no site logs (tests)
 }
 
 func (o *statsOps) register(s *agentrpc.Server) {
@@ -41,6 +43,7 @@ func (o *statsOps) usage(ctx context.Context) agentapi.SitesStatsResponse {
 	}
 
 	out := agentapi.SitesStatsResponse{At: time.Now().UTC(), Sites: make([]agentapi.SiteUsage, 0, len(all))}
+	keep := make(map[string]bool, len(all))
 
 	for _, site := range all {
 		u, err := sitestats.ReadUsage(sitestats.SliceCgroup(o.cgroupRoot, site.User))
@@ -57,10 +60,27 @@ func (o *statsOps) usage(ctx context.Context) agentapi.SitesStatsResponse {
 			u = u.Add(s)
 		}
 
-		out.Sites = append(out.Sites, agentapi.SiteUsage{
+		su := agentapi.SiteUsage{
 			Name: site.User, CPUUsec: u.CPUUsec, MemoryBytes: u.MemoryBytes, CacheBytes: u.CacheBytes, MemoryKnown: u.MemoryKnown,
 			Tasks: u.Tasks, IOReadBytes: u.IOReadBytes, IOWriteBytes: u.IOWriteBytes, IOKnown: u.IOKnown,
-		})
+		}
+
+		if o.traffic != nil {
+			keep[site.User] = true
+
+			t, err := o.traffic.Read(site.User)
+			if err != nil {
+				o.h.log.WarnContext(ctx, "usage: read traffic log", "site", site.User, "err", err)
+			}
+
+			su.HTTPRequests, su.HTTPBytesIn, su.HTTPBytesOut = t.Requests, t.BytesIn, t.BytesOut
+		}
+
+		out.Sites = append(out.Sites, su)
+	}
+
+	if o.traffic != nil {
+		o.traffic.Forget(keep)
 	}
 
 	return out

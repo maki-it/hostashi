@@ -92,3 +92,11 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 None left.
 
 1. ~~Network: web traffic from a small nginx log now and outgoing traffic of the site's processes later (2A), or both at once (2B), or none (2D)?~~ Decided (Kim, 2026-11-24): web traffic now, outgoing traffic later (2A).
+
+## Implementation notes: counters in the agent (2026-11-24)
+
+Notes on how the first parts are built; they change no decision.
+
+- `sites.stats` reads `cpu.stat`, `memory.current`, `memory.stat`, `pids.current` and `io.stat` of the site's slice and, for uids from 1000, of `user.slice/user-<uid>.slice`, and sums both. A missing cgroup counts as zero, a missing file as accounting off; a file that does not parse is logged and the site answers empty, so one odd site never hides the others. Files are read up to 64 KiB [V: `internal/sitestats/usage_test.go`, `internal/agent/metrics_test.go`].
+- Web traffic: `internal/sitetraffic` opens `traffic.log` with the `sitelogs` rules (no symlinks, regular file of root), starts at the end of the file when it first sees it, reads at most 32 MiB of whole lines per call and keeps an unfinished last line for the next one. A rotated file is finished from `traffic.log.1` when it is still the same inode; a truncated file is read from the start [V: `internal/sitetraffic/sitetraffic_test.go`].
+- `traffic.log` goes through the existing logrotate rule of the site logs (`<site>/*.log`) and so keeps the log retention set in the panel (ADR-0053), not one day as written above; it holds no personal data [A].

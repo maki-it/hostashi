@@ -69,6 +69,11 @@ type SiteUsage struct {
 	IOReadBytes  uint64 `json:"ioReadBytes"`
 	IOWriteBytes uint64 `json:"ioWriteBytes"`
 	IOKnown      bool   `json:"ioKnown"`
+	// HTTP* count the site's traffic.log since the agent started: requests,
+	// bytes the clients sent and bytes nginx sent.
+	HTTPRequests uint64 `json:"httpRequests"`
+	HTTPBytesIn  uint64 `json:"httpBytesIn"`
+	HTTPBytesOut uint64 `json:"httpBytesOut"`
 }
 
 // SitesStatsResponse lists at most MaxSites sites, sorted by name.
