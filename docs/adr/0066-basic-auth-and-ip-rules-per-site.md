@@ -1,6 +1,6 @@
 # ADR-0066 Password protection and IP rules per site
 
-**Status:** Proposed. **Date drafted:** 2026-11-24. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0005 (nginx), ADR-0018 (API), ADR-0021 (fail2ban), ADR-0027 (maintenance pages), ADR-0029 (nginx snippets), ADR-0035 (roles), ADR-0046 (page cache), ADR-0053 (site logs), ADR-0054 (site types), ADR-0056 (security headers), ADR-0058 (OpenAPI and CLI), ADR-0059 (real client IP).
+**Status:** Accepted (Kim, 2026-11-24). **Date drafted:** 2026-11-24. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0005 (nginx), ADR-0018 (API), ADR-0021 (fail2ban), ADR-0027 (maintenance pages), ADR-0029 (nginx snippets), ADR-0035 (roles), ADR-0046 (page cache), ADR-0053 (site logs), ADR-0054 (site types), ADR-0056 (security headers), ADR-0058 (OpenAPI and CLI), ADR-0059 (real client IP).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -94,7 +94,7 @@ Bot blocking and rate limits per site, country blocking (needs a GeoIP database)
 
 ## Open questions for Kim
 
-None. Choices worth a second look: the hash cost (5), the bypass list, and that site users (role `user`) may set all of this for their own sites.
+None left. Kim accepted the recommendation as drafted on 2026-11-24, including bcrypt cost 5, path prefixes, the bypass list and that site users (role `user`) may set all of this for their own sites.
 
 ## Sandbox test (2026-11-24)
 

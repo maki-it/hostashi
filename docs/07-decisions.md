@@ -67,7 +67,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0061 | Site type Python | Accepted on 2026-11-22 ([adr/0061](adr/0061-site-type-python.md)) | No |
 | 0062 | Git deploy per site | Accepted on 2026-11-24 ([adr/0062](adr/0062-git-deploy-per-site.md)) | No |
 | 0063 | Resource usage per site | Accepted on 2026-11-24 ([adr/0063](adr/0063-resource-usage-per-site.md)) | No |
-| 0066 | Password protection and IP rules per site | Proposed ([adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md)) | Yes |
+| 0066 | Password protection and IP rules per site | Accepted on 2026-11-24 ([adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md)) | No |
 
 ---
 
@@ -437,4 +437,4 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0066 Password protection and IP rules per site
 
-**Full text (status Proposed, 2026-11-24):** [adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md). Summary: basic auth and IP blocking per site are P1. Recommended: typed settings instead of snippets. An IP rule per site (off, only these addresses, or block these addresses; up to 256 entries) and password protection for the whole site or a list of path prefixes (case-insensitive, through `map $uri` and a variable `auth_basic`), with up to 50 users whose bcrypt hashes (cost 5, about 3.5 ms per request) the panel makes, and an optional list of addresses that skip the password. The ACME and health locations always stay open, nginx does not pass the `Authorization` header on to the application, and the password file lives outside the site's home (root:www-data 0640, named by its content so rollbacks stay consistent). Real IP (ADR-0059) applies first. A fail2ban jail on the site error logs bans on ports 80 and 443. Everyone with a grant for the site may change it; snippets with the same directives are refused while the setting is on.
+**Full text (status Accepted, 2026-11-24, by Kim):** [adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md). Summary: basic auth and IP blocking per site are P1. Recommended: typed settings instead of snippets. An IP rule per site (off, only these addresses, or block these addresses; up to 256 entries) and password protection for the whole site or a list of path prefixes (case-insensitive, through `map $uri` and a variable `auth_basic`), with up to 50 users whose bcrypt hashes (cost 5, about 3.5 ms per request) the panel makes, and an optional list of addresses that skip the password. The ACME and health locations always stay open, nginx does not pass the `Authorization` header on to the application, and the password file lives outside the site's home (root:www-data 0640, named by its content so rollbacks stay consistent). Real IP (ADR-0059) applies first. A fail2ban jail on the site error logs bans on ports 80 and 443. Everyone with a grant for the site may change it; snippets with the same directives are refused while the setting is on.
