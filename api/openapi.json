@@ -6251,6 +6251,108 @@
         },
         "type": "object"
       },
+      "SiteSample": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "cache": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cpu": {
+            "type": "number"
+          },
+          "httpIn": {
+            "type": "number"
+          },
+          "httpOut": {
+            "type": "number"
+          },
+          "httpReq": {
+            "type": "number"
+          },
+          "ioRead": {
+            "type": "number"
+          },
+          "ioWrite": {
+            "type": "number"
+          },
+          "mem": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tasks": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "at",
+          "cache",
+          "cpu",
+          "httpIn",
+          "httpOut",
+          "httpReq",
+          "ioRead",
+          "ioWrite",
+          "mem",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "SiteTotal": {
+        "additionalProperties": false,
+        "properties": {
+          "cpuAvg": {
+            "type": "number"
+          },
+          "cpuMax": {
+            "type": "number"
+          },
+          "httpInBytes": {
+            "type": "number"
+          },
+          "httpOutBytes": {
+            "type": "number"
+          },
+          "httpRequests": {
+            "type": "number"
+          },
+          "ioReadBytes": {
+            "type": "number"
+          },
+          "ioWriteBytes": {
+            "type": "number"
+          },
+          "memAvg": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "memMax": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "site": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cpuAvg",
+          "cpuMax",
+          "httpInBytes",
+          "httpOutBytes",
+          "httpRequests",
+          "ioReadBytes",
+          "ioWriteBytes",
+          "memAvg",
+          "memMax",
+          "site"
+        ],
+        "type": "object"
+      },
       "SiteTypeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -6311,6 +6413,36 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "SiteUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/SiteSample"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "range": {
+            "type": "string"
+          },
+          "site": {
+            "type": "string"
+          },
+          "step": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "points",
+          "range",
+          "site",
+          "step"
+        ],
         "type": "object"
       },
       "SiteWebRequest": {
@@ -7082,6 +7214,32 @@
           "inodes",
           "inodesPercent",
           "level"
+        ],
+        "type": "object"
+      },
+      "UsageRanking": {
+        "additionalProperties": false,
+        "properties": {
+          "range": {
+            "type": "string"
+          },
+          "sites": {
+            "items": {
+              "$ref": "#/components/schemas/SiteTotal"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "sort": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "range",
+          "sites",
+          "sort"
         ],
         "type": "object"
       },
@@ -20030,6 +20188,68 @@
         "x-hostashi-action": "sites.type:write"
       }
     },
+    "/api/v1/sites/{name}/usage": {
+      "get": {
+        "operationId": "getSiteUsage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "1h, 24h, 7d or 30d; default 1h",
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteUsage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "CPU, memory, disk I/O and web traffic of a site over a range",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.usage:read"
+      }
+    },
     "/api/v1/sites/{name}/web": {
       "put": {
         "operationId": "setSiteWeb",
@@ -20806,6 +21026,69 @@
           "tokens"
         ],
         "x-hostashi-access": "session"
+      }
+    },
+    "/api/v1/usage/sites": {
+      "get": {
+        "operationId": "rankSiteUsage",
+        "parameters": [
+          {
+            "description": "1h, 24h, 7d or 30d; default 1h",
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "cpu, memory, traffic or io; default cpu",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageRanking"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "services:read"
+            ]
+          }
+        ],
+        "summary": "All sites by their usage over a range, the biggest first",
+        "tags": [
+          "services"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "usage:read"
       }
     },
     "/api/v1/users": {

@@ -124,8 +124,9 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	deps.NotifyPrefs = st
 	deps.MailHistory = st
 	sa := &stubServerAgent{}
-	mon := &servermon.Monitor{Agent: sa, Store: st}
+	mon := &servermon.Monitor{Agent: sa, Store: st, SiteAgent: sa, SiteStore: st}
 	deps.Monitor = mon
+	deps.Usage = mon
 	sys := newStubSystem()
 	deps.System = sys
 	deps.AuditLog = st

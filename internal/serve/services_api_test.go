@@ -16,9 +16,10 @@ import (
 )
 
 type stubServerAgent struct {
-	mu    sync.Mutex
-	acted []agentapi.ServiceActionRequest
-	err   error
+	mu        sync.Mutex
+	acted     []agentapi.ServiceActionRequest
+	siteCalls int
+	err       error
 }
 
 func (a *stubServerAgent) HostStats(context.Context) (agentapi.HostStats, error) {

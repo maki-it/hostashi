@@ -102,9 +102,12 @@ var table = map[Action]Rule{
 	"python:install":       server("python:install"),
 	"python:remove":        server("python:install"),
 	"services:read":        server("services:read"),
-	"services:write":       server("services:write"),
-	"system:read":          server("system:read"),
-	"system:write":         server("system:write"),
+	// All sites by their usage (ADR-0063): admins only, a site user never
+	// sees other sites' numbers.
+	"usage:read":     server("services:read"),
+	"services:write": server("services:write"),
+	"system:read":    server("system:read"),
+	"system:write":   server("system:write"),
 	// Rename a storage pool or make it the default (ADR-0016 addendum 2).
 	"pools:write": server("system:write"),
 	"web:sync":    server("sites:write"),
@@ -163,7 +166,9 @@ var table = map[Action]Rule{
 
 	// The day-to-day work on one's own site: everyone with a grant. All of
 	// it runs as the site's own Linux user inside its isolation.
-	"sites:read":           ownSite("sites:read"),
+	"sites:read": ownSite("sites:read"),
+	// The usage of one site (ADR-0063).
+	"sites.usage:read":     ownSite("sites:read"),
 	"sites.php:write":      ownSite("sites:write"),
 	"sites.hsts:write":     ownSite("sites:write"),
 	"sites.headers:write":  ownSite("sites:write"),

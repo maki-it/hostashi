@@ -177,6 +177,9 @@ type Deps struct {
 	// Monitor serves service management and the dashboard (ADR-0052); nil
 	// disables their routes. Needs Auth and Settings (for the audit log).
 	Monitor ServerMonitor
+	// Usage serves the resource usage per site (ADR-0063); nil disables
+	// its routes. Needs Sites.
+	Usage SiteUsage
 
 	// System serves the time zone, hostname and reboot (ADR-0060); nil
 	// disables their routes. Needs Auth and Settings (for the audit log).
@@ -366,6 +369,10 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		if deps.Monitor != nil && deps.Settings != nil {
 			registerServices(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Monitor, deps.Settings, log)
+		}
+
+		if deps.Usage != nil && deps.Sites != nil {
+			registerUsage(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Usage, hostingSiteExists(deps.Sites), log)
 		}
 
 		if deps.System != nil && deps.Settings != nil {
@@ -608,6 +615,7 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
 	m.RegisterSites(siteStats(client), cfg.Log)
+	m.RegisterSiteUsage(siteUsage(client), cfg.Log)
 	m.RegisterTokenExpiry(svc.MetricsTokenExpiry, cfg.Log)
 
 	// Operations emails (ADR-0044) for the accounts that switched them on.
@@ -640,9 +648,11 @@ func Run(ctx context.Context, cfg Config) error {
 	// Service outages are emailed too (ADR-0055).
 	mon := &servermon.Monitor{
 		Agent: RPCServerAgent{C: client}, Store: st, Log: cfg.Log,
-		Alerts: &notify.ServiceAlerts{Notifier: notifier, Log: cfg.Log},
+		Alerts:    &notify.ServiceAlerts{Notifier: notifier, Log: cfg.Log},
+		SiteAgent: RPCServerAgent{C: client}, SiteStore: st,
 	}
 	deps.Monitor = mon
+	deps.Usage = mon
 	deps.System = RPCSystemAgent{C: client}
 
 	go mon.Run(ctx)
@@ -817,6 +827,27 @@ func siteStats(c *agentrpc.Client) func(context.Context) ([]metrics.Site, error)
 				PHPMemoryBytes: s.PHPMemoryBytes, PHPMemoryKnown: s.PHPMemoryKnown,
 				DiskUsedBytes: s.DiskUsedBytes, DiskMeasuredAt: s.DiskMeasuredAt,
 				CacheMB: s.CacheMB, CacheUp: s.CacheUp, CacheMemoryBytes: s.CacheMemoryBytes, CacheMemoryKnown: s.CacheMemoryKnown,
+			})
+		}
+
+		return out, nil
+	}
+}
+
+// siteUsage reads the sites' usage counters for /metrics (ADR-0063).
+func siteUsage(c *agentrpc.Client) func(context.Context) ([]metrics.SiteUsage, error) {
+	return func(ctx context.Context) ([]metrics.SiteUsage, error) {
+		res, err := agentapi.SitesStats.Call(ctx, c, agentapi.SitesStatsRequest{})
+		if err != nil {
+			return nil, err
+		}
+
+		out := make([]metrics.SiteUsage, 0, len(res.Sites))
+		for _, s := range res.Sites {
+			out = append(out, metrics.SiteUsage{
+				Name: s.Name, CPUUsec: s.CPUUsec, MemoryBytes: s.MemoryBytes, MemoryKnown: s.MemoryKnown, Tasks: s.Tasks,
+				IOReadBytes: s.IOReadBytes, IOWriteBytes: s.IOWriteBytes, IOKnown: s.IOKnown,
+				HTTPRequests: s.HTTPRequests, HTTPBytesIn: s.HTTPBytesIn, HTTPBytesOut: s.HTTPBytesOut,
 			})
 		}
 

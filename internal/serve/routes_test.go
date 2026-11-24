@@ -310,6 +310,8 @@ var routeAccess = map[string]authz.Action{
 	"POST /api/v1/services/{id}/{action}":              "services:write",
 	"POST /api/v1/sites/{name}/services/{id}/{action}": "services:write",
 	"GET /api/v1/dashboard":                            "services:read",
+	"GET /api/v1/usage/sites":                          "usage:read",
+	"GET /api/v1/sites/{name}/usage":                   "sites.usage:read",
 	"GET /api/v1/system":                               "system:read",
 	"GET /api/v1/system/timezones":                     "system:read",
 	"PUT /api/v1/system/timezone":                      "system:write",
@@ -340,7 +342,7 @@ func newFullAPIMux(t *testing.T) (*apiEnv, *routeMux) {
 		PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb,
 		CloudPanel: e.cp, CloudPanelSource: newStubSource(t), Metrics: e.metrics, Settings: e.settings,
 		Doctor: e.doctor.run, Pools: e.pools.list, PoolAdmin: e.pools, PoolSites: e.st, Firewall: e.firewall, PHP: e.php, PGClient: e.pgclient, Node: e.node, Python: e.python, Mail: e.mail, MailSend: e.mailSent.send, Outbox: e.outbox, Files: e.files.open, NotifyPrefs: e.st, AuditLog: e.st,
-		Monitor: e.monitor, Logs: e.logs, System: e.system,
+		Monitor: e.monitor, Usage: e.monitor, Logs: e.logs, System: e.system,
 	})
 
 	return e, mux
