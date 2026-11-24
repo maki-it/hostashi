@@ -113,7 +113,7 @@ func ReadUsage(dir string) (Usage, error) {
 
 // readFile reads a small cgroup file; ok is false when it does not exist.
 func readFile(path string) ([]byte, bool, error) {
-	f, err := os.Open(path) //nolint:gosec // path is built from a fixed root and a checked site name
+	f, err := os.Open(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, false, nil
 	}
@@ -121,7 +121,8 @@ func readFile(path string) ([]byte, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	defer f.Close() //nolint:errcheck // read-only
+
+	defer f.Close()
 
 	b, err := io.ReadAll(io.LimitReader(f, maxStatFile+1))
 	if err != nil {
