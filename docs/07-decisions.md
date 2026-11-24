@@ -70,6 +70,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0065 | www/non-www redirect per site | Accepted on 2026-11-24 ([adr/0065](adr/0065-www-redirect-per-site.md)) | No |
 | 0066 | Password protection and IP rules per site | Accepted on 2026-11-24 ([adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md)) | No |
 | 0067 | Reset the file permissions of a site | Accepted on 2026-11-24 ([adr/0067](adr/0067-reset-site-permissions.md)) | Done |
+| 0068 | Change the domain of a site | Proposed (draft: [adr/0068](adr/0068-change-the-domain-of-a-site.md)) | **Yes** |
 
 ---
 
@@ -448,3 +449,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0067 Reset the file permissions of a site
 
 **Full text (status Accepted, 2026-11-24, by Kim):** [adr/0067](adr/0067-reset-site-permissions.md). Summary: a typed agent op `site.permissions.reset` gives every entry below a site's home back to the site user (home `site:www-data 0750`), directories `0755`, files `0644` or `0755` if executable, setuid/setgid/sticky removed, `.ssh` and `.gnupg` private (`0700`/`0600`). It walks on file descriptors only, never follows a link (the Git deploy link stays), skips other file systems, device files and hard links to foreign files and reports them. API `POST /api/v1/sites/{name}/permissions/reset` (scope `sites:write`, own sites), audited, CLI `hostashi api sites reset-permissions`. No new `os/exec` exception.
+
+## ADR-0068 Change the domain of a site
+
+**Full draft (status Proposed):** [adr/0068](adr/0068-change-the-domain-of-a-site.md). Summary: a site's identity (name, Linux user, home, logs, backups, settings) is already independent of its domains, and the domain list can already be edited. The gap is HTTPS: a new name drops the whole site to HTTP until a certificate is there. Recommended: on a Let's Encrypt site on HTTPS, the change waits as pending until a certificate for the new list is installed, then domains and certificate switch in one web apply; on failure the site stays as it was and the error shows (cancel, retry, or change now). Port 80's default server answers ACME challenges for any host. New per-site redirect domains answer with 301 to the primary domain and stay on the certificate, so old names keep working after a change; the CloudPanel import uses them for redirect hosts. A "Change primary domain" dialog does the common case in one step. Site content (WordPress URLs, app environment) is not rewritten; the dialog lists what to check. Migration 0063.
