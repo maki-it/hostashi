@@ -13779,7 +13779,7 @@
             "session": []
           }
         ],
-        "summary": "Set the addresses API tokens may be used from; empty: anywhere",
+        "summary": "Set the addresses API tokens may be used from; empty: anywhere. 127.0.0.1 and ::1 are always allowed",
         "tags": [
           "settings"
         ],

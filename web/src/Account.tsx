@@ -64,7 +64,7 @@ export function Account({ user, onScheme }: { user: User; onScheme: (s: ColorSch
       <SecurityCard user={user} />
       <EmailCard />
       <NotificationsCard />
-      <TokensCard />
+      <TokensCard admin={user.role === "admin"} />
     </>
   );
 }

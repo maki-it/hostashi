@@ -445,7 +445,7 @@ func registerTokens(mux *routeMux, a authn) {
 	})
 
 	mux.Op("PUT /api/v1/settings/api-ip-allowlist", openapi.Operation{
-		ID: "setAPIAllowlist", Tag: "settings", Summary: "Set the addresses API tokens may be used from; empty: anywhere", In: ipAllowlistRequest{}, Out: ipAllowlistJSON{},
+		ID: "setAPIAllowlist", Tag: "settings", Summary: "Set the addresses API tokens may be used from; empty: anywhere. 127.0.0.1 and ::1 are always allowed", In: ipAllowlistRequest{}, Out: ipAllowlistJSON{},
 	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.sessionAllow(w, r, authz.SettingsWrite)
 		if !ok {

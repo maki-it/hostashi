@@ -71,9 +71,21 @@ export function tokenMessage(err: unknown): string {
       case "not_found":
         return "This token does not exist any more. Reload the page.";
       case "invalid_argument":
-        return err.message;
+        // "auth: invalid IP allowlist: …" -> "…"
+        return err.message.replace(/^auth: [^:]+: /, "");
+      case "forbidden":
+        return "Only admins can change this.";
     }
     return err.message;
   }
   return "The server is not reachable.";
 }
+
+// The addresses API tokens may be used from (ADR-0018). It is one list for
+// the whole panel, kept by admins; an empty list accepts tokens from
+// anywhere. 127.0.0.1 and ::1 are always allowed. Browser logins are not
+// affected.
+export const getTokenAllowlist = () => request<{ entries: string[] }>("GET", "/settings/api-ip-allowlist").then((r) => r.entries);
+
+export const setTokenAllowlist = (entries: string[]) =>
+  request<{ entries: string[] }>("PUT", "/settings/api-ip-allowlist", { entries }).then((r) => r.entries);

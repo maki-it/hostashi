@@ -15,6 +15,7 @@ import {
   type FirewallState,
 } from "./firewall";
 import { Button, Card, Field, IconButton, Notice, PageHead, RelTime } from "./ui";
+import { TokenAllowlistCard } from "./TokenAllowlist";
 
 type RuleDraft = { proto: "tcp" | "udp"; ports: string; sources: string; note: string };
 
@@ -79,7 +80,7 @@ export function Firewall() {
   const head = (
     <PageHead
       title="Firewall"
-      description="Ports 80 and 443 are always open for the sites. SSH and the panel are open to everyone until you set an allowlist."
+      description="Ports 80 and 443 are always open for the sites. SSH, the panel and API tokens are open to everyone until you set an allowlist."
     />
   );
 
@@ -106,6 +107,7 @@ export function Firewall() {
           Use the firewall in front of the server (for example at your provider), and let only SSH, 80, 443 and the panel port through.
           Run the installer again without --no-firewall to manage the rules here.
         </Notice>
+        <TokenAllowlistCard clientIp={fw.clientIp} />
       </>
     );
   }
@@ -115,6 +117,7 @@ export function Firewall() {
       {head}
       {error && <Notice tone="err" title={error} />}
       <Editor key={JSON.stringify(fw.state) + (fw.pending?.deadline ?? "")} fw={fw} reload={load} flash={flash} setFlash={setFlash} />
+      <TokenAllowlistCard clientIp={fw.clientIp} />
     </>
   );
 }

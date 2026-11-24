@@ -2,6 +2,7 @@
 
 import { Plus, Prohibit } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { formatHash } from "./routes";
 import { GrantFields, grantReady, useGrant } from "./TokenGrant";
 import { createToken, listTokens, revokeToken, tokenMessage, tokenState, type APIToken, type CreatedToken, type TokenState } from "./tokens";
 import { Badge, Button, Card, Field, IconButton, Notice, RelTime, RowActions, Table, type Column, type Tone } from "./ui";
@@ -16,7 +17,7 @@ const states: Record<TokenState, { label: string; tone: Tone }> = {
 // TokensCard lists the account's API tokens and creates and revokes them
 // (ADR-0018). A token never gets more than its owner: only the scopes of the
 // role and only sites the account reaches (ADR-0035).
-export function TokensCard() {
+export function TokensCard({ admin = false }: { admin?: boolean }) {
   const [tokens, setTokens] = useState<APIToken[] | null>(null);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
@@ -146,6 +147,12 @@ export function TokensCard() {
           <p className="ui-flush ui-hint">
             Tokens let scripts, monitoring and the hostashi command line use the API as you. Each has its own scopes, sites and lifetime, and
             you can revoke each one on its own.
+            {admin && (
+              <>
+                {" "}
+                Where tokens are accepted from is set under <a href={formatHash({ page: "firewall" })}>Firewall</a>.
+              </>
+            )}
           </p>
           {revoking && (
             <Notice tone="warn" title={`Revoke the token “${revoking.name}”?`}>
