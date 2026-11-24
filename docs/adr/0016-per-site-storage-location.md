@@ -142,7 +142,7 @@ None at this level. Remaining before Accepted: Kim sets the status, and spike S9
 - Negative: an admin who mounts a volume without `nosuid,nodev` or without an fstab entry is refused and has to fix the mount first. This is intended.
 - Open: XFS is accepted but not tested yet [U]; a reboot with a missing volume on a real host is not tested [U].
 
-## Addendum 2: rename pools and choose the default pool (Proposed)
+## Addendum 2: rename pools and choose the default pool (Accepted, Kim, 2026-11-24)
 
 ### Context
 
