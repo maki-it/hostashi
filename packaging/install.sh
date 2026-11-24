@@ -109,7 +109,7 @@ detect() {
   case "$RAW_ARCH" in x86_64|amd64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; *) ARCH=unsupported;; esac
 }
 
-pkg_installed() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q '^install ok installed$'; }
+pkg_installed() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep '^install ok installed$' >/dev/null; }
 
 # apt_install PKG... installs the packages that are missing, without
 # recommends, and does nothing if all are there. With --no-apt (a package
@@ -226,7 +226,7 @@ preflight() {
     for v in $(tr ',' ' ' <<<"$PHP_REQUEST"); do
       php_allowed "$v" || fail "--php-versions: '$v' is not one of ${PHP_VERSIONS[*]}"
     done
-    printf '%s' "$PHP_REQUEST" | grep -Eq '^[0-9.]+(,[0-9.]+)*$' || fail "--php-versions '$PHP_REQUEST' must be a comma-separated list such as 8.1,7.4"
+    printf '%s' "$PHP_REQUEST" | grep -E '^[0-9.]+(,[0-9.]+)*$' >/dev/null || fail "--php-versions '$PHP_REQUEST' must be a comma-separated list such as 8.1,7.4"
   fi
 
   if [ "$MODE" = apply ]; then

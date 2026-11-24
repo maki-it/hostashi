@@ -83,7 +83,7 @@ apt() { x env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install
 health() {
   local _
   for _ in $(seq 1 30); do
-    x bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf "GET /api/v1/health HTTP/1.0\r\n\r\n" >&3 && head -n 1 <&3' 2>/dev/null | grep -q ' 200 ' && return 0
+    x bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf "GET /api/v1/health HTTP/1.0\r\n\r\n" >&3 && head -n 1 <&3' 2>/dev/null | grep ' 200 ' >/dev/null && return 0
     sleep 1
   done
   return 1

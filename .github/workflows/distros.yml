@@ -56,7 +56,7 @@ jobs:
           for f in "$RUNNER_TEMP"/issues/*.md; do
             title=$(head -n 1 "$f")
             tail -n +2 "$f" > "$f.body"
-            if gh issue list --repo "$REPO" --state all --limit 100 --search "\"$title\" in:title" --json title --jq '.[].title' | grep -Fxq -- "$title"; then
+            if gh issue list --repo "$REPO" --state all --limit 100 --search "\"$title\" in:title" --json title --jq '.[].title' | grep -Fx -- "$title" >/dev/null; then
               echo "Issue exists: $title"
               continue
             fi

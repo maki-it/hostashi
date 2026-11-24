@@ -95,7 +95,7 @@ download() {
 
 php_allowed() { local v; for v in "${PHP_VERSIONS[@]}"; do [ "$v" = "$1" ] && return 0; done; return 1; }
 php_legacy() { local v; for v in "${LEGACY_PHP_VERSIONS[@]}"; do [ "$v" = "$1" ] && return 0; done; return 1; }
-pkg_installed() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q '^install ok installed$'; }
+pkg_installed() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep '^install ok installed$' >/dev/null; }
 
 # php_default prints the distribution's PHP version, from the php-fpm
 # package (Debian 13: 8.4, Ubuntu 26.04: 8.5).
