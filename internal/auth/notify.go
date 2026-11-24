@@ -9,6 +9,7 @@ import "context"
 const (
 	EventTOTPEnabled     = "totp-enabled"
 	EventTOTPDisabled    = "totp-disabled"
+	EventTOTPReplaced    = "totp-replaced"
 	EventPasskeyAdded    = "passkey-added"
 	EventPasskeyRemoved  = "passkey-removed"
 	EventTokenCreated    = "token-created"

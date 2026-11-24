@@ -93,6 +93,41 @@ describe("SecurityCard", () => {
     expect(screen.getByText(/^On\./)).toBeInTheDocument();
   });
 
+  it("moves TOTP to a new device", async () => {
+    const user = userEvent.setup();
+    let refuse = true;
+    const calls = mockFetch({
+      "GET /api/v1/auth/passkeys": { body: { passkeys: [] } },
+      "POST /api/v1/auth/totp/replace": () =>
+        refuse
+          ? { status: 401, body: { error: { code: "invalid_credentials", message: "x" } } }
+          : { body: { secret: "KRSXG5DTMVZXIZLT", uri: "otpauth://totp/Hostashi:kim?secret=KRSXG5DTMVZXIZLT" } },
+      "POST /api/v1/auth/totp/replace/confirm": { body: { recoveryCodes: ["1111-2222-3333-4444"] } },
+    });
+    render(<SecurityCard user={kim} />);
+    await user.click(screen.getByRole("button", { name: "Move to a new device" }));
+    expect(screen.getByText(/If the old phone is gone, use a recovery code/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Your password"), "my password 123");
+    await user.type(screen.getByLabelText(/recovery code/), "aaaa-bbbb-cccc-dddd");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Wrong password or code.");
+    expect(calls.find((c) => c.path === "/api/v1/auth/totp/replace")?.body).toEqual({ password: "my password 123", code: "aaaa-bbbb-cccc-dddd" });
+
+    refuse = false;
+    await user.type(screen.getByLabelText("Your password"), "my password 123");
+    await user.type(screen.getByLabelText(/recovery code/), "123456");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByLabelText("Authenticator key")).toHaveTextContent("KRSX G5DT MVZX IZLT");
+    expect(screen.getByText(/old app keeps working/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText("One-time code"), "654321");
+    await user.click(screen.getByRole("button", { name: "Use the new app" }));
+    expect(await screen.findByText("1111-2222-3333-4444")).toBeInTheDocument();
+    expect(calls.find((c) => c.path === "/api/v1/auth/totp/replace/confirm")?.body).toEqual({ code: "654321" });
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByText(/moved to the new device/)).toBeInTheDocument();
+    expect(screen.getByText(/^On\./)).toBeInTheDocument();
+  });
+
   it("lists and removes passkeys", async () => {
     const user = userEvent.setup();
     let keys = [phone];

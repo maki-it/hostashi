@@ -57,6 +57,17 @@ export async function totpConfirm(code: string): Promise<string[]> {
 
 type Ceremony = { ceremonyId: string; options: unknown };
 
+/** totpReplace starts moving TOTP to a new device; the old app works until totpReplaceConfirm. */
+export function totpReplace(password: string, code: string): Promise<{ secret: string; uri: string }> {
+  return request<{ secret: string; uri: string }>("POST", "/auth/totp/replace", { password, code });
+}
+
+/** totpReplaceConfirm swaps in the new device and returns new recovery codes. */
+export async function totpReplaceConfirm(code: string): Promise<string[]> {
+  const r = await request<{ recoveryCodes: string[] }>("POST", "/auth/totp/replace/confirm", { code });
+  return r.recoveryCodes;
+}
+
 /** totpDisable turns TOTP off; it needs the password and a current or recovery code. */
 export function totpDisable(password: string, code: string): Promise<void> {
   return request<void>("POST", "/auth/totp/disable", { password, code });

@@ -8526,6 +8526,100 @@
         "x-hostashi-access": "session"
       }
     },
+    "/api/v1/auth/totp/replace": {
+      "post": {
+        "operationId": "replaceTOTP",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpDisableRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpEnroll"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Start moving TOTP to a new device with password and a current code; returns the new secret",
+        "tags": [
+          "auth"
+        ],
+        "x-hostashi-access": "session"
+      }
+    },
+    "/api/v1/auth/totp/replace/confirm": {
+      "post": {
+        "operationId": "confirmTOTPReplace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodes"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Confirm the new device with a first code; returns new recovery codes once",
+        "tags": [
+          "auth"
+        ],
+        "x-hostashi-access": "session"
+      }
+    },
     "/api/v1/backups": {
       "get": {
         "operationId": "getBackups",

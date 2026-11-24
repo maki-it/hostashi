@@ -23,10 +23,33 @@ export function SecondFactor({ onDone }: Props) {
   );
 }
 
+type Enrolment = { secret: string; uri: string };
+
+type EnrolmentProps = {
+  intro: string;
+  onDone: () => void;
+  autoStart?: boolean;
+  /** initial skips the first step; moving to a new device gets its secret elsewhere. */
+  initial?: Enrolment;
+  /** confirm checks the first code; it defaults to turning TOTP on. */
+  confirm?: (code: string) => Promise<string[]>;
+  submitLabel?: string;
+  doneTitle?: string;
+};
+
 // TotpEnrolment walks through setting up an authenticator app: QR code,
-// first code, recovery codes. The account page uses it too.
-export function TotpEnrolment({ intro, onDone, autoStart = false }: { intro: string; onDone: () => void; autoStart?: boolean }) {
-  const [enrolment, setEnrolment] = useState<{ secret: string; uri: string } | null>(null);
+// first code, recovery codes. The account page uses it too, also for moving
+// to a new device.
+export function TotpEnrolment({
+  intro,
+  onDone,
+  autoStart = false,
+  initial,
+  confirm: confirmCode = totpConfirm,
+  submitLabel = "Turn on",
+  doneTitle = "Two-factor authentication is on. Keep these recovery codes somewhere safe; each one works once.",
+}: EnrolmentProps) {
+  const [enrolment, setEnrolment] = useState<Enrolment | null>(initial ?? null);
   const [code, setCode] = useState("");
   const [codes, setCodes] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -69,7 +92,7 @@ export function TotpEnrolment({ intro, onDone, autoStart = false }: { intro: str
     setBusy(true);
     setError("");
     try {
-      setCodes(await totpConfirm(code.trim()));
+      setCodes(await confirmCode(code.trim()));
     } catch (err) {
       setError(err instanceof ApiError && err.code === "invalid_credentials" ? "Wrong code. Use the current code from your app." : message(err));
       setCode("");
@@ -82,7 +105,7 @@ export function TotpEnrolment({ intro, onDone, autoStart = false }: { intro: str
     <div className="ui-stack">
       {codes ? (
         <>
-          <Notice tone="ok" title="Two-factor authentication is on. Keep these recovery codes somewhere safe; each one works once." />
+          <Notice tone="ok" title={doneTitle} />
           <ul aria-label="Recovery codes">
             {codes.map((c) => (
               <li key={c}>
@@ -129,7 +152,7 @@ export function TotpEnrolment({ intro, onDone, autoStart = false }: { intro: str
             />
           </Field>
           <Button variant="primary" type="submit" disabled={busy || code.trim() === ""}>
-            Turn on
+            {submitLabel}
           </Button>
         </form>
       ) : (
