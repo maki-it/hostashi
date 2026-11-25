@@ -115,6 +115,8 @@ var table = map[Action]Rule{
 	// Rename a storage pool or make it the default (ADR-0016 addendum 2).
 	"pools:write": server("system:write"),
 	"web:sync":    server("sites:write"),
+	// Own application profiles are templates for every site (ADR-0069).
+	"profiles:write": server("settings:write"),
 
 	// Read-only things everyone needs. The lists of sites and databases
 	// are filtered to the sites a user may see.
@@ -128,6 +130,8 @@ var table = map[Action]Rule{
 	"python:read":       all("sites:read"),
 	"ssh.hostkeys:read": all("ssh:read"),
 	"pages:read":        all("pages:read"),
+	// The application profiles, for choosing one (ADR-0069).
+	"profiles:read": all("sites:read"),
 
 	// What spans all sites or claims names: managers (ADR-0035, question 3).
 	"sites:create":        manage("sites:write"),

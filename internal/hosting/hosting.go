@@ -423,7 +423,7 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		}
 	}
 
-	if err := checkCreateProfile(req); err != nil {
+	if err := s.checkCreateProfile(ctx, req); err != nil {
 		return store.Site{}, err
 	}
 
@@ -999,6 +999,8 @@ type webInputs struct {
 	workers     map[int64]int64
 	caches      map[int64]store.PageCache
 	profiles    map[int64]store.SiteProfile
+	// profileDefs are the built-in and own profiles (ADR-0069).
+	profileDefs profileSet
 }
 
 func (s *Service) loadWebInputs(ctx context.Context) (webInputs, error) {
@@ -1043,6 +1045,10 @@ func (s *Service) loadWebInputs(ctx context.Context) (webInputs, error) {
 		return webInputs{}, err
 	}
 
+	if in.profileDefs, err = s.profileSet(ctx); err != nil {
+		return webInputs{}, err
+	}
+
 	return in, nil
 }
 
@@ -1077,7 +1083,7 @@ func (in webInputs) addFiles(ws *agentapi.WebSite, site store.Site, php string) 
 		ws.SPA = site.SPA
 	}
 
-	ws.Hardening = webHardening(in.profiles, site, php)
+	ws.Hardening = webHardening(in.profileDefs, in.profiles, site, php)
 
 	if site.AssetCache && (site.Type == store.SiteTypeStatic || site.Type == store.SiteTypePHP) {
 		ws.AssetCache, ws.AssetCacheSeconds, ws.AssetCacheExts = true, site.AssetCacheSeconds, site.AssetCacheExts
