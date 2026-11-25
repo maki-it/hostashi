@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ArrowLeft, Plus, Trash } from "@phosphor-icons/react";
+import { ArrowLeft, PencilSimple, Plus, Star, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "./api";
 import {
@@ -15,6 +15,7 @@ import {
   limitsMessage,
   limitsOf,
   listPresets,
+  noCaches,
   pageCacheSizes,
   presetCacheProblem,
   presetNameProblem,
@@ -35,7 +36,7 @@ import { cacheSizes } from "./objcache";
 import { formatSize } from "./pagecache";
 import { formatHash } from "./routes";
 import type { Site } from "./sites";
-import { Badge, Button, Card, Field, Notice, PageHead, RelTime, Table, type Column, type Sort } from "./ui";
+import { Badge, Button, Card, Field, IconButton, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
 
 const defaultLimits: Limits = {
   diskBytes: 0,
@@ -491,33 +492,6 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
     }
   }
 
-  const confirmDelete = deleting && (
-        <section className="ui-card ui-card-body ui-stack" role="alertdialog" aria-labelledby="preset-delete-title">
-          <h2 id="preset-delete-title" className="ui-flush">
-            Delete the preset {deleting}?
-          </h2>
-          <p className="ui-flush">Its sites keep the values as custom values.</p>
-          {error && <Notice tone="err" title={error} />}
-          <div className="ui-row">
-            <Button
-              variant="danger"
-              disabled={busy}
-              onClick={() =>
-                void act(async () => {
-                  await deletePreset(deleting);
-                  return `Preset ${deleting} deleted.`;
-                })
-              }
-            >
-              Delete preset
-            </Button>
-            <Button disabled={busy} onClick={() => setDeleting(null)}>
-              Cancel
-            </Button>
-          </div>
-        </section>
-        );
-
   const listLink = (
     <a className="ui-btn" href={formatHash({ page: "limits" })}>
       <ArrowLeft size={16} aria-hidden="true" />
@@ -572,38 +546,10 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
             }}
           />
         </Card>
-        {initial && !initial.default && (
-          <section className="ui-danger-zone" aria-labelledby="preset-danger">
-            <h2 id="preset-danger">Danger zone</h2>
-            {confirmDelete || (
-              <Card title="Delete preset">
-                <div className="ui-stack">
-                  <p className="ui-flush">Sites that use {initial.name} keep its values as custom values.</p>
-                  {error && <Notice tone="err" title={error} />}
-                  <div className="ui-row">
-                    <Button
-                      variant="danger"
-                      icon={<Trash size={16} aria-hidden />}
-                      onClick={() => {
-                        setError("");
-                        setDeleting(initial.name);
-                      }}
-                    >
-                      Delete preset
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            )}
-          </section>
-        )}
       </>
     );
   }
 
-  // The table stays narrow: related limits share a column, and the row opens
-  // the preset, where it can be made the default or deleted (Kim, 2026-11-25).
-  const editHref = (p: Preset) => formatHash({ page: "limits", query: new URLSearchParams({ edit: p.name }) });
   const columns: Column<Preset>[] = [
     {
       key: "name",
@@ -611,9 +557,7 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
       sortValue: (p) => p.name,
       cell: (p) => (
         <span className="ui-row ui-nowrap">
-          <a className="ui-row-link ui-strong-link" href={editHref(p)}>
-            {p.name}
-          </a>
+          <strong>{p.name}</strong>
           {p.default && <Badge tone="ok">Default</Badge>}
         </span>
       ),
@@ -630,41 +574,68 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
       ),
     },
     { key: "memory", header: "Memory", sortValue: (p) => p.limits.memoryBytes || Infinity, cell: (p) => limitCell(p.limits.memoryBytes, formatBytes) },
-    {
-      key: "tasks",
-      header: "Processes",
-      sortValue: (p) => p.limits.tasks || Infinity,
-      cell: (p) => (
-        <div className="ui-cell-main">
-          <span className="ui-row">{limitCell(p.limits.tasks, formatCount)}</span>
-          <span>{p.limits.phpWorkers} PHP workers</span>
-        </div>
-      ),
-    },
+    { key: "tasks", header: "Processes", sortValue: (p) => p.limits.tasks || Infinity, cell: (p) => limitCell(p.limits.tasks, formatCount) },
+    { key: "workers", header: "PHP workers", sortValue: (p) => p.limits.phpWorkers, cell: (p) => p.limits.phpWorkers },
     {
       key: "cpu",
-      header: "CPU",
+      header: "CPU cores",
       sortValue: (p) => p.limits.cpuQuotaPercent || Infinity,
-      cell: (p) => (
-        <div className="ui-cell-main">
-          <span className="ui-row">{p.limits.cpuQuotaPercent ? formatCores(p.limits.cpuQuotaPercent) : <span className="ui-hint">No limit</span>}</span>
-          <span>{priorityLabel[p.limits.cpuPriority]} priority</span>
-        </div>
-      ),
+      cell: (p) => (p.limits.cpuQuotaPercent ? formatCores(p.limits.cpuQuotaPercent) : <span className="ui-hint">No limit</span>),
     },
     {
-      key: "caches",
-      header: "Caches",
-      sortValue: (p) => (p.caches?.objectCacheMb ?? 0) + (p.caches?.pageCacheMb ?? 0),
-      cell: (p) =>
-        p.caches?.objectCacheMb || p.caches?.pageCacheMb ? (
-          <div className="ui-cell-main">
-            {p.caches.objectCacheMb ? <span className="ui-row">Object {p.caches.objectCacheMb} MiB</span> : null}
-            {p.caches.pageCacheMb ? <span className="ui-row">Page {formatSize(p.caches.pageCacheMb)}</span> : null}
-          </div>
-        ) : (
-          <span className="ui-hint">Off</span>
-        ),
+      key: "objectCache",
+      header: "Object cache",
+      sortValue: (p) => p.caches?.objectCacheMb ?? 0,
+      cell: (p) => (p.caches?.objectCacheMb ? `${String(p.caches.objectCacheMb)} MiB` : <span className="ui-hint">Off</span>),
+    },
+    {
+      key: "pageCache",
+      header: "Page cache",
+      sortValue: (p) => p.caches?.pageCacheMb ?? 0,
+      cell: (p) => (p.caches?.pageCacheMb ? formatSize(p.caches.pageCacheMb) : <span className="ui-hint">Off</span>),
+    },
+    {
+      key: "priority",
+      header: "CPU priority",
+      sortValue: (p) => ["low", "normal", "high"].indexOf(p.limits.cpuPriority),
+      cell: (p) => priorityLabel[p.limits.cpuPriority],
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      srHeader: true,
+      cell: (p) => (
+        <RowActions>
+          {!p.default && (
+            <IconButton
+              label={`Make ${p.name} the default`}
+              text="Make default" icon={<Star size={16} />}
+              disabled={busy}
+              onClick={() =>
+                void act(async () => {
+                  const l = limitsOf(fieldsOf(p.limits), true);
+                  if (typeof l === "string") throw new Error(l);
+                  await updatePreset(p.name, p.name, true, p.limits, p.caches ?? noCaches);
+                  return `New sites now get the preset ${p.name}.`;
+                })
+              }
+            />
+          )}
+          <IconLink label={`Change ${p.name}`} text="Change" icon={<PencilSimple size={16} />} href={formatHash({ page: "limits", query: new URLSearchParams({ edit: p.name }) })} />
+          {!p.default && (
+            <IconButton
+              label={`Delete ${p.name}`}
+              text="Delete" icon={<Trash size={16} />}
+              danger
+              disabled={busy}
+              onClick={() => {
+                setError("");
+                setDeleting(p.name);
+              }}
+            />
+          )}
+        </RowActions>
+      ),
     },
   ];
 
@@ -687,6 +658,32 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
       />
       {loadError && <Notice tone="err" title={loadError} />}
       {done && <Notice tone="ok" title={done} />}
+      {deleting && (
+        <section className="ui-card ui-card-body ui-stack" role="alertdialog" aria-labelledby="preset-delete-title">
+          <h2 id="preset-delete-title" className="ui-flush">
+            Delete the preset {deleting}?
+          </h2>
+          <p className="ui-flush">Its sites keep the values as custom values.</p>
+          {error && <Notice tone="err" title={error} />}
+          <div className="ui-row">
+            <Button
+              variant="danger"
+              disabled={busy}
+              onClick={() =>
+                void act(async () => {
+                  await deletePreset(deleting);
+                  return `Preset ${deleting} deleted.`;
+                })
+              }
+            >
+              Delete preset
+            </Button>
+            <Button disabled={busy} onClick={() => setDeleting(null)}>
+              Cancel
+            </Button>
+          </div>
+        </section>
+      )}
       {error && !deleting && <Notice tone="err" title={error} />}
       <Card padded={false}>
         <div className="ui-filters">

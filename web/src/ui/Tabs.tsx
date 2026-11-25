@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useRef, type KeyboardEvent } from "react";
 
-export type Tab = { id: string; label: string; icon?: ReactNode };
+export type Tab = { id: string; label: string };
 
 type TabsProps = {
   /** Accessible name of the tab list, for example the site's name. */
@@ -55,7 +55,6 @@ export function Tabs({ label, tabs, active, onChange, idPrefix }: TabsProps) {
           onClick={() => onChange(t.id)}
           onKeyDown={(e) => move(e, i)}
         >
-          {t.icon}
           {t.label}
         </button>
       ))}
