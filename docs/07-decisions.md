@@ -72,7 +72,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0067 | Reset the file permissions of a site | Accepted on 2026-11-24 ([adr/0067](adr/0067-reset-site-permissions.md)) | Done |
 | 0068 | Change the domain of a site | Accepted on 2026-11-25 ([adr/0068](adr/0068-change-the-domain-of-a-site.md)) | No |
 | 0069 | Application profiles (vhost templates) and WordPress quick install | Accepted on 2026-11-25 ([adr/0069](adr/0069-application-profiles-and-wordpress-install.md)) | Done |
-| 0070 | Staging and cloning a site | Proposed (draft: [adr/0070](adr/0070-staging-and-cloning-a-site.md)) | **Yes** |
+| 0070 | Staging and cloning a site | Accepted on 2026-11-25 ([adr/0070](adr/0070-staging-and-cloning-a-site.md)) | Done |
 | 0071 | Panel UI in English and German | Proposed (draft: [adr/0071](adr/0071-panel-ui-in-english-and-german.md)) | **Yes** |
 
 ---
@@ -463,7 +463,7 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0070 Staging and cloning a site
 
-**Full text (status Proposed, drafted 2026-11-25):** [adr/0070](adr/0070-staging-and-cloning-a-site.md). Summary: clone a site with a Linux account into a new, independent site, optionally marked as staging of its source with "refresh from source"; no push back to live in 1.0. Files are copied by a typed agent routine on file descriptors (same safety as ADR-0067, base for the later pool move); local MariaDB databases are dumped and loaded into new databases as the clone's user through `mariadbctl`; external databases are not cloned. WordPress clones get their database settings and URLs rewritten with WP-CLI `search-replace` (ADR-0069 runner), Laravel and Symfony get typed `.env` edits, other applications a checklist. Staging clones start with cron disabled, password protection and `noindex`; Git deploy, SSH keys and caches are not copied. Open for Kim: push to live or not, the safe defaults, URL rewrite for WordPress only.
+**Full text (status Accepted, 2026-11-25, by Kim):** [adr/0070](adr/0070-staging-and-cloning-a-site.md). Summary: clone a site with a Linux account into a new, independent site, optionally marked as staging of its source with "refresh from source"; no push back to live in 1.0. Files are copied by a typed agent routine on file descriptors (same safety as ADR-0067, base for the later pool move); local MariaDB databases are dumped and loaded into new databases as the clone's user through `mariadbctl`; external databases are not cloned. WordPress clones get their database settings and URLs rewritten with WP-CLI `search-replace` (ADR-0069 runner), Laravel and Symfony get typed `.env` edits, other applications a checklist. Staging clones start with cron disabled, password protection and `noindex`; Git deploy, SSH keys and caches are not copied. Decided by Kim on 2026-11-25: clone with refresh and no push to live (1B), all three staging defaults, URL rewrite for WordPress only (3A).
 
 ## ADR-0071 Panel UI in English and German
 
