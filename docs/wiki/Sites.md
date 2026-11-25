@@ -58,6 +58,10 @@ Tabs that do not apply to a site's type are not shown.
 
 On **Overview → Availability**, **Disable** shows a maintenance page to every visitor and stops the site's PHP. Files, databases and settings stay. **Enable** brings it back.
 
+### Your own maintenance and parking pages
+
+Under **Maintenance pages** you can upload your own page: one `.html` file, or a `.zip` file with `index.html` at the top and its CSS, JavaScript, images and fonts. Write `%%DOMAIN%%` in the HTML where the visitor should see the domain they opened, for example `<p>%%DOMAIN%%</p>`. The web server puts in the visited domain in lower case, such as `www.example.com`; internationalized domains appear in their ASCII form (`xn--…`). The preview shows `example.com`. The placeholder is replaced in HTML files only, not in CSS or JavaScript.
+
 ## Delete a site
 
 On **Overview → Delete site**. This deletes the site **with its files and databases** and cannot be undone. Backups stay until they expire.
