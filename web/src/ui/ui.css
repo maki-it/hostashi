@@ -1522,6 +1522,7 @@ a.ui-btn {
   min-height: 30px;
   padding: 0 10px;
   font-size: 14px;
+  text-decoration: none;
 }
 
 /* A row whose first link opens it: the whole row is the click target */

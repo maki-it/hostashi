@@ -163,6 +163,7 @@ export function Services({ site }: { site?: string }) {
                 <IconButton
                   key={a}
                   label={`${actionWord(a)} ${serviceName(r.id)}${r.site ? " of " + r.site : ""}`}
+                  text={actionWord(a)}
                   icon={<I size={16} aria-hidden="true" />}
                   danger={a === "stop"}
                   disabled={busy !== "" || !usable(r, a)}
