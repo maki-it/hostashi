@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Oneshot unit that runs the WordPress quick install of site %i
+# (ADR-0069), as the site user. The agent writes two drop-ins:
+# 50-hostashi-slice.conf (slice and home) and 60-hostashi-wp.conf with
+# ExecStart=/usr/local/bin/hostashi wp-run <phar>, the log and the job and
+# both passwords as credentials (LoadCredential=). The runner starts the
+# site's PHP CLI with the pinned WP-CLI phar and fixed sub-commands, and
+# passes the passwords on standard input. The agent starts it without
+# waiting and asks for its state.
+
+[Unit]
+Description=WordPress quick install of Hostashi site %i
+Documentation=https://github.com/maki-it/hostashi
+# Puts the pinned WP-CLI phar in place first (root, checked SHA-512).
+Requires=hostashi-wpcli-install.service
+After=hostashi-wpcli-install.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# A finished run stays "active" (succeeded) or "failed" until the agent
+# stops it for the next run.
+RemainAfterExit=yes
+User=%i
+Group=%i
+# Replaced by the drop-in.
+ExecStart=/bin/false
+TimeoutStartSec=15min
+# No core dumps: they would hold the passwords (ADR-0033).
+LimitCORE=0
+StandardOutput=journal
+StandardError=inherit
+SyslogIdentifier=hostashi-wp-%i
+KillMode=control-group
+UMask=0027
+
+PrivateTmp=yes
+PrivateDevices=yes
+# The system is read only and /home is empty: the drop-in mounts the
+# site's own home back, writable (ADR-0033).
+ProtectSystem=strict
+ProtectHome=tmpfs
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+ProtectProc=invisible
+RemoveIPC=yes
+# No MemoryDenyWriteExecute=: PHP's JIT may need it.
+
+# No [Install]: the agent runs it, it is never enabled.

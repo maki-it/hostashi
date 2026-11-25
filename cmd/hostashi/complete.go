@@ -143,6 +143,7 @@ var completionTree = &compNode{sub: cmds(
 	)},
 	&compNode{name: "node-install", hidden: true},
 	&compNode{name: "wpcli-install", hidden: true},
+	&compNode{name: "wp-run", hidden: true},
 	&compNode{name: "python", help: "Python lines", sub: cmds(
 		leaf("status", "the installed lines and the last installation"),
 		leaf("install", "install a line"),

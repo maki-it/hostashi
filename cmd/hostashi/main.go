@@ -36,6 +36,7 @@ import (
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/serve"
 	"github.com/maki-it/hostashi/internal/store"
+	"github.com/maki-it/hostashi/internal/wpcli"
 	"github.com/maki-it/hostashi/internal/wpinstall"
 )
 
@@ -143,6 +144,9 @@ commands:
             download, check and unpack the pinned Node.js build of MAJOR into
             /opt/hostashi/node/MAJOR (root; started by
             hostashi-node-install@MAJOR.service)
+  wp-run PHAR
+            run the WordPress quick install with WP-CLI from the job in the
+            unit's credentials (site user; started by hostashi-wp@SITE.service)
   wpcli-install
             download and check the pinned WP-CLI phar into
             /opt/hostashi/wp-cli/VERSION (root; started by
@@ -453,6 +457,9 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		}
 
 		err = (&nodeinstall.Installer{Out: stdout}).Install(ctx, fs.Arg(0))
+	case "wp-run":
+		// Runs in hostashi-wp@<site> as the site user (ADR-0069).
+		err = wpcli.Main(ctx, args, euid, stdout)
 	case "wpcli-install":
 		if fs.Parse(args) != nil || fs.NArg() != 0 {
 			fmt.Fprint(stderr, usage)
