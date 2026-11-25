@@ -96,4 +96,6 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 1. ~~Transport: HTTP endpoint in the panel with an API token (A), or stdio through the CLI (B)?~~ Decided (Kim, 2026-11-25): HTTP endpoint in the panel (A).
 2. ~~Tools: curated list with reversible writes and no high-risk actions (B), or read-only at first (C)?~~ Decided (Kim, 2026-11-25): curated list with reversible writes (B).
 3. ~~Timing: after 1.0 as part of 1.1, or still in v1?~~ Decided (Kim, 2026-11-25): after 1.0, as part of 1.1.
-4. Do you want to add Hostashi as a connector in a client that only supports OAuth (for example in a web UI)? If yes, that becomes its own ADR later.
+4. ~~Do you want to add Hostashi as a connector in a client that only supports OAuth (for example in a web UI)? If yes, that becomes its own ADR later.~~ Decided (Kim, 2026-11-25): start without OAuth; a connector with OAuth would be a separate ADR later.
+
+All open questions are answered; the ADR waits for Kim's acceptance.
