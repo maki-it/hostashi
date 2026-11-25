@@ -643,6 +643,9 @@ do_pgclient() {
 CLAMAV_SRC=${HOSTASHI_CLAMAV_SRC:-$HERE/clamav}/clamav-install
 CLAMAV_BIN=/usr/local/lib/hostashi/clamav-install
 CLAMAV_UNIT=hostashi-clamav-install@.service
+# Daily `clamav-install upgrade`: the ClamAV packages from all of the
+# distribution's sources, which unattended-upgrades does not take.
+CLAMAV_TIMER=hostashi-clamav-upgrade.timer
 CLAMAV_STATE=/var/lib/hostashi-agent/clamav-install
 SCAN_LOGS=/var/log/hostashi/scan
 
@@ -654,6 +657,8 @@ chk_malwarescan() {
   dir_ok "$SCAN_LOGS" 700 root:root || { echo "$SCAN_LOGS"; return 1; }
   file_matches "$CLAMAV_BIN" 0755 root:root <"$CLAMAV_SRC" || { echo "clamav-install differs"; return 1; }
   file_matches "/etc/systemd/system/$CLAMAV_UNIT" 0644 root:root <"$UNIT_DIR/$CLAMAV_UNIT" || { echo "$CLAMAV_UNIT differs"; return 1; }
+  file_matches "/etc/systemd/system/$CLAMAV_TIMER" 0644 root:root <"$UNIT_DIR/$CLAMAV_TIMER" || { echo "$CLAMAV_TIMER differs"; return 1; }
+  [ "$(systemctl is-enabled "$CLAMAV_TIMER" 2>/dev/null)" = enabled ] || { echo "$CLAMAV_TIMER not enabled"; return 1; }
   [ "$MALWARE_SCAN" = no ] || [ "$(clamav_state)" = on ] || { echo "ClamAV not installed"; return 1; }
   why=$(HOSTASHI_CLAMAV_STATE_DIR=$CLAMAV_STATE "$CLAMAV_SRC" check) || { echo "$why"; return 1; }
 }
@@ -664,9 +669,15 @@ do_malwarescan() {
   install -d -m 0755 -o root -g root "${SCAN_LOGS%/*}" || return 1
   install -d -m 0700 -o root -g root "$SCAN_LOGS" || return 1
   write_file "$CLAMAV_BIN" 0755 root:root <"$CLAMAV_SRC"; [ $? -le 1 ] || return 1
+  local reload=no
   write_file "/etc/systemd/system/$CLAMAV_UNIT" 0644 root:root <"$UNIT_DIR/$CLAMAV_UNIT"; rc=$?
   [ "$rc" -le 1 ] || return 1
-  if [ "$rc" = 0 ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
+  [ "$rc" = 1 ] || reload=yes
+  write_file "/etc/systemd/system/$CLAMAV_TIMER" 0644 root:root <"$UNIT_DIR/$CLAMAV_TIMER"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  [ "$rc" = 1 ] || reload=yes
+  if [ "$reload" = yes ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
+  systemctl enable --now "$CLAMAV_TIMER" >>"$LOG" 2>&1 || return 1
   local need=no
   if [ "$(clamav_state)" = on ]; then
     HOSTASHI_CLAMAV_STATE_DIR=$CLAMAV_STATE "$CLAMAV_BIN" check >/dev/null || need=yes

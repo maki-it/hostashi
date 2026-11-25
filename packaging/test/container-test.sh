@@ -642,6 +642,15 @@ x grep -q '^OnAccessIncludePath /home/blog$' /etc/hostashi/clamav/clamd.conf || 
 # its local include must add the agent's file (web3, Debian 13).
 x grep -qxF '/etc/hostashi/clamav/clamd.conf r,' /etc/apparmor.d/local/usr.sbin.clamd || fail "clamd's AppArmor include lacks the config: $(x cat /etc/apparmor.d/local/usr.sbin.clamd)"
 x env HOSTASHI_CLAMAV_STATE_DIR=/var/lib/hostashi-agent/clamav-install /usr/local/lib/hostashi/clamav-install check >/dev/null || fail "clamav-install check after real-time on"
+# The daily upgrade takes only the ClamAV packages and keeps the mode
+# working; the panel shows dpkg's version.
+x systemctl is-enabled --quiet hostashi-clamav-upgrade.timer || fail "ClamAV upgrade timer not enabled"
+[ "$(x systemctl show -p Unit --value hostashi-clamav-upgrade.timer)" = hostashi-clamav-install@upgrade.service ] || fail "upgrade timer starts the wrong unit"
+x systemctl start hostashi-clamav-install@upgrade.service || fail "ClamAV upgrade: $(x cat /var/lib/hostashi-agent/clamav-install/install.log)"
+x grep -q '^clamav-install: done: ClamAV ' /var/lib/hostashi-agent/clamav-install/install.log || fail "upgrade log: $(x cat /var/lib/hostashi-agent/clamav-install/install.log)"
+[ "$(api GET /api/v1/malware-scan)" = 200 ] || fail "engine state after upgrade: $(x cat /tmp/api.out)"
+# shellcheck disable=SC2016 # ${Version} is dpkg-query's field
+[ "$(jget 'd["version"]')" = "$(x dpkg-query -W -f='${Version}' clamav)" ] || fail "panel version is not dpkg's: $(x cat /tmp/api.out)"
 x cp /etc/apparmor.d/local/usr.sbin.clamd /tmp/aa.keep
 x sh -c 'printf "# admin\n" >/etc/apparmor.d/local/usr.sbin.clamd'
 if x env HOSTASHI_CLAMAV_STATE_DIR=/var/lib/hostashi-agent/clamav-install /usr/local/lib/hostashi/clamav-install check >/dev/null; then fail "check missed the AppArmor block"; fi

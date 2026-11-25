@@ -204,6 +204,27 @@ func listName(uri, suite, component, arch string) string {
 	return b.String()
 }
 
+// Installed returns the installed version of pkg from the dpkg status
+// file (default /var/lib/dpkg/status); empty when it is not installed.
+func Installed(dpkgStatus, pkg string) (string, error) {
+	if dpkgStatus == "" {
+		dpkgStatus = "/var/lib/dpkg/status"
+	}
+
+	v := ""
+	err := eachStanza(dpkgStatus, func(f map[string]string) bool {
+		if f["Package"] == pkg && strings.HasSuffix(f["Status"], " installed") {
+			v = f["Version"]
+
+			return false
+		}
+
+		return true
+	})
+
+	return v, err
+}
+
 // eachStanza calls fn with the fields of each deb822 stanza in the file
 // until fn returns false. Continuation lines are joined with a space. A
 // missing file has no stanzas.

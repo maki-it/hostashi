@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/updates"
 )
 
 // The scan engine is ClamAV from the distribution. The fixed root unit
@@ -51,6 +52,9 @@ type Engine struct {
 	Ctl         EngineController
 	// Realtime reads clamonacc's state; nil reports it as not running.
 	Realtime RealtimeController
+	// DpkgStatus is dpkg's status file (default /var/lib/dpkg/status):
+	// the version shown is the installed one, also after apt updated it.
+	DpkgStatus string
 }
 
 func (e *Engine) dir() string   { return or(e.Dir, DefaultEngineDir) }
@@ -63,6 +67,16 @@ func (e *Engine) read(name string) string {
 	}
 
 	return strings.TrimSpace(string(b))
+}
+
+// version is the installed clamav package's version; the one
+// clamav-install recorded when dpkg's status cannot be read.
+func (e *Engine) version() string {
+	if v, err := updates.Installed(e.DpkgStatus, "clamav"); err == nil && v != "" {
+		return v
+	}
+
+	return e.read("version")
 }
 
 // On reports whether ClamAV is installed and switched on.
@@ -123,7 +137,7 @@ func (e *Engine) Status(ctx context.Context) (agentapi.ScanEngineStatus, error) 
 		return agentapi.ScanEngineStatus{State: agentapi.ScanEngineOff}, nil
 	}
 
-	out := agentapi.ScanEngineStatus{State: agentapi.ScanEngineOn, Version: clip(e.read("version"), 64)}
+	out := agentapi.ScanEngineStatus{State: agentapi.ScanEngineOn, Version: clip(e.version(), 64)}
 	if t := newestSignature(e.dbDir()); !t.IsZero() {
 		out.Signatures = t.UTC().Format(time.RFC3339)
 	}

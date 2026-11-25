@@ -169,7 +169,7 @@ func TestEngineRealtime(t *testing.T) {
 	dir := t.TempDir()
 	ctl := &fakeEngine{states: map[string]string{}}
 	units := &fakeUnits{states: map[string]string{ClamonaccUnit: "active"}}
-	e := &Engine{Dir: dir, DatabaseDir: t.TempDir(), Ctl: ctl, Realtime: units}
+	e := &Engine{Dir: dir, DatabaseDir: t.TempDir(), Ctl: ctl, Realtime: units, DpkgStatus: filepath.Join(dir, "dpkg-status")}
 	on, off := true, false
 
 	if _, err := e.Set(ctx, agentapi.ScanEngineSetRequest{Realtime: &on}); !errors.Is(err, ErrEngineOff) {

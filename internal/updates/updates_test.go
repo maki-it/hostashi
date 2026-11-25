@@ -132,6 +132,22 @@ func TestReadWithoutPackageOrList(t *testing.T) {
 	}
 }
 
+func TestInstalled(t *testing.T) {
+	p := setup(t)
+
+	if v, err := Installed(p.DpkgStatus, Package); err != nil || v != "0.1.0" {
+		t.Fatalf("Installed = %q, %v", v, err)
+	}
+
+	if v, err := Installed(p.DpkgStatus, "clamav"); err != nil || v != "" {
+		t.Fatalf("not installed: %q, %v", v, err)
+	}
+
+	if v, err := Installed(filepath.Join(t.TempDir(), "missing"), Package); err != nil || v != "" {
+		t.Fatalf("missing file: %q, %v", v, err)
+	}
+}
+
 func TestListName(t *testing.T) {
 	for _, c := range []struct{ uri, want string }{
 		{"https://get.hostashi.com/apt", "get.hostashi.com_apt_dists_stable_main_binary-arm64_Packages"},
