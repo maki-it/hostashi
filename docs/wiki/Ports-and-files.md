@@ -32,6 +32,7 @@ Hostashi's firewall lets in only these ports, plus what you open in the panel or
 | `/run/hostashi-valkey/<site>/valkey.sock` | the object cache (Valkey) of a site, if it is on. Only the site's own user can open it; it holds nothing worth keeping and is empty after a restart. |
 | `/var/log/nginx/sites/<site>/` | access and error logs of a site, readable only by root and in the panel |
 | `/var/log/hostashi/php/<site>/` | PHP error log of a site, readable only by root and in the panel |
+| `/var/log/hostashi/app/<site>/` | the output of a site's app (`app.log`) and of its last WordPress install (`wordpress.log`), readable only by root and in the panel |
 | `/var/log/nginx/hostashi/` | access and error logs of requests for no site; `error.log` also gets the failed site passwords that fail2ban reads |
 | `/var/lib/hostashi-web-auth/` | the password files of sites with [access protection](Access-protection.md): user names and password hashes, readable by root and the web server only |
 | `/etc/logrotate.d/hostashi` | daily rotation of these logs; the panel sets how many days are kept (default 7) |

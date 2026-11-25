@@ -1,13 +1,13 @@
 # Site logs
 
-Each site has three logs: the **access** log of every request, the **web server error** log of nginx, and the **PHP error** log of the site's PHP. You can read them in the panel and follow new lines as they arrive.
+Each site has three logs: the **access** log of every request, the **web server error** log of nginx, and the **PHP error** log of the site's PHP. A PHP site also has the **WordPress install** log: the output of WP-CLI during the last [WordPress install](Application-profiles.md#install-wordpress) from the panel, empty if there was none. You can read them in the panel and follow new lines as they arrive.
 
 **For:** admins and managers for every site, users for their own sites.
 
 ## Read and follow a log
 
 1. Open the site and choose the **Operations › Logs** tab.
-2. Pick **Access**, **Web server errors** or **PHP errors**, and how many of the last lines to show (100 to 1000).
+2. Pick **Access**, **Web server errors**, **PHP errors** or **WordPress install**, and how many of the last lines to show (100 to 1000).
 3. While **Live** shows a green dot, new lines appear every 2 seconds. **Pause** stops this, and **Follow** starts it again. The view only asks for new lines while the browser tab is visible.
 4. **Filter** shows only the lines that contain every word you type, for example `404 wp-login`. Upper and lower case do not matter.
 5. With **Scroll automatically** on, the view stays at the newest line. Scroll up to read older lines, and the view stays where you are until you scroll back to the bottom.
@@ -30,7 +30,7 @@ The logs belong to root, so a site user cannot read or change them over SFTP or 
 
 ## API
 
-- `GET /api/v1/sites/{name}/logs/{kind}` with `kind` set to `access`, `error` or `php`, and `lines` (1 to 1000, default 200). The answer carries `lines` and a `cursor`.
+- `GET /api/v1/sites/{name}/logs/{kind}` with `kind` set to `access`, `error`, `php`, `app` or `wordpress`, and `lines` (1 to 1000, default 200). The answer carries `lines` and a `cursor`.
 - The same address with `cursor` set to the last answer's cursor returns the lines that came after it. `rotated` is true when the log was rotated in between. `more` is true when there are more lines to fetch right away.
 - API tokens need the scope `logs:read`.
 - `GET` and `PUT /api/v1/settings/logs` with `{"days": 14}` read and set the retention. Only admins can do this, in a browser session.

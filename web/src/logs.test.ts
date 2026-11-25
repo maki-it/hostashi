@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it } from "vitest";
-import { appendLines, filterLines, lineTone, retentionProblem } from "./logs";
+import { appendLines, filterLines, lineTone, retentionProblem, siteLogKinds } from "./logs";
 
 describe("logs", () => {
   it("keeps the newest lines", () => {
@@ -23,6 +23,20 @@ describe("logs", () => {
     expect(lineTone("error", "2026/11/21 [error] 1#1: x")).toBe("err");
     expect(lineTone("php", "NOTICE: PHP message: PHP Warning:  x")).toBe("warn");
     expect(lineTone("php", "NOTICE: PHP message: PHP Fatal error:  x")).toBe("err");
+  });
+
+  it("lists the logs of each site type", () => {
+    const ids = (type: string) => siteLogKinds(type).map((k) => k.id);
+    expect(ids("php")).toEqual(["access", "error", "php", "wordpress"]);
+    expect(ids("static")).toEqual(["access", "error", "php"]);
+    expect(ids("node")).toEqual(["access", "error", "app"]);
+    expect(ids("app")).toEqual(["access", "error", "app"]);
+  });
+
+  it("colours WP-CLI's errors and warnings", () => {
+    expect(lineTone("wordpress", "Error: Error establishing a database connection.")).toBe("err");
+    expect(lineTone("wordpress", "Warning: Could not create directory.")).toBe("warn");
+    expect(lineTone("wordpress", "Success: WordPress installed successfully.")).toBe("");
   });
 
   it("checks the retention", () => {
