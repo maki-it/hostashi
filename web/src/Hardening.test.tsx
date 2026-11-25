@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { HardeningCard } from "./Hardening";
@@ -86,6 +86,44 @@ describe("HardeningCard", () => {
     expect(await screen.findByText(/follows the profile's rules again/)).toBeInTheDocument();
     expect(calls.at(-1)).toEqual({ method: "PUT", path, body: { profile: "wordpress" } });
     expect(screen.queryByText("Changed from the profile")).not.toBeInTheDocument();
+  });
+
+  it("shows the server block of the unsaved rules", async () => {
+    const calls = mockFetch({
+      ["GET " + path]: { body: view("php", { configFiles: true }) },
+      ["POST " + path + "/preview"]: (body) => {
+        const b = body as { profile: string; hardening: WebHardening };
+        const files = (b.hardening.denyFiles ?? []).map((f) => `    location = /${f} {\n        return 404;\n    }\n`);
+        return { body: { config: `# Preview of the server block of site blog (read only).\nserver {\n${files.join("")}}\n` } };
+      },
+    });
+    const user = userEvent.setup();
+    render(<HardeningCard site={site} />);
+
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Profile" }), "wordpress");
+    // Nothing is loaded while the block is closed.
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+
+    await user.click(screen.getByText("Show the server block"));
+    expect(await screen.findByLabelText("Server block")).toHaveTextContent("location = /xmlrpc.php");
+    expect(calls.at(-1)).toEqual({ method: "POST", path: path + "/preview", body: { profile: "wordpress", hardening: wp } });
+
+    // A change in the form shows up without saving.
+    await user.clear(screen.getByRole("textbox", { name: "Blocked files" }));
+    await waitFor(() => expect(screen.getByLabelText("Server block")).not.toHaveTextContent("xmlrpc.php"));
+    expect(calls.some((c) => c.method === "PUT")).toBe(false);
+  });
+
+  it("says why the server block cannot be shown", async () => {
+    mockFetch({
+      ["GET " + path]: { body: view("php", { configFiles: true }) },
+      ["POST " + path + "/preview"]: { status: 422, body: { error: { code: "invalid_argument", message: `hosting: invalid input: unknown profile "x" for a php site` } } },
+    });
+    const user = userEvent.setup();
+    render(<HardeningCard site={site} />);
+
+    await user.click(await screen.findByText("Show the server block"));
+    expect(await screen.findByRole("alert")).toHaveTextContent(`Unknown profile "x" for a php site.`);
   });
 
   it("hides the PHP rules on a static site", async () => {

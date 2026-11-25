@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   fromHardeningForm,
   getSiteProfile,
+  previewSiteProfile,
   profileMessage,
   setSiteProfile,
   toHardeningForm,
@@ -165,6 +166,7 @@ export function HardeningCard({ site }: { site: Site }) {
             )}
           </div>
         </fieldset>
+        <ServerBlock site={site.name} profile={profile} form={form} php={php} />
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
@@ -177,5 +179,57 @@ export function HardeningCard({ site }: { site: Site }) {
         </div>
       </form>
     </Card>
+  );
+}
+
+// ServerBlock shows the nginx server block the site gets with the chosen
+// profile and the rules in the form, before they are saved (ADR-0069). It
+// loads only while open, and again shortly after the form changes.
+function ServerBlock({ site, profile, form, php }: { site: string; profile: string; form: HardeningForm; php: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [config, setConfig] = useState("");
+  const [error, setError] = useState("");
+  const hardening = useMemo(() => fromHardeningForm(form, php), [form, php]);
+
+  useEffect(() => {
+    if (!open) return;
+    let stale = false;
+    const run = async () => {
+      try {
+        const p = await previewSiteProfile(site, profile, hardening);
+        if (!stale) {
+          setConfig(p.config);
+          setError("");
+        }
+      } catch (err) {
+        if (!stale) setError(profileMessage(err));
+      }
+    };
+    const timer = setTimeout(() => void run(), 300);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
+  }, [open, site, profile, hardening]);
+
+  return (
+    <details onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary>Show the server block</summary>
+      <div className="ui-stack">
+        <p className="ui-hint">
+          Read only, with the profile and rules above as they are now, saved or not. Paths below <code>/placeholder</code> stand for the server's
+          own; password hashes are never shown.
+        </p>
+        {error ? (
+          <Notice tone="err" title={error} />
+        ) : config ? (
+          <pre className="ui-code ui-code-scroll" aria-label="Server block">
+            {config}
+          </pre>
+        ) : (
+          <p aria-busy="true">Loading…</p>
+        )}
+      </div>
+    </details>
   );
 }
