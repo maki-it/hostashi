@@ -6968,6 +6968,37 @@
         },
         "type": "object"
       },
+      "SiteProfilePreview": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config"
+        ],
+        "type": "object"
+      },
+      "SiteProfilePreviewInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "hardening": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebHardeningInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profile": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "SiteSample": {
         "additionalProperties": false,
         "properties": {
@@ -20881,6 +20912,69 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites.profile:write"
+      }
+    },
+    "/api/v1/sites/{name}/profile/preview": {
+      "post": {
+        "operationId": "previewSiteProfile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteProfilePreviewInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteProfilePreview"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "Render the site's server block for a profile and hardening (read only)",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
       }
     },
     "/api/v1/sites/{name}/proxy": {

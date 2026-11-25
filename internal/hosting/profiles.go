@@ -10,6 +10,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/profile"
 	"github.com/maki-it/hostashi/internal/store"
+	"github.com/maki-it/hostashi/internal/web"
 )
 
 // siteProfile returns the profile a site follows: its stored one, or the
@@ -226,4 +227,69 @@ func (s *Service) storeCreateProfile(ctx context.Context, req CreateRequest, sit
 	}
 
 	return nil
+}
+
+// SiteProfilePreview renders the server block a static or PHP site gets
+// with a profile and hardening (ADR-0069), with the agent's templates and
+// placeholder paths (web.Preview). It stores nothing and does not ask the
+// agent. An empty profileName with nil hardening shows what the site has;
+// otherwise the arguments mean what they mean for SetSiteProfile.
+func (s *Service) SiteProfilePreview(ctx context.Context, name, profileName string, want *agentapi.WebHardening) (string, error) {
+	site, err := s.Get(ctx, name)
+	if err != nil {
+		return "", err
+	}
+
+	if site.State != store.SiteActive {
+		return "", ErrState
+	}
+
+	in, err := s.loadWebInputs(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	p, o, ok := siteProfile(in.profiles, site)
+	if !ok {
+		return "", ErrSiteType
+	}
+
+	if profileName != "" || want != nil {
+		if profileName != "" {
+			if p, ok = profile.Builtin(profileName); !ok || p.Type != site.Type {
+				return "", fmt.Errorf("%w: unknown profile %q for a %s site", ErrInvalid, profileName, site.Type)
+			}
+		}
+
+		o = profile.Overrides{}
+
+		if want != nil {
+			if err := want.Validate(site.Type == store.SiteTypePHP); err != nil {
+				return "", fmt.Errorf("%w: %w", ErrInvalid, err)
+			}
+
+			o = profile.Diff(p.Hardening, *want)
+		}
+	}
+
+	if len(site.Domains) == 0 {
+		return "", fmt.Errorf("%w: the site has no domain", ErrInvalid)
+	}
+
+	// As the site is served: the preview shows its rules also while it is
+	// disabled or in maintenance.
+	ws := in.webSite(site, site.PHP, site.TLS && s.certCovers(site, 0))
+	in.addFiles(&ws, site, site.PHP)
+
+	ws.Hardening = nil
+	if h := profile.Effective(p, o, site.PHP != ""); !h.IsZero() {
+		ws.Hardening = &h
+	}
+
+	out, err := web.Preview(ws)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	return out, nil
 }

@@ -74,8 +74,9 @@ jobs:
           sudo systemctl disable --now nginx
           for u in /usr/lib/systemd/system/php*-fpm.service; do sudo systemctl disable --now "$(basename "$u")"; done
       - name: Tests (unprivileged)
-        # hostashi_fasthash: cheap password hashes in tests only (see
-        # internal/auth/cost_fast.go); the next step checks the real cost.
+        # hostashi_fasthash: cheap password hashes (internal/auth/cost_fast.go;
+        # the next step checks the real cost) and new test databases copied
+        # from one migrated database (internal/store/template_fast.go).
         run: go test -race -tags hostashi_fasthash ./...
       - name: Password hashing with the production cost
         run: go test -race -count=1 -run '^(TestHashAndVerify|TestProductionCost)$' ./internal/auth/
