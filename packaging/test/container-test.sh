@@ -654,6 +654,18 @@ x grep -q '^clamav-install: done: ClamAV ' /var/lib/hostashi-agent/clamav-instal
 x cp /etc/apparmor.d/local/usr.sbin.clamd /tmp/aa.keep
 x sh -c 'printf "# admin\n" >/etc/apparmor.d/local/usr.sbin.clamd'
 if x env HOSTASHI_CLAMAV_STATE_DIR=/var/lib/hostashi-agent/clamav-install /usr/local/lib/hostashi/clamav-install check >/dev/null; then fail "check missed the AppArmor block"; fi
+# The package's postinst runs the upgrade without apt (dpkg holds the
+# lock): it must put the block back without apt and keep the admin's lines
+# (web3, 0.8.0 -> 0.9.0).
+out=$(x /opt/hostashi/install.sh upgrade --binary /opt/hostashi/hostashi 2>&1) || fail "upgrade without the AppArmor block: $out"
+x grep -qxF '/etc/hostashi/clamav/clamd.conf r,' /etc/apparmor.d/local/usr.sbin.clamd || fail "upgrade did not put the AppArmor block back: $(x cat /etc/apparmor.d/local/usr.sbin.clamd)"
+x grep -qxF '# admin' /etc/apparmor.d/local/usr.sbin.clamd || fail "upgrade dropped the admin's AppArmor lines"
+x env HOSTASHI_CLAMAV_STATE_DIR=/var/lib/hostashi-agent/clamav-install /usr/local/lib/hostashi/clamav-install check >/dev/null || fail "clamav-install check after the upgrade repair"
+# A missing package still needs apt: the upgrade names it.
+x dpkg --remove --force-depends clamdscan >/dev/null 2>&1 || fail "cannot remove clamdscan for the test"
+rc=0; out=$(x /opt/hostashi/install.sh upgrade --binary /opt/hostashi/hostashi 2>&1) || rc=$?
+{ [ "$rc" != 0 ] && grep -q 'clamdscan not installed' <<<"$out"; } || fail "upgrade without clamdscan did not name it (rc $rc): $out"
+x apt-get -o DPkg::Lock::Timeout=600 -y -qq --no-install-recommends install clamdscan >/dev/null || fail "cannot reinstall clamdscan"
 x cp /tmp/aa.keep /etc/apparmor.d/local/usr.sbin.clamd
 # The unit systemd runs, after all drop-ins, must not move files.
 onacc_exec="$(x systemctl show -p ExecStart --value clamav-clamonacc.service)"
