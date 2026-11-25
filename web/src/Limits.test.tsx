@@ -198,22 +198,22 @@ describe("LimitSettings", () => {
 describe("Presets", () => {
   const rowOf = async (name: string) => {
     const table = await screen.findByRole("table", { name: "Limit presets" });
-    return within(within(table).getByText(name, { selector: "strong" }).closest("tr")!);
+    return within(within(table).getByRole("link", { name }).closest("tr")!);
   };
 
-  it("lists presets in a table with the default marked, CPU in cores and no delete for the default", async () => {
+  it("lists presets in a narrow table with the default marked, CPU in cores and the row opening the preset", async () => {
     mockFetch({ "GET /api/v1/limit-presets": { body: { presets: [presets[0], { ...presets[1]!, limits: { ...small, cpuQuotaPercent: 150 } }], cpus: 4 } } });
     render(<Harness />);
     const def = await rowOf("small");
     expect(def.getByText("Default")).toBeInTheDocument();
-    expect(def.getByRole("cell", { name: "1.5" })).toBeInTheDocument();
-    expect(def.queryByRole("button", { name: "Delete small" })).toBeNull();
+    expect(def.getByText("1.5")).toBeInTheDocument();
     const med = await rowOf("medium");
     expect(med.getByText("25 GiB")).toBeInTheDocument();
     expect(med.getByText("No limit")).toBeInTheDocument();
-    expect(med.getByRole("button", { name: "Delete medium" })).toBeInTheDocument();
-    expect(med.getByRole("link", { name: "Change medium" })).toHaveAttribute("href", "#/limits?edit=medium");
-    expect(screen.getByRole("columnheader", { name: "CPU cores" })).toBeInTheDocument();
+    expect(med.getByText("10 PHP workers")).toBeInTheDocument();
+    expect(med.queryByRole("button")).toBeNull();
+    expect(med.getByRole("link", { name: "medium" })).toHaveAttribute("href", "#/limits?edit=medium");
+    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Preset", "Disk space", "Memory", "Processes", "CPU", "Caches"]);
     expect(screen.getByText("This server has 4 CPU cores.")).toBeInTheDocument();
   });
 
@@ -226,7 +226,7 @@ describe("Presets", () => {
       screen
         .getAllByRole("row")
         .slice(1)
-        .map((r) => r.querySelector("strong")?.textContent);
+        .map((r) => r.querySelector("a")?.textContent);
     expect(names()).toEqual(["medium", "small"]);
     await user.click(screen.getByRole("button", { name: "Memory" }));
     expect(names()).toEqual(["small", "medium"]);
@@ -282,19 +282,28 @@ describe("Presets", () => {
       ...list,
       "DELETE /api/v1/limit-presets/medium": { status: 409, body: { error: { code: "preset_is_default", message: "" } } },
     });
-    render(<Harness />);
-    await userEvent.click((await rowOf("medium")).getByRole("button", { name: "Delete medium" }));
+    render(<Harness initial="edit=medium" />);
+    await userEvent.click(await screen.findByRole("button", { name: "Delete preset" }));
     const dialog = within(screen.getByRole("alertdialog", { name: "Delete the preset medium?" }));
     await userEvent.click(dialog.getByRole("button", { name: "Delete preset" }));
     expect(await dialog.findByRole("alert")).toHaveTextContent("Make another preset the default first.");
     expect(calls.some((c) => c.method === "DELETE")).toBe(true);
   });
 
-  it("makes a preset the default", async () => {
+  it("makes a preset the default in its form", async () => {
     const calls = mockFetch({ ...list, "PUT /api/v1/limit-presets/medium": { body: { ...presets[0], default: true } } });
-    render(<Harness />);
-    await userEvent.click((await rowOf("medium")).getByRole("button", { name: "Make medium the default" }));
-    expect(await screen.findByText("New sites now get the preset medium.")).toBeInTheDocument();
+    render(<Harness initial="edit=medium" />);
+    const form = within(await screen.findByRole("form", { name: "Change preset medium" }));
+    await userEvent.click(form.getByRole("checkbox", { name: "Default for new sites" }));
+    await userEvent.click(form.getByRole("button", { name: "Save preset" }));
+    expect(await screen.findByText("Preset medium saved. Sites that use it get the new values.")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toMatchObject({ name: "medium", default: true });
+  });
+
+  it("offers no delete for the default preset", async () => {
+    mockFetch(list);
+    render(<Harness initial="edit=small" />);
+    await screen.findByRole("form", { name: "Change preset small" });
+    expect(screen.queryByRole("button", { name: "Delete preset" })).toBeNull();
   });
 });

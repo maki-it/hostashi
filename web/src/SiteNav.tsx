@@ -2,17 +2,19 @@
 
 import type { SiteTab } from "./routes";
 import { tabPanelProps, Tabs } from "./ui";
+import { Code, FolderSimple, Gauge, Globe, ShieldCheck, SquaresFour } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 
-export type SiteGroup = { id: string; label: string; tabs: { id: SiteTab; label: string }[] };
+export type SiteGroup = { id: string; label: string; icon: ReactNode; tabs: { id: SiteTab; label: string }[] };
 
 // The sections of a site page: a few groups, each with its own tabs. The
 // address keeps naming the inner tab (#/sites/<name>/<tab>), so links from
 // before the groups still open the same settings.
 export const siteGroups: readonly SiteGroup[] = [
-  { id: "overview", label: "Overview", tabs: [{ id: "overview", label: "Overview" }] },
+  { id: "overview", icon: <SquaresFour size={18} aria-hidden />, label: "Overview", tabs: [{ id: "overview", label: "Overview" }] },
   {
     id: "domains",
+    icon: <Globe size={18} aria-hidden />,
     label: "Domains & HTTPS",
     tabs: [
       { id: "domains", label: "Domains" },
@@ -21,6 +23,7 @@ export const siteGroups: readonly SiteGroup[] = [
   },
   {
     id: "app",
+    icon: <Code size={18} aria-hidden />,
     label: "App",
     tabs: [
       { id: "web", label: "Web" },
@@ -30,6 +33,7 @@ export const siteGroups: readonly SiteGroup[] = [
   },
   {
     id: "files",
+    icon: <FolderSimple size={18} aria-hidden />,
     label: "Files",
     tabs: [
       { id: "files", label: "File manager" },
@@ -38,6 +42,7 @@ export const siteGroups: readonly SiteGroup[] = [
   },
   {
     id: "security",
+    icon: <ShieldCheck size={18} aria-hidden />,
     label: "Security",
     tabs: [
       { id: "access", label: "Access" },
@@ -48,6 +53,7 @@ export const siteGroups: readonly SiteGroup[] = [
   },
   {
     id: "ops",
+    icon: <Gauge size={18} aria-hidden />,
     label: "Operations",
     tabs: [
       { id: "usage", label: "Usage" },
@@ -110,10 +116,10 @@ export function SiteNav({ site, groups, active, onTab, children }: Props) {
           )}
         </select>
       </div>
-      <div className="ui-site-tabs">
+      <div className="ui-site-tabs ui-site-groups">
         <Tabs
           label={site}
-          tabs={groups.map((g) => ({ id: g.id, label: g.label }))}
+          tabs={groups.map((g) => ({ id: g.id, label: g.label, icon: g.icon }))}
           active={group.id}
           onChange={(id) => {
             const g = groups.find((x) => x.id === id);

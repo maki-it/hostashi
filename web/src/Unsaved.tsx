@@ -34,6 +34,14 @@ export function useUnsaved(key: string) {
   // settle decides a save by the notice its card shows afterwards.
   const settle = () => {
     let changed = false;
+    // A form that is gone (a closed dialog, a cancelled edit) holds nothing.
+    for (const f of forms.current) {
+      if (!f.isConnected) {
+        forms.current.delete(f);
+        saving.current.delete(f);
+        changed = true;
+      }
+    }
     for (const f of saving.current) {
       const card = f.closest("section[aria-label]") ?? f;
       if (card.querySelector('[role="alert"]')) saving.current.delete(f);
