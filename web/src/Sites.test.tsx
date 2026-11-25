@@ -733,6 +733,9 @@ describe("SitePage", () => {
     await user.click(within(screen.getByRole("tablist", { name: "Domains & HTTPS" })).getByRole("tab", { name: "HTTPS" }));
     expect(screen.getByText("Unsaved changes").parentElement).toHaveTextContent("Unsaved changes in Domains. Save them first, or drop them to open the other tab.");
     expect(screen.getByRole("region", { name: "Domains" })).toBeInTheDocument();
+    // The card name jumps to the form.
+    await user.click(screen.getByRole("button", { name: "Domains" }));
+    expect(screen.getByLabelText(/^Domains of blog/)).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Drop changes" }));
     const https = within(await screen.findByRole("region", { name: "HTTPS" }));
     await user.click(https.getByLabelText(/^HTTPS with/));
