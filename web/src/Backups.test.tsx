@@ -9,7 +9,7 @@ import type { BackupInfo } from "./backups";
 import { mockFetch } from "./test-utils";
 
 const status = { running: false, ok: false, items: [], maintenanceOk: true };
-const defaults = { version: 1, retention: { daily: 7, weekly: 4, monthly: 6 }, windowStart: 1, windowEnd: 5, readParts: 12 };
+const defaults = { version: 1, retention: { hourly: 0, daily: 7, weekly: 4, monthly: 6, yearly: 0 }, intervalHours: 24, windowStart: 1, windowEnd: 5, readParts: 12 };
 const target = { user: "u123456", host: "u123456.your-storagebox.de", port: 23, path: "hostashi" };
 const pub = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGtest hostashi-backup@web3";
 
@@ -70,6 +70,42 @@ describe("Backups", () => {
     expect(await screen.findByLabelText("Public key")).toHaveTextContent(pub);
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ ...defaults, target: nas });
     expect(screen.queryByText(/Hetzner.s console/)).not.toBeInTheDocument();
+  });
+
+  it("runs backups every hour and keeps hourly and yearly snapshots", async () => {
+    const user = userEvent.setup();
+    const nas = { user: "backup", host: "192.0.2.10", port: 22, path: "hostashi" };
+    const hourly = { ...defaults, target: nas, intervalHours: 1, retention: { ...defaults.retention, hourly: 48, yearly: 3 } };
+    const calls = mockFetch({
+      "GET /api/v1/backups": { body: fresh },
+      "PUT /api/v1/backups/settings": { body: { ...fresh, settings: hourly, publicKey: pub } },
+    });
+    render(<Harness />);
+    expect(await screen.findByLabelText("Start from (hour)")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("User"), "backup");
+    await user.type(screen.getByLabelText("Host"), "192.0.2.10");
+    await user.selectOptions(screen.getByLabelText("Run backups"), "Every hour");
+    expect(screen.queryByLabelText("Start from (hour)")).not.toBeInTheDocument();
+    expect(screen.getByText(/skips that one/)).toBeInTheDocument();
+    const h = screen.getByLabelText("Hourly");
+    await user.clear(h);
+    await user.type(h, "48");
+    const y = screen.getByLabelText("Yearly");
+    await user.clear(y);
+    await user.type(y, "3");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByLabelText("Public key")).toHaveTextContent(pub);
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual(hourly);
+    expect(screen.getByLabelText("Run backups")).toHaveValue("1");
+  });
+
+  it("shows an older server's settings as daily without hourly or yearly snapshots", async () => {
+    const old = { version: 1, retention: { daily: 7, weekly: 4, monthly: 6 }, windowStart: 1, windowEnd: 5, readParts: 12 };
+    mockFetch({ "GET /api/v1/backups": { body: { ...fresh, settings: old } } });
+    render(<Harness />);
+    expect(await screen.findByLabelText("Run backups")).toHaveValue("24");
+    expect(screen.getByLabelText("Hourly")).toHaveValue("0");
+    expect(screen.getByLabelText("Yearly")).toHaveValue("0");
   });
 
   it("warns when a Storage Box is set on another port than 23", async () => {

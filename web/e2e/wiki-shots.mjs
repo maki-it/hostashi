@@ -251,6 +251,17 @@ const shots = [
     ready: "text=Target and schedule",
     act: async (page) => page.getByRole("heading", { name: "Target and schedule" }).evaluate((h) => h.scrollIntoView({ block: "start" })),
   },
+  {
+    name: "backups-hourly",
+    hash: "#/backups",
+    ready: "text=Target and schedule",
+    act: async (page) => {
+      await page.getByLabel("Run backups").selectOption("1");
+      await page.getByLabel("Hourly").fill("48");
+      await page.getByLabel("Yearly").fill("3");
+      await page.getByRole("group", { name: "Keep snapshots" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
   { name: "firewall", hash: "#/firewall", ready: "text=Allowlists" },
   {
     name: "firewall-api-tokens",
