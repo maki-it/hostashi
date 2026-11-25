@@ -100,8 +100,10 @@ export function Table<T>({ label, columns, rows, rowKey, sort, onSort, empty }: 
           ) : (
             shown.map((row) => (
               <tr key={rowKey(row)}>
-                {columns.map((c) => (
-                  <td key={c.key}>{c.cell(row)}</td>
+                {columns.map((c, i) => (
+                  <td key={c.key} data-label={i === 0 || c.srHeader ? undefined : c.header} data-actions={c.srHeader ? "" : undefined}>
+                    {c.cell(row)}
+                  </td>
                 ))}
               </tr>
             ))

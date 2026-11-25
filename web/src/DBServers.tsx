@@ -180,15 +180,15 @@ export function DBServersView({
       cell: (s) => (
         <RowActions>
           {!s.local && (
-            <IconButton label={`Check ${s.name}`} icon={<ArrowsClockwise size={16} />} disabled={busy !== ""} onClick={() => void act(s.name, "check")} />
+            <IconButton label={`Check ${s.name}`} text="Check" icon={<ArrowsClockwise size={16} />} disabled={busy !== ""} onClick={() => void act(s.name, "check")} />
           )}
           {!s.default && (
-            <IconButton label={`Make ${s.name} the default`} icon={<Star size={16} />} disabled={busy !== ""} onClick={() => void act(s.name, "default")} />
+            <IconButton label={`Make ${s.name} the default`} text="Make default" icon={<Star size={16} />} disabled={busy !== ""} onClick={() => void act(s.name, "default")} />
           )}
           {!s.local && (
             <IconButton
               label={`Remove ${s.name}`}
-              icon={<Trash size={16} />}
+              text="Remove" icon={<Trash size={16} />}
               danger
               disabled={busy !== "" || s.databases > 0}
               onClick={() => setConfirm(s.name)}

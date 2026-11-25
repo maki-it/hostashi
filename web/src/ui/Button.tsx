@@ -31,13 +31,23 @@ type IconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"
   danger?: boolean;
   /** Opens the tooltip below the button, for the first row of a table. */
   tipBelow?: boolean;
+  /** A short visible word, part of label; the button then shows icon and text. */
+  text?: string;
 };
 
 /**
  * An icon-only button for toolbars and table rows. The label is the
  * accessible name and shows as a tooltip on hover and keyboard focus.
  */
-export function IconButton({ label, icon, danger = false, tipBelow = false, type = "button", ...rest }: IconButtonProps) {
+export function IconButton({ label, icon, danger = false, tipBelow = false, text, type = "button", ...rest }: IconButtonProps) {
+  if (text !== undefined) {
+    return (
+      <button type={type} className={danger ? "ui-btn ui-btn-sm ui-btn-danger" : "ui-btn ui-btn-sm"} aria-label={label === text ? undefined : label} {...rest}>
+        {icon}
+        {text}
+      </button>
+    );
+  }
   const cls = ["ui-icon-btn", danger && "ui-danger", tipBelow && "ui-tip-below"].filter(Boolean).join(" ");
   return (
     <button type={type} className={cls} aria-label={label} data-tip={label} {...rest}>
@@ -51,10 +61,20 @@ type IconLinkProps = {
   icon: ReactNode;
   href: string;
   tipBelow?: boolean;
+  /** A short visible word, part of label; the link then shows icon and text. */
+  text?: string;
 };
 
 /** An icon-only link that looks like an IconButton, for row actions that open a page. */
-export function IconLink({ label, icon, href, tipBelow = false }: IconLinkProps) {
+export function IconLink({ label, icon, href, tipBelow = false, text }: IconLinkProps) {
+  if (text !== undefined) {
+    return (
+      <a className="ui-btn ui-btn-sm" href={href} aria-label={label === text ? undefined : label}>
+        {icon}
+        {text}
+      </a>
+    );
+  }
   return (
     <a className={tipBelow ? "ui-icon-btn ui-tip-below" : "ui-icon-btn"} href={href} aria-label={label} data-tip={label}>
       {icon}

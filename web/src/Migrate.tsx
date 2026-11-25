@@ -481,8 +481,8 @@ function ReportsCard({ onOpen }: { onOpen: (id: string) => void }) {
       srHeader: true,
       cell: (r) => (
         <RowActions>
-          <IconLink label="Show plan" icon={<ListChecks size={16} />} href={importHash({ report: r.id })} />
-          <IconButton label="Delete report" icon={<Trash size={16} />} danger disabled={busy} onClick={() => setConfirmDelete(r.id)} />
+          <IconLink label="Show plan" text="Show plan" icon={<ListChecks size={16} />} href={importHash({ report: r.id })} />
+          <IconButton label="Delete report" text="Delete" icon={<Trash size={16} />} danger disabled={busy} onClick={() => setConfirmDelete(r.id)} />
         </RowActions>
       ),
     },

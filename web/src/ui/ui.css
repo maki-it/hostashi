@@ -1522,6 +1522,7 @@ a.ui-btn {
   min-height: 30px;
   padding: 0 10px;
   font-size: 14px;
+  text-decoration: none;
 }
 
 /* A row whose first link opens it: the whole row is the click target */
@@ -1598,4 +1599,71 @@ a.ui-btn {
 }
 .ui-site-name > .ui-state-dot {
   margin-top: 7px;
+}
+/* Tables on a phone: each row is a card. The first column is the title,
+   the others get their header as a label, row actions sit at the end. */
+@media (max-width: 600px) {
+  .ui-table-box {
+    overflow-x: visible;
+  }
+  .ui-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .ui-table,
+  .ui-table tbody,
+  .ui-table td {
+    display: block;
+  }
+  .ui-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--line);
+  }
+  .ui-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .ui-table td,
+  .ui-table :is(th, td):first-child,
+  .ui-table :is(th, td):last-child {
+    padding: 2px 0;
+    border: 0;
+  }
+  .ui-table td:first-child {
+    padding-bottom: var(--space-2);
+  }
+  .ui-table td[data-label],
+  .ui-table td.ui-empty {
+    grid-column: 1 / -1;
+  }
+  .ui-table td[data-label] {
+    display: grid;
+    justify-items: start;
+    grid-template-columns: 9em 1fr;
+    gap: var(--space-3);
+    align-items: center;
+  }
+  .ui-table td[data-label]::before {
+    content: attr(data-label);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .ui-table td[data-actions] {
+    display: flex;
+    grid-row: 1;
+    grid-column: 2;
+    align-items: flex-start;
+    justify-content: flex-end;
+  }
+  .ui-table td.ui-empty {
+    text-align: center;
+  }
+}
+.ui-row-actions:has(.ui-btn) {
+  gap: var(--space-2);
 }

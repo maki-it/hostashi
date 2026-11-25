@@ -111,6 +111,7 @@ export function CertificateCard({ base, name, tls, deletable = true, offHint = "
           {canRenew && (
             <IconButton
               label="Renew now"
+              text="Renew now"
               icon={<ArrowClockwise />}
               disabled={busy}
               onClick={() =>
@@ -121,11 +122,12 @@ export function CertificateCard({ base, name, tls, deletable = true, offHint = "
               }
             />
           )}
-          <IconButton label="Upload certificate" icon={<UploadSimple />} disabled={busy} onClick={() => open("upload")} />
-          <IconButton label="Create CSR" icon={<FileText />} disabled={busy} onClick={() => open("csr")} />
+          <IconButton label="Upload certificate" text="Upload" icon={<UploadSimple />} disabled={busy} onClick={() => open("upload")} />
+          <IconButton label="Create CSR" text="Create CSR" icon={<FileText />} disabled={busy} onClick={() => open("csr")} />
           {deletable && (
             <IconButton
               label={canDelete ? "Delete certificate" : `Delete certificate (${offHint})`}
+              text="Delete"
               icon={<Trash />}
               danger
               disabled={busy || !canDelete}
