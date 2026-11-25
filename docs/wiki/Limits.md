@@ -23,7 +23,7 @@ When a site has used 95 % of a disk limit, the panel warns. When it is full, wri
 
 ## Presets
 
-A preset is a named set of limits. Under **Server → Limit presets** you create and change them.
+A preset is a named set of limits. Under **Hosting → Limit presets** you create and change them.
 
 - A new site gets the **default** preset.
 - On a site's **Limits** tab you choose a preset or **custom values**.
