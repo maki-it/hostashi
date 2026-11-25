@@ -344,7 +344,7 @@ function EntryName({ entry, onOpen }: { entry: FileEntry; onOpen: () => void }) 
   if (entry.type === "dir") {
     return (
       <button type="button" className="ui-files-name ui-link-btn" onClick={onOpen}>
-        <Folder size={18} weight="fill" aria-hidden="true" />
+        <Folder size={18} aria-hidden="true" />
         <span>{entry.name}</span>
       </button>
     );
