@@ -6,7 +6,7 @@ import type { User } from "./auth";
 import { daysLeft } from "./certs";
 import { ServerDashboard } from "./Dashboard";
 import { SitesByUsage } from "./Usage";
-import { getBackups, type BackupInfo } from "./backups";
+import { getBackups, overdueHours, type BackupInfo } from "./backups";
 import { checkTitle, runDoctor, type DoctorReport } from "./doctor";
 import { canSee } from "./nav";
 import { listParked, type ParkedDomain } from "./parked";
@@ -33,6 +33,16 @@ export function attention(d: Data): Item[] {
     const st = d.backups.status;
     if (!d.backups.ready) {
       items.push({ key: "backups-setup", tone: "warn", word: "Warning", title: "Backups are not set up", href: formatHash({ page: "backups" }), link: "Set up backups" });
+    } else if (d.backups.overdue) {
+      items.push({
+        key: "backups-overdue",
+        tone: "warn",
+        word: "Warning",
+        title: "No recent backup",
+        detail: `No backup has finished in the last ${overdueHours(d.backups.settings.intervalHours)} hours.`,
+        href: formatHash({ page: "backups" }),
+        link: "Open backups",
+      });
     } else if (st.started && !st.running && !st.ok) {
       items.push({
         key: "backups",
@@ -213,7 +223,9 @@ export function Overview({ user }: { user: User }) {
           <Stat title="Backups" href={formatHash({ page: "backups" })} link="Open backups">
             {data.backups.status.finished ? (
               <>
-                <Badge tone={data.backups.status.ok ? "ok" : "err"}>{data.backups.status.ok ? "OK" : "Failed"}</Badge>
+                <Badge tone={data.backups.overdue ? "warn" : data.backups.status.ok ? "ok" : "err"}>
+                  {data.backups.overdue ? "Overdue" : data.backups.status.ok ? "OK" : "Failed"}
+                </Badge>
                 <p className="ui-hint ui-flush">
                   Last backup <RelTime iso={data.backups.status.finished} />
                 </p>

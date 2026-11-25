@@ -55,7 +55,10 @@ type Cert struct {
 type Watcher struct {
 	Notifier *Notifier
 	Backups  func(ctx context.Context) (agentapi.BackupStatus, error) // nil: no backups
-	Certs    func(ctx context.Context) ([]Cert, error)
+	// BackupInfo gives the schedule, to notice a missing run; nil: not
+	// checked.
+	BackupInfo func(ctx context.Context) (agentapi.BackupInfo, error)
+	Certs      func(ctx context.Context) ([]Cert, error)
 	// Doctor runs the server checks; nil: none. It runs at most hourly.
 	Doctor func(ctx context.Context) (agentapi.DoctorReport, error)
 	Now    func() time.Time
@@ -85,8 +88,12 @@ func (w *Watcher) Check(ctx context.Context) {
 	if w.Backups != nil {
 		if s, err := w.Backups(ctx); err != nil {
 			w.Log.WarnContext(ctx, "notify: backup status", "err", err)
-		} else if ev, ok := w.backupEvent(s); ok {
-			w.notify(ctx, ev)
+		} else {
+			if ev, ok := w.backupEvent(s); ok {
+				w.notify(ctx, ev)
+			}
+
+			w.checkOverdue(ctx, s)
 		}
 	}
 
@@ -181,6 +188,52 @@ func (w *Watcher) backupEvent(s agentapi.BackupStatus) (Event, bool) {
 		Window:   longWindow,
 		Fragment: "backups",
 		Mail:     mail.OpsEvent{Template: "backup-failed", Subject: "Backup failed", Lines: lines},
+	}, true
+}
+
+func (w *Watcher) checkOverdue(ctx context.Context, s agentapi.BackupStatus) {
+	if w.BackupInfo == nil {
+		return
+	}
+
+	info, err := w.BackupInfo(ctx)
+	if err != nil {
+		w.Log.WarnContext(ctx, "notify: backup settings", "err", err)
+
+		return
+	}
+
+	if ev, ok := w.overdueEvent(info, s); ok {
+		w.notify(ctx, ev)
+	}
+}
+
+// overdueEvent reports a scheduled run that did not happen (ADR-0008, 8),
+// once per last finished run.
+func (w *Watcher) overdueEvent(info agentapi.BackupInfo, s agentapi.BackupStatus) (Event, bool) {
+	if !agentapi.BackupOverdue(info.Settings, info.Ready, s, w.Now()) {
+		return Event{}, false
+	}
+
+	every := "every day"
+	if h := info.Settings.IntervalHours; h > 0 && h < 24 {
+		every = "every " + strconv.Itoa(h) + " hours"
+		if h == 1 {
+			every = "every hour"
+		}
+	}
+
+	lines := []string{
+		"no backup has finished since " + when(s.Finished) + ", although backups are scheduled to run " + every + ".",
+		"Check the timer with: systemctl status hostashi-backup.timer hostashi-backup.service",
+	}
+
+	return Event{
+		Category: Backups,
+		Key:      "backup-overdue:" + strconv.FormatInt(s.Finished.Unix(), 10),
+		Window:   longWindow,
+		Fragment: "backups",
+		Mail:     mail.OpsEvent{Template: "backup-overdue", Subject: "Backup missing", Lines: lines},
 	}, true
 }
 

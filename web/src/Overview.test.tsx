@@ -41,6 +41,14 @@ const backups = (ok: boolean): BackupInfo =>
   }) as unknown as BackupInfo;
 
 describe("attention", () => {
+  it("warns when no backup finished within the interval", () => {
+    const late = { ...backups(true), overdue: true, settings: { intervalHours: 1 } } as unknown as BackupInfo;
+    const items = attention({ backups: late });
+    expect(items.map((i) => [i.key, i.tone])).toEqual([["backups-overdue", "warn"]]);
+    expect(items[0]!.detail).toBe("No backup has finished in the last 3 hours.");
+    expect(attention({ backups: backups(true) })).toEqual([]);
+  });
+
   it("takes the doctor's problems, failures first, and a failed backup", () => {
     const items = attention({ sites: [broken], doctor, backups: backups(false) });
     expect(items.map((i) => i.word)).toEqual(["Failed", "Failed", "Warning"]);

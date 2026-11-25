@@ -577,6 +577,9 @@
           "hostKey": {
             "type": "string"
           },
+          "overdue": {
+            "type": "boolean"
+          },
           "publicKey": {
             "type": "string"
           },
@@ -592,6 +595,7 @@
         },
         "required": [
           "hostKey",
+          "overdue",
           "publicKey",
           "ready",
           "settings",

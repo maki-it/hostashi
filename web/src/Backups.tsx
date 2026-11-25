@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { ClockCounterClockwise, CloudArrowUp } from "@phosphor-icons/react";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   backupMessage,
   confirmHostKey,
@@ -9,8 +9,10 @@ import {
   getBackups,
   getImport,
   getRestore,
+  everyText,
   importDump,
   intervals,
+  overdueHours,
   listSites,
   poll,
   runBackup,
@@ -75,7 +77,7 @@ export function Backups({ query, onQuery }: QueryProps) {
     <>
       <PageHead
         title="Backups"
-        description="Daily restic backups of all sites and databases to any SFTP server, for example a Hetzner Storage Box, a NAS or another Linux server."
+        description="Scheduled restic backups of all sites and databases to any SFTP server, for example a Hetzner Storage Box, a NAS or another Linux server."
         actions={
           info?.ready && (
             <Button variant="primary" icon={<CloudArrowUp size={16} aria-hidden="true" />} disabled={busy || info.status.running} onClick={() => void run()}>
@@ -100,11 +102,24 @@ export function Backups({ query, onQuery }: QueryProps) {
   );
 }
 
-function statusOf(info: BackupInfo): { tone: Tone; word: string; summary: string } {
+function statusOf(info: BackupInfo): { tone: Tone; word: string; summary: ReactNode } {
   const st = info.status;
   if (!info.ready) return { tone: "off", word: "Not set up", summary: "Not set up yet: set a target and confirm its host key." };
   if (st.running) return { tone: "warn", word: "Running", summary: "A backup is running." };
   if (!st.started) return { tone: "off", word: "No backup yet", summary: "No backup has run yet." };
+  if (info.overdue) {
+    const h = info.settings.intervalHours;
+    return {
+      tone: "warn",
+      word: "Overdue",
+      summary: (
+        <>
+          No backup has finished in the last {overdueHours(h)} hours, although backups run {everyText(h)}. Check the timer on the server with{" "}
+          <code>systemctl status hostashi-backup.timer</code>.
+        </>
+      ),
+    };
+  }
   if (st.ok) return { tone: "ok", word: "OK", summary: "The last backup succeeded." };
   return { tone: "err", word: "Failed", summary: "The last backup failed" + (st.error ? ": " + st.error : ".") };
 }

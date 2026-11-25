@@ -631,12 +631,13 @@ func Run(ctx context.Context, cfg Config) error {
 		Link: func(f string) string { return panelLink(cfg.PublicURL, f) },
 	}
 	watcher := &notify.Watcher{
-		Notifier: notifier,
-		Backups:  deps.Backups.Status,
-		Certs:    notifyCerts(st, deps.Sites, PanelDomain(cfg.PublicURL)),
-		Doctor:   withDatabaseChecks(deps.Doctor, deps.Sites.DatabaseDoctor),
-		Now:      time.Now,
-		Log:      cfg.Log,
+		Notifier:   notifier,
+		Backups:    deps.Backups.Status,
+		BackupInfo: deps.Backups.Get,
+		Certs:      notifyCerts(st, deps.Sites, PanelDomain(cfg.PublicURL)),
+		Doctor:     withDatabaseChecks(deps.Doctor, deps.Sites.DatabaseDoctor),
+		Now:        time.Now,
+		Log:        cfg.Log,
 	}
 
 	go watcher.Run(ctx)

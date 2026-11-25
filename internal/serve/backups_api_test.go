@@ -153,7 +153,7 @@ func TestBackupsOverHTTP(t *testing.T) {
 	}
 
 	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/backups/hostkey", cookie: c, body: `{"key":"` + scan.Key + `"}`})
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"ready":true`) {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"ready":true`) || !strings.Contains(rec.Body.String(), `"overdue":false`) {
 		t.Fatalf("confirm host key: %d %s", rec.Code, rec.Body)
 	}
 
