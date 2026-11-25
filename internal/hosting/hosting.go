@@ -276,6 +276,10 @@ type CreateRequest struct {
 	// Node makes an app site, which runs a program of its own instead
 	// (addendum 2).
 	App *store.SiteApp
+	// Profile is the application profile of a static or PHP site
+	// (ADR-0069); empty takes the default of the type. Its document root
+	// folder and hardening rules are stored with the site.
+	Profile string
 }
 
 // checkRedirect normalizes and checks the redirect of a site with these
@@ -416,6 +420,10 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		if err := s.checkProxy(ctx, *req.Proxy, domains); err != nil {
 			return store.Site{}, err
 		}
+	}
+
+	if err := checkCreateProfile(req); err != nil {
+		return store.Site{}, err
 	}
 
 	if req.Redirect != nil {
@@ -621,7 +629,7 @@ func (s *Service) storeTLSChoice(ctx context.Context, req CreateRequest, siteID 
 		}
 	}
 
-	return nil
+	return s.storeCreateProfile(ctx, req, siteID)
 }
 
 // parkedAmong returns the parked domains among domains.

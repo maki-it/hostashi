@@ -214,6 +214,9 @@ type siteCreateRequest struct {
 	Node     *nodeAppJSON    `json:"node"`
 	App      *programAppJSON `json:"app"`
 	Python   *pythonAppJSON  `json:"python"`
+	// Profile is the application profile of a static or PHP site
+	// (ADR-0069, GET /api/v1/profiles); left out, the default of the type.
+	Profile string `json:"profile"`
 }
 
 type siteDomainsRequest struct {
@@ -547,6 +550,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 
 		s, err := svc.Create(ctx, p.User.ID, hosting.CreateRequest{
 			Name: in.Name, Title: in.Title, Pool: in.Pool, PHP: in.PHP, Domains: in.Domains, TLS: in.TLS, HSTS: in.HSTS, Headers: in.Headers, Redirect: redirect, Proxy: proxy, App: app,
+			Profile: in.Profile,
 		})
 		if err != nil {
 			headersFail(log, w, err, "create site")

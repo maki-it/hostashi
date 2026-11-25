@@ -91,3 +91,24 @@ func TestDiffAndEffective(t *testing.T) {
 		t.Fatalf("without PHP: %+v", got)
 	}
 }
+
+func TestPHPAtLeast(t *testing.T) {
+	for _, c := range []struct {
+		v, lowest string
+		want      bool
+	}{
+		{"8.4", "8.2", true},
+		{"8.2", "8.2", true},
+		{"8.1", "8.2", false},
+		{"9.0", "8.4", true},
+		{"7.4", "8.0", false},
+		{"8.10", "8.9", true},
+		{"", "7.4", false},
+		{"x.y", "7.4", false},
+		{"8", "7.4", false},
+	} {
+		if got := PHPAtLeast(c.v, c.lowest); got != c.want {
+			t.Errorf("%s >= %s: %v", c.v, c.lowest, got)
+		}
+	}
+}
