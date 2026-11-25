@@ -37,7 +37,15 @@ type Store struct {
 // group or others can access is refused, because the database holds audit
 // data and encrypted secrets.
 func Open(ctx context.Context, path string) (*Store, error) {
-	if err := prepareFile(path); err != nil {
+	return openSeeded(ctx, path, seedFile)
+}
+
+// seedFile, when set, may create a missing database file before Open
+// opens it. Only test builds set it (template_fast.go).
+var seedFile func(path string) error
+
+func openSeeded(ctx context.Context, path string, seed func(string) error) (*Store, error) {
+	if err := prepareFile(path, seed); err != nil {
 		return nil, err
 	}
 
@@ -143,7 +151,7 @@ func isBusy(err error) bool {
 
 // prepareFile creates the file with mode 0600 if it does not exist and
 // refuses existing files or directories that leak access.
-func prepareFile(path string) error {
+func prepareFile(path string, seed func(string) error) error {
 	if path == "" {
 		return errors.New("store: empty database path")
 	}
@@ -157,6 +165,12 @@ func prepareFile(path string) error {
 
 	if !fi.IsDir() || fi.Mode().Perm()&0o022 != 0 {
 		return fmt.Errorf("%w: directory %s has mode %v", ErrInsecurePermissions, dir, fi.Mode().Perm())
+	}
+
+	if seed != nil {
+		if err := seed(path); err != nil {
+			return err
+		}
 	}
 
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
