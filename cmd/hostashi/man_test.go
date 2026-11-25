@@ -19,7 +19,7 @@ func TestManPage(t *testing.T) {
 	got := manPage()
 
 	if *updateMan {
-		if err := os.WriteFile(manFile, got, 0o644); err != nil { //nolint:gosec // a page in the source tree, readable by all
+		if err := os.WriteFile(manFile, got, 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
