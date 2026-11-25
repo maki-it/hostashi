@@ -612,6 +612,17 @@ x test ! -e /home/blog/htdocs/eicar.com || fail "quarantined file still in the s
 [ "$(api POST "/api/v1/sites/blog/malware-findings/$fid/restore")" = 200 ] || fail "restore: $(x cat /tmp/api.out)"
 [ "$(x stat -c '%U:%G' /home/blog/htdocs/eicar.com)" = blog:blog ] || fail "restored file has the wrong owner"
 x rm -f /home/blog/htdocs/eicar.com
+# Without a flagged file, clamscan's exit code shows any file it could not
+# read (exit 1 for a finding hides exit 2).
+[ "$(api POST /api/v1/sites/blog/malware-scans)" = 202 ] || fail "start clean scan: $(x cat /tmp/api.out)"
+for _ in $(seq 1 60); do
+  [ "$(api GET /api/v1/sites/blog/malware-scan)" = 200 ] || fail "site scan: $(x cat /tmp/api.out)"
+  run=$(jget 'd["runs"][0]["state"]')
+  case "$run" in succeeded|failed) break;; esac
+  sleep 2
+done
+[ "$run" = succeeded ] || fail "clean scan did not succeed ($run): $(x cat /tmp/api.out)"
+[ "$(jget 'd["runs"][0]["error"]')" = "" ] || fail "clean scan reported an error: $(x cat /tmp/api.out); log: $(x cat /var/log/hostashi/scan/blog.log)"
 
 step "malware scan: real-time mode reports a new file (ADR-0064)"
 # clamd starts only once the official signatures are there; the test has
