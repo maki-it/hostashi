@@ -676,6 +676,11 @@ var siteTmpl = template.Must(template.Must(template.Must(template.Must(withPageL
 {{- with .C}}
 {{- template "cachezone" .}}
 {{- end}}
+{{- with .HD}}{{if .Zone}}
+
+# Rate limit of the site's hardening rules (ADR-0017): per client address.
+limit_req_zone $binary_remote_addr zone={{.Zone}}:1m rate={{.Rate}}r/m;
+{{- end}}{{end}}
 {{- with .Expires}}
 
 # Asset caching (ADR-0054): the listed file types for the chosen time,
@@ -944,6 +949,7 @@ server {
     {{- with $.Expires}}
     expires ${{.Var}};
     {{- end}}
+    {{- template "hardening" $}}
     {{- if .S.PHPSocket}}
     index index.php index.html index.htm;
 
@@ -964,6 +970,52 @@ server {
     }
 
     location ~ \.php$ {
+        {{- template "phpbody" $}}
+    }
+    {{- else}}
+    index index.html index.htm;
+
+    location / {
+        {{- if .M}}
+        if (${{.Open}} = 0) {
+            return 503;
+        }
+        {{- end}}
+        {{- with $.SnipRoot}}
+        {{- if $.RootHdrs}}
+        # The snippet adds headers, so nginx would drop the server's.
+        {{- template "sitehdrs" $.RootHdrs}}
+        {{- end}}
+        include {{.}};
+        {{- end}}
+        {{- if .S.SPA}}
+        # Single-page app (ADR-0054): unknown paths get the app's index.html.
+        try_files $uri $uri/ /index.html;
+        {{- else}}
+        try_files $uri $uri/ =404;
+        {{- end}}
+    }
+
+    # Without PHP, PHP files are never sent as text: they may hold secrets
+    # such as database passwords.
+    location ~ \.php$ {
+        deny all;
+    }
+    {{- end}}
+    {{- with $.SnipServer}}
+
+    # Custom snippet (ADR-0029), after Hostashi's own locations.
+    include {{.}};
+    {{- end}}
+    {{- end}}
+}
+{{- template "www" .}}
+`).Parse(cacheSrc)).Parse(siteHdrsSrc)).Parse(realIPSrc + accessMapSrc + accessSrc + accessOpenSrc)).Parse(wwwSrc + hardeningSrc + phpBodySrc))
+
+// phpBodySrc is the body of a location that passes a PHP file to the
+// site's pool, for "location ~ \.php$" and the rate limited files of the
+// site's hardening rules. It is executed with the site's data.
+const phpBodySrc = `{{define "phpbody"}}
         {{- if .M}}
         if (${{.Open}} = 0) {
             return 503;
@@ -1010,51 +1062,7 @@ server {
         {{- with $.C}}
         {{- template "cacheloc" .}}
         {{- end}}
-    }
-    {{- else}}
-    index index.html index.htm;
-
-    location / {
-        {{- if .M}}
-        if (${{.Open}} = 0) {
-            return 503;
-        }
-        {{- end}}
-        {{- with $.SnipRoot}}
-        {{- if $.RootHdrs}}
-        # The snippet adds headers, so nginx would drop the server's.
-        {{- template "sitehdrs" $.RootHdrs}}
-        {{- end}}
-        include {{.}};
-        {{- end}}
-        {{- if .S.SPA}}
-        # Single-page app (ADR-0054): unknown paths get the app's index.html.
-        try_files $uri $uri/ /index.html;
-        {{- else}}
-        try_files $uri $uri/ =404;
-        {{- end}}
-    }
-
-    # Without PHP, PHP files are never sent as text: they may hold secrets
-    # such as database passwords.
-    location ~ \.php$ {
-        deny all;
-    }
-    {{- end}}
-
-    # Hidden files stay hidden, except /.well-known (RFC 8615).
-    location ~ /\.(?!well-known/) {
-        deny all;
-    }
-    {{- with $.SnipServer}}
-
-    # Custom snippet (ADR-0029), after Hostashi's own locations.
-    include {{.}};
-    {{- end}}
-    {{- end}}
-}
-{{- template "www" .}}
-`).Parse(cacheSrc)).Parse(siteHdrsSrc)).Parse(realIPSrc + accessMapSrc + accessSrc + accessOpenSrc)).Parse(wwwSrc))
+{{- end}}`
 
 // phpLimits sets the site's body size and read timeout (ADR-0049) unless
 // its server snippet, which is rendered at the server level, sets the same
@@ -1190,6 +1198,10 @@ func (n *Nginx) Render(d Desired, gen int) (Files, error) {
 		data := map[string]any{"N": n, "S": s, "M": (*Maintenance)(nil), "D": (*PageRef)(nil), "C": (*cacheView)(nil)}
 		if s.AssetCache && !s.Disabled {
 			data["Expires"] = assetCacheView(s)
+		}
+
+		if !s.Disabled {
+			data["HD"] = newHardeningView(s)
 		}
 
 		if r := s.Redirect; r != nil {

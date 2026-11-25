@@ -65,6 +65,10 @@ type Site struct {
 	// Headers are the site's security headers (ADR-0056), sent on every
 	// answer of the site. A snippet must not set one of them as well.
 	Headers agentapi.WebHeaders `json:"headers,omitzero"`
+	// Hardening are the site's hardening rules (ADR-0017 Part 4), for
+	// static and PHP sites; the zero value keeps the fixed hidden-file
+	// rule only.
+	Hardening agentapi.WebHardening `json:"hardening,omitzero"`
 	// RealIP takes the client address from a header of trusted proxies
 	// (ADR-0059), rendered into every server block of the site; the zero
 	// value trusts nobody. The agent has already refused ranges that hold
@@ -305,6 +309,16 @@ func (d Desired) Validate() error {
 
 		if err := s.checkHeaders(); err != nil {
 			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if !s.Hardening.IsZero() {
+			if s.Redirect != nil || s.Proxy != nil || s.App != nil {
+				return fmt.Errorf("site %q: hardening rules are for static and PHP sites", s.User)
+			}
+
+			if err := s.Hardening.Validate(s.PHPSocket != ""); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
 		}
 
 		if err := s.RealIP.Validate(); err != nil {

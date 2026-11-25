@@ -93,3 +93,16 @@ Accepting this ADR settles Parts 1 to 4 in principle. The questions below are st
 2. ~~Which presets are default-on?~~ Decided: per site type (Part 4). Kim confirmed the default matrix on 2026-11-18, including HTTP/3 and compression as defaults.
 3. ~~Do we keep a Varnish option?~~ Decided by Kim: yes, in the same phase as the importer. The Varnish configuration (VCL) and the purge integration must be our own; the CloudPanel WordPress purge plugin is GPLv3 and usable only if ADR-0002 allows it [V: `01-cloudpanel-research.md`].
 4. ~~Should the importer keep custom snippets verbatim?~~ Decided by Kim (2026-11-18): yes, after a one-time review by a person; they stay visible as custom snippets (Part 2).
+
+## Addendum 1: hardening presets spec (2026-11-25)
+
+Part 4 asks for a short spec per preset before it is built. This is the spec for the hardening rows; ADR-0069 bundles them into application profiles. Status of the values: [A] until the profile specs confirm them per application.
+
+- **Shape:** one typed object per site (`agentapi.WebHardening`) with a switch and four path lists, no nginx text. Every path is relative to the document root and follows the web root folder rules (letters, digits, `.`, `_`, `-`, at most four levels, no `..`); the panel and the agent check them. nginx gets regular expressions built in Go with `regexp.QuoteMeta`.
+- **Hidden files** (dot paths except `/.well-known/`): always on for static and PHP sites, not switchable, and the answer changes from 403 to **404**. The rule now comes before the PHP location: before, `/.git/x.php` reached PHP-FPM because nginx takes the first matching regular expression [V: render test].
+- **Config, backup and dump files** (`configFiles`): 404 for names ending in `.sql` (also `.gz`, `.bz2`, `.xz`, `.zst`), `.dump`, `.bak`, `.backup`, `.old`, `.orig`, `.save`, `.swp`, `.swo`, `~`, `.log`, `.env`, `.ini`, compared without case. Archives (`.zip`, `.tar.gz`) are not on the list, because download sites serve them on purpose [A].
+- **No PHP in folders** (`noPhpDirs`): a `.php`, `.phtml` or `.phar` file below a listed folder answers 404 instead of reaching PHP-FPM. Other files there are served. Needs PHP.
+- **Blocked folders** (`denyDirs`) and **blocked files** (`denyFiles`): 404 for the folder, everything in it, or the exact file. The WordPress `xmlrpc.php` block is the blocked file `xmlrpc.php`; TYPO3 internals are blocked folders.
+- **Rate limited files** (`limitFiles`): PHP files that allow 12 requests per minute per client address with a burst of 10, then 429 [A]. One `limit_req_zone` per site, keyed by the client address after the real IP rule (ADR-0059). The WordPress login protection is the rate limited file `wp-login.php`. Needs PHP; a file cannot be blocked and rate limited at once.
+- **Not rendered** while the site is disabled; redirect, reverse proxy and app sites refuse the rules.
+- **Tests:** a real nginx answers every rule (including case variants, the folder without slash and the rate limit), validation refuses absolute paths, `..`, quotes, braces, `$`, regular expression text and over-long lists, and no rendered pattern holds `\t`, `\r` or `\n`.

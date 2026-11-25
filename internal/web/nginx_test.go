@@ -342,8 +342,9 @@ func TestHiddenFilesAreDenied(t *testing.T) {
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("/.env answered %d, want 403", resp.StatusCode)
+	// 404 does not tell whether the file exists (ADR-0017).
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("/.env answered %d, want 404", resp.StatusCode)
 	}
 
 	// A site without PHP never hands out PHP source.
@@ -1566,7 +1567,7 @@ func TestMaintenanceSite(t *testing.T) {
 	}
 
 	// Hidden paths are denied again.
-	if code, _ := e.fetchPath(t, "alpha.example.com", "/.hostashi/page/maint/css/site.css"); code != http.StatusForbidden {
+	if code, _ := e.fetchPath(t, "alpha.example.com", "/.hostashi/page/maint/css/site.css"); code != http.StatusNotFound {
 		t.Errorf("page served after maintenance: %d", code)
 	}
 }
