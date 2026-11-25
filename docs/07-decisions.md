@@ -13,7 +13,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0007 | Isolation model per site | Accepted on 2026-11-21 (Kim) | No |
 | 0008 | Backups with restic | Accepted on 2026-11-19 ([adr/0008](adr/0008-backups-with-restic.md)) | Done |
 | 0009 | Target platforms and packaging | Accepted on 2026-11-21 (Kim) | Partly |
-| 0010 | Target audience and v1 scope | Proposed (draft: [adr/0010](adr/0010-target-audience-and-v1-scope.md)) | **Yes** |
+| 0010 | Target audience and v1 scope | Accepted on 2026-11-25 (Kim), option A ([adr/0010](adr/0010-target-audience-and-v1-scope.md)) | Done |
 | 0011 | Name and trademark | Accepted (subject to trademark search) | Done, trademark open |
 | 0012 | Language of code and documentation | Accepted on 2026-11-21 (Kim) | Yes, briefly |
 | 0013 | Business model and governance | Proposed (draft: [adr/0013](adr/0013-business-model-and-governance.md)) | **Yes** |
@@ -168,7 +168,7 @@ Rationale (general knowledge, unverified): Debian is more conservative, has fewe
 
 ## ADR-0010 Target audience and v1 scope
 
-**Full draft (status Proposed):** [adr/0010-target-audience-and-v1-scope.md](adr/0010-target-audience-and-v1-scope.md). Summary: option A (single server for developers and agencies) with guardrails.
+**Full text (status Accepted, 2026-11-25, by Kim):** [adr/0010-target-audience-and-v1-scope.md](adr/0010-target-audience-and-v1-scope.md). Summary: option A (single server for developers and agencies) with guardrails.
 
 Original proposal: single server for developers and agencies. Resellers, mail, DNS server and multi-server are non-goals for v1 (see [vision](02-vision-scope.md)).
 
