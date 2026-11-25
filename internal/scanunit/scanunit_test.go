@@ -117,7 +117,7 @@ func TestDropInContent(t *testing.T) {
 
 	// With the real-time mode's clamd, clamdscan hands it the open files.
 	b, err = DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", "/etc/hostashi-scan/blog.conf", nil)
-	if err != nil || !strings.Contains(string(b), "ExecStart=\nExecStart=/usr/bin/clamdscan --config-file=/etc/hostashi-scan/blog.conf --fdpass --infected --no-summary --stdout \"/home/blog\"\n") {
+	if err != nil || !strings.Contains(string(b), "ExecStart=\nExecStart=/usr/bin/clamdscan --config-file=/etc/hostashi-scan/blog.conf --stream --infected --no-summary --stdout \"/home/blog\"\n") {
 		t.Errorf("clamdscan drop-in: %v\n%s", err, b)
 	}
 }
