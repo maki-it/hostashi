@@ -80,6 +80,9 @@ type NewSite struct {
 	// Python makes the site a Python site of this line; its app stays
 	// stopped until a start command is set (ADR-0061).
 	Python string
+	// Profile is the application profile of the site (ADR-0069), "" for
+	// the default of its type.
+	Profile string
 }
 
 // Created counts what came with a new site.
@@ -213,6 +216,9 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		cache = ""
 	}
 
+	// The PHP version may differ from the plan's, so the profile follows it.
+	prof := plan.ProfileFor(site.Type, php)
+
 	n, err := s.create(ctx, actor, NewSite{
 		Name: ps.Name, Pool: o.Pool, PHP: php, Domains: domains, Cron: plan.CronJobs(site), Usage: site.Usage, SSHKeys: plan.SSHKeys(site),
 		PageCache:       cache,
@@ -222,6 +228,7 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		Python:          python,
 		WWWRedirect:     ps.WWWRedirect,
 		RedirectDomains: ps.RedirectDomains,
+		Profile:         prof,
 	})
 	if err != nil {
 		return ps, err
@@ -234,9 +241,11 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		"phpSettings": strconv.FormatBool(n.PHPSettings),
 		"node":        node,
 		"python":      python,
+		"profile":     prof,
 	})
 
-	ps.PHP, ps.Node, ps.Python, ps.CronImport, ps.SSHImport, ps.ObjectCacheOn, ps.PHPSettingsOn = php, node, python, n.Cron, n.SSHKeys, n.ObjectCache, n.PHPSettings
+	ps.PHP, ps.Node, ps.Python, ps.Profile, ps.CronImport, ps.SSHImport, ps.ObjectCacheOn, ps.PHPSettingsOn = php, node, python, prof,
+		n.Cron, n.SSHKeys, n.ObjectCache, n.PHPSettings
 	if !n.PageCache {
 		ps.PageCache = ""
 	}
