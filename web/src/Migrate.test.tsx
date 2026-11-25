@@ -370,7 +370,9 @@ describe("Migrate", () => {
     render(<Harness initial="report=r1&site=api" />);
     expect(await screen.findByText("Node.js")).toBeInTheDocument();
     const select = await screen.findByLabelText(/^Node.js for api/);
-    expect(within(select).getByRole("option", { name: "Node.js 26 (not installed)" })).toBeInTheDocument();
+    // The release list arrives after the select first renders with the
+    // installed lines only, so wait for it.
+    expect(await within(select).findByRole("option", { name: "Node.js 26 (not installed)" })).toBeInTheDocument();
     await user.selectOptions(select, "22");
     await user.click(screen.getByLabelText(/I checked the points above/));
     await user.click(screen.getByRole("button", { name: "Create api" }));

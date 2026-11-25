@@ -150,6 +150,7 @@ export function FileManager({ site, path, onPath }: Props) {
   const entries = listing?.entries ?? [];
   const shown = filter === "" ? entries : entries.filter((e) => e.name.toLowerCase().includes(filter.toLowerCase()));
   const allSelected = shown.length > 0 && shown.every((e) => selected.has(e.name));
+  const selectAll = () => setSelected(allSelected ? new Set() : new Set(shown.map((e) => e.name)));
 
   const toggle = (name: string) =>
     setSelected((s) => {
@@ -207,8 +208,23 @@ export function FileManager({ site, path, onPath }: Props) {
       key: "select",
       header: "Select",
       srHeader: true,
+      headerCell: (
+        <label className="ui-check-cell">
+          <input
+            type="checkbox"
+            className="ui-check"
+            aria-label="Select all"
+            checked={allSelected}
+            disabled={shown.length === 0}
+            onChange={selectAll}
+          />
+        </label>
+      ),
       cell: (e) => (
-        <input type="checkbox" className="ui-check" aria-label={"Select " + e.name} checked={selected.has(e.name)} onChange={() => toggle(e.name)} />
+        // The whole cell is the click target, not only the small box.
+        <label className="ui-check-cell">
+          <input type="checkbox" className="ui-check" aria-label={"Select " + e.name} checked={selected.has(e.name)} onChange={() => toggle(e.name)} />
+        </label>
       ),
     },
     {
@@ -340,14 +356,9 @@ export function FileManager({ site, path, onPath }: Props) {
       )}
       <div className="ui-filters">
         <input className="ui-input" type="search" aria-label="Filter files" placeholder="Filter by name" value={filter} onChange={(e) => setFilter(e.target.value)} />
-        <label className="ui-row">
-          <input
-            type="checkbox"
-            className="ui-check"
-            checked={allSelected}
-            disabled={shown.length === 0}
-            onChange={() => setSelected(allSelected ? new Set() : new Set(shown.map((e) => e.name)))}
-          />
+        {/* On a phone the table head is hidden, so the box sits here. */}
+        <label className="ui-row ui-phone-only">
+          <input type="checkbox" className="ui-check" checked={allSelected} disabled={shown.length === 0} onChange={selectAll} />
           Select all
         </label>
       </div>

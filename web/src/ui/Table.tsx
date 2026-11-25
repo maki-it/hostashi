@@ -14,6 +14,9 @@ export type Column<T> = {
   sortValue?: (row: T) => string | number;
   /** Hides the header text visually, for a column of row actions. */
   srHeader?: boolean;
+  /** Replaces the header text with a control, for example a "select all"
+   *  checkbox; header stays its accessible name. */
+  headerCell?: ReactNode;
 };
 
 type TableProps<T> = {
@@ -70,7 +73,9 @@ export function Table<T>({ label, columns, rows, rowKey, sort, onSort, empty }: 
               const Icon = !active ? CaretUpDown : sort.dir === "asc" ? CaretUp : CaretDown;
               return (
                 <th key={c.key} scope="col" aria-sort={ariaSort}>
-                  {c.srHeader ? (
+                  {c.headerCell !== undefined ? (
+                    c.headerCell
+                  ) : c.srHeader ? (
                     <span className="ui-sr-only">{c.header}</span>
                   ) : sortable ? (
                     <button
