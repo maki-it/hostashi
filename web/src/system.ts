@@ -124,3 +124,12 @@ export async function panelVersion(): Promise<string> {
 export function versionLabel(v: string): string {
   return /^\d+\.\d+\.\d+/.test(v) ? `v${v}` : v;
 }
+
+const releases = "https://github.com/maki-it/hostashi/releases";
+
+// releaseUrl links a released version (X.Y.Z, or a pre-release such as
+// X.Y.Z-rc.1) to its release notes. A dev build has no tag ("dev", or
+// "X.Y.Z-dev+commit" from a snapshot), so it links to the list of releases.
+export function releaseUrl(v: string): string {
+  return /^\d+\.\d+\.\d+(-(alpha|beta|rc)[0-9.]*)?$/.test(v) ? `${releases}/tag/v${v}` : releases;
+}
