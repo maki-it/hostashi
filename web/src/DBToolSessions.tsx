@@ -73,14 +73,14 @@ export function ToolSessions({ db, reload = 0 }: { db: string; reload?: number }
                 <RowActions>
                   <IconButton
                     label="Extend by 30 minutes"
-                    icon={<ClockClockwise size={18} />}
+                    text="Extend" icon={<ClockClockwise size={18} />}
                     disabled={busy !== ""}
                     onClick={() => void act(s.id, () => extendToolSession(db, s.id))}
                   />
                   <IconButton
                     label="End now"
                     danger
-                    icon={<StopCircle size={18} />}
+                    text="End now" icon={<StopCircle size={18} />}
                     disabled={busy !== ""}
                     onClick={() => void act(s.id, () => endToolSession(db, s.id))}
                   />

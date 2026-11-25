@@ -221,12 +221,12 @@ export function Pages({ query = new URLSearchParams(), onQuery = () => undefined
       srHeader: true,
       cell: (p) => (
         <RowActions>
-          <IconButton label={`Preview ${p.name}`} icon={<Eye size={16} />} onClick={() => void openPreview(p.id).then(setError)} />
-          <IconLink label={`Manage ${p.name}`} icon={<GearSix size={16} />} href={pagesHash({ page: p.id })} />
+          <IconButton label={`Preview ${p.name}`} text="Preview" icon={<Eye size={16} />} onClick={() => void openPreview(p.id).then(setError)} />
+          <IconLink label={`Manage ${p.name}`} text="Manage" icon={<GearSix size={16} />} href={pagesHash({ page: p.id })} />
           {!p.builtin && (
             <IconButton
               label={`Delete ${p.name}`}
-              icon={<Trash size={16} />}
+              text="Delete" icon={<Trash size={16} />}
               danger
               disabled={busy}
               onClick={() => {

@@ -395,6 +395,7 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
         <RowActions>
           <IconButton
             label={`Restore ${snapLabel(s).toLowerCase()} of ${exactTime(new Date(s.time))}`}
+            text="Restore"
             icon={<ClockCounterClockwise size={16} />}
             disabled={restoring}
             onClick={() => void doRestore(s)}

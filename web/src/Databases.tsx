@@ -105,8 +105,8 @@ const columns = (onOpen?: (db: string) => void): Column<Database>[] => [
     srHeader: true,
     cell: (d) => (
       <RowActions>
-        {onOpen && <IconButton label={`Open ${d.name} in Adminer`} icon={<TableIcon size={16} />} onClick={() => onOpen(d.name)} />}
-        <IconLink label={`Manage ${d.name}`} icon={<Gear size={16} />} href={dbHref(d.name)} />
+        {onOpen && <IconButton label={`Open ${d.name} in Adminer`} text="Open" icon={<TableIcon size={16} />} onClick={() => onOpen(d.name)} />}
+        <IconLink label={`Manage ${d.name}`} text="Manage" icon={<Gear size={16} />} href={dbHref(d.name)} />
       </RowActions>
     ),
   },

@@ -173,7 +173,7 @@ export function PHPPage({
           <span className="ui-row">
             <Badge tone="ok">Installed</Badge>
             {r.sites === 0 && versions.distro !== r.version && (
-              <IconButton label={"Remove PHP " + r.version} icon={<Trash size={16} aria-hidden="true" />} danger disabled={running} onClick={() => setConfirmRemove(r.version)} />
+              <IconButton label={"Remove PHP " + r.version} text="Remove" icon={<Trash size={16} aria-hidden="true" />} danger disabled={running} onClick={() => setConfirmRemove(r.version)} />
             )}
           </span>
         ) : (

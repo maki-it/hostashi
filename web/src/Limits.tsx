@@ -609,7 +609,7 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
           {!p.default && (
             <IconButton
               label={`Make ${p.name} the default`}
-              icon={<Star size={16} />}
+              text="Make default" icon={<Star size={16} />}
               disabled={busy}
               onClick={() =>
                 void act(async () => {
@@ -621,11 +621,11 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
               }
             />
           )}
-          <IconLink label={`Change ${p.name}`} icon={<PencilSimple size={16} />} href={formatHash({ page: "limits", query: new URLSearchParams({ edit: p.name }) })} />
+          <IconLink label={`Change ${p.name}`} text="Change" icon={<PencilSimple size={16} />} href={formatHash({ page: "limits", query: new URLSearchParams({ edit: p.name }) })} />
           {!p.default && (
             <IconButton
               label={`Delete ${p.name}`}
-              icon={<Trash size={16} />}
+              text="Delete" icon={<Trash size={16} />}
               danger
               disabled={busy}
               onClick={() => {
