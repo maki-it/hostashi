@@ -27,10 +27,15 @@
   --font-body: "IBM Plex Sans", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
   --head-ls: -0.04em;
+  /* Small caps for table heads, nav groups and similar captions */
   --label-font: var(--font-mono);
   --label-size: 12px;
   --label-tf: uppercase;
   --label-ls: 0.08em;
+  /* Form labels and fact names: plain text, easier to read */
+  --field-label-font: var(--font-body);
+  --field-label-size: 14px;
+  --field-label-weight: 600;
 
   --radius: 6px;
   --radius-card: 10px;
@@ -54,8 +59,12 @@
   --muted: #3b4a44;
   --accent: #1f6b55;
   --focus: #1f6b55;
-  --primary: #ff6f61;
-  --on-primary: #0d1f1a;
+  /* Main actions are green; coral stays the brand colour of the logo so
+     it is never mistaken for the red of a destructive action. */
+  --primary: #1f6b55;
+  --on-primary: #ffffff;
+  --brand: #ff6f61;
+  --on-brand: #0d1f1a;
   /* QR codes stay dark on white in both schemes: scanners need it. */
   --qr-dark: #000;
   --qr-light: #fff;
@@ -95,7 +104,7 @@
   --muted: #9db3ab;
   --accent: #5cbc9d;
   --focus: #5cbc9d;
-  --primary: #ff6f61;
+  --primary: #5cbc9d;
   --on-primary: #0d1f1a;
   --ok: #5bc0de;
   --ok-bg: #0f2c36;
@@ -132,7 +141,7 @@
     --muted: #9db3ab;
     --accent: #5cbc9d;
     --focus: #5cbc9d;
-    --primary: #ff6f61;
+    --primary: #5cbc9d;
     --on-primary: #0d1f1a;
     --ok: #5bc0de;
     --ok-bg: #0f2c36;

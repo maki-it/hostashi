@@ -43,9 +43,13 @@
   color: var(--accent);
   border-color: var(--accent);
 }
-.ui-btn:disabled {
+.ui-btn:disabled,
+.ui-btn-primary:disabled,
+.ui-btn-danger:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  color: var(--muted);
+  background: var(--sunken);
+  border-color: var(--line-strong);
 }
 .ui-btn-primary {
   color: var(--on-primary);
@@ -242,12 +246,10 @@
 }
 .ui-field > label,
 .ui-fieldset > legend {
-  font-family: var(--label-font);
-  font-size: var(--label-size);
-  font-weight: 500;
-  letter-spacing: var(--label-ls);
-  text-transform: var(--label-tf);
-  color: var(--muted);
+  font-family: var(--field-label-font);
+  font-size: var(--field-label-size);
+  font-weight: var(--field-label-weight);
+  color: var(--fg);
 }
 /* A group of form fields with a heading, one rule above each but the first */
 .ui-group {
@@ -505,12 +507,9 @@ a.ui-icon-btn {
   margin: 0;
 }
 .ui-facts dt {
-  font-family: var(--label-font);
-  font-size: var(--label-size);
-  letter-spacing: var(--label-ls);
-  text-transform: var(--label-tf);
+  font-family: var(--field-label-font);
+  font-size: var(--field-label-size);
   color: var(--muted);
-  padding-top: 2px;
 }
 .ui-facts dd {
   margin: 0;

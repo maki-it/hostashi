@@ -51,6 +51,7 @@ const pairs: [string, string, number][] = [
   ["--accent", "--bg", 4.5],
   ["--accent", "--sunken", 4.5],
   ["--on-primary", "--primary", 4.5],
+  ["--on-brand", "--brand", 4.5],
   ["--ok", "--ok-bg", 4.5],
   ["--warn", "--warn-bg", 4.5],
   ["--err", "--err-bg", 4.5],
