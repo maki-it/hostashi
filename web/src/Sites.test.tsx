@@ -731,7 +731,7 @@ describe("SitePage", () => {
     expect(domains.getByRole("alert")).toHaveTextContent("at least one domain");
     // The refused change is not saved: switching tabs asks first.
     await user.click(within(screen.getByRole("tablist", { name: "Domains & HTTPS" })).getByRole("tab", { name: "HTTPS" }));
-    expect(screen.getByText("Save or drop the changes first:", { exact: false })).toHaveTextContent("Domains");
+    expect(screen.getByText("Unsaved changes").parentElement).toHaveTextContent("Unsaved changes in Domains. Save them first, or drop them to open the other tab.");
     expect(screen.getByRole("region", { name: "Domains" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Drop changes" }));
     const https = within(await screen.findByRole("region", { name: "HTTPS" }));

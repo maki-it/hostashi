@@ -91,8 +91,8 @@ export function useUnsaved(key: string) {
     names.length > 0 ? (
       <div className="ui-unsaved" role="status">
         <p>
-          {pending ? "Save or drop the changes first: " : "Not saved yet: "}
-          <strong>{names.join(", ")}</strong>
+          <strong>Unsaved changes</strong> in {names.join(", ")}.{" "}
+          {pending ? "Save them first, or drop them to open the other tab." : "Save them before you leave this tab."}
         </p>
         {pending && (
           <>
