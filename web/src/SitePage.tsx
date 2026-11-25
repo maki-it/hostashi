@@ -29,6 +29,9 @@ import {
   siteStatus,
   siteType,
   siteTypeLabel,
+  maxTitleLength,
+  setTitle,
+  siteLabel,
   type PHPVersions,
   type Site,
 } from "./sites";
@@ -134,8 +137,13 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
     <>
       <div className="ui-page-head">
         <div>
-          <h1>{site.name}</h1>
+          <h1>{siteLabel(site)}</h1>
           <p className="ui-row">
+            {site.title && (
+              <span title="Linux user, home folder and SSH login">
+                System name <code>{site.name}</code>
+              </span>
+            )}
             <span className="ui-mono">{site.domains[0]}</span>
             <Badge tone={status.tone}>{status.word}</Badge>
             <Badge tone={httpsTone(site.tls)}>{httpsLabel(site.tls)}</Badge>
@@ -211,6 +219,17 @@ function Overview({ site, onChange, staff, admin }: TabProps & { staff: boolean;
     <>
       <Card title="Details">
         <dl className="ui-facts" aria-label={"Details of " + site.name}>
+          <dt>System name</dt>
+          <dd>
+            <code>{site.name}</code>
+            {hasAccount(site) ? " (Linux user, home folder and SSH login)" : ""}
+          </dd>
+          {site.title && (
+            <>
+              <dt>Display name</dt>
+              <dd>{site.title}</dd>
+            </>
+          )}
           <dt>State</dt>
           <dd>
             {site.state === "deleting"
@@ -299,6 +318,7 @@ function Overview({ site, onChange, staff, admin }: TabProps & { staff: boolean;
           )}
         </dl>
       </Card>
+      {site.state !== "deleting" && <RenameCard site={site} onChange={onChange} />}
       {admin && hasAccount(site) && <Services site={site.name} />}
       {site.state === "active" && (
         <>
@@ -314,6 +334,54 @@ function Overview({ site, onChange, staff, admin }: TabProps & { staff: boolean;
         </>
       )}
     </>
+  );
+}
+
+// RenameCard sets the display name (ADR-0072). The system name stays, and
+// the card says so with the name in code style.
+function RenameCard({ site, onChange }: TabProps) {
+  const [title, setTitleText] = useState(site.title ?? "");
+  const { busy, act, result } = useAction(onChange);
+  const current = site.title ?? "";
+  const next = title.trim();
+
+  useEffect(() => setTitleText(site.title ?? ""), [site.title]);
+
+  function save(e: FormEvent, value: string) {
+    e.preventDefault();
+    void act(async () => {
+      await setTitle(site.name, value);
+      return value ? `The site is now shown as ${value}.` : "The display name is removed.";
+    });
+  }
+
+  return (
+    <Card title="Rename">
+      <form className="ui-stack" onSubmit={(e) => save(e, next)} noValidate>
+        <Field
+          label="Display name"
+          hint={
+            <>
+              Shown in the panel instead of the system name, up to {maxTitleLength} characters. The system name <code>{site.name}</code>
+              {hasAccount(site) ? " stays: Linux user, home folder, SSH login and API keep it." : " stays in the API."}
+            </>
+          }
+        >
+          <input className="ui-input" value={title} onChange={(e) => setTitleText(e.target.value)} maxLength={maxTitleLength} placeholder={site.name} autoComplete="off" />
+        </Field>
+        {result}
+        <div className="ui-row">
+          <Button type="submit" variant="primary" disabled={busy || next === current}>
+            Save display name
+          </Button>
+          {current && (
+            <Button type="button" variant="secondary" disabled={busy} onClick={(e) => save(e, "")}>
+              Remove display name
+            </Button>
+          )}
+        </div>
+      </form>
+    </Card>
   );
 }
 
