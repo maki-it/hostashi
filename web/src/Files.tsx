@@ -75,6 +75,7 @@ const isZip = (e: FileEntry) => e.type === "file" && e.name.toLowerCase().endsWi
 
 export function FileManager({ site, path, onPath }: Props) {
   const [listing, setListing] = useState<Listing | null>(null);
+  const [listed, setListed] = useState("");
   const [loadError, setLoadError] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<Sort>({ key: "name", dir: "asc" });
@@ -92,14 +93,16 @@ export function FileManager({ site, path, onPath }: Props) {
     try {
       const l = await listFiles(site.name, path);
       setListing(l);
+      setListed(site.name + "/" + path);
       setSelected((s) => new Set([...s].filter((n) => l.entries.some((e) => e.name === n))));
     } catch (err) {
       setLoadError(filesMessage(err));
     }
   }, [site.name, path]);
 
+  // The old listing stays on screen (dimmed, not clickable) until the new
+  // folder is read, so switching folders does not make the page jump.
   useEffect(() => {
-    setListing(null);
     setSelected(new Set());
     setDialog(null);
     setEditing(null);
@@ -107,6 +110,7 @@ export function FileManager({ site, path, onPath }: Props) {
     void load();
   }, [load]);
 
+  const stale = listing !== null && listed !== site.name + "/" + path;
   const entries = listing?.entries ?? [];
   const shown = filter === "" ? entries : entries.filter((e) => e.name.toLowerCase().includes(filter.toLowerCase()));
   const allSelected = shown.length > 0 && shown.every((e) => selected.has(e.name));
@@ -297,6 +301,7 @@ export function FileManager({ site, path, onPath }: Props) {
       <div
         className="ui-files-drop"
         data-dragging={dragging}
+        aria-busy={stale}
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes("Files")) {
             e.preventDefault();

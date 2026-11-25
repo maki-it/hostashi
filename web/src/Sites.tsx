@@ -115,17 +115,12 @@ function statusRank(s: Site): number {
   return r === 3 && !s.tls.enabled ? 2 : r;
 }
 
-// SiteState shows before the name whether the site is switched on, as a
-// word: On, Off, or New while it is being created.
-function SiteState({ s }: { s: Site }) {
+// stateBadge marks a site that is not simply on: switched off, being
+// created or being deleted. An active site gets no mark (Kim, 2026-11-25).
+function stateBadge(s: Site) {
   const st = siteStatus(s);
-  const [tone, word] =
-    st.key === "active" || st.key === "maintenance" ? (["ok", "On"] as const) : st.key === "creating" ? (["warn", "New"] as const) : (["off", "Off"] as const);
-  return (
-    <span className="ui-site-state" title={st.key === "maintenance" ? "Active" : st.word}>
-      <Badge tone={tone}>{word}</Badge>
-    </span>
-  );
+  if (st.key === "active" || st.key === "maintenance") return null;
+  return <Badge tone={st.tone}>{st.key === "disabled" ? "Disabled" : st.word}</Badge>;
 }
 
 const columns: Column<Site>[] = [
@@ -134,24 +129,24 @@ const columns: Column<Site>[] = [
     header: "Site",
     sortValue: (s) => siteLabel(s).toLowerCase(),
     cell: (s) => (
-      <div className="ui-site-name">
-        <SiteState s={s} />
-        <div className={`ui-cell-main${s.disabled ? " ui-cell-off" : ""}`}>
+      <div className={`ui-cell-main${s.disabled ? " ui-cell-off" : ""}`}>
+        <span className="ui-row ui-row-tight">
           <a className="ui-row-link" href={formatHash({ page: "sites", site: { name: s.name } })}>
             {siteLabel(s)}
           </a>
-          <span>
-            {s.title && (
-              <>
-                <span className="ui-mono" title="System name">
-                  {s.name}
-                </span>
-                {" · "}
-              </>
-            )}
-            {s.domains[0]}
-          </span>
-        </div>
+          {stateBadge(s)}
+        </span>
+        <span>
+          {s.title && (
+            <>
+              <span className="ui-mono" title="System name">
+                {s.name}
+              </span>
+              {" · "}
+            </>
+          )}
+          {s.domains[0]}
+        </span>
       </div>
     ),
   },
