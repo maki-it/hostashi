@@ -148,7 +148,7 @@ const columns: Column<Site>[] = [
       <span className="ui-row ui-row-tight">
         {s.tls.active ? (
           <span className="ui-https">
-            <LockSimple size={16} weight="bold" aria-hidden />
+            <LockSimple size={16} aria-hidden />
             HTTPS
           </span>
         ) : (
