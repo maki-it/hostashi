@@ -6,7 +6,7 @@ require (
 	github.com/ProtonMail/go-crypto v1.5.2
 	github.com/fxamacker/cbor/v2 v2.10.0
 	github.com/getkin/kin-openapi v0.153.0
-	github.com/go-acme/lego/v5 v5.6.0
+	github.com/go-acme/lego/v5 v5.7.0
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/go-sql-driver/mysql v1.10.2
 	github.com/go-webauthn/webauthn v0.18.2
@@ -36,7 +36,7 @@ require (
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.9.2 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.6 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.9 // indirect
 	github.com/go-openapi/jsonpointer v0.22.5 // indirect
 	github.com/go-openapi/swag/jsonname v0.25.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
