@@ -85,6 +85,13 @@
   padding: 12px 12px 4px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* A thin, quiet scrollbar that gets stronger while the pointer is on the nav */
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.app-nav:hover,
+.app-nav:focus-within {
+  scrollbar-color: var(--line-strong) transparent;
 }
 .app-foot {
   display: flex;
