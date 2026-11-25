@@ -65,6 +65,11 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 echo "systemd: $state"
+# On a server systemd makes / a shared mount at boot; in a container with
+# --tmpfs /run it stays private, and systemd 257 (Debian 13) then mounts
+# a unit's credentials (LoadCredential=, the WordPress install) where the
+# unit never sees them. Make it shared, like a real server.
+docker exec "$NAME" mount --make-rshared /
 
 docker exec "$NAME" mkdir -p /opt/hostashi
 docker cp "$HERE/." "$NAME:/opt/hostashi/"
