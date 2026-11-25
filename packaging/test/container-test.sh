@@ -653,7 +653,19 @@ for _ in $(seq 1 60); do
 done
 [ "$run" = succeeded ] || fail "clamdscan run did not succeed ($run): $(x cat /tmp/api.out)"
 x grep -q 'clamdscan' /etc/systemd/system/hostashi-scan@blog.service.d/60-hostashi-scan.conf || fail "scan did not use clamdscan"
-x rm -f /home/blog/htdocs/new.com /etc/systemd/system/clamav-daemon.service.d/90-test.conf
+# Without a flagged file, a scan through clamd reports no error either.
+x rm -f /home/blog/htdocs/new.com
+[ "$(api POST /api/v1/sites/blog/malware-scans)" = 202 ] || fail "start scan: $(x cat /tmp/api.out)"
+for _ in $(seq 1 60); do
+  [ "$(api GET /api/v1/sites/blog/malware-scan)" = 200 ] || fail "site scan: $(x cat /tmp/api.out)"
+  run=$(jget '[r["state"] for r in d["runs"] if r["source"] == "panel"][0]')
+  case "$run" in succeeded|failed) break;; esac
+  sleep 2
+done
+[ "$run" = succeeded ] || fail "clean clamdscan run did not succeed ($run): $(x cat /tmp/api.out)"
+[ "$(jget '[r["error"] for r in d["runs"] if r["source"] == "panel"][0]')" = "" ] ||
+  fail "clean clamdscan run reported an error: $(x cat /tmp/api.out); log: $(x cat /var/log/hostashi/scan/blog.log)"
+x rm -f /etc/systemd/system/clamav-daemon.service.d/90-test.conf
 [ "$(api PUT /api/v1/malware-scan '{"on":false}')" = 202 ] || fail "switch the scan off: $(x cat /tmp/api.out)"
 for _ in $(seq 1 120); do
   [ "$(api GET /api/v1/malware-scan)" = 200 ] || fail "engine state: $(x cat /tmp/api.out)"
