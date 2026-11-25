@@ -38,6 +38,9 @@ export type SiteWWW = {
 
 export type Site = {
   name: string;
+  // Display name (ADR-0072), "" for none; name stays the system name
+  // (Linux user, home folder, API path). Older answers lack it.
+  title?: string;
   pool: string;
   state: "creating" | "active" | "deleting" | string;
   // static, php, node, app, proxy or redirect (ADR-0054), python (ADR-0061). Older answers lack it.
@@ -184,6 +187,7 @@ export type PHPVersions = {
 
 export type NewSite = {
   name: string;
+  title?: string;
   pool?: string;
   php: string;
   domains: string[];
@@ -348,6 +352,13 @@ export const changeDomains = (name: string, domains: string[], redirectDomains: 
 
 /** Cancels the domain change that waits for its certificate. */
 export const cancelDomainChange = (name: string) => request<Site>("DELETE", sitePath(name) + "/domains/pending");
+/** The display name if set, else the system name (ADR-0072). */
+export const siteLabel = (s: Pick<Site, "name" | "title">) => s.title || s.name;
+
+/** The longest display name in characters, as in migration 0065. */
+export const maxTitleLength = 64;
+
+export const setTitle = (name: string, title: string) => request<Site>("PUT", sitePath(name) + "/title", { title });
 export const setPHP = (name: string, php: string) => request<Site>("PUT", sitePath(name) + "/php", { php });
 
 /** A new type with its settings (ADR-0054 addendum 3); static takes none. */

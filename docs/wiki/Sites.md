@@ -24,10 +24,11 @@ A site without a Linux user has no files, cron jobs, SSH access or limits. [Site
 
 1. Open **Hosting → Sites** and choose **New site**.
 2. **Name:** 2 to 32 characters, lowercase letters, digits, `_` and `-`. For sites with files the name is also the Linux user and the home folder, `/home/<name>`.
-3. **Domains:** one per line. The first one is the primary domain.
-4. **Type:** see the table above. For PHP choose the version; only installed versions are listed (more under **Server → PHP versions**).
-5. **HTTPS with a Let's Encrypt certificate:** leave it on. The domains must already point to this server, see [Domains and HTTPS](Domains-and-HTTPS.md).
-6. If the server has more than one storage pool, choose where the site's home lives. A site stays on its pool.
+3. **Display name (optional):** free text up to 64 characters, shown in the panel instead of the name. It can be changed later, see [Rename a site](#rename-a-site).
+4. **Domains:** one per line. The first one is the primary domain.
+5. **Type:** see the table above. For PHP choose the version; only installed versions are listed (more under **Server → PHP versions**).
+6. **HTTPS with a Let's Encrypt certificate:** leave it on. The domains must already point to this server, see [Domains and HTTPS](Domains-and-HTTPS.md).
+7. If the server has more than one storage pool, choose where the site's home lives. A site stays on its pool.
 
 Choose **Create site**. The panel opens the new site; it is live right away. Until the certificate is there, it answers over HTTP.
 
@@ -39,7 +40,7 @@ Upload your files with SFTP ([SSH and SFTP](SSH-and-SFTP.md)) or the [file manag
 
 | Tab | What you do there |
 |-----|-------------------|
-| Overview | state, availability (enable, disable), delete |
+| Overview | state, display name, availability (enable, disable), delete |
 | Domains & HTTPS | domains, certificate, HSTS, [security headers](Security-headers.md), [real visitor address](Real-visitor-address.md) |
 | Access | [IP rules and password protection](Access-protection.md) |
 | Web | web root folder, single-page app fallback, asset caching; the app, proxy or redirect settings; [changing the type](Site-types.md#change-the-type) |
@@ -53,6 +54,16 @@ Upload your files with SFTP ([SSH and SFTP](SSH-and-SFTP.md)) or the [file manag
 | nginx | own nginx directives (admins only) |
 
 Tabs that do not apply to a site's type are not shown.
+
+## Rename a site
+
+On **Overview → Rename**, set the **Display name** and choose **Save display name**. The panel then shows it in the site list and as the page title; **Remove display name** goes back to the name.
+
+The name you chose when creating the site stays the site's system name: the Linux user, the home folder `/home/<name>`, the SSH and SFTP login, and the name in the [API and command line](Command-line.md). The site page always shows it next to the display name. Changing the display name changes nothing on the server and needs no restart.
+
+The display name is plain text: up to 64 characters, no line breaks and no control characters.
+
+![The Rename card of a site with a display name](images/site-rename.png)
 
 ## Disable a site
 

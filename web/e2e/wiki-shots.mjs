@@ -28,6 +28,7 @@ const width = Number(process.env.SHOTS_WIDTH) || 1280;
 const shots = [
   { name: "sites", hash: "#/sites", ready: "table" },
   { name: "site-new", hash: "#/sites?new=1", ready: "form" },
+  { name: "site-rename", hash: "#/sites/shop", ready: "text=Save display name", full: true },
   { name: "site-domains", hash: "#/sites/blog/domains", ready: "text=Domains" },
   {
     name: "site-domain-change",
