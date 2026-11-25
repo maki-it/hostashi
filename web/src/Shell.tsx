@@ -149,11 +149,14 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     <div className="ui-root app">
       <aside className="app-side" data-open={menuOpen} data-scrolled={navScrolled}>
         <div className="app-brand">
-          <Mark />
-          <span className="app-brand-name">
-            Hostashi
-            <span className="app-host">{window.location.hostname}</span>
-          </span>
+          {/* The name and the panel's host lead to the overview (Kim, 2026-11-25). */}
+          <a className="app-brand-link" href={formatHash({ page: "home" })} aria-label="Hostashi, overview" onClick={() => setMenuOpen(false)}>
+            <Mark />
+            <span className="app-brand-name">
+              Hostashi
+              <span className="app-host">{window.location.hostname}</span>
+            </span>
+          </a>
           <span className="app-menu-btn">
             <IconButton
               label={menuOpen ? "Close menu" : "Open menu"}
