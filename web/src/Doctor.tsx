@@ -2,16 +2,16 @@
 
 import { ArrowClockwise } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
-import { PanelCertificate } from "./Certificate";
-import { PanelRealIPCard } from "./RealIP";
 import { checkTitle, doctorMessage, runDoctor, type DoctorCheck, type DoctorReport, type DoctorStatus } from "./doctor";
-import { formatHash } from "./routes";
+import { formatHash, type Page } from "./routes";
 import { Badge, Button, Card, Notice, PageHead, RelTime, Table, type Column, type NoticeTone, type Sort, type Tone } from "./ui";
 
 const labels: Record<DoctorStatus, string> = { ok: "OK", warn: "Warning", fail: "Failed" };
 const tones: Record<DoctorStatus, Tone> = { ok: "ok", warn: "warn", fail: "err" };
 const noticeTones: Record<DoctorStatus, NoticeTone> = { ok: "ok", warn: "warn", fail: "err" };
 const rank: Record<DoctorStatus, number> = { fail: 0, warn: 1, ok: 2 };
+// Server checks whose setting lives on another page link there.
+const settingsPage: Partial<Record<string, Page>> = { "panel.tls": "system" };
 
 type QueryProps = {
   /** The address query: q, show (all or problems), sort, dir. */
@@ -26,6 +26,16 @@ function overall(r: DoctorReport): string {
   if (r.counts.fail) parts.push(r.counts.fail === 1 ? "1 check failed" : r.counts.fail + " checks failed");
   if (r.counts.warn) parts.push(r.counts.warn === 1 ? "1 warning" : r.counts.warn + " warnings");
   return parts.join(", ") + ".";
+}
+
+function ServerWhere({ id }: { id: string }) {
+  const page = settingsPage[id];
+  if (!page) return "Server";
+  return (
+    <a className="ui-nowrap" href={formatHash({ page })}>
+      System
+    </a>
+  );
 }
 
 // Doctor shows the checks of hostashi doctor in one table, problems first.
@@ -111,7 +121,7 @@ export function Doctor({ query = new URLSearchParams(), onQuery = () => undefine
             Site {c.site}
           </a>
         ) : (
-          "Server"
+          <ServerWhere id={c.id} />
         ),
     },
     {
@@ -164,8 +174,6 @@ export function Doctor({ query = new URLSearchParams(), onQuery = () => undefine
           empty={problemsOnly && !q ? "No problems." : "No check matches the filter."}
         />
       </Card>
-      <PanelCertificate />
-      <PanelRealIPCard />
     </>
   );
 }

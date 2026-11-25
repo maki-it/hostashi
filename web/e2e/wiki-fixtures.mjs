@@ -324,6 +324,24 @@ const routes = [
     updatedAt: day(1),
   })],
   ["POST", /^\/sites\/[^/]+\/access\/users$/, () => ({ name: "agency", password: "Vq7mR2xK9pLt4Wz8Bn3sHc6J" })],
+  ["GET", /^\/panel\/tls$/, () => ({ ...tls(["panel.example.com"]), domain: "panel.example.com" })],
+  ["GET", /^\/panel\/tls\/certificate$/, () => ({
+    certificate: { domains: ["panel.example.com"], issuer: "Let's Encrypt (E7)", notBefore: "2026-11-16T03:12:00Z", notAfter: "2027-02-14T00:00:00Z", fingerprint: "9d2e7b1a".repeat(8), trusted: true },
+  })],
+  ["GET", /^\/settings\/panel-real-ip$/, () => ({ realIp: {}, headers: ["X-Forwarded-For", "X-Real-IP", "CF-Connecting-IP"], cloudflare: [], cloudflareDate: "2026-11-16", maxRanges: 64 })],
+  ["GET", /^\/health$/, () => ({ status: "ok", version: "0.6.0" })],
+  ["GET", /^\/services$/, () => ({ services: [] })],
+  ["GET", /^\/doctor$/, () => ({
+    status: "warn",
+    checkedAt: day(0),
+    counts: { ok: 3, warn: 1, fail: 0 },
+    checks: [
+      { id: "panel.tls", status: "warn", summary: "certificate for panel.example.com valid until 2026-12-10 (17 days); the last renewal failed: acme: no DNS record for panel.example.com", hint: "See System → Panel certificate. Let's Encrypt needs the panel's host name to point at this server; an own certificate is never renewed automatically: upload a new one." },
+      { id: "system.disk", status: "ok", summary: "31.2 GiB of 38.0 GiB free" },
+      { id: "service.nginx", status: "ok", summary: "nginx is running" },
+      { id: "site.tls", site: "blog", status: "ok", summary: "certificate valid until 2027-02-14 (81 days)" },
+    ],
+  })],
   ["GET", /^\/sites\/[^/]+\/real-ip$/, () => ({ realIp: {}, headers: ["X-Forwarded-For", "X-Real-IP"], cloudflare: [], cloudflareDate: "2026-11-16", maxRanges: 64 })],
   ["GET", /^\/sites\/([^/]+)\/tls\/certificate$/, (m) => {
     const t = sites.find((x) => x.name === m[1])?.tls;

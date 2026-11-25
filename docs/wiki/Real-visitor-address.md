@@ -51,7 +51,7 @@ fail2ban never bans a trusted proxy, because a ban of one Cloudflare edge would 
 
 ## The panel's own address
 
-If the panel's host name is behind a proxy too, admins set the same on the **Health** page under **Real visitor address of the panel**. The panel's audit log, its login limiter and the panel allowlist then see the visitor's address.
+If the panel's host name is behind a proxy too, admins set the same on the [**System**](System-settings.md) page under **Real visitor address of the panel**. The panel's audit log, its login limiter and the panel allowlist then see the visitor's address.
 
 ## How the Cloudflare list stays current
 

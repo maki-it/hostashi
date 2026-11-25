@@ -22,7 +22,7 @@ export function toolMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case "dbtool_unavailable":
-        return "The database tool is not available. It needs the panel's own certificate; see Health.";
+        return "The database tool is not available. It needs the panel's own certificate; see System.";
       case "not_found":
         return err.message === "the session has ended" ? "This session has ended already." : "This database does not exist any more. Reload the page.";
       case "dbtool_session_limit":

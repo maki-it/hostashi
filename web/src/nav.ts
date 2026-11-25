@@ -42,6 +42,7 @@ export const navGroups: readonly NavGroup[] = [
       { page: "databases", label: "Databases", icon: Database, roles: all },
       { page: "parked", label: "Parked domains", icon: Signpost, roles: staff },
       { page: "pages", label: "Maintenance pages", icon: Browser, roles: staff },
+      { page: "limits", label: "Limit presets", icon: Gauge, roles: staff },
     ],
   },
   {
@@ -56,7 +57,6 @@ export const navGroups: readonly NavGroup[] = [
       { page: "python", label: "Python versions", icon: FilePy, roles: admin },
       { page: "backups", label: "Backups", icon: ClockCounterClockwise, roles: admin },
       { page: "firewall", label: "Firewall", icon: ShieldCheck, roles: admin },
-      { page: "limits", label: "Limit presets", icon: Gauge, roles: staff },
     ],
   },
   {

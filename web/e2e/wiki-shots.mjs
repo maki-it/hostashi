@@ -167,6 +167,13 @@ const shots = [
     ready: "text=ClamAV 1.4.6+dfsg-1",
     act: async (page) => page.getByRole("heading", { name: "Virus scan" }).evaluate((h) => h.scrollIntoView({ block: "start" })),
   },
+  {
+    name: "system-panel",
+    hash: "#/system",
+    ready: "text=Real visitor address of the panel",
+    act: async (page) => page.getByRole("heading", { name: /^Panel certificate/ }).evaluate((h) => h.scrollIntoView({ block: "start" })),
+  },
+  { name: "health-panel-tls", hash: "#/health", ready: "table" },
   { name: "users", hash: "#/users", ready: "table" },
   { name: "databases", hash: "#/databases", ready: "table" },
   { name: "backups", hash: "#/backups", ready: "text=Snapshots" },
