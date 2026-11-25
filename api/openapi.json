@@ -1370,6 +1370,25 @@
         ],
         "type": "object"
       },
+      "Cron": {
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command",
+          "schedule"
+        ],
+        "type": "object"
+      },
       "CronInput": {
         "additionalProperties": false,
         "properties": {
@@ -5329,6 +5348,101 @@
         ],
         "type": "object"
       },
+      "Profile": {
+        "additionalProperties": false,
+        "properties": {
+          "builtin": {
+            "type": "boolean"
+          },
+          "checklist": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cron": {
+            "items": {
+              "$ref": "#/components/schemas/Cron"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hardening": {
+            "$ref": "#/components/schemas/WebHardening"
+          },
+          "minPhp": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pageCache": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "webDir": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "builtin",
+          "hardening",
+          "name",
+          "title",
+          "type"
+        ],
+        "type": "object"
+      },
+      "Profiles": {
+        "additionalProperties": false,
+        "properties": {
+          "configFileSuffixes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "limitBurst": {
+            "type": "integer"
+          },
+          "limitPerMinute": {
+            "type": "integer"
+          },
+          "maxPaths": {
+            "type": "integer"
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/Profile"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "configFileSuffixes",
+          "limitBurst",
+          "limitPerMinute",
+          "maxPaths",
+          "profiles"
+        ],
+        "type": "object"
+      },
       "ProgramApp": {
         "additionalProperties": false,
         "properties": {
@@ -6773,6 +6887,60 @@
         },
         "type": "object"
       },
+      "SiteProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "type": "boolean"
+          },
+          "choices": {
+            "$ref": "#/components/schemas/Profiles"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/WebHardening"
+          },
+          "hardening": {
+            "$ref": "#/components/schemas/WebHardening"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "changed",
+          "choices",
+          "defaults",
+          "hardening",
+          "profile"
+        ],
+        "type": "object"
+      },
+      "SiteProfileInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "hardening": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebHardeningInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profile": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "SiteSample": {
         "additionalProperties": false,
         "properties": {
@@ -7935,6 +8103,96 @@
           "dir",
           "spa"
         ],
+        "type": "object"
+      },
+      "WebHardening": {
+        "additionalProperties": false,
+        "properties": {
+          "configFiles": {
+            "type": "boolean"
+          },
+          "denyDirs": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "denyFiles": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "limitFiles": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "noPhpDirs": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "WebHardeningInput": {
+        "additionalProperties": false,
+        "properties": {
+          "configFiles": {
+            "type": "boolean"
+          },
+          "denyDirs": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "denyFiles": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "limitFiles": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "noPhpDirs": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       },
       "WebHeaders": {
@@ -14237,6 +14495,49 @@
         "x-hostashi-action": "pools:write"
       }
     },
+    "/api/v1/profiles": {
+      "get": {
+        "operationId": "listProfiles",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profiles"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "List the application profiles",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
+      }
+    },
     "/api/v1/python": {
       "get": {
         "operationId": "getPython",
@@ -20372,6 +20673,120 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites.php:write"
+      }
+    },
+    "/api/v1/sites/{name}/profile": {
+      "get": {
+        "operationId": "getSiteProfile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteProfile"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "Get the site's application profile and hardening",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
+      },
+      "put": {
+        "operationId": "setSiteProfile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteProfileInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteProfile"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Set the site's application profile and hardening",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.profile:write"
       }
     },
     "/api/v1/sites/{name}/proxy": {

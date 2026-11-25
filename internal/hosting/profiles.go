@@ -3,6 +3,10 @@
 package hosting
 
 import (
+	"context"
+	"fmt"
+	"time"
+
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/profile"
 	"github.com/maki-it/hostashi/internal/store"
@@ -43,4 +47,126 @@ func webHardening(all map[int64]store.SiteProfile, site store.Site, php string) 
 	}
 
 	return &h
+}
+
+// SiteProfileState is a site's profile with its effective hardening and
+// the profile's own rules, for the panel.
+type SiteProfileState struct {
+	Profile   profile.Profile
+	Hardening agentapi.WebHardening
+	// Changed: the site's hardening differs from its profile.
+	Changed   bool
+	UpdatedAt time.Time
+}
+
+// Profiles returns the profiles a site of that type can choose, Static for
+// a static site.
+func Profiles(siteType string) []profile.Profile {
+	out := []profile.Profile{}
+
+	for _, p := range profile.Builtins() {
+		if p.Type == siteType {
+			out = append(out, p)
+		}
+	}
+
+	return out
+}
+
+// SiteProfile returns the profile of a static or PHP site.
+func (s *Service) SiteProfile(ctx context.Context, name string) (SiteProfileState, error) {
+	site, err := s.Get(ctx, name)
+	if err != nil {
+		return SiteProfileState{}, err
+	}
+
+	sp, err := s.st.SiteProfile(ctx, site.ID)
+	if err != nil {
+		return SiteProfileState{}, err
+	}
+
+	p, o, ok := siteProfile(map[int64]store.SiteProfile{site.ID: sp}, site)
+	if !ok {
+		return SiteProfileState{}, ErrSiteType
+	}
+
+	return SiteProfileState{
+		Profile: p, Hardening: profile.Effective(p, o, site.Type == store.SiteTypePHP), Changed: !o.IsZero(), UpdatedAt: sp.UpdatedAt,
+	}, nil
+}
+
+// SetSiteProfile sets the profile of a static or PHP site and the
+// hardening it wants; only the values that differ from the profile are
+// stored (ADR-0069). nil hardening takes the profile's rules. Changing
+// the profile re-renders the site's server block and never touches its
+// files or its document root folder.
+func (s *Service) SetSiteProfile(ctx context.Context, actor int64, name, profileName string, want *agentapi.WebHardening) (SiteProfileState, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	site, err := s.Get(ctx, name)
+	if err != nil {
+		return SiteProfileState{}, err
+	}
+
+	if site.State != store.SiteActive {
+		return SiteProfileState{}, ErrState
+	}
+
+	if _, ok := profile.Default(site.Type); !ok {
+		return SiteProfileState{}, ErrSiteType
+	}
+
+	p, ok := profile.Builtin(profileName)
+	if !ok || p.Type != site.Type {
+		return SiteProfileState{}, fmt.Errorf("%w: unknown profile %q for a %s site", ErrInvalid, profileName, site.Type)
+	}
+
+	php := site.Type == store.SiteTypePHP
+
+	var o profile.Overrides
+
+	if want != nil {
+		if err := want.Validate(php); err != nil {
+			return SiteProfileState{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+		}
+
+		o = profile.Diff(p.Hardening, *want)
+	}
+
+	// The default profile without changes needs no row.
+	stored := store.SiteProfile{SiteID: site.ID, Profile: p.Name, Overrides: o, UpdatedBy: actor}
+	if def, _ := profile.Default(site.Type); def == p.Name && o.IsZero() {
+		stored = store.SiteProfile{SiteID: site.ID}
+	}
+
+	old, err := s.st.SetSiteProfile(ctx, stored, s.now())
+	if err != nil {
+		return SiteProfileState{}, err
+	}
+
+	if err := s.applyWeb(ctx); err != nil {
+		if _, rerr := s.st.SetSiteProfile(context.WithoutCancel(ctx), old, old.UpdatedAt); rerr != nil {
+			s.log.ErrorContext(ctx, "restore profile after failed change", "site", name, "err", rerr)
+		}
+
+		return SiteProfileState{}, err
+	}
+
+	oldP, oldO, _ := siteProfile(map[int64]store.SiteProfile{site.ID: old}, site)
+	view := func(name string, h agentapi.WebHardening) map[string]string {
+		m := store.FieldsOf(h)
+		if m == nil {
+			m = map[string]string{}
+		}
+
+		m["profile"] = name
+
+		return m
+	}
+
+	s.auditChange(ctx, actor, "site.profile.set", name, nil,
+		view(oldP.Name, profile.Effective(oldP, oldO, php)), view(p.Name, profile.Effective(p, o, php)))
+
+	return SiteProfileState{Profile: p, Hardening: profile.Effective(p, o, php), Changed: !o.IsZero(), UpdatedAt: s.now()}, nil
 }
