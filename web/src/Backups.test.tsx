@@ -32,7 +32,7 @@ const snapFiles = "a".repeat(64);
 const snapDB = "b".repeat(64);
 
 describe("Backups", () => {
-  it("sets the target and shows the key for the Storage Box", async () => {
+  it("sets a Storage Box target and shows the key", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({
       "GET /api/v1/backups": { body: fresh },
@@ -42,10 +42,46 @@ describe("Backups", () => {
     expect(await screen.findByText(/Not set up yet/)).toBeInTheDocument();
     await user.type(screen.getByLabelText("User"), "u123456");
     await user.type(screen.getByLabelText("Host"), "U123456.your-storagebox.de ");
+    const port = screen.getByLabelText("Port");
+    await user.clear(port);
+    await user.type(port, "23");
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByLabelText("Public key")).toHaveTextContent(pub);
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ ...defaults, target });
     expect(screen.getByRole("heading", { name: "Host key" })).toBeInTheDocument();
+  });
+
+  it("sets a plain SFTP server on port 22 by default", async () => {
+    const user = userEvent.setup();
+    const nas = { user: "backup_web3", host: "192.0.2.10", port: 22, path: "/srv/backups/web3" };
+    const calls = mockFetch({
+      "GET /api/v1/backups": { body: fresh },
+      "PUT /api/v1/backups/settings": { body: { ...fresh, settings: { ...defaults, target: nas }, publicKey: pub } },
+    });
+    render(<Harness />);
+    expect(await screen.findByText(/Not set up yet/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Port")).toHaveValue("22");
+    await user.type(screen.getByLabelText("User"), "backup_web3");
+    await user.type(screen.getByLabelText("Host"), "192.0.2.10");
+    const dir = screen.getByLabelText("Directory");
+    await user.clear(dir);
+    await user.type(dir, "/srv/backups/web3");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByLabelText("Public key")).toHaveTextContent(pub);
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ ...defaults, target: nas });
+    expect(screen.queryByText(/Hetzner.s console/)).not.toBeInTheDocument();
+  });
+
+  it("warns when a Storage Box is set on another port than 23", async () => {
+    const user = userEvent.setup();
+    mockFetch({ "GET /api/v1/backups": { body: fresh } });
+    render(<Harness />);
+    await user.type(await screen.findByLabelText("Host"), "u123456.your-storagebox.de");
+    expect(screen.getByText("Hetzner Storage Boxes serve SFTP on port 23.")).toBeInTheDocument();
+    const port = screen.getByLabelText("Port");
+    await user.clear(port);
+    await user.type(port, "23");
+    expect(screen.queryByText("Hetzner Storage Boxes serve SFTP on port 23.")).not.toBeInTheDocument();
   });
 
   it("shows the fingerprint and trusts the key only on confirmation", async () => {
@@ -58,7 +94,7 @@ describe("Backups", () => {
     });
     render(<Harness />);
     await user.click(await screen.findByRole("button", { name: "Fetch the host key" }));
-    expect(await screen.findByText(/Compare it with the fingerprints/)).toHaveTextContent("SHA256:abc");
+    expect(await screen.findByText(/Compare it with the fingerprint of the server/)).toHaveTextContent("SHA256:abc");
     expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
     await user.click(screen.getByRole("button", { name: "Trust this key" }));
     expect(await screen.findByText("Trusted:")).toBeInTheDocument();

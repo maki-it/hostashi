@@ -5,6 +5,8 @@ package agentapi
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/netip"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,21 +19,40 @@ import (
 var ErrBackupInvalid = errors.New("backup: invalid settings")
 
 var (
-	// Storage Box main and sub-accounts look like u123456 and u123456-sub1.
-	sftpUserRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+	// An SFTP login name: letters, digits, dot, underscore and dash, as
+	// Linux, NAS and hosting accounts use them (u123456-sub1, backup_web3,
+	// first.last). Never a leading dash, never @, : or /.
+	sftpUserRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$`)
 	hostnameRe = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`)
-	// A path below the login directory: segments of plain characters.
-	remotePathRe = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}){0,7}$`)
+	// A path relative to the login directory, or absolute with a leading
+	// slash: segments of plain characters.
+	remotePathRe = regexp.MustCompile(`^/?[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}){0,7}$`)
 )
 
-// BackupTarget is the SFTP account the repository lives in, shaped for a
-// Hetzner Storage Box (ADR-0008, recommendation 2). It is never a free-form
-// restic URL.
+// BackupTarget is the SFTP account the repository lives in: any SSH server
+// with SFTP and key login, for example a Hetzner Storage Box, a NAS or
+// another Linux server (ADR-0008, recommendation 2). It is never a
+// free-form restic URL.
 type BackupTarget struct {
 	User string `json:"user"`
-	Host string `json:"host"`
+	Host string `json:"host"` // lowercase DNS name or IP address
 	Port int    `json:"port"`
-	Path string `json:"path"` // relative to the login directory
+	Path string `json:"path"` // relative to the login directory, or absolute
+}
+
+// backupHost accepts a lowercase DNS name or a unicast IP address that is
+// not loopback or unspecified.
+func backupHost(h string) bool {
+	if len(h) <= 253 && hostnameRe.MatchString(h) {
+		return true
+	}
+
+	a, err := netip.ParseAddr(h)
+	if err != nil || a.Zone() != "" || a.String() != h {
+		return false
+	}
+
+	return !a.IsLoopback() && !a.IsUnspecified() && !a.IsMulticast() && !a.Is4In6()
 }
 
 // Validate checks every field on its own.
@@ -39,8 +60,8 @@ func (t BackupTarget) Validate() error {
 	switch {
 	case !sftpUserRe.MatchString(t.User):
 		return fmt.Errorf("%w: user", ErrBackupInvalid)
-	case len(t.Host) > 253 || !hostnameRe.MatchString(t.Host):
-		return fmt.Errorf("%w: host must be a lowercase DNS name", ErrBackupInvalid)
+	case !backupHost(t.Host):
+		return fmt.Errorf("%w: host must be a lowercase DNS name or an IP address", ErrBackupInvalid)
 	case t.Port < 1 || t.Port > 65535:
 		return fmt.Errorf("%w: port", ErrBackupInvalid)
 	case !remotePathRe.MatchString(t.Path) || strings.Contains(t.Path, ".."):
@@ -50,9 +71,10 @@ func (t BackupTarget) Validate() error {
 	return nil
 }
 
-// Repository is the restic repository URL of the target.
+// Repository is the restic repository URL of the target. restic drops the
+// first slash after the port, so an absolute path is written with two.
 func (t BackupTarget) Repository() string {
-	return "sftp://" + t.User + "@" + t.Host + ":" + strconv.Itoa(t.Port) + "/" + t.Path
+	return "sftp://" + t.User + "@" + net.JoinHostPort(t.Host, strconv.Itoa(t.Port)) + "/" + t.Path
 }
 
 // KnownHostsName is how ssh names the target in known_hosts.

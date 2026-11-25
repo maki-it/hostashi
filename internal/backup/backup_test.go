@@ -31,16 +31,65 @@ func TestTargetValidate(t *testing.T) {
 		t.Errorf("repository %q", got)
 	}
 
+	generic := map[string]struct {
+		tg   Target
+		repo string
+		kh   string
+	}{
+		"linux server, absolute path": {
+			Target{User: "backup_web3", Host: "backup.example.org", Port: 22, Path: "/srv/backups/web3"},
+			"sftp://backup_web3@backup.example.org:22//srv/backups/web3", "backup.example.org",
+		},
+		"nas by ipv4": {
+			Target{User: "First.Last", Host: "192.0.2.10", Port: 2222, Path: "hostashi"},
+			"sftp://First.Last@192.0.2.10:2222/hostashi", "[192.0.2.10]:2222",
+		},
+		"ipv6": {
+			Target{User: "u1", Host: "2001:db8::10", Port: 22, Path: "restic"},
+			"sftp://u1@[2001:db8::10]:22/restic", "2001:db8::10",
+		},
+		"ipv6 other port": {
+			Target{User: "u1", Host: "2001:db8::10", Port: 23, Path: "restic"},
+			"sftp://u1@[2001:db8::10]:23/restic", "[2001:db8::10]:23",
+		},
+	}
+
+	for name, c := range generic {
+		if err := c.tg.Validate(); err != nil {
+			t.Errorf("%s refused: %v", name, err)
+			continue
+		}
+
+		if got := c.tg.Repository(); got != c.repo {
+			t.Errorf("%s: repository %q, want %q", name, got, c.repo)
+		}
+
+		if got := c.tg.KnownHostsName(); got != c.kh {
+			t.Errorf("%s: known hosts name %q, want %q", name, got, c.kh)
+		}
+	}
+
 	bad := map[string]func(*Target){
 		"empty user":        func(t *Target) { t.User = "" },
 		"user with @":       func(t *Target) { t.User = "a@b" },
 		"user as option":    func(t *Target) { t.User = "-oProxyCommand" },
-		"ip host":           func(t *Target) { t.Host = "127.0.0.1" },
+		"user with colon":   func(t *Target) { t.User = "a:b" },
+		"user with slash":   func(t *Target) { t.User = "a/b" },
+		"user with space":   func(t *Target) { t.User = "a b" },
+		"loopback host":     func(t *Target) { t.Host = "127.0.0.1" },
+		"loopback ipv6":     func(t *Target) { t.Host = "::1" },
+		"unspecified host":  func(t *Target) { t.Host = "0.0.0.0" },
+		"multicast host":    func(t *Target) { t.Host = "224.0.0.1" },
+		"bracketed ipv6":    func(t *Target) { t.Host = "[2001:db8::1]" },
+		"ipv6 with zone":    func(t *Target) { t.Host = "fe80::1%eth0" },
+		"ipv6 uppercase":    func(t *Target) { t.Host = "2001:DB8::1" },
+		"ipv4 mapped ipv6":  func(t *Target) { t.Host = "::ffff:192.0.2.1" },
+		"single label host": func(t *Target) { t.Host = "nas" },
 		"uppercase host":    func(t *Target) { t.Host = "U1.Example.com" },
 		"host with port":    func(t *Target) { t.Host = "u1.example.com:22" },
 		"port zero":         func(t *Target) { t.Port = 0 },
 		"port too large":    func(t *Target) { t.Port = 65536 },
-		"absolute path":     func(t *Target) { t.Path = "/etc" },
+		"double slash path": func(t *Target) { t.Path = "//etc" },
 		"dotdot":            func(t *Target) { t.Path = "a/../../etc" },
 		"dot segment":       func(t *Target) { t.Path = "a/./b" },
 		"trailing slash":    func(t *Target) { t.Path = "a/" },
@@ -105,6 +154,9 @@ func TestResticAcceptsEveryValidTarget(t *testing.T) {
 		*storageBox(),
 		{User: "u1", Host: "backup.example.org", Port: 65535, Path: "a"},
 		{User: "0", Host: "a.de", Port: 1, Path: "a_b/c-d/e.f"},
+		{User: "backup_web3", Host: "nas.example.lan", Port: 22, Path: "/srv/backups/web3"},
+		{User: "First.Last", Host: "192.0.2.10", Port: 2222, Path: "hostashi"},
+		{User: "u1", Host: "2001:db8::10", Port: 22, Path: "/srv/restic"},
 	} {
 		s := DefaultSettings()
 		s.Target = &tg

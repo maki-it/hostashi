@@ -9,7 +9,7 @@ A modern, **truly open source** hosting control panel for single Linux servers, 
 - **Sites:** PHP (several versions side by side), Node.js, static, reverse proxy and redirect sites on nginx, plus app sites that run a program of their own behind nginx. A site's type can be changed later. Sites that run code get their own Linux user, SSH/SFTP access, cron jobs, resource limits and logs; Node.js and app sites also get environment variables.
 - **HTTPS:** Let's Encrypt certificates for every domain, or your own certificate; HSTS and security headers per site.
 - **Databases:** MariaDB on the server, plus external MariaDB, MySQL and PostgreSQL servers; import, export and a web database tool.
-- **Backups:** daily restic backups of files and databases to a Hetzner Storage Box over SFTP, with restore from the panel.
+- **Backups:** daily restic backups of files and databases to any SFTP server (for example a Hetzner Storage Box), with restore from the panel.
 - **Server:** firewall that rolls back unconfirmed changes, fail2ban, services and dashboard, e-mail notifications, audit log.
 - **Users and roles:** admin, manager and user, with a second factor (TOTP or passkeys).
 - **Import from CloudPanel:** scan the old server, plan, transfer sites and databases, sync once more before you move DNS.
