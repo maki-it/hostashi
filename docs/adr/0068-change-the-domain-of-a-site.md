@@ -1,6 +1,6 @@
 # ADR-0068 Change the domain of a site
 
-**Status:** Proposed. **Date drafted:** 2026-11-25. **Decides:** Kim. **Related:** ADR-0005 (nginx), ADR-0018 (API), ADR-0026 (CloudPanel transfer), ADR-0027 (parked domains), ADR-0035 (roles), ADR-0039 (certificate management), ADR-0054 (site types), ADR-0056 (security headers), ADR-0058 (OpenAPI and CLI parity), ADR-0065 (www redirect), ADR-0066 (access rules), [03-features](../03-features.md) "Change the domain of a site" (P1).
+**Status:** Accepted (Kim, 2026-11-25). **Date drafted:** 2026-11-25. **Decides:** Kim. **Related:** ADR-0005 (nginx), ADR-0018 (API), ADR-0026 (CloudPanel transfer), ADR-0027 (parked domains), ADR-0035 (roles), ADR-0039 (certificate management), ADR-0054 (site types), ADR-0056 (security headers), ADR-0058 (OpenAPI and CLI parity), ADR-0065 (www redirect), ADR-0066 (access rules), [03-features](../03-features.md) "Change the domain of a site" (P1).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
