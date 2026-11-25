@@ -17,4 +17,7 @@ exclude = [
   # The wiki pages point at their own source folder, which a pull request
   # that adds it has not merged yet
   '^https://github\.com/maki-it/hostashi/tree/main/docs/wiki$',
+  # cloudpanel.io answers the GitHub runners with 301 to a bot check page,
+  # and 200 everywhere else
+  '^https://www\.cloudpanel\.io/$',
 ]
