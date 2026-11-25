@@ -1,6 +1,6 @@
 # ADR-0070 Staging and cloning a site
 
-**Status:** Proposed. **Date drafted:** 2026-11-25. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups), ADR-0015 (limits and quota), ADR-0016 (storage pools), ADR-0024 and ADR-0025 (MariaDB per site, import and export), ADR-0028 (cron), ADR-0032 (SSH per site), ADR-0035 (roles), ADR-0041 (external database servers), ADR-0045 (object cache), ADR-0046 (page cache), ADR-0054 (site types), ADR-0056 (security headers), ADR-0062 (Git deploy), ADR-0066 (password protection), ADR-0067 (permission reset), ADR-0069 (profiles and WP-CLI, drafted with this one), the ADR for changing the domain of a site (drafted in parallel), [03-features](../03-features.md) row "Staging/cloning a site" (P1, in 1.0 scope).
+**Status:** Accepted (Kim, 2026-11-25). **Date drafted:** 2026-11-25. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups), ADR-0015 (limits and quota), ADR-0016 (storage pools), ADR-0024 and ADR-0025 (MariaDB per site, import and export), ADR-0028 (cron), ADR-0032 (SSH per site), ADR-0035 (roles), ADR-0041 (external database servers), ADR-0045 (object cache), ADR-0046 (page cache), ADR-0054 (site types), ADR-0056 (security headers), ADR-0062 (Git deploy), ADR-0066 (password protection), ADR-0067 (permission reset), ADR-0069 (profiles and WP-CLI, drafted with this one), the ADR for changing the domain of a site (drafted in parallel), [03-features](../03-features.md) row "Staging/cloning a site" (P1, in 1.0 scope).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -78,6 +78,8 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions for Kim
 
-1. Clone with an optional staging mark and "refresh from source" (1B), or also "push to live" (1C)? Recommendation: 1B; pushing a database back loses data written on live in the meantime.
-2. Safe defaults for a staging clone: cron disabled, password protection on and `noindex`? Recommendation: yes, all three, each switchable afterwards.
-3. Rewrite URLs only for WordPress with WP-CLI and give other applications a checklist (3A)? Recommendation: 3A; a generic rewrite of serialized data is error-prone.
+1. ~~Clone with an optional staging mark and "refresh from source" (1B), or also "push to live" (1C)?~~ Decided (Kim, 2026-11-25): 1B, no push to live in 1.0.
+2. ~~Safe defaults for a staging clone: cron disabled, password protection on and `noindex`?~~ Decided (Kim, 2026-11-25): yes, all three, each switchable afterwards.
+3. ~~Rewrite URLs only for WordPress with WP-CLI and give other applications a checklist (3A)?~~ Decided (Kim, 2026-11-25): 3A.
+
+The ADR as a whole was accepted by Kim on 2026-11-25.

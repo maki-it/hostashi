@@ -64,7 +64,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0067](0067-reset-site-permissions.md) | Reset the file permissions of a site | Accepted |
 | [0068](0068-change-the-domain-of-a-site.md) | Change the domain of a site | Accepted |
 | [0069](0069-application-profiles-and-wordpress-install.md) | Application profiles (vhost templates) and WordPress quick install | Accepted |
-| [0070](0070-staging-and-cloning-a-site.md) | Staging and cloning a site | Proposed |
+| [0070](0070-staging-and-cloning-a-site.md) | Staging and cloning a site | Accepted |
 | [0071](0071-panel-ui-in-english-and-german.md) | Panel UI in English and German | Proposed |
 
 Only the project owner sets a status to `Accepted`.
