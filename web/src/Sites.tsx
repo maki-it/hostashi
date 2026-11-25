@@ -27,6 +27,8 @@ import {
   type Site,
   type SiteProxy,
   type SiteRedirect,
+  maxTitleLength,
+  siteLabel,
 } from "./sites";
 import { newNodeApp, NodeFields, nodeProblem, useNodeStatus, type NodeValue } from "./SiteNode";
 import { newPythonApp, PythonFields, pythonFieldsProblem, pythonRequest, usePythonStatus, type PythonFieldsValue } from "./SitePython";
@@ -89,7 +91,7 @@ const stateFilters = [
 ] as const;
 
 function matches(s: Site, q: string, state: string): boolean {
-  if (q && !s.name.includes(q) && !s.domains.some((d) => d.includes(q))) return false;
+  if (q && !s.name.includes(q) && !(s.title ?? "").toLowerCase().includes(q) && !s.domains.some((d) => d.includes(q))) return false;
   if (state === "problem") return s.tls.enabled && !s.tls.active && Boolean(s.tls.error);
   if (state) return siteStatus(s).key === state;
   return true;
@@ -125,16 +127,26 @@ const columns: Column<Site>[] = [
   {
     key: "name",
     header: "Site",
-    sortValue: (s) => s.name,
+    sortValue: (s) => siteLabel(s).toLowerCase(),
     cell: (s) => (
       <div className={`ui-cell-main${s.disabled ? " ui-cell-off" : ""}`}>
         <span className="ui-row ui-row-tight">
           <a className="ui-row-link" href={formatHash({ page: "sites", site: { name: s.name } })}>
-            {s.name}
+            {siteLabel(s)}
           </a>
           {stateBadge(s)}
         </span>
-        <span>{s.domains[0]}</span>
+        <span>
+          {s.title && (
+            <>
+              <span className="ui-mono" title="System name">
+                {s.name}
+              </span>
+              {" · "}
+            </>
+          )}
+          {s.domains[0]}
+        </span>
       </div>
     ),
   },
@@ -324,6 +336,7 @@ type CreateProps = {
 
 function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProps) {
   const [name, setName] = useState("");
+  const [title, setTitleText] = useState("");
   const [domains, setDomainsText] = useState(parked);
   const [version, setVersion] = useState<string | null>(null);
   const [kind, setKind] = useState<ChosenType>("php");
@@ -385,6 +398,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
       }
       const s = await createSite({
         name,
+        ...(title.trim() && { title: title.trim() }),
         ...(choosePool && !webOnly(kind) && { pool }),
         php: kind === "php" ? phpValue : "",
         domains: list,
@@ -419,6 +433,9 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
           }
         >
           <input className="ui-input" value={name} onChange={(e) => setName(e.target.value.trim())} required autoComplete="off" spellCheck={false} />
+        </Field>
+        <Field label="Display name (optional)" hint="Shown in the panel instead of the name. Free text, up to 64 characters; it can be changed at any time.">
+          <input className="ui-input" value={title} onChange={(e) => setTitleText(e.target.value)} maxLength={maxTitleLength} autoComplete="off" />
         </Field>
         <Field label="Domains" hint="One per line. The first one is the primary domain.">
           <textarea

@@ -171,6 +171,22 @@ describe("Sites", () => {
     expect(screen.getByText("No site matches the filter.")).toBeInTheDocument();
   });
 
+  it("shows the display name with the system name and filters by it", async () => {
+    const user = userEvent.setup();
+    mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [{ ...shop, title: "Müller Online-Shop" }, blog] } } });
+    render(<ListHarness />);
+    const table = await screen.findByRole("table", { name: "Sites" });
+    const row = within(within(table).getByRole("link", { name: "Müller Online-Shop" }).closest("tr")!);
+    expect(row.getByTitle("System name")).toHaveTextContent("shop");
+    expect(row.getByRole("link", { name: "Müller Online-Shop" })).toHaveAttribute("href", "#/sites/shop");
+    // A site without a display name shows its name alone.
+    expect(within(table).getByRole("link", { name: "blog" })).toBeInTheDocument();
+    expect(within(within(table).getByRole("link", { name: "blog" }).closest("tr")!).queryByTitle("System name")).toBeNull();
+
+    await user.type(screen.getByRole("searchbox", { name: "Filter sites" }), "müller");
+    expect(rowNames()).toEqual(["Müller Online-Shop"]);
+  });
+
   it("reads filter and sort from the address", async () => {
     mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [shop, blog] } } });
     render(<ListHarness initial="sort=name&dir=desc&q=o" />);
@@ -590,6 +606,33 @@ describe("SitePage", () => {
     await user.click(within(inner).getByRole("tab", { name: "PHP" }));
     expect(screen.getByRole("tabpanel", { name: "PHP" })).toHaveTextContent("PHP of blog");
     expect(within(tabs).getByRole("tab", { name: "App" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("sets and removes the display name, keeping the system name visible", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [{ ...blog, title: "Company blog" }] } },
+      "PUT /api/v1/sites/blog/title": { body: { ...blog, title: "News" } },
+    });
+    render(<PageHarness />);
+    expect(await screen.findByRole("heading", { name: "Company blog", level: 1 })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Details of blog")).getByText("Company blog")).toBeInTheDocument();
+    const card = within(screen.getByRole("region", { name: "Rename" }));
+    // The hint names the system name that stays, in code style.
+    expect(card.getByText("blog", { selector: "code" })).toBeInTheDocument();
+    const save = card.getByRole("button", { name: "Save display name" });
+    expect(save).toBeDisabled();
+
+    const input = card.getByLabelText("Display name");
+    await user.clear(input);
+    await user.type(input, "  News ");
+    await user.click(save);
+    await waitFor(() => expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ title: "News" }));
+
+    await user.click(card.getByRole("button", { name: "Remove display name" }));
+    await waitFor(() => expect(calls.filter((c) => c.method === "PUT").at(-1)?.body).toEqual({ title: "" }));
+    expect(input).toHaveAttribute("maxlength", "64");
   });
 
   it("explains a failed certificate", async () => {

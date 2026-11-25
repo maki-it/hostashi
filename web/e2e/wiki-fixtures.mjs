@@ -9,6 +9,7 @@ const tls = (domains, extra = {}) => ({ enabled: true, active: true, hsts: true,
 
 const site = (name, o) => ({
   name,
+  title: "",
   pool: "default",
   state: "active",
   php: "",
@@ -36,7 +37,7 @@ export const sites = [
     www: { mode: "to-non-www", pairs: [{ bare: "blog.example.com", www: "www.blog.example.com" }], missing: [] },
     tls: tls(["blog.example.com", "www.blog.example.com", "blog.example.net"]),
   }),
-  site("shop", { type: "php", php: "8.3", domains: ["shop.example.com"], www: { mode: "off", pairs: [], missing: ["www.shop.example.com"] }, tls: tls(["shop.example.com"]) }),
+  site("shop", { title: "Müller Online-Shop", type: "php", php: "8.3", domains: ["shop.example.com"], www: { mode: "off", pairs: [], missing: ["www.shop.example.com"] }, tls: tls(["shop.example.com"]) }),
   site("docs", { type: "static", domains: ["docs.example.com"], web: { dir: "public", spa: false, cache: true }, tls: tls(["docs.example.com"]) }),
   site("app", {
     type: "node",
@@ -331,6 +332,7 @@ const routes = [
   ["GET", /^\/settings\/panel-real-ip$/, () => ({ realIp: {}, headers: ["X-Forwarded-For", "X-Real-IP", "CF-Connecting-IP"], cloudflare: [], cloudflareDate: "2026-11-16", maxRanges: 64 })],
   ["GET", /^\/health$/, () => ({ status: "ok", version: "0.6.0" })],
   ["GET", /^\/services$/, () => ({ services: [] })],
+  ["GET", /^\/sites\/[^/]+\/services$/, () => ({ services: [] })],
   ["GET", /^\/doctor$/, () => ({
     status: "warn",
     checkedAt: day(0),
