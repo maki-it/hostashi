@@ -170,3 +170,60 @@ func (s *Service) SetSiteProfile(ctx context.Context, actor int64, name, profile
 
 	return SiteProfileState{Profile: p, Hardening: profile.Effective(p, o, php), Changed: !o.IsZero(), UpdatedAt: s.now()}, nil
 }
+
+// createType is the type Create gives a site of this request, for the
+// profile check: static or PHP, empty for the other types.
+func createType(req CreateRequest) string {
+	switch {
+	case req.Redirect != nil || req.Proxy != nil || req.App != nil:
+		return ""
+	case req.PHP != "":
+		return store.SiteTypePHP
+	}
+
+	return store.SiteTypeStatic
+}
+
+// checkCreateProfile checks the profile of a new site: it must exist, fit
+// the site's type and its PHP version.
+func checkCreateProfile(req CreateRequest) error {
+	if req.Profile == "" {
+		return nil
+	}
+
+	p, ok := profile.Builtin(req.Profile)
+
+	typ := createType(req)
+	if !ok || p.Type != typ {
+		return fmt.Errorf("%w: unknown profile %q for this type of site", ErrInvalid, req.Profile)
+	}
+
+	if p.MinPHP != "" && !profile.PHPAtLeast(req.PHP, p.MinPHP) {
+		return fmt.Errorf("%w: %s needs PHP %s or newer", ErrInvalid, p.Title, p.MinPHP)
+	}
+
+	return nil
+}
+
+// storeCreateProfile stores the profile of a new site and its document
+// root folder, before the site's first web state.
+func (s *Service) storeCreateProfile(ctx context.Context, req CreateRequest, siteID int64) error {
+	p, ok := profile.Builtin(req.Profile)
+	if !ok {
+		return nil
+	}
+
+	if def, _ := profile.Default(p.Type); def != p.Name {
+		if _, err := s.st.SetSiteProfile(ctx, store.SiteProfile{SiteID: siteID, Profile: p.Name}, s.now()); err != nil {
+			return err
+		}
+	}
+
+	if p.WebDir != "" {
+		if _, err := s.st.SetSiteWebOptions(ctx, req.Name, store.WebOptions{Dir: p.WebDir}, s.now()); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}

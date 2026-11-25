@@ -6642,6 +6642,9 @@
           "pool": {
             "type": "string"
           },
+          "profile": {
+            "type": "string"
+          },
           "proxy": {
             "anyOf": [
               {
