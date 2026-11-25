@@ -31,7 +31,9 @@ func TestValidate(t *testing.T) {
 	bad := map[string]func(r *Repo){
 		"shell in repository":  func(r *Repo) { r.Repository = "sftp://u1@host:23/x;rm -rf /" },
 		"dotdot in repository": func(r *Repo) { r.Repository = "sftp://u1@host:23/../etc" },
-		"absolute sftp path":   func(r *Repo) { r.Repository = "sftp://u1@host:23//etc" },
+		"triple slash path":    func(r *Repo) { r.Repository = "sftp://u1@host:23///etc" },
+		"unbracketed ipv6":     func(r *Repo) { r.Repository = "sftp://u1@::1:22/x" },
+		"user with colon":      func(r *Repo) { r.Repository = "sftp://u:p@host:23/x" },
 		"port zero":            func(r *Repo) { r.Repository = "sftp://u1@host:0/x" },
 		"port too large":       func(r *Repo) { r.Repository = "sftp://u1@host:70000/x" },
 		"option as user":       func(r *Repo) { r.Repository = "sftp://-oProxyCommand=x@host:23/x" },
@@ -55,6 +57,19 @@ func TestValidate(t *testing.T) {
 
 		if err := r.validate(); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: got %v, want ErrInvalid", name, err)
+		}
+	}
+
+	for _, repo := range []string{
+		"sftp://backup_web3@nas.example.lan:22//srv/backups/web3",
+		"sftp://first.last@192.0.2.10:2222/hostashi",
+		"sftp://u1@[2001:db8::10]:22//srv/restic",
+	} {
+		r := validRepo()
+		r.Repository = repo
+
+		if err := r.validate(); err != nil {
+			t.Errorf("%s refused: %v", repo, err)
 		}
 	}
 

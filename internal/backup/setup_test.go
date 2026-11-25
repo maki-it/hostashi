@@ -263,3 +263,36 @@ func TestAgentStatusAndSnapshots(t *testing.T) {
 		t.Errorf("panel: %+v", panel)
 	}
 }
+
+// A pinned key must be found again for every kind of host, or the target
+// never becomes ready: DNS names, IP addresses, IPv6 on port 22 and others.
+func TestHostKeyPinnedForGenericTargets(t *testing.T) {
+	ctx := context.Background()
+
+	for _, tg := range []Target{
+		*storageBox(),
+		{User: "backup_web3", Host: "backup.example.org", Port: 22, Path: "/srv/backups/web3"},
+		{User: "u1", Host: "192.0.2.10", Port: 2222, Path: "hostashi"},
+		{User: "u1", Host: "2001:db8::10", Port: 22, Path: "hostashi"},
+		{User: "u1", Host: "2001:db8::10", Port: 23, Path: "hostashi"},
+	} {
+		a, _ := newAgent(t)
+		s := DefaultSettings()
+		s.Target = &tg
+
+		if _, err := a.Set(ctx, s); err != nil {
+			t.Fatalf("%s: set: %v", tg.Host, err)
+		}
+
+		pub, _, _ := ed25519.GenerateKey(rand.Reader)
+
+		if _, err := a.SetHostKey(ctx, authorized(t, pub)); err != nil {
+			t.Fatalf("%s: host key: %v", tg.Host, err)
+		}
+
+		info, err := a.Get()
+		if err != nil || !info.Ready {
+			t.Errorf("%s port %d: not ready after pinning: %+v, %v", tg.Host, tg.Port, info, err)
+		}
+	}
+}

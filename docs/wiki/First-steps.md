@@ -23,7 +23,7 @@ Open **Server → Health**. It runs the same checks as `hostashi doctor` and sho
 
 ## 4. Set up backups
 
-Open **Server → Backups** and enter where backups go, for example a Hetzner Storage Box. Then print the backup keys once on the server and store them outside it:
+Open **Server → Backups** and enter where backups go: any SFTP server, for example a Hetzner Storage Box, a NAS or another Linux server. Then print the backup keys once on the server and store them outside it:
 
 ```sh
 sudo hostashi backup key show

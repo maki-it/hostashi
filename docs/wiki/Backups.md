@@ -2,14 +2,17 @@
 
 **For:** panel admins.
 
-Hostashi backs up every site's files and every database once a day with restic, encrypted, to a Hetzner Storage Box over SFTP. Restores never touch the live site.
+Hostashi backs up every site's files and every database once a day with restic, encrypted, to an SFTP server. Restores never touch the live site.
+
+Any SSH server that offers SFTP and accepts key login works: a Hetzner Storage Box, a NAS, or another Linux server. The account only needs write access to the backup directory; it does not need a shell.
 
 ## Set up the target
 
-1. In the Storage Box settings at Hetzner, turn on SSH access.
-2. Open **Server → Backups → Target and schedule** and enter the Storage Box host (for example `u123456.your-storagebox.de`), the user and a directory. The directory is created on the first run.
-3. The panel shows a **public key**. Add it to the Storage Box's `.ssh/authorized_keys`.
-4. Under **Host key**, confirm the Storage Box's SSH host key. Backups start only after that.
+1. Create an account on the SFTP server for the backups. On a Hetzner Storage Box, turn on SSH access in its settings (a sub-account limited to one directory works well).
+2. Open **Server → Backups → Target and schedule** and enter the user, the host (DNS name or IP address), the port and a directory. The port is usually 22; a Storage Box uses 23. The directory is relative to the login directory, or absolute when it starts with `/`. It is created on the first run.
+3. The panel shows a **public key**. Add it to `~/.ssh/authorized_keys` of that account (on a Storage Box also possible in Hetzner's console).
+4. Under **Host key**, fetch the server's SSH host key and compare the fingerprint with the server's own, for example `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on that server, or the fingerprints your provider publishes. Backups start only after you confirm it.
+   ![The target form for an SFTP server](images/backups-target.png)
 5. Choose the time window: the daily backup starts at a random time between the two hours (server time).
 6. Choose how many daily, weekly and monthly snapshots to keep.
 

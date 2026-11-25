@@ -74,7 +74,7 @@ export function Backups({ query, onQuery }: QueryProps) {
     <>
       <PageHead
         title="Backups"
-        description="Daily restic backups of all sites and databases to a Storage Box over SFTP."
+        description="Daily restic backups of all sites and databases to any SFTP server, for example a Hetzner Storage Box, a NAS or another Linux server."
         actions={
           info?.ready && (
             <Button variant="primary" icon={<CloudArrowUp size={16} aria-hidden="true" />} disabled={busy || info.status.running} onClick={() => void run()}>
@@ -146,6 +146,10 @@ function StatusCard({ info }: { info: BackupInfo }) {
   );
 }
 
+// A Hetzner Storage Box serves SFTP on port 23 and has its own key setup;
+// the form only adds hints for it, the target itself stays plain SFTP.
+const isStorageBox = (host: string) => /\.your-storagebox\.de$/.test(host.trim().toLowerCase());
+
 function num(v: string, fallback: number) {
   const n = Number.parseInt(v, 10);
   return Number.isNaN(n) ? fallback : n;
@@ -155,7 +159,7 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
   const s = info.settings;
   const [user, setUser] = useState(s.target?.user ?? "");
   const [host, setHost] = useState(s.target?.host ?? "");
-  const [port, setPort] = useState(String(s.target?.port ?? 23));
+  const [port, setPort] = useState(String(s.target?.port ?? 22));
   const [path, setPath] = useState(s.target?.path ?? "hostashi");
   const [daily, setDaily] = useState(String(s.retention.daily));
   const [weekly, setWeekly] = useState(String(s.retention.weekly));
@@ -166,6 +170,8 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const storageBox = isStorageBox(host);
+  const savedStorageBox = isStorageBox(s.target?.host ?? "");
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -174,7 +180,7 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
     setSaved(false);
     const next: Settings = {
       version: s.version,
-      target: { user: user.trim(), host: host.trim().toLowerCase(), port: num(port, 23), path: path.trim() },
+      target: { user: user.trim(), host: host.trim().toLowerCase(), port: num(port, 22), path: path.trim() },
       retention: { daily: num(daily, 7), weekly: num(weekly, 4), monthly: num(monthly, 6) },
       windowStart: num(start, 1),
       windowEnd: num(end, 5),
@@ -194,17 +200,21 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
     <Card title="Target and schedule">
       <form className="ui-stack" onSubmit={(e) => void submit(e)}>
         <fieldset className="ui-fieldset ui-stack">
-          <legend>Storage Box (SFTP)</legend>
+          <legend>SFTP server</legend>
           <Field label="User">
-            <input className="ui-input" value={user} onChange={(e) => setUser(e.target.value)} required placeholder="u123456" autoComplete="off" />
+            <input className="ui-input" value={user} onChange={(e) => setUser(e.target.value)} required placeholder="backup" autoComplete="off" />
           </Field>
-          <Field label="Host">
-            <input className="ui-input" value={host} onChange={(e) => setHost(e.target.value)} required placeholder="u123456.your-storagebox.de" autoComplete="off" />
+          <Field label="Host" hint="DNS name or IP address of the SSH server.">
+            <input className="ui-input" value={host} onChange={(e) => setHost(e.target.value)} required placeholder="backup.example.com" autoComplete="off" />
           </Field>
-          <Field label="Port">
+          <Field
+            label="Port"
+            hint="Usually 22. A Hetzner Storage Box uses 23."
+            {...(storageBox && port.trim() !== "23" && { error: "Hetzner Storage Boxes serve SFTP on port 23." })}
+          >
             <input className="ui-input" value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" required />
           </Field>
-          <Field label="Directory" hint="Below the login directory; created on the first run.">
+          <Field label="Directory" hint="Relative to the login directory, or absolute with a leading /. Created on the first run.">
             <input className="ui-input" value={path} onChange={(e) => setPath(e.target.value)} required />
           </Field>
         </fieldset>
@@ -242,7 +252,8 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
         {info.publicKey && (
           <div className="ui-stack-tight">
             <p className="ui-flush">
-              Add this key to the Storage Box: in Hetzner&apos;s console under SSH keys, or to <code>.ssh/authorized_keys</code> of the account.
+              Add this key to <code>~/.ssh/authorized_keys</code> of the SFTP account.
+              {savedStorageBox && <> On a Hetzner Storage Box you can also add it in Hetzner&apos;s console under SSH keys.</>}
             </p>
             <pre className="ui-code" aria-label="Public key">
               {info.publicKey}
@@ -297,7 +308,9 @@ function HostKeyCard({ info, onConfirmed }: { info: BackupInfo; onConfirmed: (i:
       {scanned && (
         <>
           <p>
-            The target presents <code>{scanned.fingerprint}</code>. Compare it with the fingerprints Hetzner publishes for Storage Boxes. Trust it only if it matches.
+            The target presents <code>{scanned.fingerprint}</code>. Compare it with the fingerprint of the server: run{" "}
+            <code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code> on that server, or ask your provider
+            {isStorageBox(info.settings.target?.host ?? "") && <> (Hetzner publishes the fingerprints of its Storage Boxes)</>}. Trust it only if it matches.
           </p>
           <Button variant="primary" disabled={busy} onClick={() => void confirm()}>
             Trust this key
