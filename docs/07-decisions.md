@@ -73,7 +73,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0068 | Change the domain of a site | Accepted on 2026-11-25 ([adr/0068](adr/0068-change-the-domain-of-a-site.md)) | No |
 | 0069 | Application profiles (vhost templates) and WordPress quick install | Accepted on 2026-11-25 ([adr/0069](adr/0069-application-profiles-and-wordpress-install.md)) | Done |
 | 0070 | Staging and cloning a site | Accepted on 2026-11-25 ([adr/0070](adr/0070-staging-and-cloning-a-site.md)) | Done |
-| 0071 | Panel UI in English and German | Proposed (draft: [adr/0071](adr/0071-panel-ui-in-english-and-german.md)) | **Yes** |
+| 0071 | Panel UI in English and German | Accepted on 2026-11-25 ([adr/0071](adr/0071-panel-ui-in-english-and-german.md)) | Done |
 
 ---
 
@@ -467,4 +467,4 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0071 Panel UI in English and German
 
-**Full text (status Proposed, drafted 2026-11-25):** [adr/0071](adr/0071-panel-ui-in-english-and-german.md). Summary: the UI gets a translation layer with `i18next` + `react-i18next` (MIT), JSON catalogs per language and page, keys typed from the English catalog, and CI tests for missing keys and for JSX text outside `t()`. Each user has a language setting (`auto`, `en`, `de`); `auto` follows the browser. Numbers and dates go through one `Intl` module. API errors stay English on the server and are translated in the UI by their `code`; the six mail templates get a German version chosen by the recipient's setting. Wiki, CLI, OpenAPI and logs stay English. Translation in the repository; Weblate possible later. Open for Kim: library, scope (UI, errors, mails), "du" or "Sie".
+**Full text (status Accepted, 2026-11-25, by Kim):** [adr/0071](adr/0071-panel-ui-in-english-and-german.md). Summary: the UI gets a translation layer with `i18next` + `react-i18next` (MIT), JSON catalogs per language and page, keys typed from the English catalog, and CI tests for missing keys and for JSX text outside `t()`. Each user has a language setting (`auto`, `en`, `de`); `auto` follows the browser. Numbers and dates go through one `Intl` module. API errors stay English on the server and are translated in the UI by their `code`; the six mail templates get a German version chosen by the recipient's setting. Wiki, CLI, OpenAPI and logs stay English. Translation in the repository; Weblate possible later. Decided by Kim on 2026-11-25: i18next + react-i18next (1A), UI plus errors plus mails (2B), German with "du".

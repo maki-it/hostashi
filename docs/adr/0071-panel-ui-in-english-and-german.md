@@ -1,6 +1,6 @@
 # ADR-0071 Panel UI in English and German
 
-**Status:** Proposed. **Date drafted:** 2026-11-25. **Decides:** Kim. **Related:** ADR-0003 (stack: React, Vite, TypeScript), ADR-0012 (language of code and documentation), ADR-0018 (API), ADR-0035 (users and roles), ADR-0037 (UI redesign), ADR-0043 (user documentation), ADR-0044 (outgoing email), ADR-0058 (OpenAPI and CLI), [03-features](../03-features.md) row "Multilingual UI (start: EN, DE)" (P1, in 1.0 scope, note "Weblate or similar").
+**Status:** Accepted (Kim, 2026-11-25). **Date drafted:** 2026-11-25. **Decides:** Kim. **Related:** ADR-0003 (stack: React, Vite, TypeScript), ADR-0012 (language of code and documentation), ADR-0018 (API), ADR-0035 (users and roles), ADR-0037 (UI redesign), ADR-0043 (user documentation), ADR-0044 (outgoing email), ADR-0058 (OpenAPI and CLI), [03-features](../03-features.md) row "Multilingual UI (start: EN, DE)" (P1, in 1.0 scope, note "Weblate or similar").
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -52,7 +52,7 @@ All licenses are on the allowlist (MIT, BSD, ISC, Apache-2.0, MPL-2.0, 0BSD) [V:
 - API errors: the UI looks up `errors.<code>`, falls back to the server's English `message`. The server stays English; no `Accept-Language` handling in the API.
 - Mails: the six templates get a German version; the recipient's language decides, `auto` means English, because there is no browser at send time. Subjects and footers are translated too; the format stays plain text.
 - Not translated in 1.0: wiki, CLI, OpenAPI document, logs, audit log entries (their kinds are codes; the UI shows labels for them), the database tool (Adminer has its own languages [U]).
-- The German text uses "du" or neutral wording (see question 3); terms follow one glossary in `web/src/locales/README.md` (for example "Site", "Storage-Pool", "Datenbank").
+- The German text uses "du" or neutral wording (decided, question 3); terms follow one glossary in `web/src/locales/README.md` (for example "Site", "Storage-Pool", "Datenbank").
 - The translation is done in the repository by Kim and Claude; Weblate or a similar service is possible later because of the JSON format, without a decision now.
 - Migration: one PR for the setup (library, language setting, formatting module, CI checks), then one PR per area (sites, databases, backups, settings, …) that moves the texts and adds the German catalog, with a screenshot pair per area. Tests keep using English by setting the language in the test setup.
 
@@ -66,6 +66,8 @@ All licenses are on the allowlist (MIT, BSD, ISC, Apache-2.0, MPL-2.0, 0BSD) [V:
 
 ## Open questions for Kim
 
-1. Library: `i18next` + `react-i18next` (1A), Lingui (1B), `react-intl` (1C) or an own `t()` (1D)? Recommendation: 1A, the most common and needs no build plugin.
-2. Scope: UI plus API errors by code plus mails in the recipient's language (2B), or the UI only (2A)? Recommendation: 2B; mails are six short templates and customers read them.
-3. German form of address: "du" or "Sie"? Recommendation: "du" with neutral wording where possible ("Speichern", "Domain eingeben"); it is shorter and matches how the project talks, but "Sie" is the safer choice if most users are business customers.
+1. ~~Library: `i18next` + `react-i18next` (1A), Lingui (1B), `react-intl` (1C) or an own `t()` (1D)?~~ Decided (Kim, 2026-11-25): 1A.
+2. ~~Scope: UI plus API errors by code plus mails in the recipient's language (2B), or the UI only (2A)?~~ Decided (Kim, 2026-11-25): 2B.
+3. ~~German form of address: "du" or "Sie"?~~ Decided (Kim, 2026-11-25): "du", with neutral wording where possible.
+
+The ADR as a whole was accepted by Kim on 2026-11-25.
