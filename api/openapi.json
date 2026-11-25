@@ -6385,6 +6385,9 @@
           "state": {
             "type": "string"
           },
+          "title": {
+            "type": "string"
+          },
           "tls": {
             "$ref": "#/components/schemas/Tls"
           },
@@ -6421,6 +6424,7 @@
           "redirect",
           "redirectDomains",
           "state",
+          "title",
           "tls",
           "type",
           "updatedAt",
@@ -6528,6 +6532,9 @@
                 "type": "null"
               }
             ]
+          },
+          "title": {
+            "type": "string"
           },
           "tls": {
             "type": "boolean"
@@ -7307,6 +7314,18 @@
         "required": [
           "zones"
         ],
+        "type": "object"
+      },
+      "TitleRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       },
       "Tls": {
@@ -21236,6 +21255,69 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "ssh:write"
+      }
+    },
+    "/api/v1/sites/{name}/title": {
+      "put": {
+        "operationId": "setSiteTitle",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TitleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Set the display name of a site (empty clears it); the system name stays",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.title:write"
       }
     },
     "/api/v1/sites/{name}/tls": {

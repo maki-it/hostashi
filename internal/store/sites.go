@@ -30,8 +30,11 @@ var (
 
 // Site is a stored site with its domains, the primary one first.
 type Site struct {
-	ID    int64
-	Name  string
+	ID   int64
+	Name string
+	// Title is the display name (ADR-0072), empty for none. Display text
+	// only: it never reaches the agent, a path or a unit name.
+	Title string
 	Pool  string
 	State string
 	// Type is one of the SiteType constants (ADR-0054).
@@ -685,7 +688,7 @@ type scanner interface{ Scan(dest ...any) error }
 const siteColumns = `id, name, pool, state, type, php, web_dir, spa, asset_cache, asset_cache_seconds, asset_cache_exts, tls, hsts, www_redirect, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
 	maintenance, coalesce(maintenance_page, 0), maintenance_allow, coalesce(disabled_page, 0), tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
 	account, redirect_target, redirect_status, redirect_keep_path, proxy_target, proxy_target_host, proxy_insecure,
-	node_version, python_version, app_workdir, app_start_kind, app_start, app_args, coalesce(app_port, 0), app_stopped, created_at, updated_at`
+	node_version, python_version, app_workdir, app_start_kind, app_start, app_args, coalesce(app_port, 0), app_stopped, title, created_at, updated_at`
 
 func scanSite(r scanner) (Site, error) {
 	var (
@@ -710,7 +713,7 @@ func scanSite(r scanner) (Site, error) {
 	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &st.WebDir, &spa, &assets, &st.AssetCacheSeconds, &exts, &tls, &hsts, &st.WWWRedirect, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
 		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced,
 		&account, &redirect.Target, &redirect.Status, &keepPath, &proxy.Target, &proxyHost, &insecure,
-		&app.Node, &app.Python, &app.Workdir, &app.StartKind, &app.Start, &args, &app.Port, &appStopped, &cre, &upd)
+		&app.Node, &app.Python, &app.Workdir, &app.StartKind, &app.Start, &args, &app.Port, &appStopped, &st.Title, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
 	}
@@ -826,6 +829,36 @@ func (s *Store) SetSiteCert(ctx context.Context, name string, domains []string, 
 // SetSiteHSTS sets whether a site sends HSTS and returns the previous value.
 func (s *Store) SetSiteHSTS(ctx context.Context, name string, on bool, now time.Time) (bool, error) {
 	return s.setSiteFlag(ctx, `SELECT hsts FROM sites WHERE name = ?`, `UPDATE sites SET hsts = ?, updated_at = ? WHERE name = ?`, name, on, now)
+}
+
+// SetSiteTitle sets the display name of a site (ADR-0072) and returns the
+// previous one. The caller validates it.
+func (s *Store) SetSiteTitle(ctx context.Context, name, title string, now time.Time) (string, error) {
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var old string
+	if err := tx.QueryRowContext(ctx, `SELECT title FROM sites WHERE name = ?`, name).Scan(&old); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET title = ?, updated_at = ? WHERE name = ?`, title, now.Unix(), name); err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	return old, nil
 }
 
 // SetSiteWWWRedirect sets the www redirect of a site and returns the

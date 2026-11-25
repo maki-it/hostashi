@@ -19,7 +19,10 @@ import (
 )
 
 type siteJSON struct {
-	Name  string `json:"name"`
+	Name string `json:"name"`
+	// Title is the display name (ADR-0072), "" for none; Name stays the
+	// system name (Linux user, home folder, API path).
+	Title string `json:"title"`
 	Pool  string `json:"pool"`
 	State string `json:"state"`
 	Type  string `json:"type"` // static, php, node, app, proxy, redirect (ADR-0054), python (ADR-0061)
@@ -191,7 +194,9 @@ type phpVersionsJSON struct {
 }
 
 type siteCreateRequest struct {
-	Name    string   `json:"name"`
+	Name string `json:"name"`
+	// Title is the display name (ADR-0072), optional.
+	Title   string   `json:"title"`
 	Pool    string   `json:"pool"`
 	PHP     string   `json:"php"`
 	Domains []string `json:"domains"`
@@ -288,6 +293,11 @@ type wwwPairJSON struct {
 	WWW  string `json:"www"`
 }
 
+// titleRequest sets the display name of a site (ADR-0072).
+type titleRequest struct {
+	Title *string `json:"title"` // at most 64 characters, "" clears it
+}
+
 type wwwRequest struct {
 	Mode *string `json:"mode"` // "off", "to-www" or "to-non-www"
 }
@@ -326,7 +336,7 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	}
 
 	return siteJSON{
-		Name: s.Name, Pool: s.Pool, State: s.State, Type: s.Type, Web: toWebJSON(s), Account: s.Account, Redirect: toRedirectJSON(s), Proxy: toProxyJSON(s), Node: toNodeAppJSON(s), App: toProgramAppJSON(s), Python: toPythonAppJSON(s), PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, RedirectDomains: rd, PendingDomains: toPendingDomainsJSON(s), Maintenance: toMaintenanceJSON(s), WWW: toWWWJSON(s),
+		Name: s.Name, Title: s.Title, Pool: s.Pool, State: s.State, Type: s.Type, Web: toWebJSON(s), Account: s.Account, Redirect: toRedirectJSON(s), Proxy: toProxyJSON(s), Node: toNodeAppJSON(s), App: toProgramAppJSON(s), Python: toPythonAppJSON(s), PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, RedirectDomains: rd, PendingDomains: toPendingDomainsJSON(s), Maintenance: toMaintenanceJSON(s), WWW: toWWWJSON(s),
 		TLS: tlsJSON{
 			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
@@ -536,7 +546,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		defer cancel()
 
 		s, err := svc.Create(ctx, p.User.ID, hosting.CreateRequest{
-			Name: in.Name, Pool: in.Pool, PHP: in.PHP, Domains: in.Domains, TLS: in.TLS, HSTS: in.HSTS, Headers: in.Headers, Redirect: redirect, Proxy: proxy, App: app,
+			Name: in.Name, Title: in.Title, Pool: in.Pool, PHP: in.PHP, Domains: in.Domains, TLS: in.TLS, HSTS: in.HSTS, Headers: in.Headers, Redirect: redirect, Proxy: proxy, App: app,
 		})
 		if err != nil {
 			headersFail(log, w, err, "create site")
@@ -779,6 +789,31 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		s, err := svc.SetWWWRedirect(ctx, p.User.ID, r.PathValue("name"), mode)
 		if err != nil {
 			siteFail(log, w, err, "set www redirect")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
+	}))
+
+	// The display name changes nothing on the server (ADR-0072).
+	mux.Op("PUT /api/v1/sites/{name}/title", openapi.Operation{
+		ID: "setSiteTitle", Tag: "sites", Summary: "Set the display name of a site (empty clears it); the system name stays", In: titleRequest{}, Out: siteJSON{},
+	}, a.allow("sites.title:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in titleRequest
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if in.Title == nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", `"title" is required`)
+
+			return
+		}
+
+		s, err := svc.SetTitle(r.Context(), p.User.ID, r.PathValue("name"), *in.Title)
+		if err != nil {
+			siteFail(log, w, err, "set title")
 
 			return
 		}

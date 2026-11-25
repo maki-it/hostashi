@@ -128,6 +128,7 @@ var routeAccess = map[string]authz.Action{
 	"PUT /api/v1/sites/{name}/tls/source":                    "sites.tls:write",
 	"POST /api/v1/sites/{name}/tls/renew":                    "sites.tls:write",
 	"PUT /api/v1/sites/{name}/hsts":                          "sites.hsts:write",
+	"PUT /api/v1/sites/{name}/title":                         "sites.title:write",
 	"PUT /api/v1/sites/{name}/www":                           "sites.www:write",
 	"GET /api/v1/sites/{name}/headers":                       "sites:read",
 	"PUT /api/v1/sites/{name}/headers":                       "sites.headers:write",

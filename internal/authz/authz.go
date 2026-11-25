@@ -177,6 +177,7 @@ var table = map[Action]Rule{
 	"sites.usage:read":     ownSite("sites:read"),
 	"sites.php:write":      ownSite("sites:write"),
 	"sites.hsts:write":     ownSite("sites:write"),
+	"sites.title:write":    ownSite("sites:write"),
 	"sites.headers:write":  ownSite("sites:write"),
 	"sites.realip:write":   ownSite("sites:write"),
 	"sites.access:write":   ownSite("sites:write"),
