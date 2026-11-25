@@ -74,6 +74,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0069 | Application profiles (vhost templates) and WordPress quick install | Accepted on 2026-11-25 ([adr/0069](adr/0069-application-profiles-and-wordpress-install.md)) | Done |
 | 0070 | Staging and cloning a site | Accepted on 2026-11-25 ([adr/0070](adr/0070-staging-and-cloning-a-site.md)) | Done |
 | 0071 | Panel UI in English and German | Accepted on 2026-11-25 ([adr/0071](adr/0071-panel-ui-in-english-and-german.md)) | Done |
+| 0072 | Rename a site | Proposed ([adr/0072](adr/0072-rename-a-site.md)) | **Yes** (display name or system rename) |
 
 ---
 
@@ -468,3 +469,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0071 Panel UI in English and German
 
 **Full text (status Accepted, 2026-11-25, by Kim):** [adr/0071](adr/0071-panel-ui-in-english-and-german.md). Summary: the UI gets a translation layer with `i18next` + `react-i18next` (MIT), JSON catalogs per language and page, keys typed from the English catalog, and CI tests for missing keys and for JSX text outside `t()`. Each user has a language setting (`auto`, `en`, `de`); `auto` follows the browser. Numbers and dates go through one `Intl` module. API errors stay English on the server and are translated in the UI by their `code`; the six mail templates get a German version chosen by the recipient's setting. Wiki, CLI, OpenAPI and logs stay English. Translation in the repository; Weblate possible later. Decided by Kim on 2026-11-25: i18next + react-i18next (1A), UI plus errors plus mails (2B), German with "du".
+
+## ADR-0072 Rename a site
+
+**Full text (status Proposed, 2026-11-25):** [adr/0072](adr/0072-rename-a-site.md). Summary: today the site name is at the same time the UI label, the Linux user and group, the home folder, the registry key and the `{name}` in the API. Recommendation: add a free display name (`sites.title`, migration 0065, at most 64 characters, display only, never sent to the agent), editable through `PUT /api/v1/sites/{name}/title`, the CLI and a "Rename" dialog that keeps the system name visible. A real rename of the system name is not done in place (it would need downtime, new `usermod`/`groupmod` exec use and breaks absolute paths in applications); after ADR-0070 a later ADR can add "move to a new system name" through clone and domain handover. Open for Kim: display name only (A, with C later) or an in-place system rename (B).

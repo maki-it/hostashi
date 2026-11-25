@@ -66,6 +66,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0069](0069-application-profiles-and-wordpress-install.md) | Application profiles (vhost templates) and WordPress quick install | Accepted |
 | [0070](0070-staging-and-cloning-a-site.md) | Staging and cloning a site | Accepted |
 | [0071](0071-panel-ui-in-english-and-german.md) | Panel UI in English and German | Accepted |
+| [0072](0072-rename-a-site.md) | Rename a site | Proposed |
 
 Only the project owner sets a status to `Accepted`.
 
