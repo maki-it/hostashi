@@ -144,6 +144,8 @@ describe("Sites", () => {
     const s = within(within(table).getByRole("link", { name: "shop" }).closest("tr")!);
     expect(s.getByText("Static")).toBeInTheDocument();
     expect(s.getByText("Certificate failed")).toBeInTheDocument();
+    // A failed certificate still says that the site is not on HTTPS.
+    expect(s.getByText("HTTP only")).toBeInTheDocument();
   });
 
   it("filters by text and state and sorts by a column", async () => {

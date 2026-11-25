@@ -152,12 +152,10 @@ const columns: Column<Site>[] = [
             HTTPS
           </span>
         ) : (
-          !s.tls.enabled && (
-            <span className="ui-https ui-https-off">
-              <LockSimpleOpen size={16} aria-hidden />
-              HTTP only
-            </span>
-          )
+          <span className="ui-https ui-https-off">
+            <LockSimpleOpen size={16} aria-hidden />
+            HTTP only
+          </span>
         )}
         {siteIssues(s).map((i) => (
           <Badge key={i.word} tone={i.tone}>
