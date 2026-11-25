@@ -2,7 +2,9 @@
 
 import { Power } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
+import { PanelCertificate } from "./Certificate";
 import { MalwareEngineCard } from "./Malware";
+import { PanelRealIPCard } from "./RealIP";
 import { formatHash } from "./routes";
 import { serviceMessage } from "./services";
 import {
@@ -24,7 +26,9 @@ type RebootState = { phase: "idle" } | { phase: "going-down" | "starting" } | { 
 /**
  * System shows the server's hostname, time zone, clock and uptime, lets an
  * admin change the first two and reboot the server after typing its
- * hostname (ADR-0060).
+ * hostname (ADR-0060). The panel's certificate (ADR-0039) and its real
+ * visitor address (ADR-0059) are settings too and live here; Health only
+ * warns about the certificate.
  */
 export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) {
   const [info, setInfo] = useState<SystemInfo | null>(null);
@@ -74,7 +78,10 @@ export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) 
 
   return (
     <>
-      <PageHead title="System" description="The server's name, time zone and clock. A reboot stops every site until the server is back." />
+      <PageHead
+        title="System"
+        description="The server's name, time zone and clock, and the panel's own address. A reboot stops every site until the server is back."
+      />
       {error && <Notice tone="err" title={error} />}
       {done && <Notice tone="ok" title={done} />}
       {reboot.phase !== "idle" && <RebootProgress state={reboot} />}
@@ -85,6 +92,8 @@ export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) 
           <Overview info={info} />
           <HostnameCard info={info} onDone={(n) => changed(n, `The hostname is now ${n.hostname}.`)} onError={setError} />
           <TimezoneCard info={info} zones={zones} onDone={(n) => changed(n, `The time zone is now ${n.timezone}.`)} onError={setError} />
+          <PanelCertificate />
+          <PanelRealIPCard />
           <MalwareEngineCard />
           <RebootCard info={info} busy={reboot.phase === "going-down" || reboot.phase === "starting"} onReboot={(c) => void startReboot(c)} />
         </>
