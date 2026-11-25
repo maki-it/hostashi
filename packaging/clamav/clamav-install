@@ -24,7 +24,11 @@
 # distribution's command lines: clamd and clamonacc read the agent's
 # /etc/hostashi/clamav/clamd.conf, clamonacc passes descriptors (--fdpass),
 # only reports (the distribution's unit would move files with --move) and
-# logs to /var/log/hostashi/scan/realtime.log. Both wait for that file. ClamAV is GPL-2.0 and stays a separate
+# logs to /var/log/hostashi/scan/realtime.log. Both wait for that file.
+# The distribution's AppArmor profile for clamd only lets it read
+# /etc/clamav/clamd.conf and the homes under /home: a marked block in its
+# local include adds that file and the files clamonacc and clamdscan hand
+# over (site homes may live on any storage pool). ClamAV is GPL-2.0 and stays a separate
 # program from the distribution; Hostashi does not ship or link it.
 #
 # The state lives in STATE_DIR (the agent reads it): state, version,
@@ -46,6 +50,11 @@ ONACC=clamav-clamonacc.service
 UNIT_DIR=${HOSTASHI_CLAMAV_UNIT_DIR:-/etc/systemd/system}
 RT_CONF=/etc/hostashi/clamav/clamd.conf
 RT_LOG=/var/log/hostashi/scan/realtime.log
+AA_DIR=${HOSTASHI_CLAMAV_APPARMOR_DIR:-/etc/apparmor.d}
+AA_PROFILE=$AA_DIR/usr.sbin.clamd
+AA_LOCAL=$AA_DIR/local/usr.sbin.clamd
+AA_BEGIN="# BEGIN hostashi (ADR-0064): written by clamav-install, do not edit"
+AA_END="# END hostashi"
 export DEBIAN_FRONTEND=noninteractive
 # apt waits for the dpkg lock (unattended-upgrades) instead of failing.
 APT_OPTS=(-o DPkg::Lock::Timeout=600 -y -qq --no-install-recommends)
@@ -93,6 +102,47 @@ EOF
   systemctl daemon-reload
 }
 
+# aa_block is the block in the profile's local include.
+aa_block() {
+  printf '%s\n' "$AA_BEGIN" \
+    "$RT_CONF r," \
+    "# Files of site homes, on /home or on a storage pool, handed over with --fdpass." \
+    "/** r," \
+    "$AA_END"
+}
+
+# aa_strip prints the local include without Hostashi's block.
+aa_strip() {
+  [ -f "$AA_LOCAL" ] || return 0
+  awk -v b="$AA_BEGIN" -v e="$AA_END" '$0 == b { skip = 1; next } skip && $0 == e { skip = 0; next } !skip' "$AA_LOCAL"
+}
+
+aa_reload() {
+  command -v apparmor_parser >/dev/null 2>&1 || return 0
+  [ -d /sys/kernel/security/apparmor ] || return 0
+  apparmor_parser -r -T -W "$AA_PROFILE"
+}
+
+# aa_ok: without the distribution's profile there is nothing to add.
+aa_ok() {
+  [ -f "$AA_PROFILE" ] || return 0
+  [ -f "$AA_LOCAL" ] && grep -qxF "$AA_BEGIN" "$AA_LOCAL" && grep -qxF "$RT_CONF r," "$AA_LOCAL"
+}
+
+# write_apparmor adds the block (after the package put its profile in
+# place) and reloads the profile, so clamd can read $RT_CONF.
+write_apparmor() {
+  [ -f "$AA_PROFILE" ] || return 0
+  install -d -m 0755 "$AA_DIR/local" || return 1
+  { aa_strip && aa_block; } >"$AA_LOCAL.tmp" && chmod 0644 "$AA_LOCAL.tmp" && mv -f "$AA_LOCAL.tmp" "$AA_LOCAL" || return 1
+  aa_reload
+}
+
+remove_apparmor() {
+  [ -f "$AA_LOCAL" ] || return 0
+  aa_strip >"$AA_LOCAL.tmp" && chmod 0644 "$AA_LOCAL.tmp" && mv -f "$AA_LOCAL.tmp" "$AA_LOCAL"
+}
+
 remove_dropins() {
   rm -f "${UNIT_DIR:?}/${CLAMD:?}.d/50-hostashi.conf" "${UNIT_DIR:?}/${ONACC:?}.d/50-hostashi.conf"
   rmdir "${UNIT_DIR:?}/${CLAMD:?}.d" "${UNIT_DIR:?}/${ONACC:?}.d" 2>/dev/null
@@ -113,6 +163,7 @@ check() {
     on)
       for p in "${RT_PKGS[@]}"; do installed "$p" || { echo "$p not installed"; return 1; }; done
       grep -q -- '--fdpass' "$UNIT_DIR/$ONACC.d/50-hostashi.conf" 2>/dev/null || { echo "$ONACC drop-in missing"; return 1; }
+      aa_ok || { echo "AppArmor lets clamd not read $RT_CONF"; return 1; }
       ;;
     off) ;;
     *) echo "unknown real-time state $(rt_state)"; return 1;;
@@ -126,6 +177,13 @@ do_install() {
   systemctl enable --now "$FRESHCLAM" || { say "cannot start $FRESHCLAM"; return 1; }
   dpkg-query -W -f='${Version}\n' clamav >"$STATE_DIR/version.tmp" && mv -f "$STATE_DIR/version.tmp" "$STATE_DIR/version"
   record on || return 1
+  # A repair (install.sh runs install when check fails) also fixes the
+  # real-time mode of servers set up before its AppArmor block; the agent
+  # then restarts the failed clamd.
+  if [ "$(rt_state)" = on ]; then
+    write_apparmor || { say "cannot add $RT_CONF to clamd's AppArmor profile"; return 1; }
+    systemctl reset-failed "$CLAMD" clamav-daemon.socket 2>/dev/null
+  fi
   say "done: ClamAV $(cat "$STATE_DIR/version"), signatures follow from freshclam"
 }
 
@@ -135,6 +193,7 @@ do_realtime_on() {
   write_dropins || { say "cannot write the drop-ins"; return 1; }
   apt-get "${APT_OPTS[@]}" update || { say "cannot update the package lists"; return 1; }
   apt-get "${APT_OPTS[@]}" install "${RT_PKGS[@]}" || { say "cannot install ${RT_PKGS[*]}"; return 1; }
+  write_apparmor || { say "cannot add $RT_CONF to clamd's AppArmor profile"; return 1; }
   systemctl enable "$CLAMD" "$ONACC" || { say "cannot enable $CLAMD and $ONACC"; return 1; }
   record_rt on || return 1
   say "done: the agent writes the configuration and starts clamonacc"
@@ -149,6 +208,7 @@ do_realtime_off() {
     apt-get "${APT_OPTS[@]}" purge "${have[@]}" || { say "cannot remove ${have[*]}"; return 1; }
   fi
   remove_dropins
+  remove_apparmor
   rm -f "$RT_CONF"
   record_rt off || return 1
   say "done: real-time mode removed"
