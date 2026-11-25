@@ -157,8 +157,9 @@ func (m *Manager) ClientConfig(site string) string {
 
 // ClientConfigContent is what clamdscan reads as the site user: the
 // socket of the real-time mode's clamd and the folders it skips, the same
-// as clamscan. clamdscan walks the folders itself and hands clamd each
-// open file (--fdpass).
+// as clamscan. clamdscan walks the folders itself and streams each file's
+// content to clamd (--stream), up to StreamMaxLength (100M by default, the
+// same as clamscan's MaxFileSize).
 func ClientConfigContent(site, home string) ([]byte, error) {
 	if err := agentapi.ValidateSiteUser(site); err != nil {
 		return nil, err
@@ -289,7 +290,10 @@ func DropInContent(site string, acct Site, hidden []string, dbDir, clientConf st
 	}
 
 	if clientConf != "" {
-		cmd = []string{Clamdscan, "--config-file=" + clientConf, "--fdpass", "--infected", "--no-summary", "--stdout"}
+		// --stream, not --fdpass: the unit opens files in its own mount
+		// namespace, and AppArmor refuses clamd a descriptor whose path
+		// it cannot resolve ("disconnected path", web3 2026-11-25).
+		cmd = []string{Clamdscan, "--config-file=" + clientConf, "--stream", "--infected", "--no-summary", "--stdout"}
 	}
 
 	if err := agentapi.ValidateScanTargets(targets); err != nil {

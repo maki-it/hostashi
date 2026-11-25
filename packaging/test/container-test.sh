@@ -696,7 +696,7 @@ done
   fail "clamdscan run did not flag new.com: $(x cat /tmp/api.out); log: $(x cat /var/log/hostashi/scan/blog.log)"
 expect_mode /etc/hostashi-scan "711 root:root"
 expect_mode /etc/hostashi-scan/blog.conf "644 root:root"
-x grep -q 'clamdscan' /etc/systemd/system/hostashi-scan@blog.service.d/60-hostashi-scan.conf || fail "scan did not use clamdscan"
+x grep -q 'clamdscan .*--stream' /etc/systemd/system/hostashi-scan@blog.service.d/60-hostashi-scan.conf || fail "scan did not stream through clamdscan"
 # Without a flagged file, a scan through clamd reports no error either.
 x rm -f /home/blog/htdocs/new.com
 [ "$(api POST /api/v1/sites/blog/malware-scans)" = 202 ] || fail "start scan: $(x cat /tmp/api.out)"
