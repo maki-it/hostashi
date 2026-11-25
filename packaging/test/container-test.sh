@@ -1186,6 +1186,77 @@ x rm -f /home/wp/htdocs/iso.php
 x pkill -u shop -x sleep || true
 [ "$(api DELETE /api/v1/sites/shop)" = 204 ] || fail "delete site shop: $(x cat /tmp/api.out)"
 
+step "WordPress quick install through the panel API (ADR-0069)"
+# A new site with the WordPress profile: the hardening rules come with it,
+# the panel creates the database, WP-CLI downloads and installs WordPress
+# as the site user. Needs wordpress.org, like a real server.
+[ "$(api POST /api/v1/sites "{\"name\":\"wpq\",\"php\":\"$ver\",\"profile\":\"wordpress\",\"domains\":[\"wpq.example.com\"]}")" = 201 ] ||
+  fail "create WordPress site: $(x cat /tmp/api.out)"
+[ "$(api GET /api/v1/sites/wpq/profile)" = 200 ] || fail "site profile: $(x cat /tmp/api.out)"
+x grep -q '"profile":"wordpress"' /tmp/api.out || fail "profile not stored: $(x cat /tmp/api.out)"
+[ "$(api GET /api/v1/sites/wpq/wordpress)" = 200 ] || fail "WordPress state: $(x cat /tmp/api.out)"
+x grep -q '"state":"none"' /tmp/api.out || fail "new site has an install: $(x cat /tmp/api.out)"
+# Refusals change nothing: the user name admin, a short own password.
+[ "$(api POST /api/v1/sites/wpq/wordpress '{"locale":"en_US","title":"Quick","adminUser":"kim","adminEmail":"kim@example.com","adminPassword":"short"}')" = 422 ] ||
+  fail "short admin password: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/wpq/wordpress '{"locale":"en_US","title":"Quick","adminUser":"kim","adminEmail":"kim@example.com","discourage":true}')" = 202 ] ||
+  fail "start WordPress install: $(x cat /tmp/api.out)"
+wppass=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["adminPassword"])')
+wpdb=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["database"])')
+[ "$wpdb" = wpq_wp ] || fail "database of the install: $wpdb"
+[ ${#wppass} -ge 24 ] || fail "generated admin password too short: ${#wppass}"
+state=running
+for _ in $(seq 1 150); do
+  [ "$(api GET /api/v1/sites/wpq/wordpress)" = 200 ] || fail "WordPress state: $(x cat /tmp/api.out)"
+  state=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')
+  [ "$state" = running ] || break
+  sleep 2
+done
+[ "$state" = succeeded ] || fail "WordPress install ended '$state': $(x cat /tmp/api.out)"
+# The pinned WP-CLI belongs to root; nobody else may change it.
+phar=$(x sh -c 'ls /opt/hostashi/wp-cli/*/wp-cli.phar')
+expect_mode "$phar" "644 root:root"
+# WordPress belongs to the site user, with file editing off.
+[ "$(x stat -c %U /home/wpq/htdocs/wp-config.php)" = wpq ] || fail "wp-config.php not owned by wpq"
+[ -z "$(x find /home/wpq/htdocs ! -user wpq | head -n 5)" ] || fail "files of WordPress not owned by wpq: $(x find /home/wpq/htdocs ! -user wpq | head -n 5)"
+x grep -q "define( 'DISALLOW_FILE_EDIT', true )" /home/wpq/htdocs/wp-config.php || fail "DISALLOW_FILE_EDIT missing"
+[ "$(x mariadb -Nse "SELECT option_value FROM wpq_wp.wp_options WHERE option_name='blog_public'")" = 0 ] || fail "search engines not discouraged"
+# The front page and the login page load through nginx and the site's PHP.
+body=$(x curl -fsS -H 'Host: wpq.example.com' http://127.0.0.1/) || fail "front page of WordPress"
+grep -q '<title>Quick' <<<"$body" || fail "front page without the site title: $(head -c 300 <<<"$body")"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpq.example.com' http://127.0.0.1/wp-login.php)
+[ "$code" = 200 ] || fail "wp-login.php answered $code"
+# The admin logs in with the password that was shown once.
+# The login page sets WordPress's test cookie first.
+x rm -f /tmp/wpq.jar
+x curl -fsS -o /dev/null -c /tmp/wpq.jar -H 'Host: wpq.example.com' http://127.0.0.1/wp-login.php || fail "wp-login.php for the test cookie"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -b /tmp/wpq.jar -c /tmp/wpq.jar -H 'Host: wpq.example.com' \
+  --data-urlencode log=kim --data-urlencode "pwd=$wppass" --data-urlencode testcookie=1 \
+  http://127.0.0.1/wp-login.php)
+[ "$code" = 302 ] || fail "admin login with the generated password answered $code"
+x grep -q wordpress_logged_in /tmp/wpq.jar || fail "admin login set no session cookie"
+x rm -f /tmp/wpq.jar
+# The profile's hardening: xmlrpc.php blocked, no PHP in uploads.
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpq.example.com' http://127.0.0.1/xmlrpc.php)
+[ "$code" = 404 ] || fail "xmlrpc.php answered $code"
+x runuser -u wpq -- sh -c 'mkdir -p /home/wpq/htdocs/wp-content/uploads && echo "<?php echo 1;" >/home/wpq/htdocs/wp-content/uploads/x.php'
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpq.example.com' http://127.0.0.1/wp-content/uploads/x.php)
+[ "$code" = 404 ] || fail "PHP in wp-content/uploads answered $code"
+x rm -f /home/wpq/htdocs/wp-content/uploads/x.php
+# The password is in no file, log or journal of the server.
+if x grep -rqsF -- "$wppass" /var/lib/hostashi /var/lib/hostashi-agent /var/log/hostashi /run/hostashi-wp /etc/hostashi /etc/systemd/system; then
+  fail "the admin password was stored on the server"
+fi
+if x journalctl --no-pager -o cat | grep -F -- "$wppass" >/dev/null; then fail "the admin password is in the journal"; fi
+# A second install never writes over the site.
+[ "$(api POST /api/v1/sites/wpq/wordpress '{"locale":"en_US","title":"Again","adminUser":"kim","adminEmail":"kim@example.com"}')" = 409 ] ||
+  fail "second install over WordPress: $(x cat /tmp/api.out)"
+x grep -q 'not empty' /tmp/api.out || fail "second install refusal: $(x cat /tmp/api.out)"
+[ "$(x mariadb -Nse "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE 'wpq\\_wp_'")" = 0 ] || fail "a refused install left a database"
+[ "$(api DELETE /api/v1/databases/wpq_wp)" = 204 ] || fail "delete WordPress database: $(x cat /tmp/api.out)"
+[ "$(api DELETE /api/v1/sites/wpq)" = 204 ] || fail "delete site wpq: $(x cat /tmp/api.out)"
+unset wppass
+
 step "a second storage pool on its own volume (ADR-0016, spike S9)"
 # An ext4 file system on a loop device inside the container stands in for
 # a provider volume. Hostashi never formats or mounts: the admin does.
