@@ -3,6 +3,8 @@
 package agentapi
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -87,19 +89,41 @@ func (t BackupTarget) KnownHostsName() string {
 }
 
 // BackupRetention is how many snapshots of each site and kind are kept.
+// Hourly and Yearly were added later (ADR-0008, amendment 2026-11-25);
+// settings written before that have neither and keep none.
 type BackupRetention struct {
+	Hourly  int `json:"hourly"`
 	Daily   int `json:"daily"`
 	Weekly  int `json:"weekly"`
 	Monthly int `json:"monthly"`
+	Yearly  int `json:"yearly"`
 }
 
 // Bounds of the adjustable values (ADR-0008, recommendation 3).
 const (
+	MaxBackupHourly    = 168
 	MaxBackupDaily     = 90
 	MaxBackupWeekly    = 52
 	MaxBackupMonthly   = 120
+	MaxBackupYearly    = 50
 	MaxBackupReadParts = 120
 )
+
+// BackupIntervals are the allowed hours between two scheduled runs: the
+// divisors of 24, so that runs fall on the same hours every day. 24 is the
+// daily run in the window.
+var BackupIntervals = []int{1, 2, 3, 4, 6, 8, 12, 24}
+
+// ValidBackupInterval reports whether h is one of BackupIntervals.
+func ValidBackupInterval(h int) bool {
+	for _, v := range BackupIntervals {
+		if v == h {
+			return true
+		}
+	}
+
+	return false
+}
 
 // BackupSettings is the complete backup configuration of a server. The
 // panel holds the desired state, the agent writes it to its config
@@ -108,8 +132,12 @@ type BackupSettings struct {
 	Version   int             `json:"version"`
 	Target    *BackupTarget   `json:"target,omitempty"` // nil: backups not set up
 	Retention BackupRetention `json:"retention"`
+	// IntervalHours is the time between two scheduled runs, one of
+	// BackupIntervals. Settings without it run daily (24).
+	IntervalHours int `json:"intervalHours"`
 	// WindowStart and WindowEnd (hours, local time) bound the daily start;
-	// the timer picks a random minute between them.
+	// the timer picks a random minute between them. They only apply to
+	// IntervalHours 24.
 	WindowStart int `json:"windowStart"`
 	WindowEnd   int `json:"windowEnd"`
 	// ReadParts: the monthly check reads 1/ReadParts of all data, a
@@ -120,14 +148,35 @@ type BackupSettings struct {
 // BackupSettingsVersion is the current format of the settings.
 const BackupSettingsVersion = 1
 
+// UnmarshalJSON decodes strictly like every request, and fills in the
+// fields that settings from before the hourly schedule lack: such a file
+// or request runs daily.
+func (s *BackupSettings) UnmarshalJSON(data []byte) error {
+	type plain BackupSettings
+
+	p := plain{IntervalHours: 24}
+
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+
+	if err := dec.Decode(&p); err != nil {
+		return err
+	}
+
+	*s = BackupSettings(p)
+
+	return nil
+}
+
 // DefaultBackupSettings are the defaults Kim decided (2026-11-19).
 func DefaultBackupSettings() BackupSettings {
 	return BackupSettings{
-		Version:     BackupSettingsVersion,
-		Retention:   BackupRetention{Daily: 7, Weekly: 4, Monthly: 6},
-		WindowStart: 1,
-		WindowEnd:   5,
-		ReadParts:   12,
+		Version:       BackupSettingsVersion,
+		Retention:     BackupRetention{Daily: 7, Weekly: 4, Monthly: 6},
+		IntervalHours: 24,
+		WindowStart:   1,
+		WindowEnd:     5,
+		ReadParts:     12,
 	}
 }
 
@@ -138,12 +187,18 @@ func (s BackupSettings) Validate() error {
 	switch {
 	case s.Version != BackupSettingsVersion:
 		return fmt.Errorf("%w: version %d", ErrBackupInvalid, s.Version)
+	case r.Hourly < 0 || r.Hourly > MaxBackupHourly:
+		return fmt.Errorf("%w: hourly must be 0 to %d", ErrBackupInvalid, MaxBackupHourly)
 	case r.Daily < 1 || r.Daily > MaxBackupDaily:
 		return fmt.Errorf("%w: daily must be 1 to %d", ErrBackupInvalid, MaxBackupDaily)
 	case r.Weekly < 0 || r.Weekly > MaxBackupWeekly:
 		return fmt.Errorf("%w: weekly must be 0 to %d", ErrBackupInvalid, MaxBackupWeekly)
 	case r.Monthly < 0 || r.Monthly > MaxBackupMonthly:
 		return fmt.Errorf("%w: monthly must be 0 to %d", ErrBackupInvalid, MaxBackupMonthly)
+	case r.Yearly < 0 || r.Yearly > MaxBackupYearly:
+		return fmt.Errorf("%w: yearly must be 0 to %d", ErrBackupInvalid, MaxBackupYearly)
+	case !ValidBackupInterval(s.IntervalHours):
+		return fmt.Errorf("%w: interval must be 1, 2, 3, 4, 6, 8, 12 or 24 hours", ErrBackupInvalid)
 	case s.WindowStart < 0 || s.WindowStart > 23 || s.WindowEnd < 1 || s.WindowEnd > 24 || s.WindowEnd <= s.WindowStart:
 		return fmt.Errorf("%w: window must be hours 0 to 24 with start before end", ErrBackupInvalid)
 	case s.ReadParts < 0 || s.ReadParts > MaxBackupReadParts:

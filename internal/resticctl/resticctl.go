@@ -130,12 +130,13 @@ type SnapshotSummary struct {
 // Keep is a retention policy for forget. Every group (host and tag set) is
 // kept by these counts.
 type Keep struct {
-	Daily, Weekly, Monthly int
+	Hourly, Daily, Weekly, Monthly, Yearly int
 }
 
 // Validate requires at least one daily snapshot and bounded counts.
 func (k Keep) Validate() error {
-	if k.Daily < 1 || k.Daily > 366 || k.Weekly < 0 || k.Weekly > 520 || k.Monthly < 0 || k.Monthly > 1200 {
+	if k.Hourly < 0 || k.Hourly > 8784 || k.Daily < 1 || k.Daily > 366 || k.Weekly < 0 || k.Weekly > 520 ||
+		k.Monthly < 0 || k.Monthly > 1200 || k.Yearly < 0 || k.Yearly > 100 {
 		return fmt.Errorf("%w: retention counts out of range", ErrInvalid)
 	}
 
@@ -487,9 +488,11 @@ func (r *Repo) Forget(ctx context.Context, k Keep) error {
 	}
 
 	_, err := r.run(ctx, "forget", "--group-by", "host,tags",
+		"--keep-hourly", strconv.Itoa(k.Hourly),
 		"--keep-daily", strconv.Itoa(k.Daily),
 		"--keep-weekly", strconv.Itoa(k.Weekly),
-		"--keep-monthly", strconv.Itoa(k.Monthly))
+		"--keep-monthly", strconv.Itoa(k.Monthly),
+		"--keep-yearly", strconv.Itoa(k.Yearly))
 
 	return err
 }

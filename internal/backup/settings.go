@@ -49,5 +49,5 @@ var ErrInvalid = agentapi.ErrBackupInvalid
 func DefaultSettings() Settings { return agentapi.DefaultBackupSettings() }
 
 func keep(r Retention) resticctl.Keep {
-	return resticctl.Keep{Daily: r.Daily, Weekly: r.Weekly, Monthly: r.Monthly}
+	return resticctl.Keep{Hourly: r.Hourly, Daily: r.Daily, Weekly: r.Weekly, Monthly: r.Monthly, Yearly: r.Yearly}
 }

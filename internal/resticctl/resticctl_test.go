@@ -102,6 +102,8 @@ func TestArgumentChecks(t *testing.T) {
 	_, cases["snapshots bad tag"] = r.Snapshots(ctx, []string{"x"})
 	cases["keep no daily"] = r.Forget(ctx, Keep{Daily: 0, Weekly: 4, Monthly: 6})
 	cases["keep negative"] = r.Forget(ctx, Keep{Daily: 7, Weekly: -1})
+	cases["keep hourly negative"] = r.Forget(ctx, Keep{Hourly: -1, Daily: 7})
+	cases["keep yearly too many"] = r.Forget(ctx, Keep{Daily: 7, Yearly: 101})
 	cases["check part zero"] = r.Check(ctx, 0, 12)
 	cases["check part too big"] = r.Check(ctx, 13, 12)
 	cases["check negative"] = r.Check(ctx, 1, -1)
@@ -213,6 +215,14 @@ func TestRestic(t *testing.T) {
 
 			if err := r.Forget(ctx, Keep{Daily: 7, Weekly: 4, Monthly: 6}); err != nil {
 				t.Fatalf("forget: %v", err)
+			}
+
+			if err := r.Forget(ctx, Keep{Hourly: 24, Daily: 7, Weekly: 4, Monthly: 6, Yearly: 3}); err != nil {
+				t.Fatalf("forget with hourly and yearly: %v", err)
+			}
+
+			if s, err := r.Snapshots(ctx, []string{"site:blog", "kind:files"}); err != nil || len(s) != 1 {
+				t.Fatalf("forget dropped the only snapshot: %+v, %v", s, err)
 			}
 
 			if err := r.Prune(ctx); err != nil {

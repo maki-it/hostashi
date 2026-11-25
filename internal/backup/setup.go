@@ -314,11 +314,23 @@ func (a *Agent) applyTimer(ctx context.Context) (agentapi.BackupInfo, error) {
 	return info, nil
 }
 
-// TimerWindow renders the drop-in: the timer fires at the start of the
-// window plus a random delay that is fixed per server and below the
-// window's length.
+// TimerWindow renders the drop-in. A daily run fires at the start of the
+// window plus a random delay below the window's length. Shorter intervals
+// fire every IntervalHours hours from midnight plus a random delay below
+// one hour. The packaged timer sets FixedRandomDelay, so the delay is the
+// same on every run of a server and the runs stay evenly spaced. systemd
+// never starts the service while a run is still active, so a run longer
+// than the interval skips the next start instead of overlapping it.
 func TimerWindow(s Settings) string {
-	return fmt.Sprintf("# Written by the Hostashi agent from the backup settings.\n[Timer]\nOnCalendar=\nOnCalendar=*-*-* %02d:00:00\nRandomizedDelaySec=%dh\n",
+	const head = "# Written by the Hostashi agent from the backup settings.\n[Timer]\nOnCalendar=\n"
+
+	if s.IntervalHours > 0 && s.IntervalHours < 24 {
+		delay := min(s.IntervalHours*60, 60)
+
+		return fmt.Sprintf(head+"OnCalendar=*-*-* 00/%d:00:00\nRandomizedDelaySec=%dmin\n", s.IntervalHours, delay)
+	}
+
+	return fmt.Sprintf(head+"OnCalendar=*-*-* %02d:00:00\nRandomizedDelaySec=%dh\n",
 		s.WindowStart, s.WindowEnd-s.WindowStart)
 }
 

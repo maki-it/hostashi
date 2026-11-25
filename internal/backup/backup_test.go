@@ -4,6 +4,7 @@ package backup
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -115,7 +116,7 @@ func TestSettingsValidate(t *testing.T) {
 		t.Fatalf("defaults refused: %v", err)
 	}
 
-	if d.Retention != (Retention{Daily: 7, Weekly: 4, Monthly: 6}) || d.WindowStart != 1 || d.WindowEnd != 5 || d.ReadParts != 12 {
+	if d.Retention != (Retention{Daily: 7, Weekly: 4, Monthly: 6}) || d.IntervalHours != 24 || d.WindowStart != 1 || d.WindowEnd != 5 || d.ReadParts != 12 {
 		t.Errorf("defaults changed: %+v", d)
 	}
 
@@ -124,6 +125,14 @@ func TestSettingsValidate(t *testing.T) {
 		"daily too many":   func(s *Settings) { s.Retention.Daily = agentapi.MaxBackupDaily + 1 },
 		"weekly negative":  func(s *Settings) { s.Retention.Weekly = -1 },
 		"monthly too many": func(s *Settings) { s.Retention.Monthly = agentapi.MaxBackupMonthly + 1 },
+		"hourly negative":  func(s *Settings) { s.Retention.Hourly = -1 },
+		"hourly too many":  func(s *Settings) { s.Retention.Hourly = agentapi.MaxBackupHourly + 1 },
+		"yearly negative":  func(s *Settings) { s.Retention.Yearly = -1 },
+		"yearly too many":  func(s *Settings) { s.Retention.Yearly = agentapi.MaxBackupYearly + 1 },
+		"interval zero":    func(s *Settings) { s.IntervalHours = 0 },
+		"interval 5":       func(s *Settings) { s.IntervalHours = 5 },
+		"interval 48":      func(s *Settings) { s.IntervalHours = 48 },
+		"interval minus":   func(s *Settings) { s.IntervalHours = -1 },
 		"window reversed":  func(s *Settings) { s.WindowStart, s.WindowEnd = 5, 1 },
 		"window empty":     func(s *Settings) { s.WindowStart, s.WindowEnd = 3, 3 },
 		"window 25":        func(s *Settings) { s.WindowEnd = 25 },
@@ -146,6 +155,76 @@ func TestSettingsValidate(t *testing.T) {
 
 	if err := ok.Validate(); err != nil {
 		t.Errorf("minimal settings refused: %v", err)
+	}
+}
+
+func TestSettingsHourlyAndYearly(t *testing.T) {
+	for _, h := range agentapi.BackupIntervals {
+		s := DefaultSettings()
+		s.IntervalHours = h
+		s.Retention = Retention{Hourly: agentapi.MaxBackupHourly, Daily: 1, Yearly: agentapi.MaxBackupYearly}
+
+		if err := s.Validate(); err != nil {
+			t.Errorf("interval %d refused: %v", h, err)
+		}
+	}
+
+	// Settings from before the hourly schedule run daily and keep no hourly
+	// or yearly snapshots.
+	var old Settings
+	if err := json.Unmarshal([]byte(`{"version":1,"retention":{"daily":7,"weekly":4,"monthly":6},"windowStart":1,"windowEnd":5,"readParts":12}`), &old); err != nil {
+		t.Fatal(err)
+	}
+
+	if old != DefaultSettings() {
+		t.Errorf("old settings decoded as %+v", old)
+	}
+
+	var set Settings
+	if err := json.Unmarshal([]byte(`{"version":1,"retention":{"hourly":48,"daily":7,"yearly":2},"intervalHours":1,"windowStart":1,"windowEnd":5}`), &set); err != nil {
+		t.Fatal(err)
+	}
+
+	if set.IntervalHours != 1 || set.Retention.Hourly != 48 || set.Retention.Yearly != 2 {
+		t.Errorf("decoded %+v", set)
+	}
+
+	for _, raw := range []string{
+		`{"version":1,"retention":{"daily":7},"every":"1h"}`,
+		`{"version":1,"retention":{"daily":7,"minutely":5}}`,
+		`{"version":1,"intervalHours":"1"}`,
+	} {
+		var s Settings
+		if err := json.Unmarshal([]byte(raw), &s); err == nil {
+			t.Errorf("%s decoded as %+v", raw, s)
+		}
+	}
+}
+
+func TestTimerWindow(t *testing.T) {
+	cases := map[int]string{
+		24: "OnCalendar=*-*-* 01:00:00\nRandomizedDelaySec=4h\n",
+		12: "OnCalendar=*-*-* 00/12:00:00\nRandomizedDelaySec=60min\n",
+		6:  "OnCalendar=*-*-* 00/6:00:00\nRandomizedDelaySec=60min\n",
+		1:  "OnCalendar=*-*-* 00/1:00:00\nRandomizedDelaySec=60min\n",
+	}
+
+	for h, want := range cases {
+		s := DefaultSettings()
+		s.IntervalHours = h
+
+		got := TimerWindow(s)
+		if !strings.HasPrefix(got, "# Written by the Hostashi agent") || !strings.Contains(got, "[Timer]\nOnCalendar=\n"+want) {
+			t.Errorf("interval %d: %q", h, got)
+		}
+	}
+
+	// The window only shapes the daily run.
+	s := DefaultSettings()
+	s.IntervalHours, s.WindowStart, s.WindowEnd = 2, 20, 22
+
+	if got := TimerWindow(s); strings.Contains(got, "20:00") || strings.Contains(got, "RandomizedDelaySec=2h") {
+		t.Errorf("window applied to an interval: %q", got)
 	}
 }
 
