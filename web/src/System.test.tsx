@@ -4,7 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { System } from "./System";
-import { hostnameError, panelVersion, uptime, versionLabel, waitForPanel, type SystemInfo } from "./system";
+import { hostnameError, panelVersion, releaseUrl, uptime, versionLabel, waitForPanel, type SystemInfo } from "./system";
 import { mockFetch } from "./test-utils";
 
 const info: SystemInfo = {
@@ -42,6 +42,12 @@ describe("panel version", () => {
     expect(versionLabel("0.4.0")).toBe("v0.4.0");
     expect(versionLabel("1.2.3-rc.1")).toBe("v1.2.3-rc.1");
     expect(versionLabel("dev")).toBe("dev");
+    // A released version links to its notes, a dev build to all releases.
+    const rel = "https://github.com/maki-it/hostashi/releases";
+    expect(releaseUrl("0.7.0")).toBe(rel + "/tag/v0.7.0");
+    expect(releaseUrl("1.2.3-rc.1")).toBe(rel + "/tag/v1.2.3-rc.1");
+    expect(releaseUrl("0.7.1-dev+abc1234")).toBe(rel);
+    expect(releaseUrl("dev")).toBe(rel);
   });
 });
 

@@ -440,7 +440,10 @@ describe("Shell", () => {
     });
     render(<App />);
     const nav = await screen.findByRole("navigation", { name: "Main" });
-    expect(await screen.findByText("Hostashi v0.4.0")).toBeInTheDocument();
+    const version = await screen.findByRole("link", { name: "Hostashi v0.4.0" });
+    expect(version).toHaveAttribute("href", "https://github.com/maki-it/hostashi/releases/tag/v0.4.0");
+    expect(version).toHaveAttribute("target", "_blank");
+    expect(version).toHaveAttribute("rel", "noopener noreferrer");
     expect(await within(nav).findByRole("link", { name: "Health, 2 problems" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Services, 1 problem" })).toBeInTheDocument();
     expect(within(nav).getAllByRole("heading").map((h) => h.textContent)).toEqual(["Hosting", "Server", "Administration"]);
