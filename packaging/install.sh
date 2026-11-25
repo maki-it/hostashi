@@ -709,12 +709,16 @@ NODE_LOGS=/var/lib/hostashi-agent/node-install
 # hostashi-node@<site>, hostashi-app@<site> (ADR-0054) and hostashi-python@<site>
 # (ADR-0061); venv.log of hostashi-python-venv@<site>.
 APP_LOGS=/var/log/hostashi/app
+# The pinned WP-CLI phar (ADR-0069): hostashi-wpcli-install.service writes
+# /opt/hostashi/wp-cli/<version>/wp-cli.phar when a site installs WordPress.
+WPCLI_DIR=/opt/hostashi/wp-cli
 
 chk_node() {
   dir_ok "${NODE_DIR%/*}" 755 root:root || { echo "${NODE_DIR%/*}"; return 1; }
   dir_ok "$NODE_DIR" 755 root:root || { echo "$NODE_DIR"; return 1; }
   dir_ok "$NODE_LOGS" 700 root:root || { echo "$NODE_LOGS"; return 1; }
   dir_ok "$APP_LOGS" 750 root:root || { echo "$APP_LOGS"; return 1; }
+  dir_ok "$WPCLI_DIR" 755 root:root || { echo "$WPCLI_DIR"; return 1; }
   file_matches "/etc/systemd/system/$NODE_UNIT" 0644 root:root <"$UNIT_DIR/$NODE_UNIT" || { echo "$NODE_UNIT differs"; return 1; }
 }
 do_node() {
@@ -723,6 +727,7 @@ do_node() {
   install -d -m 0700 -o root -g root "$NODE_LOGS" || return 1
   install -d -m 0755 -o root -g root "${APP_LOGS%/*}" || return 1
   install -d -m 0750 -o root -g root "$APP_LOGS" || return 1
+  install -d -m 0755 -o root -g root "$WPCLI_DIR" || return 1
   write_file "/etc/systemd/system/$NODE_UNIT" 0644 root:root <"$UNIT_DIR/$NODE_UNIT"; rc=$?
   [ "$rc" -le 1 ] || return 1
   if [ "$rc" = 0 ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
@@ -1206,7 +1211,7 @@ php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }
 
 chk_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-app@.service hostashi-python@.service hostashi-python-venv@.service hostashi-deploy@.service hostashi-scan@.service hostashi-scan.slice hostashi-files@.service hostashi-files@.socket; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-app@.service hostashi-python@.service hostashi-python-venv@.service hostashi-deploy@.service hostashi-scan@.service hostashi-scan.slice hostashi-files@.service hostashi-files@.socket hostashi-wpcli-install.service; do
     file_matches "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u" || { echo "$u differs"; return 1; }
   done
   dir_ok "$(dirname "$NGINX_DROPIN")" 755 root:root || { echo "nginx drop-in directory"; return 1; }
@@ -1220,7 +1225,7 @@ chk_units() {
 }
 do_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-app@.service hostashi-python@.service hostashi-python-venv@.service hostashi-deploy@.service hostashi-scan@.service hostashi-scan.slice hostashi-files@.service hostashi-files@.socket; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-app@.service hostashi-python@.service hostashi-python-venv@.service hostashi-deploy@.service hostashi-scan@.service hostashi-scan.slice hostashi-files@.service hostashi-files@.socket hostashi-wpcli-install.service; do
     write_file "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u"
     [ $? -le 1 ] || return 1
   done
