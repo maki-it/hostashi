@@ -14,7 +14,7 @@ The scan is off on a new server. An admin switches it on under **System → Viru
 
 ClamAV needs memory while it scans: plan for about 1.5 GB of free RAM while a site is scanned. The card shows the server's memory and warns below 2 GB. Only one site is scanned at a time on the whole server, so this is paid once, not per site, and it does not count against a site's [memory limit](Limits.md). The signatures take about 300 MB on disk and are updated several times a day.
 
-**Switch virus scan off…** removes ClamAV and its signatures again. Findings, the history and the quarantine stay.
+**Turn off…** next to the state removes ClamAV and its signatures again. Findings, the history and the quarantine stay.
 
 You can also install it with the server: `install.sh apply --malware-scan` (see [Install](Install.md)).
 
