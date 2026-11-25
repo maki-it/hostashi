@@ -1,6 +1,6 @@
 # ADR-0073 MCP server for AI assistants
 
-**Status:** Proposed. **Date drafted:** 2026-11-25. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0010 (v1 scope), ADR-0018 (REST API, tokens, scopes, IP allowlist), ADR-0035 (roles and route matrix), ADR-0058 (OpenAPI and CLI parity, device login), ADR-0059 (real client IP).
+**Status:** Accepted (Kim, 2026-11-25). **Date drafted:** 2026-11-25. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0010 (v1 scope), ADR-0018 (REST API, tokens, scopes, IP allowlist), ADR-0035 (roles and route matrix), ADR-0058 (OpenAPI and CLI parity, device login), ADR-0059 (real client IP).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -98,4 +98,4 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 3. ~~Timing: after 1.0 as part of 1.1, or still in v1?~~ Decided (Kim, 2026-11-25): after 1.0, as part of 1.1.
 4. ~~Do you want to add Hostashi as a connector in a client that only supports OAuth (for example in a web UI)? If yes, that becomes its own ADR later.~~ Decided (Kim, 2026-11-25): start without OAuth; a connector with OAuth would be a separate ADR later.
 
-All open questions are answered; the ADR waits for Kim's acceptance.
+The ADR as a whole was accepted by Kim on 2026-11-25.
