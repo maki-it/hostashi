@@ -17,6 +17,7 @@
 - [Parked domains](Parked-domains.md)
 - [PHP settings](PHP-settings.md)
 - [Object cache](Object-cache.md)
+- [Application profiles](Application-profiles.md)
 - [Security headers](Security-headers.md)
 - [Real visitor address](Real-visitor-address.md)
 - [Access protection](Access-protection.md)
