@@ -211,3 +211,39 @@ func TestDownloadIsZipPerLocale(t *testing.T) {
 		}
 	}
 }
+
+// WP-CLI may echo what it read after a prompt: the log masks every
+// password, also when one arrives in two writes.
+func TestRunMasksPasswordsInOutput(t *testing.T) {
+	var out bytes.Buffer
+
+	r := &Runner{
+		Euid: 1001, Phar: phar, Secrets: secrets, Out: &out,
+		start: func(_ context.Context, _ string, _, _ []string, stdin io.Reader, w io.Writer) error {
+			b, _ := io.ReadAll(stdin)
+			if len(b) == 0 {
+				return nil
+			}
+
+			s := strings.TrimSuffix(string(b), "\n")
+			_, _ = io.WriteString(w, "1/1 [--admin_password=<pw>]: "+s[:5])
+			_, _ = io.WriteString(w, s[5:]+"\nSuccess.\nno newline "+s)
+
+			return nil
+		},
+	}
+
+	if err := r.Run(t.Context(), job()); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, s := range secrets {
+		if strings.Contains(out.String(), s) {
+			t.Fatalf("%s in the log:\n%s", name, out.String())
+		}
+	}
+
+	if !strings.Contains(out.String(), "[--admin_password=<pw>]: …\nSuccess.\nno newline …") {
+		t.Fatalf("log:\n%s", out.String())
+	}
+}

@@ -190,8 +190,15 @@ func (r *Runner) Run(ctx context.Context, j Job) error {
 			stdin = strings.NewReader(r.Secrets[s.Stdin] + "\n")
 		}
 
+		// WP-CLI may repeat what it read on standard input, for example
+		// after a prompt; the log never gets a password.
+		w := &maskWriter{out: out, secrets: []string{r.Secrets[CredDBPass], r.Secrets[CredAdminPass]}}
+
 		args := append([]string{"-d", "memory_limit=512M", r.Phar}, s.Args...)
-		if err := start(ctx, bin, args, env, stdin, out); err != nil {
+		err := start(ctx, bin, args, env, stdin, w)
+		w.Flush()
+
+		if err != nil {
 			return fmt.Errorf("wpcli: wp %s %s: %w", s.Args[0], s.Args[1], err)
 		}
 	}
@@ -199,6 +206,57 @@ func (r *Runner) Run(ctx context.Context, j Job) error {
 	fmt.Fprintf(out, "%s %s\n", DoneMarker, j.URL)
 
 	return nil
+}
+
+// maskWriter passes output on line by line with every secret replaced,
+// so a secret split over two writes is still found.
+type maskWriter struct {
+	out     io.Writer
+	secrets []string
+	buf     []byte
+}
+
+// maxLine bounds a line kept back while waiting for its end.
+const maxLine = 64 << 10
+
+func (m *maskWriter) Write(p []byte) (int, error) {
+	m.buf = append(m.buf, p...)
+
+	for {
+		i := bytes.IndexByte(m.buf, '\n')
+		if i < 0 {
+			break
+		}
+
+		m.emit(m.buf[:i+1])
+		m.buf = m.buf[i+1:]
+	}
+
+	if len(m.buf) > maxLine {
+		m.Flush()
+	}
+
+	return len(p), nil
+}
+
+// Flush writes what is left of an unfinished line.
+func (m *maskWriter) Flush() {
+	if len(m.buf) > 0 {
+		m.emit(m.buf)
+		m.buf = nil
+	}
+}
+
+func (m *maskWriter) emit(line []byte) {
+	s := string(line)
+
+	for _, sec := range m.secrets {
+		if sec != "" {
+			s = strings.ReplaceAll(s, sec, "…")
+		}
+	}
+
+	_, _ = io.WriteString(m.out, s)
 }
 
 // redact keeps the log free of the admin email.

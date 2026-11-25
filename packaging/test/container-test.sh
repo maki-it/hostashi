@@ -1244,9 +1244,8 @@ code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpq.example.com' http
 [ "$code" = 404 ] || fail "PHP in wp-content/uploads answered $code"
 x rm -f /home/wpq/htdocs/wp-content/uploads/x.php
 # The password is in no file, log or journal of the server.
-if x grep -rqsF -- "$wppass" /var/lib/hostashi /var/lib/hostashi-agent /var/log/hostashi /run/hostashi-wp /etc/hostashi /etc/systemd/system; then
-  fail "the admin password was stored on the server"
-fi
+found=$(x grep -rlsF -- "$wppass" /var/lib/hostashi /var/lib/hostashi-agent /var/log/hostashi /run/hostashi-wp /etc/hostashi /etc/systemd/system || true)
+[ -z "$found" ] || fail "the admin password is stored in: $found"
 if x journalctl --no-pager -o cat | grep -F -- "$wppass" >/dev/null; then fail "the admin password is in the journal"; fi
 # A second install never writes over the site.
 [ "$(api POST /api/v1/sites/wpq/wordpress '{"locale":"en_US","title":"Again","adminUser":"kim","adminEmail":"kim@example.com"}')" = 409 ] ||
