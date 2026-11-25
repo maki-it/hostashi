@@ -180,12 +180,16 @@ var table = map[Action]Rule{
 	"sites.title:write":   ownSite("sites:write"),
 	"sites.headers:write": ownSite("sites:write"),
 	// Profile and hardening rules of one's own site (ADR-0069).
-	"sites.profile:write":  ownSite("sites:write"),
-	"sites.realip:write":   ownSite("sites:write"),
-	"sites.access:write":   ownSite("sites:write"),
-	"sites.web:write":      ownSite("sites:write"),
-	"sites.redirect:write": ownSite("sites:write"),
-	"sites.proxy:write":    ownSite("sites:write"),
+	"sites.profile:write": ownSite("sites:write"),
+	// The WordPress quick install writes the site's files as the site user
+	// and creates a database; the handler also asks for databases:write
+	// (ADR-0069).
+	"sites.wordpress:install": ownSite("sites:write"),
+	"sites.realip:write":      ownSite("sites:write"),
+	"sites.access:write":      ownSite("sites:write"),
+	"sites.web:write":         ownSite("sites:write"),
+	"sites.redirect:write":    ownSite("sites:write"),
+	"sites.proxy:write":       ownSite("sites:write"),
 	// The app runs as the site user inside its isolation (ADR-0054).
 	"sites.app:write": ownSite("sites:write"),
 	// The values of the app's environment variables: whoever may change
