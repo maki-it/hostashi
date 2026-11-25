@@ -10,6 +10,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/cloudpanel/scan"
 	"github.com/maki-it/hostashi/internal/cron"
+	"github.com/maki-it/hostashi/internal/profile"
 )
 
 // Target is what already exists on this server.
@@ -100,6 +101,9 @@ type Site struct {
 	// cache (likely Varnish) in front of it on the old server, "" for none
 	// (ADR-0046).
 	PageCache string `json:"pageCache,omitempty"`
+	// Profile is the application profile the new site gets (ADR-0069),
+	// "" for the default of its type.
+	Profile string `json:"profile,omitempty"`
 	// PHPSettings is how many PHP settings of the old pool the site takes
 	// over (ADR-0049); PHPSettingsOn tells whether they were set.
 	PHPSettings   int      `json:"phpSettings"`
@@ -258,6 +262,8 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 		review("php_legacy", "PHP "+ps.PHP+" gets no or only security fixes upstream")
 	}
 
+	ps.Profile = ProfileFor(s.Type, ps.PHP)
+
 	switch s.TLS.Kind {
 	case "letsencrypt", "selfsigned", "missing":
 		ps.TLS = TLSReissue
@@ -345,6 +351,22 @@ func siteOf(s scan.Site, t Target, users, domains map[string]int) Site {
 	}
 
 	return ps
+}
+
+// ProfileFor is the application profile of an imported site (ADR-0069):
+// WordPress for a site the scan found WordPress in, when its PHP version
+// is new enough for the profile; "" (the default of the type) otherwise.
+func ProfileFor(siteType, php string) string {
+	if siteType != "wordpress" || php == "" {
+		return ""
+	}
+
+	p, ok := profile.Builtin(profile.WordPress)
+	if !ok || !profile.PHPAtLeast(php, p.MinPHP) {
+		return ""
+	}
+
+	return p.Name
 }
 
 // cachePreset is the page cache preset for a site type (ADR-0046).

@@ -981,6 +981,12 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
           Switch on the page cache ({presetLabel[site.pageCache as Preset] ?? site.pageCache} preset)
         </label>
       )}
+      {site.profile === "wordpress" && (
+        <p className="ui-hint">
+          The site gets the WordPress profile: <code>xmlrpc.php</code> is blocked, PHP never runs in <code>wp-content/uploads</code>, and{" "}
+          <code>wp-login.php</code> is rate limited. Change the rules on the site's Hardening tab after the import.
+        </p>
+      )}
       {review && (
         <label className="ui-check">
           <input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} />I checked the points above for {site.name}

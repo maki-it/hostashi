@@ -455,7 +455,7 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 	return func(ctx context.Context, actor int64, s cpmigrate.NewSite) (cpmigrate.Created, error) {
 		// The old site may call programs from PHP; it keeps that until the
 		// admin turns it off in the site's settings (ADR-0033).
-		req := hosting.CreateRequest{Name: s.Name, Pool: s.Pool, PHP: s.PHP, Domains: s.Domains, PHPPrograms: s.PHP != ""}
+		req := hosting.CreateRequest{Name: s.Name, Pool: s.Pool, PHP: s.PHP, Domains: s.Domains, PHPPrograms: s.PHP != "", Profile: s.Profile}
 
 		// A reverse proxy site has no account: nothing else comes with it.
 		if s.Proxy != "" {

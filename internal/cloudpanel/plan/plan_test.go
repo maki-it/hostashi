@@ -466,3 +466,45 @@ func TestBuildProposesPageCache(t *testing.T) {
 		t.Errorf("site without a cache tier: %q", got.PageCache)
 	}
 }
+
+func TestBuildPicksTheProfile(t *testing.T) {
+	target := plan.Target{PHP: []string{"7.3", "8.4"}}
+
+	for _, tc := range []struct {
+		typ, php, want string
+	}{
+		{"wordpress", "8.4", "wordpress"},
+		{"wordpress", "7.3", ""}, // older than the profile allows
+		{"php", "8.4", ""},
+		{"static", "", ""},
+	} {
+		s := base()
+		s.Type = tc.typ
+
+		if tc.php == "" {
+			s.Pool = nil
+		} else {
+			s.Pool = &scan.Pool{User: s.User, Version: tc.php}
+		}
+
+		if got := one(s, target); got.Profile != tc.want {
+			t.Errorf("%s with PHP %q: profile %q, want %q", tc.typ, tc.php, got.Profile, tc.want)
+		}
+	}
+}
+
+func TestProfileFor(t *testing.T) {
+	for _, tc := range []struct {
+		typ, php, want string
+	}{
+		{"wordpress", "7.4", "wordpress"},
+		{"wordpress", "8.5", "wordpress"},
+		{"wordpress", "7.2", ""},
+		{"wordpress", "", ""},
+		{"nodejs", "8.4", ""},
+	} {
+		if got := plan.ProfileFor(tc.typ, tc.php); got != tc.want {
+			t.Errorf("ProfileFor(%q, %q) = %q, want %q", tc.typ, tc.php, got, tc.want)
+		}
+	}
+}
