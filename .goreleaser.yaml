@@ -13,6 +13,9 @@ before:
   hooks:
     - npm --prefix web ci --no-audit --no-fund
     - npm --prefix web run build
+    # The manual page ships gzipped (Debian policy 12.1); -n leaves the
+    # name and time out, so the same page gives the same file.
+    - sh -c 'mkdir -p build/man && gzip -9nc packaging/man/hostashi.1 > build/man/hostashi.1.gz'
 
 builds:
   - id: hostashi
@@ -154,6 +157,11 @@ nfpms:
       - src: packaging/systemd/
         dst: /usr/share/hostashi/systemd/
         type: tree
+      # hostashi(1), made from the usage text (cmd/hostashi/man.go).
+      - src: build/man/hostashi.1.gz
+        dst: /usr/share/man/man1/hostashi.1.gz
+        file_info:
+          mode: 0644
       - src: LICENSE
         dst: /usr/share/doc/hostashi/copyright
         file_info:

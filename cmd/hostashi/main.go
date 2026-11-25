@@ -94,14 +94,14 @@ commands:
             memory, tasks, cpu-priority (low, normal, high), cpu-quota,
             disk, inodes, php-workers, db-size, db-connections; 0 means no
             limit, values left out stay as they are
-  web apply read the complete web state as JSON from stdin and make it live,
+  web apply  read the complete web state as JSON from stdin and make it live,
             e.g. {"sites":[{"user":"blog","domains":["blog.example.com"]}]}
   db list | db create SITE NAME | db delete NAME
   db user create DATABASE USER | db user password USER | db user delete USER
   db import DATABASE FILE | db export DATABASE FILE
-            with FILE relative to the site home, ending in .sql or .sql.gz
             manage databases through the panel's API (needs hostashi
-            login); the password is read from stdin, an empty line lets
+            login); FILE is relative to the site home and ends in .sql or
+            .sql.gz; the password is read from stdin, an empty line lets
             the panel generate one
   backup run   one backup now (root; normally started by hostashi-backup.service)
   backup get | backup set | backup hostkey | backup start | backup status
@@ -211,6 +211,8 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		return completionCmd(args, stdout, stderr)
 	case "__complete":
 		return completeCmd(args, stdout)
+	case "__man":
+		return manCmd(args, stdout, stderr)
 	}
 
 	switch cmd {
