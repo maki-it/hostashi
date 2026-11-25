@@ -41,6 +41,7 @@ export const siteGroups: readonly SiteGroup[] = [
     label: "Security",
     tabs: [
       { id: "access", label: "Access" },
+      { id: "hardening", label: "Hardening" },
       { id: "headers", label: "Security headers" },
       { id: "malware", label: "Virus scan" },
       { id: "ssh", label: "SSH & SFTP" },

@@ -46,6 +46,7 @@ import { SnippetSettings } from "./Snippets";
 import { SiteAccess } from "./SiteAccess";
 import { RealIPCard } from "./RealIP";
 import { SecurityHeadersCard } from "./SecurityHeaders";
+import { HardeningCard } from "./Hardening";
 import { SSHSettings } from "./SSH";
 import { PermissionsResetCard } from "./PermissionsReset";
 import { Badge, Button, Card, Field, Notice } from "./ui";
@@ -99,7 +100,9 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
       (t !== "git" || canDeploy(site)) &&
       (hasAccount(site) || !noAccount.includes(t)) &&
       (!["redirect", "proxy"].includes(siteType(site)) || t !== "nginx") &&
-      (siteType(site) !== "redirect" || t !== "access"),
+      (siteType(site) !== "redirect" || t !== "access") &&
+      // Profiles and hardening are for static and PHP sites (ADR-0069).
+      (t !== "hardening" || ["static", "php"].includes(siteType(site))),
   );
   const active: SiteTab = ready && groups.some((g) => g.tabs.some((t) => t.id === tab)) ? tab : "overview";
 
@@ -109,6 +112,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
       {active === "domains" && <DomainsTab site={site} onChange={load} />}
       {active === "https" && <HTTPSTab site={site} onChange={load} />}
       {active === "headers" && <SecurityHeadersCard site={site} />}
+      {active === "hardening" && <HardeningCard site={site} />}
       {active === "realip" && <RealIPCard site={site} admin={role === "admin"} />}
       {active === "access" && <SiteAccess site={site} />}
       {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} admin={role === "admin"} staff={staff} />}

@@ -261,6 +261,28 @@ const homeFiles = [
   { name: "backup.tar.gz", type: "file", size: 48_000_000, modified: day(3), mode: "0600" },
 ];
 
+// Application profiles (ADR-0069), as GET /api/v1/profiles lists them.
+const wpRules = { configFiles: true, noPhpDirs: ["wp-content/uploads"], denyFiles: ["xmlrpc.php"], limitFiles: ["wp-login.php"] };
+const wpChecklist = ["xmlrpc.php is blocked; allow it in the hardening settings if an app or plugin needs it.", "wp-login.php is rate limited per address."];
+const profileList = [
+  { name: "static", title: "Static site", type: "static", hardening: { configFiles: true }, builtin: true },
+  { name: "php", title: "Generic PHP", type: "php", hardening: { configFiles: true }, pageCache: "php", builtin: true },
+  { name: "wordpress", title: "WordPress", type: "php", minPhp: "7.4", hardening: wpRules, pageCache: "wordpress", checklist: wpChecklist, builtin: true },
+  { name: "woocommerce", title: "WooCommerce", type: "php", minPhp: "7.4", hardening: wpRules, pageCache: "woocommerce", checklist: wpChecklist, builtin: true },
+  { name: "laravel", title: "Laravel", type: "php", minPhp: "8.2", webDir: "public", hardening: { configFiles: true }, builtin: true },
+  { name: "symfony", title: "Symfony", type: "php", minPhp: "8.2", webDir: "public", hardening: { configFiles: true }, builtin: true },
+  { name: "shopware6", title: "Shopware 6", type: "php", minPhp: "8.2", webDir: "public", hardening: { configFiles: true }, builtin: true },
+  { name: "typo3", title: "TYPO3", type: "php", minPhp: "8.2", webDir: "public", hardening: { configFiles: true, noPhpDirs: ["fileadmin", "typo3temp"] }, builtin: true },
+  { name: "drupal", title: "Drupal", type: "php", minPhp: "8.3", webDir: "web", hardening: { configFiles: true, noPhpDirs: ["sites/default/files"] }, builtin: true },
+];
+const profileChoices = {
+  profiles: profileList.filter((p) => p.type === "php"),
+  configFileSuffixes: [".sql", ".sql.gz", ".sql.bz2", ".sql.xz", ".sql.zst", ".dump", ".bak", ".backup", ".old", ".orig", ".save", ".swp", ".swo", "~", ".log", ".env", ".ini"],
+  limitPerMinute: 12,
+  limitBurst: 10,
+  maxPaths: 20,
+};
+
 const routes = [
   ["GET", /^\/sites\/([^/]+)\/files$/, () => ({ path: "", entries: homeFiles, truncated: false, unnamed: 0 })],
   [
@@ -311,6 +333,15 @@ const routes = [
     permissionsPolicyStrict: "camera=(), microphone=(), geolocation=()",
     maxValueBytes: 4096,
   })],
+  ["GET", /^\/sites\/[^/]+\/profile$/, () => ({
+    profile: "wordpress",
+    hardening: { configFiles: true, noPhpDirs: ["wp-content/uploads"], limitFiles: ["wp-login.php"] },
+    defaults: profileList[2].hardening,
+    changed: true,
+    choices: profileChoices,
+    updatedAt: day(1),
+  })],
+  ["GET", /^\/profiles$/, () => profileChoices],
   ["GET", /^\/sites\/[^/]+\/access$/, () => ({
     ipMode: "deny",
     ips: ["198.51.100.23", "203.0.113.0/26"],

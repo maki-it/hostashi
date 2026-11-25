@@ -31,6 +31,7 @@ const shots = [
   { name: "site-new", hash: "#/sites?new=1", ready: "form" },
   { name: "site-rename", hash: "#/sites/shop", ready: "text=Save display name", full: true },
   { name: "site-domains", hash: "#/sites/blog/domains", ready: "text=Domains" },
+  { name: "site-hardening", hash: "#/sites/blog/hardening", ready: "text=Save profile and rules", full: true },
   {
     name: "site-domain-change",
     hash: "#/sites/blog/domains",

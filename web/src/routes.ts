@@ -36,7 +36,7 @@ export const pages = [
 
 export type Page = (typeof pages)[number];
 
-export const siteTabs = ["overview", "domains", "access", "web", "files", "git", "malware", "php", "databases", "cron", "ssh", "limits", "usage", "logs", "nginx", "backups", "https", "headers", "realip"] as const;
+export const siteTabs = ["overview", "domains", "access", "web", "files", "git", "malware", "php", "databases", "cron", "ssh", "limits", "usage", "logs", "nginx", "backups", "https", "headers", "realip", "hardening"] as const;
 
 export type SiteTab = (typeof siteTabs)[number];
 
