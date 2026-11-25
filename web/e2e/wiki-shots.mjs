@@ -43,6 +43,18 @@ const shots = [
   { name: "site-rename", hash: "#/sites/shop", ready: "text=Save display name", full: true },
   { name: "site-domains", hash: "#/sites/blog/domains", ready: "text=Domains" },
   { name: "site-hardening", hash: "#/sites/blog/hardening", ready: "text=Save profile and rules", full: true },
+  { name: "profiles", hash: "#/profiles", ready: "table", full: true },
+  { name: "profile-copy", hash: "#/profiles?copy=wordpress", ready: "text=Add profile", full: true },
+  {
+    name: "profile-import",
+    hash: "#/profiles?import=1",
+    ready: "text=Import profile",
+    act: async (page) => {
+      await page
+        .getByLabel(/^YAML$/)
+        .fill("version: 1\nname: agency-shop\ntitle: Agency shop\ntype: php\nminPhp: \"8.2\"\nhardening:\n  configFiles: true\n  denyFiles:\n    - xmlrpc.php\npageCache: woocommerce\n");
+    },
+  },
   {
     name: "site-hardening-preview",
     hash: "#/sites/blog/hardening",

@@ -44,7 +44,7 @@ func TestDecidedRules(t *testing.T) {
 	never := map[authz.Role][]authz.Action{
 		authz.RoleManager: {
 			authz.UsersRead, authz.UsersWrite, authz.SettingsWrite, "firewall:write", "backups.server:write",
-			"migrations:write", "doctor:read", "sites.snippets:write", "limits.presets:write", "web:sync",
+			"migrations:write", "doctor:read", "sites.snippets:write", "limits.presets:write", "web:sync", "profiles:write",
 		},
 		authz.RoleUser: {
 			authz.UsersRead, authz.SettingsRead, "sites:create", "sites:delete", "sites.domains:write",
@@ -83,7 +83,7 @@ func TestDecidedRules(t *testing.T) {
 // A user's actions on one site must be site actions, or a grant would not
 // limit them.
 func TestUserActionsAreSiteBound(t *testing.T) {
-	unbound := []authz.Action{"sites:list", "databases:list", "db_servers:list", "php.versions:read", "node:read", "python:read", "ssh.hostkeys:read", "pages:read"}
+	unbound := []authz.Action{"sites:list", "databases:list", "db_servers:list", "php.versions:read", "node:read", "python:read", "ssh.hostkeys:read", "pages:read", "profiles:read"}
 
 	for _, a := range authz.Actions() {
 		r, _ := authz.Lookup(a)
