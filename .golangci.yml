@@ -65,6 +65,10 @@ linters:
         # PostgreSQL major by absolute path, never as root, with fixed
         # arguments, the connection in libpq's environment and the password
         # only in a 0600 passfile (ADR-0051).
+        # internal/wpcli runs the site's PHP CLI (/usr/bin/php<version>)
+        # with the pinned, root-owned WP-CLI phar and a fixed list of
+        # sub-commands, only inside hostashi-wp@<site> as the site user (it
+        # refuses root); passwords on standard input (ADR-0069).
         no-exec:
           files:
             - "$all"
@@ -75,6 +79,7 @@ linters:
             - "!**/internal/resticctl/*.go"
             - "!**/internal/mariadbctl/*.go"
             - "!**/internal/pgctl/*.go"
+            - "!**/internal/wpcli/*.go"
           deny:
             - pkg: os/exec
               desc: "no process execution in product code (see docs/05-security.md)"
