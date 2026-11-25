@@ -1,22 +1,34 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The logs of a site (ADR-0053): nginx's access and error log and the PHP
-// error log. Everyone with access to the site reads them; admins set how
+// The logs of a site (ADR-0053): nginx's access and error log, the PHP
+// error log or the app's output, and the WordPress install (ADR-0069). Everyone with access to the site reads them; admins set how
 // many days the server keeps them.
 
 import { ApiError, request } from "./api";
 
-export type LogKind = "access" | "error" | "php" | "app";
+export type LogKind = "access" | "error" | "php" | "app" | "wordpress";
 
 export const logKinds: { id: LogKind; label: string; hint: string }[] = [
   { id: "access", label: "Access", hint: "Every request to the site, with the visitor's address." },
   { id: "error", label: "Web server errors", hint: "What nginx reports for the site, including PHP messages it receives." },
   { id: "php", label: "PHP errors", hint: "Warnings and errors of the site's PHP, written by PHP-FPM." },
   { id: "app", label: "App", hint: "What the site's Node.js app writes to its output and error output." },
+  {
+    id: "wordpress",
+    label: "WordPress install",
+    hint: "The WP-CLI output of the last WordPress install from the panel. Empty if WordPress was never installed here.",
+  },
 ];
 
-/** The logs a site has: the app log for a Node.js site, the PHP log for the others. */
-export const siteLogKinds = (type: string) => logKinds.filter((k) => (type === "node" || type === "app" ? k.id !== "php" : k.id !== "app"));
+/**
+ * The logs a site has: the app log for a Node.js site, the PHP log for the
+ * others, and the WordPress install log for a PHP site.
+ */
+export const siteLogKinds = (type: string) =>
+  logKinds.filter((k) => {
+    if (k.id === "wordpress") return type === "php";
+    return type === "node" || type === "app" ? k.id !== "php" : k.id !== "app";
+  });
 
 export type LogChunk = { lines: string[]; cursor: string; rotated: boolean; more: boolean };
 

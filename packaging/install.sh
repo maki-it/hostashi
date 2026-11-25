@@ -355,12 +355,15 @@ do_config() { env_file | write_file /etc/hostashi/hostashi.env 0640 root:hostash
 # passwords and no forwarding. The block ends with its file, so root and the
 # admin's own sshd settings stay as they are. sshd -t checks the result
 # before sshd is reloaded; a file that fails the test is removed again, so
-# a later reload cannot lock anyone out.
+# a later reload cannot lock anyone out. The step also installs the site
+# users' wp command (ADR-0069), a root-owned wrapper that runs the pinned
+# WP-CLI phar with the PHP version of the caller's site.
 SSH_GROUP=hostashi-sites
 SSH_KEYS_DIR=/etc/hostashi-ssh/keys
 SSH_DROPIN=/etc/ssh/sshd_config.d/10-hostashi.conf
 SSH_SRC=${HOSTASHI_SSH_SRC:-$HERE/ssh}
 SSH_CHANGED=no
+WP_CMD=/usr/local/bin/wp
 
 chk_ssh() {
   pkg_installed openssh-server || { echo "openssh-server not installed"; return 1; }
@@ -368,13 +371,16 @@ chk_ssh() {
   dir_ok /etc/hostashi-ssh 755 root:root || { echo "/etc/hostashi-ssh"; return 1; }
   dir_ok "$SSH_KEYS_DIR" 755 root:root || { echo "$SSH_KEYS_DIR"; return 1; }
   file_matches "$SSH_DROPIN" 0644 root:root <"$SSH_SRC/10-hostashi.conf" || { echo "sshd drop-in differs"; return 1; }
+  file_matches "$WP_CMD" 0755 root:root <"$SSH_SRC/wp" || { echo "$WP_CMD differs"; return 1; }
   [ "$SSH_CHANGED" = no ] || { echo "sshd reload needed after a change"; return 1; }
 }
 do_ssh() {
   local rc
   apt_install openssh-server || return 1
   getent group "$SSH_GROUP" >/dev/null || groupadd --system "$SSH_GROUP" >>"$LOG" 2>&1 || return 1
-  install -d -m 0755 -o root -g root /etc/hostashi-ssh "$SSH_KEYS_DIR" /etc/ssh/sshd_config.d || return 1
+  install -d -m 0755 -o root -g root /etc/hostashi-ssh "$SSH_KEYS_DIR" /etc/ssh/sshd_config.d "${WP_CMD%/*}" || return 1
+  write_file "$WP_CMD" 0755 root:root <"$SSH_SRC/wp"
+  [ $? -le 1 ] || return 1
   write_file "$SSH_DROPIN" 0644 root:root <"$SSH_SRC/10-hostashi.conf"; rc=$?
   [ "$rc" -le 1 ] || return 1
   [ "$rc" = 0 ] && SSH_CHANGED=yes

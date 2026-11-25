@@ -995,6 +995,14 @@ sshopt=(-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/
 out=$(x ssh "${sshopt[@]}" -p 2297 -i /root/t/k wp@127.0.0.1 'id -un; cat /proc/self/cgroup') || fail "shell login with the panel's key failed"
 grep -qx wp <<<"$out" || fail "shell login ran as someone else: $out"
 grep -q "/user.slice/user-$wpuid.slice/" <<<"$out" || fail "SSH session not in user-$wpuid.slice: $out"
+# The wp command (ADR-0069) runs WP-CLI with the site's PHP; without the
+# phar it says how to get it. It never runs as root.
+expect_mode /usr/local/bin/wp "755 root:root"
+expect_mode /etc/hostashi-php "711 root:root"
+[ "$(x cat /etc/hostashi-php/wp)" = "$ver" ] || fail "PHP version file of wp: $(x cat /etc/hostashi-php/wp)"
+out=$(x ssh "${sshopt[@]}" -p 2297 -i /root/t/k wp@127.0.0.1 'wp --version 2>&1' || true)
+grep -Eq '^WP-CLI [0-9]|WP-CLI is not installed' <<<"$out" || fail "wp over SSH: $out"
+x /usr/local/bin/wp --version >/dev/null 2>&1 && fail "wp ran as root"
 # Back to SFTP only: no shell, and commands are refused.
 [ "$(api PUT "/api/v1/sites/wp/ssh-keys/$keyid" '{"label":"laptop","access":"sftp"}')" = 200 ] || fail "change SSH key: $(x cat /tmp/api.out)"
 [ "$(x getent passwd wp | cut -d: -f7)" = /usr/sbin/nologin ] || fail "wp kept its login shell without a shell key"

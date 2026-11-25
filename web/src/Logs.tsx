@@ -260,7 +260,7 @@ function RetentionCard({ admin }: { admin: boolean }) {
     <Card title="Log retention">
       <form className="ui-stack" onSubmit={save} noValidate>
         <p className="ui-hint">
-          One value for every site on this server: access, web server, PHP and app logs, and nginx's logs of requests for no site. Logs are
+          One value for every site on this server: access, web server, PHP, app and WordPress install logs, and nginx's logs of requests for no site. Logs are
           rotated daily and deleted after this many days. Match it to what your privacy policy and data processing agreements promise.
         </p>
         {r && (

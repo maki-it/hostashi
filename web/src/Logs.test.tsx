@@ -66,6 +66,27 @@ describe("SiteLogs", () => {
     expect(calls.some((c) => c.path === "/api/v1/settings/logs")).toBe(false);
   });
 
+  it("shows the WordPress install log of a PHP site, empty without an install", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      "GET /api/v1/sites/blog/logs/access?lines=200": chunk(access),
+      "GET /api/v1/sites/blog/logs/wordpress?lines=200": chunk(["Success: WordPress downloaded.", "Error: The site you have requested is not installed."]),
+    });
+    render(<SiteLogs site={site} admin={false} />);
+    await screen.findByText(/GET \/cart/);
+    await user.click(screen.getByRole("radio", { name: "WordPress install" }));
+    const log = screen.getByRole("log");
+    expect(await within(log).findByText(/WordPress downloaded/)).toBeInTheDocument();
+    expect(within(log).getByText(/not installed/)).toHaveClass("err");
+  });
+
+  it("shows no WordPress log for a site without PHP", async () => {
+    mockFetch({ "GET /api/v1/sites/blog/logs/access?lines=200": chunk([]) });
+    render(<SiteLogs site={{ ...site, php: "" }} admin={false} />);
+    expect(await screen.findByText("The log is empty so far.")).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "WordPress install" })).not.toBeInTheDocument();
+  });
+
   it("shows an error from the server", async () => {
     mockFetch({ "GET /api/v1/sites/blog/logs/access?lines=200": { status: 404, body: { error: "not_found", message: "no such log" } } });
     render(<SiteLogs site={site} admin={false} />);

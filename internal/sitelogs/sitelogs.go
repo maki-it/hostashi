@@ -21,6 +21,10 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 )
 
+// WordPressLog is the file name of a site's WordPress install log below
+// AppLogDir, wpunit.LogName.
+const WordPressLog = "wordpress.log"
+
 // ErrUnsafe is returned for a log that is not a regular file of the owner.
 var ErrUnsafe = errors.New("sitelogs: log file is not safe to read")
 
@@ -30,7 +34,9 @@ type Reader struct {
 	SiteLogDir string
 	// PHPLogDir holds <site>/error.log of PHP-FPM.
 	PHPLogDir string
-	// AppLogDir holds <site>/app.log of the site's app (ADR-0054).
+	// AppLogDir holds <site>/app.log of the site's app (ADR-0054) and
+	// <site>/wordpress.log of its last WordPress quick install (ADR-0069,
+	// package wpunit).
 	AppLogDir string
 	// Owner is the uid every log file must have: 0 in production.
 	Owner uint32
@@ -55,6 +61,12 @@ func (r *Reader) Path(site string, kind agentapi.LogKind) (string, error) {
 		}
 
 		return filepath.Join(r.AppLogDir, site, "app.log"), nil
+	case agentapi.LogWordPress:
+		if r.AppLogDir == "" {
+			return "", fmt.Errorf("unknown log %q", kind)
+		}
+
+		return filepath.Join(r.AppLogDir, site, WordPressLog), nil
 	default:
 		return "", fmt.Errorf("unknown log %q", kind)
 	}

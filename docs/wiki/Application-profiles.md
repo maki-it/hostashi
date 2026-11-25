@@ -74,7 +74,9 @@ A generated password is shown **once**, together with the login address, the use
 
 ![The admin password, shown once](images/site-wordpress-password.png)
 
-The install takes about a minute. The card shows its progress and, at the end, the log of WP-CLI. A site whose profile was *Generic PHP* gets the WordPress profile. The installed WordPress has file editing in the dashboard switched off (`DISALLOW_FILE_EDIT`).
+The install takes about a minute. The card shows its progress and, at the end, the log of WP-CLI. The log stays readable afterwards under **Operations › Logs › WordPress install**, see [Site logs](Site-logs.md). A site whose profile was *Generic PHP* gets the WordPress profile. The installed WordPress has file editing in the dashboard switched off (`DISALLOW_FILE_EDIT`).
+
+After the install, a [Shell key](SSH-and-SFTP.md#wp-cli) gives you the `wp` command for WP-CLI on the site, with the site's PHP version.
 
 ### When the install fails
 

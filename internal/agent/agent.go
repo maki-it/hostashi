@@ -1470,16 +1470,17 @@ func openPHP(stateDir string, log *slog.Logger) *php.Manager {
 	}
 
 	return &php.Manager{
-		Dir:       filepath.Join(stateDir, "php"),
-		SocketDir: PHPSocketDir,
-		LogDir:    php.LogDir,
-		WebGroup:  WebUser,
-		Ctl:       phpctl.Controller{},
-		Units:     phpctl.Controller{},
-		UnitDir:   siteslice.DefaultDir,
-		Slice:     siteslice.Name,
-		Installed: phpctl.Installed,
-		Log:       log,
+		Dir:        filepath.Join(stateDir, "php"),
+		SocketDir:  PHPSocketDir,
+		LogDir:     php.LogDir,
+		WebGroup:   WebUser,
+		Ctl:        phpctl.Controller{},
+		Units:      phpctl.Controller{},
+		UnitDir:    siteslice.DefaultDir,
+		Slice:      siteslice.Name,
+		Installed:  phpctl.Installed,
+		VersionDir: php.VersionDir,
+		Log:        log,
 	}
 }
 

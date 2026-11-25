@@ -19,10 +19,13 @@ const (
 	LogError  LogKind = "error"  // nginx error log
 	LogPHP    LogKind = "php"    // PHP-FPM error log
 	LogApp    LogKind = "app"    // output of the site's app (ADR-0054)
+	// LogWordPress is the output of the site's last WordPress quick
+	// install (ADR-0069).
+	LogWordPress LogKind = "wordpress"
 )
 
 // LogKinds lists the kinds in the order the panel shows them.
-var LogKinds = []LogKind{LogAccess, LogError, LogPHP, LogApp}
+var LogKinds = []LogKind{LogAccess, LogError, LogPHP, LogApp, LogWordPress}
 
 // Limits of site.logs.read. An answer stays well below agentrpc.MaxFrame
 // even when JSON escapes every byte.
