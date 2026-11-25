@@ -599,6 +599,8 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 [ "$run" = succeeded ] || fail "scan did not succeed ($run): $(x cat /tmp/api.out)"
+# A site with nothing unreadable in it scans without a note.
+[ "$(jget 'd["runs"][0]["error"]')" = "" ] || fail "scan reported an error: $(x cat /tmp/api.out); log: $(x cat /var/log/hostashi/scan/blog.log)"
 # ClamAV names signatures of its own databases NAME.UNOFFICIAL.
 [ "$(jget '[f["path"]+" "+f["signature"].split(".UNOFFICIAL")[0]+" "+f["state"] for f in d["findings"]]')" = "['htdocs/eicar.com Hostashi.Test.EICAR open']" ] ||
   fail "findings: $(x cat /tmp/api.out)"
@@ -610,6 +612,17 @@ x test ! -e /home/blog/htdocs/eicar.com || fail "quarantined file still in the s
 [ "$(api POST "/api/v1/sites/blog/malware-findings/$fid/restore")" = 200 ] || fail "restore: $(x cat /tmp/api.out)"
 [ "$(x stat -c '%U:%G' /home/blog/htdocs/eicar.com)" = blog:blog ] || fail "restored file has the wrong owner"
 x rm -f /home/blog/htdocs/eicar.com
+# Without a flagged file, clamscan's exit code shows any file it could not
+# read (exit 1 for a finding hides exit 2).
+[ "$(api POST /api/v1/sites/blog/malware-scans)" = 202 ] || fail "start clean scan: $(x cat /tmp/api.out)"
+for _ in $(seq 1 60); do
+  [ "$(api GET /api/v1/sites/blog/malware-scan)" = 200 ] || fail "site scan: $(x cat /tmp/api.out)"
+  run=$(jget 'd["runs"][0]["state"]')
+  case "$run" in succeeded|failed) break;; esac
+  sleep 2
+done
+[ "$run" = succeeded ] || fail "clean scan did not succeed ($run): $(x cat /tmp/api.out)"
+[ "$(jget 'd["runs"][0]["error"]')" = "" ] || fail "clean scan reported an error: $(x cat /tmp/api.out); log: $(x cat /var/log/hostashi/scan/blog.log)"
 
 step "malware scan: real-time mode reports a new file (ADR-0064)"
 # clamd starts only once the official signatures are there; the test has
@@ -650,8 +663,24 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 [ "$run" = succeeded ] || fail "clamdscan run did not succeed ($run): $(x cat /tmp/api.out)"
+[ "$(jget '[r["found"] for r in d["runs"] if r["source"] == "panel"][0]')" = 1 ] ||
+  fail "clamdscan run did not flag new.com: $(x cat /tmp/api.out); log: $(x cat /var/log/hostashi/scan/blog.log)"
+expect_mode /etc/hostashi-scan "711 root:root"
+expect_mode /etc/hostashi-scan/blog.conf "644 root:root"
 x grep -q 'clamdscan' /etc/systemd/system/hostashi-scan@blog.service.d/60-hostashi-scan.conf || fail "scan did not use clamdscan"
-x rm -f /home/blog/htdocs/new.com /etc/systemd/system/clamav-daemon.service.d/90-test.conf
+# Without a flagged file, a scan through clamd reports no error either.
+x rm -f /home/blog/htdocs/new.com
+[ "$(api POST /api/v1/sites/blog/malware-scans)" = 202 ] || fail "start scan: $(x cat /tmp/api.out)"
+for _ in $(seq 1 60); do
+  [ "$(api GET /api/v1/sites/blog/malware-scan)" = 200 ] || fail "site scan: $(x cat /tmp/api.out)"
+  run=$(jget '[r["state"] for r in d["runs"] if r["source"] == "panel"][0]')
+  case "$run" in succeeded|failed) break;; esac
+  sleep 2
+done
+[ "$run" = succeeded ] || fail "clean clamdscan run did not succeed ($run): $(x cat /tmp/api.out)"
+[ "$(jget '[r["error"] for r in d["runs"] if r["source"] == "panel"][0]')" = "" ] ||
+  fail "clean clamdscan run reported an error: $(x cat /tmp/api.out); log: $(x cat /var/log/hostashi/scan/blog.log)"
+x rm -f /etc/systemd/system/clamav-daemon.service.d/90-test.conf
 [ "$(api PUT /api/v1/malware-scan '{"on":false}')" = 202 ] || fail "switch the scan off: $(x cat /tmp/api.out)"
 for _ in $(seq 1 120); do
   [ "$(api GET /api/v1/malware-scan)" = 200 ] || fail "engine state: $(x cat /tmp/api.out)"

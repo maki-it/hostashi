@@ -9,9 +9,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 )
@@ -80,7 +83,7 @@ func sum(b string) string {
 }
 
 func TestDropInContent(t *testing.T) {
-	b, err := DropInContent("blog", Site{Home: "/home/blog.example"}, []string{"/srv/pool2"}, "/var/lib/clamav", false)
+	b, err := DropInContent("blog", Site{Home: "/home/blog.example"}, []string{"/srv/pool2"}, "/var/lib/clamav", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,18 +105,18 @@ func TestDropInContent(t *testing.T) {
 	}
 
 	for _, bad := range []string{"/home/a b", "home/x", "/home/x/../y", "/home/$x", "/home/%i"} {
-		if _, err := DropInContent("blog", Site{Home: bad}, nil, "/var/lib/clamav", false); err == nil {
+		if _, err := DropInContent("blog", Site{Home: bad}, nil, "/var/lib/clamav", ""); err == nil {
 			t.Errorf("home %q accepted", bad)
 		}
 	}
 
-	if _, err := DropInContent("Bad", Site{Home: "/home/x"}, nil, "/var/lib/clamav", false); err == nil {
+	if _, err := DropInContent("Bad", Site{Home: "/home/x"}, nil, "/var/lib/clamav", ""); err == nil {
 		t.Error("bad site accepted")
 	}
 
 	// With the real-time mode's clamd, clamdscan hands it the open files.
-	b, err = DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", true)
-	if err != nil || !strings.Contains(string(b), "ExecStart=\nExecStart=/usr/bin/clamdscan --config-file=/etc/hostashi/clamav/clamd.conf --fdpass --infected --no-summary --stdout \"/home/blog\"\n") {
+	b, err = DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", "/etc/hostashi-scan/blog.conf")
+	if err != nil || !strings.Contains(string(b), "ExecStart=\nExecStart=/usr/bin/clamdscan --config-file=/etc/hostashi-scan/blog.conf --fdpass --infected --no-summary --stdout \"/home/blog\"\n") {
 		t.Errorf("clamdscan drop-in: %v\n%s", err, b)
 	}
 }
@@ -171,8 +174,19 @@ func TestStartAndStatus(t *testing.T) {
 	// Some files could not be read: still the findings, with a note.
 	ctl.props["ExecMainStatus"] = "2"
 
-	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.State != agentapi.ScanSucceeded || st.Error == "" || len(st.Findings) != 1 {
+	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.State != agentapi.ScanSucceeded || st.Error != "some files could not be scanned" || len(st.Findings) != 1 {
 		t.Fatalf("partial: %+v", st)
+	}
+
+	// The first error line of the log says which file and why.
+	partial := home + "/shell.php: Php.Webshell-1 FOUND\n" +
+		home + "/private: Permission denied ERROR\n" + home + "/other: Permission denied ERROR\n"
+	if err := os.WriteFile(m.LogFile("blog"), []byte(partial), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.Error != "some files could not be scanned: "+home+"/private: Permission denied ERROR" || len(st.Findings) != 1 {
+		t.Fatalf("partial with reason: %+v", st)
 	}
 
 	// Exit 1 with no usable line is not "clean".
@@ -421,5 +435,89 @@ func TestEngine(t *testing.T) {
 	st, _ := e.Status(ctx)
 	if st.State != agentapi.ScanEngineOn || st.Version != "1.4.6+dfsg-1~deb13u1" || st.Signatures == "" || !e.On() {
 		t.Fatalf("on: %+v", st)
+	}
+}
+
+func TestFirstError(t *testing.T) {
+	dir := t.TempDir()
+
+	for _, tc := range []struct{ log, want string }{
+		{"", ""},
+		{"/home/blog/a.php: X FOUND\nLibClamAV Warning: old\n", ""},
+		{"ERROR: Can't access file /home/blog/x\n", "ERROR: Can't access file /home/blog/x"},
+		{"LibClamAV Error: cli_loaddbdir(): no db\nERROR: later\n", "LibClamAV Error: cli_loaddbdir(): no db"},
+		{"/home/blog/\x1b[31mx: Excluded\n/home/blog/\x1bsock: Not supported file type ERROR\n", "/home/blog/ sock: Not supported file type ERROR"},
+		{"/home/blog/" + strings.Repeat("a", 600) + ": Permission denied ERROR\n", "/home/blog/" + strings.Repeat("a", maxErrorLine-len("/home/blog/")) + "..."},
+	} {
+		name := filepath.Join(dir, "log")
+		if err := os.WriteFile(name, []byte(tc.log), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		if got := firstError(name); got != tc.want {
+			t.Errorf("firstError(%q) = %q, want %q", tc.log, got, tc.want)
+		}
+	}
+
+	if got := firstError(filepath.Join(dir, "missing")); got != "" {
+		t.Errorf("missing log: %q", got)
+	}
+}
+
+// While the real-time mode is on, the scan reads its own clamdscan
+// configuration: the site user cannot read the one below /etc/hostashi.
+func TestStartThroughClamd(t *testing.T) {
+	ctx := context.Background()
+	m, _, home := newManager(t)
+	m.ClientDir = filepath.Join(t.TempDir(), "client")
+	m.Clamd = func(context.Context) bool { return true }
+
+	// The agent's umask is 0077; the modes must not depend on it.
+	old := unix.Umask(0o077)
+	_, err := m.Start(ctx, agentapi.ScanStartRequest{Site: "blog", ID: 1})
+
+	unix.Umask(old)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conf := m.ClientConfig("blog")
+
+	b, err := os.ReadFile(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := "LocalSocket /run/clamav/clamd.ctl\nExcludePath ^" + regexp.QuoteMeta(home+"/.cache") + "/\n"
+	if !strings.HasSuffix(string(b), want) {
+		t.Fatalf("client config:\n%s\nwant suffix\n%s", b, want)
+	}
+
+	for p, mode := range map[string]os.FileMode{conf: 0o644, m.ClientDir: 0o711 | os.ModeDir} {
+		if fi, err := os.Stat(p); err != nil || fi.Mode() != mode {
+			t.Errorf("%s: %v %v", p, fi.Mode(), err)
+		}
+	}
+
+	d, err := os.ReadFile(filepath.Join(m.UnitDir, "hostashi-scan@blog.service.d", DropIn))
+	if err != nil || !strings.Contains(string(d), "/usr/bin/clamdscan --config-file="+conf+" ") {
+		t.Fatalf("drop-in %v\n%s", err, d)
+	}
+
+	if err := m.Remove(ctx, "blog"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(conf); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("client config left: %v", err)
+	}
+}
+
+func TestClientConfigContent(t *testing.T) {
+	for _, tc := range []struct{ site, home string }{{"Bad", "/home/x"}, {"blog", "home/x"}, {"blog", "/home/a b"}} {
+		if _, err := ClientConfigContent(tc.site, tc.home); err == nil {
+			t.Errorf("%+v accepted", tc)
+		}
 	}
 }
