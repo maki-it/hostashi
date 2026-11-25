@@ -75,6 +75,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0070 | Staging and cloning a site | Accepted on 2026-11-25 ([adr/0070](adr/0070-staging-and-cloning-a-site.md)) | Done |
 | 0071 | Panel UI in English and German | Accepted on 2026-11-25 ([adr/0071](adr/0071-panel-ui-in-english-and-german.md)) | Done |
 | 0072 | Rename a site | Accepted on 2026-11-25 ([adr/0072](adr/0072-rename-a-site.md)) | Done |
+| 0073 | MCP server for AI assistants | Accepted on 2026-11-25 ([adr/0073](adr/0073-mcp-server.md)) | Done |
 
 ---
 
@@ -473,3 +474,7 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0072 Rename a site
 
 **Full text (status Accepted, 2026-11-25, by Kim):** [adr/0072](adr/0072-rename-a-site.md). Summary: today the site name is at the same time the UI label, the Linux user and group, the home folder, the registry key and the `{name}` in the API. Recommendation: add a free display name (`sites.title`, migration 0065, at most 64 characters, display only, never sent to the agent), editable through `PUT /api/v1/sites/{name}/title`, the CLI and a "Rename" dialog that keeps the system name visible. A real rename of the system name is not done in place (it would need downtime, new `usermod`/`groupmod` exec use and breaks absolute paths in applications); after ADR-0070 a later ADR can add "move to a new system name" through clone and domain handover. Decided by Kim on 2026-11-25: display name for 1.0 (A), move to a new system name through clone later (C).
+
+## ADR-0073 MCP server for AI assistants
+
+**Full text (status Accepted, 2026-11-25, by Kim):** [adr/0073](adr/0073-mcp-server.md). Summary: an MCP server so that AI assistants such as Claude can use the panel. Recommendation: a Streamable HTTP endpoint `POST /api/v1/mcp` in `serve` (stateless, official Go SDK `modelcontextprotocol/go-sdk`, protocol 2026-07-28), authenticated only by API token with a new scope `mcp:use`, no OAuth. A curated list of about 20 tools, each dispatched in-process to an existing API handler, so scopes, roles, site grants, validation and audit stay as they are; tools are filtered by the token's scopes, high-risk and session-only operations are never offered, writes are limited to reversible actions (maintenance, cache purge, backup, deploy, PHP pool restart). Prompt injection is named as a residual risk; mitigations: read-only token preset, untrusted content marked in results, `via: mcp` in the audit log, rate limit. No new agent operation, no new `os/exec`. Timing: after 1.0, as part of 1.1. Decided by Kim on 2026-11-25: HTTP endpoint (A), curated tools with reversible writes (B), after 1.0, no OAuth for now.
