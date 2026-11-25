@@ -15,8 +15,12 @@
 # PEBBLE_DIR (optional): a directory with the pebble and pebble-challtestsrv
 # binaries (v2.10.3). With it, a site gets a certificate from Pebble, a
 # local test CA; the test never talks to the real Let's Encrypt.
+# PART (optional): core or runtimes runs one half of the checks after the
+# common setup, so CI can run the halves side by side; default all.
 set -euo pipefail
 
+PART=${PART:-all}
+case "$PART" in all | core | runtimes) ;; *) echo "PART must be all, core or runtimes" >&2; exit 2;; esac
 IMG=$1
 BINARY=$(realpath "$2")
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -333,6 +337,11 @@ xi /usr/local/bin/hostashi login -token http://127.0.0.1:8080 <<<"$cli_token" ||
 who=$(x /usr/local/bin/hostashi whoami) || fail "whoami: $who"
 grep -qx 'kim (admin) at http://127.0.0.1:8080' <<<"$who" || fail "whoami: $who"
 expect_mode /root/.config/hostashi/credentials.json "600 root:root"
+
+# PART=core runs everything up to here and then the panel, sites,
+# databases, backups and imports; PART=runtimes the extra PHP versions,
+# runtimes and app sites. Both end with the account recovery.
+if [ "$PART" != runtimes ]; then
 
 step "services and restarts (ADR-0052)"
 svc=$(x /usr/local/bin/hostashi service list)
@@ -2016,6 +2025,13 @@ UNIT
   x systemctl restart mariadb.service
 fi
 
+fi # core
+
+if [ "$PART" != core ]; then
+# The container shares the host network; its first address is the
+# external server address for the PostgreSQL part below.
+ext_ip=${ext_ip:-$(x sh -c "hostname -I | tr ' ' '\n' | grep -E '^[0-9]+(\.[0-9]+){3}$' | grep -v '^127\.' | head -n1")}
+
 step "more PHP versions from sury.org (ADR-0019)"
 inst() { x /opt/hostashi/install.sh "$@" --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com; }
 if inst plan --php-versions 8.0 2>/dev/null; then fail "PHP 8.0 accepted"; fi
@@ -2577,6 +2593,8 @@ if [ -n "${PEBBLE_DIR:-}" ]; then
   rm -rf "$pgcerts"
 fi
 
+fi # runtimes
+
 step "root gets an account back (ADR-0035)"
 out=$(x /usr/local/bin/hostashi user recover kim) || fail "user recover: $out"
 echo "$out"
@@ -2590,4 +2608,4 @@ cookie=""
 [ "$(api POST /api/v1/invitations/accept "{\"token\":\"$inv\",\"password\":\"$pw-new\"}")" = 200 ] || fail "accept: $(x cat /tmp/api.out)"
 x grep -q '"secondFactorRequired":true' /tmp/api.out || fail "recovered admin without the second factor demand: $(x cat /tmp/api.out)"
 
-echo "PASS: installer test on $IMG"
+echo "PASS: installer test on $IMG ($PART)"
