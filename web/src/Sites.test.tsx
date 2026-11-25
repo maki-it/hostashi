@@ -230,6 +230,44 @@ describe("Sites", () => {
     window.location.hash = "";
   });
 
+  it("creates a Laravel site and warns about an older PHP", async () => {
+    const user = userEvent.setup();
+    const profiles = [
+      { name: "php", title: "Generic PHP", type: "php", hardening: {}, builtin: true },
+      { name: "laravel", title: "Laravel", type: "php", minPhp: "8.3", webDir: "public", hardening: {}, builtin: true },
+      { name: "static", title: "Static site", type: "static", hardening: {}, builtin: true },
+    ];
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/profiles": { body: { profiles, configFileSuffixes: [], limitPerMinute: 12, limitBurst: 10, maxPaths: 20 } },
+      "POST /api/v1/sites": { status: 201, body: { ...blog, tls: noTLS } },
+    });
+    render(<ListHarness initial="new=1" />);
+    await user.type(screen.getByLabelText(/^Name/), "blog");
+    await user.type(screen.getByLabelText(/^Domains/), "blog.example.com");
+    await waitFor(() => expect(screen.getByLabelText("PHP version")).toHaveValue("8.4"));
+
+    const app = await screen.findByRole("combobox", { name: /^Application/ });
+    expect(screen.queryByRole("option", { name: "Static site" })).not.toBeInTheDocument();
+    await user.selectOptions(app, "laravel");
+    expect(screen.getByText(/Serves the public folder/)).toBeInTheDocument();
+    expect(screen.queryByText("Laravel needs PHP 8.3 or newer.")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("PHP version"), "8.2");
+    expect(screen.getByText("Laravel needs PHP 8.3 or newer.")).toBeInTheDocument();
+
+    // Not sent while the PHP version is too old.
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+
+    // With a new enough version, the profile goes along.
+    await user.selectOptions(screen.getByLabelText("PHP version"), "8.4");
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/blog"));
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ php: "8.4", profile: "laravel" });
+    window.location.hash = "";
+  });
+
   it("puts a site on a second storage pool", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({

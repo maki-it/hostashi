@@ -3,6 +3,7 @@
 // The Web tab of a site (ADR-0054): its type and its web root folder, and
 // for static sites the fallback for single-page apps and asset caching.
 
+import { WordPressCard } from "./WordPress";
 import { useState, type FormEvent } from "react";
 import { formatHash } from "./routes";
 import { EnvCard } from "./SiteEnv";
@@ -84,6 +85,7 @@ export function SiteWebSettings({ site, php, onChange, admin = false, staff = fa
     <>
       {!change && <TypeCard site={site} php={php} onChange={onChange} />}
       <WebRootCard site={site} onChange={onChange} />
+      {siteType(site) === "php" && site.state === "active" && <WordPressCard site={site} />}
       {change}
     </>
   );

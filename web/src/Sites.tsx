@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { listProfiles, type Profile } from "./profiles";
 import { LockSimple, LockSimpleOpen, Plus } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatHash } from "./routes";
 import {
+  compareVersions,
   createSite,
   domainsProblem,
   httpsLabel,
@@ -355,6 +357,16 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   const [error, setError] = useState("");
   const [pools, setPools] = useState<Pool[]>([]);
   const [pool, setPool] = useState("default");
+  // Application profiles of PHP sites (ADR-0069); without the list only
+  // the generic one is offered.
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profile, setProfile] = useState("php");
+
+  useEffect(() => {
+    listProfiles()
+      .then((c) => setProfiles(c.profiles.filter((p) => p.type === "php")))
+      .catch(() => setProfiles([]));
+  }, []);
 
   // The pool choice shows only with a second pool (ADR-0016). Without the
   // list, the site goes to the default pool as before.
@@ -372,6 +384,8 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   // Default to the newest installed version that is not legacy.
   const newest = [...(php?.installed ?? [])].reverse().find((v) => !php?.legacy.includes(v)) ?? "";
   const phpValue = version ?? newest;
+  const chosenProfile = profiles.find((p) => p.name === profile);
+  const tooOld = kind === "php" && !!chosenProfile?.minPhp && !!phpValue && compareVersions(phpValue, chosenProfile.minPhp) < 0;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -391,6 +405,11 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
     setBusy(true);
     setError("");
     try {
+      if (tooOld) {
+        setError(`${chosenProfile!.title} needs PHP ${chosenProfile!.minPhp} or newer.`);
+        setBusy(false);
+        return;
+      }
       if (kind === "php" && !phpValue) {
         setError("No PHP version is installed. Install one under PHP, or create a static site.");
         setBusy(false);
@@ -404,6 +423,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         domains: list,
         tls,
         hsts: tls && hsts,
+        ...(kind === "php" && profile !== "php" && { profile }),
         ...(kind === "redirect" && { type: "redirect" as const, redirect }),
         ...(kind === "proxy" && { type: "proxy" as const, proxy: { ...proxy, insecure: proxy.target.startsWith("https://") && proxy.insecure } }),
         ...(kind === "node" && { type: "node" as const, node: nodeValue }),
@@ -474,6 +494,25 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
             <p className="ui-hint ui-flush">
               Only installed versions are listed. <a href="#/php">Install more PHP versions</a>
             </p>
+            {profiles.length > 1 && (
+              <Field
+                label="Application"
+                hint={
+                  chosenProfile?.webDir
+                    ? `Serves the ${chosenProfile.webDir} folder and brings the hardening rules for ${chosenProfile.title}; both can be changed later.`
+                    : "Brings fitting hardening rules; they can be changed later under Security."
+                }
+              >
+                <select className="ui-select" value={profile} onChange={(e) => setProfile(e.target.value)}>
+                  {profiles.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      {p.title}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+            {tooOld && <Notice tone="warn" title={`${chosenProfile!.title} needs PHP ${chosenProfile!.minPhp} or newer.`} />}
           </>
         )}
         {kind === "static" && (
