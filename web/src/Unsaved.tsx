@@ -13,15 +13,15 @@ export function useUnsaved(key: string) {
   const forms = useRef(new Set<HTMLFormElement>());
   const saving = useRef(new Set<HTMLFormElement>());
   const box = useRef<HTMLDivElement | null>(null);
-  const [names, setNames] = useState<string[]>([]);
+  const [names, setNames] = useState<{ name: string; form: HTMLFormElement }[]>([]);
   const [pending, setPending] = useState<(() => void) | null>(null);
 
   const refresh = () =>
     setNames(
       [...forms.current]
         .filter((f) => f.isConnected)
-        .map((f) => f.closest("section[aria-label]")?.getAttribute("aria-label") ?? "this tab")
-        .filter((n, i, all) => all.indexOf(n) === i),
+        .map((form) => ({ name: form.closest("section[aria-label]")?.getAttribute("aria-label") ?? "this tab", form }))
+        .filter((n, i, all) => all.findIndex((x) => x.name === n.name) === i),
     );
 
   useEffect(() => {
@@ -80,6 +80,13 @@ export function useUnsaved(key: string) {
     },
   };
 
+  // jump shows a card with unsaved input and puts the cursor in its form.
+  const jump = (form: HTMLFormElement) => {
+    const card = form.closest("section[aria-label]") ?? form;
+    card.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    form.querySelector<HTMLElement>("input:not([type=hidden]), textarea, select")?.focus({ preventScroll: true });
+  };
+
   /** guard runs go now, or after the person drops the unsaved changes. */
   const guard = (go: () => void) => {
     refresh();
@@ -91,7 +98,16 @@ export function useUnsaved(key: string) {
     names.length > 0 ? (
       <div className="ui-unsaved" role="status">
         <p>
-          <strong>Unsaved changes</strong> in {names.join(", ")}.{" "}
+          <strong>Unsaved changes</strong> in{" "}
+          {names.map((n, i) => (
+            <span key={n.name}>
+              {i > 0 && ", "}
+              <button type="button" className="ui-link-btn" onClick={() => jump(n.form)}>
+                {n.name}
+              </button>
+            </span>
+          ))}
+          .{" "}
           {pending ? "Save them first, or drop them to open the other tab." : "Save them before you leave this tab."}
         </p>
         {pending && (

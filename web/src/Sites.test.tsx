@@ -136,13 +136,16 @@ describe("Sites", () => {
     const table = await screen.findByRole("table", { name: "Sites" });
     const b = within(within(table).getByRole("link", { name: "blog" }).closest("tr")!);
     expect(b.getByText("PHP 8.4")).toBeInTheDocument();
+    // The dot before the name says whether the site is on; Status shows HTTPS.
+    expect(b.getByRole("img", { name: "Active" })).toBeInTheDocument();
     expect(b.getByText("HTTPS")).toBeInTheDocument();
-    expect(b.getByText("Active")).toBeInTheDocument();
     expect(b.getByText("blog.example.com")).toBeInTheDocument();
-    expect(b.getByRole("link", { name: "Settings of blog" })).toHaveAttribute("href", "#/sites/blog");
+    expect(b.getByRole("link", { name: "blog" })).toHaveAttribute("href", "#/sites/blog");
     const s = within(within(table).getByRole("link", { name: "shop" }).closest("tr")!);
     expect(s.getByText("Static")).toBeInTheDocument();
     expect(s.getByText("Certificate failed")).toBeInTheDocument();
+    // A failed certificate still says that the site is not on HTTPS.
+    expect(s.getByText("HTTP only")).toBeInTheDocument();
   });
 
   it("filters by text and state and sorts by a column", async () => {
@@ -733,6 +736,9 @@ describe("SitePage", () => {
     await user.click(within(screen.getByRole("tablist", { name: "Domains & HTTPS" })).getByRole("tab", { name: "HTTPS" }));
     expect(screen.getByText("Unsaved changes").parentElement).toHaveTextContent("Unsaved changes in Domains. Save them first, or drop them to open the other tab.");
     expect(screen.getByRole("region", { name: "Domains" })).toBeInTheDocument();
+    // The card name jumps to the form.
+    await user.click(screen.getByRole("button", { name: "Domains" }));
+    expect(screen.getByLabelText(/^Domains of blog/)).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Drop changes" }));
     const https = within(await screen.findByRole("region", { name: "HTTPS" }));
     await user.click(https.getByLabelText(/^HTTPS with/));

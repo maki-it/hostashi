@@ -8,12 +8,14 @@ type ButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> & 
   variant?: ButtonVariant;
   /** A Phosphor icon element, shown before the label. */
   icon?: ReactNode;
+  /** A smaller button, for actions next to a value or in a table row. */
+  small?: boolean;
   children: ReactNode;
 };
 
 /** A labelled button. Final actions (dialog footers, forms) always use this. */
-export function Button({ variant = "secondary", icon, children, type = "button", ...rest }: ButtonProps) {
-  const cls = variant === "secondary" ? "ui-btn" : `ui-btn ui-btn-${variant}`;
+export function Button({ variant = "secondary", icon, small = false, children, type = "button", ...rest }: ButtonProps) {
+  const cls = ["ui-btn", variant !== "secondary" && `ui-btn-${variant}`, small && "ui-btn-sm"].filter(Boolean).join(" ");
   return (
     <button type={type} className={cls} {...rest}>
       {icon}

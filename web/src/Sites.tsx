@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { Gear, Plus } from "@phosphor-icons/react";
+import { LockSimple, LockSimpleOpen, Plus } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatHash } from "./routes";
 import {
@@ -35,7 +35,7 @@ import { newProgramApp, ProgramFields, programFieldsProblem, programRequest, typ
 import { newProxy, ProxyFields } from "./SiteProxy";
 import { newestLine } from "./node";
 import { newRedirect, RedirectFields } from "./SiteRedirect";
-import { Badge, Button, Card, Field, IconLink, Notice, PageHead, RowActions, Table, type Column, type Sort } from "./ui";
+import { Badge, Button, Card, Field, Notice, PageHead, Table, type Column, type Sort } from "./ui";
 
 type QueryProps = {
   /** The address query: q (text filter), state, sort, dir, new. */
@@ -95,42 +95,74 @@ function matches(s: Site, q: string, state: string): boolean {
   return true;
 }
 
+// siteIssues lists what needs a look on a site: maintenance and a
+// certificate that is missing or failed. Errors sort first.
+export function siteIssues(s: Site): { word: string; tone: "ok" | "warn" | "err" | "off" }[] {
+  const out: { word: string; tone: "ok" | "warn" | "err" | "off" }[] = [];
+  const st = siteStatus(s);
+  if (st.key === "maintenance") out.push({ word: st.word, tone: st.tone });
+  if (s.tls.enabled && !s.tls.active) out.push({ word: httpsLabel(s.tls), tone: httpsTone(s.tls) });
+  return out;
+}
+
+const rank = { err: 0, warn: 1, off: 2, ok: 3 } as const;
+
+// statusRank sorts problems first: errors, warnings, then HTTP only.
+function statusRank(s: Site): number {
+  const r = Math.min(3, ...siteIssues(s).map((i) => rank[i.tone]));
+  return r === 3 && !s.tls.enabled ? 2 : r;
+}
+
+// StateDot shows before the name whether the site is switched on. The word
+// is the accessible name and the tooltip, so the colour is never alone.
+function StateDot({ s }: { s: Site }) {
+  const st = siteStatus(s);
+  const tone = st.key === "active" || st.key === "maintenance" ? "ok" : st.key === "creating" ? "warn" : "off";
+  const word = st.key === "maintenance" ? "Active" : st.word;
+  return <span className={`ui-state-dot ui-dot-${tone}`} role="img" aria-label={word} title={word} />;
+}
+
 const columns: Column<Site>[] = [
   {
     key: "name",
     header: "Site",
     sortValue: (s) => s.name,
     cell: (s) => (
-      <div className="ui-cell-main">
-        <a href={formatHash({ page: "sites", site: { name: s.name } })}>{s.name}</a>
-        <span>{s.domains[0]}</span>
+      <div className="ui-site-name">
+        <StateDot s={s} />
+        <div className={`ui-cell-main${s.disabled ? " ui-cell-off" : ""}`}>
+          <a className="ui-row-link" href={formatHash({ page: "sites", site: { name: s.name } })}>
+            {s.name}
+          </a>
+          <span>{s.domains[0]}</span>
+        </div>
       </div>
     ),
   },
   { key: "type", header: "Type", sortValue: (s) => siteTypeLabel(s), cell: (s) => siteTypeLabel(s) },
   {
-    key: "https",
-    header: "HTTPS",
-    sortValue: (s) => httpsLabel(s.tls),
-    cell: (s) => <Badge tone={httpsTone(s.tls)}>{httpsLabel(s.tls)}</Badge>,
-  },
-  {
-    key: "state",
-    header: "State",
-    sortValue: (s) => siteStatus(s).word,
-    cell: (s) => {
-      const st = siteStatus(s);
-      return <Badge tone={st.tone}>{st.word}</Badge>;
-    },
-  },
-  {
-    key: "actions",
-    header: "Actions",
-    srHeader: true,
+    key: "status",
+    header: "Status",
+    sortValue: (s) => statusRank(s),
     cell: (s) => (
-      <RowActions>
-        <IconLink label={`Settings of ${s.name}`} icon={<Gear size={16} />} href={formatHash({ page: "sites", site: { name: s.name } })} />
-      </RowActions>
+      <span className="ui-row ui-row-tight">
+        {s.tls.active ? (
+          <span className="ui-https">
+            <LockSimple size={16} weight="bold" aria-hidden />
+            HTTPS
+          </span>
+        ) : (
+          <span className="ui-https ui-https-off">
+            <LockSimpleOpen size={16} aria-hidden />
+            HTTP only
+          </span>
+        )}
+        {siteIssues(s).map((i) => (
+          <Badge key={i.word} tone={i.tone}>
+            {i.word}
+          </Badge>
+        ))}
+      </span>
     ),
   },
 ];

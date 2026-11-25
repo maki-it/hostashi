@@ -1488,3 +1488,114 @@ a.ui-btn {
 .ui-site-select .ui-select {
   width: 100%;
 }
+
+/* Form fields side by side: short values get short inputs */
+.ui-fields {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+}
+.ui-fields-server {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) minmax(0, 1fr);
+  max-width: 860px;
+}
+.ui-fields-num {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 160px));
+}
+.ui-wide {
+  max-width: 860px;
+}
+@media (max-width: 600px) {
+  .ui-fields-server {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A form opened in place inside a card, below the facts it changes */
+.ui-edit {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+/* A small button, for actions next to a value or in a table row */
+.ui-btn-sm {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+/* A row whose first link opens it: the whole row is the click target */
+.ui-table tr:has(.ui-row-link) {
+  position: relative;
+}
+.ui-table tr:has(.ui-row-link):hover {
+  background: var(--sunken);
+}
+.ui-row-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.ui-row-tight {
+  gap: var(--space-1);
+}
+.ui-quiet {
+  color: var(--muted);
+}
+
+/* A button that reads as a link inside running text */
+.ui-link-btn {
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.ui-unsaved {
+  scroll-margin-bottom: var(--space-6);
+}
+
+/* Sites list: whether a site is switched on, before its name */
+.ui-state-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.ui-dot-ok {
+  background: var(--ok);
+}
+.ui-dot-warn {
+  background: var(--warn);
+}
+.ui-dot-off {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--muted);
+}
+.ui-cell-off a,
+.ui-cell-off > span {
+  color: var(--muted);
+}
+.ui-https {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--ok);
+}
+.ui-https-off {
+  font-weight: 400;
+  color: var(--muted);
+}
+.ui-site-name {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.ui-site-name > .ui-state-dot {
+  margin-top: 7px;
+}

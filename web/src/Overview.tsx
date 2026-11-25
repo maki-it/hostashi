@@ -170,7 +170,18 @@ export function Overview({ user }: { user: User }) {
   return (
     <>
       {head}
-      <Card title="Needs attention" padded={items.length === 0}>
+      <Card
+        title="Needs attention"
+        padded={items.length === 0}
+        actions={
+          may("health") &&
+          data.doctor && (
+            <span className="ui-hint">
+              Checks run <RelTime iso={data.doctor.checkedAt} /> · <a href={formatHash({ page: "health" })}>All checks</a>
+            </span>
+          )
+        }
+      >
         {items.length === 0 ? (
           <p className="ui-flush">Nothing needs attention.</p>
         ) : (
@@ -196,16 +207,6 @@ export function Overview({ user }: { user: User }) {
           <Stat title="Sites" href={formatHash({ page: "sites" })} link="All sites">
             <span className="ui-stat-value">{sites.length}</span>
             {siteNote && <p className="ui-hint ui-flush">{siteNote}</p>}
-          </Stat>
-        )}
-        {may("health") && data.doctor && (
-          <Stat title="Health" href={formatHash({ page: "health" })} link="Open health">
-            <Badge tone={data.doctor.status === "ok" ? "ok" : data.doctor.status === "warn" ? "warn" : "err"}>
-              {data.doctor.status === "ok" ? "OK" : data.doctor.status === "warn" ? "Warnings" : "Problems"}
-            </Badge>
-            <p className="ui-hint ui-flush">
-              Checked <RelTime iso={data.doctor.checkedAt} />
-            </p>
           </Stat>
         )}
         {may("backups") && data.backups && (
