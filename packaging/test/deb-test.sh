@@ -93,11 +93,13 @@ dpkg-deb --fsys-tarfile "$deb" | tar -xOf - "$page" | gzip -dc | cmp -s - /src/p
 # Nothing outside /usr, and no file writable by others.
 bad=$(dpkg -L hostashi | grep -vE '^/(\.|usr(/.*)?)$' || true)
 [ -z "$bad" ] || fail "files outside /usr: $bad"
-ww=$(dpkg -L hostashi | while read -r f; do [ -e "$f" ] && [ ! -L "$f" ] && find "$f" -maxdepth 0 -perm -o+w; done)
+# "if", not "&&": a path the image leaves out (Ubuntu drops /usr/share/man)
+# must not end the loop with a failure, which set -e would stop on.
+ww=$(dpkg -L hostashi | while read -r f; do if [ -e "$f" ] && [ ! -L "$f" ]; then find "$f" -maxdepth 0 -perm -o+w; fi; done)
 [ -z "$ww" ] || fail "world-writable: $ww"
 
 # Installing the same package again works and changes nothing.
-sum() { dpkg -L hostashi | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done | sort; }
+sum() { dpkg -L hostashi | while read -r f; do if [ -f "$f" ]; then sha256sum "$f"; fi; done | sort; }
 before=$(sum)
 apt-get install -y -qq --no-install-recommends --reinstall "$deb" >/dev/null || fail "reinstall"
 [ "$(sum)" = "$before" ] || fail "reinstall changed files"
