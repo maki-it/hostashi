@@ -342,6 +342,8 @@ const routes = [
     updatedAt: day(1),
   })],
   ["GET", /^\/profiles$/, () => profileChoices],
+  ["GET", /^\/sites\/[^/]+\/wordpress$/, () => ({ state: "none" })],
+  ["POST", /^\/sites\/[^/]+\/wordpress$/, () => ({ state: "running", database: "blog_wp", adminPassword: "Vq7mR2xK9pLt4Wz8Bn3sHc6J" })],
   ["GET", /^\/sites\/[^/]+\/access$/, () => ({
     ipMode: "deny",
     ips: ["198.51.100.23", "203.0.113.0/26"],

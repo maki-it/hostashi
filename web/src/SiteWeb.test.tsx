@@ -111,7 +111,7 @@ describe("SiteWebSettings", () => {
 
   it("offers the asset cache but no single-page app for a PHP site", async () => {
     const user = userEvent.setup();
-    const calls = mockFetch({ "PUT /api/v1/sites/docs/web": (b: unknown) => ({ body: { ...site, web: b } }) });
+    const calls = mockFetch({ "GET /api/v1/sites/docs/wordpress": { body: { state: "none" } }, "PUT /api/v1/sites/docs/web": (b: unknown) => ({ body: { ...site, web: b } }) });
     render(<SiteWebSettings site={{ ...site, type: "php", php: "8.4", web: { dir: "", spa: true, assetCache: false } }} php={php} onChange={async () => undefined} />);
     const card = within(screen.getByRole("region", { name: "Web root" }));
     expect(card.queryByLabelText(/^Single-page app/)).not.toBeInTheDocument();
@@ -119,7 +119,7 @@ describe("SiteWebSettings", () => {
     await user.click(card.getByLabelText(/^Cache assets/));
     await user.click(card.getByRole("button", { name: "Save web root" }));
     await card.findByRole("status");
-    expect(calls[0]?.body).toEqual({
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({
       dir: "public",
       spa: false,
       assetCache: true,
@@ -145,13 +145,13 @@ describe("SiteWebSettings", () => {
 
   it("turns a PHP site into a static site", async () => {
     const user = userEvent.setup();
-    const calls = mockFetch({ "PUT /api/v1/sites/docs/php": () => ({ body: site }) });
+    const calls = mockFetch({ "GET /api/v1/sites/docs/wordpress": { body: { state: "none" } }, "PUT /api/v1/sites/docs/php": () => ({ body: site }) });
     render(<SiteWebSettings site={{ ...site, type: "php", php: "8.2" }} php={php} onChange={async () => undefined} />);
     const card = within(screen.getByRole("region", { name: "Site type" }));
     await user.click(card.getByLabelText(/^Static/));
     expect(card.getByText(/Only the PHP pool is stopped/)).toBeInTheDocument();
     await user.click(card.getByRole("button", { name: "Save type" }));
     expect(await card.findByRole("status")).toHaveTextContent("docs is a static site now.");
-    expect(calls[0]?.body).toEqual({ php: "" });
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ php: "" });
   });
 });

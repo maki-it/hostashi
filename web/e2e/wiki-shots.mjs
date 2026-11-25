@@ -33,6 +33,29 @@ const shots = [
   { name: "site-domains", hash: "#/sites/blog/domains", ready: "text=Domains" },
   { name: "site-hardening", hash: "#/sites/blog/hardening", ready: "text=Save profile and rules", full: true },
   {
+    name: "site-wordpress",
+    hash: "#/sites/blog/web",
+    ready: "text=Install WordPress",
+    full: true,
+    act: async (page) => {
+      await page.getByLabel("Site title").fill("Kim's blog");
+      await page.getByLabel(/Admin user/).fill("kim");
+      await page.getByLabel("Admin email").fill("kim@example.com");
+      await page.getByRole("heading", { name: "WordPress" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  {
+    name: "site-wordpress-password",
+    hash: "#/sites/blog/web",
+    ready: "text=Install WordPress",
+    act: async (page) => {
+      await page.getByLabel(/Admin user/).fill("kim");
+      await page.getByLabel("Admin email").fill("kim@example.com");
+      await page.getByRole("button", { name: "Install WordPress" }).click();
+      await page.getByRole("heading", { name: "Save the WordPress admin password now" }).waitFor();
+    },
+  },
+  {
     name: "site-domain-change",
     hash: "#/sites/blog/domains",
     ready: "text=Change primary domain",
