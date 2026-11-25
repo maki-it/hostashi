@@ -1212,7 +1212,12 @@ for _ in $(seq 1 150); do
   [ "$state" = running ] || break
   sleep 2
 done
-[ "$state" = succeeded ] || fail "WordPress install ended '$state': $(x cat /tmp/api.out)"
+if [ "$state" != succeeded ]; then
+  x systemctl --version | head -n 1
+  x journalctl --no-pager -o short-precise -u hostashi-wp@wpq.service -u hostashi-wpcli-install.service -n 60 || true
+  x ls -la /run/hostashi-wp /run/hostashi-wp/wpq 2>&1 || true
+  fail "WordPress install ended '$state': $(x cat /tmp/api.out)"
+fi
 # The pinned WP-CLI belongs to root; nobody else may change it.
 phar=$(x sh -c 'ls /opt/hostashi/wp-cli/*/wp-cli.phar')
 expect_mode "$phar" "644 root:root"
