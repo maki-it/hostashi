@@ -33,6 +33,17 @@ function usable(r: ServiceRow, a: ServiceAction): boolean {
   return true;
 }
 
+// shown hides the action that does not fit the state: Start while the
+// service runs, Stop while it does not, so the two share one place in the
+// row (Kim, 2026-11-25). A service without Stop (nginx, PHP, Valkey, the
+// virus scanner) shows only Restart and Reload while it runs.
+function shown(r: ServiceRow, a: ServiceAction): boolean {
+  const running = r.installed && stateWord(r).tone === "ok";
+  if (a === "start") return !running;
+  if (a === "stop") return running;
+  return true;
+}
+
 type Pending = { row: ServiceRow; action: ServiceAction };
 
 /**
@@ -157,7 +168,7 @@ export function Services({ site }: { site?: string }) {
           <span className="ui-hint">Managed by Hostashi</span>
         ) : (
           <RowActions>
-            {r.actions.map((a) => {
+            {r.actions.filter((a) => shown(r, a)).map((a) => {
               const I = icons[a];
               return (
                 <IconButton

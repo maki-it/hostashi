@@ -39,11 +39,16 @@ describe("Services", () => {
     const [, nginx, mariadb, panel, php] = within(table).getAllByRole("row");
     expect(nginx).toHaveTextContent("Web server (nginx)");
     expect(nginx).toHaveTextContent("50 MiB");
-    // Start is pointless while it runs.
-    expect(within(nginx!).getByRole("button", { name: "Start Web server (nginx)" })).toBeDisabled();
+    // Start is hidden while it runs; nginx has no Stop at all.
+    expect(within(nginx!).queryByRole("button", { name: "Start Web server (nginx)" })).not.toBeInTheDocument();
     expect(within(nginx!).getByRole("button", { name: "Reload Web server (nginx)" })).toBeEnabled();
     expect(within(nginx!).queryByRole("button", { name: /Stop/ })).not.toBeInTheDocument();
     expect(mariadb).toHaveTextContent("2");
+    // A running MariaDB offers Stop in place of Start.
+    expect(within(mariadb!).getByRole("button", { name: "Stop MariaDB" })).toBeEnabled();
+    expect(within(mariadb!).queryByRole("button", { name: "Start MariaDB" })).not.toBeInTheDocument();
+    // A failed PHP-FPM offers Start.
+    expect(within(php!).getByRole("button", { name: /^Start PHP/ })).toBeEnabled();
     expect(panel).toHaveTextContent("Managed by Hostashi");
     expect(php).toHaveTextContent("Failed");
     expect(php).toHaveTextContent("Site blog");
