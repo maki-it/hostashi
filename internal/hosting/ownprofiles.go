@@ -146,7 +146,7 @@ func (s *Service) UpdateProfile(ctx context.Context, actor int64, name string, p
 	}
 
 	if len(sites) > 0 && cur.Profile.Type != p.Type {
-		return profile.Profile{}, fmt.Errorf("%w: the type cannot change while sites use the profile: %s", ErrProfileInUse, strings.Join(sites, ", "))
+		return profile.Profile{}, fmt.Errorf("%w (%s); its type cannot change", ErrProfileInUse, strings.Join(sites, ", "))
 	}
 
 	old, err := s.st.UpdateOwnProfile(ctx, p, actor, s.now())
@@ -190,7 +190,7 @@ func (s *Service) DeleteProfile(ctx context.Context, actor int64, name string) e
 			return serr
 		}
 
-		return fmt.Errorf("%w: %s", ErrProfileInUse, strings.Join(sites, ", "))
+		return fmt.Errorf("%w (%s)", ErrProfileInUse, strings.Join(sites, ", "))
 	case err != nil:
 		return err
 	}

@@ -126,6 +126,21 @@ describe("HardeningCard", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(`Unknown profile "x" for a php site.`);
   });
 
+  it("offers own profiles next to the built-in ones", async () => {
+    const own: Profile = { name: "agency", title: "Agency", type: "php", hardening: { configFiles: true, denyDirs: ["private"] }, builtin: false };
+    const withOwn = view("php", { configFiles: true });
+    withOwn.choices.profiles = [...profiles, own];
+    const calls = mockFetch({ ["GET " + path]: { body: withOwn }, ["PUT " + path]: { body: { ...withOwn, profile: "agency" } } });
+    const user = userEvent.setup();
+    render(<HardeningCard site={site} />);
+
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Profile" }), "agency");
+    expect(screen.getByRole("textbox", { name: "Blocked folders" })).toHaveValue("private");
+    await user.click(screen.getByRole("button", { name: "Save profile and rules" }));
+    await screen.findByRole("status");
+    expect(calls.at(-1)?.body).toMatchObject({ profile: "agency" });
+  });
+
   it("hides the PHP rules on a static site", async () => {
     mockFetch({ ["GET " + path]: { body: view("php", { configFiles: true }) } });
     render(<HardeningCard site={{ ...site, php: "" }} />);

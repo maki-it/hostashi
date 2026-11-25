@@ -133,7 +133,7 @@ func profileFail(log *slog.Logger, w http.ResponseWriter, err error, what string
 	case errors.Is(err, hosting.ErrProfileBuiltin):
 		writeError(w, http.StatusConflict, "profile_builtin", "built-in profiles cannot be changed or deleted; copy one instead")
 	case errors.Is(err, hosting.ErrProfileInUse):
-		writeError(w, http.StatusConflict, "profile_in_use", "sites use this profile"+strings.TrimPrefix(err.Error(), hosting.ErrProfileInUse.Error()))
+		writeError(w, http.StatusConflict, "profile_in_use", strings.TrimPrefix(err.Error(), "hosting: "))
 	default:
 		siteFail(log, w, err, what)
 	}

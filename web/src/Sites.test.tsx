@@ -268,6 +268,39 @@ describe("Sites", () => {
     window.location.hash = "";
   });
 
+  it("offers own profiles, also for a static site", async () => {
+    const user = userEvent.setup();
+    const profiles = [
+      { name: "static", title: "Static site", type: "static", hardening: {}, builtin: true },
+      { name: "php", title: "Generic PHP", type: "php", hardening: {}, builtin: true },
+      { name: "agency", title: "Agency PHP", type: "php", hardening: {}, builtin: false },
+      { name: "landing", title: "Landing pages", type: "static", webDir: "dist", hardening: {}, builtin: false },
+    ];
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/profiles": { body: { profiles, configFileSuffixes: [], limitPerMinute: 12, limitBurst: 10, maxPaths: 20 } },
+      "POST /api/v1/sites": { status: 201, body: { ...blog, php: "", tls: noTLS } },
+    });
+    render(<ListHarness initial="new=1" />);
+    await user.type(screen.getByLabelText(/^Name/), "blog");
+    await user.type(screen.getByLabelText(/^Domains/), "blog.example.com");
+
+    const app = await screen.findByRole("combobox", { name: /^Application/ });
+    expect(within(app).getByRole("option", { name: "Agency PHP" })).toBeInTheDocument();
+    expect(within(app).queryByRole("option", { name: "Landing pages" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText(/^Static/));
+    const staticApp = screen.getByRole("combobox", { name: /^Application/ });
+    expect(staticApp).toHaveValue("static");
+    await user.selectOptions(staticApp, "landing");
+    expect(screen.getByText(/Serves the dist folder/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ php: "", profile: "landing" });
+    window.location.hash = "";
+  });
+
   it("puts a site on a second storage pool", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({

@@ -13,6 +13,7 @@ import { Firewall } from "./Firewall";
 import { Home } from "./Home";
 import { Invite } from "./Invite";
 import { Presets } from "./Limits";
+import { Profiles } from "./Profiles";
 import { Login } from "./Login";
 import { Mail } from "./Mail";
 import { Migrate } from "./Migrate";
@@ -158,6 +159,7 @@ export function App() {
         {show("node") && <NodePage />}
         {show("python") && <PythonPage />}
         {show("limits") && <Presets query={route.query} onQuery={replaceQuery} />}
+        {show("profiles") && <Profiles query={route.query} onQuery={replaceQuery} />}
         {show("health") && <Doctor query={route.query} onQuery={replaceQuery} />}
         {show("services") && <Services />}
         {show("system") && <System />}

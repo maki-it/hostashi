@@ -26,6 +26,7 @@ export const pages = [
   "backups",
   "firewall",
   "limits",
+  "profiles",
   "users",
   "mail",
   "import",

@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Signpost,
   SquaresFour,
+  Stack,
   UsersThree,
 } from "@phosphor-icons/react";
 import type { Page } from "./routes";
@@ -43,6 +44,7 @@ export const navGroups: readonly NavGroup[] = [
       { page: "parked", label: "Parked domains", icon: Signpost, roles: staff },
       { page: "pages", label: "Maintenance pages", icon: Browser, roles: staff },
       { page: "limits", label: "Limit presets", icon: Gauge, roles: staff },
+      { page: "profiles", label: "App profiles", icon: Stack, roles: admin },
     ],
   },
   {
