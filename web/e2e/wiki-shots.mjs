@@ -158,6 +158,12 @@ const shots = [
   { name: "users", hash: "#/users", ready: "table" },
   { name: "databases", hash: "#/databases", ready: "table" },
   { name: "backups", hash: "#/backups", ready: "text=Snapshots" },
+  {
+    name: "backups-target",
+    hash: "#/backups",
+    ready: "text=Target and schedule",
+    act: async (page) => page.getByRole("heading", { name: "Target and schedule" }).evaluate((h) => h.scrollIntoView({ block: "start" })),
+  },
   { name: "firewall", hash: "#/firewall", ready: "text=Allowlists" },
   {
     name: "firewall-api-tokens",
