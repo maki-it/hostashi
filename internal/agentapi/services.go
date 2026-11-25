@@ -34,6 +34,9 @@ type Service struct {
 	// Unit is the systemd unit for a system service; empty for per-site
 	// services, whose unit the agent builds from the site's state.
 	Unit string `json:"unit,omitempty"`
+	// Optional services come with a feature the admin switches on (the
+	// virus scan, ADR-0064); the panel lists them only while installed.
+	Optional bool `json:"optional,omitempty"`
 }
 
 // Allows reports whether the catalog row permits the action.
@@ -42,7 +45,8 @@ func (s Service) Allows(action string) bool { return slices.Contains(s.Actions, 
 // Services is the catalog, in the order the panel shows it. No stop for
 // nginx (the panel sits behind it, ADR-0042), SSH and the firewall; the
 // panel and the agent are status only. Per-site PHP and Valkey are turned
-// off through their own switches, which also change the stored state.
+// off through their own switches, which also change the stored state; so
+// are the virus scan's units (ADR-0064), which have no stop either.
 var Services = []Service{
 	{ID: "nginx", Unit: "nginx.service", Actions: []string{ServiceStart, ServiceRestart, ServiceReload}},
 	{ID: "mariadb", Unit: "mariadb.service", Actions: []string{ServiceStart, ServiceStop, ServiceRestart}, Confirm: []string{ServiceStop}},
@@ -50,6 +54,9 @@ var Services = []Service{
 	{ID: "fail2ban", Unit: "fail2ban.service", Actions: []string{ServiceStart, ServiceStop, ServiceRestart, ServiceReload}},
 	{ID: "firewall", Unit: "hostashi-firewall.service", Actions: []string{ServiceReload}},
 	{ID: "adminer", Unit: "hostashi-adminer.service", Actions: []string{ServiceStart, ServiceStop, ServiceRestart}},
+	{ID: "freshclam", Unit: "clamav-freshclam.service", Actions: []string{ServiceStart, ServiceRestart}, Optional: true},
+	{ID: "clamd", Unit: "clamav-daemon.service", Actions: []string{ServiceStart, ServiceRestart}, Optional: true},
+	{ID: "clamonacc", Unit: "clamav-clamonacc.service", Actions: []string{ServiceStart, ServiceRestart}, Optional: true},
 	{ID: "panel", Unit: "hostashi.service", Actions: []string{}},
 	{ID: "agent", Unit: "hostashi-agent.service", Actions: []string{}},
 	{ID: "php", PerSite: true, Actions: []string{ServiceStart, ServiceRestart, ServiceReload}},

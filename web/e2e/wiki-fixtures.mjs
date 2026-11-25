@@ -331,8 +331,37 @@ const routes = [
   })],
   ["GET", /^\/settings\/panel-real-ip$/, () => ({ realIp: {}, headers: ["X-Forwarded-For", "X-Real-IP", "CF-Connecting-IP"], cloudflare: [], cloudflareDate: "2026-11-16", maxRanges: 64 })],
   ["GET", /^\/health$/, () => ({ status: "ok", version: "0.6.0" })],
-  ["GET", /^\/services$/, () => ({ services: [] })],
   ["GET", /^\/sites\/[^/]+\/services$/, () => ({ services: [] })],
+  [
+    "GET",
+    /^\/services\/events/,
+    () => ({
+      events: [
+        { at: day(1), service: "clamonacc", kind: "action", detail: "restart", user: "kim" },
+        { at: day(4), service: "mariadb", kind: "crash-restart", restarts: 1 },
+      ],
+    }),
+  ],
+  [
+    "GET",
+    /^\/services$/,
+    () => ({
+      services: [
+        { id: "nginx", unit: "nginx.service", installed: true, active: "active", sub: "running", memoryBytes: 50331648, memoryKnown: true, activeSince: day(6), startedAt: day(6), actions: ["start", "restart", "reload"], restarts24h: 0 },
+        { id: "mariadb", unit: "mariadb.service", installed: true, active: "active", sub: "running", memoryBytes: 432013312, memoryKnown: true, activeSince: day(6), startedAt: day(6), actions: ["start", "stop", "restart"], confirm: ["stop"], restarts24h: 0 },
+        { id: "ssh", unit: "ssh.service", installed: true, active: "active", sub: "running", memoryBytes: 9437184, memoryKnown: true, activeSince: day(6), startedAt: day(6), actions: ["reload"], restarts24h: 0 },
+        { id: "fail2ban", unit: "fail2ban.service", installed: true, active: "active", sub: "running", memoryBytes: 32505856, memoryKnown: true, activeSince: day(6), startedAt: day(6), actions: ["start", "stop", "restart", "reload"], restarts24h: 0 },
+        { id: "firewall", unit: "hostashi-firewall.service", installed: true, active: "active", sub: "exited", memoryBytes: 0, memoryKnown: false, activeSince: day(6), startedAt: day(6), actions: ["reload"], restarts24h: 0 },
+        { id: "adminer", unit: "hostashi-adminer.service", installed: true, active: "active", sub: "running", memoryBytes: 23068672, memoryKnown: true, activeSince: day(6), startedAt: day(6), actions: ["start", "stop", "restart"], restarts24h: 0 },
+        { id: "freshclam", unit: "clamav-freshclam.service", installed: true, active: "active", sub: "running", memoryBytes: 14680064, memoryKnown: true, activeSince: day(6), startedAt: day(6), actions: ["start", "restart"], restarts24h: 0 },
+        { id: "clamd", unit: "clamav-daemon.service", installed: true, active: "active", sub: "running", memoryBytes: 1237319680, memoryKnown: true, activeSince: day(6), startedAt: day(6), actions: ["start", "restart"], restarts24h: 0 },
+        { id: "clamonacc", unit: "clamav-clamonacc.service", installed: true, active: "active", sub: "running", memoryBytes: 12582912, memoryKnown: true, activeSince: day(6), startedAt: day(6), actions: ["start", "restart"], restarts24h: 0 },
+        { id: "panel", unit: "hostashi.service", installed: true, active: "active", sub: "running", memoryBytes: 39845888, memoryKnown: true, activeSince: day(6), startedAt: day(6), actions: [], restarts24h: 0 },
+        { id: "agent", unit: "hostashi-agent.service", installed: true, active: "active", sub: "running", memoryBytes: 28311552, memoryKnown: true, activeSince: day(6), startedAt: day(6), actions: [], restarts24h: 0 },
+        { id: "php", site: "blog", unit: "hostashi-php-8.4@blog.service", installed: true, active: "active", sub: "running", memoryBytes: 67108864, memoryKnown: true, activeSince: day(6), startedAt: day(6), actions: ["start", "restart", "reload"], restarts24h: 0 },
+      ],
+    }),
+  ],
   ["GET", /^\/doctor$/, () => ({
     status: "warn",
     checkedAt: day(0),

@@ -30,17 +30,20 @@ const (
 
 // serviceNames are the names emails use; an unknown ID is used as it is.
 var serviceNames = map[string]string{
-	"nginx":    "nginx (web server)",
-	"mariadb":  "MariaDB (databases)",
-	"ssh":      "SSH",
-	"fail2ban": "fail2ban",
-	"firewall": "the firewall",
-	"adminer":  "Adminer (database tool)",
-	"agent":    "the Hostashi agent",
-	"php":      "PHP",
-	"valkey":   "the object cache (Valkey)",
-	"node":     "the Node.js app",
-	"app":      "the app",
+	"nginx":     "nginx (web server)",
+	"mariadb":   "MariaDB (databases)",
+	"ssh":       "SSH",
+	"fail2ban":  "fail2ban",
+	"firewall":  "the firewall",
+	"adminer":   "Adminer (database tool)",
+	"freshclam": "the virus scan's signature updates (freshclam)",
+	"clamd":     "the virus scan's scanner (clamd)",
+	"clamonacc": "the real-time virus scan (clamonacc)",
+	"agent":     "the Hostashi agent",
+	"php":       "PHP",
+	"valkey":    "the object cache (Valkey)",
+	"node":      "the Node.js app",
+	"app":       "the app",
 }
 
 // outage is one unit that got a "down" or "keeps crashing" email.

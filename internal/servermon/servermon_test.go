@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -393,5 +394,44 @@ func TestAlerts(t *testing.T) {
 
 	if len(al.down) != 1 {
 		t.Fatalf("canceled poll counted %v", al.down)
+	}
+}
+
+// The virus scan's units are listed only while installed (ADR-0064).
+func TestServicesOptional(t *testing.T) {
+	st := openStore(t)
+	now := time.Unix(2_000_000, 0).UTC()
+	ag := &fakeAgent{states: []agentapi.ServiceState{
+		{ID: "adminer", Unit: "hostashi-adminer.service"},
+		{ID: "freshclam", Unit: "clamav-freshclam.service", Installed: true, Active: "active", StartedAt: now},
+		{ID: "clamd", Unit: "clamav-daemon.service"},
+		{ID: "clamonacc", Unit: "clamav-clamonacc.service"},
+	}}
+	m := &Monitor{Agent: ag, Store: st, Now: func() time.Time { return now }}
+
+	rows, err := m.Services(t.Context(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var ids []string
+	for _, r := range rows {
+		ids = append(ids, r.ID)
+	}
+
+	if !slices.Equal(ids, []string{"adminer", "freshclam"}) {
+		t.Fatalf("ids %v", ids)
+	}
+
+	if !slices.Equal(rows[1].Actions, []string{agentapi.ServiceStart, agentapi.ServiceRestart}) {
+		t.Fatalf("freshclam actions %v", rows[1].Actions)
+	}
+
+	// Switching the real-time mode on brings clamd and clamonacc.
+	ag.states[2].Installed, ag.states[3].Installed = true, true
+
+	rows, err = m.Services(t.Context(), "")
+	if err != nil || len(rows) != 4 {
+		t.Fatalf("%+v %v", rows, err)
 	}
 }
