@@ -29,6 +29,17 @@ const shots = [
   { name: "sites", hash: "#/sites", ready: "table" },
   { name: "services", hash: "#/services", ready: "text=Real-time virus scan (clamonacc)", full: true },
   { name: "site-new", hash: "#/sites?new=1", ready: "form" },
+  {
+    name: "site-new-profile",
+    hash: "#/sites?new=1",
+    ready: "text=Application",
+    full: true,
+    act: async (page) => {
+      await page.getByLabel(/^Name/).fill("shop");
+      await page.getByLabel(/^Domains/).fill("shop.example.com");
+      await page.getByLabel(/^Application/).selectOption("laravel");
+    },
+  },
   { name: "site-rename", hash: "#/sites/shop", ready: "text=Save display name", full: true },
   { name: "site-domains", hash: "#/sites/blog/domains", ready: "text=Domains" },
   { name: "site-hardening", hash: "#/sites/blog/hardening", ready: "text=Save profile and rules", full: true },

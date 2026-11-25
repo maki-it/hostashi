@@ -193,6 +193,8 @@ export type NewSite = {
   domains: string[];
   tls: boolean;
   hsts: boolean;
+  /** Application profile of a PHP site (ADR-0069); omitted: generic PHP. */
+  profile?: string;
   type?: "redirect" | "proxy" | "node" | "app" | "python";
   redirect?: SiteRedirect;
   proxy?: SiteProxy;
