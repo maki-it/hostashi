@@ -364,7 +364,7 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
                 </Field>
                 <IconButton
                   label={"Remove port " + (i + 1)}
-                  icon={<Trash size={16} />}
+                  text="Remove" icon={<Trash size={16} />}
                   danger
                   onClick={() => setRules(rules.filter((_, j) => j !== i))}
                 />

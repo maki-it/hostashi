@@ -305,7 +305,7 @@ function PasskeySection() {
                   )}
                 </span>
               </span>
-              <IconButton label={`Remove passkey ${p.name}`} icon={<Trash size={16} aria-hidden="true" />} danger disabled={busy} onClick={() => void remove(p)} />
+              <IconButton label={`Remove passkey ${p.name}`} text="Remove" icon={<Trash size={16} aria-hidden="true" />} danger disabled={busy} onClick={() => void remove(p)} />
             </li>
           ))}
         </ul>

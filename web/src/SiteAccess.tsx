@@ -272,7 +272,7 @@ function UsersCard({
       srHeader: true,
       cell: (u) => (
         <RowActions>
-          <IconButton label={`New password for ${u.name}`} icon={<Key size={16} aria-hidden="true" />} tipBelow={u === view.users[0]} disabled={busy} onClick={() => void renew(u.name)} />
+          <IconButton label={`New password for ${u.name}`} text="New password" icon={<Key size={16} aria-hidden="true" />} tipBelow={u === view.users[0]} disabled={busy} onClick={() => void renew(u.name)} />
           {confirm === u.name ? (
             <Button variant="danger" disabled={busy} onClick={() => void remove(u.name)}>
               Remove {u.name}?
@@ -280,7 +280,7 @@ function UsersCard({
           ) : (
             <IconButton
               label={last ? "The last user stays while the password is on" : `Remove ${u.name}`}
-              icon={<Trash size={16} aria-hidden="true" />}
+              text="Remove" icon={<Trash size={16} aria-hidden="true" />}
               danger
               tipBelow={u === view.users[0]}
               disabled={busy || last}

@@ -143,7 +143,7 @@ export function NodePage({ today = todayUTC(), poll = 3000 }: { today?: string; 
             </Button>
           )}
           {r.installed && r.sites === 0 && (
-            <IconButton label={"Remove Node.js " + r.major} icon={<Trash size={16} aria-hidden="true" />} danger disabled={running || busy} onClick={() => setConfirm(r.major)} />
+            <IconButton label={"Remove Node.js " + r.major} text="Remove" icon={<Trash size={16} aria-hidden="true" />} danger disabled={running || busy} onClick={() => setConfirm(r.major)} />
           )}
         </span>
       ),

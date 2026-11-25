@@ -144,7 +144,7 @@ export function PythonPage({ today = todayUTC(), poll = 3000 }: { today?: string
             </Button>
           )}
           {r.installed && r.sites === 0 && (
-            <IconButton label={"Remove Python " + r.line} icon={<Trash size={16} aria-hidden="true" />} danger disabled={running || busy} onClick={() => setConfirm(r.line)} />
+            <IconButton label={"Remove Python " + r.line} text="Remove" icon={<Trash size={16} aria-hidden="true" />} danger disabled={running || busy} onClick={() => setConfirm(r.line)} />
           )}
         </span>
       ),

@@ -250,11 +250,11 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
       srHeader: true,
       cell: (p) => (
         <RowActions>
-          <IconLink label={`Change ${p.domain}`} icon={<PencilSimple size={16} />} href={parkedHash({ edit: p.domain })} />
-          <IconLink label={`Make a site of ${p.domain}`} icon={<Globe size={16} />} href={newSiteHash(p.domain, p.tls.enabled)} />
+          <IconLink label={`Change ${p.domain}`} text="Change" icon={<PencilSimple size={16} />} href={parkedHash({ edit: p.domain })} />
+          <IconLink label={`Make a site of ${p.domain}`} text="Make site" icon={<Globe size={16} />} href={newSiteHash(p.domain, p.tls.enabled)} />
           <IconButton
             label={`Unpark ${p.domain}`}
-            icon={<Trash size={16} />}
+            text="Unpark" icon={<Trash size={16} />}
             danger
             disabled={busy}
             onClick={() => {

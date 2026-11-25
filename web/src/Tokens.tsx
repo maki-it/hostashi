@@ -98,7 +98,7 @@ export function TokensCard({ admin = false }: { admin?: boolean }) {
           <RowActions>
             <IconButton
               label={`Revoke ${t.name}`}
-              icon={<Prohibit size={16} />}
+              text="Revoke" icon={<Prohibit size={16} />}
               danger
               disabled={busy}
               onClick={() => {
