@@ -187,3 +187,27 @@ func TestMainCommand(t *testing.T) {
 		t.Fatal("no phar accepted")
 	}
 }
+
+// The download is the zip of the locale, never a tar.gz: WP-CLI's
+// PharData cuts long paths of a tarball (WordPress 7, php-ai-client).
+func TestDownloadIsZipPerLocale(t *testing.T) {
+	for _, l := range agentapi.WPLocales {
+		u := DownloadURL[l]
+		if !strings.HasPrefix(u, "https://") || !strings.HasSuffix(u, ".zip") {
+			t.Fatalf("%s: download %q", l, u)
+		}
+
+		j := job()
+		j.Locale = l
+
+		dl := Steps(j)[0].Args
+		if len(dl) != 4 || dl[0] != "core" || dl[1] != "download" || dl[2] != u || dl[3] != "--path="+j.Path {
+			t.Fatalf("%s: download step %q", l, dl)
+		}
+
+		vc := Steps(j)[1].Args
+		if vc[1] != "verify-checksums" || vc[len(vc)-1] != "--locale="+l {
+			t.Fatalf("%s: checksums step %q", l, vc)
+		}
+	}
+}

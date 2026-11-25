@@ -56,6 +56,18 @@ const (
 	CredAdminPass = "adminpass"
 )
 
+// DownloadURL is the zip of the latest WordPress per offered locale
+// (agentapi.WPLocales). WP-CLI unpacks a tar.gz with PharData, which cuts
+// paths longer than 100 characters (WordPress 7 has them below
+// wp-includes/php-ai-client), so verify-checksums fails; a zip goes
+// through ZipArchive (php-zip) intact. WP-CLI checks the zip against the
+// .md5 next to it where wordpress.org has one (not for de_DE), and
+// verify-checksums checks every file against wordpress.org afterwards.
+var DownloadURL = map[string]string{
+	"en_US": "https://wordpress.org/latest.zip",
+	"de_DE": "https://de.wordpress.org/latest-de_DE.zip",
+}
+
 // ErrRoot: the runner never runs as root.
 var ErrRoot = errors.New("wpcli: must not run as root")
 
@@ -89,7 +101,7 @@ type Step struct {
 func Steps(j Job) []Step {
 	path := "--path=" + j.Path
 	steps := []Step{
-		{Args: []string{"core", "download", path, "--locale=" + j.Locale}},
+		{Args: []string{"core", "download", DownloadURL[j.Locale], path}},
 		{Args: []string{"core", "verify-checksums", path, "--locale=" + j.Locale}},
 		{Args: []string{
 			"config", "create", path, "--dbname=" + j.DBName, "--dbuser=" + j.DBUser, "--dbhost=" + j.DBHost,
