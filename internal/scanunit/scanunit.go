@@ -464,7 +464,7 @@ func checkTargets(home string, paths []string) error {
 
 	for _, p := range paths {
 		fi, err := root.Lstat(p)
-		if err != nil || !(fi.Mode().IsRegular() || fi.IsDir()) {
+		if err != nil || !fi.Mode().IsRegular() && !fi.IsDir() {
 			return fmt.Errorf("%w: %s", ErrTarget, p)
 		}
 	}
