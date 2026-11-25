@@ -94,7 +94,7 @@ const backupItems = sites
   .concat(databases.map((d) => ({ kind: "db", site: d.site, database: d.name, snapshotId: "e5f6a7b8", dataAdded: 400_000, files: 1, bytes: d.sizeBytes })));
 
 const backups = {
-  settings: { version: 3, target: { user: "backup", host: "backup.example.com", port: 22, path: "hostashi/web1" }, retention: { daily: 7, weekly: 4, monthly: 6 }, windowStart: 2, windowEnd: 5, readParts: 12 },
+  settings: { version: 3, target: { user: "backup", host: "backup.example.com", port: 22, path: "hostashi/web1" }, retention: { hourly: 0, daily: 7, weekly: 4, monthly: 6, yearly: 0 }, intervalHours: 24, windowStart: 2, windowEnd: 5, readParts: 12 },
   publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleExampleExampleExampleExampleExample hostashi-backup",
   hostKey: "SHA256:Ex4mpleHostKeyFingerprintOnlyForTheWikiPictures0",
   ready: true,

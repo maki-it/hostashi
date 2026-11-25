@@ -13,8 +13,9 @@ Any SSH server that offers SFTP and accepts key login works: a Hetzner Storage B
 3. The panel shows a **public key**. Add it to `~/.ssh/authorized_keys` of that account (on a Storage Box also possible in Hetzner's console).
 4. Under **Host key**, fetch the server's SSH host key and compare the fingerprint with the server's own, for example `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on that server, or the fingerprints your provider publishes. Backups start only after you confirm it.
    ![The target form for an SFTP server](images/backups-target.png)
-5. Choose the time window: the daily backup starts at a random time between the two hours (server time).
-6. Choose how many daily, weekly and monthly snapshots to keep.
+5. Under **Run backups**, choose how often: once a day, or every 1, 2, 3, 4, 6, 8 or 12 hours. Once a day starts at a random time in the window between the two hours. Shorter intervals start at a fixed random minute after each of those hours, counted from midnight. All times are server time. A backup that is still running when the next one is due skips that one, so two backups never overlap.
+6. Choose how many hourly, daily, weekly, monthly and yearly snapshots to keep. For each hour, day, week, month and year, the newest snapshot is kept, up to these counts. Hourly only matters when backups run more than once a day; hourly and yearly are 0 by default.
+   ![Hourly backups that keep 48 hourly and 3 yearly snapshots](images/backups-hourly.png)
 
 **Back up now** runs a backup right away; it runs in the background.
 
