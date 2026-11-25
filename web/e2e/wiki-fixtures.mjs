@@ -458,7 +458,25 @@ const profileList = [
   { name: "shopware6", title: "Shopware 6", type: "php", minPhp: "8.2", webDir: "public", hardening: { configFiles: true }, builtin: true },
   { name: "typo3", title: "TYPO3", type: "php", minPhp: "8.2", webDir: "public", hardening: { configFiles: true, noPhpDirs: ["fileadmin", "typo3temp"] }, builtin: true },
   { name: "drupal", title: "Drupal", type: "php", minPhp: "8.3", webDir: "web", hardening: { configFiles: true, noPhpDirs: ["sites/default/files"] }, builtin: true },
+  // An own profile: a copy of WordPress with readme.html blocked as well.
+  {
+    name: "agency-wp",
+    title: "Agency WordPress",
+    type: "php",
+    minPhp: "8.2",
+    hardening: { ...wpRules, denyFiles: ["xmlrpc.php", "readme.html"] },
+    pageCache: "wordpress",
+    checklist: ["Install the agency's plugin set from the shared repository."],
+    builtin: false,
+  },
 ];
+const allProfiles = {
+  profiles: profileList,
+  configFileSuffixes: [".sql", ".sql.gz", ".sql.bz2", ".sql.xz", ".sql.zst", ".dump", ".bak", ".backup", ".old", ".orig", ".save", ".swp", ".swo", "~", ".log", ".env", ".ini"],
+  limitPerMinute: 12,
+  limitBurst: 10,
+  maxPaths: 20,
+};
 const profileChoices = {
   profiles: profileList.filter((p) => p.type === "php"),
   configFileSuffixes: [".sql", ".sql.gz", ".sql.bz2", ".sql.xz", ".sql.zst", ".dump", ".bak", ".backup", ".old", ".orig", ".save", ".swp", ".swo", "~", ".log", ".env", ".ini"],
@@ -526,7 +544,7 @@ const routes = [
     updatedAt: day(1),
   })],
   ["POST", /^\/sites\/[^/]+\/profile\/preview$/, () => ({ config: serverBlock })],
-  ["GET", /^\/profiles$/, () => profileChoices],
+  ["GET", /^\/profiles$/, () => allProfiles],
   ["GET", /^\/sites\/[^/]+\/wordpress$/, () => ({ state: "none" })],
   ["POST", /^\/sites\/[^/]+\/wordpress$/, () => ({ state: "running", database: "blog_wp", adminPassword: "Vq7mR2xK9pLt4Wz8Bn3sHc6J" })],
   ["GET", /^\/sites\/[^/]+\/access$/, () => ({

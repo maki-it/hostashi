@@ -5,6 +5,8 @@ package hosting
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -13,17 +15,49 @@ import (
 	"github.com/maki-it/hostashi/internal/web"
 )
 
+// profileSet are the profiles sites can follow by name: the built-in ones
+// and the own ones (ADR-0069).
+type profileSet map[string]profile.Profile
+
+// lookup returns a profile by name.
+func (ps profileSet) lookup(name string) (profile.Profile, bool) {
+	p, ok := ps[name]
+
+	return p, ok
+}
+
+// profileSet returns the built-in and own profiles.
+func (s *Service) profileSet(ctx context.Context) (profileSet, error) {
+	own, err := s.st.OwnProfiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ps := profileSet{}
+	for _, o := range own {
+		ps[o.Profile.Name] = profile.Normalize(o.Profile)
+	}
+
+	// A built-in name always means the built-in profile.
+	for _, p := range profile.Builtins() {
+		ps[p.Name] = p
+	}
+
+	return ps, nil
+}
+
 // siteProfile returns the profile a site follows: its stored one, or the
-// default of its type (ADR-0069). A stored name that no longer exists
-// falls back to the default as well, so a site never loses its rules.
-func siteProfile(all map[int64]store.SiteProfile, site store.Site) (profile.Profile, profile.Overrides, bool) {
+// default of its type (ADR-0069). A stored name that no longer exists, or
+// whose profile is now for another type, falls back to the default as
+// well, so a site never loses its rules.
+func siteProfile(ps profileSet, all map[int64]store.SiteProfile, site store.Site) (profile.Profile, profile.Overrides, bool) {
 	def, ok := profile.Default(site.Type)
 	if !ok {
 		return profile.Profile{}, profile.Overrides{}, false
 	}
 
 	if sp, ok := all[site.ID]; ok {
-		if p, ok := profile.Builtin(sp.Profile); ok && p.Type == site.Type {
+		if p, ok := ps.lookup(sp.Profile); ok && p.Type == site.Type {
 			return p, sp.Overrides, true
 		}
 	}
@@ -36,8 +70,8 @@ func siteProfile(all map[int64]store.SiteProfile, site store.Site) (profile.Prof
 // webHardening is the hardening the agent gets for a static or PHP site
 // (ADR-0017 Part 4); php is the PHP version it sends, empty while the
 // site is disabled.
-func webHardening(all map[int64]store.SiteProfile, site store.Site, php string) *agentapi.WebHardening {
-	p, o, ok := siteProfile(all, site)
+func webHardening(ps profileSet, all map[int64]store.SiteProfile, site store.Site, php string) *agentapi.WebHardening {
+	p, o, ok := siteProfile(ps, all, site)
 	if !ok {
 		return nil
 	}
@@ -58,20 +92,39 @@ type SiteProfileState struct {
 	// Changed: the site's hardening differs from its profile.
 	Changed   bool
 	UpdatedAt time.Time
+	// Choices are the profiles a site of this type can choose.
+	Choices []profile.Profile
 }
 
-// Profiles returns the profiles a site of that type can choose, Static for
-// a static site.
-func Profiles(siteType string) []profile.Profile {
+// choices returns the profiles a site of that type can choose, in the
+// order of sorted.
+func (ps profileSet) choices(siteType string) []profile.Profile {
 	out := []profile.Profile{}
 
-	for _, p := range profile.Builtins() {
+	for _, p := range ps.sorted() {
 		if p.Type == siteType {
 			out = append(out, p)
 		}
 	}
 
 	return out
+}
+
+// sorted returns the built-in profiles in their order, then the own ones
+// by name.
+func (ps profileSet) sorted() []profile.Profile {
+	out := profile.Builtins()
+	own := []profile.Profile{}
+
+	for _, p := range ps {
+		if !p.Builtin {
+			own = append(own, p)
+		}
+	}
+
+	slices.SortFunc(own, func(a, b profile.Profile) int { return strings.Compare(a.Name, b.Name) })
+
+	return append(out, own...)
 }
 
 // SiteProfile returns the profile of a static or PHP site.
@@ -86,13 +139,19 @@ func (s *Service) SiteProfile(ctx context.Context, name string) (SiteProfileStat
 		return SiteProfileState{}, err
 	}
 
-	p, o, ok := siteProfile(map[int64]store.SiteProfile{site.ID: sp}, site)
+	ps, err := s.profileSet(ctx)
+	if err != nil {
+		return SiteProfileState{}, err
+	}
+
+	p, o, ok := siteProfile(ps, map[int64]store.SiteProfile{site.ID: sp}, site)
 	if !ok {
 		return SiteProfileState{}, ErrSiteType
 	}
 
 	return SiteProfileState{
 		Profile: p, Hardening: profile.Effective(p, o, site.Type == store.SiteTypePHP), Changed: !o.IsZero(), UpdatedAt: sp.UpdatedAt,
+		Choices: ps.choices(site.Type),
 	}, nil
 }
 
@@ -118,7 +177,12 @@ func (s *Service) SetSiteProfile(ctx context.Context, actor int64, name, profile
 		return SiteProfileState{}, ErrSiteType
 	}
 
-	p, ok := profile.Builtin(profileName)
+	ps, err := s.profileSet(ctx)
+	if err != nil {
+		return SiteProfileState{}, err
+	}
+
+	p, ok := ps.lookup(profileName)
 	if !ok || p.Type != site.Type {
 		return SiteProfileState{}, fmt.Errorf("%w: unknown profile %q for a %s site", ErrInvalid, profileName, site.Type)
 	}
@@ -154,7 +218,7 @@ func (s *Service) SetSiteProfile(ctx context.Context, actor int64, name, profile
 		return SiteProfileState{}, err
 	}
 
-	oldP, oldO, _ := siteProfile(map[int64]store.SiteProfile{site.ID: old}, site)
+	oldP, oldO, _ := siteProfile(ps, map[int64]store.SiteProfile{site.ID: old}, site)
 	view := func(name string, h agentapi.WebHardening) map[string]string {
 		m := store.FieldsOf(h)
 		if m == nil {
@@ -169,7 +233,9 @@ func (s *Service) SetSiteProfile(ctx context.Context, actor int64, name, profile
 	s.auditChange(ctx, actor, "site.profile.set", name, nil,
 		view(oldP.Name, profile.Effective(oldP, oldO, php)), view(p.Name, profile.Effective(p, o, php)))
 
-	return SiteProfileState{Profile: p, Hardening: profile.Effective(p, o, php), Changed: !o.IsZero(), UpdatedAt: s.now()}, nil
+	return SiteProfileState{
+		Profile: p, Hardening: profile.Effective(p, o, php), Changed: !o.IsZero(), UpdatedAt: s.now(), Choices: ps.choices(site.Type),
+	}, nil
 }
 
 // createType is the type Create gives a site of this request, for the
@@ -187,12 +253,17 @@ func createType(req CreateRequest) string {
 
 // checkCreateProfile checks the profile of a new site: it must exist, fit
 // the site's type and its PHP version.
-func checkCreateProfile(req CreateRequest) error {
+func (s *Service) checkCreateProfile(ctx context.Context, req CreateRequest) error {
 	if req.Profile == "" {
 		return nil
 	}
 
-	p, ok := profile.Builtin(req.Profile)
+	ps, err := s.profileSet(ctx)
+	if err != nil {
+		return err
+	}
+
+	p, ok := ps.lookup(req.Profile)
 
 	typ := createType(req)
 	if !ok || p.Type != typ {
@@ -209,7 +280,16 @@ func checkCreateProfile(req CreateRequest) error {
 // storeCreateProfile stores the profile of a new site and its document
 // root folder, before the site's first web state.
 func (s *Service) storeCreateProfile(ctx context.Context, req CreateRequest, siteID int64) error {
-	p, ok := profile.Builtin(req.Profile)
+	if req.Profile == "" {
+		return nil
+	}
+
+	ps, err := s.profileSet(ctx)
+	if err != nil {
+		return err
+	}
+
+	p, ok := ps.lookup(req.Profile)
 	if !ok {
 		return nil
 	}
@@ -249,14 +329,14 @@ func (s *Service) SiteProfilePreview(ctx context.Context, name, profileName stri
 		return "", err
 	}
 
-	p, o, ok := siteProfile(in.profiles, site)
+	p, o, ok := siteProfile(in.profileDefs, in.profiles, site)
 	if !ok {
 		return "", ErrSiteType
 	}
 
 	if profileName != "" || want != nil {
 		if profileName != "" {
-			if p, ok = profile.Builtin(profileName); !ok || p.Type != site.Type {
+			if p, ok = in.profileDefs.lookup(profileName); !ok || p.Type != site.Type {
 				return "", fmt.Errorf("%w: unknown profile %q for a %s site", ErrInvalid, profileName, site.Type)
 			}
 		}

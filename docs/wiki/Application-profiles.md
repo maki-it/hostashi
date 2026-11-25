@@ -57,6 +57,71 @@ Paths are relative to the web root, one per line, at most 20 per list, for examp
 
 Hidden files and folders such as `.git`, `.env` or `.htaccess` are always blocked with 404, whatever the profile. `/.well-known` stays open, so Let's Encrypt and other checks keep working.
 
+## Own profiles
+
+Admins can make their own profiles, for example a WordPress profile that also blocks `readme.html`, or a static profile that serves `htdocs/dist`. An own profile has the same values as a built-in one and no nginx text.
+
+**For:** admins. Everyone who can create or change a site can choose an own profile.
+
+![The list of application profiles](images/profiles.png)
+
+### Copy a profile
+
+1. Go to **Hosting → App profiles**.
+2. Click **Copy** next to the profile to start from.
+3. Give the copy a **Name** (up to 40 lower-case letters, digits and dashes, starting with a letter; built-in names are taken) and a **Title**.
+4. Change the values: the site type, the lowest PHP version, the web root folder, the page cache preset, the hardening rules, suggested cron jobs and the checklist.
+5. Click **Add profile**.
+
+![Copying the WordPress profile](images/profile-copy.png)
+
+Own profiles appear after the built-in ones on **New site** and on the site's **Security › Hardening** tab. Static profiles are offered for static sites.
+
+### Change or delete an own profile
+
+**Change** saves new values. Sites that use the profile get its new hardening rules right away and keep their own changes. The web root folder only applies to sites created afterwards. The name cannot change, and the site type cannot change while sites use the profile.
+
+**Delete** works only while no site uses the profile; the panel names the sites that still do. Give them another profile on their Hardening tab first. Built-in profiles cannot be changed or deleted.
+
+Every change of an own profile is in the [audit log](Audit-log.md) as `profile.create`, `profile.import`, `profile.update` or `profile.delete`.
+
+### Export and import as YAML
+
+**Export** downloads a profile, built-in or own, as `hostashi-profile-<name>.yaml`:
+
+```yaml
+version: 1
+name: agency-wp
+title: Agency WordPress
+type: php
+minPhp: "8.2"
+hardening:
+  configFiles: true
+  noPhpDirs:
+    - wp-content/uploads
+  denyFiles:
+    - xmlrpc.php
+    - readme.html
+  limitFiles:
+    - wp-login.php
+pageCache: wordpress
+checklist:
+  - Install the agency's plugin set.
+```
+
+To import, click **Import YAML**, choose the file or paste it, and click **Import profile**. The panel refuses a file without `version: 1`, with fields it does not know (such as nginx text), with more than one document or larger than 64 KiB, and every value it would refuse in the form. The name must not be taken: edit it in the text field to import a profile a second time.
+
+![Importing a profile](images/profile-import.png)
+
+From the command line, the same works through `hostashi api`; a token needs the scope `settings:write` to change profiles:
+
+```sh
+hostashi api sites export-profile agency-wp > agency-wp.yaml
+jq -Rs '{yaml: .}' agency-wp.yaml | hostashi api sites import-profile -d -
+```
+
+Own profiles do not carry nginx snippets. For extra nginx rules, an admin adds a custom snippet on the site's **Operations › nginx** tab.
+
 ## Install WordPress
 
 Any active PHP site can get WordPress in one step. The panel creates a database and its user, then WP-CLI downloads and installs WordPress as the site's user. The PHP site's own PHP version runs it.

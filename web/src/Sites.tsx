@@ -357,14 +357,14 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   const [error, setError] = useState("");
   const [pools, setPools] = useState<Pool[]>([]);
   const [pool, setPool] = useState("default");
-  // Application profiles of PHP sites (ADR-0069); without the list only
-  // the generic one is offered.
+  // Application profiles of PHP and static sites (ADR-0069), built-in and
+  // own ones; without the list a site gets the default of its type.
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [profile, setProfile] = useState("php");
 
   useEffect(() => {
     listProfiles()
-      .then((c) => setProfiles(c.profiles.filter((p) => p.type === "php")))
+      .then((c) => setProfiles(c.profiles))
       .catch(() => setProfiles([]));
   }, []);
 
@@ -384,8 +384,30 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   // Default to the newest installed version that is not legacy.
   const newest = [...(php?.installed ?? [])].reverse().find((v) => !php?.legacy.includes(v)) ?? "";
   const phpValue = version ?? newest;
-  const chosenProfile = profiles.find((p) => p.name === profile);
+  const kindProfiles = profiles.filter((p) => p.type === kind);
+  const defaultProfile = kind === "static" ? "static" : "php";
+  const profileValue = kindProfiles.some((p) => p.name === profile) ? profile : defaultProfile;
+  const chosenProfile = kindProfiles.find((p) => p.name === profileValue);
   const tooOld = kind === "php" && !!chosenProfile?.minPhp && !!phpValue && compareVersions(phpValue, chosenProfile.minPhp) < 0;
+
+  const profileChoice = (
+    <Field
+      label="Application"
+      hint={
+        chosenProfile?.webDir
+          ? `Serves the ${chosenProfile.webDir} folder and brings the hardening rules for ${chosenProfile.title}; both can be changed later.`
+          : "Brings fitting hardening rules; they can be changed later under Security."
+      }
+    >
+      <select className="ui-select" value={profileValue} onChange={(e) => setProfile(e.target.value)}>
+        {kindProfiles.map((p) => (
+          <option key={p.name} value={p.name}>
+            {p.title}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -423,7 +445,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         domains: list,
         tls,
         hsts: tls && hsts,
-        ...(kind === "php" && profile !== "php" && { profile }),
+        ...((kind === "php" || kind === "static") && profileValue !== defaultProfile && { profile: profileValue }),
         ...(kind === "redirect" && { type: "redirect" as const, redirect }),
         ...(kind === "proxy" && { type: "proxy" as const, proxy: { ...proxy, insecure: proxy.target.startsWith("https://") && proxy.insecure } }),
         ...(kind === "node" && { type: "node" as const, node: nodeValue }),
@@ -494,27 +516,11 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
             <p className="ui-hint ui-flush">
               Only installed versions are listed. <a href="#/php">Install more PHP versions</a>
             </p>
-            {profiles.length > 1 && (
-              <Field
-                label="Application"
-                hint={
-                  chosenProfile?.webDir
-                    ? `Serves the ${chosenProfile.webDir} folder and brings the hardening rules for ${chosenProfile.title}; both can be changed later.`
-                    : "Brings fitting hardening rules; they can be changed later under Security."
-                }
-              >
-                <select className="ui-select" value={profile} onChange={(e) => setProfile(e.target.value)}>
-                  {profiles.map((p) => (
-                    <option key={p.name} value={p.name}>
-                      {p.title}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            )}
+            {kindProfiles.length > 1 && profileChoice}
             {tooOld && <Notice tone="warn" title={`${chosenProfile!.title} needs PHP ${chosenProfile!.minPhp} or newer.`} />}
           </>
         )}
+        {kind === "static" && kindProfiles.length > 1 && profileChoice}
         {kind === "static" && (
           <p className="ui-hint ui-flush">The web root folder, a fallback for single-page apps and asset caching can be set on the site's Web tab.</p>
         )}

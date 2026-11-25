@@ -63,6 +63,7 @@ var scopeCatalog = map[string]ScopeInfo{
 	"malware:read":            {Description: "Read the malware scan of sites: schedule, runs and flagged files (paths and signatures, never their content)"},
 	"malware:write":           {Description: "Start malware scans of sites and quarantine flagged files; (admins and managers) change the schedule, mark false positives and put quarantined files back"},
 	"malware.engine:write":    {Description: "Install or remove ClamAV for the malware scan (runs apt as root with a fixed package list)", HighRisk: true},
+	"settings:write":          {Description: "Create, change, import and delete the own application profiles that sites can follow"},
 	"logs:read":               {Description: "Read and follow the access, error and PHP logs of sites (they hold visitors' IP addresses)"},
 }
 
