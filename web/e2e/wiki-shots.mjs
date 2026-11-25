@@ -30,6 +30,18 @@ const shots = [
   { name: "site-new", hash: "#/sites?new=1", ready: "form" },
   { name: "site-domains", hash: "#/sites/blog/domains", ready: "text=Domains" },
   {
+    name: "site-domain-change",
+    hash: "#/sites/blog/domains",
+    ready: "text=Change primary domain",
+    full: true,
+    act: async (page) => {
+      await page.getByRole("button", { name: "Change primary domain" }).click();
+      await page.getByLabel(/New primary domain/).fill("example.com");
+      await page.getByRole("heading", { name: "Change primary domain" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  { name: "site-domain-pending", hash: "#/sites/news/domains", ready: "text=Domain change waiting for its certificate", full: true },
+  {
     name: "site-permissions",
     hash: "#/sites/blog/files",
     ready: "text=Reset permissions",

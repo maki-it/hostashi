@@ -63,12 +63,27 @@ export type Site = {
   disabledPage: string; // maintenance page shown while disabled (ADR-0047)
   maintenance: SiteMaintenance;
   domains: string[]; // the first one is the primary domain
+  // Names that answer with 301 to the primary domain and stay on the
+  // certificate (ADR-0068). Older answers lack it.
+  redirectDomains?: string[];
+  // A domain change that waits for its certificate, null for none
+  // (ADR-0068). Older answers lack it.
+  pendingDomains?: PendingDomains | null;
   // The redirect between example.com and www.example.com (ADR-0065).
   // Older answers lack it.
   www?: SiteWWW;
   tls: SiteTLS;
   createdAt: string;
   updatedAt: string;
+};
+
+/** A domain change that waits for a certificate for its names (ADR-0068). */
+export type PendingDomains = {
+  domains: string[];
+  redirectDomains: string[];
+  requestedAt: string;
+  error: string; // the last failed attempt, "" for none
+  failedAt: string | null;
 };
 
 export type SiteType = "static" | "php" | "node" | "app" | "python" | "proxy" | "redirect";
@@ -322,6 +337,17 @@ export const deleteAndPark = (name: string, p: ParkSite) => request<void>("POST"
 export const newSiteHash = (domain: string, tls: boolean) =>
   "#/sites?" + new URLSearchParams({ new: "1", domain, tls: tls ? "1" : "0" }).toString();
 export const setDomains = (name: string, domains: string[]) => request<Site>("PUT", sitePath(name) + "/domains", { domains });
+
+/**
+ * Sets the served and redirect domains (ADR-0068). On a site live on HTTPS
+ * the change waits for its certificate unless waitForCertificate is false;
+ * the answer then has pendingDomains.
+ */
+export const changeDomains = (name: string, domains: string[], redirectDomains: string[], waitForCertificate = true) =>
+  request<Site>("PUT", sitePath(name) + "/domains", { domains, redirectDomains, waitForCertificate });
+
+/** Cancels the domain change that waits for its certificate. */
+export const cancelDomainChange = (name: string) => request<Site>("DELETE", sitePath(name) + "/domains/pending");
 export const setPHP = (name: string, php: string) => request<Site>("PUT", sitePath(name) + "/php", { php });
 
 /** A new type with its settings (ADR-0054 addendum 3); static takes none. */

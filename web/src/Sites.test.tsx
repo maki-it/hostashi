@@ -702,7 +702,7 @@ describe("SitePage", () => {
     });
     render(<PageHarness tab="domains" />);
     const domains = within(await screen.findByRole("region", { name: "Domains" }));
-    await user.type(domains.getByLabelText(/^Domains of blog/), "\nWWW.blog.example.com");
+    await user.type(domains.getByLabelText(/^Domains of blog/), "\nShop.example.com");
     await user.click(domains.getByRole("button", { name: "Save domains" }));
     expect(await domains.findByRole("status")).toHaveTextContent("served over HTTP until a certificate for the new domains");
 
@@ -712,7 +712,7 @@ describe("SitePage", () => {
     await user.click(https.getByLabelText(/^HTTPS with/));
     expect(await https.findByText("HTTPS is off. The site is served over HTTP.")).toBeInTheDocument();
     expect(calls.filter((c) => c.method === "PUT").map((c) => [c.path, c.body])).toEqual([
-      ["/api/v1/sites/blog/domains", { domains: ["blog.example.com", "www.blog.example.com"] }],
+      ["/api/v1/sites/blog/domains", { domains: ["blog.example.com", "shop.example.com"], redirectDomains: [], waitForCertificate: true }],
       ["/api/v1/sites/blog/hsts", { enabled: false }],
       ["/api/v1/sites/blog/tls", { enabled: false }],
     ]);

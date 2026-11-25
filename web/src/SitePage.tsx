@@ -17,13 +17,10 @@ import { PHPOptions, useSites } from "./Sites";
 import {
   deleteAndPark,
   deleteSite,
-  domainsProblem,
   hasAccount,
   httpsLabel,
   httpsTone,
-  parseDomains,
   setDisabled,
-  setDomains,
   setHSTS,
   setPHP,
   setPHPPrograms,
@@ -51,6 +48,7 @@ import { PermissionsResetCard } from "./PermissionsReset";
 import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
 import { SiteUsageCard } from "./Usage";
 import { WWWCard } from "./WWW";
+import { DomainsCard, PendingDomainsNotice } from "./Domains";
 
 // The tabs that exist today (ADR-0037). Databases and backups per site
 // come with their features; their addresses show the overview.
@@ -537,26 +535,7 @@ function DeleteSite({ site, canPark }: { site: Site; canPark: boolean }) {
 }
 
 function DomainsTab({ site, onChange, admin }: TabProps & { admin: boolean }) {
-  const [domains, setDomainsText] = useState(site.domains.join("\n"));
-  const d = useAction(onChange);
   const h = useAction(onChange);
-
-  function saveDomains(e: FormEvent) {
-    e.preventDefault();
-    const list = parseDomains(domains);
-    const problem = domainsProblem(list);
-    if (problem) {
-      d.setError(problem);
-      d.setDone("");
-      return;
-    }
-    void d.act(async () => {
-      await setDomains(site.name, list);
-      return site.tls.enabled
-        ? "Domains saved. The site is served over HTTP until a certificate for the new domains is there."
-        : "Domains saved.";
-    });
-  }
 
   const toggleTLS = (on: boolean) =>
     h.act(async () => {
@@ -573,20 +552,9 @@ function DomainsTab({ site, onChange, admin }: TabProps & { admin: boolean }) {
 
   return (
     <>
-      <Card title="Domains">
-        <form className="ui-stack" onSubmit={saveDomains} noValidate>
-          <Field label={`Domains of ${site.name}`} hint="One per line. The first one is the primary domain.">
-            <textarea className="ui-input ui-textarea" value={domains} onChange={(e) => setDomainsText(e.target.value)} rows={4} autoComplete="off" spellCheck={false} />
-          </Field>
-          {d.result}
-          <div className="ui-row">
-            <Button type="submit" variant="primary" disabled={d.busy}>
-              Save domains
-            </Button>
-          </div>
-        </form>
-      </Card>
-      {siteType(site) !== "redirect" && <WWWCard site={site} onChange={onChange} onDomains={(l) => setDomainsText(l.join("\n"))} />}
+      <PendingDomainsNotice site={site} onChange={onChange} />
+      <DomainsCard site={site} onChange={onChange} />
+      {siteType(site) !== "redirect" && <WWWCard site={site} onChange={onChange} onDomains={() => undefined} />}
       <Card title="HTTPS">
         <div className="ui-stack">
           <label className="ui-check">
