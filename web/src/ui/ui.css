@@ -1560,23 +1560,7 @@ a.ui-btn {
   scroll-margin-bottom: var(--space-6);
 }
 
-/* Sites list: whether a site is switched on, before its name */
-.ui-state-dot {
-  flex: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-.ui-dot-ok {
-  background: var(--ok);
-}
-.ui-dot-warn {
-  background: var(--warn);
-}
-.ui-dot-off {
-  background: transparent;
-  box-shadow: inset 0 0 0 2px var(--muted);
-}
+/* Sites list: an off site has a muted name */
 .ui-cell-off a,
 .ui-cell-off > span {
   color: var(--muted);
@@ -1596,9 +1580,6 @@ a.ui-btn {
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
-}
-.ui-site-name > .ui-state-dot {
-  margin-top: 7px;
 }
 /* Tables on a phone: each row is a card. The first column is the title,
    the others get their header as a label, row actions sit at the end. */
@@ -1666,4 +1647,12 @@ a.ui-btn {
 }
 .ui-row-actions:has(.ui-btn) {
   gap: var(--space-2);
+}
+/* Sites list: On/Off before the name, one width so the names line up */
+.ui-site-state {
+  flex: none;
+  min-width: 64px;
+}
+.ui-site-name > .ui-site-state {
+  margin-top: 1px;
 }
