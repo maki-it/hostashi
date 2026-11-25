@@ -163,8 +163,10 @@ describe("FileManager", () => {
     expect(await screen.findByText("Mode set to 640.")).toBeInTheDocument();
     expect(calls.find((c) => c.path.endsWith("/chmod"))?.body).toEqual({ paths: ["htdocs/index.php", "htdocs/wp-content"], mode: "0640" });
 
-    // The selection is cleared after an action; pick again to delete.
-    await userEvent.click(screen.getByLabelText("Select all"));
+    // The selection is cleared after an action; pick again to delete, with
+    // the box in the table head.
+    const head = screen.getAllByRole("columnheader")[0]!;
+    await userEvent.click(within(head).getByRole("checkbox", { name: "Select all" }));
     await userEvent.click(within(screen.getByRole("region", { name: "Selection" })).getByRole("button", { name: "Delete" }));
     dialog = within(screen.getByRole("alertdialog", { name: "Delete 4 entries?" }));
     expect(dialog.getByText(/There is no recycle bin/)).toBeInTheDocument();
