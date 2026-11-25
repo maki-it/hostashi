@@ -34,7 +34,7 @@ func (s *Service) certCovers(site store.Site, margin time.Duration) bool {
 		return false
 	}
 
-	return len(agentapi.MissingNames(site.TLSDomains, site.Domains)) == 0
+	return len(agentapi.MissingNames(site.TLSDomains, site.AllDomains())) == 0
 }
 
 // TLSActive reports whether site is served over HTTPS now: the last web
@@ -309,6 +309,7 @@ func (s *Service) RenewDue(ctx context.Context) {
 
 	s.renewPanel(ctx)
 	s.renewParked(ctx)
+	s.finishDomainChanges(ctx)
 
 	sites, err := s.st.Sites(ctx)
 	if err != nil {
@@ -342,7 +343,7 @@ func (s *Service) issue(ctx context.Context, site store.Site) error {
 	ctx, cancel := context.WithTimeout(ctx, issueTimeout)
 	defer cancel()
 
-	info, err := s.obtain(ctx, site.Name, site.Domains)
+	info, err := s.obtain(ctx, site.Name, site.AllDomains())
 	if err != nil {
 		return err
 	}

@@ -66,7 +66,7 @@ func (s *Service) UploadCert(ctx context.Context, actor int64, name string, in C
 	}
 
 	info, err := s.ag.TLSUpload(ctx, agentapi.TLSUploadRequest{
-		User: name, Chain: in.Chain, Key: in.Key, Domains: site.Domains, AllowUntrusted: in.AllowUntrusted,
+		User: name, Chain: in.Chain, Key: in.Key, Domains: site.AllDomains(), AllowUntrusted: in.AllowUntrusted,
 	})
 	if err != nil {
 		return store.Site{}, err
@@ -105,12 +105,12 @@ func (s *Service) CertCSR(ctx context.Context, actor int64, name string) (string
 		return "", err
 	}
 
-	csr, err := s.ag.TLSCustomCSR(ctx, name, site.Domains)
+	csr, err := s.ag.TLSCustomCSR(ctx, name, site.AllDomains())
 	if err != nil {
 		return "", err
 	}
 
-	s.audit(ctx, actor, "site.cert.csr", name, map[string]string{"domains": strings.Join(site.Domains, " ")})
+	s.audit(ctx, actor, "site.cert.csr", name, map[string]string{"domains": strings.Join(site.AllDomains(), " ")})
 
 	return csr, nil
 }

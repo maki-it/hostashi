@@ -4612,6 +4612,51 @@
         },
         "type": "object"
       },
+      "PendingDomains": {
+        "additionalProperties": false,
+        "properties": {
+          "domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "error": {
+            "type": "string"
+          },
+          "failedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "redirectDomains": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "requestedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domains",
+          "error",
+          "failedAt",
+          "redirectDomains",
+          "requestedAt"
+        ],
+        "type": "object"
+      },
       "PermissionsReset": {
         "additionalProperties": false,
         "properties": {
@@ -5007,6 +5052,15 @@
           "reasons": {
             "items": {
               "$ref": "#/components/schemas/Reason"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "redirectDomains": {
+            "items": {
+              "type": "string"
             },
             "type": [
               "array",
@@ -6270,6 +6324,16 @@
               }
             ]
           },
+          "pendingDomains": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingDomains"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "php": {
             "type": "string"
           },
@@ -6309,6 +6373,15 @@
               }
             ]
           },
+          "redirectDomains": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "state": {
             "type": "string"
           },
@@ -6339,12 +6412,14 @@
           "maintenance",
           "name",
           "node",
+          "pendingDomains",
           "php",
           "phpPrograms",
           "pool",
           "proxy",
           "python",
           "redirect",
+          "redirectDomains",
           "state",
           "tls",
           "type",
@@ -6487,6 +6562,21 @@
             },
             "type": [
               "array",
+              "null"
+            ]
+          },
+          "redirectDomains": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "waitForCertificate": {
+            "type": [
+              "boolean",
               "null"
             ]
           }
@@ -16937,6 +17027,16 @@
             },
             "description": "OK"
           },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
           "default": {
             "content": {
               "application/json": {
@@ -16958,7 +17058,60 @@
             ]
           }
         ],
-        "summary": "Set the site's domains",
+        "summary": "Set the site's served and redirect domains; 202 when the change waits for its certificate (ADR-0068)",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.domains:write"
+      }
+    },
+    "/api/v1/sites/{name}/domains/pending": {
+      "delete": {
+        "operationId": "cancelSiteDomainChange",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Cancel the site's domain change that waits for its certificate (ADR-0068)",
         "tags": [
           "sites"
         ],

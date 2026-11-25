@@ -98,3 +98,25 @@ func TestSiteCreatorSetsWWW(t *testing.T) {
 		t.Fatalf("lone: %q %v", s.WWWRedirect, err)
 	}
 }
+
+// The CloudPanel import turns the other redirect hosts into redirect
+// domains (ADR-0068).
+func TestSiteCreatorSetsRedirectDomains(t *testing.T) {
+	e := newAPIWithAgent(t, &stubAgent{})
+	ctx := t.Context()
+	create := siteCreator(e.sites, nil)
+
+	ns := cpmigrate.NewSite{
+		Name: "shop", Domains: []string{"shop.example.com", "www.shop.example.com", "shop.example.net"},
+		WWWRedirect: "to-non-www", RedirectDomains: []string{"shop.example.net"},
+	}
+	if _, err := create(ctx, 1, ns); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := e.sites.Get(ctx, "shop")
+	if err != nil || s.WWWRedirect != "to-non-www" || strings.Join(s.Domains, " ") != "shop.example.com www.shop.example.com" ||
+		strings.Join(s.RedirectDomains, " ") != "shop.example.net" {
+		t.Fatalf("site %+v %v", s, err)
+	}
+}

@@ -642,20 +642,25 @@ func TestTLSLifecycle(t *testing.T) {
 		t.Fatalf("renewed a fresh certificate: %d", iss.calls)
 	}
 
-	// A new domain: HTTP only until the new certificate is there.
+	// A new domain waits for its certificate (ADR-0068): the site stays
+	// on HTTPS with the old domains until the new one is there.
 	if _, err := s.SetDomains(ctx, 1, "blog", []string{"blog.example.com", "www.blog.example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
-	if got := ag.live(); got != "[blog=[blog.example.com www.blog.example.com]]" {
+	if got := ag.live(); got != "[blog=[blog.example.com]+tls]" {
 		t.Fatalf("after domain change: %s", got)
 	}
 
-	if got, _ := s.Get(ctx, "blog"); s.TLSActive(got) {
-		t.Fatalf("active while served over HTTP only: %+v", got)
+	if c, err := s.DomainChange(ctx, "blog"); err != nil || c == nil || fmt.Sprint(c.Domains) != "[blog.example.com www.blog.example.com]" {
+		t.Fatalf("pending: %+v %v", c, err)
 	}
 
 	s.RenewDue(ctx)
+
+	if c, err := s.DomainChange(ctx, "blog"); err != nil || c != nil {
+		t.Fatalf("pending after the switch: %+v %v", c, err)
+	}
 
 	if got := ag.live(); got != "[blog=[blog.example.com www.blog.example.com]+tls]" || iss.calls != 2 {
 		t.Fatalf("after reissue: %s, calls %d", got, iss.calls)

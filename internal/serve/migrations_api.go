@@ -11,6 +11,7 @@ import (
 	"mime"
 	"net/http"
 	"net/netip"
+	"slices"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -416,9 +417,25 @@ func migrationTarget(sites *hosting.Service) cpmigrate.TargetFunc {
 	}
 }
 
-// setWWW takes over the old site's www redirect (ADR-0065). The site
-// stands without it; the admin can set it on the site's page.
+// setWWW takes over the old site's redirect hosts as redirect domains
+// (ADR-0068) and its www redirect (ADR-0065). The site stands without
+// them; the admin can set them on the site's page.
 func setWWW(ctx context.Context, sites *hosting.Service, log *slog.Logger, actor int64, s cpmigrate.NewSite) {
+	if len(s.RedirectDomains) > 0 {
+		served := make([]string, 0, len(s.Domains))
+
+		for _, d := range s.Domains {
+			if !slices.Contains(s.RedirectDomains, d) {
+				served = append(served, d)
+			}
+		}
+
+		// The new site has no certificate yet, so this goes live at once.
+		if _, _, err := sites.ChangeDomains(ctx, actor, s.Name, hosting.DomainsRequest{Domains: served, RedirectDomains: s.RedirectDomains}); err != nil {
+			log.WarnContext(ctx, "imported redirect domains not set", "site", s.Name, "domains", s.RedirectDomains, "err", err)
+		}
+	}
+
 	if s.WWWRedirect == "" {
 		return
 	}

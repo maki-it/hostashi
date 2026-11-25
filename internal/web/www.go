@@ -13,8 +13,11 @@ import "github.com/maki-it/hostashi/internal/agentapi"
 const wwwSrc = `{{define "www"}}
 {{- $s := .S}}
 {{- range .WWW}}
-
+{{if .Domain}}
+# Redirect domain (ADR-0068): {{.From}} goes to {{.To}}.
+{{- else}}
 # www redirect (ADR-0065): {{.From}} goes to {{.To}}.
+{{- end}}
 server {
     {{- range $.N.Listen}}
     listen {{.}};
@@ -77,7 +80,7 @@ server {
 // (the names that redirect) and "WWWHdrs" (the headers of their blocks,
 // without the page cache's X-Cache).
 func (n *Nginx) wwwData(data map[string]any, s Site) {
-	serve, redirect := agentapi.SplitWWW(s.Domains, s.WWWRedirect)
+	serve, redirect := agentapi.SplitRedirects(s.Domains, s.WWWRedirect, s.RedirectDomains)
 	data["Serve"], data["WWW"] = serve, redirect
 	data["WWWHdrs"] = &hdrView{Indent: "    ", Lines: n.siteHeaderLines(s, false)}
 }
@@ -85,6 +88,6 @@ func (n *Nginx) wwwData(data map[string]any, s Site) {
 // healthDomain is the name the health check asks for: the first domain
 // the site serves itself.
 func (s Site) healthDomain() string {
-	serve, _ := agentapi.SplitWWW(s.Domains, s.WWWRedirect)
+	serve, _ := agentapi.SplitRedirects(s.Domains, s.WWWRedirect, s.RedirectDomains)
 	return serve[0]
 }
