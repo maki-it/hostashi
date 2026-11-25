@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/maki-it/hostashi/internal/agentapi"
 )
 
@@ -470,7 +472,12 @@ func TestStartThroughClamd(t *testing.T) {
 	m.ClientDir = filepath.Join(t.TempDir(), "client")
 	m.Clamd = func(context.Context) bool { return true }
 
-	if _, err := m.Start(ctx, agentapi.ScanStartRequest{Site: "blog", ID: 1}); err != nil {
+	// The agent's umask is 0077; the modes must not depend on it.
+	old := unix.Umask(0o077)
+	_, err := m.Start(ctx, agentapi.ScanStartRequest{Site: "blog", ID: 1})
+	unix.Umask(old)
+
+	if err != nil {
 		t.Fatal(err)
 	}
 

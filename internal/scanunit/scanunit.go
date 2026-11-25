@@ -340,12 +340,23 @@ func (m *Manager) Start(ctx context.Context, req agentapi.ScanStartRequest) (age
 			return agentapi.ScanStatus{}, err
 		}
 
-		if err := os.MkdirAll(filepath.Dir(clientConf), 0o711); err != nil {
+		// Explicit modes: the agent runs with UMask=0077, and the site user
+		// must reach and read the file.
+		dir := filepath.Dir(clientConf)
+		if err := os.MkdirAll(dir, 0o711); err != nil {
+			return agentapi.ScanStatus{}, fmt.Errorf("scanunit: %w", err)
+		}
+
+		if err := os.Chmod(dir, 0o711); err != nil {
 			return agentapi.ScanStatus{}, fmt.Errorf("scanunit: %w", err)
 		}
 
 		if err := writeFile(clientConf, conf); err != nil {
 			return agentapi.ScanStatus{}, err
+		}
+
+		if err := os.Chmod(clientConf, 0o644); err != nil {
+			return agentapi.ScanStatus{}, fmt.Errorf("scanunit: %w", err)
 		}
 	}
 
