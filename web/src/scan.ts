@@ -38,6 +38,8 @@ export type ScanRun = {
   createdAt: string;
   startedAt: string;
   finishedAt: string;
+  /** The files and folders a scan of a selection covered, relative to the home; empty for the whole site. */
+  paths?: string[];
 };
 
 export type FindingState = "open" | "ignored" | "quarantined" | "gone" | "restored";
@@ -76,7 +78,19 @@ export const getSiteScan = (site: string) => request<SiteScan>("GET", path(site)
 
 export const setScanSchedule = (site: string, schedule: ScanSchedule) => request<void>("PUT", path(site) + "/malware-scan", { schedule });
 
-export const startScan = (site: string) => request<ScanRun>("POST", path(site) + "/malware-scans");
+/** startScan scans the whole site, or with paths (relative to the home) only those files and folders. */
+export const startScan = (site: string, paths?: string[]) =>
+  request<ScanRun>("POST", path(site) + "/malware-scans", paths && paths.length > 0 ? { paths } : undefined);
+
+/** maxScanPaths is how many files and folders one scan of a selection may name. */
+export const maxScanPaths = 100;
+
+/** scopeText describes what a run covered: "" for the whole site. */
+export function scopeText(paths: string[] | undefined): string {
+  if (!paths || paths.length === 0) return "";
+  const shown = paths.slice(0, 3).join(", ");
+  return paths.length > 3 ? `${shown} and ${String(paths.length - 3)} more` : shown;
+}
 
 export type FindingAction = "quarantine" | "restore" | "ignore" | "reopen";
 

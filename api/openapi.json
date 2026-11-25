@@ -5952,6 +5952,15 @@
           "newFound": {
             "type": "integer"
           },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "source": {
             "type": "string"
           },
@@ -5970,6 +5979,7 @@
           "found",
           "id",
           "newFound",
+          "paths",
           "source",
           "startedAt",
           "state"
@@ -5981,6 +5991,21 @@
         "properties": {
           "schedule": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ScanStartRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           }
         },
         "type": "object"
@@ -19424,6 +19449,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "202": {
             "content": {
@@ -19456,7 +19491,7 @@
             ]
           }
         ],
-        "summary": "Scan a site now; it waits while another site is scanned",
+        "summary": "Scan a site, or some of its files and folders, now; it waits while another site is scanned",
         "tags": [
           "malware"
         ],

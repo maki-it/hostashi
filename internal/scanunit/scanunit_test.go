@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -83,7 +84,7 @@ func sum(b string) string {
 }
 
 func TestDropInContent(t *testing.T) {
-	b, err := DropInContent("blog", Site{Home: "/home/blog.example"}, []string{"/srv/pool2"}, "/var/lib/clamav", "")
+	b, err := DropInContent("blog", Site{Home: "/home/blog.example"}, []string{"/srv/pool2"}, "/var/lib/clamav", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,17 +106,17 @@ func TestDropInContent(t *testing.T) {
 	}
 
 	for _, bad := range []string{"/home/a b", "home/x", "/home/x/../y", "/home/$x", "/home/%i"} {
-		if _, err := DropInContent("blog", Site{Home: bad}, nil, "/var/lib/clamav", ""); err == nil {
+		if _, err := DropInContent("blog", Site{Home: bad}, nil, "/var/lib/clamav", "", nil); err == nil {
 			t.Errorf("home %q accepted", bad)
 		}
 	}
 
-	if _, err := DropInContent("Bad", Site{Home: "/home/x"}, nil, "/var/lib/clamav", ""); err == nil {
+	if _, err := DropInContent("Bad", Site{Home: "/home/x"}, nil, "/var/lib/clamav", "", nil); err == nil {
 		t.Error("bad site accepted")
 	}
 
 	// With the real-time mode's clamd, clamdscan hands it the open files.
-	b, err = DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", "/etc/hostashi-scan/blog.conf")
+	b, err = DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", "/etc/hostashi-scan/blog.conf", nil)
 	if err != nil || !strings.Contains(string(b), "ExecStart=\nExecStart=/usr/bin/clamdscan --config-file=/etc/hostashi-scan/blog.conf --fdpass --infected --no-summary --stdout \"/home/blog\"\n") {
 		t.Errorf("clamdscan drop-in: %v\n%s", err, b)
 	}
@@ -519,5 +520,77 @@ func TestClientConfigContent(t *testing.T) {
 		if _, err := ClientConfigContent(tc.site, tc.home); err == nil {
 			t.Errorf("%+v accepted", tc)
 		}
+	}
+}
+
+func TestDropInContentTargets(t *testing.T) {
+	b, err := DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", "", []string{"htdocs/wp-content", "100% \"odd\" $name.php"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := "\"/home/blog/htdocs/wp-content\" \"/home/blog/100%% \\\"odd\\\" $$name.php\"\n"
+	if !strings.Contains(string(b), want) || strings.Contains(string(b), "\"/home/blog\" ") || strings.Contains(string(b), "\"/home/blog\"\n") {
+		t.Errorf("targets: want %q in\n%s", want, b)
+	}
+
+	b, err = DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", "/etc/hostashi-scan/blog.conf", []string{"htdocs"})
+	if err != nil || !strings.HasSuffix(string(b), "--stdout \"/home/blog/htdocs\"\n") {
+		t.Errorf("clamdscan targets: %v\n%s", err, b)
+	}
+
+	for _, bad := range [][]string{{"../other"}, {"/etc"}, {"a/../b"}, {"a", "a"}, {"x\n"}, {"\xff"}, {""}} {
+		if _, err := DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", "", bad); err == nil {
+			t.Errorf("targets %q accepted", bad)
+		}
+	}
+}
+
+func TestStartTargets(t *testing.T) {
+	ctx := context.Background()
+	m, ctl, home := newManager(t)
+
+	if err := os.MkdirAll(filepath.Join(home, "htdocs", "up"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(home, "htdocs", "index.php"), []byte("x"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Symlink("/etc", filepath.Join(home, "etc")); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, bad := range []string{"missing", "etc", "etc/passwd"} {
+		if _, err := m.Start(ctx, agentapi.ScanStartRequest{Site: "blog", ID: 3, Paths: []string{"htdocs", bad}}); !errors.Is(err, ErrTarget) {
+			t.Errorf("%s: %v", bad, err)
+		}
+	}
+
+	if len(ctl.started) != 0 {
+		t.Fatalf("started %v", ctl.started)
+	}
+
+	if _, err := m.Start(ctx, agentapi.ScanStartRequest{Site: "blog", ID: 3, Paths: []string{"htdocs/up", "htdocs/index.php"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	b, err := os.ReadFile(filepath.Join(m.UnitDir, "hostashi-scan@blog.service.d", DropIn))
+	if err != nil || !strings.Contains(string(b), appQuote(home+"/htdocs/up")+" "+appQuote(home+"/htdocs/index.php")+"\n") {
+		t.Fatalf("drop-in %v\n%s", err, b)
+	}
+}
+
+func appQuote(s string) string { return "\"" + strings.ReplaceAll(s, "%", "%%") + "\"" }
+
+func TestValidateScanTargetsLimit(t *testing.T) {
+	many := make([]string, agentapi.MaxScanTargets+1)
+	for i := range many {
+		many[i] = "f" + strconv.Itoa(i)
+	}
+
+	if agentapi.ValidateScanTargets(many) == nil || agentapi.ValidateScanTargets(many[:agentapi.MaxScanTargets]) != nil {
+		t.Fatal("limit")
 	}
 }

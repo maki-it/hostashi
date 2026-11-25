@@ -5,8 +5,10 @@ package hosting
 import (
 	"context"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -258,10 +260,17 @@ func (s *Service) SetScanSchedule(ctx context.Context, actor int64, name, schedu
 }
 
 // StartScan queues a scan of a site; RunScans starts it when no other
-// scan runs.
-func (s *Service) StartScan(ctx context.Context, actor int64, name, source string) (store.ScanRun, error) {
+// scan runs. paths, relative to the home, narrow it to those files and
+// folders (the file manager's selection); none scans the whole home. An
+// invalid list matches ErrInvalid; the server checks at the start that
+// each path is there.
+func (s *Service) StartScan(ctx context.Context, actor int64, name, source string, paths []string) (store.ScanRun, error) {
 	if s.scans == nil {
 		return store.ScanRun{}, ErrNoScans
+	}
+
+	if err := agentapi.ValidateScanTargets(paths); err != nil {
+		return store.ScanRun{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 
 	site, err := s.scanSite(ctx, name)
@@ -282,13 +291,18 @@ func (s *Service) StartScan(ctx context.Context, actor int64, name, source strin
 		return store.ScanRun{}, ErrScanEngineOff
 	}
 
-	run, err := s.st.CreateScanRun(ctx, site.ID, source, actor, s.now())
+	run, err := s.st.CreateScanRun(ctx, site.ID, source, actor, paths, s.now())
 	if err != nil {
 		return store.ScanRun{}, err
 	}
 
 	if source != store.ScanSourceSchedule {
-		s.audit(ctx, actor, "site.malware_scan", site.Name, map[string]string{"id": strconv.FormatInt(run.ID, 10), "source": source})
+		detail := map[string]string{"id": strconv.FormatInt(run.ID, 10), "source": source}
+		if len(paths) > 0 {
+			detail["paths"] = strings.Join(paths, ", ")
+		}
+
+		s.audit(ctx, actor, "site.malware_scan", site.Name, detail)
 	}
 
 	s.kickScans()
@@ -405,7 +419,7 @@ func (s *Service) pollScans(ctx context.Context) {
 			continue
 		}
 
-		if _, err := s.scans.ScanStart(ctx, agentapi.ScanStartRequest{Site: site.Name, ID: r.ID}); err != nil {
+		if _, err := s.scans.ScanStart(ctx, agentapi.ScanStartRequest{Site: site.Name, ID: r.ID, Paths: r.Paths}); err != nil {
 			if isCode(err, agentrpc.CodeConflict) && s.now().Sub(r.Created) < scanQueuedGrace {
 				return
 			}
@@ -609,7 +623,7 @@ func (s *Service) queueScheduledScans(ctx context.Context, sites []store.Site) {
 			continue
 		}
 
-		if _, err := s.st.CreateScanRun(ctx, site.ID, store.ScanSourceSchedule, 0, now); err != nil && !errors.Is(err, store.ErrScanBusy) {
+		if _, err := s.st.CreateScanRun(ctx, site.ID, store.ScanSourceSchedule, 0, nil, now); err != nil && !errors.Is(err, store.ErrScanBusy) {
 			s.log.ErrorContext(ctx, "queue scheduled scan", "site", site.Name, "err", err)
 		}
 	}

@@ -23,6 +23,7 @@ import {
   PencilSimpleLine,
   Trash,
   UploadSimple,
+  ShieldCheck,
 } from "@phosphor-icons/react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import {
@@ -49,6 +50,8 @@ import {
   type FileEntry,
   type Listing,
 } from "./files";
+import { formatHash } from "./routes";
+import { getSiteScan, maxScanPaths, scanMessage, startScan } from "./scan";
 import type { Site } from "./sites";
 import { Button, Card, Field, IconButton, Notice, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
 
@@ -85,6 +88,9 @@ export function FileManager({ site, path, onPath }: Props) {
   const [uploads, setUploads] = useState<UploadRow[]>([]);
   const [dragging, setDragging] = useState(false);
   const [editing, setEditing] = useState<FileEntry | null>(null);
+  const [scanOn, setScanOn] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
 
@@ -111,6 +117,36 @@ export function FileManager({ site, path, onPath }: Props) {
   }, [load]);
 
   const stale = listing !== null && listed !== site.name + "/" + path;
+
+  // The scan button shows only while ClamAV is on for this server and the
+  // account may read the site's scan (ADR-0064).
+  useEffect(() => {
+    let live = true;
+    getSiteScan(site.name).then(
+      (v) => live && setScanOn(v.engine === "on"),
+      () => live && setScanOn(false),
+    );
+    return () => {
+      live = false;
+    };
+  }, [site.name]);
+
+  useEffect(() => setScanNote(null), [path]);
+
+  async function scanSelection(paths: string[]) {
+    setScanning(true);
+    setScanNote(null);
+    try {
+      await startScan(site.name, paths);
+      setSelected(new Set());
+      setScanNote({ tone: "ok", text: paths.length === 1 ? `Virus scan of ${paths[0]} started.` : `Virus scan of ${String(paths.length)} items started.` });
+    } catch (err) {
+      setScanNote({ tone: "err", text: scanMessage(err) });
+    } finally {
+      setScanning(false);
+    }
+  }
+
   const entries = listing?.entries ?? [];
   const shown = filter === "" ? entries : entries.filter((e) => e.name.toLowerCase().includes(filter.toLowerCase()));
   const allSelected = shown.length > 0 && shown.every((e) => selected.has(e.name));
@@ -236,10 +272,19 @@ export function FileManager({ site, path, onPath }: Props) {
           onChange={(e) => { onPick(e.target.files); e.target.value = ""; }}
         />
       </div>
-      {(loadError || done || uploads.length > 0 || listing?.truncated || (listing?.unnamed ?? 0) > 0 || dialog || sel.length > 0) && (
+      {(loadError || done || scanNote || uploads.length > 0 || listing?.truncated || (listing?.unnamed ?? 0) > 0 || dialog || sel.length > 0) && (
       <div className="ui-card-body ui-stack">
         {loadError && <Notice tone="err" title={loadError} />}
         {done && <Notice tone="ok" title={done} />}
+        {scanNote && (
+          <Notice tone={scanNote.tone} title={scanNote.text}>
+            {scanNote.tone === "ok" && (
+              <>
+                The results appear on the <a href={formatHash({ page: "sites", site: { name: site.name, tab: "malware" } })}>Virus scan</a> tab.
+              </>
+            )}
+          </Notice>
+        )}
         {uploads.length > 0 && <Uploads rows={uploads} onClose={() => setUploads([])} />}
         {listing?.truncated && <Notice tone="warn" title="This folder has more entries than the panel shows. Use SFTP to see all of them." />}
         {listing !== null && listing.unnamed > 0 && (
@@ -277,6 +322,14 @@ export function FileManager({ site, path, onPath }: Props) {
             <Button icon={<LockKey size={16} aria-hidden="true" />} onClick={() => setDialog({ kind: "chmod", names: sel })}>
               Change mode
             </Button>
+            {scanOn &&
+              (sel.length <= maxScanPaths ? (
+                <Button icon={<ShieldCheck size={16} aria-hidden="true" />} disabled={scanning} onClick={() => void scanSelection(selPaths)}>
+                  {scanning ? "Starting scan…" : "Scan for viruses"}
+                </Button>
+              ) : (
+                <span className="ui-hint">Too many entries for one virus scan; scan the folder instead.</span>
+              ))}
             <Button variant="danger" icon={<Trash size={16} aria-hidden="true" />} onClick={() => setDialog({ kind: "delete", names: sel })}>
               Delete
             </Button>

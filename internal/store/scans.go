@@ -5,8 +5,11 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -56,6 +59,9 @@ type ScanRun struct {
 	Created  time.Time
 	// Started and Finished are zero until then.
 	Started, Finished time.Time
+	// Paths are the files and folders a scan of a selection covers,
+	// relative to the home; empty for the whole home.
+	Paths []string
 }
 
 // Active reports whether the run is queued or running.
@@ -147,7 +153,7 @@ ON CONFLICT (site_id) DO UPDATE SET schedule = excluded.schedule, updated_by = e
 	return nil
 }
 
-const scanRunColumns = `id, site_id, source, actor, state, error, found, new_found, dropped, created_at, started_at, finished_at`
+const scanRunColumns = `id, site_id, source, actor, state, error, found, new_found, dropped, created_at, started_at, finished_at, paths`
 
 func scanScanRun(sc interface{ Scan(dest ...any) error }) (ScanRun, error) {
 	var (
@@ -155,11 +161,20 @@ func scanScanRun(sc interface{ Scan(dest ...any) error }) (ScanRun, error) {
 		actor             sql.NullInt64
 		created           int64
 		started, finished sql.NullInt64
+		paths             string
 	)
 
 	if err := sc.Scan(&r.ID, &r.SiteID, &r.Source, &actor, &r.State, &r.Error, &r.Found, &r.NewFound, &r.Dropped,
-		&created, &started, &finished); err != nil {
+		&created, &started, &finished, &paths); err != nil {
 		return ScanRun{}, err
+	}
+
+	if err := json.Unmarshal([]byte(paths), &r.Paths); err != nil {
+		return ScanRun{}, fmt.Errorf("scan run %d: paths: %w", r.ID, err)
+	}
+
+	if len(r.Paths) == 0 {
+		r.Paths = nil
 	}
 
 	r.Actor = actor.Int64
@@ -176,9 +191,19 @@ func scanScanRun(sc interface{ Scan(dest ...any) error }) (ScanRun, error) {
 	return r, nil
 }
 
-// CreateScanRun queues a scan of a site. While another scan of the site is
-// queued or running it is ErrScanBusy.
-func (s *Store) CreateScanRun(ctx context.Context, siteID int64, source string, actor int64, now time.Time) (ScanRun, error) {
+// CreateScanRun queues a scan of a site, of the given files and folders
+// (relative to the home) or with none of the whole home. While another
+// scan of the site is queued or running it is ErrScanBusy.
+func (s *Store) CreateScanRun(ctx context.Context, siteID int64, source string, actor int64, paths []string, now time.Time) (ScanRun, error) {
+	if paths == nil {
+		paths = []string{}
+	}
+
+	pj, err := json.Marshal(paths)
+	if err != nil {
+		return ScanRun{}, fmt.Errorf("store: %w", err)
+	}
+
 	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return ScanRun{}, fmt.Errorf("store: %w", err)
@@ -200,8 +225,8 @@ func (s *Store) CreateScanRun(ctx context.Context, siteID int64, source string, 
 		by = actor
 	}
 
-	res, err := tx.ExecContext(ctx, `INSERT INTO scan_runs (site_id, source, actor, state, created_at) VALUES (?, ?, ?, 'queued', ?)`,
-		siteID, source, by, now.Unix())
+	res, err := tx.ExecContext(ctx, `INSERT INTO scan_runs (site_id, source, actor, state, created_at, paths) VALUES (?, ?, ?, 'queued', ?, ?)`,
+		siteID, source, by, now.Unix(), string(pj))
 	if err != nil {
 		return ScanRun{}, fmt.Errorf("store: %w", err)
 	}
@@ -222,7 +247,12 @@ func (s *Store) CreateScanRun(ctx context.Context, siteID int64, source string, 
 		return ScanRun{}, fmt.Errorf("store: %w", err)
 	}
 
-	return ScanRun{ID: id, SiteID: siteID, Source: source, Actor: actor, State: ScanQueued, Created: now.UTC().Truncate(time.Second)}, nil
+	run := ScanRun{ID: id, SiteID: siteID, Source: source, Actor: actor, State: ScanQueued, Created: now.UTC().Truncate(time.Second)}
+	if len(paths) > 0 {
+		run.Paths = slices.Clone(paths)
+	}
+
+	return run, nil
 }
 
 // StartScanRun marks a queued run as running.
@@ -261,9 +291,8 @@ func (s *Store) FinishScanRun(ctx context.Context, run ScanRun, files []FoundFil
 		return nil, err
 	}
 
-	if _, err := tx.ExecContext(ctx, `UPDATE scan_findings SET state = 'gone' WHERE site_id = ? AND state = 'open' AND (last_run IS NULL OR last_run <> ?)`,
-		run.SiteID, run.ID); err != nil {
-		return nil, fmt.Errorf("store: %w", err)
+	if err := markGone(ctx, tx, run); err != nil {
+		return nil, err
 	}
 
 	res, err := tx.ExecContext(ctx, `UPDATE scan_runs SET state = 'succeeded', error = ?, found = ?, new_found = ?, dropped = ?, finished_at = ?
@@ -281,6 +310,67 @@ WHERE id = ? AND state = 'running'`, clipText(run.Error, 4096), len(files), len(
 	}
 
 	return fresh, nil
+}
+
+// markGone marks the open findings the run did not see as gone: all of the
+// site's for a scan of the whole home, only those inside its paths for a
+// scan of a selection.
+func markGone(ctx context.Context, tx *sql.Tx, run ScanRun) error {
+	if len(run.Paths) == 0 {
+		if _, err := tx.ExecContext(ctx, `UPDATE scan_findings SET state = 'gone' WHERE site_id = ? AND state = 'open' AND (last_run IS NULL OR last_run <> ?)`,
+			run.SiteID, run.ID); err != nil {
+			return fmt.Errorf("store: %w", err)
+		}
+
+		return nil
+	}
+
+	rows, err := tx.QueryContext(ctx, `SELECT id, path FROM scan_findings WHERE site_id = ? AND state = 'open' AND (last_run IS NULL OR last_run <> ?)`,
+		run.SiteID, run.ID)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	var gone []int64
+
+	for rows.Next() {
+		var (
+			id int64
+			p  string
+		)
+
+		if err := rows.Scan(&id, &p); err != nil {
+			rows.Close()
+
+			return fmt.Errorf("store: %w", err)
+		}
+
+		if Covers(run.Paths, p) {
+			gone = append(gone, id)
+		}
+	}
+
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+
+	for _, id := range gone {
+		if _, err := tx.ExecContext(ctx, `UPDATE scan_findings SET state = 'gone' WHERE id = ?`, id); err != nil {
+			return fmt.Errorf("store: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// Covers reports whether a scan of paths covers the file p: p is one of
+// them or inside one of them. No paths covers everything.
+func Covers(paths []string, p string) bool {
+	if len(paths) == 0 {
+		return true
+	}
+
+	return slices.ContainsFunc(paths, func(t string) bool { return p == t || strings.HasPrefix(p, t+"/") })
 }
 
 // upsertFindings records the files of a run: a file seen before keeps its

@@ -39,6 +39,14 @@ Open the site's **Security › Virus scan** tab.
 
 ClamAV reads every file in the site's home, read only and without network, as the site's own user. The folder `.cache` is skipped. Site databases are not scanned.
 
+### Scan some files or folders
+
+In the [file manager](File-manager.md), select up to 100 files and folders and click **Scan for viruses**. The button is there while the virus scan is on. The scan waits like any other, and its results appear on the **Virus scan** tab; the history lists the selected paths.
+
+![Files selected for a virus scan in the file manager](images/files-virus-scan.png)
+
+A scan of a selection marks only flagged files inside the selection as gone when they are not there any more. Flagged files elsewhere in the site stay as they are.
+
 ## Flagged files
 
 Each flagged file shows its path, the name of the signature that matched, its size and when it was first seen. **Open folder** opens its folder in the [file manager](File-manager.md).
@@ -65,6 +73,7 @@ hostashi api malware get-scan
 hostashi api malware set-scan on=true
 hostashi api malware set-scan realtime=true
 hostashi api malware start-site-scan blog
+hostashi api malware start-site-scan blog paths=htdocs/wp-content/uploads
 hostashi api malware get-site-scan blog
 hostashi api malware quarantine-site-finding blog 21
 ```

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -108,10 +109,18 @@ func TestMalwareScanOverHTTP(t *testing.T) {
 		t.Fatalf("schedule: %d %s", rec.Code, rec.Body)
 	}
 
-	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/malware-scans", cookie: c})
+	for body, code := range map[string]int{`{"paths":["../x"]}`: http.StatusUnprocessableEntity, `{"paths":["a","a"]}`: http.StatusUnprocessableEntity, `{"files":["a"]}`: http.StatusBadRequest} {
+		if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/malware-scans", cookie: c, body: body}); rec.Code != code {
+			t.Fatalf("scan %s: %d %s", body, rec.Code, rec.Body)
+		}
+	}
+
+	// A scan of the file manager's selection.
+	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/malware-scans", cookie: c, body: `{"paths":["htdocs/up","htdocs/index.php"]}`})
 
 	var run scanRunJSON
-	if err := json.Unmarshal(rec.Body.Bytes(), &run); rec.Code != http.StatusAccepted || err != nil || run.State != "queued" || run.Source != "panel" {
+	if err := json.Unmarshal(rec.Body.Bytes(), &run); rec.Code != http.StatusAccepted || err != nil || run.State != "queued" || run.Source != "panel" ||
+		!slices.Equal(run.Paths, []string{"htdocs/up", "htdocs/index.php"}) {
 		t.Fatalf("scan: %d %s", rec.Code, rec.Body)
 	}
 

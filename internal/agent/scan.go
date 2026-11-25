@@ -187,7 +187,7 @@ func mapScanError(err error) error {
 		return nil
 	case errors.Is(err, sites.ErrNotFound):
 		return errScanNotFound
-	case errors.Is(err, scanunit.ErrUnknownItem):
+	case errors.Is(err, scanunit.ErrUnknownItem), errors.Is(err, scanunit.ErrTarget):
 		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: err.Error()}
 	case errors.Is(err, scanunit.ErrEngineOff):
 		return errEngineNotOn
