@@ -18,6 +18,11 @@
 #   clamav-install realtime-on   install clamav-daemon and clamdscan with
 #                            Hostashi's drop-ins, record realtime "on"
 #   clamav-install realtime-off  stop and purge them, record realtime "off"
+#   clamav-install upgrade   while "on": update the installed ClamAV
+#                            packages only, from every apt source of the
+#                            distribution (also -updates and stable-updates,
+#                            which unattended-upgrades leaves out); run
+#                            daily by hostashi-clamav-upgrade.timer
 #
 # Only these packages, without recommends: no clamav-daemon unless the
 # real-time mode is switched on (ADR-0064). Its drop-ins replace the
@@ -214,6 +219,28 @@ do_realtime_off() {
   say "done: real-time mode removed"
 }
 
+# ALL_PKGS are the packages upgrade updates when they are installed.
+ALL_PKGS=(clamav clamav-base clamav-freshclam libclamav12 clamav-daemon clamdscan)
+
+do_upgrade() {
+  local p have=()
+  [ "$(state)" = on ] || { say "ClamAV is off: nothing to upgrade"; return 0; }
+  for p in "${ALL_PKGS[@]}"; do installed "$p" && have+=("$p"); done
+  # A library with another soname still comes along as a dependency.
+  for p in $(dpkg-query -W -f='${Package}\n' 'libclamav*' 2>/dev/null); do
+    installed "$p" && [[ " ${have[*]} " != *" $p "* ]] && have+=("$p")
+  done
+  [ "${#have[@]}" -gt 0 ] || { say "no ClamAV package installed"; return 1; }
+  say "upgrading ${have[*]}"
+  apt-get "${APT_OPTS[@]}" update || { say "cannot update the package lists"; return 1; }
+  apt-get "${APT_OPTS[@]}" install --only-upgrade "${have[@]}" || { say "cannot upgrade ${have[*]}"; return 1; }
+  dpkg-query -W -f='${Version}\n' clamav >"$STATE_DIR/version.tmp" && mv -f "$STATE_DIR/version.tmp" "$STATE_DIR/version"
+  # A new profile from the package keeps its local include; the block
+  # stays, the reload picks up both.
+  if [ "$(rt_state)" = on ]; then write_apparmor || { say "cannot reload clamd's AppArmor profile"; return 1; }; fi
+  say "done: ClamAV $(cat "$STATE_DIR/version")"
+}
+
 do_remove() {
   local p have=()
   if [ "$(rt_state)" != off ] || installed clamav-daemon; then do_realtime_off || return 1; fi
@@ -232,6 +259,7 @@ case "${1:-}" in
   install) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_install || exit 1;;
   remove) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_remove || exit 1;;
   realtime-on) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_realtime_on || exit 1;;
+  upgrade) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_upgrade || exit 1;;
   realtime-off) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_realtime_off || exit 1;;
-  *) echo "usage: $0 check | install | remove | realtime-on | realtime-off" >&2; exit 64;;
+  *) echo "usage: $0 check | install | remove | realtime-on | realtime-off | upgrade" >&2; exit 64;;
 esac

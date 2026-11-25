@@ -393,7 +393,7 @@ func TestEngine(t *testing.T) {
 	ctx := context.Background()
 	dir, db := t.TempDir(), t.TempDir()
 	ctl := &fakeEngine{states: map[string]string{"install": "inactive", "remove": "inactive"}}
-	e := &Engine{Dir: dir, DatabaseDir: db, Ctl: ctl}
+	e := &Engine{Dir: dir, DatabaseDir: db, Ctl: ctl, DpkgStatus: filepath.Join(dir, "dpkg-status")}
 
 	if st, _ := e.Status(ctx); st.State != agentapi.ScanEngineOff {
 		t.Fatalf("off: %+v", st)
@@ -436,6 +436,18 @@ func TestEngine(t *testing.T) {
 	st, _ := e.Status(ctx)
 	if st.State != agentapi.ScanEngineOn || st.Version != "1.4.6+dfsg-1~deb13u1" || st.Signatures == "" || !e.On() {
 		t.Fatalf("on: %+v", st)
+	}
+	// After apt updated ClamAV the installed version wins over the one
+	// recorded at install time.
+	dpkg := "Package: clamav-base\nStatus: install ok installed\nVersion: 9\n\n" +
+		"Package: clamav\nStatus: deinstall ok config-files\nVersion: 1.0\n\n" +
+		"Package: clamav\nStatus: install ok installed\nVersion: 1.4.7+dfsg-1~deb13u1\n"
+	if err := os.WriteFile(e.DpkgStatus, []byte(dpkg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if st, _ := e.Status(ctx); st.Version != "1.4.7+dfsg-1~deb13u1" {
+		t.Fatalf("dpkg version: %+v", st)
 	}
 }
 

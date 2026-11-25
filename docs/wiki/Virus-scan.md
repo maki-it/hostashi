@@ -12,7 +12,7 @@ The scan is off on a new server. An admin switches it on under **System → Viru
 
 ![Switching the virus scan on](images/system-malware.png)
 
-ClamAV needs memory while it scans: plan for about 1.5 GB of free RAM while a site is scanned. The card shows the server's memory and warns below 2 GB. Only one site is scanned at a time on the whole server, so this is paid once, not per site, and it does not count against a site's [memory limit](Limits.md). The signatures take about 300 MB on disk and are updated several times a day.
+ClamAV needs memory while it scans: plan for about 1.5 GB of free RAM while a site is scanned. The card shows the server's memory and warns below 2 GB. Only one site is scanned at a time on the whole server, so this is paid once, not per site, and it does not count against a site's [memory limit](Limits.md). The signatures take about 300 MB on disk and are updated several times a day. ClamAV itself is updated once a day from the distribution: Hostashi updates only the ClamAV packages, also with versions the distribution ships outside its security updates. The card shows the installed version.
 
 **Turn off…** next to the state removes ClamAV and its signatures again. Findings, the history and the quarantine stay.
 
