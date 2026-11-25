@@ -172,6 +172,10 @@ release:
   # it publishes the release at the end.
   draft: true
   prerelease: auto
+  # A re-run after a failed upload (for example during a GitHub outage)
+  # finds the files of the first attempt; replace them instead of failing
+  # with "already_exists".
+  replace_existing_artifacts: true
 
 changelog:
   use: github-native
