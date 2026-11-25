@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -80,7 +81,7 @@ func sum(b string) string {
 }
 
 func TestDropInContent(t *testing.T) {
-	b, err := DropInContent("blog", Site{Home: "/home/blog.example"}, []string{"/srv/pool2"}, "/var/lib/clamav", false)
+	b, err := DropInContent("blog", Site{Home: "/home/blog.example"}, []string{"/srv/pool2"}, "/var/lib/clamav", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,18 +103,18 @@ func TestDropInContent(t *testing.T) {
 	}
 
 	for _, bad := range []string{"/home/a b", "home/x", "/home/x/../y", "/home/$x", "/home/%i"} {
-		if _, err := DropInContent("blog", Site{Home: bad}, nil, "/var/lib/clamav", false); err == nil {
+		if _, err := DropInContent("blog", Site{Home: bad}, nil, "/var/lib/clamav", ""); err == nil {
 			t.Errorf("home %q accepted", bad)
 		}
 	}
 
-	if _, err := DropInContent("Bad", Site{Home: "/home/x"}, nil, "/var/lib/clamav", false); err == nil {
+	if _, err := DropInContent("Bad", Site{Home: "/home/x"}, nil, "/var/lib/clamav", ""); err == nil {
 		t.Error("bad site accepted")
 	}
 
 	// With the real-time mode's clamd, clamdscan hands it the open files.
-	b, err = DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", true)
-	if err != nil || !strings.Contains(string(b), "ExecStart=\nExecStart=/usr/bin/clamdscan --config-file=/etc/hostashi/clamav/clamd.conf --fdpass --infected --no-summary --stdout \"/home/blog\"\n") {
+	b, err = DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", "/etc/hostashi-scan/blog.conf")
+	if err != nil || !strings.Contains(string(b), "ExecStart=\nExecStart=/usr/bin/clamdscan --config-file=/etc/hostashi-scan/blog.conf --fdpass --infected --no-summary --stdout \"/home/blog\"\n") {
 		t.Errorf("clamdscan drop-in: %v\n%s", err, b)
 	}
 }
@@ -458,5 +459,57 @@ func TestFirstError(t *testing.T) {
 
 	if got := firstError(filepath.Join(dir, "missing")); got != "" {
 		t.Errorf("missing log: %q", got)
+	}
+}
+
+// While the real-time mode is on, the scan reads its own clamdscan
+// configuration: the site user cannot read the one below /etc/hostashi.
+func TestStartThroughClamd(t *testing.T) {
+	ctx := context.Background()
+	m, _, home := newManager(t)
+	m.ClientDir = filepath.Join(t.TempDir(), "client")
+	m.Clamd = func(context.Context) bool { return true }
+
+	if _, err := m.Start(ctx, agentapi.ScanStartRequest{Site: "blog", ID: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	conf := m.ClientConfig("blog")
+
+	b, err := os.ReadFile(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := "LocalSocket /run/clamav/clamd.ctl\nExcludePath ^" + regexp.QuoteMeta(home+"/.cache") + "/\n"
+	if !strings.HasSuffix(string(b), want) {
+		t.Fatalf("client config:\n%s\nwant suffix\n%s", b, want)
+	}
+
+	for p, mode := range map[string]os.FileMode{conf: 0o644, m.ClientDir: 0o711 | os.ModeDir} {
+		if fi, err := os.Stat(p); err != nil || fi.Mode() != mode {
+			t.Errorf("%s: %v %v", p, fi.Mode(), err)
+		}
+	}
+
+	d, err := os.ReadFile(filepath.Join(m.UnitDir, "hostashi-scan@blog.service.d", DropIn))
+	if err != nil || !strings.Contains(string(d), "/usr/bin/clamdscan --config-file="+conf+" ") {
+		t.Fatalf("drop-in %v\n%s", err, d)
+	}
+
+	if err := m.Remove(ctx, "blog"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(conf); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("client config left: %v", err)
+	}
+}
+
+func TestClientConfigContent(t *testing.T) {
+	for _, tc := range []struct{ site, home string }{{"Bad", "/home/x"}, {"blog", "home/x"}, {"blog", "/home/a b"}} {
+		if _, err := ClientConfigContent(tc.site, tc.home); err == nil {
+			t.Errorf("%+v accepted", tc)
+		}
 	}
 }

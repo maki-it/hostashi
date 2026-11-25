@@ -663,6 +663,10 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 [ "$run" = succeeded ] || fail "clamdscan run did not succeed ($run): $(x cat /tmp/api.out)"
+[ "$(jget '[r["found"] for r in d["runs"] if r["source"] == "panel"][0]')" = 1 ] ||
+  fail "clamdscan run did not flag new.com: $(x cat /tmp/api.out); log: $(x cat /var/log/hostashi/scan/blog.log)"
+expect_mode /etc/hostashi-scan "711 root:root"
+expect_mode /etc/hostashi-scan/blog.conf "644 root:root"
 x grep -q 'clamdscan' /etc/systemd/system/hostashi-scan@blog.service.d/60-hostashi-scan.conf || fail "scan did not use clamdscan"
 # Without a flagged file, a scan through clamd reports no error either.
 x rm -f /home/blog/htdocs/new.com
