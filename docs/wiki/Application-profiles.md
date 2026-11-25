@@ -37,6 +37,12 @@ On **Hosting → Sites → New site**, pick the **Application** of a PHP site be
 
 The panel stores only what differs from the profile. When a later Hostashi version changes a profile, a site keeps its own changes and gets the rest. The badge *Changed from the profile* shows that the site has changes; **Use the profile's rules** drops them.
 
+### See the server block
+
+**Show the server block** below the rules shows the nginx configuration the site gets with the chosen profile and the rules in the form, before you save them. It changes as you edit the form. The panel renders it with the same templates as the server, but it is read only and saves nothing. Paths below `/placeholder`, such as the web root, the PHP socket and the certificate, stand for the server's own paths. Password protection shows its rules but never the users or their password hashes. Custom snippets that point into the site's home are left out with a note. A site in maintenance or switched off is shown as it is served when it is back online. Everyone who can see the site can open it; the API route is `POST /api/v1/sites/{name}/profile/preview`.
+
+![The server block of a WordPress site](images/site-hardening-preview.png)
+
 ## The rules
 
 | Rule | What nginx does |

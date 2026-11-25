@@ -808,6 +808,11 @@ a.ui-btn {
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
+/* A long block of code that scrolls instead of growing the page */
+.ui-code-scroll {
+  max-height: 32rem;
+  overflow: auto;
+}
 /* An address and its port on one line */
 .ui-host-port {
   display: grid;

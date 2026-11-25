@@ -871,47 +871,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		return err
 	}
 
-	snippets, err := s.st.AllSiteSnippets(ctx)
-	if err != nil {
-		return err
-	}
-
-	phpSettings, err := s.st.AllSitePHPSettings(ctx)
-	if err != nil {
-		return err
-	}
-
-	headers, err := s.st.AllSiteHeaders(ctx)
-	if err != nil {
-		return err
-	}
-
-	realips, err := s.st.AllSiteRealIP(ctx)
-	if err != nil {
-		return err
-	}
-
-	access, err := s.st.AllSiteAccess(ctx)
-	if err != nil {
-		return err
-	}
-
-	authUsers, err := s.st.AllAuthUsers(ctx)
-	if err != nil {
-		return err
-	}
-
-	workers, err := s.st.PHPWorkers(ctx)
-	if err != nil {
-		return err
-	}
-
-	caches, err := s.st.AllPageCaches(ctx)
-	if err != nil {
-		return err
-	}
-
-	profiles, err := s.st.AllSiteProfiles(ctx)
+	in, err := s.loadWebInputs(ctx)
 	if err != nil {
 		return err
 	}
@@ -928,18 +888,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				php = ""
 			}
 
-			ws := agentapi.WebSite{
-				User: site.Name, Domains: site.AllDomains(), PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
-				Headers: webHeaders(headers, site), RealIP: webRealIP(realips, site),
-				Access: webAccess(access, authUsers, site),
-			}
-
-			// A redirect site sends every name to its target anyway; it
-			// keeps the setting for a later type change (ADR-0065).
-			if site.Type != store.SiteTypeRedirect {
-				ws.WWWRedirect = site.WWWRedirect
-				ws.RedirectDomains = site.RedirectDomains
-			}
+			ws := in.webSite(site, php, tls)
 
 			// Redirect and reverse proxy sites send only their target: no
 			// files, PHP, caches or snippets (ADR-0054).
@@ -967,7 +916,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 			if hasApp(site) {
 				ws.PHP = ""
 				ws.App = &agentapi.WebApp{Port: site.App.Port}
-				ws.Snippets = webSnippets(snippets, site)
+				ws.Snippets = webSnippets(in.snippets, site)
 
 				if err := s.addLifecycleWeb(ctx, &ws, site, onAgent); err != nil {
 					return err
@@ -978,33 +927,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				continue
 			}
 
-			// SPA is kept while the site runs PHP and only sent for a
-			// static site; the asset cache serves static and PHP sites
-			// (ADR-0054 addenda 1 and 4).
-			ws.WebDir = site.WebDir
-			if site.Type == store.SiteTypeStatic {
-				ws.SPA = site.SPA
-			}
-
-			ws.Hardening = webHardening(profiles, site, php)
-
-			if site.AssetCache && (site.Type == store.SiteTypeStatic || site.Type == store.SiteTypePHP) {
-				ws.AssetCache, ws.AssetCacheSeconds, ws.AssetCacheExts = true, site.AssetCacheSeconds, site.AssetCacheExts
-			}
-
-			if php != "" {
-				ws.PHPWorkers = phpWorkers(workers, site.ID)
-				ws.PHPPrograms = site.PHPPrograms
-				ws.PHPSettings = webPHPSettings(phpSettings, site)
-			}
-
-			// Sent in maintenance as well, so the agent keeps the cache's
-			// directory; it purges it when the site is served again.
-			ws.PageCache = webPageCache(caches, site, php)
-
-			// The agent leaves them out while the site is disabled or in
-			// maintenance; they are sent anyway so the state stays complete.
-			ws.Snippets = webSnippets(snippets, site)
+			in.addFiles(&ws, site, php)
 
 			if err := s.addLifecycleWeb(ctx, &ws, site, onAgent); err != nil {
 				return err
@@ -1062,6 +985,117 @@ func (s *Service) applyWeb(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// webInputs are the per-site settings of the web state, read once for
+// all sites.
+type webInputs struct {
+	snippets    map[int64]store.SiteSnippets
+	phpSettings map[int64]store.SitePHPSettings
+	headers     map[int64]store.SiteHeaders
+	realips     map[int64]store.SiteRealIP
+	access      map[int64]store.SiteAccess
+	authUsers   map[int64][]store.AuthUser
+	workers     map[int64]int64
+	caches      map[int64]store.PageCache
+	profiles    map[int64]store.SiteProfile
+}
+
+func (s *Service) loadWebInputs(ctx context.Context) (webInputs, error) {
+	var (
+		in  webInputs
+		err error
+	)
+
+	if in.snippets, err = s.st.AllSiteSnippets(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.phpSettings, err = s.st.AllSitePHPSettings(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.headers, err = s.st.AllSiteHeaders(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.realips, err = s.st.AllSiteRealIP(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.access, err = s.st.AllSiteAccess(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.authUsers, err = s.st.AllAuthUsers(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.workers, err = s.st.PHPWorkers(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.caches, err = s.st.AllPageCaches(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.profiles, err = s.st.AllSiteProfiles(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	return in, nil
+}
+
+// webSite is what every type of site sends: names, HTTPS and the
+// settings that apply to each of its server blocks.
+func (in webInputs) webSite(site store.Site, php string, tls bool) agentapi.WebSite {
+	ws := agentapi.WebSite{
+		User: site.Name, Domains: site.AllDomains(), PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
+		Headers: webHeaders(in.headers, site), RealIP: webRealIP(in.realips, site),
+		Access: webAccess(in.access, in.authUsers, site),
+	}
+
+	// A redirect site sends every name to its target anyway; it keeps the
+	// setting for a later type change (ADR-0065).
+	if site.Type != store.SiteTypeRedirect {
+		ws.WWWRedirect = site.WWWRedirect
+		ws.RedirectDomains = site.RedirectDomains
+	}
+
+	return ws
+}
+
+// addFiles adds what a static or PHP site sends: its document root,
+// hardening, caches, PHP and snippets. php is the PHP version it sends,
+// empty while the site is disabled.
+func (in webInputs) addFiles(ws *agentapi.WebSite, site store.Site, php string) {
+	// SPA is kept while the site runs PHP and only sent for a static site;
+	// the asset cache serves static and PHP sites (ADR-0054 addenda 1 and
+	// 4).
+	ws.WebDir = site.WebDir
+	if site.Type == store.SiteTypeStatic {
+		ws.SPA = site.SPA
+	}
+
+	ws.Hardening = webHardening(in.profiles, site, php)
+
+	if site.AssetCache && (site.Type == store.SiteTypeStatic || site.Type == store.SiteTypePHP) {
+		ws.AssetCache, ws.AssetCacheSeconds, ws.AssetCacheExts = true, site.AssetCacheSeconds, site.AssetCacheExts
+	}
+
+	if php != "" {
+		ws.PHPWorkers = phpWorkers(in.workers, site.ID)
+		ws.PHPPrograms = site.PHPPrograms
+		ws.PHPSettings = webPHPSettings(in.phpSettings, site)
+	}
+
+	// Sent in maintenance as well, so the agent keeps the cache's
+	// directory; it purges it when the site is served again.
+	ws.PageCache = webPageCache(in.caches, site, php)
+
+	// The agent leaves them out while the site is disabled or in
+	// maintenance; they are sent anyway so the state stays complete.
+	ws.Snippets = webSnippets(in.snippets, site)
 }
 
 // addLifecycleWeb adds the maintenance page or the page of a disabled site.

@@ -55,6 +55,12 @@ export function setSiteProfile(site: string, profile: string, hardening?: WebHar
   return request<SiteProfileView>("PUT", path(site), hardening ? { profile, hardening } : { profile });
 }
 
+// previewSiteProfile renders the site's server block with that profile and
+// rules, unsaved, with placeholder paths. Nothing is stored.
+export function previewSiteProfile(site: string, profile: string, hardening: WebHardening): Promise<{ config: string }> {
+  return request<{ config: string }>("POST", path(site) + "/preview", { profile, hardening });
+}
+
 export function listProfiles(): Promise<ProfileChoices> {
   return request<ProfileChoices>("GET", "/profiles");
 }

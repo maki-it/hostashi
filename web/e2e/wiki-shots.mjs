@@ -44,6 +44,16 @@ const shots = [
   { name: "site-domains", hash: "#/sites/blog/domains", ready: "text=Domains" },
   { name: "site-hardening", hash: "#/sites/blog/hardening", ready: "text=Save profile and rules", full: true },
   {
+    name: "site-hardening-preview",
+    hash: "#/sites/blog/hardening",
+    ready: "text=Save profile and rules",
+    act: async (page) => {
+      await page.getByText("Show the server block").click();
+      await page.getByLabel("Server block").waitFor();
+      await page.getByText("Show the server block").evaluate((s) => s.scrollIntoView({ block: "start" }));
+    },
+  },
+  {
     name: "site-wordpress",
     hash: "#/sites/blog/web",
     ready: "text=Install WordPress",
