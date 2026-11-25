@@ -1808,7 +1808,7 @@ UNIT
   [ "$(p8444 -o /dev/null -w '%{http_code}' https://other.example.com:8444/tool.php)" = 404 ] || fail "tool.php reachable"
   x test -z "$(x ls -A /run/hostashi-adminer/tickets)" || fail "used ticket kept"
   [ "$(p8444 -o /dev/null -w '%{http_code}' https://other.example.com:8444/adminer.php)" = 404 ] || fail "adminer.php reachable"
-  rp=$(p8444 -o /dev/null -D - "https://other.example.com:8444/?username=$user&db=tooldb_wp" | tr -d '\r' | grep -i -m1 '^referrer-policy:')
+  rp=$(p8444 -o /dev/null -D - "https://other.example.com:8444/?username=$user&db=tooldb_wp" | tr -d '\r' | awk 'tolower($0) ~ /^referrer-policy:/ && !n++')
   [ "$rp" = "referrer-policy: no-referrer" ] || fail "tool referrer policy: '$rp'"
   if x curl -sSk -o /dev/null --resolve unknown.example.com:8444:127.0.0.1 https://unknown.example.com:8444/ 2>/dev/null; then
     fail "tool port answered an unknown name"
