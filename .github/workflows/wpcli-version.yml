@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Checks GitHub once a week for a new WP-CLI release (ADR-0069). The phar
+# of a new release must match the .sha512 file published next to it. When
+# it finds one it opens (or updates) a pull request from the branch
+# automation/wpcli-version that updates the pin in
+# internal/agentapi/wpcli.go. Nothing is merged automatically: a
+# maintainer reviews and merges, and the next Hostashi release brings the
+# new pin; hostashi-wpcli-install.service downloads it on the next
+# WordPress install.
+#
+# Pull requests opened with GITHUB_TOKEN start no pull_request workflows,
+# so this workflow starts the checks on the branch itself.
+name: WP-CLI version
+
+on:
+  schedule:
+    # Every Monday at 05:23 UTC.
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/wpcliversions/**"
+      - ".github/workflows/wpcli-version.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wpcli-version-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BRANCH: automation/wpcli-version
+
+jobs:
+  check:
+    name: Check GitHub
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Only scheduled and manual runs push; pull requests only report.
+          persist-credentials: ${{ github.event_name != 'pull_request' }}
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check and update the list
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          go run ./tools/wpcliversions -write -summary "$RUNNER_TEMP/summary.md"
+          cat "$RUNNER_TEMP/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          git diff --stat
+      - name: Run the tests the change affects
+        run: go test ./internal/agentapi/ ./internal/wpinstall/ ./tools/wpcliversions/
+      - name: Open or update the pull request
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          if git diff --quiet; then
+            echo "Nothing to change."
+            exit 0
+          fi
+          title="chore(wpcli): update WP-CLI to the latest release"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git commit -q -s -a -m "$title" -m "Found by the weekly WP-CLI version workflow (ADR-0069)."
+          # The same change as on the open branch: do not push again, so the
+          # checks and reviews on it stay.
+          if git fetch -q origin "$BRANCH" 2>/dev/null && git diff --quiet FETCH_HEAD HEAD; then
+            echo "The branch already has this change."
+            exit 0
+          fi
+          git push -f origin "$BRANCH"
+
+          {
+            echo "## What"
+            echo
+            echo "The weekly WP-CLI version workflow found:"
+            echo
+            cat "$RUNNER_TEMP/summary.md"
+            echo
+            echo "Source: the latest release of wp-cli/wp-cli and its .sha512 file, checked $(date -u +%F)."
+            echo
+            echo "## Before merging"
+            echo
+            echo "- [ ] The Go, Web, REUSE and Licenses runs on this branch are green, including both installer tests."
+            echo "- [ ] The WP-CLI changelog has nothing that breaks the quick install."
+            echo "- [ ] Release Hostashi afterwards: the next WordPress install downloads the new phar."
+            echo
+            echo "This pull request is never merged automatically."
+          } > "$RUNNER_TEMP/body.md"
+
+          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -z "$pr" ]; then
+            gh pr create --repo "$REPO" --base main --head "$BRANCH" \
+              --title "$title" --body-file "$RUNNER_TEMP/body.md" --label enhancement --assignee kimdre
+          else
+            gh pr edit "$pr" --repo "$REPO" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          fi
+
+          for wf in go.yml web.yml licenses.yml; do
+            gh workflow run "$wf" --repo "$REPO" --ref "$BRANCH"
+          done

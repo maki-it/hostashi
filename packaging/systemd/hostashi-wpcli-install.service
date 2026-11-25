@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Installs the pinned WP-CLI phar (ADR-0069). The WordPress quick install
+# unit of a site pulls this unit in before it runs. The binary downloads
+# the phar of its own pinned release from GitHub, checks its SHA-512 and
+# moves it into /opt/hostashi/wp-cli/<version>. Nothing it downloads is
+# run here; a run with the phar in place only checks it.
+#
+# It needs the network (github.com) but no capability: root owns
+# /opt/hostashi/wp-cli, and the file it writes stays root's and read-only
+# for the site users.
+
+[Unit]
+Description=Install WP-CLI for Hostashi
+Documentation=https://github.com/maki-it/hostashi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/hostashi wpcli-install
+TimeoutStartSec=10min
+# No core dumps (ADR-0033).
+LimitCORE=0
+UMask=0022
+
+ReadWritePaths=/opt/hostashi/wp-cli
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+RemoveIPC=yes
+PrivateIPC=yes

@@ -36,6 +36,7 @@ import (
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/serve"
 	"github.com/maki-it/hostashi/internal/store"
+	"github.com/maki-it/hostashi/internal/wpinstall"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -142,6 +143,10 @@ commands:
             download, check and unpack the pinned Node.js build of MAJOR into
             /opt/hostashi/node/MAJOR (root; started by
             hostashi-node-install@MAJOR.service)
+  wpcli-install
+            download and check the pinned WP-CLI phar into
+            /opt/hostashi/wp-cli/VERSION (root; started by
+            hostashi-wpcli-install.service, ADR-0069)
   python status | python install LINE | python remove LINE
             the installed Python lines and the last installation, start the
             installation of a line (for example 3.13) or remove one that no
@@ -448,6 +453,20 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		}
 
 		err = (&nodeinstall.Installer{Out: stdout}).Install(ctx, fs.Arg(0))
+	case "wpcli-install":
+		if fs.Parse(args) != nil || fs.NArg() != 0 {
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+
+		if euid != 0 {
+			err = errors.New("must run as root")
+
+			break
+		}
+
+		err = (&wpinstall.Installer{Out: stdout}).Install(ctx)
 	case "user":
 		dbPath := fs.String("db", store.DefaultPath, "SQLite database path")
 		publicURL := fs.String("public-url", "", "panel address for the link (default: from "+envFile+")")
