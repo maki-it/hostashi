@@ -244,7 +244,9 @@ func (s *Service) EnableTLS(i Issuer) { s.issuer = i }
 
 // CreateRequest describes a new site.
 type CreateRequest struct {
-	Name    string
+	Name string
+	// Title is the display name (ADR-0072), empty for none.
+	Title   string
 	Pool    string // empty: the default pool
 	PHP     string // PHP version, empty: no PHP
 	Domains []string
@@ -435,6 +437,11 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		}
 	}
 
+	title, err := NormalizeTitle(req.Title)
+	if err != nil {
+		return store.Site{}, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -473,6 +480,20 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 
 	// Cleanup must run even when the request was canceled meanwhile.
 	undo := context.WithoutCancel(ctx)
+
+	if title != "" {
+		if _, err := s.st.SetSiteTitle(ctx, req.Name, title, s.now()); err != nil {
+			if derr := s.st.DeleteSite(undo, req.Name); derr != nil {
+				s.log.ErrorContext(ctx, "remove site row after failed create", "site", req.Name, "err", derr)
+			}
+
+			s.parkAgain(undo, actor, req.Name, parked)
+
+			return store.Site{}, err
+		}
+
+		created.Title = title
+	}
 
 	if err := s.storeTLSChoice(ctx, req, created.ID); err != nil {
 		if derr := s.st.DeleteSite(undo, req.Name); derr != nil {
