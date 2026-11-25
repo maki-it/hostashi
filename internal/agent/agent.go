@@ -753,6 +753,10 @@ func (h *siteOps) webApply(ctx context.Context, _ agentrpc.Caller, req agentapi.
 			site.Headers = *s.Headers
 		}
 
+		if s.Hardening != nil {
+			site.Hardening = *s.Hardening
+		}
+
 		if err := h.realIPFor(&site, s.RealIP); err != nil {
 			return agentapi.WebApplyResponse{}, err
 		}

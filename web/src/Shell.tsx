@@ -9,7 +9,7 @@ import { runDoctor } from "./doctor";
 import { listServices } from "./services";
 import { formatHash, type Route } from "./routes";
 import { isDark, saveColorScheme, type ColorScheme } from "./scheme";
-import { panelVersion, versionLabel } from "./system";
+import { panelVersion, releaseUrl, versionLabel } from "./system";
 import { IconButton } from "./ui";
 
 type ShellProps = {
@@ -215,7 +215,13 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
               {error}
             </p>
           )}
-          {isAdmin && version && <p className="app-version">Hostashi {versionLabel(version)}</p>}
+          {isAdmin && version && (
+            <p className="app-version">
+              <a href={releaseUrl(version)} target="_blank" rel="noopener noreferrer" title="Release notes">
+                Hostashi {versionLabel(version)}
+              </a>
+            </p>
+          )}
         </div>
       </aside>
       <div className="app-main">

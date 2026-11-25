@@ -119,6 +119,9 @@ type WebSite struct {
 	AssetCacheExts    []string `json:"assetCacheExts,omitempty"`
 	// Headers are the site's security headers (ADR-0056); nil sends none.
 	Headers *WebHeaders `json:"headers,omitempty"`
+	// Hardening are the site's hardening rules (ADR-0017, ADR-0069); nil
+	// keeps only the fixed ones. Static and PHP sites only.
+	Hardening *WebHardening `json:"hardening,omitempty"`
 	// RealIP takes the client address from a header of trusted proxies
 	// (ADR-0059); nil trusts nobody. The agent also refuses ranges that
 	// contain one of its own addresses (CheckOwn).
@@ -411,6 +414,16 @@ func (r WebApplyRequest) Validate() error {
 
 		if h := s.Headers; h != nil {
 			if err := h.Validate(); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
+		}
+
+		if h := s.Hardening; h != nil {
+			if s.accountless() || s.App != nil {
+				return fmt.Errorf("site %q: hardening rules are for static and PHP sites", s.User)
+			}
+
+			if err := h.Validate(s.PHP != ""); err != nil {
 				return fmt.Errorf("site %q: %w", s.User, err)
 			}
 		}

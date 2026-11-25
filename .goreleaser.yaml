@@ -53,9 +53,9 @@ nfpms:
     package_name: hostashi
     file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Arch }}"
     formats: [deb]
-    vendor: The Hostashi contributors
+    vendor: Maki IT
     homepage: https://github.com/maki-it/hostashi
-    maintainer: The Hostashi contributors <kontakt@maki-it.de>
+    maintainer: Maki IT <kontakt@maki-it.de>
     description: |-
       Hosting control panel for a single Linux server
       Hostashi runs websites with nginx, PHP-FPM and MariaDB on one Debian or
@@ -172,6 +172,10 @@ release:
   # it publishes the release at the end.
   draft: true
   prerelease: auto
+  # A re-run after a failed upload (for example during a GitHub outage)
+  # finds the files of the first attempt; replace them instead of failing
+  # with "already_exists".
+  replace_existing_artifacts: true
 
 changelog:
   use: github-native
