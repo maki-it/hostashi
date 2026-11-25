@@ -99,3 +99,35 @@ func TestProfilesOverHTTP(t *testing.T) {
 		t.Fatalf("unknown site: %d", rec.Code)
 	}
 }
+
+func TestCreateSiteWithProfile(t *testing.T) {
+	ag := &stubAgent{}
+	e := newAPIWithAgent(t, ag)
+	c := e.adminCookie(t)
+
+	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"app","php":"8.4","domains":["app.example.com"],"profile":"laravel"}`})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	for _, s := range ag.web.Sites {
+		if s.User == "app" && s.WebDir != "public" {
+			t.Fatalf("web dir: %+v", s)
+		}
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/app/profile", cookie: c}); !strings.Contains(rec.Body.String(), `"profile":"laravel"`) {
+		t.Fatalf("profile: %s", rec.Body)
+	}
+
+	for name, body := range map[string]string{
+		"old PHP":            `{"name":"old","php":"8.1","domains":["old.example.com"],"profile":"laravel"}`,
+		"PHP profile static": `{"name":"st","domains":["st.example.com"],"profile":"wordpress"}`,
+		"unknown":            `{"name":"un","php":"8.4","domains":["un.example.com"],"profile":"magento2"}`,
+		"redirect":           `{"name":"rd","type":"redirect","domains":["rd.example.com"],"redirect":{"target":"https://example.com"},"profile":"php"}`,
+	} {
+		if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: body}); rec.Code != http.StatusUnprocessableEntity {
+			t.Errorf("%s: %d %s", name, rec.Code, rec.Body)
+		}
+	}
+}

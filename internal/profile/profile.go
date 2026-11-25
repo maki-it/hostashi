@@ -14,6 +14,8 @@ package profile
 
 import (
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 )
@@ -256,4 +258,25 @@ func Effective(p Profile, o Overrides, php bool) agentapi.WebHardening {
 	}
 
 	return h
+}
+
+// PHPAtLeast reports whether PHP version v ("8.4") is lowest or newer. An
+// unreadable version is never enough.
+func PHPAtLeast(v, lowest string) bool {
+	vm, vn, ok1 := majorMinor(v)
+	mm, mn, ok2 := majorMinor(lowest)
+
+	return ok1 && ok2 && (vm > mm || vm == mm && vn >= mn)
+}
+
+func majorMinor(v string) (int, int, bool) {
+	maj, minor, ok := strings.Cut(v, ".")
+	if !ok {
+		return 0, 0, false
+	}
+
+	a, err1 := strconv.Atoi(maj)
+	b, err2 := strconv.Atoi(minor)
+
+	return a, b, err1 == nil && err2 == nil && a >= 0 && b >= 0
 }
