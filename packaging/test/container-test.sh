@@ -999,7 +999,7 @@ grep -q "/user.slice/user-$wpuid.slice/" <<<"$out" || fail "SSH session not in u
 # phar it says how to get it. It never runs as root.
 expect_mode /usr/local/bin/wp "755 root:root"
 expect_mode /etc/hostashi-php "711 root:root"
-[ "$(x cat /etc/hostashi-php/wp)" = 8.4 ] || fail "PHP version file of wp: $(x cat /etc/hostashi-php/wp)"
+[ "$(x cat /etc/hostashi-php/wp)" = "$ver" ] || fail "PHP version file of wp: $(x cat /etc/hostashi-php/wp)"
 out=$(x ssh "${sshopt[@]}" -p 2297 -i /root/t/k wp@127.0.0.1 'wp --version 2>&1' || true)
 grep -Eq '^WP-CLI [0-9]|WP-CLI is not installed' <<<"$out" || fail "wp over SSH: $out"
 x /usr/local/bin/wp --version >/dev/null 2>&1 && fail "wp ran as root"
