@@ -16,10 +16,12 @@ import (
 // constraint error and the API answered 500 (deploys, malware).
 func TestEveryCategoryStorable(t *testing.T) {
 	ctx := context.Background()
+
 	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "h.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = st.Close() })
 
 	u, err := st.CreateFirstUser(ctx, "kim", "hash")
@@ -32,10 +34,12 @@ func TestEveryCategoryStorable(t *testing.T) {
 			if err := st.SetNotificationPrefs(ctx, u.ID, map[string]bool{string(c): on}); err != nil {
 				t.Fatalf("store %s=%v: %v", c, on, err)
 			}
+
 			got, err := st.NotificationPrefs(ctx, u.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if v, ok := got[string(c)]; !ok || v != on {
 				t.Fatalf("%s: got %v (present %v), want %v", c, v, ok, on)
 			}
