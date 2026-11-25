@@ -34,7 +34,7 @@ describe("App start", () => {
       "GET /api/v1/auth/me": { body: { ...admin, auth: "session" } },
       "GET /api/v1/backups": {
         body: {
-          settings: { version: 1, retention: { daily: 7, weekly: 4, monthly: 6 }, windowStart: 1, windowEnd: 5, readParts: 12 },
+          settings: { version: 1, retention: { hourly: 0, daily: 7, weekly: 4, monthly: 6, yearly: 0 }, intervalHours: 24, windowStart: 1, windowEnd: 5, readParts: 12 },
           publicKey: "",
           hostKey: "",
           ready: false,

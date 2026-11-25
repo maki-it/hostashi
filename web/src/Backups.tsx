@@ -10,6 +10,7 @@ import {
   getImport,
   getRestore,
   importDump,
+  intervals,
   listSites,
   poll,
   runBackup,
@@ -161,9 +162,12 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
   const [host, setHost] = useState(s.target?.host ?? "");
   const [port, setPort] = useState(String(s.target?.port ?? 22));
   const [path, setPath] = useState(s.target?.path ?? "hostashi");
+  const [hourly, setHourly] = useState(String(s.retention.hourly ?? 0));
   const [daily, setDaily] = useState(String(s.retention.daily));
   const [weekly, setWeekly] = useState(String(s.retention.weekly));
   const [monthly, setMonthly] = useState(String(s.retention.monthly));
+  const [yearly, setYearly] = useState(String(s.retention.yearly ?? 0));
+  const [interval, setIntervalHours] = useState(String(s.intervalHours ?? 24));
   const [start, setStart] = useState(String(s.windowStart));
   const [end, setEnd] = useState(String(s.windowEnd));
   const [parts, setParts] = useState(String(s.readParts));
@@ -181,7 +185,8 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
     const next: Settings = {
       version: s.version,
       target: { user: user.trim(), host: host.trim().toLowerCase(), port: num(port, 22), path: path.trim() },
-      retention: { daily: num(daily, 7), weekly: num(weekly, 4), monthly: num(monthly, 6) },
+      retention: { hourly: num(hourly, 0), daily: num(daily, 7), weekly: num(weekly, 4), monthly: num(monthly, 6), yearly: num(yearly, 0) },
+      intervalHours: num(interval, 24),
       windowStart: num(start, 1),
       windowEnd: num(end, 5),
       readParts: num(parts, 12),
@@ -224,6 +229,9 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
         <fieldset className="ui-fieldset ui-stack">
           <legend>Keep snapshots</legend>
           <div className="ui-fields ui-fields-num">
+            <Field label="Hourly">
+              <input className="ui-input" value={hourly} onChange={(e) => setHourly(e.target.value)} inputMode="numeric" required />
+            </Field>
             <Field label="Daily">
               <input className="ui-input" value={daily} onChange={(e) => setDaily(e.target.value)} inputMode="numeric" required />
             </Field>
@@ -233,19 +241,42 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
             <Field label="Monthly">
               <input className="ui-input" value={monthly} onChange={(e) => setMonthly(e.target.value)} inputMode="numeric" required />
             </Field>
+            <Field label="Yearly">
+              <input className="ui-input" value={yearly} onChange={(e) => setYearly(e.target.value)} inputMode="numeric" required />
+            </Field>
           </div>
+          <p className="ui-hint ui-flush">
+            The newest snapshot of each hour, day, week, month and year is kept, up to these counts. Hourly only matters when backups run more than once a day.
+          </p>
         </fieldset>
         <fieldset className="ui-fieldset ui-stack">
           <legend>Schedule</legend>
           <div className="ui-fields ui-fields-num">
-            <Field label="Start from (hour)">
-              <input className="ui-input" value={start} onChange={(e) => setStart(e.target.value)} inputMode="numeric" required />
+            <Field label="Run backups">
+              <select className="ui-select" value={interval} onChange={(e) => setIntervalHours(e.target.value)}>
+                {intervals.map((h) => (
+                  <option key={h} value={String(h)}>
+                    {h === 24 ? "Once a day" : h === 1 ? "Every hour" : `Every ${h} hours`}
+                  </option>
+                ))}
+              </select>
             </Field>
-            <Field label="Start until (hour)">
-              <input className="ui-input" value={end} onChange={(e) => setEnd(e.target.value)} inputMode="numeric" required />
-            </Field>
+            {interval === "24" && (
+              <>
+                <Field label="Start from (hour)">
+                  <input className="ui-input" value={start} onChange={(e) => setStart(e.target.value)} inputMode="numeric" required />
+                </Field>
+                <Field label="Start until (hour)">
+                  <input className="ui-input" value={end} onChange={(e) => setEnd(e.target.value)} inputMode="numeric" required />
+                </Field>
+              </>
+            )}
           </div>
-          <p className="ui-hint ui-flush">The daily backup starts at a random time in this window, server time.</p>
+          <p className="ui-hint ui-flush">
+            {interval === "24"
+              ? "The daily backup starts at a random time in this window, server time."
+              : "Backups start at a fixed random minute after each of these hours, counted from midnight, server time. A backup that is still running when the next one is due skips that one."}
+          </p>
           <div className="ui-fields ui-fields-num">
             <Field label="Data check parts" hint="Each month 1 of these parts is read back and checked. 0 turns it off.">
               <input className="ui-input" value={parts} onChange={(e) => setParts(e.target.value)} inputMode="numeric" required />

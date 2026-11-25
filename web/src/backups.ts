@@ -11,11 +11,16 @@ export type Target = { user: string; host: string; port: number; path: string };
 export type Settings = {
   version: number;
   target?: Target;
-  retention: { daily: number; weekly: number; monthly: number };
+  retention: { hourly: number; daily: number; weekly: number; monthly: number; yearly: number };
+  // Hours between two scheduled runs; 24 is the daily run in the window.
+  intervalHours: number;
   windowStart: number;
   windowEnd: number;
   readParts: number;
 };
+
+// The intervals the agent accepts (ADR-0008, amendment 2026-11-25).
+export const intervals = [1, 2, 3, 4, 6, 8, 12, 24];
 
 export type ItemResult = {
   kind: string;
