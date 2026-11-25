@@ -902,6 +902,11 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		return err
 	}
 
+	profiles, err := s.st.AllSiteProfiles(ctx)
+	if err != nil {
+		return err
+	}
+
 	for _, site := range sites {
 		if site.State == store.SiteActive && len(site.Domains) > 0 {
 			tls := site.TLS && s.certCovers(site, 0)
@@ -971,6 +976,8 @@ func (s *Service) applyWeb(ctx context.Context) error {
 			if site.Type == store.SiteTypeStatic {
 				ws.SPA = site.SPA
 			}
+
+			ws.Hardening = webHardening(profiles, site, php)
 
 			if site.AssetCache && (site.Type == store.SiteTypeStatic || site.Type == store.SiteTypePHP) {
 				ws.AssetCache, ws.AssetCacheSeconds, ws.AssetCacheExts = true, site.AssetCacheSeconds, site.AssetCacheExts
