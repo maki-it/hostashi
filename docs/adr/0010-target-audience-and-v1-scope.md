@@ -1,6 +1,6 @@
 # ADR-0010 Target audience and v1 scope
 
-**Status:** Proposed (not accepted). **Date drafted:** 2026-11-17. **Decides:** Kim. **Depends on:** open questions 1 and 5. **Feeds:** ADR-0009 (platform matrix), ADR-0013.
+**Status:** Accepted (2026-11-25, by Kim), option A. **Date drafted:** 2026-11-17. **Decides:** Kim. **Depends on:** open questions 1 and 5. **Feeds:** ADR-0009 (platform matrix), ADR-0013.
 
 ## Context
 
@@ -49,12 +49,12 @@ Effect: option A is confirmed by the owner. The first user is Kim's own business
 
 ## Consequences
 
-- Smaller, shippable roadmap: Alpha PHP site with HTTPS and DB, Beta parity, 1.0 with pentest [V: `06-roadmap.md`].
+- Smaller, shippable roadmap: Alpha PHP site with HTTPS and DB, Beta parity, 1.0 after an own security review. An external pentest stays a goal for later, there is no budget for it before 1.0 (Kim, 2026-11-21) [V: `06-roadmap.md`]. The exact feature scope of 1.0 is section 3.0 of [`03-features.md`](../03-features.md).
 - Clear "no" for requests that need cross-customer billing or mass accounts. Documented in a public "Scope" page.
-- Platform matrix stays small (ADR-0009): Ubuntu 24.04 and Debian 13, plus older LTS, amd64 and arm64 [V: ADR-0009].
+- Platform matrix stays small: Debian 13 and Ubuntu 26.04, amd64 and arm64 ([ADR-0020](0020-nginx-package-source-and-brotli.md)), fresh servers only.
 - Risk: if the real demand is hosting resellers, v1 will miss the market. Mitigation: validate before Beta, not after 1.0.
-- Risk: users with 3 to 5 servers see no central management and leave. Mitigation: API and YAML export/apply as the automation path [V: `03-features.md` 3.10].
+- Risk: users with 3 to 5 servers see no central management and leave. Mitigation: the REST API with its OpenAPI specification and the CLI as the automation path ([ADR-0058](0058-openapi-spec-and-cli-parity.md)); YAML export/apply is not in 1.0.
 
 ## Open questions
 
-None at this level. Remaining before Accepted: Kim sets the status, and the Phase 0 market analysis checks the audience assumption.
+None. Accepted on 2026-11-25 by Kim. The market analysis and the interviews under "How to check the assumption" are no longer a condition for 1.0, because the first user is Kim's own business; they stay useful before a public launch.

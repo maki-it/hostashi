@@ -59,20 +59,24 @@ Goal: feature parity for the most common CloudPanel use cases.
 
 ## Phase 3: Release 1.0 (8–10 weeks)
 
-Goal: trustworthy enough for production servers.
+Goal: trustworthy enough for production servers. The feature scope is section 3.0 of [03-features](03-features.md) (Kim, 2026-11-21; this phase follows it since 2026-11-25).
 
-- Adopt mode and CloudPanel importer
-- PostgreSQL, staging/cloning, zero-downtime deployments
-- State as YAML (export/apply), OIDC SSO, Prometheus endpoint, Fail2ban/CrowdSec
-- **Own security review** and fixes (code review of every trust boundary, gosec, govulncheck, semgrep, isolation test, IDOR matrix), automated restore tests. An external pentest stays a goal for later; there is no budget for it before 1.0 (Kim, 2026-11-21)
+- CloudPanel importer onto a fresh Hostashi server
+- Site types Node.js, reverse proxy, redirect, Python and app; www/non-www redirect; permission reset; logs and audit log in the panel
+- External PostgreSQL servers (no local PostgreSQL), Git deploy, staging/cloning, change the domain of a site, WordPress quick install, vhost templates
+- Cloudflare real IP, basic auth and IP rules per site, optional malware scan, time zone/hostname/reboot, Prometheus endpoint, fail2ban
+- OpenAPI specification and a CLI with parity
+- **Own security review** and fixes (code review of every trust boundary, gosec, govulncheck, semgrep, isolation test, IDOR matrix). An external pentest stays a goal for later; there is no budget for it before 1.0 (Kim, 2026-11-21)
 - Complete documentation (EN), UI in EN/DE, migration guides
 - Signed releases, SBOM, support and update policy
+
+Not in 1.0 (Kim, 2026-11-25): adopt mode on an existing server, local PostgreSQL, zero-downtime deployments outside Git deploy, state as YAML (export/apply), OIDC SSO, CrowdSec, automated restore tests.
 
 **Acceptance:** no open critical or high findings from the own security review, upgrade tests from beta to 1.0, release checklist complete.
 
 ## Phase 4 and later (not planned, options only)
 
-Multi-server (controller + agents), resellers and packages, mail integration (Mailcow/Stalwart), Docker Compose apps, Git deploy, Terraform provider, plugin system, LXC operation, cloud provider integrations (Hetzner Cloud and Robot, snapshots, firewalls), web terminal.
+Multi-server (controller + agents), resellers and packages, mail integration (Mailcow/Stalwart), Docker Compose apps, the items listed under "Not in 1.0" above, Terraform provider, plugin system, LXC operation, cloud provider integrations (Hetzner Cloud and Robot, snapshots, firewalls), web terminal.
 
 ## Test strategy
 
