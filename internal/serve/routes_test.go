@@ -135,6 +135,8 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/profiles":                                   "sites:read",
 	"GET /api/v1/sites/{name}/profile":                       "sites:read",
 	"PUT /api/v1/sites/{name}/profile":                       "sites.profile:write",
+	"GET /api/v1/sites/{name}/wordpress":                     "sites:read",
+	"POST /api/v1/sites/{name}/wordpress":                    "sites.wordpress:install",
 	"GET /api/v1/sites/{name}/real-ip":                       "sites:read",
 	"PUT /api/v1/sites/{name}/real-ip":                       "sites.realip:write",
 	"GET /api/v1/sites/{name}/access":                        "sites:read",

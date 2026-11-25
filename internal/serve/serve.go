@@ -268,6 +268,7 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 			registerPHPSettings(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerHeaders(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerProfiles(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerWordPress(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerRealIP(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerAccess(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPageCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
@@ -615,6 +616,7 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.Sites.EnableAppEnv(box)
 	deps.Sites.EnableGit(box)
 	deps.Sites.EnableDeploys(hosting.RPCAgent{C: client})
+	deps.Sites.EnableWordPress(hosting.RPCAgent{C: client})
 	deps.Sites.EnableScans(hosting.RPCAgent{C: client})
 
 	deps.Sites.ObserveApply(m.WebApplied)

@@ -160,17 +160,18 @@ type Service struct {
 
 	issuer     Issuer
 	kick       chan struct{}
-	cron       CronAgent     // nil: no cron jobs
-	limits     LimitsAgent   // nil: no resource limits (ADR-0015)
-	ssh        SSHAgent      // nil: no SSH keys (ADR-0032)
-	cache      CacheAgent    // nil: no object caches (ADR-0045)
-	apps       AppAgent      // nil: no Node.js apps (ADR-0054)
-	envBox     *secrets.Box  // nil: apps have no environment variables
-	gitBox     *secrets.Box  // nil: no Git deploy (ADR-0062)
-	deploys    DeployAgent   // nil: no deploy runs (ADR-0062)
-	deployKick chan struct{} // wakes RunDeploys
-	scans      ScanAgent     // nil: no malware scans (ADR-0064)
-	scanKick   chan struct{} // wakes RunScans
+	cron       CronAgent      // nil: no cron jobs
+	limits     LimitsAgent    // nil: no resource limits (ADR-0015)
+	ssh        SSHAgent       // nil: no SSH keys (ADR-0032)
+	cache      CacheAgent     // nil: no object caches (ADR-0045)
+	apps       AppAgent       // nil: no Node.js apps (ADR-0054)
+	envBox     *secrets.Box   // nil: apps have no environment variables
+	gitBox     *secrets.Box   // nil: no Git deploy (ADR-0062)
+	deploys    DeployAgent    // nil: no deploy runs (ADR-0062)
+	wp         WordPressAgent // nil: no WordPress installs (ADR-0069)
+	deployKick chan struct{}  // wakes RunDeploys
+	scans      ScanAgent      // nil: no malware scans (ADR-0064)
+	scanKick   chan struct{}  // wakes RunScans
 	// rtCursor and rtPending belong to RunScans: where the real-time log
 	// was read to (0 after a start: the agent's log is read again, known
 	// findings are not reported twice) and the findings waiting for an
