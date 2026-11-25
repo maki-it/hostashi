@@ -171,8 +171,19 @@ func TestStartAndStatus(t *testing.T) {
 	// Some files could not be read: still the findings, with a note.
 	ctl.props["ExecMainStatus"] = "2"
 
-	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.State != agentapi.ScanSucceeded || st.Error == "" || len(st.Findings) != 1 {
+	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.State != agentapi.ScanSucceeded || st.Error != "some files could not be scanned" || len(st.Findings) != 1 {
 		t.Fatalf("partial: %+v", st)
+	}
+
+	// The first error line of the log says which file and why.
+	partial := home + "/shell.php: Php.Webshell-1 FOUND\n" +
+		home + "/private: Permission denied ERROR\n" + home + "/other: Permission denied ERROR\n"
+	if err := os.WriteFile(m.LogFile("blog"), []byte(partial), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.Error != "some files could not be scanned: "+home+"/private: Permission denied ERROR" || len(st.Findings) != 1 {
+		t.Fatalf("partial with reason: %+v", st)
 	}
 
 	// Exit 1 with no usable line is not "clean".
@@ -421,5 +432,31 @@ func TestEngine(t *testing.T) {
 	st, _ := e.Status(ctx)
 	if st.State != agentapi.ScanEngineOn || st.Version != "1.4.6+dfsg-1~deb13u1" || st.Signatures == "" || !e.On() {
 		t.Fatalf("on: %+v", st)
+	}
+}
+
+func TestFirstError(t *testing.T) {
+	dir := t.TempDir()
+
+	for _, tc := range []struct{ log, want string }{
+		{"", ""},
+		{"/home/blog/a.php: X FOUND\nLibClamAV Warning: old\n", ""},
+		{"ERROR: Can't access file /home/blog/x\n", "ERROR: Can't access file /home/blog/x"},
+		{"LibClamAV Error: cli_loaddbdir(): no db\nERROR: later\n", "LibClamAV Error: cli_loaddbdir(): no db"},
+		{"/home/blog/\x1b[31mx: Excluded\n/home/blog/\x1bsock: Not supported file type ERROR\n", "/home/blog/ sock: Not supported file type ERROR"},
+		{"/home/blog/" + strings.Repeat("a", 600) + ": Permission denied ERROR\n", "/home/blog/" + strings.Repeat("a", maxErrorLine-len("/home/blog/")) + "..."},
+	} {
+		name := filepath.Join(dir, "log")
+		if err := os.WriteFile(name, []byte(tc.log), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		if got := firstError(name); got != tc.want {
+			t.Errorf("firstError(%q) = %q, want %q", tc.log, got, tc.want)
+		}
+	}
+
+	if got := firstError(filepath.Join(dir, "missing")); got != "" {
+		t.Errorf("missing log: %q", got)
 	}
 }

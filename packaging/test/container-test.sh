@@ -599,6 +599,8 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 [ "$run" = succeeded ] || fail "scan did not succeed ($run): $(x cat /tmp/api.out)"
+# A site with nothing unreadable in it scans without a note.
+[ "$(jget 'd["runs"][0]["error"]')" = "" ] || fail "scan reported an error: $(x cat /tmp/api.out); log: $(x cat /var/log/hostashi/scan/blog.log)"
 # ClamAV names signatures of its own databases NAME.UNOFFICIAL.
 [ "$(jget '[f["path"]+" "+f["signature"].split(".UNOFFICIAL")[0]+" "+f["state"] for f in d["findings"]]')" = "['htdocs/eicar.com Hostashi.Test.EICAR open']" ] ||
   fail "findings: $(x cat /tmp/api.out)"

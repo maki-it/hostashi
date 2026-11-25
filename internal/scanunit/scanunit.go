@@ -63,6 +63,8 @@ const (
 	maxLogLines = 200_000
 	// maxErrorTail is how much of the log a failed run carries.
 	maxErrorTail = 2048
+	// maxErrorLine bounds the error line a partial run carries.
+	maxErrorLine = 512
 )
 
 // Excluded are the directories of a home that are not scanned: caches
@@ -417,6 +419,9 @@ func (m *Manager) Status(ctx context.Context, req agentapi.ScanStatusRequest) (a
 
 	if props["ExecMainStatus"] == exitErrors {
 		out.Error = "some files could not be scanned"
+		if e := firstError(m.LogFile(req.Site)); e != "" {
+			out.Error += ": " + e
+		}
 	}
 
 	f, err := os.Open(m.LogFile(req.Site))
@@ -553,6 +558,44 @@ func hashFile(root *os.Root, rel string) (string, int64, error) {
 }
 
 // tail is the end of a log, at most maxErrorTail bytes on one line.
+// firstError returns the first line of a log that reports an error of
+// clamscan or clamdscan ("<path>: <reason> ERROR", "ERROR: ...",
+// "LibClamAV Error: ..."), cut to maxErrorLine and with control
+// characters replaced; "" if there is none.
+func firstError(name string) string {
+	f, err := os.Open(name)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 4096), maxLogLine)
+
+	for n := 0; n < maxLogLines && sc.Scan(); n++ {
+		line := sc.Text()
+		if !strings.HasSuffix(line, " ERROR") && !strings.HasPrefix(line, "ERROR: ") && !strings.HasPrefix(line, "LibClamAV Error: ") {
+			continue
+		}
+
+		line = strings.Map(func(r rune) rune {
+			if r < 0x20 || r == 0x7f {
+				return ' '
+			}
+
+			return r
+		}, strings.ToValidUTF8(line, "?"))
+
+		if len(line) > maxErrorLine {
+			line = strings.ToValidUTF8(line[:maxErrorLine], "") + "..."
+		}
+
+		return line
+	}
+
+	return ""
+}
+
 func tail(name string) string {
 	f, err := os.Open(name)
 	if err != nil {
