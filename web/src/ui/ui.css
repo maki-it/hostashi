@@ -1558,3 +1558,44 @@ a.ui-btn {
 .ui-unsaved {
   scroll-margin-bottom: var(--space-6);
 }
+
+/* Sites list: whether a site is switched on, before its name */
+.ui-state-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.ui-dot-ok {
+  background: var(--ok);
+}
+.ui-dot-warn {
+  background: var(--warn);
+}
+.ui-dot-off {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--muted);
+}
+.ui-cell-off a,
+.ui-cell-off > span {
+  color: var(--muted);
+}
+.ui-https {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--ok);
+}
+.ui-https-off {
+  font-weight: 400;
+  color: var(--muted);
+}
+.ui-site-name {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.ui-site-name > .ui-state-dot {
+  margin-top: 7px;
+}

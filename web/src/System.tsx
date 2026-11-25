@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { Power } from "@phosphor-icons/react";
+import { PencilSimple, Power } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 import { PanelCertificate } from "./Certificate";
 import { MalwareEngineCard } from "./Malware";
@@ -124,7 +124,7 @@ function Overview({
   const [edit, setEdit] = useState<"" | "hostname" | "timezone">("");
   const change = (what: "hostname" | "timezone", label: string) =>
     edit !== what && (
-      <Button small aria-label={`Change ${label}`} onClick={() => setEdit(what)}>
+      <Button small icon={<PencilSimple size={16} aria-hidden />} aria-label={`Change ${label}`} onClick={() => setEdit(what)}>
         Change
       </Button>
     );

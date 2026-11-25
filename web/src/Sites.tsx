@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { Plus } from "@phosphor-icons/react";
+import { LockSimple, LockSimpleOpen, Plus } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatHash } from "./routes";
 import {
@@ -95,21 +95,31 @@ function matches(s: Site, q: string, state: string): boolean {
   return true;
 }
 
-// siteIssues lists what differs from an active site with working HTTPS;
-// the list shows only those, so a problem stands out among quiet rows.
+// siteIssues lists what needs a look on a site: maintenance and a
+// certificate that is missing or failed. Errors sort first.
 export function siteIssues(s: Site): { word: string; tone: "ok" | "warn" | "err" | "off" }[] {
   const out: { word: string; tone: "ok" | "warn" | "err" | "off" }[] = [];
   const st = siteStatus(s);
-  if (st.key !== "active") out.push({ word: st.word, tone: st.tone });
-  if (!s.tls.enabled || !s.tls.active) out.push({ word: httpsLabel(s.tls), tone: httpsTone(s.tls) });
+  if (st.key === "maintenance") out.push({ word: st.word, tone: st.tone });
+  if (s.tls.enabled && !s.tls.active) out.push({ word: httpsLabel(s.tls), tone: httpsTone(s.tls) });
   return out;
 }
 
 const rank = { err: 0, warn: 1, off: 2, ok: 3 } as const;
 
-// statusRank sorts problems first: errors, warnings, then switched off.
+// statusRank sorts problems first: errors, warnings, then HTTP only.
 function statusRank(s: Site): number {
-  return Math.min(3, ...siteIssues(s).map((i) => rank[i.tone]));
+  const r = Math.min(3, ...siteIssues(s).map((i) => rank[i.tone]));
+  return r === 3 && !s.tls.enabled ? 2 : r;
+}
+
+// StateDot shows before the name whether the site is switched on. The word
+// is the accessible name and the tooltip, so the colour is never alone.
+function StateDot({ s }: { s: Site }) {
+  const st = siteStatus(s);
+  const tone = st.key === "active" || st.key === "maintenance" ? "ok" : st.key === "creating" ? "warn" : "off";
+  const word = st.key === "maintenance" ? "Active" : st.word;
+  return <span className={`ui-state-dot ui-dot-${tone}`} role="img" aria-label={word} title={word} />;
 }
 
 const columns: Column<Site>[] = [
@@ -118,11 +128,14 @@ const columns: Column<Site>[] = [
     header: "Site",
     sortValue: (s) => s.name,
     cell: (s) => (
-      <div className="ui-cell-main">
-        <a className="ui-row-link" href={formatHash({ page: "sites", site: { name: s.name } })}>
-          {s.name}
-        </a>
-        <span>{s.domains[0]}</span>
+      <div className="ui-site-name">
+        <StateDot s={s} />
+        <div className={`ui-cell-main${s.disabled ? " ui-cell-off" : ""}`}>
+          <a className="ui-row-link" href={formatHash({ page: "sites", site: { name: s.name } })}>
+            {s.name}
+          </a>
+          <span>{s.domains[0]}</span>
+        </div>
       </div>
     ),
   },
@@ -131,19 +144,28 @@ const columns: Column<Site>[] = [
     key: "status",
     header: "Status",
     sortValue: (s) => statusRank(s),
-    cell: (s) => {
-      const issues = siteIssues(s);
-      if (issues.length === 0) return <span className="ui-quiet">Active, HTTPS</span>;
-      return (
-        <span className="ui-row ui-row-tight">
-          {issues.map((i) => (
-            <Badge key={i.word} tone={i.tone}>
-              {i.word}
-            </Badge>
-          ))}
-        </span>
-      );
-    },
+    cell: (s) => (
+      <span className="ui-row ui-row-tight">
+        {s.tls.active ? (
+          <span className="ui-https">
+            <LockSimple size={16} weight="bold" aria-hidden />
+            HTTPS
+          </span>
+        ) : (
+          !s.tls.enabled && (
+            <span className="ui-https ui-https-off">
+              <LockSimpleOpen size={16} aria-hidden />
+              HTTP only
+            </span>
+          )
+        )}
+        {siteIssues(s).map((i) => (
+          <Badge key={i.word} tone={i.tone}>
+            {i.word}
+          </Badge>
+        ))}
+      </span>
+    ),
   },
 ];
 

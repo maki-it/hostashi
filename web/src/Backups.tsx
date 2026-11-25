@@ -210,8 +210,7 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
             </Field>
             <Field
               label="Port"
-              hint="Usually 22, Hetzner Storage Box 23."
-              {...(storageBox && port.trim() !== "23" && { error: "Hetzner Storage Boxes serve SFTP on port 23." })}
+              {...(storageBox && (port.trim() === "23" ? { hint: "Right for a Hetzner Storage Box." } : { error: "Hetzner Storage Boxes serve SFTP on port 23." }))}
             >
               <input className="ui-input" value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" required />
             </Field>
