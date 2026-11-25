@@ -31,7 +31,7 @@ func NormalizeTitle(title string) (string, error) {
 	}
 
 	for _, r := range t {
-		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == ' ' || r == ' ' {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == '\u2028' || r == '\u2029' {
 			return "", fmt.Errorf("%w: the display name contains a control character or line break", ErrInvalid)
 		}
 	}

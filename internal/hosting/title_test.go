@@ -26,9 +26,9 @@ func TestNormalizeTitle(t *testing.T) {
 		{"tab\there", "", false},
 		{"bell\x07", "", false},
 		{"del\x7f", "", false},
-		{"rtl‮evil", "", false},   // right-to-left override
-		{"zero​width", "", false}, // zero width space (Cf)
-		{"line sep", "", false},
+		{"rtl\u202eevil", "", false},   // right-to-left override
+		{"zero\u200bwidth", "", false}, // zero width space (Cf)
+		{"line\u2028sep", "", false},
 		{"bad\xffutf8", "", false},
 	} {
 		got, err := NormalizeTitle(c.in)
@@ -85,7 +85,7 @@ func TestSetTitle(t *testing.T) {
 		t.Fatalf("missing site: %v", err)
 	}
 
-	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", Title: "bad‮", Domains: []string{"blog.example.com"}}); !errors.Is(err, ErrInvalid) {
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "blog", Title: "bad\u202e", Domains: []string{"blog.example.com"}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("create with a bad title: %v", err)
 	}
 
