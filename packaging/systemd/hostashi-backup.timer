@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Daily backup (ADR-0008): a random but fixed minute per server between
-# 01:00 and 05:00 local time. The agent replaces the window with a drop-in
-# when the administrator changes it, and enables the timer once a backup
+# Scheduled backup (ADR-0008): daily by default, at a random but fixed
+# minute per server between 01:00 and 05:00 local time. The agent replaces
+# the schedule (daily window or every 1 to 12 hours) with a drop-in when
+# the administrator changes it, and enables the timer once a backup
 # target is set up; the installer only installs it.
 
 [Unit]
-Description=Daily Hostashi backup
+Description=Scheduled Hostashi backup
 Documentation=https://github.com/maki-it/hostashi
 
 [Timer]

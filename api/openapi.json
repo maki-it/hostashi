@@ -709,17 +709,25 @@
           "daily": {
             "type": "integer"
           },
+          "hourly": {
+            "type": "integer"
+          },
           "monthly": {
             "type": "integer"
           },
           "weekly": {
             "type": "integer"
+          },
+          "yearly": {
+            "type": "integer"
           }
         },
         "required": [
           "daily",
+          "hourly",
           "monthly",
-          "weekly"
+          "weekly",
+          "yearly"
         ],
         "type": "object"
       },
@@ -729,10 +737,16 @@
           "daily": {
             "type": "integer"
           },
+          "hourly": {
+            "type": "integer"
+          },
           "monthly": {
             "type": "integer"
           },
           "weekly": {
+            "type": "integer"
+          },
+          "yearly": {
             "type": "integer"
           }
         },
@@ -741,6 +755,9 @@
       "BackupSettings": {
         "additionalProperties": false,
         "properties": {
+          "intervalHours": {
+            "type": "integer"
+          },
           "readParts": {
             "type": "integer"
           },
@@ -768,6 +785,7 @@
           }
         },
         "required": [
+          "intervalHours",
           "readParts",
           "retention",
           "version",
@@ -779,6 +797,9 @@
       "BackupSettingsInput": {
         "additionalProperties": false,
         "properties": {
+          "intervalHours": {
+            "type": "integer"
+          },
           "readParts": {
             "type": "integer"
           },
