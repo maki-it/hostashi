@@ -8,7 +8,7 @@ With the setting on, nginx takes the visitor's address from a header, but only f
 
 ## Switch it on
 
-1. Open the site and go to the **Domains & HTTPS** tab.
+1. Open the site and go to the **Operations › Visitor address** tab.
 2. Under **Real visitor address**, tick **This site is behind a proxy or CDN**.
 3. Choose the proxies to trust:
    - **Cloudflare** trusts Cloudflare's published edge ranges. The card shows how many there are and from which day the list is.

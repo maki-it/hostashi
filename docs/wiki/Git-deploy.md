@@ -4,13 +4,13 @@ A site can take its files from a Git repository. Each deploy fetches the branch,
 
 **For:** admins and managers of a site set up the repository; everybody who can open the site, users too, can deploy and roll back.
 
-The **Git** tab is there for static, PHP, Node.js, app and Python sites. Proxy and redirect sites have no files of their own, so they have no Git tab.
+The **Files › Git deploy** tab is there for static, PHP, Node.js, app and Python sites. Proxy and redirect sites have no files of their own, so they have no Git tab.
 
 ![The Git tab of a site](images/site-git.png)
 
 ## Set up a repository
 
-Open the site's **Git** tab and fill in the form.
+Open the site's **Files › Git deploy** tab and fill in the form.
 
 ![Setting up a repository](images/site-git-setup.png)
 

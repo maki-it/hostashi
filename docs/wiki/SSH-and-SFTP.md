@@ -12,7 +12,7 @@ Each site with files has one login: its Linux user, named like the site. You log
    ssh-keygen -t ed25519
    ```
 
-2. Open the site's **SSH & SFTP** tab and add the contents of the `.pub` file, for example `~/.ssh/id_ed25519.pub`. Ed25519, ECDSA or RSA with at least 3072 bits are accepted.
+2. Open the site's **Security › SSH & SFTP** tab and add the contents of the `.pub` file, for example `~/.ssh/id_ed25519.pub`. Ed25519, ECDSA or RSA with at least 3072 bits are accepted.
 3. Give the key a label, so you know later whose key it is.
 4. Choose the access:
    - **SFTP only** (default): file transfer with SFTP and `scp`, no terminal.

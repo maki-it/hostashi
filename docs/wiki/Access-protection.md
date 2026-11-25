@@ -1,6 +1,6 @@
 # Access protection
 
-A site can let only some addresses in, block some addresses, or ask for a user name and password: for the whole site or only for some paths, such as the admin area of a CMS. nginx checks this before the site sees a request, for every file and page. You set it on the site's **Access** tab.
+A site can let only some addresses in, block some addresses, or ask for a user name and password: for the whole site or only for some paths, such as the admin area of a CMS. nginx checks this before the site sees a request, for every file and page. You set it on the site's **Security › Access** tab.
 
 **For:** everyone who can change the site.
 
@@ -8,7 +8,7 @@ A site can let only some addresses in, block some addresses, or ask for a user n
 
 ## IP rule
 
-1. Open the site and go to the **Access** tab.
+1. Open the site and go to the **Security › Access** tab.
 2. Under **IP rule**, choose:
    - **Everybody may visit**: no rule.
    - **Only these addresses may visit**: every other address gets *403 Forbidden*.
@@ -52,11 +52,11 @@ Behind a CDN such as Cloudflare, every request comes from the CDN's addresses. S
 
 ## Site types
 
-Static, PHP, Node.js, Python, app and reverse proxy sites can use access protection. A redirect site has no **Access** tab: nginx answers the redirect before it would check access. A site that becomes a redirect keeps its setting, but it takes effect only when the site becomes another type again.
+Static, PHP, Node.js, Python, app and reverse proxy sites can use access protection. A redirect site has no **Security › Access** tab: nginx answers the redirect before it would check access. A site that becomes a redirect keeps its setting, but it takes effect only when the site becomes another type again.
 
 ## Custom nginx snippets
 
-A custom snippet on the **nginx** tab must not use `allow`, `deny` or `satisfy` while an IP rule is on, nor `auth_basic`, `auth_basic_user_file` or `satisfy` while the password is on. The panel refuses saving such a snippet, and it refuses switching on the rule while a snippet uses these directives.
+A custom snippet on the **Operations › nginx** tab must not use `allow`, `deny` or `satisfy` while an IP rule is on, nor `auth_basic`, `auth_basic_user_file` or `satisfy` while the password is on. The panel refuses saving such a snippet, and it refuses switching on the rule while a snippet uses these directives.
 
 ## Command line
 

@@ -1,6 +1,6 @@
 # File manager
 
-Every site has a **Files** tab between "Domains & HTTPS" and "PHP". It shows the site's home folder (`/home/<site>`); the web root is `htdocs`.
+Every site has a **Files › File manager** tab between "Domains & HTTPS" and "PHP". It shows the site's home folder (`/home/<site>`); the web root is `htdocs`.
 
 ## What you can do
 

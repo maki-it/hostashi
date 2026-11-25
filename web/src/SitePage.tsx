@@ -45,29 +45,12 @@ import { RealIPCard } from "./RealIP";
 import { SecurityHeadersCard } from "./SecurityHeaders";
 import { SSHSettings } from "./SSH";
 import { PermissionsResetCard } from "./PermissionsReset";
-import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
+import { Badge, Button, Card, Field, Notice } from "./ui";
+import { SiteNav, visibleGroups, type SiteGroup } from "./SiteNav";
+import { useUnsaved } from "./Unsaved";
 import { SiteUsageCard } from "./Usage";
 import { WWWCard } from "./WWW";
 import { DomainsCard, PendingDomainsNotice } from "./Domains";
-
-// The tabs that exist today (ADR-0037). Databases and backups per site
-// come with their features; their addresses show the overview.
-const tabs: { id: SiteTab; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "domains", label: "Domains & HTTPS" },
-  { id: "access", label: "Access" },
-  { id: "web", label: "Web" },
-  { id: "files", label: "Files" },
-  { id: "git", label: "Git" },
-  { id: "malware", label: "Virus scan" },
-  { id: "php", label: "PHP" },
-  { id: "cron", label: "Cron" },
-  { id: "ssh", label: "SSH & SFTP" },
-  { id: "limits", label: "Limits" },
-  { id: "usage", label: "Usage" },
-  { id: "logs", label: "Logs" },
-  { id: "nginx", label: "nginx" },
-];
 
 type Props = {
   name: string;
@@ -98,6 +81,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
 
   const status = siteStatus(site);
   const ready = site.state === "active";
+  const staff = role === "admin" || role === "manager";
   // The PHP tab only for sites with PHP; the type is changed on the Web tab.
   // A redirect or reverse proxy that kept its account after a type change
   // keeps these tabs.
@@ -106,16 +90,45 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
   // (ADR-0054). A redirect answers before nginx checks access, so it has no
   // access tab (ADR-0066).
   const noAccount = ["files", "malware", "php", "cron", "ssh", "limits"];
-  const shown = tabs.filter(
+  const groups = visibleGroups(
     (t) =>
-      (t.id !== "php" || site.php !== "") &&
-      (t.id !== "git" || canDeploy(site)) &&
-      (hasAccount(site) || !noAccount.includes(t.id)) &&
-      (!["redirect", "proxy"].includes(siteType(site)) || t.id !== "nginx") &&
-      (siteType(site) !== "redirect" || t.id !== "access"),
+      (t !== "php" || site.php !== "") &&
+      (t !== "git" || canDeploy(site)) &&
+      (hasAccount(site) || !noAccount.includes(t)) &&
+      (!["redirect", "proxy"].includes(siteType(site)) || t !== "nginx") &&
+      (siteType(site) !== "redirect" || t !== "access"),
   );
-  const active = ready && shown.some((t) => t.id === tab) ? tab : "overview";
-  const prefix = `site-${site.name}`;
+  const active: SiteTab = ready && groups.some((g) => g.tabs.some((t) => t.id === tab)) ? tab : "overview";
+
+  const panel = (
+    <>
+      {active === "overview" && <Overview site={site} onChange={load} staff={staff} admin={role === "admin"} />}
+      {active === "domains" && <DomainsTab site={site} onChange={load} />}
+      {active === "https" && <HTTPSTab site={site} onChange={load} />}
+      {active === "headers" && <SecurityHeadersCard site={site} />}
+      {active === "realip" && <RealIPCard site={site} admin={role === "admin"} />}
+      {active === "access" && <SiteAccess site={site} />}
+      {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} admin={role === "admin"} staff={staff} />}
+      {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
+      {active === "files" && site.state === "active" && <PermissionsResetCard site={site} />}
+      {active === "logs" && <SiteLogs site={site} admin={role === "admin"} />}
+      {active === "php" && (
+        <>
+          <PHPTab site={site} php={php} onChange={load} />
+          {site.php && <PHPSettingsCard site={site} />}
+          {site.php && <ObjectCacheSettings site={site} canSize={staff} />}
+          {site.php && <PageCacheSettings site={site} canSize={staff} />}
+        </>
+      )}
+      {active === "git" && <GitSettings site={site} canEdit={staff} />}
+      {active === "malware" && <SiteMalware site={site} canManage={staff} admin={role === "admin"} />}
+      {active === "cron" && <CronSettings site={site} />}
+      {active === "ssh" && <SSHSettings site={site} />}
+      {active === "limits" && <LimitSettings site={site} />}
+      {active === "usage" && <SiteUsageCard site={site.name} />}
+      {active === "nginx" && <SnippetSettings site={site} />}
+    </>
+  );
 
   return (
     <>
@@ -136,33 +149,27 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
           Last attempt failed: {site.tls.error}. Hostashi tries again within an hour.
         </Notice>
       )}
-      {ready && <Tabs label={site.name} tabs={shown} active={active} onChange={(t) => onTab(t as SiteTab)} idPrefix={prefix} />}
-      <div {...(ready ? tabPanelProps(prefix, active) : {})} className="ui-stack">
-        {active === "overview" && <Overview site={site} onChange={load} staff={role === "admin" || role === "manager"} />}
-        {active === "overview" && role === "admin" && hasAccount(site) && <Services site={site.name} />}
-        {active === "domains" && <DomainsTab site={site} onChange={load} admin={role === "admin"} />}
-        {active === "access" && <SiteAccess site={site} />}
-        {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} admin={role === "admin"} staff={role === "admin" || role === "manager"} />}
-        {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
-        {active === "files" && site.state === "active" && <PermissionsResetCard site={site} />}
-        {active === "logs" && <SiteLogs site={site} admin={role === "admin"} />}
-        {active === "php" && (
-          <>
-            <PHPTab site={site} php={php} onChange={load} />
-            {site.php && <PHPSettingsCard site={site} />}
-            {site.php && <ObjectCacheSettings site={site} canSize={role === "admin" || role === "manager"} />}
-            {site.php && <PageCacheSettings site={site} canSize={role === "admin" || role === "manager"} />}
-          </>
-        )}
-        {active === "git" && <GitSettings site={site} canEdit={role === "admin" || role === "manager"} />}
-        {active === "malware" && <SiteMalware site={site} canManage={role === "admin" || role === "manager"} admin={role === "admin"} />}
-        {active === "cron" && <CronSettings site={site} />}
-        {active === "ssh" && <SSHSettings site={site} />}
-        {active === "limits" && <LimitSettings site={site} />}
-        {active === "usage" && <SiteUsageCard site={site.name} />}
-        {active === "nginx" && <SnippetSettings site={site} />}
-      </div>
+      {ready ? (
+        <SitePanel site={site.name} groups={groups} active={active} onTab={onTab}>
+          {panel}
+        </SitePanel>
+      ) : (
+        <div className="ui-stack">{panel}</div>
+      )}
     </>
+  );
+}
+
+// SitePanel is the tab navigation with the unsaved-changes guard around it.
+function SitePanel({ site, groups, active, onTab, children }: { site: string; groups: SiteGroup[]; active: SiteTab; onTab: (t: SiteTab) => void; children: ReactNode }) {
+  const u = useUnsaved(site + "/" + active);
+  return (
+    <SiteNav site={site} groups={groups} active={active} onTab={(t) => u.guard(() => onTab(t))}>
+      <div className="ui-stack" {...u.watch}>
+        {children}
+      </div>
+      {u.bar}
+    </SiteNav>
   );
 }
 
@@ -198,7 +205,7 @@ function useAction(onChange: () => Promise<void>) {
 
 type TabProps = { site: Site; onChange: () => Promise<void> };
 
-function Overview({ site, onChange, staff }: TabProps & { staff: boolean }) {
+function Overview({ site, onChange, staff, admin }: TabProps & { staff: boolean; admin: boolean }) {
   const [primary, ...aliases] = site.domains;
   return (
     <>
@@ -292,14 +299,18 @@ function Overview({ site, onChange, staff }: TabProps & { staff: boolean }) {
           )}
         </dl>
       </Card>
+      {admin && hasAccount(site) && <Services site={site.name} />}
       {site.state === "active" && (
         <>
           <Card title="Maintenance">
             <MaintenanceSettings site={site} onChange={onChange} />
           </Card>
-          <Availability site={site} onChange={onChange} />
-          {staff && hasAccount(site) && ["redirect", "proxy"].includes(siteType(site)) && <RemoveAccountCard site={site} onChange={onChange} />}
-          <DeleteSite site={site} canPark={staff} />
+          <section className="ui-danger-zone" aria-labelledby={`danger-${site.name}`}>
+            <h2 id={`danger-${site.name}`}>Danger zone</h2>
+            <Availability site={site} onChange={onChange} />
+            {staff && hasAccount(site) && ["redirect", "proxy"].includes(siteType(site)) && <RemoveAccountCard site={site} onChange={onChange} />}
+            <DeleteSite site={site} canPark={staff} />
+          </section>
         </>
       )}
     </>
@@ -534,7 +545,17 @@ function DeleteSite({ site, canPark }: { site: Site; canPark: boolean }) {
   );
 }
 
-function DomainsTab({ site, onChange, admin }: TabProps & { admin: boolean }) {
+function DomainsTab({ site, onChange }: TabProps) {
+  return (
+    <>
+      <PendingDomainsNotice site={site} onChange={onChange} />
+      <DomainsCard site={site} onChange={onChange} />
+      {siteType(site) !== "redirect" && <WWWCard site={site} onChange={onChange} onDomains={() => undefined} />}
+    </>
+  );
+}
+
+function HTTPSTab({ site, onChange }: TabProps) {
   const h = useAction(onChange);
 
   const toggleTLS = (on: boolean) =>
@@ -552,9 +573,6 @@ function DomainsTab({ site, onChange, admin }: TabProps & { admin: boolean }) {
 
   return (
     <>
-      <PendingDomainsNotice site={site} onChange={onChange} />
-      <DomainsCard site={site} onChange={onChange} />
-      {siteType(site) !== "redirect" && <WWWCard site={site} onChange={onChange} onDomains={() => undefined} />}
       <Card title="HTTPS">
         <div className="ui-stack">
           <label className="ui-check">
@@ -569,8 +587,6 @@ function DomainsTab({ site, onChange, admin }: TabProps & { admin: boolean }) {
           {h.result}
         </div>
       </Card>
-      <SecurityHeadersCard site={site} />
-      <RealIPCard site={site} admin={admin} />
       <CertificateCard base={siteCertBase(site.name)} name={site.name} tls={site.tls} onChange={onChange} />
     </>
   );

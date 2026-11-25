@@ -465,10 +465,10 @@ describe("redirect sites", () => {
     });
     render(<PageHarness />);
     const tabs = await screen.findByRole("tablist", { name: "blog" });
-    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "Web", "Usage", "Logs"]);
+    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "App", "Security", "Operations"]);
     expect(within(screen.getByLabelText("Details of blog")).getByText("https://new.example.com")).toBeInTheDocument();
 
-    await user.click(within(tabs).getByRole("tab", { name: "Web" }));
+    await user.click(within(tabs).getByRole("tab", { name: "App" }));
     const card = within(screen.getByRole("region", { name: "Redirect" }));
     expect(card.getByRole("button", { name: "Save redirect" })).toBeDisabled();
     await user.click(card.getByLabelText(/^Keep the path/));
@@ -540,12 +540,14 @@ describe("reverse proxy sites", () => {
     });
     render(<PageHarness />);
     const tabs = await screen.findByRole("tablist", { name: "blog" });
-    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "Access", "Web", "Usage", "Logs"]);
+    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "App", "Security", "Operations"]);
     expect(within(screen.getByLabelText("Details of blog")).getByText("http://10.0.0.5:8080")).toBeInTheDocument();
     // The type sits next to the status and HTTPS in the page head.
     expect(within(screen.getByRole("heading", { name: "blog", level: 1 }).parentElement!).getByText("Reverse proxy")).toBeInTheDocument();
 
-    await user.click(within(tabs).getByRole("tab", { name: "Web" }));
+    await user.click(within(tabs).getByRole("tab", { name: "Security" }));
+    expect(within(screen.getByRole("tablist", { name: "Security" })).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Access", "Security headers"]);
+    await user.click(within(tabs).getByRole("tab", { name: "App" }));
     const card = within(screen.getByRole("region", { name: "Reverse proxy" }));
     expect(card.getByRole("button", { name: "Save reverse proxy" })).toBeDisabled();
     await user.click(card.getByLabelText(/^Send the target's host/));
@@ -572,24 +574,19 @@ describe("SitePage", () => {
     expect(d.getByText("HTTPS, HSTS, valid until 2027-02-01")).toBeInTheDocument();
     expect(d.getByText("www.blog.example.com")).toBeInTheDocument();
     const tabs = screen.getByRole("tablist", { name: "blog" });
-    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual([
-      "Overview",
-      "Domains & HTTPS",
-      "Access",
-      "Web",
-      "Files",
-      "Git",
-      "Virus scan",
-      "PHP",
-      "Cron",
-      "SSH & SFTP",
-      "Limits",
-      "Usage",
-      "Logs",
-      "nginx",
-    ]);
-    await user.click(within(tabs).getByRole("tab", { name: "PHP" }));
+    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "App", "Files", "Security", "Operations"]);
+    expect(screen.getByLabelText("Section of blog")).toHaveValue("overview");
+    // Destructive actions sit together at the end of the overview.
+    const danger = screen.getByRole("region", { name: "Danger zone" });
+    expect(within(danger).getByRole("region", { name: "Availability" })).toBeInTheDocument();
+    expect(within(danger).getByRole("region", { name: "Delete site" })).toBeInTheDocument();
+
+    await user.click(within(tabs).getByRole("tab", { name: "App" }));
+    const inner = screen.getByRole("tablist", { name: "App" });
+    expect(within(inner).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Web", "PHP", "Cron"]);
+    await user.click(within(inner).getByRole("tab", { name: "PHP" }));
     expect(screen.getByRole("tabpanel", { name: "PHP" })).toHaveTextContent("PHP of blog");
+    expect(within(tabs).getByRole("tab", { name: "App" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("explains a failed certificate", async () => {
@@ -706,6 +703,8 @@ describe("SitePage", () => {
     await user.click(domains.getByRole("button", { name: "Save domains" }));
     expect(await domains.findByRole("status")).toHaveTextContent("served over HTTP until a certificate for the new domains");
 
+    // Saved, so the switch to the HTTPS tab is not held.
+    await user.click(within(screen.getByRole("tablist", { name: "Domains & HTTPS" })).getByRole("tab", { name: "HTTPS" }));
     const https = within(screen.getByRole("region", { name: "HTTPS" }));
     await user.click(https.getByLabelText(/^HSTS/));
     expect(await https.findByText(/HSTS is off/)).toBeInTheDocument();
@@ -730,7 +729,12 @@ describe("SitePage", () => {
     await user.clear(domains.getByLabelText(/^Domains of blog/));
     await user.click(domains.getByRole("button", { name: "Save domains" }));
     expect(domains.getByRole("alert")).toHaveTextContent("at least one domain");
-    const https = within(screen.getByRole("region", { name: "HTTPS" }));
+    // The refused change is not saved: switching tabs asks first.
+    await user.click(within(screen.getByRole("tablist", { name: "Domains & HTTPS" })).getByRole("tab", { name: "HTTPS" }));
+    expect(screen.getByText("Save or drop the changes first:", { exact: false })).toHaveTextContent("Domains");
+    expect(screen.getByRole("region", { name: "Domains" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Drop changes" }));
+    const https = within(await screen.findByRole("region", { name: "HTTPS" }));
     await user.click(https.getByLabelText(/^HTTPS with/));
     expect(await https.findByRole("alert")).toHaveTextContent("Certificates are not available");
     expect(calls.filter((c) => c.method === "PUT")).toHaveLength(1);

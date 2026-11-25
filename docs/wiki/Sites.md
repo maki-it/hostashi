@@ -31,7 +31,7 @@ A site without a Linux user has no files, cron jobs, SSH access or limits. [Site
 
 Choose **Create site**. The panel opens the new site; it is live right away. Until the certificate is there, it answers over HTTP.
 
-Upload your files with SFTP ([SSH and SFTP](SSH-and-SFTP.md)) or the [file manager](File-manager.md). For PHP and static sites, the web root is `/home/<name>/htdocs`; another folder can be set on the site's **Web** tab.
+Upload your files with SFTP ([SSH and SFTP](SSH-and-SFTP.md)) or the [file manager](File-manager.md). For PHP and static sites, the web root is `/home/<name>/htdocs`; another folder can be set on the site's **App › Web** tab.
 
 ![The form for a new site](images/site-new.png)
 

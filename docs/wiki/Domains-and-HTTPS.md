@@ -15,7 +15,7 @@ Hostashi does not run DNS. Let's Encrypt checks each name over HTTP on port 80, 
 
 ## Change the domains of a site
 
-On the site's **Domains & HTTPS** tab, edit the list: one domain per line, the first one is the primary domain. The site keeps its name, Linux user, files, databases, backups and settings; only the names it answers to change.
+On the site's **Domains & HTTPS › Domains** tab, edit the list: one domain per line, the first one is the primary domain. The site keeps its name, Linux user, files, databases, backups and settings; only the names it answers to change.
 
 **Redirect domains** answer every request with a permanent redirect (301) to the primary domain, path and query included. Use them for old names after a move, or for extra names that should not show the site themselves. They stay on the site's certificate, so their DNS records must keep pointing to this server; remove a name from the list once you no longer need it.
 
@@ -56,7 +56,7 @@ The setting works on every pair of a domain and its `www` name, so a site with `
 
 ## HTTPS
 
-With **HTTPS with a Let's Encrypt certificate** on, Hostashi gets a certificate for all domains of the site, renews it on its own and redirects HTTP to HTTPS. Sites are served with HTTP/2 and HTTP/3.
+The switches and the certificate are on the **Domains & HTTPS › HTTPS** tab. With **HTTPS with a Let's Encrypt certificate** on, Hostashi gets a certificate for all domains of the site, renews it on its own and redirects HTTP to HTTPS. Sites are served with HTTP/2 and HTTP/3.
 
 If the certificate cannot be issued, the site page says why, for example a domain that does not point to the server. Hostashi tries again within an hour. Fix the DNS record and wait, or use **Renew now** on the certificate card.
 
