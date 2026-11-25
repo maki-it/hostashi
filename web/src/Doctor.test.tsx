@@ -49,6 +49,28 @@ describe("Doctor", () => {
     expect(screen.getAllByRole("link", { name: "Site shop" })[0]).toHaveAttribute("href", "#/sites/shop");
   });
 
+  it("leaves the panel's settings to the System page", async () => {
+    const calls = mockFetch({ "GET /api/v1/doctor": { body: report } });
+    render(<Harness />);
+
+    expect(await screen.findByText("1 check failed, 1 warning.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: /Panel certificate/ })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Real visitor address of the panel" })).toBeNull();
+    expect(calls.map((c) => c.path)).toEqual(["/api/v1/doctor"]);
+  });
+
+  it("links the panel certificate check to the System page", async () => {
+    mockFetch({
+      "GET /api/v1/doctor": {
+        body: { ...report, checks: [{ id: "panel.tls", status: "warn", summary: "certificate for panel.example.com valid until 2026-12-10 (15 days)", hint: "See System → Panel certificate." }] },
+      },
+    });
+    render(<Harness />);
+
+    expect(await screen.findByText("Panel certificate")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "System" })).toHaveAttribute("href", "#/system");
+  });
+
   it("filters by the address and checks again", async () => {
     const user = userEvent.setup();
     let current = report;

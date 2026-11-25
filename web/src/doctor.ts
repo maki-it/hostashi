@@ -33,6 +33,7 @@ const titles: Record<string, string> = {
   "system.fstab": "Mount table",
   "service.panel": "Panel",
   "panel.mail": "Email",
+  "panel.tls": "Panel certificate",
   "service.nginx": "Web server",
   "service.mariadb": "MariaDB",
   "service.fail2ban": "Brute-force protection",

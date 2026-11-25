@@ -95,6 +95,26 @@ describe("System", () => {
     expect(screen.getByText(/cloud-init is installed/)).toBeInTheDocument();
   });
 
+  it("holds the panel's certificate and real visitor address", async () => {
+    mockFetch({
+      "GET /api/v1/system": { body: info },
+      "GET /api/v1/system/timezones": { body: zones },
+      "GET /api/v1/panel/tls": {
+        body: { enabled: true, domain: "panel.example.com", active: true, domains: ["panel.example.com"], notAfter: "2099-01-01T00:00:00Z", source: "letsencrypt", certSource: "letsencrypt" },
+      },
+      "GET /api/v1/panel/tls/certificate": {
+        body: { certificate: { domains: ["panel.example.com"], issuer: "R11", notBefore: "2026-11-01T00:00:00Z", notAfter: "2099-01-01T00:00:00Z", fingerprint: "ab12cd", trusted: true } },
+      },
+      "GET /api/v1/settings/panel-real-ip": {
+        body: { realIp: {}, headers: ["X-Forwarded-For"], cloudflare: [], cloudflareDate: "2026-11-22", maxRanges: 256 },
+      },
+    });
+    render(<System />);
+
+    expect(await screen.findByRole("region", { name: "Panel certificate (panel.example.com)" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Real visitor address of the panel" })).toBeInTheDocument();
+  });
+
   it("saves a valid hostname only", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({

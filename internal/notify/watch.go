@@ -191,7 +191,7 @@ func (w *Watcher) certEvents(c Cert) []Event {
 	name, fragment := "the certificate of the site "+c.Name, "sites/"+c.Site
 
 	if c.Site == "" {
-		name, fragment = "the panel's certificate for "+c.Name, ""
+		name, fragment = "the panel's certificate for "+c.Name, "system"
 	}
 
 	var out []Event

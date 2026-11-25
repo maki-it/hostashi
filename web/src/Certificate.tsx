@@ -351,7 +351,7 @@ function CSRPanel({ name, csr, busy, onCreate, onUpload }: CSRPanelProps) {
 }
 
 // PanelCertificate is the certificate of the panel's own address, on the
-// Health page (ADR-0039). Without an address of its own there is none.
+// System page (ADR-0039). Without an address of its own there is none.
 export function PanelCertificate() {
   const [tls, setTLS] = useState<PanelTLS | null>(null);
 
