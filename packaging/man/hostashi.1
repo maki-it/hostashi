@@ -1,0 +1,217 @@
+.\" SPDX-License-Identifier: AGPL-3.0-or-later
+.\" Generated from the usage text by "hostashi __man" (cmd/hostashi/man.go).
+.\" Do not edit; run: go test ./cmd/hostashi -run TestManPage -update
+.nh
+.TH HOSTASHI 1 "" "Hostashi" "Hostashi Manual"
+
+.SH NAME
+hostashi \- hosting control panel for a single Linux server
+
+
+.SH SYNOPSIS
+\fBhostashi\fP \fIcommand\fP [\fIflags\fP] [\fIarguments\fP]
+
+
+.SH DESCRIPTION
+Hostashi runs websites with nginx, PHP\-FPM, Node.js, Python and MariaDB or
+PostgreSQL on one Debian or Ubuntu server. The same binary is the
+unprivileged web process (\fBserve\fP), the root agent that performs typed
+operations (\fBagent\fP), the helpers that systemd units start, and the
+command line client described here.
+
+.PP
+Most commands talk to the panel's API and need \fBhostashi login\fP first,
+also as root. Commands marked "root" in their description talk to the
+agent directly and only work as root on the server. Run a command with
+\fB\-h\fP for its flags.
+
+
+.SH COMMANDS
+.TP
+\fBlogin [\-token] [\-name NAME] [URL]\fP
+log in to the panel's API through the browser: prints a link and a code to approve in the panel, then stores an API token in ~/.config/hostashi/credentials.json; \-token reads an existing token from stdin instead. URL defaults to http://127.0.0.1:8080; HOSTASHI_URL and HOSTASHI_TOKEN override the stored login (ADR\-0058)
+
+.TP
+\fBlogout\fP
+forget the stored token (revoke it in the panel if it leaked)
+
+.TP
+\fBwhoami\fP
+show the account and panel the CLI talks to
+
+.TP
+\fBapi [AREA [COMMAND [ARGS...]]]\fP
+call any operation of the panel's API with the stored login, e.g. hostashi api sites list or hostashi api sites get blog; without arguments it lists the areas, \-h explains a command
+
+.TP
+\fBserve\fP
+run the web process (never as root)
+
+.TP
+\fBagent\fP
+run the privileged agent (root only)
+
+.TP
+\fBping\fP
+check that the agent answers
+
+.TP
+\fBdoctor [\-json]\fP
+check the server and every site without changing anything (root on the server); exit code 3 if a check failed, 0 otherwise
+
+.TP
+\fBservice list [\-json] | service ID [SITE] ACTION\fP
+show the managed services with their state and restarts, or start, stop, restart or reload one where the service catalog allows it, through the panel's API (needs hostashi login, ADR\-0052)
+
+.TP
+\fBsystem info | system timezones | system timezone ZONE | system hostname NAME | system reboot HOSTNAME\fP
+show or change the server's time zone and hostname, or reboot it after typing its hostname, through the panel's API (needs hostashi login, ADR\-0060)
+
+.TP
+\fBsite create NAME DOMAIN[,DOMAIN...] [POOL] | site delete NAME | site list\fP
+create a static site with its domains, delete a site with its data, or list the sites, through the panel's API (needs hostashi login)
+
+.TP
+\fBpool add [\-default] NAME PATH | pool remove NAME | pool list\fP
+storage pools for site homes (ADR\-0016, root on the server): PATH is a mounted, empty ext4 or XFS volume with nosuid,nodev and an /etc/fstab entry; Hostashi never formats or mounts; \-default makes the new pool the default for new sites
+
+.TP
+\fBpool rename NAME NEWNAME | pool default NAME\fP
+rename a pool (its path and sites stay) or make it the default for new sites, through the panel's API (needs hostashi login)
+
+.TP
+\fBsite files NAME\fP
+start the file manager's socket of a site and print its path (ADR\-0040)
+
+.TP
+\fBsite limits NAME [preset=NAME | KEY=VALUE...]\fP
+show a site's limits, give it a preset, or change single values through the panel's API (needs hostashi login, ADR\-0015); keys: memory, tasks, cpu\-priority (low, normal, high), cpu\-quota, disk, inodes, php\-workers, db\-size, db\-connections; 0 means no limit, values left out stay as they are
+
+.TP
+\fBweb apply\fP
+read the complete web state as JSON from stdin and make it live, e.g. {"sites":[{"user":"blog","domains":["blog.example.com"]}]}
+
+.TP
+\fBdb list | db create SITE NAME | db delete NAME | db user create DATABASE USER | db user password USER | db user delete USER | db import DATABASE FILE | db export DATABASE FILE\fP
+manage databases through the panel's API (needs hostashi login); FILE is relative to the site home and ends in .sql or .sql.gz; the password is read from stdin, an empty line lets the panel generate one
+
+.TP
+\fBbackup run\fP
+one backup now (root; normally started by hostashi\-backup.service)
+
+.TP
+\fBbackup get | backup set | backup hostkey | backup start | backup status\fP
+backup settings through the panel's API (needs hostashi login); set reads the settings as JSON and hostkey one public key from stdin; start runs a backup now
+
+.TP
+\fBbackup restore SITE SNAPSHOT | backup restore\-status ID\fP
+restore a snapshot into a new directory restore\-<time> in the site's home, through the panel's API (needs hostashi login)
+
+.TP
+\fBbackup restore\-run ID\fP
+one restore (root; started by hostashi\-restore@ID.service)
+
+.TP
+\fBbackup key show\fP
+print the repository password and the panel key to keep outside the server (root only, never available over the API)
+
+.TP
+\fBcloudpanel scan [\-root DIR] [\-json] [\-full]\fP
+read a CloudPanel server (root on the old server, or a read\-only copy of its disk) and show which sites can be imported; changes nothing, hides snippets and cron commands unless \-full is given
+
+.TP
+\fBcloudpanel database\fP
+make a new password for the read\-only database user on the old server and print the SQL to run there (shown once)
+
+.TP
+\fBcloudpanel import SITE REMOTE_USER DOCROOT [OLD_DB[:NEW_DB] ...] | cloudpanel import\-status ID\fP
+copy the files of DOCROOT (below /home/REMOTE_USER/ on the old server) into SITE's home as cloudpanel\-import, and dump each old database into cloudpanel\-import\-db/NEW_DB\-<time>\&.sql for "db import", through the agent (root on the server); run it again for the final sync
+
+.TP
+\fBcloudpanel import\-run ID\fP
+one import (root; started by hostashi\-import@ID.service)
+
+.TP
+\fBdbjob run ID | dbjob finish ID\fP
+one import or export of a database on an external server and its cleanup (root; started by hostashi\-dbjob@ID.service)
+
+.TP
+\fBnode status | node install MAJOR\fP
+the installed Node.js lines and the last installation, or start the installation of an LTS line, through the agent (root on the server, ADR\-0054)
+
+.TP
+\fBnode\-install MAJOR\fP
+download, check and unpack the pinned Node.js build of MAJOR into /opt/hostashi/node/MAJOR (root; started by hostashi\-node\-install@MAJOR.service)
+
+.TP
+\fBpython status | python install LINE | python remove LINE\fP
+the installed Python lines and the last installation, start the installation of a line (for example 3.13) or remove one that no site uses, through the panel's API (ADR\-0061)
+
+.TP
+\fBpython\-install LINE\fP
+download, check and unpack the pinned CPython build of LINE into /opt/hostashi/python/LINE (root; started by hostashi\-python\-install@LINE.service)
+
+.TP
+\fBgit\-sync \-url URL \-branch BRANCH \-cache DIR \-release DIR \-result FILE [flags]\fP
+fetch a site's branch and write one commit into a new release directory (the site user, never root; started by hostashi\-deploy@SITE.service, ADR\-0062)
+
+.TP
+\fBuser recover [\-public\-url URL] NAME\fP
+reset NAME's password and second factors, enable the account and print a new invitation link (root; the way back in when the last admin is locked out)
+
+.TP
+\fBfiles\-helper \-home DIR [\-idle DURATION]\fP
+the file manager's helper for one site (the site user; started by hostashi\-files@SITE.socket, ADR\-0040)
+
+.TP
+\fBsetup\-token\fP
+print the one\-time token for the first login (read as the serve user or root)
+
+.TP
+\fBcompletion bash|zsh|fish\fP
+print the shell completion script; the installer puts it into each shell's completion directory below /usr/local/share
+
+.TP
+\fBversion [\-schema]\fP
+print the version, or with \-schema the database schema version this binary migrates to (package scripts, ADR\-0050)
+
+
+.SH ENVIRONMENT
+.TP
+HOSTASHI_URL
+Address of the panel's API; overrides the stored login.
+
+.TP
+HOSTASHI_TOKEN
+API token; overrides the stored login.
+
+.TP
+XDG_CONFIG_HOME
+Directory of the stored login, by default \fI~/.config\fP\&.
+
+
+.SH FILES
+.TP
+\fI~/.config/hostashi/credentials.json\fP
+The panel address and API token that \fBhostashi login\fP stores (mode 0600).
+
+.TP
+\fI/usr/share/hostashi/install.sh\fP
+The installer that sets up the server and runs again on every package upgrade.
+
+.TP
+\fI/etc/hostashi/install.options\fP
+The options the installer ran with; upgrades reuse them.
+
+
+.SH EXIT STATUS
+\fB0\fP on success, \fB1\fP when the command failed, \fB2\fP for a usage error.
+\fBhostashi doctor\fP exits with \fB3\fP when a check failed.
+
+
+.SH SEE ALSO
+\fBnginx\fP(8), \fBsystemctl\fP(1), \fBrestic\fP(1)
+
+.PP
+The documentation is at 
+\[la]https://github.com/maki\-it/hostashi/wiki\[ra]\&.

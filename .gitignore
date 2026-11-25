@@ -3,6 +3,7 @@
 # Build / local
 /bin/
 /dist/
+/build/
 /node_modules/
 *.log
 .env

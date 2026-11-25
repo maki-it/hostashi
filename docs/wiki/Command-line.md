@@ -166,3 +166,5 @@ The rest of the move is done in the panel. A full guide follows.
 ## All commands
 
 `hostashi help` prints every command, including the ones the panel and the system services use internally.
+
+The package also installs a manual page with the same list, so `man hostashi` works on the server. It is made from the same text as `hostashi help` and changes with it.
