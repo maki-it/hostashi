@@ -440,6 +440,7 @@ describe("Shell", () => {
     });
     render(<App />);
     const nav = await screen.findByRole("navigation", { name: "Main" });
+    expect(screen.getByRole("link", { name: "Hostashi, overview" })).toHaveAttribute("href", "#/");
     const version = await screen.findByRole("link", { name: "Hostashi v0.4.0" });
     expect(version).toHaveAttribute("href", "https://github.com/maki-it/hostashi/releases/tag/v0.4.0");
     expect(version).toHaveAttribute("target", "_blank");
