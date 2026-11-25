@@ -475,6 +475,7 @@ func TestStartThroughClamd(t *testing.T) {
 	// The agent's umask is 0077; the modes must not depend on it.
 	old := unix.Umask(0o077)
 	_, err := m.Start(ctx, agentapi.ScanStartRequest{Site: "blog", ID: 1})
+
 	unix.Umask(old)
 
 	if err != nil {
