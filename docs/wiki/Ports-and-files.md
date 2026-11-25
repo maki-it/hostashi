@@ -21,6 +21,9 @@ Hostashi's firewall lets in only these ports, plus what you open in the panel or
 | Path | What |
 |------|------|
 | `/usr/local/bin/hostashi` | the program (panel, agent and command line in one file) |
+| `/usr/local/bin/wp` | the site users' `wp` command: WP-CLI with the PHP version of their site, see [SSH and SFTP](SSH-and-SFTP.md#wp-cli) |
+| `/etc/hostashi-php/<site>` | the PHP version of a PHP site, written by the agent for the `wp` command |
+| `/opt/hostashi/wp-cli/<version>/wp-cli.phar` | the pinned WP-CLI, installed with the first WordPress install |
 | `/etc/hostashi/hostashi.env` | settings written by the installer, such as the panel address |
 | `/etc/hostashi/secret.key` | the panel's secret key. **Back it up outside the server**; see below. |
 | `/var/lib/hostashi/hostashi.db` | the panel database: sites, users, settings |

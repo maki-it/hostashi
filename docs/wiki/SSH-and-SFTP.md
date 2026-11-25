@@ -16,7 +16,7 @@ Each site with files has one login: its Linux user, named like the site. You log
 3. Give the key a label, so you know later whose key it is.
 4. Choose the access:
    - **SFTP only** (default): file transfer with SFTP and `scp`, no terminal.
-   - **Shell**: a terminal as well, for tools such as `wp-cli`, `composer` or `git`.
+   - **Shell**: a terminal as well, for tools such as `wp`, `composer` or `git`.
 
 The key works within seconds.
 
@@ -36,6 +36,18 @@ The site's web root is `htdocs` in the home folder you land in.
 Sites cannot read each other's files, and a site user does not see other users' processes. SFTP is not locked into the home folder, but everything outside it that belongs to other sites is closed.
 
 Shell sessions run as the site user, outside the limits of the site's PHP processes.
+
+## WP-CLI
+
+On a PHP site, the `wp` command runs [WP-CLI](https://wp-cli.org/) with the site's PHP version, for example:
+
+```sh
+cd htdocs
+wp plugin list
+wp core update
+```
+
+It is the WP-CLI release that Hostashi installs WordPress with. The server gets it with the first WordPress install from the panel, see [Install WordPress](Application-profiles.md#install-wordpress); until then `wp` says so. A server admin can also install it with `systemctl start hostashi-wpcli-install.service`. `wp` refuses to run as root, because WP-CLI runs the site's own code; as root, use `runuser -u <site> -- wp …`.
 
 ## Remove a key
 

@@ -586,7 +586,7 @@ jobs:
           CGO_ENABLED: "0"
         run: go build -trimpath -o hostashi ./cmd/hostashi
       - name: shellcheck
-        run: shellcheck -x packaging/install.sh packaging/php/php-install packaging/postgresql/pg-client-install packaging/clamav/clamav-install packaging/test/container-test.sh packaging/test/deb-test.sh packaging/test/quota-test.sh packaging/test/dracut-test.sh packaging/test/firewall-test.sh packaging/test/apt-update-test.sh packaging/test/upgrade-test.sh packaging/deb/preinst packaging/deb/postinst packaging/deb/prerm packaging/deb/hostashi-rollback tools/release-key/new.sh tools/release-key/renew.sh tools/release-key/set-public.sh packaging/apt-repo/build.sh packaging/test/apt-repo-test.sh packaging/get/install.sh packaging/test/get-test.sh packaging/test/key-test.sh
+        run: shellcheck -x packaging/install.sh packaging/ssh/wp packaging/php/php-install packaging/postgresql/pg-client-install packaging/clamav/clamav-install packaging/test/container-test.sh packaging/test/deb-test.sh packaging/test/quota-test.sh packaging/test/dracut-test.sh packaging/test/firewall-test.sh packaging/test/apt-update-test.sh packaging/test/upgrade-test.sh packaging/deb/preinst packaging/deb/postinst packaging/deb/prerm packaging/deb/hostashi-rollback tools/release-key/new.sh tools/release-key/renew.sh tools/release-key/set-public.sh packaging/apt-repo/build.sh packaging/test/apt-repo-test.sh packaging/get/install.sh packaging/test/get-test.sh packaging/test/key-test.sh
       - name: No pipes into grep -q
         # grep -q exits at the first match; the writer then dies of SIGPIPE
         # and pipefail fails the whole pipe. Use grep PATTERN >/dev/null.
