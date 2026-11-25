@@ -164,7 +164,8 @@ func (r *Root) mkdirAll(p string) error {
 
 // removeOldParts deletes abandoned part files of the folder.
 func removeOldParts(dir int) {
-	d, err := unix.Dup(dir)
+	// A fresh descriptor, not a dup: reading a dup would move dir's offset.
+	d, err := unix.Openat2(dir, ".", &unix.OpenHow{Flags: dirFlags, Resolve: noEscape})
 	if err != nil {
 		return
 	}

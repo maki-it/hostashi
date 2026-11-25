@@ -168,6 +168,35 @@ func TestList(t *testing.T) {
 	}
 }
 
+// The helper keeps one descriptor of the home for its whole life. Listing
+// the home must not consume that descriptor's directory offset, or every
+// later listing of the home comes back empty until the helper restarts.
+func TestListHomeTwice(t *testing.T) {
+	r, _, _ := newRoot(t)
+
+	for i := range 3 {
+		l, err := r.List("")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(l.Entries) != 3 {
+			t.Fatalf("listing %d: got %d entries, want 3: %+v", i+1, len(l.Entries), l.Entries)
+		}
+	}
+
+	// Starting an upload into the home reads the home for stale parts; that
+	// must not drain it either.
+	if _, err := r.StartUpload("new.txt", UploadOptions{Size: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The new part file shows up next to the three entries.
+	if l, err := r.List(""); err != nil || len(l.Entries) != 4 {
+		t.Fatalf("after upload start: %+v, %v", l, err)
+	}
+}
+
 func TestNoWayOut(t *testing.T) {
 	r, home, outside := newRoot(t)
 

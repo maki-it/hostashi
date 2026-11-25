@@ -170,20 +170,17 @@ func mapErr(op, p string, err error) error {
 	return fmt.Errorf("%w: %s %q: %w", kind, op, p, err)
 }
 
-// openDir opens the folder p ("" is the home).
+// openDir opens the folder p ("" is the home). The home is opened anew
+// through "." rather than duplicated: a dup shares the directory offset with
+// r.fd, so reading it once would leave every later listing of the home empty
+// for the rest of the helper's life.
 func (r *Root) openDir(p string) (int, error) {
-	if p == "" {
-		fd, err := unix.Dup(r.fd)
-		if err != nil {
-			return -1, fmt.Errorf("files: dup: %w", err)
-		}
-
-		unix.CloseOnExec(fd)
-
-		return fd, nil
+	name := p
+	if name == "" {
+		name = "."
 	}
 
-	fd, err := unix.Openat2(r.fd, p, &unix.OpenHow{Flags: dirFlags, Resolve: noEscape})
+	fd, err := unix.Openat2(r.fd, name, &unix.OpenHow{Flags: dirFlags, Resolve: noEscape})
 	if err != nil {
 		return -1, mapErr("open folder", p, err)
 	}
