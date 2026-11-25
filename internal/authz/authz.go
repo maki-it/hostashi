@@ -174,11 +174,13 @@ var table = map[Action]Rule{
 	// it runs as the site's own Linux user inside its isolation.
 	"sites:read": ownSite("sites:read"),
 	// The usage of one site (ADR-0063).
-	"sites.usage:read":     ownSite("sites:read"),
-	"sites.php:write":      ownSite("sites:write"),
-	"sites.hsts:write":     ownSite("sites:write"),
-	"sites.title:write":    ownSite("sites:write"),
-	"sites.headers:write":  ownSite("sites:write"),
+	"sites.usage:read":    ownSite("sites:read"),
+	"sites.php:write":     ownSite("sites:write"),
+	"sites.hsts:write":    ownSite("sites:write"),
+	"sites.title:write":   ownSite("sites:write"),
+	"sites.headers:write": ownSite("sites:write"),
+	// Profile and hardening rules of one's own site (ADR-0069).
+	"sites.profile:write":  ownSite("sites:write"),
 	"sites.realip:write":   ownSite("sites:write"),
 	"sites.access:write":   ownSite("sites:write"),
 	"sites.web:write":      ownSite("sites:write"),
