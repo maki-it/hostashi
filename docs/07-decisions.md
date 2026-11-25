@@ -71,7 +71,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0066 | Password protection and IP rules per site | Accepted on 2026-11-24 ([adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md)) | No |
 | 0067 | Reset the file permissions of a site | Accepted on 2026-11-24 ([adr/0067](adr/0067-reset-site-permissions.md)) | Done |
 | 0068 | Change the domain of a site | Accepted on 2026-11-25 ([adr/0068](adr/0068-change-the-domain-of-a-site.md)) | No |
-| 0069 | Application profiles (vhost templates) and WordPress quick install | Proposed (draft: [adr/0069](adr/0069-application-profiles-and-wordpress-install.md)) | **Yes** |
+| 0069 | Application profiles (vhost templates) and WordPress quick install | Accepted on 2026-11-25 ([adr/0069](adr/0069-application-profiles-and-wordpress-install.md)) | Done |
 | 0070 | Staging and cloning a site | Proposed (draft: [adr/0070](adr/0070-staging-and-cloning-a-site.md)) | **Yes** |
 | 0071 | Panel UI in English and German | Proposed (draft: [adr/0071](adr/0071-panel-ui-in-english-and-german.md)) | **Yes** |
 
@@ -459,7 +459,7 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0069 Application profiles (vhost templates) and WordPress quick install
 
-**Full text (status Proposed, drafted 2026-11-25):** [adr/0069](adr/0069-application-profiles-and-wordpress-install.md). Summary: vhost templates become typed application profiles of the PHP type (ADR-0017 Part 4): web root, front controller, presets, PHP defaults and suggested cron jobs, never nginx text. Recommended: built-in profiles (Generic PHP, WordPress, WooCommerce, Laravel, Symfony, Shopware 6, TYPO3, Drupal; Magento 2 later) plus own profiles as typed data with YAML import/export and a read-only preview; extra rules only through the ADR-0029 snippet slots. WordPress quick install through a pinned WP-CLI in a oneshot unit `hostashi-wp@<site>` as the site user, started by a Go runner with fixed sub-commands and secrets on stdin; this needs a new, narrow `os/exec` exception `internal/wpcli`. Open for Kim: own profiles yes or no, WP-CLI with the exception or pure Go, the list of built-in profiles.
+**Full text (status Accepted, 2026-11-25, by Kim):** [adr/0069](adr/0069-application-profiles-and-wordpress-install.md). Summary: vhost templates become typed application profiles of the PHP type (ADR-0017 Part 4): web root, front controller, presets, PHP defaults and suggested cron jobs, never nginx text. Recommended: built-in profiles (Generic PHP, WordPress, WooCommerce, Laravel, Symfony, Shopware 6, TYPO3, Drupal; Magento 2 later) plus own profiles as typed data with YAML import/export and a read-only preview; extra rules only through the ADR-0029 snippet slots. WordPress quick install through a pinned WP-CLI in a oneshot unit `hostashi-wp@<site>` as the site user, started by a Go runner with fixed sub-commands and secrets on stdin; this needs a new, narrow `os/exec` exception `internal/wpcli`. Decided by Kim on 2026-11-25: own profiles (1B), WP-CLI with the `internal/wpcli` exception (2A), the eight built-in profiles with Magento 2 after 1.0.
 
 ## ADR-0070 Staging and cloning a site
 

@@ -1,6 +1,6 @@
 # ADR-0069 Application profiles (vhost templates) and WordPress quick install
 
-**Status:** Proposed. **Date drafted:** 2026-11-25. **Decides:** Kim. **Related:** ADR-0001 (clean-room), ADR-0004 (web/agent privilege split), ADR-0017 Parts 3 and 4 (presets and application profiles), ADR-0024 (MariaDB per site), ADR-0028 (cron), ADR-0029 (custom snippets), ADR-0033 (hardening), ADR-0046 (page cache), ADR-0049 (PHP settings), ADR-0054 (site types), ADR-0062 (Git deploy), ADR-0070 (staging and cloning, drafted with this one), [03-features](../03-features.md) rows "Vhost templates" and "WordPress quick install (WP-CLI)" (both P1, in 1.0 scope).
+**Status:** Accepted (Kim, 2026-11-25). **Date drafted:** 2026-11-25. **Decides:** Kim. **Related:** ADR-0001 (clean-room), ADR-0004 (web/agent privilege split), ADR-0017 Parts 3 and 4 (presets and application profiles), ADR-0024 (MariaDB per site), ADR-0028 (cron), ADR-0029 (custom snippets), ADR-0033 (hardening), ADR-0046 (page cache), ADR-0049 (PHP settings), ADR-0054 (site types), ADR-0062 (Git deploy), ADR-0070 (staging and cloning, drafted with this one), [03-features](../03-features.md) rows "Vhost templates" and "WordPress quick install (WP-CLI)" (both P1, in 1.0 scope).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -68,6 +68,8 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions for Kim
 
-1. Templates: built-in profiles only (1A), or built-in plus own typed profiles with YAML import/export (1B)? Recommendation: 1B, because the 1.0 row asks for custom templates and the agent still sees only typed values.
-2. WordPress install: pinned WP-CLI in a site-user unit with a new, narrow `os/exec` exception `internal/wpcli` (2A), or pure Go without WP-CLI (2C)? Recommendation: 2A; ADR-0070 also needs WP-CLI for the URL rewrite of WordPress clones.
-3. Built-in profiles in 1.0: Generic PHP, WordPress, WooCommerce, Laravel, Symfony, Shopware 6, TYPO3 and Drupal, with Magento 2 after 1.0? Recommendation: yes, Magento 2 only once its own spec exists.
+1. ~~Templates: built-in profiles only (1A), or built-in plus own typed profiles with YAML import/export (1B)?~~ Decided (Kim, 2026-11-25): 1B.
+2. ~~WordPress install: pinned WP-CLI in a site-user unit with a new, narrow `os/exec` exception `internal/wpcli` (2A), or pure Go without WP-CLI (2C)?~~ Decided (Kim, 2026-11-25): 2A, including the new `os/exec` exception `internal/wpcli`.
+3. ~~Built-in profiles in 1.0: Generic PHP, WordPress, WooCommerce, Laravel, Symfony, Shopware 6, TYPO3 and Drupal, with Magento 2 after 1.0?~~ Decided (Kim, 2026-11-25): yes, these eight; Magento 2 after 1.0 with its own spec.
+
+The ADR as a whole was accepted by Kim on 2026-11-25.
