@@ -1664,3 +1664,6 @@ a.ui-btn {
     text-align: center;
   }
 }
+.ui-row-actions:has(.ui-btn) {
+  gap: var(--space-2);
+}
