@@ -14,13 +14,13 @@ Every site has one type. It decides what serves the site's domains. Domains, HTT
 | **Reverse proxy** | another web server, by passing every request on | no |
 | **Redirect** | nothing: every address goes to another one | no |
 
-You choose the type when you create a site ([Sites](Sites.md)) and can change it later on the site's **Web** tab.
+You choose the type when you create a site ([Sites](Sites.md)) and can change it later on the site's **App › Web** tab.
 
 ## Static and PHP
 
 The site serves the files in `/home/<name>/htdocs`, or in a folder below it that you set under **Web root**. For a single-page app, turn on **Single-page app**: addresses without a file then get `index.html`.
 
-A PHP site runs its own PHP pool as the site's user. The version is chosen on the **PHP** tab; install versions under **Server → PHP versions**. See [PHP settings](PHP-settings.md).
+A PHP site runs its own PHP pool as the site's user. The version is chosen on the **App › PHP** tab; install versions under **Server → PHP versions**. See [PHP settings](PHP-settings.md).
 
 ## Node.js
 
@@ -41,7 +41,7 @@ cd ~/htdocs
 PATH=/opt/hostashi/node/24/bin:$PATH npm ci
 ```
 
-Then choose **Restart**. **Stop** keeps the app stopped, also after a reboot, until you start it again. After a crash it restarts by itself. Its output is in the **app** log on the **Logs** tab ([Site logs](Site-logs.md)). The site's [limits](Limits.md) apply to the app.
+Then choose **Restart**. **Stop** keeps the app stopped, also after a reboot, until you start it again. After a crash it restarts by itself. Its output is in the **app** log on the **Operations › Logs** tab ([Site logs](Site-logs.md)). The site's [limits](Limits.md) apply to the app.
 
 ## Python
 

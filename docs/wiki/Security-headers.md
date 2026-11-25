@@ -1,12 +1,12 @@
 # Security headers
 
-A site can send the common security headers with every answer: error pages, files and the answers of PHP alike. You switch them on the site's **Domains & HTTPS** tab. HSTS keeps its own switch on the same tab, under **HTTPS**.
+A site can send the common security headers with every answer: error pages, files and the answers of PHP alike. You switch them on the site's **Security › Security headers** tab. HSTS has its own switch on the **Domains & HTTPS › HTTPS** tab.
 
 **For:** everyone who can change the site.
 
 ## Change the headers
 
-1. Open the site and go to the **Domains & HTTPS** tab.
+1. Open the site and go to the **Security › Security headers** tab.
 2. Under **Security headers**, choose a value for each header, or *Off*.
 3. Click **Save security headers**. nginx sends the new headers right away.
 
@@ -36,6 +36,6 @@ A header switched on here replaces the header of the same name that the applicat
 
 ## Custom nginx snippets
 
-A custom snippet on the **nginx** tab must not set a header that is switched on here. The panel refuses saving such a snippet, and it refuses switching on a header that a snippet already sets. Remove the header from one of the two places first.
+A custom snippet on the **Operations › nginx** tab must not set a header that is switched on here. The panel refuses saving such a snippet, and it refuses switching on a header that a snippet already sets. Remove the header from one of the two places first.
 
 Headers that a snippet adds inside `location /` no longer drop the site's other headers, such as HSTS.

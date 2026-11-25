@@ -2,7 +2,7 @@
 
 **For:** everybody who can open a site, including users.
 
-A cron job runs a command on a schedule, as the site's Linux user, inside the site's limits. Open the site's **Cron** tab.
+A cron job runs a command on a schedule, as the site's Linux user, inside the site's limits. Open the site's **App › Cron** tab.
 
 ## Add a cron job
 

@@ -6,7 +6,7 @@ Each site has three logs: the **access** log of every request, the **web server 
 
 ## Read and follow a log
 
-1. Open the site and choose the **Logs** tab.
+1. Open the site and choose the **Operations › Logs** tab.
 2. Pick **Access**, **Web server errors** or **PHP errors**, and how many of the last lines to show (100 to 1000).
 3. While **Live** shows a green dot, new lines appear every 2 seconds. **Pause** stops this, and **Follow** starts it again. The view only asks for new lines while the browser tab is visible.
 4. **Filter** shows only the lines that contain every word you type, for example `404 wp-login`. Upper and lower case do not matter.
@@ -20,7 +20,7 @@ A line longer than 4 KiB is cut and ends with `…`. Control characters and inva
 
 ## How long logs are kept
 
-Logs are rotated daily and deleted after a number of days, **7 by default**. An admin sets this on the **Logs** tab of any site under **Log retention**, from 1 to 365 days. The value applies to every site on the server, and to nginx's logs of requests that match no site. Match it to what your privacy policy and data processing agreements promise, because the access log holds visitors' IP addresses.
+Logs are rotated daily and deleted after a number of days, **7 by default**. An admin sets this on the **Operations › Logs** tab of any site under **Log retention**, from 1 to 365 days. The value applies to every site on the server, and to nginx's logs of requests that match no site. Match it to what your privacy policy and data processing agreements promise, because the access log holds visitors' IP addresses.
 
 A shorter time deletes older logs at the next daily rotation. The panel's own logs and the system journal follow the settings of the distribution.
 

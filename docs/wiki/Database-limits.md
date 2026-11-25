@@ -15,16 +15,16 @@ The preset values are estimates for typical WordPress sites. *Unlimited* switche
 
 ## Change them
 
-- **One site:** open the site, go to the **Limits** tab and choose another preset, or *Custom* and enter the values under **Database**.
+- **One site:** open the site, go to the **Operations › Limits** tab and choose another preset, or *Custom* and enter the values under **Database**.
 - **A preset:** open **Limit presets** in the menu and edit the preset. Every site that follows the preset gets the new values.
 
 ## Database size
 
-The size is the data and the indexes of the site's tables, as MariaDB reports them. For InnoDB tables this is an estimate, so it can differ from the files on disk by some percent. Hostashi measures it at most every five minutes. The **Databases** tab shows the size of each database, the **Limits** tab the sum against the threshold.
+The size is the data and the indexes of the site's tables, as MariaDB reports them. For InnoDB tables this is an estimate, so it can differ from the files on disk by some percent. Hostashi measures it at most every five minutes. The **Databases** tab shows the size of each database, the **Operations › Limits** tab the sum against the threshold.
 
 The size is **only a warning**. Nothing stops a database from growing past it, because a hard stop would break the site at once: no logins, no orders. Hostashi warns in three places:
 
-- the **Limits** tab of the site, from 80 percent,
+- the **Operations › Limits** tab of the site, from 80 percent,
 - the **Health** page, check *Database size*: a warning from 80 percent and an error from 95 percent,
 - an email from 90 percent, in the category *Disk space* of the [email notifications](Email-notifications.md), at most once a day.
 
@@ -34,7 +34,7 @@ When the warning comes, look for data the site no longer needs (old logs, sessio
 
 A login above the limit fails with MariaDB error 1226 (*User has exceeded the 'max_user_connections' resource*). The limit keeps one site's runaway script from taking every connection of the server. It counts per database user, so a site with two users can open twice as many connections.
 
-If a site legitimately needs more, raise the value on its **Limits** tab. Hostashi applies the new value to every database user of the site at once; connections that are already open stay open.
+If a site legitimately needs more, raise the value on its **Operations › Limits** tab. Hostashi applies the new value to every database user of the site at once; connections that are already open stay open.
 
 The temporary users of the web database tool (Adminer) and of import and export jobs keep their own fixed limits.
 

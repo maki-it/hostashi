@@ -8,7 +8,7 @@ The cache is off until you switch it on. It listens only on a socket that the si
 
 **For:** everyone who can change the site.
 
-1. Open the site and go to the **PHP** tab.
+1. Open the site and go to the **App › PHP** tab.
 2. Under **Object cache**, switch it on. It starts with 64 MiB.
 3. Copy the connection details shown there into the app.
 

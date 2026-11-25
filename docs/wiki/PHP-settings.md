@@ -1,12 +1,12 @@
 # PHP settings
 
-Every site runs its own PHP. On the site's **PHP** tab you choose the PHP version and set the most common PHP settings, such as the memory limit, the largest upload and the time zone. Only the twelve settings below can be set. Settings that keep sites apart, such as `open_basedir` or `disable_functions`, stay fixed.
+Every site runs its own PHP. On the site's **App › PHP** tab you choose the PHP version and set the most common PHP settings, such as the memory limit, the largest upload and the time zone. Only the twelve settings below can be set. Settings that keep sites apart, such as `open_basedir` or `disable_functions`, stay fixed.
 
 **For:** everyone who can change the site.
 
 ## Change a setting
 
-1. Open the site and go to the **PHP** tab.
+1. Open the site and go to the **App › PHP** tab.
 2. Under **PHP settings**, fill in the fields you want to change. An empty field uses the Hostashi default, shown in grey.
 3. Click **Save PHP settings**. PHP and nginx use the new values right away.
 
@@ -36,9 +36,9 @@ If you raise only the largest upload, the largest request follows it.
 The values are defaults for the site. The site's own `.user.ini` file or `ini_set()` in its code can still change them, as on most hosts; many plugins rely on that. The server's limits stay in place:
 
 - nginx takes no request larger than **Largest request** and waits for PHP no longer than **Execution time** plus 10 seconds (at least 60 seconds). A higher value in `.user.ini` does not get past nginx.
-- The site's memory limit (on the **Limits** tab) caps all of its PHP processes together, whatever `memory_limit` says. The form warns when `memory_limit` times the site's PHP workers is more than that limit. It still saves: workers rarely all need their maximum at once.
+- The site's memory limit (on the **Operations › Limits** tab) caps all of its PHP processes together, whatever `memory_limit` says. The form warns when `memory_limit` times the site's PHP workers is more than that limit. It still saves: workers rarely all need their maximum at once.
 
-A server snippet on the **nginx** tab that sets `client_max_body_size` or `fastcgi_read_timeout` itself wins over these values.
+A server snippet on the **Operations › nginx** tab that sets `client_max_body_size` or `fastcgi_read_timeout` itself wins over these values.
 
 ## Sites from CloudPanel
 

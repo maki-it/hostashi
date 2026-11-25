@@ -22,7 +22,7 @@ You can also install it with the server: `install.sh apply --malware-scan` (see 
 
 With the virus scan on, an admin can also switch on the **Real-time scan** under **System → Virus scan**. ClamAV then watches the sites' homes and checks every file right after it is written or changed, for example an upload through a form, SFTP or the [file manager](File-manager.md).
 
-The real-time scan only reports. It does not block, move or delete a file: flagged files show up in the site's **Virus scan** tab as **Real time, today**, and you quarantine them as usual. Admins get at most one email per site and hour.
+The real-time scan only reports. It does not block, move or delete a file: flagged files show up in the site's **Security › Virus scan** tab as **Real time, today**, and you quarantine them as usual. Admins get at most one email per site and hour.
 
 It keeps the ClamAV daemon running all the time, so it needs about 1.5 GB of RAM permanently, not only during a scan. Switch it on only on servers with enough memory; the card warns below 4 GB. While it is on, scheduled and manual scans use the daemon too.
 
@@ -30,7 +30,7 @@ It keeps the ClamAV daemon running all the time, so it needs about 1.5 GB of RAM
 
 ## Scan a site
 
-Open the site's **Virus scan** tab.
+Open the site's **Security › Virus scan** tab.
 
 ![The Virus scan tab of a site](images/site-malware.png)
 

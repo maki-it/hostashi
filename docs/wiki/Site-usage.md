@@ -6,7 +6,7 @@ Hostashi shows how much CPU, memory, disk I/O and web traffic each site uses, so
 
 ## Usage of a site
 
-Open the site and the tab **Usage**. Pick the range at the top right: **1h**, **24h**, **7d** or **30d**.
+Open the site and the tab **Operations › Usage**. Pick the range at the top right: **1h**, **24h**, **7d** or **30d**.
 
 - **CPU**: 100 % is the cores the site may use. With a CPU limit (see [Limits](Limits.md)) that is the limit, without one all cores of the server. The heading says which.
 - **Memory**: memory the site's processes use, without the file cache. With a memory limit the chart goes up to it.

@@ -2,7 +2,7 @@
 
 **For:** panel admins and managers set limits; users can see them.
 
-Each site with a Linux user has its own limits, so one busy or broken site cannot slow down the others. The site's **Limits** tab shows them and what the site uses.
+Each site with a Linux user has its own limits, so one busy or broken site cannot slow down the others. The site's **Operations › Limits** tab shows them and what the site uses.
 
 ## What can be limited
 
@@ -26,7 +26,7 @@ When a site has used 95 % of a disk limit, the panel warns. When it is full, wri
 A preset is a named set of limits. Under **Hosting → Limit presets** you create and change them.
 
 - A new site gets the **default** preset.
-- On a site's **Limits** tab you choose a preset or **custom values**.
+- On a site's **Operations › Limits** tab you choose a preset or **custom values**.
 - Changing a preset changes every site that uses it. A site with custom values stays as it is.
 - Deleting a preset keeps its values on the sites that used it, as custom values.
 
