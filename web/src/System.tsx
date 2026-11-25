@@ -89,9 +89,13 @@ export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) 
         !error && <p aria-busy="true">Loading the server settings…</p>
       ) : (
         <>
-          <Overview info={info} />
-          <HostnameCard info={info} onDone={(n) => changed(n, `The hostname is now ${n.hostname}.`)} onError={setError} />
-          <TimezoneCard info={info} zones={zones} onDone={(n) => changed(n, `The time zone is now ${n.timezone}.`)} onError={setError} />
+          <Overview
+            info={info}
+            zones={zones}
+            onHostname={(n) => changed(n, `The hostname is now ${n.hostname}.`)}
+            onTimezone={(n) => changed(n, `The time zone is now ${n.timezone}.`)}
+            onError={setError}
+          />
           <PanelCertificate />
           <PanelRealIPCard />
           <MalwareEngineCard />
@@ -102,7 +106,28 @@ export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) 
   );
 }
 
-function Overview({ info }: { info: SystemInfo }) {
+// Overview shows the server's facts once; hostname and time zone open
+// their form in place instead of repeating the value in a card of its own.
+function Overview({
+  info,
+  zones,
+  onHostname,
+  onTimezone,
+  onError,
+}: {
+  info: SystemInfo;
+  zones: string[];
+  onHostname: (i: SystemInfo) => void;
+  onTimezone: (i: SystemInfo) => void;
+  onError: (m: string) => void;
+}) {
+  const [edit, setEdit] = useState<"" | "hostname" | "timezone">("");
+  const change = (what: "hostname" | "timezone", label: string) =>
+    edit !== what && (
+      <Button small aria-label={`Change ${label}`} onClick={() => setEdit(what)}>
+        Change
+      </Button>
+    );
   return (
     <Card
       title="Server"
@@ -111,14 +136,20 @@ function Overview({ info }: { info: SystemInfo }) {
       <div className="ui-stack">
         <dl className="ui-facts">
           <dt>Hostname</dt>
-          <dd>
-            <code>{info.hostname}</code>
-            {info.transientHostname && info.transientHostname !== info.hostname && (
-              <span className="ui-hint"> (the kernel still uses {info.transientHostname})</span>
-            )}
+          <dd className="ui-row">
+            <span>
+              <code>{info.hostname}</code>
+              {info.transientHostname && info.transientHostname !== info.hostname && (
+                <span className="ui-hint"> (the kernel still uses {info.transientHostname})</span>
+              )}
+            </span>
+            {change("hostname", "hostname")}
           </dd>
           <dt>Time zone</dt>
-          <dd>{info.timezone || "not set"}</dd>
+          <dd className="ui-row">
+            <span>{info.timezone || "not set"}</span>
+            {change("timezone", "time zone")}
+          </dd>
           <dt>Server time</dt>
           <dd>
             {clockIn(info.time, info.timezone || "UTC") || info.time}{" "}
@@ -127,6 +158,29 @@ function Overview({ info }: { info: SystemInfo }) {
           <dt>Uptime</dt>
           <dd>{uptime(info.uptimeSeconds)}</dd>
         </dl>
+        {edit === "hostname" && (
+          <HostnameForm
+            info={info}
+            onDone={(i) => {
+              setEdit("");
+              onHostname(i);
+            }}
+            onCancel={() => setEdit("")}
+            onError={onError}
+          />
+        )}
+        {edit === "timezone" && (
+          <TimezoneForm
+            info={info}
+            zones={zones}
+            onDone={(i) => {
+              setEdit("");
+              onTimezone(i);
+            }}
+            onCancel={() => setEdit("")}
+            onError={onError}
+          />
+        )}
         {info.rebootRequired && (
           <p className="ui-flush">
             Updates wait for a reboot
@@ -139,14 +193,24 @@ function Overview({ info }: { info: SystemInfo }) {
   );
 }
 
-function HostnameCard({ info, onDone, onError }: { info: SystemInfo; onDone: (i: SystemInfo) => void; onError: (m: string) => void }) {
+function HostnameForm({
+  info,
+  onDone,
+  onCancel,
+  onError,
+}: {
+  info: SystemInfo;
+  onDone: (i: SystemInfo) => void;
+  onCancel: () => void;
+  onError: (m: string) => void;
+}) {
   const [name, setName] = useState(info.hostname);
   const [busy, setBusy] = useState(false);
   const problem = hostnameError(name);
   const same = name === info.hostname;
 
   return (
-    <Card title="Hostname">
+    <section className="ui-edit" aria-label="Hostname">
       <form
         className="ui-stack"
         onSubmit={async (e) => {
@@ -177,21 +241,26 @@ function HostnameCard({ info, onDone, onError }: { info: SystemInfo; onDone: (i:
           <Button variant="primary" type="submit" disabled={busy || same || problem !== ""}>
             Save hostname
           </Button>
+          <Button disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
         </div>
       </form>
-    </Card>
+    </section>
   );
 }
 
-function TimezoneCard({
+function TimezoneForm({
   info,
   zones,
   onDone,
+  onCancel,
   onError,
 }: {
   info: SystemInfo;
   zones: string[];
   onDone: (i: SystemInfo) => void;
+  onCancel: () => void;
   onError: (m: string) => void;
 }) {
   const [zone, setZone] = useState(info.timezone);
@@ -201,7 +270,7 @@ function TimezoneCard({
   const preview = known && !same ? clockIn(info.time, zone) : "";
 
   return (
-    <Card title="Time zone">
+    <section className="ui-edit" aria-label="Time zone">
       <form
         className="ui-stack"
         onSubmit={async (e) => {
@@ -245,9 +314,12 @@ function TimezoneCard({
           <Button variant="primary" type="submit" disabled={busy || same || !known || zone === ""}>
             Save time zone
           </Button>
+          <Button disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
         </div>
       </form>
-    </Card>
+    </section>
   );
 }
 

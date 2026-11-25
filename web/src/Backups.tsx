@@ -201,46 +201,57 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
       <form className="ui-stack" onSubmit={(e) => void submit(e)}>
         <fieldset className="ui-fieldset ui-stack">
           <legend>SFTP server</legend>
-          <Field label="User">
-            <input className="ui-input" value={user} onChange={(e) => setUser(e.target.value)} required placeholder="backup" autoComplete="off" />
-          </Field>
-          <Field label="Host" hint="DNS name or IP address of the SSH server.">
-            <input className="ui-input" value={host} onChange={(e) => setHost(e.target.value)} required placeholder="backup.example.com" autoComplete="off" />
-          </Field>
-          <Field
-            label="Port"
-            hint="Usually 22. A Hetzner Storage Box uses 23."
-            {...(storageBox && port.trim() !== "23" && { error: "Hetzner Storage Boxes serve SFTP on port 23." })}
-          >
-            <input className="ui-input" value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" required />
-          </Field>
-          <Field label="Directory" hint="Relative to the login directory, or absolute with a leading /. Created on the first run.">
-            <input className="ui-input" value={path} onChange={(e) => setPath(e.target.value)} required />
-          </Field>
+          <div className="ui-fields ui-fields-server">
+            <Field label="User">
+              <input className="ui-input" value={user} onChange={(e) => setUser(e.target.value)} required placeholder="backup" autoComplete="off" />
+            </Field>
+            <Field label="Host" hint="DNS name or IP address of the SSH server.">
+              <input className="ui-input" value={host} onChange={(e) => setHost(e.target.value)} required placeholder="backup.example.com" autoComplete="off" />
+            </Field>
+            <Field
+              label="Port"
+              hint="Usually 22, Hetzner Storage Box 23."
+              {...(storageBox && port.trim() !== "23" && { error: "Hetzner Storage Boxes serve SFTP on port 23." })}
+            >
+              <input className="ui-input" value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" required />
+            </Field>
+          </div>
+          <div className="ui-wide">
+            <Field label="Directory" hint="Relative to the login directory, or absolute with a leading /. Created on the first run.">
+              <input className="ui-input" value={path} onChange={(e) => setPath(e.target.value)} required />
+            </Field>
+          </div>
         </fieldset>
         <fieldset className="ui-fieldset ui-stack">
-          <legend>Keep</legend>
-          <Field label="Daily snapshots">
-            <input className="ui-input" value={daily} onChange={(e) => setDaily(e.target.value)} inputMode="numeric" required />
-          </Field>
-          <Field label="Weekly snapshots">
-            <input className="ui-input" value={weekly} onChange={(e) => setWeekly(e.target.value)} inputMode="numeric" required />
-          </Field>
-          <Field label="Monthly snapshots">
-            <input className="ui-input" value={monthly} onChange={(e) => setMonthly(e.target.value)} inputMode="numeric" required />
-          </Field>
+          <legend>Keep snapshots</legend>
+          <div className="ui-fields ui-fields-num">
+            <Field label="Daily">
+              <input className="ui-input" value={daily} onChange={(e) => setDaily(e.target.value)} inputMode="numeric" required />
+            </Field>
+            <Field label="Weekly">
+              <input className="ui-input" value={weekly} onChange={(e) => setWeekly(e.target.value)} inputMode="numeric" required />
+            </Field>
+            <Field label="Monthly">
+              <input className="ui-input" value={monthly} onChange={(e) => setMonthly(e.target.value)} inputMode="numeric" required />
+            </Field>
+          </div>
         </fieldset>
         <fieldset className="ui-fieldset ui-stack">
           <legend>Schedule</legend>
-          <Field label="Start between (hour)" hint="The daily backup starts at a random time in this window, server time.">
-            <input className="ui-input" value={start} onChange={(e) => setStart(e.target.value)} inputMode="numeric" required />
-          </Field>
-          <Field label="And (hour)">
-            <input className="ui-input" value={end} onChange={(e) => setEnd(e.target.value)} inputMode="numeric" required />
-          </Field>
-          <Field label="Monthly data check reads 1 of" hint="parts of all data, a different part each month. 0 turns it off.">
-            <input className="ui-input" value={parts} onChange={(e) => setParts(e.target.value)} inputMode="numeric" required />
-          </Field>
+          <div className="ui-fields ui-fields-num">
+            <Field label="Start from (hour)">
+              <input className="ui-input" value={start} onChange={(e) => setStart(e.target.value)} inputMode="numeric" required />
+            </Field>
+            <Field label="Start until (hour)">
+              <input className="ui-input" value={end} onChange={(e) => setEnd(e.target.value)} inputMode="numeric" required />
+            </Field>
+          </div>
+          <p className="ui-hint ui-flush">The daily backup starts at a random time in this window, server time.</p>
+          <div className="ui-fields ui-fields-num">
+            <Field label="Data check parts" hint="Each month 1 of these parts is read back and checked. 0 turns it off.">
+              <input className="ui-input" value={parts} onChange={(e) => setParts(e.target.value)} inputMode="numeric" required />
+            </Field>
+          </div>
         </fieldset>
         {error && <Notice tone="err" title={error} />}
         {saved && <Notice tone="ok" title="Saved." />}

@@ -92,6 +92,9 @@ describe("System", () => {
     expect(server).toHaveTextContent("3 d 4 h");
     expect(server).toHaveTextContent("Reboot needed");
     expect(server).toHaveTextContent("linux-image-6.12");
+    // The cloud-init note belongs to changing the hostname.
+    expect(screen.queryByText(/cloud-init is installed/)).toBeNull();
+    await userEvent.setup().click(within(server).getByRole("button", { name: "Change hostname" }));
     expect(screen.getByText(/cloud-init is installed/)).toBeInTheDocument();
   });
 
@@ -124,7 +127,8 @@ describe("System", () => {
     });
     render(<System />);
 
-    const card = await screen.findByRole("region", { name: "Hostname" });
+    await user.click(await screen.findByRole("button", { name: "Change hostname" }));
+    const card = screen.getByRole("region", { name: "Hostname" });
     const input = within(card).getByLabelText("Hostname");
     const save = within(card).getByRole("button", { name: "Save hostname" });
     expect(save).toBeDisabled();
@@ -140,6 +144,8 @@ describe("System", () => {
 
     expect(await screen.findByText("The hostname is now web3.")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ hostname: "web3" });
+    // The form closes after the save; the fact shows the new name.
+    expect(screen.queryByRole("region", { name: "Hostname" })).toBeNull();
   });
 
   it("refuses an unknown time zone and saves a known one", async () => {
@@ -151,7 +157,8 @@ describe("System", () => {
     });
     render(<System />);
 
-    const card = await screen.findByRole("region", { name: "Time zone" });
+    await user.click(await screen.findByRole("button", { name: "Change time zone" }));
+    const card = screen.getByRole("region", { name: "Time zone" });
     const input = within(card).getByLabelText("Time zone");
     const save = within(card).getByRole("button", { name: "Save time zone" });
 

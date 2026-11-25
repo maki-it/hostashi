@@ -136,10 +136,10 @@ describe("Sites", () => {
     const table = await screen.findByRole("table", { name: "Sites" });
     const b = within(within(table).getByRole("link", { name: "blog" }).closest("tr")!);
     expect(b.getByText("PHP 8.4")).toBeInTheDocument();
-    expect(b.getByText("HTTPS")).toBeInTheDocument();
-    expect(b.getByText("Active")).toBeInTheDocument();
+    // A site without problems is quiet; only deviations get a badge.
+    expect(b.getByText("Active, HTTPS")).toBeInTheDocument();
     expect(b.getByText("blog.example.com")).toBeInTheDocument();
-    expect(b.getByRole("link", { name: "Settings of blog" })).toHaveAttribute("href", "#/sites/blog");
+    expect(b.getByRole("link", { name: "blog" })).toHaveAttribute("href", "#/sites/blog");
     const s = within(within(table).getByRole("link", { name: "shop" }).closest("tr")!);
     expect(s.getByText("Static")).toBeInTheDocument();
     expect(s.getByText("Certificate failed")).toBeInTheDocument();

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { Gear, Plus } from "@phosphor-icons/react";
+import { Plus } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatHash } from "./routes";
 import {
@@ -35,7 +35,7 @@ import { newProgramApp, ProgramFields, programFieldsProblem, programRequest, typ
 import { newProxy, ProxyFields } from "./SiteProxy";
 import { newestLine } from "./node";
 import { newRedirect, RedirectFields } from "./SiteRedirect";
-import { Badge, Button, Card, Field, IconLink, Notice, PageHead, RowActions, Table, type Column, type Sort } from "./ui";
+import { Badge, Button, Card, Field, Notice, PageHead, Table, type Column, type Sort } from "./ui";
 
 type QueryProps = {
   /** The address query: q (text filter), state, sort, dir, new. */
@@ -95,6 +95,23 @@ function matches(s: Site, q: string, state: string): boolean {
   return true;
 }
 
+// siteIssues lists what differs from an active site with working HTTPS;
+// the list shows only those, so a problem stands out among quiet rows.
+export function siteIssues(s: Site): { word: string; tone: "ok" | "warn" | "err" | "off" }[] {
+  const out: { word: string; tone: "ok" | "warn" | "err" | "off" }[] = [];
+  const st = siteStatus(s);
+  if (st.key !== "active") out.push({ word: st.word, tone: st.tone });
+  if (!s.tls.enabled || !s.tls.active) out.push({ word: httpsLabel(s.tls), tone: httpsTone(s.tls) });
+  return out;
+}
+
+const rank = { err: 0, warn: 1, off: 2, ok: 3 } as const;
+
+// statusRank sorts problems first: errors, warnings, then switched off.
+function statusRank(s: Site): number {
+  return Math.min(3, ...siteIssues(s).map((i) => rank[i.tone]));
+}
+
 const columns: Column<Site>[] = [
   {
     key: "name",
@@ -102,36 +119,31 @@ const columns: Column<Site>[] = [
     sortValue: (s) => s.name,
     cell: (s) => (
       <div className="ui-cell-main">
-        <a href={formatHash({ page: "sites", site: { name: s.name } })}>{s.name}</a>
+        <a className="ui-row-link" href={formatHash({ page: "sites", site: { name: s.name } })}>
+          {s.name}
+        </a>
         <span>{s.domains[0]}</span>
       </div>
     ),
   },
   { key: "type", header: "Type", sortValue: (s) => siteTypeLabel(s), cell: (s) => siteTypeLabel(s) },
   {
-    key: "https",
-    header: "HTTPS",
-    sortValue: (s) => httpsLabel(s.tls),
-    cell: (s) => <Badge tone={httpsTone(s.tls)}>{httpsLabel(s.tls)}</Badge>,
-  },
-  {
-    key: "state",
-    header: "State",
-    sortValue: (s) => siteStatus(s).word,
+    key: "status",
+    header: "Status",
+    sortValue: (s) => statusRank(s),
     cell: (s) => {
-      const st = siteStatus(s);
-      return <Badge tone={st.tone}>{st.word}</Badge>;
+      const issues = siteIssues(s);
+      if (issues.length === 0) return <span className="ui-quiet">Active, HTTPS</span>;
+      return (
+        <span className="ui-row ui-row-tight">
+          {issues.map((i) => (
+            <Badge key={i.word} tone={i.tone}>
+              {i.word}
+            </Badge>
+          ))}
+        </span>
+      );
     },
-  },
-  {
-    key: "actions",
-    header: "Actions",
-    srHeader: true,
-    cell: (s) => (
-      <RowActions>
-        <IconLink label={`Settings of ${s.name}`} icon={<Gear size={16} />} href={formatHash({ page: "sites", site: { name: s.name } })} />
-      </RowActions>
-    ),
   },
 ];
 

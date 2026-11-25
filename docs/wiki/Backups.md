@@ -32,7 +32,7 @@ Without them, the backups are useless if the server is lost. They are never show
 
 ## Data check
 
-Once a month Hostashi reads part of the stored data back and checks it, a different part each month. **Monthly data check reads 1 of N parts** sets how much; `0` turns it off. **Status** shows the last backup and the last data check.
+Once a month Hostashi reads part of the stored data back and checks it, a different part each month. **Data check parts** sets how much: each month 1 of that many parts is read; `0` turns it off. **Status** shows the last backup and the last data check.
 
 ## Restore files
 

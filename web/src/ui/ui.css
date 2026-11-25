@@ -1488,3 +1488,57 @@ a.ui-btn {
 .ui-site-select .ui-select {
   width: 100%;
 }
+
+/* Form fields side by side: short values get short inputs */
+.ui-fields {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+}
+.ui-fields-server {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) minmax(0, 1fr);
+  max-width: 860px;
+}
+.ui-fields-num {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 160px));
+}
+.ui-wide {
+  max-width: 860px;
+}
+@media (max-width: 600px) {
+  .ui-fields-server {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A form opened in place inside a card, below the facts it changes */
+.ui-edit {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+/* A small button, for actions next to a value or in a table row */
+.ui-btn-sm {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+/* A row whose first link opens it: the whole row is the click target */
+.ui-table tr:has(.ui-row-link) {
+  position: relative;
+}
+.ui-table tr:has(.ui-row-link):hover {
+  background: var(--sunken);
+}
+.ui-row-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.ui-row-tight {
+  gap: var(--space-1);
+}
+.ui-quiet {
+  color: var(--muted);
+}
