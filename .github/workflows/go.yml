@@ -531,26 +531,22 @@ jobs:
           distribution: goreleaser
           version: v2.20.3
           args: release --snapshot --clean
+      # Both distributions at the same time (each-distro.sh); the
+      # containers have their own names and networks.
       - name: Install and remove the package
-        run: |
-          for img in debian:trixie ubuntu:26.04; do
-            docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/src:ro" "$img" /src/packaging/test/deb-test.sh /dist
-          done
+        run: >-
+          packaging/test/each-distro.sh docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/src:ro" {}
+          /src/packaging/test/deb-test.sh /dist
       - name: Signed apt repository (throwaway key)
-        run: |
-          for img in debian:trixie ubuntu:26.04; do
-            docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/src:ro" "$img" /src/packaging/test/apt-repo-test.sh /dist
-          done
+        run: >-
+          packaging/test/each-distro.sh docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/src:ro" {}
+          /src/packaging/test/apt-repo-test.sh /dist
       - name: Install script for get.hostashi.com (local repository over HTTP)
-        run: |
-          for img in debian:trixie ubuntu:26.04; do
-            docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/src:ro" "$img" /src/packaging/test/get-test.sh /dist
-          done
+        run: >-
+          packaging/test/each-distro.sh docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/src:ro" {}
+          /src/packaging/test/get-test.sh /dist
       - name: Upgrade a set-up server with the package (systemd container)
-        run: |
-          for img in debian:trixie ubuntu:26.04; do
-            packaging/test/upgrade-test.sh "$img" ./dist
-          done
+        run: packaging/test/each-distro.sh packaging/test/upgrade-test.sh {} ./dist
 
   dracut:
     needs: changes
@@ -564,6 +560,24 @@ jobs:
       - name: Build an initramfs and run the hook on a loop device
         # --privileged for losetup; the container is thrown away afterwards.
         run: docker run --rm --privileged -v "$PWD:/src:ro" ubuntu:26.04 /src/packaging/test/dracut-test.sh
+
+  # The firewall step in its own systemd container, beside the installer
+  # job instead of before it.
+  firewall:
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
+    name: Installer firewall step (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:trixie", "ubuntu:26.04"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Firewall step (systemd container with its own network)
+        run: packaging/test/firewall-test.sh "${{ matrix.image }}"
 
   installer:
     needs: changes
@@ -581,13 +595,13 @@ jobs:
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
-          cache: false
+          cache: true
       - name: Build
         env:
           CGO_ENABLED: "0"
         run: go build -trimpath -o hostashi ./cmd/hostashi
       - name: shellcheck
-        run: shellcheck -x packaging/install.sh packaging/php/php-install packaging/postgresql/pg-client-install packaging/clamav/clamav-install packaging/test/container-test.sh packaging/test/deb-test.sh packaging/test/quota-test.sh packaging/test/dracut-test.sh packaging/test/firewall-test.sh packaging/test/apt-update-test.sh packaging/test/upgrade-test.sh packaging/deb/preinst packaging/deb/postinst packaging/deb/prerm packaging/deb/hostashi-rollback tools/release-key/new.sh tools/release-key/renew.sh tools/release-key/set-public.sh packaging/apt-repo/build.sh packaging/test/apt-repo-test.sh packaging/get/install.sh packaging/test/get-test.sh packaging/test/key-test.sh
+        run: shellcheck -x packaging/install.sh packaging/php/php-install packaging/postgresql/pg-client-install packaging/clamav/clamav-install packaging/test/container-test.sh packaging/test/deb-test.sh packaging/test/quota-test.sh packaging/test/dracut-test.sh packaging/test/firewall-test.sh packaging/test/apt-update-test.sh packaging/test/upgrade-test.sh packaging/deb/preinst packaging/deb/postinst packaging/deb/prerm packaging/deb/hostashi-rollback tools/release-key/new.sh tools/release-key/renew.sh tools/release-key/set-public.sh packaging/apt-repo/build.sh packaging/test/apt-repo-test.sh packaging/get/install.sh packaging/test/get-test.sh packaging/test/key-test.sh packaging/test/each-distro.sh
       - name: No pipes into grep -q
         # grep -q exits at the first match; the writer then dies of SIGPIPE
         # and pipefail fails the whole pipe. Use grep PATTERN >/dev/null.
@@ -603,8 +617,6 @@ jobs:
         run: packaging/test/apt-update-test.sh
       - name: Quota step (stubbed filesystem and boot tools)
         run: sudo packaging/test/quota-test.sh
-      - name: Firewall step (systemd container with its own network)
-        run: packaging/test/firewall-test.sh "${{ matrix.image }}"
       - name: Build Pebble (local test CA, never the real Let's Encrypt)
         env:
           CGO_ENABLED: "0"
