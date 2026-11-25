@@ -201,6 +201,38 @@ func TestSettingsHourlyAndYearly(t *testing.T) {
 	}
 }
 
+func TestBackupOverdue(t *testing.T) {
+	now := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+	done := func(ago time.Duration) agentapi.BackupStatus { return agentapi.BackupStatus{Finished: now.Add(-ago)} }
+
+	cases := []struct {
+		name     string
+		interval int
+		ready    bool
+		st       agentapi.BackupStatus
+		want     bool
+	}{
+		{"daily within 26 hours", 24, true, done(26 * time.Hour), false},
+		{"daily after 26 hours", 24, true, done(26*time.Hour + time.Minute), true},
+		{"hourly within 3 hours", 1, true, done(3 * time.Hour), false},
+		{"hourly after 3 hours", 1, true, done(3*time.Hour + time.Second), true},
+		{"every 6 hours after 8", 6, true, done(9 * time.Hour), true},
+		{"not set up", 1, false, done(48 * time.Hour), false},
+		{"running", 1, true, agentapi.BackupStatus{Running: true, Finished: now.Add(-48 * time.Hour)}, false},
+		{"never finished", 1, true, agentapi.BackupStatus{}, false},
+		{"invalid interval counts as daily", 0, true, done(25 * time.Hour), false},
+	}
+
+	for _, c := range cases {
+		s := DefaultSettings()
+		s.IntervalHours = c.interval
+
+		if got := agentapi.BackupOverdue(s, c.ready, c.st, now); got != c.want {
+			t.Errorf("%s: got %v", c.name, got)
+		}
+	}
+}
+
 func TestTimerWindow(t *testing.T) {
 	cases := map[int]string{
 		24: "OnCalendar=*-*-* 01:00:00\nRandomizedDelaySec=4h\n",

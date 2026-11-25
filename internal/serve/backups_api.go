@@ -128,6 +128,9 @@ func (RPCBackups) ScanHostKey(ctx context.Context, t agentapi.BackupTarget) (ssh
 type backupJSON struct {
 	agentapi.BackupInfo
 	Status agentapi.BackupStatus `json:"status"`
+	// Overdue: no run finished within the interval plus two hours
+	// (ADR-0008, recommendation 8).
+	Overdue bool `json:"overdue"`
 }
 
 // hostKeyJSON is a host key an SSH server presented, to confirm.
@@ -238,7 +241,7 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 			return
 		}
 
-		writeJSON(w, code, backupJSON{BackupInfo: i, Status: st})
+		writeJSON(w, code, backupJSON{BackupInfo: i, Status: st, Overdue: agentapi.BackupOverdue(i.Settings, i.Ready, st, time.Now())})
 	}
 
 	mux.Op("GET /api/v1/backups", openapi.Operation{

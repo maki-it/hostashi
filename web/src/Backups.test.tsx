@@ -108,6 +108,16 @@ describe("Backups", () => {
     expect(screen.getByLabelText("Yearly")).toHaveValue("0");
   });
 
+  it("shows an overdue backup with the interval", async () => {
+    mockFetch({
+      "GET /api/v1/backups": { body: { ...ready, overdue: true, settings: { ...ready.settings, intervalHours: 6 } } },
+      "GET /api/v1/sites": { body: { sites: [] } },
+    });
+    render(<Harness />);
+    expect(await screen.findByText(/No backup has finished in the last 8 hours, although backups run every 6 hours/)).toBeInTheDocument();
+    expect(screen.getByText("Overdue")).toBeInTheDocument();
+  });
+
   it("warns when a Storage Box is set on another port than 23", async () => {
     const user = userEvent.setup();
     mockFetch({ "GET /api/v1/backups": { body: fresh } });

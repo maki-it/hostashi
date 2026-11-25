@@ -301,6 +301,31 @@ type BackupStatus struct {
 	Maintenance   string             `json:"maintenance,omitempty"`
 }
 
+// overdueMargin is how much later than the interval a run may finish
+// before it counts as missing: 26 hours for the daily run (ADR-0008, 8).
+const overdueMargin = 2 * time.Hour
+
+// OverdueAfter is the age of the last finished run after which a run is
+// missing: the interval plus two hours. A run never starts more than one
+// interval after the previous one finished, as the timer keeps its fixed
+// delay and a run that outlasts the interval only skips starts.
+func (s BackupSettings) OverdueAfter() time.Duration {
+	h := s.IntervalHours
+	if !ValidBackupInterval(h) {
+		h = 24
+	}
+
+	return time.Duration(h)*time.Hour + overdueMargin
+}
+
+// BackupOverdue reports whether a scheduled run is missing at now: backups
+// are set up, none is running, and the last one finished longer ago than
+// OverdueAfter. Before the first run finished there is nothing to compare
+// with, and the status shows "No backup yet" instead.
+func BackupOverdue(s BackupSettings, ready bool, st BackupStatus, now time.Time) bool {
+	return ready && !st.Running && !st.Finished.IsZero() && now.Sub(st.Finished) > s.OverdueAfter()
+}
+
 // BackupSnapshotsRequest asks for the snapshots of one site, or of the
 // panel when Site is empty.
 type BackupSnapshotsRequest struct {

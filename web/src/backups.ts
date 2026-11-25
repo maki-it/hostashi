@@ -54,7 +54,19 @@ export type BackupInfo = {
   hostKey: string;
   ready: boolean;
   status: Status;
+  // No run finished within the interval plus two hours (ADR-0008, 8).
+  overdue?: boolean;
 };
+
+// The wording of the interval, as in the form.
+export function everyText(hours: number) {
+  if (hours === 1) return "every hour";
+  if (hours > 0 && hours < 24) return `every ${hours} hours`;
+  return "once a day";
+}
+
+// The age after which a run counts as missing, as the panel computes it.
+export const overdueHours = (hours: number) => (hours > 0 && hours < 24 ? hours : 24) + 2;
 
 export type Snapshot = { id: string; time: string; kind: string; database?: string };
 
