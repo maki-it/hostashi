@@ -87,6 +87,10 @@ func writeServiceAgentError(w http.ResponseWriter, r *http.Request, log *slog.Lo
 		writeError(w, http.StatusNotFound, "not_found", ae.Message)
 	case errors.As(err, &ae) && (ae.Code == agentrpc.CodePrecondition || ae.Code == agentrpc.CodeConflict):
 		writeError(w, http.StatusConflict, "failed_precondition", ae.Message)
+	case errors.As(err, &ae) && ae.Code == agentrpc.CodeInternal && ae.Message != "internal error":
+		// The agent's own words (for example errAction), not a raw error.
+		log.WarnContext(r.Context(), "services", "err", err)
+		writeError(w, http.StatusBadGateway, "agent_error", ae.Message)
 	case errors.Is(err, context.DeadlineExceeded):
 		writeError(w, http.StatusGatewayTimeout, "agent_timeout", "the agent did not answer in time")
 	default:

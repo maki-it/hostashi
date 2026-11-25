@@ -638,6 +638,14 @@ for _ in $(seq 1 120); do
 done
 [ "$(jget 'd["realtimeActive"]')" = True ] || fail "clamonacc not running: $(x cat /tmp/api.out); $(x journalctl --no-pager -n 30 -u clamav-daemon -u clamav-clamonacc)"
 x grep -q '^OnAccessIncludePath /home/blog$' /etc/hostashi/clamav/clamd.conf || fail "blog not watched"
+# The distribution's AppArmor profile only allows /etc/clamav/clamd.conf;
+# its local include must add the agent's file (web3, Debian 13).
+x grep -qxF '/etc/hostashi/clamav/clamd.conf r,' /etc/apparmor.d/local/usr.sbin.clamd || fail "clamd's AppArmor include lacks the config: $(x cat /etc/apparmor.d/local/usr.sbin.clamd)"
+x env HOSTASHI_CLAMAV_STATE_DIR=/var/lib/hostashi-agent/clamav-install /usr/local/lib/hostashi/clamav-install check >/dev/null || fail "clamav-install check after real-time on"
+x cp /etc/apparmor.d/local/usr.sbin.clamd /tmp/aa.keep
+x sh -c 'printf "# admin\n" >/etc/apparmor.d/local/usr.sbin.clamd'
+if x env HOSTASHI_CLAMAV_STATE_DIR=/var/lib/hostashi-agent/clamav-install /usr/local/lib/hostashi/clamav-install check >/dev/null; then fail "check missed the AppArmor block"; fi
+x cp /tmp/aa.keep /etc/apparmor.d/local/usr.sbin.clamd
 # The unit systemd runs, after all drop-ins, must not move files.
 onacc_exec="$(x systemctl show -p ExecStart --value clamav-clamonacc.service)"
 case "$onacc_exec" in *--fdpass*) ;; *) fail "clamonacc does not run from the Hostashi drop-in: $onacc_exec";; esac

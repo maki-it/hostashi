@@ -5,6 +5,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 
@@ -269,7 +270,7 @@ func (o *serviceOps) action(ctx context.Context, req agentapi.ServiceActionReque
 			return agentapi.ServiceState{}, rpcErr
 		}
 
-		return agentapi.ServiceState{}, errAction
+		return agentapi.ServiceState{}, o.actionError(ctx, unit)
 	}
 
 	o.log.InfoContext(ctx, "service action", "service", svc.ID, "site", req.Site, "action", req.Action)
@@ -285,6 +286,23 @@ func (o *serviceOps) action(ctx context.Context, req agentapi.ServiceActionReque
 	st[0].ID, st[0].Site = svc.ID, req.Site
 
 	return st[0], nil
+}
+
+// actionError says why an action failed: for a unit that systemd now
+// shows as failed, its result and where its log is, since systemctl only
+// says the job failed. Unit and result come from fixed, checked values.
+func (o *serviceOps) actionError(ctx context.Context, unit string) error {
+	st, err := o.ctl.Show(ctx, []string{unit})
+	if err != nil || len(st) != 1 || st[0].Active != "failed" {
+		return errAction
+	}
+
+	why := "it failed"
+	if st[0].Result != "" && st[0].Result != "success" {
+		why = "it failed with result " + st[0].Result
+	}
+
+	return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: fmt.Sprintf("%s did not start: %s. Its log: journalctl -u %s", unit, why, unit)}
 }
 
 func (o *serviceOps) run(ctx context.Context, svc agentapi.Service, unit, action string) error {
