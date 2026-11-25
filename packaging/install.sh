@@ -678,14 +678,21 @@ do_malwarescan() {
   [ "$rc" = 1 ] || reload=yes
   if [ "$reload" = yes ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
   systemctl enable --now "$CLAMAV_TIMER" >>"$LOG" 2>&1 || return 1
-  local need=no
+  local need=no why
   if [ "$(clamav_state)" = on ]; then
     HOSTASHI_CLAMAV_STATE_DIR=$CLAMAV_STATE "$CLAMAV_BIN" check >/dev/null || need=yes
+    # Most gaps (a new AppArmor block, a drop-in, a disabled unit) need no
+    # package: repair them without apt first, since an upgrade from the
+    # hostashi package runs with --no-apt while dpkg holds the lock.
+    if [ "$need" = yes ]; then
+      HOSTASHI_CLAMAV_STATE_DIR=$CLAMAV_STATE "$CLAMAV_BIN" repair >>"$LOG" 2>&1 || true
+      why=$(HOSTASHI_CLAMAV_STATE_DIR=$CLAMAV_STATE "$CLAMAV_BIN" check) && need=no
+    fi
   elif [ "$MALWARE_SCAN" = yes ]; then
-    need=yes
+    need=yes why="ClamAV is not installed"
   fi
   if [ "$need" = yes ]; then
-    [ "$NO_APT" = no ] || { log "ClamAV is not installed and --no-apt is set: switch the malware scan on in the panel"; return 1; }
+    [ "$NO_APT" = no ] || { log "ClamAV needs packages ($why) and --no-apt is set: install them with apt-get, then run the installer again"; return 1; }
     HOSTASHI_CLAMAV_STATE_DIR=$CLAMAV_STATE "$CLAMAV_BIN" install 2>&1 | tee -a "$LOG" | grep -E 'cannot' >&2
     [ "${PIPESTATUS[0]}" = 0 ] || return 1
   fi

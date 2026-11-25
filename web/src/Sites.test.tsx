@@ -625,6 +625,8 @@ describe("SitePage", () => {
     expect(save).toBeDisabled();
 
     const input = card.getByLabelText("Display name");
+    // The field follows the loaded name; clear it only once it shows it.
+    await waitFor(() => expect(input).toHaveValue("Company blog"));
     await user.clear(input);
     await user.type(input, "  News ");
     await user.click(save);
