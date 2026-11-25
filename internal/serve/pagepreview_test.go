@@ -93,6 +93,35 @@ func TestPreviewServesThePageSandboxed(t *testing.T) {
 	}
 }
 
+// TestPreviewDomainPlaceholder: the preview shows an example domain for
+// %%DOMAIN%% in HTML, like nginx shows the visited one, and leaves other
+// files as they are.
+func TestPreviewDomainPlaceholder(t *testing.T) {
+	pv, mux, _ := previewServer(t)
+	page := filepath.Join(pv.dir, "p7."+previewDigest)
+
+	if err := os.WriteFile(filepath.Join(page, "index.html"), []byte("<p>%%DOMAIN%%</p><p>%%DOMAIN%%</p>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(page, "a.js"), []byte("'%%DOMAIN%%'"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tok, err := pv.issue(preview{id: "p7", digest: previewDigest})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if rec := get(mux, previewPrefix+tok+"/"); rec.Code != http.StatusOK || rec.Body.String() != "<p>example.com</p><p>example.com</p>" {
+		t.Errorf("index: %d %q", rec.Code, rec.Body)
+	}
+
+	if rec := get(mux, previewPrefix+tok+"/a.js"); rec.Code != http.StatusOK || rec.Body.String() != "'%%DOMAIN%%'" {
+		t.Errorf("script: %d %q", rec.Code, rec.Body)
+	}
+}
+
 func TestPreviewBuiltinPage(t *testing.T) {
 	pv, mux, _ := previewServer(t)
 

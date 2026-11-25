@@ -218,6 +218,12 @@ const compressTypes = "text/plain text/css text/xml text/javascript application/
 const PageCSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data:; font-src 'self' data:; form-action 'none'; frame-ancestors 'none'; base-uri 'self'"
 
+// pageDomainRe is the host name that nginx puts into a page for
+// agentapi.PageDomainPlaceholder: labels of letters, digits, "_" and "-".
+// Nothing in it can end an HTML text, attribute or script string. $host is
+// already lower case and without the port.
+const pageDomainRe = `^[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?(\.[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?)*$`
+
 // pageTypes are the lines of the types block of a page location: the MIME
 // type without parameters (charset adds them) and its extensions.
 var pageTypes = func() []string {
@@ -259,6 +265,13 @@ http {
     # Retry-After of maintenance pages: only on their 503 answers.
     map $status $hostashi_retry_after {
         503 3600;
+        default "";
+    }
+    # %%DOMAIN%% in maintenance and parking pages: the visited host name,
+    # only when it holds nothing but host name characters, so the page
+    # never gets markup from the Host header. Empty otherwise.
+    map $host $hostashi_page_domain {
+        "~{{.PageDomain}}" $host;
         default "";
     }
     # Page cache (ADR-0046): requests that never use the cache of any site.
@@ -607,6 +620,7 @@ type pageLoc struct {
 	AltSvc            string // port for Alt-Svc, empty for none
 	HSTS              bool
 	Retry             bool // Retry-After on the 503 answers (maintenance)
+	Placeholder       string
 }
 
 const pageLocSrc = `{{define "pageloc"}}
@@ -621,6 +635,10 @@ const pageLocSrc = `{{define "pageloc"}}
         default_type application/octet-stream;
         charset utf-8;
         charset_types text/css text/javascript image/svg+xml;
+        # agentapi.PageDomainPlaceholder in the HTML files becomes the visited
+        # domain, see $hostashi_page_domain.
+        sub_filter '{{.Placeholder}}' $hostashi_page_domain;
+        sub_filter_once off;
         add_header Content-Security-Policy "{{.CSP}}" always;
         add_header X-Content-Type-Options nosniff always;
         add_header Cache-Control no-store always;
@@ -642,7 +660,7 @@ func withPageLoc(name, src string) *template.Template {
 }
 
 func (n *Nginx) pageLoc(page, dir string, tls, hsts, retry bool) pageLoc {
-	pl := pageLoc{Prefix: agentapi.PagePathPrefix, Page: page, Dir: dir, Types: pageTypes, CSP: PageCSP, Retry: retry}
+	pl := pageLoc{Prefix: agentapi.PagePathPrefix, Page: page, Dir: dir, Types: pageTypes, CSP: PageCSP, Retry: retry, Placeholder: agentapi.PageDomainPlaceholder}
 	if tls {
 		pl.HSTS = hsts
 
@@ -1156,7 +1174,7 @@ func (n *Nginx) Render(d Desired, gen int) (Files, error) {
 	f := Files{Content: map[string][]byte{}, Meta: map[string][]byte{}}
 
 	var b bytes.Buffer
-	if err := mainTmpl.Execute(&b, map[string]any{"N": n, "Types": compressTypes, "Control": controlHost}); err != nil {
+	if err := mainTmpl.Execute(&b, map[string]any{"N": n, "Types": compressTypes, "Control": controlHost, "PageDomain": pageDomainRe}); err != nil {
 		return Files{}, fmt.Errorf("web: render nginx.conf: %w", err)
 	}
 

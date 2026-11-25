@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -1858,4 +1859,113 @@ func TestNoHTTPHostOverHTTP3(t *testing.T) {
 	if alpha := string(f.Content["sites/alpha.conf"]); !strings.Contains(alpha, "fastcgi_param HTTP_HOST $host;") {
 		t.Errorf("PHP site without HTTP_HOST:\n%s", alpha)
 	}
+}
+
+// TestPageDomainRe checks the host names that nginx puts into a page for
+// %%DOMAIN%%: plain host names only, nothing that can end an HTML text or
+// attribute, a script string or a URL.
+func TestPageDomainRe(t *testing.T) {
+	re := regexp.MustCompile(pageDomainRe)
+
+	for _, ok := range []string{"a", "example.com", "www.alpha.example.com", "xn--mller-kva.de", "203.0.113.7", "my_host.example.com", "a-b.c-d.e"} {
+		if !re.MatchString(ok) {
+			t.Errorf("%q not accepted", ok)
+		}
+	}
+
+	for _, bad := range []string{
+		"", ".", ".example.com", "example.com.", "a..b", "-a.example.com", "a-.example.com",
+		"Example.com", "<script>", "a<b", "a>b", `a"b`, "a'b", "a`b", "a b", "a&b", "a;b",
+		"a/b", `a\b`, "a=b", "a(b)", "[::1]", "a:80", "a\nb", "a\x00b", "müller.de", "%%DOMAIN%%",
+	} {
+		if re.MatchString(bad) {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}
+
+func TestPageDomainRender(t *testing.T) {
+	n := &Nginx{Ctl: &testCtl{}, Listen: []string{"80"}, ControlSocket: "/run/x.sock", PIDFile: "/run/x.pid", ErrorLog: "/var/log/x", MimeTypes: "/etc/x"}
+	m := &Maintenance{Page: "maint", Digest: digest64, Dir: "/var/lib/hostashi-pages/maint." + digest64}
+
+	f, err := n.Render(Desired{
+		Sites:  []Site{{User: "my-site", Domains: []string{"a.example.com"}, Root: "/srv/a", Maintenance: m}},
+		Parked: []Parked{{Name: "_park-1", Domain: "parked.example.net", Page: m.Page, Digest: m.Digest, Dir: m.Dir}},
+	}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if main := string(f.Content["nginx.conf"]); !strings.Contains(main, "map $host $hostashi_page_domain {\n        \"~"+pageDomainRe+"\" $host;\n        default \"\";") {
+		t.Errorf("main has no page domain map:\n%s", main)
+	}
+
+	for _, name := range []string{"sites/my-site.conf", "sites/_park-1.conf"} {
+		conf, ok := f.Content[name]
+		if !ok {
+			t.Fatalf("no %s in %v", name, f.Content)
+		}
+
+		if !strings.Contains(string(conf), "sub_filter '%%DOMAIN%%' $hostashi_page_domain;\n        sub_filter_once off;") {
+			t.Errorf("%s has no sub_filter:\n%s", name, conf)
+		}
+
+		if strings.Contains(string(conf), "sub_filter_types") {
+			t.Errorf("%s: sub_filter beyond text/html", name)
+		}
+	}
+}
+
+// TestPageDomainPlaceholder checks %%DOMAIN%% against a real nginx: the
+// visited domain in the HTML of maintenance, disabled and parking pages,
+// lower case and without the port, and untouched in other files.
+func TestPageDomainPlaceholder(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+
+	const html = `<!doctype html><h1>Back soon</h1><p class="domain">%%DOMAIN%%</p><a href="https://%%DOMAIN%%/">x</a>`
+
+	s := e.site(t, "alpha", "hello alpha", "alpha.example.com", "www.alpha.example.com")
+	s.Maintenance = e.page(t, map[string]string{"index.html": html, "css/site.css": "/* %%DOMAIN%% */", "js/a.js": "var d = '%%DOMAIN%%';"})
+	m := s.Maintenance
+	parked := Parked{Name: "_park-1", Domain: "parked.example.net", Page: m.Page, Digest: m.Digest, Dir: m.Dir}
+
+	if _, err := e.r.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{s}, Parked: []Parked{parked}}); err != nil {
+		t.Fatal(err)
+	}
+
+	check := func(state, host, want string) {
+		t.Helper()
+
+		_, _, body := e.fetchFull(t, host, "/some/path")
+		if !strings.Contains(body, `<p class="domain">`+want+`</p><a href="https://`+want+`/">`) || strings.Contains(body, "%%DOMAIN%%") {
+			t.Errorf("%s, Host %q: %q", state, host, body)
+		}
+	}
+
+	check("maintenance", "alpha.example.com", "alpha.example.com")
+	check("maintenance", "WWW.Alpha.Example.COM:8080", "www.alpha.example.com")
+	check("parked", "parked.example.net", "parked.example.net")
+
+	for p, want := range map[string]string{
+		"/.hostashi/page/maint/css/site.css": "/* %%DOMAIN%% */",
+		"/.hostashi/page/maint/js/a.js":      "var d = '%%DOMAIN%%';",
+	} {
+		if code, _, body := e.fetchFull(t, "alpha.example.com", p); code != http.StatusOK || body != want {
+			t.Errorf("%s: %d %q", p, code, body)
+		}
+	}
+
+	s.Maintenance, s.Disabled = nil, true
+	s.DisabledPage = &PageRef{Page: m.Page, Digest: m.Digest, Dir: m.Dir}
+
+	if _, err := e.r.Apply(ctx, Desired{Sites: []Site{s}, Parked: []Parked{parked}}); err != nil {
+		t.Fatal(err)
+	}
+
+	check("disabled", "www.alpha.example.com", "www.alpha.example.com")
 }

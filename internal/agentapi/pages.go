@@ -61,6 +61,14 @@ var PageTypes = map[string]string{
 	"woff2": "font/woff2",
 }
 
+// PageDomainPlaceholder in a page's HTML files is replaced with the visited
+// domain when nginx serves the page (empty if the Host header is not a plain
+// host name); the panel's preview shows PagePreviewDomain instead.
+const (
+	PageDomainPlaceholder = "%%DOMAIN%%"
+	PagePreviewDomain     = "example.com"
+)
+
 // ValidatePageID accepts the id of a stored page.
 func ValidatePageID(id string) error {
 	if !pageIDRe.MatchString(id) {

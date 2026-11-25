@@ -86,3 +86,16 @@ None left.
 - No new agent operation, no new `os/exec` exception; the panel reads the pages directory read-only.
 
 **Consequences.** A preview link works for whoever holds it for 15 minutes, like a share link; it shows only what visitors of a site with that page see anyway. The token sits in the URL and so in the browser history; it expires quickly and unlocks nothing else [A]. Requests from the page itself (`fetch`, forms) are blocked in the preview, unlike on a live site.
+
+## Addendum 2: the visited domain in a page (Kim's request, 2026-11-25)
+
+**Context.** Kim's own maintenance and parking pages (repository `maki-it/cloudpanel`, `parking/`) contain the placeholder `%%DOMAIN%%`, which their CloudPanel setup replaces with nginx `sub_filter`. Hostashi served it literally (Kim, 2026-11-25, with a screenshot). Those pages use no other placeholder [V: `parking/src/page.html`, `parking/build.py`]. The value comes from the request: the Host header, or the host of an absolute request line [U: nginx docs for `$host`]. Placed unchecked into HTML it would allow markup injection wherever a request can reach the server block with an odd host name [A: today every server block has exact names, so this is defence in depth].
+
+**Decision.**
+
+- In the location of a page's files, nginx replaces `%%DOMAIN%%` with `$hostashi_page_domain` (`sub_filter`, `sub_filter_once off`), only in `text/html` (the `sub_filter_types` default), so CSS, JavaScript and SVG stay untouched. This covers maintenance, disabled sites and parked domains, which all serve pages through that location.
+- `$hostashi_page_domain` is a `map` on `$host` (lower case, no port): the host name if it consists only of dot-separated labels of `a-z`, `0-9`, `_` and `-`, otherwise empty. None of these characters can end an HTML text, an attribute value or a script string. Internationalized names appear in their ASCII form.
+- The panel preview replaces the placeholder with `example.com` in HTML files.
+- `ngx_http_sub_module` is part of the Debian and Ubuntu nginx builds [V: `nginx -V` on Ubuntu 24.04 shows `--with-http_sub_module`; the installer tests on Debian 13 and Ubuntu 26.04 run the rendered configuration]. No new agent operation and no `os/exec` exception.
+
+**Consequences.** Pages written for Kim's CloudPanel setup work unchanged. `sub_filter` skips compressed responses; uploaded pages cannot contain precompressed `.br` or `.gz` files, so `brotli_static` never bypasses it [V: `agentapi.PageTypes`]. A visitor who sends an unusual Host header sees an empty domain instead.

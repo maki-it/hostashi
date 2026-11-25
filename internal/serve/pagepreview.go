@@ -3,6 +3,7 @@
 package serve
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -208,6 +209,10 @@ func servePreview(ctx context.Context, w http.ResponseWriter, r *http.Request, p
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("Cross-Origin-Resource-Policy", "same-origin")
 	w.WriteHeader(http.StatusOK)
+
+	if ext == "html" {
+		b = bytes.ReplaceAll(b, []byte(agentapi.PageDomainPlaceholder), []byte(agentapi.PagePreviewDomain))
+	}
 
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(b)

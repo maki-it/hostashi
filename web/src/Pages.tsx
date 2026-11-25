@@ -32,7 +32,7 @@ const sizeOf = (p: StatusPage) => p.files.reduce((n, f) => n + f.size, 0);
 const nobody = (p: StatusPage) => (p.kind === "parking" ? "No domain" : "No site");
 
 const fileHint =
-  "One .html file, or a .zip file with index.html at the top and its CSS, JavaScript, images (png, jpg, webp, gif, svg, ico) and woff2 fonts. At most 2 MiB, 100 files and two folder levels. Files load only from the page itself.";
+  "One .html file, or a .zip file with index.html at the top and its CSS, JavaScript, images (png, jpg, webp, gif, svg, ico) and woff2 fonts. At most 2 MiB, 100 files and two folder levels. Files load only from the page itself. %%DOMAIN%% in the HTML shows the domain the visitor opened.";
 
 // Pages lists the maintenance and parking pages and uploads new ones. Sites
 // choose their maintenance page in their settings.
