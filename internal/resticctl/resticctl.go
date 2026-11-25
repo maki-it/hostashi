@@ -63,9 +63,10 @@ var (
 )
 
 var (
-	// The repository is either SFTP (user, host, port and a path relative to
-	// the login directory, as on a Storage Box) or an absolute local path.
-	sftpRepoRe  = regexp.MustCompile(`^sftp://[a-z0-9][a-z0-9-]{0,31}@[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?:([0-9]{1,5})/[A-Za-z0-9._-][A-Za-z0-9._/-]{0,199}$`)
+	// The repository is either SFTP (user, host or bracketed IPv6 address,
+	// port, and a path relative to the login directory or, after a second
+	// slash, absolute) or an absolute local path.
+	sftpRepoRe  = regexp.MustCompile(`^sftp://[A-Za-z0-9_][A-Za-z0-9._-]{0,63}@(?:[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?|\[[0-9a-f:.]{2,45}\]):([0-9]{1,5})//?[A-Za-z0-9._-][A-Za-z0-9._/-]{0,199}$`)
 	localPathRe = regexp.MustCompile(`^/[A-Za-z0-9._/-]{1,1000}$`)
 	tagRe       = regexp.MustCompile(`^[a-z]{1,16}:[a-z0-9_-]{1,64}$`)
 	hostRe      = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`)
@@ -180,7 +181,7 @@ func checkPort(repo string) error {
 		return fmt.Errorf("%w: repository", ErrInvalid)
 	}
 
-	if port, err := strconv.Atoi(m[2]); err != nil || port < 1 || port > 65535 {
+	if port, err := strconv.Atoi(m[1]); err != nil || port < 1 || port > 65535 {
 		return fmt.Errorf("%w: port", ErrInvalid)
 	}
 
