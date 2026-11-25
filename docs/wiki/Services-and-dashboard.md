@@ -19,7 +19,11 @@ The panel takes a sample every 15 seconds. The last hour is kept in memory; 5-mi
 
 ## Services
 
-Open **Services** in the Server part of the menu. The table lists each service with its state, how long it has been running, its memory and how often systemd restarted it after a crash in the last 24 hours.
+Open **Services** in the Server part of the menu.
+
+![The Services page with the virus scan's services](images/services.png)
+
+The table lists each service with its state, how long it has been running, its memory and how often systemd restarted it after a crash in the last 24 hours.
 
 | Service | What you can do |
 |---------|-----------------|
@@ -29,6 +33,8 @@ Open **Services** in the Server part of the menu. The table lists each service w
 | Brute-force protection (fail2ban) | Start, stop, restart, reload. |
 | Firewall | Reload only. |
 | Database tool (Adminer) | Start, stop, restart. |
+| Virus scan signatures (freshclam) | Start, restart. Listed while the [virus scan](Virus-scan.md) is on. |
+| Virus scanner (clamd), Real-time virus scan (clamonacc) | Start, restart. Listed while the real-time mode is on. Turn the scan or the real-time mode off on the **Virus scan** page. |
 | Panel, Agent | Nothing: Hostashi manages them itself. |
 | PHP-FPM of a site | Start, restart, reload. |
 | Object cache (Valkey) of a site | Start, restart. |

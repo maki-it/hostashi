@@ -158,7 +158,8 @@ func TestServicesStatusAndActions(t *testing.T) {
 
 	want := []string{
 		"nginx/=nginx.service", "mariadb/=mariadb.service", "ssh/=ssh.service", "fail2ban/=fail2ban.service",
-		"firewall/=hostashi-firewall.service", "adminer/=hostashi-adminer.service", "panel/=hostashi.service", "agent/=hostashi-agent.service",
+		"firewall/=hostashi-firewall.service", "adminer/=hostashi-adminer.service",
+		"freshclam/=clamav-freshclam.service", "clamd/=clamav-daemon.service", "clamonacc/=clamav-clamonacc.service", "panel/=hostashi.service", "agent/=hostashi-agent.service",
 		"php/blog=hostashi-php-8.3@blog.service", "php/shop=hostashi-php-8.4@shop.service",
 		"valkey/blog=hostashi-valkey@blog.service", "valkey/shop=hostashi-valkey@shop.service",
 	}

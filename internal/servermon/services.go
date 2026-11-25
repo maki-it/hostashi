@@ -158,7 +158,8 @@ type Service struct {
 
 // Services reads the states now (not from the last poll) and adds the
 // catalog row and the restart count. site narrows to one site's units
-// (both PHP and Valkey) when not empty.
+// (both PHP and Valkey) when not empty. Optional services that are not
+// installed are left out.
 func (m *Monitor) Services(ctx context.Context, site string) ([]Service, error) {
 	states, err := m.Agent.Services(ctx, agentapi.ServicesStatusRequest{})
 	if err != nil {
@@ -180,6 +181,10 @@ func (m *Monitor) Services(ctx context.Context, site string) ([]Service, error) 
 		}
 
 		svc, _ := agentapi.LookupService(st.ID)
+		if svc.Optional && !st.Installed {
+			continue
+		}
+
 		row := Service{ServiceState: st, Actions: svc.Actions, Confirm: svc.Confirm, Restarts24: restarts[key(st.ID, st.Site)]}
 
 		if !st.Installed || row.Actions == nil {
