@@ -1422,8 +1422,9 @@ a.ui-btn {
 }
 
 /* Site page sections: group tabs with inner tabs; one select on a phone */
-/* Inner tabs of a site section: a segmented control on a grey track, the
-   active tab raised as a white button, so they read as a second level. */
+/* Inner tabs of a site section: a segmented control in an outlined track
+   without fill, the active tab raised as a white button, so they read as a
+   second level (Kim chose this quieter variant, 2026-11-25). */
 .ui-subtabs {
   align-self: flex-start;
   max-width: 100%;
@@ -1431,7 +1432,7 @@ a.ui-btn {
 .ui-subtabs .ui-tabs {
   gap: 2px;
   padding: 3px;
-  background: var(--sunken);
+  background: transparent;
   border: 1px solid var(--line);
   border-radius: calc(var(--radius) + 3px);
 }
@@ -1443,7 +1444,7 @@ a.ui-btn {
 }
 .ui-subtabs .ui-tab:hover {
   color: var(--fg);
-  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  background: color-mix(in srgb, var(--sunken) 60%, transparent);
 }
 .ui-subtabs .ui-tab[aria-selected="true"] {
   color: var(--accent);
