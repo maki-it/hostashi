@@ -11,7 +11,9 @@
 # Upload and deploy are separate jobs: right after upload-pages-artifact
 # finishes, the artifact API sometimes does not list the artifact yet and
 # deploy-pages fails with "No artifacts named github-pages". The deploy job
-# waits until the artifact is listed before it deploys.
+# waits until the artifact is listed before it deploys. The artifact name
+# carries the attempt of the build job, so re-running all jobs does not leave
+# two artifacts with the same name (deploy-pages refuses that).
 name: Pages
 
 on:
@@ -29,7 +31,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      artifact: ${{ steps.name.outputs.artifact }}
     steps:
+      - id: name
+        run: echo "artifact=github-pages-$GITHUB_RUN_ATTEMPT" >>"$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -73,6 +79,7 @@ jobs:
           HTML
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
+          name: ${{ steps.name.outputs.artifact }}
           path: site
 
   deploy:
@@ -90,14 +97,17 @@ jobs:
       - name: Wait until the artifact is listed
         env:
           GH_TOKEN: ${{ github.token }}
+          ARTIFACT: ${{ needs.build.outputs.artifact }}
         run: |
           for i in $(seq 1 24); do
-            n=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=github-pages" --jq .total_count || echo 0)
+            n=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=$ARTIFACT" --jq .total_count || echo 0)
             if [ "$n" -gt 0 ]; then echo "artifact listed after $i check(s)"; exit 0; fi
             sleep 5
           done
-          echo "::error::artifact github-pages not listed after 2 minutes"
+          echo "::error::artifact $ARTIFACT not listed after 2 minutes"
           exit 1
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - id: deploy
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        with:
+          artifact_name: ${{ needs.build.outputs.artifact }}
