@@ -27,6 +27,7 @@ A site without a Linux user has no files, cron jobs, SSH access or limits. [Site
 3. **Display name (optional):** free text up to 64 characters, shown in the panel instead of the name. It can be changed later, see [Rename a site](#rename-a-site).
 4. **Domains:** one per line. The first one is the primary domain.
 5. **Type:** see the table above. For PHP choose the version; only installed versions are listed (more under **Server → PHP versions**).
+   For PHP also choose the **Application**, such as WordPress or Laravel. It brings the hardening rules, see [Application profiles](Application-profiles.md).
 6. **HTTPS with a Let's Encrypt certificate:** leave it on. The domains must already point to this server, see [Domains and HTTPS](Domains-and-HTTPS.md).
 7. If the server has more than one storage pool, choose where the site's home lives. A site stays on its pool.
 
