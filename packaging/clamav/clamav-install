@@ -192,6 +192,24 @@ do_install() {
   say "done: ClamAV $(cat "$STATE_DIR/version"), signatures follow from freshclam"
 }
 
+# do_repair puts back what check wants without apt: the installer runs it
+# while dpkg holds the lock (the hostashi package's postinst). It fails
+# when a package is missing, which only install can fix.
+do_repair() {
+  local p
+  if [ "$(state)" = on ]; then
+    for p in "${PKGS[@]}"; do installed "$p" || { say "$p not installed"; return 1; }; done
+    systemctl enable --now "$FRESHCLAM" || { say "cannot start $FRESHCLAM"; return 1; }
+  fi
+  if [ "$(rt_state)" = on ]; then
+    for p in "${RT_PKGS[@]}"; do installed "$p" || { say "$p not installed"; return 1; }; done
+    write_dropins || { say "cannot write the drop-ins"; return 1; }
+    write_apparmor || { say "cannot add $RT_CONF to clamd's AppArmor profile"; return 1; }
+    systemctl reset-failed "$CLAMD" clamav-daemon.socket 2>/dev/null
+  fi
+  say "done: repaired"
+}
+
 do_realtime_on() {
   [ "$(state)" = on ] || { say "switch the malware scan on first"; return 1; }
   say "installing ${RT_PKGS[*]}"
@@ -257,6 +275,7 @@ do_remove() {
 case "${1:-}" in
   check) [ $# = 1 ] || exit 64; check || exit 1;;
   install) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_install || exit 1;;
+  repair) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_repair || exit 1;;
   remove) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_remove || exit 1;;
   realtime-on) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_realtime_on || exit 1;;
   upgrade) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_upgrade || exit 1;;
