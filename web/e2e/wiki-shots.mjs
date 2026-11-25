@@ -164,6 +164,27 @@ const shots = [
   },
   { name: "site-malware", hash: "#/sites/blog/malware", ready: "text=Flagged files", full: true },
   {
+    name: "files-virus-scan",
+    hash: "#/sites/blog/files",
+    ready: "text=backup.tar.gz",
+    act: async (page) => {
+      await page.getByLabel("Select htdocs").check();
+      await page.getByLabel("Select backup.tar.gz").check();
+      await page.getByRole("region", { name: "Selection" }).getByRole("button", { name: "Scan for viruses" }).waitFor();
+    },
+  },
+  {
+    name: "files-virus-scan-started",
+    hash: "#/sites/blog/files",
+    ready: "text=backup.tar.gz",
+    act: async (page) => {
+      await page.getByLabel("Select htdocs").check();
+      await page.getByLabel("Select backup.tar.gz").check();
+      await page.getByRole("region", { name: "Selection" }).getByRole("button", { name: "Scan for viruses" }).click();
+      await page.getByText("Virus scan of 2 items started.").waitFor();
+    },
+  },
+  {
     name: "system-malware",
     hash: "#/system",
     ready: "text=ClamAV 1.4.6+dfsg-1",

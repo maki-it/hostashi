@@ -88,6 +88,9 @@ var (
 	ErrExists = errors.New("scanunit: a file exists at the original path")
 	// ErrNoParent: the directory of a restore is gone.
 	ErrNoParent = errors.New("scanunit: the directory of the original path is gone")
+	// ErrTarget: a path of a scan of a selection is not a file or folder
+	// in the home.
+	ErrTarget = errors.New("scanunit: not a file or folder in the site")
 	// ErrUnknownItem: no such file in the quarantine.
 	ErrUnknownItem = errors.New("scanunit: no such file in the quarantine")
 )
@@ -254,7 +257,9 @@ func safePath(p string) bool {
 // a clamdscan configuration (clientConf, see ClientConfigContent) clamdscan,
 // which hands each open file to the running clamd of the real-time mode.
 // The template holds the sandbox, the slice, the log and the exit codes.
-func DropInContent(site string, acct Site, hidden []string, dbDir, clientConf string) ([]byte, error) {
+// targets, relative to the home and checked by the caller, narrow the scan
+// to those files and folders; none scans the whole home.
+func DropInContent(site string, acct Site, hidden []string, dbDir, clientConf string, targets []string) ([]byte, error) {
 	if err := agentapi.ValidateSiteUser(site); err != nil {
 		return nil, err
 	}
@@ -287,7 +292,17 @@ func DropInContent(site string, acct Site, hidden []string, dbDir, clientConf st
 		cmd = []string{Clamdscan, "--config-file=" + clientConf, "--fdpass", "--infected", "--no-summary", "--stdout"}
 	}
 
-	cmd = append(cmd, appunit.Quote(acct.Home))
+	if err := agentapi.ValidateScanTargets(targets); err != nil {
+		return nil, err
+	}
+
+	if len(targets) == 0 {
+		cmd = append(cmd, appunit.Quote(acct.Home))
+	}
+
+	for _, t := range targets {
+		cmd = append(cmd, appunit.Quote(acct.Home+"/"+t))
+	}
 
 	w("ExecStart=")
 	w("ExecStart=", strings.Join(cmd, " "))
@@ -331,6 +346,10 @@ func (m *Manager) Start(ctx context.Context, req agentapi.ScanStartRequest) (age
 		hidden = m.Hidden()
 	}
 
+	if err := checkTargets(acct.Home, req.Paths); err != nil {
+		return agentapi.ScanStatus{}, err
+	}
+
 	clientConf := ""
 	if m.Clamd != nil && m.Clamd(ctx) {
 		clientConf = m.ClientConfig(req.Site)
@@ -360,7 +379,7 @@ func (m *Manager) Start(ctx context.Context, req agentapi.ScanStartRequest) (age
 		}
 	}
 
-	content, err := DropInContent(req.Site, acct, hidden, m.dbDir(), clientConf)
+	content, err := DropInContent(req.Site, acct, hidden, m.dbDir(), clientConf, req.Paths)
 	if err != nil {
 		return agentapi.ScanStatus{}, err
 	}
@@ -429,6 +448,29 @@ const (
 	exitFound  = "1"
 	exitErrors = "2"
 )
+
+// checkTargets reports ErrTarget unless every path is a regular file or a
+// folder inside home, reached without leaving it and not a symlink itself.
+func checkTargets(home string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+
+	root, err := os.OpenRoot(home)
+	if err != nil {
+		return fmt.Errorf("scanunit: %w", err)
+	}
+	defer root.Close()
+
+	for _, p := range paths {
+		fi, err := root.Lstat(p)
+		if err != nil || !fi.Mode().IsRegular() && !fi.IsDir() {
+			return fmt.Errorf("%w: %s", ErrTarget, p)
+		}
+	}
+
+	return nil
+}
 
 // Status reports the state of a run (site.scan.status). A finished run
 // carries its findings.

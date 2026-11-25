@@ -66,6 +66,16 @@ type scanRunJSON struct {
 	CreatedAt  string `json:"createdAt"`
 	StartedAt  string `json:"startedAt"`
 	FinishedAt string `json:"finishedAt"`
+	// Paths are the files and folders a scan of a selection covered,
+	// relative to the site's home; empty for the whole site.
+	Paths []string `json:"paths"`
+}
+
+// scanStartRequest narrows a scan to files and folders; without a body,
+// or with no paths, the whole site is scanned.
+type scanStartRequest struct {
+	// Paths are relative to the site's home, at most 100.
+	Paths []string `json:"paths,omitempty"`
 }
 
 // scanFindingJSON is one file ClamAV flagged.
@@ -112,6 +122,7 @@ func toScanRunJSON(r store.ScanRun) scanRunJSON {
 	return scanRunJSON{
 		ID: r.ID, Source: r.Source, State: r.State, Error: r.Error, Found: r.Found, NewFound: r.NewFound, Dropped: r.Dropped,
 		CreatedAt: rfc3339(r.Created), StartedAt: rfc3339(r.Started), FinishedAt: rfc3339(r.Finished),
+		Paths: append([]string{}, r.Paths...),
 	}
 }
 
@@ -262,10 +273,15 @@ func registerScans(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 	}))
 
 	mux.Op("POST /api/v1/sites/{name}/malware-scans", openapi.Operation{
-		ID: "startSiteMalwareScan", Tag: "malware", Summary: "Scan a site now; it waits while another site is scanned", Out: scanRunJSON{},
-		Status: http.StatusAccepted,
+		ID: "startSiteMalwareScan", Tag: "malware", Summary: "Scan a site, or some of its files and folders, now; it waits while another site is scanned",
+		In: scanStartRequest{}, Out: scanRunJSON{}, Status: http.StatusAccepted,
 	}, a.allow("sites.malware:scan", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		run, err := svc.StartScan(r.Context(), p.User.ID, r.PathValue("name"), scanSource(p))
+		var in scanStartRequest
+		if r.ContentLength != 0 && !decodeJSON(w, r, &in) {
+			return
+		}
+
+		run, err := svc.StartScan(r.Context(), p.User.ID, r.PathValue("name"), scanSource(p), in.Paths)
 		if err != nil {
 			scanFail(log, w, err, "start scan")
 

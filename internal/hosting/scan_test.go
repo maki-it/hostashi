@@ -5,6 +5,7 @@ package hosting
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -160,7 +161,7 @@ func TestScanRunAndFindings(t *testing.T) {
 		}
 	})
 
-	if _, err := s.StartScan(ctx, 1, "blog", store.ScanSourcePanel); !errors.Is(err, ErrScanEngineOff) {
+	if _, err := s.StartScan(ctx, 1, "blog", store.ScanSourcePanel, nil); !errors.Is(err, ErrScanEngineOff) {
 		t.Fatalf("engine off: %v", err)
 	}
 
@@ -168,16 +169,16 @@ func TestScanRunAndFindings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r1, err := s.StartScan(ctx, 1, "blog", store.ScanSourcePanel)
+	r1, err := s.StartScan(ctx, 1, "blog", store.ScanSourcePanel, nil)
 	if err != nil || r1.State != store.ScanQueued {
 		t.Fatalf("start: %+v %v", r1, err)
 	}
 
-	if _, err := s.StartScan(ctx, 1, "blog", store.ScanSourceAPI); !errors.Is(err, ErrScanBusy) {
+	if _, err := s.StartScan(ctx, 1, "blog", store.ScanSourceAPI, nil); !errors.Is(err, ErrScanBusy) {
 		t.Fatalf("second: %v", err)
 	}
 
-	r2, err := s.StartScan(ctx, 1, "shop", store.ScanSourceAPI)
+	r2, err := s.StartScan(ctx, 1, "shop", store.ScanSourceAPI, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +242,7 @@ func TestScanRunAndFindings(t *testing.T) {
 
 	// Next scan: a again (still ignored), a copy of a elsewhere (ignored
 	// too: same content and signature), b is gone, c is new.
-	r3, err := s.StartScan(ctx, 1, "blog", store.ScanSourcePanel)
+	r3, err := s.StartScan(ctx, 1, "blog", store.ScanSourcePanel, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +309,7 @@ func TestScanFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r, err := s.StartScan(ctx, 1, "blog", store.ScanSourcePanel)
+	r, err := s.StartScan(ctx, 1, "blog", store.ScanSourcePanel, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +324,7 @@ func TestScanFailures(t *testing.T) {
 	}
 
 	// Switched off with a queued scan: it fails, nothing starts.
-	r, _ = s.StartScan(ctx, 1, "blog", store.ScanSourcePanel)
+	r, _ = s.StartScan(ctx, 1, "blog", store.ScanSourcePanel, nil)
 	f.engine = agentapi.ScanEngineOff
 
 	s.pollScans(ctx)
@@ -567,5 +568,32 @@ func TestMalwareDoctor(t *testing.T) {
 
 	if got := checks(); got != "site.malware/blog/warn/2 open virus scan findings; site.malware/shop/warn/1 open virus scan finding" {
 		t.Fatalf("off with findings: %s", got)
+	}
+}
+
+// The file manager's selection goes to the agent as it was picked.
+func TestScanSelection(t *testing.T) {
+	s, f := scanService(t)
+	ctx := t.Context()
+
+	if _, err := s.SetScanEngine(ctx, 1, true); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, bad := range [][]string{{"../x"}, {"/etc"}, {"a", "a"}, make([]string, agentapi.MaxScanTargets+1)} {
+		if _, err := s.StartScan(ctx, 1, "blog", store.ScanSourcePanel, bad); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%q: %v", bad, err)
+		}
+	}
+
+	r, err := s.StartScan(ctx, 1, "blog", store.ScanSourcePanel, []string{"htdocs/up", "htdocs/index.php"})
+	if err != nil || len(r.Paths) != 2 {
+		t.Fatalf("start %+v %v", r, err)
+	}
+
+	s.pollScans(ctx)
+
+	if len(f.started) != 1 || !slices.Equal(f.started[0].Paths, []string{"htdocs/up", "htdocs/index.php"}) {
+		t.Fatalf("started %+v", f.started)
 	}
 }

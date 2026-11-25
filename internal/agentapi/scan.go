@@ -8,6 +8,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/maki-it/hostashi/internal/agentrpc"
 )
@@ -76,23 +77,61 @@ type ScanEngineStatus struct {
 	MemTotal uint64 `json:"memTotal,omitempty"`
 }
 
+// MaxScanTargets bounds the files and folders one scan of a selection
+// names.
+const MaxScanTargets = 100
+
 // ScanStartRequest starts a scan of a site (site.scan.start).
 type ScanStartRequest struct {
 	Site string `json:"site"`
 	// ID is the run's id in the panel.
 	ID int64 `json:"id"`
+	// Paths are the files and folders to scan, relative to the home; none
+	// scans the whole home. The agent checks that each is there.
+	Paths []string `json:"paths,omitempty"`
 }
 
 // Validate implements agentrpc's request check.
 func (r ScanStartRequest) Validate() error {
+	errs := []error{ValidateSiteUser(r.Site)}
 	if r.ID <= 0 {
-		return errors.Join(ValidateSiteUser(r.Site), fmt.Errorf("invalid scan id %d", r.ID))
+		errs = append(errs, fmt.Errorf("invalid scan id %d", r.ID))
 	}
 
-	return ValidateSiteUser(r.Site)
+	errs = append(errs, ValidateScanTargets(r.Paths))
+
+	return errors.Join(errs...)
 }
 
-// ScanStatusRequest asks for the state of a scan run.
+// ValidateScanTargets checks the paths of a scan of a selection: at most
+// MaxScanTargets, each a valid relative path in UTF-8 and named once.
+func ValidateScanTargets(paths []string) error {
+	if len(paths) > MaxScanTargets {
+		return fmt.Errorf("at most %d paths per scan, got %d", MaxScanTargets, len(paths))
+	}
+
+	seen := make(map[string]bool, len(paths))
+
+	for _, p := range paths {
+		if err := ValidateScanPath(p); err != nil {
+			return err
+		}
+
+		if !utf8.ValidString(p) {
+			return fmt.Errorf("invalid path %q", p)
+		}
+
+		if seen[p] {
+			return fmt.Errorf("path %q named twice", p)
+		}
+
+		seen[p] = true
+	}
+
+	return nil
+}
+
+// ScanStatusRequest asks for the state of a scan run (Paths is not used).
 type ScanStatusRequest = ScanStartRequest
 
 // The states of a scan run.

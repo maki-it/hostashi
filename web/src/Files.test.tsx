@@ -101,6 +101,41 @@ describe("FileManager", () => {
     expect(calls.find((c) => c.path.endsWith("/mkdir"))?.body).toEqual({ path: "htdocs/uploads" });
   });
 
+  it("scans a selection for viruses while the scan is on", async () => {
+    const scan = (engine: string) => ({ body: { engine, schedule: "weekly", nextScheduled: "", runs: [], findings: [] } });
+    let calls = mockFetch({ [list("htdocs")]: listing("htdocs"), ["GET /api/v1/sites/blog/malware-scan"]: scan("off") });
+    const { unmount } = render(<FileManager site={site} path="htdocs" onPath={() => undefined} />);
+    await screen.findByRole("table");
+    await userEvent.click(screen.getByLabelText("Select index.php"));
+    expect(within(screen.getByRole("region", { name: "Selection" })).queryByRole("button", { name: "Scan for viruses" })).toBeNull();
+    unmount();
+
+    calls = mockFetch({
+      [list("htdocs")]: listing("htdocs"),
+      ["GET /api/v1/sites/blog/malware-scan"]: scan("on"),
+      ["POST /api/v1/sites/blog/malware-scans"]: (body) =>
+        (body as { paths: string[] }).paths.length === 1
+          ? { status: 409, body: { error: { code: "scan_running", message: "a scan of this site is queued or running" } } }
+          : { status: 202, body: { id: 4, state: "queued", source: "panel" } },
+    });
+    render(<FileManager site={site} path="htdocs" onPath={() => undefined} />);
+    await screen.findByRole("table");
+
+    await userEvent.click(screen.getByLabelText("Select index.php"));
+    await userEvent.click(await within(screen.getByRole("region", { name: "Selection" })).findByRole("button", { name: "Scan for viruses" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/waiting or running/);
+
+    await userEvent.click(screen.getByLabelText("Select wp-content"));
+    await userEvent.click(within(screen.getByRole("region", { name: "Selection" })).getByRole("button", { name: "Scan for viruses" }));
+    expect(await screen.findByText("Virus scan of 2 items started.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Virus scan" })).toHaveAttribute("href", "#/sites/blog/malware");
+    expect(calls.filter((c) => c.method === "POST").map((c) => c.body)).toEqual([
+      { paths: ["htdocs/index.php"] },
+      { paths: ["htdocs/index.php", "htdocs/wp-content"] },
+    ]);
+    expect(screen.queryByRole("region", { name: "Selection" })).toBeNull();
+  });
+
   it("acts on a selection: ZIP link, mode and delete", async () => {
     const calls = mockFetch({
       [list("htdocs")]: listing("htdocs"),

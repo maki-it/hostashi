@@ -293,6 +293,7 @@ const routes = [
   ["GET", /^\/dbtool$/, () => ({ available: true, minutes: [30, 120] })],
   ["GET", /^\/malware-scan$/, () => ({ state: "on", version: "1.4.6+dfsg-1", signatures: at(0, 13, 12), error: "", realtime: "off", realtimeActive: false, memTotal: 8 * 1024 ** 3 })],
   ["GET", /^\/sites\/[^/]+\/malware-scan$/, () => siteScan],
+  ["POST", /^\/sites\/[^/]+\/malware-scans$/, () => ({ id: 42, source: "panel", state: "queued", error: "", found: 0, newFound: 0, dropped: 0, createdAt: at(0, 18, 0), startedAt: "", finishedAt: "", paths: ["htdocs", "backup.tar.gz"] })],
   ["GET", /^\/system$/, () => ({ hostname: "web1", transientHostname: "web1", timezone: "Europe/Berlin", time: "2026-11-22T18:00:00Z", uptimeSeconds: 1_234_567, ntpSynchronized: true, rebootRequired: false, cloudInit: false })],
   ["GET", /^\/system\/timezones$/, () => ({ zones: ["Europe/Berlin", "UTC"] })],
   ["GET", /^\/sites\/([^/]+)\/git$/, (m) => git[m[1]] ?? gitBase],
