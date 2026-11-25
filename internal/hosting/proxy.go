@@ -66,7 +66,7 @@ func (s *Service) proxyWeb(ctx context.Context, site store.Site) (*agentapi.WebP
 		return nil, nil
 	}
 
-	addrs, err := s.proxyAddrs(ctx, p.Target, site.Domains)
+	addrs, err := s.proxyAddrs(ctx, p.Target, site.AllDomains())
 	if err != nil {
 		s.log.WarnContext(ctx, "proxy target", "site", site.Name, "target", p.Target, "err", err)
 	}
@@ -94,7 +94,7 @@ func (s *Service) SetProxy(ctx context.Context, actor int64, name string, p stor
 		return store.Site{}, ErrSiteType
 	}
 
-	if err := s.checkProxy(ctx, p, site.Domains); err != nil {
+	if err := s.checkProxy(ctx, p, site.AllDomains()); err != nil {
 		return store.Site{}, err
 	}
 

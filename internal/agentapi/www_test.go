@@ -3,6 +3,7 @@
 package agentapi
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -84,12 +85,12 @@ func TestSplitWWW(t *testing.T) {
 		{
 			"to-www",
 			[]string{"www.example.com", "shop.example.com", "www.example.de"},
-			[]WWWName{{"example.com", "www.example.com"}, {"example.de", "www.example.de"}},
+			[]WWWName{{From: "example.com", To: "www.example.com"}, {From: "example.de", To: "www.example.de"}},
 		},
 		{
 			"to-non-www",
 			[]string{"example.com", "shop.example.com", "example.de"},
-			[]WWWName{{"www.example.com", "example.com"}, {"www.example.de", "example.de"}},
+			[]WWWName{{From: "www.example.com", To: "example.com"}, {From: "www.example.de", To: "example.de"}},
 		},
 	}
 
@@ -132,5 +133,38 @@ func TestWebApplyRequestChecksWWWRedirect(t *testing.T) {
 	r.Sites[0].Redirect = &WebRedirect{Target: "https://example.org/", Status: 301}
 	if err := r.Validate(); err == nil || !strings.Contains(err.Error(), "www redirect") {
 		t.Errorf("redirect site: got %v", err)
+	}
+}
+
+func TestSplitRedirects(t *testing.T) {
+	for _, c := range []struct {
+		domains, redirect []string
+		mode              string
+		serve, out        string
+	}{
+		{[]string{"a.example"}, nil, "", "[a.example]", "[]"},
+		{[]string{"a.example", "b.example"}, []string{"b.example"}, "", "[a.example]", "[{b.example a.example true}]"},
+		// The www redirect moves the target to www, the old name goes there directly.
+		{[]string{"a.example", "www.a.example", "b.example"}, []string{"b.example"}, WWWRedirectToWWW, "[www.a.example]", "[{a.example www.a.example false} {b.example www.a.example true}]"},
+		// A redirect domain never forms a www pair.
+		{[]string{"a.example", "www.a.example"}, []string{"www.a.example"}, WWWRedirectToNonWWW, "[a.example]", "[{www.a.example a.example true}]"},
+	} {
+		serve, out := SplitRedirects(c.domains, c.mode, c.redirect)
+		if got := fmt.Sprint(out); fmt.Sprint(serve) != c.serve || got != c.out && (len(out) != 0 || c.out != "[]") {
+			t.Errorf("SplitRedirects(%v, %q, %v) = %v %v, want %s %s", c.domains, c.mode, c.redirect, serve, out, c.serve, c.out)
+		}
+	}
+}
+
+func TestValidateRedirectDomains(t *testing.T) {
+	d := []string{"a.example", "b.example"}
+	if err := ValidateRedirectDomains(d, []string{"b.example"}); err != nil {
+		t.Error(err)
+	}
+
+	for _, r := range [][]string{{"a.example"}, {"c.example"}, {"b.example", "b.example"}} {
+		if err := ValidateRedirectDomains(d, r); err == nil {
+			t.Errorf("%v accepted", r)
+		}
 	}
 }

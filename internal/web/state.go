@@ -37,6 +37,10 @@ type Site struct {
 	// with 301 (ADR-0065), in server blocks of their own; empty serves
 	// every domain. A redirect site has none.
 	WWWRedirect string `json:"wwwRedirect,omitempty"`
+	// RedirectDomains are names of Domains that answer with 301 to the
+	// first name the site serves (ADR-0068), in the same server blocks as
+	// the www redirect.
+	RedirectDomains []string `json:"redirectDomains,omitempty"`
 	// Disabled answers every request with 503 and never serves Root.
 	// ACME challenges, the health check and the HTTPS redirect stay.
 	Disabled bool `json:"disabled,omitempty"`
@@ -228,6 +232,14 @@ func (d Desired) Validate() error {
 
 		if s.WWWRedirect != agentapi.WWWRedirectOff && s.Redirect != nil {
 			return fmt.Errorf("site %q: a redirect site has no www redirect", s.User)
+		}
+
+		if err := agentapi.ValidateRedirectDomains(s.Domains, s.RedirectDomains); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if len(s.RedirectDomains) > 0 && s.Redirect != nil {
+			return fmt.Errorf("site %q: a redirect site has no redirect domains", s.User)
 		}
 
 		if m := s.Maintenance; m != nil {

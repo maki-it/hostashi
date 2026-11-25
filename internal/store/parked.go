@@ -113,6 +113,11 @@ func (s *Store) PutParked(ctx context.Context, domain string, page int64, tls bo
 		return Parked{}, false, fmt.Errorf("%w: %s", ErrDomainTaken, domain)
 	}
 
+	// A name a pending domain change waits for is reserved (ADR-0068).
+	if err := pendingElsewhere(ctx, tx, 0, domain); err != nil {
+		return Parked{}, false, err
+	}
+
 	old, err = scanParked(tx.QueryRowContext(ctx, `SELECT `+parkedColumns+` FROM parked_domains WHERE domain = ?`, domain))
 	switch {
 	case err == nil:

@@ -325,14 +325,29 @@ http {
     ssl_session_tickets off;
     {{- end}}
 
-    # Unknown host names get no answer.
+    # Unknown host names get no answer, except ACME challenges: a domain
+    # change waits for a certificate for names no server block has yet
+    # (ADR-0068). Every site block serves the same files for any token.
     server {
         {{- range .N.Listen}}
         listen {{.}} default_server;
         {{- end}}
         listen unix:{{.N.ControlSocket}} default_server;
         server_name _;
+        {{- if .N.ACMERoot}}
+
+        location ^~ /.well-known/acme-challenge/ {
+            root {{.N.ACMERoot}};
+            default_type text/plain;
+            try_files $uri =404;
+        }
+
+        location / {
+            return 444;
+        }
+        {{- else}}
         return 444;
+        {{- end}}
     }
     {{- if .N.ListenTLS}}
 

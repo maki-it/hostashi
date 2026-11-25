@@ -18,7 +18,10 @@ import (
 
 // stubAgent accepts every change and remembers the last web state.
 type stubAgent struct {
-	mu      sync.Mutex
+	mu sync.Mutex
+	// csr are the names of the last TLSCSR per site; TLSInstall returns
+	// them when set (ADR-0068 tests).
+	csr     map[string][]string
 	web     agentapi.WebApplyRequest
 	webErr  error
 	deleted []string
@@ -81,13 +84,29 @@ func (a *stubAgent) WebApply(_ context.Context, req agentapi.WebApplyRequest) (a
 
 func (a *stubAgent) PHPVersions(context.Context) ([]string, error) { return []string{"8.4"}, nil }
 
-func (a *stubAgent) TLSCSR(_ context.Context, user string, _ []string) (string, error) {
+func (a *stubAgent) TLSCSR(_ context.Context, user string, domains []string) (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.csr == nil {
+		a.csr = map[string][]string{}
+	}
+
+	a.csr[user] = domains
+
 	return "csr " + user, nil
 }
 
 func (a *stubAgent) TLSInstall(_ context.Context, user, _ string) (agentapi.TLSCertInfo, error) {
 	if user == agentapi.PanelCert {
 		return agentapi.TLSCertInfo{Domains: []string{"panel.example.org"}, NotAfter: time.Now().Add(90 * 24 * time.Hour)}, nil
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if d := a.csr[user]; len(d) > 0 && user != "blog" {
+		return agentapi.TLSCertInfo{Domains: d, NotAfter: time.Now().Add(90 * 24 * time.Hour)}, nil
 	}
 
 	return agentapi.TLSCertInfo{Domains: []string{"blog.example.org"}, NotAfter: time.Now().Add(90 * 24 * time.Hour)}, nil

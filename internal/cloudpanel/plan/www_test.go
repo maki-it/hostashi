@@ -44,3 +44,16 @@ func TestBuildTakesTheWWWRedirect(t *testing.T) {
 		t.Fatalf("got %s %q %v", got.Action, got.WWWRedirect, got.Reasons)
 	}
 }
+
+// Other redirect hosts become redirect domains (ADR-0068), without a
+// review note.
+func TestBuildTakesRedirectDomains(t *testing.T) {
+	s := base()
+	s.RedirectFrom = []string{"www.shop.example.com", "shop.example.net"}
+
+	got := one(s, plan.Target{PHP: []string{"8.4"}})
+	if got.Action != plan.ActionImport || got.WWWRedirect != "to-non-www" || hasCode(got, "redirects") ||
+		len(got.RedirectDomains) != 1 || got.RedirectDomains[0] != "shop.example.net" {
+		t.Fatalf("got %s %q %v %v", got.Action, got.WWWRedirect, got.RedirectDomains, got.Reasons)
+	}
+}

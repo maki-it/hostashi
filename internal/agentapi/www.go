@@ -31,6 +31,9 @@ func ValidateWWWRedirect(mode string) error {
 type WWWName struct {
 	From string `json:"from"`
 	To   string `json:"to"`
+	// Domain: From is a redirect domain of the site (ADR-0068), not the
+	// partner of a www pair.
+	Domain bool `json:"-"`
 }
 
 // WWWPair is a domain d that does not start with "www." and the name
@@ -120,4 +123,58 @@ func SplitWWW(domains []string, mode string) (serve []string, redirect []WWWName
 	}
 
 	return serve, redirect
+}
+
+// SplitRedirects splits the names of a site into the names it serves and
+// the names that redirect: the redirect domains (ADR-0068) go to the first
+// name the site serves, then the www pairs of the remaining names follow
+// mode (ADR-0065). domains are all names of the site, the primary one
+// first; redirect is a subset without the primary domain.
+func SplitRedirects(domains []string, mode string, redirect []string) (serve []string, out []WWWName) {
+	if len(redirect) == 0 {
+		return SplitWWW(domains, mode)
+	}
+
+	served := make([]string, 0, len(domains))
+
+	for _, d := range domains {
+		if !slices.Contains(redirect, d) {
+			served = append(served, d)
+		}
+	}
+
+	serve, out = SplitWWW(served, mode)
+	if len(serve) == 0 {
+		return serve, out
+	}
+
+	for _, d := range domains {
+		if slices.Contains(redirect, d) {
+			out = append(out, WWWName{From: d, To: serve[0], Domain: true})
+		}
+	}
+
+	return serve, out
+}
+
+// ValidateRedirectDomains checks the redirect domains of a site against
+// all its names: each one listed once, one of the names, never the
+// primary domain.
+func ValidateRedirectDomains(domains, redirect []string) error {
+	seen := make(map[string]bool, len(redirect))
+
+	for _, d := range redirect {
+		switch {
+		case len(domains) > 0 && d == domains[0]:
+			return fmt.Errorf("the primary domain %s cannot redirect", d)
+		case !slices.Contains(domains, d):
+			return fmt.Errorf("redirect domain %s is not a domain of the site", d)
+		case seen[d]:
+			return fmt.Errorf("redirect domain %s listed twice", d)
+		}
+
+		seen[d] = true
+	}
+
+	return nil
 }

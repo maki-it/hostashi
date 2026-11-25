@@ -664,86 +664,6 @@ func (s *Service) removeAfterFailure(ctx context.Context, name string) {
 	}
 }
 
-// SetDomains replaces the domains of an active site. If the new virtual host
-// cannot go live, the previous domains are stored again.
-func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in []string) (store.Site, error) {
-	domains, err := NormalizeDomains(in)
-	if err != nil {
-		return store.Site{}, err
-	}
-
-	if err := s.checkReserved(domains); err != nil {
-		return store.Site{}, err
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	site, err := s.Get(ctx, name)
-	if err != nil {
-		return store.Site{}, err
-	}
-
-	if site.State != store.SiteActive {
-		return store.Site{}, ErrState
-	}
-
-	if err := checkOwnCertDomains(site, domains); err != nil {
-		return store.Site{}, err
-	}
-
-	// A redirect or proxy must not point to one of the new domains
-	// (ADR-0054).
-	if r := site.Redirect; r != nil && site.Type == store.SiteTypeRedirect {
-		if _, err := checkRedirect(*r, domains); err != nil {
-			return store.Site{}, err
-		}
-	}
-
-	if p := site.Proxy; p != nil && site.Type == store.SiteTypeProxy {
-		if _, err := agentapi.ParseProxyTarget(p.Target, domains); err != nil {
-			return store.Site{}, fmt.Errorf("%w: %w", ErrInvalid, err)
-		}
-	}
-
-	parked, err := s.parkedAmong(ctx, domains)
-	if err != nil {
-		return store.Site{}, err
-	}
-
-	old, err := s.st.ReplaceSiteDomains(ctx, name, domains, s.now())
-	if errors.Is(err, store.ErrDomainTaken) {
-		return store.Site{}, fmt.Errorf("%w: %w", ErrDomainTaken, err)
-	}
-
-	if err != nil {
-		return store.Site{}, err
-	}
-
-	if err := s.applyWeb(ctx); err != nil {
-		if _, rerr := s.st.ReplaceSiteDomains(context.WithoutCancel(ctx), name, old, s.now()); rerr != nil {
-			s.log.ErrorContext(ctx, "restore domains after failed change", "site", name, "err", rerr)
-		} else {
-			s.parkAgain(context.WithoutCancel(ctx), actor, name, parked)
-		}
-
-		return store.Site{}, err
-	}
-
-	s.auditChange(ctx, actor, "site.domains", name, map[string]string{"domains": strings.Join(domains, " ")},
-		map[string]string{"domains": strings.Join(old, " ")}, map[string]string{"domains": strings.Join(domains, " ")})
-
-	site.Domains = domains
-
-	// A certificate for the old names no longer covers the site: the site
-	// is served over HTTP until the new one is there.
-	if site.TLS && site.TLSSource == store.TLSLetsEncrypt {
-		s.Kick()
-	}
-
-	return site, nil
-}
-
 // SetPHP sets the PHP version of an active site; "" turns PHP off. If the
 // change cannot go live, the previous version is stored again.
 func (s *Service) SetPHP(ctx context.Context, actor int64, name, version string) (store.Site, error) {
@@ -974,7 +894,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 			}
 
 			ws := agentapi.WebSite{
-				User: site.Name, Domains: site.Domains, PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
+				User: site.Name, Domains: site.AllDomains(), PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
 				Headers: webHeaders(headers, site), RealIP: webRealIP(realips, site),
 				Access: webAccess(access, authUsers, site),
 			}
@@ -983,6 +903,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 			// keeps the setting for a later type change (ADR-0065).
 			if site.Type != store.SiteTypeRedirect {
 				ws.WWWRedirect = site.WWWRedirect
+				ws.RedirectDomains = site.RedirectDomains
 			}
 
 			// Redirect and reverse proxy sites send only their target: no
