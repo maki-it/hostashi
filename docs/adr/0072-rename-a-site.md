@@ -1,6 +1,6 @@
 # ADR-0072 Rename a site
 
-**Status:** Proposed. **Date drafted:** 2026-11-25. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups), ADR-0015 (limits), ADR-0016 (storage pools), ADR-0018 (REST API), ADR-0028 (cron), ADR-0032 (SSH per site), ADR-0035 (roles), ADR-0054 (site types), ADR-0058 (OpenAPI and CLI), ADR-0061 (Python sites), ADR-0068 (change the domain of a site), ADR-0070 (staging and cloning).
+**Status:** Accepted (Kim, 2026-11-25). **Date drafted:** 2026-11-25. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups), ADR-0015 (limits), ADR-0016 (storage pools), ADR-0018 (REST API), ADR-0028 (cron), ADR-0032 (SSH per site), ADR-0035 (roles), ADR-0054 (site types), ADR-0058 (OpenAPI and CLI), ADR-0061 (Python sites), ADR-0068 (change the domain of a site), ADR-0070 (staging and cloning).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -62,4 +62,6 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 ## Open questions for Kim
 
-1. Display name only for 1.0 (A), with a real system rename later through clone and domain handover (C)? Or do you need the Linux user and home folder renamed in place (B)?
+1. ~~Display name only for 1.0 (A), with a real system rename later through clone and domain handover (C)? Or do you need the Linux user and home folder renamed in place (B)?~~ Decided (Kim, 2026-11-25): A for 1.0, C later.
+
+The ADR as a whole was accepted by Kim on 2026-11-25.
