@@ -113,13 +113,17 @@ function statusRank(s: Site): number {
   return r === 3 && !s.tls.enabled ? 2 : r;
 }
 
-// StateDot shows before the name whether the site is switched on. The word
-// is the accessible name and the tooltip, so the colour is never alone.
-function StateDot({ s }: { s: Site }) {
+// SiteState shows before the name whether the site is switched on, as a
+// word: On, Off, or New while it is being created.
+function SiteState({ s }: { s: Site }) {
   const st = siteStatus(s);
-  const tone = st.key === "active" || st.key === "maintenance" ? "ok" : st.key === "creating" ? "warn" : "off";
-  const word = st.key === "maintenance" ? "Active" : st.word;
-  return <span className={`ui-state-dot ui-dot-${tone}`} role="img" aria-label={word} title={word} />;
+  const [tone, word] =
+    st.key === "active" || st.key === "maintenance" ? (["ok", "On"] as const) : st.key === "creating" ? (["warn", "New"] as const) : (["off", "Off"] as const);
+  return (
+    <span className="ui-site-state" title={st.key === "maintenance" ? "Active" : st.word}>
+      <Badge tone={tone}>{word}</Badge>
+    </span>
+  );
 }
 
 const columns: Column<Site>[] = [
@@ -129,7 +133,7 @@ const columns: Column<Site>[] = [
     sortValue: (s) => s.name,
     cell: (s) => (
       <div className="ui-site-name">
-        <StateDot s={s} />
+        <SiteState s={s} />
         <div className={`ui-cell-main${s.disabled ? " ui-cell-off" : ""}`}>
           <a className="ui-row-link" href={formatHash({ page: "sites", site: { name: s.name } })}>
             {s.name}

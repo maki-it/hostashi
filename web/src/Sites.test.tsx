@@ -136,8 +136,8 @@ describe("Sites", () => {
     const table = await screen.findByRole("table", { name: "Sites" });
     const b = within(within(table).getByRole("link", { name: "blog" }).closest("tr")!);
     expect(b.getByText("PHP 8.4")).toBeInTheDocument();
-    // The dot before the name says whether the site is on; Status shows HTTPS.
-    expect(b.getByRole("img", { name: "Active" })).toBeInTheDocument();
+    // The word before the name says whether the site is on; Status shows HTTPS.
+    expect(b.getByText("On")).toBeInTheDocument();
     expect(b.getByText("HTTPS")).toBeInTheDocument();
     expect(b.getByText("blog.example.com")).toBeInTheDocument();
     expect(b.getByRole("link", { name: "blog" })).toHaveAttribute("href", "#/sites/blog");
