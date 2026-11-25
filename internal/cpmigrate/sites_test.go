@@ -504,3 +504,59 @@ func TestCreateSiteOnPool(t *testing.T) {
 		t.Fatalf("pools %q", pools)
 	}
 }
+
+func TestCreateSiteTakesTheProfile(t *testing.T) {
+	var existing []string
+
+	svc, _ := newService(t, func(context.Context) (plan.Target, error) {
+		return plan.Target{Sites: existing, PHP: []string{"8.3", "8.4"}}, nil
+	})
+
+	site := func(user, typ string) scan.Site {
+		return scan.Site{
+			Name: user + ".example.com", User: user, Type: typ, Status: scan.StatusClean,
+			Domains: []string{user + ".example.com"}, DocRoot: "/home/" + user + "/htdocs/" + user + ".example.com",
+			Pool:    &scan.Pool{User: user, Version: "8.4"},
+			Sources: []string{"/etc/nginx/sites-enabled/" + user + ".conf"},
+		}
+	}
+
+	b, err := json.Marshal(scan.Report{Format: scan.Format, Sites: []scan.Site{site("alpha", "wordpress"), site("beta", "wordpress"), site("gamma", "php")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := svc.Upload(t.Context(), 1, bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got []string
+
+	svc.Connect(func(_ context.Context, _ int64, s cpmigrate.NewSite) (cpmigrate.Created, error) {
+		got = append(got, s.Profile)
+		existing = append(existing, s.Name)
+
+		return cpmigrate.Created{}, nil
+	}, &fakeImporter{})
+
+	ps, err := svc.CreateSite(t.Context(), 1, rep.ID, "alpha", cpmigrate.CreateOptions{})
+	if err != nil || ps.Profile != "wordpress" {
+		t.Fatalf("WordPress site: %+v %v", ps, err)
+	}
+
+	// The PHP version chosen for the import decides, like the plan's.
+	ps, err = svc.CreateSite(t.Context(), 1, rep.ID, "beta", cpmigrate.CreateOptions{PHP: "8.3"})
+	if err != nil || ps.Profile != "wordpress" || ps.PHP != "8.3" {
+		t.Fatalf("WordPress on PHP 8.3: %+v %v", ps, err)
+	}
+
+	ps, err = svc.CreateSite(t.Context(), 1, rep.ID, "gamma", cpmigrate.CreateOptions{})
+	if err != nil || ps.Profile != "" {
+		t.Fatalf("plain PHP site: %+v %v", ps, err)
+	}
+
+	if !slices.Equal(got, []string{"wordpress", "wordpress", ""}) {
+		t.Fatalf("created with %q", got)
+	}
+}

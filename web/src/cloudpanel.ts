@@ -26,6 +26,7 @@ export type PlanSite = {
   cronJobs: number;
   cronImport: number; // of cronJobs, created paused with the site
   pageCache?: string; // page cache preset proposed for a site that had a cache in front
+  profile?: string; // application profile the new site gets, missing for the default (ADR-0069)
   homeBytes?: number; // what the old home uses, missing if not measured
   action: PlanAction;
   reasons: PlanReason[];

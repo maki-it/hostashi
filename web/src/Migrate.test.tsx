@@ -116,7 +116,7 @@ describe("Migrate", () => {
   it("creates a reviewed site from the plan and imports it", async () => {
     const user = userEvent.setup();
     let sites = [
-      { ...planSite("shop", "review", [{ code: "custom_snippets", msg: "2 nginx directives need a one-time review" }]), pageCache: "php" },
+      { ...planSite("shop", "review", [{ code: "custom_snippets", msg: "2 nginx directives need a one-time review" }]), pageCache: "php", profile: "wordpress" },
       planSite("old", "skip", [{ code: "type_unsupported", msg: 'site type "nodejs" is not supported by Hostashi yet' }]),
     ];
     let polls = 0;
@@ -207,6 +207,7 @@ describe("Migrate", () => {
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["8.2 (not installed)", "8.3", "8.4"]);
     await user.selectOptions(select, "8.4");
     await user.click(create.getByRole("checkbox", { name: /I checked the points above for shop/ }));
+    expect(create.getByText(/gets the WordPress profile/)).toBeInTheDocument();
     // The proposed page cache is on unless the admin unticks it.
     const cache = create.getByRole("checkbox", { name: "Switch on the page cache (Other PHP application preset)" });
     expect(cache).toBeChecked();
