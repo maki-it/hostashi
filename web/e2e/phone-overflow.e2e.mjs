@@ -23,7 +23,7 @@ const pages = ["", "sites", "sites?new=1", "databases", "parked", "pages", "heal
 const tabs = ["overview", "domains", "access", "web", "files", "malware", "php", "cache", "cron", "ssh", "limits", "usage", "logs", "nginx", "https", "headers", "realip", "hardening"];
 const hashes = [...pages.map((p) => "#/" + p), ...tabs.map((t) => "#/sites/blog/" + t)];
 
-const server = await createServer({ root, configFile: resolve(root, "vite.config.ts"), server: { port, strictPort: true, allowedHosts: [host] }, logLevel: "error" });
+const server = await createServer({ root, configFile: resolve(root, "vite.config.ts"), server: { host: "127.0.0.1", port, strictPort: true, allowedHosts: [host] }, logLevel: "error" });
 await server.listen();
 const browser = await chromium.launch({
   ...(process.env.CHROMIUM_PATH && { executablePath: process.env.CHROMIUM_PATH }),
