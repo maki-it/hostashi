@@ -126,6 +126,14 @@ func TestWebhookOverHTTP(t *testing.T) {
 		t.Fatalf("unknown id: %d %s", code, out)
 	}
 
+	// Unknown ids do not count against the limiter, so they cannot fill it:
+	// past the limit of ten they still answer 401, not 429.
+	for range webhookPerMinute + 1 {
+		if code, out := call(strings.Repeat("0", 32), hmacHex(hook.Secret, push), push); code != http.StatusUnauthorized {
+			t.Fatalf("unknown id again: %d %s", code, out)
+		}
+	}
+
 	if code, out := call(hook.ID, hmacHex("nope", push), push); code != http.StatusUnauthorized {
 		t.Fatalf("wrong signature: %d %s", code, out)
 	}
