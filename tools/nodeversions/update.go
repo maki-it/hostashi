@@ -95,6 +95,16 @@ type Report struct {
 // Changed reports whether anything changes.
 func (r Report) Changed() bool { return len(r.Changes) > 0 }
 
+// PatchOnly reports whether there are changes and every one is a newer
+// release of a line that is already pinned, with the same end of life.
+// Only such a pull request merges by itself once all checks are green
+// (ADR-0077); new lines and changed end dates wait for a maintainer.
+func (r Report) PatchOnly() bool {
+	return r.Changed() && !slices.ContainsFunc(r.Changes, func(c Change) bool {
+		return c.From == "" || c.End != "" || CompareVersions(c.To, c.From) <= 0
+	})
+}
+
 // Security reports whether a change is a security release.
 func (r Report) Security() bool {
 	return slices.ContainsFunc(r.Changes, func(c Change) bool { return c.Security })

@@ -10,9 +10,11 @@
 # opens (or updates) a pull request from the branch
 # automation/python-versions that updates
 # internal/agentapi/python_versions.go. The installer test installs the
-# newest line through the panel API. Nothing is merged automatically: a
-# maintainer reviews and merges, and the next Hostashi release brings the
-# new builds; the agent installs them by itself.
+# newest line through the panel API. A pull request with only new patch
+# versions or builds of lines that are already pinned merges by itself
+# once every check is green (pin-auto-merge.yml, ADR-0077); new lines and
+# changed end dates wait for a maintainer. The next Hostashi release
+# brings the new builds; the agent installs them by itself.
 #
 # Daily, like Node.js: a rebuild for an OpenSSL security release should
 # reach the servers within about a day.
@@ -48,6 +50,8 @@ env:
 jobs:
   check:
     name: Check python-build-standalone
+    outputs:
+      auto-merge: ${{ steps.plan.outputs.auto-merge }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -64,6 +68,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Check and update the list
+        id: plan
         env:
           # A pull request has nothing new as a rule, so it checks the
           # newest pinned line as well: the verification below runs on
@@ -72,8 +77,9 @@ jobs:
         run: |
           flags=()
           if [ "$SELF_TEST" = true ]; then flags+=(-verify-newest); fi
-          go run ./tools/pythonversions -write -summary "$RUNNER_TEMP/summary.md" -verify "$RUNNER_TEMP/verify.txt" "${flags[@]}"
+          go run ./tools/pythonversions -write -summary "$RUNNER_TEMP/summary.md" -verify "$RUNNER_TEMP/verify.txt" -auto-merge "$RUNNER_TEMP/auto-merge.txt" "${flags[@]}"
           cat "$RUNNER_TEMP/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          echo "auto-merge=$(cat "$RUNNER_TEMP/auto-merge.txt")" >> "$GITHUB_OUTPUT"
           git diff --stat
       - name: Verify the checksum and build provenance of every new archive
         env:
@@ -100,6 +106,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          AUTO_MERGE: ${{ steps.plan.outputs.auto-merge }}
         run: |
           if git diff --quiet; then
             echo "Nothing to change."
@@ -133,7 +140,11 @@ jobs:
             echo "- [ ] For a new line: add it to ADR-0061."
             echo "- [ ] Release Hostashi afterwards: the agent installs the new builds by itself."
             echo
-            echo "This pull request is never merged automatically."
+            if [ "$AUTO_MERGE" = yes ]; then
+              echo "Only patch releases of lines that are already pinned: this pull request merges by itself once every check is green (ADR-0077)."
+            else
+              echo "This pull request needs a maintainer: it adds a line or changes an end of life."
+            fi
           } > "$RUNNER_TEMP/body.md"
 
           pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number')
@@ -147,3 +158,17 @@ jobs:
           for wf in go.yml web.yml licenses.yml; do
             gh workflow run "$wf" --repo "$REPO" --ref "$BRANCH"
           done
+
+  merge:
+    name: Merge patch releases when green
+    needs: check
+    if: github.event_name != 'pull_request' && needs.check.outputs.auto-merge == 'yes'
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+      checks: read
+    uses: ./.github/workflows/pin-auto-merge.yml
+    with:
+      branch: automation/python-versions
+      files: internal/agentapi/python_versions.go
