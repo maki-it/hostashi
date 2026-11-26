@@ -1,0 +1,131 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Checks GitHub once a week for a new Adminer release (ADR-0038, ADR-0077).
+# Hostashi ships the English build with all drivers
+# (adminer-<version>-en.php) as packaging/adminer/adminer.php, pinned by
+# its SHA-256 in packaging/adminer/SHA256SUMS. When a newer release is out
+# this workflow downloads that file from the release, checks that it says
+# the same version, and opens (or updates) a pull request from the branch
+# automation/adminer-version that replaces the file and its checksum.
+# Adminer publishes no signature, so nothing is merged automatically: a
+# maintainer reviews the release notes and merges, and the next Hostashi
+# release ships the new file.
+#
+# Pull requests opened with GITHUB_TOKEN start no pull_request workflows,
+# so this workflow starts the checks on the branch itself.
+name: Adminer version
+
+on:
+  schedule:
+    # Every Monday at 05:31 UTC.
+    - cron: "31 5 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/adminer-version.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adminer-version-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BRANCH: automation/adminer-version
+  UPSTREAM: vrana/adminer
+
+jobs:
+  check:
+    name: Check GitHub
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Only scheduled and manual runs push; pull requests only report.
+          persist-credentials: ${{ github.event_name != 'pull_request' }}
+      - name: Check and update the file
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cur=$(sed -n 's/^\* @version \([0-9][0-9.]*\)$/\1/p' packaging/adminer/adminer.php | head -n 1)
+          [ -n "$cur" ] || { echo "::error::no @version in packaging/adminer/adminer.php"; exit 1; }
+          tag=$(gh release view --repo "$UPSTREAM" --json tagName --jq .tagName)
+          new=${tag#v}
+          [[ "$new" =~ ^[0-9]+(\.[0-9]+)+$ ]] || { echo "::error::unexpected tag $tag"; exit 1; }
+          echo "pinned $cur, latest $new" | tee -a "$GITHUB_STEP_SUMMARY"
+          newest=$(printf '%s\n%s\n' "$cur" "$new" | sort -V | tail -n 1)
+          if [ "$new" = "$cur" ] || [ "$newest" = "$cur" ]; then
+            echo "Nothing new." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          f="adminer-$new-en.php"
+          gh release download "$tag" --repo "$UPSTREAM" --pattern "$f" --dir "$RUNNER_TEMP"
+          got=$(sed -n 's/^\* @version \([0-9][0-9.]*\)$/\1/p' "$RUNNER_TEMP/$f" | head -n 1)
+          [ "$got" = "$new" ] || { echo "::error::$f says version '$got'"; exit 1; }
+          php_open=$(head -c 5 "$RUNNER_TEMP/$f")
+          [ "$php_open" = "<?php" ] || { echo "::error::$f is not a PHP file"; exit 1; }
+          cp "$RUNNER_TEMP/$f" packaging/adminer/adminer.php
+          (cd packaging/adminer && sha256sum adminer.php > SHA256SUMS)
+          {
+            echo "cur=$cur"
+            echo "new=$new"
+            echo "tag=$tag"
+          } >> "$GITHUB_OUTPUT"
+          git diff --stat
+      - name: Open or update the pull request
+        if: github.event_name != 'pull_request' && steps.check.outputs.new != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          CUR: ${{ steps.check.outputs.cur }}
+          NEW: ${{ steps.check.outputs.new }}
+          TAG: ${{ steps.check.outputs.tag }}
+        run: |
+          set -euo pipefail
+          title="chore(deps): update Adminer to $NEW"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git commit -q -s -a -m "$title" -m "Found by the weekly Adminer version workflow (ADR-0077)."
+          # The same change as on the open branch: do not push again, so the
+          # checks and reviews on it stay.
+          if git fetch -q origin "$BRANCH" 2>/dev/null && git diff --quiet FETCH_HEAD HEAD; then
+            echo "The branch already has this change."
+            exit 0
+          fi
+          git push -f origin "$BRANCH"
+
+          {
+            echo "## What"
+            echo
+            echo "Adminer $CUR → $NEW: \`adminer-$NEW-en.php\` from the GitHub release [$TAG](https://github.com/$UPSTREAM/releases/tag/$TAG), checked $(date -u +%F). The new SHA-256 is in \`packaging/adminer/SHA256SUMS\`."
+            echo
+            echo "## Before merging"
+            echo
+            echo "- [ ] Read the [release notes](https://github.com/$UPSTREAM/releases/tag/$TAG): security fixes, changed plugin or driver APIs that \`tool.php\` and \`index.php\` use."
+            echo "- [ ] The Go, Web, REUSE and Licenses runs on this branch are green, including both installer tests (they check the installed file against SHA256SUMS)."
+            echo "- [ ] Look at the database tool in the panel (theme in \`adminer.css\`)."
+            echo "- [ ] Update the version in ADR-0038 and ADR-0051 if they name it."
+            echo
+            echo "Adminer publishes no signature: this pull request is never merged automatically."
+          } > "$RUNNER_TEMP/body.md"
+
+          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -z "$pr" ]; then
+            gh pr create --repo "$REPO" --base main --head "$BRANCH" \
+              --title "$title" --body-file "$RUNNER_TEMP/body.md" --label Kind/Dependency --label Kind/Security --assignee kimdre
+          else
+            gh pr edit "$pr" --repo "$REPO" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          fi
+
+          for wf in go.yml web.yml licenses.yml; do
+            gh workflow run "$wf" --repo "$REPO" --ref "$BRANCH"
+          done
