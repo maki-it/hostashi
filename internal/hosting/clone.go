@@ -901,7 +901,29 @@ func (s *Service) configureClone(ctx context.Context, src, site store.Site, c *s
 		reason = "the run failed"
 	}
 
+	if last := lastLogLine(st.Log); last != "" {
+		reason += ": " + last
+	}
+
 	return false, false, "configuration: " + reason, nil
+}
+
+// maxReasonLog bounds the log line a failed configuration step adds to
+// the clone's error.
+const maxReasonLog = 300
+
+// lastLogLine is the last non-empty line of a run's log, which names the
+// step that failed and WP-CLI's error; the runner keeps passwords out of
+// the log.
+func lastLogLine(log string) string {
+	lines := strings.Split(strings.TrimSpace(log), "\n")
+	last := strings.TrimSpace(lines[len(lines)-1])
+
+	if len(last) > maxReasonLog {
+		last = strings.ToValidUTF8(last[:maxReasonLog], "") + "…"
+	}
+
+	return last
 }
 
 // wpCloneRequest sets a new password for every database user of the
