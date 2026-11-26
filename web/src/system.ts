@@ -27,7 +27,19 @@ export type SystemUpdates = {
   auto: boolean;
   /** When apt last fetched the list, RFC 3339. */
   listedAt?: string;
+  /** The installed hostashi-runtimes, YYYYMMDDHHMMSS (ADR-0077); absent when it is not installed. */
+  runtimes?: string;
+  /** unattended-upgrades updates hostashi-runtimes. */
+  runtimesAuto: boolean;
 };
+
+/** pinsDate turns a hostashi-runtimes version (YYYYMMDDHHMMSS, UTC) into a date; "" for anything else. */
+export function pinsDate(v: string): string {
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(v);
+  if (!m) return "";
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6])));
+  return d.toLocaleDateString(undefined, { dateStyle: "medium" });
+}
 
 export const getSystem = () => request<SystemInfo>("GET", "/system");
 

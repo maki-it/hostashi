@@ -164,6 +164,7 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	out = append(out, hard.Updates(), hard.Reboot(), hard.PHP(), hard.Files(), hard.SSH(), hard.Sysctl())
 	st, err := updates.Read(d.env.Updates)
 	out = append(out, doctor.Update(st, err, d.now())...)
+	out = append(out, doctor.Runtimes(st)...)
 	out = append(out, d.valkey(ctx))
 	out = append(out, d.nodeChecks()...)
 

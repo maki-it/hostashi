@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Daily check that the package hostashi-runtimes is installed (ADR-0077),
+# after apt-daily.timer fetched the lists. A random but fixed time per
+# server.
+
+[Unit]
+Description=Daily install of the Hostashi runtime pins
+Documentation=https://github.com/maki-it/hostashi
+
+[Timer]
+OnCalendar=*-*-* 07:00:00
+RandomizedDelaySec=4h
+FixedRandomDelay=yes
+Persistent=yes
+
+[Install]
+WantedBy=timers.target

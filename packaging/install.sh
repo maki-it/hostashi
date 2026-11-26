@@ -259,7 +259,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary completion config ssh harden sysctl system nginx php phpversions pgclient malwarescan node python valkey mariadb dbtool backup units service fail2ban firewall updates quota"
+STEPS="account dirs key binary completion config ssh harden sysctl system nginx php phpversions pgclient malwarescan node python valkey mariadb dbtool backup units service fail2ban firewall updates runtimes quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -1188,6 +1188,9 @@ uu_origins() {
   # The PostgreSQL client tools from apt.postgresql.org (ADR-0051): the same,
   # and the pin keeps everything but the client packages away.
   printf '\t"origin=apt.postgresql.org,archive=${distro_codename}-pgdg";\n'
+  # The pinned Node.js and CPython releases (ADR-0077): data only, signed
+  # with their own key, always on. Without the source it matches nothing.
+  printf '\t"origin=Hostashi,codename=runtimes";\n'
   # New Hostashi versions come from AUTO_FILE, which --auto-update writes
   # and the panel's switch writes or removes (ADR-0050).
 }
@@ -1225,6 +1228,58 @@ do_updates() {
   write_file "$PHP_HOOK_FILE" 0644 root:root <"$APT_SRC/80hostashi-php-restart"
   [ $? -le 1 ] || return 1
   for t in "${UU_TIMERS[@]}"; do systemctl enable --now "$t" >>"$LOG" 2>&1 || return 1; done
+}
+
+# The apt suite runtimes (ADR-0077): the package hostashi-runtimes brings
+# newer patch releases of the pinned Node.js and CPython lines as signed
+# data, /usr/share/hostashi/runtimes.json. Only on servers set up from the
+# hostashi package (HOSTASHI_SOURCES, written by packaging/get/install.sh):
+# the source uses the same address with the suite runtimes and the key the
+# package ships; the pin lets the suite provide hostashi-runtimes only.
+# unattended-upgrades upgrades it (uu_origins). An upgrade from the package
+# runs with --no-apt and cannot install it: the daily RUNTIMES_TIMER does.
+HOSTASHI_SOURCES=/etc/apt/sources.list.d/hostashi.sources
+RUNTIMES_SOURCES=/etc/apt/sources.list.d/hostashi-runtimes.sources
+RUNTIMES_PIN=/etc/apt/preferences.d/00hostashi-runtimes
+RUNTIMES_KEYRING=/usr/share/keyrings/hostashi-runtimes-keyring.asc
+RUNTIMES_UNIT=hostashi-runtimes-install.service
+RUNTIMES_TIMER=hostashi-runtimes-install.timer
+
+runtimes_uri() { awk '$1 == "URIs:" { print $2; exit }' "$HOSTASHI_SOURCES" 2>/dev/null; }
+runtimes_sources() {
+  local uri
+  uri=$(runtimes_uri)
+  [ -n "$uri" ] || return 1
+  printf '# Hostashi runtime pins (ADR-0077), signed with their own key.\nTypes: deb\nURIs: %s\nSuites: runtimes\nComponents: main\nSigned-By: %s\n' "$uri" "$RUNTIMES_KEYRING"
+}
+
+chk_runtimes() {
+  [ -f "$HOSTASHI_SOURCES" ] || return 0
+  [ -f "$RUNTIMES_KEYRING" ] || { echo "$RUNTIMES_KEYRING missing (upgrade the hostashi package)"; return 1; }
+  runtimes_sources | file_matches "$RUNTIMES_SOURCES" 0644 root:root || { echo "runtimes source differs"; return 1; }
+  file_matches "$RUNTIMES_PIN" 0644 root:root <"$APT_SRC/00hostashi-runtimes" || { echo "runtimes pin differs"; return 1; }
+  file_matches "/etc/systemd/system/$RUNTIMES_UNIT" 0644 root:root <"$UNIT_DIR/$RUNTIMES_UNIT" || { echo "$RUNTIMES_UNIT differs"; return 1; }
+  file_matches "/etc/systemd/system/$RUNTIMES_TIMER" 0644 root:root <"$UNIT_DIR/$RUNTIMES_TIMER" || { echo "$RUNTIMES_TIMER differs"; return 1; }
+  [ "$(systemctl is-enabled "$RUNTIMES_TIMER" 2>/dev/null)" = enabled ] || { echo "$RUNTIMES_TIMER not enabled"; return 1; }
+  # With --no-apt the timer installs the package later.
+  [ "$NO_APT" = yes ] || pkg_installed hostashi-runtimes || { echo "hostashi-runtimes not installed"; return 1; }
+}
+do_runtimes() {
+  local rc reload=no
+  [ -f "$RUNTIMES_KEYRING" ] || { log "$RUNTIMES_KEYRING is missing: upgrade the hostashi package first"; return 1; }
+  runtimes_sources | write_file "$RUNTIMES_SOURCES" 0644 root:root
+  [ $? -le 1 ] || return 1
+  write_file "$RUNTIMES_PIN" 0644 root:root <"$APT_SRC/00hostashi-runtimes"
+  [ $? -le 1 ] || return 1
+  write_file "/etc/systemd/system/$RUNTIMES_UNIT" 0644 root:root <"$UNIT_DIR/$RUNTIMES_UNIT"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  [ "$rc" = 1 ] || reload=yes
+  write_file "/etc/systemd/system/$RUNTIMES_TIMER" 0644 root:root <"$UNIT_DIR/$RUNTIMES_TIMER"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  [ "$rc" = 1 ] || reload=yes
+  if [ "$reload" = yes ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
+  systemctl enable --now "$RUNTIMES_TIMER" >>"$LOG" 2>&1 || return 1
+  [ "$NO_APT" = yes ] || apt_install hostashi-runtimes
 }
 
 php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }

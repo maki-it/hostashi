@@ -23,13 +23,19 @@ func TestRender(t *testing.T) {
 	for _, want := range []string{
 		"/var/log/nginx/sites/*/*.log /var/log/nginx/hostashi/*.log {",
 		"    rotate 7\n", "    maxage 7\n", "    daily\n", "    delaycompress\n",
-		`[ ! -s /run/nginx.pid ] || kill -USR1 "$(cat /run/nginx.pid)"`,
+		`[ ! -s /run/nginx.pid ] || kill -HUP "$(cat /run/nginx.pid)"`,
 		"/var/log/hostashi/php/*/*.log {",
 		"systemctl kill --kill-whom=main --signal=USR1 'hostashi-php-*@*.service'",
 	} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("missing %q in\n%s", want, b)
 		}
+	}
+
+	// USR1 would leave nginx's workers on the rotated files: they cannot
+	// reopen logs in the root-only directories.
+	if strings.Contains(string(b), "kill -USR1") {
+		t.Errorf("nginx gets USR1 after a rotation:\n%s", b)
 	}
 
 	if d, ok := Days(b); !ok || d != 7 {
