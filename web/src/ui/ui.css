@@ -2228,4 +2228,19 @@ html:has(.ui-files) {
 /* An icon button without a tip text, such as a ⋯ menu, shows no tip. */
 .ui-icon-btn:not([data-tip])::after {
   content: none;
+/* Segmented links between pages, such as the tabs of Runtimes. */
+.ui-seg-nav {
+  align-self: flex-start;
+  width: max-content;
+  max-width: 100%;
+}
+.ui-seg-nav .ui-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+.ui-seg-btn[aria-current="page"] {
+  color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line-strong);
 }

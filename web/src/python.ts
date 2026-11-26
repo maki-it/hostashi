@@ -79,7 +79,7 @@ export function pythonArgsProblem(kind: PythonStartKind, args: string[]): string
 
 /** pythonProblem checks the fields before they are sent. */
 export function pythonProblem(v: PythonValue): string {
-  if (!v.version) return "No Python version is installed. An administrator installs one under Python versions.";
+  if (!v.version) return "No Python version is installed. An administrator installs one under Runtimes › Python.";
   return workdirProblem(v.workdir) || targetProblem(v.startKind, v.target) || pythonArgsProblem(v.startKind, v.args);
 }
 

@@ -529,11 +529,11 @@ export function siteMessage(err: unknown): string {
       case "not_letsencrypt":
         return "Only a certificate from Let's Encrypt can be renewed here. Upload a new own certificate instead.";
       case "node_missing":
-        return "This Node.js version is not installed. An administrator installs it under Node.js versions.";
+        return "This Node.js version is not installed. An administrator installs it under Runtimes › Node.js.";
       case "apps_unavailable":
         return "Apps are not available on this panel.";
       case "python_missing":
-        return "This Python version is not installed. An administrator installs it under Python versions.";
+        return "This Python version is not installed. An administrator installs it under Runtimes › Python.";
       case "confirm_required":
         return "Type the site's name to confirm: this rebuilds .venv and its installed packages go.";
       case "wrong_site_type":

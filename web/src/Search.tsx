@@ -4,6 +4,7 @@ import { FileText, Globe, MagnifyingGlass, UserCircle, type Icon } from "@phosph
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { navFor } from "./nav";
 import { formatHash } from "./routes";
+import { runtimes } from "./Runtimes";
 import { groupsForSite } from "./SiteNav";
 import { listSites, type Site } from "./sites";
 
@@ -44,6 +45,13 @@ export function searchItems(role: string, sites: readonly Site[]): SearchItem[] 
   }
   for (const g of navFor(role)) {
     for (const i of g.items) {
+      if (i.also) {
+        // Runtimes: one hit per language, so "python" finds its versions.
+        for (const r of runtimes) {
+          out.push({ group: "Pages", label: `${i.label} › ${r.label}`, detail: g.label ?? "", href: formatHash({ page: r.page }), icon: i.icon, words: `${i.label} ${r.label} versions ${g.label ?? ""}` });
+        }
+        continue;
+      }
       out.push({ group: "Pages", label: i.label, detail: g.label ?? "", href: formatHash({ page: i.page }), icon: i.icon, words: `${i.label} ${g.label ?? ""}` });
     }
   }

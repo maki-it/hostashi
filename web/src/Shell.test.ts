@@ -10,6 +10,7 @@ describe("pageTitle", () => {
     expect(pageTitle(parseHash("#/"), host)).toBe("Overview · panel.example.com");
     expect(pageTitle(parseHash("#/backups"), host)).toBe("Backups · panel.example.com");
     expect(pageTitle(parseHash("#/account"), host)).toBe("Your account · panel.example.com");
+    expect(pageTitle(parseHash("#/node"), host)).toBe("Node.js · Runtimes · panel.example.com");
   });
   it("puts a site's tab before its name", () => {
     expect(pageTitle(parseHash("#/sites/blog"), host)).toBe("blog · panel.example.com");

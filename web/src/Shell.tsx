@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { CaretRight, List, MagnifyingGlass, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
-import { useEffect, useState, type ReactNode } from "react";
+import { CaretDown, CaretRight, List, MagnifyingGlass, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { logout, type User } from "./auth";
 import { navFor, navItem } from "./nav";
+import { runtimes } from "./Runtimes";
 import { siteGroups } from "./SiteNav";
 import { countLabel, healthCount, servicesCount, type NavCount } from "./navcounts";
 import { runDoctor } from "./doctor";
@@ -52,9 +53,13 @@ function crumbs(route: Route): Crumb[] {
   if (!item) return [];
   const out: Crumb[] = [];
   if (item.group) out.push({ label: item.group });
+  const tab = item.also ? runtimes.find((r) => r.page === route.page) : undefined;
   if (route.site) {
     out.push({ label: item.label, href: formatHash({ page: route.page }) });
     out.push({ label: route.site.name });
+  } else if (tab) {
+    out.push({ label: item.label, href: formatHash({ page: item.page }) });
+    out.push({ label: tab.label });
   } else {
     out.push({ label: item.label });
   }
@@ -76,6 +81,8 @@ export function pageTitle(route: Route, host: string): string {
     parts.push("Your account");
   } else {
     const item = navItem(route.page);
+    const tab = runtimes.find((r) => r.page === route.page);
+    if (item && tab) parts.push(tab.label);
     if (item) parts.push(item.label);
   }
   parts.push(host || "Hostashi");
@@ -187,6 +194,22 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
 
   // navScrolled draws a line under the brand once the nav scrolls under it.
   const [navScrolled, setNavScrolled] = useState(false);
+  // navMore shows a hint at the bottom of the nav while entries are hidden
+  // below it, on a low screen (C2 of the UX review).
+  const navRef = useRef<HTMLElement>(null);
+  const [navMore, setNavMore] = useState(false);
+  const measureNav = useCallback(() => {
+    const el = navRef.current;
+    if (!el) return;
+    setNavScrolled(el.scrollTop > 0);
+    setNavMore(el.scrollTop + el.clientHeight < el.scrollHeight - 8);
+  }, []);
+  useEffect(() => {
+    measureNav();
+    window.addEventListener("resize", measureNav);
+    return () => window.removeEventListener("resize", measureNav);
+  }, [measureNav, groups.length]);
+  const lastGroup = groups[groups.length - 1]?.label;
 
   return (
     <div className="ui-root app">
@@ -211,7 +234,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
             />
           </span>
         </div>
-        <nav aria-label="Main" id="app-nav" className="app-nav" onScroll={(e) => setNavScrolled(e.currentTarget.scrollTop > 0)}>
+        <nav aria-label="Main" id="app-nav" className="app-nav" ref={navRef} onScroll={measureNav}>
           {groups.map((g) => (
             <div className="app-nav-group" key={g.label ?? "top"}>
               {g.label && <h2 className="app-nav-label">{g.label}</h2>}
@@ -223,7 +246,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
                       <a
                         className="app-nav-item"
                         href={formatHash({ page: i.page })}
-                        aria-current={route.page === i.page ? "page" : undefined}
+                        aria-current={route.page === i.page || i.also?.includes(route.page) ? "page" : undefined}
                         onClick={() => setMenuOpen(false)}
                       >
                         <Icon size={20} aria-hidden="true" />
@@ -239,6 +262,14 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
             </div>
           ))}
         </nav>
+        {navMore && lastGroup && (
+          <div className="app-nav-more">
+            <button type="button" tabIndex={-1} onClick={() => navRef.current?.scrollTo({ top: navRef.current.scrollHeight, behavior: "smooth" })}>
+              <CaretDown size={12} aria-hidden="true" />
+              {lastGroup}
+            </button>
+          </div>
+        )}
         {/* The account, logout and version stay in view while the nav scrolls. */}
         <div className="app-foot">
           <div className="app-user">
