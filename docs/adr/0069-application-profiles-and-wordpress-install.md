@@ -73,3 +73,22 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 3. ~~Built-in profiles in 1.0: Generic PHP, WordPress, WooCommerce, Laravel, Symfony, Shopware 6, TYPO3 and Drupal, with Magento 2 after 1.0?~~ Decided (Kim, 2026-11-25): yes, these eight; Magento 2 after 1.0 with its own spec.
 
 The ADR as a whole was accepted by Kim on 2026-11-25.
+
+## Addendum 1: reinstall and detection (2026-11-26)
+
+**Status:** Proposed. **Decides:** Kim (asked for both on 2026-11-26).
+
+### Context
+
+The quick install ran only once per site: after a successful run the card kept saying "installed", even when the person had deleted WordPress in the file manager, and there was no way to start over without emptying the web root by hand [V: thread 2026-11-26].
+
+### Decision
+
+- **Detection.** `site.wordpress.status` looks at the web root (as root, through `os.Root`, never following links): WordPress counts as installed when `wp-config.php` or `wp-includes/version.php` is a regular file; it also reports whether the web root is empty and the `DB_NAME` of `wp-config.php` if it is a plain database name. A successful run whose WordPress is gone reports `none` again, so the form comes back. A failed run keeps its error.
+- **Reinstall.** `POST /api/v1/sites/{name}/wordpress/reinstall` with the install fields and `confirm` = the site's name. The job gets `clear`: the runner in `hostashi-wp@<site>` empties the web root **as the site user** before WP-CLI runs, so the agent itself never deletes site files. The install gets a new database (`<site>_wp2` if `<site>_wp` is taken). After the start, the panel drops the old WordPress database only if it is a local database of the same site with a quick install's name (`<site>_wp` to `<site>_wp9`); any other database stays.
+- **No automatic backup.** The form warns and links to Backups; backups run per server today, not per site [V: `POST /api/v1/backups/run`].
+
+### Consequences
+
+- Same action and scopes as the install (`sites.wordpress:install` plus `databases:write`), audited as `site.wordpress.reinstall` with the old database.
+- If the install fails after the old database was dropped, the person restores from a backup; the warning says so.

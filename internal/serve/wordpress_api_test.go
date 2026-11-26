@@ -96,10 +96,33 @@ func TestWordPressOverHTTP(t *testing.T) {
 		t.Fatalf("not empty: %d %s", rec.Code, rec.Body)
 	}
 
-	// A token needs databases:write as well.
+	// A token needs databases:write as well, for the install and the
+	// reinstall.
 	tok := e.createToken(t, c, `{"name":"wp","scopes":["sites:read","sites:write"]}`)
-	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/wordpress", header: bearerHeader(tok.Token), body: body}); rec.Code != http.StatusForbidden ||
-		!strings.Contains(rec.Body.String(), "databases:write") {
-		t.Fatalf("scope: %d %s", rec.Code, rec.Body)
+	for _, p := range []string{"/api/v1/sites/blog/wordpress", "/api/v1/sites/blog/wordpress/reinstall"} {
+		if rec := e.do(t, reqOpts{method: "POST", path: p, header: bearerHeader(tok.Token), body: body}); rec.Code != http.StatusForbidden ||
+			!strings.Contains(rec.Body.String(), "databases:write") {
+			t.Fatalf("scope %s: %d %s", p, rec.Code, rec.Body)
+		}
+	}
+
+	// The reinstall needs the site's name as confirmation.
+	wp.err = nil
+	reinstall := strings.Replace(body, "{", `{"confirm":"blog",`, 1)
+
+	for name, b := range map[string]string{
+		"no confirm":    body,
+		"wrong confirm": strings.Replace(body, "{", `{"confirm":"blog.example.com",`, 1),
+	} {
+		if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/wordpress/reinstall", cookie: c, body: b}); rec.Code != http.StatusUnprocessableEntity {
+			t.Errorf("%s: %d %s", name, rec.Code, rec.Body)
+		}
+	}
+
+	n := len(wp.reqs)
+
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/wordpress/reinstall", cookie: c, body: reinstall})
+	if rec.Code != http.StatusAccepted || len(wp.reqs) != n+1 || !wp.reqs[n].Reinstall || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("reinstall: %d %s", rec.Code, rec.Body)
 	}
 }

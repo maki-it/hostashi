@@ -564,7 +564,9 @@ const routes = [
   })],
   ["POST", /^\/sites\/[^/]+\/profile\/preview$/, () => ({ config: serverBlock })],
   ["GET", /^\/profiles$/, () => allProfiles],
-  ["GET", /^\/sites\/[^/]+\/wordpress$/, () => ({ state: "none" })],
+  // shop has WordPress already, for the reinstall.
+  ["GET", /^\/sites\/shop\/wordpress$/, () => ({ state: "succeeded", installed: true, empty: false, database: "shop_wp", log: "Success: WordPress installed successfully.\nwordpress installed: https://shop.example.com\n" })],
+  ["GET", /^\/sites\/[^/]+\/wordpress$/, () => ({ state: "none", installed: false, empty: true })],
   ["POST", /^\/sites\/[^/]+\/wordpress$/, () => ({ state: "running", database: "blog_wp", adminPassword: "Vq7mR2xK9pLt4Wz8Bn3sHc6J" })],
   ["GET", /^\/sites\/[^/]+\/access$/, () => ({
     ipMode: "deny",

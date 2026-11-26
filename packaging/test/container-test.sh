@@ -1288,7 +1288,41 @@ if x journalctl --no-pager -o cat | grep -F -- "$wppass" >/dev/null; then fail "
   fail "second install over WordPress: $(x cat /tmp/api.out)"
 x grep -q 'not empty' /tmp/api.out || fail "second install refusal: $(x cat /tmp/api.out)"
 [ "$(x mariadb -Nse "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE 'wpq\\_wp_'")" = 0 ] || fail "a refused install left a database"
-[ "$(api DELETE /api/v1/databases/wpq_wp)" = 204 ] || fail "delete WordPress database: $(x cat /tmp/api.out)"
+# The panel sees the WordPress in the document root and its database.
+[ "$(api GET /api/v1/sites/wpq/wordpress)" = 200 ] || fail "WordPress state: $(x cat /tmp/api.out)"
+x grep -q '"installed":true' /tmp/api.out || fail "installed WordPress not seen: $(x cat /tmp/api.out)"
+x grep -q '"database":"wpq_wp"' /tmp/api.out || fail "database of wp-config.php not seen: $(x cat /tmp/api.out)"
+# Reinstall: only with the site's name typed; then the document root is
+# emptied as the site user, WordPress gets a new database and the old one
+# goes.
+x runuser -u wpq -- sh -c 'echo stray >/home/wpq/htdocs/stray.txt'
+[ "$(api POST /api/v1/sites/wpq/wordpress/reinstall '{"locale":"en_US","title":"Again","adminUser":"kim","adminEmail":"kim@example.com","confirm":"wpq.example.com"}')" = 422 ] ||
+  fail "reinstall with a wrong confirmation: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/wpq/wordpress/reinstall '{"locale":"en_US","title":"Again","adminUser":"kim","adminEmail":"kim@example.com","confirm":"wpq"}')" = 202 ] ||
+  fail "start WordPress reinstall: $(x cat /tmp/api.out)"
+x grep -q '"database":"wpq_wp2"' /tmp/api.out || fail "database of the reinstall: $(x cat /tmp/api.out)"
+x grep -q '"droppedDatabase":"wpq_wp"' /tmp/api.out || fail "old database not dropped: $(x cat /tmp/api.out)"
+state=running
+for _ in $(seq 1 150); do
+  [ "$(api GET /api/v1/sites/wpq/wordpress)" = 200 ] || fail "WordPress state: $(x cat /tmp/api.out)"
+  state=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')
+  [ "$state" = running ] || break
+  sleep 2
+done
+[ "$state" = succeeded ] || fail "WordPress reinstall ended '$state': $(x cat /tmp/api.out)"
+x test ! -e /home/wpq/htdocs/stray.txt || fail "reinstall left the old files"
+x grep -q "'DB_NAME', 'wpq_wp2'" /home/wpq/htdocs/wp-config.php || fail "wp-config.php of the reinstall"
+[ "$(x mariadb -Nse "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = 'wpq_wp'")" = 0 ] || fail "old WordPress database still there"
+body=$(x curl -fsS -H 'Host: wpq.example.com' http://127.0.0.1/) || fail "front page after the reinstall"
+grep -q '<title>Again' <<<"$body" || fail "front page after the reinstall: $(head -c 300 <<<"$body")"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpq.example.com' http://127.0.0.1/wp-admin/)
+[ "$code" = 302 ] || fail "/wp-admin/ after the reinstall answered $code"
+# WordPress deleted in the file manager: the install is offered again.
+x runuser -u wpq -- find /home/wpq/htdocs -mindepth 1 -delete
+[ "$(api GET /api/v1/sites/wpq/wordpress)" = 200 ] || fail "WordPress state: $(x cat /tmp/api.out)"
+x grep -q '"state":"none"' /tmp/api.out || fail "deleted WordPress still reported: $(x cat /tmp/api.out)"
+x grep -q '"empty":true' /tmp/api.out || fail "empty document root not seen: $(x cat /tmp/api.out)"
+[ "$(api DELETE /api/v1/databases/wpq_wp2)" = 204 ] || fail "delete WordPress database: $(x cat /tmp/api.out)"
 [ "$(api DELETE /api/v1/sites/wpq)" = 204 ] || fail "delete site wpq: $(x cat /tmp/api.out)"
 unset wppass
 
