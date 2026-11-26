@@ -86,17 +86,20 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
   const status = siteStatus(site);
   const ready = site.state === "active";
   const staff = role === "admin" || role === "manager";
-  // The PHP tab only for sites with PHP; the type is changed on the Web tab.
+  // The PHP and Cache tabs only for sites with PHP; the type is changed on
+  // the Web tab.
   // A redirect or reverse proxy that kept its account after a type change
   // keeps these tabs.
   // A site without an account (redirect, reverse proxy) has no files,
   // cron, SSH or limits, and redirect and reverse proxy no snippets
   // (ADR-0054). A redirect answers before nginx checks access, so it has no
   // access tab (ADR-0066).
-  const noAccount = ["files", "malware", "php", "cron", "ssh", "limits"];
+  const noAccount = ["files", "malware", "php", "cache", "cron", "ssh", "limits"];
   const groups = visibleGroups(
     (t) =>
-      (t !== "php" || site.php !== "") &&
+      // Both caches serve PHP: the object cache for its apps, the page
+      // cache for the pages it renders (ADR-0045, ADR-0046).
+      (!["php", "cache"].includes(t) || site.php !== "") &&
       (t !== "git" || canDeploy(site)) &&
       (hasAccount(site) || !noAccount.includes(t)) &&
       (!["redirect", "proxy"].includes(siteType(site)) || t !== "nginx") &&
@@ -123,8 +126,12 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
         <>
           <PHPTab site={site} php={php} onChange={load} />
           {site.php && <PHPSettingsCard site={site} />}
-          {site.php && <ObjectCacheSettings site={site} canSize={staff} />}
-          {site.php && <PageCacheSettings site={site} canSize={staff} />}
+        </>
+      )}
+      {active === "cache" && (
+        <>
+          <ObjectCacheSettings site={site} canSize={staff} />
+          <PageCacheSettings site={site} canSize={staff} />
         </>
       )}
       {active === "git" && <GitSettings site={site} canEdit={staff} />}

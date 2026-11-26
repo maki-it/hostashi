@@ -673,7 +673,7 @@ describe("SitePage", () => {
 
     await user.click(within(tabs).getByRole("tab", { name: "App" }));
     const inner = screen.getByRole("tablist", { name: "App" });
-    expect(within(inner).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Web", "PHP", "Cron"]);
+    expect(within(inner).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Web", "PHP", "Cache", "Cron"]);
     await user.click(within(inner).getByRole("tab", { name: "PHP" }));
     expect(screen.getByRole("tabpanel", { name: "PHP" })).toHaveTextContent("PHP of blog");
     expect(within(tabs).getByRole("tab", { name: "App" })).toHaveAttribute("aria-selected", "true");
@@ -915,6 +915,35 @@ describe("SitePage", () => {
     expect(within(tabs).queryByRole("tab", { name: "PHP" })).not.toBeInTheDocument();
     expect(within(tabs).getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("region", { name: "Programs from PHP" })).not.toBeInTheDocument();
+  });
+
+  it("shows both caches on their own tab, not on the PHP tab", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [blog] } },
+      "GET /api/v1/sites/blog/php/settings": { status: 404, body: { error: "not_found" } },
+      "GET /api/v1/sites/blog/object-cache": { status: 404, body: { error: "not_found" } },
+      "GET /api/v1/sites/blog/page-cache": { status: 404, body: { error: "not_found" } },
+    });
+    render(<PageHarness tab="php" />);
+    await screen.findByRole("region", { name: "PHP version" });
+    expect(screen.queryByRole("region", { name: "Object cache" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Page cache" })).not.toBeInTheDocument();
+    await user.click(within(screen.getByRole("tablist", { name: "App" })).getByRole("tab", { name: "Cache" }));
+    const panel = within(screen.getByRole("tabpanel", { name: "Cache" }));
+    expect(await panel.findByRole("region", { name: "Object cache" })).toBeInTheDocument();
+    expect(panel.getByRole("region", { name: "Page cache" })).toBeInTheDocument();
+    expect(panel.queryByRole("region", { name: "PHP version" })).not.toBeInTheDocument();
+  });
+
+  it("has no cache tab for a static site", async () => {
+    mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [{ ...blog, php: "", type: "static" }] } } });
+    render(<PageHarness tab="cache" />);
+    const tabs = await screen.findByRole("tablist", { name: "blog" });
+    expect(within(tabs).getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+    await userEvent.setup().click(within(tabs).getByRole("tab", { name: "App" }));
+    expect(within(screen.getByRole("tablist", { name: "App" })).queryByRole("tab", { name: "Cache" })).not.toBeInTheDocument();
   });
 
   it("keeps a PHP version that is no longer installed selectable, newest first", async () => {

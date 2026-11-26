@@ -525,6 +525,11 @@ a.ui-icon-btn {
   align-items: center;
   gap: var(--space-2);
 }
+/* A field and its button on one line: the button lines up with the
+   control, not with the label above it. Only for fields without a hint. */
+.ui-row-field {
+  align-items: flex-end;
+}
 a.ui-btn {
   text-decoration: none;
 }
