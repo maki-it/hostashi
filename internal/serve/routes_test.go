@@ -143,6 +143,7 @@ var routeAccess = map[string]authz.Action{
 	"POST /api/v1/sites/{name}/profile/preview":              "sites:read",
 	"GET /api/v1/sites/{name}/wordpress":                     "sites:read",
 	"POST /api/v1/sites/{name}/wordpress":                    "sites.wordpress:install",
+	"POST /api/v1/sites/{name}/wordpress/reinstall":          "sites.wordpress:install",
 	"POST /api/v1/sites/{name}/clone":                        "sites:clone",
 	"GET /api/v1/sites/{name}/clone":                         "sites:read",
 	"POST /api/v1/sites/{name}/clone/refresh":                "sites.clone:refresh",

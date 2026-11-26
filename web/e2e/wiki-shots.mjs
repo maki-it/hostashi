@@ -89,6 +89,27 @@ const shots = [
     },
   },
   {
+    name: "site-wordpress-installed",
+    hash: "#/sites/shop/web",
+    ready: "text=WordPress is installed.",
+    act: async (page) => {
+      await page.getByRole("heading", { name: "WordPress" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  {
+    name: "site-wordpress-reinstall",
+    hash: "#/sites/shop/web",
+    ready: "text=WordPress is installed.",
+    full: true,
+    act: async (page) => {
+      await page.getByRole("button", { name: "Reinstall WordPress" }).click();
+      await page.getByLabel(/Admin user/).fill("kim");
+      await page.getByLabel("Admin email").fill("kim@example.com");
+      await page.getByLabel(/to confirm/).fill("shop");
+      await page.getByRole("heading", { name: "WordPress" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  {
     name: "site-domain-change",
     hash: "#/sites/blog/domains",
     ready: "text=Change primary domain",

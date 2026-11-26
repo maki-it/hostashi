@@ -23,8 +23,10 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -214,11 +216,16 @@ func (m *Manager) Start(ctx context.Context, req agentapi.WPInstallRequest) (age
 	}
 
 	st, err := m.start(ctx, req.Site, func(acct Site) (map[string][]byte, error) {
-		if err := checkEmpty(acct.Home, req.WebDir); err != nil {
-			return nil, err
+		if !req.Reinstall {
+			if err := checkEmpty(acct.Home, req.WebDir); err != nil {
+				return nil, err
+			}
 		}
 
-		job := wpcli.Job{WPInstall: req.Install, PHP: req.PHP, Path: docRoot(acct.Home, req.WebDir), Home: acct.Home, Domain: req.Domain}
+		job := wpcli.Job{
+			WPInstall: req.Install, PHP: req.PHP, Path: docRoot(acct.Home, req.WebDir), Home: acct.Home, Domain: req.Domain,
+			Clear: req.Reinstall,
+		}
 		if err := job.Validate(); err != nil {
 			return nil, err
 		}
@@ -383,6 +390,61 @@ func (m *Manager) start(ctx context.Context, site string, creds func(Site) (map[
 	return agentapi.WPInstallStatus{Site: site, State: agentapi.DeployRunning}, nil
 }
 
+// maxConfig bounds the wp-config.php that inspect reads.
+const maxConfig = 256 << 10
+
+// dbNameRe finds DB_NAME in wp-config.php as WP-CLI writes it.
+var dbNameRe = regexp.MustCompile(`define\(\s*['"]DB_NAME['"]\s*,\s*['"]([A-Za-z0-9_]{1,64})['"]\s*\)`)
+
+// inspect looks at the site's document root: whether it holds WordPress,
+// whether it is empty, and the database its wp-config.php names. Links
+// are never followed; anything it cannot read counts as not there.
+func inspect(home, webDir string) (installed, empty bool, db string) {
+	empty = checkEmpty(home, webDir) == nil
+	if empty {
+		return false, true, ""
+	}
+
+	root, err := os.OpenRoot(home)
+	if err != nil {
+		return false, false, ""
+	}
+	defer root.Close()
+
+	dir := sites.WebRootName
+	if webDir != "" {
+		dir += "/" + webDir
+	}
+
+	regular := func(name string) bool {
+		fi, err := root.Lstat(dir + "/" + name)
+
+		return err == nil && fi.Mode().IsRegular()
+	}
+
+	installed = regular("wp-config.php") || regular("wp-includes/version.php")
+	if !regular("wp-config.php") {
+		return installed, false, ""
+	}
+
+	f, err := root.OpenFile(dir+"/wp-config.php", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return installed, false, ""
+	}
+	defer f.Close()
+
+	b, err := io.ReadAll(io.LimitReader(f, maxConfig))
+	if err != nil {
+		return installed, false, ""
+	}
+
+	if m := dbNameRe.FindSubmatch(b); m != nil && agentapi.ValidateDBName(string(m[1])) == nil {
+		db = string(m[1])
+	}
+
+	return installed, false, db
+}
+
 // checkEmpty refuses a document root with anything in it. A missing one
 // is fine: WP-CLI creates it. Links are not followed.
 func checkEmpty(home, webDir string) error {
@@ -506,7 +568,8 @@ func (m *Manager) Status(ctx context.Context, req agentapi.WPStatusRequest) (age
 		return agentapi.WPInstallStatus{}, err
 	}
 
-	if _, err := m.Site(req.Site); err != nil {
+	acct, err := m.Site(req.Site)
+	if err != nil {
 		return agentapi.WPInstallStatus{}, err
 	}
 
@@ -514,6 +577,7 @@ func (m *Manager) Status(ctx context.Context, req agentapi.WPStatusRequest) (age
 	defer m.mu.Unlock()
 
 	out := agentapi.WPInstallStatus{Site: req.Site, State: agentapi.WPNone}
+	out.Installed, out.Empty, out.Database = inspect(acct.Home, req.WebDir)
 
 	st, err := m.load()
 	if err != nil {
@@ -530,12 +594,24 @@ func (m *Manager) Status(ctx context.Context, req agentapi.WPStatusRequest) (age
 		return out, err
 	}
 
-	switch m.phase(props["ActiveState"], started, true) {
-	case agentapi.DeployRunning:
+	phase := m.phase(props["ActiveState"], started, true)
+	if phase == agentapi.DeployRunning {
 		out.State = agentapi.DeployRunning
 		out.Log = tail(m.LogFile(req.Site))
 
 		return out, nil
+	}
+
+	m.removeCreds(req.Site)
+
+	// WordPress was installed but is gone, for example deleted in the
+	// file manager: the site counts as never installed again. A failed
+	// run keeps its error and log; the panel offers the install below it.
+	if phase == agentapi.DeploySucceeded && !out.Installed {
+		return out, nil
+	}
+
+	switch phase {
 	case agentapi.DeploySucceeded:
 		out.State = agentapi.DeploySucceeded
 	case agentapi.DeployFailed:
@@ -544,7 +620,6 @@ func (m *Manager) Status(ctx context.Context, req agentapi.WPStatusRequest) (age
 		out.State, out.Error = agentapi.DeployFailed, "the run did not start"
 	}
 
-	m.removeCreds(req.Site)
 	out.Log = tail(m.LogFile(req.Site))
 
 	return out, nil

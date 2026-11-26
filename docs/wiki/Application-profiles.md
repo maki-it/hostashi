@@ -145,4 +145,20 @@ After the install, a [Shell key](SSH-and-SFTP.md#wp-cli) gives you the `wp` comm
 
 ### When the install fails
 
-The card shows the error and the log. The database stays. To try again, empty the web root in the [file manager](File-manager.md) or over [SSH](SSH-and-SFTP.md), then reload the page. Delete the database on the **Databases** tab if you no longer need it.
+The card shows the error and the log. The database stays. If the web root is empty, the form is there again; otherwise empty it in the [file manager](File-manager.md) or over [SSH](SSH-and-SFTP.md), or use **Reinstall WordPress**. Delete the database on the **Databases** tab if you no longer need it.
+
+### Reinstall WordPress
+
+The card looks at the web root itself. It says **WordPress is installed** when it finds `wp-config.php` or `wp-includes/version.php`, also for a WordPress you installed by hand. If you delete WordPress in the file manager, the install form comes back.
+
+![WordPress is installed](images/site-wordpress-installed.png)
+
+**Reinstall WordPress** replaces everything in the web root with a new WordPress:
+
+1. Back up the site first, see [Backups](Backups.md). A reinstall cannot be undone.
+2. Click **Reinstall WordPress**, fill in the form as for a new install, and type the site's name to confirm.
+3. Click **Reinstall WordPress** again.
+
+![The reinstall form](images/site-wordpress-reinstall.png)
+
+The install run empties the web root first, as the site's user, then installs WordPress into a new database (`<site>_wp2` if `<site>_wp` is taken). Themes, plugins, uploads and every other file in the web root are gone. The old WordPress database, the one `wp-config.php` names, is deleted once the install started, but only if it belongs to the site and has a quick install's name (`<site>_wp` to `<site>_wp9`). Any other database stays; delete it on the **Databases** tab if you no longer need it.
