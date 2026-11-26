@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ArrowClockwise, ArrowsCounterClockwise, Play, Stop, type Icon } from "@phosphor-icons/react";
+import { ArrowClockwise, ArrowsCounterClockwise, DotsThree, Play, Stop, type Icon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 import { formatHash } from "./routes";
 import {
@@ -17,7 +17,7 @@ import {
   type ServiceEvent,
   type ServiceRow,
 } from "./services";
-import { Badge, Button, Card, Field, IconButton, Notice, PageHead, RelTime, RowActions, Table, type Column, type Tone } from "./ui";
+import { Badge, Button, Card, Field, IconButton, Menu, Notice, PageHead, RelTime, RowActions, Table, type Column, type Tone } from "./ui";
 
 const icons: Record<ServiceAction, Icon> = { start: Play, stop: Stop, restart: ArrowClockwise, reload: ArrowsCounterClockwise };
 
@@ -64,7 +64,10 @@ export function Services({ site }: { site?: string }) {
   const [done, setDone] = useState("");
   const [busy, setBusy] = useState("");
   const [pending, setPending] = useState<Pending | null>(null);
-  const [group, setGroup] = useState<Group>("all");
+  // Until someone picks a group, the page opens on the problems when there
+  // are any (C4 of the UX review), else on all services.
+  const [picked, setGroup] = useState<Group | null>(null);
+  const group: Group = picked ?? (rows?.some(problem) ? "problems" : "all");
   const [text, setText] = useState("");
 
   const load = useCallback(async () => {
@@ -110,6 +113,7 @@ export function Services({ site }: { site?: string }) {
     {
       key: "service",
       header: "Service",
+      main: true,
       sortValue: (r) => serviceName(r.id),
       cell: (r) => (
         <div className="ui-stack-tight">
@@ -122,7 +126,13 @@ export function Services({ site }: { site?: string }) {
               </>
             )}
           </strong>
-          <code className="ui-hint">{r.unit}</code>
+          <code className="ui-hint ui-phone-hide">{r.unit}</code>
+          <span className="ui-phone-only ui-compact-meta">
+            <Badge tone={stateWord(r).tone}>{stateWord(r).word}</Badge>
+            {[r.restarts24h > 0 ? (r.restarts24h === 1 ? "1 restart today" : `${r.restarts24h} restarts today`) : "", r.memoryKnown && r.memoryBytes !== undefined ? bytes(r.memoryBytes) : ""]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
         </div>
       ),
     },
@@ -163,24 +173,42 @@ export function Services({ site }: { site?: string }) {
       srHeader: true,
       cell: (r) =>
         r.actions.length === 0 ? (
-          <span className="ui-hint">Managed by Hostashi</span>
+          <span className="ui-hint ui-phone-hide">Managed by Hostashi</span>
         ) : (
-          <RowActions>
-            {r.actions.filter((a) => shown(r, a)).map((a) => {
-              const I = icons[a];
-              return (
-                <IconButton
-                  key={a}
-                  label={`${actionWord(a)} ${serviceName(r.id)}${r.site ? " of " + r.site : ""}`}
-                  text={actionWord(a)}
-                  icon={<I size={16} aria-hidden="true" />}
-                  danger={a === "stop"}
-                  disabled={busy !== "" || !usable(r, a)}
-                  onClick={() => ask(r, a)}
-                />
-              );
-            })}
-          </RowActions>
+          <>
+            <span className="ui-phone-hide">
+              <RowActions>
+                {r.actions.filter((a) => shown(r, a)).map((a) => {
+                  const I = icons[a];
+                  return (
+                    <IconButton
+                      key={a}
+                      label={`${actionWord(a)} ${serviceName(r.id)}${r.site ? " of " + r.site : ""}`}
+                      text={actionWord(a)}
+                      icon={<I size={16} aria-hidden="true" />}
+                      danger={a === "stop"}
+                      disabled={busy !== "" || !usable(r, a)}
+                      onClick={() => ask(r, a)}
+                    />
+                  );
+                })}
+              </RowActions>
+            </span>
+            <span className="ui-phone-only">
+              <Menu
+                label={`Actions for ${serviceName(r.id)}${r.site ? " of " + r.site : ""}`}
+                buttonLabel={`Actions for ${serviceName(r.id)}${r.site ? " of " + r.site : ""}`}
+                buttonClass="ui-icon-btn"
+                button={<DotsThree size={20} aria-hidden="true" />}
+                items={r.actions
+                  .filter((a) => shown(r, a) && usable(r, a) && busy === "")
+                  .map((a) => {
+                    const I = icons[a];
+                    return { label: actionWord(a), icon: <I size={16} aria-hidden="true" />, danger: a === "stop", onSelect: () => ask(r, a) };
+                  })}
+              />
+            </span>
+          </>
         ),
     },
   ];
@@ -260,7 +288,7 @@ function Grouped({
   ];
   const table = (title: string, list: ServiceRow[], empty: string) => (
     <Card padded={false} title={title} actions={<span className="ui-hint">{summary(list)}</span>}>
-      <Table label={title} columns={columns} rows={list} rowKey={rowKey} empty={empty} />
+      <Table label={title} columns={columns} rows={list} rowKey={rowKey} empty={empty} compact />
     </Card>
   );
   return (

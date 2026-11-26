@@ -2222,6 +2222,14 @@ html:has(.ui-files) {
     font-size: 13px;
     color: var(--muted);
   }
+  /* The grey line under the name of a compact row: state, size, age. */
+  .ui-compact-meta {
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+  }
 }
 
 /* An icon button without a tip text, such as a ⋯ menu, shows no tip. */
