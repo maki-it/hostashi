@@ -29,7 +29,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 | Option | Pro | Contra |
 |--------|-----|--------|
 | **A. Until the administrator deletes them** with a "Delete backups" action (typed name confirmation), listed under "Deleted sites" | Nothing is lost by surprise; erasure on request becomes possible | Space is used until someone acts |
-| B. Expire automatically N days after deletion | No manual work | Needs the deletion time stored outside the panel database, and data disappears without a person deciding |
+| B. Expire automatically N days after deletion | No manual work | Data disappears without a person deciding each case |
 | C. Leave as today | No work | No erasure possible, snapshots stay forever |
 
 ### Name reuse
@@ -47,11 +47,12 @@ Options **A, A, A**.
 2. **Browsing.** The Backups page gets a "Deleted sites" group in the site selector (administrators only), with the same snapshot table. `GET /api/v1/sites/{name}/backups` keeps answering for existing sites and only returns snapshots newer than the site's creation; the deleted ones are reached through `GET /api/v1/backups/deleted/{name}` (`backups.server:read`), which also returns the snapshots of an earlier site of a reused name.
 3. **Restore.** `BackupRestoreRequest` gets an optional `Target` site. The agent accepts a target other than the snapshot's site only when the snapshot's site has no entry in its registry (deleted) or the snapshot is older than the target's registry entry (earlier site); the target must exist. Everything else stays as in ADR-0008 recommendation 7: `restore-<time>` in the target's home, dumps into a new database of the target. Route `POST /api/v1/backups/deleted/{name}/{snapshot}/restore` with body `{"target": "<site>"}`, scopes `backups:restore` and `backups.server:write`. The audit log records source, target and snapshot.
 4. **Deleting.** "Delete backups" removes every snapshot tagged `site:<name>` of a deleted site (or of an earlier site, up to its creation time) with `restic forget <ids>` in a unit like the restore, because the agent has no network. The panel asks to type the site name, shown highlighted and copyable. Space is freed by the next weekly `prune`. This step is irreversible and high-risk (`backups.server:write` plus a fresh login as for other high-risk actions). It comes as its own PR after 1 to 3.
-5. **Not in this ADR:** download as an archive (option B of the first table) and automatic expiry; both can follow as later ADRs.
+5. **Automatic expiry (optional, decided by Kim, 2026-11-26).** A new backup setting `deletedSiteDays` (0 = off, the default, or 1 to 3650), editable on the Backups page and through `PUT /api/v1/backups` as a typed, bounded field. After `forget`, the backup run removes the snapshots of a deleted site (and of an earlier site of a reused name) once its newest snapshot is older than that many days. The newest snapshot time stands in for the deletion time, so nothing new has to be stored [A: a site deleted right after a run expires up to one interval earlier than the exact deletion time plus N days]. The run logs each expired name, and the status lists it.
+6. **Not in this ADR:** download as an archive (option B of the first table); it can follow as a later ADR.
 
 ## Consequences
 
-- One new agent operation (`backup.sites`), one optional field on `backup.restore`, later one operation `backup.forget` with its unit. No new `os/exec` exception: restic stays in `internal/resticctl`.
+- One new agent operation (`backup.sites`), one optional field on `backup.restore`, later one operation `backup.forget` with its unit, and one new settings field `deletedSiteDays` (old settings files without it mean off). No new `os/exec` exception: restic stays in `internal/resticctl`.
 - The snapshot list of an existing site can become shorter after an update, where a name was reused; those snapshots move to "earlier site".
 - Wiki: the backup page explains deleted sites, restore into another site and deleting backups.
 - Site users (ADR-0035) see nothing new; everything under "Deleted sites" is for administrators.
@@ -59,5 +60,5 @@ Options **A, A, A**.
 ## Open questions for Kim
 
 1. ~~Where is a snapshot of a deleted site restored to?~~ Decided by Kim (2026-11-26): A, into an existing site the administrator picks.
-2. How long do the snapshots of a deleted site stay? Recommendation: A, until the administrator deletes them.
+2. ~~How long do the snapshots of a deleted site stay?~~ Decided by Kim (2026-11-26): A, until the administrator deletes them, and optionally B, automatic expiry after a number of days set in the UI (recommendation 5).
 3. Name reuse: recommendation A, a site shows only snapshots taken after it was created.
