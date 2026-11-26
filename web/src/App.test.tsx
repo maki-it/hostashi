@@ -27,6 +27,17 @@ describe("App start", () => {
     expect(await screen.findByRole("heading", { name: "Overview", level: 1 })).toBeInTheDocument();
   });
 
+  it("shows neither the login brand nor text while the session check runs", async () => {
+    mockFetch({ ...noSetup, "GET /api/v1/auth/me": { body: { ...admin, auth: "session" } } });
+    const { container } = render(<App />);
+    const boot = container.querySelector("main.ui-boot");
+    expect(boot).toHaveAttribute("aria-busy", "true");
+    expect(boot).toHaveTextContent("");
+    expect(container.querySelector(".ui-auth-brand")).toBeNull();
+    expect(await screen.findByRole("heading", { name: "Overview", level: 1 })).toBeInTheDocument();
+    expect(container.querySelector("main.ui-boot")).toBeNull();
+  });
+
   it("opens the backup page from the navigation", async () => {
     const user = userEvent.setup();
     mockFetch({
