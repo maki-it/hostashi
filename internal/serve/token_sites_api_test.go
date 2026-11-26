@@ -129,3 +129,40 @@ func TestUserTokenLimits(t *testing.T) {
 		t.Fatalf("user token after the grant is gone: %d %s", rec.Code, rec.Body)
 	}
 }
+
+// TestSiteTokenSecondActions checks the routes that need a second action
+// on top of their own (ADR-0035): a token limited to some sites passes the
+// first, a site action, but may not clone (a new site) or park (server-wide
+// parked domains), even with every scope those need.
+func TestSiteTokenSecondActions(t *testing.T) {
+	e, _ := newFullAPI(t)
+	c := e.adminCookie(t)
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"alpha","domains":["alpha.example"]}`}); rec.Code >= 300 {
+		t.Fatalf("create alpha: %d %s", rec.Code, rec.Body)
+	}
+
+	scopes := `"scopes":["sites:read","sites:write","sites:delete","databases:write","pages:write","sites.maintenance:write"],"expiresInDays":1`
+	limited := bearerHeader(e.createToken(t, c, `{"name":"alpha only",`+scopes+`,"sites":["alpha"]}`).Token)
+	full := bearerHeader(e.createToken(t, c, `{"name":"all",`+scopes+`}`).Token)
+
+	for _, req := range []struct{ path, body string }{
+		{"/api/v1/sites/alpha/clone", `{"name":"alpha2","domain":"alpha2.example"}`},
+		{"/api/v1/sites/alpha/park", `{"domains":["alpha.example"],"confirm":"alpha"}`},
+	} {
+		rec := e.do(t, reqOpts{method: "POST", path: req.path, body: req.body, header: limited})
+		if rec.Code != http.StatusForbidden || errCode(t, rec) != "forbidden" || !strings.Contains(rec.Body.String(), "limited to some sites") {
+			t.Errorf("%s with a site token: %d %s, want 403 forbidden", req.path, rec.Code, rec.Body)
+		}
+
+		// A token without a site list is not stopped by authorization.
+		if rec := e.do(t, reqOpts{method: "POST", path: req.path, body: `{}`, header: full}); rec.Code == http.StatusForbidden || rec.Code == http.StatusUnauthorized {
+			t.Errorf("%s with a full token: %d %s", req.path, rec.Code, rec.Body)
+		}
+	}
+
+	// The site is still there.
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/alpha", cookie: c}); rec.Code != http.StatusOK {
+		t.Fatalf("alpha: %d %s", rec.Code, rec.Body)
+	}
+}

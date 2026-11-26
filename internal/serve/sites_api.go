@@ -12,7 +12,6 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
-	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
@@ -959,15 +958,9 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 	mux.Op("POST /api/v1/sites/{name}/park", openapi.Operation{
 		ID: "deleteAndParkSite", Tag: "sites", Summary: "Delete a site and park its chosen domains", In: siteParkRequest{},
 	}, a.allow("sites:park", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		if !p.Allows(authz.ScopeOf("parked:write")) {
-			writeError(w, http.StatusForbidden, "insufficient_scope", "the token lacks the scope "+authz.ScopeOf("parked:write"))
-
-			return
-		}
-
-		if !authz.Allowed(authz.Role(p.User.Role), "parked:write") {
-			writeError(w, http.StatusForbidden, "forbidden", "your role does not allow this")
-
+		// Parked domains are server-wide: a token limited to some sites
+		// may not make them.
+		if !alsoAllowed(w, p, "parked:write") {
 			return
 		}
 

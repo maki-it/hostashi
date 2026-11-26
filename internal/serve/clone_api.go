@@ -11,7 +11,6 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/auth"
-	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/openapi"
 )
@@ -137,9 +136,9 @@ func registerClones(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 		ID: "cloneSite", Tag: "sites", Summary: "Create a new site as a copy of this one (files, local databases, settings)",
 		In: cloneIn{}, Out: cloneStartJSON{}, Status: http.StatusAccepted,
 	}, a.allow("sites:clone", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		if !p.Allows(authz.ScopeOf("databases:write")) {
-			writeError(w, http.StatusForbidden, "insufficient_scope", "the token lacks the scope "+authz.ScopeOf("databases:write"))
-
+		// A clone is a new site: a token limited to some sites may not
+		// make one, as it may not create a site (sites:create).
+		if !alsoAllowed(w, p, "sites:create") || !alsoAllowed(w, p, "databases:write") {
 			return
 		}
 
