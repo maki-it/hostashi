@@ -95,3 +95,9 @@ Notes on the typed copy routine (option 2A); they change no decision.
 - An entry that exists in the target already fails the copy (folders of the target site are merged, so the empty web root of a new site is no obstacle). With `replace` ("refresh from source") the target home is emptied first, apart from its own `.ssh`, `.deploy/repo` and `.deploy/results`.
 - Root bypasses the disk quota while it writes [U]; the panel checks free space before it starts a clone. ACLs and extended attributes are not copied.
 - Tests run as root (two sites need two uids; CI step `TestRoot`): contents, modes, times, links, link rewrite, skipped paths, owners, setuid, hard link to a foreign file, device file, socket, existing entry, replace, cancellation, a target home swapped for a link, an account that changed [V: `internal/sites/copy_test.go`].
+
+## Implementation notes: database copy (2026-11-26)
+
+- Agent op `db.copy {source, target}` copies one local database into another as a background job; `db.job` reports it like an import (kind `copy`, `source` and `database`). Both databases are busy while it runs. The target must exist; the panel creates it, with its user, before the copy.
+- `mariadb-dump --single-transaction` reads the source as the source site's uid with a temporary account that has rights on the source only; the stream goes through a pipe, never to disk, into `mariadb` as the target site's uid with the target's owner account (ADR-0030), DEFINER clauses stripped, so views, triggers and procedures get a definer that stays. The dump's `DROP TABLE IF EXISTS` replaces tables of the same name, so a refresh works into the same database [V: `internal/mariadb/server_copy_test.go`].
+- If either side fails, the other is stopped; the temporary account is dropped and the owner locked again.
