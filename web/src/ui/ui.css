@@ -688,6 +688,23 @@ a.ui-btn {
   gap: var(--space-4);
 }
 /* Rows of form fields, one opened port each */
+/* fail2ban's jails on the Firewall page (ADR-0078): one line each. */
+.ui-jails {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ui-jails > li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
 .ui-port-rows {
   display: flex;
   flex-direction: column;

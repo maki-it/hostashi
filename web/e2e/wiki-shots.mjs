@@ -351,6 +351,18 @@ const shots = [
   },
   { name: "firewall", hash: "#/firewall", ready: "text=Allowlists" },
   {
+    name: "firewall-bans",
+    hash: "#/firewall",
+    ready: "text=Blocked addresses",
+    act: async (page) => {
+      await page.getByRole("button", { name: "Unblock 198.51.100.23" }).click();
+      await page.getByRole("heading", { name: "Blocked addresses" }).evaluate((h) => {
+        h.scrollIntoView({ block: "start" });
+        window.scrollBy(0, -96);
+      });
+    },
+  },
+  {
     name: "firewall-api-tokens",
     hash: "#/firewall",
     ready: "text=Allowed addresses",
