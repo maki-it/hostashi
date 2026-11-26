@@ -2157,4 +2157,75 @@ html:has(.ui-files) {
 }
 .ui-cellbar[data-tone="err"] .ui-cellbar-track > span {
   background: var(--err);
+/* Filters above several cards: no card around them. */
+.ui-filters-bare {
+  align-items: center;
+  padding: 0;
+  border-bottom: 0;
+}
+.ui-filters-bare > .ui-input {
+  flex: 0 1 280px;
+}
+
+/* Menu items: links look like the buttons, a danger item is red. */
+.ui-menu a[role="menuitem"] {
+  text-decoration: none;
+}
+.ui-menu [role="menuitem"][data-danger] {
+  color: var(--err);
+}
+.ui-menu [role="menuitem"] svg {
+  flex: none;
+}
+
+/* Hidden on a phone, where something compact takes its place. */
+@media (max-width: 600px) {
+  .ui-phone-hide {
+    display: none;
+  }
+}
+
+/* Compact table rows on a phone (C3 of the UX review): one line per row
+   with a checkbox, the main cell and a ⋯ menu; the labelled columns are
+   left out because the main cell carries them. */
+@media (max-width: 600px) {
+  .ui-table[data-compact] tr {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    padding: var(--space-2) var(--space-4);
+  }
+  .ui-table[data-compact] td[data-label] {
+    display: none;
+  }
+  .ui-table[data-compact] td:first-child {
+    padding-bottom: 2px;
+  }
+  .ui-table[data-compact] td[data-actions]:has(> .ui-check-cell) {
+    grid-row: 1;
+    grid-column: 1;
+  }
+  .ui-table[data-compact] td[data-main] {
+    grid-row: 1;
+    grid-column: 2;
+    min-width: 0;
+  }
+  .ui-table[data-compact] td[data-actions]:not(:has(> .ui-check-cell)) {
+    grid-row: 1;
+    grid-column: 3;
+    align-items: center;
+  }
+  .ui-table[data-compact] td.ui-empty {
+    grid-column: 1 / -1;
+  }
+  .ui-files-meta {
+    display: block;
+    margin-left: 26px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+}
+
+/* An icon button without a tip text, such as a ⋯ menu, shows no tip. */
+.ui-icon-btn:not([data-tip])::after {
+  content: none;
 }

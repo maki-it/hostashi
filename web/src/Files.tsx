@@ -9,6 +9,7 @@ import {
   ArrowClockwise,
   ArrowSquareOut,
   Copy,
+  DotsThree,
   DownloadSimple,
   File as FileIcon,
   FileArchive,
@@ -53,7 +54,7 @@ import {
 import { formatHash } from "./routes";
 import { getSiteScan, maxScanPaths, scanMessage, startScan } from "./scan";
 import type { Site } from "./sites";
-import { Button, Card, Field, IconButton, Notice, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
+import { Button, Card, Field, IconButton, Menu, Notice, relativeTime, RelTime, RowActions, Table, type Column, type MenuItem, type Sort } from "./ui";
 
 type Props = {
   site: Site;
@@ -214,6 +215,19 @@ export function FileManager({ site, path, onPath }: Props) {
     void sendFiles(await droppedFiles(e.dataTransfer));
   }
 
+  // entryItems are the row actions as a menu, for the compact rows on a phone.
+  const entryItems = (e: FileEntry): MenuItem[] => {
+    const items: MenuItem[] = [];
+    const p = joinPath(path, e.name);
+    if (e.type === "file") items.push({ label: "Download", icon: <DownloadSimple size={16} aria-hidden="true" />, href: downloadUrl(site.name, p), download: true });
+    if (e.type === "dir") items.push({ label: "Download as ZIP", icon: <DownloadSimple size={16} aria-hidden="true" />, href: zipUrl(site.name, [p]), download: true });
+    if (e.type === "file" && e.size <= maxEditBytes) items.push({ label: "Edit", icon: <NotePencil size={16} aria-hidden="true" />, onSelect: () => setEditing(e) });
+    if (isZip(e)) items.push({ label: "Extract", icon: <FileArchive size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "extract", entry: e }) });
+    items.push({ label: "Rename", icon: <PencilSimpleLine size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "rename", entry: e }) });
+    items.push({ label: "Delete", icon: <Trash size={16} aria-hidden="true" />, danger: true, onSelect: () => setDialog({ kind: "delete", names: [e.name] }) });
+    return items;
+  };
+
   const columns: Column<FileEntry>[] = [
     {
       key: "select",
@@ -241,8 +255,14 @@ export function FileManager({ site, path, onPath }: Props) {
     {
       key: "name",
       header: "Name",
+      main: true,
       sortValue: (e) => (e.type === "dir" ? "0" : "1") + e.name,
-      cell: (e) => <EntryName entry={e} onOpen={() => onPath(joinPath(path, e.name))} />,
+      cell: (e) => (
+        <>
+          <EntryName entry={e} onOpen={() => onPath(joinPath(path, e.name))} />
+          <span className="ui-phone-only ui-files-meta">{[e.type === "file" ? formatSize(e.size) : "", relativeTime(new Date(e.modified)), e.mode.slice(1)].filter(Boolean).join(" · ")}</span>
+        </>
+      ),
     },
     { key: "size", header: "Size", sortValue: (e) => (e.type === "dir" ? -1 : e.size), cell: (e) => (e.type === "file" ? formatSize(e.size) : "") },
     { key: "modified", header: "Modified", sortValue: (e) => e.modified, cell: (e) => <RelTime iso={e.modified} /> },
@@ -252,24 +272,31 @@ export function FileManager({ site, path, onPath }: Props) {
       header: "Actions",
       srHeader: true,
       cell: (e) => (
-        <RowActions>
-          {e.type === "file" && (
-            <a className="ui-icon-btn" href={downloadUrl(site.name, joinPath(path, e.name))} download aria-label={"Download " + e.name} data-tip="Download">
-              <DownloadSimple size={18} aria-hidden="true" />
-            </a>
-          )}
-          {e.type === "dir" && (
-            <a className="ui-icon-btn" href={zipUrl(site.name, [joinPath(path, e.name)])} download aria-label={"Download " + e.name + " as ZIP"} data-tip="Download as ZIP">
-              <DownloadSimple size={18} aria-hidden="true" />
-            </a>
-          )}
-          {e.type === "file" && e.size <= maxEditBytes && (
-            <IconButton label={"Edit " + e.name} icon={<NotePencil size={18} aria-hidden="true" />} onClick={() => setEditing(e)} />
-          )}
-          {isZip(e) && <IconButton label={"Extract " + e.name} icon={<FileArchive size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "extract", entry: e })} />}
-          <IconButton label={"Rename " + e.name} icon={<PencilSimpleLine size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "rename", entry: e })} />
-          <IconButton label={"Delete " + e.name} danger icon={<Trash size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "delete", names: [e.name] })} />
-        </RowActions>
+        <>
+          <span className="ui-phone-hide">
+            <RowActions>
+              {e.type === "file" && (
+                <a className="ui-icon-btn" href={downloadUrl(site.name, joinPath(path, e.name))} download aria-label={"Download " + e.name} data-tip="Download">
+                  <DownloadSimple size={18} aria-hidden="true" />
+                </a>
+              )}
+              {e.type === "dir" && (
+                <a className="ui-icon-btn" href={zipUrl(site.name, [joinPath(path, e.name)])} download aria-label={"Download " + e.name + " as ZIP"} data-tip="Download as ZIP">
+                  <DownloadSimple size={18} aria-hidden="true" />
+                </a>
+              )}
+              {e.type === "file" && e.size <= maxEditBytes && (
+                <IconButton label={"Edit " + e.name} icon={<NotePencil size={18} aria-hidden="true" />} onClick={() => setEditing(e)} />
+              )}
+              {isZip(e) && <IconButton label={"Extract " + e.name} icon={<FileArchive size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "extract", entry: e })} />}
+              <IconButton label={"Rename " + e.name} icon={<PencilSimpleLine size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "rename", entry: e })} />
+              <IconButton label={"Delete " + e.name} danger icon={<Trash size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "delete", names: [e.name] })} />
+            </RowActions>
+          </span>
+          <span className="ui-phone-only">
+            <Menu label={"Actions for " + e.name} buttonLabel={"Actions for " + e.name} buttonClass="ui-icon-btn" button={<DotsThree size={20} aria-hidden="true" />} items={entryItems(e)} />
+          </span>
+        </>
       ),
     },
   ];
@@ -404,6 +431,7 @@ export function FileManager({ site, path, onPath }: Props) {
             rowKey={(e) => e.name}
             sort={sort}
             onSort={setSort}
+            compact
             empty={filter === "" ? "This folder is empty. Drop files here to upload them." : "No entry matches the filter."}
           />
         )}

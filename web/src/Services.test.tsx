@@ -35,8 +35,9 @@ describe("Services", () => {
     mockFetch({ "GET /api/v1/services": { body: { services: rows } }, "GET /api/v1/services/events?limit=50": { body: { events } } });
     render(<Services />);
 
-    const table = await screen.findByRole("table", { name: "Services" });
-    const [, nginx, mariadb, panel, php] = within(table).getAllByRole("row");
+    const table = await screen.findByRole("table", { name: "Server" });
+    const [, nginx, mariadb, panel] = within(table).getAllByRole("row");
+    const [, php] = within(screen.getByRole("table", { name: "Sites" })).getAllByRole("row");
     expect(nginx).toHaveTextContent("Web server (nginx)");
     expect(nginx).toHaveTextContent("50 MiB");
     // Start is hidden while it runs; nginx has no Stop at all.
@@ -51,8 +52,27 @@ describe("Services", () => {
     expect(within(php!).getByRole("button", { name: /^Start PHP/ })).toBeEnabled();
     expect(panel).toHaveTextContent("Managed by Hostashi");
     expect(php).toHaveTextContent("Failed");
-    expect(php).toHaveTextContent("Site blog");
+    expect(within(php!).getByRole("link", { name: "blog" })).toHaveAttribute("href", "#/sites/blog");
     expect(screen.getByText("Restarted by systemd 2 times after a crash", { exact: false })).toBeInTheDocument();
+  });
+
+  it("groups the server and the sites and filters the problems", async () => {
+    const user = userEvent.setup();
+    mockFetch({ "GET /api/v1/services": { body: { services: rows } }, "GET /api/v1/services/events?limit=50": { body: { events } } });
+    render(<Services />);
+
+    const sites = await screen.findByRole("region", { name: "Sites" });
+    expect(sites).toHaveTextContent("1 of 1 with a problem");
+    await user.click(screen.getByRole("radio", { name: /^Problems/ }));
+    const problems = within(screen.getByRole("table", { name: "Problems" })).getAllByRole("row").slice(1);
+    // The failed PHP-FPM and MariaDB, which systemd restarted today.
+    expect(problems.map((r) => within(r).getAllByRole("cell")[0]!.querySelector("strong")?.textContent)).toEqual(["MariaDB", "PHP-FPM · blog"]);
+    expect(screen.queryByRole("table", { name: "Server" })).toBeNull();
+
+    await user.click(screen.getByRole("radio", { name: /^All/ }));
+    await user.type(screen.getByRole("searchbox", { name: "Filter services" }), "blog");
+    expect(screen.getByRole("table", { name: "Server" })).toHaveTextContent("No server service matches the filter.");
+    expect(within(screen.getByRole("table", { name: "Sites" })).getAllByRole("row")).toHaveLength(2);
   });
 
   it("asks to type the action before stopping MariaDB", async () => {

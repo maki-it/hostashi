@@ -5,7 +5,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { Badge, Button, Card, Field, IconButton, Notice, nextSort, relativeTime, RelTime, sortRows, Switch, Table, tabPanelProps, Tabs, UnsavedNote } from ".";
+import { Badge, Button, Card, Field, IconButton, Menu, Notice, nextSort, relativeTime, RelTime, sortRows, Switch, Table, tabPanelProps, Tabs, UnsavedNote } from ".";
 import type { Column, Sort } from ".";
 
 describe("Button", () => {
@@ -263,5 +263,33 @@ describe("Switch", () => {
     expect(screen.getByText("No changes")).toBeInTheDocument();
     rerender(<UnsavedNote dirty />);
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+});
+
+describe("Menu", () => {
+  it("runs an action, offers a link and moves with the arrow keys", async () => {
+    const user = userEvent.setup();
+    const rename = vi.fn();
+    render(
+      <Menu
+        label="Actions for a.txt"
+        buttonLabel="Actions for a.txt"
+        button="⋯"
+        items={[
+          { label: "Download", href: "/dl/a.txt", download: true },
+          { label: "Rename", onSelect: rename },
+          { label: "Delete", danger: true, onSelect: () => undefined },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Actions for a.txt" }));
+    const menu = screen.getByRole("menu", { name: "Actions for a.txt" });
+    expect(within(menu).getByRole("menuitem", { name: "Download" })).toHaveAttribute("href", "/dl/a.txt");
+    expect(within(menu).getByRole("menuitem", { name: "Download" })).toHaveFocus();
+    await user.keyboard("{End}");
+    expect(within(menu).getByRole("menuitem", { name: "Delete" })).toHaveFocus();
+    await user.keyboard("{ArrowUp}{Enter}");
+    expect(rename).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });

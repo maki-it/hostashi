@@ -45,7 +45,7 @@ describe("FileManager", () => {
 
     const table = await screen.findByRole("table", { name: "Files in htdocs" });
     const rows = within(table).getAllByRole("row").slice(1);
-    expect(rows.map((r) => within(r).getAllByRole("cell")[1]!.textContent)).toEqual([
+    expect(rows.map((r) => within(r).getAllByRole("cell")[1]!.querySelector(".ui-files-name")?.textContent)).toEqual([
       "wp-content",
       "current→ ../release",
       "index.php",

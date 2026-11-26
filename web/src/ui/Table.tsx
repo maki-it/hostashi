@@ -17,6 +17,8 @@ export type Column<T> = {
   /** Replaces the header text with a control, for example a "select all"
    *  checkbox; header stays its accessible name. */
   headerCell?: ReactNode;
+  /** The title of a row on a phone card, shown without a label. */
+  main?: boolean;
 };
 
 type TableProps<T> = {
@@ -29,6 +31,11 @@ type TableProps<T> = {
   onSort?: (sort: Sort) => void;
   /** Shown in place of the rows when there are none. */
   empty?: ReactNode;
+  /**
+   * One line per row on a phone: the main column and the row actions; the
+   * labelled columns are hidden, so the main cell should carry them.
+   */
+  compact?: boolean;
 };
 
 const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
@@ -59,11 +66,11 @@ export function nextSort(current: Sort | undefined, key: string): Sort {
  * up/down icon, and an up or down arrow on the active column (ADR-0037).
  * The caller keeps the sort, for example in the address.
  */
-export function Table<T>({ label, columns, rows, rowKey, sort, onSort, empty }: TableProps<T>) {
+export function Table<T>({ label, columns, rows, rowKey, sort, onSort, empty, compact = false }: TableProps<T>) {
   const shown = sortRows(rows, columns, sort);
   return (
     <div className="ui-table-box">
-      <table className="ui-table" aria-label={label}>
+      <table className="ui-table" aria-label={label} data-compact={compact ? "" : undefined}>
         <thead>
           <tr>
             {columns.map((c) => {
@@ -106,7 +113,7 @@ export function Table<T>({ label, columns, rows, rowKey, sort, onSort, empty }: 
             shown.map((row) => (
               <tr key={rowKey(row)}>
                 {columns.map((c, i) => (
-                  <td key={c.key} data-label={i === 0 || c.srHeader ? undefined : c.header} data-actions={c.srHeader ? "" : undefined}>
+                  <td key={c.key} data-label={i === 0 || c.srHeader || c.main ? undefined : c.header} data-actions={c.srHeader ? "" : undefined} data-main={c.main ? "" : undefined}>
                     {c.cell(row)}
                   </td>
                 ))}

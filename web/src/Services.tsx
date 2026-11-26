@@ -46,6 +46,11 @@ function shown(r: ServiceRow, a: ServiceAction): boolean {
 
 type Pending = { row: ServiceRow; action: ServiceAction };
 
+/** problem: the service failed or systemd restarted it today. */
+export const problem = (r: ServiceRow) => stateWord(r).tone === "err" || r.restarts24h > 0;
+
+type Group = "all" | "server" | "sites" | "problems";
+
 /**
  * Services lists the system services of the server and of each site
  * (ADR-0052) with their state and automatic restarts, and runs the few
@@ -59,6 +64,8 @@ export function Services({ site }: { site?: string }) {
   const [done, setDone] = useState("");
   const [busy, setBusy] = useState("");
   const [pending, setPending] = useState<Pending | null>(null);
+  const [group, setGroup] = useState<Group>("all");
+  const [text, setText] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -106,28 +113,19 @@ export function Services({ site }: { site?: string }) {
       sortValue: (r) => serviceName(r.id),
       cell: (r) => (
         <div className="ui-stack-tight">
-          <strong>{serviceName(r.id)}</strong>
+          <strong>
+            {serviceName(r.id)}
+            {r.site && !site && (
+              <>
+                {" · "}
+                <a href={formatHash({ page: "sites", site: { name: r.site, tab: "overview" } })}>{r.site}</a>
+              </>
+            )}
+          </strong>
           <code className="ui-hint">{r.unit}</code>
         </div>
       ),
     },
-    ...(site
-      ? []
-      : [
-          {
-            key: "where",
-            header: "Where",
-            sortValue: (r: ServiceRow) => (r.site ? "1" + r.site : "0"),
-            cell: (r: ServiceRow) =>
-              r.site ? (
-                <a className="ui-nowrap" href={formatHash({ page: "sites", site: { name: r.site, tab: "overview" } })}>
-                  Site {r.site}
-                </a>
-              ) : (
-                "Server"
-              ),
-          },
-        ]),
     {
       key: "state",
       header: "State",
@@ -195,9 +193,13 @@ export function Services({ site }: { site?: string }) {
       {rows === null ? (
         !error && <p aria-busy="true">Loading the services…</p>
       ) : (
-        <Card padded={false} {...(site ? { title: "Services" } : {})}>
-          <Table label="Services" columns={columns} rows={rows} rowKey={rowKey} empty="No services." />
-        </Card>
+        site ? (
+          <Card padded={false} title="Services">
+            <Table label="Services" columns={columns} rows={rows} rowKey={rowKey} empty="No services." />
+          </Card>
+        ) : (
+          <Grouped rows={rows} columns={columns} group={group} onGroup={setGroup} text={text} onText={setText} />
+        )
       )}
     </>
   );
@@ -212,6 +214,70 @@ export function Services({ site }: { site?: string }) {
       />
       {body}
       {rows !== null && <Events events={events} />}
+    </>
+  );
+}
+
+// summary says how a group of services is doing.
+function summary(rows: ServiceRow[]): string {
+  const bad = rows.filter(problem).length;
+  if (rows.length === 0) return "";
+  if (bad > 0) return `${bad} of ${rows.length} with a problem`;
+  const off = rows.filter((r) => stateWord(r).tone !== "ok").length;
+  return off === 0 ? `All ${rows.length} running` : `${rows.length - off} of ${rows.length} running`;
+}
+
+/**
+ * Grouped shows the services of the server and of the sites apart, with a
+ * filter for the ones with a problem first (C4 of the UX review).
+ */
+function Grouped({
+  rows,
+  columns,
+  group,
+  onGroup,
+  text,
+  onText,
+}: {
+  rows: ServiceRow[];
+  columns: Column<ServiceRow>[];
+  group: Group;
+  onGroup: (g: Group) => void;
+  text: string;
+  onText: (t: string) => void;
+}) {
+  const q = text.trim().toLowerCase();
+  const hit = (r: ServiceRow) => !q || `${serviceName(r.id)} ${r.unit} ${r.site ?? ""}`.toLowerCase().includes(q);
+  const shownRows = rows.filter(hit);
+  const server = shownRows.filter((r) => !r.site);
+  const sites = shownRows.filter((r) => r.site);
+  const problems = shownRows.filter(problem);
+  const groups: { id: Group; label: string }[] = [
+    { id: "all", label: "All" },
+    { id: "problems", label: `Problems (${rows.filter(problem).length})` },
+    { id: "sites", label: `Sites (${rows.filter((r) => r.site).length})` },
+    { id: "server", label: `Server (${rows.filter((r) => !r.site).length})` },
+  ];
+  const table = (title: string, list: ServiceRow[], empty: string) => (
+    <Card padded={false} title={title} actions={<span className="ui-hint">{summary(list)}</span>}>
+      <Table label={title} columns={columns} rows={list} rowKey={rowKey} empty={empty} />
+    </Card>
+  );
+  return (
+    <>
+      <div className="ui-filters ui-filters-bare">
+        <div className="ui-seg" role="radiogroup" aria-label="Show">
+          {groups.map((g) => (
+            <button key={g.id} type="button" role="radio" aria-checked={group === g.id} className="ui-seg-btn" onClick={() => onGroup(g.id)}>
+              {g.label}
+            </button>
+          ))}
+        </div>
+        <input className="ui-input" type="search" aria-label="Filter services" placeholder="Filter by site or service" value={text} onChange={(e) => onText(e.target.value)} />
+      </div>
+      {group === "problems" && table("Problems", problems, "No problems. Every service is running.")}
+      {(group === "all" || group === "sites") && table("Sites", sites, q ? "No site service matches the filter." : "No site has a service of its own.")}
+      {(group === "all" || group === "server") && table("Server", server, q ? "No server service matches the filter." : "No services.")}
     </>
   );
 }
