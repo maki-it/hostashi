@@ -1373,6 +1373,10 @@ f2b=$(x fail2ban-client status hostashi-site-auth)
 grep -Eq 'Total failed:[[:space:]]+[1-9]' <<<"$f2b" || { f2b_restore; fail "jail counted no failed login: $f2b"; }
 grep -q 'Banned IP list:.*127\.0\.0\.1' <<<"$f2b" || { f2b_restore; fail "jail did not ban: $f2b"; }
 f2b_restore
+# recidive reads fail2ban's own Ban notices from the journal; the ban above
+# is one. fail2ban-regex ignores ignoreip, so loopback counts here.
+f2b=$(x fail2ban-regex systemd-journal recidive)
+grep -Eq '^Lines: [0-9]+ lines, [0-9]+ ignored, [1-9][0-9]* matched' <<<"$f2b" || fail "recidive does not see the ban: $(grep -E '^Lines: ' <<<"$f2b")"
 x fail2ban-client get hostashi-site-auth ignoreself | grep -x True >/dev/null || fail "jail does not ignore own addresses again"
 [ "$(api GET '/api/v1/sites/wpqs/logs/access?lines=5')" = 200 ] || fail "access log through the panel after the rotation: $(x cat /tmp/api.out)"
 unset f2b
