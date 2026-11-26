@@ -1368,12 +1368,12 @@ done
 x grep -q "user \"$stuser\": password mismatch" /var/log/nginx/hostashi/error.log || { f2b_restore; fail "failed login not in the server error log after the rotation: $(x tail -n 3 /var/log/nginx/hostashi/error.log)"; }
 x grep -q "user \"$stuser\": password mismatch" /var/log/nginx/sites/wpqs/error.log || { f2b_restore; fail "failed login not in the site's error log after the rotation"; }
 x grep -q '" 401 ' /var/log/nginx/sites/wpqs/access.log || { f2b_restore; fail "request not in the site's access log after the rotation"; }
-for _ in $(seq 30); do x fail2ban-client status hostashi-site-auth | grep -q 'Banned IP list:.*127\.0\.0\.1' && break; sleep 1; done
+for _ in $(seq 30); do x fail2ban-client status hostashi-site-auth | grep 'Banned IP list:.*127\.0\.0\.1' >/dev/null && break; sleep 1; done
 f2b=$(x fail2ban-client status hostashi-site-auth)
 grep -Eq 'Total failed:[[:space:]]+[1-9]' <<<"$f2b" || { f2b_restore; fail "jail counted no failed login: $f2b"; }
 grep -q 'Banned IP list:.*127\.0\.0\.1' <<<"$f2b" || { f2b_restore; fail "jail did not ban: $f2b"; }
 f2b_restore
-x fail2ban-client get hostashi-site-auth ignoreself | grep -qx True || fail "jail does not ignore own addresses again"
+x fail2ban-client get hostashi-site-auth ignoreself | grep -x True >/dev/null || fail "jail does not ignore own addresses again"
 [ "$(api GET '/api/v1/sites/wpqs/logs/access?lines=5')" = 200 ] || fail "access log through the panel after the rotation: $(x cat /tmp/api.out)"
 unset f2b
 
