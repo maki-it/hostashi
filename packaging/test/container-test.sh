@@ -1253,6 +1253,15 @@ body=$(x curl -fsS -H 'Host: wpq.example.com' http://127.0.0.1/) || fail "front 
 grep -q '<title>Quick' <<<"$body" || fail "front page without the site title: $(head -c 300 <<<"$body")"
 code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpq.example.com' http://127.0.0.1/wp-login.php)
 [ "$code" = 200 ] || fail "wp-login.php answered $code"
+# nginx reads the files itself: the admin folder and the style sheets.
+# The install once left them 0750/0640 in the site's group, and nginx
+# answered 403 for /wp-admin/.
+expect_mode /home/wpq/htdocs/wp-admin "755 wpq:wpq"
+expect_mode /home/wpq/htdocs/wp-includes/css/dashicons.min.css "644 wpq:wpq"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpq.example.com' http://127.0.0.1/wp-admin/)
+[ "$code" = 302 ] || fail "/wp-admin/ answered $code"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpq.example.com' http://127.0.0.1/wp-includes/css/dashicons.min.css)
+[ "$code" = 200 ] || fail "a style sheet of WordPress answered $code"
 # The admin logs in with the password that was shown once.
 # The login page sets WordPress's test cookie first.
 x rm -f /tmp/wpq.jar

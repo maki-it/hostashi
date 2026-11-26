@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { cleanPath, formatSize, modeProblem, nameProblem, zipUrl, type FileEntry } from "./files";
@@ -67,6 +67,41 @@ describe("FileManager", () => {
     await userEvent.click(within(crumbs).getByRole("button", { name: "blog" }));
     expect(onPath).toHaveBeenLastCalledWith("");
     expect(within(crumbs).getByRole("button", { name: "htdocs" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("keeps toolbar, filter and selection in a bar that turns compact once stuck", async () => {
+    let observe: ((e: Partial<IntersectionObserverEntry>[]) => void) | undefined;
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(cb: (e: Partial<IntersectionObserverEntry>[]) => void) {
+          observe = cb;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    try {
+      mockFetch({ [list("htdocs")]: listing("htdocs") });
+      const { container } = render(<FileManager site={site} path="htdocs" onPath={() => undefined} />);
+      const table = await screen.findByRole("table", { name: "Files in htdocs" });
+      const bar = container.querySelector<HTMLElement>(".ui-files-bar")!;
+      expect(bar).toHaveAttribute("data-stuck", "false");
+      expect(within(bar).getByRole("toolbar", { name: "Files" })).toBeInTheDocument();
+      expect(within(bar).getByRole("searchbox", { name: "Filter files" })).toBeInTheDocument();
+
+      await userEvent.click(within(table).getByRole("checkbox", { name: "Select index.php" }));
+      expect(within(bar).getByRole("region", { name: "Selection" })).toHaveTextContent("1 selected");
+
+      // The sentinel above the bar scrolled out at the top: stuck.
+      act(() => observe!([{ isIntersecting: false, boundingClientRect: { top: -5 } as DOMRectReadOnly }]));
+      expect(bar).toHaveAttribute("data-stuck", "true");
+      // Out at the bottom (the page is scrolled up) is not stuck.
+      act(() => observe!([{ isIntersecting: false, boundingClientRect: { top: 900 } as DOMRectReadOnly }]));
+      expect(bar).toHaveAttribute("data-stuck", "false");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("warns about entries it cannot show and explains errors", async () => {

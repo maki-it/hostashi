@@ -25,6 +25,7 @@ export const siteGroups: readonly SiteGroup[] = [
     tabs: [
       { id: "web", label: "Web" },
       { id: "php", label: "PHP" },
+      { id: "cache", label: "Cache" },
       { id: "cron", label: "Cron" },
     ],
   },

@@ -134,6 +134,7 @@ const shots = [
     ready: "text=www redirect",
     act: async (page) => page.getByRole("heading", { name: "www redirect" }).evaluate((h) => h.scrollIntoView({ block: "start" })),
   },
+  { name: "site-cache", hash: "#/sites/blog/cache", ready: "text=Save page cache", full: true },
   { name: "site-access", hash: "#/sites/blog/access", ready: "text=Access protection", full: true },
   {
     name: "site-access-password",

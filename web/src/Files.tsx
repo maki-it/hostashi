@@ -25,7 +25,7 @@ import {
   UploadSimple,
   ShieldCheck,
 } from "@phosphor-icons/react";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject, type DragEvent, type FormEvent, type ReactNode } from "react";
 import {
   chmod,
   cleanPath,
@@ -93,6 +93,11 @@ export function FileManager({ site, path, onPath }: Props) {
   const [scanNote, setScanNote] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const { stuck, gap } = useStickyBar(rootRef, sentinelRef, barRef);
 
   const load = useCallback(async () => {
     setLoadError("");
@@ -115,6 +120,12 @@ export function FileManager({ site, path, onPath }: Props) {
     setDone("");
     void load();
   }, [load]);
+
+  // The selection bar stays in view while the listing scrolls; a dialog or
+  // a result it starts shows above the table, so bring that into view.
+  useEffect(() => {
+    if (dialog || done || scanNote || loadError) bodyRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [dialog, done, scanNote, loadError]);
 
   const stale = listing !== null && listed !== site.name + "/" + path;
 
@@ -269,6 +280,11 @@ export function FileManager({ site, path, onPath }: Props) {
 
   return (
     <Card padded={false}>
+      <div className="ui-files" ref={rootRef}>
+      {/* The bar (folder, toolbar, filter and the selection) sticks to the
+          top of the window in a compact form while the listing scrolls. */}
+      <div ref={sentinelRef} className="ui-files-sentinel" aria-hidden="true" />
+      <div ref={barRef} className="ui-files-bar" data-stuck={stuck} style={gap > 0 ? { marginBottom: gap } : undefined}>
       <div className="ui-files-head">
         <Breadcrumb site={site.name} path={path} onPath={onPath} />
         <div className="ui-row ui-nowrap" role="toolbar" aria-label="Files">
@@ -288,36 +304,14 @@ export function FileManager({ site, path, onPath }: Props) {
           onChange={(e) => { onPick(e.target.files); e.target.value = ""; }}
         />
       </div>
-      {(loadError || done || scanNote || uploads.length > 0 || listing?.truncated || (listing?.unnamed ?? 0) > 0 || dialog || sel.length > 0) && (
-      <div className="ui-card-body ui-stack">
-        {loadError && <Notice tone="err" title={loadError} />}
-        {done && <Notice tone="ok" title={done} />}
-        {scanNote && (
-          <Notice tone={scanNote.tone} title={scanNote.text}>
-            {scanNote.tone === "ok" && (
-              <>
-                The results appear on the <a href={formatHash({ page: "sites", site: { name: site.name, tab: "malware" } })}>Virus scan</a> tab.
-              </>
-            )}
-          </Notice>
-        )}
-        {uploads.length > 0 && <Uploads rows={uploads} onClose={() => setUploads([])} />}
-        {listing?.truncated && <Notice tone="warn" title="This folder has more entries than the panel shows. Use SFTP to see all of them." />}
-        {listing !== null && listing.unnamed > 0 && (
-          <Notice tone="warn" title={`${String(listing.unnamed)} entries have names that are not valid UTF-8 and are not shown. Rename them over SFTP.`} />
-        )}
-        {dialog && (
-          <DialogCard
-            site={site.name}
-            path={path}
-            dialog={dialog}
-            onCancel={() => setDialog(null)}
-            onDone={(msg) => {
-              setSelected(new Set());
-              void finished(msg);
-            }}
-          />
-        )}
+      <div className="ui-filters">
+        <input className="ui-input" type="search" aria-label="Filter files" placeholder="Filter by name" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        {/* On a phone the table head is hidden, so the box sits here. */}
+        <label className="ui-row ui-phone-only">
+          <input type="checkbox" className="ui-check" checked={allSelected} disabled={shown.length === 0} onChange={selectAll} />
+          Select all
+        </label>
+      </div>
         {sel.length > 0 && (
           <div className="ui-files-selection" role="region" aria-label="Selection">
             <strong>{sel.length === 1 ? "1 selected" : `${String(sel.length)} selected`}</strong>
@@ -353,15 +347,38 @@ export function FileManager({ site, path, onPath }: Props) {
           </div>
         )}
       </div>
-      )}
-      <div className="ui-filters">
-        <input className="ui-input" type="search" aria-label="Filter files" placeholder="Filter by name" value={filter} onChange={(e) => setFilter(e.target.value)} />
-        {/* On a phone the table head is hidden, so the box sits here. */}
-        <label className="ui-row ui-phone-only">
-          <input type="checkbox" className="ui-check" checked={allSelected} disabled={shown.length === 0} onChange={selectAll} />
-          Select all
-        </label>
+      {(loadError || done || scanNote || uploads.length > 0 || listing?.truncated || (listing?.unnamed ?? 0) > 0 || dialog) && (
+      <div ref={bodyRef} className="ui-card-body ui-stack ui-files-body">
+        {loadError && <Notice tone="err" title={loadError} />}
+        {done && <Notice tone="ok" title={done} />}
+        {scanNote && (
+          <Notice tone={scanNote.tone} title={scanNote.text}>
+            {scanNote.tone === "ok" && (
+              <>
+                The results appear on the <a href={formatHash({ page: "sites", site: { name: site.name, tab: "malware" } })}>Virus scan</a> tab.
+              </>
+            )}
+          </Notice>
+        )}
+        {uploads.length > 0 && <Uploads rows={uploads} onClose={() => setUploads([])} />}
+        {listing?.truncated && <Notice tone="warn" title="This folder has more entries than the panel shows. Use SFTP to see all of them." />}
+        {listing !== null && listing.unnamed > 0 && (
+          <Notice tone="warn" title={`${String(listing.unnamed)} entries have names that are not valid UTF-8 and are not shown. Rename them over SFTP.`} />
+        )}
+        {dialog && (
+          <DialogCard
+            site={site.name}
+            path={path}
+            dialog={dialog}
+            onCancel={() => setDialog(null)}
+            onDone={(msg) => {
+              setSelected(new Set());
+              void finished(msg);
+            }}
+          />
+        )}
       </div>
+      )}
       <div
         className="ui-files-drop"
         data-dragging={dragging}
@@ -405,8 +422,74 @@ export function FileManager({ site, path, onPath }: Props) {
           />
         </Suspense>
       )}
+      </div>
     </Card>
   );
+}
+
+/** The height of the bar and the table head; the head counts only where it
+ *  shows (on a phone the rows are cards without one). */
+function stickyHeight(root: HTMLElement | null, bar: HTMLElement | null): number {
+  const head = root?.querySelector("thead")?.getBoundingClientRect().height ?? 0;
+  return (bar?.offsetHeight ?? 0) + (head > 1 ? head : 0);
+}
+
+/**
+ * Tells whether the bar is stuck to the top of the window: the sentinel just
+ * above it has scrolled out at the top. The compact bar and table head are
+ * lower than the full ones; gap keeps the difference as a margin below it while stuck, so
+ * the listing does not jump at the moment the bar sticks. The heights of
+ * the bar and the table head go to CSS variables: the table head sticks
+ * below the bar, and focus scrolls clear of both.
+ */
+function useStickyBar(root: RefObject<HTMLDivElement | null>, sentinel: RefObject<HTMLDivElement | null>, bar: RefObject<HTMLDivElement | null>) {
+  const [stuck, setStuck] = useState(false);
+  const [gap, setGap] = useState(0);
+  const fullHeight = useRef(0);
+
+  useEffect(() => {
+    const s = sentinel.current;
+    if (!s || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => {
+      if (!e) return;
+      const now = !e.isIntersecting && e.boundingClientRect.top < 0;
+      if (now && bar.current?.dataset["stuck"] !== "true") fullHeight.current = stickyHeight(root.current, bar.current);
+      setStuck(now);
+    });
+    io.observe(s);
+    return () => io.disconnect();
+  }, [root, sentinel, bar]);
+
+  // A long path in the compact bar scrolls; keep the open folder in view.
+  useLayoutEffect(() => {
+    const crumbs = root.current?.querySelector<HTMLElement>(".ui-files-crumbs");
+    if (stuck && crumbs) crumbs.scrollLeft = crumbs.scrollWidth;
+  });
+
+  useLayoutEffect(() => {
+    setGap(stuck ? Math.max(0, fullHeight.current - stickyHeight(root.current, bar.current)) : 0);
+  }, [stuck, root, bar]);
+
+  useEffect(() => {
+    const r = root.current;
+    const b = bar.current;
+    if (!r || !b || typeof ResizeObserver === "undefined") return;
+    const html = document.documentElement;
+    const measure = () => {
+      r.style.setProperty("--files-bar-h", `${String(b.offsetHeight)}px`);
+      html.style.setProperty("--files-sticky-h", `${String(stickyHeight(r, b))}px`);
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(b);
+    ro.observe(r);
+    measure();
+    return () => {
+      ro.disconnect();
+      html.style.removeProperty("--files-sticky-h");
+    };
+  }, [root, bar]);
+
+  return { stuck, gap };
 }
 
 function EntryName({ entry, onOpen }: { entry: FileEntry; onOpen: () => void }) {
