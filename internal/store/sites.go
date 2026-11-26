@@ -655,6 +655,22 @@ func allDomains(ctx context.Context, q queryer) (map[int64]DomainSet, error) {
 	return out, nil
 }
 
+// SiteByID returns the site with that id, or ErrNotFound.
+func (s *Store) SiteByID(ctx context.Context, id int64) (Site, error) {
+	var name string
+
+	err := s.db.QueryRowContext(ctx, `SELECT name FROM sites WHERE id = ?`, id).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Site{}, ErrNotFound
+	}
+
+	if err != nil {
+		return Site{}, fmt.Errorf("store: %w", err)
+	}
+
+	return s.SiteByName(ctx, name)
+}
+
 // SiteByName returns one site or ErrNotFound.
 func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
 	st, err := scanSite(s.db.QueryRowContext(ctx, `SELECT `+siteColumns+` FROM sites WHERE name = ?`, name))

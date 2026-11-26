@@ -1087,6 +1087,145 @@
         },
         "type": "object"
       },
+      "Clone": {
+        "additionalProperties": false,
+        "properties": {
+          "databases": {
+            "items": {
+              "$ref": "#/components/schemas/CloneDatabase"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "error": {
+            "type": "string"
+          },
+          "files": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CloneHome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "filesDone": {
+            "type": "boolean"
+          },
+          "finishedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "refresh": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "staging": {
+            "type": "boolean"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "databases",
+          "filesDone",
+          "refresh",
+          "source",
+          "staging",
+          "startedAt",
+          "state"
+        ],
+        "type": "object"
+      },
+      "CloneDatabase": {
+        "additionalProperties": false,
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "done",
+          "source",
+          "target"
+        ],
+        "type": "object"
+      },
+      "CloneHome": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "type": "integer"
+          },
+          "dirs": {
+            "type": "integer"
+          },
+          "files": {
+            "type": "integer"
+          },
+          "links": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "skippedPaths": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionsSkip"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "bytes",
+          "dirs",
+          "files",
+          "links",
+          "skipped",
+          "skippedPaths"
+        ],
+        "type": "object"
+      },
+      "CloneInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pool": {
+            "type": "string"
+          },
+          "staging": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "CloudPanelActivated": {
         "additionalProperties": false,
         "properties": {
@@ -17040,6 +17179,173 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "backups:restore"
+      }
+    },
+    "/api/v1/sites/{name}/clone": {
+      "get": {
+        "operationId": "getSiteClone",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Clone"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "Where the site was copied from and how far the copy is",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
+      },
+      "post": {
+        "operationId": "cloneSite",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloneInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Create a new site as a copy of this one (files, local databases, settings)",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:clone"
+      }
+    },
+    "/api/v1/sites/{name}/clone/refresh": {
+      "post": {
+        "operationId": "refreshSiteClone",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Clone"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Copy the source's files and databases into this staging clone again",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.clone:refresh"
       }
     },
     "/api/v1/sites/{name}/cron": {
