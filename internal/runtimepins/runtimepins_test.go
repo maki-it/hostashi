@@ -150,7 +150,7 @@ func TestLoadRefusesAWritableFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := os.Chmod(name, 0o666); err != nil { //nolint:gosec // the point of the test
+	if err := os.Chmod(name, 0o666); err != nil {
 		t.Fatal(err)
 	}
 
@@ -165,6 +165,7 @@ func TestLoad(t *testing.T) {
 	}
 
 	saved := agentapi.NodeReleases
+
 	t.Cleanup(func() { agentapi.NodeReleases = saved })
 
 	agentapi.NodeReleases = builtinNode()
@@ -172,7 +173,7 @@ func TestLoad(t *testing.T) {
 	name := filepath.Join(t.TempDir(), "runtimes.json")
 	data := `{"schema":1,"node":[{"major":"24","version":"24.22.4","end":"2028-04-30","sha256":{"x64":"` + sumB + `","arm64":"` + sumB + `"}}]}`
 
-	if err := os.WriteFile(name, []byte(data), 0o644); err != nil { //nolint:gosec // world-readable like the real file
+	if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

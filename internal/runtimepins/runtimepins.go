@@ -93,13 +93,13 @@ var (
 // agentapi.PythonReleases. A missing file is no error: the built-in pins
 // stay. Call it once at start, before anything reads the pins.
 func Load(path string) (Result, error) {
-	f, err := os.Open(path) //nolint:gosec // a fixed path, or one from a test
+	f, err := os.Open(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return Result{}, nil
 	} else if err != nil {
 		return Result{}, err
 	}
-	defer f.Close() //nolint:errcheck // read only
+	defer f.Close()
 
 	fi, err := f.Stat()
 	if err != nil {
@@ -156,6 +156,7 @@ func Apply(data []byte, node []agentapi.NodeRelease, python []agentapi.PythonRel
 	for _, p := range f.Node {
 		i := slices.IndexFunc(outNode, func(r agentapi.NodeRelease) bool { return r.Major == p.Major })
 		cur := agentapi.NodeRelease{}
+
 		if i >= 0 {
 			cur = outNode[i]
 		}
@@ -180,6 +181,7 @@ func Apply(data []byte, node []agentapi.NodeRelease, python []agentapi.PythonRel
 	for _, p := range f.Python {
 		i := slices.IndexFunc(outPython, func(r agentapi.PythonRelease) bool { return r.Line == p.Line })
 		cur := agentapi.PythonRelease{}
+
 		if i >= 0 {
 			cur = outPython[i]
 		}
