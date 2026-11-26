@@ -72,7 +72,9 @@ export type Snapshot = { id: string; time: string; kind: string; database?: stri
 
 export type Restore = {
   id: string;
+  /** The site restored into; source is the deleted site the snapshot is of. */
   site: string;
+  source?: string;
   snapshot: string;
   kind: string;
   database?: string;
@@ -90,6 +92,9 @@ export type ImportJob = { id: string; database: string; state: "running" | "done
 
 export type Site = { name: string; state: string };
 
+/** A deleted site with snapshots, or (earlier) the snapshots of an earlier site whose name a newer site took (ADR-0074). */
+export type DeletedSite = { name: string; earlier: boolean; snapshots: number; oldest: string; newest: string };
+
 export const getBackups = () => request<BackupInfo>("GET", "/backups");
 export const saveSettings = (s: Settings) => request<BackupInfo>("PUT", "/backups/settings", s);
 export const scanHostKey = () => request<{ key: string; fingerprint: string }>("POST", "/backups/hostkey/scan");
@@ -100,6 +105,11 @@ export const siteSnapshots = async (site: string) =>
   (await request<{ snapshots: Snapshot[] }>("GET", "/sites/" + encodeURIComponent(site) + "/backups")).snapshots;
 export const startRestore = (site: string, snapshot: string) =>
   request<Restore>("POST", "/sites/" + encodeURIComponent(site) + "/backups/" + snapshot + "/restore");
+export const listDeleted = async () => (await request<{ sites: DeletedSite[] }>("GET", "/backups/deleted")).sites;
+export const deletedSnapshots = async (site: string) =>
+  (await request<{ snapshots: Snapshot[] }>("GET", "/backups/deleted/" + encodeURIComponent(site))).snapshots;
+export const startDeletedRestore = (site: string, snapshot: string, target: string) =>
+  request<Restore>("POST", "/backups/deleted/" + encodeURIComponent(site) + "/" + snapshot + "/restore", { target });
 export const getRestore = (id: string) => request<Restore>("GET", "/backups/restores/" + id);
 export const createDatabase = (site: string, name: string, server = "") =>
   request<unknown>("POST", "/sites/" + encodeURIComponent(site) + "/databases", { name, ...(server ? { server } : {}) });
@@ -125,6 +135,10 @@ export function backupMessage(err: unknown): string {
         return "A restored dump only goes into a new database.";
       case "forbidden":
         return "You are not allowed to do this.";
+      case "target_not_found":
+        return "The site to restore into does not exist.";
+      case "source_exists":
+        return "A site of this name exists. Restore its earlier snapshots into that site.";
       default:
         return err.message ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + "." : "Something went wrong (" + err.code + ").";
     }
