@@ -115,9 +115,26 @@ func restore(ctx context.Context, cfg RunConfig, r Restore) (extracted, error) {
 		return extracted{}, fmt.Errorf("site %s no longer exists", r.Site)
 	}
 
-	// The snapshot must still be this host's, of this site and kind; its
-	// single path is what the tar names start with.
-	tags := []string{"site:" + r.Site, "kind:" + r.Kind}
+	// A snapshot of another site goes here only while that site does not
+	// exist (ADR-0074); the agent checked it, and so does the run.
+	from := r.Site
+	if r.Source != "" && r.Source != r.Site {
+		if err := agentapi.ValidateSiteUser(r.Source); err != nil {
+			return extracted{}, fmt.Errorf("%w: source: %w", ErrInvalid, err)
+		}
+
+		from = r.Source
+
+		for i := range all {
+			if all[i].Name == from {
+				return extracted{}, fmt.Errorf("%w: %s", ErrSourceExists, from)
+			}
+		}
+	}
+
+	// The snapshot must still be this host's, of the snapshot's site and
+	// kind; its single path is what the tar names start with.
+	tags := []string{"site:" + from, "kind:" + r.Kind}
 	if r.Kind == KindDB {
 		tags = append(tags, "db:"+r.Database)
 	}

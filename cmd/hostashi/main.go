@@ -113,6 +113,9 @@ commands:
   backup restore SITE SNAPSHOT | backup restore-status ID
             restore a snapshot into a new directory restore-<time> in the
             site's home, through the panel's API (needs hostashi login)
+  backup deleted [SITE] | backup restore-deleted SITE SNAPSHOT TARGET
+            list deleted sites that still have snapshots, or the snapshots
+            of one; restore one into the existing site TARGET (admins)
   backup restore-run ID
             one restore (root; started by hostashi-restore@ID.service)
   backup key show

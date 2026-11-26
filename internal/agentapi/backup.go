@@ -352,6 +352,27 @@ type BackupSnapshot struct {
 	Files int64 `json:"files,omitempty"`
 }
 
+// BackupSitesRequest asks for every site name that has snapshots.
+type BackupSitesRequest struct{}
+
+// Validate accepts every request.
+func (BackupSitesRequest) Validate() error { return nil }
+
+// BackupSiteSummary is one site name in the snapshot list of the last run.
+// Exists reports whether the agent still has a site of that name.
+type BackupSiteSummary struct {
+	Site      string    `json:"site"`
+	Exists    bool      `json:"exists"`
+	Snapshots int       `json:"snapshots"`
+	Oldest    time.Time `json:"oldest"`
+	Newest    time.Time `json:"newest"`
+}
+
+// BackupSitesResponse lists site names with snapshots, sorted by name.
+type BackupSitesResponse struct {
+	Sites []BackupSiteSummary `json:"sites"`
+}
+
 // BackupSnapshotsResponse lists snapshots, newest first.
 type BackupSnapshotsResponse struct {
 	Snapshots []BackupSnapshot `json:"snapshots"`
@@ -367,6 +388,9 @@ var (
 	BackupRun       = agentrpc.Op[BackupRunRequest, BackupRunResponse]{Name: "backup.run"}
 	BackupStatusGet = agentrpc.Op[BackupStatusRequest, BackupStatus]{Name: "backup.status"}
 	BackupSnapshots = agentrpc.Op[BackupSnapshotsRequest, BackupSnapshotsResponse]{Name: "backup.snapshots"}
+	// BackupSites lists the site names in the snapshot list, also of
+	// deleted sites (ADR-0074).
+	BackupSites = agentrpc.Op[BackupSitesRequest, BackupSitesResponse]{Name: "backup.sites"}
 )
 
 var (
@@ -378,15 +402,26 @@ var (
 // database dump) into a new directory restore-<time> in the site's home,
 // owned by the site user. Nothing live is overwritten (ADR-0008,
 // recommendation 7).
+//
+// Target, if set and not Site, restores into another site instead. The
+// agent allows that only for a snapshot whose site no longer exists
+// (ADR-0074).
 type BackupRestoreRequest struct {
 	Site     string `json:"site"`
 	Snapshot string `json:"snapshot"` // the full 64-digit id
+	Target   string `json:"target,omitempty"`
 }
 
-// Validate checks the site name and the id's form.
+// Validate checks the site names and the id's form.
 func (r BackupRestoreRequest) Validate() error {
 	if err := ValidateSiteUser(r.Site); err != nil {
 		return err
+	}
+
+	if r.Target != "" {
+		if err := ValidateSiteUser(r.Target); err != nil {
+			return fmt.Errorf("target: %w", err)
+		}
 	}
 
 	if !snapshotIDRe.MatchString(r.Snapshot) {
@@ -406,8 +441,11 @@ const (
 
 // BackupRestore is one restore and how it went.
 type BackupRestore struct {
-	ID       string `json:"id"`
+	ID string `json:"id"`
+	// Site is the site restored into; Source, when set, is the deleted
+	// site the snapshot was taken of (ADR-0074).
 	Site     string `json:"site"`
+	Source   string `json:"source,omitempty"`
 	Snapshot string `json:"snapshot"`
 	Kind     string `json:"kind"` // files or db
 	Database string `json:"database,omitempty"`

@@ -82,12 +82,22 @@ func registerBackup(s *agentrpc.Server, b *backup.Agent) {
 		return agentapi.BackupSnapshotsResponse{Snapshots: snaps}, mapBackupError(err)
 	})
 
+	agentrpc.Handle(s, agentapi.BackupSites, func(_ context.Context, _ agentrpc.Caller, _ agentapi.BackupSitesRequest) (agentapi.BackupSitesResponse, error) {
+		if b == nil {
+			return agentapi.BackupSitesResponse{}, errNoBackup
+		}
+
+		all, err := b.SnapshotSites()
+
+		return agentapi.BackupSitesResponse{Sites: all}, mapBackupError(err)
+	})
+
 	agentrpc.Handle(s, agentapi.BackupRestoreStart, func(ctx context.Context, _ agentrpc.Caller, req agentapi.BackupRestoreRequest) (agentapi.BackupRestore, error) {
 		if b == nil {
 			return agentapi.BackupRestore{}, errNoBackup
 		}
 
-		r, err := b.StartRestore(ctx, req.Site, req.Snapshot)
+		r, err := b.StartRestoreInto(ctx, req.Site, req.Snapshot, req.Target)
 
 		return r, mapBackupError(err)
 	})
@@ -120,6 +130,10 @@ func mapBackupError(err error) error {
 		return &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "a restore is in progress"}
 	case errors.Is(err, backup.ErrSnapshotNotFound):
 		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "no such snapshot of this site in the last run's list"}
+	case errors.Is(err, backup.ErrSourceExists):
+		return &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "the snapshot's site still exists; restore it into that site"}
+	case errors.Is(err, backup.ErrTargetNotFound):
+		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "no such site to restore into"}
 	case errors.Is(err, backup.ErrNoSpace):
 		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: err.Error()}
 	case errors.Is(err, backup.ErrRestoreNotFound):

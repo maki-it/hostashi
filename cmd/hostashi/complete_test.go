@@ -33,7 +33,7 @@ func TestComplete(t *testing.T) {
 		{name: "top level hides service commands", words: []string{""}, has: []string{"login", "api", "site", "completion"}, hasNot: []string{"serve", "agent", "files-helper", "dbjob", "node-install", "python-install", "git-sync", "__complete"}},
 		{name: "subcommands", words: []string{"db", ""}, want: []string{"list", "create", "delete", "user", "import", "export"}},
 		{name: "nested subcommands", words: []string{"db", "user", "p"}, want: []string{"password"}},
-		{name: "hidden subcommands", words: []string{"backup", "r"}, want: []string{"restore", "restore-status"}},
+		{name: "hidden subcommands", words: []string{"backup", "r"}, want: []string{"restore", "restore-status", "restore-deleted"}},
 		{name: "nothing after a leaf", words: []string{"site", "list", ""}, wantNil: true},
 		{name: "no subcommand after an argument", words: []string{"site", "limits", ""}, wantNil: true},
 		{name: "limit keys after the site", words: []string{"site", "limits", "blog", "c"}, want: []string{"cpu-priority=", "cpu-quota="}},
