@@ -33,7 +33,7 @@ The build runs as the site's Linux user, inside the site's limits, with the site
 
 ### Access token
 
-For a private repository over HTTPS, create a read-only token at the Git host (GitHub: a fine-grained token with read access to the repository's contents; GitLab: a deploy token or a project access token with `read_repository`). GitLab needs the user name of the token too, for example `oauth2`. The token is stored encrypted and never shown again.
+For a private repository over HTTPS, create a read-only token at the Git host (GitHub: a fine-grained token with read access to the repository's contents; GitLab: a deploy token or a project access token with `read_repository`). GitLab needs the user name of the token too, for example `oauth2`. The token is stored encrypted and never shown again. The build commands run in the same run and can read the token while it lasts, so can any code they start from the repository or its dependencies: never use a personal token with access to more than this repository.
 
 ### Deploy key
 

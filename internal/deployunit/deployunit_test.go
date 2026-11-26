@@ -302,10 +302,33 @@ func TestStatus(t *testing.T) {
 		t.Fatalf("bad commit %+v", st)
 	}
 
+	// The finished run's unit was stopped once, so systemd released its
+	// credentials; its outcome is kept for later calls.
+	if n := strings.Count(strings.Join(e.ctl.stopped, " "), "hostashi-deploy@blog.service"); n != 2 {
+		t.Fatalf("unit stopped %d times (start and finish), want 2: %v", n, e.ctl.stopped)
+	}
+
+	e.ctl.props = map[string]string{"ActiveState": "inactive"}
+
+	if busy, err := e.m.running(ctx, "blog"); err != nil || busy {
+		t.Fatalf("finished run counts as running: %v %v", busy, err)
+	}
+
+	// A run that timed out.
+	if _, err := e.m.Start(ctx, startReq(7)); err != nil {
+		t.Fatal(err)
+	}
+
 	e.ctl.props = map[string]string{"ActiveState": "failed", "Result": "timeout"}
 
-	if st := status(5); st.State != agentapi.DeployFailed || !strings.Contains(st.Error, "time limit") {
+	if st := status(7); st.State != agentapi.DeployFailed || !strings.Contains(st.Error, "time limit") {
 		t.Fatalf("timeout %+v", st)
+	}
+
+	e.ctl.props = map[string]string{"ActiveState": "inactive"}
+
+	if st := status(7); st.State != agentapi.DeployFailed || !strings.Contains(st.Error, "time limit") {
+		t.Fatalf("timeout after the stop %+v", st)
 	}
 
 	// A queued start that never ran.

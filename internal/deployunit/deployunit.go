@@ -161,11 +161,19 @@ func (m *Manager) LogFile(site string, id int64) string {
 	return filepath.Join(m.logDir(), site, "deploy-"+strconv.FormatInt(id, 10)+".log")
 }
 
-// run is the stored last run of a site: its deploy id and when it was
-// started.
+// run is the stored last run of a site: its deploy id, when it was
+// started and, once it ended, how. The outcome is kept here because the
+// agent stops the finished unit: systemd releases a unit's credentials
+// only when it is stopped, and with RemainAfterExit= a finished run would
+// otherwise keep the token or key in place until the next deploy.
 type run struct {
 	ID      int64     `json:"id"`
 	Started time.Time `json:"started"`
+	// Outcome is the phase the run ended in (DeploySucceeded,
+	// DeployFailed or DeployUnknown), "" while it runs; Result is the
+	// unit's Result property then.
+	Outcome string `json:"outcome,omitempty"`
+	Result  string `json:"result,omitempty"`
 }
 
 func (m *Manager) load() (map[string]run, error) {
@@ -361,8 +369,7 @@ func (m *Manager) Start(ctx context.Context, req agentapi.DeployStartRequest) (a
 		return agentapi.DeployStatus{}, err
 	}
 
-	r, ok := st[req.Site]
-	if m.phase(props["ActiveState"], r, ok) == agentapi.DeployRunning {
+	if r, ok := st[req.Site]; m.busy(props["ActiveState"], r, ok) {
 		return agentapi.DeployStatus{}, ErrBusy
 	}
 
@@ -562,12 +569,20 @@ func (m *Manager) Status(ctx context.Context, req agentapi.DeployStatusRequest) 
 		return out, nil
 	}
 
-	props, err := m.Ctl.Show(ctx, Unit(req.Site), "ActiveState", "Result")
-	if err != nil {
-		return out, err
+	phase, result := r.Outcome, r.Result
+	if phase == "" {
+		props, err := m.Ctl.Show(ctx, Unit(req.Site), "ActiveState", "Result")
+		if err != nil {
+			return out, err
+		}
+
+		phase, result = m.phase(props["ActiveState"], r, true), props["Result"]
+		if phase != agentapi.DeployRunning {
+			m.finish(ctx, st, req.Site, r, phase, result)
+		}
 	}
 
-	switch m.phase(props["ActiveState"], r, true) {
+	switch phase {
 	case agentapi.DeployRunning:
 		out.State = agentapi.DeployRunning
 
@@ -575,7 +590,7 @@ func (m *Manager) Status(ctx context.Context, req agentapi.DeployStatusRequest) 
 	case agentapi.DeploySucceeded:
 		out.State = agentapi.DeploySucceeded
 	case agentapi.DeployFailed:
-		out.State, out.Error = agentapi.DeployFailed, failReason(props["Result"])
+		out.State, out.Error = agentapi.DeployFailed, failReason(result)
 	default:
 		out.State, out.Error = agentapi.DeployFailed, "the deploy did not start"
 	}
@@ -595,6 +610,25 @@ func (m *Manager) Status(ctx context.Context, req agentapi.DeployStatusRequest) 
 	}
 
 	return out, nil
+}
+
+// finish records how the run r of site ended and stops its unit, so
+// systemd releases the run's credentials. m.mu is held. Errors are only
+// logged: the outcome is reported either way, and the next start stops
+// the unit too.
+func (m *Manager) finish(ctx context.Context, st map[string]run, site string, r run, phase, result string) {
+	r.Outcome, r.Result = phase, result
+	st[site] = r
+
+	if err := m.save(st); err != nil {
+		m.log().WarnContext(ctx, "record deploy outcome", "site", site, "id", r.ID, "err", err)
+
+		return
+	}
+
+	if err := m.Ctl.Stop(ctx, Unit(site)); err != nil {
+		m.log().WarnContext(ctx, "stop finished deploy", "site", site, "id", r.ID, "err", err)
+	}
 }
 
 func failReason(result string) string {
@@ -798,7 +832,14 @@ func (m *Manager) running(ctx context.Context, site string) (bool, error) {
 
 	r, ok := st[site]
 
-	return m.phase(props["ActiveState"], r, ok) == agentapi.DeployRunning, nil
+	return m.busy(props["ActiveState"], r, ok), nil
+}
+
+// busy reports whether the stored run r is still going, given the unit's
+// ActiveState: a run with an outcome has ended, even while its stopped
+// unit looks like a start that is still queued.
+func (m *Manager) busy(state string, r run, ok bool) bool {
+	return (!ok || r.Outcome == "") && m.phase(state, r, ok) == agentapi.DeployRunning
 }
 
 // ensureDir makes dir the agent's directory with the group gid, -1 to
