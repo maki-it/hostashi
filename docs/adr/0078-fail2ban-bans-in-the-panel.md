@@ -67,5 +67,7 @@ Constraints:
 
 ## Open questions for Kim
 
-1. Is the Firewall page the right place, or should the card live under Health? Recommendation: Firewall, because Health only shows states (rule from PR 492) and this card has an action.
-2. Unblock in all jails at once (recommended) or per jail?
+1. ~~Firewall page or Health?~~ Decided (Kim, 2026-11-26): the Firewall page.
+2. ~~Unblock in all jails at once or per jail?~~ Decided (Kim, 2026-11-26): in all jails at once.
+
+In v1 (Kim, 2026-11-26).
