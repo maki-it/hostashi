@@ -41,10 +41,10 @@ Upload your files with SFTP ([SSH and SFTP](SSH-and-SFTP.md)) or the [file manag
 
 | Tab | What you do there |
 |-----|-------------------|
-| Overview | state, display name, availability (enable, disable), delete |
+| Overview | state, display name, [copy and staging](Staging-and-copies.md), availability (enable, disable), delete |
 | Domains & HTTPS | domains, certificate, HSTS, [security headers](Security-headers.md), [real visitor address](Real-visitor-address.md) |
 | Access | [IP rules and password protection](Access-protection.md) |
-| Web | web root folder, single-page app fallback, asset caching; the app, proxy or redirect settings; [changing the type](Site-types.md#change-the-type) |
+| Web | web root folder, single-page app fallback, asset caching; the app, proxy or redirect settings; search engines (noindex); [changing the type](Site-types.md#change-the-type) |
 | Files | the [file manager](File-manager.md) |
 | Git | [deploys from a Git repository](Git-deploy.md), rollbacks and the webhook |
 | PHP | PHP version and [settings](PHP-settings.md) |
