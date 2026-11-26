@@ -147,6 +147,9 @@ var (
 	ErrSiteType = store.ErrSiteType
 	// ErrNoTLS means the panel has no ACME client configured.
 	ErrNoTLS = errors.New("hosting: certificates are not available")
+	// ErrProxyPrivate: the proxy target lies in a private network, which
+	// only admins and managers may set.
+	ErrProxyPrivate = errors.New("hosting: a proxy target in a private network needs an admin or manager")
 )
 
 // Service manages sites. Changes are serialized: each one ends with the

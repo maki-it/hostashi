@@ -12,6 +12,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/openapi"
 	"github.com/maki-it/hostashi/internal/store"
@@ -393,6 +394,8 @@ func siteFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "app_env_unavailable", "environment variables are not available on this panel")
 	case errors.Is(err, hosting.ErrSiteType):
 		writeError(w, http.StatusConflict, "wrong_site_type", "not possible for this type of site")
+	case errors.Is(err, hosting.ErrProxyPrivate):
+		writeError(w, http.StatusForbidden, "private_target", "a target in a private network can only be set by an admin or manager")
 	case errors.As(err, &ae):
 		log.Warn(what+": agent refused", "code", ae.Code, "message", ae.Message)
 
@@ -592,7 +595,9 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
-		s, err := svc.SetProxy(ctx, p.User.ID, r.PathValue("name"), store.SiteProxy{Target: in.Target, TargetHost: in.TargetHost, Insecure: in.Insecure})
+		private := authz.Allowed(authz.Role(p.User.Role), "sites.proxy.private:write")
+
+		s, err := svc.SetProxy(ctx, p.User.ID, r.PathValue("name"), store.SiteProxy{Target: in.Target, TargetHost: in.TargetHost, Insecure: in.Insecure}, private)
 		if err != nil {
 			siteFail(log, w, err, "set proxy")
 
