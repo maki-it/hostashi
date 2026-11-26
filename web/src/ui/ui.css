@@ -759,10 +759,34 @@ a.ui-btn {
 .ui-stat-link:hover {
   text-decoration: underline;
 }
-/* Login: the brand above the card, full-width buttons, an "or" divider */
+/* Login: the brand centred above the card, full-width buttons, an "or"
+   divider. The brand drops the sidebar's offsets and fixed height, so it
+   sits on the card's centre line. */
 .ui-auth-brand {
-  margin-bottom: var(--space-5);
-  padding: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: 0;
+  margin: 0;
+  padding: var(--space-4) 0 var(--space-2);
+  text-align: center;
+}
+.ui-auth-brand .app-mark {
+  width: 44px;
+  height: 44px;
+}
+.ui-auth-brand .app-mark svg {
+  width: 26px;
+  height: 26px;
+}
+.ui-auth-brand .app-brand-name {
+  align-items: center;
+  gap: 2px;
+  font-size: 22px;
+}
+.ui-auth-brand .app-host {
+  max-width: 100%;
+  color: var(--muted);
 }
 .ui-auth-actions {
   display: grid;
