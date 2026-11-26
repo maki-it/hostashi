@@ -466,6 +466,25 @@ describe("Shell", () => {
     window.location.hash = "";
   });
 
+  it("opens the search from the top bar and with Ctrl K", async () => {
+    window.location.hash = "#/users";
+    mockFetch({
+      ...session,
+      "GET /api/v1/users": { body: { users: [] } },
+      "GET /api/v1/invitations": { body: { invitations: [] } },
+      "GET /api/v1/sites": { body: { sites: [] } },
+    });
+    render(<App />);
+    const top = await screen.findByRole("banner");
+    await userEvent.click(within(top).getByRole("button", { name: /Search/ }));
+    expect(screen.getByRole("dialog", { name: "Search" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    expect(screen.getByRole("dialog", { name: "Search" })).toBeInTheDocument();
+    window.location.hash = "";
+  });
+
   it("opens a site address on its own page with the site in the breadcrumbs", async () => {
     window.location.hash = "#/sites/shop/php";
     mockFetch({

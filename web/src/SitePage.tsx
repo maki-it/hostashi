@@ -7,7 +7,6 @@ import type { Clone } from "./clones";
 import { siteCertBase } from "./certs";
 import { CronSettings } from "./Cron";
 import { FileManager } from "./Files";
-import { canDeploy } from "./git";
 import { GitSettings } from "./Git";
 import { LimitSettings } from "./Limits";
 import { SiteMalware } from "./Malware";
@@ -52,7 +51,7 @@ import { HardeningCard } from "./Hardening";
 import { SSHSettings } from "./SSH";
 import { PermissionsResetCard } from "./PermissionsReset";
 import { Badge, Button, Card, Field, Notice } from "./ui";
-import { SiteNav, visibleGroups, type SiteGroup } from "./SiteNav";
+import { groupsForSite, SiteNav, type SiteGroup } from "./SiteNav";
 import { useUnsaved } from "./Unsaved";
 import { SiteUsageCard } from "./Usage";
 import { WWWCard } from "./WWW";
@@ -89,27 +88,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
   const status = siteStatus(site);
   const ready = site.state === "active";
   const staff = role === "admin" || role === "manager";
-  // The PHP and Cache tabs only for sites with PHP; the type is changed on
-  // the Web tab.
-  // A redirect or reverse proxy that kept its account after a type change
-  // keeps these tabs.
-  // A site without an account (redirect, reverse proxy) has no files,
-  // cron, SSH or limits, and redirect and reverse proxy no snippets
-  // (ADR-0054). A redirect answers before nginx checks access, so it has no
-  // access tab (ADR-0066).
-  const noAccount = ["files", "malware", "php", "cache", "cron", "ssh", "limits"];
-  const groups = visibleGroups(
-    (t) =>
-      // Both caches serve PHP: the object cache for its apps, the page
-      // cache for the pages it renders (ADR-0045, ADR-0046).
-      (!["php", "cache"].includes(t) || site.php !== "") &&
-      (t !== "git" || canDeploy(site)) &&
-      (hasAccount(site) || !noAccount.includes(t)) &&
-      (!["redirect", "proxy"].includes(siteType(site)) || t !== "nginx") &&
-      (siteType(site) !== "redirect" || t !== "access") &&
-      // Profiles and hardening are for static and PHP sites (ADR-0069).
-      (t !== "hardening" || ["static", "php"].includes(siteType(site))),
-  );
+  const groups = groupsForSite(site);
   const active: SiteTab = ready && groups.some((g) => g.tabs.some((t) => t.id === tab)) ? tab : "overview";
 
   const panel = (

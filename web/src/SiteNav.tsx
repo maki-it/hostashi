@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { canDeploy } from "./git";
 import type { SiteTab } from "./routes";
+import { hasAccount, siteType, type Site } from "./sites";
 import { tabPanelProps, Tabs } from "./ui";
 import type { ReactNode } from "react";
 
@@ -64,6 +66,31 @@ export const siteGroups: readonly SiteGroup[] = [
 /** visibleGroups keeps the tabs that pass shown, and the groups left with one. */
 export function visibleGroups(shown: (tab: SiteTab) => boolean): SiteGroup[] {
   return siteGroups.map((g) => ({ ...g, tabs: g.tabs.filter((t) => shown(t.id)) })).filter((g) => g.tabs.length > 0);
+}
+
+// A site without an account (redirect, reverse proxy) has no files, cron,
+// SSH or limits (ADR-0054).
+const noAccount: readonly SiteTab[] = ["files", "malware", "php", "cache", "cron", "ssh", "limits"];
+
+/**
+ * groupsForSite returns the tabs a site has. The PHP and Cache tabs only for
+ * sites with PHP: both caches serve PHP (ADR-0045, ADR-0046). A redirect or
+ * reverse proxy that kept its account after a type change keeps the account
+ * tabs. Redirect and reverse proxy have no nginx snippets, and a redirect
+ * answers before nginx checks access, so it has no access tab (ADR-0066).
+ * Profiles and hardening are for static and PHP sites (ADR-0069).
+ */
+export function groupsForSite(site: Site): SiteGroup[] {
+  const type = siteType(site);
+  return visibleGroups(
+    (t) =>
+      (!["php", "cache"].includes(t) || site.php !== "") &&
+      (t !== "git" || canDeploy(site)) &&
+      (hasAccount(site) || !noAccount.includes(t)) &&
+      (!["redirect", "proxy"].includes(type) || t !== "nginx") &&
+      (type !== "redirect" || t !== "access") &&
+      (t !== "hardening" || ["static", "php"].includes(type)),
+  );
 }
 
 /** groupOf returns the group that holds a tab. */

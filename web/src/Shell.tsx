@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { CaretRight, List, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
+import { CaretRight, List, MagnifyingGlass, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
 import { logout, type User } from "./auth";
 import { navFor, navItem } from "./nav";
 import { siteGroups } from "./SiteNav";
 import { countLabel, healthCount, servicesCount, type NavCount } from "./navcounts";
 import { runDoctor } from "./doctor";
+import { Search, shortcut } from "./Search";
 import { listServices } from "./services";
 import { formatHash, type Route } from "./routes";
 import { isDark, saveColorScheme, type ColorScheme } from "./scheme";
@@ -171,6 +172,19 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     }
   }
 
+  // Ctrl K (⌘ K on a Mac) opens the search from anywhere.
+  const [searching, setSearching] = useState(false);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearching((v) => !v);
+      }
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, []);
+
   // navScrolled draws a line under the brand once the nav scrolls under it.
   const [navScrolled, setNavScrolled] = useState(false);
 
@@ -276,6 +290,13 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
             </ol>
           </nav>
           <span className="app-top-actions">
+            <button type="button" className="app-search-btn" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" onClick={() => setSearching(true)}>
+              <MagnifyingGlass size={16} aria-hidden="true" />
+              <span className="app-search-text">Search</span>
+              <kbd className="app-kbd" aria-hidden="true">
+                {shortcut}
+              </kbd>
+            </button>
             <IconButton
               label={dark ? "Use light colours" : "Use dark colours"}
               icon={dark ? <Sun size={20} /> : <Moon size={20} />}
@@ -286,6 +307,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
         </header>
         <div className="app-content">{children}</div>
       </div>
+      {searching && <Search role={user.role} onClose={() => setSearching(false)} />}
     </div>
   );
 }
