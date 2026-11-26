@@ -162,15 +162,16 @@ func source(path string) (aptSource, error) {
 	return s, err
 }
 
-// auto reports whether the unattended-upgrades file lets the Hostashi
-// repository in (packaging/install.sh, uu_origins).
+// auto reports whether the unattended-upgrades file lets the suite stable
+// of the Hostashi repository in (packaging/install.sh, uu_origins). The
+// suite runtimes (ADR-0077) does not count: it brings no Hostashi code.
 func auto(path string) (bool, error) {
 	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
 	}
 
-	return strings.Contains(string(b), `"origin=Hostashi,`), err
+	return strings.Contains(string(b), `"origin=Hostashi,codename=stable"`), err
 }
 
 // listName is the file name apt gives a repository's package list

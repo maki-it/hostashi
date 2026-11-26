@@ -7956,6 +7956,16 @@
           "transientHostname": {
             "type": "string"
           },
+          "updates": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SystemUpdates"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "uptimeSeconds": {
             "type": "number"
           }
@@ -8017,6 +8027,32 @@
         },
         "required": [
           "zones"
+        ],
+        "type": "object"
+      },
+      "SystemUpdates": {
+        "additionalProperties": false,
+        "properties": {
+          "auto": {
+            "type": "boolean"
+          },
+          "available": {
+            "type": "string"
+          },
+          "installed": {
+            "type": "string"
+          },
+          "listedAt": {
+            "type": "string"
+          },
+          "update": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "auto",
+          "installed",
+          "update"
         ],
         "type": "object"
       },

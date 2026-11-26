@@ -14,6 +14,19 @@ export type SystemInfo = {
   rebootRequired: boolean;
   rebootPackages?: string[];
   cloudInit: boolean;
+  /** The hostashi package (ADR-0050); absent when the server was not set up from it. */
+  updates?: SystemUpdates;
+};
+
+export type SystemUpdates = {
+  installed: string;
+  /** The newest version apt saw in the Hostashi repository; absent while apt has no list. */
+  available?: string;
+  update: boolean;
+  /** unattended-upgrades installs new versions by itself (--auto-update). */
+  auto: boolean;
+  /** When apt last fetched the list, RFC 3339. */
+  listedAt?: string;
 };
 
 export const getSystem = () => request<SystemInfo>("GET", "/system");

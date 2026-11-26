@@ -89,6 +89,33 @@ describe("system helpers", () => {
 });
 
 describe("System", () => {
+  it("always says whether Hostashi updates itself", async () => {
+    const updates = { installed: "0.12.0", available: "0.13.0", update: true, auto: false, listedAt: "2026-11-26T06:00:00Z" };
+    mockFetch({ "GET /api/v1/system": { body: { ...info, updates } }, "GET /api/v1/system/timezones": { body: zones } });
+    const { unmount } = render(<System />);
+
+    let card = await screen.findByRole("region", { name: "Updates" });
+    expect(card).toHaveTextContent("Update available");
+    expect(within(card).getByRole("link", { name: "v0.13.0" })).toHaveAttribute("href", releaseUrl("0.13.0"));
+    expect(within(card).getByText("Automatic updates").nextElementSibling).toHaveTextContent("Off");
+    expect(card).toHaveTextContent("--auto-update");
+    unmount();
+
+    const current = { ...updates, installed: "0.13.0", update: false, auto: true };
+    mockFetch({ "GET /api/v1/system": { body: { ...info, updates: current } }, "GET /api/v1/system/timezones": { body: zones } });
+    render(<System />);
+    card = await screen.findByRole("region", { name: "Updates" });
+    expect(card).toHaveTextContent("Up to date");
+    expect(within(card).getByText("Automatic updates").nextElementSibling).toHaveTextContent("On");
+  });
+
+  it("has no updates card without the package", async () => {
+    mockFetch({ "GET /api/v1/system": { body: info }, "GET /api/v1/system/timezones": { body: zones } });
+    render(<System />);
+    await screen.findByRole("region", { name: "Server" });
+    expect(screen.queryByRole("region", { name: "Updates" })).toBeNull();
+  });
+
   it("shows the server's settings and the pending reboot", async () => {
     mockFetch({ "GET /api/v1/system": { body: info }, "GET /api/v1/system/timezones": { body: zones } });
     render(<System />);

@@ -22,6 +22,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/sysconf"
+	"github.com/maki-it/hostashi/internal/updates"
 )
 
 // SystemCtl reaches timedated, hostnamed and logind (sysconf.Client in
@@ -172,7 +173,34 @@ func (o *systemOps) info(ctx context.Context) (agentapi.SystemInfo, error) {
 		info.CloudInit = true
 	}
 
+	info.Updates = o.updates(ctx)
+
 	return info, nil
+}
+
+// updates reads the hostashi package's update state; nil when it is not
+// installed or the files cannot be read (the doctor reports that).
+func (o *systemOps) updates(ctx context.Context) *agentapi.SystemUpdates {
+	st, err := updates.Read(updates.Paths{
+		DpkgStatus: o.path("/var/lib/dpkg/status"),
+		Sources:    o.path("/etc/apt/sources.list.d/hostashi.sources"),
+		Lists:      o.path("/var/lib/apt/lists"),
+		Unattended: o.path("/etc/apt/apt.conf.d/52hostashi-unattended-upgrades"),
+	})
+	if err != nil {
+		o.log.WarnContext(ctx, "system: read the update state", "err", err)
+	}
+
+	if st.Installed == "" {
+		return nil
+	}
+
+	u := &agentapi.SystemUpdates{Installed: st.Installed, Available: st.Available, Update: st.Update, Auto: st.Auto}
+	if !st.ListedAt.IsZero() {
+		u.ListedAt = st.ListedAt.UTC().Format(time.RFC3339)
+	}
+
+	return u
 }
 
 func (o *systemOps) uptime() float64 {

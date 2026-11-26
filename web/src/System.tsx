@@ -14,11 +14,14 @@ import {
   hostnameError,
   listTimezones,
   rebootServer,
+  releaseUrl,
   setHostname,
   setTimezone,
   uptime,
+  versionLabel,
   waitForPanel,
   type SystemInfo,
+  type SystemUpdates,
 } from "./system";
 import { Badge, Button, Card, Field, Notice, PageHead } from "./ui";
 
@@ -97,6 +100,7 @@ export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) 
             onTimezone={(n) => changed(n, `The time zone is now ${n.timezone}.`)}
             onError={setError}
           />
+          <UpdatesCard updates={info.updates} />
           <PanelCertificate />
           <PanelRealIPCard />
           <LogRetentionCard />
@@ -190,6 +194,51 @@ function Overview({
             reboots by itself.
           </p>
         )}
+      </div>
+    </Card>
+  );
+}
+
+// UpdatesCard says which Hostashi version runs, whether a newer one is out
+// and, always, whether the server installs it by itself (--auto-update).
+function UpdatesCard({ updates }: { updates: SystemUpdates | undefined }) {
+  if (!updates) return null;
+  const version = (v: string) => (
+    <a href={releaseUrl(v)} target="_blank" rel="noopener noreferrer" title="Release notes">
+      {versionLabel(v)}
+    </a>
+  );
+  return (
+    <Card
+      title="Updates"
+      actions={updates.update ? <Badge tone="warn">Update available</Badge> : updates.available ? <Badge tone="ok">Up to date</Badge> : undefined}
+    >
+      <div className="ui-stack">
+        <dl className="ui-facts">
+          <dt>Hostashi</dt>
+          <dd>
+            {version(updates.installed)}
+            {updates.update && updates.available && <> (newest: {version(updates.available)})</>}
+          </dd>
+          <dt>Automatic updates</dt>
+          <dd>{updates.auto ? <Badge tone="ok">On</Badge> : <Badge tone="off">Off</Badge>}</dd>
+          {updates.listedAt && (
+            <>
+              <dt>Last checked</dt>
+              <dd>{new Date(updates.listedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</dd>
+            </>
+          )}
+        </dl>
+        <p className="ui-flush ui-hint">
+          {updates.auto ? (
+            <>New Hostashi versions are installed by unattended-upgrades together with the daily security updates.</>
+          ) : (
+            <>
+              New Hostashi versions wait for <code>sudo apt upgrade</code>. To install them by themselves, run the installer's{" "}
+              <code>apply</code> again with <code>--auto-update</code>.
+            </>
+          )}
+        </p>
       </div>
     </Card>
   );

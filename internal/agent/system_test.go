@@ -138,6 +138,10 @@ func TestSystemInfo(t *testing.T) {
 	if info.CloudInit {
 		t.Fatal("cloud-init without /etc/cloud")
 	}
+
+	if info.Updates != nil {
+		t.Fatalf("updates without the package: %+v", info.Updates)
+	}
 }
 
 func TestSystemInfoWithoutFiles(t *testing.T) {
@@ -369,5 +373,36 @@ func TestWriteHostsOnBindMount(t *testing.T) {
 		if strings.HasPrefix(e.Name(), ".hosts.") {
 			t.Fatalf("left %s", e.Name())
 		}
+	}
+}
+
+func TestSystemInfoUpdates(t *testing.T) {
+	o, root := newSystemOps(t, &fakeSystem{st: sysconf.State{Hostname: "web2"}})
+
+	writeTestFile(t, filepath.Join(root, "var/lib/dpkg/status"), "Package: hostashi\nStatus: install ok installed\nArchitecture: amd64\nVersion: 0.12.0\n")
+	writeTestFile(t, filepath.Join(root, "etc/apt/sources.list.d/hostashi.sources"), "Types: deb\nURIs: https://get.hostashi.com/apt\nSuites: stable\nComponents: main\n")
+
+	list := filepath.Join(root, "var/lib/apt/lists/get.hostashi.com_apt_dists_stable_main_binary-amd64_Packages")
+	writeTestFile(t, list, "Package: hostashi\nVersion: 0.13.0\n")
+
+	when := time.Date(2026, 11, 26, 6, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(list, when, when); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := o.info(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := agentapi.SystemUpdates{Installed: "0.12.0", Available: "0.13.0", Update: true, ListedAt: "2026-11-26T06:00:00Z"}
+	if info.Updates == nil || *info.Updates != want {
+		t.Fatalf("updates %+v, want %+v", info.Updates, want)
+	}
+
+	writeTestFile(t, filepath.Join(root, "etc/apt/apt.conf.d/52hostashi-unattended-upgrades"), "\t\"origin=Hostashi,codename=stable\";\n")
+
+	if info, err = o.info(t.Context()); err != nil || !info.Updates.Auto {
+		t.Fatalf("auto: %+v %v", info.Updates, err)
 	}
 }

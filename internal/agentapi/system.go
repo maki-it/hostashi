@@ -101,6 +101,22 @@ type SystemInfo struct {
 	// CloudInit reports that cloud-init is installed; the agent then keeps
 	// it from setting the hostname back at boot.
 	CloudInit bool `json:"cloudInit"`
+	// Updates is the state of the hostashi package (ADR-0050); absent
+	// when the server was not set up from the package.
+	Updates *SystemUpdates `json:"updates,omitempty"`
+}
+
+// SystemUpdates says which hostashi package is installed, which one apt
+// last saw in the Hostashi repository, and whether unattended-upgrades
+// installs new ones by itself (--auto-update).
+type SystemUpdates struct {
+	Installed string `json:"installed"`
+	// Available is empty while apt has no list of the repository.
+	Available string `json:"available,omitempty"`
+	Update    bool   `json:"update"`
+	Auto      bool   `json:"auto"`
+	// ListedAt is when apt last fetched the list, RFC 3339 UTC.
+	ListedAt string `json:"listedAt,omitempty"`
 }
 
 // SystemTimezonesRequest has no parameters.
