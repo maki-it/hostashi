@@ -69,6 +69,8 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0072](0072-rename-a-site.md) | Rename a site | Accepted |
 | [0073](0073-mcp-server.md) | MCP server for AI assistants | Accepted |
 | [0074](0074-backups-of-deleted-sites.md) | Backups of deleted sites | Accepted |
+| [0075](0075-wildcard-domains-for-proxy-and-redirect-sites.md) | Wildcard domains for reverse proxy and redirect sites | Accepted |
+| [0076](0076-dns-01-certificates-via-dns-provider-apis.md) | DNS-01 certificates via DNS provider APIs | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 

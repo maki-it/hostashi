@@ -93,9 +93,12 @@ describe("component styles", () => {
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(/i);
   });
 
+  // Measured sizes that components set at runtime, not design tokens.
+  const runtime = new Set(["--files-bar-h", "--files-sticky-h"]);
+
   it.each(sheets)("%s uses only defined tokens", (file) => {
     const css = readFileSync(resolve(dir, file), "utf8");
     const used = new Set([...css.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]!));
-    expect([...used].filter((v) => !light.has(v))).toEqual([]);
+    expect([...used].filter((v) => !light.has(v) && !runtime.has(v))).toEqual([]);
   });
 });
