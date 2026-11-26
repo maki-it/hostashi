@@ -2156,6 +2156,7 @@ html:has(.ui-files) {
 }
 .ui-cellbar[data-tone="err"] .ui-cellbar-track > span {
   background: var(--err);
+}
 /* Filters above several cards: no card around them. */
 .ui-filters-bare {
   align-items: center;
@@ -2235,6 +2236,7 @@ html:has(.ui-files) {
 /* An icon button without a tip text, such as a ⋯ menu, shows no tip. */
 .ui-icon-btn:not([data-tip])::after {
   content: none;
+}
 /* Segmented links between pages, such as the tabs of Runtimes. */
 .ui-seg-nav {
   align-self: flex-start;
