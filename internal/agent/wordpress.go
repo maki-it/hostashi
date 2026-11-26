@@ -25,7 +25,8 @@ func wpSite(m *sites.Manager) func(string) (wpunit.Site, error) {
 	}
 }
 
-// registerWordPress serves site.wordpress.* (ADR-0069). Start holds h.mu
+// registerWordPress serves site.wordpress.* (ADR-0069, the clone
+// configuration of ADR-0070). Start holds h.mu
 // like site.deploy.start, so a site cannot be deleted meanwhile; the run
 // goes on in its unit.
 func (h *siteOps) registerWordPress(s *agentrpc.Server) {
@@ -38,6 +39,23 @@ func (h *siteOps) registerWordPress(s *agentrpc.Server) {
 		defer h.mu.Unlock()
 
 		st, err := h.wp.Start(ctx, req)
+
+		return st, mapWPError(err)
+	})
+
+	agentrpc.Handle(s, agentapi.WPCloneStart, func(ctx context.Context, _ agentrpc.Caller, req agentapi.WPCloneRequest) (agentapi.WPInstallStatus, error) {
+		if h.wp == nil {
+			return agentapi.WPInstallStatus{}, errNoWordPress
+		}
+
+		h.mu.Lock()
+		defer h.mu.Unlock()
+
+		st, err := h.wp.StartClone(ctx, req)
+		if errors.Is(err, wpunit.ErrBusy) {
+			// The panel tries again later.
+			return st, &agentrpc.Error{Code: agentrpc.CodeConflict, Message: err.Error()}
+		}
 
 		return st, mapWPError(err)
 	})
