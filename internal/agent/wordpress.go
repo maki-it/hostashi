@@ -60,6 +60,22 @@ func (h *siteOps) registerWordPress(s *agentrpc.Server) {
 		return st, mapWPError(err)
 	})
 
+	agentrpc.Handle(s, agentapi.DotEnvCloneStart, func(ctx context.Context, _ agentrpc.Caller, req agentapi.DotEnvCloneRequest) (agentapi.WPInstallStatus, error) {
+		if h.wp == nil {
+			return agentapi.WPInstallStatus{}, errNoWordPress
+		}
+
+		h.mu.Lock()
+		defer h.mu.Unlock()
+
+		st, err := h.wp.StartDotEnv(ctx, req)
+		if errors.Is(err, wpunit.ErrBusy) {
+			return st, &agentrpc.Error{Code: agentrpc.CodeConflict, Message: err.Error()}
+		}
+
+		return st, mapWPError(err)
+	})
+
 	agentrpc.Handle(s, agentapi.WPInstallStatOp, func(ctx context.Context, _ agentrpc.Caller, req agentapi.WPStatusRequest) (agentapi.WPInstallStatus, error) {
 		if h.wp == nil {
 			return agentapi.WPInstallStatus{}, errNoWordPress

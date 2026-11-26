@@ -274,6 +274,37 @@ func (m *Manager) StartClone(ctx context.Context, req agentapi.WPCloneRequest) (
 	return st, err
 }
 
+// StartDotEnv queues the .env step of a cloned Laravel or Symfony site
+// (site.dotenv.clone, ADR-0070) in the same unit.
+func (m *Manager) StartDotEnv(ctx context.Context, req agentapi.DotEnvCloneRequest) (agentapi.WPInstallStatus, error) {
+	if err := req.Validate(); err != nil {
+		return agentapi.WPInstallStatus{}, err
+	}
+
+	st, err := m.start(ctx, req.Site, func(acct Site) (map[string][]byte, error) {
+		job := wpcli.Job{DotEnv: &wpcli.DotEnvJob{
+			Home: acct.Home, Dir: wpcli.ProjectDir(req.WebDir), Kind: req.Kind, URL: req.URL, Databases: req.Databases,
+		}}
+
+		raw, err := json.Marshal(job)
+		if err != nil {
+			return nil, fmt.Errorf("wpunit: %w", err)
+		}
+
+		pw, err := json.Marshal(req.DBPasswords)
+		if err != nil {
+			return nil, fmt.Errorf("wpunit: %w", err)
+		}
+
+		return map[string][]byte{wpcli.CredJob: raw, wpcli.CredDBPass: pw, wpcli.CredAdminPass: nil}, nil
+	})
+	if err == nil {
+		m.log().InfoContext(ctx, "clone .env step started", "site", req.Site, "kind", req.Kind)
+	}
+
+	return st, err
+}
+
 func docRoot(home, webDir string) string {
 	path := home + "/" + sites.WebRootName
 	if webDir != "" {

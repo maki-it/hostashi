@@ -484,6 +484,7 @@ jobs:
           go test -run '^$' -fuzz '^FuzzCheckRender$' -fuzztime 20s ./internal/snippet/
           go test -run '^$' -fuzz '^FuzzStripDefiners$' -fuzztime 20s ./internal/mariadb/
           go test -run '^$' -fuzz '^FuzzParse$' -fuzztime 20s ./internal/sshkeys/
+          go test -run '^$' -fuzz '^FuzzSet$' -fuzztime 20s ./internal/dotenv/
 
   build:
     needs: changes
