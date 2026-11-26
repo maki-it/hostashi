@@ -88,8 +88,23 @@ func registerBackup(s *agentrpc.Server, b *backup.Agent) {
 		}
 
 		all, err := b.SnapshotSites()
+		if err != nil {
+			return agentapi.BackupSitesResponse{}, mapBackupError(err)
+		}
 
-		return agentapi.BackupSitesResponse{Sites: all}, mapBackupError(err)
+		marks, err := b.Marks()
+
+		return agentapi.BackupSitesResponse{Sites: all, Marks: marks}, mapBackupError(err)
+	})
+
+	agentrpc.Handle(s, agentapi.BackupForget, func(_ context.Context, _ agentrpc.Caller, req agentapi.BackupForgetRequest) (agentapi.BackupForgetResponse, error) {
+		if b == nil {
+			return agentapi.BackupForgetResponse{}, errNoBackup
+		}
+
+		marks, err := b.Forget(req)
+
+		return agentapi.BackupForgetResponse{Marks: marks}, mapBackupError(err)
 	})
 
 	agentrpc.Handle(s, agentapi.BackupRestoreStart, func(ctx context.Context, _ agentrpc.Caller, req agentapi.BackupRestoreRequest) (agentapi.BackupRestore, error) {

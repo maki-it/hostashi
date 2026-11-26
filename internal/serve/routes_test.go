@@ -304,6 +304,8 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/backups/deleted":                            "backups.server:read",
 	"GET /api/v1/backups/deleted/{name}":                     "backups.server:read",
 	"POST /api/v1/backups/deleted/{name}/{snapshot}/restore": "backups.server:restore",
+	"PUT /api/v1/backups/deleted/{name}/removal":             "backups.server:delete",
+	"DELETE /api/v1/backups/deleted/{name}/removal":          "backups.server:delete",
 	"POST /api/v1/sites/{name}/backups/{snapshot}/restore":   "backups:restore",
 	"POST /api/v1/backups/restores/{id}/import":              "backups:restore",
 	"GET /api/v1/backups/imports/{id}":                       "backups:read",

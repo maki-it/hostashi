@@ -497,6 +497,37 @@ func (r *Repo) Forget(ctx context.Context, k Keep) error {
 	return err
 }
 
+// MaxForgetIDs bounds the snapshot ids of one ForgetIDs call, which keeps
+// the argument list short; callers split longer lists.
+const MaxForgetIDs = 100
+
+// ForgetIDs removes the snapshots with these full ids from the list
+// (ADR-0074, backups of deleted sites). Like Forget it does not delete
+// data; Prune does.
+func (r *Repo) ForgetIDs(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	if len(ids) > MaxForgetIDs {
+		return fmt.Errorf("%w: more than %d snapshot ids", ErrInvalid, MaxForgetIDs)
+	}
+
+	args := []string{"forget", "--"}
+
+	for _, id := range ids {
+		if !snapshotRe.MatchString(id) {
+			return fmt.Errorf("%w: snapshot id", ErrInvalid)
+		}
+
+		args = append(args, id)
+	}
+
+	_, err := r.run(ctx, args...)
+
+	return err
+}
+
 // Prune removes data no snapshot refers to.
 func (r *Repo) Prune(ctx context.Context) error {
 	_, err := r.run(ctx, "prune")

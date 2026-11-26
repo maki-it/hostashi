@@ -112,6 +112,10 @@ restore a snapshot into a new directory restore\-<time> in the site's home, thro
 list deleted sites that still have snapshots, or the snapshots of one; restore one into the existing site TARGET (admins)
 
 .TP
+\fBbackup delete\-deleted SITE | backup keep\-deleted SITE\fP
+delete the backups of a deleted site with the next backup run, or keep them after all (admins)
+
+.TP
 \fBbackup restore\-run ID\fP
 one restore (root; started by hostashi\-restore@ID.service)
 

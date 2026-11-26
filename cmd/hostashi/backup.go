@@ -25,6 +25,7 @@ import (
 //	backup restore-status ID
 //	backup deleted [SITE]
 //	backup restore-deleted SITE SNAPSHOT TARGET
+//	backup delete-deleted SITE | backup keep-deleted SITE
 func backupCmd(ctx context.Context, args []string, out io.Writer) error {
 	switch {
 	case len(args) == 3 && args[0] == "restore":
@@ -35,6 +36,12 @@ func backupCmd(ctx context.Context, args []string, out io.Writer) error {
 		path := "/backups/deleted/" + url.PathEscape(args[1]) + "/" + url.PathEscape(args[2]) + "/restore"
 
 		return apiPrint(ctx, out, http.MethodPost, path, map[string]string{"target": args[3]})
+	case len(args) == 2 && args[0] == "delete-deleted":
+		path := "/backups/deleted/" + url.PathEscape(args[1]) + "/removal"
+
+		return apiPrint(ctx, out, http.MethodPut, path, map[string]string{"confirm": args[1]})
+	case len(args) == 2 && args[0] == "keep-deleted":
+		return apiPrint(ctx, out, http.MethodDelete, "/backups/deleted/"+url.PathEscape(args[1])+"/removal", nil)
 	case len(args) == 2 && args[0] == "deleted":
 		return apiPrint(ctx, out, http.MethodGet, "/backups/deleted/"+url.PathEscape(args[1]), nil)
 	case len(args) == 2 && args[0] == "restore-status":

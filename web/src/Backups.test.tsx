@@ -9,7 +9,7 @@ import type { BackupInfo } from "./backups";
 import { mockFetch } from "./test-utils";
 
 const status = { running: false, ok: false, items: [], maintenanceOk: true };
-const defaults = { version: 1, retention: { hourly: 0, daily: 7, weekly: 4, monthly: 6, yearly: 0 }, intervalHours: 24, windowStart: 1, windowEnd: 5, readParts: 12 };
+const defaults = { version: 1, retention: { hourly: 0, daily: 7, weekly: 4, monthly: 6, yearly: 0 }, intervalHours: 24, windowStart: 1, windowEnd: 5, readParts: 12, deletedSiteDays: 0 };
 const target = { user: "u123456", host: "u123456.your-storagebox.de", port: 23, path: "hostashi" };
 const pub = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGtest hostashi-backup@web3";
 
@@ -106,6 +106,35 @@ describe("Backups", () => {
     expect(await screen.findByLabelText("Run backups")).toHaveValue("24");
     expect(screen.getByLabelText("Hourly")).toHaveValue("0");
     expect(screen.getByLabelText("Yearly")).toHaveValue("0");
+    expect(screen.getByLabelText("Deleted sites (days)")).toHaveValue("0");
+  });
+
+  it("removes the backups of deleted sites after the days set", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      "GET /api/v1/backups": { body: withTarget },
+      "PUT /api/v1/backups/settings": { body: { ...withTarget, settings: { ...defaults, target, deletedSiteDays: 90 } } },
+    });
+    render(<Harness />);
+    const days = await screen.findByLabelText("Deleted sites (days)");
+    await user.clear(days);
+    await user.type(days, "90");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ ...defaults, target, deletedSiteDays: 90 });
+  });
+
+  it("lists what the last run removed of deleted sites", async () => {
+    mockFetch({
+      "GET /api/v1/backups": {
+        body: { ...ready, status: { ...ready.status, removed: [{ site: "old", snapshots: 3, expired: true }], removeError: "repository locked" } },
+      },
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/backups/deleted": { body: { sites: [] } },
+    });
+    render(<Harness />);
+    expect(await screen.findByText(/Removed 3 snapshots of the deleted site/)).toHaveTextContent("old (expired).");
+    expect(screen.getByText(/Removing backups of deleted sites failed: repository locked/)).toBeInTheDocument();
   });
 
   it("shows an overdue backup with the interval", async () => {
@@ -324,5 +353,38 @@ describe("Backups", () => {
     await user.click(await screen.findByRole("button", { name: "Create and import" }));
     expect(await screen.findByText(/The dump is in the new database/)).toHaveTextContent("old_wp_restored");
     expect(calls.find((c) => c.path === "/api/v1/sites/shop/databases")?.body).toEqual({ name: "old_wp_restored" });
+  });
+
+  it("deletes the backups of a deleted site with the next run, after the name is typed", async () => {
+    const user = userEvent.setup();
+    let marked: string | null = null;
+    const old = () => ({ name: "old", earlier: false, snapshots: 2, oldest: "2026-11-01T01:00:00Z", newest: "2026-11-02T01:00:00Z", markedAt: marked });
+    const calls = mockFetch({
+      "GET /api/v1/backups": { body: ready },
+      "GET /api/v1/sites": { body: { sites: [{ name: "shop", state: "active" }] } },
+      "GET /api/v1/backups/deleted": () => ({ body: { sites: [old()] } }),
+      "GET /api/v1/backups/deleted/old": { body: { snapshots: [{ id: snapFiles, time: "2026-11-02T01:00:00Z", kind: "files" }] } },
+      "PUT /api/v1/backups/deleted/old/removal": () => {
+        marked = "2026-11-26T09:00:00Z";
+        return { body: { marks: [] } };
+      },
+      "DELETE /api/v1/backups/deleted/old/removal": () => {
+        marked = null;
+        return { body: { marks: [] } };
+      },
+    });
+    render(<Harness initial="deleted=old" />);
+    const input = await screen.findByLabelText(/to confirm/);
+    expect(screen.getByText("old", { selector: "code.ui-confirm-phrase" })).toBeInTheDocument();
+    const del = screen.getByRole("button", { name: "Delete backups of old" });
+    expect(del).toBeDisabled();
+    await user.type(input, "old");
+    await user.click(del);
+    expect(await screen.findByText("Marked for deletion")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PUT" && c.path.endsWith("/removal"))?.body).toEqual({ confirm: "old" });
+
+    await user.click(screen.getByRole("button", { name: "Keep backups" }));
+    expect(await screen.findByRole("button", { name: "Delete backups of old" })).toBeInTheDocument();
+    expect(calls.some((c) => c.method === "DELETE" && c.path.endsWith("/removal"))).toBe(true);
   });
 });

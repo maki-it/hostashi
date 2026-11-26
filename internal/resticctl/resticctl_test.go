@@ -104,6 +104,9 @@ func TestArgumentChecks(t *testing.T) {
 	cases["keep negative"] = r.Forget(ctx, Keep{Daily: 7, Weekly: -1})
 	cases["keep hourly negative"] = r.Forget(ctx, Keep{Hourly: -1, Daily: 7})
 	cases["keep yearly too many"] = r.Forget(ctx, Keep{Daily: 7, Yearly: 101})
+	cases["forget short id"] = r.ForgetIDs(ctx, []string{"abc"})
+	cases["forget option id"] = r.ForgetIDs(ctx, []string{"--keep-last=0"})
+	cases["forget too many"] = r.ForgetIDs(ctx, make([]string, MaxForgetIDs+1))
 	cases["check part zero"] = r.Check(ctx, 0, 12)
 	cases["check part too big"] = r.Check(ctx, 13, 12)
 	cases["check negative"] = r.Check(ctx, 1, -1)
@@ -223,6 +226,24 @@ func TestRestic(t *testing.T) {
 
 			if s, err := r.Snapshots(ctx, []string{"site:blog", "kind:files"}); err != nil || len(s) != 1 {
 				t.Fatalf("forget dropped the only snapshot: %+v, %v", s, err)
+			}
+
+			// The snapshot of a deleted site goes by its id (ADR-0074).
+			gone, err := r.Backup(ctx, []string{"site:gone", "kind:files"}, src)
+			if err != nil {
+				t.Fatalf("backup of gone: %v", err)
+			}
+
+			if err := r.ForgetIDs(ctx, []string{gone.SnapshotID}); err != nil {
+				t.Fatalf("forget ids: %v", err)
+			}
+
+			if s, err := r.Snapshots(ctx, []string{"site:gone"}); err != nil || len(s) != 0 {
+				t.Fatalf("after forget ids: %+v, %v", s, err)
+			}
+
+			if s, err := r.Snapshots(ctx, []string{"site:blog", "kind:files"}); err != nil || len(s) != 1 {
+				t.Fatalf("forget ids took another snapshot: %+v, %v", s, err)
 			}
 
 			if err := r.Prune(ctx); err != nil {

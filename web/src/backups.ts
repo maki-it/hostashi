@@ -17,6 +17,9 @@ export type Settings = {
   windowStart: number;
   windowEnd: number;
   readParts: number;
+  // Days after which the snapshots of a deleted site are removed; 0 keeps
+  // them until an administrator deletes them (ADR-0074).
+  deletedSiteDays?: number;
 };
 
 // The intervals the agent accepts (ADR-0008, amendment 2026-11-25).
@@ -46,6 +49,9 @@ export type Status = {
   lastReadCheck?: string;
   maintenanceOk: boolean;
   maintenance?: string;
+  // Snapshots of deleted sites the last run removed (ADR-0074).
+  removed?: { site: string; snapshots: number; expired?: boolean }[];
+  removeError?: string;
 };
 
 export type BackupInfo = {
@@ -93,7 +99,15 @@ export type ImportJob = { id: string; database: string; state: "running" | "done
 export type Site = { name: string; state: string };
 
 /** A deleted site with snapshots, or (earlier) the snapshots of an earlier site whose name a newer site took (ADR-0074). */
-export type DeletedSite = { name: string; earlier: boolean; snapshots: number; oldest: string; newest: string };
+export type DeletedSite = {
+  name: string;
+  earlier: boolean;
+  snapshots: number;
+  oldest: string;
+  newest: string;
+  /** Set while the snapshots are marked for removal by the next backup run. */
+  markedAt?: string | null;
+};
 
 export const getBackups = () => request<BackupInfo>("GET", "/backups");
 export const saveSettings = (s: Settings) => request<BackupInfo>("PUT", "/backups/settings", s);
@@ -110,6 +124,9 @@ export const deletedSnapshots = async (site: string) =>
   (await request<{ snapshots: Snapshot[] }>("GET", "/backups/deleted/" + encodeURIComponent(site))).snapshots;
 export const startDeletedRestore = (site: string, snapshot: string, target: string) =>
   request<Restore>("POST", "/backups/deleted/" + encodeURIComponent(site) + "/" + snapshot + "/restore", { target });
+export const markRemoval = (site: string, confirm: string) =>
+  request<unknown>("PUT", "/backups/deleted/" + encodeURIComponent(site) + "/removal", { confirm });
+export const keepBackups = (site: string) => request<unknown>("DELETE", "/backups/deleted/" + encodeURIComponent(site) + "/removal");
 export const getRestore = (id: string) => request<Restore>("GET", "/backups/restores/" + id);
 export const createDatabase = (site: string, name: string, server = "") =>
   request<unknown>("POST", "/sites/" + encodeURIComponent(site) + "/databases", { name, ...(server ? { server } : {}) });
@@ -137,6 +154,8 @@ export function backupMessage(err: unknown): string {
         return "You are not allowed to do this.";
       case "target_not_found":
         return "The site to restore into does not exist.";
+      case "confirm_mismatch":
+        return "Type the site's name to confirm.";
       case "source_exists":
         return "A site of this name exists. Restore its earlier snapshots into that site.";
       default:

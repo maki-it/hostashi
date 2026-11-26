@@ -175,6 +175,8 @@ func TestBackupOverAPI(t *testing.T) {
 		"GET /api/v1/backups/deleted":                  `{"sites":[{"name":"old","earlier":false}]}`,
 		"GET /api/v1/backups/deleted/old":              `{"snapshots":[{"id":"abc"}]}`,
 		"POST /api/v1/backups/deleted/old/abc/restore": `{"id":"r2","site":"bk","source":"old"}`,
+		"PUT /api/v1/backups/deleted/old/removal":      `{"marks":[{"site":"old"}]}`,
+		"DELETE /api/v1/backups/deleted/old/removal":   `{"marks":[]}`,
 	})
 
 	for _, c := range []struct {
@@ -192,6 +194,8 @@ func TestBackupOverAPI(t *testing.T) {
 		{"", []string{"deleted"}, `"name": "old"`},
 		{"", []string{"deleted", "old"}, `"id": "abc"`},
 		{"", []string{"restore-deleted", "old", "abc", "bk"}, `"source": "old"`},
+		{"", []string{"delete-deleted", "old"}, `"site": "old"`},
+		{"", []string{"keep-deleted", "old"}, `"marks": []`},
 	} {
 		code, out, errOut := runCLI(t, c.in, append([]string{"backup"}, c.args...)...)
 		if code != 0 || !strings.Contains(out, c.want) {

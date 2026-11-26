@@ -14,7 +14,9 @@ import {
   importDump,
   intervals,
   overdueHours,
+  keepBackups,
   listDeleted,
+  markRemoval,
   listSites,
   poll,
   runBackup,
@@ -161,6 +163,17 @@ function StatusCard({ info }: { info: BackupInfo }) {
           </ul>
         )}
         {!st.maintenanceOk && st.maintenance && <p className="ui-error ui-flush">Maintenance: {st.maintenance}</p>}
+        {st.removed && st.removed.length > 0 && (
+          <ul className="ui-flush">
+            {st.removed.map((x) => (
+              <li key={x.site}>
+                Removed {x.snapshots} {x.snapshots === 1 ? "snapshot" : "snapshots"} of the deleted site <code>{x.site}</code>
+                {x.expired ? " (expired)" : ""}.
+              </li>
+            ))}
+          </ul>
+        )}
+        {st.removeError && <p className="ui-error ui-flush">Removing backups of deleted sites failed: {st.removeError}</p>}
       </div>
     </Card>
   );
@@ -190,6 +203,7 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
   const [start, setStart] = useState(String(s.windowStart));
   const [end, setEnd] = useState(String(s.windowEnd));
   const [parts, setParts] = useState(String(s.readParts));
+  const [goneDays, setGoneDays] = useState(String(s.deletedSiteDays ?? 0));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -209,6 +223,7 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
       windowStart: num(start, 1),
       windowEnd: num(end, 5),
       readParts: num(parts, 12),
+      deletedSiteDays: num(goneDays, 0),
     };
     try {
       onSaved(await saveSettings(next));
@@ -267,6 +282,14 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
           <p className="ui-hint ui-flush">
             The newest snapshot of each hour, day, week, month and year is kept, up to these counts. Hourly only matters when backups run more than once a day.
           </p>
+          <div className="ui-fields ui-fields-num">
+            <Field
+              label="Deleted sites (days)"
+              hint="The snapshots of a deleted site are removed this many days after its last snapshot. 0 keeps them until you delete them."
+            >
+              <input className="ui-input" value={goneDays} onChange={(e) => setGoneDays(e.target.value)} inputMode="numeric" required />
+            </Field>
+          </div>
         </fieldset>
         <fieldset className="ui-fieldset ui-stack">
           <legend>Schedule</legend>
@@ -410,13 +433,16 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
     onQuery(next);
   };
 
+  const loadDeleted = () =>
+    listDeleted()
+      .then(setDeleted)
+      .catch(() => setDeleted([]));
+
   useEffect(() => {
     listSites()
       .then(setSites)
       .catch((err: unknown) => setError(backupMessage(err)));
-    listDeleted()
-      .then(setDeleted)
-      .catch(() => setDeleted([]));
+    void loadDeleted();
   }, []);
 
   useEffect(() => {
@@ -585,7 +611,80 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
           empty="No snapshots of this site yet."
         />
       )}
+      {goneInfo && <DeleteBackups key={goneInfo.name} site={goneInfo} onChange={() => void loadDeleted()} />}
     </Card>
+  );
+}
+
+// DeleteBackups marks the snapshots of a deleted site, or of an earlier
+// site of a reused name, for removal by the next backup run (ADR-0074, 4).
+// Until that run the mark can be taken back.
+function DeleteBackups({ site, onChange }: { site: DeletedSite; onChange: () => void }) {
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const what = site.earlier ? "the earlier site's snapshots" : "all snapshots of this site";
+
+  async function act(f: () => Promise<unknown>) {
+    setBusy(true);
+    setError("");
+    try {
+      await f();
+      setTyped("");
+      onChange();
+    } catch (err) {
+      setError(backupMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (site.markedAt) {
+    return (
+      <div className="ui-card-body ui-stack">
+        <Notice tone="warn" title="Marked for deletion">
+          <p>
+            The next backup run removes {what}. <strong>Back up now</strong> removes them at once. Until then you can keep them.
+          </p>
+        </Notice>
+        {error && <Notice tone="err" title={error} />}
+        <div className="ui-row">
+          <Button disabled={busy} onClick={() => void act(() => keepBackups(site.name))}>
+            Keep backups
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="ui-card-body ui-stack"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void act(() => markRemoval(site.name, typed));
+      }}
+    >
+      <h3 className="ui-flush">Delete backups</h3>
+      <div className="ui-narrow">
+        <Field
+          label={
+            <>
+              Type <code className="ui-confirm-phrase">{site.name}</code> to confirm
+            </>
+          }
+          hint={`The next backup run removes ${what} (${site.snapshots}). Once removed, they cannot be restored.`}
+        >
+          <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
+        </Field>
+      </div>
+      {error && <Notice tone="err" title={error} />}
+      <div className="ui-row">
+        <Button variant="danger" type="submit" disabled={busy || typed !== site.name}>
+          Delete backups of {site.name}
+        </Button>
+      </div>
+    </form>
   );
 }
 
