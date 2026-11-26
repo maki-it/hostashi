@@ -231,6 +231,7 @@ func clearDir(dir string) error {
 	if err != nil {
 		return fmt.Errorf("wpcli: empty the document root: %w", err)
 	}
+
 	defer root.Close()
 
 	f, err := root.Open(".")

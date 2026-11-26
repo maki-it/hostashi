@@ -110,6 +110,7 @@ func (s *Service) oldWPDatabase(ctx context.Context, site store.Site, st agentap
 // installWordPress is the install, or with a confirm the reinstall.
 func (s *Service) installWordPress(ctx context.Context, actor int64, name string, in WordPressInput, confirm string) (WordPressStart, error) {
 	reinstall := confirm != ""
+
 	if s.wp == nil {
 		return WordPressStart{}, ErrNoWordPress
 	}
@@ -157,6 +158,7 @@ func (s *Service) installWordPress(ctx context.Context, actor int64, name string
 	}
 
 	old := ""
+
 	if reinstall {
 		cur, err := s.wp.WPInstallStatus(ctx, agentapi.WPStatusRequest{Site: site.Name, WebDir: site.WebDir})
 		if err != nil {
@@ -198,6 +200,7 @@ func (s *Service) installWordPress(ctx context.Context, actor int64, name string
 	// The old WordPress is being replaced; its database goes too. A
 	// failure leaves it for the person to delete.
 	var dropped string
+
 	if old != "" {
 		if err := s.DeleteDatabase(context.WithoutCancel(ctx), actor, old); err != nil {
 			s.log.ErrorContext(ctx, "drop the database of a replaced WordPress", "site", name, "database", old, "err", err)

@@ -211,6 +211,7 @@ func TestReinstallWordPress(t *testing.T) {
 		site := "my-blog"
 		if db == "other_wp" {
 			site = "other"
+
 			if _, err := s.Create(ctx, 1, CreateRequest{Name: "other", PHP: "8.4", Domains: []string{"other.example.com"}}); err != nil {
 				t.Fatal(err)
 			}
