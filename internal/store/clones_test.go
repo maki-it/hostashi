@@ -124,7 +124,7 @@ func TestSiteClones(t *testing.T) {
 		t.Fatalf("refresh while copying: %v", err)
 	}
 
-	c.HomeJob, c.HomeDone, c.State = "0123456789abcdef", true, CloneDone
+	c.HomeJob, c.HomeDone, c.State, c.Config = "0123456789abcdef", true, CloneDone, CloneConfigDone
 	c.Databases[0].Done = true
 
 	if err := s.UpdateSiteClone(ctx, c, now.Add(time.Minute)); err != nil {
@@ -132,7 +132,7 @@ func TestSiteClones(t *testing.T) {
 	}
 
 	c, _ = s.SiteClone(ctx, dst.ID)
-	if c.State != CloneDone || !c.HomeDone || !c.Databases[0].Done || !c.FinishedAt.Equal(now.Add(time.Minute)) {
+	if c.State != CloneDone || !c.HomeDone || !c.Databases[0].Done || c.Config != CloneConfigDone || !c.FinishedAt.Equal(now.Add(time.Minute)) {
 		t.Fatalf("after update %+v", c)
 	}
 
@@ -141,7 +141,7 @@ func TestSiteClones(t *testing.T) {
 	}
 
 	c, _ = s.SiteClone(ctx, dst.ID)
-	if c.State != CloneCopying || !c.Refresh || c.HomeJob != "" || c.HomeDone || c.Databases[0].Done || !c.FinishedAt.IsZero() {
+	if c.State != CloneCopying || !c.Refresh || c.HomeJob != "" || c.HomeDone || c.Databases[0].Done || c.Config != CloneConfigNone || !c.FinishedAt.IsZero() {
 		t.Fatalf("refresh %+v", c)
 	}
 

@@ -3,7 +3,16 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { Site } from "./sites";
 import { Button, Card, Field, Notice } from "./ui";
-import { getWordPress, installWordPress, wordPressMessage, wpLocales, type WordPressInput, type WordPressStatus } from "./wordpress";
+import {
+  getWordPress,
+  installWordPress,
+  reinstallWordPress,
+  wordPressMessage,
+  wpLocales,
+  type WordPressInput,
+  type WordPressStart,
+  type WordPressStatus,
+} from "./wordpress";
 
 // How often the card asks for the state of a running install.
 const pollMs = 3000;
@@ -17,6 +26,7 @@ export function WordPressCard({ site }: { site: Site }) {
   const [status, setStatus] = useState<WordPressStatus | null>(null);
   const [loadError, setLoadError] = useState("");
   const [secret, setSecret] = useState<Secret | null>(null);
+  const [reinstalling, setReinstalling] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -56,21 +66,27 @@ export function WordPressCard({ site }: { site: Site }) {
     );
   }
 
+  const started = (st: WordPressStart, input: WordPressInput) => {
+    setReinstalling(false);
+    setStatus(st);
+    if (st.adminPassword)
+      setSecret({
+        url,
+        user: input.adminUser,
+        password: st.adminPassword,
+        database: st.database,
+      });
+  };
+  const finished = status.state !== "running";
+  // WordPress is there, or other files are: only a reinstall can install.
+  const occupied = finished && (status.installed === true || status.empty === false);
+
   return (
     <>
       {secret && <PasswordBox secret={secret} onClose={() => setSecret(null)} />}
       <Card title={title}>
-        {status.state === "none" && (
-          <InstallForm
-            site={site}
-            onStarted={(st, input) => {
-              setStatus(st);
-              if (st.adminPassword) setSecret({ url, user: input.adminUser, password: st.adminPassword, database: st.database });
-            }}
-          />
-        )}
         {status.state === "running" && <Notice tone="info" title="WordPress is being installed. This takes about a minute." />}
-        {status.state === "succeeded" && (
+        {finished && status.installed && (
           <Notice tone="ok" title="WordPress is installed.">
             Log in at{" "}
             <a href={url + "/wp-admin/"} target="_blank" rel="noreferrer noopener">
@@ -81,7 +97,12 @@ export function WordPressCard({ site }: { site: Site }) {
         )}
         {status.state === "failed" && (
           <Notice tone="err" title={`The install failed${status.error ? `: ${status.error}` : ""}.`}>
-            Its database stays. To try again, empty the document root in the file manager, then reload this page.
+            Its database stays.
+          </Notice>
+        )}
+        {finished && !status.installed && status.empty === false && (
+          <Notice tone="info" title="The document root holds files, but no WordPress.">
+            WordPress installs only into an empty folder. Reinstall replaces the files with a new WordPress.
           </Notice>
         )}
         {status.log && status.state !== "none" && (
@@ -92,13 +113,42 @@ export function WordPressCard({ site }: { site: Site }) {
             </pre>
           </details>
         )}
+        {finished && !occupied && <InstallForm site={site} onStarted={started} />}
+        {occupied && !reinstalling && (
+          <div className="ui-row">
+            <Button variant="danger" onClick={() => setReinstalling(true)}>
+              Reinstall WordPress
+            </Button>
+          </div>
+        )}
+        {occupied && reinstalling && (
+          <InstallForm site={site} reinstall={{ database: status.database }} onStarted={started} onCancel={() => setReinstalling(false)} />
+        )}
       </Card>
     </>
   );
 }
 
-function InstallForm({ site, onStarted }: { site: Site; onStarted: (st: Awaited<ReturnType<typeof installWordPress>>, input: WordPressInput) => void }) {
-  const [input, setInput] = useState<WordPressInput>({ locale: "en_US", title: site.title || site.domains[0] || "", adminUser: "", adminEmail: "" });
+// InstallForm installs into the empty document root, or with reinstall
+// replaces everything in it: the person types the site's name to confirm.
+function InstallForm({
+  site,
+  reinstall,
+  onStarted,
+  onCancel,
+}: {
+  site: Site;
+  reinstall?: { database?: string | undefined };
+  onStarted: (st: WordPressStart, input: WordPressInput) => void;
+  onCancel?: () => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const [input, setInput] = useState<WordPressInput>({
+    locale: "en_US",
+    title: site.title || site.domains[0] || "",
+    adminUser: "",
+    adminEmail: "",
+  });
   const [own, setOwn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -111,7 +161,7 @@ function InstallForm({ site, onStarted }: { site: Site; onStarted: (st: Awaited<
     try {
       const { adminPassword, ...rest } = input;
       const body: WordPressInput = own && adminPassword ? { ...rest, adminPassword } : rest;
-      onStarted(await installWordPress(site.name, body), body);
+      onStarted(reinstall ? await reinstallWordPress(site.name, body, typed) : await installWordPress(site.name, body), body);
     } catch (err) {
       setError(wordPressMessage(err));
     } finally {
@@ -121,10 +171,25 @@ function InstallForm({ site, onStarted }: { site: Site; onStarted: (st: Awaited<
 
   return (
     <form className="ui-stack" onSubmit={submit} noValidate>
-      <p className="ui-hint">
-        Installs the latest WordPress into the empty document root, with a new database and user for it. WP-CLI runs as the site user;
-        file editing in the dashboard stays off.
-      </p>
+      {reinstall ? (
+        <Notice tone="warn" title="Reinstall replaces the site with a new WordPress.">
+          Everything in the document root is deleted: themes, plugins, uploads and any other files.
+          {reinstall.database ? (
+            <>
+              {" "}
+              The database <code>{reinstall.database}</code> is deleted as well.
+            </>
+          ) : (
+            " The site's databases stay."
+          )}{" "}
+          Back up the site first under Backups; this cannot be undone.
+        </Notice>
+      ) : (
+        <p className="ui-hint">
+          Installs the latest WordPress into the empty document root, with a new database and user for it. WP-CLI runs as the site user;
+          file editing in the dashboard stays off.
+        </p>
+      )}
       <fieldset className="ui-fieldset ui-stack" disabled={busy}>
         <div className="ui-form-grid">
           <Field label="Site title">
@@ -140,7 +205,14 @@ function InstallForm({ site, onStarted }: { site: Site; onStarted: (st: Awaited<
             </select>
           </Field>
           <Field label="Admin user" hint="Not admin, which bots try first.">
-            <input className="ui-input" value={input.adminUser} autoComplete="off" spellCheck={false} onChange={(e) => set({ adminUser: e.target.value })} maxLength={60} />
+            <input
+              className="ui-input"
+              value={input.adminUser}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => set({ adminUser: e.target.value })}
+              maxLength={60}
+            />
           </Field>
           <Field label="Admin email">
             <input className="ui-input" type="email" value={input.adminEmail} onChange={(e) => set({ adminEmail: e.target.value })} />
@@ -170,11 +242,35 @@ function InstallForm({ site, onStarted }: { site: Site; onStarted: (st: Awaited<
           Ask search engines not to index the site
         </label>
       </fieldset>
+      {reinstall && (
+        <div className="ui-narrow">
+          <Field
+            label={
+              <>
+                Type <code className="ui-confirm-phrase">{site.name}</code> to confirm
+              </>
+            }
+          >
+            <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
+          </Field>
+        </div>
+      )}
       {error && <Notice tone="err" title={error} />}
       <div className="ui-row">
-        <Button type="submit" variant="primary" disabled={busy}>
-          Install WordPress
-        </Button>
+        {reinstall ? (
+          <>
+            <Button type="submit" variant="danger" disabled={busy || typed !== site.name}>
+              Reinstall WordPress
+            </Button>
+            <Button disabled={busy} onClick={onCancel}>
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <Button type="submit" variant="primary" disabled={busy}>
+            Install WordPress
+          </Button>
+        )}
       </div>
     </form>
   );
@@ -219,7 +315,14 @@ function PasswordBox({ secret, onClose }: { secret: Secret; onClose: () => void 
         </dd>
       </dl>
       <Field label="Password">
-        <input readOnly value={secret.password} onFocus={(e) => e.currentTarget.select()} autoComplete="off" spellCheck={false} className="ui-input ui-mono" />
+        <input
+          readOnly
+          value={secret.password}
+          onFocus={(e) => e.currentTarget.select()}
+          autoComplete="off"
+          spellCheck={false}
+          className="ui-input ui-mono"
+        />
       </Field>
       <div className="ui-row">
         <Button onClick={() => void copy()}>Copy password</Button>

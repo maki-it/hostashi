@@ -10,11 +10,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/profile"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -31,10 +33,16 @@ type fakeClones struct {
 	state, dbState string
 	homeErr        error
 	poolFree       uint64
+	// wp are the WordPress configurations started; wpState is what their
+	// status reports, wpErr what a start answers.
+	wp      []agentapi.WPCloneRequest
+	dotenv  []agentapi.DotEnvCloneRequest
+	wpState string
+	wpErr   error
 }
 
 func newFakeClones(ag *fakeAgent) *fakeClones {
-	return &fakeClones{ag: ag, homes: map[string]agentapi.SiteHomeCopyJob{}, state: agentapi.JobDone, dbState: agentapi.JobDone, poolFree: 1 << 40}
+	return &fakeClones{ag: ag, homes: map[string]agentapi.SiteHomeCopyJob{}, state: agentapi.JobDone, dbState: agentapi.JobDone, poolFree: 1 << 40, wpState: agentapi.DeploySucceeded}
 }
 
 func (f *fakeClones) id() string {
@@ -91,6 +99,48 @@ func (f *fakeClones) DBCopy(_ context.Context, source, target string) (agentapi.
 	f.ag.mu.Unlock()
 
 	return j, nil
+}
+
+func (f *fakeClones) WPCloneStart(_ context.Context, req agentapi.WPCloneRequest) (agentapi.WPInstallStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if err := req.Validate(); err != nil {
+		return agentapi.WPInstallStatus{}, &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: err.Error()}
+	}
+
+	if f.wpErr != nil {
+		return agentapi.WPInstallStatus{}, f.wpErr
+	}
+
+	f.wp = append(f.wp, req)
+
+	return agentapi.WPInstallStatus{Site: req.Site, State: agentapi.DeployRunning}, nil
+}
+
+func (f *fakeClones) DotEnvCloneStart(_ context.Context, req agentapi.DotEnvCloneRequest) (agentapi.WPInstallStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if err := req.Validate(); err != nil {
+		return agentapi.WPInstallStatus{}, &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: err.Error()}
+	}
+
+	f.dotenv = append(f.dotenv, req)
+
+	return agentapi.WPInstallStatus{Site: req.Site, State: agentapi.DeployRunning}, nil
+}
+
+func (f *fakeClones) WPCloneStatus(_ context.Context, site string) (agentapi.WPInstallStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	st := agentapi.WPInstallStatus{Site: site, State: f.wpState}
+	if st.State == agentapi.DeployFailed {
+		st.Error = "a step failed, see the log"
+	}
+
+	return st, nil
 }
 
 func (f *fakeClones) PoolList(context.Context) ([]agentapi.PoolInfo, error) {
@@ -526,5 +576,151 @@ func TestCloneNoSpace(t *testing.T) {
 
 	if _, err := s.CloneSite(t.Context(), 1, "shop", CloneInput{Name: "shop-copy", Domain: "copy.shop.example.com"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// wordPressSource gives the source the WordPress profile, which the
+// clone takes over.
+func wordPressSource(t *testing.T, st *store.Store) {
+	t.Helper()
+
+	sourceProfile(t, st, profile.WordPress)
+}
+
+func sourceProfile(t *testing.T, st *store.Store, name string) {
+	t.Helper()
+
+	src, err := st.SiteByName(t.Context(), "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := st.SetSiteProfile(t.Context(), store.SiteProfile{SiteID: src.ID, Profile: name}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCloneSiteWordPress(t *testing.T) {
+	s, _, f, st := cloneEnv(t)
+	ctx := t.Context()
+
+	wordPressSource(t, st)
+
+	f.wpState = agentapi.DeployRunning
+	f.wpErr = &agentrpc.Error{Code: agentrpc.CodeConflict, Message: "a WordPress install of this site is running"}
+
+	if _, err := s.CloneSite(ctx, 1, "shop", CloneInput{Name: "shop-stage", Domain: "stage.shop.example.com", Staging: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Files and databases are copied; the run of the site is busy, so the
+	// configuration waits.
+	for range 10 {
+		s.pollClones(ctx)
+	}
+
+	if v := cloneRow(t, s, "shop-stage"); v.State != store.CloneCopying || v.Config != store.CloneConfigNone || !v.HomeDone || !allDBsDone(v.Databases) {
+		t.Fatalf("while busy %+v", v)
+	}
+
+	f.wpErr = nil
+
+	s.pollClones(ctx)
+
+	if v := cloneRow(t, s, "shop-stage"); v.State != store.CloneCopying || v.Config != store.CloneConfigRunning || len(f.wp) != 1 {
+		t.Fatalf("running %+v %d", v, len(f.wp))
+	}
+
+	// Every copied database goes along; the run picks wp-config.php's.
+	req := f.wp[0]
+	if req.Site != "shop-stage" || req.URL != "http://stage.shop.example.com" || len(req.From) != 1 || req.From[0] != "shop.example.com" || !req.Staging ||
+		len(req.Databases) != 2 || req.Databases[1] != (agentapi.WPCloneDB{Source: "shop_wp", Target: "shop_stage_wp", User: "shop_stage_wp"}) ||
+		len(req.DBPasswords["shop_stage_wp"]) < agentapi.MinWPPassword || len(req.DBPasswords) != 2 {
+		t.Fatalf("request %+v", req)
+	}
+
+	f.wpState = agentapi.DeploySucceeded
+
+	v := pollUntil(t, s, "shop-stage")
+	if v.State != store.CloneDone || v.Config != store.CloneConfigDone {
+		t.Fatalf("done %+v", v)
+	}
+
+	// A refresh configures again.
+	if err := s.RefreshClone(ctx, 1, "shop-stage"); err != nil {
+		t.Fatal(err)
+	}
+
+	if v := pollUntil(t, s, "shop-stage"); v.State != store.CloneDone || len(f.wp) != 2 {
+		t.Fatalf("refresh %+v %d", v, len(f.wp))
+	}
+}
+
+func TestCloneSiteWordPressFails(t *testing.T) {
+	s, _, f, st := cloneEnv(t)
+	ctx := t.Context()
+
+	wordPressSource(t, st)
+
+	f.wpState = agentapi.DeployFailed
+
+	if _, err := s.CloneSite(ctx, 1, "shop", CloneInput{Name: "shop-copy", Domain: "copy.shop.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+
+	pollUntil(t, s, "shop-copy")
+
+	if _, err := s.Get(ctx, "shop-copy"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a clone whose configuration failed is left: %v", err)
+	}
+
+	list, _, err := st.AuditEntries(ctx, store.AuditFilter{}, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, e := range list {
+		if e.Action == "site.clone.failed" {
+			if !strings.Contains(string(e.Detail), "configuration: a step failed") {
+				t.Errorf("detail %s", e.Detail)
+			}
+
+			return
+		}
+	}
+
+	t.Fatal("no audit entry site.clone.failed")
+}
+
+// A clone of a site without the WordPress profile needs no step.
+func TestCloneSiteNoConfiguration(t *testing.T) {
+	s, _, f, _ := cloneEnv(t)
+
+	if _, err := s.CloneSite(t.Context(), 1, "shop", CloneInput{Name: "shop-copy", Domain: "copy.shop.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if v := pollUntil(t, s, "shop-copy"); v.State != store.CloneDone || v.Config != store.CloneConfigDone || len(f.wp) != 0 {
+		t.Fatalf("%+v %d", v, len(f.wp))
+	}
+}
+
+// A Laravel clone gets the .env step instead of WP-CLI.
+func TestCloneSiteLaravel(t *testing.T) {
+	s, _, f, st := cloneEnv(t)
+
+	sourceProfile(t, st, profile.Laravel)
+
+	if _, err := s.CloneSite(t.Context(), 1, "shop", CloneInput{Name: "shop-copy", Domain: "copy.shop.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+
+	v := pollUntil(t, s, "shop-copy")
+	if v.State != store.CloneDone || len(f.wp) != 0 || len(f.dotenv) != 1 {
+		t.Fatalf("%+v wp %d dotenv %d", v, len(f.wp), len(f.dotenv))
+	}
+
+	if r := f.dotenv[0]; r.Kind != agentapi.DotEnvLaravel || r.URL != "http://copy.shop.example.com" || len(r.Databases) != 2 || len(r.DBPasswords) != 2 {
+		t.Fatalf("request %+v", r)
 	}
 }

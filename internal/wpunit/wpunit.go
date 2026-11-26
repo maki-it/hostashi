@@ -23,8 +23,10 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -213,7 +215,116 @@ func (m *Manager) Start(ctx context.Context, req agentapi.WPInstallRequest) (age
 		return agentapi.WPInstallStatus{}, err
 	}
 
-	acct, err := m.Site(req.Site)
+	st, err := m.start(ctx, req.Site, func(acct Site) (map[string][]byte, error) {
+		if !req.Reinstall {
+			if err := checkEmpty(acct.Home, req.WebDir); err != nil {
+				return nil, err
+			}
+		}
+
+		job := wpcli.Job{
+			WPInstall: req.Install, PHP: req.PHP, Path: docRoot(acct.Home, req.WebDir), Home: acct.Home, Domain: req.Domain,
+			Clear: req.Reinstall,
+		}
+		if err := job.Validate(); err != nil {
+			return nil, err
+		}
+
+		raw, err := json.Marshal(job)
+		if err != nil {
+			return nil, fmt.Errorf("wpunit: %w", err)
+		}
+
+		return map[string][]byte{wpcli.CredJob: raw, wpcli.CredDBPass: []byte(req.DBPassword), wpcli.CredAdminPass: []byte(req.AdminPassword)}, nil
+	})
+	if err == nil {
+		m.log().InfoContext(ctx, "wordpress install started", "site", req.Site, "locale", req.Install.Locale)
+	}
+
+	return st, err
+}
+
+// StartClone queues the configuration of a cloned WordPress site
+// (site.wordpress.clone, ADR-0070) in the same unit. The database
+// passwords go into the dbpass credential as a JSON object.
+func (m *Manager) StartClone(ctx context.Context, req agentapi.WPCloneRequest) (agentapi.WPInstallStatus, error) {
+	if err := req.Validate(); err != nil {
+		return agentapi.WPInstallStatus{}, err
+	}
+
+	st, err := m.start(ctx, req.Site, func(acct Site) (map[string][]byte, error) {
+		job := wpcli.Job{Clone: &wpcli.CloneJob{
+			PHP: req.PHP, Path: docRoot(acct.Home, req.WebDir), Home: acct.Home, URL: req.URL,
+			From: req.From, Databases: req.Databases, Staging: req.Staging,
+		}}
+		if err := job.Clone.Validate(); err != nil {
+			return nil, err
+		}
+
+		raw, err := json.Marshal(job)
+		if err != nil {
+			return nil, fmt.Errorf("wpunit: %w", err)
+		}
+
+		pw, err := json.Marshal(req.DBPasswords)
+		if err != nil {
+			return nil, fmt.Errorf("wpunit: %w", err)
+		}
+
+		// The unit loads every credential; the admin password is unused.
+		return map[string][]byte{wpcli.CredJob: raw, wpcli.CredDBPass: pw, wpcli.CredAdminPass: nil}, nil
+	})
+	if err == nil {
+		m.log().InfoContext(ctx, "wordpress clone configuration started", "site", req.Site)
+	}
+
+	return st, err
+}
+
+// StartDotEnv queues the .env step of a cloned Laravel or Symfony site
+// (site.dotenv.clone, ADR-0070) in the same unit.
+func (m *Manager) StartDotEnv(ctx context.Context, req agentapi.DotEnvCloneRequest) (agentapi.WPInstallStatus, error) {
+	if err := req.Validate(); err != nil {
+		return agentapi.WPInstallStatus{}, err
+	}
+
+	st, err := m.start(ctx, req.Site, func(acct Site) (map[string][]byte, error) {
+		job := wpcli.Job{DotEnv: &wpcli.DotEnvJob{
+			Home: acct.Home, Dir: wpcli.ProjectDir(req.WebDir), Kind: req.Kind, URL: req.URL, Databases: req.Databases,
+		}}
+
+		raw, err := json.Marshal(job)
+		if err != nil {
+			return nil, fmt.Errorf("wpunit: %w", err)
+		}
+
+		pw, err := json.Marshal(req.DBPasswords)
+		if err != nil {
+			return nil, fmt.Errorf("wpunit: %w", err)
+		}
+
+		return map[string][]byte{wpcli.CredJob: raw, wpcli.CredDBPass: pw, wpcli.CredAdminPass: nil}, nil
+	})
+	if err == nil {
+		m.log().InfoContext(ctx, "clone .env step started", "site", req.Site, "kind", req.Kind)
+	}
+
+	return st, err
+}
+
+func docRoot(home, webDir string) string {
+	path := home + "/" + sites.WebRootName
+	if webDir != "" {
+		path += "/" + webDir
+	}
+
+	return path
+}
+
+// start runs a job in the site's unit unless one runs: creds returns the
+// credential files after its own checks.
+func (m *Manager) start(ctx context.Context, site string, creds func(Site) (map[string][]byte, error)) (agentapi.WPInstallStatus, error) {
+	acct, err := m.Site(site)
 	if err != nil {
 		return agentapi.WPInstallStatus{}, err
 	}
@@ -226,38 +337,29 @@ func (m *Manager) Start(ctx context.Context, req agentapi.WPInstallRequest) (age
 		return agentapi.WPInstallStatus{}, err
 	}
 
-	unit := Unit(req.Site)
+	unit := Unit(site)
 
 	props, err := m.Ctl.Show(ctx, unit, "ActiveState")
 	if err != nil {
 		return agentapi.WPInstallStatus{}, err
 	}
 
-	started, ok := st[req.Site]
+	started, ok := st[site]
 	if m.phase(props["ActiveState"], started, ok) == agentapi.DeployRunning {
 		return agentapi.WPInstallStatus{}, ErrBusy
 	}
 
-	if err := checkEmpty(acct.Home, req.WebDir); err != nil {
+	files, err := creds(acct)
+	if err != nil {
 		return agentapi.WPInstallStatus{}, err
 	}
 
-	path := acct.Home + "/" + sites.WebRootName
-	if req.WebDir != "" {
-		path += "/" + req.WebDir
-	}
-
-	job := wpcli.Job{WPInstall: req.Install, PHP: req.PHP, Path: path, Home: acct.Home, Domain: req.Domain}
-	if err := job.Validate(); err != nil {
+	if err := m.writeCreds(site, files); err != nil {
 		return agentapi.WPInstallStatus{}, err
 	}
 
-	if err := m.writeCreds(req, job); err != nil {
-		return agentapi.WPInstallStatus{}, err
-	}
-
-	if err := m.writeUnit(ctx, req.Site, acct); err != nil {
-		m.removeCreds(req.Site)
+	if err := m.writeUnit(ctx, site, acct); err != nil {
+		m.removeCreds(site)
 
 		return agentapi.WPInstallStatus{}, err
 	}
@@ -265,29 +367,82 @@ func (m *Manager) Start(ctx context.Context, req agentapi.WPInstallRequest) (age
 	// The last run stays active (RemainAfterExit=) or failed: stop it,
 	// so the start below runs again.
 	if err := m.Ctl.Stop(ctx, unit); err != nil {
-		m.removeCreds(req.Site)
+		m.removeCreds(site)
 
 		return agentapi.WPInstallStatus{}, err
 	}
 
 	_ = m.Ctl.ResetFailed(ctx, unit)
 
-	st[req.Site] = m.clock().UTC()
+	st[site] = m.clock().UTC()
 	if err := m.save(st); err != nil {
-		m.removeCreds(req.Site)
+		m.removeCreds(site)
 
 		return agentapi.WPInstallStatus{}, err
 	}
 
 	if err := m.Ctl.StartNoBlock(ctx, unit); err != nil {
-		m.removeCreds(req.Site)
+		m.removeCreds(site)
 
 		return agentapi.WPInstallStatus{}, err
 	}
 
-	m.log().InfoContext(ctx, "wordpress install started", "site", req.Site, "locale", req.Install.Locale)
+	return agentapi.WPInstallStatus{Site: site, State: agentapi.DeployRunning}, nil
+}
 
-	return agentapi.WPInstallStatus{Site: req.Site, State: agentapi.DeployRunning}, nil
+// maxConfig bounds the wp-config.php that inspect reads.
+const maxConfig = 256 << 10
+
+// dbNameRe finds DB_NAME in wp-config.php as WP-CLI writes it.
+var dbNameRe = regexp.MustCompile(`define\(\s*['"]DB_NAME['"]\s*,\s*['"]([A-Za-z0-9_]{1,64})['"]\s*\)`)
+
+// inspect looks at the site's document root: whether it holds WordPress,
+// whether it is empty, and the database its wp-config.php names. Links
+// are never followed; anything it cannot read counts as not there.
+func inspect(home, webDir string) (installed, empty bool, db string) {
+	empty = checkEmpty(home, webDir) == nil
+	if empty {
+		return false, true, ""
+	}
+
+	root, err := os.OpenRoot(home)
+	if err != nil {
+		return false, false, ""
+	}
+	defer root.Close()
+
+	dir := sites.WebRootName
+	if webDir != "" {
+		dir += "/" + webDir
+	}
+
+	regular := func(name string) bool {
+		fi, err := root.Lstat(dir + "/" + name)
+
+		return err == nil && fi.Mode().IsRegular()
+	}
+
+	installed = regular("wp-config.php") || regular("wp-includes/version.php")
+	if !regular("wp-config.php") {
+		return installed, false, ""
+	}
+
+	f, err := root.OpenFile(dir+"/wp-config.php", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return installed, false, ""
+	}
+	defer f.Close()
+
+	b, err := io.ReadAll(io.LimitReader(f, maxConfig))
+	if err != nil {
+		return installed, false, ""
+	}
+
+	if m := dbNameRe.FindSubmatch(b); m != nil && agentapi.ValidateDBName(string(m[1])) == nil {
+		db = string(m[1])
+	}
+
+	return installed, false, db
 }
 
 // checkEmpty refuses a document root with anything in it. A missing one
@@ -335,24 +490,17 @@ func checkEmpty(home, webDir string) error {
 	return nil
 }
 
-func (m *Manager) writeCreds(req agentapi.WPInstallRequest, job wpcli.Job) error {
-	raw, err := json.Marshal(job)
-	if err != nil {
-		return fmt.Errorf("wpunit: %w", err)
-	}
-
+func (m *Manager) writeCreds(site string, files map[string][]byte) error {
 	if err := os.MkdirAll(m.credDir(), 0o700); err != nil {
 		return fmt.Errorf("wpunit: %w", err)
 	}
 
-	dir := filepath.Join(m.credDir(), req.Site)
+	dir := filepath.Join(m.credDir(), site)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("wpunit: %w", err)
 	}
 
-	for name, data := range map[string][]byte{
-		wpcli.CredJob: raw, wpcli.CredDBPass: []byte(req.DBPassword), wpcli.CredAdminPass: []byte(req.AdminPassword),
-	} {
+	for name, data := range files {
 		if err := writeFile(filepath.Join(dir, name), data, 0o600); err != nil {
 			return err
 		}
@@ -420,7 +568,8 @@ func (m *Manager) Status(ctx context.Context, req agentapi.WPStatusRequest) (age
 		return agentapi.WPInstallStatus{}, err
 	}
 
-	if _, err := m.Site(req.Site); err != nil {
+	acct, err := m.Site(req.Site)
+	if err != nil {
 		return agentapi.WPInstallStatus{}, err
 	}
 
@@ -428,6 +577,7 @@ func (m *Manager) Status(ctx context.Context, req agentapi.WPStatusRequest) (age
 	defer m.mu.Unlock()
 
 	out := agentapi.WPInstallStatus{Site: req.Site, State: agentapi.WPNone}
+	out.Installed, out.Empty, out.Database = inspect(acct.Home, req.WebDir)
 
 	st, err := m.load()
 	if err != nil {
@@ -444,21 +594,32 @@ func (m *Manager) Status(ctx context.Context, req agentapi.WPStatusRequest) (age
 		return out, err
 	}
 
-	switch m.phase(props["ActiveState"], started, true) {
-	case agentapi.DeployRunning:
+	phase := m.phase(props["ActiveState"], started, true)
+	if phase == agentapi.DeployRunning {
 		out.State = agentapi.DeployRunning
 		out.Log = tail(m.LogFile(req.Site))
 
 		return out, nil
+	}
+
+	m.removeCreds(req.Site)
+
+	// WordPress was installed but is gone, for example deleted in the
+	// file manager: the site counts as never installed again. A failed
+	// run keeps its error and log; the panel offers the install below it.
+	if phase == agentapi.DeploySucceeded && !out.Installed {
+		return out, nil
+	}
+
+	switch phase {
 	case agentapi.DeploySucceeded:
 		out.State = agentapi.DeploySucceeded
 	case agentapi.DeployFailed:
 		out.State, out.Error = agentapi.DeployFailed, failReason(props["Result"])
 	default:
-		out.State, out.Error = agentapi.DeployFailed, "the install did not start"
+		out.State, out.Error = agentapi.DeployFailed, "the run did not start"
 	}
 
-	m.removeCreds(req.Site)
 	out.Log = tail(m.LogFile(req.Site))
 
 	return out, nil
@@ -467,16 +628,16 @@ func (m *Manager) Status(ctx context.Context, req agentapi.WPStatusRequest) (age
 func failReason(result string) string {
 	switch result {
 	case "timeout":
-		return "the install took too long"
+		return "the run took too long"
 	case "exit-code":
-		return "a step of the install failed, see the log"
+		return "a step failed, see the log"
 	case "signal", "core-dump":
-		return "the install was killed"
+		return "the run was killed"
 	case "oom-kill":
-		return "the install ran out of memory"
+		return "the run ran out of memory"
 	}
 
-	return "the install failed (" + result + ")"
+	return "the run failed (" + result + ")"
 }
 
 // tail is the end of the log, valid UTF-8.

@@ -12,6 +12,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/profile"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -39,6 +40,28 @@ type CloneAgent interface {
 	DBCopy(ctx context.Context, source, target string) (agentapi.DBJob, error)
 	PoolList(ctx context.Context) ([]agentapi.PoolInfo, error)
 	HostStats(ctx context.Context) (agentapi.HostStats, error)
+	// WPCloneStart and WPCloneStatus run the WordPress configuration of
+	// a clone (site.wordpress.clone, site.wordpress.status).
+	WPCloneStart(ctx context.Context, req agentapi.WPCloneRequest) (agentapi.WPInstallStatus, error)
+	WPCloneStatus(ctx context.Context, site string) (agentapi.WPInstallStatus, error)
+	// DotEnvCloneStart runs the .env step of a Laravel or Symfony clone
+	// in the same unit (site.dotenv.clone).
+	DotEnvCloneStart(ctx context.Context, req agentapi.DotEnvCloneRequest) (agentapi.WPInstallStatus, error)
+}
+
+// DotEnvCloneStart calls site.dotenv.clone.
+func (a RPCAgent) DotEnvCloneStart(ctx context.Context, req agentapi.DotEnvCloneRequest) (agentapi.WPInstallStatus, error) {
+	return agentapi.DotEnvCloneStart.Call(ctx, a.C, req)
+}
+
+// WPCloneStart calls site.wordpress.clone.
+func (a RPCAgent) WPCloneStart(ctx context.Context, req agentapi.WPCloneRequest) (agentapi.WPInstallStatus, error) {
+	return agentapi.WPCloneStart.Call(ctx, a.C, req)
+}
+
+// WPCloneStatus calls site.wordpress.status.
+func (a RPCAgent) WPCloneStatus(ctx context.Context, site string) (agentapi.WPInstallStatus, error) {
+	return agentapi.WPInstallStatOp.Call(ctx, a.C, agentapi.WPStatusRequest{Site: site})
 }
 
 // SiteHomeCopy calls site.home.copy.
@@ -692,7 +715,16 @@ func (s *Service) stepClone(ctx context.Context, c store.SiteClone) {
 		// The agent is unavailable or busy: try again on the next poll.
 		s.log.WarnContext(ctx, "clone step", "site", site.Name, "err", err)
 	case c.HomeDone && allDBsDone(c.Databases):
-		s.finishClone(ctx, src, site, c)
+		// Keep the last copy's result before the configuration starts.
+		if changed {
+			if err := s.st.UpdateSiteClone(ctx, c, s.now()); err != nil {
+				s.log.ErrorContext(ctx, "save clone progress", "site", site.Name, "err", err)
+
+				return
+			}
+		}
+
+		s.configureStep(ctx, src, site, c)
 	case changed:
 		if err := s.st.UpdateSiteClone(ctx, c, s.now()); err != nil {
 			s.log.ErrorContext(ctx, "save clone progress", "site", site.Name, "err", err)
@@ -779,6 +811,146 @@ func (s *Service) advanceClone(ctx context.Context, src, site store.Site, c *sto
 	return false, "", nil
 }
 
+// configureStep runs the configuration step once files and databases are
+// copied, then finishes the clone.
+func (s *Service) configureStep(ctx context.Context, src, site store.Site, c store.SiteClone) {
+	changed, done, msg, err := s.configureClone(ctx, src, site, &c)
+
+	switch {
+	case msg != "":
+		s.failClone(ctx, site, c, msg)
+	case err != nil:
+		s.log.WarnContext(ctx, "clone configuration", "site", site.Name, "err", err)
+	case done:
+		s.finishClone(ctx, src, site, c)
+	case changed:
+		if err := s.st.UpdateSiteClone(ctx, c, s.now()); err != nil {
+			s.log.ErrorContext(ctx, "save clone progress", "site", site.Name, "err", err)
+		}
+	}
+}
+
+// configureClone points a WordPress, Laravel or Symfony clone at its
+// databases and its domain (ADR-0070): it sets new passwords for the
+// clone's database users, which the panel never stores, and starts the
+// agent's run (WP-CLI, or the .env edits), then waits for it. A clone of
+// another application needs no step (done at once).
+func (s *Service) configureClone(ctx context.Context, src, site store.Site, c *store.SiteClone) (changed, done bool, msg string, err error) {
+	if c.Config == store.CloneConfigDone {
+		return false, true, "", nil
+	}
+
+	if c.Config == store.CloneConfigNone {
+		p, err := s.st.SiteProfile(ctx, site.ID)
+		if err != nil {
+			return false, false, "", err
+		}
+
+		kind := map[string]string{profile.WordPress: profile.WordPress, profile.Laravel: agentapi.DotEnvLaravel, profile.Symfony: agentapi.DotEnvSymfony}[p.Profile]
+		if kind == "" || !hasDBUser(c.Databases) {
+			c.Config = store.CloneConfigDone
+
+			return true, true, "", nil
+		}
+
+		req, err := s.wpCloneRequest(ctx, src, site, *c)
+		if err != nil {
+			s.log.WarnContext(ctx, "set the database passwords of a clone", "site", site.Name, "err", err)
+
+			return false, false, "the database passwords of the clone could not be set", nil
+		}
+
+		if kind == profile.WordPress {
+			_, err = s.clones.WPCloneStart(ctx, req)
+		} else {
+			_, err = s.clones.DotEnvCloneStart(ctx, agentapi.DotEnvCloneRequest{
+				Site: req.Site, Kind: kind, WebDir: req.WebDir, URL: req.URL, Databases: req.Databases, DBPasswords: req.DBPasswords,
+			})
+		}
+
+		if err != nil {
+			if isCode(err, agentrpc.CodeConflict) {
+				// Another run of the site is busy: try again (with new
+				// passwords then, which is fine).
+				return false, false, "", err
+			}
+
+			return false, false, "the configuration could not start: " + agentMessage(err), nil
+		}
+
+		c.Config = store.CloneConfigRunning
+
+		return true, false, "", nil
+	}
+
+	st, err := s.clones.WPCloneStatus(ctx, site.Name)
+
+	switch {
+	case err != nil:
+		return false, false, "", err
+	case st.State == agentapi.DeploySucceeded:
+		c.Config = store.CloneConfigDone
+
+		return true, true, "", nil
+	case st.State == agentapi.DeployRunning:
+		return false, false, "", nil
+	}
+
+	reason := st.Error
+	if reason == "" {
+		reason = "the run failed"
+	}
+
+	return false, false, "configuration: " + reason, nil
+}
+
+// wpCloneRequest sets a new password for every database user of the
+// clone and builds the agent's request. The clone's address is https when
+// it wants HTTPS: WordPress then loads once its certificate exists.
+func (s *Service) wpCloneRequest(ctx context.Context, src, site store.Site, c store.SiteClone) (agentapi.WPCloneRequest, error) {
+	scheme := "http"
+	if site.TLS {
+		scheme = "https"
+	}
+
+	req := agentapi.WPCloneRequest{
+		Site: site.Name, PHP: site.PHP, WebDir: site.WebDir, URL: scheme + "://" + site.Domains[0],
+		From: src.Domains, Staging: c.Staging, DBPasswords: map[string]string{},
+	}
+
+	// A database without a user cannot be WordPress's.
+	for _, d := range c.Databases {
+		if d.User == "" {
+			continue
+		}
+
+		req.Databases = append(req.Databases, agentapi.WPCloneDB{Source: d.Source, Target: d.Target, User: d.User})
+
+		if _, ok := req.DBPasswords[d.User]; ok {
+			continue
+		}
+
+		pw, err := s.SetDatabaseUserPassword(ctx, c.StartedBy, d.Target, d.User, "")
+		if err != nil {
+			return agentapi.WPCloneRequest{}, err
+		}
+
+		req.DBPasswords[d.User] = pw
+	}
+
+	return req, nil
+}
+
+func hasDBUser(dbs []store.CloneDatabase) bool {
+	for _, d := range dbs {
+		if d.User != "" {
+			return true
+		}
+	}
+
+	return false
+}
+
 func allDBsDone(dbs []store.CloneDatabase) bool {
 	for _, d := range dbs {
 		if !d.Done {
@@ -826,4 +998,14 @@ func (s *Service) failClone(ctx context.Context, site store.Site, c store.SiteCl
 	if err := s.Delete(ctx, c.StartedBy, site.Name); err != nil {
 		s.log.ErrorContext(ctx, "remove a failed clone", "site", site.Name, "err", err)
 	}
+}
+
+// agentMessage is the agent's text of an error, for the clone's error.
+func agentMessage(err error) string {
+	var e *agentrpc.Error
+	if errors.As(err, &e) {
+		return e.Message
+	}
+
+	return "the agent did not answer"
 }

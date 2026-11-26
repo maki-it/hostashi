@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package wpcli runs WP-CLI for the WordPress quick install (ADR-0069).
+// Package wpcli runs WP-CLI for the WordPress quick install (ADR-0069)
+// and the configuration of a cloned WordPress site (ADR-0070); the .env
+// step of a cloned Laravel or Symfony site runs here too, without a
+// process.
 //
 // It is the seventh package that may start processes (os/exec), with this
 // narrow scope: Run only works inside hostashi-wp@<site>.service, as the
@@ -21,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +44,14 @@ type Job struct {
 	Home string `json:"home"`
 	// Domain is the site's primary domain, which URL must name.
 	Domain string `json:"domain"`
+	// Clone, when set, makes the run the configuration of a cloned site
+	// (ADR-0070) instead of a quick install; the other fields stay empty.
+	Clone *CloneJob `json:"clone,omitempty"`
+	// DotEnv, when set, makes the run the .env step of a cloned Laravel
+	// or Symfony site; it starts no process.
+	DotEnv *DotEnvJob `json:"dotEnv,omitempty"`
+	// Clear empties Path before the install (a reinstall).
+	Clear bool `json:"clear,omitempty"`
 }
 
 // Fixed places.
@@ -95,6 +107,19 @@ func (j Job) Validate() error {
 type Step struct {
 	Args  []string
 	Stdin string // "", CredDBPass or CredAdminPass
+	// Password is what goes to standard input instead of a credential
+	// (the clone's database password); never logged.
+	Password string
+	// Capture returns the step's output to the runner.
+	Capture bool
+}
+
+func (s Step) input(secrets map[string]string) string {
+	if s.Password != "" {
+		return s.Password
+	}
+
+	return secrets[s.Stdin]
 }
 
 // Steps returns the WP-CLI calls of a job, in order.
@@ -164,48 +189,114 @@ func (r *Runner) Run(ctx context.Context, j Job) error {
 		}
 	}
 
-	start := r.start
-	if start == nil {
-		start = startCmd
-	}
-
 	out := r.Out
 	if out == nil {
 		out = io.Discard
 	}
 
-	bin := PHPBin + j.PHP
-	env := []string{
-		"PATH=/usr/bin:/bin", "HOME=" + j.Home, "LANG=C.UTF-8",
-		"WP_CLI_CACHE_DIR=" + filepath.Join(j.Home, ".wp-cli", "cache"),
-		// No packages, no config of the site user: only the pinned phar.
-		"WP_CLI_PACKAGES_DIR=/nonexistent", "WP_CLI_CONFIG_PATH=/dev/null", "WP_CLI_DISABLE_AUTO_CHECK_UPDATE=1",
+	run := r.stepper(j.PHP, j.Home, out, r.Secrets[CredDBPass], r.Secrets[CredAdminPass])
+
+	if j.Clear {
+		fmt.Fprintf(out, "$ empty %s\n", j.Path)
+
+		if err := clearDir(j.Path); err != nil {
+			return err
+		}
 	}
 
 	for _, s := range Steps(j) {
-		fmt.Fprintf(out, "$ wp %s\n", strings.Join(redact(s.Args), " "))
-
-		var stdin io.Reader = strings.NewReader("")
-		if s.Stdin != "" {
-			stdin = strings.NewReader(r.Secrets[s.Stdin] + "\n")
-		}
-
-		// WP-CLI may repeat what it read on standard input, for example
-		// after a prompt; the log never gets a password.
-		w := &maskWriter{out: out, secrets: []string{r.Secrets[CredDBPass], r.Secrets[CredAdminPass]}}
-
-		args := append([]string{"-d", "memory_limit=512M", r.Phar}, s.Args...)
-		err := start(ctx, bin, args, env, stdin, w)
-		w.Flush()
-
-		if err != nil {
-			return fmt.Errorf("wpcli: wp %s %s: %w", s.Args[0], s.Args[1], err)
+		if _, err := run(ctx, s); err != nil {
+			return err
 		}
 	}
 
 	fmt.Fprintf(out, "%s %s\n", DoneMarker, j.URL)
 
 	return nil
+}
+
+// clearDir removes everything inside dir, as the user that runs it, and
+// keeps dir itself. Links are removed, never followed. A missing dir is
+// fine: WP-CLI creates it.
+func clearDir(dir string) error {
+	root, err := os.OpenRoot(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("wpcli: empty the document root: %w", err)
+	}
+
+	defer root.Close()
+
+	f, err := root.Open(".")
+	if err != nil {
+		return fmt.Errorf("wpcli: empty the document root: %w", err)
+	}
+
+	names, err := f.Readdirnames(-1)
+	f.Close()
+
+	if err != nil {
+		return fmt.Errorf("wpcli: empty the document root: %w", err)
+	}
+
+	for _, n := range names {
+		if err := root.RemoveAll(n); err != nil {
+			return fmt.Errorf("wpcli: empty the document root: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// stepper returns the function that runs one step with the site's PHP
+// CLI, logs it and masks every secret in its output. With capture, the
+// step's output is also returned.
+func (r *Runner) stepper(php, home string, out io.Writer, secrets ...string) func(ctx context.Context, s Step) (string, error) {
+	start := r.start
+	if start == nil {
+		start = startCmd
+	}
+
+	bin := PHPBin + php
+	env := []string{
+		"PATH=/usr/bin:/bin", "HOME=" + home, "LANG=C.UTF-8",
+		"WP_CLI_CACHE_DIR=" + filepath.Join(home, ".wp-cli", "cache"),
+		// No packages, no config of the site user: only the pinned phar.
+		"WP_CLI_PACKAGES_DIR=/nonexistent", "WP_CLI_CONFIG_PATH=/dev/null", "WP_CLI_DISABLE_AUTO_CHECK_UPDATE=1",
+	}
+
+	return func(ctx context.Context, s Step) (string, error) {
+		fmt.Fprintf(out, "$ wp %s\n", strings.Join(redact(s.Args), " "))
+
+		var stdin io.Reader = strings.NewReader("")
+		if s.Stdin != "" || s.Password != "" {
+			stdin = strings.NewReader(s.input(r.Secrets) + "\n")
+		}
+
+		var captured bytes.Buffer
+
+		dst := out
+		if s.Capture {
+			dst = io.MultiWriter(out, &captured)
+		}
+
+		// WP-CLI may repeat what it read on standard input, for example
+		// after a prompt; the log never gets a password.
+		w := &maskWriter{out: dst, secrets: secrets}
+
+		args := append([]string{"-d", "memory_limit=512M", r.Phar}, s.Args...)
+		err := start(ctx, bin, args, env, stdin, w)
+		w.Flush()
+
+		if err != nil {
+			return "", fmt.Errorf("wpcli: wp %s %s: %w", s.Args[0], s.Args[1], err)
+		}
+
+		return captured.String(), nil
+	}
 }
 
 // maskWriter passes output on line by line with every secret replaced,
@@ -314,6 +405,25 @@ func Main(ctx context.Context, args []string, euid int, out io.Writer) error {
 
 	if err := dec.Decode(&j); err != nil {
 		return fmt.Errorf("wpcli: job: %w", err)
+	}
+
+	if j.Clone != nil || j.DotEnv != nil {
+		b, err := read(CredDBPass)
+		if err != nil {
+			return err
+		}
+
+		pw, err := cloneSecrets(b)
+		if err != nil {
+			return err
+		}
+
+		r := &Runner{Euid: euid, Phar: args[0], Out: out}
+		if j.DotEnv != nil {
+			return r.RunDotEnv(*j.DotEnv, pw)
+		}
+
+		return r.RunClone(ctx, *j.Clone, pw)
 	}
 
 	secrets := map[string]string{}

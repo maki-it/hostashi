@@ -27,26 +27,79 @@ type wordPressIn struct {
 	Discourage bool `json:"discourage,omitempty"`
 }
 
+// wordPressReinstallIn replaces the site's document root with a new
+// WordPress. Confirm is the site's name, typed by the person.
+type wordPressReinstallIn struct {
+	wordPressIn
+
+	Confirm string `json:"confirm"`
+}
+
 // wordPressJSON is the state of the site's install run. Log is the run's
-// output, which WP-CLI writes and the site user can change.
+// output, which WP-CLI writes and the site user can change. Installed and
+// Empty describe the document root now: whether it holds WordPress, and
+// whether it is empty, so the install can start without a reinstall.
+// Database is DB_NAME from its wp-config.php.
 type wordPressJSON struct {
-	State string `json:"state"`
-	Error string `json:"error,omitempty"`
-	Log   string `json:"log,omitempty"`
+	State     string `json:"state"`
+	Error     string `json:"error,omitempty"`
+	Log       string `json:"log,omitempty"`
+	Installed bool   `json:"installed"`
+	Empty     bool   `json:"empty"`
+	Database  string `json:"database,omitempty"`
 }
 
 // wordPressStartJSON is a started install: the state, the database it
 // created, and the admin password when the panel generated it. The panel
 // keeps no copy of the password.
 type wordPressStartJSON struct {
-	wordPressJSON
-
+	State         string `json:"state"`
+	Error         string `json:"error,omitempty"`
+	Log           string `json:"log,omitempty"`
 	Database      string `json:"database"`
 	AdminPassword string `json:"adminPassword,omitempty"`
+	// DroppedDatabase is the old WordPress database a reinstall dropped.
+	DroppedDatabase string `json:"droppedDatabase,omitempty"`
 }
 
 func toWordPressJSON(st agentapi.WPInstallStatus) wordPressJSON {
-	return wordPressJSON{State: st.State, Error: st.Error, Log: st.Log}
+	return wordPressJSON{
+		State: st.State, Error: st.Error, Log: st.Log, Installed: st.Installed, Empty: st.Empty, Database: st.Database,
+	}
+}
+
+// mayWriteDatabases: the install creates a database (and a reinstall
+// drops one), so it needs databases:write on top of its own action.
+func mayWriteDatabases(w http.ResponseWriter, p auth.Principal) bool {
+	if !p.Allows(authz.ScopeOf("databases:write")) {
+		writeError(w, http.StatusForbidden, "insufficient_scope", "the token lacks the scope "+authz.ScopeOf("databases:write"))
+
+		return false
+	}
+
+	if !authz.Allowed(authz.Role(p.User.Role), "databases:write") {
+		writeError(w, http.StatusForbidden, "forbidden", "your role does not allow this")
+
+		return false
+	}
+
+	return true
+}
+
+func (in wordPressIn) input() hosting.WordPressInput {
+	return hosting.WordPressInput{
+		Locale: in.Locale, Title: in.Title, AdminUser: in.AdminUser, AdminEmail: in.AdminEmail,
+		AdminPassword: in.AdminPassword, Discourage: in.Discourage,
+	}
+}
+
+func writeWordPressStart(w http.ResponseWriter, got hosting.WordPressStart) {
+	// The answer may hold the generated admin password.
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusAccepted, wordPressStartJSON{
+		State: got.Status.State, Error: got.Status.Error, Log: got.Status.Log,
+		Database: got.Database, AdminPassword: got.AdminPassword, DroppedDatabase: got.DroppedDatabase,
+	})
 }
 
 // wordPressFail answers the errors of the WordPress routes.
@@ -84,15 +137,7 @@ func registerWordPress(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		ID: "installSiteWordPress", Tag: "sites", Summary: "Start the WordPress quick install", In: wordPressIn{}, Out: wordPressStartJSON{},
 		Status: http.StatusAccepted,
 	}, a.allow("sites.wordpress:install", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		if !p.Allows(authz.ScopeOf("databases:write")) {
-			writeError(w, http.StatusForbidden, "insufficient_scope", "the token lacks the scope "+authz.ScopeOf("databases:write"))
-
-			return
-		}
-
-		if !authz.Allowed(authz.Role(p.User.Role), "databases:write") {
-			writeError(w, http.StatusForbidden, "forbidden", "your role does not allow this")
-
+		if !mayWriteDatabases(w, p) {
 			return
 		}
 
@@ -104,20 +149,42 @@ func registerWordPress(mux *routeMux, a authn, svc *hosting.Service, log *slog.L
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
-		got, err := svc.InstallWordPress(ctx, p.User.ID, r.PathValue("name"), hosting.WordPressInput{
-			Locale: in.Locale, Title: in.Title, AdminUser: in.AdminUser, AdminEmail: in.AdminEmail,
-			AdminPassword: in.AdminPassword, Discourage: in.Discourage,
-		})
+		got, err := svc.InstallWordPress(ctx, p.User.ID, r.PathValue("name"), in.input())
 		if err != nil {
 			wordPressFail(log, w, err, "start WordPress install")
 
 			return
 		}
 
-		// The answer may hold the generated admin password.
-		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusAccepted, wordPressStartJSON{
-			wordPressJSON: toWordPressJSON(got.Status), Database: got.Database, AdminPassword: got.AdminPassword,
-		})
+		writeWordPressStart(w, got)
+	}))
+
+	// Empties the document root as the site user and installs a new
+	// WordPress with a new database. The database of the WordPress it
+	// replaces is dropped. Everything else in the document root is lost.
+	mux.Op("POST /api/v1/sites/{name}/wordpress/reinstall", openapi.Operation{
+		ID: "reinstallSiteWordPress", Tag: "sites", Summary: "Replace the site's files with a new WordPress",
+		In: wordPressReinstallIn{}, Out: wordPressStartJSON{}, Status: http.StatusAccepted,
+	}, a.allow("sites.wordpress:install", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		if !mayWriteDatabases(w, p) {
+			return
+		}
+
+		var in wordPressReinstallIn
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		got, err := svc.ReinstallWordPress(ctx, p.User.ID, r.PathValue("name"), in.input(), in.Confirm)
+		if err != nil {
+			wordPressFail(log, w, err, "start WordPress reinstall")
+
+			return
+		}
+
+		writeWordPressStart(w, got)
 	}))
 }

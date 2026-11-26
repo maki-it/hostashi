@@ -149,8 +149,11 @@ type WPInstallRequest struct {
 	// PHP is the site's PHP version; its CLI runs WP-CLI.
 	PHP string `json:"php"`
 	// WebDir is the site's document root below htdocs (ValidateWebDir).
-	// It must be empty or missing.
+	// It must be empty or missing, unless Reinstall is set.
 	WebDir string `json:"webDir,omitempty"`
+	// Reinstall empties the document root first, as the site user, so a
+	// new WordPress replaces whatever is there.
+	Reinstall bool `json:"reinstall,omitempty"`
 	// Domain is the site's primary domain.
 	Domain  string    `json:"domain"`
 	Install WPInstall `json:"install"`
@@ -193,10 +196,20 @@ func (r WPInstallRequest) Validate() error {
 // WPStatusRequest asks for the last quick install of a site.
 type WPStatusRequest struct {
 	Site string `json:"site"`
+	// WebDir is the site's document root below htdocs (ValidateWebDir).
+	// A finished run whose document root is empty again reports WPNone,
+	// so the install can run anew.
+	WebDir string `json:"webDir,omitempty"`
 }
 
-// Validate checks the site name.
-func (r WPStatusRequest) Validate() error { return ValidateSiteUser(r.Site) }
+// Validate checks the site name and the document root.
+func (r WPStatusRequest) Validate() error {
+	if err := ValidateSiteUser(r.Site); err != nil {
+		return err
+	}
+
+	return ValidateWebDir(r.WebDir)
+}
 
 // States of a quick install: the deploy states (DeployRunning, ...) plus
 // WPNone for a site that never ran one.
@@ -211,4 +224,13 @@ type WPInstallStatus struct {
 	State string `json:"state"`
 	Error string `json:"error,omitempty"`
 	Log   string `json:"log,omitempty"`
+	// Installed: the document root holds WordPress (wp-config.php or
+	// wp-includes/version.php), whoever put it there.
+	Installed bool `json:"installed,omitempty"`
+	// Empty: the document root is empty or missing, so an install can
+	// start without Reinstall.
+	Empty bool `json:"empty,omitempty"`
+	// Database is DB_NAME from wp-config.php when it is a plain database
+	// name (ValidateDBName), else empty.
+	Database string `json:"database,omitempty"`
 }
