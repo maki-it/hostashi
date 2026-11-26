@@ -486,6 +486,23 @@ const profileChoices = {
 };
 
 const routes = [
+  ["GET", /^\/sites\/([^/]+)\/object-cache$/, (m) => ({
+    enabled: true,
+    memoryMb: 64,
+    minMb: 32,
+    maxMb: 1024,
+    memoryLimitBytes: 1024 * 1024 * 1024,
+    socket: `/run/hostashi-valkey/${m[1]}/valkey.sock`,
+    status: { state: "active", paused: false, usedBytes: 8 * 1024 * 1024 },
+  })],
+  ["GET", /^\/sites\/([^/]+)\/page-cache$/, () => ({
+    enabled: true,
+    preset: "wordpress",
+    minutes: 10,
+    sizeMB: 256,
+    exclude: ["/members*"],
+    choices: { presets: ["wordpress", "woocommerce", "php"], minutes: [1, 5, 10, 15, 30, 60], sizesMB: [64, 128, 256, 512, 1024, 2048, 4096], maxExclude: 50 },
+  })],
   ["GET", /^\/sites\/([^/]+)\/files$/, () => ({ path: "", entries: homeFiles, truncated: false, unnamed: 0 })],
   [
     "POST",
