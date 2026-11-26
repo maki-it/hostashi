@@ -8054,6 +8054,12 @@
           "listedAt": {
             "type": "string"
           },
+          "runtimes": {
+            "type": "string"
+          },
+          "runtimesAuto": {
+            "type": "boolean"
+          },
           "update": {
             "type": "boolean"
           }
@@ -8061,6 +8067,7 @@
         "required": [
           "auto",
           "installed",
+          "runtimesAuto",
           "update"
         ],
         "type": "object"

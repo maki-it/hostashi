@@ -86,7 +86,16 @@ type Status struct {
 	// ListedAt is when apt last fetched the repository's list; zero
 	// without a list.
 	ListedAt time.Time `json:"listedAt,omitzero"`
+	// Runtimes is the installed version of RuntimesPackage (ADR-0077);
+	// empty when it is not installed.
+	Runtimes string `json:"runtimes,omitempty"`
+	// RuntimesAuto: unattended-upgrades takes the suite runtimes.
+	RuntimesAuto bool `json:"runtimesAuto"`
 }
+
+// RuntimesPackage brings the pinned Node.js and CPython releases as data
+// from the suite runtimes (ADR-0077).
+const RuntimesPackage = "hostashi-runtimes"
 
 // Read reads the status. A missing file is no error: it leaves the fields
 // it would fill empty.
@@ -116,6 +125,16 @@ func Read(p Paths) (Status, error) {
 	}
 
 	st.Repository = src.uri
+
+	if st.Runtimes, err = Installed(p.DpkgStatus, RuntimesPackage); err != nil {
+		return st, err
+	}
+
+	if b, err := os.ReadFile(p.Unattended); err == nil {
+		st.RuntimesAuto = strings.Contains(string(b), `"origin=Hostashi,codename=runtimes"`)
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return st, err
+	}
 
 	for _, f := range []string{p.Auto, p.Unattended} {
 		on, err := auto(f)

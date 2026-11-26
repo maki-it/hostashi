@@ -92,6 +92,14 @@ So a Node.js security release reaches a server only after three manual steps: me
 
 - A weekly workflow like `wpcli-version.yml` for `packaging/adminer`, manual merge (it ships in the package anyway).
 
+## Implementation notes (2026-11-26)
+
+- The agent and the panel read the file at the start of every command; the package's `postinst` restarts both, so there is no daily re-read.
+- The installer step `runtimes` (only on servers set up from the package) writes `/etc/apt/sources.list.d/hostashi-runtimes.sources` with `Signed-By` the runtimes key and the pin `/etc/apt/preferences.d/00hostashi-runtimes`: from `o=Hostashi,n=runtimes` only `hostashi-runtimes` (500), `hostashi` and everything else -1. It sorts before the stable pin, so a runtimes key holder cannot offer a `hostashi` package (checked in `apt-repo-test.sh`). deb822 `Include:` would say the same but needs apt 3.1; the pin works on every supported release.
+- An upgrade from the package runs with `--no-apt`, so the daily `hostashi-runtimes-install.timer` installs the package where it is missing. Doctor reports `hostashi.runtimes`; System, Updates shows it.
+- Kim (2026-11-26): the pin workflows run every six hours, the vulnerability check twice a day. unattended-upgrades on the servers stays daily.
+- The stable origin moved to its own file with a panel switch (ADR-0050 addendum); the runtimes origin is always in the installer's file.
+
 ## Consequences
 
 - A Node.js or CPython security patch reaches every server in about one to two days without any human step [E: workflow run + checks ~1 h, unattended-upgrades daily with random delay, agent daily check].

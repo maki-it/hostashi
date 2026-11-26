@@ -2198,7 +2198,10 @@ grep -F "origin=Hostashi,codename=stable" <<<"$(uu_allowed)" >/dev/null || fail 
 x rm /etc/apt/apt.conf.d/53hostashi-auto-update
 out=$(inst apply --yes)
 grep 'changes=0' <<<"$out" >/dev/null || { echo "$out"; fail "a run after the switch went off changed something"; }
-! grep -F "origin=Hostashi" <<<"$(uu_allowed)" >/dev/null || fail "Hostashi still in unattended-upgrades after the switch went off"
+origins=$(uu_allowed)
+! grep -F "origin=Hostashi,codename=stable" <<<"$origins" >/dev/null || fail "Hostashi still in unattended-upgrades after the switch went off: $origins"
+# The runtime pins (ADR-0077) stay on, whatever the switch says.
+grep -F "origin=Hostashi,codename=runtimes" <<<"$origins" >/dev/null || fail "the suite runtimes is not in unattended-upgrades: $origins"
 # A server set up before the switch named the suite in the installer's own
 # file; the next run moves it to 53hostashi-auto-update.
 x sed -i 's|^\(\t"origin=apt.postgresql.org.*\)$|\1\n\t"origin=Hostashi,codename=stable";|' /etc/apt/apt.conf.d/52hostashi-unattended-upgrades

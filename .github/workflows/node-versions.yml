@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Checks nodejs.org once a day for new releases of the Node.js LTS lines
+# Checks nodejs.org every six hours for new releases of the Node.js LTS lines
 # Hostashi pins (ADR-0054): patch and security releases, new LTS lines and
 # changed end dates. Every new release's SHASUMS256.txt must carry a valid
 # signature of a Node.js release key (tools/nodeversions/release-keys.asc).
@@ -22,8 +22,8 @@ name: Node versions
 
 on:
   schedule:
-    # Every day at 04:47 UTC.
-    - cron: "47 4 * * *"
+    # Every six hours (ADR-0077: security releases reach servers sooner).
+    - cron: "47 4,10,16,22 * * *"
   workflow_dispatch:
   pull_request:
     paths:
@@ -87,7 +87,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C "$BRANCH"
-          git commit -q -s -a -m "$title" -m "Found by the daily Node versions workflow (ADR-0054)."
+          git commit -q -s -a -m "$title" -m "Found by the Node versions workflow (ADR-0054)."
           # The same change as on the open branch: do not push again, so the
           # checks and reviews on it stay.
           if git fetch -q origin "$BRANCH" 2>/dev/null && git diff --quiet FETCH_HEAD HEAD; then
@@ -99,7 +99,7 @@ jobs:
           {
             echo "## What"
             echo
-            echo "The daily Node versions workflow found:"
+            echo "The Node versions workflow found:"
             echo
             cat "$RUNNER_TEMP/summary.md"
             echo

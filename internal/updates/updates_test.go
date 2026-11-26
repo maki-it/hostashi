@@ -175,3 +175,15 @@ func TestAutoContentMatchesInstaller(t *testing.T) {
 		t.Fatalf("packaging/apt/%s differs from AutoContent: %v", filepath.Base(AutoFile), err)
 	}
 }
+
+func TestReadRuntimes(t *testing.T) {
+	p := setup(t)
+
+	write(t, p.DpkgStatus, status+"\nPackage: hostashi-runtimes\nStatus: install ok installed\nArchitecture: all\nVersion: 20261127050000\n")
+	write(t, p.Unattended, "\t\"origin=Hostashi,codename=runtimes\";\n")
+
+	st, err := Read(p)
+	if err != nil || st.Runtimes != "20261127050000" || !st.RuntimesAuto || st.Auto {
+		t.Fatalf("runtimes: %+v %v", st, err)
+	}
+}
