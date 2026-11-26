@@ -31,6 +31,8 @@ Type to search the list of zones the server knows. Before you save, the hint sho
 
 Shown on servers set up from the `hostashi` package. The card shows the installed Hostashi version and the newest one apt saw in the Hostashi repository (apt fetches the list once a day). The versions link to their release notes.
 
+**Node.js and Python patches** shows the package `hostashi-runtimes`: newer patch releases of the pinned Node.js and Python lines, published as signed data in the suite `runtimes` of the Hostashi repository and installed by unattended-upgrades every day, independent of the switch below ([ADR-0077](https://github.com/maki-it/hostashi/blob/main/docs/adr/0077-automatic-security-updates-for-pinned-runtimes.md)). The agent then installs the new release with its checksum check. **Not set up** means the installer has not run since the package came; the Health page says so too.
+
 The switch **Automatic updates** applies at once and is recorded in the audit log:
 
 - **On**: unattended-upgrades installs new Hostashi versions together with the daily security updates. Each update keeps a copy of the panel database first. Hostashi writes `/etc/apt/apt.conf.d/53hostashi-auto-update` for it, the same file as the installer option `--auto-update`.

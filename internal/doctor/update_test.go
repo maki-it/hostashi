@@ -73,3 +73,32 @@ func TestUpdate(t *testing.T) {
 		}
 	}
 }
+
+func TestRuntimes(t *testing.T) {
+	repo := "https://get.hostashi.com/apt"
+
+	for _, c := range []struct {
+		name   string
+		st     updates.Status
+		status string
+		text   string
+	}{
+		{"not from the package", updates.Status{}, "", ""},
+		{"missing", updates.Status{Installed: "0.14.0", Repository: repo}, agentapi.DoctorWarn, "not installed"},
+		{"not automatic", updates.Status{Installed: "0.14.0", Repository: repo, Runtimes: "20261127050000"}, agentapi.DoctorWarn, "does not take"},
+		{"fine", updates.Status{Installed: "0.14.0", Repository: repo, Runtimes: "20261127050000", RuntimesAuto: true}, agentapi.DoctorOK, "20261127050000"},
+	} {
+		got := Runtimes(c.st)
+		if c.status == "" {
+			if len(got) != 0 {
+				t.Errorf("%s: %+v", c.name, got)
+			}
+
+			continue
+		}
+
+		if len(got) != 1 || got[0].ID != "hostashi.runtimes" || got[0].Status != c.status || !strings.Contains(got[0].Summary, c.text) {
+			t.Errorf("%s: %+v", c.name, got)
+		}
+	}
+}

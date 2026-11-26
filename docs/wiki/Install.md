@@ -126,6 +126,8 @@ The installer refuses an options file that anyone but root could have written, o
 
 The Health page and the overview show when a newer version is in the Hostashi repository (from apt's package list, which apt refreshes every day), and admins get one email per new version. On a server set up this way, installing a newer `hostashi` package (`apt upgrade`) updates it by itself. Before the new files land, the package stops the panel and keeps a copy of the panel database in `/var/lib/hostashi-installer/upgrade/` (the three newest). Then it runs `install.sh upgrade`, which restarts agent and panel, and waits up to 60 seconds for the panel to answer. The output goes to `/var/log/hostashi-upgrade.log`.
 
+The installer also adds the suite `runtimes` of the same repository (`/etc/apt/sources.list.d/hostashi-runtimes.sources`, signed with its own key, `/usr/share/keyrings/hostashi-runtimes-keyring.asc`) and installs the package `hostashi-runtimes`. It holds the pinned Node.js and Python releases as data, no Hostashi code; unattended-upgrades updates it every day, so patch releases of the installed lines arrive without a new Hostashi version. A pin (`/etc/apt/preferences.d/00hostashi-runtimes`) lets this suite provide only that package. Where an upgrade could not install it, `hostashi-runtimes-install.timer` does once a day.
+
 If that fails, the panel runs again as far as possible and apt reports an error; the package stays unconfigured. Fix the cause (the log says what failed), then run `sudo dpkg --configure -a`.
 
 ### Going back to an older version
