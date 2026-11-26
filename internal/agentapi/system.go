@@ -117,6 +117,11 @@ type SystemUpdates struct {
 	Auto      bool   `json:"auto"`
 	// ListedAt is when apt last fetched the list, RFC 3339 UTC.
 	ListedAt string `json:"listedAt,omitempty"`
+	// Runtimes is the installed version of hostashi-runtimes, the pinned
+	// Node.js and CPython releases (ADR-0077); empty when not installed.
+	// RuntimesAuto: unattended-upgrades updates it.
+	Runtimes     string `json:"runtimes,omitempty"`
+	RuntimesAuto bool   `json:"runtimesAuto"`
 }
 
 // SystemTimezonesRequest has no parameters.

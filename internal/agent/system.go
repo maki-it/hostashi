@@ -240,7 +240,10 @@ func (o *systemOps) updates(ctx context.Context) *agentapi.SystemUpdates {
 		return nil
 	}
 
-	u := &agentapi.SystemUpdates{Installed: st.Installed, Available: st.Available, Update: st.Update, Auto: st.Auto}
+	u := &agentapi.SystemUpdates{
+		Installed: st.Installed, Available: st.Available, Update: st.Update, Auto: st.Auto,
+		Runtimes: st.Runtimes, RuntimesAuto: st.RuntimesAuto,
+	}
 	if !st.ListedAt.IsZero() {
 		u.ListedAt = st.ListedAt.UTC().Format(time.RFC3339)
 	}

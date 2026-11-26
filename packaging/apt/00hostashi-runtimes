@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Managed by Hostashi (ADR-0077); the installer overwrites changes. The
+# suite runtimes of the Hostashi repository, signed with its own key, may
+# provide the package hostashi-runtimes only: the pinned Node.js and CPython
+# releases as data, no Hostashi code. This file sorts before the pin of the
+# suite stable (preferences.d/hostashi), so the first record wins over its
+# record for the hostashi package.
+
+Package: hostashi
+Pin: release o=Hostashi,n=runtimes
+Pin-Priority: -1
+
+Package: hostashi-runtimes
+Pin: release o=Hostashi,n=runtimes
+Pin-Priority: 500
+
+Package: *
+Pin: release o=Hostashi,n=runtimes
+Pin-Priority: -1

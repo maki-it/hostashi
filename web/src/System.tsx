@@ -13,6 +13,7 @@ import {
   getSystem,
   hostnameError,
   listTimezones,
+  pinsDate,
   rebootServer,
   releaseUrl,
   setAutoUpdate,
@@ -246,6 +247,19 @@ function UpdatesCard({
           <dd>
             {version(updates.installed)}
             {updates.update && updates.available && <> (newest: {version(updates.available)})</>}
+          </dd>
+          <dt>Node.js and Python patches</dt>
+          <dd>
+            {updates.runtimes && updates.runtimesAuto ? (
+              <>
+                <Badge tone="ok">Automatic</Badge>{" "}
+                <span className="ui-hint">pins of {pinsDate(updates.runtimes) || updates.runtimes}, always on</span>
+              </>
+            ) : (
+              <>
+                <Badge tone="warn">Not set up</Badge> <span className="ui-hint">the installer sets them up on its next run</span>
+              </>
+            )}
           </dd>
           {updates.listedAt && (
             <>

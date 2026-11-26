@@ -4,7 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { System } from "./System";
-import { hostnameError, panelVersion, releaseUrl, uptime, versionLabel, waitForPanel, type SystemInfo } from "./system";
+import { hostnameError, panelVersion, pinsDate, releaseUrl, uptime, versionLabel, waitForPanel, type SystemInfo } from "./system";
 import { mockFetch } from "./test-utils";
 
 const info: SystemInfo = {
@@ -63,6 +63,11 @@ describe("system helpers", () => {
     expect(hostnameError("a".repeat(65))).not.toBe("");
   });
 
+  it("reads the date of the runtime pins", () => {
+    expect(pinsDate("20261127050000")).toContain("2026");
+    expect(pinsDate("2026-11-27")).toBe("");
+  });
+
   it("formats the uptime", () => {
     expect(uptime(59)).toBe("0 min");
     expect(uptime(3 * 3600 + 120)).toBe("3 h 2 min");
@@ -90,7 +95,15 @@ describe("system helpers", () => {
 
 describe("System", () => {
   it("switches automatic updates", async () => {
-    const updates = { installed: "0.12.0", available: "0.13.0", update: true, auto: false, listedAt: "2026-11-26T06:00:00Z" };
+    const updates = {
+      installed: "0.12.0",
+      available: "0.13.0",
+      update: true,
+      auto: false,
+      listedAt: "2026-11-26T06:00:00Z",
+      runtimes: "20261127050000",
+      runtimesAuto: true,
+    };
     const calls = mockFetch({
       "GET /api/v1/system": { body: { ...info, updates } },
       "GET /api/v1/system/timezones": { body: zones },
@@ -103,6 +116,7 @@ describe("System", () => {
     expect(within(card).getByRole("link", { name: "v0.13.0" })).toHaveAttribute("href", releaseUrl("0.13.0"));
     const sw = within(card).getByRole("switch", { name: "Automatic updates" });
     expect(sw).not.toBeChecked();
+    expect(within(card).getByText("Node.js and Python patches").nextElementSibling).toHaveTextContent("Automatic");
     await userEvent.setup().click(sw);
     expect(await screen.findByText(/Automatic updates are on/)).toBeInTheDocument();
     expect(within(card).getByRole("switch", { name: "Automatic updates" })).toBeChecked();
