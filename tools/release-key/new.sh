@@ -5,7 +5,13 @@
 # (ADR-0050, section 3). Run once, on your own computer, by a repository
 # admin; nothing else needs gpg by hand.
 #
-#   tools/release-key/new.sh [--repo OWNER/NAME] [--replace]
+#   tools/release-key/new.sh [--repo OWNER/NAME] [--replace] [--runtimes]
+#
+# With --runtimes it creates the second key instead, for the apt suite
+# "runtimes" (ADR-0077): environment "runtimes" without approval and with
+# deployments from main only, secret RUNTIMES_SIGNING_KEY, backup file
+# ./hostashi-runtimes-signing-key.asc. Servers trust that key for the
+# runtimes suite only, so it can sign pins but never a Hostashi package.
 #
 # Needs bash, gpg (2.2 or later) and the GitHub CLI, logged in as an admin
 # of the repository (gh auth login). The script
@@ -30,12 +36,17 @@ SECRET=APT_SIGNING_KEY
 UID_TEXT="Hostashi archive signing key <kontakt@maki-it.de>"
 BACKUP=./hostashi-apt-signing-key.asc
 replace=""
+REVIEWERS=yes POLICY_TYPE=tag POLICY_NAME='v*'
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) [ $# -ge 2 ] || { echo "--repo needs OWNER/NAME" >&2; exit 64; }; REPO=$2; shift;;
     --replace) replace=1;;
-    -h | --help) sed -n '3,25p' "$0"; exit 0;;
+    --runtimes)
+      ENV=runtimes SECRET=RUNTIMES_SIGNING_KEY BACKUP=./hostashi-runtimes-signing-key.asc
+      UID_TEXT="Hostashi runtimes signing key <kontakt@maki-it.de>"
+      REVIEWERS=no POLICY_TYPE=branch POLICY_NAME=main;;
+    -h | --help) sed -n '3,30p' "$0"; exit 0;;
     *) echo "unknown argument: $1" >&2; exit 64;;
   esac
   shift
@@ -54,23 +65,30 @@ if gh api "repos/$REPO/environments/$ENV/secrets/$SECRET" >/dev/null 2>&1; then
   [ -n "$replace" ] || die "$ENV already holds $SECRET. Replacing it means a new key for every server (ADR-0050); rerun with --replace if that is what you want."
 fi
 
-step "environment $ENV: your approval, tags v* only"
-me=$(gh api user -q .id)
+if [ "$REVIEWERS" = yes ]; then
+  step "environment $ENV: your approval, $POLICY_TYPE $POLICY_NAME only"
+  me=$(gh api user -q .id)
+  reviewers="[{\"type\": \"User\", \"id\": $me}]"
+else
+  # The runtimes suite is published from main without a person (ADR-0077).
+  step "environment $ENV: no approval, $POLICY_TYPE $POLICY_NAME only"
+  reviewers="[]"
+fi
 gh api -X PUT "repos/$REPO/environments/$ENV" --input - >/dev/null <<JSON
 {
   "wait_timer": 0,
   "prevent_self_review": false,
-  "reviewers": [{"type": "User", "id": $me}],
+  "reviewers": $reviewers,
   "deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}
 }
 JSON
 policies=$(gh api "repos/$REPO/environments/$ENV/deployment-branch-policies" -q '.branch_policies[] | "\(.type) \(.name)"')
 while read -r type name; do
   [ -n "$type" ] || continue
-  [ "$type $name" = "tag v*" ] || die "environment $ENV allows $type '$name' as well; remove that policy in the repository settings, then run again"
+  [ "$type $name" = "$POLICY_TYPE $POLICY_NAME" ] || die "environment $ENV allows $type '$name' as well; remove that policy in the repository settings, then run again"
 done <<<"$policies"
-grep -qx 'tag v\*' <<<"$policies" ||
-  gh api -X POST "repos/$REPO/environments/$ENV/deployment-branch-policies" -f name='v*' -f type=tag >/dev/null
+grep -qxF "$POLICY_TYPE $POLICY_NAME" <<<"$policies" ||
+  gh api -X POST "repos/$REPO/environments/$ENV/deployment-branch-policies" -f name="$POLICY_NAME" -f type="$POLICY_TYPE" >/dev/null
 
 step "key: Ed25519, expires in two years"
 GNUPGHOME=$(mktemp -d)
