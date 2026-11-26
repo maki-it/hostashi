@@ -171,6 +171,39 @@ describe("Sites", () => {
     expect(screen.getByText("No site matches the filter.")).toBeInTheDocument();
   });
 
+  it("shows disk, backup, virus finds and staging, and filters what needs attention", async () => {
+    const user = userEvent.setup();
+    const GiB = 1024 ** 3;
+    const usage = (bytes: number, level: string) => ({ enforced: true, bytes, inodes: 10, bytesPercent: Math.round((bytes * 100) / (10 * GiB)), inodesPercent: 0, level });
+    const lim = (u: object) => ({ body: { set: true, preset: "", limits: { diskBytes: 10 * GiB }, appliedAt: 1, applyError: "", updatedAt: 1, usage: u } });
+    const stage = { ...blog, name: "stage", domains: ["stage.example.com"] };
+    mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [blog, shop, stage], marks: { blog: { openFindings: 2, cloneOf: "", staging: false }, stage: { openFindings: 0, cloneOf: "blog", staging: true } } } },
+      "GET /api/v1/sites/blog/limits": lim(usage(2 * GiB, "ok")),
+      "GET /api/v1/sites/shop/limits": lim(usage(9.6 * GiB, "critical")),
+      "GET /api/v1/sites/stage/limits": lim(usage(1 * GiB, "ok")),
+      "GET /api/v1/backups": {
+        body: { ready: true, overdue: false, status: { running: false, ok: true, finished: new Date(Date.now() - 2 * 3600e3).toISOString(), items: [{ kind: "files", site: "blog" }, { kind: "files", site: "shop", error: "disk read" }], maintenanceOk: true } },
+      },
+    });
+    render(<ListHarness />);
+    const table = await screen.findByRole("table", { name: "Sites" });
+    const row = (name: string) => within(within(table).getByRole("link", { name }).closest("tr")!);
+
+    expect(await row("blog").findByText("2 GiB of 10 GiB")).toBeInTheDocument();
+    expect(row("blog").getByRole("link", { name: "2 virus finds" })).toHaveAttribute("href", "#/sites/blog/malware");
+    expect(row("blog").getByText("2 hours ago")).toBeInTheDocument();
+    expect(await row("shop").findByText("Failed")).toBeInTheDocument();
+    expect(row("stage").getByText("Staging of blog")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "State" }), "attention");
+    // blog has virus finds, shop a full disk and a failed certificate.
+    expect(rowNames()).toEqual(["blog", "shop"]);
+    await user.selectOptions(screen.getByRole("combobox", { name: "State" }), "staging");
+    expect(rowNames()).toEqual(["stage"]);
+  });
+
   it("shows the display name with the system name and filters by it", async () => {
     const user = userEvent.setup();
     mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [{ ...shop, title: "Müller Online-Shop" }, blog] } } });

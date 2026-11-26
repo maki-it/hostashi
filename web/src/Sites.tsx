@@ -2,7 +2,10 @@
 
 import { listProfiles, type Profile } from "./profiles";
 import { LockSimple, LockSimpleOpen, Plus } from "@phosphor-icons/react";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { getBackups, type BackupInfo } from "./backups";
+import { formatBytes, getSiteLimits, type Usage } from "./limits";
+import { relativeTime } from "./ui/Time";
 import { formatHash } from "./routes";
 import {
   compareVersions,
@@ -12,7 +15,9 @@ import {
   httpsTone,
   defaultPool,
   listPools,
-  listSites,
+  hasAccount,
+  listSitesMarked,
+  type SiteMarks,
   parseDomains,
   phpChoices,
   phpVersions,
@@ -52,12 +57,15 @@ type QueryProps = {
 // certificate is pending.
 export function useSites() {
   const [sites, setSites] = useState<Site[] | null>(null);
+  const [marks, setMarks] = useState<Record<string, SiteMarks>>({});
   const [php, setPhp] = useState<PHPVersions | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     try {
-      setSites(await listSites());
+      const r = await listSitesMarked();
+      setSites(r.sites);
+      setMarks(r.marks);
       setError("");
     } catch (err) {
       setError(siteMessage(err));
@@ -81,7 +89,66 @@ export function useSites() {
       .catch(() => setPhp({ installed: [], supported: [], legacy: [] }));
   }, [load]);
 
-  return { sites, php, error, load };
+  return { sites, marks, php, error, load };
+}
+
+// Disk is the disk use of a site and its limit (0: none).
+type Disk = { usage: Usage; limit: number };
+
+// useDisks loads the disk use of the sites with files, a few at a time, so
+// a long list does not ask the agent for every site at once.
+function useDisks(sites: Site[] | null): Record<string, Disk> {
+  const [disks, setDisks] = useState<Record<string, Disk>>({});
+  const names = (sites ?? []).filter((s) => s.state === "active" && hasAccount(s)).map((s) => s.name);
+  const key = names.join(" ");
+  useEffect(() => {
+    let live = true;
+    const queue = key ? key.split(" ") : [];
+    const next = async (): Promise<void> => {
+      const name = queue.shift();
+      if (!name || !live) return;
+      try {
+        const l = await getSiteLimits(name);
+        if (live && l.usage) setDisks((d) => ({ ...d, [name]: { usage: l.usage!, limit: l.limits.diskBytes } }));
+      } catch {
+        // The column stays empty for this site.
+      }
+      return next();
+    };
+    void Promise.all([next(), next(), next(), next()]);
+    return () => {
+      live = false;
+    };
+  }, [key]);
+  return disks;
+}
+
+// useBackupStatus loads the backup state for administrators; for other
+// roles the request fails and the column stays hidden.
+function useBackupStatus(): BackupInfo | null {
+  const [info, setInfo] = useState<BackupInfo | null>(null);
+  useEffect(() => {
+    let live = true;
+    getBackups().then(
+      (b) => live && setInfo(b),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+  return info;
+}
+
+// backupOf says how the last backup run went for a site: "" when the site
+// was not part of it.
+function backupOf(info: BackupInfo, s: Site): { word: string; tone?: "err" | "warn"; at: number } {
+  const st = info.status;
+  const item = st.items.find((i) => i.site === s.name && i.kind === "files");
+  if (!info.ready || !item || !st.finished) return { word: "", at: 0 };
+  if (item.error) return { word: "Failed", tone: "err", at: 0 };
+  const at = new Date(st.finished).getTime();
+  return { word: relativeTime(new Date(at)), at, ...(info.overdue ? { tone: "warn" as const } : {}) };
 }
 
 const stateFilters = [
@@ -90,10 +157,14 @@ const stateFilters = [
   { value: "maintenance", label: "Maintenance" },
   { value: "disabled", label: "Disabled" },
   { value: "problem", label: "Certificate problems" },
+  { value: "attention", label: "Needs attention" },
+  { value: "staging", label: "Staging sites" },
 ] as const;
 
-function matches(s: Site, q: string, state: string): boolean {
+function matches(s: Site, q: string, state: string, m: SiteMarks | undefined, disk: Disk | undefined): boolean {
   if (q && !s.name.includes(q) && !(s.title ?? "").toLowerCase().includes(q) && !s.domains.some((d) => d.includes(q))) return false;
+  if (state === "attention") return siteIssues(s).length > 0 || (m?.openFindings ?? 0) > 0 || (disk !== undefined && disk.usage.level !== "ok");
+  if (state === "staging") return m?.staging === true;
   if (state === "problem") return s.tls.enabled && !s.tls.active && Boolean(s.tls.error);
   if (state) return siteStatus(s).key === state;
   return true;
@@ -125,66 +196,120 @@ function stateBadge(s: Site) {
   return <Badge tone={st.tone}>{st.key === "disabled" ? "Disabled" : st.word}</Badge>;
 }
 
-const columns: Column<Site>[] = [
-  {
-    key: "name",
-    header: "Site",
-    sortValue: (s) => siteLabel(s).toLowerCase(),
-    cell: (s) => (
-      <div className={`ui-cell-main${s.disabled ? " ui-cell-off" : ""}`}>
-        <span className="ui-row ui-row-tight">
-          <a className="ui-row-link" href={formatHash({ page: "sites", site: { name: s.name } })}>
-            {siteLabel(s)}
-          </a>
-          {stateBadge(s)}
-        </span>
-        <span>
-          {s.title && (
-            <>
-              <span className="ui-mono" title="System name">
-                {s.name}
+type ListData = { marks: Record<string, SiteMarks>; disks: Record<string, Disk>; backups: BackupInfo | null };
+
+// siteColumns are the columns of the list. Disk and backup come in after
+// the list; the backup column is only there for administrators.
+function siteColumns({ marks, disks, backups }: ListData): Column<Site>[] {
+  const cols: Column<Site>[] = [
+    {
+      key: "name",
+      header: "Site",
+      sortValue: (s) => siteLabel(s).toLowerCase(),
+      cell: (s) => {
+        const m = marks[s.name];
+        return (
+          <div className={`ui-cell-main${s.disabled ? " ui-cell-off" : ""}`}>
+            <span className="ui-row ui-row-tight">
+              <a className="ui-row-link" href={formatHash({ page: "sites", site: { name: s.name } })}>
+                {siteLabel(s)}
+              </a>
+              {stateBadge(s)}
+              {m?.cloneOf && <Badge tone={m.staging ? "warn" : "off"}>{`${m.staging ? "Staging" : "Copy"} of ${m.cloneOf}`}</Badge>}
+            </span>
+            <span>
+              {s.title && (
+                <>
+                  <span className="ui-mono" title="System name">
+                    {s.name}
+                  </span>
+                  {" · "}
+                </>
+              )}
+              {s.domains[0]}
+            </span>
+          </div>
+        );
+      },
+    },
+    { key: "type", header: "Type", sortValue: (s) => siteTypeLabel(s), cell: (s) => siteTypeLabel(s) },
+    {
+      key: "disk",
+      header: "Disk",
+      sortValue: (s) => disks[s.name]?.usage.bytes ?? -1,
+      cell: (s) => {
+        const d = disks[s.name];
+        if (!d) return <span className="ui-hint">—</span>;
+        const tone = d.usage.level === "critical" ? "err" : d.usage.level === "warning" ? "warn" : undefined;
+        return (
+          <span className="ui-cellbar" data-tone={tone}>
+            {d.limit > 0 && (
+              <span className="ui-cellbar-track" aria-hidden="true">
+                <span style={{ width: `${Math.min(100, d.usage.bytesPercent)}%` }} />
               </span>
-              {" · "}
-            </>
-          )}
-          {s.domains[0]}
-        </span>
-      </div>
-    ),
-  },
-  { key: "type", header: "Type", sortValue: (s) => siteTypeLabel(s), cell: (s) => siteTypeLabel(s) },
-  {
+            )}
+            <span>{d.limit > 0 ? `${formatBytes(d.usage.bytes)} of ${formatBytes(d.limit)}` : formatBytes(d.usage.bytes)}</span>
+          </span>
+        );
+      },
+    },
+  ];
+  if (backups) {
+    cols.push({
+      key: "backup",
+      header: "Last backup",
+      sortValue: (s) => backupOf(backups, s).at,
+      cell: (s) => {
+        const b = backupOf(backups, s);
+        if (!b.word) return <span className="ui-hint">—</span>;
+        return b.tone ? <Badge tone={b.tone}>{b.word}</Badge> : b.word;
+      },
+    });
+  }
+  cols.push({
     key: "status",
     header: "Status",
-    sortValue: (s) => statusRank(s),
-    cell: (s) => (
-      <span className="ui-row ui-row-tight">
-        {s.tls.active ? (
-          <span className="ui-https">
-            <LockSimple size={16} aria-hidden />
-            HTTPS
-          </span>
-        ) : (
-          <span className="ui-https ui-https-off">
-            <LockSimpleOpen size={16} aria-hidden />
-            HTTP only
-          </span>
-        )}
-        {siteIssues(s).map((i) => (
-          <Badge key={i.word} tone={i.tone}>
-            {i.word}
-          </Badge>
-        ))}
-      </span>
-    ),
-  },
-];
+    sortValue: (s) => statusRank(s) - ((marks[s.name]?.openFindings ?? 0) > 0 ? 10 : 0),
+    cell: (s) => {
+      const finds = marks[s.name]?.openFindings ?? 0;
+      return (
+        <span className="ui-row ui-row-tight">
+          {s.tls.active ? (
+            <span className="ui-https">
+              <LockSimple size={16} aria-hidden />
+              HTTPS
+            </span>
+          ) : (
+            <span className="ui-https ui-https-off">
+              <LockSimpleOpen size={16} aria-hidden />
+              HTTP only
+            </span>
+          )}
+          {finds > 0 && (
+            <a href={formatHash({ page: "sites", site: { name: s.name, tab: "malware" } })}>
+              <Badge tone="err">{finds === 1 ? "1 virus find" : `${finds} virus finds`}</Badge>
+            </a>
+          )}
+          {siteIssues(s).map((i) => (
+            <Badge key={i.word} tone={i.tone}>
+              {i.word}
+            </Badge>
+          ))}
+        </span>
+      );
+    },
+  });
+  return cols;
+}
 
 // Sites is the list of sites (ADR-0037): a table that can be sorted and
 // filtered, with the choice kept in the address. "New site" opens the form
 // as its own view (?new=1). Each site's settings are on its own page.
 export function Sites({ query, onQuery }: QueryProps) {
-  const { sites, php, error, load } = useSites();
+  const { sites, marks, php, error, load } = useSites();
+  const disks = useDisks(sites);
+  const backups = useBackupStatus();
+  const columns = useMemo(() => siteColumns({ marks, disks, backups }), [marks, disks, backups]);
   const set = (key: string, value: string) => {
     const next = new URLSearchParams(query);
     if (value) next.set(key, value);
@@ -205,7 +330,7 @@ export function Sites({ query, onQuery }: QueryProps) {
   const state = query.get("state") ?? "";
   const sortKey = query.get("sort");
   const sort: Sort | undefined = sortKey ? { key: sortKey, dir: query.get("dir") === "desc" ? "desc" : "asc" } : undefined;
-  const shown = (sites ?? []).filter((s) => matches(s, q, state));
+  const shown = (sites ?? []).filter((s) => matches(s, q, state, marks[s.name], disks[s.name]));
 
   return (
     <>

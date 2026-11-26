@@ -7253,6 +7253,15 @@
       "SiteList": {
         "additionalProperties": false,
         "properties": {
+          "marks": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SiteMarks"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
           "sites": {
             "items": {
               "$ref": "#/components/schemas/Site"
@@ -7264,6 +7273,7 @@
           }
         },
         "required": [
+          "marks",
           "sites"
         ],
         "type": "object"
@@ -7295,6 +7305,26 @@
           "lines",
           "more",
           "rotated"
+        ],
+        "type": "object"
+      },
+      "SiteMarks": {
+        "additionalProperties": false,
+        "properties": {
+          "cloneOf": {
+            "type": "string"
+          },
+          "openFindings": {
+            "type": "integer"
+          },
+          "staging": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cloneOf",
+          "openFindings",
+          "staging"
         ],
         "type": "object"
       },

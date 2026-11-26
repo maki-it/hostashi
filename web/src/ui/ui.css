@@ -2130,3 +2130,31 @@ html:has(.ui-files) {
   background: var(--sunken);
   outline: none;
 }
+
+/* A small bar with its value in a table cell, such as the disk use. */
+.ui-cellbar {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 120px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.ui-cellbar-track {
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  background: var(--sunken);
+  border-radius: 3px;
+}
+.ui-cellbar-track > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.ui-cellbar[data-tone="warn"] .ui-cellbar-track > span {
+  background: var(--warn);
+}
+.ui-cellbar[data-tone="err"] .ui-cellbar-track > span {
+  background: var(--err);
+}
