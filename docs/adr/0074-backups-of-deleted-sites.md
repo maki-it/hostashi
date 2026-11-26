@@ -58,6 +58,6 @@ Options **A, A, A**.
 
 ## Open questions for Kim
 
-1. Where is a snapshot of a deleted site restored to? Recommendation: A, into an existing site the administrator picks.
+1. ~~Where is a snapshot of a deleted site restored to?~~ Decided by Kim (2026-11-26): A, into an existing site the administrator picks.
 2. How long do the snapshots of a deleted site stay? Recommendation: A, until the administrator deletes them.
 3. Name reuse: recommendation A, a site shows only snapshots taken after it was created.
