@@ -1300,7 +1300,11 @@ stuser=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.s
 wait_clone() {
   local state=copying
   for _ in $(seq 1 150); do
-    [ "$(api GET /api/v1/sites/wpqs/clone)" = 200 ] || fail "clone state: $(x cat /tmp/api.out)"
+    if [ "$(api GET /api/v1/sites/wpqs/clone)" != 200 ]; then
+      # A first copy that fails is deleted; the reason stays in the audit log.
+      api GET '/api/v1/audit?action=site.clone.failed&limit=1' >/dev/null
+      fail "clone state: $(x cat /tmp/api.out)"
+    fi
     state=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')
     [ "$state" = copying ] || break
     sleep 2
