@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { RuntimesHead } from "./Runtimes";
 import { DownloadSimple, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 import { daysUntil, getPHPInstall, installPHP, phpMessage, removePHP, support, todayUTC, type PHPInstall, type Support } from "./php";
 import { listSites, phpVersions, type PHPVersions, type Site } from "./sites";
-import { Badge, Button, Card, IconButton, JobCard, Notice, PageHead, Table, useJobCard, type Column, type Sort, type Tone } from "./ui";
+import { Badge, Button, Card, IconButton, JobCard, Notice, Table, useJobCard, type Column, type Sort, type Tone } from "./ui";
 
 const supportLabel: Record<Support, string> = {
   active: "Supported",
@@ -96,12 +97,7 @@ export function PHPPage({
     onQuery(next);
   };
 
-  const head = (
-    <PageHead
-      title="PHP versions"
-      description="The distribution's PHP is always installed. More versions come from the sury.org repository and get their updates automatically; one that no site uses can be removed."
-    />
-  );
+  const head = <RuntimesHead active="php" description={"The distribution's PHP is always installed. More versions come from the sury.org repository and get their updates automatically; one that no site uses can be removed."} />;
 
   if (!versions || !inst) {
     return (
