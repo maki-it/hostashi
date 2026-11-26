@@ -85,4 +85,4 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 ## Open questions for Kim
 
 1. ~~Providers in the first version: INWX, Hetzner and Cloudflare?~~ Decided (Kim, 2026-11-26): yes, these three.
-2. Build for 1.0 or after the v1 release (1.1)? Recommendation: 1.1 together with ADR-0075, unless you need it earlier.
+2. ~~Build for 1.0 or 1.1?~~ Decided (Kim, 2026-11-26): 1.1, before ADR-0075.
