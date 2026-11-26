@@ -747,6 +747,7 @@ func (s *Service) stepClone(ctx context.Context, c store.SiteClone) {
 		// configuration, which touches only the clone.
 		if c.SourceMaintenance {
 			s.releaseSource(ctx, src, &c)
+
 			changed = true
 		}
 
