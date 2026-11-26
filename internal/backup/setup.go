@@ -282,7 +282,7 @@ func (a *Agent) Snapshots(site string) ([]agentapi.BackupSnapshot, error) {
 	return out, nil
 }
 
-// SnapshotSites summarises the snapshot list of the last run by site
+// SnapshotSites summarizes the snapshot list of the last run by site
 // name, deleted sites included (ADR-0074). Panel snapshots are left out.
 func (a *Agent) SnapshotSites() ([]agentapi.BackupSiteSummary, error) {
 	all, err := ReadSnapshots(a.statusDir(), owner())
