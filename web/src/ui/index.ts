@@ -10,6 +10,7 @@ export { LineChart, Meter, type Series } from "./Chart";
 export { CopyButton, CopyValue, copyText } from "./Copy";
 export { Field } from "./Field";
 export { JobCard, useJobCard, type JobState } from "./JobCard";
+export { Menu, type MenuItem } from "./Menu";
 export { Notice, type NoticeTone } from "./Notice";
 export { PageHead } from "./PageHead";
 export { QRCode } from "./QRCode";

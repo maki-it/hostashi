@@ -18,7 +18,7 @@ import {
   Terminal,
   Timer,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { getBackups, type BackupInfo } from "./backups";
 import { canClone } from "./Clone";
 import { cronFailing, lastRun, listCron, type CronList } from "./cron";
@@ -28,7 +28,7 @@ import { formatHash, type SiteTab } from "./routes";
 import { getSiteScan, type SiteScan } from "./scan";
 import type { SiteGroup } from "./SiteNav";
 import { hasAccount, type Site } from "./sites";
-import { Card } from "./ui";
+import { Card, Menu, type MenuItem } from "./ui";
 import { relativeTime } from "./ui/Time";
 
 type Tone = "warn" | "err" | undefined;
@@ -238,19 +238,11 @@ export function QuickActions({ site, groups }: { site: Site; groups: SiteGroup[]
 /** The ids of the overview cards the Actions menu scrolls to. */
 export const cardId = (site: string, card: "rename" | "clone") => `site-${card}-${site}`;
 
-type Item = { label: string; icon: ReactNode; run: () => void };
-
 /**
  * SiteActions is the Actions menu of the site header: rarer steps that
  * live on a tab or further down the overview.
  */
 export function SiteActions({ site, groups, staff, onTab }: { site: Site; groups: SiteGroup[]; staff: boolean; onTab: (t: SiteTab) => void }) {
-  const [open, setOpen] = useState(false);
-  const [at, setAt] = useState(0);
-  const wrap = useRef<HTMLDivElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  const list = useRef<HTMLDivElement>(null);
-
   // scrollTo opens the overview and brings a card of it into view.
   const scrollTo = (id: string) => () => {
     onTab("overview");
@@ -261,91 +253,23 @@ export function SiteActions({ site, groups, staff, onTab }: { site: Site; groups
     });
   };
 
-  const items: Item[] = [];
-  if (site.state !== "deleting") items.push({ label: "Rename…", icon: <PencilSimple size={16} aria-hidden="true" />, run: scrollTo(cardId(site.name, "rename")) });
-  if (staff && canClone(site)) items.push({ label: "Copy site…", icon: <CopySimple size={16} aria-hidden="true" />, run: scrollTo(cardId(site.name, "clone")) });
-  if (hasTab(groups, "domains")) items.push({ label: "Change domains…", icon: <Globe size={16} aria-hidden="true" />, run: () => onTab("domains") });
-  if (hasTab(groups, "files") && hasAccount(site)) items.push({ label: "Reset permissions…", icon: <Key size={16} aria-hidden="true" />, run: () => onTab("files") });
-
-  useEffect(() => {
-    if (!open) return;
-    list.current?.querySelectorAll<HTMLElement>("[role=menuitem]")[at]?.focus();
-  }, [open, at]);
-
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: MouseEvent) => {
-      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", away);
-    return () => document.removeEventListener("mousedown", away);
-  }, [open]);
-
-  if (items.length === 0) return null;
-
-  function close() {
-    setOpen(false);
-    button.current?.focus();
-  }
+  const items: MenuItem[] = [];
+  if (site.state !== "deleting") items.push({ label: "Rename…", icon: <PencilSimple size={16} aria-hidden="true" />, onSelect: scrollTo(cardId(site.name, "rename")) });
+  if (staff && canClone(site)) items.push({ label: "Copy site…", icon: <CopySimple size={16} aria-hidden="true" />, onSelect: scrollTo(cardId(site.name, "clone")) });
+  if (hasTab(groups, "domains")) items.push({ label: "Change domains…", icon: <Globe size={16} aria-hidden="true" />, onSelect: () => onTab("domains") });
+  if (hasTab(groups, "files") && hasAccount(site)) items.push({ label: "Reset permissions…", icon: <Key size={16} aria-hidden="true" />, onSelect: () => onTab("files") });
 
   return (
-    <div className="ui-menu-wrap" ref={wrap}>
-      <button
-        ref={button}
-        type="button"
-        className="ui-btn ui-btn-secondary"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => {
-          setAt(0);
-          setOpen(!open);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setAt(0);
-            setOpen(true);
-          }
-        }}
-      >
-        <DotsThree size={16} aria-hidden="true" />
-        Actions
-        <CaretDown size={14} aria-hidden="true" />
-      </button>
-      {open && (
-        <div
-          className="ui-menu"
-          role="menu"
-          aria-label={"Actions for " + site.name}
-          ref={list}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") close();
-            else if (e.key === "ArrowDown") setAt((at + 1) % items.length);
-            else if (e.key === "ArrowUp") setAt((at - 1 + items.length) % items.length);
-            else if (e.key === "Home") setAt(0);
-            else if (e.key === "End") setAt(items.length - 1);
-            else if (e.key === "Tab") setOpen(false);
-            else return;
-            if (e.key !== "Tab") e.preventDefault();
-          }}
-        >
-          {items.map((i, k) => (
-            <button
-              key={i.label}
-              type="button"
-              role="menuitem"
-              tabIndex={k === at ? 0 : -1}
-              onClick={() => {
-                setOpen(false);
-                i.run();
-              }}
-            >
-              {i.icon}
-              {i.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <Menu
+      label={"Actions for " + site.name}
+      items={items}
+      button={
+        <>
+          <DotsThree size={16} aria-hidden="true" />
+          Actions
+          <CaretDown size={14} aria-hidden="true" />
+        </>
+      }
+    />
   );
 }
