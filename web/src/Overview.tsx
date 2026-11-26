@@ -12,7 +12,9 @@ import { canSee } from "./nav";
 import { listParked, type ParkedDomain } from "./parked";
 import { formatHash } from "./routes";
 import { bytes } from "./services";
-import { listPools, listSites, poolUsed, type Pool, type Site } from "./sites";
+import { cronFailing, listCron } from "./cron";
+import { groupsForSite } from "./SiteNav";
+import { listPools, listSitesMarked, poolUsed, type Pool, type Site, type SiteMarks } from "./sites";
 import { Badge, Card, Meter, Notice, PageHead, RelTime, type Tone } from "./ui";
 
 // Item is one thing that needs someone to act, with a link to where they can.
@@ -20,7 +22,7 @@ type Item = { key: string; tone: Tone; word: string; title: string; detail?: str
 
 // What the overview could load; a part the role may not see, or that
 // failed to load, stays undefined and is left out.
-type Data = { sites?: Site[]; doctor?: DoctorReport; backups?: BackupInfo; parked?: ParkedDomain[]; pools?: Pool[] };
+type Data = { sites?: Site[]; marks?: Record<string, SiteMarks>; cron?: Record<string, number>; doctor?: DoctorReport; backups?: BackupInfo; parked?: ParkedDomain[]; pools?: Pool[] };
 
 const ignore = () => undefined;
 
@@ -102,6 +104,31 @@ export function attention(d: Data): Item[] {
       });
     }
   }
+  // Virus finds are no doctor check: they come from the sites list.
+  for (const s of d.sites ?? []) {
+    const n = d.marks?.[s.name]?.openFindings ?? 0;
+    if (n === 0) continue;
+    items.push({
+      key: "malware-" + s.name,
+      tone: "err",
+      word: "Failed",
+      title: n === 1 ? `1 file flagged by the virus scan on site ${s.name}` : `${n} files flagged by the virus scan on site ${s.name}`,
+      href: formatHash({ page: "sites", site: { name: s.name, tab: "malware" } }),
+      link: "Open virus scan",
+    });
+  }
+  // Without Health, failing cron jobs of the own sites stand in for it.
+  for (const [site, n] of Object.entries(d.cron ?? {})) {
+    if (n === 0) continue;
+    items.push({
+      key: "cron-" + site,
+      tone: "warn",
+      word: "Warning",
+      title: n === 1 ? `1 cron job of site ${site} fails` : `${n} cron jobs of site ${site} fail`,
+      href: formatHash({ page: "sites", site: { name: site, tab: "cron" } }),
+      link: "Open cron jobs",
+    });
+  }
   for (const p of d.parked ?? []) {
     const left = p.tls.certSource === "custom" ? daysLeft(p.tls.notAfter) : null;
     if (left === null || left >= 30) continue;
@@ -141,15 +168,32 @@ export function Overview({ user }: { user: User }) {
     let live = true;
     const opt = <T,>(ok: boolean, f: () => Promise<T>) => (ok ? f().catch(ignore) : Promise.resolve(undefined));
     void Promise.all([
-      opt(true, listSites),
+      opt(true, listSitesMarked),
       opt(canSee(user.role, "health"), runDoctor),
       opt(canSee(user.role, "backups"), getBackups),
       opt(canSee(user.role, "parked"), listParked),
       opt(canSee(user.role, "pools"), listPools),
-    ]).then(([sites, doctor, backups, parked, pools]) => {
+    ]).then(async ([list, doctor, backups, parked, pools]) => {
+      const sites = list?.sites;
+      // Without Health, look at the cron jobs of the (few) own sites.
+      const cron: Record<string, number> = {};
+      if (!canSee(user.role, "health") && sites) {
+        await Promise.all(
+          sites
+            .filter((s) => s.state === "active" && groupsForSite(s).some((g) => g.tabs.some((t) => t.id === "cron")))
+            .slice(0, 20)
+            .map((s) =>
+              listCron(s.name)
+                .then((l) => {
+                  cron[s.name] = l.jobs.filter((j) => !j.paused && cronFailing(j.status)).length;
+                })
+                .catch(ignore),
+            ),
+        );
+      }
       if (!live) return;
       setData({
-        ...(sites ? { sites } : {}),
+        ...(sites ? { sites, marks: list.marks, cron } : {}),
         ...(doctor ? { doctor } : {}),
         ...(backups ? { backups } : {}),
         ...(parked ? { parked } : {}),

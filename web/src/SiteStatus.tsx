@@ -279,7 +279,7 @@ export function SiteActions({ site, groups, staff, admin, onTab, onCard }: { sit
   const items: MenuItem[] = [];
   if (site.state !== "deleting") items.push({ label: "Rename…", icon: <PencilSimple size={16} aria-hidden="true" />, onSelect: open("rename") });
   if (staff && canClone(site)) items.push({ label: "Copy site…", icon: <CopySimple size={16} aria-hidden="true" />, onSelect: open("clone") });
-  if (hasTab(groups, "domains")) items.push({ label: "Change domains…", icon: <Globe size={16} aria-hidden="true" />, onSelect: () => onTab("domains") });
+  if (staff && hasTab(groups, "domains")) items.push({ label: "Change domains…", icon: <Globe size={16} aria-hidden="true" />, onSelect: () => onTab("domains") });
   if (hasAccount(site)) items.push({ label: "Databases…", icon: <Database size={16} aria-hidden="true" />, href: dbHref(site.name) });
   if (admin && hasAccount(site)) items.push({ label: site.php ? "Restart PHP…" : "Services…", icon: <Gear size={16} aria-hidden="true" />, onSelect: open("services") });
   if (hasTab(groups, "files") && hasAccount(site)) items.push({ label: "Reset permissions…", icon: <Key size={16} aria-hidden="true" />, onSelect: () => onTab("files") });
