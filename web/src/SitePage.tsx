@@ -148,8 +148,12 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
       {active === "overview" && (
         <Overview site={site} groups={groups} onChange={load} staff={staff} admin={role === "admin"} clone={clone ?? null} onCloneChange={reloadClone} card={card} onCard={setCard} />
       )}
-      {active === "domains" && <DomainsTab site={site} onChange={load} />}
-      {active === "https" && <HTTPSTab site={site} onChange={load} />}
+      {active === "domains" && (
+        <ReadOnly when={!staff}>
+          <DomainsTab site={site} onChange={load} />
+        </ReadOnly>
+      )}
+      {active === "https" && <HTTPSTab site={site} onChange={load} staff={staff} />}
       {active === "headers" && <SecurityHeadersCard site={site} />}
       {active === "hardening" && <HardeningCard site={site} />}
       {active === "realip" && <RealIPCard site={site} admin={role === "admin"} />}
@@ -160,7 +164,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
       {active === "logs" && <SiteLogs site={site} admin={role === "admin"} />}
       {active === "php" && (
         <>
-          <PHPTab site={site} php={php} onChange={load} />
+          <PHPTab site={site} php={php} onChange={load} staff={staff} />
           {site.php && <PHPSettingsCard site={site} />}
         </>
       )}
@@ -174,9 +178,17 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
       {active === "malware" && <SiteMalware site={site} canManage={staff} admin={role === "admin"} />}
       {active === "cron" && <CronSettings site={site} />}
       {active === "ssh" && <SSHSettings site={site} />}
-      {active === "limits" && <LimitSettings site={site} />}
+      {active === "limits" && (
+        <ReadOnly when={!staff}>
+          <LimitSettings site={site} />
+        </ReadOnly>
+      )}
       {active === "usage" && <SiteUsageCard site={site.name} />}
-      {active === "nginx" && <SnippetSettings site={site} />}
+      {active === "nginx" && (
+        <ReadOnly when={role !== "admin"} who="An administrator">
+          <SnippetSettings site={site} />
+        </ReadOnly>
+      )}
     </>
   );
 
@@ -405,15 +417,14 @@ function Overview({
         )}
       </div>
       {clone && <CloneStatusCard site={site} clone={clone} staff={staff} onRefresh={onCloneChange} />}
-      {site.state === "active" && (
-        <>
-          <section className="ui-danger-zone" aria-labelledby={`danger-${site.name}`}>
-            <h2 id={`danger-${site.name}`}>Danger zone</h2>
-            <Availability site={site} onChange={onChange} />
-            {staff && hasAccount(site) && ["redirect", "proxy"].includes(siteType(site)) && <RemoveAccountCard site={site} onChange={onChange} />}
-            <DeleteSite site={site} canPark={staff} />
-          </section>
-        </>
+      {/* Disabling and deleting are for administrators and managers (ADR-0035). */}
+      {site.state === "active" && staff && (
+        <section className="ui-danger-zone" aria-labelledby={`danger-${site.name}`}>
+          <h2 id={`danger-${site.name}`}>Danger zone</h2>
+          <Availability site={site} onChange={onChange} />
+          {hasAccount(site) && ["redirect", "proxy"].includes(siteType(site)) && <RemoveAccountCard site={site} onChange={onChange} />}
+          <DeleteSite site={site} canPark />
+        </section>
       )}
     </>
   );
@@ -707,7 +718,7 @@ function DomainsTab({ site, onChange }: TabProps) {
   );
 }
 
-function HTTPSTab({ site, onChange }: TabProps) {
+function HTTPSTab({ site, onChange, staff }: TabProps & { staff: boolean }) {
   const h = useAction(onChange);
   // Turning HTTPS off and HSTS on are asked again: the first serves the
   // site over plain HTTP, the second sticks in browsers for a long time.
@@ -732,8 +743,8 @@ function HTTPSTab({ site, onChange }: TabProps) {
         <div className="ui-stack">
           <Switch
             checked={site.tls.enabled}
-            disabled={h.busy || ask !== null}
-            hint="Turning it off asks first."
+            disabled={h.busy || ask !== null || !staff}
+            hint={staff ? "Turning it off asks first." : "An administrator or manager turns HTTPS on or off."}
             onChange={(on) => (on ? void toggleTLS(true) : setAsk("tls-off"))}
           >
             {site.tls.source === "custom" ? "HTTPS with the own certificate" : "HTTPS with a Let's Encrypt certificate"}
@@ -782,12 +793,28 @@ function HTTPSTab({ site, onChange }: TabProps) {
           {h.result}
         </div>
       </Card>
-      <CertificateCard base={siteCertBase(site.name)} name={site.name} tls={site.tls} onChange={onChange} />
+      <ReadOnly when={!staff}>
+        <CertificateCard base={siteCertBase(site.name)} name={site.name} tls={site.tls} onChange={onChange} />
+      </ReadOnly>
     </>
   );
 }
 
-function PHPTab({ site, php, onChange }: TabProps & { php: PHPVersions | null }) {
+// ReadOnly shows settings a role may see but not change: a note on top and
+// every control below it switched off. The server refuses the change anyway.
+function ReadOnly({ when, who = "An administrator or manager", children }: { when: boolean; who?: string; children: ReactNode }) {
+  if (!when) return <>{children}</>;
+  return (
+    <>
+      <Notice tone="info" title={`${who} changes these settings.`} />
+      <fieldset className="ui-fieldset ui-stack" disabled aria-label="Read only">
+        {children}
+      </fieldset>
+    </>
+  );
+}
+
+function PHPTab({ site, php, onChange, staff }: TabProps & { php: PHPVersions | null; staff: boolean }) {
   const [version, setVersion] = useState(site.php);
   const v = useAction(onChange);
   const p = useAction(onChange);
@@ -835,9 +862,9 @@ function PHPTab({ site, php, onChange }: TabProps & { php: PHPVersions | null })
           <div className="ui-stack">
             <Switch
               checked={site.phpPrograms}
-              disabled={p.busy}
+              disabled={p.busy || !staff}
               onChange={(on) => void togglePrograms(on)}
-              hint="Off by default: a hacked plugin then cannot run commands on the server. Turn it on only for software that needs it, for example image optimizers or PDF tools. WP-CLI, Composer and cron jobs are not affected."
+              hint={(staff ? "" : "An administrator or manager changes this. ") + "Off by default: a hacked plugin then cannot run commands on the server. Turn it on only for software that needs it, for example image optimizers or PDF tools. WP-CLI, Composer and cron jobs are not affected."}
             >
               Allow PHP to start programs (exec, system, shell_exec, proc_open, popen)
             </Switch>

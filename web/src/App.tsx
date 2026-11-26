@@ -151,7 +151,7 @@ export function App() {
               }}
             />
           ) : (
-            <Sites query={route.query} onQuery={replaceQuery} />
+            <Sites query={route.query} onQuery={replaceQuery} role={user.role} />
           ))}
         {show("databases") && <Databases role={user.role} query={route.query} onQuery={replaceQuery} />}
         {show("backups") && <Backups query={route.query} onQuery={replaceQuery} />}
