@@ -22,7 +22,7 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 die() { echo "runtimes-deb: $*" >&2; exit 1; }
 [[ "$VERSION" =~ ^[0-9]{14}$ ]] || die "VERSION must be YYYYMMDDHHMMSS, not '$VERSION'"
 [ -s "$JSON" ] || die "$JSON is missing or empty"
-head -c 1 "$JSON" | grep -q '{' || die "$JSON is not a JSON object"
+[ "$(head -c 1 "$JSON")" = '{' ] || die "$JSON is not a JSON object"
 command -v dpkg-deb >/dev/null || die "dpkg-deb is missing"
 
 root=$(mktemp -d)
