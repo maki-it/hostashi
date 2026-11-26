@@ -347,3 +347,141 @@ a.app-user-name[aria-current="page"] {
   text-decoration: none;
   border-radius: var(--radius);
 }
+
+/* The top bar stays in view while the page scrolls (Kim, 2026-11-26). */
+.app-top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.app-top-actions {
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Search: a field-like button in the top bar, a dialog with results. */
+.app-search-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: clamp(180px, 28vw, 320px);
+  min-height: 36px;
+  padding: 0 8px 0 10px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--muted);
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.app-search-btn:hover {
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+.app-search-btn .app-kbd {
+  margin-left: auto;
+}
+.app-kbd {
+  padding: 1px 6px;
+  font: 600 11px/1.4 var(--font-mono);
+  color: var(--muted);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+}
+@media (max-width: 700px) {
+  .app-search-btn {
+    width: auto;
+    padding: 0 9px;
+  }
+  .app-search-btn .app-search-text,
+  .app-search-btn .app-kbd {
+    display: none;
+  }
+}
+.app-search-back {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh 16px 16px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  backdrop-filter: blur(3px);
+}
+.app-search-dialog {
+  width: min(620px, 100%);
+  max-height: 76vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: calc(var(--radius) + 4px);
+  box-shadow: 0 24px 48px -24px color-mix(in srgb, var(--fg) 40%, transparent);
+  overflow: hidden;
+}
+.app-search-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+.app-search-input input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 16px;
+  color: var(--fg);
+  background: none;
+  border: 0;
+  outline: none;
+}
+.app-search-list {
+  margin: 0;
+  padding: 0 0 6px;
+  list-style: none;
+  overflow: auto;
+}
+.app-search-group {
+  padding: 10px 16px 4px;
+  font: 600 11px/1.2 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.app-search-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  color: var(--fg);
+  text-decoration: none;
+}
+.app-search-item[aria-selected="true"] {
+  background: var(--sunken);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.app-search-item span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.app-search-item small {
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--muted);
+  text-align: right;
+}
+.app-search-empty {
+  padding: 16px;
+  color: var(--muted);
+}
+.app-search-foot {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+}
