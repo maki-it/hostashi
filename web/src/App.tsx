@@ -177,6 +177,18 @@ export function App() {
     );
   }
 
+  // The session check usually answers within a few milliseconds. Until it
+  // does, nothing of the login page shows, so a reload while logged in does
+  // not flash the login brand; a spinner fades in only when the check takes
+  // noticeably long (CSS delay in base.css).
+  if (view.kind === "loading") {
+    return (
+      <main className="ui-root ui-boot" aria-busy="true" aria-label="Loading">
+        <span className="ui-boot-spinner" aria-hidden="true" />
+      </main>
+    );
+  }
+
   return (
     <main className="ui-root ui-auth">
       <header className="app-brand ui-auth-brand">
@@ -186,7 +198,6 @@ export function App() {
           <span className="app-host">{window.location.hostname}</span>
         </span>
       </header>
-      {view.kind === "loading" && <p aria-busy="true">Loading…</p>}
       {view.kind === "error" && (
         <Notice tone="err" title="The server is not reachable.">
           <Button onClick={() => void boot()}>Try again</Button>
