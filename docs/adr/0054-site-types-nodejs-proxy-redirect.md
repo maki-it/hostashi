@@ -100,7 +100,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 None left.
 
 1. ~~Node.js from the official nodejs.org builds (option C), LTS lines only?~~ Decided (Kim, 2026-11-22): yes.
-2. ~~Reverse proxy: allow private networks, refuse loopback and link-local, as recommended?~~ Decided (Kim, 2026-11-22): yes; public addresses and host names are allowed too.
+2. ~~Reverse proxy: allow private networks, refuse loopback and link-local, as recommended?~~ Decided (Kim, 2026-11-22): yes; public addresses and host names are allowed too. Addendum (Kim, 2026-11-26, second own security review): a target that is or resolves to a private network (also `100.64.0.0/10`) needs the action `sites.proxy.private:write` (admins and managers); an account with the role user may set public targets only (403 `private_target`). [A] A name that resolves to a public address when saved and to a private one later is not caught, the same gap as the DNS change after save above.
 3. ~~Proxy and redirect sites without a Linux account (no SSH, files, cron, backups)?~~ Decided (Kim, 2026-11-22): yes.
 
 ## Addendum 1: static sites as a first-class type (Accepted, Kim, 2026-11-22)

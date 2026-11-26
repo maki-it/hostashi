@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"net/netip"
 	"reflect"
 	"slices"
@@ -140,5 +141,55 @@ func TestProxySiteOverHTTP(t *testing.T) {
 
 	if rec := e.do(t, reqOpts{method: "DELETE", path: "/api/v1/sites/app", cookie: c}); rec.Code != http.StatusNoContent {
 		t.Fatalf("delete: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestProxyPrivateTargetRoles: a user with a grant may point the site's
+// proxy at a public address, but a target that is or resolves to a private
+// network needs an admin or manager (second own security review,
+// 2026-11-26).
+func TestProxyPrivateTargetRoles(t *testing.T) {
+	ag := &stubAgent{}
+	e := newAPIWithAgent(t, ag)
+	c := e.adminCookie(t)
+
+	e.sites.SetResolver(mapResolver{
+		"public.example.net":   {netip.MustParseAddr("203.0.113.7")},
+		"internal.example.net": {netip.MustParseAddr("203.0.113.8"), netip.MustParseAddr("10.0.0.5")},
+	})
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"app","domains":["app.example.com"],"type":"proxy","proxy":{"target":"http://public.example.net"}}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+
+	user, uid := matrixLogin(t, e, c, "gina", "user")
+	if rec := e.do(t, reqOpts{method: "PUT", path: userPath(uid, "/grants"), cookie: c, body: `{"sites":["app"]}`}); rec.Code != http.StatusOK {
+		t.Fatalf("grant: %d %s", rec.Code, rec.Body)
+	}
+
+	manager, _ := matrixLogin(t, e, c, "mona", "manager")
+
+	set := func(cookie *http.Cookie, target string) *httptest.ResponseRecorder {
+		return e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/app/proxy", cookie: cookie, body: `{"target":"` + target + `"}`})
+	}
+
+	if rec := set(user, "http://public.example.net:8080"); rec.Code != http.StatusOK {
+		t.Fatalf("user, public target: %d %s", rec.Code, rec.Body)
+	}
+
+	for _, target := range []string{"http://10.0.0.5", "http://192.168.1.1:8006", "http://172.16.0.1", "http://100.64.0.1", "http://[fd00::1]", "http://[::ffff:10.0.0.5]", "http://internal.example.net"} {
+		if rec := set(user, target); rec.Code != http.StatusForbidden || errCode(t, rec) != "private_target" {
+			t.Errorf("user, %s: %d %s, want 403 private_target", target, rec.Code, rec.Body)
+		}
+	}
+
+	if ws := ag.web.Sites[0]; ws.Proxy == nil || ws.Proxy.Target != "http://public.example.net:8080" {
+		t.Fatalf("a refused target reached the web state: %+v", ws.Proxy)
+	}
+
+	for who, cookie := range map[string]*http.Cookie{"manager": manager, "admin": c} {
+		if rec := set(cookie, "http://10.0.0.5"); rec.Code != http.StatusOK {
+			t.Errorf("%s, private target: %d %s", who, rec.Code, rec.Body)
+		}
 	}
 }

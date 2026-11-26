@@ -79,7 +79,7 @@ An app site runs a program of your own instead of Node.js, for example a Go, Rus
 
 A reverse proxy site passes every request to another web server, for example an app on another machine in your network. It has no Linux user, files, databases, cron jobs or SSH access.
 
-- **Pass requests to:** `http://` or `https://`, a host or IP address, an optional port and path, for example `http://10.0.0.5:8080`. Private networks are fine. This server's own addresses, loopback (`127.0.0.1`) and link-local addresses are refused, so a site cannot reach the panel or other local services.
+- **Pass requests to:** `http://` or `https://`, a host or IP address, an optional port and path, for example `http://10.0.0.5:8080`. Private networks (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`, `fc00::/7`) are fine, but only admins and managers may set such a target; an account with the role user gets "private_target". This server's own addresses, loopback (`127.0.0.1`) and link-local addresses are refused, so a site cannot reach the panel or other local services.
 - **Send the target's host name:** off by default, so the other server sees the visitor's domain, as most apps expect.
 - **Do not verify the target's certificate:** only for an `https` target with a self-signed certificate in a network you trust.
 

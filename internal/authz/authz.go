@@ -205,6 +205,9 @@ var table = map[Action]Rule{
 	"sites.web:write":         ownSite("sites:write"),
 	"sites.redirect:write":    ownSite("sites:write"),
 	"sites.proxy:write":       ownSite("sites:write"),
+	// A proxy target in a private network reaches the server's internal
+	// network; the proxy handler asks for this when a change sets one.
+	"sites.proxy.private:write": mgrSite("sites:write"),
 	// The app runs as the site user inside its isolation (ADR-0054).
 	"sites.app:write": ownSite("sites:write"),
 	// The values of the app's environment variables: whoever may change
