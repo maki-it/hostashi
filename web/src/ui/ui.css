@@ -163,6 +163,7 @@
 .ui-card-actions {
   margin-left: auto;
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 .ui-card-body {
@@ -224,8 +225,13 @@
 .ui-notice-body strong {
   display: block;
 }
+/* A div, not a p: a notice may hold paragraphs and buttons. */
+.ui-notice-text,
 .ui-notice-body p {
   margin: 2px 0 0;
+}
+.ui-notice-text > .ui-row {
+  margin-top: var(--space-3);
 }
 
 /* Field */

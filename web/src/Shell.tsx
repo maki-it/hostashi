@@ -4,6 +4,7 @@ import { CaretRight, List, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
 import { logout, type User } from "./auth";
 import { navFor, navItem } from "./nav";
+import { siteGroups } from "./SiteNav";
 import { countLabel, healthCount, servicesCount, type NavCount } from "./navcounts";
 import { runDoctor } from "./doctor";
 import { listServices } from "./services";
@@ -57,6 +58,27 @@ function crumbs(route: Route): Crumb[] {
     out.push({ label: item.label });
   }
   return out;
+}
+
+/**
+ * pageTitle names the browser tab after the page, most specific first, and
+ * ends in the panel's host name, so tabs of several servers stay apart:
+ * "Logs · blog · panel.example.com".
+ */
+export function pageTitle(route: Route, host: string): string {
+  const parts: string[] = [];
+  if (route.site) {
+    const tab = siteGroups.flatMap((g) => g.tabs).find((t) => t.id === route.site?.tab);
+    if (tab && route.site.tab !== "overview") parts.push(tab.label);
+    parts.push(route.site.name);
+  } else if (route.page === "account") {
+    parts.push("Your account");
+  } else {
+    const item = navItem(route.page);
+    if (item) parts.push(item.label);
+  }
+  parts.push(host || "Hostashi");
+  return parts.join(" · ");
 }
 
 /**
@@ -115,6 +137,13 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     };
   }, [isAdmin, onCountPage]);
   const trail = crumbs(route);
+  const title = pageTitle(route, window.location.hostname);
+  useEffect(() => {
+    document.title = title;
+    return () => {
+      document.title = "Hostashi";
+    };
+  }, [title]);
 
   async function doLogout() {
     setBusy(true);

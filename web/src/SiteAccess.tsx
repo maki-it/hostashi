@@ -16,6 +16,7 @@ import {
   type AccessView,
 } from "./access";
 import type { Site } from "./sites";
+import { formatHash } from "./routes";
 import { Key, Trash } from "@phosphor-icons/react";
 import { Button, Card, Field, IconButton, Notice, RelTime, RowActions, Table, type Column } from "./ui";
 
@@ -88,8 +89,9 @@ function SettingsCard({ site, view, onSaved }: { site: string; view: AccessView;
       <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
         <p className="ui-hint">
           nginx checks these rules before the site sees a request, for every file and page. Let's Encrypt still reaches the site, so certificates keep
-          renewing. Behind a CDN such as Cloudflare, switch on "Real visitor address" in the Domains & HTTPS tab first, or the rules see the CDN instead of
-          the visitor.
+          renewing. Behind a CDN such as Cloudflare, switch on the{" "}
+          <a href={formatHash({ page: "sites", site: { name: site, tab: "realip" } })}>real visitor address</a> under Operations first, or the
+          rules see the CDN instead of the visitor.
         </p>
         <fieldset className="ui-fieldset ui-stack" disabled={busy}>
           <legend>IP rule</legend>

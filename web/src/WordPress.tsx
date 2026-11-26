@@ -239,7 +239,7 @@ function InstallForm({
         )}
         <label className="ui-check">
           <input type="checkbox" checked={input.discourage === true} onChange={(e) => set({ discourage: e.target.checked })} />
-          Ask search engines not to index the site
+          Discourage search engines in WordPress (Settings, Reading)
         </label>
       </fieldset>
       {reinstall && (
