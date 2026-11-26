@@ -1373,6 +1373,18 @@ for _ in $(seq 30); do x fail2ban-client status hostashi-site-auth | grep 'Banne
 f2b=$(x fail2ban-client status hostashi-site-auth)
 grep -Eq 'Total failed:[[:space:]]+[1-9]' <<<"$f2b" || { f2b_restore; fail "jail counted no failed login: $f2b"; }
 grep -q 'Banned IP list:.*127\.0\.0\.1' <<<"$f2b" || { f2b_restore; fail "jail did not ban: $f2b"; }
+# The panel shows the ban and lifts it (ADR-0078). The panel itself is on
+# 127.0.0.1:8080 and not behind the site jail, so the ban does not block it.
+[ "$(api GET /api/v1/firewall/bans)" = 200 ] || { f2b_restore; fail "bans through the panel: $(x cat /tmp/api.out)"; }
+x cat /tmp/api.out | python3 -c 'import json,sys
+j = {x["name"]: x for x in json.load(sys.stdin)["jails"]}["hostashi-site-auth"]
+assert j["running"] and j["totalFailed"] > 0, j
+assert "127.0.0.1" in [b["address"] for b in j["bans"]], j' || { f2b_restore; fail "panel does not show the ban: $(x cat /tmp/api.out)"; }
+[ "$(api DELETE /api/v1/firewall/bans/127.0.0.1)" = 200 ] || { f2b_restore; fail "unblock through the panel: $(x cat /tmp/api.out)"; }
+x grep -q '"hostashi-site-auth"' /tmp/api.out || { f2b_restore; fail "unblock did not name the jail: $(x cat /tmp/api.out)"; }
+f2b=$(x fail2ban-client status hostashi-site-auth)
+grep -q 'Banned IP list:.*127\.0\.0\.1' <<<"$f2b" && { f2b_restore; fail "address still banned after the unblock: $f2b"; }
+[ "$(api DELETE /api/v1/firewall/bans/127.0.0.1)" = 404 ] || { f2b_restore; fail "second unblock answered: $(x cat /tmp/api.out)"; }
 f2b_restore
 # recidive reads fail2ban's own Ban notices from the journal; the ban above
 # is one. fail2ban-regex ignores ignoreip, so loopback counts here.
