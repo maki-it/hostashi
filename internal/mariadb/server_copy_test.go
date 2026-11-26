@@ -3,6 +3,7 @@
 package mariadb
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -58,6 +59,15 @@ func TestServerCopy(t *testing.T) {
 	if _, err := m.Create(ctx, "stage", "copy_dst"); err != nil {
 		t.Fatal(err)
 	}
+
+	// Later tests count the owner accounts on the server: drop ours.
+	t.Cleanup(func() {
+		for _, n := range []string{"copy_src", "copy_dst"} {
+			if err := m.Delete(context.Background(), n); err != nil {
+				t.Errorf("delete %s: %v", n, err)
+			}
+		}
+	})
 
 	p := filepath.Join(homes["live"].Home, "defs.sql")
 	if err := os.WriteFile(p, []byte(definerDump), 0o600); err != nil {
