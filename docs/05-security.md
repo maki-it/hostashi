@@ -69,5 +69,5 @@ See [architecture 4.4](04-architecture.md). Also mandatory:
 
 - `SECURITY.md` with a reporting channel (email, PGP/Signal) and response times. Coordinated disclosure, CVE assignment, security advisories.
 - Static analysis (gosec, semgrep) and secret scanning in CI.
-- **Own security review before 1.0** instead of an external pentest (no budget, Kim, 2026-11-21, see roadmap). An external pentest stays a goal for later.
+- **Own security review before 1.0** instead of an external pentest (no budget, Kim, 2026-11-21, see roadmap). An external pentest stays a goal for later. Reports: [second own review, 2026-11-26](security-reviews/2026-11-26-second-own-review.md); the first (2026-11-21) is section 2 of the v1 check, outside the repository.
 - Consider a bug bounty once funding is in place.
