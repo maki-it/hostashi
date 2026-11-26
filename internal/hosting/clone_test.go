@@ -286,11 +286,11 @@ func TestCloneSite(t *testing.T) {
 	}
 
 	// Refresh copies again, replacing the clone's files.
-	if err := s.RefreshClone(ctx, 1, "shop-stage"); err != nil {
+	if err := s.RefreshClone(ctx, 1, "shop-stage", false); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := s.RefreshClone(ctx, 1, "shop-stage"); !errors.Is(err, ErrCloneBusy) {
+	if err := s.RefreshClone(ctx, 1, "shop-stage", false); !errors.Is(err, ErrCloneBusy) {
 		t.Fatalf("second refresh: %v", err)
 	}
 
@@ -300,7 +300,7 @@ func TestCloneSite(t *testing.T) {
 	}
 
 	// The source is no clone and cannot be refreshed.
-	if err := s.RefreshClone(ctx, 1, "shop"); !errors.Is(err, ErrNotClone) {
+	if err := s.RefreshClone(ctx, 1, "shop", false); !errors.Is(err, ErrNotClone) {
 		t.Fatalf("refresh of the source: %v", err)
 	}
 }
@@ -464,7 +464,7 @@ func TestCloneRefreshFailureKeepsClone(t *testing.T) {
 
 	f.state = agentapi.JobFailed
 
-	if err := s.RefreshClone(ctx, 1, "shop-stage"); err != nil {
+	if err := s.RefreshClone(ctx, 1, "shop-stage", false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -648,7 +648,7 @@ func TestCloneSiteWordPress(t *testing.T) {
 	}
 
 	// A refresh configures again.
-	if err := s.RefreshClone(ctx, 1, "shop-stage"); err != nil {
+	if err := s.RefreshClone(ctx, 1, "shop-stage", false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -723,5 +723,84 @@ func TestCloneSiteLaravel(t *testing.T) {
 
 	if r := f.dotenv[0]; r.Kind != agentapi.DotEnvLaravel || r.URL != "http://copy.shop.example.com" || len(r.Databases) != 2 || len(r.DBPasswords) != 2 {
 		t.Fatalf("request %+v", r)
+	}
+}
+
+func sourceInMaintenance(t *testing.T, st *store.Store) bool {
+	t.Helper()
+
+	src, err := st.SiteByName(t.Context(), "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return src.Maintenance
+}
+
+func TestCloneSourceMaintenance(t *testing.T) {
+	s, _, f, st := cloneEnv(t)
+	ctx := t.Context()
+
+	if _, err := s.CloneSite(ctx, 1, "shop", CloneInput{Name: "shop-stage", Domain: "stage.shop.example.com", Staging: true, Maintenance: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !sourceInMaintenance(t, st) {
+		t.Fatal("source not in maintenance while it is copied")
+	}
+
+	if v := pollUntil(t, s, "shop-stage"); v.State != store.CloneDone {
+		t.Fatalf("clone %+v", v)
+	}
+
+	if sourceInMaintenance(t, st) {
+		t.Fatal("source still in maintenance after the copy")
+	}
+
+	// A refresh that fails turns the maintenance off again.
+	f.state = agentapi.JobFailed
+
+	if err := s.RefreshClone(ctx, 1, "shop-stage", true); err != nil {
+		t.Fatal(err)
+	}
+
+	if !sourceInMaintenance(t, st) {
+		t.Fatal("source not in maintenance during the refresh")
+	}
+
+	if v := pollUntil(t, s, "shop-stage"); v.State != store.CloneFailed {
+		t.Fatalf("refresh %+v", v)
+	}
+
+	if sourceInMaintenance(t, st) {
+		t.Fatal("source still in maintenance after a failed refresh")
+	}
+
+	entries := auditActions(t, st)
+	if !entries["site.maintenance.on"] || !entries["site.maintenance.off"] {
+		t.Errorf("maintenance not in the audit log: %v", entries)
+	}
+}
+
+// A source already in maintenance stays in it: the panel turns off only
+// what it turned on.
+func TestCloneSourceMaintenanceKept(t *testing.T) {
+	s, _, _, st := cloneEnv(t)
+	ctx := t.Context()
+
+	if _, err := s.SetMaintenance(ctx, 1, "shop", Maintenance{Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.CloneSite(ctx, 1, "shop", CloneInput{Name: "shop-copy", Domain: "copy.shop.example.com", Maintenance: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	if v := pollUntil(t, s, "shop-copy"); v.State != store.CloneDone {
+		t.Fatalf("clone %+v", v)
+	}
+
+	if !sourceInMaintenance(t, st) {
+		t.Fatal("maintenance the user turned on was turned off")
 	}
 }

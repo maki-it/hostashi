@@ -15,6 +15,8 @@ export type CloneInput = {
   pool?: string;
   /** Staging copy: cron paused, password protection on, noindex, refresh offered. */
   staging?: boolean;
+  /** Put the source in maintenance until its files and databases are copied. */
+  maintenance?: boolean;
 };
 
 export type CloneStart = {
@@ -64,7 +66,8 @@ export async function getClone(site: string): Promise<Clone | null> {
   }
 }
 
-export const refreshClone = (site: string) => request<Clone>("POST", path(site) + "/refresh");
+export const refreshClone = (site: string, maintenance = false) =>
+  request<Clone>("POST", path(site) + "/refresh", maintenance ? { maintenance } : undefined);
 
 /** cloneMessage explains the errors that are special to cloning. */
 export function cloneMessage(err: unknown): string | null {

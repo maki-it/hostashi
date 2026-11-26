@@ -96,6 +96,8 @@ func TestCloneOverHTTP(t *testing.T) {
 		"unknown source":      {"POST", "/api/v1/sites/none/clone", body, http.StatusNotFound},
 		"unknown field":       {"POST", "/api/v1/sites/shop/clone", `{"name":"x","domain":"x.example.com","files":true}`, http.StatusBadRequest},
 		"refresh of no clone": {"POST", "/api/v1/sites/shop/clone/refresh", "", http.StatusNotFound},
+		"refresh body":        {"POST", "/api/v1/sites/shop/clone/refresh", `{"maintenance":true}`, http.StatusNotFound},
+		"refresh bad body":    {"POST", "/api/v1/sites/shop-stage/clone/refresh", `{"files":true}`, http.StatusBadRequest},
 	} {
 		if rec := e.do(t, reqOpts{method: tc.method, path: tc.path, cookie: c, body: tc.body}); rec.Code != tc.code {
 			t.Errorf("%s: %d %s", name, rec.Code, rec.Body)

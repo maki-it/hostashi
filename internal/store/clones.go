@@ -57,13 +57,16 @@ type SiteClone struct {
 	Databases []CloneDatabase
 	// Config is the configuration step: CloneConfigNone, ...Running or
 	// ...Done.
-	Config     string
-	StartedBy  int64 // 0: unknown or deleted user
-	StartedAt  time.Time
-	FinishedAt time.Time // zero while copying
+	Config string
+	// SourceMaintenance: the panel put the source in maintenance for this
+	// copy and turns it off when the files and databases are copied.
+	SourceMaintenance bool
+	StartedBy         int64 // 0: unknown or deleted user
+	StartedAt         time.Time
+	FinishedAt        time.Time // zero while copying
 }
 
-const cloneCols = `site_id, source_id, staging, state, refresh, error, home_job, home_done, databases, config, started_by, started_at, finished_at`
+const cloneCols = `site_id, source_id, staging, state, refresh, error, home_job, home_done, databases, config, source_maintenance, started_by, started_at, finished_at`
 
 func scanClone(sc interface{ Scan(dest ...any) error }) (SiteClone, error) {
 	var (
@@ -71,16 +74,17 @@ func scanClone(sc interface{ Scan(dest ...any) error }) (SiteClone, error) {
 		src, by       sql.NullInt64
 		staging, ref  int
 		homeDone      int
+		srcMaint      int
 		raw           string
 		started, fini int64
 	)
 
-	if err := sc.Scan(&c.SiteID, &src, &staging, &c.State, &ref, &c.Error, &c.HomeJob, &homeDone, &raw, &c.Config, &by, &started, &fini); err != nil {
+	if err := sc.Scan(&c.SiteID, &src, &staging, &c.State, &ref, &c.Error, &c.HomeJob, &homeDone, &raw, &c.Config, &srcMaint, &by, &started, &fini); err != nil {
 		return SiteClone{}, err
 	}
 
 	c.SourceID, c.StartedBy = src.Int64, by.Int64
-	c.Staging, c.Refresh, c.HomeDone = staging == 1, ref == 1, homeDone == 1
+	c.Staging, c.Refresh, c.HomeDone, c.SourceMaintenance = staging == 1, ref == 1, homeDone == 1, srcMaint == 1
 	c.StartedAt = time.Unix(started, 0).UTC()
 
 	if fini != 0 {
@@ -147,8 +151,8 @@ func (s *Store) CreateSiteClone(ctx context.Context, c SiteClone, now time.Time)
 		return err
 	}
 
-	_, err = s.w.ExecContext(ctx, `INSERT INTO site_clones (site_id, source_id, staging, state, refresh, databases, started_by, started_at)
-		VALUES (?, ?, ?, ?, 0, ?, ?, ?)`, c.SiteID, nullID(c.SourceID), boolInt(c.Staging), CloneCopying, raw, nullID(c.StartedBy), now.Unix())
+	_, err = s.w.ExecContext(ctx, `INSERT INTO site_clones (site_id, source_id, staging, state, refresh, databases, source_maintenance, started_by, started_at)
+		VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)`, c.SiteID, nullID(c.SourceID), boolInt(c.Staging), CloneCopying, raw, boolInt(c.SourceMaintenance), nullID(c.StartedBy), now.Unix())
 	if isUnique(err) {
 		return ErrCloneExists
 	}
@@ -161,7 +165,7 @@ func (s *Store) CreateSiteClone(ctx context.Context, c SiteClone, now time.Time)
 }
 
 // UpdateSiteClone writes the progress of a clone: its state, error, jobs,
-// database pairs and configuration step. finished_at is set when the state leaves copying.
+// database pairs, configuration step and source maintenance. finished_at is set when the state leaves copying.
 func (s *Store) UpdateSiteClone(ctx context.Context, c SiteClone, now time.Time) error {
 	raw, err := cloneDBJSON(c.Databases)
 	if err != nil {
@@ -177,8 +181,8 @@ func (s *Store) UpdateSiteClone(ctx context.Context, c SiteClone, now time.Time)
 		fini = now.Unix()
 	}
 
-	res, err := s.w.ExecContext(ctx, `UPDATE site_clones SET state = ?, refresh = ?, error = ?, home_job = ?, home_done = ?, databases = ?, config = ?, finished_at = ? WHERE site_id = ?`,
-		c.State, boolInt(c.Refresh), c.Error, c.HomeJob, boolInt(c.HomeDone), raw, c.Config, fini, c.SiteID)
+	res, err := s.w.ExecContext(ctx, `UPDATE site_clones SET state = ?, refresh = ?, error = ?, home_job = ?, home_done = ?, databases = ?, config = ?, source_maintenance = ?, finished_at = ? WHERE site_id = ?`,
+		c.State, boolInt(c.Refresh), c.Error, c.HomeJob, boolInt(c.HomeDone), raw, c.Config, boolInt(c.SourceMaintenance), fini, c.SiteID)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
@@ -191,16 +195,17 @@ func (s *Store) UpdateSiteClone(ctx context.Context, c SiteClone, now time.Time)
 }
 
 // StartCloneRefresh puts a finished clone back into copying for "refresh
-// from source", unless a copy runs already. It returns ErrNotFound for a
+// from source", unless a copy runs already; sourceMaintenance records
+// that the panel put the source in maintenance for it. It returns ErrNotFound for a
 // site without a clone row and ErrCloneBusy while one copies.
-func (s *Store) StartCloneRefresh(ctx context.Context, siteID, by int64, dbs []CloneDatabase, now time.Time) error {
+func (s *Store) StartCloneRefresh(ctx context.Context, siteID, by int64, dbs []CloneDatabase, sourceMaintenance bool, now time.Time) error {
 	raw, err := cloneDBJSON(dbs)
 	if err != nil {
 		return err
 	}
 
-	res, err := s.w.ExecContext(ctx, `UPDATE site_clones SET state = ?, refresh = 1, error = '', home_job = '', home_done = 0, databases = ?, config = '', started_by = ?, started_at = ?, finished_at = 0
-		WHERE site_id = ? AND state != ?`, CloneCopying, raw, nullID(by), now.Unix(), siteID, CloneCopying)
+	res, err := s.w.ExecContext(ctx, `UPDATE site_clones SET state = ?, refresh = 1, error = '', home_job = '', home_done = 0, databases = ?, config = '', source_maintenance = ?, started_by = ?, started_at = ?, finished_at = 0
+		WHERE site_id = ? AND state != ?`, CloneCopying, raw, boolInt(sourceMaintenance), nullID(by), now.Unix(), siteID, CloneCopying)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}

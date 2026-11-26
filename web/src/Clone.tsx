@@ -62,6 +62,7 @@ export function CloneCard({ site }: { site: Site }) {
   const [pool, setPool] = useState("");
   const [pools, setPools] = useState<Pool[]>([]);
   const [staging, setStaging] = useState(true);
+  const [maintenance, setMaintenance] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [started, setStarted] = useState<CloneStart | null>(null);
@@ -84,7 +85,7 @@ export function CloneCard({ site }: { site: Site }) {
     setBusy(true);
     setError("");
     try {
-      const out = await cloneSite(site.name, { name: name.trim(), domain: domain.trim().toLowerCase(), staging, ...(pool && { pool }) });
+      const out = await cloneSite(site.name, { name: name.trim(), domain: domain.trim().toLowerCase(), staging, ...(pool && { pool }), ...(maintenance && { maintenance }) });
       setStarted(out);
       setOpen(false);
     } catch (err) {
@@ -136,6 +137,7 @@ export function CloneCard({ site }: { site: Site }) {
               <input type="checkbox" checked={staging} onChange={(e) => setStaging(e.target.checked)} />
               Staging copy of {site.name}
             </label>
+            {!site.maintenance.enabled && <MaintenanceCheck source={site.name} checked={maintenance} onChange={setMaintenance} />}
             <Notice tone="warn" title="The copy takes over the application's own mail settings and can send real mail.">
               Environment variables of the app are copied too and may hold live API keys. Databases on external database servers are not copied: the copy
               keeps using them.
@@ -321,11 +323,26 @@ function Checklist({ site, clone }: { site: Site; clone: Clone }) {
   );
 }
 
+// MaintenanceCheck offers to put the source in maintenance while its files
+// and databases are copied, so the copy gets one consistent state.
+function MaintenanceCheck({ source, checked, onChange }: { source: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="ui-check ui-check-hint">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span>
+        Put {source} in maintenance while copying
+        <span className="ui-hint ui-flush">Visitors see the maintenance page until the files and databases are copied, so nothing changes on the site halfway through the copy.</span>
+      </span>
+    </label>
+  );
+}
+
 // RefreshForm copies the source's files and databases into the staging
 // copy again, after the copy's name is typed.
 function RefreshForm({ site, clone, onDone }: { site: Site; clone: Clone; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
+  const [maintenance, setMaintenance] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -334,7 +351,7 @@ function RefreshForm({ site, clone, onDone }: { site: Site; clone: Clone; onDone
     setBusy(true);
     setError("");
     try {
-      await refreshClone(site.name);
+      await refreshClone(site.name, maintenance);
       setOpen(false);
       setTyped("");
       onDone();
@@ -367,6 +384,7 @@ function RefreshForm({ site, clone, onDone }: { site: Site; clone: Clone; onDone
               <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
             </Field>
           </div>
+          {clone.source && <MaintenanceCheck source={clone.source} checked={maintenance} onChange={setMaintenance} />}
           <div className="ui-row">
             <Button type="submit" variant="danger" disabled={busy || typed !== site.name}>
               {busy ? "Starting…" : `Replace ${site.name} with ${clone.source}`}

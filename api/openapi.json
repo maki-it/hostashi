@@ -1296,6 +1296,9 @@
           "domain": {
             "type": "string"
           },
+          "maintenance": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           },
@@ -1303,6 +1306,15 @@
             "type": "string"
           },
           "staging": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "CloneRefreshInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "maintenance": {
             "type": "boolean"
           }
         },
@@ -17832,6 +17844,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloneRefreshInInput"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "202": {
             "content": {

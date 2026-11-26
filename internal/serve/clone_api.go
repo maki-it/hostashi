@@ -27,6 +27,16 @@ type cloneIn struct {
 	// paused, password protection on, noindex, "refresh from source"
 	// offered.
 	Staging bool `json:"staging,omitempty"`
+	// Maintenance puts the source in maintenance until its files and
+	// databases are copied, so the copy sees one consistent state.
+	Maintenance bool `json:"maintenance,omitempty"`
+}
+
+// cloneRefreshIn is the optional body of a refresh.
+type cloneRefreshIn struct {
+	// Maintenance puts the source in maintenance until its files and
+	// databases are copied.
+	Maintenance bool `json:"maintenance,omitempty"`
 }
 
 // cloneAccessJSON is the generated basic auth user of a clone with
@@ -141,7 +151,7 @@ func registerClones(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
-		s, err := svc.CloneSite(ctx, p.User.ID, r.PathValue("name"), hosting.CloneInput{Name: in.Name, Domain: in.Domain, Pool: in.Pool, Staging: in.Staging})
+		s, err := svc.CloneSite(ctx, p.User.ID, r.PathValue("name"), hosting.CloneInput{Name: in.Name, Domain: in.Domain, Pool: in.Pool, Staging: in.Staging, Maintenance: in.Maintenance})
 		if err != nil {
 			cloneFail(log, w, err, "clone site")
 
@@ -175,14 +185,19 @@ func registerClones(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 	// Replaces the clone's files and databases with the source's.
 	mux.Op("POST /api/v1/sites/{name}/clone/refresh", openapi.Operation{
 		ID: "refreshSiteClone", Tag: "sites", Summary: "Copy the source's files and databases into this staging clone again",
-		Out: cloneJSON{}, Status: http.StatusAccepted,
+		In: cloneRefreshIn{}, Out: cloneJSON{}, Status: http.StatusAccepted,
 	}, a.allow("sites.clone:refresh", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in cloneRefreshIn
+		if r.ContentLength != 0 && !decodeJSON(w, r, &in) {
+			return
+		}
+
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
 		name := r.PathValue("name")
 
-		if err := svc.RefreshClone(ctx, p.User.ID, name); err != nil {
+		if err := svc.RefreshClone(ctx, p.User.ID, name, in.Maintenance); err != nil {
 			cloneFail(log, w, err, "refresh clone")
 
 			return

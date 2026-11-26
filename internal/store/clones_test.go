@@ -106,7 +106,7 @@ func TestSiteClones(t *testing.T) {
 	}
 
 	dbs := []CloneDatabase{{Source: "alpha_wp", Target: "beta_wp", User: "beta_wp"}}
-	if err := s.CreateSiteClone(ctx, SiteClone{SiteID: dst.ID, SourceID: src.ID, Staging: true, Databases: dbs, StartedBy: 1}, now); err != nil {
+	if err := s.CreateSiteClone(ctx, SiteClone{SiteID: dst.ID, SourceID: src.ID, Staging: true, Databases: dbs, SourceMaintenance: true, StartedBy: 1}, now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -115,16 +115,16 @@ func TestSiteClones(t *testing.T) {
 	}
 
 	c, err := s.SiteClone(ctx, dst.ID)
-	if err != nil || c.State != CloneCopying || !c.Staging || c.SourceID != src.ID || len(c.Databases) != 1 || c.Databases[0].Target != "beta_wp" || c.StartedBy != 1 || !c.FinishedAt.IsZero() {
+	if err != nil || c.State != CloneCopying || !c.Staging || c.SourceID != src.ID || len(c.Databases) != 1 || c.Databases[0].Target != "beta_wp" || !c.SourceMaintenance || c.StartedBy != 1 || !c.FinishedAt.IsZero() {
 		t.Fatalf("clone %+v %v", c, err)
 	}
 
 	// A refresh cannot start while the copy runs.
-	if err := s.StartCloneRefresh(ctx, dst.ID, 1, dbs, now); !errors.Is(err, ErrCloneBusy) {
+	if err := s.StartCloneRefresh(ctx, dst.ID, 1, dbs, false, now); !errors.Is(err, ErrCloneBusy) {
 		t.Fatalf("refresh while copying: %v", err)
 	}
 
-	c.HomeJob, c.HomeDone, c.State, c.Config = "0123456789abcdef", true, CloneDone, CloneConfigDone
+	c.HomeJob, c.HomeDone, c.State, c.Config, c.SourceMaintenance = "0123456789abcdef", true, CloneDone, CloneConfigDone, false
 	c.Databases[0].Done = true
 
 	if err := s.UpdateSiteClone(ctx, c, now.Add(time.Minute)); err != nil {
@@ -132,20 +132,20 @@ func TestSiteClones(t *testing.T) {
 	}
 
 	c, _ = s.SiteClone(ctx, dst.ID)
-	if c.State != CloneDone || !c.HomeDone || !c.Databases[0].Done || c.Config != CloneConfigDone || !c.FinishedAt.Equal(now.Add(time.Minute)) {
+	if c.State != CloneDone || !c.HomeDone || !c.Databases[0].Done || c.Config != CloneConfigDone || c.SourceMaintenance || !c.FinishedAt.Equal(now.Add(time.Minute)) {
 		t.Fatalf("after update %+v", c)
 	}
 
-	if err := s.StartCloneRefresh(ctx, dst.ID, 1, dbs, now.Add(time.Hour)); err != nil {
+	if err := s.StartCloneRefresh(ctx, dst.ID, 1, dbs, true, now.Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 
 	c, _ = s.SiteClone(ctx, dst.ID)
-	if c.State != CloneCopying || !c.Refresh || c.HomeJob != "" || c.HomeDone || c.Databases[0].Done || c.Config != CloneConfigNone || !c.FinishedAt.IsZero() {
+	if c.State != CloneCopying || !c.Refresh || c.HomeJob != "" || c.HomeDone || c.Databases[0].Done || c.Config != CloneConfigNone || !c.SourceMaintenance || !c.FinishedAt.IsZero() {
 		t.Fatalf("refresh %+v", c)
 	}
 
-	if err := s.StartCloneRefresh(ctx, src.ID, 1, nil, now); !errors.Is(err, ErrNotFound) {
+	if err := s.StartCloneRefresh(ctx, src.ID, 1, nil, false, now); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("refresh of a site that is no clone: %v", err)
 	}
 

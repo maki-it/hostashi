@@ -10,7 +10,7 @@ The card is on the site's **Overview** tab and only admins and managers see it.
 
 1. Point the copy's domain at the server first, for example `staging.shop.example.com`. The copy then gets its certificate right away.
 2. Open the live site and click **Copy site**. Name and domain come filled in as `staging-<site>` and `staging.<first domain>`. Change them if you like, and choose another storage pool if there is one.
-3. Leave **Staging copy** checked and click **Create staging copy**.
+3. Leave **Staging copy** checked. Check **Put <site> in maintenance while copying** if the live site must not change halfway through the copy, for example a shop that takes orders. Then click **Create staging copy**.
 4. Save the login that is shown now. A staging copy asks every visitor for it. Hostashi shows the password only once; you can set a new one later under **Security › Access**.
 5. The copy shows its progress on its own Overview tab: first the files, then the databases, then the configuration. When it is done, the copy is ready on its domain.
 6. Test on the copy. When you are happy with the result, make the same change on the live site, for example by running the same update there.
@@ -60,11 +60,15 @@ A staging copy is marked **Staging** in its page head. It differs from a plain c
 
 ## Refresh from the source
 
-On the staging copy, **Refresh from <source>** copies the live site's files and databases into the copy again. Domain, login, databases and users of the copy stay; everything changed on the copy is replaced. Type the copy's name to confirm.
+On the staging copy, **Refresh from <source>** copies the live site's files and databases into the copy again. Domain, login, databases and users of the copy stay; everything changed on the copy is replaced. Type the copy's name to confirm. Here too you can put the live site in maintenance while it is copied.
 
 ![Refresh from the source with the copy's name to type](images/site-staging.png)
 
 While a copy or refresh runs, neither site can be copied or refreshed again.
+
+## Maintenance during the copy
+
+The files and the databases are copied one after the other. Anything the live site writes in the meantime, such as a new order, can therefore end up in the copied database without its uploaded files, or the other way round. With **Put <site> in maintenance while copying** the live site shows its maintenance page (see [Sites](Sites.md#your-own-maintenance-and-parking-pages)) until files and databases are copied, and Hostashi turns the maintenance off again by itself, also when the copy fails. A site that was already in maintenance stays in it.
 
 ## When something fails
 
