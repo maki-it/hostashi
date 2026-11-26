@@ -10,7 +10,6 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/auth"
-	"github.com/maki-it/hostashi/internal/authz"
 	"github.com/maki-it/hostashi/internal/hosting"
 	"github.com/maki-it/hostashi/internal/openapi"
 )
@@ -71,19 +70,7 @@ func toWordPressJSON(st agentapi.WPInstallStatus) wordPressJSON {
 // mayWriteDatabases: the install creates a database (and a reinstall
 // drops one), so it needs databases:write on top of its own action.
 func mayWriteDatabases(w http.ResponseWriter, p auth.Principal) bool {
-	if !p.Allows(authz.ScopeOf("databases:write")) {
-		writeError(w, http.StatusForbidden, "insufficient_scope", "the token lacks the scope "+authz.ScopeOf("databases:write"))
-
-		return false
-	}
-
-	if !authz.Allowed(authz.Role(p.User.Role), "databases:write") {
-		writeError(w, http.StatusForbidden, "forbidden", "your role does not allow this")
-
-		return false
-	}
-
-	return true
+	return alsoAllowed(w, p, "databases:write")
 }
 
 func (in wordPressIn) input() hosting.WordPressInput {

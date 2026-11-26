@@ -183,6 +183,32 @@ func (a authn) allowSite(action authz.Action, siteOf siteOfFunc, h func(http.Res
 	})
 }
 
+// alsoAllowed checks a second action of a request that allow already let
+// through for its first one, such as the new databases of a clone: the
+// token's scope, the role, and for a token with a site list that the
+// action is one such a token may do. It writes the error answer itself.
+func alsoAllowed(w http.ResponseWriter, p auth.Principal, action authz.Action) bool {
+	if scope := authz.ScopeOf(action); !p.Allows(scope) {
+		writeError(w, http.StatusForbidden, "insufficient_scope", "the token lacks the scope "+scope)
+
+		return false
+	}
+
+	if !authz.Allowed(authz.Role(p.User.Role), action) {
+		writeError(w, http.StatusForbidden, "forbidden", "your role does not allow this")
+
+		return false
+	}
+
+	if p.SiteLimited() && !authz.ForSiteToken(action) {
+		writeError(w, http.StatusForbidden, "forbidden", "this token is limited to some sites")
+
+		return false
+	}
+
+	return true
+}
+
 // reaches reports whether the principal may work on site: admins and
 // managers reach every site, a user only a granted one. An error of the
 // store answers 500 and returns false as well.

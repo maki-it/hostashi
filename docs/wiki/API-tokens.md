@@ -13,7 +13,7 @@ A token never gets more than your account: only the scopes your [role](Users-and
 1. Open **Your account** (your name at the bottom of the menu) and go to **API tokens**.
 2. Click **New token** and give it a name that says what uses it, for example "Uptime monitoring".
 3. Pick what the token may do. **Only reading** ticks the scopes that read, **All but high risk** everything except the scopes marked *high risk*, **None** clears the list. Pick high-risk scopes such as `files:write` or `cron:write` only if the job needs them.
-4. Leave **Every site I can reach** on, or untick it and pick the sites.
+4. Leave **Every site I can reach** on, or untick it and pick the sites. A token limited to some sites works only on those sites; it cannot do what spans the server, such as creating a site, cloning one (a clone is a new site) or parking domains.
 5. Set how many days the token is valid, 1 to 365. **Never expires** is for a job you look after yourself; such a token works until you revoke it.
 6. Click **Create token**.
 
