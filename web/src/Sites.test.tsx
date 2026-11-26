@@ -116,9 +116,9 @@ describe("siteStatus and phpChoices", () => {
 });
 
 // ListHarness keeps the address query in state, as the app does.
-function ListHarness({ initial = "" }: { initial?: string }) {
+function ListHarness({ initial = "", role = "admin" }: { initial?: string; role?: string }) {
   const [query, setQuery] = useState(new URLSearchParams(initial));
-  return <Sites query={query} onQuery={setQuery} />;
+  return <Sites query={query} onQuery={setQuery} role={role} />;
 }
 
 const shop: Site = { ...blog, name: "shop", php: "", domains: ["shop.example.com"], tls: { ...noTLS, enabled: true, error: "no DNS record" } };
@@ -686,9 +686,9 @@ describe("reverse proxy sites", () => {
 });
 
 // PageHarness switches tabs as the app does with the address.
-function PageHarness({ tab = "overview" }: { tab?: SiteTab }) {
+function PageHarness({ tab = "overview", role = "admin" }: { tab?: SiteTab; role?: string }) {
   const [t, setT] = useState<SiteTab>(tab);
-  return <SitePage name="blog" tab={t} onTab={setT} />;
+  return <SitePage name="blog" tab={t} onTab={setT} role={role} />;
 }
 
 describe("SitePage", () => {
@@ -845,11 +845,30 @@ describe("SitePage", () => {
     window.location.hash = "";
   });
 
-  it("offers delete and park only to admins and managers", async () => {
+  it("offers disabling and deleting only to admins and managers", async () => {
     mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [blog] } } });
-    render(<PageHarness />);
+    const { unmount } = render(<PageHarness role="manager" />);
     expect(await screen.findByRole("button", { name: "Delete" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete and park domains" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Disable site" })).toBeInTheDocument();
+    unmount();
+
+    render(<PageHarness role="user" />);
+    expect(await screen.findByRole("region", { name: "Details" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Disable site" })).toBeNull();
+    expect(screen.queryByText("Danger zone")).toBeNull();
+  });
+
+  it("shows a user the domains and HTTPS without letting them change them", async () => {
+    const user = userEvent.setup();
+    mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [blog] } } });
+    render(<PageHarness tab="domains" role="user" />);
+    expect(await screen.findByText("An administrator or manager changes these settings.")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Read only" })).toBeDisabled();
+    await user.click(screen.getByRole("tab", { name: "HTTPS" }));
+    expect(await screen.findByRole("switch", { name: /HTTPS with/ })).toBeDisabled();
+    // HSTS is the site's own choice (ADR-0035).
+    expect(screen.getByRole("switch", { name: /HSTS/ })).toBeEnabled();
   });
 
   it("fills in the new site form from a parked domain", async () => {

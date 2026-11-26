@@ -122,10 +122,26 @@ describe("Overview", () => {
   });
 
   it("asks only for what a user may see", async () => {
-    const calls = mockFetch({ "GET /api/v1/sites": { body: { sites: [site("shop")] } } });
+    const calls = mockFetch({
+      "GET /api/v1/sites": { body: { sites: [site("shop")] } },
+      "GET /api/v1/sites/shop/cron": { body: { statusKnown: true, jobs: [] } },
+    });
     render(<Overview user={{ username: "uma", role: "user", secondFactor: true } as never} />);
     expect(await screen.findByText("Nothing needs attention.")).toBeInTheDocument();
-    expect(calls.map((c) => c.path)).toEqual(["/api/v1/sites"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/v1/sites", "/api/v1/sites/shop/cron"]);
     expect(screen.queryByRole("region", { name: "Health" })).not.toBeInTheDocument();
+  });
+
+  it("shows a user the virus finds and failing cron jobs of their sites", async () => {
+    mockFetch({
+      "GET /api/v1/sites": { body: { sites: [site("shop")], marks: { shop: { openFindings: 2, cloneOf: "", staging: false } } } },
+      "GET /api/v1/sites/shop/cron": {
+        body: { statusKnown: true, jobs: [{ id: 1, schedule: "@daily", command: "./x.sh", timeoutSec: 0, nice: null, paused: false, createdAt: 1, updatedAt: 1, status: { running: false, result: "exit-code", exitStatus: 1, lastStart: 1795600000 } }] },
+      },
+    });
+    render(<Overview user={{ username: "uma", role: "user", secondFactor: true } as never} />);
+    expect(await screen.findByText("2 files flagged by the virus scan on site shop")).toBeInTheDocument();
+    expect(screen.getByText("1 cron job of site shop fails")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open cron jobs" })).toHaveAttribute("href", "#/sites/shop/cron");
   });
 });
