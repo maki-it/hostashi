@@ -657,6 +657,7 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 		}
 
 		req := agentapi.BackupForgetRequest{Site: name, Cancel: cancel}
+
 		if exists {
 			if sites == nil {
 				writeError(w, http.StatusConflict, "source_exists", "this site exists; its backups are not deleted here")
