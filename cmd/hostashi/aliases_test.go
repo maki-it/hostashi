@@ -166,12 +166,15 @@ func TestSiteLimitsOverAPI(t *testing.T) {
 
 func TestBackupOverAPI(t *testing.T) {
 	got := fakeAPI(t, map[string]string{
-		"GET /api/v1/backups":                       `{"ready":false,"publicKey":"ssh-ed25519 AAAA","hostKey":"","settings":{},"status":{"ok":true,"running":false}}`,
-		"PUT /api/v1/backups/settings":              `{"ready":false,"publicKey":"ssh-ed25519 AAAA"}`,
-		"PUT /api/v1/backups/hostkey":               `{"ready":true}`,
-		"POST /api/v1/backups/run":                  ``,
-		"POST /api/v1/sites/bk/backups/abc/restore": `{"id":"r1","state":"queued"}`,
-		"GET /api/v1/backups/restores/r1":           `{"id":"r1","state":"done"}`,
+		"GET /api/v1/backups":                          `{"ready":false,"publicKey":"ssh-ed25519 AAAA","hostKey":"","settings":{},"status":{"ok":true,"running":false}}`,
+		"PUT /api/v1/backups/settings":                 `{"ready":false,"publicKey":"ssh-ed25519 AAAA"}`,
+		"PUT /api/v1/backups/hostkey":                  `{"ready":true}`,
+		"POST /api/v1/backups/run":                     ``,
+		"POST /api/v1/sites/bk/backups/abc/restore":    `{"id":"r1","state":"queued"}`,
+		"GET /api/v1/backups/restores/r1":              `{"id":"r1","state":"done"}`,
+		"GET /api/v1/backups/deleted":                  `{"sites":[{"name":"old","earlier":false}]}`,
+		"GET /api/v1/backups/deleted/old":              `{"snapshots":[{"id":"abc"}]}`,
+		"POST /api/v1/backups/deleted/old/abc/restore": `{"id":"r2","site":"bk","source":"old"}`,
 	})
 
 	for _, c := range []struct {
@@ -186,6 +189,9 @@ func TestBackupOverAPI(t *testing.T) {
 		{"", []string{"start"}, "backup started"},
 		{"", []string{"restore", "bk", "abc"}, `"state": "queued"`},
 		{"", []string{"restore-status", "r1"}, `"state": "done"`},
+		{"", []string{"deleted"}, `"name": "old"`},
+		{"", []string{"deleted", "old"}, `"id": "abc"`},
+		{"", []string{"restore-deleted", "old", "abc", "bk"}, `"source": "old"`},
 	} {
 		code, out, errOut := runCLI(t, c.in, append([]string{"backup"}, c.args...)...)
 		if code != 0 || !strings.Contains(out, c.want) {

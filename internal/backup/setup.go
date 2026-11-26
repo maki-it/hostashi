@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
@@ -277,6 +278,58 @@ func (a *Agent) Snapshots(site string) ([]agentapi.BackupSnapshot, error) {
 			out = append(out, agentapi.BackupSnapshot{ID: s.ID, Time: s.Time, Kind: s.Kind, Database: s.Database, Bytes: s.Bytes, Files: s.Files})
 		}
 	}
+
+	return out, nil
+}
+
+// SnapshotSites summarizes the snapshot list of the last run by site
+// name, deleted sites included (ADR-0074). Panel snapshots are left out.
+func (a *Agent) SnapshotSites() ([]agentapi.BackupSiteSummary, error) {
+	all, err := ReadSnapshots(a.statusDir(), owner())
+	if err != nil {
+		return nil, err
+	}
+
+	live, err := Sites(a.stateDir(), owner())
+	if err != nil {
+		return nil, err
+	}
+
+	exists := map[string]bool{}
+	for _, s := range live {
+		exists[s.Name] = true
+	}
+
+	by := map[string]*agentapi.BackupSiteSummary{}
+
+	for _, s := range all {
+		if s.Site == "" {
+			continue
+		}
+
+		e := by[s.Site]
+		if e == nil {
+			e = &agentapi.BackupSiteSummary{Site: s.Site, Exists: exists[s.Site], Oldest: s.Time, Newest: s.Time}
+			by[s.Site] = e
+		}
+
+		e.Snapshots++
+
+		if s.Time.Before(e.Oldest) {
+			e.Oldest = s.Time
+		}
+
+		if s.Time.After(e.Newest) {
+			e.Newest = s.Time
+		}
+	}
+
+	out := make([]agentapi.BackupSiteSummary, 0, len(by))
+	for _, e := range by {
+		out = append(out, *e)
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].Site < out[j].Site })
 
 	return out, nil
 }

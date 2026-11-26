@@ -23,12 +23,20 @@ import (
 //	backup get|status|set|hostkey|start
 //	backup restore SITE SNAPSHOT
 //	backup restore-status ID
+//	backup deleted [SITE]
+//	backup restore-deleted SITE SNAPSHOT TARGET
 func backupCmd(ctx context.Context, args []string, out io.Writer) error {
 	switch {
 	case len(args) == 3 && args[0] == "restore":
 		path := "/sites/" + url.PathEscape(args[1]) + "/backups/" + url.PathEscape(args[2]) + "/restore"
 
 		return apiPrint(ctx, out, http.MethodPost, path, nil)
+	case len(args) == 4 && args[0] == "restore-deleted":
+		path := "/backups/deleted/" + url.PathEscape(args[1]) + "/" + url.PathEscape(args[2]) + "/restore"
+
+		return apiPrint(ctx, out, http.MethodPost, path, map[string]string{"target": args[3]})
+	case len(args) == 2 && args[0] == "deleted":
+		return apiPrint(ctx, out, http.MethodGet, "/backups/deleted/"+url.PathEscape(args[1]), nil)
 	case len(args) == 2 && args[0] == "restore-status":
 		return apiPrint(ctx, out, http.MethodGet, "/backups/restores/"+url.PathEscape(args[1]), nil)
 	case len(args) != 1:
@@ -38,6 +46,8 @@ func backupCmd(ctx context.Context, args []string, out io.Writer) error {
 	switch args[0] {
 	case "get":
 		return apiPrint(ctx, out, http.MethodGet, "/backups", nil)
+	case "deleted":
+		return apiPrint(ctx, out, http.MethodGet, "/backups/deleted", nil)
 	case "status":
 		var b struct {
 			Status json.RawMessage `json:"status"`

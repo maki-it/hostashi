@@ -153,6 +153,8 @@ These commands go through the panel's API and need `hostashi login`, except `bac
 | `hostashi backup status` | Shows the state of the last backup. |
 | `hostashi backup restore SITE SNAPSHOT` | Restores a snapshot into a new folder `restore-<time>` in the site's home. Nothing existing is overwritten. |
 | `hostashi backup restore-status ID` | Shows the state of a restore. |
+| `hostashi backup deleted [SITE]` | Lists deleted sites that still have snapshots, or the snapshots of one. A site name that a newer site took again shows the snapshots from before that site was created. Administrators only. |
+| `hostashi backup restore-deleted SITE SNAPSHOT TARGET` | Restores a snapshot of a deleted site into a new folder `restore-<time>` in the home of the existing site `TARGET`. Administrators only. |
 | `hostashi backup key show` | Prints the backup repository password and the panel key. Store them outside the server: without them, backups cannot be restored on a new server. |
 
 ## Moving from CloudPanel

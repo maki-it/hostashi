@@ -470,6 +470,9 @@
   padding: var(--space-3) var(--space-5);
   border-bottom: 1px solid var(--line);
 }
+.ui-filters > .ui-select {
+  align-self: center;
+}
 .ui-filters .ui-input {
   flex: 1 1 220px;
   max-width: 320px;
@@ -535,6 +538,13 @@ a.ui-btn {
 }
 .ui-flush {
   margin: 0;
+}
+/* A labelled control inside a filter bar, label and control on one line */
+.ui-filter-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
 }
 /* A short note beside the filters, for example what an action does */
 .ui-filters-note {
