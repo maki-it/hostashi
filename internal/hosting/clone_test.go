@@ -36,6 +36,7 @@ type fakeClones struct {
 	// wp are the WordPress configurations started; wpState is what their
 	// status reports, wpErr what a start answers.
 	wp      []agentapi.WPCloneRequest
+	dotenv  []agentapi.DotEnvCloneRequest
 	wpState string
 	wpErr   error
 }
@@ -113,6 +114,19 @@ func (f *fakeClones) WPCloneStart(_ context.Context, req agentapi.WPCloneRequest
 	}
 
 	f.wp = append(f.wp, req)
+
+	return agentapi.WPInstallStatus{Site: req.Site, State: agentapi.DeployRunning}, nil
+}
+
+func (f *fakeClones) DotEnvCloneStart(_ context.Context, req agentapi.DotEnvCloneRequest) (agentapi.WPInstallStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if err := req.Validate(); err != nil {
+		return agentapi.WPInstallStatus{}, &agentrpc.Error{Code: agentrpc.CodeInvalidArgument, Message: err.Error()}
+	}
+
+	f.dotenv = append(f.dotenv, req)
 
 	return agentapi.WPInstallStatus{Site: req.Site, State: agentapi.DeployRunning}, nil
 }
@@ -570,12 +584,18 @@ func TestCloneNoSpace(t *testing.T) {
 func wordPressSource(t *testing.T, st *store.Store) {
 	t.Helper()
 
+	sourceProfile(t, st, profile.WordPress)
+}
+
+func sourceProfile(t *testing.T, st *store.Store, name string) {
+	t.Helper()
+
 	src, err := st.SiteByName(t.Context(), "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := st.SetSiteProfile(t.Context(), store.SiteProfile{SiteID: src.ID, Profile: profile.WordPress}, time.Now()); err != nil {
+	if _, err := st.SetSiteProfile(t.Context(), store.SiteProfile{SiteID: src.ID, Profile: name}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -661,7 +681,7 @@ func TestCloneSiteWordPressFails(t *testing.T) {
 
 	for _, e := range list {
 		if e.Action == "site.clone.failed" {
-			if !strings.Contains(string(e.Detail), "WordPress configuration: a step failed") {
+			if !strings.Contains(string(e.Detail), "configuration: a step failed") {
 				t.Errorf("detail %s", e.Detail)
 			}
 
@@ -682,5 +702,25 @@ func TestCloneSiteNoConfiguration(t *testing.T) {
 
 	if v := pollUntil(t, s, "shop-copy"); v.State != store.CloneDone || v.Config != store.CloneConfigDone || len(f.wp) != 0 {
 		t.Fatalf("%+v %d", v, len(f.wp))
+	}
+}
+
+// A Laravel clone gets the .env step instead of WP-CLI.
+func TestCloneSiteLaravel(t *testing.T) {
+	s, _, f, st := cloneEnv(t)
+
+	sourceProfile(t, st, profile.Laravel)
+
+	if _, err := s.CloneSite(t.Context(), 1, "shop", CloneInput{Name: "shop-copy", Domain: "copy.shop.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+
+	v := pollUntil(t, s, "shop-copy")
+	if v.State != store.CloneDone || len(f.wp) != 0 || len(f.dotenv) != 1 {
+		t.Fatalf("%+v wp %d dotenv %d", v, len(f.wp), len(f.dotenv))
+	}
+
+	if r := f.dotenv[0]; r.Kind != agentapi.DotEnvLaravel || r.URL != "http://copy.shop.example.com" || len(r.Databases) != 2 || len(r.DBPasswords) != 2 {
+		t.Fatalf("request %+v", r)
 	}
 }

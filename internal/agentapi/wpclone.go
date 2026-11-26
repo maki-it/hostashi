@@ -145,3 +145,49 @@ func ValidateWPCloneDBs(dbs []WPCloneDB, pw map[string]string) error {
 
 	return nil
 }
+
+// The .env step of a cloned Laravel or Symfony site (ADR-0070): typed key
+// edits in the clone's .env, run as the site user in the same unit as the
+// WordPress step and reported by site.wordpress.status.
+var DotEnvCloneStart = agentrpc.Op[DotEnvCloneRequest, WPInstallStatus]{Name: "site.dotenv.clone"}
+
+// Frameworks of the .env step.
+const (
+	DotEnvLaravel = "laravel"
+	DotEnvSymfony = "symfony"
+)
+
+// DotEnvCloneRequest starts the .env step of a clone.
+type DotEnvCloneRequest struct {
+	Site string `json:"site"`
+	// Kind is DotEnvLaravel or DotEnvSymfony.
+	Kind string `json:"kind"`
+	// WebDir is the clone's document root below htdocs; the project is
+	// its parent when it is called public, else the document root.
+	WebDir string `json:"webDir,omitempty"`
+	// URL is the clone's address (Laravel's APP_URL).
+	URL         string            `json:"url"`
+	Databases   []WPCloneDB       `json:"databases"`
+	DBPasswords map[string]string `json:"dbPasswords"`
+}
+
+// Validate checks every field.
+func (r DotEnvCloneRequest) Validate() error {
+	if err := ValidateSiteUser(r.Site); err != nil {
+		return err
+	}
+
+	if r.Kind != DotEnvLaravel && r.Kind != DotEnvSymfony {
+		return fmt.Errorf("dotenv: unknown kind %q", r.Kind)
+	}
+
+	if err := ValidateWebDir(r.WebDir); err != nil {
+		return err
+	}
+
+	if _, _, err := ParseWPCloneURL(r.URL); err != nil {
+		return err
+	}
+
+	return ValidateWPCloneDBs(r.Databases, r.DBPasswords)
+}
