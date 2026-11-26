@@ -61,4 +61,4 @@ Options **A, A, A**.
 
 1. ~~Where is a snapshot of a deleted site restored to?~~ Decided by Kim (2026-11-26): A, into an existing site the administrator picks.
 2. ~~How long do the snapshots of a deleted site stay?~~ Decided by Kim (2026-11-26): A, until the administrator deletes them, and optionally B, automatic expiry after a number of days set in the UI (recommendation 5).
-3. Name reuse: recommendation A, a site shows only snapshots taken after it was created.
+3. ~~Name reuse?~~ Decided by Kim (2026-11-26): A, a site shows only snapshots taken after it was created.
