@@ -68,6 +68,37 @@ describe("CloneCard", () => {
     expect(screen.queryByRole("textbox", { name: "Password" })).toBeNull();
   });
 
+  it("puts the source in maintenance while copying when asked", async () => {
+    const calls = mockFetch({
+      "GET /api/v1/pools": { body: { pools: [] } },
+      "POST /api/v1/sites/shop/clone": { status: 202, body: { site: staging, access: { user: "staging", password: "s3cret-pass" } } },
+    });
+    const user = userEvent.setup();
+    render(<CloneCard site={site} />);
+
+    await user.click(screen.getByRole("button", { name: "Copy site" }));
+    const check = screen.getByRole("checkbox", { name: /Put shop in maintenance while copying/ });
+    expect(check).not.toBeChecked();
+    await user.click(check);
+    await user.click(screen.getByRole("button", { name: "Create staging copy" }));
+
+    await screen.findByRole("heading", { name: "Save the password of the copy now" });
+    expect(calls).toContainEqual({
+      method: "POST",
+      path: "/api/v1/sites/shop/clone",
+      body: { name: "staging-shop", domain: "staging.shop.example.com", staging: true, maintenance: true },
+    });
+  });
+
+  it("offers no maintenance for a source already in maintenance", async () => {
+    mockFetch({ "GET /api/v1/pools": { body: { pools: [] } } });
+    const user = userEvent.setup();
+    render(<CloneCard site={{ ...site, maintenance: { ...site.maintenance, enabled: true } }} />);
+
+    await user.click(screen.getByRole("button", { name: "Copy site" }));
+    expect(screen.queryByRole("checkbox", { name: /maintenance/ })).toBeNull();
+  });
+
   it("checks the name before asking the server", async () => {
     const calls = mockFetch({ "GET /api/v1/pools": { body: { pools: [] } } });
     const user = userEvent.setup();
@@ -120,10 +151,11 @@ describe("CloneStatusCard", () => {
     expect(go).toBeDisabled();
     await user.clear(screen.getByRole("textbox", { name: /to confirm/ }));
     await user.type(screen.getByRole("textbox", { name: /to confirm/ }), "staging-shop");
+    await user.click(screen.getByRole("checkbox", { name: /Put shop in maintenance while copying/ }));
     await user.click(go);
 
     expect(refreshed).toBe(1);
-    expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
+    expect(calls.filter((c) => c.method === "POST")).toEqual([{ method: "POST", path: "/api/v1/sites/staging-shop/clone/refresh", body: { maintenance: true } }]);
     expect(screen.queryByRole("list", { name: "What to change" })).toBeNull();
   });
 

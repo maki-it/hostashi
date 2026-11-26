@@ -116,6 +116,9 @@ type CloneInput struct {
 	Pool string
 	// Staging marks the clone as staging copy of the source.
 	Staging bool
+	// Maintenance puts the source in maintenance (ADR-0027) while its
+	// files and databases are copied, so the copy is consistent.
+	Maintenance bool
 }
 
 // CloneView is the clone row of a site with the names the API shows.
@@ -217,13 +220,27 @@ func (s *Service) CloneSite(ctx context.Context, actor int64, source string, in 
 		}
 	}
 
-	if err := s.st.CreateSiteClone(ctx, store.SiteClone{SiteID: created.ID, SourceID: src.ID, Staging: in.Staging, Databases: dbs, StartedBy: actor}, s.now()); err != nil {
+	// A source already in maintenance stays as it is, also afterwards. It
+	// goes into maintenance before the row exists, so the poller never
+	// copies it before.
+	hold := in.Maintenance && !src.Maintenance
+	if hold {
+		if err := s.sourceMaintenance(ctx, actor, src, true); err != nil {
+			return fail(fmt.Errorf("put %s in maintenance: %w", src.Name, err))
+		}
+	}
+
+	if err := s.st.CreateSiteClone(ctx, store.SiteClone{SiteID: created.ID, SourceID: src.ID, Staging: in.Staging, Databases: dbs, SourceMaintenance: hold, StartedBy: actor}, s.now()); err != nil {
+		if hold {
+			s.releaseSource(undo, src, &store.SiteClone{StartedBy: actor})
+		}
+
 		return fail(err)
 	}
 
 	s.audit(ctx, actor, "site.clone", created.Name, map[string]string{
 		"source": src.Name, "pool": in.Pool, "domain": in.Domain, "staging": strconv.FormatBool(in.Staging),
-		"databases": cloneDBList(dbs),
+		"maintenance": strconv.FormatBool(hold), "databases": cloneDBList(dbs),
 	})
 
 	s.kickClones()
@@ -239,7 +256,7 @@ func (s *Service) CloneSite(ctx context.Context, actor int64, source string, in 
 // RefreshClone copies the files and databases of the source into the
 // clone again ("refresh from source"); the clone's own files and data are
 // replaced. Only for staging clones whose source still exists.
-func (s *Service) RefreshClone(ctx context.Context, actor int64, name string) error {
+func (s *Service) RefreshClone(ctx context.Context, actor int64, name string, maintenance bool) error {
 	if s.clones == nil {
 		return ErrNoClone
 	}
@@ -293,7 +310,18 @@ func (s *Service) RefreshClone(ctx context.Context, actor int64, name string) er
 		return err
 	}
 
-	if err := s.st.StartCloneRefresh(ctx, site.ID, actor, dbs, s.now()); err != nil {
+	hold := maintenance && !src.Maintenance
+	if hold {
+		if err := s.sourceMaintenance(ctx, actor, src, true); err != nil {
+			return fmt.Errorf("put %s in maintenance: %w", src.Name, err)
+		}
+	}
+
+	if err := s.st.StartCloneRefresh(ctx, site.ID, actor, dbs, hold, s.now()); err != nil {
+		if hold {
+			s.releaseSource(context.WithoutCancel(ctx), src, &store.SiteClone{StartedBy: actor})
+		}
+
 		if errors.Is(err, store.ErrCloneBusy) {
 			return ErrCloneBusy
 		}
@@ -301,7 +329,7 @@ func (s *Service) RefreshClone(ctx context.Context, actor int64, name string) er
 		return err
 	}
 
-	s.audit(ctx, actor, "site.clone.refresh", site.Name, map[string]string{"source": src.Name, "databases": cloneDBList(dbs)})
+	s.audit(ctx, actor, "site.clone.refresh", site.Name, map[string]string{"source": src.Name, "maintenance": strconv.FormatBool(hold), "databases": cloneDBList(dbs)})
 	s.kickClones()
 
 	return nil
@@ -715,6 +743,13 @@ func (s *Service) stepClone(ctx context.Context, c store.SiteClone) {
 		// The agent is unavailable or busy: try again on the next poll.
 		s.log.WarnContext(ctx, "clone step", "site", site.Name, "err", err)
 	case c.HomeDone && allDBsDone(c.Databases):
+		// The source is copied: it leaves maintenance before the clone's
+		// configuration, which touches only the clone.
+		if c.SourceMaintenance {
+			s.releaseSource(ctx, src, &c)
+			changed = true
+		}
+
 		// Keep the last copy's result before the configuration starts.
 		if changed {
 			if err := s.st.UpdateSiteClone(ctx, c, s.now()); err != nil {
@@ -1015,6 +1050,12 @@ func (s *Service) finishClone(ctx context.Context, src, site store.Site, c store
 // failClone records the error. A first copy that failed is deleted with
 // its databases (ADR-0070); a refresh keeps the clone, marked failed.
 func (s *Service) failClone(ctx context.Context, site store.Site, c store.SiteClone, msg string) {
+	if c.SourceMaintenance && c.SourceID != 0 {
+		if src, err := s.st.SiteByID(ctx, c.SourceID); err == nil {
+			s.releaseSource(ctx, src, &c)
+		}
+	}
+
 	c.State, c.Error = store.CloneFailed, msg
 
 	if err := s.st.UpdateSiteClone(ctx, c, s.now()); err != nil {
@@ -1030,6 +1071,26 @@ func (s *Service) failClone(ctx context.Context, site store.Site, c store.SiteCl
 	if err := s.Delete(ctx, c.StartedBy, site.Name); err != nil {
 		s.log.ErrorContext(ctx, "remove a failed clone", "site", site.Name, "err", err)
 	}
+}
+
+// sourceMaintenance switches the maintenance of a clone's source and
+// keeps its page and allowed addresses.
+func (s *Service) sourceMaintenance(ctx context.Context, actor int64, src store.Site, on bool) error {
+	_, err := s.SetMaintenance(ctx, actor, src.Name, Maintenance{Enabled: on, Page: pageIDString(src.MaintenancePage), AllowIPs: src.MaintenanceAllow})
+
+	return err
+}
+
+// releaseSource takes the source out of the maintenance the copy put it
+// in. A failure is logged and the flag kept, so the next step tries again.
+func (s *Service) releaseSource(ctx context.Context, src store.Site, c *store.SiteClone) {
+	if err := s.sourceMaintenance(ctx, c.StartedBy, src, false); err != nil {
+		s.log.ErrorContext(ctx, "take the source of a clone out of maintenance", "source", src.Name, "err", err)
+
+		return
+	}
+
+	c.SourceMaintenance = false
 }
 
 // agentMessage is the agent's text of an error, for the clone's error.
