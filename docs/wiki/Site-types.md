@@ -20,7 +20,7 @@ You choose the type when you create a site ([Sites](Sites.md)) and can change it
 
 The site serves the files in `/home/<name>/htdocs`, or in a folder below it that you set under **Web root**. For a single-page app, turn on **Single-page app**: addresses without a file then get `index.html`.
 
-A PHP site runs its own PHP pool as the site's user. The version is chosen on the **App › PHP** tab; install versions under **Server → PHP versions**. See [PHP settings](PHP-settings.md).
+A PHP site runs its own PHP pool as the site's user. The version is chosen on the **App › PHP** tab; install versions under **Server → Runtimes › PHP**. See [PHP settings](PHP-settings.md).
 
 ## Node.js
 
@@ -28,7 +28,7 @@ A PHP site runs its own PHP pool as the site's user. The version is chosen on th
 
 A Node.js site runs one app as the site's user. nginx passes every request to it.
 
-- **Node.js version.** Hostashi installs the official long-term support releases from nodejs.org under **Server → Node.js versions**. Install one there before you create the site. Updates of a version arrive with Hostashi updates; the apps of that version restart by themselves.
+- **Node.js version.** Hostashi installs the official long-term support releases from nodejs.org under **Server → Runtimes › Node.js**. Install one there before you create the site. Updates of a version arrive with Hostashi updates; the apps of that version restart by themselves.
 - **Working directory.** The folder the app starts in, below the home, `htdocs` by default. Usually the folder with `package.json`.
 - **Start command.** Either a **start file** (`node server.js`) or an **npm script** (`npm run start`). Until one is set, the app stays stopped.
 - **Port.** The panel gives each app its own port and passes it in the variable `PORT`, with `HOST=127.0.0.1` and `NODE_ENV=production`. Your app must listen on `PORT`. Only nginx and the site's own user can reach the port.
@@ -49,7 +49,7 @@ Then choose **Restart**. **Stop** keeps the app stopped, also after a reboot, un
 
 A Python site runs one app as the site's user, from its own environment `~/.venv`. nginx passes every request to it. It works like a Node.js site, with these differences:
 
-- **Python version.** Hostashi installs the supported lines of Python from the CPython builds of [python-build-standalone](https://github.com/astral-sh/python-build-standalone) under **Server → Python versions**, each download checked against a pinned checksum. Install one there before you create the site. A newer release or build of a line arrives with a Hostashi update; the environments stay and the apps restart by themselves. A line can be removed once no site uses it.
+- **Python version.** Hostashi installs the supported lines of Python from the CPython builds of [python-build-standalone](https://github.com/astral-sh/python-build-standalone) under **Server → Runtimes › Python**, each download checked against a pinned checksum. Install one there before you create the site. A newer release or build of a line arrives with a Hostashi update; the environments stay and the apps restart by themselves. A line can be removed once no site uses it.
 - **Start command.** **WSGI with gunicorn** (`mysite.wsgi:application`, Django, Flask), **ASGI with uvicorn** (`main:app`, FastAPI) or a **Python file** (`app.py`). Until one is set, the app stays stopped. Under **Extra arguments**, one per line, you add options such as `--workers` and `3`. The address is Hostashi's: for gunicorn and uvicorn, `--bind`, `--host` and `--port` are refused. A Python file listens on `HOST` and `PORT` itself.
 - **Environment.** Hostashi creates `~/.venv` with the chosen version when the site is created. It does not install packages. Install them in the site's SSH shell, gunicorn or uvicorn included, for example:
 

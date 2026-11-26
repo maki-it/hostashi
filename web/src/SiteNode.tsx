@@ -36,7 +36,7 @@ export const newNodeApp = (version = ""): NodeValue => ({ version, workdir: "htd
 
 /** nodeProblem checks the fields before they are sent. */
 export function nodeProblem(v: NodeValue): string {
-  if (!v.version) return "No Node.js version is installed. An administrator installs one under Node.js versions.";
+  if (!v.version) return "No Node.js version is installed. An administrator installs one under Runtimes › Node.js.";
   return workdirProblem(v.workdir) || startProblem(v.startKind, v.start);
 }
 

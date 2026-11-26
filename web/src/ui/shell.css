@@ -486,3 +486,43 @@ a.app-user-name[aria-current="page"] {
   color: var(--muted);
   border-top: 1px solid var(--line);
 }
+
+/* A hint at the bottom of the nav while entries are hidden below it: a
+   fade with the name of the last group, which scrolls there on a click.
+   Keyboard users reach the entries by Tab, so the button is not in the
+   tab order. */
+.app-nav-more {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  flex: none;
+  height: 56px;
+  margin: -56px -12px 0;
+  padding-bottom: 6px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--side-bg) 55%);
+}
+.app-nav-more button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--side-muted);
+  background: var(--side-bg);
+  border: 1px solid var(--side-line);
+  border-radius: 10px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.app-nav-more button:hover {
+  color: var(--side-fg);
+}
+@media (max-width: 700px) {
+  .app-nav-more {
+    display: none;
+  }
+}

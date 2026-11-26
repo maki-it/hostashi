@@ -28,6 +28,11 @@ describe("search items", () => {
     expect(matchItems(items, "account").map((i) => i.label)).toEqual(["Your account"]);
   });
 
+  it("finds each runtime on the Runtimes page", () => {
+    const hits = matchItems(searchItems("admin", []), "python");
+    expect(hits.map((h) => [h.label, h.href])).toEqual([["Runtimes › Python", "#/python"]]);
+  });
+
   it("shows at most six hits per group", () => {
     const sites = Array.from({ length: 10 }, (_, i) => site(`site${i}`));
     expect(matchItems(searchItems("admin", sites), "site").filter((i) => i.group === "Sites")).toHaveLength(6);
