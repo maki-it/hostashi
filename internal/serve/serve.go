@@ -288,15 +288,21 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		if deps.Backups != nil {
 			var (
-				dbs  SiteDatabases
-				jobs DatabaseJobs
+				dbs   SiteDatabases
+				jobs  DatabaseJobs
+				sites PanelSites
+				aud   auditor
 			)
 
 			if deps.Sites != nil {
-				dbs, jobs = deps.Sites.Databases, deps.Sites
+				dbs, jobs, sites = deps.Sites.Databases, deps.Sites, deps.Sites.List
 			}
 
-			registerBackups(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Backups, dbs, jobs, log)
+			if deps.Settings != nil {
+				aud = deps.Settings
+			}
+
+			registerBackups(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Backups, dbs, jobs, sites, aud, log)
 		}
 
 		if deps.CloudPanel != nil {

@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/backup"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 type nopUnits struct{ runs int }
@@ -60,8 +62,12 @@ func (l *localBackups) Snapshots(_ context.Context, site string) ([]agentapi.Bac
 	return l.a.Snapshots(site)
 }
 
-func (l *localBackups) Restore(ctx context.Context, site, snapshot string) (agentapi.BackupRestore, error) {
-	return l.a.StartRestore(ctx, site, snapshot)
+func (l *localBackups) SnapshotSites(context.Context) ([]agentapi.BackupSiteSummary, error) {
+	return l.a.SnapshotSites()
+}
+
+func (l *localBackups) Restore(ctx context.Context, site, snapshot, target string) (agentapi.BackupRestore, error) {
+	return l.a.StartRestoreInto(ctx, site, snapshot, target)
 }
 
 func (l *localBackups) GetRestore(_ context.Context, id string) (agentapi.BackupRestore, error) {
@@ -106,7 +112,7 @@ func newBackupAPI(t *testing.T) (*apiEnv, *localBackups, *nopUnits) {
 	}
 
 	ok := func(context.Context) error { return nil }
-	e.h = Handler(Config{}, Deps{PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb})
+	e.h = Handler(Config{}, Deps{PingAgent: ok, PingDB: ok, Auth: e.svc, Sites: e.sites, Backups: lb, Settings: e.settings})
 
 	return e, lb, units
 }
@@ -161,10 +167,14 @@ func TestBackupsOverHTTP(t *testing.T) {
 		t.Errorf("run: %d %s, runs %d", rec.Code, rec.Body, units.runs)
 	}
 
-	for _, path := range []string{"/api/v1/sites/blog/backups", "/api/v1/backups/panel"} {
-		if rec := e.do(t, reqOpts{method: "GET", path: path, cookie: c}); rec.Code != http.StatusOK || rec.Body.String() != "{\"snapshots\":[]}\n" {
-			t.Errorf("%s: %d %q", path, rec.Code, rec.Body)
-		}
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/backups/panel", cookie: c}); rec.Code != http.StatusOK || rec.Body.String() != "{\"snapshots\":[]}\n" {
+		t.Errorf("panel: %d %q", rec.Code, rec.Body)
+	}
+
+	// A site the panel does not know has no snapshots of its own; those
+	// of deleted sites are under /api/v1/backups/deleted (ADR-0074).
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/blog/backups", cookie: c}); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown site: %d %q", rec.Code, rec.Body)
 	}
 
 	cases := []struct {
@@ -262,7 +272,7 @@ func TestRestoreOverHTTP(t *testing.T) {
 	time.Sleep(1100 * time.Millisecond)
 
 	snap := strings.Repeat("ab", 32)
-	if err := backup.WriteSnapshots(lb.a.StatusDir, []backup.SnapshotEntry{{ID: snap, Kind: backup.KindDB, Site: "blog", Database: "blog_wp"}}); err != nil {
+	if err := backup.WriteSnapshots(lb.a.StatusDir, []backup.SnapshotEntry{{ID: snap, Kind: backup.KindDB, Site: "blog", Database: "blog_wp", Time: time.Now().UTC()}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -356,5 +366,156 @@ func TestRestoreOverHTTP(t *testing.T) {
 	write := e.createToken(t, c, `{"name":"w","scopes":["backups:read","backups:write"],"expiresInDays":1}`)
 	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/backups/" + snap + "/restore", header: bearerHeader(write.Token)}); rec.Code != http.StatusForbidden {
 		t.Errorf("restore with backups:write: %d", rec.Code)
+	}
+}
+
+// readyRestores sets up the target and its host key, an agent registry of
+// the given sites, and the same sites in the panel.
+func readyRestores(t *testing.T, e *apiEnv, lb *localBackups, c *http.Cookie, names ...string) {
+	t.Helper()
+
+	state := t.TempDir()
+	if err := os.Chmod(state, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	pool := filepath.Join(state, "pool")
+	_ = os.Mkdir(pool, 0o755)
+
+	var regSites []string
+	for i, n := range names {
+		regSites = append(regSites, fmt.Sprintf(`{"user":"%s","uid":%d,"gid":%d,"pool":"default"}`, n, 2000+i, 2000+i))
+	}
+
+	reg := `{"version":1,"pools":[{"name":"default","path":"` + pool + `"}],"sites":[` + strings.Join(regSites, ",") + `]}`
+	if err := os.WriteFile(filepath.Join(state, "sites.json"), []byte(reg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	lb.a.StateDir, lb.a.UnitDir = state, t.TempDir()
+
+	settings := `{"version":1,"target":{"user":"u1","host":"u1.your-storagebox.de","port":23,"path":"x"},"retention":{"daily":7},"windowStart":1,"windowEnd":5}`
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/backups/settings", cookie: c, body: settings}); rec.Code != http.StatusOK {
+		t.Fatalf("set: %d %s", rec.Code, rec.Body)
+	}
+
+	key := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(lb.hostKey)))
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/backups/hostkey", cookie: c, body: `{"key":"` + key + `"}`}); rec.Code != http.StatusOK {
+		t.Fatalf("host key: %d %s", rec.Code, rec.Body)
+	}
+
+	for _, n := range names {
+		body := `{"name":"` + n + `","domains":["` + n + `.example.com"]}`
+		if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: body}); rec.Code != http.StatusCreated {
+			t.Fatalf("create site: %d %s", rec.Code, rec.Body)
+		}
+	}
+}
+
+// Snapshots of deleted sites, and of an earlier site whose name a newer
+// site took, stay reachable for administrators and restore into an
+// existing site (ADR-0074).
+func TestDeletedSiteBackupsOverHTTP(t *testing.T) {
+	e, lb, _ := newBackupAPI(t)
+	c := e.adminCookie(t)
+	readyRestores(t, e, lb, c, "blog", "shop")
+
+	now := time.Now().UTC()
+	earlier := now.AddDate(-1, 0, 0)
+	gone, goneDB, oldBlog, blog := strings.Repeat("a1", 32), strings.Repeat("a2", 32), strings.Repeat("b1", 32), strings.Repeat("b2", 32)
+
+	if err := backup.WriteSnapshots(lb.a.StatusDir, []backup.SnapshotEntry{
+		{ID: blog, Kind: backup.KindFiles, Site: "blog", Time: now.Add(time.Minute)},
+		{ID: goneDB, Kind: backup.KindDB, Site: "old", Database: "old_wp", Time: earlier.Add(time.Hour)},
+		{ID: gone, Kind: backup.KindFiles, Site: "old", Time: earlier},
+		{ID: oldBlog, Kind: backup.KindFiles, Site: "blog", Time: earlier},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The site of a reused name sees only its own snapshots.
+	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/blog/backups", cookie: c})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), blog) || strings.Contains(rec.Body.String(), oldBlog) {
+		t.Errorf("site list: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/blog/backups/" + oldBlog + "/restore", cookie: c}); rec.Code != http.StatusNotFound {
+		t.Errorf("earlier site's snapshot through the site: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/backups/deleted", cookie: c})
+
+	var list deletedSiteListJSON
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &list) != nil || len(list.Sites) != 2 {
+		t.Fatalf("deleted: %d %s", rec.Code, rec.Body)
+	}
+
+	if d := list.Sites[0]; d.Name != "blog" || !d.Earlier || d.Snapshots != 1 || !d.Newest.Equal(earlier) {
+		t.Errorf("earlier site: %+v", d)
+	}
+
+	if d := list.Sites[1]; d.Name != "old" || d.Earlier || d.Snapshots != 2 || !d.Oldest.Equal(earlier) || !d.Newest.Equal(earlier.Add(time.Hour)) {
+		t.Errorf("deleted site: %+v", d)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/backups/deleted/old", cookie: c})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), gone) || !strings.Contains(rec.Body.String(), goneDB) {
+		t.Errorf("deleted snapshots: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/backups/deleted/blog", cookie: c})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), oldBlog) || strings.Contains(rec.Body.String(), `"`+blog+`"`) {
+		t.Errorf("earlier snapshots: %d %s", rec.Code, rec.Body)
+	}
+
+	for _, p := range []string{"/api/v1/backups/deleted/shop", "/api/v1/backups/deleted/none", "/api/v1/backups/deleted/..%2Fx"} {
+		if rec := e.do(t, reqOpts{method: "GET", path: p, cookie: c}); rec.Code != http.StatusNotFound {
+			t.Errorf("%s: %d %s", p, rec.Code, rec.Body)
+		}
+	}
+
+	restore := func(name, snap string) string { return "/api/v1/backups/deleted/" + name + "/" + snap + "/restore" }
+
+	cases := []struct {
+		path, body, code string
+		status           int
+	}{
+		{restore("old", gone), `{"target":"none"}`, "target_not_found", http.StatusNotFound},
+		{restore("old", gone), `{"target":""}`, "invalid_argument", http.StatusUnprocessableEntity},
+		{restore("old", gone), `{"target":"../blog"}`, "invalid_argument", http.StatusUnprocessableEntity},
+		{restore("old", blog), `{"target":"shop"}`, "not_found", http.StatusNotFound},
+		{restore("blog", blog), `{"target":"blog"}`, "not_found", http.StatusNotFound},
+		{restore("blog", oldBlog), `{"target":"shop"}`, "source_exists", http.StatusConflict},
+		{restore("old", "abc"), `{"target":"shop"}`, "not_found", http.StatusNotFound},
+	}
+	for _, tc := range cases {
+		rec := e.do(t, reqOpts{method: "POST", path: tc.path, cookie: c, body: tc.body})
+		if rec.Code != tc.status || !strings.Contains(rec.Body.String(), `"`+tc.code+`"`) {
+			t.Errorf("%s %s: %d %s", tc.path, tc.body, rec.Code, rec.Body)
+		}
+	}
+
+	// Restoring needs the high-risk scope.
+	write := e.createToken(t, c, `{"name":"w","scopes":["backups:read","backups:write"],"expiresInDays":1}`)
+	if rec := e.do(t, reqOpts{method: "POST", path: restore("old", goneDB), header: bearerHeader(write.Token), body: `{"target":"shop"}`}); rec.Code != http.StatusForbidden {
+		t.Errorf("restore with backups:write: %d", rec.Code)
+	}
+
+	rec = e.do(t, reqOpts{method: "POST", path: restore("old", goneDB), cookie: c, body: `{"target":"shop"}`})
+
+	var r agentapi.BackupRestore
+	if rec.Code != http.StatusAccepted || json.Unmarshal(rec.Body.Bytes(), &r) != nil || r.Site != "shop" || r.Source != "old" || r.Database != "old_wp" {
+		t.Fatalf("restore: %d %s", rec.Code, rec.Body)
+	}
+
+	entries, _, err := e.st.AuditEntries(t.Context(), store.AuditFilter{Action: "backup.restore.deleted"}, 0, 1)
+	if err != nil || len(entries) != 1 || entries[0].Target != "shop" || !strings.Contains(string(entries[0].Detail), `"source":"old"`) {
+		t.Errorf("audit: %+v, %v", entries, err)
+	}
+
+	// The restore belongs to the target: its dump goes into a new
+	// database of shop.
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/backups/restores/" + r.ID, cookie: c}); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"site":"shop"`) {
+		t.Errorf("get: %d %s", rec.Code, rec.Body)
 	}
 }
