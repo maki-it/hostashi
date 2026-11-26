@@ -33,6 +33,7 @@ import (
 	"github.com/maki-it/hostashi/internal/nodeinstall"
 	"github.com/maki-it/hostashi/internal/pythoninstall"
 	"github.com/maki-it/hostashi/internal/reqid"
+	"github.com/maki-it/hostashi/internal/runtimepins"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/serve"
 	"github.com/maki-it/hostashi/internal/store"
@@ -206,6 +207,8 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 
 	log := slog.New(reqid.Handler(slog.NewJSONHandler(stderr, nil)))
 	cmd, args := args[0], args[1:]
+
+	loadRuntimePins(log, runtimepins.DefaultPath, cmd == "agent")
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	socket := fs.String("socket", agentapi.DefaultSocket, "agent socket path")
@@ -588,4 +591,27 @@ func filesHelper(ctx context.Context, euid int, home string, idle time.Duration,
 	}
 
 	return files.Serve(ctx, ln, &files.Handler{Root: root, Log: log}, idle, log)
+}
+
+// loadRuntimePins puts newer Node.js and CPython pins from the package
+// hostashi-runtimes over the built-in ones (ADR-0077), before any command
+// reads them, so the agent, the panel and the install units agree. A bad
+// file is reported and ignored; the built-in pins stay.
+func loadRuntimePins(log *slog.Logger, path string, verbose bool) {
+	res, err := runtimepins.Load(path)
+	if err != nil {
+		log.Warn("runtime pins file ignored", "err", err)
+
+		return
+	}
+
+	for _, s := range res.Skipped {
+		log.Warn("runtime pin ignored", "pin", s)
+	}
+
+	if verbose {
+		for _, a := range res.Applied {
+			log.Info("runtime pin from "+path, "pin", a)
+		}
+	}
 }
