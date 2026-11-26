@@ -6,7 +6,7 @@
 
 ## Result
 
-No critical or high finding. Four findings were fixed with tests in this review, two low ones stay open, the rest are notes.
+No critical or high finding. Five findings were fixed with tests in this review, one low one stays open, the rest are notes.
 
 | # | Finding | Severity | State |
 |---|---|---|---|
@@ -15,7 +15,7 @@ No critical or high finding. Four findings were fixed with tests in this review,
 | 3 | A token limited to some sites could clone a site (a new site) and park domains | Low | fixed, PR 570 |
 | 4 | A site user could point a reverse proxy site at any host of the private network | Medium | fixed, PR 572 |
 | 5 | The build commands of a Git deploy can read the run's token or key | Low | open, documented in PR 571 |
-| 6 | Unknown webhook ids fill the webhook's rate limiter, which then blocks every webhook | Low | open |
+| 6 | Unknown webhook ids fill the webhook's rate limiter, which then blocks every webhook | Low | fixed, PR 574 |
 | 7 | Notes | Info | – |
 
 Severity is the project's own rating: how bad the effect is, weighed by what an attacker needs [E].
@@ -50,9 +50,9 @@ Fix (PR 572, decided by Kim on 2026-11-26): a target that is or resolves to a pr
 
 git-sync and the build commands run in the same unit, so the credentials are in `$CREDENTIALS_DIRECTORY` while the build runs [V: `DropInContent`]. Only admins and managers store build commands, but the commands usually run code from the repository and its dependencies (`npm ci`, `composer install`). Whoever can push to the repository can read the token through it [V by construction]. A separate unit for the build would close this; until then the wiki and ADR-0062 recommend a read-only token for the one repository [V: ADR-0062 note added in PR 571].
 
-### 6. Webhook rate limiter fills up (Low, open)
+### 6. Webhook rate limiter fills up (Low, fixed)
 
-The webhook route counts every call against its id, which comes from the URL, before the id is checked [V: `internal/serve/webhook_api.go`]. The limiter holds 10 000 keys and blocks new keys while it is full of live entries (fail closed) [V: `internal/auth/limiter.go`]. About 10 000 calls with random ids within a minute therefore block every webhook for that minute. Each failed call writes the fail2ban line, so the caller's address is banned long before that [A: depends on the jail's threshold]. Possible fix: count by id only after the id is known, and by client address before.
+The webhook route counts every call against its id, which comes from the URL, before the id is checked [V: `internal/serve/webhook_api.go`]. The limiter holds 10 000 keys and blocks new keys while it is full of live entries (fail closed) [V: `internal/auth/limiter.go`]. About 10 000 calls with random ids within a minute therefore block every webhook for that minute. Each failed call writes the fail2ban line, so the caller's address is banned long before that [A: depends on the jail's threshold]. Fix (PR 574): the route looks the id up first and counts only calls of a known webhook; an unknown id answers 401 and writes the fail2ban line without an entry in the limiter. The number of keys is now bounded by the number of webhooks. `TestWebhookOverHTTP` calls an unknown id more often than the limit and expects 401 each time; it fails without the change [V]. A known id now answers 429 after ten calls while an unknown one never does, which tells a caller that an id exists; ids have 128 random bits, so guessing one is not practical [E].
 
 ### 7. Notes (Info)
 

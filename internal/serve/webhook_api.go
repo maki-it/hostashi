@@ -161,25 +161,30 @@ func registerWebhook(mux *routeMux, a authn, svc *hosting.Service, log *slog.Log
 	}, func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 
-		if limit.Blocked(id) {
-			writeError(w, http.StatusTooManyRequests, "rate_limited", "too many calls of this webhook, try again later")
-
-			return
-		}
-
-		limit.Fail(id)
-
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBody))
-		if err != nil {
-			writeError(w, http.StatusRequestEntityTooLarge, "too_large", "the body is larger than 1 MiB")
-
-			return
-		}
-
 		t, err := svc.GitWebhook(r.Context(), id)
 		if err != nil && !errors.Is(err, hosting.ErrWebhookNotFound) {
 			log.ErrorContext(r.Context(), "webhook", "err", err)
 			writeError(w, http.StatusInternalServerError, "internal", "internal error")
+
+			return
+		}
+
+		// Only calls of a known webhook count against its limit, so calls
+		// with made-up ids cannot fill the limiter and block every webhook.
+		// Those fail below and write the fail2ban line.
+		if err == nil {
+			if limit.Blocked(id) {
+				writeError(w, http.StatusTooManyRequests, "rate_limited", "too many calls of this webhook, try again later")
+
+				return
+			}
+
+			limit.Fail(id)
+		}
+
+		body, rerr := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBody))
+		if rerr != nil {
+			writeError(w, http.StatusRequestEntityTooLarge, "too_large", "the body is larger than 1 MiB")
 
 			return
 		}
