@@ -96,13 +96,13 @@ func Replacements(scheme, host string, from []string) []Replacement {
 		Replacement{other + `:\/\/` + host, scheme + `:\/\/` + host})
 }
 
-// setDBPassword sets DB_PASSWORD in wp-config.php to the first line of
+// phpUpdateConfig sets DB_PASSWORD in wp-config.php to the first line of
 // standard input, with the editor WP-CLI's config commands use. "wp config
 // set DB_PASSWORD --prompt=value" cannot do it: WP-CLI refuses a prompt
 // for a positional argument named in --prompt (usage error), and the
 // password must not be in argv. --skip-wordpress loads no WordPress, so
 // the old database password does not matter.
-const setDBPassword = `$f = \WP_CLI\Utils\locate_wp_config();
+const phpUpdateConfig = `$f = \WP_CLI\Utils\locate_wp_config();
 if (!$f) { WP_CLI::error("no wp-config.php"); }
 $v = fgets(STDIN);
 if ($v === false || ($v = rtrim($v, "\n")) === "") { WP_CLI::error("no password on standard input"); }
@@ -116,7 +116,7 @@ func CloneSteps(j CloneJob, db agentapi.WPCloneDB, pw string) []Step {
 	steps := []Step{
 		{Args: []string{"config", "set", "DB_NAME", db.Target, "--type=constant", path}},
 		{Args: []string{"config", "set", "DB_USER", db.User, "--type=constant", path}},
-		{Args: []string{"eval", setDBPassword, "--skip-wordpress", path}, Password: pw},
+		{Args: []string{"eval", phpUpdateConfig, "--skip-wordpress", path}, Password: pw},
 	}
 
 	if j.Staging {
