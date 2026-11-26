@@ -1339,6 +1339,61 @@ wait_clone
 [ "$(x mariadb -Nse "SELECT option_value FROM wpqs_wp.wp_options WHERE option_name='blogname'")" = Quick ] || fail "refresh kept the copy's database"
 code=$(x curl -sS -o /dev/null -w '%{http_code}' -u "$stuser:$stpass" -H 'Host: wpqs.example.com' http://127.0.0.1/)
 [ "$code" = 200 ] || fail "staging copy after refresh answered $code"
+
+step "a log rotation keeps nginx's logs and fail2ban's site-auth jail working (ADR-0053, ADR-0066)"
+# A real rotation: nginx's workers must write to the new files. On USR1
+# they reopened them themselves and, as www-data, could not enter the
+# root-only directories; they stayed on the rotated files and the jail
+# saw nothing.
+out=$(x logrotate -f /etc/logrotate.d/hostashi 2>&1) || fail "logrotate run: $out"
+for _ in $(seq 20); do [ -z "$(x pgrep -f 'nginx: worker process is shutting down')" ] && break; sleep 0.5; done
+if x grep -h 'Permission denied' /var/log/nginx/hostashi/error.log /var/log/nginx/hostashi/error.log.1 2>/dev/null | grep -F '[emerg]' >/dev/null; then
+  fail "nginx cannot reopen its logs: $(x grep -h '\[emerg\]' /var/log/nginx/hostashi/error.log /var/log/nginx/hostashi/error.log.1 | tail -n 3)"
+fi
+for log in /var/log/nginx/hostashi/error.log /var/log/nginx/sites/wpqs/access.log /var/log/nginx/sites/wpqs/error.log; do
+  [ "$(x stat -c '%U:%G' "$log")" = root:root ] || fail "$log after the rotation: $(x stat -c '%U:%G %a' "$log")"
+done
+# fail2ban never bans loopback; for this check the jail takes it, and a
+# ban lasts at most a minute in case the test stops before the unban.
+x fail2ban-client set hostashi-site-auth ignoreself false >/dev/null
+x fail2ban-client set hostashi-site-auth delignoreip 127.0.0.0/8 >/dev/null
+x fail2ban-client set hostashi-site-auth bantime 60 >/dev/null
+f2b_restore() {
+  x fail2ban-client set hostashi-site-auth unbanip 127.0.0.1 >/dev/null 2>&1 || true
+  x fail2ban-client reload hostashi-site-auth >/dev/null 2>&1 || true
+}
+for _ in $(seq 10); do
+  code=$(x curl -sS -o /dev/null -w '%{http_code}' -u "$stuser:wrong-password" -H 'Host: wpqs.example.com' http://127.0.0.1/ || true)
+  [ "$code" = 401 ] || { f2b_restore; fail "wrong staging password answered $code"; }
+done
+x grep -q "user \"$stuser\": password mismatch" /var/log/nginx/hostashi/error.log || { f2b_restore; fail "failed login not in the server error log after the rotation: $(x tail -n 3 /var/log/nginx/hostashi/error.log)"; }
+x grep -q "user \"$stuser\": password mismatch" /var/log/nginx/sites/wpqs/error.log || { f2b_restore; fail "failed login not in the site's error log after the rotation"; }
+x grep -q '" 401 ' /var/log/nginx/sites/wpqs/access.log || { f2b_restore; fail "request not in the site's access log after the rotation"; }
+for _ in $(seq 30); do x fail2ban-client status hostashi-site-auth | grep 'Banned IP list:.*127\.0\.0\.1' >/dev/null && break; sleep 1; done
+f2b=$(x fail2ban-client status hostashi-site-auth)
+grep -Eq 'Total failed:[[:space:]]+[1-9]' <<<"$f2b" || { f2b_restore; fail "jail counted no failed login: $f2b"; }
+grep -q 'Banned IP list:.*127\.0\.0\.1' <<<"$f2b" || { f2b_restore; fail "jail did not ban: $f2b"; }
+# The panel shows the ban and lifts it (ADR-0078). The panel itself is on
+# 127.0.0.1:8080 and not behind the site jail, so the ban does not block it.
+[ "$(api GET /api/v1/firewall/bans)" = 200 ] || { f2b_restore; fail "bans through the panel: $(x cat /tmp/api.out)"; }
+x cat /tmp/api.out | python3 -c 'import json,sys
+j = {x["name"]: x for x in json.load(sys.stdin)["jails"]}["hostashi-site-auth"]
+assert j["running"] and j["totalFailed"] > 0, j
+assert "127.0.0.1" in [b["address"] for b in j["bans"]], j' || { f2b_restore; fail "panel does not show the ban: $(x cat /tmp/api.out)"; }
+[ "$(api DELETE /api/v1/firewall/bans/127.0.0.1)" = 200 ] || { f2b_restore; fail "unblock through the panel: $(x cat /tmp/api.out)"; }
+x grep -q '"hostashi-site-auth"' /tmp/api.out || { f2b_restore; fail "unblock did not name the jail: $(x cat /tmp/api.out)"; }
+f2b=$(x fail2ban-client status hostashi-site-auth)
+grep -q 'Banned IP list:.*127\.0\.0\.1' <<<"$f2b" && { f2b_restore; fail "address still banned after the unblock: $f2b"; }
+[ "$(api DELETE /api/v1/firewall/bans/127.0.0.1)" = 404 ] || { f2b_restore; fail "second unblock answered: $(x cat /tmp/api.out)"; }
+f2b_restore
+# recidive reads fail2ban's own Ban notices from the journal; the ban above
+# is one. fail2ban-regex ignores ignoreip, so loopback counts here.
+f2b=$(x fail2ban-regex systemd-journal recidive)
+grep -Eq '^Lines: [0-9]+ lines, [0-9]+ ignored, [1-9][0-9]* matched' <<<"$f2b" || fail "recidive does not see the ban: $(grep -E '^Lines: ' <<<"$f2b")"
+x fail2ban-client get hostashi-site-auth ignoreself | grep -x True >/dev/null || fail "jail does not ignore own addresses again"
+[ "$(api GET '/api/v1/sites/wpqs/logs/access?lines=5')" = 200 ] || fail "access log through the panel after the rotation: $(x cat /tmp/api.out)"
+unset f2b
+
 # The staging password is in no file, log or journal of the server.
 found=$(x grep -rlsF -- "$stpass" /var/lib/hostashi /var/lib/hostashi-agent /var/log/hostashi /run/hostashi-wp /etc/hostashi /etc/systemd/system || true)
 [ -z "$found" ] || fail "the staging password is stored in: $found"
