@@ -175,6 +175,20 @@ func timeOrNil(t time.Time) *time.Time {
 
 type siteListJSON struct {
 	Sites []siteJSON `json:"sites"`
+	// Marks are shown beside a site in the list, by site name; a site
+	// with none is left out.
+	Marks map[string]siteMarksJSON `json:"marks"`
+}
+
+type siteMarksJSON struct {
+	// OpenFindings counts the files the virus scan flagged that nobody
+	// acted on yet (ADR-0064).
+	OpenFindings int `json:"openFindings"`
+	// CloneOf is the site this one was copied from (ADR-0070), "" for
+	// none or when that site is gone.
+	CloneOf string `json:"cloneOf"`
+	// Staging: the copy is a staging site of CloneOf.
+	Staging bool `json:"staging"`
 }
 
 // enabledRequest switches one setting of a site on or off.
@@ -437,14 +451,29 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			return
 		}
 
+		marks, err := svc.ListMarks(r.Context(), sites)
+		if err != nil {
+			siteFail(log, w, err, "list sites")
+
+			return
+		}
+
 		out := make([]siteJSON, 0, len(sites))
+		outMarks := map[string]siteMarksJSON{}
+
 		for _, s := range sites {
-			if sees == nil || sees(s.Name) {
-				out = append(out, toSiteJSON(svc, s))
+			if sees != nil && !sees(s.Name) {
+				continue
+			}
+
+			out = append(out, toSiteJSON(svc, s))
+
+			if m, ok := marks[s.ID]; ok {
+				outMarks[s.Name] = siteMarksJSON{OpenFindings: m.OpenFindings, CloneOf: m.CloneOf, Staging: m.Staging}
 			}
 		}
 
-		writeJSON(w, http.StatusOK, siteListJSON{Sites: out})
+		writeJSON(w, http.StatusOK, siteListJSON{Sites: out, Marks: outMarks})
 	}))
 
 	mux.Op("GET /api/v1/sites/{name}", openapi.Operation{

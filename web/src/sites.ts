@@ -330,7 +330,14 @@ export function poolNote(p: Pool | undefined): string {
 
 const sitePath = (name: string) => "/sites/" + encodeURIComponent(name);
 
-export const listSites = async () => (await request<{ sites: Site[] }>("GET", "/sites")).sites;
+/** SiteMarks are shown beside a site in the list. */
+export type SiteMarks = { openFindings: number; cloneOf: string; staging: boolean };
+/** listSitesMarked returns the sites with their marks, by site name; older answers lack them. */
+export const listSitesMarked = async () => {
+  const r = await request<{ sites: Site[]; marks?: Record<string, SiteMarks> }>("GET", "/sites");
+  return { sites: r.sites, marks: r.marks ?? {} };
+};
+export const listSites = async () => (await listSitesMarked()).sites;
 export const phpVersions = () => request<PHPVersions>("GET", "/php/versions");
 export const createSite = (s: NewSite) => request<Site>("POST", "/sites", s);
 export const deleteSite = (name: string) => request<void>("DELETE", sitePath(name));

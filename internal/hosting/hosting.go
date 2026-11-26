@@ -348,6 +348,51 @@ func (s *Service) List(ctx context.Context) ([]store.Site, error) {
 	return s.st.Sites(ctx)
 }
 
+// SiteMarks is what the list of sites shows beside a site: open virus
+// finds and, for a copy, the site it was copied from.
+type SiteMarks struct {
+	OpenFindings int
+	// CloneOf is the source of a copy, "" when it is none or the source
+	// is gone.
+	CloneOf string
+	Staging bool
+}
+
+// ListMarks returns the marks of every site with any, by site ID.
+func (s *Service) ListMarks(ctx context.Context, sites []store.Site) (map[int64]SiteMarks, error) {
+	open, err := s.st.OpenScanFindings(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	clones, err := s.st.SiteClones(ctx, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	names := make(map[int64]string, len(sites))
+	for _, site := range sites {
+		names[site.ID] = site.Name
+	}
+
+	out := make(map[int64]SiteMarks)
+
+	for id, n := range open {
+		m := out[id]
+		m.OpenFindings = n
+		out[id] = m
+	}
+
+	for _, c := range clones {
+		m := out[c.SiteID]
+		m.CloneOf = names[c.SourceID]
+		m.Staging = c.Staging
+		out[c.SiteID] = m
+	}
+
+	return out, nil
+}
+
 // Get returns one site.
 func (s *Service) Get(ctx context.Context, name string) (store.Site, error) {
 	site, err := s.st.SiteByName(ctx, name)
