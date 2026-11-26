@@ -940,9 +940,129 @@ a.ui-btn {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-5);
   background: var(--sunken);
+  border-bottom: 1px solid var(--line);
+}
+
+/* The bar of the file manager: folder, toolbar, filter and the selection.
+   It sticks to the top of the window while the listing scrolls, and the
+   table head sticks below it (--files-bar-h, measured in Files.tsx). Once
+   stuck it gets compact: folder, filter and toolbar share one row, the
+   controls are lower and the selection stays on one scrolling row. */
+.ui-files-sentinel {
+  height: 1px;
+  margin-bottom: -1px;
+}
+.ui-files-bar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--surface);
+  border-radius: calc(var(--radius-card) - 1px) calc(var(--radius-card) - 1px) 0 0;
+}
+.ui-files-bar[data-stuck="true"] {
+  --control-h: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  border-radius: 0;
+}
+.ui-files-bar[data-stuck="true"] .ui-files-head {
+  display: contents;
+}
+.ui-files-bar[data-stuck="true"] .ui-files-crumbs {
+  flex: 1 1 auto;
+  order: 1;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-5);
+  font-size: 13px;
+}
+.ui-files-bar[data-stuck="true"] .ui-filters {
+  flex: 0 1 280px;
+  order: 2;
+  padding: var(--space-2) 0;
+  border-bottom: 0;
+}
+.ui-files-bar[data-stuck="true"] .ui-filters .ui-input {
+  flex-basis: 160px;
+  min-height: 32px;
+  font-size: 13.5px;
+}
+.ui-files-bar[data-stuck="true"] [role="toolbar"] {
+  order: 3;
+  padding: var(--space-1) var(--space-5) var(--space-1) var(--space-3);
+}
+.ui-files-bar[data-stuck="true"] .ui-files-selection {
+  flex: 1 0 100%;
+  order: 4;
+  flex-wrap: nowrap;
+  padding: var(--space-2) var(--space-5);
+  overflow-x: auto;
+  white-space: nowrap;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+  scrollbar-width: thin;
+}
+/* Room at the end of the scrolling row, which padding does not give */
+.ui-files-bar[data-stuck="true"] .ui-files-selection::after {
+  flex: 0 0 var(--space-2);
+  content: "";
+}
+.ui-files-bar[data-stuck="true"] .ui-files-selection .ui-btn {
+  flex: none;
+  padding: 0 10px;
+  font-size: 13.5px;
+}
+/* The table head of the listing sticks below the bar. A collapsed border
+   would scroll away with the table, so the line is a shadow. The lowest
+   stuck part casts the shadow: the table head, or the bar where there is
+   none (phone cards). */
+.ui-files .ui-table-box {
+  overflow-x: visible;
+}
+.ui-files .ui-table thead th {
+  position: sticky;
+  top: var(--files-bar-h, 0px);
+  z-index: 3;
+  border-bottom: 0;
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+.ui-files-bar[data-stuck="true"] ~ .ui-files-drop .ui-table thead th {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  box-shadow: inset 0 -1px 0 var(--line), 0 6px 12px -8px color-mix(in srgb, var(--fg) 35%, transparent);
+}
+@media (max-width: 600px) {
+  .ui-files-bar[data-stuck="true"] {
+    box-shadow: 0 6px 12px -8px color-mix(in srgb, var(--fg) 35%, transparent);
+  }
+  /* Folder and toolbar on one row, the filter and "Select all" below */
+  .ui-files-bar[data-stuck="true"] .ui-files-crumbs {
+    flex: 1 1 0;
+    flex-wrap: nowrap;
+    padding-left: var(--space-4);
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+  }
+  .ui-files-bar[data-stuck="true"] [role="toolbar"] {
+    order: 2;
+    gap: 2px;
+    padding-right: var(--space-4);
+  }
+  .ui-files-bar[data-stuck="true"] .ui-filters {
+    flex: 1 0 100%;
+    order: 3;
+    align-items: center;
+    padding: 0 var(--space-4) var(--space-2);
+  }
+  .ui-files-bar[data-stuck="true"] .ui-files-selection {
+    padding-inline: var(--space-4);
+  }
+}
+/* Focus and anchors scroll clear of the bar and the table head. */
+html:has(.ui-files) {
+  scroll-padding-top: var(--files-sticky-h, 0px);
 }
 .ui-files-drop {
   outline: 2px dashed transparent;
@@ -1720,6 +1840,15 @@ a.ui-btn {
   margin: 0;
   cursor: pointer;
   accent-color: var(--accent);
+}
+/* On a phone card the box sits at the start of the first line, the row
+   actions at its end; both columns have a hidden header, so without this
+   the box landed under the actions. */
+@media (max-width: 600px) {
+  .ui-table td[data-actions]:has(> .ui-check-cell) {
+    grid-column: 1;
+    justify-content: flex-start;
+  }
 }
 @media (min-width: 601px) {
   .ui-table :is(th, td):has(> .ui-check-cell) {
