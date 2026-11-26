@@ -1,6 +1,6 @@
 # ADR-0076 DNS-01 certificates via DNS provider APIs
 
-**Status:** Proposed. **Date drafted:** 2026-11-26. **Decides:** Kim. **Related:** ADR-0003 (stack, lego), ADR-0004 (web/agent privilege split), ADR-0023 (panel address), ADR-0031 (DNS check), ADR-0035 (roles), ADR-0039 (own certificates), ADR-0058 (OpenAPI and CLI), ADR-0068 (change the domain of a site), ADR-0075 (wildcard domains).
+**Status:** Accepted (Kim, 2026-11-26). **Date drafted:** 2026-11-26. **Decides:** Kim. **Related:** ADR-0003 (stack, lego), ADR-0004 (web/agent privilege split), ADR-0023 (panel address), ADR-0031 (DNS check), ADR-0035 (roles), ADR-0039 (own certificates), ADR-0058 (OpenAPI and CLI), ADR-0068 (change the domain of a site), ADR-0075 (wildcard domains).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -86,3 +86,5 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 
 1. ~~Providers in the first version: INWX, Hetzner and Cloudflare?~~ Decided (Kim, 2026-11-26): yes, these three.
 2. ~~Build for 1.0 or 1.1?~~ Decided (Kim, 2026-11-26): 1.1, before ADR-0075.
+
+The ADR as a whole was accepted by Kim on 2026-11-26.

@@ -1,6 +1,6 @@
 # ADR-0075 Wildcard domains for reverse proxy and redirect sites
 
-**Status:** Proposed. **Date drafted:** 2026-11-26. **Decides:** Kim. **Related:** ADR-0005 (nginx), ADR-0023 (panel address), ADR-0031 (DNS check), ADR-0039 (own certificates), ADR-0042 (panel on 443), ADR-0054 (site types), ADR-0058 (OpenAPI and CLI), ADR-0065 (www redirect), ADR-0068 (change the domain of a site), ADR-0076 (DNS-01 certificates).
+**Status:** Accepted (Kim, 2026-11-26). **Date drafted:** 2026-11-26. **Decides:** Kim. **Related:** ADR-0005 (nginx), ADR-0023 (panel address), ADR-0031 (DNS check), ADR-0039 (own certificates), ADR-0042 (panel on 443), ADR-0054 (site types), ADR-0058 (OpenAPI and CLI), ADR-0065 (www redirect), ADR-0068 (change the domain of a site), ADR-0076 (DNS-01 certificates).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -85,3 +85,5 @@ Kim chose A on 2026-11-26 (decision card in the project thread).
 1. ~~Named wildcard per site (A), server-wide catch-all (B) or both?~~ Decided (Kim, 2026-11-26): A.
 2. ~~Proxy and redirect sites only, or also PHP and static sites?~~ Decided (Kim, 2026-11-26): proxy and redirect only for now.
 3. ~~Build for 1.0 or 1.1?~~ Decided (Kim, 2026-11-26): 1.1, right after ADR-0076.
+
+The ADR as a whole was accepted by Kim on 2026-11-26.
