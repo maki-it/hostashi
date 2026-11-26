@@ -642,6 +642,9 @@ function DomainsTab({ site, onChange }: TabProps) {
 
 function HTTPSTab({ site, onChange }: TabProps) {
   const h = useAction(onChange);
+  // Turning HTTPS off and HSTS on are asked again: the first serves the
+  // site over plain HTTP, the second sticks in browsers for a long time.
+  const [ask, setAsk] = useState<"tls-off" | "hsts-on" | null>(null);
 
   const toggleTLS = (on: boolean) =>
     h.act(async () => {
@@ -661,13 +664,55 @@ function HTTPSTab({ site, onChange }: TabProps) {
       <Card title="HTTPS">
         <div className="ui-stack">
           <label className="ui-check">
-            <input type="checkbox" checked={site.tls.enabled} disabled={h.busy} onChange={(e) => void toggleTLS(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={site.tls.enabled}
+              disabled={h.busy || ask !== null}
+              onChange={(e) => (e.target.checked ? void toggleTLS(true) : setAsk("tls-off"))}
+            />
             {site.tls.source === "custom" ? "HTTPS with the own certificate" : "HTTPS with a Let's Encrypt certificate"}
           </label>
           <label className="ui-check">
-            <input type="checkbox" checked={site.tls.hsts} disabled={h.busy} onChange={(e) => void toggleHSTS(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={site.tls.hsts}
+              disabled={h.busy || ask !== null}
+              onChange={(e) => (e.target.checked ? setAsk("hsts-on") : void toggleHSTS(false))}
+            />
             HSTS: browsers use only HTTPS for this site
           </label>
+          {ask === "tls-off" && (
+            <Notice tone="warn" title="Turn HTTPS off?">
+              <p className="ui-flush">
+                The site is then served over plain HTTP: passwords and cookies travel unencrypted. Browsers that know HSTS for it refuse to open
+                it.
+              </p>
+              <div className="ui-row">
+                <Button variant="danger" disabled={h.busy} onClick={() => void toggleTLS(false).finally(() => setAsk(null))}>
+                  Turn HTTPS off
+                </Button>
+                <Button disabled={h.busy} onClick={() => setAsk(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </Notice>
+          )}
+          {ask === "hsts-on" && (
+            <Notice tone="warn" title="Turn HSTS on?">
+              <p className="ui-flush">
+                Browsers that visit the site remember for a year to use only HTTPS, even if HTTPS is turned off here later. Turn it on once the
+                certificate works for every domain of the site.
+              </p>
+              <div className="ui-row">
+                <Button variant="primary" disabled={h.busy} onClick={() => void toggleHSTS(true).finally(() => setAsk(null))}>
+                  Turn HSTS on
+                </Button>
+                <Button disabled={h.busy} onClick={() => setAsk(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </Notice>
+          )}
           {site.tls.hsts && !site.tls.active && <p className="ui-hint">HSTS is sent only while the site is served over HTTPS.</p>}
           {h.result}
         </div>

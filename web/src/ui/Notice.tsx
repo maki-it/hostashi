@@ -19,7 +19,7 @@ export function Notice({ tone, title, children }: { tone: NoticeTone; title: str
       <Icon size={20} aria-hidden="true" />
       <div className="ui-notice-body">
         <strong>{title}</strong>
-        {children !== undefined && <p>{children}</p>}
+        {children !== undefined && <div className="ui-notice-text">{children}</div>}
       </div>
     </div>
   );

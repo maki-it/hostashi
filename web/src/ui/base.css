@@ -20,6 +20,12 @@ body {
   background: var(--bg);
 }
 
+/* Long tokens such as fingerprints and keys wrap instead of widening the
+   page on a phone. */
+code {
+  overflow-wrap: anywhere;
+}
+
 h1,
 h2,
 h3 {

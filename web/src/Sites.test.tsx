@@ -827,11 +827,24 @@ describe("SitePage", () => {
     const https = within(screen.getByRole("region", { name: "HTTPS" }));
     await user.click(https.getByLabelText(/^HSTS/));
     expect(await https.findByText(/HSTS is off/)).toBeInTheDocument();
+    // HSTS on and HTTPS off are asked again; Cancel sends nothing.
+    await user.click(https.getByLabelText(/^HSTS/));
+    expect(https.getByText("Turn HSTS on?")).toBeInTheDocument();
+    expect(https.getByLabelText(/^HSTS/)).not.toBeChecked();
+    await user.click(https.getByRole("button", { name: "Cancel" }));
+    expect(https.queryByText("Turn HSTS on?")).not.toBeInTheDocument();
+    await user.click(https.getByLabelText(/^HSTS/));
+    await user.click(https.getByRole("button", { name: "Turn HSTS on" }));
+    expect(await https.findByText(/HSTS is on/)).toBeInTheDocument();
     await user.click(https.getByLabelText(/^HTTPS with/));
+    expect(https.getByText("Turn HTTPS off?")).toBeInTheDocument();
+    await user.click(https.getByRole("button", { name: "Turn HTTPS off" }));
     expect(await https.findByText("HTTPS is off. The site is served over HTTP.")).toBeInTheDocument();
+    expect(https.queryByText("Turn HTTPS off?")).not.toBeInTheDocument();
     expect(calls.filter((c) => c.method === "PUT").map((c) => [c.path, c.body])).toEqual([
       ["/api/v1/sites/blog/domains", { domains: ["blog.example.com", "shop.example.com"], redirectDomains: [], waitForCertificate: true }],
       ["/api/v1/sites/blog/hsts", { enabled: false }],
+      ["/api/v1/sites/blog/hsts", { enabled: true }],
       ["/api/v1/sites/blog/tls", { enabled: false }],
     ]);
   });
@@ -858,6 +871,7 @@ describe("SitePage", () => {
     await user.click(screen.getByRole("button", { name: "Drop changes" }));
     const https = within(await screen.findByRole("region", { name: "HTTPS" }));
     await user.click(https.getByLabelText(/^HTTPS with/));
+    await user.click(https.getByRole("button", { name: "Turn HTTPS off" }));
     expect(await https.findByRole("alert")).toHaveTextContent("Certificates are not available");
     expect(calls.filter((c) => c.method === "PUT")).toHaveLength(1);
   });
