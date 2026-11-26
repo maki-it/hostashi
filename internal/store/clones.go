@@ -18,6 +18,13 @@ const (
 	CloneFailed  = "failed"
 )
 
+// States of a clone's configuration step after the copy.
+const (
+	CloneConfigNone    = ""
+	CloneConfigRunning = "running"
+	CloneConfigDone    = "done"
+)
+
 // MaxCloneError bounds the stored error text.
 const MaxCloneError = 512
 
@@ -40,20 +47,23 @@ type CloneDatabase struct {
 type SiteClone struct {
 	SiteID int64
 	// SourceID is the site it was copied from; 0 once that site is gone.
-	SourceID   int64
-	Staging    bool
-	State      string
-	Refresh    bool
-	Error      string
-	HomeJob    string
-	HomeDone   bool
-	Databases  []CloneDatabase
+	SourceID  int64
+	Staging   bool
+	State     string
+	Refresh   bool
+	Error     string
+	HomeJob   string
+	HomeDone  bool
+	Databases []CloneDatabase
+	// Config is the configuration step: CloneConfigNone, ...Running or
+	// ...Done.
+	Config     string
 	StartedBy  int64 // 0: unknown or deleted user
 	StartedAt  time.Time
 	FinishedAt time.Time // zero while copying
 }
 
-const cloneCols = `site_id, source_id, staging, state, refresh, error, home_job, home_done, databases, started_by, started_at, finished_at`
+const cloneCols = `site_id, source_id, staging, state, refresh, error, home_job, home_done, databases, config, started_by, started_at, finished_at`
 
 func scanClone(sc interface{ Scan(dest ...any) error }) (SiteClone, error) {
 	var (
@@ -65,7 +75,7 @@ func scanClone(sc interface{ Scan(dest ...any) error }) (SiteClone, error) {
 		started, fini int64
 	)
 
-	if err := sc.Scan(&c.SiteID, &src, &staging, &c.State, &ref, &c.Error, &c.HomeJob, &homeDone, &raw, &by, &started, &fini); err != nil {
+	if err := sc.Scan(&c.SiteID, &src, &staging, &c.State, &ref, &c.Error, &c.HomeJob, &homeDone, &raw, &c.Config, &by, &started, &fini); err != nil {
 		return SiteClone{}, err
 	}
 
@@ -150,8 +160,8 @@ func (s *Store) CreateSiteClone(ctx context.Context, c SiteClone, now time.Time)
 	return nil
 }
 
-// UpdateSiteClone writes the progress of a clone: its state, error, jobs
-// and database pairs. finished_at is set when the state leaves copying.
+// UpdateSiteClone writes the progress of a clone: its state, error, jobs,
+// database pairs and configuration step. finished_at is set when the state leaves copying.
 func (s *Store) UpdateSiteClone(ctx context.Context, c SiteClone, now time.Time) error {
 	raw, err := cloneDBJSON(c.Databases)
 	if err != nil {
@@ -167,8 +177,8 @@ func (s *Store) UpdateSiteClone(ctx context.Context, c SiteClone, now time.Time)
 		fini = now.Unix()
 	}
 
-	res, err := s.w.ExecContext(ctx, `UPDATE site_clones SET state = ?, refresh = ?, error = ?, home_job = ?, home_done = ?, databases = ?, finished_at = ? WHERE site_id = ?`,
-		c.State, boolInt(c.Refresh), c.Error, c.HomeJob, boolInt(c.HomeDone), raw, fini, c.SiteID)
+	res, err := s.w.ExecContext(ctx, `UPDATE site_clones SET state = ?, refresh = ?, error = ?, home_job = ?, home_done = ?, databases = ?, config = ?, finished_at = ? WHERE site_id = ?`,
+		c.State, boolInt(c.Refresh), c.Error, c.HomeJob, boolInt(c.HomeDone), raw, c.Config, fini, c.SiteID)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}
@@ -189,7 +199,7 @@ func (s *Store) StartCloneRefresh(ctx context.Context, siteID, by int64, dbs []C
 		return err
 	}
 
-	res, err := s.w.ExecContext(ctx, `UPDATE site_clones SET state = ?, refresh = 1, error = '', home_job = '', home_done = 0, databases = ?, started_by = ?, started_at = ?, finished_at = 0
+	res, err := s.w.ExecContext(ctx, `UPDATE site_clones SET state = ?, refresh = 1, error = '', home_job = '', home_done = 0, databases = ?, config = '', started_by = ?, started_at = ?, finished_at = 0
 		WHERE site_id = ? AND state != ?`, CloneCopying, raw, nullID(by), now.Unix(), siteID, CloneCopying)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
