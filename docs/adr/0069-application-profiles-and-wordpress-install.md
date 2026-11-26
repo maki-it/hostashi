@@ -76,7 +76,7 @@ The ADR as a whole was accepted by Kim on 2026-11-25.
 
 ## Addendum 1: reinstall and detection (2026-11-26)
 
-**Status:** Proposed. **Decides:** Kim (asked for both on 2026-11-26).
+**Status:** Accepted (Kim, 2026-11-26). **Decides:** Kim (asked for both on 2026-11-26).
 
 ### Context
 
