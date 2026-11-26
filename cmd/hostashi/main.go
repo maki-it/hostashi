@@ -71,6 +71,10 @@ commands:
             start, stop, restart or reload one where the service catalog
             allows it, through the panel's API (needs hostashi login,
             ADR-0052)
+  firewall bans [-json] | firewall unban ADDRESS
+            show the addresses fail2ban blocks, or unblock one in every
+            Hostashi jail, through the panel's API (needs hostashi login,
+            ADR-0078)
   system info | system timezones | system timezone ZONE |
   system hostname NAME | system reboot HOSTNAME
             show or change the server's time zone and hostname, or reboot it
@@ -312,6 +316,17 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		}
 
 		err = serviceCmd(ctx, fs.Args(), stdout)
+		if errors.Is(err, errUsage) {
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+	case "firewall":
+		if fs.Parse(args) != nil {
+			return 2
+		}
+
+		err = firewallCmd(ctx, fs.Args(), stdout)
 		if errors.Is(err, errUsage) {
 			fmt.Fprint(stderr, usage)
 

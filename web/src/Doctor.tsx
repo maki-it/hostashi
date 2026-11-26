@@ -11,7 +11,7 @@ const tones: Record<DoctorStatus, Tone> = { ok: "ok", warn: "warn", fail: "err" 
 const noticeTones: Record<DoctorStatus, NoticeTone> = { ok: "ok", warn: "warn", fail: "err" };
 const rank: Record<DoctorStatus, number> = { fail: 0, warn: 1, ok: 2 };
 // Server checks whose setting lives on another page link there.
-const settingsPage: Partial<Record<string, Page>> = { "panel.tls": "system" };
+const settingsPage: Partial<Record<string, Page>> = { "panel.tls": "system", "service.fail2ban.jails": "firewall" };
 
 type QueryProps = {
   /** The address query: q, show (all or problems), sort, dir. */

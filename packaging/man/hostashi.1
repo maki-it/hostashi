@@ -64,6 +64,10 @@ check the server and every site without changing anything (root on the server); 
 show the managed services with their state and restarts, or start, stop, restart or reload one where the service catalog allows it, through the panel's API (needs hostashi login, ADR\-0052)
 
 .TP
+\fBfirewall bans [\-json] | firewall unban ADDRESS\fP
+show the addresses fail2ban blocks, or unblock one in every Hostashi jail, through the panel's API (needs hostashi login, ADR\-0078)
+
+.TP
 \fBsystem info | system timezones | system timezone ZONE | system hostname NAME | system reboot HOSTNAME\fP
 show or change the server's time zone and hostname, or reboot it after typing its hostname, through the panel's API (needs hostashi login, ADR\-0060)
 

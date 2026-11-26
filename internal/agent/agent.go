@@ -378,7 +378,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	tool.units = cfg.DBToolUnits
 	tool.register(s)
 
-	registerDoctor(s, cfg.Doctor, cfg.StateDir, h, cfg.Firewall, cfg.NodeInstall, cfg.DBToolPort > 0)
+	registerDoctor(s, cfg.Doctor, cfg.StateDir, h, cfg.Firewall, cfg.NodeInstall, cfg.Fail2ban, cfg.DBToolPort > 0)
 	registerBackup(s, cfg.Backup)
 	registerCloudPanel(s, cfg.CloudPanel, cfg.CloudPanelImport)
 	registerDBJobs(s, cfg.DBJobs)

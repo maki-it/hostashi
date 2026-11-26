@@ -330,3 +330,39 @@ func TestPoolRenameAndDefaultOverAPI(t *testing.T) {
 		}
 	}
 }
+
+func TestFirewallOverAPI(t *testing.T) {
+	got := fakeAPI(t, map[string]string{
+		"GET /api/v1/firewall/bans": `{"jails":[{"name":"sshd","running":false,"bans":[]},` +
+			`{"name":"hostashi-site-auth","running":true,"totalFailed":10,"bans":[{"address":"203.0.113.7","since":"2026-11-26T22:00:00Z","until":"2026-11-26T23:00:00Z"}]},` +
+			`{"name":"recidive","running":true,"bans":[{"address":"2001:db8::1","since":"2026-11-26T22:00:00Z","until":null}]}]}`,
+		"DELETE /api/v1/firewall/bans/203.0.113.7": `{"address":"203.0.113.7","jails":["hostashi-site-auth"]}`,
+	})
+
+	code, out, _ := runCLI(t, "", "firewall", "bans")
+	if code != 0 || !strings.Contains(out, "203.0.113.7") || !strings.Contains(out, "no end") || !strings.Contains(out, "(not running)") {
+		t.Errorf("bans = %d: %s", code, out)
+	}
+
+	if code, out, _ = runCLI(t, "", "firewall", "bans", "-json"); code != 0 || !strings.Contains(out, `"recidive"`) {
+		t.Errorf("bans -json = %d: %s", code, out)
+	}
+
+	if code, out, _ = runCLI(t, "", "firewall", "unban", "203.0.113.7"); code != 0 || !strings.Contains(out, "hostashi-site-auth") {
+		t.Errorf("unban = %d: %s", code, out)
+	}
+
+	if _, ok := got["DELETE /api/v1/firewall/bans/203.0.113.7"]; !ok {
+		t.Errorf("no DELETE: %v", got)
+	}
+
+	if code, _, errOut := runCLI(t, "", "firewall", "unban", "198.51.100.1"); code != 1 || !strings.Contains(errOut, "no such thing") {
+		t.Errorf("not banned = %d: %s", code, errOut)
+	}
+
+	for _, args := range [][]string{{"firewall"}, {"firewall", "unban"}, {"firewall", "bans", "-yaml"}} {
+		if code, _, _ := runCLI(t, "", args...); code != 2 {
+			t.Errorf("%v = %d", args, code)
+		}
+	}
+}

@@ -2852,6 +2852,113 @@
         ],
         "type": "object"
       },
+      "Fail2ban": {
+        "additionalProperties": false,
+        "properties": {
+          "jails": {
+            "items": {
+              "$ref": "#/components/schemas/Fail2banJail"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "jails"
+        ],
+        "type": "object"
+      },
+      "Fail2banBan": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "since": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "until": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "address",
+          "since",
+          "until"
+        ],
+        "type": "object"
+      },
+      "Fail2banJail": {
+        "additionalProperties": false,
+        "properties": {
+          "bans": {
+            "items": {
+              "$ref": "#/components/schemas/Fail2banBan"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "currentlyBanned": {
+            "type": "integer"
+          },
+          "currentlyFailed": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "totalBanned": {
+            "type": "integer"
+          },
+          "totalFailed": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bans",
+          "currentlyBanned",
+          "currentlyFailed",
+          "name",
+          "running",
+          "totalBanned",
+          "totalFailed"
+        ],
+        "type": "object"
+      },
+      "Fail2banUnban": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "jails": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "address",
+          "jails"
+        ],
+        "type": "object"
+      },
       "FileOpRequest": {
         "additionalProperties": false,
         "properties": {
@@ -12394,6 +12501,102 @@
           }
         ],
         "summary": "Apply new firewall rules; they roll back unless confirmed in time",
+        "tags": [
+          "firewall"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "firewall:write"
+      }
+    },
+    "/api/v1/firewall/bans": {
+      "get": {
+        "operationId": "getFirewallBans",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Fail2ban"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "firewall:read"
+            ]
+          }
+        ],
+        "summary": "fail2ban's Hostashi jails and the addresses they block",
+        "tags": [
+          "firewall"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "firewall:read"
+      }
+    },
+    "/api/v1/firewall/bans/{address}": {
+      "delete": {
+        "operationId": "deleteFirewallBan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Fail2banUnban"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "firewall:write"
+            ]
+          }
+        ],
+        "summary": "Unblock an address in every Hostashi jail",
         "tags": [
           "firewall"
         ],
