@@ -1315,9 +1315,9 @@ wait_clone
 # The copy uses its own database; the source's stays as it was.
 x grep -q "define( 'DB_NAME', 'wpqs_wp' )" /home/wpqs/htdocs/wp-config.php || fail "clone's DB_NAME: $(x grep DB_NAME /home/wpqs/htdocs/wp-config.php)"
 x grep -q "WP_ENVIRONMENT_TYPE', 'staging'" /home/wpqs/htdocs/wp-config.php || fail "clone without WP_ENVIRONMENT_TYPE staging"
-x mariadb -Nse "SELECT option_value FROM wpqs_wp.wp_options WHERE option_name='siteurl'" | grep -q '//wpqs.example.com$' ||
+x mariadb -Nse "SELECT option_value FROM wpqs_wp.wp_options WHERE option_name='siteurl'" | grep '//wpqs.example.com$' >/dev/null ||
   fail "clone's siteurl: $(x mariadb -Nse "SELECT option_value FROM wpqs_wp.wp_options WHERE option_name='siteurl'")"
-x mariadb -Nse "SELECT option_value FROM wpq_wp.wp_options WHERE option_name='siteurl'" | grep -q '//wpq.example.com$' || fail "source's siteurl changed"
+x mariadb -Nse "SELECT option_value FROM wpq_wp.wp_options WHERE option_name='siteurl'" | grep '//wpq.example.com$' >/dev/null || fail "source's siteurl changed"
 [ -z "$(x find /home/wpqs/htdocs ! -user wpqs | head -n 5)" ] || fail "files of the clone not owned by wpqs: $(x find /home/wpqs/htdocs ! -user wpqs | head -n 5)"
 # Visitors need the generated login; search engines are asked to stay away.
 code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpqs.example.com' http://127.0.0.1/)
