@@ -123,6 +123,8 @@ var completionTree = &compNode{sub: cmds(
 		leaf("status", "show the last backup"),
 		leaf("restore", "restore a snapshot into a site's home"),
 		leaf("restore-status", "show a restore"),
+		leaf("deleted", "list deleted sites with snapshots, or the snapshots of one"),
+		leaf("restore-deleted", "restore a deleted site's snapshot into another site"),
 		&compNode{name: "restore-run", hidden: true},
 		&compNode{name: "key", help: "the keys to keep outside the server", sub: cmds(leaf("show", "print the repository password and panel key"))},
 	)},

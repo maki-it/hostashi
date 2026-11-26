@@ -274,7 +274,55 @@ describe("Backups", () => {
     });
     render(<Harness initial="site=shop" />);
     expect(await screen.findByText("No snapshots of this site yet.")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Site" })).toHaveValue("shop");
+    expect(screen.getByRole("combobox", { name: "Site" })).toHaveValue("s:shop");
     expect(calls.some((c) => c.path === "/api/v1/sites/blog/backups")).toBe(false);
+  });
+
+  it("restores a snapshot of a deleted site into the site picked", async () => {
+    const user = userEvent.setup();
+    const restore = { site: "shop", source: "old", files: 1, bytes: 10, state: "done" };
+    const calls = mockFetch({
+      "GET /api/v1/backups": { body: ready },
+      "GET /api/v1/sites": { body: { sites: [{ name: "blog", state: "active" }, { name: "shop", state: "active" }] } },
+      "GET /api/v1/sites/blog/backups": { body: { snapshots: [] } },
+      "GET /api/v1/backups/deleted": {
+        body: {
+          sites: [
+            { name: "blog", earlier: true, snapshots: 1, oldest: "2025-01-02T01:00:00Z", newest: "2025-01-02T01:00:00Z" },
+            { name: "old", earlier: false, snapshots: 1, oldest: "2026-11-01T01:00:00Z", newest: "2026-11-01T01:00:00Z" },
+          ],
+        },
+      },
+      "GET /api/v1/backups/deleted/old": { body: { snapshots: [{ id: snapDB, time: "2026-11-01T01:00:00Z", kind: "db", database: "old_wp" }] } },
+      "GET /api/v1/backups/deleted/blog": { body: { snapshots: [{ id: snapFiles, time: "2025-01-02T01:00:00Z", kind: "files" }] } },
+      ["POST /api/v1/backups/deleted/old/" + snapDB + "/restore"]: {
+        status: 202,
+        body: { ...restore, id: "4444444444444444", snapshot: snapDB, kind: "db", database: "old_wp", dir: "restore-4", state: "queued" },
+      },
+      "GET /api/v1/backups/restores/4444444444444444": { body: { ...restore, id: "4444444444444444", kind: "db", database: "old_wp", dir: "restore-4" } },
+      "POST /api/v1/sites/shop/databases": { status: 201, body: { name: "old_wp_restored" } },
+      "POST /api/v1/backups/restores/4444444444444444/import": { status: 202, body: { id: "5555555555555555", state: "running" } },
+      "GET /api/v1/backups/imports/5555555555555555": { body: { id: "5555555555555555", state: "done" } },
+    });
+    render(<Harness />);
+    const select = await screen.findByRole("combobox", { name: "Site" });
+    expect(await within(select).findByRole("option", { name: "old (deleted)" })).toBeInTheDocument();
+
+    // An earlier site of a reused name goes back only into the current one.
+    await user.selectOptions(select, "blog (earlier site)");
+    expect(await screen.findByRole("table", { name: "Snapshots of blog" })).toBeInTheDocument();
+    expect(screen.getByText(/from an earlier site named/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Restore into")).toBeDisabled();
+    expect(screen.getByLabelText("Restore into")).toHaveValue("blog");
+
+    await user.selectOptions(select, "old (deleted)");
+    expect(await screen.findByText(/was deleted; its snapshots stay/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Restore into"), "shop");
+    await user.click(await screen.findByRole("button", { name: /^Restore database old_wp of / }));
+    expect(await screen.findByText(/Restored 1 file into/)).toHaveTextContent("restore-4 of the site shop.");
+    expect(calls.find((c) => c.path.endsWith("/backups/deleted/old/" + snapDB + "/restore"))?.body).toEqual({ target: "shop" });
+    await user.click(await screen.findByRole("button", { name: "Create and import" }));
+    expect(await screen.findByText(/The dump is in the new database/)).toHaveTextContent("old_wp_restored");
+    expect(calls.find((c) => c.path === "/api/v1/sites/shop/databases")?.body).toEqual({ name: "old_wp_restored" });
   });
 });

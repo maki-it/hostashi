@@ -49,3 +49,17 @@ Each database has its own snapshots in the same list. Restoring one writes its d
 You can also import the dump into an existing database yourself, see [Databases](Databases.md).
 
 On the command line, the same is `hostashi backup restore SITE SNAPSHOT`.
+
+## Backups of deleted sites
+
+Deleting a site does not delete its snapshots. Administrators find them under **Snapshots** in the site list, in the group **Deleted sites**.
+
+![Snapshots of a deleted site with the choice of the site to restore into](images/backups-deleted.png)
+
+1. Choose the deleted site.
+2. Under **Restore into**, choose an existing site, for example a new site you created for it.
+3. Restore a snapshot. Files go into a new folder `restore-<time>` in the home of that site; a database dump can then be imported into a new database of that site, as above.
+
+If you create a new site with the name of a deleted one, the new site only shows the snapshots taken since it was created. The older ones are listed as **(earlier site)** under **Deleted sites** and can be restored into the site of the same name.
+
+On the command line: `hostashi backup deleted` lists deleted sites with snapshots, `hostashi backup deleted SITE` their snapshots, and `hostashi backup restore-deleted SITE SNAPSHOT TARGET` restores one into the site `TARGET`.

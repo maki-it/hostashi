@@ -686,6 +686,9 @@
           "snapshot": {
             "type": "string"
           },
+          "source": {
+            "type": "string"
+          },
           "started": {
             "format": "date-time",
             "type": "string"
@@ -2299,6 +2302,63 @@
           "database",
           "password",
           "user"
+        ],
+        "type": "object"
+      },
+      "DeletedRestoreRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DeletedSite": {
+        "additionalProperties": false,
+        "properties": {
+          "earlier": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "newest": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "oldest": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "snapshots": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "earlier",
+          "name",
+          "newest",
+          "oldest",
+          "snapshots"
+        ],
+        "type": "object"
+      },
+      "DeletedSiteList": {
+        "additionalProperties": false,
+        "properties": {
+          "sites": {
+            "items": {
+              "$ref": "#/components/schemas/DeletedSite"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "sites"
         ],
         "type": "object"
       },
@@ -10156,6 +10216,173 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "backups.server:read"
+      }
+    },
+    "/api/v1/backups/deleted": {
+      "get": {
+        "operationId": "listDeletedSiteBackups",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedSiteList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "backups:read"
+            ]
+          }
+        ],
+        "summary": "List deleted sites that still have snapshots",
+        "tags": [
+          "backups"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "backups.server:read"
+      }
+    },
+    "/api/v1/backups/deleted/{name}": {
+      "get": {
+        "operationId": "listDeletedSiteSnapshots",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupSnapshotList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "backups:read"
+            ]
+          }
+        ],
+        "summary": "List the snapshots of a deleted site, or of an earlier site of that name",
+        "tags": [
+          "backups"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "backups.server:read"
+      }
+    },
+    "/api/v1/backups/deleted/{name}/{snapshot}/restore": {
+      "post": {
+        "operationId": "restoreDeletedSiteBackup",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "snapshot",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeletedRestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupRestore"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "backups:restore"
+            ]
+          }
+        ],
+        "summary": "Restore a snapshot of a deleted site into a new directory of another site",
+        "tags": [
+          "backups"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "backups.server:restore"
       }
     },
     "/api/v1/backups/hostkey": {

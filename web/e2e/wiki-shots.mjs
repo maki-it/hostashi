@@ -279,6 +279,7 @@ const shots = [
   { name: "users", hash: "#/users", ready: "table" },
   { name: "databases", hash: "#/databases", ready: "table" },
   { name: "backups", hash: "#/backups", ready: "text=Snapshots" },
+  { name: "backups-deleted", hash: "#/backups?deleted=oldshop", ready: "text=Restore into" },
   {
     name: "backups-target",
     hash: "#/backups",

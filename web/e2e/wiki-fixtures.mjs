@@ -545,6 +545,8 @@ const routes = [
   ["GET", /^\/sites\/[^/]+\/app\/env$/, () => ({ names: ["DATABASE_URL", "SESSION_SECRET"] })],
   ["GET", /^\/sites\/[^/]+\/app$/, () => ({ state: "active", subState: "running", restarts: 0, usedBytes: 86_000_000, since: day(1) })],
   ["GET", /^\/sites\/[^/]+\/backups$/, () => ({ snapshots })],
+  ["GET", /^\/backups\/deleted$/, () => ({ sites: [{ name: "oldshop", earlier: false, snapshots: 4, oldest: day(20), newest: day(9) }] })],
+  ["GET", /^\/backups\/deleted\/[^/]+$/, () => ({ snapshots: [9, 10, 13].map((d) => ({ id: "old" + d + "abcd", time: day(d), kind: "files" })).concat([{ id: "olddb9abc", time: day(9), kind: "db", database: "oldshop_wp" }]) })],
   ["GET", /^\/sites\/[^/]+\/headers$/, () => ({
     headers: { noSniff: true, frameOptions: "SAMEORIGIN", referrerPolicy: "strict-origin-when-cross-origin" },
     defaults: { noSniff: true, frameOptions: "SAMEORIGIN", referrerPolicy: "strict-origin-when-cross-origin" },

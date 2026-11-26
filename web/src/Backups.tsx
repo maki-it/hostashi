@@ -6,6 +6,7 @@ import {
   backupMessage,
   confirmHostKey,
   createDatabase,
+  deletedSnapshots,
   getBackups,
   getImport,
   getRestore,
@@ -13,14 +14,17 @@ import {
   importDump,
   intervals,
   overdueHours,
+  listDeleted,
   listSites,
   poll,
   runBackup,
   saveSettings,
   scanHostKey,
   siteSnapshots,
+  startDeletedRestore,
   startRestore,
   type BackupInfo,
+  type DeletedSite,
   type Restore,
   type Settings,
   type Site,
@@ -30,7 +34,7 @@ import { isPostgres, listServers, type DBServer } from "./databases";
 import { Badge, Button, Card, exactTime, Field, IconButton, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort, type Tone } from "./ui";
 
 type QueryProps = {
-  /** The address query: site (snapshots of that site), sort, dir. */
+  /** The address query: site (snapshots of that site) or deleted (of a deleted site), sort, dir. */
   query: URLSearchParams;
   /** Replaces the query in the address without a new history entry. */
   onQuery: (q: URLSearchParams) => void;
@@ -385,12 +389,18 @@ const snapLabel = (s: Snapshot) => (s.kind === "db" ? "Database " + (s.database 
 
 function SnapshotsCard({ query, onQuery }: QueryProps) {
   const [sites, setSites] = useState<Site[] | null>(null);
+  // Deleted sites, and earlier sites of a reused name, with snapshots
+  // (ADR-0074); only administrators get the list.
+  const [deleted, setDeleted] = useState<DeletedSite[]>([]);
   const [snaps, setSnaps] = useState<Snapshot[] | null>(null);
   const [error, setError] = useState("");
   const [active, setActive] = useState<{ snap: Snapshot; restore: Restore | null } | null>(null);
   const [restoreError, setRestoreError] = useState("");
+  const [into, setInto] = useState("");
 
-  const site = query.get("site") || sites?.[0]?.name || "";
+  const gone = query.get("deleted") || (sites && sites.length === 0 ? (deleted[0]?.name ?? "") : "");
+  const goneInfo = deleted.find((d) => d.name === gone);
+  const site = gone ? "" : query.get("site") || sites?.[0]?.name || "";
   const set = (changes: Record<string, string>) => {
     const next = new URLSearchParams(query);
     for (const [k, v] of Object.entries(changes)) {
@@ -404,22 +414,31 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
     listSites()
       .then(setSites)
       .catch((err: unknown) => setError(backupMessage(err)));
+    listDeleted()
+      .then(setDeleted)
+      .catch(() => setDeleted([]));
   }, []);
 
   useEffect(() => {
-    if (!site) return;
+    if (!site && !gone) return;
     setSnaps(null);
     setActive(null);
-    siteSnapshots(site)
+    (gone ? deletedSnapshots(gone) : siteSnapshots(site))
       .then(setSnaps)
       .catch((err: unknown) => setError(backupMessage(err)));
-  }, [site]);
+  }, [site, gone]);
+
+  // An earlier site's snapshots go back into the site of that name; a
+  // deleted site's into the first site until the administrator picks one.
+  useEffect(() => {
+    setInto(goneInfo?.earlier ? goneInfo.name : (sites?.[0]?.name ?? ""));
+  }, [goneInfo, sites]);
 
   async function doRestore(snap: Snapshot) {
     setActive({ snap, restore: null });
     setRestoreError("");
     try {
-      const r = await startRestore(site, snap.id);
+      const r = gone ? await startDeletedRestore(gone, snap.id, into) : await startRestore(site, snap.id);
       setActive({ snap, restore: r });
       const end = await poll(() => getRestore(r.id), (x) => x.state === "done" || x.state === "failed");
       setActive({ snap, restore: end });
@@ -443,7 +462,7 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
             label={`Restore ${snapLabel(s).toLowerCase()} of ${exactTime(new Date(s.time))}`}
             text="Restore"
             icon={<ClockCounterClockwise size={16} />}
-            disabled={restoring}
+            disabled={restoring || (gone !== "" && !into)}
             onClick={() => void doRestore(s)}
           />
         </RowActions>
@@ -457,20 +476,77 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
   return (
     <Card title="Snapshots" padded={false}>
       <div className="ui-filters">
-        {sites && sites.length > 0 && (
-          <select className="ui-select" aria-label="Site" value={site} onChange={(e) => set({ site: e.target.value })}>
-            {sites.map((s) => (
-              <option key={s.name} value={s.name}>
-                {s.name}
-              </option>
-            ))}
+        {sites && (sites.length > 0 || deleted.length > 0) && (
+          <select
+            className="ui-select"
+            aria-label="Site"
+            value={gone ? "d:" + gone : "s:" + site}
+            onChange={(e) => {
+              const v = e.target.value;
+              set(v.startsWith("d:") ? { deleted: v.slice(2), site: "" } : { site: v.slice(2), deleted: "" });
+            }}
+          >
+            {deleted.length === 0 ? (
+              sites.map((s) => (
+                <option key={s.name} value={"s:" + s.name}>
+                  {s.name}
+                </option>
+              ))
+            ) : (
+              <>
+                {sites.length > 0 && (
+                  <optgroup label="Sites">
+                    {sites.map((s) => (
+                      <option key={s.name} value={"s:" + s.name}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="Deleted sites">
+                  {deleted.map((d) => (
+                    <option key={d.name} value={"d:" + d.name}>
+                      {d.name + (d.earlier ? " (earlier site)" : " (deleted)")}
+                    </option>
+                  ))}
+                </optgroup>
+              </>
+            )}
           </select>
         )}
-        <p className="ui-hint ui-filters-note">
-          A restore writes into a new directory <code>restore-&lt;time&gt;</code> in the site&apos;s home and never changes the live site.
-        </p>
+        {gone && sites && sites.length > 0 && (
+          <label className="ui-filter-inline">
+            Restore into
+            <select className="ui-select" value={into} disabled={goneInfo?.earlier} onChange={(e) => setInto(e.target.value)}>
+              {sites.map((s) => (
+                <option key={s.name} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {gone ? (
+          <p className="ui-hint ui-filters-note">
+            {goneInfo?.earlier ? (
+              <>
+                These snapshots are from an earlier site named <code>{gone}</code>, from before the current site was created. Only administrators
+                see them. A restore writes into a new directory <code>restore-&lt;time&gt;</code> in the home of the current site.
+              </>
+            ) : (
+              <>
+                The site <code>{gone}</code> was deleted; its snapshots stay until you delete them. A restore writes into a new directory{" "}
+                <code>restore-&lt;time&gt;</code> in the home of the site you pick and never changes live files.
+              </>
+            )}
+          </p>
+        ) : (
+          <p className="ui-hint ui-filters-note">
+            A restore writes into a new directory <code>restore-&lt;time&gt;</code> in the site&apos;s home and never changes the live site.
+          </p>
+        )}
       </div>
-      {(error || restoreError || active) && (
+      {(error || restoreError || active || (gone && sites?.length === 0)) && (
         <div className="ui-card-body ui-stack">
           {error && <Notice tone="err" title={error} />}
           {restoreError && <Notice tone="err" title={restoreError} />}
@@ -479,20 +555,28 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
           {r?.state === "done" && (
             <Notice tone="ok" title="Restored">
               <p>
-                Restored {r.files} {r.files === 1 ? "file" : "files"} into <code>{r.dir}</code>.
+                Restored {r.files} {r.files === 1 ? "file" : "files"} into <code>{r.dir}</code>
+                {r.source ? (
+                  <>
+                    {" "}
+                    of the site <code>{r.site}</code>
+                  </>
+                ) : null}
+                .
               </p>
             </Notice>
           )}
-          {r?.state === "done" && r.kind === "db" && <ImportForm key={r.id} site={site} restore={r} />}
+          {r?.state === "done" && r.kind === "db" && <ImportForm key={r.id} site={r.site} restore={r} />}
+          {gone && sites && sites.length === 0 && <Notice tone="warn" title="Create a site first to restore these snapshots into." />}
         </div>
       )}
-      {sites && sites.length === 0 ? (
+      {sites && sites.length === 0 && deleted.length === 0 ? (
         <p className="ui-empty">No sites yet.</p>
       ) : !snaps ? (
         !error && <p className="ui-empty" aria-busy="true">Loading…</p>
       ) : (
         <Table
-          label={"Snapshots of " + site}
+          label={"Snapshots of " + (gone || site)}
           columns={columns}
           rows={snaps}
           rowKey={(s) => s.id}

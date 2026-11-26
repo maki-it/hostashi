@@ -397,3 +397,86 @@ func TestStartRestoreChecksSpace(t *testing.T) {
 		t.Fatalf("restore that fits: %v", err)
 	}
 }
+
+// A snapshot of a deleted site goes into another site; one of a site that
+// still exists never does (ADR-0074).
+func TestStartRestoreInto(t *testing.T) {
+	ctx := context.Background()
+	a, units := readyAgent(t)
+	writeRegistry(t, a.StateDir, "blog", "shop")
+
+	gone, live := strings.Repeat("ab", 32), strings.Repeat("cd", 32)
+	if err := WriteSnapshots(a.StatusDir, []SnapshotEntry{
+		{ID: gone, Kind: KindDB, Site: "old", Database: "old_wp"},
+		{ID: live, Kind: KindFiles, Site: "shop"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := a.StartRestoreInto(ctx, "shop", live, "blog"); !errors.Is(err, ErrSourceExists) {
+		t.Errorf("live site into another: %v", err)
+	}
+
+	if _, err := a.StartRestoreInto(ctx, "old", gone, "none"); !errors.Is(err, ErrTargetNotFound) {
+		t.Errorf("into a missing site: %v", err)
+	}
+
+	if _, err := a.StartRestoreInto(ctx, "old", gone, ""); !errors.Is(err, ErrSnapshotNotFound) {
+		t.Errorf("deleted site into itself: %v", err)
+	}
+
+	if _, err := a.StartRestoreInto(ctx, "old", gone, "../x"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("bad target: %v", err)
+	}
+
+	if _, err := a.StartRestoreInto(ctx, "old", live, "blog"); !errors.Is(err, ErrSnapshotNotFound) {
+		t.Errorf("snapshot of another site: %v", err)
+	}
+
+	r, err := a.StartRestoreInto(ctx, "old", gone, "blog")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if r.Site != "blog" || r.Source != "old" || r.Database != "old_wp" || strings.Join(units.calls, ",") != "reload,restore "+r.ID {
+		t.Fatalf("restore %+v, units %v", r, units.calls)
+	}
+
+	drop, _ := os.ReadFile(a.restoreDropIn(r.ID))
+	if !strings.Contains(string(drop), "\nReadWritePaths="+filepath.Join(a.StateDir, "pool", "blog")+"\n") {
+		t.Errorf("drop-in %q", drop)
+	}
+
+	if got, err := a.GetRestore(r.ID); err != nil || got != r {
+		t.Errorf("get: %+v, %v", got, err)
+	}
+}
+
+func TestSnapshotSites(t *testing.T) {
+	a, _ := readyAgent(t)
+
+	t1 := time.Date(2026, 11, 1, 3, 0, 0, 0, time.UTC)
+	t2, t3 := t1.AddDate(0, 0, 1), t1.AddDate(0, 0, 2)
+
+	if err := WriteSnapshots(a.StatusDir, []SnapshotEntry{
+		{ID: strings.Repeat("a", 64), Kind: KindFiles, Site: "old", Time: t2},
+		{ID: strings.Repeat("b", 64), Kind: KindDB, Site: "old", Database: "old_wp", Time: t1},
+		{ID: strings.Repeat("c", 64), Kind: KindFiles, Site: "blog", Time: t3},
+		{ID: strings.Repeat("d", 64), Kind: KindPanel, Time: t3},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := a.SnapshotSites()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []agentapi.BackupSiteSummary{
+		{Site: "blog", Exists: true, Snapshots: 1, Oldest: t3, Newest: t3},
+		{Site: "old", Snapshots: 2, Oldest: t1, Newest: t2},
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("got %+v", got)
+	}
+}

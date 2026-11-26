@@ -27,6 +27,11 @@ var (
 	ErrSnapshotNotFound = errors.New("backup: no such snapshot of this site")
 	ErrRestoreBusy      = errors.New("backup: a restore is in progress")
 	ErrRestoreNotFound  = errors.New("backup: no such restore")
+	// ErrSourceExists refuses to restore a snapshot of a site that still
+	// exists into another site (ADR-0074).
+	ErrSourceExists = errors.New("backup: the snapshot's site still exists; restore it into that site")
+	// ErrTargetNotFound means the site to restore into does not exist.
+	ErrTargetNotFound = errors.New("backup: no such site to restore into")
 	// ErrNoSpace means the snapshot does not fit into what is left under
 	// the site's disk limits (ADR-0015). The restore runs as root, which
 	// the quota does not stop, so it is checked before.
@@ -102,8 +107,19 @@ func (a *Agent) restoreDropIn(id string) string {
 // run, records the restore and starts its unit. Only one restore runs at a
 // time.
 func (a *Agent) StartRestore(ctx context.Context, site, snapshot string) (Restore, error) {
-	if err := (agentapi.BackupRestoreRequest{Site: site, Snapshot: snapshot}).Validate(); err != nil {
+	return a.StartRestoreInto(ctx, site, snapshot, "")
+}
+
+// StartRestoreInto is StartRestore into the home of target. A target other
+// than site is allowed only when site no longer exists (ADR-0074): the
+// snapshot of a deleted site goes into a site the administrator picks.
+func (a *Agent) StartRestoreInto(ctx context.Context, site, snapshot, target string) (Restore, error) {
+	if err := (agentapi.BackupRestoreRequest{Site: site, Snapshot: snapshot, Target: target}).Validate(); err != nil {
 		return Restore{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	if target == "" {
+		target = site
 	}
 
 	a.mu.Lock()
@@ -135,15 +151,33 @@ func (a *Agent) StartRestore(ctx context.Context, site, snapshot string) (Restor
 		return Restore{}, ErrSnapshotNotFound
 	}
 
-	home, err := a.siteHome(site)
+	source := ""
+
+	if target != site {
+		if _, err := a.siteHome(site); !errors.Is(err, ErrSnapshotNotFound) {
+			if err != nil {
+				return Restore{}, err
+			}
+
+			return Restore{}, ErrSourceExists
+		}
+
+		source = site
+	}
+
+	home, err := a.siteHome(target)
 	if err != nil {
+		if errors.Is(err, ErrSnapshotNotFound) && source != "" {
+			return Restore{}, ErrTargetNotFound
+		}
+
 		return Restore{}, err
 	}
 
 	if a.Space != nil {
-		sp, err := a.Space(site)
+		sp, err := a.Space(target)
 		if err != nil {
-			return Restore{}, fmt.Errorf("backup: space of site %s: %w", site, err)
+			return Restore{}, fmt.Errorf("backup: space of site %s: %w", target, err)
 		}
 
 		if ok, why := fits(sp, snap.Bytes, snap.Files); !ok {
@@ -175,7 +209,7 @@ func (a *Agent) StartRestore(ctx context.Context, site, snapshot string) (Restor
 
 	now := time.Now().UTC()
 	r := Restore{
-		ID: hex.EncodeToString(id), Site: site, Snapshot: snapshot, Kind: snap.Kind, Database: snap.Database,
+		ID: hex.EncodeToString(id), Site: target, Source: source, Snapshot: snapshot, Kind: snap.Kind, Database: snap.Database,
 		Dir: RestoreDirPrefix + now.Format("20060102-150405"), State: agentapi.RestoreQueued, Created: now,
 	}
 
