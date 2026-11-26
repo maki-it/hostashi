@@ -68,6 +68,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0071](0071-panel-ui-in-english-and-german.md) | Panel UI in English and German | Accepted |
 | [0072](0072-rename-a-site.md) | Rename a site | Accepted |
 | [0073](0073-mcp-server.md) | MCP server for AI assistants | Accepted |
+| [0075](0075-wildcard-domains-for-proxy-and-redirect-sites.md) | Wildcard domains for reverse proxy and redirect sites | Proposed |
 
 Only the project owner sets a status to `Accepted`.
 
