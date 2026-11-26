@@ -19,6 +19,7 @@ var allHeaders = agentapi.WebHeaders{
 	NoSniff: true, FrameOptions: agentapi.FrameDeny, ReferrerPolicy: "same-origin",
 	PermissionsPolicy: `geolocation=(self "https://maps.example.com"), camera=()`,
 	CSP:               "default-src 'self'; img-src 'self' data:",
+	NoIndex:           true,
 }
 
 // appServer is a PHP application that sends its own security headers.

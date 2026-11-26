@@ -60,6 +60,7 @@ describe("headers form", () => {
         cspReportOnly: true,
       },
       { permissionsPolicy: "camera=()", csp: "default-src 'self'" },
+      { noSniff: true, noIndex: true },
     ] satisfies WebHeaders[]) {
       expect(fromForm(toForm(h, strict), strict)).toEqual({ headers: h });
     }

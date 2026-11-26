@@ -24,8 +24,24 @@ type cloneIn struct {
 	// Pool is the target storage pool; empty: the source's.
 	Pool string `json:"pool,omitempty"`
 	// Staging marks the clone as staging copy of the source: cron jobs
-	// paused, "refresh from source" offered.
+	// paused, password protection on, noindex, "refresh from source"
+	// offered.
 	Staging bool `json:"staging,omitempty"`
+}
+
+// cloneAccessJSON is the generated basic auth user of a clone with
+// password protection. The password is shown only in this answer.
+type cloneAccessJSON struct {
+	User     string `json:"user"`
+	Password string `json:"password"`
+}
+
+// cloneStartJSON answers a started clone.
+type cloneStartJSON struct {
+	Site siteJSON `json:"site"`
+	// Access is set when the clone asks for a password: always for a
+	// staging clone, otherwise when the source did.
+	Access *cloneAccessJSON `json:"access,omitempty"`
 }
 
 // cloneDatabaseJSON is one database pair of a clone.
@@ -106,7 +122,7 @@ func registerClones(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 	// The clone gets new databases, so it also needs databases:write.
 	mux.Op("POST /api/v1/sites/{name}/clone", openapi.Operation{
 		ID: "cloneSite", Tag: "sites", Summary: "Create a new site as a copy of this one (files, local databases, settings)",
-		In: cloneIn{}, Out: siteJSON{}, Status: http.StatusAccepted,
+		In: cloneIn{}, Out: cloneStartJSON{}, Status: http.StatusAccepted,
 	}, a.allow("sites:clone", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		if !p.Allows(authz.ScopeOf("databases:write")) {
 			writeError(w, http.StatusForbidden, "insufficient_scope", "the token lacks the scope "+authz.ScopeOf("databases:write"))
@@ -129,7 +145,12 @@ func registerClones(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logg
 			return
 		}
 
-		writeJSON(w, http.StatusAccepted, toSiteJSON(svc, s))
+		out := cloneStartJSON{Site: toSiteJSON(svc, s.Site)}
+		if s.AccessUser != "" {
+			out.Access = &cloneAccessJSON{User: s.AccessUser, Password: s.AccessPassword}
+		}
+
+		writeJSON(w, http.StatusAccepted, out)
 	}))
 
 	mux.Op("GET /api/v1/sites/{name}/clone", openapi.Operation{

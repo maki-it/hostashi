@@ -56,8 +56,15 @@ func TestCloneOverHTTP(t *testing.T) {
 	e.sites.EnableClones(cl)
 
 	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites/shop/clone", cookie: c, body: body})
-	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"name":"shop-stage"`) {
+
+	var started cloneStartJSON
+	if rec.Code != http.StatusAccepted || json.Unmarshal(rec.Body.Bytes(), &started) != nil || started.Site.Name != "shop-stage" {
 		t.Fatalf("clone: %d %s", rec.Code, rec.Body)
+	}
+
+	// A staging clone is behind a generated user, shown in this answer.
+	if started.Access == nil || started.Access.User != "staging" || len(started.Access.Password) != 24 {
+		t.Fatalf("access: %s", rec.Body)
 	}
 
 	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/shop-stage/clone", cookie: c})
