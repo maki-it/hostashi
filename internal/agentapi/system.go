@@ -152,6 +152,15 @@ type SystemRebootRequest struct{}
 // Validate accepts the empty request.
 func (SystemRebootRequest) Validate() error { return nil }
 
+// SystemAutoUpdateRequest turns the automatic installation of new Hostashi
+// versions on or off (ADR-0050).
+type SystemAutoUpdateRequest struct {
+	On bool `json:"on"`
+}
+
+// Validate accepts both values.
+func (SystemAutoUpdateRequest) Validate() error { return nil }
+
 // SystemRebootResponse says when the agent asks systemd to reboot.
 type SystemRebootResponse struct {
 	DelaySeconds int `json:"delaySeconds"`
@@ -164,4 +173,6 @@ var (
 	SystemTimezoneSet = agentrpc.Op[SystemTimezoneRequest, SystemInfo]{Name: "system.timezone.set"}
 	SystemHostnameSet = agentrpc.Op[SystemHostnameRequest, SystemInfo]{Name: "system.hostname.set"}
 	SystemReboot      = agentrpc.Op[SystemRebootRequest, SystemRebootResponse]{Name: "system.reboot"}
+	// SystemAutoUpdateSet is ADR-0050's --auto-update as a switch.
+	SystemAutoUpdateSet = agentrpc.Op[SystemAutoUpdateRequest, SystemInfo]{Name: "system.autoupdate.set"}
 )

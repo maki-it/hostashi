@@ -29,7 +29,8 @@
 #   --php-versions LIST  more PHP versions from sury.org next to the distribution's, comma-separated
 #                        from 7.4, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6 (7.4, 8.1 and 8.2 are legacy). Kept for later runs
 #   --auto-update        also install new Hostashi versions from its apt repository automatically,
-#                        with the daily security updates (ADR-0050); off by default
+#                        with the daily security updates (ADR-0050); off by default. The panel
+#                        switches it on and off later, so the option is not kept for later runs
 #   --malware-scan       install ClamAV from the distribution for the malware scan (ADR-0064); the panel
 #                        switches it on and off later, so the option is not kept for later runs
 #   --no-apt             install no packages; a step that needs a missing one fails and names it.
@@ -1158,6 +1159,16 @@ UU_FILE=/etc/apt/apt.conf.d/52hostashi-unattended-upgrades
 PHP_HOOK_FILE=/etc/apt/apt.conf.d/80hostashi-php-restart
 PHP_HOOK_BIN=/usr/local/lib/hostashi/php-restart
 UU_TIMERS=(apt-daily.timer apt-daily-upgrade.timer)
+# AUTO_FILE adds the suite stable of the Hostashi repository to the origins
+# (internal/updates.AutoFile). The pin lets this repository provide the
+# hostashi package only; the package's postinst keeps a database copy, sets
+# up and waits for the panel.
+AUTO_FILE=/etc/apt/apt.conf.d/53hostashi-auto-update
+
+# auto_wanted: --auto-update, or a server set up before the panel's switch
+# whose UU_FILE still names the suite stable; do_updates moves it to
+# AUTO_FILE.
+auto_wanted() { [ "$AUTO_UPDATE" = yes ] || grep -F '"origin=Hostashi,codename=stable"' "$UU_FILE" >/dev/null 2>&1; }
 
 # uu_origins prints the security origins of the running distribution.
 # shellcheck disable=SC2016 # ${distro_codename} is for unattended-upgrades
@@ -1177,10 +1188,8 @@ uu_origins() {
   # The PostgreSQL client tools from apt.postgresql.org (ADR-0051): the same,
   # and the pin keeps everything but the client packages away.
   printf '\t"origin=apt.postgresql.org,archive=${distro_codename}-pgdg";\n'
-  # New Hostashi versions only with --auto-update (ADR-0050). The pin lets
-  # this repository provide the hostashi package only; the package's
-  # postinst keeps a database copy, sets up and waits for the panel.
-  [ "$AUTO_UPDATE" = no ] || printf '\t"origin=Hostashi,codename=stable";\n'
+  # New Hostashi versions come from AUTO_FILE, which --auto-update writes
+  # and the panel's switch writes or removes (ADR-0050).
 }
 uu_render() {
   local origins
@@ -1192,6 +1201,7 @@ chk_updates() {
   local t
   pkg_installed unattended-upgrades || { echo "unattended-upgrades not installed"; return 1; }
   uu_render | file_matches "$UU_FILE" 0644 root:root || { echo "unattended-upgrades settings differ"; return 1; }
+  [ "$AUTO_UPDATE" = no ] || file_matches "$AUTO_FILE" 0644 root:root <"$APT_SRC/53hostashi-auto-update" || { echo "automatic Hostashi updates are off"; return 1; }
   file_matches "$PHP_HOOK_FILE" 0644 root:root <"$APT_SRC/80hostashi-php-restart" || { echo "PHP restart hook differs"; return 1; }
   local d=${PHP_HOOK_BIN%/*}
   dir_ok "$d" 755 root:root || { echo "$d"; return 1; }
@@ -1203,6 +1213,10 @@ chk_updates() {
 do_updates() {
   local t
   apt_install unattended-upgrades || return 1
+  if auto_wanted; then
+    write_file "$AUTO_FILE" 0644 root:root <"$APT_SRC/53hostashi-auto-update"
+    [ $? -le 1 ] || return 1
+  fi
   uu_render | write_file "$UU_FILE" 0644 root:root
   [ $? -le 1 ] || return 1
   install -d -m 0755 -o root -g root "${PHP_HOOK_BIN%/*}" || return 1
@@ -1733,7 +1747,6 @@ saved_options() {
   for a in "${FW_ALLOW[@]}"; do echo "--firewall-allow $a"; done
   [ "$NO_DB_TOOL" = no ] || echo "--no-db-tool"
   [ "$PHP_REQUEST_SET" = no ] || echo "--php-versions $PHP_REQUEST"
-  [ "$AUTO_UPDATE" = no ] || echo "--auto-update"
 }
 
 # load_options reads OPTIONS_FILE into SAVED_ARGS. It refuses a file that
@@ -1754,9 +1767,12 @@ load_options() {
     val=""
     [ "$opt" = "$line" ] || val=${line#* }
     case "$opt" in
-      --allow-untested|--no-quota|--no-firewall|--no-db-tool|--auto-update)
+      --allow-untested|--no-quota|--no-firewall|--no-db-tool)
         [ -z "$val" ] || { log "REFUSED: $OPTIONS_FILE: '$opt' takes no value"; exit 2; }
         SAVED_ARGS+=("$opt");;
+      # Saved before the panel's switch (ADR-0050): the server keeps the
+      # setting in AUTO_FILE now, so an upgrade does not turn it on again.
+      --auto-update) [ -z "$val" ] || { log "REFUSED: $OPTIONS_FILE: '$opt' takes no value"; exit 2; };;
       --listen|--panel-port|--panel-domain|--firewall-allow|--php-versions)
         [ -n "$val" ] && [ "${val#* }" = "$val" ] || { log "REFUSED: $OPTIONS_FILE: '$opt' needs one value"; exit 2; }
         SAVED_ARGS+=("$opt" "$val");;

@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// Managed by Hostashi (ADR-0050): System, Updates, Automatic updates in the
+// panel, or the installer option --auto-update. unattended-upgrades also
+// installs new Hostashi versions from the suite stable.
+Unattended-Upgrade::Origins-Pattern {
+	"origin=Hostashi,codename=stable";
+};

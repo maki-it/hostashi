@@ -5,6 +5,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/sysconf"
+	"github.com/maki-it/hostashi/internal/updates"
 )
 
 type fakeSystem struct {
@@ -404,5 +406,37 @@ func TestSystemInfoUpdates(t *testing.T) {
 
 	if info, err = o.info(t.Context()); err != nil || !info.Updates.Auto {
 		t.Fatalf("auto: %+v %v", info.Updates, err)
+	}
+}
+
+func TestSystemSetAutoUpdate(t *testing.T) {
+	o, root := newSystemOps(t, &fakeSystem{st: sysconf.State{Hostname: "web2"}})
+
+	if _, err := o.setAutoUpdate(t.Context(), true); !errors.Is(err, errNoPackage) {
+		t.Fatalf("without the package: %v", err)
+	}
+
+	writeTestFile(t, filepath.Join(root, "var/lib/dpkg/status"), "Package: hostashi\nStatus: install ok installed\nArchitecture: amd64\nVersion: 0.13.0\n")
+	writeTestFile(t, filepath.Join(root, "etc/apt/sources.list.d/hostashi.sources"), "Types: deb\nURIs: https://get.hostashi.com/apt\nSuites: stable\nComponents: main\n")
+	writeTestFile(t, filepath.Join(root, "etc/apt/apt.conf.d/52hostashi-unattended-upgrades"), "#clear Unattended-Upgrade::Origins-Pattern;\n")
+
+	info, err := o.setAutoUpdate(t.Context(), true)
+	if err != nil || info.Updates == nil || !info.Updates.Auto {
+		t.Fatalf("on: %+v %v", info.Updates, err)
+	}
+
+	b, err := os.ReadFile(filepath.Join(root, updates.AutoFile))
+	if err != nil || string(b) != updates.AutoContent {
+		t.Fatalf("file %q %v", b, err)
+	}
+
+	for range 2 { // turning it off twice is fine
+		if info, err = o.setAutoUpdate(t.Context(), false); err != nil || info.Updates.Auto {
+			t.Fatalf("off: %+v %v", info.Updates, err)
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(root, updates.AutoFile)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("file left: %v", err)
 	}
 }

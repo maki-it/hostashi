@@ -111,14 +111,14 @@ Things to know:
 | `--no-firewall` | No Hostashi firewall. Only use this behind a provider firewall. |
 | `--no-db-tool` | Do not install the web database tool (Adminer on port 8444). Given on a server that has it, the installer removes it. |
 | `--no-quota` | Do not enable disk quota. Sites then have no disk limit. |
-| `--auto-update` | Also install new Hostashi versions automatically: unattended-upgrades takes them from `get.hostashi.com/apt` together with the daily security updates. Off by default; then `sudo apt upgrade` installs them. Each update keeps a copy of the panel database first. A later `apply` without the option turns it off again. |
+| `--auto-update` | Also install new Hostashi versions automatically: unattended-upgrades takes them from `get.hostashi.com/apt` together with the daily security updates. Off by default; then `sudo apt upgrade` installs them. Each update keeps a copy of the panel database first. An admin can also switch it on and off in the panel (**System**, **Updates**), so a later `apply` without the option leaves it as it is. |
 | `--malware-scan` | Install ClamAV from the distribution for the malware scan. Off by default; an admin can also switch it on and off in the panel later, so a later `apply` without the option leaves it as it is. A scan needs about 1.5 GB of RAM while it runs. |
 | `--allow-untested` | Accept an operating system release that is not on the supported list. |
 | `--no-apt` | Install no packages. A step that needs a missing package fails and names it. Meant for runs from the `hostashi` package, which brings its dependencies. |
 
 ### Saved options and `upgrade`
 
-After each successful `apply` the installer saves its options (all of the above except `--binary` and `--no-apt`) to `/etc/hostashi/install.options`, one per line, owned by root with mode `0600`. `install.sh upgrade` runs `apply --yes --no-apt` again with these options and the binary of the `hostashi` package (`/usr/bin/hostashi`, or `--binary PATH`). To change an option, run `apply` again with the new options; the file follows.
+After each successful `apply` the installer saves its options (all of the above except `--binary`, `--no-apt`, `--auto-update` and `--malware-scan`) to `/etc/hostashi/install.options`, one per line, owned by root with mode `0600`. `install.sh upgrade` runs `apply --yes --no-apt` again with these options and the binary of the `hostashi` package (`/usr/bin/hostashi`, or `--binary PATH`). To change an option, run `apply` again with the new options; the file follows.
 
 The installer refuses an options file that anyone but root could have written, or that holds anything but the options above.
 

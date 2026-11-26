@@ -15,6 +15,7 @@ import {
   listTimezones,
   rebootServer,
   releaseUrl,
+  setAutoUpdate,
   setHostname,
   setTimezone,
   uptime,
@@ -23,7 +24,7 @@ import {
   type SystemInfo,
   type SystemUpdates,
 } from "./system";
-import { Badge, Button, Card, Field, Notice, PageHead } from "./ui";
+import { Badge, Button, Card, Field, Notice, PageHead, Switch } from "./ui";
 
 type RebootState = { phase: "idle" } | { phase: "going-down" | "starting" } | { phase: "back" } | { phase: "lost" };
 
@@ -100,7 +101,7 @@ export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) 
             onTimezone={(n) => changed(n, `The time zone is now ${n.timezone}.`)}
             onError={setError}
           />
-          <UpdatesCard updates={info.updates} />
+          <UpdatesCard updates={info.updates} onChanged={changed} onError={setError} />
           <PanelCertificate />
           <PanelRealIPCard />
           <LogRetentionCard />
@@ -199,15 +200,41 @@ function Overview({
   );
 }
 
-// UpdatesCard says which Hostashi version runs, whether a newer one is out
-// and, always, whether the server installs it by itself (--auto-update).
-function UpdatesCard({ updates }: { updates: SystemUpdates | undefined }) {
+// UpdatesCard says which Hostashi version runs and whether a newer one is
+// out, and switches the automatic installation of new versions
+// (--auto-update, ADR-0050) on and off.
+function UpdatesCard({
+  updates,
+  onChanged,
+  onError,
+}: {
+  updates: SystemUpdates | undefined;
+  onChanged: (i: SystemInfo, text: string) => void;
+  onError: (m: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
   if (!updates) return null;
   const version = (v: string) => (
     <a href={releaseUrl(v)} target="_blank" rel="noopener noreferrer" title="Release notes">
       {versionLabel(v)}
     </a>
   );
+  async function toggle(on: boolean) {
+    setBusy(true);
+    try {
+      const next = await setAutoUpdate(on);
+      onChanged(
+        next,
+        on
+          ? "Automatic updates are on. New Hostashi versions install with the next daily security updates."
+          : "Automatic updates are off. New Hostashi versions wait for sudo apt upgrade.",
+      );
+    } catch (err) {
+      onError(serviceMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <Card
       title="Updates"
@@ -220,8 +247,6 @@ function UpdatesCard({ updates }: { updates: SystemUpdates | undefined }) {
             {version(updates.installed)}
             {updates.update && updates.available && <> (newest: {version(updates.available)})</>}
           </dd>
-          <dt>Automatic updates</dt>
-          <dd>{updates.auto ? <Badge tone="ok">On</Badge> : <Badge tone="off">Off</Badge>}</dd>
           {updates.listedAt && (
             <>
               <dt>Last checked</dt>
@@ -229,16 +254,22 @@ function UpdatesCard({ updates }: { updates: SystemUpdates | undefined }) {
             </>
           )}
         </dl>
-        <p className="ui-flush ui-hint">
-          {updates.auto ? (
-            <>New Hostashi versions are installed by unattended-upgrades together with the daily security updates.</>
-          ) : (
-            <>
-              New Hostashi versions wait for <code>sudo apt upgrade</code>. To install them by themselves, run the installer's{" "}
-              <code>apply</code> again with <code>--auto-update</code>.
-            </>
-          )}
-        </p>
+        <Switch
+          checked={updates.auto}
+          disabled={busy}
+          hint={
+            updates.auto ? (
+              "unattended-upgrades installs new Hostashi versions with the daily security updates, after a copy of the panel database."
+            ) : (
+              <>
+                New Hostashi versions wait for <code>sudo apt upgrade</code>. Health and an email say when one is out.
+              </>
+            )
+          }
+          onChange={(on) => void toggle(on)}
+        >
+          Automatic updates
+        </Switch>
       </div>
     </Card>
   );

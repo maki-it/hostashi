@@ -89,24 +89,24 @@ describe("system helpers", () => {
 });
 
 describe("System", () => {
-  it("always says whether Hostashi updates itself", async () => {
+  it("switches automatic updates", async () => {
     const updates = { installed: "0.12.0", available: "0.13.0", update: true, auto: false, listedAt: "2026-11-26T06:00:00Z" };
-    mockFetch({ "GET /api/v1/system": { body: { ...info, updates } }, "GET /api/v1/system/timezones": { body: zones } });
-    const { unmount } = render(<System />);
+    const calls = mockFetch({
+      "GET /api/v1/system": { body: { ...info, updates } },
+      "GET /api/v1/system/timezones": { body: zones },
+      "PUT /api/v1/system/auto-update": { body: { ...info, updates: { ...updates, auto: true } } },
+    });
+    render(<System />);
 
-    let card = await screen.findByRole("region", { name: "Updates" });
+    const card = await screen.findByRole("region", { name: "Updates" });
     expect(card).toHaveTextContent("Update available");
     expect(within(card).getByRole("link", { name: "v0.13.0" })).toHaveAttribute("href", releaseUrl("0.13.0"));
-    expect(within(card).getByText("Automatic updates").nextElementSibling).toHaveTextContent("Off");
-    expect(card).toHaveTextContent("--auto-update");
-    unmount();
-
-    const current = { ...updates, installed: "0.13.0", update: false, auto: true };
-    mockFetch({ "GET /api/v1/system": { body: { ...info, updates: current } }, "GET /api/v1/system/timezones": { body: zones } });
-    render(<System />);
-    card = await screen.findByRole("region", { name: "Updates" });
-    expect(card).toHaveTextContent("Up to date");
-    expect(within(card).getByText("Automatic updates").nextElementSibling).toHaveTextContent("On");
+    const sw = within(card).getByRole("switch", { name: "Automatic updates" });
+    expect(sw).not.toBeChecked();
+    await userEvent.setup().click(sw);
+    expect(await screen.findByText(/Automatic updates are on/)).toBeInTheDocument();
+    expect(within(card).getByRole("switch", { name: "Automatic updates" })).toBeChecked();
+    expect(calls.some((c) => c.method === "PUT" && c.path === "/api/v1/system/auto-update" && JSON.stringify(c.body) === '{"on":true}')).toBe(true);
   });
 
   it("has no updates card without the package", async () => {

@@ -22,6 +22,7 @@ type SystemAgent interface {
 	SetTimezone(ctx context.Context, zone string) (agentapi.SystemInfo, error)
 	SetHostname(ctx context.Context, name string) (agentapi.SystemInfo, error)
 	Reboot(ctx context.Context) (agentapi.SystemRebootResponse, error)
+	SetAutoUpdate(ctx context.Context, on bool) (agentapi.SystemInfo, error)
 }
 
 // RPCSystemAgent is SystemAgent over the agent socket.
@@ -50,6 +51,15 @@ func (a RPCSystemAgent) SetHostname(ctx context.Context, name string) (agentapi.
 // Reboot implements SystemAgent.
 func (a RPCSystemAgent) Reboot(ctx context.Context) (agentapi.SystemRebootResponse, error) {
 	return agentapi.SystemReboot.Call(ctx, a.C, agentapi.SystemRebootRequest{})
+}
+
+// SetAutoUpdate implements SystemAgent.
+func (a RPCSystemAgent) SetAutoUpdate(ctx context.Context, on bool) (agentapi.SystemInfo, error) {
+	return agentapi.SystemAutoUpdateSet.Call(ctx, a.C, agentapi.SystemAutoUpdateRequest{On: on})
+}
+
+type systemAutoUpdateJSON struct {
+	On bool `json:"on"`
 }
 
 type systemTimezoneJSON struct {
@@ -177,6 +187,27 @@ func registerSystem(mux *routeMux, a authn, sys SystemAgent, st Settings, log *s
 
 		change(w, r, p, "system.hostname", "hostname", in.Hostname, func(i agentapi.SystemInfo) string { return i.Hostname },
 			func(ctx context.Context) (agentapi.SystemInfo, error) { return sys.SetHostname(ctx, in.Hostname) })
+	}))
+
+	mux.Op("PUT /api/v1/system/auto-update", openapi.Operation{
+		ID: "setAutoUpdate", Tag: "system", Summary: "Turn the automatic installation of new Hostashi versions on or off",
+		In: systemAutoUpdateJSON{}, Out: agentapi.SystemInfo{},
+	}, a.allow("system:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in systemAutoUpdateJSON
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		onOff := func(on bool) string {
+			if on {
+				return "on"
+			}
+
+			return "off"
+		}
+
+		change(w, r, p, "system.auto_update", "auto_update", onOff(in.On), func(i agentapi.SystemInfo) string { return onOff(i.Updates != nil && i.Updates.Auto) },
+			func(ctx context.Context) (agentapi.SystemInfo, error) { return sys.SetAutoUpdate(ctx, in.On) })
 	}))
 
 	mux.Op("POST /api/v1/system/reboot", openapi.Operation{

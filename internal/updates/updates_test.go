@@ -166,3 +166,12 @@ func TestListName(t *testing.T) {
 		}
 	}
 }
+
+// The installer writes AutoFile from packaging/apt with --auto-update; the
+// panel's switch writes AutoContent. Both must be the same file.
+func TestAutoContentMatchesInstaller(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "packaging", "apt", filepath.Base(AutoFile)))
+	if err != nil || string(b) != AutoContent {
+		t.Fatalf("packaging/apt/%s differs from AutoContent: %v", filepath.Base(AutoFile), err)
+	}
+}

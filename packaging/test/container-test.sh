@@ -2183,15 +2183,29 @@ origins=$(x unattended-upgrade --dry-run -d 2>&1 | sed -n 's/^Allowed origins ar
 grep -qF "origin=deb.sury.org,archive=$codename" <<<"$origins" || fail "sury.org not in unattended-upgrades: $origins"
 out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run without --php-versions changed something"; }
-# New Hostashi versions automatically only with --auto-update (ADR-0050),
-# kept in the saved options for upgrade; a run without it turns it off.
+# New Hostashi versions automatically with --auto-update or the panel's
+# switch (ADR-0050): both write 53hostashi-auto-update, which a later run
+# without the option leaves as it is and the saved options do not hold.
+uu_allowed() { x unattended-upgrade --dry-run -d 2>&1 | sed -n 's/^Allowed origins are: //p' | head -1; }
 inst apply --yes --auto-update >/dev/null || fail "apply with --auto-update failed"
-origins=$(x unattended-upgrade --dry-run -d 2>&1 | sed -n 's/^Allowed origins are: //p' | head -1)
-grep -qF "origin=Hostashi,codename=stable" <<<"$origins" || fail "--auto-update: Hostashi not in unattended-upgrades: $origins"
-x grep -qx -- --auto-update /etc/hostashi/install.options || fail "--auto-update not saved: $(x cat /etc/hostashi/install.options)"
+origins=$(uu_allowed)
+grep -F "origin=Hostashi,codename=stable" <<<"$origins" >/dev/null || fail "--auto-update: Hostashi not in unattended-upgrades: $origins"
+expect_mode /etc/apt/apt.conf.d/53hostashi-auto-update "644 root:root"
+! x grep -x -- --auto-update /etc/hostashi/install.options >/dev/null || fail "--auto-update saved: $(x cat /etc/hostashi/install.options)"
 inst apply --yes >/dev/null || fail "apply without --auto-update failed"
-origins=$(x unattended-upgrade --dry-run -d 2>&1 | sed -n 's/^Allowed origins are: //p' | head -1)
-! grep -qF "origin=Hostashi" <<<"$origins" || fail "Hostashi still in unattended-upgrades without --auto-update: $origins"
+grep -F "origin=Hostashi,codename=stable" <<<"$(uu_allowed)" >/dev/null || fail "apply without --auto-update turned it off"
+# The panel's switch removes the file; the installer then leaves it off.
+x rm /etc/apt/apt.conf.d/53hostashi-auto-update
+out=$(inst apply --yes)
+grep 'changes=0' <<<"$out" >/dev/null || { echo "$out"; fail "a run after the switch went off changed something"; }
+! grep -F "origin=Hostashi" <<<"$(uu_allowed)" >/dev/null || fail "Hostashi still in unattended-upgrades after the switch went off"
+# A server set up before the switch named the suite in the installer's own
+# file; the next run moves it to 53hostashi-auto-update.
+x sed -i 's|^\(\t"origin=apt.postgresql.org.*\)$|\1\n\t"origin=Hostashi,codename=stable";|' /etc/apt/apt.conf.d/52hostashi-unattended-upgrades
+inst apply --yes >/dev/null || fail "apply on an old auto-update server failed"
+x test -f /etc/apt/apt.conf.d/53hostashi-auto-update || fail "the old auto-update setting was not moved"
+! x grep -F "codename=stable" /etc/apt/apt.conf.d/52hostashi-unattended-upgrades >/dev/null || fail "52hostashi-unattended-upgrades still names stable"
+x rm /etc/apt/apt.conf.d/53hostashi-auto-update
 # The unit the panel starts (ADR-0036): the script refuses what is not on
 # its list, and installs what is.
 expect_mode /usr/local/lib/hostashi/php-install "755 root:root"

@@ -37,6 +37,8 @@ export const setTimezone = (zone: string) => request<SystemInfo>("PUT", "/system
 
 export const setHostname = (hostname: string) => request<SystemInfo>("PUT", "/system/hostname", { hostname });
 
+export const setAutoUpdate = (on: boolean) => request<SystemInfo>("PUT", "/system/auto-update", { on });
+
 export const rebootServer = (confirm: string) => request<{ delaySeconds: number }>("POST", "/system/reboot", { confirm });
 
 const labelRe = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;

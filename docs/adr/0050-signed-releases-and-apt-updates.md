@@ -174,6 +174,8 @@ Decided by Kim (2026-11-21) as below.
 
 **Recommendation: B** (decided by Kim, 2026-11-21). The panel reads the candidate version from the apt lists (file read, no `apt` call) and shows it on Health and in the doctor digest. An "update now" button in the panel would need a new root unit (like `hostashi-php-install@`) and is left for later.
 
+**Addendum (Kim, 2026-11-26): a switch in the panel.** Admins switch automatic updates on and off under System, Updates. The Hostashi origin moves from the installer's unattended-upgrades file into its own file, `/etc/apt/apt.conf.d/53hostashi-auto-update`, which the agent writes or removes (audit log `system.auto_update`, scope `system:write`) and `--auto-update` writes too. The default stays off. Like `--malware-scan`, the option is no longer saved, so a later `apply` or `upgrade` without it leaves the switch as it is; servers that had it keep it, the next installer run moves the line. The suite `runtimes` (ADR-0077) is not part of this switch: it brings no Hostashi code and stays on.
+
 ## 7. Release channels
 
 **Recommendation** (decided by Kim, 2026-11-21): one channel `stable` for v1. Pre-releases (`v1.0.0-rc.1`) are published on GitHub only, not in the apt repo. A `testing` suite can come later without breaking clients.
