@@ -547,8 +547,9 @@ const routes = [
   ["GET", /^\/sites\/[^/]+\/backups$/, () => ({ snapshots })],
   ["GET", /^\/backups\/deleted$/, () => ({ sites: [{ name: "oldshop", earlier: false, snapshots: 4, oldest: day(20), newest: day(9) }] })],
   ["GET", /^\/backups\/deleted\/[^/]+$/, () => ({ snapshots: [9, 10, 13].map((d) => ({ id: "old" + d + "abcd", time: day(d), kind: "files" })).concat([{ id: "olddb9abc", time: day(9), kind: "db", database: "oldshop_wp" }]) })],
-  ["GET", /^\/sites\/[^/]+\/headers$/, () => ({
-    headers: { noSniff: true, frameOptions: "SAMEORIGIN", referrerPolicy: "strict-origin-when-cross-origin" },
+  ["GET", /^\/sites\/([^/]+)\/headers$/, (m) => ({
+    // A staging copy is not indexed (ADR-0070).
+    headers: { noSniff: true, frameOptions: "SAMEORIGIN", referrerPolicy: "strict-origin-when-cross-origin", ...(m[1] === "staging" && { noIndex: true }) },
     defaults: { noSniff: true, frameOptions: "SAMEORIGIN", referrerPolicy: "strict-origin-when-cross-origin" },
     referrerPolicies: ["no-referrer", "same-origin", "strict-origin", "strict-origin-when-cross-origin"],
     permissionsPolicyStrict: "camera=(), microphone=(), geolocation=()",
@@ -631,6 +632,20 @@ const routes = [
       { id: "site.tls", site: "blog", status: "ok", summary: "certificate valid until 2027-02-14 (81 days)" },
     ],
   })],
+  // A staging copy of blog (ADR-0070); every other site is no copy.
+  ["GET", /^\/sites\/staging\/clone$/, () => ({
+    source: "blog",
+    staging: true,
+    state: "done",
+    refresh: false,
+    filesDone: true,
+    config: "done",
+    databases: [{ source: "blog_wp", target: "staging_wp", done: true }],
+    startedAt: day(1),
+    finishedAt: day(1),
+  })],
+  ["GET", /^\/sites\/[^/]+\/clone$/, () => ({ $status: 404, body: { error: { code: "not_a_clone", message: "the site is no staging clone of an existing site" } } })],
+  ["POST", /^\/sites\/[^/]+\/clone$/, () => ({ site: sites.find((x) => x.name === "staging"), access: { user: "staging", password: "Vq7mR2xK9pLt4Wz8Bn3sHc6J" } })],
   ["GET", /^\/sites\/[^/]+\/real-ip$/, () => ({ realIp: {}, headers: ["X-Forwarded-For", "X-Real-IP"], cloudflare: [], cloudflareDate: "2026-11-16", maxRanges: 64 })],
   ["GET", /^\/sites\/([^/]+)\/tls\/certificate$/, (m) => {
     const t = sites.find((x) => x.name === m[1])?.tls;
@@ -645,6 +660,7 @@ export function answer(method, path, query) {
     const match = path.match(re);
     if (match) {
       const body = fn(match, query);
+      if (body?.$status) return { status: body.$status, body: body.body };
       return body === undefined ? undefined : { body };
     }
   }

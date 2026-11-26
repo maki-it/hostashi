@@ -41,6 +41,44 @@ const shots = [
     },
   },
   { name: "site-rename", hash: "#/sites/shop", ready: "text=Save display name", full: true },
+  {
+    name: "site-clone",
+    hash: "#/sites/blog",
+    ready: "text=Copy this site",
+    act: async (page) => {
+      await page.getByRole("button", { name: "Copy site" }).click();
+      await page.getByLabel(/^System name of the copy/).fill("staging");
+      await page.getByLabel(/^Domain of the copy/).fill("staging.example.com");
+      await page.getByRole("heading", { name: "Copy this site" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  {
+    name: "site-clone-password",
+    hash: "#/sites/blog",
+    ready: "text=Copy this site",
+    act: async (page) => {
+      await page.getByRole("button", { name: "Copy site" }).click();
+      await page.getByLabel(/^System name of the copy/).fill("staging");
+      await page.getByLabel(/^Domain of the copy/).fill("staging.example.com");
+      await page.getByRole("button", { name: "Create staging copy" }).click();
+      await page.getByRole("heading", { name: "Save the password of the copy now" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  {
+    name: "site-staging",
+    hash: "#/sites/staging",
+    ready: "text=Refresh from blog",
+    act: async (page) => {
+      await page.getByRole("button", { name: "Refresh from blog" }).click();
+      await page.getByLabel(/to confirm/).fill("stag");
+    },
+  },
+  {
+    name: "site-search-engines",
+    hash: "#/sites/staging/web",
+    ready: "text=Ask search engines not to index the site",
+    act: async (page) => page.getByRole("heading", { name: "Search engines" }).evaluate((h) => h.scrollIntoView({ block: "center" })),
+  },
   { name: "site-domains", hash: "#/sites/blog/domains", ready: "text=Domains" },
   { name: "site-hardening", hash: "#/sites/blog/hardening", ready: "text=Save profile and rules", full: true },
   { name: "profiles", hash: "#/profiles", ready: "table", full: true },

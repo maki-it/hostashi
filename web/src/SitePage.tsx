@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { CertificateCard } from "./Certificate";
+import { canClone, CloneBadge, CloneCard, CloneStatusCard, useClone } from "./Clone";
+import type { Clone } from "./clones";
 import { siteCertBase } from "./certs";
 import { CronSettings } from "./Cron";
 import { FileManager } from "./Files";
@@ -73,6 +75,7 @@ type Props = {
 export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = () => undefined }: Props) {
   const { sites, php, error, load } = useSites();
   const site = sites?.find((s) => s.name === name);
+  const { clone, reload: reloadClone } = useClone(name);
 
   if (!sites) return error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading…</p>;
   if (!site) {
@@ -111,7 +114,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
 
   const panel = (
     <>
-      {active === "overview" && <Overview site={site} onChange={load} staff={staff} admin={role === "admin"} />}
+      {active === "overview" && <Overview site={site} onChange={load} staff={staff} admin={role === "admin"} clone={clone ?? null} onCloneChange={reloadClone} />}
       {active === "domains" && <DomainsTab site={site} onChange={load} />}
       {active === "https" && <HTTPSTab site={site} onChange={load} />}
       {active === "headers" && <SecurityHeadersCard site={site} />}
@@ -159,6 +162,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
             <Badge tone={status.tone}>{status.word}</Badge>
             <Badge tone={httpsTone(site.tls)}>{httpsLabel(site.tls)}</Badge>
             <Badge tone="off">{siteTypeLabel(site)}</Badge>
+            <CloneBadge clone={clone} />
           </p>
         </div>
       </div>
@@ -224,7 +228,7 @@ function useAction(onChange: () => Promise<void>) {
 
 type TabProps = { site: Site; onChange: () => Promise<void> };
 
-function Overview({ site, onChange, staff, admin }: TabProps & { staff: boolean; admin: boolean }) {
+function Overview({ site, onChange, staff, admin, clone, onCloneChange }: TabProps & { staff: boolean; admin: boolean; clone: Clone | null; onCloneChange: () => void }) {
   const [primary, ...aliases] = site.domains;
   return (
     <>
@@ -329,7 +333,9 @@ function Overview({ site, onChange, staff, admin }: TabProps & { staff: boolean;
           )}
         </dl>
       </Card>
+      {clone && <CloneStatusCard site={site} clone={clone} staff={staff} onRefresh={onCloneChange} />}
       {site.state !== "deleting" && <RenameCard site={site} onChange={onChange} />}
+      {staff && canClone(site) && clone?.state !== "copying" && <CloneCard site={site} />}
       {admin && hasAccount(site) && <Services site={site.name} />}
       {site.state === "active" && (
         <>
