@@ -18,7 +18,7 @@ import {
 import type { Site } from "./sites";
 import { formatHash } from "./routes";
 import { Key, Trash } from "@phosphor-icons/react";
-import { Button, Card, Field, IconButton, Notice, RelTime, RowActions, Table, type Column } from "./ui";
+import { Button, Card, Field, IconButton, Notice, RelTime, RowActions, Table, UnsavedNote, type Column } from "./ui";
 
 // SiteAccess is the "Access" tab of a site (ADR-0066): an IP rule and
 // password protection for the whole site or some paths, with its users.
@@ -83,6 +83,7 @@ function SettingsCard({ site, view, onSaved }: { site: string; view: AccessView;
   }
 
   const locked = lockout(form, view.clientAddress);
+  const dirty = JSON.stringify(form) !== JSON.stringify(toAccessForm(view));
 
   return (
     <Card title="Access protection">
@@ -178,9 +179,10 @@ function SettingsCard({ site, view, onSaved }: { site: string; view: AccessView;
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
-          <Button type="submit" variant="primary" disabled={busy}>
+          <Button type="submit" variant="primary" disabled={busy || !dirty}>
             Save
           </Button>
+          <UnsavedNote dirty={dirty} />
         </div>
       </form>
     </Card>

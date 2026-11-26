@@ -50,7 +50,7 @@ import { SecurityHeadersCard } from "./SecurityHeaders";
 import { HardeningCard } from "./Hardening";
 import { SSHSettings } from "./SSH";
 import { PermissionsResetCard } from "./PermissionsReset";
-import { Badge, Button, Card, Field, Notice } from "./ui";
+import { AppliesAtOnce, Badge, Button, Card, Field, Notice, Switch } from "./ui";
 import { groupsForSite, SiteNav, type SiteGroup } from "./SiteNav";
 import { useUnsaved } from "./Unsaved";
 import { SiteUsageCard } from "./Usage";
@@ -640,26 +640,24 @@ function HTTPSTab({ site, onChange }: TabProps) {
 
   return (
     <>
-      <Card title="HTTPS">
+      <Card title="HTTPS" actions={<AppliesAtOnce />}>
         <div className="ui-stack">
-          <label className="ui-check">
-            <input
-              type="checkbox"
-              checked={site.tls.enabled}
-              disabled={h.busy || ask !== null}
-              onChange={(e) => (e.target.checked ? void toggleTLS(true) : setAsk("tls-off"))}
-            />
+          <Switch
+            checked={site.tls.enabled}
+            disabled={h.busy || ask !== null}
+            hint="Turning it off asks first."
+            onChange={(on) => (on ? void toggleTLS(true) : setAsk("tls-off"))}
+          >
             {site.tls.source === "custom" ? "HTTPS with the own certificate" : "HTTPS with a Let's Encrypt certificate"}
-          </label>
-          <label className="ui-check">
-            <input
-              type="checkbox"
-              checked={site.tls.hsts}
-              disabled={h.busy || ask !== null}
-              onChange={(e) => (e.target.checked ? setAsk("hsts-on") : void toggleHSTS(false))}
-            />
+          </Switch>
+          <Switch
+            checked={site.tls.hsts}
+            disabled={h.busy || ask !== null}
+            hint="Turning it on asks first: browsers remember it for a year."
+            onChange={(on) => (on ? setAsk("hsts-on") : void toggleHSTS(false))}
+          >
             HSTS: browsers use only HTTPS for this site
-          </label>
+          </Switch>
           {ask === "tls-off" && (
             <Notice tone="warn" title="Turn HTTPS off?">
               <p className="ui-flush">
@@ -745,16 +743,16 @@ function PHPTab({ site, php, onChange }: TabProps & { php: PHPVersions | null })
         </form>
       </Card>
       {site.php && (
-        <Card title="Programs from PHP">
+        <Card title="Programs from PHP" actions={<AppliesAtOnce />}>
           <div className="ui-stack">
-            <label className="ui-check">
-              <input type="checkbox" checked={site.phpPrograms} disabled={p.busy} onChange={(e) => void togglePrograms(e.target.checked)} />
+            <Switch
+              checked={site.phpPrograms}
+              disabled={p.busy}
+              onChange={(on) => void togglePrograms(on)}
+              hint="Off by default: a hacked plugin then cannot run commands on the server. Turn it on only for software that needs it, for example image optimizers or PDF tools. WP-CLI, Composer and cron jobs are not affected."
+            >
               Allow PHP to start programs (exec, system, shell_exec, proc_open, popen)
-            </label>
-            <p className="ui-hint">
-              Off by default: a hacked plugin then cannot run commands on the server. Turn it on only for software that needs it, for
-              example image optimizers or PDF tools. WP-CLI, Composer and cron jobs are not affected.
-            </p>
+            </Switch>
             {p.result}
           </div>
         </Card>

@@ -14,7 +14,7 @@ import {
   type FirewallRule,
   type FirewallState,
 } from "./firewall";
-import { Button, Card, Field, IconButton, Notice, PageHead, RelTime } from "./ui";
+import { Button, Card, Field, IconButton, Notice, PageHead, RelTime, UnsavedNote } from "./ui";
 import { TokenAllowlistCard } from "./TokenAllowlist";
 
 type RuleDraft = { proto: "tcp" | "udp"; ports: string; sources: string; note: string };
@@ -229,6 +229,8 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
 
   const setRule = (i: number, patch: Partial<RuleDraft>) => setRules(rules.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const foreignPending = !!fw.pending && !waiting;
+  const dirty =
+    ssh !== fw.state.sshAllow.join("\n") || panel !== fw.state.panelAllow.join("\n") || JSON.stringify(rules) !== JSON.stringify(fw.state.open.map(toDraft));
 
   return (
     <form className="ui-stack" onSubmit={(e) => void save(e)}>
@@ -383,10 +385,13 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
           </label>
         </Notice>
       )}
-      <div className="ui-row">
-        <Button type="submit" variant="primary" disabled={busy || !!waiting || foreignPending}>
+      {/* One bar for both cards above: the allowlists and the ports apply together. */}
+      <div className="ui-card ui-card-body ui-apply-bar">
+        <Button type="submit" variant="primary" disabled={busy || !!waiting || foreignPending || !dirty}>
           {busy ? "Applying…" : "Apply rules"}
         </Button>
+        <UnsavedNote dirty={dirty} />
+        <span className="ui-hint">Rolls back after {fw.confirmWithin} seconds unless it is confirmed.</span>
       </div>
     </form>
   );

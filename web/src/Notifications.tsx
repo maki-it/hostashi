@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { accountEmailMessage, getNotifications, setNotifications, type Notifications, type NotifyCategory } from "./mail";
-import { Card, Notice } from "./ui";
+import { AppliesAtOnce, Card, Notice, Switch } from "./ui";
 
 const labels: Record<NotifyCategory, { label: string; hint: string }> = {
   backups: { label: "Backups", hint: "A backup failed or did not save everything." },
@@ -46,7 +46,7 @@ export function NotificationsCard() {
   const off = !state.mail_enabled || state.email === "";
 
   return (
-    <Card title="Notifications">
+    <Card title="Notifications" actions={<AppliesAtOnce />}>
       <div className="ui-stack">
         <p className="ui-flush ui-hint">
           Emails about problems on the server and your sites. Security notes about your account are always sent.
@@ -56,13 +56,9 @@ export function NotificationsCard() {
         <fieldset className="ui-stack-tight ui-fieldset" disabled={busy || off}>
           <legend className="ui-sr-only">Email me about</legend>
           {state.categories.filter((c) => c.id in labels).map((c) => (
-            <label key={c.id} className="ui-check">
-              <input type="checkbox" checked={c.enabled} onChange={(e) => void toggle(c.id, e.target.checked)} />
-              <span>
-                {labels[c.id].label}
-                <span className="ui-hint"> {labels[c.id].hint}</span>
-              </span>
-            </label>
+            <Switch key={c.id} checked={c.enabled} onChange={(on) => void toggle(c.id, on)} hint={labels[c.id].hint}>
+              {labels[c.id].label}
+            </Switch>
           ))}
         </fieldset>
         {error && <Notice tone="err" title={error} />}

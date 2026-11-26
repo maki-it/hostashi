@@ -14,7 +14,7 @@ import {
   type ObjectCache,
 } from "./objcache";
 import type { Site } from "./sites";
-import { Badge, Button, Card, Field, Notice } from "./ui";
+import { AppliesAtOnce, Badge, Button, Card, Field, Notice, Switch } from "./ui";
 
 type Props = {
   site: Site;
@@ -99,7 +99,7 @@ export function ObjectCacheSettings({ site, canSize }: Props) {
   const state = cacheState(c);
 
   return (
-    <Card title="Object cache">
+    <Card title="Object cache" actions={<AppliesAtOnce />}>
       <div className="ui-stack">
         <p className="ui-row">
           <Badge tone={state.tone}>{state.word}</Badge>
@@ -109,14 +109,14 @@ export function ObjectCacheSettings({ site, canSize }: Props) {
             </span>
           )}
         </p>
-        <label className="ui-check">
-          <input type="checkbox" checked={c.enabled} disabled={busy || (site.disabled && !c.enabled)} onChange={(e) => void toggle(e.target.checked)} />
+        <Switch
+          checked={c.enabled}
+          disabled={busy || (site.disabled && !c.enabled)}
+          onChange={(on) => void toggle(on)}
+          hint="Only this site's PHP, cron jobs and SSH logins reach it, over a socket. It keeps nothing on disk: a restart, a flush or a new size empties it. Its memory counts against the site's memory limit."
+        >
           Run an object cache (Valkey, compatible with Redis) for this site
-        </label>
-        <p className="ui-hint">
-          Only this site's PHP, cron jobs and SSH logins reach it, over a socket. It keeps nothing on disk: a restart, a flush or a new
-          size empties it. Its memory counts against the site's memory limit.
-        </p>
+        </Switch>
         {site.disabled && !c.enabled && <Notice tone="warn" title="Enable the site first to turn the cache on." />}
         {c.status?.paused && <Notice tone="warn" title="The site is disabled, so its cache is stopped. It starts again with the site." />}
         {canSize && (
