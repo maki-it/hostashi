@@ -20,4 +20,7 @@ exclude = [
   # cloudpanel.io answers the GitHub runners with 301 to a bot check page,
   # and 200 everywhere else
   '^https://www\.cloudpanel\.io/$',
+  # The README's release badge is an image GitHub renders through its own
+  # proxy; img.shields.io often times out for the runners
+  '^https://img\.shields\.io/',
 ]
