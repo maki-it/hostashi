@@ -2020,3 +2020,113 @@ html:has(.ui-files) {
   align-items: center;
   gap: 4px;
 }
+
+/* Status tiles of the site overview: each opens its tab. */
+.ui-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ui-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  padding: 14px 16px;
+  color: inherit;
+  text-decoration: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) + 3px);
+}
+.ui-tile:hover {
+  border-color: var(--line-strong);
+}
+.ui-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ui-tile[data-tone="err"] {
+  border-color: var(--err);
+  box-shadow: inset 3px 0 0 var(--err);
+}
+.ui-tile[data-tone="warn"] {
+  border-color: var(--warn);
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.ui-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 12px/1.2 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ui-tile-value {
+  font-family: var(--font-head);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: var(--head-ls);
+}
+.ui-tile-sub {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.ui-tile-bar {
+  height: 6px;
+  overflow: hidden;
+  background: var(--sunken);
+  border-radius: 3px;
+}
+.ui-tile-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.ui-tile[data-tone="err"] .ui-tile-bar > span {
+  background: var(--err);
+}
+.ui-tile[data-tone="warn"] .ui-tile-bar > span {
+  background: var(--warn);
+}
+
+/* A drop-down menu of actions, such as the site's Actions menu. */
+.ui-menu-wrap {
+  position: relative;
+}
+.ui-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 220px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: calc(var(--radius) + 3px);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--fg) 14%, transparent);
+}
+.ui-menu [role="menuitem"] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.ui-menu [role="menuitem"]:hover,
+.ui-menu [role="menuitem"]:focus-visible {
+  background: var(--sunken);
+  outline: none;
+}

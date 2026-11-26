@@ -7,6 +7,7 @@ import { canClone, CloneBadge, CloneCard, CloneStatusCard, useClone } from "./Cl
 import type { Clone } from "./clones";
 import { siteCertBase } from "./certs";
 import { CronSettings } from "./Cron";
+import { cardId, QuickActions, SiteActions, siteUrl, StatusTiles } from "./SiteStatus";
 import { cronFailing, listCron } from "./cron";
 import { getSiteScan } from "./scan";
 import { FileManager } from "./Files";
@@ -141,7 +142,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
 
   const panel = (
     <>
-      {active === "overview" && <Overview site={site} onChange={load} staff={staff} admin={role === "admin"} clone={clone ?? null} onCloneChange={reloadClone} />}
+      {active === "overview" && <Overview site={site} groups={groups} onChange={load} staff={staff} admin={role === "admin"} clone={clone ?? null} onCloneChange={reloadClone} />}
       {active === "domains" && <DomainsTab site={site} onChange={load} />}
       {active === "https" && <HTTPSTab site={site} onChange={load} />}
       {active === "headers" && <SecurityHeadersCard site={site} />}
@@ -186,7 +187,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
               </span>
             )}
             {site.domains[0] && (
-              <a className="ui-mono ui-ext" href={(site.tls.active ? "https://" : "http://") + site.domains[0]} target="_blank" rel="noopener noreferrer" title="Open the site in a new tab">
+              <a className="ui-mono ui-ext" href={siteUrl(site)} target="_blank" rel="noopener noreferrer" title="Open the site in a new tab">
                 {site.domains[0]}
                 <ArrowSquareOut size={14} aria-hidden="true" />
               </a>
@@ -198,6 +199,11 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
             {ready && <SiteAlerts site={site.name} groups={groups} tab={active} />}
           </p>
         </div>
+        {ready && (
+          <div className="ui-page-actions">
+            <SiteActions site={site} groups={groups} staff={staff} onTab={onTab} />
+          </div>
+        )}
       </div>
       {error && <Notice tone="err" title={error} />}
       {site.tls.enabled && !site.tls.active && site.tls.error && (
@@ -261,10 +267,16 @@ function useAction(onChange: () => Promise<void>) {
 
 type TabProps = { site: Site; onChange: () => Promise<void> };
 
-function Overview({ site, onChange, staff, admin, clone, onCloneChange }: TabProps & { staff: boolean; admin: boolean; clone: Clone | null; onCloneChange: () => void }) {
+function Overview({ site, groups, onChange, staff, admin, clone, onCloneChange }: TabProps & { groups: SiteGroup[]; staff: boolean; admin: boolean; clone: Clone | null; onCloneChange: () => void }) {
   const [primary, ...aliases] = site.domains;
   return (
     <>
+      {site.state === "active" && (
+        <>
+          <StatusTiles site={site} groups={groups} admin={admin} />
+          <QuickActions site={site} groups={groups} />
+        </>
+      )}
       <Card title="Details">
         <dl className="ui-facts" aria-label={"Details of " + site.name}>
           <dt>System name</dt>
@@ -406,7 +418,7 @@ function RenameCard({ site, onChange }: TabProps) {
   }
 
   return (
-    <Card title="Rename">
+    <Card title="Rename" id={cardId(site.name, "rename")}>
       <form className="ui-stack" onSubmit={(e) => save(e, next)} noValidate>
         <Field
           label="Display name"

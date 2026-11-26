@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { cardId } from "./SiteStatus";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { cloneMessage, cloneSite, cloneSuggestion, configuredProfiles, getClone, refreshClone, type Clone, type CloneStart } from "./clones";
 import { getSiteProfile } from "./profiles";
@@ -96,7 +97,7 @@ export function CloneCard({ site }: { site: Site }) {
   }
 
   return (
-    <Card title="Copy this site">
+    <Card title="Copy this site" id={cardId(site.name, "clone")}>
       <div className="ui-stack">
         <p className="ui-hint ui-flush">
           Creates a new site with a copy of the files, the databases on this server and the settings. A staging copy is for trying changes: its cron jobs
