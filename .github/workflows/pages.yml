@@ -8,6 +8,12 @@
 # main after publishing (the environment github-pages deploys from main
 # only); run it by hand to deploy the latest release again.
 #
+# Next to stable it publishes the suite "runtimes" (ADR-0077) from the
+# apt-runtimes artifact of the Runtimes workflow: of the run given as
+# runtimes_run (the Runtimes workflow passes its own), else of its latest
+# successful run on main. That suite is checked against the runtimes key.
+# Without any such run the page goes out with stable only.
+#
 # Upload and deploy are separate jobs: right after upload-pages-artifact
 # finishes, the artifact API sometimes does not list the artifact yet and
 # deploy-pages fails with "No artifacts named github-pages". The deploy job
@@ -18,6 +24,11 @@ name: Pages
 
 on:
   workflow_dispatch:
+    inputs:
+      runtimes_run:
+        description: run of the Runtimes workflow to take the runtimes suite from (default the latest successful one)
+        required: false
+        type: string
 
 permissions: {}
 
@@ -31,6 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
     outputs:
       artifact: ${{ steps.name.outputs.artifact }}
     steps:
@@ -59,6 +71,40 @@ jobs:
           gpgv --keyring "$GNUPGHOME/key.gpg" site/apt/dists/stable/Release.gpg site/apt/dists/stable/Release
           cmp -s site/apt/hostashi.asc packaging/keyring/hostashi-archive-keyring.asc ||
             echo "::warning::hostashi.asc in the release differs from packaging/keyring (key renewed since?)"
+      - name: The runtimes suite
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ inputs.runtimes_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RUN" ]; then
+            RUN=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow runtimes.yml --branch main --status success \
+              --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          fi
+          [[ -z "$RUN" || "$RUN" =~ ^[0-9]+$ ]] || { echo "::error::runtimes_run is not a run id"; exit 1; }
+          if [ -z "$RUN" ]; then
+            echo "::warning::no successful Runtimes run yet: publishing stable only"
+            exit 0
+          fi
+          gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name apt-runtimes --dir "$RUNNER_TEMP/rt"
+          mkdir "$RUNNER_TEMP/rt/x"
+          tar -xzf "$RUNNER_TEMP/rt/apt-runtimes.tar.gz" -C "$RUNNER_TEMP/rt/x" --no-same-owner --no-same-permissions
+          x=$RUNNER_TEMP/rt/x/apt
+          if [ -n "$(find "$x" -type l -print -quit)" ]; then echo "::error::links in apt-runtimes"; exit 1; fi
+          # Only the runtimes suite and its pool, nothing that could shadow stable.
+          extra=$(cd "$x" && find . -mindepth 1 -maxdepth 4 ! -path ./dists ! -path ./dists/runtimes ! -path './dists/runtimes/*' \
+            ! -path ./pool ! -path ./pool/main ! -path ./pool/main/h ! -path ./pool/main/h/hostashi-runtimes ! -path ./hostashi-runtimes.asc)
+          [ -z "$extra" ] || { echo "::error::unexpected files in apt-runtimes: $extra"; exit 1; }
+          GNUPGHOME=$(mktemp -d)
+          export GNUPGHOME
+          gpg --batch --quiet --dearmor -o "$GNUPGHOME/key.gpg" packaging/keyring/hostashi-runtimes-keyring.asc
+          gpgv --keyring "$GNUPGHOME/key.gpg" "$x/dists/runtimes/InRelease"
+          gpgv --keyring "$GNUPGHOME/key.gpg" "$x/dists/runtimes/Release.gpg" "$x/dists/runtimes/Release"
+          mkdir -p site/apt/dists site/apt/pool/main/h
+          cp -r "$x/dists/runtimes" site/apt/dists/
+          cp -r "$x/pool/main/h/hostashi-runtimes" site/apt/pool/main/h/
+          cp "$x/hostashi-runtimes.asc" site/apt/
+          echo "runtimes suite from run $RUN" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Start page
         run: |
           cat >site/index.html <<'HTML'
@@ -73,7 +119,9 @@ jobs:
           less install.sh
           sudo bash install.sh --yes --panel-domain panel.example.com</pre>
           <p>apt repository: <code>https://get.hostashi.com/apt</code>, suite <code>stable</code>,
-          signing key <a href="apt/hostashi.asc">apt/hostashi.asc</a>.
+          signing key <a href="apt/hostashi.asc">apt/hostashi.asc</a>;
+          suite <code>runtimes</code> (Node.js and CPython pins only),
+          signing key <a href="apt/hostashi-runtimes.asc">apt/hostashi-runtimes.asc</a>.
           Source: <a href="https://github.com/maki-it/hostashi">github.com/maki-it/hostashi</a>.</p>
           </html>
           HTML

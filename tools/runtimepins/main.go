@@ -5,7 +5,11 @@
 // builds the package hostashi-runtimes runs it on main; the binary reads the
 // file with internal/runtimepins.
 //
-//	go run ./tools/runtimepins -out runtimes.json
+// -time sets the "generated" field (RFC 3339), so the same pins give the
+// same file; the workflow passes the time of the last commit that changed
+// them.
+//
+//	go run ./tools/runtimepins [-out runtimes.json] [-time 2026-11-27T05:00:00Z]
 package main
 
 import (
@@ -22,10 +26,22 @@ import (
 
 func main() {
 	out := flag.String("out", "", "write the file here (default: standard output)")
+	at := flag.String("time", "", `the "generated" time, RFC 3339 (default: now)`)
 
 	flag.Parse()
 
-	data, err := Encode(agentapi.NodeReleases, agentapi.PythonReleases, time.Now().UTC())
+	now := time.Now().UTC()
+
+	var err error
+	if *at != "" {
+		now, err = time.Parse(time.RFC3339, *at)
+	}
+
+	var data []byte
+	if err == nil {
+		data, err = Encode(agentapi.NodeReleases, agentapi.PythonReleases, now.UTC())
+	}
+
 	if err == nil {
 		if *out == "" {
 			_, err = os.Stdout.Write(data)

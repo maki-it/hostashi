@@ -89,4 +89,48 @@ rm "$work/unsigned/dists/stable/InRelease" "$work/unsigned/dists/stable/Release.
 use "$work/unsigned" "$repo/hostashi.asc"
 if update >/dev/null; then fail "apt accepted an unsigned repository"; fi
 
+# The runtimes suite (ADR-0077), when the job built hostashi-runtimes into
+# DIST/runtimes: its own key, next to stable, installs the data file.
+rdeb=""
+for f in "$DIST"/runtimes/hostashi-runtimes_*_all.deb; do [ -f "$f" ] && rdeb=$f; done
+if [ -n "$rdeb" ]; then
+  mkdir "$work/rdebs"
+  cp "$rdeb" "$work/rdebs/"
+  if SUITE=runtimes PACKAGE=hostashi-runtimes GNUPGHOME=$work/other /src/packaging/apt-repo/build.sh "$work/debs" "$work/wrong" 2>/dev/null; then
+    fail "the runtimes suite took the hostashi package"
+  fi
+  SUITE=runtimes PACKAGE=hostashi-runtimes GNUPGHOME=$work/other /src/packaging/apt-repo/build.sh "$work/rdebs" "$work/rrepo"
+  rrepo=$work/rrepo
+  for f in dists/runtimes/InRelease dists/runtimes/main/binary-amd64/Packages.xz hostashi-runtimes.asc; do
+    [ -s "$rrepo/$f" ] || fail "runtimes: $f missing"
+  done
+  grep -qx 'Codename: runtimes' "$rrepo/dists/runtimes/Release" || fail "runtimes codename"
+  grep -qx 'Origin: Hostashi' "$rrepo/dists/runtimes/Release" || fail "runtimes origin"
+
+  rkeyring=/usr/share/keyrings/hostashi-runtimes-keyring.asc
+  rsrc=/etc/apt/sources.list.d/hostashi-runtimes.sources
+  cat >"$rsrc" <<SRC
+Types: deb
+URIs: file:$rrepo
+Suites: runtimes
+Components: main
+Signed-By: $rkeyring
+SRC
+  use "$repo" "$repo/hostashi.asc"
+  cp "$rrepo/hostashi-runtimes.asc" "$rkeyring"
+  out=$(update) || fail "apt-get update with both suites: $out"
+  grep -qiE '^(W|E):' <<<"$out" && fail "apt-get update warned: $out"
+  rwant=$(dpkg-deb -f "$rdeb" Version)
+  rcand=$(apt-cache policy hostashi-runtimes | awk '/Candidate:/ { print $2 }')
+  [ "$rcand" = "$rwant" ] || fail "apt offers hostashi-runtimes '$rcand', want $rwant"
+  apt-get install -y -qq hostashi-runtimes >/dev/null || fail "install hostashi-runtimes"
+  [ "$(stat -c '%U:%G %a' /usr/share/hostashi/runtimes.json)" = "root:root 644" ] || fail "runtimes.json owner or mode"
+  grep -q '"schema": 1' /usr/share/hostashi/runtimes.json || fail "runtimes.json content"
+
+  # The stable key does not open the runtimes suite, and the other way round.
+  cp "$repo/hostashi.asc" "$rkeyring"
+  if update >/dev/null; then fail "the runtimes suite was accepted with the stable key"; fi
+  rm -f "$rsrc" "$rkeyring"
+fi
+
 echo "OK: apt repository with hostashi $want on $(. /etc/os-release && echo "$PRETTY_NAME") ($arch)"
