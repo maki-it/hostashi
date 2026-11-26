@@ -15,6 +15,7 @@ import {
   type FirewallState,
 } from "./firewall";
 import { Button, Card, Field, IconButton, Notice, PageHead, RelTime, UnsavedNote } from "./ui";
+import { BlockedAddressesCard } from "./BlockedAddresses";
 import { TokenAllowlistCard } from "./TokenAllowlist";
 
 type RuleDraft = { proto: "tcp" | "udp"; ports: string; sources: string; note: string };
@@ -107,6 +108,7 @@ export function Firewall() {
           Use the firewall in front of the server (for example at your provider), and let only SSH, 80, 443 and the panel port through.
           Run the installer again without --no-firewall to manage the rules here.
         </Notice>
+        <BlockedAddressesCard />
         <TokenAllowlistCard clientIp={fw.clientIp} />
       </>
     );
@@ -117,6 +119,7 @@ export function Firewall() {
       {head}
       {error && <Notice tone="err" title={error} />}
       <Editor key={JSON.stringify(fw.state) + (fw.pending?.deadline ?? "")} fw={fw} reload={load} flash={flash} setFlash={setFlash} />
+      <BlockedAddressesCard />
       <TokenAllowlistCard clientIp={fw.clientIp} />
     </>
   );

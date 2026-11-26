@@ -35,7 +35,13 @@ Without a confirmation the rules roll back after the time shown on the page. The
 
 ## Blocked after failed logins
 
-Independent of these rules, fail2ban blocks addresses for a while after repeated failed SSH or panel logins, and after repeated wrong passwords on a site with [access protection](Access-protection.md).
+Independent of these rules, fail2ban blocks addresses for a while after repeated failed SSH or panel logins, and after repeated wrong passwords on a site with [access protection](Access-protection.md). An address that is blocked again and again is blocked from everything, SSH included, for a week.
+
+The card **Blocked addresses** on the same page shows each blocked address, why it was blocked, since when and until when, and how many failed logins each kind of protection has counted. When a customer or you were locked out by mistake, choose **Unblock** next to the address and confirm. The address is unblocked everywhere at once; new failed logins block it again. Every unblock is in the audit log.
+
+![Blocked addresses on the Firewall page](images/firewall-bans.png)
+
+On the command line, `hostashi firewall bans` lists the blocked addresses and `hostashi firewall unban ADDRESS` unblocks one. If fail2ban does not run, the card says so and **Health** shows a warning.
 
 ## Without the Hostashi firewall
 

@@ -20,8 +20,11 @@ const status = (state: Partial<FirewallState> = {}, extra: Partial<FirewallStatu
   ...extra,
 });
 
-// The API token card on the page loads its own list.
-const allow = { "GET /api/v1/settings/api-ip-allowlist": { body: { entries: [] } } };
+// The API token card and the blocked addresses card load their own data.
+const allow = {
+  "GET /api/v1/settings/api-ip-allowlist": { body: { entries: [] } },
+  "GET /api/v1/firewall/bans": { body: { jails: [] } },
+};
 
 describe("Firewall", () => {
   it("explains a server installed without the firewall", async () => {
