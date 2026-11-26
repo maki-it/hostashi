@@ -144,7 +144,7 @@ export function memoryWarning(form: Pick<PHPForm, "memoryLimit">, v: Pick<PHPSet
 }
 
 export const presetLabels: Record<string, string> = {
-  production: "Production (all but deprecations)",
-  development: "Development (everything)",
+  production: "Production",
+  development: "Development",
   errors: "Errors only",
 };

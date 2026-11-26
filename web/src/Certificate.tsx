@@ -20,7 +20,7 @@ import {
   type CertUpload,
 } from "./certs";
 import { siteMessage } from "./sites";
-import { Badge, Button, Card, Field, IconButton, Notice } from "./ui";
+import { Badge, Button, Card, CopyValue, Field, IconButton, Notice } from "./ui";
 
 type Props = {
   /** The API path of the certificate routes, from certs.ts. */
@@ -231,7 +231,9 @@ function CertFacts({ own, cert }: { own: boolean; cert: NonNullable<CertInfo["ce
         {left !== null && own && <span className="ui-hint"> Not renewed automatically.</span>}
       </dd>
       <dt>SHA-256</dt>
-      <dd className="ui-mono ui-break">{fingerprintText(cert.fingerprint)}</dd>
+      <dd className="ui-mono ui-break">
+        <CopyValue value={fingerprintText(cert.fingerprint)} label="Copy the SHA-256 fingerprint" />
+      </dd>
     </dl>
   );
 }

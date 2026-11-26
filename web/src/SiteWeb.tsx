@@ -221,7 +221,11 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
       <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate>
         <Field
           label="Folder"
-          hint="The folder the site serves, below htdocs. Leave it empty for htdocs itself, or enter for example dist, public or build. A folder that does not exist yet answers 404 until it is there."
+          hint={
+            "The folder the site serves, below htdocs. Leave it empty for htdocs itself, or enter for example dist, public or build." +
+            (isStatic ? "" : " Laravel and similar frameworks serve public.") +
+            " A folder that does not exist yet answers 404 until it is there."
+          }
         >
           <div className="ui-input-prefix">
             <span className="ui-mono" aria-hidden="true">
@@ -238,7 +242,6 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
             />
           </div>
         </Field>
-        {!isStatic && <p className="ui-hint ui-flush">For Laravel and similar frameworks, enter public.</p>}
         <fieldset className="ui-fieldset ui-stack-tight">
           <legend>Options</legend>
           {isStatic && (

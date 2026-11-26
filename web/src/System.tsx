@@ -3,6 +3,7 @@
 import { PencilSimple, Power } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 import { PanelCertificate } from "./Certificate";
+import { LogRetentionCard } from "./Logs";
 import { MalwareEngineCard } from "./Malware";
 import { PanelRealIPCard } from "./RealIP";
 import { formatHash } from "./routes";
@@ -98,6 +99,7 @@ export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) 
           />
           <PanelCertificate />
           <PanelRealIPCard />
+          <LogRetentionCard />
           <MalwareEngineCard />
           <RebootCard info={info} busy={reboot.phase === "going-down" || reboot.phase === "starting"} onReboot={(c) => void startReboot(c)} />
         </>

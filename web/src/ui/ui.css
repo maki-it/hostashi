@@ -183,11 +183,20 @@
   white-space: nowrap;
   border-radius: 999px;
 }
+/* A long badge in a list of details may wrap on a phone. */
+dd > .ui-badge {
+  height: auto;
+  min-height: 24px;
+  padding-block: 2px;
+  line-height: 1.35;
+  white-space: normal;
+}
 .ui-badge::before {
   content: "";
   width: 7px;
   height: 7px;
   background: currentColor;
+  flex: none;
   border-radius: 50%;
 }
 .ui-tone-ok {
@@ -1975,4 +1984,39 @@ html:has(.ui-files) {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
+}
+
+/* A value with a copy button (B7) */
+.ui-copy {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+}
+.ui-copy > code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ui-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Four charts of a site: two by two, not three and one */
+.ui-charts-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 760px) {
+  .ui-charts-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A link that opens another site: the icon follows the text, not underlined. */
+.ui-ext {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }

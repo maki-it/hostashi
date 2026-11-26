@@ -293,7 +293,8 @@ a.app-user-name[aria-current="page"] {
     display: block;
   }
   .app-side[data-open="false"] .app-nav,
-  .app-side[data-open="false"] .app-user {
+  .app-side[data-open="false"] .app-user,
+  .app-side[data-open="false"] .app-version {
     display: none;
   }
   /* An open menu fits the screen: the nav scrolls, the account stays. */

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { Plus } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   commandProblem,
@@ -12,6 +13,7 @@ import {
   formatTime,
   inputOf,
   lastRun,
+  lastRunTone,
   listCron,
   maxCronJobs,
   maxTimeoutMin,
@@ -63,7 +65,23 @@ export function CronSettings({ site }: { site: Site }) {
   };
 
   return (
-    <Card title="Cron jobs">
+    <Card
+      title="Cron jobs"
+      actions={
+        list && !adding && list.jobs.length < maxCronJobs ? (
+          <Button
+            variant="primary"
+            icon={<Plus size={16} aria-hidden="true" />}
+            onClick={() => {
+              setDone("");
+              setAdding(true);
+            }}
+          >
+            Add cron job
+          </Button>
+        ) : undefined
+      }
+    >
       <div className="ui-stack">
         <p className="ui-flush">
           Each job runs one command line as the user {site.name} in its home directory, with lower priority than the site. A “%” is passed to
@@ -79,6 +97,18 @@ export function CronSettings({ site }: { site: Site }) {
         ) : (
           <>
             {loadError && <Notice tone="err" title={loadError} />}
+            {adding && (
+              <JobForm
+                title="New cron job"
+                submitLabel="Add cron job"
+                onCancel={() => setAdding(false)}
+                onSubmit={async (input) => {
+                  await createCron(site.name, input);
+                  setAdding(false);
+                  await changed(input.paused ? "Cron job added, paused." : "Cron job added.");
+                }}
+              />
+            )}
             {list.jobs.length === 0 ? (
               <p className="ui-hint ui-flush">No cron jobs yet.</p>
             ) : (
@@ -92,31 +122,7 @@ export function CronSettings({ site }: { site: Site }) {
               </>
             )}
             {done && <Notice tone="ok" title={done} />}
-            {list.jobs.length >= maxCronJobs ? (
-              <p className="ui-hint ui-flush">A site has at most {maxCronJobs} cron jobs.</p>
-            ) : adding ? (
-              <JobForm
-                title="New cron job"
-                submitLabel="Add cron job"
-                onCancel={() => setAdding(false)}
-                onSubmit={async (input) => {
-                  await createCron(site.name, input);
-                  setAdding(false);
-                  await changed(input.paused ? "Cron job added, paused." : "Cron job added.");
-                }}
-              />
-            ) : (
-              <div className="ui-row">
-                <Button
-                  onClick={() => {
-                    setDone("");
-                    setAdding(true);
-                  }}
-                >
-                  Add cron job
-                </Button>
-              </div>
-            )}
+            {list.jobs.length >= maxCronJobs && <p className="ui-hint ui-flush">A site has at most {maxCronJobs} cron jobs.</p>}
           </>
         )}
       </div>
@@ -174,7 +180,9 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
       <pre className="ui-code">{job.command}</pre>
       <dl className="ui-facts" aria-label={"Details of cron job " + String(job.id)}>
         <dt>Last run</dt>
-        <dd>{st ? lastRun(st) : "Unknown"}</dd>
+        <dd>
+          {st && st.result && st.lastStart && !st.running ? <Badge tone={lastRunTone(st)}>{lastRun(st)}</Badge> : st ? lastRun(st) : "Unknown"}
+        </dd>
         <dt>Next run</dt>
         <dd>{job.paused ? "Paused" : site.disabled ? "Site disabled" : st?.next ? formatTime(st.next) : st ? "Not planned" : "Unknown"}</dd>
         <dt>Limits</dt>

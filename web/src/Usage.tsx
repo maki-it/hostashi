@@ -81,7 +81,7 @@ export function SiteUsageCard({ site }: { site: string }) {
         <p aria-busy="true">Loading…</p>
       ) : (
         <div className="ui-stack">
-          <div className="ui-charts">
+          <div className="ui-charts ui-charts-2">
             <section className="ui-stack-tight" aria-label="CPU">
               <h3 className="ui-chart-title">
                 CPU
