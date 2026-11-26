@@ -131,6 +131,9 @@ type Deps struct {
 	// Firewall is the panel's part of the firewall (ADR-0034); nil
 	// disables its routes. Needs Auth and Settings.
 	Firewall Firewall
+	// Fail2ban shows and lifts fail2ban's bans (ADR-0078); nil disables
+	// its routes. Needs Auth and Settings.
+	Fail2ban Fail2ban
 	// Pools lists the storage pools (ADR-0016); nil disables its route.
 	// Needs Auth.
 	Pools Pools
@@ -319,6 +322,10 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		if deps.Firewall != nil && deps.Settings != nil {
 			registerFirewall(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Firewall, deps.Settings, log)
+		}
+
+		if deps.Fail2ban != nil && deps.Settings != nil {
+			registerFail2ban(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Fail2ban, deps.Settings, log)
 		}
 
 		if deps.PHP != nil && deps.Settings != nil {
@@ -570,6 +577,7 @@ func Run(ctx context.Context, cfg Config) error {
 		PoolAdmin:   RPCPoolAdmin{C: client},
 		PoolSites:   st,
 		Firewall:    RPCFirewall{C: client},
+		Fail2ban:    RPCFail2ban{C: client},
 		PHP:         RPCPHPInstaller{C: client},
 		PGClient:    RPCPGClient{C: client},
 		Node:        RPCNodeInstaller{C: client},

@@ -37,6 +37,7 @@ const titles: Record<string, string> = {
   "service.nginx": "Web server",
   "service.mariadb": "MariaDB",
   "service.fail2ban": "Brute-force protection",
+  "service.fail2ban.jails": "Brute-force protection jails",
   "system.firewall": "Firewall",
   "system.firewall.panel": "Firewall rules from the panel",
   "system.updates": "Security updates",

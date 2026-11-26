@@ -41,6 +41,7 @@ type apiEnv struct {
 	doctor    *stubDoctor
 	pools     *stubPools
 	firewall  *stubFirewall
+	fail2ban  *stubFail2ban
 	php       *stubPHP
 	pgclient  *stubPGClient
 	node      *stubNode
@@ -103,6 +104,8 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	deps.PoolSites = st
 	fw := &stubFirewall{enabled: true}
 	deps.Firewall = fw
+	f2b := &stubFail2ban{}
+	deps.Fail2ban = f2b
 	php := &stubPHP{}
 	deps.PHP = php
 	pgc := &stubPGClient{}
@@ -153,7 +156,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 
 	return &apiEnv{
 		h: Handler(Config{PublicURL: testPublicURL}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st, cp: deps.CloudPanel,
-		imports: imports, doctor: doc, pools: pl, firewall: fw, php: php, pgclient: pgc, node: nd, python: py, mail: deps.Mail, mailSent: sent, outbox: outbox, files: fm,
+		imports: imports, doctor: doc, pools: pl, firewall: fw, fail2ban: f2b, php: php, pgclient: pgc, node: nd, python: py, mail: deps.Mail, mailSent: sent, outbox: outbox, files: fm,
 		monitor: mon, srvAgent: sa, logs: lg, system: sys,
 	}
 }

@@ -80,6 +80,10 @@ var completionTree = &compNode{sub: cmds(
 		sub:  cmds(&compNode{name: "list", help: "show the managed services", flags: []string{"-json"}}),
 		args: []string{"start", "stop", "restart", "reload"}, argsFrom: 1,
 	},
+	&compNode{name: "firewall", help: "addresses fail2ban blocks", sub: cmds(
+		&compNode{name: "bans", help: "show the blocked addresses", flags: []string{"-json"}},
+		leaf("unban", "unblock an address in every jail"),
+	)},
 	&compNode{name: "system", help: "time zone, hostname and reboot", sub: cmds(
 		leaf("info", "show time zone, hostname and uptime"),
 		leaf("timezones", "list the time zones"),
