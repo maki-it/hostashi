@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/mariadb"
 	"github.com/maki-it/hostashi/internal/resticctl"
 	"github.com/maki-it/hostashi/internal/sites"
@@ -97,6 +98,41 @@ func ReadSnapshots(dir string, ownerUID uint32) ([]SnapshotEntry, error) {
 	}
 
 	return s, nil
+}
+
+// ReadMarks reads the sites marked for removal. A missing directory or
+// file is an empty list.
+func ReadMarks(dir string, ownerUID uint32) ([]agentapi.BackupForgetMark, error) {
+	if _, err := os.Lstat(dir); errors.Is(err, os.ErrNotExist) {
+		return []agentapi.BackupForgetMark{}, nil
+	}
+
+	raw, err := statefile.Read(dir, ForgetFile, ownerUID, maxFileSize)
+
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return []agentapi.BackupForgetMark{}, nil
+	case err != nil:
+		return nil, err
+	}
+
+	var m []agentapi.BackupForgetMark
+	if err := decodeStrict(raw, &m); err != nil {
+		return nil, fmt.Errorf("backup: forget file: %w", err)
+	}
+
+	for _, x := range m {
+		if err := agentapi.ValidateSiteUser(x.Site); err != nil {
+			return nil, fmt.Errorf("backup: forget file: %w", err)
+		}
+	}
+
+	return m, nil
+}
+
+// WriteMarks writes the sites marked for removal atomically.
+func WriteMarks(dir string, m []agentapi.BackupForgetMark) error {
+	return writeJSON(dir, ForgetFile, m)
 }
 
 // WriteSnapshots writes the snapshot list atomically.

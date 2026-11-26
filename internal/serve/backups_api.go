@@ -32,7 +32,10 @@ type Backups interface {
 	Snapshots(ctx context.Context, site string) ([]agentapi.BackupSnapshot, error)
 	// SnapshotSites lists the site names with snapshots, also of deleted
 	// sites (ADR-0074).
-	SnapshotSites(ctx context.Context) ([]agentapi.BackupSiteSummary, error)
+	SnapshotSites(ctx context.Context) (agentapi.BackupSitesResponse, error)
+	// Forget marks or unmarks the snapshots of a deleted site for removal
+	// by the next run.
+	Forget(ctx context.Context, req agentapi.BackupForgetRequest) ([]agentapi.BackupForgetMark, error)
 	// ScanHostKey connects to the target and returns its host key, for
 	// the administrator to confirm.
 	ScanHostKey(ctx context.Context, t agentapi.BackupTarget) (ssh.PublicKey, error)
@@ -105,10 +108,15 @@ func (b RPCBackups) Snapshots(ctx context.Context, site string) ([]agentapi.Back
 }
 
 // SnapshotSites implements Backups.
-func (b RPCBackups) SnapshotSites(ctx context.Context) ([]agentapi.BackupSiteSummary, error) {
-	r, err := agentapi.BackupSites.Call(ctx, b.C, agentapi.BackupSitesRequest{})
+func (b RPCBackups) SnapshotSites(ctx context.Context) (agentapi.BackupSitesResponse, error) {
+	return agentapi.BackupSites.Call(ctx, b.C, agentapi.BackupSitesRequest{})
+}
 
-	return r.Sites, err
+// Forget implements Backups.
+func (b RPCBackups) Forget(ctx context.Context, req agentapi.BackupForgetRequest) ([]agentapi.BackupForgetMark, error) {
+	r, err := agentapi.BackupForget.Call(ctx, b.C, req)
+
+	return r.Marks, err
 }
 
 // Restore implements Backups.
@@ -165,6 +173,19 @@ type deletedSiteJSON struct {
 	Snapshots int       `json:"snapshots"`
 	Oldest    time.Time `json:"oldest"`
 	Newest    time.Time `json:"newest"`
+	// MarkedAt: the snapshots are marked for removal by the next run
+	// since then; null when not.
+	MarkedAt *time.Time `json:"markedAt"`
+}
+
+// deleteBackupsRequest confirms deleting the backups of a deleted site
+// with its name.
+type deleteBackupsRequest struct {
+	Confirm string `json:"confirm"`
+}
+
+type forgetMarksJSON struct {
+	Marks []agentapi.BackupForgetMark `json:"marks"`
 }
 
 type deletedSiteListJSON struct {
@@ -523,7 +544,7 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 	mux.Op("GET /api/v1/backups/deleted", openapi.Operation{
 		ID: "listDeletedSiteBackups", Tag: "backups", Summary: "List deleted sites that still have snapshots", Out: deletedSiteListJSON{},
 	}, a.allow("backups.server:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
-		all, err := b.SnapshotSites(r.Context())
+		resp, err := b.SnapshotSites(r.Context())
 		if err != nil {
 			backupFail(log, w, err, "list snapshot sites")
 
@@ -532,7 +553,19 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 
 		out := deletedSiteListJSON{Sites: []deletedSiteJSON{}}
 
-		for _, sum := range all {
+		marked := func(site string) *time.Time {
+			for _, m := range resp.Marks {
+				if m.Site == site {
+					t := m.Requested
+
+					return &t
+				}
+			}
+
+			return nil
+		}
+
+		for _, sum := range resp.Sites {
 			created, exists, err := since(r.Context(), sum.Site)
 			if err != nil {
 				backupFail(log, w, err, "list sites")
@@ -542,7 +575,7 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 
 			switch {
 			case !exists:
-				out.Sites = append(out.Sites, deletedSiteJSON{Name: sum.Site, Snapshots: sum.Snapshots, Oldest: sum.Oldest, Newest: sum.Newest})
+				out.Sites = append(out.Sites, deletedSiteJSON{Name: sum.Site, Snapshots: sum.Snapshots, Oldest: sum.Oldest, Newest: sum.Newest, MarkedAt: marked(sum.Site)})
 			case sum.Oldest.Before(created):
 				_, old, _, err := siteSnapshots(r.Context(), sum.Site)
 				if err != nil {
@@ -552,7 +585,7 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 				}
 
 				if len(old) > 0 {
-					d := deletedSiteJSON{Name: sum.Site, Earlier: true, Snapshots: len(old), Oldest: old[0].Time, Newest: old[0].Time}
+					d := deletedSiteJSON{Name: sum.Site, Earlier: true, Snapshots: len(old), Oldest: old[0].Time, Newest: old[0].Time, MarkedAt: marked(sum.Site)}
 					for _, sn := range old {
 						d.Oldest, d.Newest = minTime(d.Oldest, sn.Time), maxTime(d.Newest, sn.Time)
 					}
@@ -589,6 +622,94 @@ func registerBackups(mux *routeMux, a authn, b Backups, dbs SiteDatabases, jobs 
 		}
 
 		writeJSON(w, http.StatusOK, backupSnapshotListJSON{Snapshots: old})
+	}))
+
+	// Deleting the backups of a deleted site marks them for the next run,
+	// which removes them (ADR-0074, decided by Kim 2026-11-26); until then
+	// the mark can be taken back. For an earlier site of a reused name only
+	// the snapshots from before the current site was created are marked.
+	forget := func(w http.ResponseWriter, r *http.Request, p auth.Principal, cancel bool) {
+		name := r.PathValue("name")
+		if agentapi.ValidateSiteUser(name) != nil {
+			writeError(w, http.StatusNotFound, "not_found", "no such deleted site")
+
+			return
+		}
+
+		if !cancel {
+			var in deleteBackupsRequest
+			if !decodeJSON(w, r, &in) {
+				return
+			}
+
+			if in.Confirm != name {
+				writeError(w, http.StatusUnprocessableEntity, "confirm_mismatch", "type the site's name to confirm")
+
+				return
+			}
+		}
+
+		created, exists, err := since(r.Context(), name)
+		if err != nil {
+			backupFail(log, w, err, "list sites")
+
+			return
+		}
+
+		req := agentapi.BackupForgetRequest{Site: name, Cancel: cancel}
+		if exists {
+			if sites == nil {
+				writeError(w, http.StatusConflict, "source_exists", "this site exists; its backups are not deleted here")
+
+				return
+			}
+
+			req.Before = created
+		}
+
+		marks, err := b.Forget(r.Context(), req)
+
+		var ae *agentrpc.Error
+
+		switch {
+		case err == nil:
+		case errors.Is(err, backup.ErrSourceExists), errors.As(err, &ae) && ae.Code == agentrpc.CodeConflict:
+			writeError(w, http.StatusConflict, "source_exists", "this site exists; its backups are not deleted here")
+
+			return
+		default:
+			backupFail(log, w, err, "mark backups for removal")
+
+			return
+		}
+
+		action := "backup.delete"
+		if cancel {
+			action = "backup.delete.cancel"
+		}
+
+		if aud != nil {
+			uid := p.User.ID
+			if err := aud.Audit(r.Context(), &uid, action, name, nil); err != nil {
+				log.ErrorContext(r.Context(), "audit log", "action", action, "err", err)
+			}
+		}
+
+		log.InfoContext(r.Context(), "backups of a deleted site marked", "site", name, "cancel", cancel)
+		writeJSON(w, http.StatusOK, forgetMarksJSON{Marks: marks})
+	}
+
+	mux.Op("PUT /api/v1/backups/deleted/{name}/removal", openapi.Operation{
+		ID: "deleteDeletedSiteBackups", Tag: "backups", Summary: "Delete the backups of a deleted site with the next backup run",
+		In: deleteBackupsRequest{}, Out: forgetMarksJSON{},
+	}, a.allow("backups.server:delete", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		forget(w, r, p, false)
+	}))
+
+	mux.Op("DELETE /api/v1/backups/deleted/{name}/removal", openapi.Operation{
+		ID: "keepDeletedSiteBackups", Tag: "backups", Summary: "Keep the backups of a deleted site that were marked for deletion", Out: forgetMarksJSON{},
+	}, a.allow("backups.server:delete", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		forget(w, r, p, true)
 	}))
 
 	// A deleted site has no home, so its snapshot goes into a site the

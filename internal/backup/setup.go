@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -259,7 +260,7 @@ func (a *Agent) Status() (agentapi.BackupStatus, error) {
 	return agentapi.BackupStatus{
 		Running: Running(a.statusDir()), Started: st.Started, Finished: st.Finished, OK: st.OK, Error: st.Error,
 		Items: items, LastPrune: st.LastPrune, LastCheck: st.LastCheck, LastReadCheck: st.LastReadCheck,
-		MaintenanceOK: st.MaintenanceOK, Maintenance: st.Maintenance,
+		MaintenanceOK: st.MaintenanceOK, Maintenance: st.Maintenance, Removed: st.Removed, RemoveError: st.RemoveError,
 	}, nil
 }
 
@@ -277,6 +278,129 @@ func (a *Agent) Snapshots(site string) ([]agentapi.BackupSnapshot, error) {
 		if s.Site == site {
 			out = append(out, agentapi.BackupSnapshot{ID: s.ID, Time: s.Time, Kind: s.Kind, Database: s.Database, Bytes: s.Bytes, Files: s.Files})
 		}
+	}
+
+	return out, nil
+}
+
+// Marks returns the sites whose snapshots the next run removes. A mark
+// that a run finished after has done its work once no snapshot of the
+// last list is left for it; it is dropped then.
+func (a *Agent) Marks() ([]agentapi.BackupForgetMark, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	return a.marks()
+}
+
+func (a *Agent) marks() ([]agentapi.BackupForgetMark, error) {
+	all, err := ReadMarks(a.configDir(), owner())
+	if err != nil || len(all) == 0 {
+		return all, err
+	}
+
+	st, err := ReadStatus(a.statusDir(), owner())
+	if err != nil {
+		return nil, err
+	}
+
+	snaps, err := ReadSnapshots(a.statusDir(), owner())
+	if err != nil {
+		return nil, err
+	}
+
+	keep := []agentapi.BackupForgetMark{}
+
+	for _, m := range all {
+		done := st.Finished.After(m.Requested)
+
+		for _, s := range snaps {
+			if m.Covers(s.Site, s.Time) {
+				done = false
+			}
+		}
+
+		if !done {
+			keep = append(keep, m)
+		}
+	}
+
+	if len(keep) != len(all) {
+		if err := WriteMarks(a.configDir(), keep); err != nil {
+			return nil, err
+		}
+	}
+
+	return keep, nil
+}
+
+// Forget marks the snapshots of a deleted site for removal by the next
+// run, or drops the mark (ADR-0074). Without Before the site must no
+// longer exist; with it, only snapshots taken before it are marked, those
+// of an earlier site whose name a newer site took. Something must be
+// marked: a site without such snapshots is ErrSnapshotNotFound.
+func (a *Agent) Forget(req agentapi.BackupForgetRequest) ([]agentapi.BackupForgetMark, error) {
+	if err := req.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	marks, err := a.marks()
+	if err != nil {
+		return nil, err
+	}
+
+	out := []agentapi.BackupForgetMark{}
+
+	for _, m := range marks {
+		if m.Site != req.Site {
+			out = append(out, m)
+		}
+	}
+
+	if !req.Cancel {
+		if req.Before.IsZero() {
+			live, err := Sites(a.stateDir(), owner())
+			if err != nil {
+				return nil, err
+			}
+
+			for _, s := range live {
+				if s.Name == req.Site {
+					return nil, ErrSourceExists
+				}
+			}
+		}
+
+		snaps, err := ReadSnapshots(a.statusDir(), owner())
+		if err != nil {
+			return nil, err
+		}
+
+		m := agentapi.BackupForgetMark{Site: req.Site, Before: req.Before.UTC(), Requested: time.Now().UTC()}
+		found := false
+
+		for _, s := range snaps {
+			if m.Covers(s.Site, s.Time) {
+				found = true
+			}
+		}
+
+		if !found {
+			return nil, ErrSnapshotNotFound
+		}
+
+		out = append(out, m)
+	}
+
+	if err := ensureDir(a.configDir()); err != nil {
+		return nil, err
+	}
+
+	if err := WriteMarks(a.configDir(), out); err != nil {
+		return nil, err
 	}
 
 	return out, nil

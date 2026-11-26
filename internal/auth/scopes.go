@@ -58,6 +58,7 @@ var scopeCatalog = map[string]ScopeInfo{
 	"migrations:read":         {Description: "List uploaded CloudPanel scan reports and read their migration plans"},
 	"migrations:write":        {Description: "Upload and delete CloudPanel scan reports"},
 	"backups:restore":         {Description: "Restore a site's backups into its home", HighRisk: true},
+	"backups:delete":          {Description: "Delete the backups of deleted sites (removed by the next backup run)", HighRisk: true},
 	"files:read":              {Description: "List and download the files of sites"},
 	"files:write":             {Description: "Upload, change, move, copy and delete the files of sites (this changes the sites' code)", HighRisk: true},
 	"malware:read":            {Description: "Read the malware scan of sites: schedule, runs and flagged files (paths and signatures, never their content)"},

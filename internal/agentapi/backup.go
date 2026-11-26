@@ -143,6 +143,10 @@ type BackupSettings struct {
 	// ReadParts: the monthly check reads 1/ReadParts of all data, a
 	// different part each month. 0 turns the data check off.
 	ReadParts int `json:"readParts"`
+	// DeletedSiteDays removes the snapshots of a deleted site once its
+	// newest one is that many days old; 0 keeps them until they are
+	// deleted by hand (ADR-0074).
+	DeletedSiteDays int `json:"deletedSiteDays"`
 }
 
 // BackupSettingsVersion is the current format of the settings.
@@ -203,6 +207,8 @@ func (s BackupSettings) Validate() error {
 		return fmt.Errorf("%w: window must be hours 0 to 24 with start before end", ErrBackupInvalid)
 	case s.ReadParts < 0 || s.ReadParts > MaxBackupReadParts:
 		return fmt.Errorf("%w: read parts must be 0 to %d", ErrBackupInvalid, MaxBackupReadParts)
+	case s.DeletedSiteDays < 0 || s.DeletedSiteDays > MaxBackupDeletedSiteDays:
+		return fmt.Errorf("%w: days to keep deleted sites must be 0 to %d", ErrBackupInvalid, MaxBackupDeletedSiteDays)
 	}
 
 	if s.Target != nil {
@@ -299,6 +305,10 @@ type BackupStatus struct {
 	LastReadCheck time.Time          `json:"lastReadCheck,omitzero"`
 	MaintenanceOK bool               `json:"maintenanceOk"`
 	Maintenance   string             `json:"maintenance,omitempty"`
+	// Removed lists the snapshots of deleted sites the run removed, and
+	// RemoveError why removing failed (ADR-0074).
+	Removed     []BackupRemoved `json:"removed,omitempty"`
+	RemoveError string          `json:"removeError,omitempty"`
 }
 
 // overdueMargin is how much later than the interval a run may finish
@@ -368,9 +378,52 @@ type BackupSiteSummary struct {
 	Newest    time.Time `json:"newest"`
 }
 
-// BackupSitesResponse lists site names with snapshots, sorted by name.
+// BackupSitesResponse lists site names with snapshots, sorted by name,
+// and the snapshots marked for removal.
 type BackupSitesResponse struct {
 	Sites []BackupSiteSummary `json:"sites"`
+	Marks []BackupForgetMark  `json:"marks"`
+}
+
+// MaxBackupDeletedSiteDays bounds DeletedSiteDays: ten years.
+const MaxBackupDeletedSiteDays = 3650
+
+// BackupForgetRequest marks the snapshots of a deleted site for removal by
+// the next backup run (ADR-0074, decided by Kim 2026-11-26). With Before,
+// only those taken before it: an earlier site whose name a newer site
+// took. Cancel drops the mark again.
+type BackupForgetRequest struct {
+	Site   string    `json:"site"`
+	Before time.Time `json:"before,omitzero"`
+	Cancel bool      `json:"cancel,omitempty"`
+}
+
+// Validate checks the site name.
+func (r BackupForgetRequest) Validate() error { return ValidateSiteUser(r.Site) }
+
+// BackupForgetMark is one site whose snapshots the next run removes.
+type BackupForgetMark struct {
+	Site      string    `json:"site"`
+	Before    time.Time `json:"before,omitzero"`
+	Requested time.Time `json:"requested"`
+}
+
+// Covers reports whether the mark takes a snapshot of site taken at t.
+func (m BackupForgetMark) Covers(site string, t time.Time) bool {
+	return m.Site == site && (m.Before.IsZero() || t.Before(m.Before))
+}
+
+// BackupForgetResponse lists the marks after the change.
+type BackupForgetResponse struct {
+	Marks []BackupForgetMark `json:"marks"`
+}
+
+// BackupRemoved is what a run removed of one site's snapshots: marked by
+// hand, or Expired after DeletedSiteDays.
+type BackupRemoved struct {
+	Site      string `json:"site"`
+	Snapshots int    `json:"snapshots"`
+	Expired   bool   `json:"expired,omitempty"`
 }
 
 // BackupSnapshotsResponse lists snapshots, newest first.
@@ -391,6 +444,9 @@ var (
 	// BackupSites lists the site names in the snapshot list, also of
 	// deleted sites (ADR-0074).
 	BackupSites = agentrpc.Op[BackupSitesRequest, BackupSitesResponse]{Name: "backup.sites"}
+	// BackupForget marks or unmarks a deleted site's snapshots for removal
+	// by the next run (ADR-0074).
+	BackupForget = agentrpc.Op[BackupForgetRequest, BackupForgetResponse]{Name: "backup.forget"}
 )
 
 var (

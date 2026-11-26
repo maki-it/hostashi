@@ -116,6 +116,9 @@ commands:
   backup deleted [SITE] | backup restore-deleted SITE SNAPSHOT TARGET
             list deleted sites that still have snapshots, or the snapshots
             of one; restore one into the existing site TARGET (admins)
+  backup delete-deleted SITE | backup keep-deleted SITE
+            delete the backups of a deleted site with the next backup run,
+            or keep them after all (admins)
   backup restore-run ID
             one restore (root; started by hostashi-restore@ID.service)
   backup key show

@@ -62,8 +62,19 @@ func (l *localBackups) Snapshots(_ context.Context, site string) ([]agentapi.Bac
 	return l.a.Snapshots(site)
 }
 
-func (l *localBackups) SnapshotSites(context.Context) ([]agentapi.BackupSiteSummary, error) {
-	return l.a.SnapshotSites()
+func (l *localBackups) SnapshotSites(context.Context) (agentapi.BackupSitesResponse, error) {
+	all, err := l.a.SnapshotSites()
+	if err != nil {
+		return agentapi.BackupSitesResponse{}, err
+	}
+
+	marks, err := l.a.Marks()
+
+	return agentapi.BackupSitesResponse{Sites: all, Marks: marks}, err
+}
+
+func (l *localBackups) Forget(_ context.Context, req agentapi.BackupForgetRequest) ([]agentapi.BackupForgetMark, error) {
+	return l.a.Forget(req)
 }
 
 func (l *localBackups) Restore(ctx context.Context, site, snapshot, target string) (agentapi.BackupRestore, error) {
@@ -517,5 +528,78 @@ func TestDeletedSiteBackupsOverHTTP(t *testing.T) {
 	// database of shop.
 	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/backups/restores/" + r.ID, cookie: c}); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"site":"shop"`) {
 		t.Errorf("get: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// Deleting the backups of a deleted site marks them for the next run; the
+// name must be typed, a live site's own snapshots are never marked, and
+// the mark can be taken back (ADR-0074).
+func TestDeleteDeletedSiteBackupsOverHTTP(t *testing.T) {
+	e, lb, _ := newBackupAPI(t)
+	c := e.adminCookie(t)
+	readyRestores(t, e, lb, c, "blog")
+
+	now := time.Now().UTC()
+	earlier := now.AddDate(-1, 0, 0)
+
+	if err := backup.WriteSnapshots(lb.a.StatusDir, []backup.SnapshotEntry{
+		{ID: strings.Repeat("a1", 32), Kind: backup.KindFiles, Site: "old", Time: earlier},
+		{ID: strings.Repeat("b1", 32), Kind: backup.KindFiles, Site: "blog", Time: earlier},
+		{ID: strings.Repeat("b2", 32), Kind: backup.KindFiles, Site: "blog", Time: now.Add(time.Minute)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	removal := func(name string) string { return "/api/v1/backups/deleted/" + name + "/removal" }
+
+	for _, tc := range []struct {
+		path, body, code string
+		status           int
+	}{
+		{removal("old"), `{"confirm":"blog"}`, "confirm_mismatch", http.StatusUnprocessableEntity},
+		{removal("old"), `{}`, "confirm_mismatch", http.StatusUnprocessableEntity},
+		{removal("none"), `{"confirm":"none"}`, "not_found", http.StatusNotFound},
+		{removal("..%2Fx"), `{"confirm":"../x"}`, "not_found", http.StatusNotFound},
+	} {
+		rec := e.do(t, reqOpts{method: "PUT", path: tc.path, cookie: c, body: tc.body})
+		if rec.Code != tc.status || !strings.Contains(rec.Body.String(), `"`+tc.code+`"`) {
+			t.Errorf("%s %s: %d %s", tc.path, tc.body, rec.Code, rec.Body)
+		}
+	}
+
+	// It needs the high-risk scope backups:delete.
+	write := e.createToken(t, c, `{"name":"w","scopes":["backups:read","backups:write","backups:restore"],"expiresInDays":1}`)
+	if rec := e.do(t, reqOpts{method: "PUT", path: removal("old"), header: bearerHeader(write.Token), body: `{"confirm":"old"}`}); rec.Code != http.StatusForbidden {
+		t.Errorf("without backups:delete: %d", rec.Code)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: removal("old"), cookie: c, body: `{"confirm":"old"}`}); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"site":"old"`) {
+		t.Fatalf("mark: %d %s", rec.Code, rec.Body)
+	}
+
+	// The earlier site of blog: only what is older than the current site.
+	rec := e.do(t, reqOpts{method: "PUT", path: removal("blog"), cookie: c, body: `{"confirm":"blog"}`})
+
+	var marks forgetMarksJSON
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &marks) != nil || len(marks.Marks) != 2 || marks.Marks[1].Before.IsZero() {
+		t.Fatalf("mark earlier site: %d %s", rec.Code, rec.Body)
+	}
+
+	if m := marks.Marks[1]; m.Covers("blog", now.Add(time.Minute)) || !m.Covers("blog", earlier) {
+		t.Errorf("earlier mark %+v covers the current site", m)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/backups/deleted", cookie: c})
+	if rec.Code != http.StatusOK || strings.Count(rec.Body.String(), `"markedAt":"`) != 2 {
+		t.Errorf("list: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "DELETE", path: removal("old"), cookie: c}); rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), `"site":"old"`) {
+		t.Errorf("cancel: %d %s", rec.Code, rec.Body)
+	}
+
+	entries, _, err := e.st.AuditEntries(t.Context(), store.AuditFilter{Action: "backup.delete"}, 0, 5)
+	if err != nil || len(entries) != 3 {
+		t.Errorf("audit: %+v, %v", entries, err)
 	}
 }

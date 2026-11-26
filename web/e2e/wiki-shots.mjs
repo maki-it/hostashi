@@ -260,6 +260,15 @@ const shots = [
   { name: "backups", hash: "#/backups", ready: "text=Snapshots" },
   { name: "backups-deleted", hash: "#/backups?deleted=oldshop", ready: "text=Restore into" },
   {
+    name: "backups-deleted-remove",
+    hash: "#/backups?deleted=oldshop",
+    ready: "text=Delete backups",
+    act: async (page) => {
+      await page.getByLabel(/to confirm/).fill("oldshop");
+      await page.getByRole("heading", { name: "Delete backups" }).evaluate((h) => h.scrollIntoView({ block: "center" }));
+    },
+  },
+  {
     name: "backups-target",
     hash: "#/backups",
     ready: "text=Target and schedule",

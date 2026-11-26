@@ -62,4 +62,12 @@ Deleting a site does not delete its snapshots. Administrators find them under **
 
 If you create a new site with the name of a deleted one, the new site only shows the snapshots taken since it was created. The older ones are listed as **(earlier site)** under **Deleted sites** and can be restored into the site of the same name.
 
-On the command line: `hostashi backup deleted` lists deleted sites with snapshots, `hostashi backup deleted SITE` their snapshots, and `hostashi backup restore-deleted SITE SNAPSHOT TARGET` restores one into the site `TARGET`.
+### Delete the backups of a deleted site
+
+The snapshots of a deleted site stay until you delete them. Below the snapshots of a deleted site, type its name and choose **Delete backups of …**. The next backup run removes them; **Back up now** removes them at once. Until that run, **Keep backups** takes it back. The space is freed by the next weekly cleanup of the repository. For an earlier site, only the snapshots from before the current site was created are deleted.
+
+![Deleting the backups of a deleted site, with the name to type](images/backups-deleted-remove.png)
+
+To remove them automatically, set **Deleted sites (days)** under **Keep snapshots**. A backup run then removes the snapshots of a deleted site once its newest snapshot is older than that many days. 0, the default, keeps them until you delete them. Earlier sites of a reused name are never removed automatically. The status shows what the last run removed.
+
+On the command line: `hostashi backup deleted` lists deleted sites with snapshots, `hostashi backup deleted SITE` their snapshots, and `hostashi backup restore-deleted SITE SNAPSHOT TARGET` restores one into the site `TARGET`. `hostashi backup delete-deleted SITE` marks the backups of a deleted site for removal by the next run, and `hostashi backup keep-deleted SITE` takes that back.

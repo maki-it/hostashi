@@ -480,3 +480,67 @@ func TestSnapshotSites(t *testing.T) {
 		t.Errorf("got %+v", got)
 	}
 }
+
+// Marks for removal (ADR-0074): a deleted site, or with Before an earlier
+// site of a reused name; dropped once a later run left nothing of them.
+func TestForgetMarks(t *testing.T) {
+	a, _ := readyAgent(t) // blog exists
+	t1 := time.Date(2026, 11, 1, 3, 0, 0, 0, time.UTC)
+
+	if err := WriteSnapshots(a.StatusDir, []SnapshotEntry{
+		{ID: strings.Repeat("a", 64), Kind: KindFiles, Site: "old", Time: t1},
+		{ID: strings.Repeat("b", 64), Kind: KindFiles, Site: "blog", Time: t1},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := a.Forget(agentapi.BackupForgetRequest{Site: "blog"}); !errors.Is(err, ErrSourceExists) {
+		t.Errorf("live site: %v", err)
+	}
+
+	if _, err := a.Forget(agentapi.BackupForgetRequest{Site: "none"}); !errors.Is(err, ErrSnapshotNotFound) {
+		t.Errorf("no snapshots: %v", err)
+	}
+
+	if _, err := a.Forget(agentapi.BackupForgetRequest{Site: "blog", Before: t1}); !errors.Is(err, ErrSnapshotNotFound) {
+		t.Errorf("nothing before: %v", err)
+	}
+
+	if _, err := a.Forget(agentapi.BackupForgetRequest{Site: "../x"}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("bad name: %v", err)
+	}
+
+	if _, err := a.Forget(agentapi.BackupForgetRequest{Site: "old"}); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := a.Forget(agentapi.BackupForgetRequest{Site: "blog", Before: t1.Add(time.Hour)})
+	if err != nil || len(m) != 2 || m[0].Site != "old" || m[1].Site != "blog" {
+		t.Fatalf("marks %+v, %v", m, err)
+	}
+
+	if m, err := a.Forget(agentapi.BackupForgetRequest{Site: "blog", Cancel: true}); err != nil || len(m) != 1 {
+		t.Errorf("cancel: %+v, %v", m, err)
+	}
+
+	// A run that finished later and left no snapshot of old drops its mark.
+	if err := WriteStatus(a.StatusDir, Status{Version: StatusVersion, Finished: time.Now().Add(time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if m, err := a.Marks(); err != nil || len(m) != 1 {
+		t.Errorf("still listed: %+v, %v", m, err)
+	}
+
+	if err := WriteSnapshots(a.StatusDir, []SnapshotEntry{{ID: strings.Repeat("b", 64), Kind: KindFiles, Site: "blog", Time: t1}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if m, err := a.Marks(); err != nil || len(m) != 0 {
+		t.Errorf("done mark kept: %+v, %v", m, err)
+	}
+
+	if m, err := ReadMarks(a.ConfigDir, owner()); err != nil || len(m) != 0 {
+		t.Errorf("file: %+v, %v", m, err)
+	}
+}

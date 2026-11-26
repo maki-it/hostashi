@@ -120,6 +120,7 @@ type Repo interface {
 	BackupDatabase(ctx context.Context, tags []string, database string) (resticctl.Summary, error)
 	BackupRemoteDatabase(ctx context.Context, tags []string, database string, cfg dbserver.Config) (resticctl.Summary, error)
 	Forget(ctx context.Context, k resticctl.Keep) error
+	ForgetIDs(ctx context.Context, ids []string) error
 	Prune(ctx context.Context) error
 	Check(ctx context.Context, part, total int) error
 }
@@ -145,6 +146,10 @@ type Status struct {
 	Maintenance   string    `json:"maintenance,omitempty"` // last maintenance error
 	// Initialized: this run created the repository.
 	Initialized bool `json:"initialized,omitempty"`
+	// Removed and RemoveError: snapshots of deleted sites this run took
+	// out of the list (ADR-0074).
+	Removed     []agentapi.BackupRemoved `json:"removed,omitempty"`
+	RemoveError string                   `json:"removeError,omitempty"`
 
 	// Snapshots is the repository's list at the end of the run, kept in a
 	// file of its own; nil if it could not be read.
@@ -225,6 +230,10 @@ type Runner struct {
 	// such as an unreadable list of external databases. The run saves the
 	// rest and reports it as its error.
 	Warning string
+	// Live names the sites that exist; Marks are the sites whose
+	// snapshots to remove (ADR-0074). With Live nil nothing is removed.
+	Live  map[string]bool
+	Marks []agentapi.BackupForgetMark
 }
 
 // Run backs up all items, applies the retention policy and does the
@@ -293,6 +302,8 @@ func (r *Runner) Run(ctx context.Context, items []Item) Status {
 
 		st.Items = append(st.Items, r.item(ctx, it, lstat, log))
 	}
+
+	r.removeDeleted(ctx, &st, now(), log)
 
 	if err := r.Repo.Forget(ctx, keep(r.Settings.Retention)); err != nil {
 		return finish(fmt.Errorf("retention: %w", err))
@@ -438,4 +449,102 @@ func (r *Runner) maintain(ctx context.Context, st *Status, now func() time.Time)
 			st.LastCheck = t.UTC()
 		}
 	}
+}
+
+// removeDeleted takes the snapshots of deleted sites out of the list
+// (ADR-0074): those marked by hand, and those of a deleted site whose
+// newest snapshot is older than DeletedSiteDays. A snapshot of a site that
+// exists is only removed by a mark with a Before time, for an earlier site
+// of that name. Prune frees the space later. A failure does not fail the
+// backup; it is reported in RemoveError.
+func (r *Runner) removeDeleted(ctx context.Context, st *Status, now time.Time, log *slog.Logger) {
+	days := r.Settings.DeletedSiteDays
+	if r.Live == nil || (len(r.Marks) == 0 && days == 0) {
+		return
+	}
+
+	snaps, err := r.Repo.Snapshots(ctx, nil)
+	if err != nil {
+		st.RemoveError = "list snapshots: " + err.Error()
+
+		return
+	}
+
+	ids, removed := deletedSnapshots(entries(snaps), r.Live, r.Marks, days, now)
+
+	for start := 0; start < len(ids); start += resticctl.MaxForgetIDs {
+		end := min(start+resticctl.MaxForgetIDs, len(ids))
+		if err := r.Repo.ForgetIDs(ctx, ids[start:end]); err != nil {
+			st.RemoveError = "remove snapshots of deleted sites: " + err.Error()
+
+			return
+		}
+	}
+
+	st.Removed = removed
+
+	for _, rm := range removed {
+		log.InfoContext(ctx, "removed snapshots of a deleted site", "site", rm.Site, "snapshots", rm.Snapshots, "expired", rm.Expired)
+	}
+}
+
+// deletedSnapshots picks the snapshot ids to remove and sums them per site.
+func deletedSnapshots(all []SnapshotEntry, live map[string]bool, marks []agentapi.BackupForgetMark, days int, now time.Time) ([]string, []agentapi.BackupRemoved) {
+	newest := map[string]time.Time{}
+
+	for _, s := range all {
+		if s.Site != "" && s.Time.After(newest[s.Site]) {
+			newest[s.Site] = s.Time
+		}
+	}
+
+	expired := func(site string) bool {
+		return days > 0 && !live[site] && now.Sub(newest[site]) > time.Duration(days)*24*time.Hour
+	}
+
+	marked := func(s SnapshotEntry) bool {
+		for _, m := range marks {
+			if m.Covers(s.Site, s.Time) && (!live[s.Site] || !m.Before.IsZero()) {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	var ids []string
+
+	by := map[string]*agentapi.BackupRemoved{}
+	order := []string{}
+
+	for _, s := range all {
+		if s.Site == "" {
+			continue
+		}
+
+		exp := expired(s.Site)
+		if !exp && !marked(s) {
+			continue
+		}
+
+		ids = append(ids, s.ID)
+
+		rm := by[s.Site]
+		if rm == nil {
+			rm = &agentapi.BackupRemoved{Site: s.Site, Expired: exp}
+			by[s.Site] = rm
+			order = append(order, s.Site)
+		}
+
+		rm.Snapshots++
+	}
+
+	sort.Strings(order)
+
+	removed := make([]agentapi.BackupRemoved, 0, len(order))
+	for _, site := range order {
+		removed = append(removed, *by[site])
+	}
+
+	return ids, removed
 }

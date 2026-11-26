@@ -603,6 +603,27 @@
         ],
         "type": "object"
       },
+      "BackupForgetMark": {
+        "additionalProperties": false,
+        "properties": {
+          "before": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "requested": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "site": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "requested",
+          "site"
+        ],
+        "type": "object"
+      },
       "BackupItemResult": {
         "additionalProperties": false,
         "properties": {
@@ -639,6 +660,25 @@
           "dataAdded",
           "files",
           "kind"
+        ],
+        "type": "object"
+      },
+      "BackupRemoved": {
+        "additionalProperties": false,
+        "properties": {
+          "expired": {
+            "type": "boolean"
+          },
+          "site": {
+            "type": "string"
+          },
+          "snapshots": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "site",
+          "snapshots"
         ],
         "type": "object"
       },
@@ -762,6 +802,9 @@
       "BackupSettings": {
         "additionalProperties": false,
         "properties": {
+          "deletedSiteDays": {
+            "type": "integer"
+          },
           "intervalHours": {
             "type": "integer"
           },
@@ -792,6 +835,7 @@
           }
         },
         "required": [
+          "deletedSiteDays",
           "intervalHours",
           "readParts",
           "retention",
@@ -804,6 +848,9 @@
       "BackupSettingsInput": {
         "additionalProperties": false,
         "properties": {
+          "deletedSiteDays": {
+            "type": "integer"
+          },
           "intervalHours": {
             "type": "integer"
           },
@@ -922,6 +969,18 @@
           },
           "ok": {
             "type": "boolean"
+          },
+          "removeError": {
+            "type": "string"
+          },
+          "removed": {
+            "items": {
+              "$ref": "#/components/schemas/BackupRemoved"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "running": {
             "type": "boolean"
@@ -2305,6 +2364,15 @@
         ],
         "type": "object"
       },
+      "DeleteBackupsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "DeletedRestoreRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2319,6 +2387,13 @@
         "properties": {
           "earlier": {
             "type": "boolean"
+          },
+          "markedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -2337,6 +2412,7 @@
         },
         "required": [
           "earlier",
+          "markedAt",
           "name",
           "newest",
           "oldest",
@@ -3018,6 +3094,24 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "ForgetMarks": {
+        "additionalProperties": false,
+        "properties": {
+          "marks": {
+            "items": {
+              "$ref": "#/components/schemas/BackupForgetMark"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "marks"
+        ],
         "type": "object"
       },
       "Git": {
@@ -10271,6 +10365,120 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "backups.server:read"
+      }
+    },
+    "/api/v1/backups/deleted/{name}/removal": {
+      "delete": {
+        "operationId": "keepDeletedSiteBackups",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgetMarks"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "backups:delete"
+            ]
+          }
+        ],
+        "summary": "Keep the backups of a deleted site that were marked for deletion",
+        "tags": [
+          "backups"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "backups.server:delete"
+      },
+      "put": {
+        "operationId": "deleteDeletedSiteBackups",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteBackupsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgetMarks"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "backups:delete"
+            ]
+          }
+        ],
+        "summary": "Delete the backups of a deleted site with the next backup run",
+        "tags": [
+          "backups"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "backups.server:delete"
       }
     },
     "/api/v1/backups/deleted/{name}/{snapshot}/restore": {

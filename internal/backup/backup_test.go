@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -321,7 +322,20 @@ type fakeRepo struct {
 	partial   string
 	failOpen  error
 	failCheck error
+	failIDs   error
 	snaps     []resticctl.Snapshot
+	forgotten []string
+}
+
+func (f *fakeRepo) ForgetIDs(_ context.Context, ids []string) error {
+	f.calls = append(f.calls, "forget-ids "+strconv.Itoa(len(ids)))
+	if f.failIDs != nil {
+		return f.failIDs
+	}
+
+	f.forgotten = append(f.forgotten, ids...)
+
+	return nil
 }
 
 func (f *fakeRepo) Init(context.Context) error {
@@ -668,5 +682,93 @@ func TestSettingsAndStatusFiles(t *testing.T) {
 	got, err := ReadStatus(dir, uid)
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("status round trip:\n got %+v\nwant %+v (%v)", got, want, err)
+	}
+}
+
+// The run removes the snapshots of deleted sites that are marked or, with
+// DeletedSiteDays, expired, and never those of a site that exists unless
+// a mark names an earlier site of that name (ADR-0074).
+func TestRunRemovesDeletedSites(t *testing.T) {
+	now := time.Date(2026, 11, 26, 2, 0, 0, 0, time.UTC)
+	created := now.AddDate(0, -1, 0)
+	snap := func(id byte, site string, age time.Duration) resticctl.Snapshot {
+		return resticctl.Snapshot{ID: strings.Repeat(string(id), 64), Time: now.Add(-age), Tags: []string{"site:" + site, "kind:files"}}
+	}
+
+	day := 24 * time.Hour
+	repo := &fakeRepo{snaps: []resticctl.Snapshot{
+		snap('a', "blog", day),     // live
+		snap('b', "blog", 60*day),  // earlier site of blog, marked
+		snap('c', "old", 40*day),   // deleted, newest 40 days ago: expires
+		snap('d', "old", 50*day),   // same site
+		snap('e', "gone", 5*day),   // deleted, marked
+		snap('f', "fresh", 5*day),  // deleted, neither marked nor old enough
+		snap('9', "shop", 400*day), // live and old: kept
+		{ID: strings.Repeat("8", 64), Time: now.Add(-400 * day), Tags: []string{"kind:panel"}},
+	}}
+
+	s := settingsWithTarget()
+	s.DeletedSiteDays = 30
+
+	r := &Runner{
+		Repo: repo, Settings: s, Now: func() time.Time { return now }, Lstat: fakeFS(nil, nil),
+		Live: map[string]bool{"blog": true, "shop": true},
+		Marks: []agentapi.BackupForgetMark{
+			{Site: "blog", Before: created},
+			{Site: "gone"},
+			{Site: "shop"}, // no Before while shop exists: ignored
+		},
+	}
+
+	st := r.Run(context.Background(), nil)
+
+	got := strings.Join(slices.Sorted(slices.Values(repo.forgotten)), ",")
+	want := strings.Join([]string{strings.Repeat("b", 64), strings.Repeat("c", 64), strings.Repeat("d", 64), strings.Repeat("e", 64)}, ",")
+
+	if got != want {
+		t.Errorf("forgotten %s", got)
+	}
+
+	wantRemoved := []agentapi.BackupRemoved{{Site: "blog", Snapshots: 1}, {Site: "gone", Snapshots: 1}, {Site: "old", Snapshots: 2, Expired: true}}
+	if !reflect.DeepEqual(st.Removed, wantRemoved) || st.RemoveError != "" || !st.OK {
+		t.Errorf("status %+v", st)
+	}
+
+	// The removal comes before the retention policy.
+	if i := slices.Index(repo.calls, "forget-ids 4"); i < 0 || repo.calls[i+1] != "forget" {
+		t.Errorf("calls %q", repo.calls)
+	}
+
+	// A failure is reported apart from the backup, which stays OK.
+	repo2 := &fakeRepo{snaps: repo.snaps, failIDs: errors.New("locked")}
+	r.Repo = repo2
+
+	if st := r.Run(context.Background(), nil); !st.OK || !strings.Contains(st.RemoveError, "locked") || st.Removed != nil {
+		t.Errorf("failed removal: %+v", st)
+	}
+
+	// Without a list of live sites nothing is removed.
+	repo3 := &fakeRepo{snaps: repo.snaps}
+	r.Repo, r.Live = repo3, nil
+
+	if r.Run(context.Background(), nil); len(repo3.forgotten) != 0 {
+		t.Errorf("removed without live sites: %v", repo3.forgotten)
+	}
+}
+
+func TestDeletedSiteDaysBounds(t *testing.T) {
+	s := DefaultSettings()
+
+	for days, ok := range map[int]bool{0: true, 1: true, 3650: true, -1: false, 3651: false} {
+		s.DeletedSiteDays = days
+		if err := s.Validate(); (err == nil) != ok {
+			t.Errorf("%d: %v", days, err)
+		}
+	}
+
+	// Settings written before the field exist keep everything.
+	var old Settings
+	if err := json.Unmarshal([]byte(`{"version":1,"retention":{"daily":7},"windowStart":1,"windowEnd":5,"readParts":12}`), &old); err != nil || old.DeletedSiteDays != 0 {
+		t.Errorf("old settings: %+v, %v", old, err)
 	}
 }
