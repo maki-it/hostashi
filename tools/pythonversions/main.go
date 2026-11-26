@@ -7,9 +7,10 @@
 // with -verify it writes the archives of every changed build, so the
 // "Python versions" workflow can check their checksum and Sigstore build
 // provenance before it opens a pull request. It never installs anything
-// and never merges.
+// and never merges. With -auto-merge it writes "yes" when the change may
+// merge by itself (Report.PatchOnly, ADR-0077), else "no".
 //
-//	go run ./tools/pythonversions [-write] [-root DIR] [-summary FILE] [-verify FILE [-verify-newest]]
+//	go run ./tools/pythonversions [-write] [-root DIR] [-summary FILE] [-verify FILE [-verify-newest]] [-auto-merge FILE]
 package main
 
 import (
@@ -32,16 +33,17 @@ func main() {
 	summary := flag.String("summary", "", "write a Markdown summary to this file")
 	verify := flag.String("verify", "", `write "SHA256 URL" of every changed archive to this file`)
 	newest := flag.Bool("verify-newest", false, "also list the archives of the newest pinned line (a self-test of the check)")
+	merge := flag.String("auto-merge", "", `write "yes" to this file when the change may merge by itself, else "no"`)
 
 	flag.Parse()
 
-	if err := run(*root, *write, *summary, *verify, *newest); err != nil {
+	if err := run(*root, *write, *summary, *verify, *newest, *merge); err != nil {
 		fmt.Fprintln(os.Stderr, "pythonversions:", err)
 		os.Exit(1)
 	}
 }
 
-func run(root string, write bool, summary, verify string, newest bool) error {
+func run(root string, write bool, summary, verify string, newest bool, merge string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -92,6 +94,13 @@ func run(root string, write bool, summary, verify string, newest bool) error {
 		}
 	}
 
+	//nolint:gosec // reports for the workflow
+	if merge != "" {
+		if err := os.WriteFile(merge, []byte(yesNo(rep.PatchOnly())+"\n"), 0o644); err != nil {
+			return err
+		}
+	}
+
 	if !write || !rep.Changed() {
 		return nil
 	}
@@ -109,4 +118,12 @@ func run(root string, write bool, summary, verify string, newest bool) error {
 	}
 
 	return os.WriteFile(name, out, 0o644) //nolint:gosec // a source file
+}
+
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+
+	return "no"
 }

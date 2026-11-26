@@ -7,9 +7,11 @@
 # When it finds something it opens (or updates) a pull request from the
 # branch automation/node-versions that updates
 # internal/agentapi/node_versions.go. The installer test then installs the
-# newest line through the panel API. Nothing is merged automatically: a
-# maintainer reviews and merges, and the next Hostashi release brings the
-# new builds; the agent installs them by itself and restarts the apps.
+# newest line through the panel API. A pull request with only patch
+# releases of lines that are already pinned merges by itself once every
+# check is green (pin-auto-merge.yml, ADR-0077); new lines and changed end
+# dates wait for a maintainer. The next Hostashi release brings the new
+# builds; the agent installs them by itself and restarts the apps.
 #
 # Daily, not weekly like PHP (Kim, 2026-11-22): a security release should
 # reach the servers within about a day.
@@ -41,6 +43,8 @@ env:
 jobs:
   check:
     name: Check nodejs.org
+    outputs:
+      auto-merge: ${{ steps.plan.outputs.auto-merge }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -57,9 +61,11 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Check and update the list
+        id: plan
         run: |
-          go run ./tools/nodeversions -write -summary "$RUNNER_TEMP/summary.md"
+          go run ./tools/nodeversions -write -summary "$RUNNER_TEMP/summary.md" -auto-merge "$RUNNER_TEMP/auto-merge.txt"
           cat "$RUNNER_TEMP/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          echo "auto-merge=$(cat "$RUNNER_TEMP/auto-merge.txt")" >> "$GITHUB_OUTPUT"
           git diff --stat
       - name: Run the tests the change affects
         run: go test ./internal/agentapi/ ./internal/nodeinstall/ ./tools/nodeversions/
@@ -68,6 +74,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          AUTO_MERGE: ${{ steps.plan.outputs.auto-merge }}
         run: |
           if git diff --quiet; then
             echo "Nothing to change."
@@ -104,7 +111,11 @@ jobs:
             echo "- [ ] For a new LTS line: add a line to ADR-0054."
             echo "- [ ] Release Hostashi afterwards: the agent installs the new builds by itself and restarts the apps on them."
             echo
-            echo "This pull request is never merged automatically."
+            if [ "$AUTO_MERGE" = yes ]; then
+              echo "Only patch releases of lines that are already pinned: this pull request merges by itself once every check is green (ADR-0077)."
+            else
+              echo "This pull request needs a maintainer: it adds a line or changes an end of life."
+            fi
           } > "$RUNNER_TEMP/body.md"
 
           pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number')
@@ -118,3 +129,17 @@ jobs:
           for wf in go.yml web.yml licenses.yml; do
             gh workflow run "$wf" --repo "$REPO" --ref "$BRANCH"
           done
+
+  merge:
+    name: Merge patch releases when green
+    needs: check
+    if: github.event_name != 'pull_request' && needs.check.outputs.auto-merge == 'yes'
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+      checks: read
+    uses: ./.github/workflows/pin-auto-merge.yml
+    with:
+      branch: automation/node-versions
+      files: internal/agentapi/node_versions.go

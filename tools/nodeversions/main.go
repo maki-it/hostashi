@@ -8,7 +8,10 @@
 // versions" workflow runs it and opens a pull request; it never installs
 // anything and never merges.
 //
-//	go run ./tools/nodeversions [-write] [-root DIR] [-summary FILE]
+// With -auto-merge it writes "yes" when the change may merge by itself
+// (Report.PatchOnly, ADR-0077), else "no".
+//
+//	go run ./tools/nodeversions [-write] [-root DIR] [-summary FILE] [-auto-merge FILE]
 package main
 
 import (
@@ -29,16 +32,17 @@ func main() {
 	root := flag.String("root", ".", "repository root")
 	write := flag.Bool("write", false, "rewrite the file (default: only report)")
 	summary := flag.String("summary", "", "write a Markdown summary to this file")
+	merge := flag.String("auto-merge", "", `write "yes" to this file when the change may merge by itself, else "no"`)
 
 	flag.Parse()
 
-	if err := run(*root, *write, *summary); err != nil {
+	if err := run(*root, *write, *summary, *merge); err != nil {
 		fmt.Fprintln(os.Stderr, "nodeversions:", err)
 		os.Exit(1)
 	}
 }
 
-func run(root string, write bool, summary string) error {
+func run(root string, write bool, summary, merge string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -71,6 +75,12 @@ func run(root string, write bool, summary string) error {
 		}
 	}
 
+	if merge != "" {
+		if err := os.WriteFile(merge, []byte(yesNo(rep.PatchOnly())+"\n"), 0o644); err != nil { //nolint:gosec // a report for the workflow
+			return err
+		}
+	}
+
 	if !write || !rep.Changed() {
 		return nil
 	}
@@ -88,4 +98,12 @@ func run(root string, write bool, summary string) error {
 	}
 
 	return os.WriteFile(name, out, 0o644) //nolint:gosec // a source file
+}
+
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+
+	return "no"
 }

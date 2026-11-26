@@ -174,3 +174,24 @@ func TestRewriteMatchesTheRepository(t *testing.T) {
 		t.Error("rewrote a file without the list")
 	}
 }
+
+func TestPatchOnly(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		rep  Report
+		want bool
+	}{
+		{"nothing", Report{}, false},
+		{"patch", Report{Changes: []Change{{Major: "24", From: "24.22.3", To: "24.22.4", Security: true}}}, true},
+		{"two patches", Report{Changes: []Change{{Major: "22", From: "22.23.5", To: "22.23.6"}, {Major: "24", From: "24.22.3", To: "24.22.4"}}}, true},
+		{"new line", Report{Changes: []Change{{Major: "28", To: "28.10.0", End: "2031-04-30"}}}, false},
+		{"patch and new line", Report{Changes: []Change{{Major: "24", From: "24.22.3", To: "24.22.4"}, {Major: "28", To: "28.10.0"}}}, false},
+		{"end of life changed", Report{Changes: []Change{{Major: "22", From: "22.23.5", To: "22.23.5", End: "2027-06-30"}}}, false},
+		{"patch with new end of life", Report{Changes: []Change{{Major: "22", From: "22.23.5", To: "22.23.6", End: "2027-06-30"}}}, false},
+		{"older release", Report{Changes: []Change{{Major: "24", From: "24.22.3", To: "24.22.2"}}}, false},
+	} {
+		if got := tc.rep.PatchOnly(); got != tc.want {
+			t.Errorf("%s: PatchOnly() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

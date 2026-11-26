@@ -118,6 +118,16 @@ type Archive struct {
 // Changed reports whether anything changes.
 func (r Report) Changed() bool { return len(r.Changes) > 0 }
 
+// PatchOnly reports whether there are changes and every one is a newer
+// release or build of a line that is already pinned, with the same end of
+// life. Only such a pull request merges by itself once all checks are
+// green (ADR-0077); new lines and changed end dates wait for a maintainer.
+func (r Report) PatchOnly() bool {
+	return r.Changed() && !slices.ContainsFunc(r.Changes, func(c Change) bool {
+		return c.From == "" || c.End != "" || c.To == c.From
+	})
+}
+
 func build(version, tag string) string { return version + "+" + tag }
 
 // archives lists the downloads of a release, x86_64 first.
