@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Oneshot unit that runs the build commands of one Git deploy of a site
+# (ADR-0062), after hostashi-deploy@ has fetched the release. It has the
+# same sandbox but no credentials: the build runs code from the repository
+# and its dependencies, which must not read the Git token or deploy key.
+# The agent writes two drop-ins: 50-hostashi-slice.conf (slice and home)
+# and 60-hostashi-deploy.conf with ExecStart=/bin/sh and the build script
+# /var/lib/hostashi-deploy/<site>/build.sh, the build time limit and the
+# run's log (StandardOutput=append:). The agent starts it once git-sync
+# succeeded and stopped hostashi-deploy@, and asks for its state.
+
+[Unit]
+Description=Build of a Git deploy of Hostashi site %i
+Documentation=https://github.com/maki-it/hostashi
+After=network.target
+
+[Service]
+Type=oneshot
+# A finished build stays "active" (succeeded) or "failed" until the agent
+# has read its outcome for site.deploy.status; the agent then stops it.
+RemainAfterExit=yes
+User=%i
+Group=%i
+# Replaced by the drop-in.
+ExecStart=/bin/false
+# Replaced by the drop-in: the site's build time limit.
+TimeoutStartSec=15min
+# No core dumps: they would hold keys, passwords and session data (ADR-0033).
+LimitCORE=0
+# The drop-in sets StandardOutput=append:/var/log/hostashi/app/%i/deploy-<id>.log,
+# the log git-sync began, opened by systemd as root: the site user can
+# neither open nor change it.
+StandardOutput=journal
+StandardError=inherit
+SyslogIdentifier=hostashi-deploy-%i
+# Build tools such as npm or composer start many processes; they all end
+# with the run.
+KillMode=control-group
+
+# A /tmp of its own.
+PrivateTmp=yes
+PrivateDevices=yes
+# The system is read only and /home is empty: the drop-in mounts the
+# site's own home back, writable (ADR-0033).
+ProtectSystem=strict
+ProtectHome=tmpfs
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Other users' processes are hidden in /proc.
+ProtectProc=invisible
+RemoveIPC=yes
+# No MemoryDenyWriteExecute=: build tools such as Node.js need a JIT.
+
+# No [Install]: the agent runs it, it is never enabled.

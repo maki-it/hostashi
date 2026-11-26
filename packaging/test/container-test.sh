@@ -1531,7 +1531,7 @@ step "Git deploy of a site (ADR-0062)"
 [ "$(api POST /api/v1/sites '{"name":"gitsite","domains":["gitsite.example.com"]}')" = 201 ] || fail "create Git site: $(x cat /tmp/api.out)"
 x sh -c 'echo before > /home/gitsite/htdocs/before.txt && chown gitsite:gitsite /home/gitsite/htdocs/before.txt' || fail "seed the deploy directory"
 # A small public repository on GitHub, fetched with depth 1 by go-git.
-[ "$(api PUT /api/v1/sites/gitsite/git '{"url":"https://github.com/octocat/Hello-World.git","branch":"master","auth":"none","deployDir":"htdocs","keep":2,"buildTimeoutMinutes":5,"shared":[".env"],"commands":["test -f README","echo built > built.txt"]}')" = 200 ] ||
+[ "$(api PUT /api/v1/sites/gitsite/git '{"url":"https://github.com/octocat/Hello-World.git","branch":"master","auth":"none","deployDir":"htdocs","keep":2,"buildTimeoutMinutes":5,"shared":[".env"],"commands":["test -f README","echo built > built.txt","cat /proc/self/cgroup > cgroup.txt"]}')" = 200 ] ||
   fail "set Git: $(x cat /tmp/api.out)"
 [ "$(api POST /api/v1/sites/gitsite/deploys)" = 202 ] || fail "start deploy: $(x cat /tmp/api.out)"
 did=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
@@ -1548,6 +1548,10 @@ x grep -q '"commit":"[0-9a-f]\{40\}"' /tmp/api.out || fail "deploy without a com
 [ "$(x readlink /home/gitsite/htdocs)" = ".deploy/releases/$did" ] || fail "htdocs is not the link to release $did: $(x ls -la /home/gitsite)"
 x test -f /home/gitsite/htdocs/README || fail "README not deployed"
 [ "$(x stat -c '%U' "/home/gitsite/.deploy/releases/$did/built.txt")" = gitsite ] || fail "build command did not run as the site user"
+# The build runs in its own unit, which has no credentials, not in the
+# deploy unit that fetched with the token or key.
+x grep -q 'hostashi-build@gitsite.service' "/home/gitsite/.deploy/releases/$did/cgroup.txt" ||
+  fail "build did not run in hostashi-build@: $(x cat "/home/gitsite/.deploy/releases/$did/cgroup.txt")"
 [ "$(x stat -c '%U' /home/gitsite/htdocs)" = gitsite ] || fail "the deploy link is not the site user's"
 x test -f /home/gitsite/.deploy/releases/0-initial/before.txt || fail "the files from before the first deploy were not kept"
 x test -L /home/gitsite/htdocs/.env || fail "shared .env is no link"
@@ -1563,6 +1567,8 @@ x test ! -e /run/hostashi-deploy/gitsite/token || fail "credentials left after t
 # a finished run, which RemainAfterExit= would otherwise keep active.
 [ "$(x systemctl show -p ActiveState --value hostashi-deploy@gitsite.service)" = inactive ] ||
   fail "the finished deploy unit is still $(x systemctl show -p ActiveState --value hostashi-deploy@gitsite.service)"
+[ "$(x systemctl show -p ActiveState --value hostashi-build@gitsite.service)" = inactive ] ||
+  fail "the finished build unit is still $(x systemctl show -p ActiveState --value hostashi-build@gitsite.service)"
 [ "$(api GET "/api/v1/sites/gitsite/deploys/$did/log")" = 200 ] || fail "deploy log: $(x cat /tmp/api.out)"
 x grep -q 'echo built' /tmp/api.out || fail "log without the build command: $(x cat /tmp/api.out)"
 # Rollback to the files from before is not offered; back to the deploy
@@ -1622,6 +1628,7 @@ x grep -q "\"hostKeyFingerprint\":\"$hkfp\"" /tmp/api.out || fail "confirmed hos
 x pkill -f 'sshd -p 2296' || true
 [ "$(api DELETE /api/v1/sites/gitsite)" = 204 ] || fail "delete Git site: $(x cat /tmp/api.out)"
 x test ! -e /etc/systemd/system/hostashi-deploy@gitsite.service.d || fail "deploy drop-ins left after delete"
+x test ! -e /etc/systemd/system/hostashi-build@gitsite.service.d || fail "build drop-ins left after delete"
 x test ! -e /var/lib/hostashi-deploy/gitsite || fail "build script left after delete"
 
 step "backups with restic (ADR-0008)"

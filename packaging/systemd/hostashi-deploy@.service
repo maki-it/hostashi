@@ -3,11 +3,11 @@
 # writes two drop-ins, as for hostashi-python-venv@: 50-hostashi-slice.conf
 # (slice and home) and 60-hostashi-deploy.conf with the run, from typed
 # values it checked: ExecStart=/usr/local/bin/hostashi git-sync ... into a
-# new release below <home>/.deploy/releases, then /bin/sh with the build
-# script /var/lib/hostashi-deploy/<site>/build.sh, the time limit, the log
-# and the token or deploy key as credentials (LoadCredential=). The agent
-# starts it without waiting and asks for its state; it never switches the
-# live link itself: the agent does that after a successful run.
+# new release below <home>/.deploy/releases, the time limit, the log and
+# the token or deploy key as credentials (LoadCredential=). The build
+# commands run afterwards in hostashi-build@, without the credentials. The
+# agent starts it without waiting and asks for its state; it never switches
+# the live link itself: the agent does that after a successful run.
 
 [Unit]
 Description=Git deploy of Hostashi site %i
@@ -24,7 +24,7 @@ User=%i
 Group=%i
 # Replaced by the drop-in.
 ExecStart=/bin/false
-# Replaced by the drop-in: the fetch plus the site's build time limit.
+# Replaced by the drop-in: the time limit of the fetch.
 TimeoutStartSec=15min
 # No core dumps: they would hold keys, passwords and session data (ADR-0033).
 LimitCORE=0

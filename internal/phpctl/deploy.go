@@ -13,10 +13,11 @@ import (
 // The sites' Git deploys (ADR-0062) go through the same exception as the
 // apps: systemctl by absolute path, fixed verbs, and only unit names that
 // match deployUnitRe. The agent never runs git or a build command itself;
-// systemd runs `hostashi git-sync` and the build script as the site user
-// from the fixed template and the agent's drop-in.
+// systemd runs `hostashi git-sync` (hostashi-deploy@) and the build script
+// (hostashi-build@) as the site user from the fixed templates and the
+// agent's drop-ins.
 var (
-	deployUnitRe = regexp.MustCompile(`^hostashi-deploy@[a-z][a-z0-9_-]{1,31}\.service$`)
+	deployUnitRe = regexp.MustCompile(`^hostashi-(?:deploy|build)@[a-z][a-z0-9_-]{1,31}\.service$`)
 	deployPropRe = regexp.MustCompile(`^(?:ActiveState|SubState|Result)$`)
 )
 
