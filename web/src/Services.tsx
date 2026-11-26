@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ArrowClockwise, ArrowsCounterClockwise, DotsThree, Play, Stop, type Icon } from "@phosphor-icons/react";
+import { ArrowClockwise, ArrowsCounterClockwise, DotsThree, Play, Stop, X, type Icon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 import { formatHash } from "./routes";
 import {
@@ -57,7 +57,7 @@ type Group = "all" | "server" | "sites" | "problems";
  * actions the catalog allows. With site set it shows only that site's
  * services, for the site's overview tab.
  */
-export function Services({ site }: { site?: string }) {
+export function Services({ site, id, onClose }: { site?: string; id?: string; onClose?: () => void }) {
   const [rows, setRows] = useState<ServiceRow[] | null>(null);
   const [events, setEvents] = useState<ServiceEvent[]>([]);
   const [error, setError] = useState("");
@@ -222,7 +222,7 @@ export function Services({ site }: { site?: string }) {
         !error && <p aria-busy="true">Loading the services…</p>
       ) : (
         site ? (
-          <Card padded={false} title="Services">
+          <Card padded={false} title="Services" id={id} actions={onClose && <IconButton label="Close" icon={<X size={16} aria-hidden="true" />} onClick={onClose} />}>
             <Table label="Services" columns={columns} rows={rows} rowKey={rowKey} empty="No services." />
           </Card>
         ) : (

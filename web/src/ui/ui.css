@@ -2021,6 +2021,13 @@ html:has(.ui-files) {
 }
 
 /* Status tiles of the site overview: each opens its tab. */
+/* Two cards side by side on a wide screen, one above the other otherwise. */
+.ui-two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: var(--space-5);
+  align-items: start;
+}
 .ui-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
