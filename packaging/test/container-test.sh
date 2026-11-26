@@ -196,7 +196,8 @@ for o in $origins; do
   o=${o%,}
   # sury.org (more PHP versions, ADR-0019) has no security archive of its own.
   # Neither has apt.postgresql.org (PostgreSQL client tools, ADR-0051).
-  case "$o" in *-security* | "origin=deb.sury.org,archive=$codename" | "origin=apt.postgresql.org,archive=$codename-pgdg") ;; *) fail "unattended-upgrades allows a non-security origin: $o";; esac
+  # The Hostashi suite runtimes holds only the pinned runtimes (ADR-0077).
+  case "$o" in *-security* | "origin=deb.sury.org,archive=$codename" | "origin=apt.postgresql.org,archive=$codename-pgdg" | "origin=Hostashi,codename=runtimes") ;; *) fail "unattended-upgrades allows a non-security origin: $o";; esac
 done
 [ "$(x apt-config dump --format '%v%n' Unattended-Upgrade::Automatic-Reboot)" = false ] || fail "automatic reboot is on"
 for t in apt-daily.timer apt-daily-upgrade.timer; do
