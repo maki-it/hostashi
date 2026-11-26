@@ -128,6 +128,7 @@ describe("SiteActions", () => {
     await user.click(screen.getByRole("button", { name: "Actions" }));
     expect(screen.queryByRole("menuitem", { name: "Copy site…" })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: "Restart PHP…" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Change domains…" })).toBeNull();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).toBeNull();
     expect(screen.getByRole("button", { name: "Actions" })).toHaveFocus();

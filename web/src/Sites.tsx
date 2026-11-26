@@ -53,6 +53,8 @@ type QueryProps = {
   query: URLSearchParams;
   /** Replaces the query in the address, without a new history entry for typing. */
   onQuery: (q: URLSearchParams) => void;
+  /** The role of the logged-in account; users cannot create sites (ADR-0035). */
+  role?: string;
 };
 
 // useSites loads the sites and the PHP versions, and looks again while a
@@ -327,8 +329,9 @@ function siteColumns({ marks, disks, crons, backups }: ListData): Column<Site>[]
 // Sites is the list of sites (ADR-0037): a table that can be sorted and
 // filtered, with the choice kept in the address. "New site" opens the form
 // as its own view (?new=1). Each site's settings are on its own page.
-export function Sites({ query, onQuery }: QueryProps) {
+export function Sites({ query, onQuery, role = "user" }: QueryProps) {
   const { sites, marks, php, error, load } = useSites();
+  const staff = role === "admin" || role === "manager";
   const disks = usePerSite(
     (sites ?? []).filter((s) => s.state === "active" && hasAccount(s)).map((s) => s.name),
     loadDisk,
@@ -343,7 +346,7 @@ export function Sites({ query, onQuery }: QueryProps) {
     onQuery(next);
   };
 
-  if (query.get("new") === "1") {
+  if (staff && query.get("new") === "1") {
     return (
       <>
         <PageHead title="New site" description="A site answers for its domains: with PHP, static files, a Node.js app or a program of its own from its own Linux user and home, or as a redirect or reverse proxy." />
@@ -364,10 +367,12 @@ export function Sites({ query, onQuery }: QueryProps) {
         title="Sites"
         description="Every site has its domains and certificate. PHP, static, Node.js and app sites also have their own Linux user; redirect and reverse proxy sites have none."
         actions={
-          <a className="ui-btn ui-btn-primary" href={formatHash({ page: "sites", query: new URLSearchParams({ new: "1" }) })}>
-            <Plus size={16} aria-hidden="true" />
-            New site
-          </a>
+          staff && (
+            <a className="ui-btn ui-btn-primary" href={formatHash({ page: "sites", query: new URLSearchParams({ new: "1" }) })}>
+              <Plus size={16} aria-hidden="true" />
+              New site
+            </a>
+          )
         }
       />
       {error && <Notice tone="err" title={error} />}
