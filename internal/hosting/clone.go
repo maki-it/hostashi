@@ -291,15 +291,18 @@ func (s *Service) RefreshClone(ctx context.Context, actor int64, name string, ma
 	}
 
 	// The pairs of the first copy; a database the clone lost meanwhile is
-	// skipped, one the source gained is not added.
+	// skipped, one the source gained is not added. Names are unique only
+	// while a database exists: a name that another site took since then
+	// is skipped too, so a refresh never reads or overwrites the database
+	// of a third site.
 	dbs := make([]store.CloneDatabase, 0, len(c.Databases))
 
 	for _, d := range c.Databases {
-		if _, err := s.st.DatabaseByName(ctx, d.Source); err != nil {
+		if sd, err := s.st.DatabaseByName(ctx, d.Source); err != nil || sd.Site != src.Name {
 			continue
 		}
 
-		if _, err := s.st.DatabaseByName(ctx, d.Target); err != nil {
+		if td, err := s.st.DatabaseByName(ctx, d.Target); err != nil || td.Site != site.Name {
 			continue
 		}
 
