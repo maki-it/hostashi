@@ -1150,6 +1150,22 @@
         ],
         "type": "object"
       },
+      "CloneAccess": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "password",
+          "user"
+        ],
+        "type": "object"
+      },
       "CloneDatabase": {
         "additionalProperties": false,
         "properties": {
@@ -1224,6 +1240,28 @@
             "type": "boolean"
           }
         },
+        "type": "object"
+      },
+      "CloneStart": {
+        "additionalProperties": false,
+        "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CloneAccess"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "site": {
+            "$ref": "#/components/schemas/Site"
+          }
+        },
+        "required": [
+          "site"
+        ],
         "type": "object"
       },
       "CloudPanelActivated": {
@@ -8480,6 +8518,9 @@
           "frameOptions": {
             "type": "string"
           },
+          "noIndex": {
+            "type": "boolean"
+          },
           "noSniff": {
             "type": "boolean"
           },
@@ -8503,6 +8544,9 @@
           },
           "frameOptions": {
             "type": "string"
+          },
+          "noIndex": {
+            "type": "boolean"
           },
           "noSniff": {
             "type": "boolean"
@@ -17260,7 +17304,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Site"
+                  "$ref": "#/components/schemas/CloneStart"
                 }
               }
             },

@@ -31,6 +31,9 @@ var ReferrerPolicies = []string{
 // Permissions-Policy: the powerful features off for every origin.
 const PermissionsPolicyStrict = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
 
+// RobotsNoIndex is the value of X-Robots-Tag that NoIndex sends.
+const RobotsNoIndex = "noindex, nofollow"
+
 // MaxHeaderValueBytes bounds an own header value (CSP, Permissions-Policy).
 const MaxHeaderValueBytes = 4096
 
@@ -57,6 +60,9 @@ type WebHeaders struct {
 	// CSPReportOnly it goes into Content-Security-Policy-Report-Only.
 	CSP           string `json:"csp,omitempty"`
 	CSPReportOnly bool   `json:"cspReportOnly,omitempty"`
+	// NoIndex sends X-Robots-Tag: noindex, nofollow, so search engines
+	// leave the site out (the default of a staging clone, ADR-0070).
+	NoIndex bool `json:"noIndex,omitempty"`
 }
 
 // IsZero reports whether no header is switched on.
@@ -94,6 +100,10 @@ func (h WebHeaders) List() []WebHeader {
 		}
 
 		l = append(l, WebHeader{name, h.CSP})
+	}
+
+	if h.NoIndex {
+		l = append(l, WebHeader{"X-Robots-Tag", RobotsNoIndex})
 	}
 
 	return l

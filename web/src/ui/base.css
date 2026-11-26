@@ -27,6 +27,40 @@ h3 {
   letter-spacing: var(--head-ls);
 }
 
+/* The session check before the first page: an empty screen, and a spinner
+   only when the check takes longer than a blink. */
+.ui-boot {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+}
+.ui-boot-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  opacity: 0;
+  animation:
+    ui-boot-show 0.2s ease-out 0.4s forwards,
+    ui-boot-spin 0.8s linear infinite;
+}
+@keyframes ui-boot-show {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ui-boot-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-boot-spinner {
+    animation: ui-boot-show 0.2s ease-out 0.4s forwards;
+  }
+}
+
 /* Login, setup, invitation and the second factor: one narrow column. */
 .ui-auth {
   display: grid;

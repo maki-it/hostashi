@@ -265,7 +265,7 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
             disabled={busy}
             onClick={() =>
               void save(
-                toForm(view.defaults, strict),
+                { ...toForm(view.defaults, strict), noIndex: form.noIndex },
                 "The recommended headers are on.",
               )
             }
