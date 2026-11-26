@@ -29,6 +29,7 @@ import {
   type Site,
 } from "./sites";
 import { Button, Card, Field, Notice } from "./ui";
+import { SearchEnginesCard } from "./SearchEngines";
 
 type Props = { site: Site; php: PHPVersions | null; onChange: () => Promise<void>; admin?: boolean };
 
@@ -36,11 +37,14 @@ type Props = { site: Site; php: PHPVersions | null; onChange: () => Promise<void
 // addendum 3); users switch their own site between static and PHP.
 export function SiteWebSettings({ site, php, onChange, admin = false, staff = false }: Props & { staff?: boolean }) {
   const change = staff && <ChangeTypeCard site={site} php={php} onChange={onChange} admin={admin} />;
+  // A redirect answers before any header is added (ADR-0054).
+  const robots = siteType(site) !== "redirect" && site.state === "active" && <SearchEnginesCard site={site} />;
   switch (siteType(site)) {
     case "proxy":
       return (
         <>
           <ProxyCard site={site} onChange={onChange} />
+          {robots}
           {change}
         </>
       );
@@ -50,6 +54,7 @@ export function SiteWebSettings({ site, php, onChange, admin = false, staff = fa
           <AppCard site={site} onChange={onChange} />
           <AppSettingsCard site={site} onChange={onChange} admin={admin} />
           <EnvCard site={site} />
+          {robots}
           {change}
         </>
       );
@@ -59,6 +64,7 @@ export function SiteWebSettings({ site, php, onChange, admin = false, staff = fa
           <AppCard site={site} onChange={onChange} />
           <ProgramSettingsCard site={site} onChange={onChange} />
           <EnvCard site={site} />
+          {robots}
           {change}
         </>
       );
@@ -69,6 +75,7 @@ export function SiteWebSettings({ site, php, onChange, admin = false, staff = fa
           <PythonSettingsCard site={site} onChange={onChange} admin={admin} />
           <VenvCard site={site} onChange={onChange} />
           <EnvCard site={site} />
+          {robots}
           {change}
         </>
       );
@@ -86,6 +93,7 @@ export function SiteWebSettings({ site, php, onChange, admin = false, staff = fa
       {!change && <TypeCard site={site} php={php} onChange={onChange} />}
       <WebRootCard site={site} onChange={onChange} />
       {siteType(site) === "php" && site.state === "active" && <WordPressCard site={site} />}
+      {robots}
       {change}
     </>
   );

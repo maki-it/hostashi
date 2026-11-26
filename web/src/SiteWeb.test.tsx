@@ -7,6 +7,10 @@ import { assetCacheDefaults, webDirProblem, type Site } from "./sites";
 import { SiteWebSettings } from "./SiteWeb";
 import { mockFetch } from "./test-utils";
 
+// The Search engines card reads the headers; the tests look at the writes.
+const headersView = { body: { headers: {}, defaults: {}, referrerPolicies: [], permissionsPolicyStrict: "", maxValueBytes: 1024 } };
+const writes = <T extends { method: string; path: string }>(calls: T[]) => calls.filter((c) => !(c.method === "GET" && c.path.endsWith("/headers")));
+
 const php = { installed: ["8.2", "8.4"], supported: ["8.2", "8.3", "8.4"], legacy: ["8.2"] };
 
 const site: Site = {
@@ -36,7 +40,7 @@ describe("webDirProblem", () => {
 describe("SiteWebSettings", () => {
   it("saves the folder and the static options of a static site", async () => {
     const user = userEvent.setup();
-    const calls = mockFetch({ "PUT /api/v1/sites/docs/web": (b: unknown) => ({ body: { ...site, web: b } }) });
+    const calls = mockFetch({ "GET /api/v1/sites/docs/headers": headersView, "PUT /api/v1/sites/docs/web": (b: unknown) => ({ body: { ...site, web: b } }) });
     render(<SiteWebSettings site={site} php={php} onChange={async () => undefined} />);
     const card = within(screen.getByRole("region", { name: "Web root" }));
     expect(card.getByRole("button", { name: "Save web root" })).toBeDisabled();
@@ -44,7 +48,7 @@ describe("SiteWebSettings", () => {
     await user.type(card.getByLabelText("Folder below htdocs"), "../etc");
     await user.click(card.getByRole("button", { name: "Save web root" }));
     expect(await card.findByRole("alert")).toHaveTextContent("Use folder names");
-    expect(calls).toEqual([]);
+    expect(writes(calls)).toEqual([]);
 
     await user.clear(card.getByLabelText("Folder below htdocs"));
     await user.type(card.getByLabelText("Folder below htdocs"), "dist");
@@ -52,7 +56,7 @@ describe("SiteWebSettings", () => {
     await user.click(card.getByLabelText(/^Cache assets/));
     await user.click(card.getByRole("button", { name: "Save web root" }));
     expect(await card.findByRole("status")).toHaveTextContent("The site serves htdocs/dist now.");
-    expect(calls.map((c) => [c.method, c.path, c.body])).toEqual([
+    expect(writes(calls).map((c) => [c.method, c.path, c.body])).toEqual([
       [
         "PUT",
         "/api/v1/sites/docs/web",
@@ -63,7 +67,7 @@ describe("SiteWebSettings", () => {
 
   it("saves a custom cache time and file types and refuses bad ones", async () => {
     const user = userEvent.setup();
-    const calls = mockFetch({ "PUT /api/v1/sites/docs/web": (b: unknown) => ({ body: { ...site, web: b } }) });
+    const calls = mockFetch({ "GET /api/v1/sites/docs/headers": headersView, "PUT /api/v1/sites/docs/web": (b: unknown) => ({ body: { ...site, web: b } }) });
     render(<SiteWebSettings site={{ ...site, web: { dir: "", spa: false, assetCache: true } }} php={php} onChange={async () => undefined} />);
     const card = within(screen.getByRole("region", { name: "Web root" }));
     const time = card.getByLabelText("Cache time");
@@ -81,18 +85,18 @@ describe("SiteWebSettings", () => {
     await user.type(types, ".css, java script!");
     await user.click(card.getByRole("button", { name: "Save web root" }));
     expect(await card.findByRole("alert")).toHaveTextContent('"script!" is not a file type');
-    expect(calls).toEqual([]);
+    expect(writes(calls)).toEqual([]);
 
     await user.clear(types);
     await user.type(types, "css, js woff2");
     await user.click(card.getByRole("button", { name: "Save web root" }));
     await card.findByRole("status");
-    expect(calls[0]?.body).toEqual({ dir: "", spa: false, assetCache: true, assetCacheSeconds: 43200, assetCacheExts: ["css", "js", "woff2"] });
+    expect(writes(calls)[0]?.body).toEqual({ dir: "", spa: false, assetCache: true, assetCacheSeconds: 43200, assetCacheExts: ["css", "js", "woff2"] });
   });
 
   it("restores the defaults and keeps stored values while the cache is off", async () => {
     const user = userEvent.setup();
-    const calls = mockFetch({ "PUT /api/v1/sites/docs/web": (b: unknown) => ({ body: { ...site, web: b } }) });
+    const calls = mockFetch({ "GET /api/v1/sites/docs/headers": headersView, "PUT /api/v1/sites/docs/web": (b: unknown) => ({ body: { ...site, web: b } }) });
     const stored = { dir: "", spa: false, assetCache: true, assetCacheSeconds: 3600, assetCacheExts: ["css"] };
     render(<SiteWebSettings site={{ ...site, web: stored }} php={php} onChange={async () => undefined} />);
     const card = within(screen.getByRole("region", { name: "Web root" }));
@@ -106,12 +110,12 @@ describe("SiteWebSettings", () => {
     expect(card.queryByLabelText("Cache time")).not.toBeInTheDocument();
     await user.click(card.getByRole("button", { name: "Save web root" }));
     await card.findByRole("status");
-    expect(calls[0]?.body).toEqual({ dir: "", spa: false, assetCache: false, assetCacheSeconds: 3600, assetCacheExts: ["css"] });
+    expect(writes(calls)[0]?.body).toEqual({ dir: "", spa: false, assetCache: false, assetCacheSeconds: 3600, assetCacheExts: ["css"] });
   });
 
   it("offers the asset cache but no single-page app for a PHP site", async () => {
     const user = userEvent.setup();
-    const calls = mockFetch({ "GET /api/v1/sites/docs/wordpress": { body: { state: "none" } }, "PUT /api/v1/sites/docs/web": (b: unknown) => ({ body: { ...site, web: b } }) });
+    const calls = mockFetch({ "GET /api/v1/sites/docs/headers": headersView, "GET /api/v1/sites/docs/wordpress": { body: { state: "none" } }, "PUT /api/v1/sites/docs/web": (b: unknown) => ({ body: { ...site, web: b } }) });
     render(<SiteWebSettings site={{ ...site, type: "php", php: "8.4", web: { dir: "", spa: true, assetCache: false } }} php={php} onChange={async () => undefined} />);
     const card = within(screen.getByRole("region", { name: "Web root" }));
     expect(card.queryByLabelText(/^Single-page app/)).not.toBeInTheDocument();
@@ -130,7 +134,7 @@ describe("SiteWebSettings", () => {
 
   it("turns a static site into a PHP site with the newest standard version", async () => {
     const user = userEvent.setup();
-    const calls = mockFetch({ "PUT /api/v1/sites/docs/php": (b: unknown) => ({ body: { ...site, type: "php", php: (b as { php: string }).php } }) });
+    const calls = mockFetch({ "GET /api/v1/sites/docs/headers": headersView, "PUT /api/v1/sites/docs/php": (b: unknown) => ({ body: { ...site, type: "php", php: (b as { php: string }).php } }) });
     render(<SiteWebSettings site={site} php={php} onChange={async () => undefined} />);
     const card = within(screen.getByRole("region", { name: "Site type" }));
     expect(card.getByRole("button", { name: "Save type" })).toBeDisabled();
@@ -140,12 +144,12 @@ describe("SiteWebSettings", () => {
     expect(card.getByText(/The site gets its own PHP pool/)).toBeInTheDocument();
     await user.click(card.getByRole("button", { name: "Save type" }));
     expect(await card.findByRole("status")).toHaveTextContent("docs is a PHP site with PHP 8.4 now.");
-    expect(calls[0]?.body).toEqual({ php: "8.4" });
+    expect(writes(calls)[0]?.body).toEqual({ php: "8.4" });
   });
 
   it("turns a PHP site into a static site", async () => {
     const user = userEvent.setup();
-    const calls = mockFetch({ "GET /api/v1/sites/docs/wordpress": { body: { state: "none" } }, "PUT /api/v1/sites/docs/php": () => ({ body: site }) });
+    const calls = mockFetch({ "GET /api/v1/sites/docs/headers": headersView, "GET /api/v1/sites/docs/wordpress": { body: { state: "none" } }, "PUT /api/v1/sites/docs/php": () => ({ body: site }) });
     render(<SiteWebSettings site={{ ...site, type: "php", php: "8.2" }} php={php} onChange={async () => undefined} />);
     const card = within(screen.getByRole("region", { name: "Site type" }));
     await user.click(card.getByLabelText(/^Static/));
