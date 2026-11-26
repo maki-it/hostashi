@@ -105,5 +105,5 @@ So a Node.js security release reaches a server only after three manual steps: me
 ## Open questions for Kim
 
 1. ~~Part 1: should security pin PRs for Node.js and CPython merge themselves (1B), as an exception to "no auto-merge"?~~ Decided (Kim, 2026-11-26): yes, 1B.
-2. Part 2: runtimes suite on by default (2C), automatic patch releases (2B), or keep today's path (2A)?
+2. ~~Part 2: runtimes suite on by default (2C), automatic patch releases (2B), or keep today's path (2A)?~~ Decided (Kim, 2026-11-26): 2C.
 3. Part 3: daily vulnerability check against the latest release (3B), and `--auto-update` stays opt-in?
