@@ -137,7 +137,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      actions: read
+      actions: write
       checks: read
     uses: ./.github/workflows/pin-auto-merge.yml
     with:

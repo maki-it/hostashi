@@ -37,7 +37,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      actions: read
+      actions: write
       checks: read
     steps:
       - name: Wait for the checks and merge
@@ -92,3 +92,6 @@ jobs:
           gh pr merge "$pr" --repo "$REPO" --squash --delete-branch --match-head-commit "$sha"
           gh pr comment "$pr" --repo "$REPO" --body "Merged by the pin workflow after every check on $sha passed (ADR-0077): only patch releases or builds of lines that were already pinned. Run: $RUN_URL"
           echo "Merged #$pr" | tee -a "$GITHUB_STEP_SUMMARY"
+          # A merge with GITHUB_TOKEN starts no push workflows: publish the
+          # new pins in the runtimes suite (ADR-0077 part 2).
+          gh workflow run runtimes.yml --repo "$REPO" --ref main

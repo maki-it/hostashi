@@ -1,0 +1,15 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# postinst of hostashi-runtimes (ADR-0077): agent and panel read the pins at
+# start, so restart them if they run. The agent then installs newer
+# releases of the installed lines by itself. Never fails the package.
+set -e
+
+[ "$1" = configure ] || exit 0
+
+if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+  systemctl try-restart hostashi-agent.service hostashi.service >/dev/null 2>&1 || true
+fi
+
+exit 0
