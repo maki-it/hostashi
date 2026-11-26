@@ -138,7 +138,7 @@ func (f *fakeClones) WPCloneStatus(_ context.Context, site string) (agentapi.WPI
 	st := agentapi.WPInstallStatus{Site: site, State: f.wpState}
 	if st.State == agentapi.DeployFailed {
 		st.Error = "a step failed, see the log"
-		st.Log = "$ wp config get DB_NAME\nwpq_wp\n\n$ wp search-replace\nError: Table wp_options does not exist.\n"
+		st.Log = "$ wp config get DB_NAME\nwpq_wp\n\n$ wp search-replace\nError: Table wp_options does not exist.\nhostashi wp-run: wpcli: wp search-replace: exit status 1\n"
 	}
 
 	return st, nil
@@ -682,7 +682,7 @@ func TestCloneSiteWordPressFails(t *testing.T) {
 
 	for _, e := range list {
 		if e.Action == "site.clone.failed" {
-			if !strings.Contains(string(e.Detail), "configuration: a step failed, see the log: Error: Table wp_options does not exist.") {
+			if !strings.Contains(string(e.Detail), "configuration: a step failed, see the log: Error: Table wp_options does not exist. (hostashi wp-run: wpcli: wp search-replace: exit status 1)") {
 				t.Errorf("detail %s", e.Detail)
 			}
 

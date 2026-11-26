@@ -106,7 +106,7 @@ func TestRunClone(t *testing.T) {
 		}
 	}
 
-	if calls[3].stdin != "wp-secret-123456\n" || !slices.Contains(calls[3].args, "--prompt=value") {
+	if calls[3].stdin != "wp-secret-123456\n" || !slices.Contains(calls[3].args, "eval") || !slices.Contains(calls[3].args, "--skip-wordpress") {
 		t.Errorf("password call %+v", calls[3])
 	}
 
