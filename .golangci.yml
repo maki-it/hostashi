@@ -65,6 +65,9 @@ linters:
         # PostgreSQL major by absolute path, never as root, with fixed
         # arguments, the connection in libpq's environment and the password
         # only in a 0600 passfile (ADR-0051).
+        # internal/f2bctl runs /usr/bin/fail2ban-client with three fixed
+        # argument shapes (ping, status/get banip of a Hostashi jail, set
+        # unbanip of a validated address) to show and lift bans (ADR-0078).
         # internal/wpcli runs the site's PHP CLI (/usr/bin/php<version>)
         # with the pinned, root-owned WP-CLI phar and a fixed list of
         # sub-commands, only inside hostashi-wp@<site> as the site user (it
@@ -80,6 +83,7 @@ linters:
             - "!**/internal/mariadbctl/*.go"
             - "!**/internal/pgctl/*.go"
             - "!**/internal/wpcli/*.go"
+            - "!**/internal/f2bctl/*.go"
           deny:
             - pkg: os/exec
               desc: "no process execution in product code (see docs/05-security.md)"
