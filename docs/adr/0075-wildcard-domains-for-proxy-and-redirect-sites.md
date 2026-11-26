@@ -83,5 +83,5 @@ Kim chose A on 2026-11-26 (decision card in the project thread).
 ## Open questions for Kim
 
 1. ~~Named wildcard per site (A), server-wide catch-all (B) or both?~~ Decided (Kim, 2026-11-26): A.
-2. Proxy and redirect sites only, as asked, or also PHP and static sites (for example WordPress multisite)? Recommendation: proxy and redirect only for now. The other types have accounts, page cache and application profiles that need their own look.
+2. ~~Proxy and redirect sites only, or also PHP and static sites?~~ Decided (Kim, 2026-11-26): proxy and redirect only for now.
 3. Build for 1.0, or after the v1 release (1.1)? Recommendation: 1.1, right after ADR-0076, unless a site of yours needs it now.
