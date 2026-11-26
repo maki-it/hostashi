@@ -1,6 +1,6 @@
 # ADR-0078 fail2ban bans in the panel
 
-**Status:** Proposed. **Date drafted:** 2026-11-26. **Decides:** Kim. **Related:** ADR-0021 (fail2ban), ADR-0034 (firewall rules in the panel), ADR-0035 (roles), ADR-0052 (services), ADR-0053 (site logs), ADR-0059 (real IP), ADR-0066 (basic auth and IP rules).
+**Status:** Accepted (Kim, 2026-11-26). **Date drafted:** 2026-11-26. **Decides:** Kim. **Related:** ADR-0021 (fail2ban), ADR-0034 (firewall rules in the panel), ADR-0035 (roles), ADR-0052 (services), ADR-0053 (site logs), ADR-0059 (real IP), ADR-0066 (basic auth and IP rules).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
