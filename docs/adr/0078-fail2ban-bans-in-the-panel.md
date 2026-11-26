@@ -50,11 +50,11 @@ Constraints:
 **Agent.** Two typed operations:
 
 - `fail2ban.status` (read): returns the four jails. It runs `fail2ban-client status <jail>` and `fail2ban-client get <jail> banip --with-time` for each jail name from a fixed list in the code; never a jail name from the request.
-- `fail2ban.unban` (write): request `{jail, address}`. The jail must be one of the four; the address is parsed with `netip.ParseAddr` and passed in canonical form, so no other string reaches the command line. It runs `fail2ban-client set <jail> unbanip <address>`.
+- `fail2ban.unban` (write): request `{address}`. The address must be an IPv4 or IPv6 address in canonical form (checked with `netip.ParseAddr`), so no other string reaches the command line. It runs `fail2ban-client set <jail> unbanip <address>` for each of the four jails and returns the jails that had banned it.
 
 `internal/f2bctl` is the only package allowed to start `/usr/bin/fail2ban-client`, by absolute path, with these three argument shapes, a timeout and a size limit on the output. It is added to the `no-exec` exceptions in `.golangci.yml` with a comment pointing here. No shell, no other sub-command.
 
-**API and CLI.** `GET /api/v1/firewall/bans` and `DELETE /api/v1/firewall/bans/{jail}/{address}`, described in OpenAPI (ADR-0058), and `hostashi firewall bans` / `hostashi firewall unban <jail> <address>`.
+**API and CLI.** `GET /api/v1/firewall/bans` and `DELETE /api/v1/firewall/bans/{address}`, described in OpenAPI (ADR-0058), and `hostashi firewall bans` / `hostashi firewall unban <address>`.
 
 ## Consequences
 
