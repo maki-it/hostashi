@@ -29,6 +29,16 @@ The script creates the environment `release` (your approval, tags `v*` only), cr
 
 The script refuses to replace an existing key. A new key reaches servers only through a package update signed with the old one, so `--replace` is for a planned change or a leak.
 
+### The runtimes key (once)
+
+Newer Node.js and CPython pins reach servers through their own apt suite `runtimes`, published from `main` without a release (ADR-0077). It is signed with a second key that servers trust for that suite only, so it can never sign a Hostashi package. Create it the same way:
+
+```sh
+bash new.sh --runtimes
+```
+
+The script creates the environment `runtimes` (no approval, deployments from `main` only) and the secret `RUNTIMES_SIGNING_KEY`, and leaves the backup `hostashi-runtimes-signing-key.asc`. Send the printed fingerprint and public key to the thread; they go into the repository with the pull request that builds the suite.
+
 ### Renew the key
 
 Nothing to do by hand. When the key has less than a year left, the approved apt job of the next stable release extends it by two years (same key, same fingerprint) and opens a pull request `packaging: extend the apt signing key by two years` with the renewed public key. Merge it; the release after that brings the renewed key to the servers with `apt upgrade`. The secret `APT_SIGNING_KEY` stays as it is.
