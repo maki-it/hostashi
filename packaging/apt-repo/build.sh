@@ -63,8 +63,8 @@ done
 apt-ftparchive \
   -o APT::FTPArchive::Release::Origin=Hostashi \
   -o APT::FTPArchive::Release::Label=Hostashi \
-  -o APT::FTPArchive::Release::Suite=$SUITE \
-  -o APT::FTPArchive::Release::Codename=$SUITE \
+  -o APT::FTPArchive::Release::Suite="$SUITE" \
+  -o APT::FTPArchive::Release::Codename="$SUITE" \
   -o APT::FTPArchive::Release::Architectures="${ARCHS[*]}" \
   -o APT::FTPArchive::Release::Components=main \
   -o APT::FTPArchive::Release::Description="$DESCRIPTION" \
