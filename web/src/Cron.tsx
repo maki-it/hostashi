@@ -114,8 +114,9 @@ export function CronSettings({ site }: { site: Site }) {
             ) : (
               <>
                 {!list.statusKnown && <p className="ui-hint ui-flush">Last and next runs are not known right now: the server did not answer.</p>}
-                <div className="ui-table-box">
-                  <table className="ui-table" aria-label={"Cron jobs of " + site.name}>
+                {/* No scroll box around the table: it would cut off the More menu. */}
+                <div>
+                  <table className="ui-table ui-table-actions-below" aria-label={"Cron jobs of " + site.name}>
                     <thead>
                       <tr>
                         <th scope="col">Schedule</th>

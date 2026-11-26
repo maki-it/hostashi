@@ -1826,6 +1826,24 @@ html:has(.ui-files) {
   .ui-table td.ui-empty {
     text-align: center;
   }
+  .ui-table td[data-label] {
+    grid-template-columns: 9em minmax(0, 1fr);
+  }
+  /* A long badge in a table cell may wrap, as in a list of details. */
+  .ui-table td[data-label] > .ui-badge {
+    height: auto;
+    min-height: 24px;
+    padding-block: 2px;
+    line-height: 1.35;
+    white-space: normal;
+  }
+  /* Tables with several row buttons put them under the row, not beside the title. */
+  .ui-table-actions-below td[data-actions] {
+    grid-row: auto;
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    padding-top: var(--space-2);
+  }
 }
 .ui-row-actions:has(.ui-btn) {
   gap: var(--space-2);
@@ -2025,6 +2043,10 @@ html:has(.ui-files) {
 .ui-cron-cmd {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+/* A card the Actions menu scrolls to stays clear of the sticky top bar. */
+.ui-card[id] {
+  scroll-margin-top: 88px;
 }
 /* Two cards side by side on a wide screen, one above the other otherwise. */
 .ui-two {
