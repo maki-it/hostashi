@@ -127,6 +127,28 @@ SRC
   [ "$(stat -c '%U:%G %a' /usr/share/hostashi/runtimes.json)" = "root:root 644" ] || fail "runtimes.json owner or mode"
   grep -q '"schema": 1' /usr/share/hostashi/runtimes.json || fail "runtimes.json content"
 
+  # The installer's pin (ADR-0077): the suite may provide hostashi-runtimes
+  # only. A suite runtimes that offers hostashi, signed with the runtimes
+  # key, must not reach apt's candidates.
+  cp /src/packaging/apt/00hostashi-runtimes /etc/apt/preferences.d/00hostashi-runtimes
+  rcand=$(apt-cache policy hostashi-runtimes | awk '/Candidate:/ { print $2 }')
+  [ "$rcand" = "$rwant" ] || fail "with the pin apt offers hostashi-runtimes '$rcand', want $rwant"
+  evil=$work/evil
+  cp -a "$repo" "$evil"
+  mv "$evil/dists/stable" "$evil/dists/runtimes"
+  sed -i 's/^Suite: stable$/Suite: runtimes/; s/^Codename: stable$/Codename: runtimes/' "$evil/dists/runtimes/Release"
+  rm "$evil/dists/runtimes/InRelease" "$evil/dists/runtimes/Release.gpg"
+  GNUPGHOME=$work/other gpg --batch --yes --quiet --clearsign -o "$evil/dists/runtimes/InRelease" "$evil/dists/runtimes/Release"
+  sed -i "s|^URIs: .*|URIs: file:$evil|" "$rsrc"
+  rm -f "$src"
+  rm -rf /var/lib/apt/lists/*
+  out=$(update) || fail "apt-get update with the changed runtimes suite: $out"
+  pol=$(apt-cache policy hostashi)
+  grep 'Candidate: (none)' <<<"$pol" >/dev/null || fail "the runtimes suite can provide hostashi: $pol"
+  rm /etc/apt/preferences.d/00hostashi-runtimes
+  sed -i "s|^URIs: .*|URIs: file:$rrepo|" "$rsrc"
+  use "$repo" "$repo/hostashi.asc"
+
   # The stable key does not open the runtimes suite, and the other way round.
   cp "$repo/hostashi.asc" "$rkeyring"
   if update >/dev/null; then fail "the runtimes suite was accepted with the stable key"; fi
