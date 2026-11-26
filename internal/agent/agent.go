@@ -619,6 +619,7 @@ func (h *siteOps) register(s *agentrpc.Server) {
 	h.registerScan(s)
 	h.registerFiles(s)
 	h.registerPermissions(s)
+	h.registerHomeCopy(s)
 	h.registerLogs(s)
 
 	h.registerSSH(s)

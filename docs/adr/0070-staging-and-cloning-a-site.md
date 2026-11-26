@@ -83,3 +83,15 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 3. ~~Rewrite URLs only for WordPress with WP-CLI and give other applications a checklist (3A)?~~ Decided (Kim, 2026-11-25): 3A.
 
 The ADR as a whole was accepted by Kim on 2026-11-25.
+
+## Implementation notes: home copy (2026-11-26)
+
+Notes on the typed copy routine (option 2A); they change no decision.
+
+- Agent op `site.home.copy {source, target, replace}` starts a background job and answers at once; `site.home.copy.status {id}` reports it with counters (folders, files, links, bytes, skipped entries with up to 50 paths). Jobs live in the agent's memory only; one lost by a restart is unknown, and the panel counts it as failed. One copy at a time may touch a site (409), a job ends after 6 hours [V: `internal/sites/copy_test.go`].
+- Both sites must be registered with their accounts unchanged; both homes are opened without links (`RESOLVE_BENEATH|NO_SYMLINKS|NO_MAGICLINKS|NO_XDEV`), as for the permission reset. Every entry is looked at through an `O_PATH|O_NOFOLLOW` fd, opened for reading with `O_NONBLOCK` and compared by device and inode, so a swap in between fails the copy. New entries are created with `O_EXCL|O_NOFOLLOW` below the open target folder, given to the target site, then get the source's mode without setuid, setgid and sticky, and its times. File data goes through `copy_file_range` where the file systems allow it, in 64 MiB steps so a canceled job stops inside a large file.
+- Symbolic links are copied as links, never followed. An absolute link into the source home (the shared paths of a Git deploy) is rewritten to the same path in the target home; any other target is kept as it is. FIFOs are made again; sockets, device files, hard links to files of another owner, entries on other file systems and trees deeper than 128 levels are skipped and reported.
+- Not copied: `.ssh`, `.deploy/repo` and `.deploy/results` (the Git cache and history of the source). Release folders, shared paths and the deploy link are copied.
+- An entry that exists in the target already fails the copy (folders of the target site are merged, so the empty web root of a new site is no obstacle). With `replace` ("refresh from source") the target home is emptied first, apart from its own `.ssh`, `.deploy/repo` and `.deploy/results`.
+- Root bypasses the disk quota while it writes [U]; the panel checks free space before it starts a clone. ACLs and extended attributes are not copied.
+- Tests run as root (two sites need two uids; CI step `TestRoot`): contents, modes, times, links, link rewrite, skipped paths, owners, setuid, hard link to a foreign file, device file, socket, existing entry, replace, cancellation, a target home swapped for a link, an account that changed [V: `internal/sites/copy_test.go`].

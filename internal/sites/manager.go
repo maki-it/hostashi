@@ -71,6 +71,8 @@ type Manager struct {
 	// trees replaces systemTrees in tests, whose temporary directories
 	// lie in one of them.
 	trees []string
+	// copies are the home copy jobs (ADR-0070).
+	copies copyJobs
 }
 
 // NewManager builds a Manager on a loaded registry.
