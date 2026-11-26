@@ -32,7 +32,12 @@ StandardOutput=journal
 StandardError=inherit
 SyslogIdentifier=hostashi-wp-%i
 KillMode=control-group
-UMask=0027
+# Not 0027: the files belong to the site's own group, so nginx
+# (www-data) reads them as "other". With 0027 it could not enter
+# wp-admin or read any style sheet, and /wp-admin/ answered 403. 0022
+# gives the modes of the permissions reset (ADR-0067): folders 755,
+# files 644. The home (0750, group www-data) keeps other users out.
+UMask=0022
 
 PrivateTmp=yes
 PrivateDevices=yes
