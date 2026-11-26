@@ -1,6 +1,6 @@
 # ADR-0074 Backups of deleted sites
 
-**Status:** Proposed. **Date drafted:** 2026-11-26. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups with restic), ADR-0018 (REST API, scope `backups:restore`), ADR-0035 (roles), ADR-0058 (OpenAPI and CLI).
+**Status:** Accepted (Kim, 2026-11-26). **Date drafted:** 2026-11-26. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0008 (backups with restic), ADR-0018 (REST API, scope `backups:restore`), ADR-0035 (roles), ADR-0058 (OpenAPI and CLI).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 

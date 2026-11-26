@@ -76,7 +76,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0071 | Panel UI in English and German | Accepted on 2026-11-25 ([adr/0071](adr/0071-panel-ui-in-english-and-german.md)) | Done |
 | 0072 | Rename a site | Accepted on 2026-11-25 ([adr/0072](adr/0072-rename-a-site.md)) | Done |
 | 0073 | MCP server for AI assistants | Accepted on 2026-11-25 ([adr/0073](adr/0073-mcp-server.md)) | Done |
-| 0074 | Backups of deleted sites | Proposed ([adr/0074](adr/0074-backups-of-deleted-sites.md)) | Open |
+| 0074 | Backups of deleted sites | Accepted on 2026-11-26 ([adr/0074](adr/0074-backups-of-deleted-sites.md)) | In progress |
 
 ---
 
@@ -482,4 +482,4 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0074 Backups of deleted sites
 
-**Full text (status Proposed, 2026-11-26):** [adr/0074](adr/0074-backups-of-deleted-sites.md). Summary: after a site is deleted its snapshots stay in the repository (restic `forget` never empties a group that gets no new snapshots), but the Backups page only lists existing sites and a restore needs the site's home. Recommendation: list sites with snapshots through a new agent operation `backup.sites`, show "Deleted sites" to administrators, restore a deleted site's snapshot into an existing site the administrator picks, keep the snapshots until the administrator deletes them with a typed-name confirmation, and show a reused name only the snapshots taken after the new site was created.
+**Full text (status Accepted, 2026-11-26, by Kim):** [adr/0074](adr/0074-backups-of-deleted-sites.md). Summary: after a site is deleted its snapshots stay in the repository (restic `forget` never empties a group that gets no new snapshots), but the Backups page only lists existing sites and a restore needs the site's home. Recommendation: list sites with snapshots through a new agent operation `backup.sites`, show "Deleted sites" to administrators, restore a deleted site's snapshot into an existing site the administrator picks, keep the snapshots until the administrator deletes them with a typed-name confirmation, and show a reused name only the snapshots taken after the new site was created. Decided by Kim on 2026-11-26: restore into an existing site (A), keep until deleted by hand (A) with optional automatic expiry set in the UI, name reuse shows only newer snapshots (A).

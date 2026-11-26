@@ -68,7 +68,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0071](0071-panel-ui-in-english-and-german.md) | Panel UI in English and German | Accepted |
 | [0072](0072-rename-a-site.md) | Rename a site | Accepted |
 | [0073](0073-mcp-server.md) | MCP server for AI assistants | Accepted |
-| [0074](0074-backups-of-deleted-sites.md) | Backups of deleted sites | Proposed |
+| [0074](0074-backups-of-deleted-sites.md) | Backups of deleted sites | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 
