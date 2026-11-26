@@ -1305,7 +1305,7 @@ wait_clone() {
     [ "$state" = copying ] || break
     sleep 2
   done
-  if [ "$state" != done ]; then
+  if [ "$state" != "done" ]; then
     x journalctl --no-pager -o short-precise -u hostashi-wp@wpqs.service -n 60 || true
     fail "clone ended '$state': $(x cat /tmp/api.out)"
   fi
