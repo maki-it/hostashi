@@ -23,6 +23,7 @@
 - [Access protection](Access-protection.md)
 - [File manager](File-manager.md)
 - [Reset permissions](Reset-permissions.md)
+- [Staging and copies](Staging-and-copies.md)
 - [Site logs](Site-logs.md)
 
 **Databases**
