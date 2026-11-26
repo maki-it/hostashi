@@ -169,6 +169,8 @@ type Service struct {
 	gitBox     *secrets.Box   // nil: no Git deploy (ADR-0062)
 	deploys    DeployAgent    // nil: no deploy runs (ADR-0062)
 	wp         WordPressAgent // nil: no WordPress installs (ADR-0069)
+	clones     CloneAgent     // nil: no clones (ADR-0070)
+	cloneKick  chan struct{}  // wakes RunClones
 	deployKick chan struct{}  // wakes RunDeploys
 	scans      ScanAgent      // nil: no malware scans (ADR-0064)
 	scanKick   chan struct{}  // wakes RunScans

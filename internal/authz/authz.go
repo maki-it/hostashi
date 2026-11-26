@@ -142,6 +142,11 @@ var table = map[Action]Rule{
 	"pools:read":   manage("sites:read"),
 	"parked:write": manage("sites.maintenance:write"),
 	"sites:delete": mgrSite("sites:delete"),
+	// A clone is a new site with a copy of the source's files and data
+	// (ADR-0070); a refresh replaces the clone's with the source's again.
+	// The clone handler also asks for databases:write.
+	"sites:clone":         mgrSite("sites:write"),
+	"sites.clone:refresh": mgrSite("sites:write"),
 	// Delete a site and park domains of it (ADR-0048); the handler also
 	// asks for parked:write.
 	"sites:park":          mgrSite("sites:delete"),
