@@ -748,7 +748,7 @@ func (m *Manager) startBuild(ctx context.Context, st map[string]run, site string
 
 	m.removeCreds(site)
 
-	if _, err := readResult(home, r.ID); err != nil {
+	if !hasResult(home, r.ID) {
 		return false, nil
 	}
 
@@ -797,6 +797,13 @@ type result struct {
 	Commit  string `json:"commit"`
 	Author  string `json:"author"`
 	Message string `json:"message"`
+}
+
+// hasResult reports whether git-sync left a valid result for run id.
+func hasResult(home string, id int64) bool {
+	_, err := readResult(home, id)
+
+	return err == nil
 }
 
 func readResult(home string, id int64) (result, error) {
