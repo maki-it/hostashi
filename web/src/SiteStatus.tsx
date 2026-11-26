@@ -270,7 +270,7 @@ export function SiteActions({ site, groups, staff, admin, onTab, onCard }: { sit
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         const el = document.getElementById(cardId(site.name, card));
-        el?.scrollIntoView({ behavior: "smooth", block: "start" });
+        el?.scrollIntoView?.({ behavior: "smooth", block: "start" });
         el?.querySelector<HTMLElement>("input, button:not([aria-label=Close])")?.focus({ preventScroll: true });
       }),
     );
