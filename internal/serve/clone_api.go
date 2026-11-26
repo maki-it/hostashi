@@ -68,10 +68,13 @@ type cloneJSON struct {
 	Source  string `json:"source"`
 	Staging bool   `json:"staging"`
 	// State is copying, done or failed.
-	State      string              `json:"state"`
-	Refresh    bool                `json:"refresh"`
-	Error      string              `json:"error,omitempty"`
-	FilesDone  bool                `json:"filesDone"`
+	State     string `json:"state"`
+	Refresh   bool   `json:"refresh"`
+	Error     string `json:"error,omitempty"`
+	FilesDone bool   `json:"filesDone"`
+	// Config is the configuration step after the copy: "" not yet (or
+	// none needed), running (WordPress), done.
+	Config     string              `json:"config"`
 	Files      *cloneHomeJSON      `json:"files,omitempty"`
 	Databases  []cloneDatabaseJSON `json:"databases"`
 	StartedAt  time.Time           `json:"startedAt"`
@@ -81,7 +84,7 @@ type cloneJSON struct {
 func toCloneJSON(v hosting.CloneView) cloneJSON {
 	out := cloneJSON{
 		Source: v.Source, Staging: v.Staging, State: v.State, Refresh: v.Refresh, Error: v.Error,
-		FilesDone: v.HomeDone, Databases: []cloneDatabaseJSON{}, StartedAt: v.StartedAt,
+		FilesDone: v.HomeDone, Config: v.Config, Databases: []cloneDatabaseJSON{}, StartedAt: v.StartedAt,
 	}
 
 	if !v.FinishedAt.IsZero() {

@@ -386,3 +386,77 @@ func TestStatusInspectsDocumentRoot(t *testing.T) {
 		t.Fatalf("other files: %+v", st)
 	}
 }
+
+func cloneRequest() agentapi.WPCloneRequest {
+	return agentapi.WPCloneRequest{
+		Site: "blog", PHP: "8.4", URL: "https://stage.blog.example.com", From: []string{"blog.example.com"},
+		Databases:   []agentapi.WPCloneDB{{Source: "live_wp", Target: "blog_wp", User: "blog_wp"}},
+		DBPasswords: map[string]string{"blog_wp": "db-secret-123456"}, Staging: true,
+	}
+}
+
+// The clone configuration runs in the same unit, on a document root with
+// files, and its passwords are only in the dbpass credential.
+func TestStartClone(t *testing.T) {
+	e := newEnv(t)
+
+	if err := os.WriteFile(filepath.Join(e.home, "htdocs", "wp-config.php"), []byte("<?php"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := e.m.StartClone(t.Context(), cloneRequest())
+	if err != nil || st.State != agentapi.DeployRunning || len(e.ctl.started) != 1 {
+		t.Fatalf("%+v %v", st, err)
+	}
+
+	dir := filepath.Join(e.base, "creds", "blog")
+
+	raw, _ := os.ReadFile(filepath.Join(dir, wpcli.CredJob))
+
+	var j wpcli.Job
+	if err := json.Unmarshal(raw, &j); err != nil || j.Clone == nil || j.Clone.Path != e.home+"/htdocs" || !j.Clone.Staging || strings.Contains(string(raw), "secret") {
+		t.Fatalf("job %s %v", raw, err)
+	}
+
+	pw, _ := os.ReadFile(filepath.Join(dir, wpcli.CredDBPass))
+	if string(pw) != `{"blog_wp":"db-secret-123456"}` {
+		t.Fatalf("dbpass %s", pw)
+	}
+
+	// The unit loads every credential, so the unused one exists.
+	if _, err := os.Stat(filepath.Join(dir, wpcli.CredAdminPass)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.m.StartClone(t.Context(), cloneRequest()); !errors.Is(err, ErrBusy) {
+		t.Fatalf("second start: %v", err)
+	}
+
+	if _, err := e.m.Start(t.Context(), request()); !errors.Is(err, ErrBusy) {
+		t.Fatalf("install while the clone runs: %v", err)
+	}
+}
+
+func TestStartCloneRefusesInvalid(t *testing.T) {
+	e := newEnv(t)
+
+	for name, f := range map[string]func(*agentapi.WPCloneRequest){
+		"unknown site":  func(r *agentapi.WPCloneRequest) { r.Site = "other" },
+		"no password":   func(r *agentapi.WPCloneRequest) { r.DBPasswords = nil },
+		"stray user":    func(r *agentapi.WPCloneRequest) { r.DBPasswords["root"] = "db-secret-123456" },
+		"bad url":       func(r *agentapi.WPCloneRequest) { r.URL = "https://stage.blog.example.com:8443" },
+		"no databases":  func(r *agentapi.WPCloneRequest) { r.Databases = nil },
+		"same as clone": func(r *agentapi.WPCloneRequest) { r.From = []string{"stage.blog.example.com"} },
+	} {
+		r := cloneRequest()
+		f(&r)
+
+		if _, err := e.m.StartClone(t.Context(), r); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+
+	if len(e.ctl.started) != 0 {
+		t.Fatalf("started %v", e.ctl.started)
+	}
+}

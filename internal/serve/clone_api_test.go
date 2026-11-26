@@ -31,6 +31,14 @@ func (s *stubClones) DBCopy(_ context.Context, source, target string) (agentapi.
 	return agentapi.DBJob{ID: "fedcba9876543210", Kind: "copy", Source: source, Database: target, State: agentapi.JobRunning}, nil
 }
 
+func (s *stubClones) WPCloneStart(_ context.Context, req agentapi.WPCloneRequest) (agentapi.WPInstallStatus, error) {
+	return agentapi.WPInstallStatus{Site: req.Site, State: agentapi.DeployRunning}, nil
+}
+
+func (s *stubClones) WPCloneStatus(_ context.Context, site string) (agentapi.WPInstallStatus, error) {
+	return agentapi.WPInstallStatus{Site: site, State: agentapi.DeployRunning}, nil
+}
+
 func (s *stubClones) PoolList(context.Context) ([]agentapi.PoolInfo, error) { return nil, nil }
 
 func (s *stubClones) HostStats(context.Context) (agentapi.HostStats, error) {

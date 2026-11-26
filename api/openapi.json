@@ -1093,6 +1093,9 @@
       "Clone": {
         "additionalProperties": false,
         "properties": {
+          "config": {
+            "type": "string"
+          },
           "databases": {
             "items": {
               "$ref": "#/components/schemas/CloneDatabase"
@@ -1143,6 +1146,7 @@
           }
         },
         "required": [
+          "config",
           "databases",
           "filesDone",
           "refresh",
