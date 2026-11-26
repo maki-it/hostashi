@@ -167,7 +167,11 @@ export function PHPSettingsCard({ site }: { site: Site }) {
             <Field label="Time zone" hint={`date.timezone, an IANA name. Default ${d.timezone}.`} {...errProp("timezone")}>
               <input className="ui-input" list="php-timezones" value={form.timezone} placeholder={d.timezone} autoComplete="off" onChange={(e) => set("timezone", e.target.value)} />
             </Field>
-            <Field label="Error reporting" hint="error_reporting" {...errProp("errorReporting")}>
+            <Field
+              label="Error reporting"
+              hint="error_reporting. Production reports all but deprecations, development everything."
+              {...errProp("errorReporting")}
+            >
               <select className="ui-select" value={form.errorReporting} onChange={(e) => set("errorReporting", e.target.value)}>
                 <option value="">Default ({presetLabels[d.errorReporting] ?? d.errorReporting})</option>
                 {view.errorReportingPresets.map((p) => (

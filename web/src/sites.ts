@@ -552,6 +552,17 @@ export function siteMessage(err: unknown): string {
 export type SiteStatus = { tone: "ok" | "warn" | "err" | "off"; word: string; key: "active" | "creating" | "deleting" | "disabled" | "maintenance" };
 
 // siteStatus is the state of a site as a badge: a word and a tone.
+/**
+ * runtimeWord names what runs a site's code: "PHP", "app" for Node.js,
+ * Python and app sites, "" for static, reverse proxy and redirect sites,
+ * whose texts then leave the runtime out.
+ */
+export function runtimeWord(s: Pick<Site, "type" | "php">): "PHP" | "app" | "" {
+  const t = siteType(s);
+  if (t === "php") return "PHP";
+  return t === "node" || t === "app" || t === "python" ? "app" : "";
+}
+
 export function siteStatus(s: Site): SiteStatus {
   if (s.state === "deleting") return { tone: "off", word: "Being deleted", key: "deleting" };
   if (s.state !== "active") return { tone: "warn", word: "Being created", key: "creating" };

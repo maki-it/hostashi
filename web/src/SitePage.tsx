@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { ArrowSquareOut } from "@phosphor-icons/react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { CertificateCard } from "./Certificate";
 import { canClone, CloneBadge, CloneCard, CloneStatusCard, useClone } from "./Clone";
 import type { Clone } from "./clones";
 import { siteCertBase } from "./certs";
 import { CronSettings } from "./Cron";
+import { cronFailing, listCron } from "./cron";
+import { getSiteScan } from "./scan";
 import { FileManager } from "./Files";
 import { GitSettings } from "./Git";
 import { LimitSettings } from "./Limits";
@@ -28,6 +31,7 @@ import {
   setTLS,
   siteMessage,
   siteStatus,
+  runtimeWord,
   siteType,
   siteTypeLabel,
   maxTitleLength,
@@ -69,6 +73,50 @@ type Props = {
   /** Opens another folder in the Files tab: a new history entry. */
   onPath?: (path: string) => void;
 };
+
+/**
+ * SiteAlerts shows, beside the site's name, what needs a look: open virus
+ * finds and cron jobs whose last run failed. Each badge opens its tab.
+ */
+function SiteAlerts({ site, groups, tab }: { site: string; groups: SiteGroup[]; tab: SiteTab }) {
+  const [finds, setFinds] = useState(0);
+  const [failing, setFailing] = useState(0);
+  const has = (id: SiteTab) => groups.some((g) => g.tabs.some((t) => t.id === id));
+  const malware = has("malware");
+  const cron = has("cron");
+
+  useEffect(() => {
+    let live = true;
+    if (malware) {
+      getSiteScan(site)
+        .then((s) => live && setFinds(s.findings.filter((f) => f.state === "open").length))
+        .catch(() => undefined);
+    }
+    if (cron) {
+      listCron(site)
+        .then((l) => live && setFailing(l.jobs.filter((j) => !j.paused && cronFailing(j.status)).length))
+        .catch(() => undefined);
+    }
+    return () => {
+      live = false;
+    };
+  }, [site, tab, malware, cron]);
+
+  return (
+    <>
+      {finds > 0 && (
+        <a href={formatHash({ page: "sites", site: { name: site, tab: "malware" } })}>
+          <Badge tone="err">{finds === 1 ? "1 virus find" : `${finds} virus finds`}</Badge>
+        </a>
+      )}
+      {failing > 0 && (
+        <a href={formatHash({ page: "sites", site: { name: site, tab: "cron" } })}>
+          <Badge tone="warn">{failing === 1 ? "1 cron job fails" : `${failing} cron jobs fail`}</Badge>
+        </a>
+      )}
+    </>
+  );
+}
 
 // SitePage shows one site with its settings in tabs (#/sites/<name>/<tab>).
 export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = () => undefined }: Props) {
@@ -137,11 +185,17 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
                 System name <code>{site.name}</code>
               </span>
             )}
-            <span className="ui-mono">{site.domains[0]}</span>
+            {site.domains[0] && (
+              <a className="ui-mono ui-ext" href={(site.tls.active ? "https://" : "http://") + site.domains[0]} target="_blank" rel="noopener noreferrer" title="Open the site in a new tab">
+                {site.domains[0]}
+                <ArrowSquareOut size={14} aria-hidden="true" />
+              </a>
+            )}
             <Badge tone={status.tone}>{status.word}</Badge>
             <Badge tone={httpsTone(site.tls)}>{httpsLabel(site.tls)}</Badge>
             <Badge tone="off">{siteTypeLabel(site)}</Badge>
             <CloneBadge clone={clone} />
+            {ready && <SiteAlerts site={site.name} groups={groups} tab={active} />}
           </p>
         </div>
       </div>
@@ -231,7 +285,7 @@ function Overview({ site, onChange, staff, admin, clone, onCloneChange }: TabPro
               : site.state !== "active"
                 ? "Being created"
                 : site.disabled
-                  ? "Disabled: everybody gets the chosen maintenance page, PHP is stopped"
+                  ? "Disabled: everybody gets the chosen maintenance page" + (runtimeWord(site) ? `, ${runtimeWord(site) === "PHP" ? "PHP" : "the app"} is stopped` : "")
                   : site.maintenance.enabled
                     ? "Maintenance: visitors get the maintenance page" +
                       (site.maintenance.allowIps.length > 0 ? ", except " + site.maintenance.allowIps.join(", ") : "")
@@ -468,7 +522,9 @@ function Availability({ site, onChange }: TabProps) {
           </>
         ) : (
           <>
-            <p className="ui-hint">A disabled site shows a maintenance page to everybody and its PHP is stopped.</p>
+            <p className="ui-hint">
+              A disabled site shows a maintenance page to everybody{runtimeWord(site) ? ` and its ${runtimeWord(site)} is stopped` : ""}.
+            </p>
             <div className="ui-row">
               <Button variant="danger" disabled={busy} onClick={() => setConfirm(true)}>
                 Disable site
@@ -817,14 +873,17 @@ function MaintenanceSettings({ site, onChange }: { site: Site; onChange: () => P
     }
   }
 
+  const rt = runtimeWord(site);
+  const keeps = rt === "PHP" ? " PHP keeps running." : rt === "app" ? " The app keeps running." : "";
+
   return (
     <form className="ui-stack" onSubmit={(e) => void save(m.enabled, e)} noValidate>
       <fieldset className="ui-fieldset ui-stack">
         <legend className="ui-sr-only">Maintenance of {site.name}</legend>
         <p className="ui-hint ui-flush">
           {m.enabled
-            ? "Maintenance is on: visitors get the page with “503 Service Unavailable”. PHP keeps running."
-            : "While maintenance is on, visitors get the page with “503 Service Unavailable”. The allowed addresses see the site as usual, so you can work on it. PHP keeps running."}
+            ? "Maintenance is on: visitors get the page with “503 Service Unavailable”." + keeps
+            : "While maintenance is on, visitors get the page with “503 Service Unavailable”. The allowed addresses see the site as usual, so you can work on it." + keeps}
         </p>
         {site.disabled && <Notice tone="warn" title="The site is disabled. Disabled wins: everybody gets the page chosen under Availability until it is enabled." />}
         <PageSelect label="Maintenance page" value={page} choices={choices} onChange={setPage} />

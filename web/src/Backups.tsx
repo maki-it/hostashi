@@ -33,7 +33,7 @@ import {
   type Snapshot,
 } from "./backups";
 import { isPostgres, listServers, type DBServer } from "./databases";
-import { Badge, Button, Card, exactTime, Field, IconButton, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort, type Tone } from "./ui";
+import { Badge, Button, Card, CopyButton, exactTime, Field, IconButton, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort, type Tone } from "./ui";
 
 type QueryProps = {
   /** The address query: site (snapshots of that site) or deleted (of a deleted site), sort, dir. */
@@ -341,6 +341,9 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
             <pre className="ui-code" aria-label="Public key">
               {info.publicKey}
             </pre>
+            <div className="ui-row">
+              <CopyButton text={info.publicKey} label="Copy the public key" />
+            </div>
           </div>
         )}
       </form>

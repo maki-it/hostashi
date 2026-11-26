@@ -654,6 +654,30 @@ function PageHarness({ tab = "overview" }: { tab?: SiteTab }) {
 }
 
 describe("SitePage", () => {
+  it("shows open virus finds and failing cron jobs beside the name", async () => {
+    const f = { path: "x.php", signature: "S", sha256: "", size: 1, firstSeen: "", lastSeen: "", decidedAt: "" };
+    mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [blog] } },
+      "GET /api/v1/sites/blog/malware-scan": {
+        body: { engine: "on", schedule: "off", nextScheduled: "", runs: [], findings: [{ ...f, id: 1, state: "open" }, { ...f, id: 2, state: "open" }, { ...f, id: 3, state: "gone" }] },
+      },
+      "GET /api/v1/sites/blog/cron": {
+        body: {
+          statusKnown: true,
+          jobs: [
+            { id: 1, schedule: "@daily", command: "a", timeoutSec: 0, nice: null, paused: false, createdAt: 1, updatedAt: 1, status: { running: false, result: "exit-code", lastStart: 1 } },
+            { id: 2, schedule: "@daily", command: "b", timeoutSec: 0, nice: null, paused: true, createdAt: 1, updatedAt: 1, status: { running: false, result: "exit-code", lastStart: 1 } },
+          ],
+        },
+      },
+    });
+    render(<PageHarness />);
+    expect(await screen.findByRole("link", { name: "2 virus finds" })).toHaveAttribute("href", "#/sites/blog/malware");
+    expect(await screen.findByRole("link", { name: "1 cron job fails" })).toHaveAttribute("href", "#/sites/blog/cron");
+    expect(screen.getByRole("link", { name: /^blog\.example\.com/ })).toHaveAttribute("href", "https://blog.example.com");
+  });
+
   it("shows the details and the tabs of a site", async () => {
     const user = userEvent.setup();
     mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [blog] } } });

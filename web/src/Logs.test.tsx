@@ -3,7 +3,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { SiteLogs } from "./Logs";
+import { LogRetentionCard, SiteLogs } from "./Logs";
 import type { Site } from "./sites";
 import { mockFetch } from "./test-utils";
 
@@ -97,11 +97,10 @@ describe("SiteLogs", () => {
   it("lets admins change the retention", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({
-      "GET /api/v1/sites/blog/logs/access?lines=200": chunk([]),
       "GET /api/v1/settings/logs": retention,
       "PUT /api/v1/settings/logs": { body: { days: 14, minDays: 1, maxDays: 365, defaultDays: 7 } },
     });
-    render(<SiteLogs site={site} admin={true} />);
+    render(<LogRetentionCard />);
     const days = await screen.findByLabelText("Keep logs for (days)");
     const save = screen.getByRole("button", { name: "Save" });
     expect(save).toBeDisabled();

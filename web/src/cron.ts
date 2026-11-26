@@ -189,6 +189,17 @@ export function lastRun(st: CronStatus | undefined): string {
   }
 }
 
+// lastRunTone is the badge colour of lastRun: red for every failure (B6
+// of the UX review), so a failing job stands out in the list.
+export function lastRunTone(st: CronStatus | undefined): "ok" | "warn" | "err" | "off" {
+  if (!st || !st.result || !st.lastStart) return "off";
+  if (st.running) return "warn";
+  return st.result === "success" ? "ok" : "err";
+}
+
+/** cronFailing reports a job whose last run failed. */
+export const cronFailing = (st: CronStatus | undefined) => lastRunTone(st) === "err";
+
 export const formatTime = (unix: number) =>
   new Date(unix * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 

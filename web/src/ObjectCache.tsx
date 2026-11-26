@@ -14,7 +14,7 @@ import {
   type ObjectCache,
 } from "./objcache";
 import type { Site } from "./sites";
-import { AppliesAtOnce, Badge, Button, Card, Field, Notice, Switch } from "./ui";
+import { AppliesAtOnce, Badge, Button, Card, CopyButton, Field, Notice, Switch } from "./ui";
 
 type Props = {
   site: Site;
@@ -141,6 +141,10 @@ export function ObjectCacheSettings({ site, canSize }: Props) {
             <Field label="Socket" hint="Apps connect here instead of 127.0.0.1:6379. No password.">
               <input className="ui-input ui-mono" readOnly value={c.socket} onFocus={(e) => e.target.select()} />
             </Field>
+            <div className="ui-row">
+              <CopyButton text={c.socket} label="Copy the socket path" />
+              <CopyButton text={wpConfig(c.socket)} label="Copy the lines for wp-config.php" />
+            </div>
             <Field label="For WordPress (wp-config.php)" hint="With the Redis Object Cache plugin. Hostashi does not install plugins.">
               <textarea className="ui-input ui-textarea ui-mono" readOnly rows={2} value={wpConfig(c.socket)} onFocus={(e) => e.target.select()} />
             </Field>
