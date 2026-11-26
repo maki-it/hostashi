@@ -1288,6 +1288,67 @@ if x journalctl --no-pager -o cat | grep -F -- "$wppass" >/dev/null; then fail "
   fail "second install over WordPress: $(x cat /tmp/api.out)"
 x grep -q 'not empty' /tmp/api.out || fail "second install refusal: $(x cat /tmp/api.out)"
 [ "$(x mariadb -Nse "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE 'wpq\\_wp_'")" = 0 ] || fail "a refused install left a database"
+
+step "WordPress staging copy and refresh (ADR-0070)"
+# A staging copy of wpq: files and database copied, WordPress pointed at
+# its own database and domain, password protection and noindex on.
+[ "$(api POST /api/v1/sites/wpq/clone '{"name":"wpqs","domain":"wpqs.example.com","staging":true}')" = 202 ] ||
+  fail "clone wpq: $(x cat /tmp/api.out)"
+stpass=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["access"]["password"])')
+stuser=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["access"]["user"])')
+[ ${#stpass} -ge 20 ] || fail "generated staging password too short: ${#stpass}"
+wait_clone() {
+  local state=copying
+  for _ in $(seq 1 150); do
+    if [ "$(api GET /api/v1/sites/wpqs/clone)" != 200 ]; then
+      # A first copy that fails is deleted; the reason stays in the audit log.
+      api GET '/api/v1/audit?action=site.clone.failed&limit=1' >/dev/null
+      fail "clone state: $(x cat /tmp/api.out)"
+    fi
+    state=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')
+    [ "$state" = copying ] || break
+    sleep 2
+  done
+  if [ "$state" != "done" ]; then
+    x journalctl --no-pager -o short-precise -u hostashi-wp@wpqs.service -n 60 || true
+    fail "clone ended '$state': $(x cat /tmp/api.out)"
+  fi
+  x grep -q '"config":"done"' /tmp/api.out || fail "clone without configuration step: $(x cat /tmp/api.out)"
+}
+wait_clone
+# The copy uses its own database; the source's stays as it was.
+x grep -q "define( 'DB_NAME', 'wpqs_wp' )" /home/wpqs/htdocs/wp-config.php || fail "clone's DB_NAME: $(x grep DB_NAME /home/wpqs/htdocs/wp-config.php)"
+x grep -q "WP_ENVIRONMENT_TYPE', 'staging'" /home/wpqs/htdocs/wp-config.php || fail "clone without WP_ENVIRONMENT_TYPE staging"
+x mariadb -Nse "SELECT option_value FROM wpqs_wp.wp_options WHERE option_name='siteurl'" | grep '//wpqs.example.com$' >/dev/null ||
+  fail "clone's siteurl: $(x mariadb -Nse "SELECT option_value FROM wpqs_wp.wp_options WHERE option_name='siteurl'")"
+x mariadb -Nse "SELECT option_value FROM wpq_wp.wp_options WHERE option_name='siteurl'" | grep '//wpq.example.com$' >/dev/null || fail "source's siteurl changed"
+[ -z "$(x find /home/wpqs/htdocs ! -user wpqs | head -n 5)" ] || fail "files of the clone not owned by wpqs: $(x find /home/wpqs/htdocs ! -user wpqs | head -n 5)"
+# Visitors need the generated login; search engines are asked to stay away.
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpqs.example.com' http://127.0.0.1/)
+[ "$code" = 401 ] || fail "staging copy without login answered $code"
+x curl -sS -D /tmp/wpqs.head -o /tmp/wpqs.body -w '%{http_code}' -u "$stuser:$stpass" -H 'Host: wpqs.example.com' http://127.0.0.1/ >/tmp/wpqs.code
+[ "$(cat /tmp/wpqs.code)" = 200 ] || fail "front page of the staging copy answered $(cat /tmp/wpqs.code) (a redirect to the source?): $(x grep -i '^location' /tmp/wpqs.head)"
+x grep -q '<title>Quick' /tmp/wpqs.body || fail "staging front page without the site title"
+x grep -qi '^x-robots-tag: noindex, nofollow' /tmp/wpqs.head || fail "staging copy without X-Robots-Tag"
+if x grep -q '//wpq\.example\.com' /tmp/wpqs.body; then fail "staging front page links to the source"; fi
+# Refresh: a post written on the copy is gone, the copy works again.
+x mariadb -e "UPDATE wpqs_wp.wp_options SET option_value='Changed' WHERE option_name='blogname'"
+[ "$(api POST /api/v1/sites/wpqs/clone/refresh)" = 202 ] || fail "refresh clone: $(x cat /tmp/api.out)"
+wait_clone
+[ "$(x mariadb -Nse "SELECT option_value FROM wpqs_wp.wp_options WHERE option_name='blogname'")" = Quick ] || fail "refresh kept the copy's database"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -u "$stuser:$stpass" -H 'Host: wpqs.example.com' http://127.0.0.1/)
+[ "$code" = 200 ] || fail "staging copy after refresh answered $code"
+# The staging password is in no file, log or journal of the server.
+found=$(x grep -rlsF -- "$stpass" /var/lib/hostashi /var/lib/hostashi-agent /var/log/hostashi /run/hostashi-wp /etc/hostashi /etc/systemd/system || true)
+[ -z "$found" ] || fail "the staging password is stored in: $found"
+if x journalctl --no-pager -o cat | grep -F -- "$stpass" >/dev/null; then fail "the staging password is in the journal"; fi
+x rm -f /tmp/wpqs.head /tmp/wpqs.body
+rm -f /tmp/wpqs.code
+[ "$(api DELETE /api/v1/databases/wpqs_wp)" = 204 ] || fail "delete clone database: $(x cat /tmp/api.out)"
+[ "$(api DELETE /api/v1/sites/wpqs)" = 204 ] || fail "delete site wpqs: $(x cat /tmp/api.out)"
+unset stpass stuser
+
+step "WordPress reinstall and a deleted WordPress (ADR-0069)"
 # The panel sees the WordPress in the document root and its database.
 [ "$(api GET /api/v1/sites/wpq/wordpress)" = 200 ] || fail "WordPress state: $(x cat /tmp/api.out)"
 x grep -q '"installed":true' /tmp/api.out || fail "installed WordPress not seen: $(x cat /tmp/api.out)"
