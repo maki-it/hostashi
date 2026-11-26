@@ -1753,16 +1753,15 @@ html:has(.ui-files) {
 .ui-cell-off > span {
   color: var(--muted);
 }
+/* HTTPS is the normal state, so it stays quiet; only plain HTTP stands out. */
 .ui-https {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-weight: 600;
-  color: var(--ok);
+  color: var(--muted);
 }
 .ui-https-off {
-  font-weight: 400;
-  color: var(--muted);
+  color: var(--warn);
 }
 /* Tables on a phone: each row is a card. The first column is the title,
    the others get their header as a label, row actions sit at the end. */
@@ -1826,6 +1825,24 @@ html:has(.ui-files) {
   }
   .ui-table td.ui-empty {
     text-align: center;
+  }
+  .ui-table td[data-label] {
+    grid-template-columns: 9em minmax(0, 1fr);
+  }
+  /* A long badge in a table cell may wrap, as in a list of details. */
+  .ui-table td[data-label] > .ui-badge {
+    height: auto;
+    min-height: 24px;
+    padding-block: 2px;
+    line-height: 1.35;
+    white-space: normal;
+  }
+  /* Tables with several row buttons put them under the row, not beside the title. */
+  .ui-table-actions-below td[data-actions] {
+    grid-row: auto;
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    padding-top: var(--space-2);
   }
 }
 .ui-row-actions:has(.ui-btn) {
@@ -2022,6 +2039,22 @@ html:has(.ui-files) {
 }
 
 /* Status tiles of the site overview: each opens its tab. */
+/* A cron command in the jobs table keeps its spaces and wraps anywhere. */
+.ui-cron-cmd {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* A card the Actions menu scrolls to stays clear of the sticky top bar. */
+.ui-card[id] {
+  scroll-margin-top: 88px;
+}
+/* Two cards side by side on a wide screen, one above the other otherwise. */
+.ui-two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: var(--space-5);
+  align-items: start;
+}
 .ui-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
@@ -2157,6 +2190,7 @@ html:has(.ui-files) {
 }
 .ui-cellbar[data-tone="err"] .ui-cellbar-track > span {
   background: var(--err);
+}
 /* Filters above several cards: no card around them. */
 .ui-filters-bare {
   align-items: center;
@@ -2223,11 +2257,20 @@ html:has(.ui-files) {
     font-size: 13px;
     color: var(--muted);
   }
+  /* The grey line under the name of a compact row: state, size, age. */
+  .ui-compact-meta {
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+  }
 }
 
 /* An icon button without a tip text, such as a ⋯ menu, shows no tip. */
 .ui-icon-btn:not([data-tip])::after {
   content: none;
+}
 /* Segmented links between pages, such as the tabs of Runtimes. */
 .ui-seg-nav {
   align-self: flex-start;

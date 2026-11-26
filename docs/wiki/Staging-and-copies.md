@@ -2,14 +2,14 @@
 
 **Copy site** creates a new site from an existing one. You get a copy of its files, of its databases on this server and of its settings. A **staging copy** is meant for trying changes, such as a WordPress or plugin update, a new theme or another PHP version. You test on a separate domain with real content, and the live site stays as it is.
 
-The card is on the site's **Overview** tab and only admins and managers see it.
+It is in the **Actions** menu of the site header (**Copy site…**), which opens the card on the site's Overview. Only admins and managers see it.
 
 ![The Copy this site card with name and domain of a staging copy](images/site-clone.png)
 
 ## How it works
 
 1. Point the copy's domain at the server first, for example `staging.shop.example.com`. The copy then gets its certificate right away.
-2. Open the live site and click **Copy site**. Name and domain come filled in as `staging-<site>` and `staging.<first domain>`. Change them if you like, and choose another storage pool if there is one.
+2. Open the live site and choose **Actions → Copy site…**. Name and domain come filled in as `staging-<site>` and `staging.<first domain>`. Change them if you like, and choose another storage pool if there is one.
 3. Leave **Staging copy** checked. Check **Put <site> in maintenance while copying** if the live site must not change halfway through the copy, for example a shop that takes orders. Then click **Create staging copy**.
 4. Save the login that is shown now. A staging copy asks every visitor for it. Hostashi shows the password only once; you can set a new one later under **Security › Access**.
 5. The copy shows its progress on its own Overview tab: first the files, then the databases, then the configuration. When it is done, the copy is ready on its domain.

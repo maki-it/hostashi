@@ -32,9 +32,11 @@ describe("services helpers", () => {
 
 describe("Services", () => {
   it("lists services with state, restarts and only the allowed actions", async () => {
+    const user = userEvent.setup();
     mockFetch({ "GET /api/v1/services": { body: { services: rows } }, "GET /api/v1/services/events?limit=50": { body: { events } } });
     render(<Services />);
 
+    await user.click(await screen.findByRole("radio", { name: /^All/ }));
     const table = await screen.findByRole("table", { name: "Server" });
     const [, nginx, mariadb, panel] = within(table).getAllByRole("row");
     const [, php] = within(screen.getByRole("table", { name: "Sites" })).getAllByRole("row");
@@ -61,15 +63,15 @@ describe("Services", () => {
     mockFetch({ "GET /api/v1/services": { body: { services: rows } }, "GET /api/v1/services/events?limit=50": { body: { events } } });
     render(<Services />);
 
-    const sites = await screen.findByRole("region", { name: "Sites" });
-    expect(sites).toHaveTextContent("1 of 1 with a problem");
-    await user.click(screen.getByRole("radio", { name: /^Problems/ }));
+    // With problems, the page opens on them.
+    expect(await screen.findByRole("radio", { name: /^Problems/ })).toHaveAttribute("aria-checked", "true");
     const problems = within(screen.getByRole("table", { name: "Problems" })).getAllByRole("row").slice(1);
     // The failed PHP-FPM and MariaDB, which systemd restarted today.
     expect(problems.map((r) => within(r).getAllByRole("cell")[0]!.querySelector("strong")?.textContent)).toEqual(["MariaDB", "PHP-FPM · blog"]);
     expect(screen.queryByRole("table", { name: "Server" })).toBeNull();
 
     await user.click(screen.getByRole("radio", { name: /^All/ }));
+    expect(screen.getByRole("region", { name: "Sites" })).toHaveTextContent("1 of 1 with a problem");
     await user.type(screen.getByRole("searchbox", { name: "Filter services" }), "blog");
     expect(screen.getByRole("table", { name: "Server" })).toHaveTextContent("No server service matches the filter.");
     expect(within(screen.getByRole("table", { name: "Sites" })).getAllByRole("row")).toHaveLength(2);
@@ -103,6 +105,7 @@ describe("Services", () => {
       "POST /api/v1/services/nginx/reload": { status: 409, body: { error: { code: "failed_precondition", message: "nginx -t rejected the configuration" } } },
     });
     render(<Services />);
+    await user.click(await screen.findByRole("radio", { name: /^Server/ }));
 
     await user.click(await screen.findByRole("button", { name: "Reload Web server (nginx)" }));
     expect(await screen.findByText(/nginx -t rejected/)).toBeInTheDocument();

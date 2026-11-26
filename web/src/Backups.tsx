@@ -479,7 +479,18 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
 
   const restoring = active !== null && active.restore?.state !== "done" && active.restore?.state !== "failed";
   const columns: Column<Snapshot>[] = [
-    { key: "time", header: "Time", sortValue: (s) => s.time, cell: (s) => <RelTime iso={s.time} /> },
+    {
+      key: "time",
+      header: "Time",
+      main: true,
+      sortValue: (s) => s.time,
+      cell: (s) => (
+        <>
+          <RelTime iso={s.time} />
+          <span className="ui-phone-only ui-compact-meta">{snapLabel(s)}</span>
+        </>
+      ),
+    },
     { key: "kind", header: "Content", sortValue: snapLabel, cell: snapLabel },
     {
       key: "actions",
@@ -612,6 +623,7 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
           sort={sort}
           onSort={(x) => set({ sort: x.key, dir: x.dir })}
           empty="No snapshots of this site yet."
+          compact
         />
       )}
       {goneInfo && <DeleteBackups key={goneInfo.name} site={goneInfo} onChange={() => void loadDeleted()} />}

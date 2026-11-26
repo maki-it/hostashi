@@ -59,7 +59,7 @@ Tabs that do not apply to a site's type are not shown.
 
 ## Rename a site
 
-On **Overview → Rename**, set the **Display name** and choose **Save display name**. The panel then shows it in the site list and as the page title; **Remove display name** goes back to the name.
+Open the site, choose **Actions → Rename…** in its header, set the **Display name** and choose **Save display name**. The panel then shows it in the site list and as the page title; **Remove display name** goes back to the name.
 
 The name you chose when creating the site stays the site's system name: the Linux user, the home folder `/home/<name>`, the SSH and SFTP login, and the name in the [API and command line](Command-line.md). The site page always shows it next to the display name. Changing the display name changes nothing on the server and needs no restart.
 

@@ -7,7 +7,7 @@ import { canClone, CloneBadge, CloneCard, CloneStatusCard, useClone } from "./Cl
 import type { Clone } from "./clones";
 import { siteCertBase } from "./certs";
 import { CronSettings } from "./Cron";
-import { cardId, QuickActions, SiteActions, siteUrl, StatusTiles } from "./SiteStatus";
+import { cardId, CloseButton, QuickActions, SiteActions, siteUrl, StatusTiles, type OverviewCard } from "./SiteStatus";
 import { cronFailing, listCron } from "./cron";
 import { getSiteScan } from "./scan";
 import { FileManager } from "./Files";
@@ -124,6 +124,9 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
   const { sites, php, error, load } = useSites();
   const site = sites?.find((s) => s.name === name);
   const { clone, reload: reloadClone } = useClone(name);
+  // card is the overview card the Actions menu opened (C1 of the UX review).
+  const [card, setCard] = useState<OverviewCard | null>(null);
+  useEffect(() => setCard(null), [name]);
 
   if (!sites) return error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading…</p>;
   if (!site) {
@@ -142,7 +145,9 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
 
   const panel = (
     <>
-      {active === "overview" && <Overview site={site} groups={groups} onChange={load} staff={staff} admin={role === "admin"} clone={clone ?? null} onCloneChange={reloadClone} />}
+      {active === "overview" && (
+        <Overview site={site} groups={groups} onChange={load} staff={staff} admin={role === "admin"} clone={clone ?? null} onCloneChange={reloadClone} card={card} onCard={setCard} />
+      )}
       {active === "domains" && <DomainsTab site={site} onChange={load} />}
       {active === "https" && <HTTPSTab site={site} onChange={load} />}
       {active === "headers" && <SecurityHeadersCard site={site} />}
@@ -201,7 +206,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
         </div>
         {ready && (
           <div className="ui-page-actions">
-            <SiteActions site={site} groups={groups} staff={staff} onTab={onTab} />
+            <SiteActions site={site} groups={groups} staff={staff} admin={role === "admin"} onTab={onTab} onCard={setCard} />
           </div>
         )}
       </div>
@@ -267,126 +272,141 @@ function useAction(onChange: () => Promise<void>) {
 
 type TabProps = { site: Site; onChange: () => Promise<void> };
 
-function Overview({ site, groups, onChange, staff, admin, clone, onCloneChange }: TabProps & { groups: SiteGroup[]; staff: boolean; admin: boolean; clone: Clone | null; onCloneChange: () => void }) {
+function Overview({
+  site,
+  groups,
+  onChange,
+  staff,
+  admin,
+  clone,
+  onCloneChange,
+  card,
+  onCard,
+}: TabProps & { groups: SiteGroup[]; staff: boolean; admin: boolean; clone: Clone | null; onCloneChange: () => void; card: OverviewCard | null; onCard: (c: OverviewCard | null) => void }) {
   const [primary, ...aliases] = site.domains;
+  const close = () => onCard(null);
   return (
     <>
+      {card === "rename" && site.state !== "deleting" && <RenameCard site={site} onChange={onChange} onClose={close} />}
+      {card === "clone" && staff && canClone(site) && clone?.state !== "copying" && <CloneCard site={site} onClose={close} />}
+      {card === "services" && admin && hasAccount(site) && <Services site={site.name} id={cardId(site.name, "services")} onClose={close} />}
       {site.state === "active" && (
         <>
           <StatusTiles site={site} groups={groups} admin={admin} />
           <QuickActions site={site} groups={groups} />
         </>
       )}
-      <Card title="Details">
-        <dl className="ui-facts" aria-label={"Details of " + site.name}>
-          <dt>System name</dt>
-          <dd>
-            <code>{site.name}</code>
-            {hasAccount(site) ? " (Linux user, home folder and SSH login)" : ""}
-          </dd>
-          {site.title && (
-            <>
-              <dt>Display name</dt>
-              <dd>{site.title}</dd>
-            </>
-          )}
-          <dt>State</dt>
-          <dd>
-            {site.state === "deleting"
-              ? "Being deleted"
-              : site.state !== "active"
-                ? "Being created"
-                : site.disabled
-                  ? "Disabled: everybody gets the chosen maintenance page" + (runtimeWord(site) ? `, ${runtimeWord(site) === "PHP" ? "PHP" : "the app"} is stopped` : "")
-                  : site.maintenance.enabled
-                    ? "Maintenance: visitors get the maintenance page" +
-                      (site.maintenance.allowIps.length > 0 ? ", except " + site.maintenance.allowIps.join(", ") : "")
-                    : "Active"}
-          </dd>
-          <dt>Primary domain</dt>
-          <dd className="ui-mono">{primary}</dd>
-          {aliases.length > 0 && (
-            <>
-              <dt>Other domains</dt>
-              <dd className="ui-mono">{aliases.join(", ")}</dd>
-            </>
-          )}
-          {site.node && (
-            <>
-              <dt>Node.js app</dt>
-              <dd>
-                {site.node.startKind ? <span className="ui-mono">{startCommand(site.node)}</span> : "No start command yet"}
-                {" on Node.js "}
-                {site.node.version}
-                {site.node.stopped ? ", stopped" : ""}
-              </dd>
-            </>
-          )}
-          {site.python && (
-            <>
-              <dt>Python app</dt>
-              <dd>
-                {site.python.startKind ? <span className="ui-mono">{pythonCommand(site.python)}</span> : "No start command yet"}
-                {" on Python "}
-                {site.python.version}
-                {site.python.stopped ? ", stopped" : ""}
-              </dd>
-            </>
-          )}
-          {site.app && (
-            <>
-              <dt>App</dt>
-              <dd>
-                {site.app.program ? <span className="ui-mono">{programCommand(site.app)}</span> : "No program yet"}
-                {site.app.stopped ? ", stopped" : ""}
-              </dd>
-            </>
-          )}
-          {site.proxy ? (
-            <>
-              <dt>Reverse proxy</dt>
-              <dd>
-                <span className="ui-mono">{site.proxy.target}</span>
-                {site.proxy.insecure ? " (certificate not verified)" : ""}
-              </dd>
-            </>
-          ) : site.redirect ? (
-            <>
-              <dt>Redirect</dt>
-              <dd>
-                <span className="ui-mono">{site.redirect.target}</span> ({site.redirect.status}
-                {site.redirect.keepPath ? ", keeps the path" : ""})
-              </dd>
-            </>
-          ) : (
-            <>
-              <dt>PHP</dt>
-              <dd>{site.php ? "PHP " + site.php + (site.disabled ? " (stopped)" : "") : "No PHP"}</dd>
-            </>
-          )}
-          <dt>HTTPS</dt>
-          <dd>
-            {httpsLabel(site.tls)}
-            {site.tls.active && site.tls.hsts ? ", HSTS" : ""}
-            {site.tls.active && site.tls.notAfter ? ", valid until " + site.tls.notAfter.slice(0, 10) : ""}
-          </dd>
-          {hasAccount(site) && (
-            <>
-              <dt>Storage pool</dt>
-              <dd className="ui-mono">{site.pool}</dd>
-            </>
-          )}
-        </dl>
-      </Card>
-      {clone && <CloneStatusCard site={site} clone={clone} staff={staff} onRefresh={onCloneChange} />}
-      {site.state !== "deleting" && <RenameCard site={site} onChange={onChange} />}
-      {staff && canClone(site) && clone?.state !== "copying" && <CloneCard site={site} />}
-      {admin && hasAccount(site) && <Services site={site.name} />}
-      {site.state === "active" && (
-        <>
-          <Card title="Maintenance">
+      <div className="ui-two">
+        <Card title="Details">
+          <dl className="ui-facts" aria-label={"Details of " + site.name}>
+            <dt>System name</dt>
+            <dd>
+              <code>{site.name}</code>
+              {hasAccount(site) ? " (Linux user, home folder and SSH login)" : ""}
+            </dd>
+            {site.title && (
+              <>
+                <dt>Display name</dt>
+                <dd>{site.title}</dd>
+              </>
+            )}
+            <dt>State</dt>
+            <dd>
+              {site.state === "deleting"
+                ? "Being deleted"
+                : site.state !== "active"
+                  ? "Being created"
+                  : site.disabled
+                    ? "Disabled: everybody gets the chosen maintenance page" + (runtimeWord(site) ? `, ${runtimeWord(site) === "PHP" ? "PHP" : "the app"} is stopped` : "")
+                    : site.maintenance.enabled
+                      ? "Maintenance: visitors get the maintenance page" +
+                        (site.maintenance.allowIps.length > 0 ? ", except " + site.maintenance.allowIps.join(", ") : "")
+                      : "Active"}
+            </dd>
+            <dt>Primary domain</dt>
+            <dd className="ui-mono">{primary}</dd>
+            {aliases.length > 0 && (
+              <>
+                <dt>Other domains</dt>
+                <dd className="ui-mono">{aliases.join(", ")}</dd>
+              </>
+            )}
+            {site.node && (
+              <>
+                <dt>Node.js app</dt>
+                <dd>
+                  {site.node.startKind ? <span className="ui-mono">{startCommand(site.node)}</span> : "No start command yet"}
+                  {" on Node.js "}
+                  {site.node.version}
+                  {site.node.stopped ? ", stopped" : ""}
+                </dd>
+              </>
+            )}
+            {site.python && (
+              <>
+                <dt>Python app</dt>
+                <dd>
+                  {site.python.startKind ? <span className="ui-mono">{pythonCommand(site.python)}</span> : "No start command yet"}
+                  {" on Python "}
+                  {site.python.version}
+                  {site.python.stopped ? ", stopped" : ""}
+                </dd>
+              </>
+            )}
+            {site.app && (
+              <>
+                <dt>App</dt>
+                <dd>
+                  {site.app.program ? <span className="ui-mono">{programCommand(site.app)}</span> : "No program yet"}
+                  {site.app.stopped ? ", stopped" : ""}
+                </dd>
+              </>
+            )}
+            {site.proxy ? (
+              <>
+                <dt>Reverse proxy</dt>
+                <dd>
+                  <span className="ui-mono">{site.proxy.target}</span>
+                  {site.proxy.insecure ? " (certificate not verified)" : ""}
+                </dd>
+              </>
+            ) : site.redirect ? (
+              <>
+                <dt>Redirect</dt>
+                <dd>
+                  <span className="ui-mono">{site.redirect.target}</span> ({site.redirect.status}
+                  {site.redirect.keepPath ? ", keeps the path" : ""})
+                </dd>
+              </>
+            ) : (
+              <>
+                <dt>PHP</dt>
+                <dd>{site.php ? "PHP " + site.php + (site.disabled ? " (stopped)" : "") : "No PHP"}</dd>
+              </>
+            )}
+            <dt>HTTPS</dt>
+            <dd>
+              {httpsLabel(site.tls)}
+              {site.tls.active && site.tls.hsts ? ", HSTS" : ""}
+              {site.tls.active && site.tls.notAfter ? ", valid until " + site.tls.notAfter.slice(0, 10) : ""}
+            </dd>
+            {hasAccount(site) && (
+              <>
+                <dt>Storage pool</dt>
+                <dd className="ui-mono">{site.pool}</dd>
+              </>
+            )}
+          </dl>
+        </Card>
+        {site.state === "active" && (
+          <Card title="Maintenance" actions={<AppliesAtOnce />}>
             <MaintenanceSettings site={site} onChange={onChange} />
           </Card>
+        )}
+      </div>
+      {clone && <CloneStatusCard site={site} clone={clone} staff={staff} onRefresh={onCloneChange} />}
+      {site.state === "active" && (
+        <>
           <section className="ui-danger-zone" aria-labelledby={`danger-${site.name}`}>
             <h2 id={`danger-${site.name}`}>Danger zone</h2>
             <Availability site={site} onChange={onChange} />
@@ -401,7 +421,7 @@ function Overview({ site, groups, onChange, staff, admin, clone, onCloneChange }
 
 // RenameCard sets the display name (ADR-0072). The system name stays, and
 // the card says so with the name in code style.
-function RenameCard({ site, onChange }: TabProps) {
+function RenameCard({ site, onChange, onClose }: TabProps & { onClose: () => void }) {
   const [title, setTitleText] = useState(site.title ?? "");
   const { busy, act, result } = useAction(onChange);
   const current = site.title ?? "";
@@ -418,7 +438,7 @@ function RenameCard({ site, onChange }: TabProps) {
   }
 
   return (
-    <Card title="Rename" id={cardId(site.name, "rename")}>
+    <Card title="Rename" id={cardId(site.name, "rename")} actions={<CloseButton onClose={onClose} />}>
       <form className="ui-stack" onSubmit={(e) => save(e, next)} noValidate>
         <Field
           label="Display name"
@@ -839,6 +859,7 @@ function MaintenanceSettings({ site, onChange }: { site: Site; onChange: () => P
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
+  const [editing, setEditing] = useState(false);
 
   async function save(enabled: boolean, e?: FormEvent) {
     e?.preventDefault();
@@ -888,36 +909,46 @@ function MaintenanceSettings({ site, onChange }: { site: Site; onChange: () => P
   const rt = runtimeWord(site);
   const keeps = rt === "PHP" ? " PHP keeps running." : rt === "app" ? " The app keeps running." : "";
 
+  const pageName = choices.find((c) => c.id === m.page)?.name ?? m.page;
+  const allowed = m.allowIps.length === 0 ? "none" : m.allowIps.length <= 2 ? m.allowIps.join(", ") : `${m.allowIps.length} addresses`;
+
   return (
-    <form className="ui-stack" onSubmit={(e) => void save(m.enabled, e)} noValidate>
-      <fieldset className="ui-fieldset ui-stack">
-        <legend className="ui-sr-only">Maintenance of {site.name}</legend>
+    <div className="ui-stack">
+      <Switch checked={m.enabled} disabled={busy} onChange={(on) => void save(on)} hint={(m.enabled ? "On: visitors get the page with “503 Service Unavailable”." : "Visitors get the page with “503 Service Unavailable”; the allowed addresses still see the site.") + keeps}>
+        Maintenance mode
+      </Switch>
+      {site.disabled && <Notice tone="warn" title="The site is disabled. Disabled wins: everybody gets the page chosen under Availability until it is enabled." />}
+      {!editing ? (
         <p className="ui-hint ui-flush">
-          {m.enabled
-            ? "Maintenance is on: visitors get the page with “503 Service Unavailable”." + keeps
-            : "While maintenance is on, visitors get the page with “503 Service Unavailable”. The allowed addresses see the site as usual, so you can work on it." + keeps}
+          Page: {pageName} · Allowed: {allowed} ·{" "}
+          <button type="button" className="ui-link-btn" onClick={() => setEditing(true)}>
+            Change…
+          </button>
         </p>
-        {site.disabled && <Notice tone="warn" title="The site is disabled. Disabled wins: everybody gets the page chosen under Availability until it is enabled." />}
-        <PageSelect label="Maintenance page" value={page} choices={choices} onChange={setPage} />
-        <Field label="Allowed addresses" hint="IPv4 or IPv6 addresses or ranges like 10.0.0.0/8, one per line, at most 20.">
-          <textarea className="ui-input ui-textarea" value={allow} onChange={(e) => setAllow(e.target.value)} rows={3} autoComplete="off" spellCheck={false} />
-        </Field>
-        <div className="ui-row">
-          <Button disabled={busy} onClick={() => void addMine()}>
-            Add my current IP
-          </Button>
-          {m.enabled && (
-            <Button variant="primary" type="submit" disabled={busy}>
-              Save maintenance
-            </Button>
-          )}
-          <Button variant={m.enabled ? "secondary" : "primary"} disabled={busy} onClick={() => void save(!m.enabled)}>
-            {m.enabled ? "End maintenance" : "Start maintenance"}
-          </Button>
-        </div>
-        {error && <Notice tone="err" title={error} />}
-        {done && <Notice tone="ok" title={done} />}
-      </fieldset>
-    </form>
+      ) : (
+        <form className="ui-stack" onSubmit={(e) => void save(m.enabled, e)} noValidate>
+          <fieldset className="ui-fieldset ui-stack">
+            <legend className="ui-sr-only">Maintenance of {site.name}</legend>
+            <PageSelect label="Maintenance page" value={page} choices={choices} onChange={setPage} />
+            <Field label="Allowed addresses" hint="IPv4 or IPv6 addresses or ranges like 10.0.0.0/8, one per line, at most 20.">
+              <textarea className="ui-input ui-textarea" value={allow} onChange={(e) => setAllow(e.target.value)} rows={3} autoComplete="off" spellCheck={false} />
+            </Field>
+            <div className="ui-row">
+              <Button disabled={busy} onClick={() => void addMine()}>
+                Add my current IP
+              </Button>
+              <Button variant="primary" type="submit" disabled={busy}>
+                Save maintenance
+              </Button>
+              <Button disabled={busy} onClick={() => setEditing(false)}>
+                Close
+              </Button>
+            </div>
+          </fieldset>
+        </form>
+      )}
+      {error && <Notice tone="err" title={error} />}
+      {done && <Notice tone="ok" title={done} />}
+    </div>
   );
 }

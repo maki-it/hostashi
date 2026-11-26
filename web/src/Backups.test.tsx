@@ -234,7 +234,7 @@ describe("Backups", () => {
     const table = await screen.findByRole("table", { name: "Snapshots of blog" });
     // Newest first: the database dump of 01:13, then the files of 01:12.
     const rows = within(table).getAllByRole("row").slice(1);
-    expect(within(rows[0]!).getByText("Database blog_wp")).toBeInTheDocument();
+    expect(within(rows[0]!).getByRole("cell", { name: "Database blog_wp" })).toBeInTheDocument();
     await user.click(within(rows[1]!).getByRole("button", { name: /^Restore files of / }));
     expect(await screen.findByText(/Restored 3 files into/)).toHaveTextContent("restore-1");
     await user.click(within(rows[0]!).getByRole("button", { name: /^Restore database blog_wp of / }));

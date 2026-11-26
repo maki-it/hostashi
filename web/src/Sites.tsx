@@ -6,7 +6,9 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { getBackups, type BackupInfo } from "./backups";
 import { formatBytes, getSiteLimits, type Usage } from "./limits";
 import { relativeTime } from "./ui/Time";
-import { formatHash } from "./routes";
+import { cronFailing, listCron } from "./cron";
+import { formatHash, type SiteTab } from "./routes";
+import { groupsForSite } from "./SiteNav";
 import {
   compareVersions,
   createSite,
@@ -97,9 +99,10 @@ type Disk = { usage: Usage; limit: number };
 
 // useDisks loads the disk use of the sites with files, a few at a time, so
 // a long list does not ask the agent for every site at once.
-function useDisks(sites: Site[] | null): Record<string, Disk> {
-  const [disks, setDisks] = useState<Record<string, Disk>>({});
-  const names = (sites ?? []).filter((s) => s.state === "active" && hasAccount(s)).map((s) => s.name);
+// usePerSite loads one value per site after the list, four requests at a
+// time. A site whose request fails stays out of the result.
+function usePerSite<T>(names: string[], load: (name: string) => Promise<T | undefined>): Record<string, T> {
+  const [out, setOut] = useState<Record<string, T>>({});
   const key = names.join(" ");
   useEffect(() => {
     let live = true;
@@ -108,10 +111,10 @@ function useDisks(sites: Site[] | null): Record<string, Disk> {
       const name = queue.shift();
       if (!name || !live) return;
       try {
-        const l = await getSiteLimits(name);
-        if (live && l.usage) setDisks((d) => ({ ...d, [name]: { usage: l.usage!, limit: l.limits.diskBytes } }));
+        const v = await load(name);
+        if (live && v !== undefined) setOut((o) => ({ ...o, [name]: v }));
       } catch {
-        // The column stays empty for this site.
+        // The cell stays empty for this site.
       }
       return next();
     };
@@ -119,9 +122,21 @@ function useDisks(sites: Site[] | null): Record<string, Disk> {
     return () => {
       live = false;
     };
+    // load is a module-level function; the names decide what to fetch.
   }, [key]);
-  return disks;
+  return out;
 }
+
+const loadDisk = async (name: string): Promise<Disk | undefined> => {
+  const l = await getSiteLimits(name);
+  return l.usage ? { usage: l.usage, limit: l.limits.diskBytes } : undefined;
+};
+
+// loadCronFailing counts the active cron jobs of a site whose last run failed.
+const loadCronFailing = async (name: string): Promise<number> => (await listCron(name)).jobs.filter((j) => !j.paused && cronFailing(j.status)).length;
+
+const activeWith = (sites: Site[] | null, tab: SiteTab) =>
+  (sites ?? []).filter((s) => s.state === "active" && groupsForSite(s).some((g) => g.tabs.some((t) => t.id === tab))).map((s) => s.name);
 
 // useBackupStatus loads the backup state for administrators; for other
 // roles the request fails and the column stays hidden.
@@ -161,9 +176,10 @@ const stateFilters = [
   { value: "staging", label: "Staging sites" },
 ] as const;
 
-function matches(s: Site, q: string, state: string, m: SiteMarks | undefined, disk: Disk | undefined): boolean {
+function matches(s: Site, q: string, state: string, m: SiteMarks | undefined, disk: Disk | undefined, failing: number, backups: BackupInfo | null): boolean {
   if (q && !s.name.includes(q) && !(s.title ?? "").toLowerCase().includes(q) && !s.domains.some((d) => d.includes(q))) return false;
-  if (state === "attention") return siteIssues(s).length > 0 || (m?.openFindings ?? 0) > 0 || (disk !== undefined && disk.usage.level !== "ok");
+  if (state === "attention")
+    return siteIssues(s).length > 0 || (m?.openFindings ?? 0) > 0 || failing > 0 || (disk !== undefined && disk.usage.level !== "ok") || (backups !== null && backupOf(backups, s).tone !== undefined);
   if (state === "staging") return m?.staging === true;
   if (state === "problem") return s.tls.enabled && !s.tls.active && Boolean(s.tls.error);
   if (state) return siteStatus(s).key === state;
@@ -196,11 +212,11 @@ function stateBadge(s: Site) {
   return <Badge tone={st.tone}>{st.key === "disabled" ? "Disabled" : st.word}</Badge>;
 }
 
-type ListData = { marks: Record<string, SiteMarks>; disks: Record<string, Disk>; backups: BackupInfo | null };
+type ListData = { marks: Record<string, SiteMarks>; disks: Record<string, Disk>; crons: Record<string, number>; backups: BackupInfo | null };
 
 // siteColumns are the columns of the list. Disk and backup come in after
 // the list; the backup column is only there for administrators.
-function siteColumns({ marks, disks, backups }: ListData): Column<Site>[] {
+function siteColumns({ marks, disks, crons, backups }: ListData): Column<Site>[] {
   const cols: Column<Site>[] = [
     {
       key: "name",
@@ -269,9 +285,10 @@ function siteColumns({ marks, disks, backups }: ListData): Column<Site>[] {
   cols.push({
     key: "status",
     header: "Status",
-    sortValue: (s) => statusRank(s) - ((marks[s.name]?.openFindings ?? 0) > 0 ? 10 : 0),
+    sortValue: (s) => statusRank(s) - ((marks[s.name]?.openFindings ?? 0) > 0 ? 10 : 0) - ((crons[s.name] ?? 0) > 0 ? 5 : 0),
     cell: (s) => {
       const finds = marks[s.name]?.openFindings ?? 0;
+      const failing = crons[s.name] ?? 0;
       return (
         <span className="ui-row ui-row-tight">
           {s.tls.active ? (
@@ -288,6 +305,11 @@ function siteColumns({ marks, disks, backups }: ListData): Column<Site>[] {
           {finds > 0 && (
             <a href={formatHash({ page: "sites", site: { name: s.name, tab: "malware" } })}>
               <Badge tone="err">{finds === 1 ? "1 virus find" : `${finds} virus finds`}</Badge>
+            </a>
+          )}
+          {failing > 0 && (
+            <a href={formatHash({ page: "sites", site: { name: s.name, tab: "cron" } })}>
+              <Badge tone="warn">{failing === 1 ? "1 cron job fails" : `${failing} cron jobs fail`}</Badge>
             </a>
           )}
           {siteIssues(s).map((i) => (
@@ -307,9 +329,13 @@ function siteColumns({ marks, disks, backups }: ListData): Column<Site>[] {
 // as its own view (?new=1). Each site's settings are on its own page.
 export function Sites({ query, onQuery }: QueryProps) {
   const { sites, marks, php, error, load } = useSites();
-  const disks = useDisks(sites);
+  const disks = usePerSite(
+    (sites ?? []).filter((s) => s.state === "active" && hasAccount(s)).map((s) => s.name),
+    loadDisk,
+  );
+  const crons = usePerSite(activeWith(sites, "cron"), loadCronFailing);
   const backups = useBackupStatus();
-  const columns = useMemo(() => siteColumns({ marks, disks, backups }), [marks, disks, backups]);
+  const columns = useMemo(() => siteColumns({ marks, disks, crons, backups }), [marks, disks, crons, backups]);
   const set = (key: string, value: string) => {
     const next = new URLSearchParams(query);
     if (value) next.set(key, value);
@@ -330,7 +356,7 @@ export function Sites({ query, onQuery }: QueryProps) {
   const state = query.get("state") ?? "";
   const sortKey = query.get("sort");
   const sort: Sort | undefined = sortKey ? { key: sortKey, dir: query.get("dir") === "desc" ? "desc" : "asc" } : undefined;
-  const shown = (sites ?? []).filter((s) => matches(s, q, state, marks[s.name], disks[s.name]));
+  const shown = (sites ?? []).filter((s) => matches(s, q, state, marks[s.name], disks[s.name], crons[s.name] ?? 0, backups));
 
   return (
     <>

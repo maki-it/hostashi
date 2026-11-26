@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { cardId } from "./SiteStatus";
+import { cardId, CloseButton } from "./SiteStatus";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { cloneMessage, cloneSite, cloneSuggestion, configuredProfiles, getClone, refreshClone, type Clone, type CloneStart } from "./clones";
 import { getSiteProfile } from "./profiles";
@@ -55,9 +55,9 @@ export function CloneBadge({ clone }: { clone: Clone | null | undefined }) {
 
 // CloneCard creates a new site as a copy of this one: files, local
 // databases and settings. A staging copy is protected and not indexed.
-export function CloneCard({ site }: { site: Site }) {
+export function CloneCard({ site, onClose }: { site: Site; onClose?: () => void }) {
   const suggestion = cloneSuggestion(site);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(onClose !== undefined);
   const [name, setName] = useState(suggestion.name);
   const [domain, setDomain] = useState(suggestion.domain);
   const [pool, setPool] = useState("");
@@ -97,7 +97,7 @@ export function CloneCard({ site }: { site: Site }) {
   }
 
   return (
-    <Card title="Copy this site" id={cardId(site.name, "clone")}>
+    <Card title="Copy this site" id={cardId(site.name, "clone")} actions={onClose && <CloseButton onClose={onClose} />}>
       <div className="ui-stack">
         <p className="ui-hint ui-flush">
           Creates a new site with a copy of the files, the databases on this server and the settings. A staging copy is for trying changes: its cron jobs

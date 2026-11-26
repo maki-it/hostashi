@@ -101,4 +101,20 @@ describe("component styles", () => {
     const used = new Set([...css.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]!));
     expect([...used].filter((v) => !light.has(v) && !runtime.has(v))).toEqual([]);
   });
+
+  // The sheets use no nesting, so a rule that starts at the left margin
+  // while another is still open lost its closing brace (as after a merge).
+  it.each(sheets)("%s closes every rule", (file) => {
+    const css = readFileSync(resolve(dir, file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    let depth = 0;
+    let inMedia = false;
+    const open: number[] = [];
+    css.split("\n").forEach((line, i) => {
+      if (line && !/^[\s}]/.test(line) && depth > (inMedia ? 1 : 0) && !line.startsWith("@")) open.push(i + 1);
+      if (depth === 0) inMedia = line.startsWith("@");
+      depth += (line.match(/{/g) ?? []).length - (line.match(/}/g) ?? []).length;
+    });
+    expect(open).toEqual([]);
+    expect(depth).toBe(0);
+  });
 });

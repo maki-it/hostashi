@@ -171,7 +171,7 @@ describe("Sites", () => {
     expect(screen.getByText("No site matches the filter.")).toBeInTheDocument();
   });
 
-  it("shows disk, backup, virus finds and staging, and filters what needs attention", async () => {
+  it("shows disk, backup, virus finds, failing cron jobs and staging, and filters what needs attention", async () => {
     const user = userEvent.setup();
     const GiB = 1024 ** 3;
     const usage = (bytes: number, level: string) => ({ enforced: true, bytes, inodes: 10, bytesPercent: Math.round((bytes * 100) / (10 * GiB)), inodesPercent: 0, level });
@@ -183,6 +183,9 @@ describe("Sites", () => {
       "GET /api/v1/sites/blog/limits": lim(usage(2 * GiB, "ok")),
       "GET /api/v1/sites/shop/limits": lim(usage(9.6 * GiB, "critical")),
       "GET /api/v1/sites/stage/limits": lim(usage(1 * GiB, "ok")),
+      "GET /api/v1/sites/stage/cron": {
+        body: { statusKnown: true, jobs: [{ id: 1, schedule: "@daily", command: "./x.sh", timeoutSec: 0, nice: null, paused: false, createdAt: 1, updatedAt: 1, status: { running: false, result: "exit-code", exitStatus: 3, lastStart: 1795600000 } }] },
+      },
       "GET /api/v1/backups": {
         body: { ready: true, overdue: false, status: { running: false, ok: true, finished: new Date(Date.now() - 2 * 3600e3).toISOString(), items: [{ kind: "files", site: "blog" }, { kind: "files", site: "shop", error: "disk read" }], maintenanceOk: true } },
       },
@@ -196,10 +199,12 @@ describe("Sites", () => {
     expect(row("blog").getByText("2 hours ago")).toBeInTheDocument();
     expect(await row("shop").findByText("Failed")).toBeInTheDocument();
     expect(row("stage").getByText("Staging of blog")).toBeInTheDocument();
+    expect(await row("stage").findByRole("link", { name: "1 cron job fails" })).toHaveAttribute("href", "#/sites/stage/cron");
+    expect(row("blog").getByText("HTTPS")).toHaveClass("ui-https");
 
     await user.selectOptions(screen.getByRole("combobox", { name: "State" }), "attention");
-    // blog has virus finds, shop a full disk and a failed certificate.
-    expect(rowNames()).toEqual(["blog", "shop"]);
+    // blog has virus finds, shop a full disk and a failed backup, stage a failing cron job.
+    expect(rowNames()).toEqual(["blog", "shop", "stage"]);
     await user.selectOptions(screen.getByRole("combobox", { name: "State" }), "staging");
     expect(rowNames()).toEqual(["stage"]);
   });
@@ -746,7 +751,11 @@ describe("SitePage", () => {
     render(<PageHarness />);
     expect(await screen.findByRole("heading", { name: "Company blog", level: 1 })).toBeInTheDocument();
     expect(within(screen.getByLabelText("Details of blog")).getByText("Company blog")).toBeInTheDocument();
-    const card = within(screen.getByRole("region", { name: "Rename" }));
+    // Renaming is rare: the card shows only once the Actions menu opens it.
+    expect(screen.queryByRole("region", { name: "Rename" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename…" }));
+    const card = within(await screen.findByRole("region", { name: "Rename" }));
     // The hint names the system name that stays, in code style.
     expect(card.getByText("blog", { selector: "code" })).toBeInTheDocument();
     const save = card.getByRole("button", { name: "Save display name" });
@@ -1137,6 +1146,9 @@ describe("SitePage", () => {
     });
     render(<PageHarness />);
     const box = within(await screen.findByRole("region", { name: "Maintenance" }));
+    // The switch applies at once; page and addresses sit behind "Change…".
+    expect(box.getByText(/Page: Built-in maintenance page · Allowed: none/)).toBeInTheDocument();
+    await user.click(box.getByRole("button", { name: "Change…" }));
     const select = await box.findByRole("combobox", { name: "Maintenance page" });
     await waitFor(() => expect(within(select).getAllByRole("option")).toHaveLength(2));
     expect(within(select).queryByText("Built-in parking page")).not.toBeInTheDocument();
@@ -1144,7 +1156,7 @@ describe("SitePage", () => {
 
     const allow = box.getByRole("textbox", { name: /Allowed addresses/ });
     await user.type(allow, "not-an-ip");
-    await user.click(box.getByRole("button", { name: "Start maintenance" }));
+    await user.click(box.getByRole("switch", { name: "Maintenance mode" }));
     expect(box.getByRole("alert")).toHaveTextContent('"not-an-ip" is not an IP address');
     expect(calls.some((c) => c.method === "PUT")).toBe(false);
 
@@ -1152,12 +1164,13 @@ describe("SitePage", () => {
     await user.type(allow, "10.0.0.0/8");
     await user.click(box.getByRole("button", { name: "Add my current IP" }));
     await waitFor(() => expect(allow).toHaveValue("10.0.0.0/8\n198.51.100.7"));
-    await user.click(box.getByRole("button", { name: "Start maintenance" }));
+    await user.click(box.getByRole("switch", { name: "Maintenance mode" }));
     expect(await box.findByText("Maintenance is on. The listed addresses still see the site.")).toBeInTheDocument();
     expect(screen.getByText("Maintenance", { selector: ".ui-badge" })).toBeInTheDocument();
     expect(within(screen.getByLabelText("Details of blog")).getByText(/except 10.0.0.0\/8, 198.51.100.7/)).toBeInTheDocument();
 
-    await user.click(box.getByRole("button", { name: "End maintenance" }));
+    expect(box.getByRole("switch", { name: "Maintenance mode" })).toBeChecked();
+    await user.click(box.getByRole("switch", { name: "Maintenance mode" }));
     expect(await box.findByText("Maintenance is off. Everybody sees the site again.")).toBeInTheDocument();
     expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([
       { enabled: true, page: "p1", allowIps: ["10.0.0.0/8", "198.51.100.7"] },

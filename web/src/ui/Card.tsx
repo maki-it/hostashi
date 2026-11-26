@@ -10,7 +10,7 @@ type CardProps = {
   padded?: boolean;
   children: ReactNode;
   /** The element id, for a menu item that scrolls to the card. */
-  id?: string;
+  id?: string | undefined;
 };
 
 /** A titled section. With a title it is a labelled region. */

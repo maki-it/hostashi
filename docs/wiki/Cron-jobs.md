@@ -18,8 +18,9 @@ The list shows the last and the next run of each job and how the last run ended.
 ## Run, pause and delete
 
 - **Run now** starts a job right away; its result shows up under **Last run**.
-- **Pause** keeps the job but stops its schedule. It then runs only when started by hand.
-- **Delete** removes it.
+- **More → Change** opens the job's form.
+- **More → Pause** keeps the job but stops its schedule. It then runs only when started by hand.
+- **More → Delete** removes it.
 
 While a site is disabled, its cron jobs do not run.
 

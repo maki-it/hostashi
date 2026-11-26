@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { Plus } from "@phosphor-icons/react";
+import { DotsThree, Pause, PencilSimple, Play, Plus, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   commandProblem,
@@ -27,7 +27,7 @@ import {
   type CronList,
 } from "./cron";
 import type { Site } from "./sites";
-import { Badge, Button, Card, Field, Notice } from "./ui";
+import { Badge, Button, Card, Field, Menu, Notice, RowActions, type MenuItem } from "./ui";
 
 // CronSettings lists the cron jobs of a site and adds, changes, pauses,
 // runs and deletes them. Jobs run as the site user in its home.
@@ -114,11 +114,27 @@ export function CronSettings({ site }: { site: Site }) {
             ) : (
               <>
                 {!list.statusKnown && <p className="ui-hint ui-flush">Last and next runs are not known right now: the server did not answer.</p>}
-                <ul className="ui-plain-list ui-stack" aria-label={"Cron jobs of " + site.name}>
-                  {list.jobs.map((j) => (
-                    <JobRow key={j.id} site={site} job={j} onChange={changed} />
-                  ))}
-                </ul>
+                {/* No scroll box around the table: it would cut off the More menu. */}
+                <div>
+                  <table className="ui-table ui-table-actions-below" aria-label={"Cron jobs of " + site.name}>
+                    <thead>
+                      <tr>
+                        <th scope="col">Schedule</th>
+                        <th scope="col">Command</th>
+                        <th scope="col">Last run</th>
+                        <th scope="col">Next run</th>
+                        <th scope="col">
+                          <span className="ui-sr-only">Actions</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {list.jobs.map((j) => (
+                        <JobRow key={j.id} site={site} job={j} onChange={changed} />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </>
             )}
             {done && <Notice tone="ok" title={done} />}
@@ -154,95 +170,114 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
 
   if (editing) {
     return (
-      <li className="ui-subsection">
-        <JobForm
-          title={"Change cron job " + String(job.id)}
-          submitLabel="Save cron job"
-          initial={job}
-          onCancel={() => setEditing(false)}
-          onSubmit={async (input) => {
-            await updateCron(site.name, job.id, input);
-            setEditing(false);
-            await onChange("Cron job saved.");
-          }}
-        />
-      </li>
+      <tr>
+        <td colSpan={5}>
+          <JobForm
+            title={"Change cron job " + String(job.id)}
+            submitLabel="Save cron job"
+            initial={job}
+            onCancel={() => setEditing(false)}
+            onSubmit={async (input) => {
+              await updateCron(site.name, job.id, input);
+              setEditing(false);
+              await onChange("Cron job saved.");
+            }}
+          />
+        </td>
+      </tr>
     );
   }
 
+  const run = () =>
+    void act(async () => {
+      await runCron(site.name, job.id);
+      return "The cron job started. Its result shows up under “Last run”.";
+    });
+  const togglePause = () =>
+    void act(async () => {
+      await updateCron(site.name, job.id, { ...inputOf(job), paused: !job.paused });
+      return job.paused ? "Cron job resumed." : "Cron job paused. It runs only when started by hand.";
+    });
+  const more: MenuItem[] = [
+    { label: "Change", icon: <PencilSimple size={16} aria-hidden="true" />, onSelect: () => setEditing(true) },
+    { label: job.paused ? "Resume" : "Pause", icon: job.paused ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />, onSelect: togglePause },
+    { label: "Delete", icon: <Trash size={16} aria-hidden="true" />, danger: true, onSelect: () => setConfirming(true) },
+  ];
+
   return (
-    <li className="ui-subsection ui-stack-tight">
-      <div className="ui-row">
-        <code>{job.schedule}</code>
-        {words && <span className="ui-hint">{words}</span>}
-        {job.paused && <Badge tone="warn">Paused</Badge>}
-      </div>
-      <pre className="ui-code">{job.command}</pre>
-      <dl className="ui-facts" aria-label={"Details of cron job " + String(job.id)}>
-        <dt>Last run</dt>
-        <dd>
+    <>
+      <tr aria-label={"Details of cron job " + String(job.id)}>
+        <td>
+          <div className="ui-stack-tight">
+            <span className="ui-row ui-row-tight">
+              <code>{job.schedule}</code>
+              {job.paused && <Badge tone="warn">Paused</Badge>}
+            </span>
+            {words && <span className="ui-hint">{words}</span>}
+          </div>
+        </td>
+        <td data-label="Command">
+          <div className="ui-stack-tight">
+            <code className="ui-cron-cmd">{job.command}</code>
+            <span className="ui-hint">
+              Limits: {limit} min, priority {job.nice ?? defaultNice}
+            </span>
+          </div>
+        </td>
+        <td data-label="Last run">
           {st && st.result && st.lastStart && !st.running ? <Badge tone={lastRunTone(st)}>{lastRun(st)}</Badge> : st ? lastRun(st) : "Unknown"}
-        </dd>
-        <dt>Next run</dt>
-        <dd>{job.paused ? "Paused" : site.disabled ? "Site disabled" : st?.next ? formatTime(st.next) : st ? "Not planned" : "Unknown"}</dd>
-        <dt>Limits</dt>
-        <dd>
-          {limit} min, priority {job.nice ?? defaultNice}
-        </dd>
-      </dl>
-      {confirming ? (
-        <div className="ui-row" role="alertdialog" aria-label={"Delete cron job " + String(job.id)}>
-          <span>Delete this cron job?</span>
-          <Button
-            variant="danger"
-            disabled={busy}
-            onClick={() =>
-              void act(async () => {
-                await deleteCron(site.name, job.id);
-                return "Cron job deleted.";
-              })
-            }
-          >
-            Delete cron job
-          </Button>
-          <Button disabled={busy} onClick={() => setConfirming(false)}>
-            Cancel
-          </Button>
-        </div>
-      ) : (
-        <div className="ui-row">
-          <Button
-            disabled={busy || site.disabled || st?.running === true}
-            onClick={() =>
-              void act(async () => {
-                await runCron(site.name, job.id);
-                return "The cron job started. Its result shows up under “Last run”.";
-              })
-            }
-          >
-            Run now
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void act(async () => {
-                await updateCron(site.name, job.id, { ...inputOf(job), paused: !job.paused });
-                return job.paused ? "Cron job resumed." : "Cron job paused. It runs only when started by hand.";
-              })
-            }
-          >
-            {job.paused ? "Resume" : "Pause"}
-          </Button>
-          <Button disabled={busy} onClick={() => setEditing(true)}>
-            Change
-          </Button>
-          <Button variant="danger" disabled={busy} onClick={() => setConfirming(true)}>
-            Delete
-          </Button>
-        </div>
+        </td>
+        <td data-label="Next run">{job.paused ? "Paused" : site.disabled ? "Site disabled" : st?.next ? formatTime(st.next) : st ? "Not planned" : "Unknown"}</td>
+        <td data-actions="">
+          <RowActions>
+            <Button small icon={<Play size={14} aria-hidden="true" />} disabled={busy || site.disabled || st?.running === true} onClick={run}>
+              Run now
+            </Button>
+            <Menu
+              label={"Actions for cron job " + String(job.id)}
+              buttonLabel={"More actions for cron job " + String(job.id)}
+              buttonClass="ui-btn ui-btn-sm"
+              button={
+                <>
+                  <DotsThree size={14} aria-hidden="true" />
+                  More
+                </>
+              }
+              items={more}
+            />
+          </RowActions>
+        </td>
+      </tr>
+      {(confirming || error) && (
+        <tr>
+          <td colSpan={5}>
+            {confirming && (
+              <div className="ui-row" role="alertdialog" aria-label={"Delete cron job " + String(job.id)}>
+                <span>
+                  Delete the cron job <code>{job.command}</code>?
+                </span>
+                <Button
+                  variant="danger"
+                  disabled={busy}
+                  onClick={() =>
+                    void act(async () => {
+                      await deleteCron(site.name, job.id);
+                      return "Cron job deleted.";
+                    })
+                  }
+                >
+                  Delete cron job
+                </Button>
+                <Button disabled={busy} onClick={() => setConfirming(false)}>
+                  Cancel
+                </Button>
+              </div>
+            )}
+            {error && <Notice tone="err" title={error} />}
+          </td>
+        </tr>
       )}
-      {error && <Notice tone="err" title={error} />}
-    </li>
+    </>
   );
 }
 

@@ -95,6 +95,7 @@ describe("QuickActions", () => {
     expect(screen.getByRole("link", { name: "Open site" })).toHaveAttribute("href", "https://blog.example.com");
     expect(screen.getByRole("link", { name: "File manager" })).toHaveAttribute("href", "#/sites/blog/files");
     expect(screen.getByRole("link", { name: "SSH & SFTP" })).toHaveAttribute("href", "#/sites/blog/ssh");
+    expect(screen.getByRole("link", { name: "Databases" })).toHaveAttribute("href", "#/databases?site=blog");
   });
 });
 
@@ -102,24 +103,31 @@ describe("SiteActions", () => {
   it("opens with the keyboard and goes to a tab", async () => {
     const user = userEvent.setup();
     const onTab = vi.fn();
-    render(<SiteActions site={blog} groups={groupsForSite(blog)} staff onTab={onTab} />);
+    const onCard = vi.fn();
+    render(<SiteActions site={blog} groups={groupsForSite(blog)} staff admin onTab={onTab} onCard={onCard} />);
     const button = screen.getByRole("button", { name: "Actions" });
     expect(button).toHaveAttribute("aria-expanded", "false");
     button.focus();
     await user.keyboard("{ArrowDown}");
     const menu = screen.getByRole("menu", { name: "Actions for blog" });
-    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Rename…", "Copy site…", "Change domains…", "Reset permissions…"]);
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Rename…", "Copy site…", "Change domains…", "Databases…", "Restart PHP…", "Reset permissions…"]);
     expect(within(menu).getByRole("menuitem", { name: "Rename…" })).toHaveFocus();
     await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
     expect(onTab).toHaveBeenCalledWith("domains");
     expect(screen.queryByRole("menu")).toBeNull();
+    // Rename opens its card on the overview.
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename…" }));
+    expect(onCard).toHaveBeenCalledWith("rename");
+    expect(onTab).toHaveBeenLastCalledWith("overview");
   });
 
   it("closes with Escape and leaves out copying for users", async () => {
     const user = userEvent.setup();
-    render(<SiteActions site={blog} groups={groupsForSite(blog)} staff={false} onTab={() => undefined} />);
+    render(<SiteActions site={blog} groups={groupsForSite(blog)} staff={false} admin={false} onTab={() => undefined} onCard={() => undefined} />);
     await user.click(screen.getByRole("button", { name: "Actions" }));
     expect(screen.queryByRole("menuitem", { name: "Copy site…" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Restart PHP…" })).toBeNull();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).toBeNull();
     expect(screen.getByRole("button", { name: "Actions" })).toHaveFocus();

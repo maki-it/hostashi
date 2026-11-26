@@ -6,10 +6,12 @@ import {
   CaretDown,
   ClockCounterClockwise,
   CopySimple,
+  Database,
   DotsThree,
   FileText,
   FolderSimple,
   GitBranch,
+  Gear,
   Globe,
   HardDrives,
   Key,
@@ -17,6 +19,7 @@ import {
   PencilSimple,
   Terminal,
   Timer,
+  X,
 } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
 import { getBackups, type BackupInfo } from "./backups";
@@ -28,7 +31,7 @@ import { formatHash, type SiteTab } from "./routes";
 import { getSiteScan, type SiteScan } from "./scan";
 import type { SiteGroup } from "./SiteNav";
 import { hasAccount, type Site } from "./sites";
-import { Card, Menu, type MenuItem } from "./ui";
+import { Card, IconButton, Menu, type MenuItem } from "./ui";
 import { relativeTime } from "./ui/Time";
 
 type Tone = "warn" | "err" | undefined;
@@ -38,6 +41,8 @@ export const siteUrl = (site: Site) => (site.tls.active ? "https://" : "http://"
 
 const hasTab = (groups: SiteGroup[], id: SiteTab) => groups.some((g) => g.tabs.some((t) => t.id === id));
 const tabHref = (site: string, tab: SiteTab) => formatHash({ page: "sites", site: { name: site, tab } });
+// dbHref lists the databases of a site; each opens in the database tool.
+const dbHref = (site: string) => formatHash({ page: "databases", query: new URLSearchParams({ site }) });
 const ago = (iso: string) => relativeTime(new Date(iso)) || "—";
 
 function Tile({ icon, head, value, sub, tone, bar, href }: { icon: ReactNode; head: string; value: ReactNode; sub?: ReactNode; tone?: Tone; bar?: number | undefined; href: string }) {
@@ -229,36 +234,55 @@ export function QuickActions({ site, groups }: { site: Site; groups: SiteGroup[]
         )}
         {link("files", <FolderSimple size={16} aria-hidden="true" />, "File manager")}
         {link("logs", <FileText size={16} aria-hidden="true" />, "Logs")}
+        {hasAccount(site) && (
+          <a className="ui-btn ui-btn-secondary" href={dbHref(n)}>
+            <Database size={16} aria-hidden="true" />
+            Databases
+          </a>
+        )}
         {link("ssh", <Terminal size={16} aria-hidden="true" />, "SSH & SFTP")}
       </div>
     </Card>
   );
 }
 
+/** CloseButton hides an overview card the Actions menu opened. */
+export function CloseButton({ onClose }: { onClose: () => void }) {
+  return <IconButton label="Close" icon={<X size={16} aria-hidden="true" />} onClick={onClose} />;
+}
+
+/** The overview cards that only show when the Actions menu opens them. */
+export type OverviewCard = "rename" | "clone" | "services";
+
 /** The ids of the overview cards the Actions menu scrolls to. */
-export const cardId = (site: string, card: "rename" | "clone") => `site-${card}-${site}`;
+export const cardId = (site: string, card: OverviewCard) => `site-${card}-${site}`;
 
 /**
- * SiteActions is the Actions menu of the site header: rarer steps that
- * live on a tab or further down the overview.
+ * SiteActions is the Actions menu of the site header: rarer steps. Rename,
+ * copy and the services open their card at the top of the overview; the
+ * others go to their tab.
  */
-export function SiteActions({ site, groups, staff, onTab }: { site: Site; groups: SiteGroup[]; staff: boolean; onTab: (t: SiteTab) => void }) {
-  // scrollTo opens the overview and brings a card of it into view.
-  const scrollTo = (id: string) => () => {
+export function SiteActions({ site, groups, staff, admin, onTab, onCard }: { site: Site; groups: SiteGroup[]; staff: boolean; admin: boolean; onTab: (t: SiteTab) => void; onCard: (c: OverviewCard) => void }) {
+  // open shows a card on the overview and brings it into view.
+  const open = (card: OverviewCard) => () => {
+    onCard(card);
     onTab("overview");
-    requestAnimationFrame(() => {
-      const el = document.getElementById(id);
-      el?.scrollIntoView({ behavior: "smooth", block: "start" });
-      el?.querySelector<HTMLElement>("input, button")?.focus({ preventScroll: true });
-    });
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const el = document.getElementById(cardId(site.name, card));
+        el?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+        el?.querySelector<HTMLElement>("input, button:not([aria-label=Close])")?.focus({ preventScroll: true });
+      }),
+    );
   };
 
   const items: MenuItem[] = [];
-  if (site.state !== "deleting") items.push({ label: "Rename…", icon: <PencilSimple size={16} aria-hidden="true" />, onSelect: scrollTo(cardId(site.name, "rename")) });
-  if (staff && canClone(site)) items.push({ label: "Copy site…", icon: <CopySimple size={16} aria-hidden="true" />, onSelect: scrollTo(cardId(site.name, "clone")) });
+  if (site.state !== "deleting") items.push({ label: "Rename…", icon: <PencilSimple size={16} aria-hidden="true" />, onSelect: open("rename") });
+  if (staff && canClone(site)) items.push({ label: "Copy site…", icon: <CopySimple size={16} aria-hidden="true" />, onSelect: open("clone") });
   if (hasTab(groups, "domains")) items.push({ label: "Change domains…", icon: <Globe size={16} aria-hidden="true" />, onSelect: () => onTab("domains") });
+  if (hasAccount(site)) items.push({ label: "Databases…", icon: <Database size={16} aria-hidden="true" />, href: dbHref(site.name) });
+  if (admin && hasAccount(site)) items.push({ label: site.php ? "Restart PHP…" : "Services…", icon: <Gear size={16} aria-hidden="true" />, onSelect: open("services") });
   if (hasTab(groups, "files") && hasAccount(site)) items.push({ label: "Reset permissions…", icon: <Key size={16} aria-hidden="true" />, onSelect: () => onTab("files") });
-
   return (
     <Menu
       label={"Actions for " + site.name}
