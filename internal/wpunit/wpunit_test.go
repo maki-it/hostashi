@@ -329,3 +329,29 @@ func TestStartCloneRefusesInvalid(t *testing.T) {
 		t.Fatalf("started %v", e.ctl.started)
 	}
 }
+
+func TestStartDotEnv(t *testing.T) {
+	e := newEnv(t)
+
+	req := agentapi.DotEnvCloneRequest{
+		Site: "blog", Kind: agentapi.DotEnvLaravel, WebDir: "public", URL: "https://stage.blog.example.com",
+		Databases:   []agentapi.WPCloneDB{{Source: "live_app", Target: "blog_app", User: "blog_app"}},
+		DBPasswords: map[string]string{"blog_app": "db-secret-123456"},
+	}
+
+	if _, err := e.m.StartDotEnv(t.Context(), req); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, _ := os.ReadFile(filepath.Join(e.base, "creds", "blog", wpcli.CredJob))
+
+	var j wpcli.Job
+	if err := json.Unmarshal(raw, &j); err != nil || j.DotEnv == nil || j.DotEnv.Dir != "htdocs" || j.DotEnv.Home != e.home || strings.Contains(string(raw), "secret") {
+		t.Fatalf("job %s %v", raw, err)
+	}
+
+	req.Kind = "rails"
+	if _, err := e.m.StartDotEnv(t.Context(), req); err == nil {
+		t.Fatal("unknown kind accepted")
+	}
+}

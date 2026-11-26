@@ -44,6 +44,14 @@ type CloneAgent interface {
 	// a clone (site.wordpress.clone, site.wordpress.status).
 	WPCloneStart(ctx context.Context, req agentapi.WPCloneRequest) (agentapi.WPInstallStatus, error)
 	WPCloneStatus(ctx context.Context, site string) (agentapi.WPInstallStatus, error)
+	// DotEnvCloneStart runs the .env step of a Laravel or Symfony clone
+	// in the same unit (site.dotenv.clone).
+	DotEnvCloneStart(ctx context.Context, req agentapi.DotEnvCloneRequest) (agentapi.WPInstallStatus, error)
+}
+
+// DotEnvCloneStart calls site.dotenv.clone.
+func (a RPCAgent) DotEnvCloneStart(ctx context.Context, req agentapi.DotEnvCloneRequest) (agentapi.WPInstallStatus, error) {
+	return agentapi.DotEnvCloneStart.Call(ctx, a.C, req)
 }
 
 // WPCloneStart calls site.wordpress.clone.
@@ -822,10 +830,11 @@ func (s *Service) configureStep(ctx context.Context, src, site store.Site, c sto
 	}
 }
 
-// configureClone points a WordPress clone at its databases and its domain
-// (ADR-0070): it sets new passwords for the clone's database users, which
-// the panel never stores, and starts the agent's run, then waits for it.
-// A clone of another application needs no step (done at once).
+// configureClone points a WordPress, Laravel or Symfony clone at its
+// databases and its domain (ADR-0070): it sets new passwords for the
+// clone's database users, which the panel never stores, and starts the
+// agent's run (WP-CLI, or the .env edits), then waits for it. A clone of
+// another application needs no step (done at once).
 func (s *Service) configureClone(ctx context.Context, src, site store.Site, c *store.SiteClone) (changed, done bool, msg string, err error) {
 	if c.Config == store.CloneConfigDone {
 		return false, true, "", nil
@@ -837,7 +846,8 @@ func (s *Service) configureClone(ctx context.Context, src, site store.Site, c *s
 			return false, false, "", err
 		}
 
-		if p.Profile != profile.WordPress || !hasDBUser(c.Databases) {
+		kind := map[string]string{profile.WordPress: profile.WordPress, profile.Laravel: agentapi.DotEnvLaravel, profile.Symfony: agentapi.DotEnvSymfony}[p.Profile]
+		if kind == "" || !hasDBUser(c.Databases) {
 			c.Config = store.CloneConfigDone
 
 			return true, true, "", nil
@@ -850,14 +860,22 @@ func (s *Service) configureClone(ctx context.Context, src, site store.Site, c *s
 			return false, false, "the database passwords of the clone could not be set", nil
 		}
 
-		if _, err := s.clones.WPCloneStart(ctx, req); err != nil {
+		if kind == profile.WordPress {
+			_, err = s.clones.WPCloneStart(ctx, req)
+		} else {
+			_, err = s.clones.DotEnvCloneStart(ctx, agentapi.DotEnvCloneRequest{
+				Site: req.Site, Kind: kind, WebDir: req.WebDir, URL: req.URL, Databases: req.Databases, DBPasswords: req.DBPasswords,
+			})
+		}
+
+		if err != nil {
 			if isCode(err, agentrpc.CodeConflict) {
 				// Another run of the site is busy: try again (with new
 				// passwords then, which is fine).
 				return false, false, "", err
 			}
 
-			return false, false, "the WordPress configuration could not start: " + agentMessage(err), nil
+			return false, false, "the configuration could not start: " + agentMessage(err), nil
 		}
 
 		c.Config = store.CloneConfigRunning
@@ -883,7 +901,7 @@ func (s *Service) configureClone(ctx context.Context, src, site store.Site, c *s
 		reason = "the run failed"
 	}
 
-	return false, false, "WordPress configuration: " + reason, nil
+	return false, false, "configuration: " + reason, nil
 }
 
 // wpCloneRequest sets a new password for every database user of the

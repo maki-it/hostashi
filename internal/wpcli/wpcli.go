@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package wpcli runs WP-CLI for the WordPress quick install (ADR-0069)
-// and the configuration of a cloned WordPress site (ADR-0070).
+// and the configuration of a cloned WordPress site (ADR-0070); the .env
+// step of a cloned Laravel or Symfony site runs here too, without a
+// process.
 //
 // It is the seventh package that may start processes (os/exec), with this
 // narrow scope: Run only works inside hostashi-wp@<site>.service, as the
@@ -44,6 +46,9 @@ type Job struct {
 	// Clone, when set, makes the run the configuration of a cloned site
 	// (ADR-0070) instead of a quick install; the other fields stay empty.
 	Clone *CloneJob `json:"clone,omitempty"`
+	// DotEnv, when set, makes the run the .env step of a cloned Laravel
+	// or Symfony site; it starts no process.
+	DotEnv *DotEnvJob `json:"dotEnv,omitempty"`
 }
 
 // Fixed places.
@@ -355,7 +360,7 @@ func Main(ctx context.Context, args []string, euid int, out io.Writer) error {
 		return fmt.Errorf("wpcli: job: %w", err)
 	}
 
-	if j.Clone != nil {
+	if j.Clone != nil || j.DotEnv != nil {
 		b, err := read(CredDBPass)
 		if err != nil {
 			return err
@@ -366,7 +371,12 @@ func Main(ctx context.Context, args []string, euid int, out io.Writer) error {
 			return err
 		}
 
-		return (&Runner{Euid: euid, Phar: args[0], Out: out}).RunClone(ctx, *j.Clone, pw)
+		r := &Runner{Euid: euid, Phar: args[0], Out: out}
+		if j.DotEnv != nil {
+			return r.RunDotEnv(*j.DotEnv, pw)
+		}
+
+		return r.RunClone(ctx, *j.Clone, pw)
 	}
 
 	secrets := map[string]string{}
