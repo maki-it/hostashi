@@ -22,6 +22,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/sysconf"
+	"github.com/maki-it/hostashi/internal/updates"
 )
 
 // SystemCtl reaches timedated, hostnamed and logind (sysconf.Client in
@@ -115,6 +116,14 @@ func registerSystem(s *agentrpc.Server, o *systemOps) {
 		return o.setHostname(ctx, req.Name)
 	})
 
+	agentrpc.Handle(s, agentapi.SystemAutoUpdateSet, func(ctx context.Context, _ agentrpc.Caller, req agentapi.SystemAutoUpdateRequest) (agentapi.SystemInfo, error) {
+		if o.ctl == nil {
+			return agentapi.SystemInfo{}, errNoSystem
+		}
+
+		return o.setAutoUpdate(ctx, req.On)
+	})
+
 	agentrpc.Handle(s, agentapi.SystemReboot, func(ctx context.Context, _ agentrpc.Caller, _ agentapi.SystemRebootRequest) (agentapi.SystemRebootResponse, error) {
 		if o.ctl == nil {
 			return agentapi.SystemRebootResponse{}, errNoSystem
@@ -122,6 +131,42 @@ func registerSystem(s *agentrpc.Server, o *systemOps) {
 
 		return o.reboot(ctx)
 	})
+}
+
+var (
+	errNoPackage  = &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the server was not set up from the hostashi package"}
+	errAutoUpdate = &agentrpc.Error{Code: agentrpc.CodeInternal, Message: "could not change the automatic updates, see the agent's log"}
+)
+
+// setAutoUpdate writes or removes updates.AutoFile. The installer's own
+// file can still name the suite stable on a server it set up before the
+// switch existed; the next run of the installer moves that line here.
+func (o *systemOps) setAutoUpdate(ctx context.Context, on bool) (agentapi.SystemInfo, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	if o.updates(ctx) == nil {
+		return agentapi.SystemInfo{}, errNoPackage
+	}
+
+	p := o.path(updates.AutoFile)
+
+	var err error
+	if on {
+		err = writeFileAtomic(p, []byte(updates.AutoContent), 0o644)
+	} else if err = os.Remove(p); errors.Is(err, fs.ErrNotExist) {
+		err = nil
+	}
+
+	if err != nil {
+		o.log.ErrorContext(ctx, "system: automatic updates", "on", on, "err", err)
+
+		return agentapi.SystemInfo{}, errAutoUpdate
+	}
+
+	o.log.InfoContext(ctx, "system: automatic updates", "on", on)
+
+	return o.info(ctx)
 }
 
 func (o *systemOps) path(p string) string { return filepath.Join(o.root, p) }
@@ -172,7 +217,35 @@ func (o *systemOps) info(ctx context.Context) (agentapi.SystemInfo, error) {
 		info.CloudInit = true
 	}
 
+	info.Updates = o.updates(ctx)
+
 	return info, nil
+}
+
+// updates reads the hostashi package's update state; nil when it is not
+// installed or the files cannot be read (the doctor reports that).
+func (o *systemOps) updates(ctx context.Context) *agentapi.SystemUpdates {
+	st, err := updates.Read(updates.Paths{
+		DpkgStatus: o.path("/var/lib/dpkg/status"),
+		Sources:    o.path("/etc/apt/sources.list.d/hostashi.sources"),
+		Lists:      o.path("/var/lib/apt/lists"),
+		Unattended: o.path("/etc/apt/apt.conf.d/52hostashi-unattended-upgrades"),
+		Auto:       o.path(updates.AutoFile),
+	})
+	if err != nil {
+		o.log.WarnContext(ctx, "system: read the update state", "err", err)
+	}
+
+	if st.Installed == "" {
+		return nil
+	}
+
+	u := &agentapi.SystemUpdates{Installed: st.Installed, Available: st.Available, Update: st.Update, Auto: st.Auto}
+	if !st.ListedAt.IsZero() {
+		u.ListedAt = st.ListedAt.UTC().Format(time.RFC3339)
+	}
+
+	return u
 }
 
 func (o *systemOps) uptime() float64 {

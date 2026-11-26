@@ -308,6 +308,11 @@ const shots = [
     act: async (page) => page.getByRole("heading", { name: "Virus scan" }).evaluate((h) => h.scrollIntoView({ block: "start" })),
   },
   {
+    name: "system-updates",
+    hash: "#/system",
+    ready: "text=Automatic updates",
+  },
+  {
     name: "system-panel",
     hash: "#/system",
     ready: "text=Real visitor address of the panel",

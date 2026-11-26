@@ -89,6 +89,33 @@ describe("system helpers", () => {
 });
 
 describe("System", () => {
+  it("switches automatic updates", async () => {
+    const updates = { installed: "0.12.0", available: "0.13.0", update: true, auto: false, listedAt: "2026-11-26T06:00:00Z" };
+    const calls = mockFetch({
+      "GET /api/v1/system": { body: { ...info, updates } },
+      "GET /api/v1/system/timezones": { body: zones },
+      "PUT /api/v1/system/auto-update": { body: { ...info, updates: { ...updates, auto: true } } },
+    });
+    render(<System />);
+
+    const card = await screen.findByRole("region", { name: "Updates" });
+    expect(card).toHaveTextContent("Update available");
+    expect(within(card).getByRole("link", { name: "v0.13.0" })).toHaveAttribute("href", releaseUrl("0.13.0"));
+    const sw = within(card).getByRole("switch", { name: "Automatic updates" });
+    expect(sw).not.toBeChecked();
+    await userEvent.setup().click(sw);
+    expect(await screen.findByText(/Automatic updates are on/)).toBeInTheDocument();
+    expect(within(card).getByRole("switch", { name: "Automatic updates" })).toBeChecked();
+    expect(calls.some((c) => c.method === "PUT" && c.path === "/api/v1/system/auto-update" && JSON.stringify(c.body) === '{"on":true}')).toBe(true);
+  });
+
+  it("has no updates card without the package", async () => {
+    mockFetch({ "GET /api/v1/system": { body: info }, "GET /api/v1/system/timezones": { body: zones } });
+    render(<System />);
+    await screen.findByRole("region", { name: "Server" });
+    expect(screen.queryByRole("region", { name: "Updates" })).toBeNull();
+  });
+
   it("shows the server's settings and the pending reboot", async () => {
     mockFetch({ "GET /api/v1/system": { body: info }, "GET /api/v1/system/timezones": { body: zones } });
     render(<System />);

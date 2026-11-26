@@ -7914,6 +7914,15 @@
         ],
         "type": "object"
       },
+      "SystemAutoUpdateInput": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "SystemHostnameInput": {
         "additionalProperties": false,
         "properties": {
@@ -7955,6 +7964,16 @@
           },
           "transientHostname": {
             "type": "string"
+          },
+          "updates": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SystemUpdates"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "uptimeSeconds": {
             "type": "number"
@@ -8017,6 +8036,32 @@
         },
         "required": [
           "zones"
+        ],
+        "type": "object"
+      },
+      "SystemUpdates": {
+        "additionalProperties": false,
+        "properties": {
+          "auto": {
+            "type": "boolean"
+          },
+          "available": {
+            "type": "string"
+          },
+          "installed": {
+            "type": "string"
+          },
+          "listedAt": {
+            "type": "string"
+          },
+          "update": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "auto",
+          "installed",
+          "update"
         ],
         "type": "object"
       },
@@ -24402,6 +24447,59 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "system:read"
+      }
+    },
+    "/api/v1/system/auto-update": {
+      "put": {
+        "operationId": "setAutoUpdate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemAutoUpdateInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:write"
+            ]
+          }
+        ],
+        "summary": "Turn the automatic installation of new Hostashi versions on or off",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "system:write"
       }
     },
     "/api/v1/system/hostname": {

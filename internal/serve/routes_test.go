@@ -356,6 +356,7 @@ var routeAccess = map[string]authz.Action{
 	"GET /api/v1/system/timezones":                     "system:read",
 	"PUT /api/v1/system/timezone":                      "system:write",
 	"PUT /api/v1/system/hostname":                      "system:write",
+	"PUT /api/v1/system/auto-update":                   "system:write",
 	"POST /api/v1/system/reboot":                       "system:write",
 	"GET /metrics":                                     "metrics:read",
 }

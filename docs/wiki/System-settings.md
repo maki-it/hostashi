@@ -27,6 +27,19 @@ Type to search the list of zones the server knows. Before you save, the hint sho
 - MariaDB uses it after its next restart (**Services**, MariaDB, restart).
 - PHP keeps its own `date.timezone` (see [PHP settings](PHP-settings.md)).
 
+## Updates
+
+Shown on servers set up from the `hostashi` package. The card shows the installed Hostashi version and the newest one apt saw in the Hostashi repository (apt fetches the list once a day). The versions link to their release notes.
+
+The switch **Automatic updates** applies at once and is recorded in the audit log:
+
+- **On**: unattended-upgrades installs new Hostashi versions together with the daily security updates. Each update keeps a copy of the panel database first. Hostashi writes `/etc/apt/apt.conf.d/53hostashi-auto-update` for it, the same file as the installer option `--auto-update`.
+- **Off**: new versions wait for `sudo apt upgrade`. The **Health** page and an email say when one is out.
+
+A later run of the installer without `--auto-update` leaves the switch as it is.
+
+![The installed version and automatic updates on the System page](images/system-updates.png)
+
 ## Panel certificate
 
 Shown when the panel has its own host name (see [Install](Install.md)). It works like a site's certificate (see [Domains and HTTPS](Domains-and-HTTPS.md)): Let's Encrypt renews it by itself, or you upload an own certificate or create a CSR. The panel's certificate cannot be deleted.

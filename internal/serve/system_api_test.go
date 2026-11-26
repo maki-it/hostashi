@@ -69,6 +69,19 @@ func (s *stubSystem) SetHostname(_ context.Context, name string) (agentapi.Syste
 	return s.info, nil
 }
 
+func (s *stubSystem) SetAutoUpdate(_ context.Context, on bool) (agentapi.SystemInfo, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.err != nil {
+		return agentapi.SystemInfo{}, s.err
+	}
+
+	s.info.Updates = &agentapi.SystemUpdates{Installed: "0.13.0", Auto: on}
+
+	return s.info, nil
+}
+
 func (s *stubSystem) Reboot(context.Context) (agentapi.SystemRebootResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -159,6 +172,19 @@ func TestSystemAPI(t *testing.T) {
 
 	if !strings.Contains(diff, "web2") || !strings.Contains(diff, "web3.example.org") {
 		t.Fatalf("hostname diff %s", diff)
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/system/auto-update", body: `{"on":true}`, cookie: c})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"auto":true`) {
+		t.Fatalf("auto-update: %d %s", rec.Code, rec.Body)
+	}
+
+	if diff := string(e.auditEntry(t, "system.auto_update").Diff); !strings.Contains(diff, "off") || !strings.Contains(diff, "on") {
+		t.Fatalf("auto-update diff %s", diff)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/system/auto-update", body: `{"on":"yes"}`, cookie: c}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("auto-update with a string: %d", rec.Code)
 	}
 
 	// The confirmation is the hostname as it is now.

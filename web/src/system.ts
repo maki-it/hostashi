@@ -14,6 +14,19 @@ export type SystemInfo = {
   rebootRequired: boolean;
   rebootPackages?: string[];
   cloudInit: boolean;
+  /** The hostashi package (ADR-0050); absent when the server was not set up from it. */
+  updates?: SystemUpdates;
+};
+
+export type SystemUpdates = {
+  installed: string;
+  /** The newest version apt saw in the Hostashi repository; absent while apt has no list. */
+  available?: string;
+  update: boolean;
+  /** unattended-upgrades installs new versions by itself (--auto-update). */
+  auto: boolean;
+  /** When apt last fetched the list, RFC 3339. */
+  listedAt?: string;
 };
 
 export const getSystem = () => request<SystemInfo>("GET", "/system");
@@ -23,6 +36,8 @@ export const listTimezones = () => request<{ zones: string[] }>("GET", "/system/
 export const setTimezone = (zone: string) => request<SystemInfo>("PUT", "/system/timezone", { zone });
 
 export const setHostname = (hostname: string) => request<SystemInfo>("PUT", "/system/hostname", { hostname });
+
+export const setAutoUpdate = (on: boolean) => request<SystemInfo>("PUT", "/system/auto-update", { on });
 
 export const rebootServer = (confirm: string) => request<{ delaySeconds: number }>("POST", "/system/reboot", { confirm });
 

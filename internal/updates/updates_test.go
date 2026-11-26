@@ -91,7 +91,14 @@ func TestRead(t *testing.T) {
 		t.Fatalf("Read = %+v, want %+v", st, want)
 	}
 
-	write(t, p.Unattended, "\t\"origin=Hostashi,codename=stable\";\n")
+	// The suite runtimes (ADR-0077) is not --auto-update.
+	write(t, p.Unattended, "\t\"origin=Hostashi,codename=runtimes\";\n")
+
+	if st, err := Read(p); err != nil || st.Auto {
+		t.Fatalf("runtimes only: %+v %v", st, err)
+	}
+
+	write(t, p.Unattended, "\t\"origin=Hostashi,codename=runtimes\";\n\t\"origin=Hostashi,codename=stable\";\n")
 	write(t, p.DpkgStatus, status[:len(status)-len("Version: 0.1.0\nDescription: Hostashi\n a hosting panel\n")]+"Version: 0.10.0\n")
 
 	st, err = Read(p)
@@ -157,5 +164,14 @@ func TestListName(t *testing.T) {
 		if got := listName(c.uri, "stable", "main", "arm64"); got != c.want {
 			t.Errorf("listName(%q) = %q, want %q", c.uri, got, c.want)
 		}
+	}
+}
+
+// The installer writes AutoFile from packaging/apt with --auto-update; the
+// panel's switch writes AutoContent. Both must be the same file.
+func TestAutoContentMatchesInstaller(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "packaging", "apt", filepath.Base(AutoFile)))
+	if err != nil || string(b) != AutoContent {
+		t.Fatalf("packaging/apt/%s differs from AutoContent: %v", filepath.Base(AutoFile), err)
 	}
 }
