@@ -5,7 +5,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { Badge, Button, Card, Field, IconButton, Notice, nextSort, relativeTime, RelTime, sortRows, Table, tabPanelProps, Tabs } from ".";
+import { Badge, Button, Card, Field, IconButton, Notice, nextSort, relativeTime, RelTime, sortRows, Switch, Table, tabPanelProps, Tabs, UnsavedNote } from ".";
 import type { Column, Sort } from ".";
 
 describe("Button", () => {
@@ -241,5 +241,27 @@ describe("relativeTime", () => {
     expect(t).toHaveAttribute("datetime", "2026-11-17T12:00:00Z");
     expect(t.getAttribute("data-tip")).toMatch(/17 Nov 2026/);
     expect(t).toHaveAccessibleName(/^3 days ago, 17 Nov 2026/);
+  });
+});
+
+describe("Switch", () => {
+  it("is a switch named by its label and described by its hint", async () => {
+    const changed = vi.fn();
+    render(
+      <Switch checked={false} onChange={changed} hint="Applies to new visits.">
+        Maintenance mode
+      </Switch>,
+    );
+    const sw = screen.getByRole("switch", { name: "Maintenance mode" });
+    expect(sw).toHaveAccessibleDescription("Applies to new visits.");
+    await userEvent.click(sw);
+    expect(changed).toHaveBeenCalledWith(true);
+  });
+
+  it("names the save state beside a save button", () => {
+    const { rerender } = render(<UnsavedNote dirty={false} />);
+    expect(screen.getByText("No changes")).toBeInTheDocument();
+    rerender(<UnsavedNote dirty />);
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 });

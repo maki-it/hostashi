@@ -20,7 +20,7 @@ import {
   type PHPSettingsView,
 } from "./phpsettings";
 import type { Site } from "./sites";
-import { Button, Card, Field, Notice } from "./ui";
+import { Button, Card, Field, Notice, UnsavedNote } from "./ui";
 
 // timezones are the IANA names the browser knows, for the datalist; the
 // server checks against its own zone database.
@@ -119,6 +119,7 @@ export function PHPSettingsCard({ site }: { site: Site }) {
   const empty = toForm({});
   const memWarn = memoryWarning(form, view);
   const allDefault = Object.values(toForm(view.settings)).every((v) => v === "");
+  const dirty = JSON.stringify(form) !== JSON.stringify(toForm(view.settings));
 
   const numberField = (key: NumberKey) => {
     const f = numberFields.find((n) => n.key === key)!;
@@ -153,14 +154,14 @@ export function PHPSettingsCard({ site }: { site: Site }) {
           change them. The server's limits still apply: nginx takes no request larger than the largest request and waits no longer
           than the execution time, and the site's memory limit stays the ceiling.
         </p>
-        <fieldset className="ui-fieldset ui-stack" disabled={busy}>
+        <fieldset className="ui-fieldset ui-group ui-stack" disabled={busy}>
           <legend>Limits</legend>
           <div className="ui-form-grid">
             {numberFields.filter((f) => f.group === "limits").map((f) => numberField(f.key))}
           </div>
           {memWarn && <Notice tone="warn" title={memWarn} />}
         </fieldset>
-        <fieldset className="ui-fieldset ui-stack" disabled={busy}>
+        <fieldset className="ui-fieldset ui-group ui-stack" disabled={busy}>
           <legend>Behaviour</legend>
           <div className="ui-form-grid">
             <Field label="Time zone" hint={`date.timezone, an IANA name. Default ${d.timezone}.`} {...errProp("timezone")}>
@@ -189,12 +190,13 @@ export function PHPSettingsCard({ site }: { site: Site }) {
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
-          <Button type="submit" variant="primary" disabled={busy}>
+          <Button type="submit" variant="primary" disabled={busy || !dirty}>
             Save PHP settings
           </Button>
           <Button disabled={busy || allDefault} onClick={() => void save(empty, "All PHP settings are back to the defaults.")}>
             Reset all to defaults
           </Button>
+          <UnsavedNote dirty={dirty} />
         </div>
       </form>
     </Card>

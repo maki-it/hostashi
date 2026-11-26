@@ -15,7 +15,7 @@ import {
   type WebRealIP,
 } from "./realip";
 import type { Site } from "./sites";
-import { Button, Card, Field, Notice } from "./ui";
+import { Button, Card, Field, Notice, UnsavedNote } from "./ui";
 
 const title = "Real visitor address";
 
@@ -117,6 +117,7 @@ function RealIPEditor({
   }
 
   const set = (next: Partial<RealIPForm>) => setForm({ ...form, ...next });
+  const dirty = JSON.stringify(form) !== JSON.stringify(toRealIPForm(view.realIp));
   const stored = view.realIp.ranges ?? [];
   // A user without the admin role may keep or remove the stored
   // addresses, never add one.
@@ -233,9 +234,10 @@ function RealIPEditor({
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
-          <Button type="submit" variant="primary" disabled={busy}>
+          <Button type="submit" variant="primary" disabled={busy || !dirty}>
             Save
           </Button>
+          <UnsavedNote dirty={dirty} />
         </div>
       </form>
     </Card>

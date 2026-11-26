@@ -238,7 +238,7 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
   return (
     <Card title="Target and schedule">
       <form className="ui-stack" onSubmit={(e) => void submit(e)}>
-        <fieldset className="ui-fieldset ui-stack">
+        <fieldset className="ui-fieldset ui-group ui-stack">
           <legend>SFTP server</legend>
           <div className="ui-fields ui-fields-server">
             <Field label="User">
@@ -260,7 +260,7 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
             </Field>
           </div>
         </fieldset>
-        <fieldset className="ui-fieldset ui-stack">
+        <fieldset className="ui-fieldset ui-group ui-stack">
           <legend>Keep snapshots</legend>
           <div className="ui-fields ui-fields-num">
             <Field label="Hourly">
@@ -291,7 +291,7 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
             </Field>
           </div>
         </fieldset>
-        <fieldset className="ui-fieldset ui-stack">
+        <fieldset className="ui-fieldset ui-group ui-stack">
           <legend>Schedule</legend>
           <div className="ui-fields ui-fields-num">
             <Field label="Run backups">

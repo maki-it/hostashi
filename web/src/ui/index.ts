@@ -13,5 +13,6 @@ export { Notice, type NoticeTone } from "./Notice";
 export { PageHead } from "./PageHead";
 export { QRCode } from "./QRCode";
 export { nextSort, sortRows, Table, type Column, type Sort, type SortDir } from "./Table";
+export { AppliesAtOnce, Switch, UnsavedNote } from "./Switch";
 export { tabPanelProps, Tabs, type Tab } from "./Tabs";
 export { exactTime, relativeTime, RelTime } from "./Time";

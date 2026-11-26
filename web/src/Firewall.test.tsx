@@ -153,7 +153,12 @@ describe("Firewall", () => {
       "POST /api/v1/firewall/confirm": { status: 404, body: { error: { code: "not_pending", message: "x" } } },
     });
     render(<Firewall />);
-    await user.click(await screen.findByRole("button", { name: "Apply rules" }));
+    const apply = await screen.findByRole("button", { name: "Apply rules" });
+    expect(apply).toBeDisabled();
+    expect(screen.getByText("No changes")).toBeInTheDocument();
+    await user.type(screen.getByRole("textbox", { name: "Panel" }), "203.0.113.9");
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    await user.click(apply);
     expect(await screen.findByRole("alert")).toHaveTextContent("it was rolled back");
   });
 });
