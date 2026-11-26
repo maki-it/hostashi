@@ -474,6 +474,51 @@ func TestCloneRefreshFailureKeepsClone(t *testing.T) {
 	}
 }
 
+// A database name of the first copy that another site took since then is
+// left out of a refresh, on either side: the refresh never reads a third
+// site's database into the clone nor overwrites one.
+func TestCloneRefreshSkipsForeignDatabases(t *testing.T) {
+	s, _, f, _ := cloneEnv(t)
+	ctx := t.Context()
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "other", PHP: "8.4", Domains: []string{"other.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.CloneSite(ctx, 1, "shop", CloneInput{Name: "shop-stage", Domain: "stage.shop.example.com", Staging: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	pollUntil(t, s, "shop-stage")
+
+	// The source's "legacy" and the clone's "shop_stage_wp" now belong to
+	// the site "other".
+	for _, name := range []string{"legacy", "shop_stage_wp"} {
+		if err := s.DeleteDatabase(ctx, 1, name); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, _, err := s.CreateDatabase(ctx, 1, NewDatabase{Site: "other", Name: name}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	f.dbs = nil
+
+	if err := s.RefreshClone(ctx, 1, "shop-stage", false); err != nil {
+		t.Fatal(err)
+	}
+
+	v := pollUntil(t, s, "shop-stage")
+	if v.State != store.CloneDone || len(v.Databases) != 0 {
+		t.Fatalf("refresh %+v", v)
+	}
+
+	if len(f.dbs) != 0 {
+		t.Fatalf("database copies of another site's databases: %+v", f.dbs)
+	}
+}
+
 func TestCloneHomeJobLost(t *testing.T) {
 	s, _, f, _ := cloneEnv(t)
 	ctx := t.Context()
