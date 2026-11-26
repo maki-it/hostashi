@@ -105,31 +105,44 @@ type CloneView struct {
 	Home *agentapi.SiteHomeCopyJob
 }
 
+// CloneStarted is a clone that has started copying. AccessUser and
+// AccessPassword are the generated basic auth user of its password
+// protection, shown once; empty when the clone has none.
+type CloneStarted struct {
+	store.Site
+	AccessUser     string
+	AccessPassword string
+}
+
+// CloneAccessUser is the name of the basic auth user generated for a
+// clone with password protection.
+const CloneAccessUser = "staging"
+
 // CloneSite creates a new site as a copy of source and starts copying its
 // files and local databases. The new site is returned at once; RunClones
 // finishes the copy.
-func (s *Service) CloneSite(ctx context.Context, actor int64, source string, in CloneInput) (store.Site, error) {
+func (s *Service) CloneSite(ctx context.Context, actor int64, source string, in CloneInput) (CloneStarted, error) {
 	if s.clones == nil {
-		return store.Site{}, ErrNoClone
+		return CloneStarted{}, ErrNoClone
 	}
 
 	src, err := s.Get(ctx, source)
 	if err != nil {
-		return store.Site{}, err
+		return CloneStarted{}, err
 	}
 
 	if !src.Account || noFiles(src.Type) {
-		return store.Site{}, ErrSiteType
+		return CloneStarted{}, ErrSiteType
 	}
 
 	if src.State != store.SiteActive {
-		return store.Site{}, ErrState
+		return CloneStarted{}, ErrState
 	}
 
 	if busy, err := s.cloneBusy(ctx, src.ID); err != nil {
-		return store.Site{}, err
+		return CloneStarted{}, err
 	} else if busy {
-		return store.Site{}, ErrCloneBusy
+		return CloneStarted{}, ErrCloneBusy
 	}
 
 	if in.Pool == "" {
@@ -138,11 +151,11 @@ func (s *Service) CloneSite(ctx context.Context, actor int64, source string, in 
 
 	dbs, err := s.cloneDatabases(ctx, src, in.Name)
 	if err != nil {
-		return store.Site{}, err
+		return CloneStarted{}, err
 	}
 
 	if err := s.checkCloneSpace(ctx, src, in.Pool, dbs); err != nil {
-		return store.Site{}, err
+		return CloneStarted{}, err
 	}
 
 	req := CreateRequest{
@@ -157,20 +170,21 @@ func (s *Service) CloneSite(ctx context.Context, actor int64, source string, in 
 
 	created, err := s.Create(ctx, actor, req)
 	if err != nil {
-		return store.Site{}, err
+		return CloneStarted{}, err
 	}
 
 	// From here on a failure removes the new site again.
 	undo := context.WithoutCancel(ctx)
-	fail := func(err error) (store.Site, error) {
+	fail := func(err error) (CloneStarted, error) {
 		if derr := s.Delete(undo, actor, created.Name); derr != nil {
 			s.log.ErrorContext(ctx, "remove a clone that failed to start", "site", created.Name, "err", derr)
 		}
 
-		return store.Site{}, err
+		return CloneStarted{}, err
 	}
 
-	if err := s.cloneSettings(ctx, actor, src, created, in.Staging); err != nil {
+	user, pw, err := s.cloneSettings(ctx, actor, src, created, in.Staging)
+	if err != nil {
 		return fail(err)
 	}
 
@@ -191,7 +205,12 @@ func (s *Service) CloneSite(ctx context.Context, actor int64, source string, in 
 
 	s.kickClones()
 
-	return s.Get(ctx, created.Name)
+	site, err := s.Get(ctx, created.Name)
+	if err != nil {
+		return CloneStarted{}, err
+	}
+
+	return CloneStarted{Site: site, AccessUser: user, AccessPassword: pw}, nil
 }
 
 // RefreshClone copies the files and databases of the source into the
@@ -459,26 +478,51 @@ func (s *Service) checkCloneSpace(ctx context.Context, src store.Site, pool stri
 // cloneSettings takes over the stored settings of src (store part) and
 // what is sealed to the site or lives in the agent: app environment
 // variables and the object cache. A staging clone gets its cron jobs
-// paused.
-func (s *Service) cloneSettings(ctx context.Context, actor int64, src, dst store.Site, staging bool) error {
+// paused, password protection on and noindex (ADR-0070). When the clone
+// asks for a password, which basic auth users are never copied, it gets
+// a generated user; its name and password are returned.
+func (s *Service) cloneSettings(ctx context.Context, actor int64, src, dst store.Site, staging bool) (user, pw string, err error) {
 	if err := s.st.CopySiteSettings(ctx, src.ID, dst.ID, store.CloneSettings{PauseCron: staging}, s.now()); err != nil {
-		return err
+		return "", "", err
 	}
 
 	site, err := s.Get(ctx, dst.Name)
 	if err != nil {
-		return err
+		return "", "", err
+	}
+
+	pw = agentapi.GenerateAccessPassword(GeneratedAccessPasswordLen)
+
+	hash, err := hashAccessPassword(pw)
+	if err != nil {
+		return "", "", err
+	}
+
+	au := store.AuthUser{SiteID: site.ID, Name: CloneAccessUser, Hash: hash, UpdatedBy: actor}
+
+	if staging {
+		if err := s.stagingDefaults(ctx, actor, site, au); err != nil {
+			return "", "", err
+		}
+	}
+
+	if user, err = s.cloneAccessUser(ctx, actor, site, au); err != nil || user == "" {
+		pw = ""
+	}
+
+	if err != nil {
+		return "", "", err
 	}
 
 	if s.envBox != nil && src.App != nil {
 		env, err := s.AppEnv(ctx, src.Name)
 		if err != nil {
-			return err
+			return "", "", err
 		}
 
 		if len(env) > 0 {
 			if _, err := s.SetAppEnv(ctx, actor, dst.Name, env); err != nil {
-				return err
+				return "", "", err
 			}
 		}
 	}
@@ -486,7 +530,7 @@ func (s *Service) cloneSettings(ctx context.Context, actor int64, src, dst store
 	if s.cache != nil {
 		if oc, err := s.st.ObjectCache(ctx, src.ID); err == nil && oc.Enabled {
 			if _, err := s.SetObjectCache(ctx, actor, dst.Name, true, oc.MemoryMB); err != nil {
-				return err
+				return "", "", err
 			}
 		}
 	}
@@ -499,14 +543,73 @@ func (s *Service) cloneSettings(ctx context.Context, actor int64, src, dst store
 
 	if s.cron != nil {
 		if err := s.applyCron(ctx, site); err != nil {
-			return err
+			return "", "", err
 		}
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.applyWeb(ctx)
+	return user, pw, s.applyWeb(ctx)
+}
+
+// stagingDefaults stores what a staging clone gets on top of the copied
+// settings: password protection for the whole site (the source's IP rules
+// and bypass addresses stay) and X-Robots-Tag noindex. A snippet that
+// already sets one of them makes the clone fail with ErrInvalid.
+func (s *Service) stagingDefaults(ctx context.Context, actor int64, site store.Site, au store.AuthUser) error {
+	sn, err := s.st.SiteSnippets(ctx, site.ID)
+	if err != nil {
+		return err
+	}
+
+	h, err := s.st.SiteHeaders(ctx, site.ID)
+	if err != nil {
+		return err
+	}
+
+	h.Headers.NoIndex = true
+	if err := checkHeaders(h.Headers, sn); err != nil {
+		return err
+	}
+
+	if _, err := s.st.SetSiteHeaders(ctx, store.SiteHeaders{SiteID: site.ID, Headers: h.Headers, UpdatedBy: actor}, s.now()); err != nil {
+		return err
+	}
+
+	a, err := s.st.SiteAccess(ctx, site.ID)
+	if err != nil {
+		return err
+	}
+
+	a.Settings.Password, a.Settings.Paths = true, nil
+
+	// The generated user comes next; check the rules with it.
+	if err := s.checkAccess(a.Settings, []store.AuthUser{au}, sn); err != nil {
+		return err
+	}
+
+	_, err = s.st.SetSiteAccess(ctx, store.SiteAccess{SiteID: site.ID, Settings: a.Settings, UpdatedBy: actor}, s.now())
+
+	return err
+}
+
+// cloneAccessUser adds the generated basic auth user au to a clone whose
+// access setting asks for a password (users are never copied) and
+// returns its name; "" when the clone asks for none.
+func (s *Service) cloneAccessUser(ctx context.Context, actor int64, site store.Site, au store.AuthUser) (string, error) {
+	a, err := s.st.SiteAccess(ctx, site.ID)
+	if err != nil || !a.Settings.Password {
+		return "", err
+	}
+
+	if err := s.st.AddAuthUser(ctx, au, s.now()); err != nil {
+		return "", err
+	}
+
+	s.audit(ctx, actor, "site.access.user.add", site.Name, map[string]string{"user": au.Name, "generated": "true"})
+
+	return au.Name, nil
 }
 
 // kickClones wakes RunClones.

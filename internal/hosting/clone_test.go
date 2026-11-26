@@ -6,9 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -180,6 +183,8 @@ func TestCloneSite(t *testing.T) {
 		t.Fatalf("site %+v", site)
 	}
 
+	checkStagingAccess(t, ag, site)
+
 	v := cloneRow(t, s, "shop-stage")
 	if v.State != store.CloneCopying || v.Source != "shop" || !v.Staging || len(v.Databases) != 2 {
 		t.Fatalf("clone %+v", v)
@@ -246,6 +251,111 @@ func TestCloneSite(t *testing.T) {
 	// The source is no clone and cannot be refreshed.
 	if err := s.RefreshClone(ctx, 1, "shop"); !errors.Is(err, ErrNotClone) {
 		t.Fatalf("refresh of the source: %v", err)
+	}
+}
+
+// checkStagingAccess asserts the staging defaults that reached the agent:
+// the whole site behind the generated user, whose password is the one
+// returned, and noindex.
+func checkStagingAccess(t *testing.T, ag *fakeAgent, c CloneStarted) {
+	t.Helper()
+
+	if c.AccessUser != CloneAccessUser || len(c.AccessPassword) != GeneratedAccessPasswordLen {
+		t.Fatalf("access user %q password %q", c.AccessUser, c.AccessPassword)
+	}
+
+	for _, w := range ag.web.Sites {
+		if w.User != c.Name {
+			continue
+		}
+
+		if w.Headers == nil || !w.Headers.NoIndex {
+			t.Errorf("headers %+v", w.Headers)
+		}
+
+		if w.Access == nil || w.Access.Auth == nil || len(w.Access.Auth.Paths) != 0 || len(w.Access.Auth.Users) != 1 {
+			t.Fatalf("access %+v", w.Access)
+		}
+
+		u := w.Access.Auth.Users[0]
+		if u.Name != CloneAccessUser || bcrypt.CompareHashAndPassword([]byte(u.Hash), []byte(c.AccessPassword)) != nil {
+			t.Errorf("user %s does not match the returned password", u.Name)
+		}
+
+		return
+	}
+
+	t.Fatalf("clone %s not in the web state", c.Name)
+}
+
+// A plain clone of a password-protected site gets a generated user: the
+// users are not copied, and the rule without one would break nginx.
+func TestCloneSitePasswordSource(t *testing.T) {
+	s, _, _, _ := cloneEnv(t)
+	ctx := t.Context()
+
+	s.localAddrs = func() ([]netip.Addr, error) { return nil, nil }
+
+	if _, err := s.AddAccessUser(ctx, 1, "shop", "owner", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.SetAccess(ctx, 1, "shop", store.AccessSettings{Password: true, Paths: []string{"/wp-admin"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := s.CloneSite(ctx, 1, "shop", CloneInput{Name: "shop-copy", Domain: "copy.shop.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if c.AccessUser != CloneAccessUser || c.AccessPassword == "" {
+		t.Fatalf("access %q %q", c.AccessUser, c.AccessPassword)
+	}
+
+	v, err := s.Access(ctx, "shop-copy")
+	if err != nil || !v.Settings.Password || len(v.Settings.Paths) != 1 || len(v.Users) != 1 || v.Users[0].Name != CloneAccessUser {
+		t.Fatalf("access of the clone %+v %v", v, err)
+	}
+
+	h, err := s.Headers(ctx, "shop-copy")
+	if err != nil || h.Headers.NoIndex {
+		t.Fatalf("a plain clone got noindex: %+v %v", h, err)
+	}
+
+	// A plain clone of a site without a password has no user.
+	if _, err := s.SetAccess(ctx, 1, "shop", store.AccessSettings{}); err != nil {
+		t.Fatal(err)
+	}
+
+	pollUntil(t, s, "shop-copy")
+
+	c, err = s.CloneSite(ctx, 1, "shop", CloneInput{Name: "shop-two", Domain: "two.shop.example.com"})
+	if err != nil || c.AccessUser != "" || c.AccessPassword != "" {
+		t.Fatalf("clone without password: %+v %v", c, err)
+	}
+}
+
+// A snippet that sets X-Robots-Tag itself conflicts with noindex.
+func TestCloneSiteStagingSnippetConflict(t *testing.T) {
+	s, _, _, st := cloneEnv(t)
+	ctx := t.Context()
+
+	src, err := st.SiteByName(ctx, "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := st.SetSiteSnippets(ctx, store.SiteSnippets{SiteID: src.ID, Server: `add_header X-Robots-Tag "all";`}, s.now()); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.CloneSite(ctx, 1, "shop", CloneInput{Name: "shop-stage", Domain: "stage.shop.example.com", Staging: true}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("got %v", err)
+	}
+
+	if _, err := s.Get(ctx, "shop-stage"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("the failed clone is left: %v", err)
 	}
 }
 

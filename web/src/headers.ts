@@ -12,6 +12,7 @@ export type WebHeaders = {
   permissionsPolicy?: string;
   csp?: string;
   cspReportOnly?: boolean;
+  noIndex?: boolean;
 };
 
 export type HeadersView = {
@@ -46,6 +47,9 @@ export type HeadersForm = {
   permissionsValue: string;
   csp: "off" | "report" | "enforce";
   cspValue: string;
+  // noIndex (X-Robots-Tag) has no control on this card yet; it is kept
+  // as it is, so saving the card does not drop a staging clone's noindex.
+  noIndex: boolean;
 };
 
 export function toForm(h: WebHeaders, strict: string): HeadersForm {
@@ -58,6 +62,7 @@ export function toForm(h: WebHeaders, strict: string): HeadersForm {
     permissionsValue: pp === strict ? "" : pp,
     csp: !h.csp ? "off" : h.cspReportOnly ? "report" : "enforce",
     cspValue: h.csp ?? "",
+    noIndex: h.noIndex === true,
   };
 }
 
@@ -71,6 +76,7 @@ export function fromForm(
   if (f.noSniff) h.noSniff = true;
   if (f.frameOptions) h.frameOptions = f.frameOptions;
   if (f.referrerPolicy) h.referrerPolicy = f.referrerPolicy;
+  if (f.noIndex) h.noIndex = true;
   if (f.permissions === "strict") h.permissionsPolicy = strict;
   if (f.permissions === "own") {
     const v = f.permissionsValue.trim();
