@@ -31,6 +31,7 @@ import (
 	"github.com/maki-it/hostashi/internal/cronjobs"
 	"github.com/maki-it/hostashi/internal/dbjob"
 	"github.com/maki-it/hostashi/internal/deployunit"
+	"github.com/maki-it/hostashi/internal/f2bctl"
 	"github.com/maki-it/hostashi/internal/f2bproxies"
 	"github.com/maki-it/hostashi/internal/filesunit"
 	"github.com/maki-it/hostashi/internal/firewall"
@@ -173,6 +174,11 @@ type Config struct {
 	// with the fixed paths; without it firewall.* answer
 	// failed_precondition.
 	Firewall *firewall.Manager
+
+	// Fail2ban reads the Hostashi jails and lifts bans (ADR-0078). Run
+	// sets the real client; without it fail2ban.* answer
+	// failed_precondition.
+	Fail2ban *f2bctl.Controller
 
 	// panelACL hands the panel allowlist to nginx on port 443 (ADR-0042);
 	// Run sets it up.
@@ -377,6 +383,7 @@ func NewServer(cfg Config, serveUID uint32) *agentrpc.Server {
 	registerCloudPanel(s, cfg.CloudPanel, cfg.CloudPanelImport)
 	registerDBJobs(s, cfg.DBJobs)
 	registerFirewall(s, cfg.Firewall)
+	registerFail2ban(s, cfg.Fail2ban, cfg.Log)
 	registerPHPInstall(s, cfg.PHPInstall, cfg.PHP)
 	registerPGClient(s, cfg.PGClient)
 	registerNodeInstall(s, cfg.NodeInstall, cfg.Apps)
@@ -1664,6 +1671,10 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if cfg.PythonInstall == nil {
 		cfg.PythonInstall = &pythoninstall.Manager{Runtime: pythoninstall.Runtime, Units: phpctl.PythonInstallUnits{}, Log: cfg.Log}
+	}
+
+	if cfg.Fail2ban == nil {
+		cfg.Fail2ban = &f2bctl.Controller{}
 	}
 
 	if cfg.Firewall == nil {
