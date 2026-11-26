@@ -1753,16 +1753,15 @@ html:has(.ui-files) {
 .ui-cell-off > span {
   color: var(--muted);
 }
+/* HTTPS is the normal state, so it stays quiet; only plain HTTP stands out. */
 .ui-https {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-weight: 600;
-  color: var(--ok);
+  color: var(--muted);
 }
 .ui-https-off {
-  font-weight: 400;
-  color: var(--muted);
+  color: var(--warn);
 }
 /* Tables on a phone: each row is a card. The first column is the title,
    the others get their header as a label, row actions sit at the end. */
