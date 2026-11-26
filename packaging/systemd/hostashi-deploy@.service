@@ -17,8 +17,8 @@ After=network.target
 [Service]
 Type=oneshot
 # A finished run stays "active" (succeeded) or "failed" until the agent
-# stops it for the next run: systemd keeps the unit and its state loaded
-# for site.deploy.status.
+# has read its outcome for site.deploy.status; the agent then stops it, so
+# systemd releases the run's credentials (token or deploy key).
 RemainAfterExit=yes
 User=%i
 Group=%i

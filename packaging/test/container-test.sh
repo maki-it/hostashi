@@ -1559,6 +1559,10 @@ body=$(x curl -fsS -H 'Host: gitsite.example.com' http://127.0.0.1/built.txt) ||
 [ "$(api PUT /api/v1/sites/gitsite/disabled '{"disabled":false}')" = 200 ] || fail "enable Git site: $(x cat /tmp/api.out)"
 expect_mode /var/lib/hostashi-deploy/gitsite/build.sh "640 root:gitsite"
 x test ! -e /run/hostashi-deploy/gitsite/token || fail "credentials left after the run"
+# systemd releases a unit's credentials only when it stops; the agent stops
+# a finished run, which RemainAfterExit= would otherwise keep active.
+[ "$(x systemctl show -p ActiveState --value hostashi-deploy@gitsite.service)" = inactive ] ||
+  fail "the finished deploy unit is still $(x systemctl show -p ActiveState --value hostashi-deploy@gitsite.service)"
 [ "$(api GET "/api/v1/sites/gitsite/deploys/$did/log")" = 200 ] || fail "deploy log: $(x cat /tmp/api.out)"
 x grep -q 'echo built' /tmp/api.out || fail "log without the build command: $(x cat /tmp/api.out)"
 # Rollback to the files from before is not offered; back to the deploy
