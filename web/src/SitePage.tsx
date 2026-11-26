@@ -130,8 +130,8 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
       )}
       {active === "cache" && (
         <>
-          <ObjectCacheSettings site={site} canSize={staff} />
           <PageCacheSettings site={site} canSize={staff} />
+          <ObjectCacheSettings site={site} canSize={staff} />
         </>
       )}
       {active === "git" && <GitSettings site={site} canEdit={staff} />}

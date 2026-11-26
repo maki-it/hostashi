@@ -48,7 +48,7 @@ Upload your files with SFTP ([SSH and SFTP](SSH-and-SFTP.md)) or the [file manag
 | Files | the [file manager](File-manager.md) |
 | Git | [deploys from a Git repository](Git-deploy.md), rollbacks and the webhook |
 | PHP | PHP version and [settings](PHP-settings.md) |
-| Cache | the [object cache](Object-cache.md) and the page cache (PHP sites) |
+| Cache | the page cache and the [object cache](Object-cache.md) (PHP sites) |
 | Cron | scheduled jobs |
 | SSH & SFTP | keys for logging in as the site's user |
 | Limits | CPU, memory, processes and disk |

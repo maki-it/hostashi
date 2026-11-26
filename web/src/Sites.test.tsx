@@ -933,7 +933,8 @@ describe("SitePage", () => {
     await user.click(within(screen.getByRole("tablist", { name: "App" })).getByRole("tab", { name: "Cache" }));
     const panel = within(screen.getByRole("tabpanel", { name: "Cache" }));
     expect(await panel.findByRole("region", { name: "Object cache" })).toBeInTheDocument();
-    expect(panel.getByRole("region", { name: "Page cache" })).toBeInTheDocument();
+    // The page cache comes first: it works without a plugin in the app.
+    expect(panel.getAllByRole("region").map((r) => r.getAttribute("aria-label") ?? r.querySelector("h2,h3")?.textContent)).toEqual(["Page cache", "Object cache"]);
     expect(panel.queryByRole("region", { name: "PHP version" })).not.toBeInTheDocument();
   });
 

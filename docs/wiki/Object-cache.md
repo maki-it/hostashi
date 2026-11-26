@@ -12,7 +12,7 @@ The cache is off until you switch it on. It listens only on a socket that the si
 2. Under **Object cache**, switch it on. It starts with 64 MiB.
 3. Copy the connection details shown there into the app.
 
-![The Cache tab of a site with the object cache and the page cache](images/site-cache.png)
+![The Cache tab of a site with the page cache and the object cache](images/site-cache.png)
 
 For WordPress with the *Redis Object Cache* plugin, add these lines to `wp-config.php` above `/* That's all, stop editing! */` (the panel shows them with the site's name filled in):
 
