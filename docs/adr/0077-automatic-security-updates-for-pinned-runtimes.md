@@ -1,6 +1,6 @@
 # ADR-0077 Automatic security updates for pinned runtimes
 
-**Status:** Proposed. **Date drafted:** 2026-11-26. **Decides:** Kim. **Related:** ADR-0033 (hardening, unattended-upgrades), ADR-0036 (PHP versions), ADR-0038 (Adminer), ADR-0050 (signed releases, `--auto-update`), ADR-0054 (site types, Node.js), ADR-0061 (Python sites), ADR-0064 (malware scan, ClamAV timer), ADR-0069 (WP-CLI).
+**Status:** Accepted (Kim, 2026-11-26). **Date drafted:** 2026-11-26. **Decides:** Kim. **Related:** ADR-0033 (hardening, unattended-upgrades), ADR-0036 (PHP versions), ADR-0038 (Adminer), ADR-0050 (signed releases, `--auto-update`), ADR-0054 (site types, Node.js), ADR-0061 (Python sites), ADR-0064 (malware scan, ClamAV timer), ADR-0069 (WP-CLI).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -107,3 +107,5 @@ So a Node.js security release reaches a server only after three manual steps: me
 1. ~~Part 1: should security pin PRs for Node.js and CPython merge themselves (1B), as an exception to "no auto-merge"?~~ Decided (Kim, 2026-11-26): yes, 1B.
 2. ~~Part 2: runtimes suite on by default (2C), automatic patch releases (2B), or keep today's path (2A)?~~ Decided (Kim, 2026-11-26): 2C.
 3. ~~Part 3: daily vulnerability check against the latest release (3B), and `--auto-update` stays opt-in?~~ Decided (Kim, 2026-11-26): 3B, `--auto-update` stays opt-in.
+
+The ADR as a whole was accepted by Kim on 2026-11-26.
