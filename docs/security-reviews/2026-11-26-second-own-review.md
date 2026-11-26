@@ -6,7 +6,7 @@
 
 ## Result
 
-No critical or high finding. Five findings were fixed with tests in this review, one low one stays open, the rest are notes.
+No critical or high finding. All six findings were fixed with tests in this review; the rest are notes.
 
 | # | Finding | Severity | State |
 |---|---|---|---|
@@ -14,7 +14,7 @@ No critical or high finding. Five findings were fixed with tests in this review,
 | 2 | A staging refresh could read or overwrite a database of a third site that took a freed name | Low | fixed, PR 569 |
 | 3 | A token limited to some sites could clone a site (a new site) and park domains | Low | fixed, PR 570 |
 | 4 | A site user could point a reverse proxy site at any host of the private network | Medium | fixed, PR 572 |
-| 5 | The build commands of a Git deploy can read the run's token or key | Low | open, documented in PR 571 |
+| 5 | The build commands of a Git deploy can read the run's token or key | Low | fixed, PR 575 |
 | 6 | Unknown webhook ids fill the webhook's rate limiter, which then blocks every webhook | Low | fixed, PR 574 |
 | 7 | Notes | Info | – |
 
@@ -46,9 +46,9 @@ ADR-0054 allows private networks (10/8, 172.16/12, 192.168/16, fc00::/7) as prox
 
 Fix (PR 572, decided by Kim on 2026-11-26): a target that is or resolves to a private network, including `100.64.0.0/10`, needs the new action `sites.proxy.private:write` (admins and managers); a user gets 403 `private_target`. Test `TestProxyPrivateTargetRoles` [V]. Creating a proxy site and changing a site's type were already manager actions [V]. [A] A name that resolves to a public address when saved and to a private one later is not caught; ADR-0054 names the same gap for every DNS change after saving.
 
-### 5. Build commands can read the deploy credentials (Low, open)
+### 5. Build commands can read the deploy credentials (Low, fixed)
 
-git-sync and the build commands run in the same unit, so the credentials are in `$CREDENTIALS_DIRECTORY` while the build runs [V: `DropInContent`]. Only admins and managers store build commands, but the commands usually run code from the repository and its dependencies (`npm ci`, `composer install`). Whoever can push to the repository can read the token through it [V by construction]. A separate unit for the build would close this; until then the wiki and ADR-0062 recommend a read-only token for the one repository [V: ADR-0062 note added in PR 571].
+git-sync and the build commands run in the same unit, so the credentials are in `$CREDENTIALS_DIRECTORY` while the build runs [V: `DropInContent`]. Only admins and managers store build commands, but the commands usually run code from the repository and its dependencies (`npm ci`, `composer install`). Whoever can push to the repository can read the token through it [V by construction]. Fix (PR 575): the build runs in a second unit `hostashi-build@<site>.service` with the same sandbox and no credentials. The agent stops the deploy unit once git-sync succeeded, so systemd releases the token or key, and only then starts the build. `TestBuildUnit` covers the order and `TestBuildTemplate` that both sandboxes are the same [V]; the installer test checks that the build ran in the build unit [A: needs the CI run of PR 575]. The wiki still recommends a token for the one repository.
 
 ### 6. Webhook rate limiter fills up (Low, fixed)
 

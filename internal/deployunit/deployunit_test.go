@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -16,7 +17,9 @@ import (
 )
 
 type fakeCtl struct {
-	props   map[string]string
+	props map[string]string
+	// units holds the properties of single units; others have props.
+	units   map[string]map[string]string
 	started []string
 	stopped []string
 	reloads int
@@ -35,10 +38,15 @@ func (f *fakeCtl) StartNoBlock(_ context.Context, u string) error {
 	return nil
 }
 
-func (f *fakeCtl) Show(_ context.Context, _ string, props ...string) (map[string]string, error) {
+func (f *fakeCtl) Show(_ context.Context, unit string, props ...string) (map[string]string, error) {
+	src := f.props
+	if u, ok := f.units[unit]; ok {
+		src = u
+	}
+
 	out := map[string]string{}
 	for _, p := range props {
-		out[p] = f.props[p]
+		out[p] = src[p]
 	}
 
 	return out, nil
@@ -112,20 +120,46 @@ func TestStartWritesRun(t *testing.T) {
 		"ExecStart=\nExecStart=/usr/local/bin/hostashi git-sync \"-url=https://git.example.com/acme/site.git\" \"-branch=main\" \"-auth=token\"",
 		`"-release=` + rel + `"`, `"-cache=` + e.home + `/.deploy/repo"`, `"-result=` + e.home + `/.deploy/results/7.json"`,
 		"-token-file=%d/token", `"-token-user=deploy"`, `"-shared-dir=` + e.home + `/.deploy/shared"`, `"-shared=.env"`, `"-shared=storage"`,
-		"ExecStart=/bin/sh " + filepath.Join(e.m.ScriptDir, "blog", "build.sh") + "\n",
 		"LoadCredential=token:" + filepath.Join(e.m.CredDir, "blog", "token") + "\n",
-		"TimeoutStartSec=1500\n",
+		"TimeoutStartSec=900\n",
 		"StandardOutput=truncate:" + filepath.Join(e.m.LogDir, "blog", "deploy-7.log") + "\n",
-		"Environment=PATH=/opt/hostashi/node/22/bin:/usr/local/bin:/usr/bin:/bin\n",
-		"HOSTASHI_RELEASE=" + rel + "\n",
+		"Environment=PATH=/usr/local/bin:/usr/bin:/bin\n",
 	} {
 		if !strings.Contains(d, want) {
 			t.Errorf("drop-in lacks %q:\n%s", want, d)
 		}
 	}
 
-	if strings.Contains(d, "s3cret") {
-		t.Fatal("token in the drop-in")
+	if strings.Contains(d, "s3cret") || strings.Contains(d, "/bin/sh") {
+		t.Fatalf("token or build in the deploy drop-in:\n%s", d)
+	}
+
+	// The build runs in its own unit, without the credentials.
+	build, err := os.ReadFile(filepath.Join(e.m.UnitDir, "hostashi-build@blog.service.d", DropIn))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b := string(build)
+
+	for _, want := range []string{
+		"ExecStart=\nExecStart=/bin/sh " + filepath.Join(e.m.ScriptDir, "blog", "build.sh") + "\n",
+		"TimeoutStartSec=600\n",
+		"StandardOutput=append:" + filepath.Join(e.m.LogDir, "blog", "deploy-7.log") + "\n",
+		"Environment=PATH=/opt/hostashi/node/22/bin:/usr/local/bin:/usr/bin:/bin\n",
+		"HOSTASHI_RELEASE=" + rel + "\n",
+	} {
+		if !strings.Contains(b, want) {
+			t.Errorf("build drop-in lacks %q:\n%s", want, b)
+		}
+	}
+
+	if strings.Contains(b, "Credential") || strings.Contains(b, "token") || strings.Contains(b, "git-sync") {
+		t.Fatalf("credentials or git-sync in the build drop-in:\n%s", b)
+	}
+
+	if _, err := os.Stat(filepath.Join(e.m.UnitDir, "hostashi-build@blog.service.d", "50-hostashi-slice.conf")); err != nil {
+		t.Fatalf("build unit without the slice drop-in: %v", err)
 	}
 
 	if fi, err := os.Stat(filepath.Join(e.m.CredDir, "blog", "token")); err != nil || fi.Mode().Perm() != 0o600 {
@@ -180,7 +214,7 @@ func TestStartSSHAndNoCommands(t *testing.T) {
 	}
 
 	d, _ := os.ReadFile(filepath.Join(e.m.UnitDir, "hostashi-deploy@blog.service.d", DropIn))
-	for _, want := range []string{"-key-file=%d/key", `"-host-key=ssh-ed25519 AAAAC3Nza"`, "LoadCredential=key:", "PATH=" + e.home + "/.venv/bin:"} {
+	for _, want := range []string{"-key-file=%d/key", `"-host-key=ssh-ed25519 AAAAC3Nza"`, "LoadCredential=key:"} {
 		if !strings.Contains(string(d), want) {
 			t.Errorf("drop-in lacks %q:\n%s", want, d)
 		}
@@ -192,6 +226,11 @@ func TestStartSSHAndNoCommands(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(e.m.CredDir, "blog", "token")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("old token kept: %v", err)
+	}
+
+	// Without commands the build unit of the earlier run loses its run.
+	if _, err := os.Stat(filepath.Join(e.m.UnitDir, "hostashi-build@blog.service.d")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("build drop-ins kept: %v", err)
 	}
 }
 
@@ -225,13 +264,21 @@ func TestStartRefuses(t *testing.T) {
 	}
 }
 
+// noBuild is startReq without build commands: one unit runs.
+func noBuild(id int64) agentapi.DeployStartRequest {
+	req := startReq(id)
+	req.Commands = nil
+
+	return req
+}
+
 func TestStatus(t *testing.T) {
 	e := newEnv(t)
 	ctx := t.Context()
 
 	e.ctl.props = map[string]string{"ActiveState": "inactive"}
 
-	if _, err := e.m.Start(ctx, startReq(5)); err != nil {
+	if _, err := e.m.Start(ctx, noBuild(5)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -315,7 +362,7 @@ func TestStatus(t *testing.T) {
 	}
 
 	// A run that timed out.
-	if _, err := e.m.Start(ctx, startReq(7)); err != nil {
+	if _, err := e.m.Start(ctx, noBuild(7)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -332,7 +379,7 @@ func TestStatus(t *testing.T) {
 	}
 
 	// A queued start that never ran.
-	if _, err := e.m.Start(ctx, startReq(6)); err != nil {
+	if _, err := e.m.Start(ctx, noBuild(6)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -342,6 +389,142 @@ func TestStatus(t *testing.T) {
 
 	if st := status(6); st.State != agentapi.DeployFailed || st.Error != "the deploy did not start" {
 		t.Fatalf("never started %+v", st)
+	}
+}
+
+func TestBuildUnit(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+	deploy, build := "hostashi-deploy@blog.service", "hostashi-build@blog.service"
+
+	status := func(id int64) agentapi.DeployStatus {
+		t.Helper()
+
+		st, err := e.m.Status(ctx, agentapi.DeployStatusRequest{Site: "blog", ID: id})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return st
+	}
+
+	result := func(id int64) {
+		t.Helper()
+
+		dir := filepath.Join(e.home, ".deploy/results")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+
+		body := `{"commit":"` + strings.Repeat("cd", 20) + `","author":"Kim","message":"x"}`
+		if err := os.WriteFile(filepath.Join(dir, strconv.FormatInt(id, 10)+".json"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	set := func(unit, state, res string) {
+		if e.ctl.units == nil {
+			e.ctl.units = map[string]map[string]string{}
+		}
+
+		e.ctl.units[unit] = map[string]string{"ActiveState": state, "Result": res}
+	}
+
+	if _, err := e.m.Start(ctx, startReq(9)); err != nil {
+		t.Fatal(err)
+	}
+
+	set(deploy, "activating", "")
+	set(build, "inactive", "")
+
+	if st := status(9); st.State != agentapi.DeployRunning || !slices.Equal(e.ctl.started, []string{deploy}) {
+		t.Fatalf("git-sync running: %+v, started %v", st, e.ctl.started)
+	}
+
+	// git-sync is done: its unit is stopped, so systemd releases the
+	// token, the agent's copy goes, and only then the build starts.
+	set(deploy, "active", "success")
+	result(9)
+
+	stops := len(e.ctl.stopped)
+
+	if st := status(9); st.State != agentapi.DeployRunning || !slices.Equal(e.ctl.started, []string{deploy, build}) {
+		t.Fatalf("build queued: %+v, started %v", st, e.ctl.started)
+	}
+
+	if !slices.Equal(e.ctl.stopped[stops:], []string{deploy}) {
+		t.Fatalf("stopped %v, want the deploy unit before the build", e.ctl.stopped[stops:])
+	}
+
+	if _, err := os.Stat(filepath.Join(e.m.CredDir, "blog")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("credentials kept while the build runs: %v", err)
+	}
+
+	// The stopped deploy unit looks inactive; the build is what counts now.
+	set(deploy, "inactive", "")
+
+	if _, err := e.m.Start(ctx, startReq(10)); !errors.Is(err, ErrBusy) {
+		t.Fatalf("start while the build is queued: %v", err)
+	}
+
+	set(build, "activating", "")
+
+	if st := status(9); st.State != agentapi.DeployRunning {
+		t.Fatalf("building %+v", st)
+	}
+
+	set(build, "failed", "exit-code")
+
+	if st := status(9); st.State != agentapi.DeployFailed || st.Error != "a step of the deploy failed" {
+		t.Fatalf("build failed %+v", st)
+	}
+
+	if e.ctl.stopped[len(e.ctl.stopped)-1] != build {
+		t.Fatalf("finished build unit not stopped: %v", e.ctl.stopped)
+	}
+
+	// A build that succeeds.
+	set(deploy, "inactive", "")
+	set(build, "inactive", "")
+
+	if _, err := e.m.Start(ctx, startReq(11)); err != nil {
+		t.Fatal(err)
+	}
+
+	set(deploy, "active", "success")
+	result(11)
+
+	if st := status(11); st.State != agentapi.DeployRunning {
+		t.Fatalf("build queued %+v", st)
+	}
+
+	set(build, "active", "success")
+
+	if st := status(11); st.State != agentapi.DeploySucceeded || st.Commit != strings.Repeat("cd", 20) {
+		t.Fatalf("build succeeded %+v", st)
+	}
+
+	// git-sync ended without its result: no build on that release, and
+	// the run stays failed.
+	set(deploy, "inactive", "")
+	set(build, "inactive", "")
+
+	if _, err := e.m.Start(ctx, startReq(12)); err != nil {
+		t.Fatal(err)
+	}
+
+	set(deploy, "active", "success")
+
+	started := len(e.ctl.started)
+
+	if st := status(12); st.State != agentapi.DeployFailed || st.Error != "git-sync left no result" || len(e.ctl.started) != started {
+		t.Fatalf("no result %+v, started %v", st, e.ctl.started)
+	}
+
+	result(12)
+
+	if st := status(12); st.State != agentapi.DeployFailed {
+		t.Fatalf("no result, later %+v", st)
 	}
 }
 
@@ -382,14 +565,18 @@ func TestRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, p := range []string{filepath.Join(e.m.UnitDir, "hostashi-deploy@blog.service.d"), filepath.Join(e.m.ScriptDir, "blog"), filepath.Join(e.m.CredDir, "blog")} {
+	for _, p := range []string{
+		filepath.Join(e.m.UnitDir, "hostashi-deploy@blog.service.d"), filepath.Join(e.m.UnitDir, "hostashi-build@blog.service.d"),
+		filepath.Join(e.m.ScriptDir, "blog"), filepath.Join(e.m.CredDir, "blog"),
+	} {
 		if _, err := os.Stat(p); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("%s left: %v", p, err)
 		}
 	}
 
-	// Start stopped the last run, Remove the unit.
-	if !slices.Equal(e.ctl.stopped, []string{"hostashi-deploy@blog.service", "hostashi-deploy@blog.service"}) {
+	// Start stopped the last run, Remove the units.
+	units := []string{"hostashi-deploy@blog.service", "hostashi-build@blog.service"}
+	if !slices.Equal(e.ctl.stopped, append(units, units...)) {
 		t.Fatalf("stopped %v", e.ctl.stopped)
 	}
 
@@ -423,5 +610,44 @@ func TestLog(t *testing.T) {
 
 	if _, err := e.m.RunLog(ctx, agentapi.DeployStatusRequest{Site: "other", ID: 3}); err == nil {
 		t.Fatal("unknown site accepted")
+	}
+}
+
+// The build unit has the deploy unit's sandbox and no credentials.
+func TestBuildTemplate(t *testing.T) {
+	read := func(name string) string {
+		t.Helper()
+
+		b, err := os.ReadFile(filepath.Join("..", "..", "packaging", "systemd", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return string(b)
+	}
+
+	deploy, build := read("hostashi-deploy@.service"), read("hostashi-build@.service")
+
+	sandbox := func(s string) string {
+		_, after, ok := strings.Cut(s, "# A /tmp of its own.")
+		if !ok {
+			t.Fatal("template without the sandbox section")
+		}
+
+		return after
+	}
+
+	if sandbox(deploy) != sandbox(build) {
+		t.Fatal("the sandboxes of hostashi-deploy@ and hostashi-build@ differ")
+	}
+
+	for _, s := range []string{"User=%i", "Group=%i", "Type=oneshot", "RemainAfterExit=yes", "KillMode=control-group", "LimitCORE=0"} {
+		if !strings.Contains(build, "\n"+s+"\n") {
+			t.Errorf("build template lacks %s", s)
+		}
+	}
+
+	if strings.Contains(build, "Credential=") {
+		t.Fatal("build template has credentials")
 	}
 }

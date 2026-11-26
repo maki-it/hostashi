@@ -71,7 +71,7 @@ func TestDeployUnitNames(t *testing.T) {
 	ctx := t.Context()
 	c := DeployController{}
 
-	for _, u := range []string{"hostashi-deploy@.service", "hostashi-deploy@a.service", "hostashi-deploy@blog.service.d", "hostashi-deploy@../x.service", "hostashi-node@blog.service", "hostashi-deploys@blog.service"} {
+	for _, u := range []string{"hostashi-deploy@.service", "hostashi-deploy@a.service", "hostashi-deploy@blog.service.d", "hostashi-deploy@../x.service", "hostashi-node@blog.service", "hostashi-deploys@blog.service", "hostashi-build@.service", "hostashi-builds@blog.service", "hostashi-build@../x.service"} {
 		if err := c.StartNoBlock(ctx, u); err == nil {
 			t.Errorf("%q accepted", u)
 		}
@@ -85,7 +85,7 @@ func TestDeployUnitNames(t *testing.T) {
 		t.Error("property ExecStart accepted")
 	}
 
-	if !deployUnitRe.MatchString("hostashi-deploy@blog.service") {
-		t.Error("deploy unit refused")
+	if !deployUnitRe.MatchString("hostashi-deploy@blog.service") || !deployUnitRe.MatchString("hostashi-build@blog.service") {
+		t.Error("deploy or build unit refused")
 	}
 }
