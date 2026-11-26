@@ -1643,6 +1643,9 @@
           "path": {
             "type": "string"
           },
+          "source": {
+            "type": "string"
+          },
           "started": {
             "format": "date-time",
             "type": "string"
