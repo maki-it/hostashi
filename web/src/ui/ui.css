@@ -2021,6 +2021,11 @@ html:has(.ui-files) {
 }
 
 /* Status tiles of the site overview: each opens its tab. */
+/* A cron command in the jobs table keeps its spaces and wraps anywhere. */
+.ui-cron-cmd {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 /* Two cards side by side on a wide screen, one above the other otherwise. */
 .ui-two {
   display: grid;

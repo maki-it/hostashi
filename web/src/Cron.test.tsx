@@ -55,20 +55,20 @@ describe("CronSettings", () => {
 
     const one = within(await screen.findByLabelText("Details of cron job 1"));
     expect(one.getByText(/^Succeeded/)).toBeInTheDocument();
-    expect(one.getByText("60 min, priority 10")).toBeInTheDocument();
+    expect(one.getByText("Limits: 60 min, priority 10")).toBeInTheDocument();
     expect(screen.getByText("every 5 minutes")).toBeInTheDocument();
     expect(screen.getAllByText("php htdocs/wp-cron.php")).toHaveLength(2);
 
     const two = within(screen.getByLabelText("Details of cron job 2"));
     expect(two.getByText(/with exit code 3/)).toBeInTheDocument();
-    expect(two.getByText("120 min, priority 15")).toBeInTheDocument();
+    expect(two.getByText("Limits: 120 min, priority 15")).toBeInTheDocument();
     expect(two.getByText("Not planned")).toBeInTheDocument();
 
     const three = within(screen.getByLabelText("Details of cron job 3"));
     expect(three.getByText("Not run yet")).toBeInTheDocument();
-    expect(three.getAllByText("Paused")).toHaveLength(1);
+    // The badge beside the schedule and the next run.
+    expect(three.getAllByText("Paused")).toHaveLength(2);
     expect(screen.getByText("Paused", { selector: ".ui-badge" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument();
   });
 
   it("says when the status is not known", async () => {
@@ -162,7 +162,8 @@ describe("CronSettings", () => {
       ["PUT " + base + "/1"]: (b) => ({ body: { ...job, ...(b as object) } }),
     });
     render(<CronSettings site={site} />);
-    await user.click(await screen.findByRole("button", { name: "Change" }));
+    await user.click(await screen.findByRole("button", { name: "More actions for cron job 1" }));
+    await user.click(screen.getByRole("menuitem", { name: "Change" }));
     const form = within(screen.getByRole("form", { name: "Change cron job 1" }));
     expect(form.getByLabelText(/^Command/)).toHaveValue("php htdocs/wp-cron.php");
     await user.clear(form.getByLabelText(/^Schedule/));
@@ -190,10 +191,12 @@ describe("CronSettings", () => {
       ["POST " + base + "/1/run"]: { status: 202 },
     });
     render(<CronSettings site={site} />);
-    await user.click(await screen.findByRole("button", { name: "Pause" }));
+    await user.click(await screen.findByRole("button", { name: "More actions for cron job 1" }));
+    await user.click(screen.getByRole("menuitem", { name: "Pause" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Cron job paused.");
     expect(await screen.findByText("Paused", { selector: ".ui-badge" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Resume" }));
+    await user.click(screen.getByRole("button", { name: "More actions for cron job 1" }));
+    await user.click(screen.getByRole("menuitem", { name: "Resume" }));
     expect(await screen.findByText("Cron job resumed.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Run now" }));
     expect(await screen.findByText(/The cron job started/)).toBeInTheDocument();
@@ -242,10 +245,12 @@ describe("CronSettings", () => {
       },
     });
     render(<CronSettings site={site} />);
-    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    await user.click(await screen.findByRole("button", { name: "More actions for cron job 1" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(calls.some((c) => c.method === "DELETE")).toBe(false);
-    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: "More actions for cron job 1" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(screen.getByRole("button", { name: "Delete cron job" }));
     expect(await screen.findByText("No cron jobs yet.")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Cron job deleted.");
@@ -258,7 +263,8 @@ describe("CronSettings", () => {
       ["DELETE " + base + "/1"]: err(404, "not_found", "no such cron job"),
     });
     render(<CronSettings site={site} />);
-    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    await user.click(await screen.findByRole("button", { name: "More actions for cron job 1" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(screen.getByRole("button", { name: "Delete cron job" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("This cron job does not exist any more.");
   });
