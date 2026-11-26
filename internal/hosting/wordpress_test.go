@@ -15,6 +15,8 @@ import (
 type fakeWP struct {
 	reqs []agentapi.WPInstallRequest
 	err  error
+	// db is DB_NAME of the WordPress in the document root.
+	db string
 }
 
 func (f *fakeWP) WPInstallStart(_ context.Context, req agentapi.WPInstallRequest) (agentapi.WPInstallStatus, error) {
@@ -32,7 +34,7 @@ func (f *fakeWP) WPInstallStart(_ context.Context, req agentapi.WPInstallRequest
 }
 
 func (f *fakeWP) WPInstallStatus(_ context.Context, req agentapi.WPStatusRequest) (agentapi.WPInstallStatus, error) {
-	st := agentapi.WPInstallStatus{Site: req.Site, State: agentapi.WPNone}
+	st := agentapi.WPInstallStatus{Site: req.Site, State: agentapi.WPNone, Database: f.db, Installed: f.db != ""}
 	if len(f.reqs) > 0 {
 		st.State = "succeeded"
 	}
@@ -156,5 +158,77 @@ func TestInstallWordPressRefuses(t *testing.T) {
 
 	if p, err := s.SiteProfile(ctx, "blog"); err != nil || p.Profile.Name != profile.GenericPHP {
 		t.Fatalf("profile: %+v %v", p, err)
+	}
+}
+
+func TestReinstallWordPress(t *testing.T) {
+	s, ag, _ := newService(t)
+	ctx := t.Context()
+	f := &fakeWP{}
+	s.EnableWordPress(f)
+
+	if _, err := s.Create(ctx, 1, CreateRequest{Name: "my-blog", PHP: "8.4", Domains: []string{"blog.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.InstallWordPress(ctx, 1, "my-blog", wpInput()); err != nil {
+		t.Fatal(err)
+	}
+
+	f.db = "my_blog_wp"
+
+	// The site's name confirms it; nothing happens without.
+	for _, confirm := range []string{"", "blog.example.com", "My-Blog"} {
+		if _, err := s.ReinstallWordPress(ctx, 1, "my-blog", wpInput(), confirm); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("confirm %q: %v", confirm, err)
+		}
+	}
+
+	if len(f.reqs) != 1 {
+		t.Fatalf("a refused reinstall reached the agent: %d", len(f.reqs))
+	}
+
+	got, err := s.ReinstallWordPress(ctx, 1, "my-blog", wpInput(), "my-blog")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !f.reqs[1].Reinstall || got.Database != "my_blog_wp2" || got.DroppedDatabase != "my_blog_wp" {
+		t.Fatalf("reinstall: %+v %+v", got, f.reqs[1])
+	}
+
+	if _, ok := ag.dbs["my_blog_wp"]; ok {
+		t.Fatal("the old WordPress database is still there")
+	}
+
+	if ag.dbs["my_blog_wp2"] != "my-blog" {
+		t.Fatalf("new database: %v", ag.dbs)
+	}
+
+	// A database the quick install did not name, or of another site,
+	// stays.
+	for _, db := range []string{"my_blog_shop", "other_wp"} {
+		site := "my-blog"
+		if db == "other_wp" {
+			site = "other"
+			if _, err := s.Create(ctx, 1, CreateRequest{Name: "other", PHP: "8.4", Domains: []string{"other.example.com"}}); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if _, _, err := s.CreateDatabase(ctx, 1, NewDatabase{Site: site, Name: db}); err != nil {
+			t.Fatal(err)
+		}
+
+		f.db = db
+
+		got, err := s.ReinstallWordPress(ctx, 1, "my-blog", wpInput(), "my-blog")
+		if err != nil || got.DroppedDatabase != "" {
+			t.Fatalf("%s: %+v %v", db, got, err)
+		}
+
+		if _, ok := ag.dbs[db]; !ok {
+			t.Fatalf("%s was dropped", db)
+		}
 	}
 }

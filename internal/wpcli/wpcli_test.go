@@ -247,3 +247,81 @@ func TestRunMasksPasswordsInOutput(t *testing.T) {
 		t.Fatalf("log:\n%s", out.String())
 	}
 }
+
+func TestRunClearsForReinstall(t *testing.T) {
+	home := t.TempDir()
+	root := filepath.Join(home, "htdocs")
+
+	for _, d := range []string{"wp-admin/css", "wp-content/uploads"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, f := range []string{"wp-config.php", ".htaccess", "wp-admin/css/a.css"} {
+		if err := os.WriteFile(filepath.Join(root, f), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// A link to a file outside goes; its target stays.
+	outside := filepath.Join(home, "keep.txt")
+	if err := os.WriteFile(outside, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Symlink(home, filepath.Join(root, "wp-content", "dir-link")); err != nil {
+		t.Fatal(err)
+	}
+
+	var (
+		calls []call
+		out   bytes.Buffer
+	)
+
+	j := job()
+	j.Home, j.Path, j.Clear = home, root, true
+
+	r := fakeRunner(&calls, 0)
+	r.Out = &out
+
+	if err := r.Run(t.Context(), j); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := os.ReadDir(root)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("left %v %v", entries, err)
+	}
+
+	if b, err := os.ReadFile(outside); err != nil || string(b) != "keep" {
+		t.Fatalf("link target: %q %v", b, err)
+	}
+
+	if !strings.HasPrefix(out.String(), "$ empty "+root+"\n") || len(calls) != 8 {
+		t.Fatalf("log %q, %d calls", out.String(), len(calls))
+	}
+
+	// A missing document root is fine; a plain install never empties.
+	j.Path = filepath.Join(home, "missing")
+	if err := fakeRunner(&calls, 0).Run(t.Context(), j); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "index.php"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	j.Path, j.Clear = root, false
+	if err := fakeRunner(&calls, 0).Run(t.Context(), j); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(root, "index.php")); err != nil {
+		t.Fatalf("install without Clear removed files: %v", err)
+	}
+}

@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +41,8 @@ type Job struct {
 	Home string `json:"home"`
 	// Domain is the site's primary domain, which URL must name.
 	Domain string `json:"domain"`
+	// Clear empties Path before the install (a reinstall).
+	Clear bool `json:"clear,omitempty"`
 }
 
 // Fixed places.
@@ -182,6 +185,14 @@ func (r *Runner) Run(ctx context.Context, j Job) error {
 		"WP_CLI_PACKAGES_DIR=/nonexistent", "WP_CLI_CONFIG_PATH=/dev/null", "WP_CLI_DISABLE_AUTO_CHECK_UPDATE=1",
 	}
 
+	if j.Clear {
+		fmt.Fprintf(out, "$ empty %s\n", j.Path)
+
+		if err := clearDir(j.Path); err != nil {
+			return err
+		}
+	}
+
 	for _, s := range Steps(j) {
 		fmt.Fprintf(out, "$ wp %s\n", strings.Join(redact(s.Args), " "))
 
@@ -204,6 +215,41 @@ func (r *Runner) Run(ctx context.Context, j Job) error {
 	}
 
 	fmt.Fprintf(out, "%s %s\n", DoneMarker, j.URL)
+
+	return nil
+}
+
+// clearDir removes everything inside dir, as the user that runs it, and
+// keeps dir itself. Links are removed, never followed. A missing dir is
+// fine: WP-CLI creates it.
+func clearDir(dir string) error {
+	root, err := os.OpenRoot(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("wpcli: empty the document root: %w", err)
+	}
+	defer root.Close()
+
+	f, err := root.Open(".")
+	if err != nil {
+		return fmt.Errorf("wpcli: empty the document root: %w", err)
+	}
+
+	names, err := f.Readdirnames(-1)
+	f.Close()
+
+	if err != nil {
+		return fmt.Errorf("wpcli: empty the document root: %w", err)
+	}
+
+	for _, n := range names {
+		if err := root.RemoveAll(n); err != nil {
+			return fmt.Errorf("wpcli: empty the document root: %w", err)
+		}
+	}
 
 	return nil
 }

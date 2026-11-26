@@ -8637,8 +8637,17 @@
       "WordPress": {
         "additionalProperties": false,
         "properties": {
+          "database": {
+            "type": "string"
+          },
+          "empty": {
+            "type": "boolean"
+          },
           "error": {
             "type": "string"
+          },
+          "installed": {
+            "type": "boolean"
           },
           "log": {
             "type": "string"
@@ -8648,6 +8657,8 @@
           }
         },
         "required": [
+          "empty",
+          "installed",
           "state"
         ],
         "type": "object"
@@ -8676,6 +8687,33 @@
         },
         "type": "object"
       },
+      "WordPressReinstallInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "adminEmail": {
+            "type": "string"
+          },
+          "adminPassword": {
+            "type": "string"
+          },
+          "adminUser": {
+            "type": "string"
+          },
+          "confirm": {
+            "type": "string"
+          },
+          "discourage": {
+            "type": "boolean"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "WordPressStart": {
         "additionalProperties": false,
         "properties": {
@@ -8683,6 +8721,9 @@
             "type": "string"
           },
           "database": {
+            "type": "string"
+          },
+          "droppedDatabase": {
             "type": "string"
           },
           "error": {
@@ -23348,6 +23389,69 @@
           }
         ],
         "summary": "Start the WordPress quick install",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.wordpress:install"
+      }
+    },
+    "/api/v1/sites/{name}/wordpress/reinstall": {
+      "post": {
+        "operationId": "reinstallSiteWordPress",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WordPressReinstallInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordPressStart"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Replace the site's files with a new WordPress",
         "tags": [
           "sites"
         ],

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -58,12 +59,57 @@ type WordPressStart struct {
 	Status        agentapi.WPInstallStatus
 	Database      string
 	AdminPassword string
+	// DroppedDatabase is the old WordPress database a reinstall dropped.
+	DroppedDatabase string
 }
 
 // InstallWordPress starts the quick install on an active PHP site whose
 // document root is empty (the agent checks that). The database it creates
 // is dropped again when the agent refuses to start.
 func (s *Service) InstallWordPress(ctx context.Context, actor int64, name string, in WordPressInput) (WordPressStart, error) {
+	return s.installWordPress(ctx, actor, name, in, "")
+}
+
+// ReinstallWordPress replaces whatever is in the site's document root with
+// a new WordPress: the agent empties it as the site user, the install gets
+// a new database, and the old WordPress database (DB_NAME in wp-config.php,
+// if it is a local database of the site named like a quick install's) is
+// dropped once the install started. confirm must be the site's name.
+func (s *Service) ReinstallWordPress(ctx context.Context, actor int64, name string, in WordPressInput, confirm string) (WordPressStart, error) {
+	if confirm != name {
+		return WordPressStart{}, fmt.Errorf("%w: type the site's name to confirm the reinstall", ErrInvalid)
+	}
+
+	return s.installWordPress(ctx, actor, name, in, confirm)
+}
+
+// wpDatabaseRe matches the names createWPDatabase gives.
+var wpDatabaseRe = regexp.MustCompile(`^[a-z0-9_]{1,28}_wp[2-9]?$`)
+
+// oldWPDatabase returns the database of the site's current WordPress that a
+// reinstall may drop: a local database of the site with a quick install's
+// name. Anything else stays, and the person deletes it themselves.
+func (s *Service) oldWPDatabase(ctx context.Context, site store.Site, st agentapi.WPInstallStatus) string {
+	base := strings.ReplaceAll(site.Name, "-", "_")
+	if len(base) > 28 {
+		base = base[:28]
+	}
+
+	if st.Database == "" || !wpDatabaseRe.MatchString(st.Database) || !strings.HasPrefix(st.Database, base+"_wp") {
+		return ""
+	}
+
+	d, err := s.st.DatabaseByName(ctx, st.Database)
+	if err != nil || d.Site != site.Name || d.Server != store.LocalDBServer {
+		return ""
+	}
+
+	return d.Name
+}
+
+// installWordPress is the install, or with a confirm the reinstall.
+func (s *Service) installWordPress(ctx context.Context, actor int64, name string, in WordPressInput, confirm string) (WordPressStart, error) {
+	reinstall := confirm != ""
 	if s.wp == nil {
 		return WordPressStart{}, ErrNoWordPress
 	}
@@ -110,6 +156,16 @@ func (s *Service) InstallWordPress(ctx context.Context, actor int64, name string
 		return WordPressStart{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 
+	old := ""
+	if reinstall {
+		cur, err := s.wp.WPInstallStatus(ctx, agentapi.WPStatusRequest{Site: site.Name, WebDir: site.WebDir})
+		if err != nil {
+			return WordPressStart{}, err
+		}
+
+		old = s.oldWPDatabase(ctx, site, cur)
+	}
+
 	db, dbPW, err := s.createWPDatabase(ctx, actor, site.Name)
 	if err != nil {
 		return WordPressStart{}, err
@@ -118,7 +174,7 @@ func (s *Service) InstallWordPress(ctx context.Context, actor int64, name string
 	install.DBName, install.DBUser = db, db
 
 	st, err := s.wp.WPInstallStart(ctx, agentapi.WPInstallRequest{
-		Site: site.Name, PHP: site.PHP, WebDir: site.WebDir, Domain: site.Domains[0],
+		Site: site.Name, PHP: site.PHP, WebDir: site.WebDir, Domain: site.Domains[0], Reinstall: reinstall,
 		Install: install, DBPassword: dbPW, AdminPassword: adminPW,
 	})
 	if err != nil {
@@ -129,13 +185,30 @@ func (s *Service) InstallWordPress(ctx context.Context, actor int64, name string
 		return WordPressStart{}, err
 	}
 
-	s.audit(ctx, actor, "site.wordpress.install", site.Name, map[string]string{
+	action, detail := "site.wordpress.install", map[string]string{
 		"database": db, "locale": in.Locale, "adminUser": in.AdminUser, "url": install.URL,
-	})
+	}
+	if reinstall {
+		action = "site.wordpress.reinstall"
+		detail["oldDatabase"] = old
+	}
+
+	s.audit(ctx, actor, action, site.Name, detail)
+
+	// The old WordPress is being replaced; its database goes too. A
+	// failure leaves it for the person to delete.
+	var dropped string
+	if old != "" {
+		if err := s.DeleteDatabase(context.WithoutCancel(ctx), actor, old); err != nil {
+			s.log.ErrorContext(ctx, "drop the database of a replaced WordPress", "site", name, "database", old, "err", err)
+		} else {
+			dropped = old
+		}
+	}
 
 	s.wordPressProfile(ctx, actor, site)
 
-	out := WordPressStart{Status: st, Database: db}
+	out := WordPressStart{Status: st, Database: db, DroppedDatabase: dropped}
 	if generated {
 		out.AdminPassword = adminPW
 	}
@@ -207,5 +280,5 @@ func (s *Service) WordPressStatus(ctx context.Context, name string) (agentapi.WP
 		return agentapi.WPInstallStatus{}, ErrSiteType
 	}
 
-	return s.wp.WPInstallStatus(ctx, agentapi.WPStatusRequest{Site: site.Name})
+	return s.wp.WPInstallStatus(ctx, agentapi.WPStatusRequest{Site: site.Name, WebDir: site.WebDir})
 }

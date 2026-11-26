@@ -209,6 +209,11 @@ func TestStatus(t *testing.T) {
 
 	e.ctl.props = map[string]string{"ActiveState": "active", "Result": "success"}
 
+	// The installed WordPress is in the document root.
+	if err := os.WriteFile(filepath.Join(e.home, "htdocs", "wp-config.php"), []byte("<?php\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	st, err := e.m.Status(t.Context(), agentapi.WPStatusRequest{Site: "blog"})
 	if err != nil || st.State != agentapi.DeploySucceeded || !strings.Contains(st.Log, wpcli.DoneMarker) {
 		t.Fatalf("%+v %v", st, err)
@@ -219,6 +224,21 @@ func TestStatus(t *testing.T) {
 		t.Fatalf("credentials kept: %v", err)
 	}
 
+	// The user deleted WordPress in the file manager: the install can run
+	// again.
+	if err := os.Remove(filepath.Join(e.home, "htdocs", "wp-config.php")); err != nil {
+		t.Fatal(err)
+	}
+
+	if st, err := e.m.Status(t.Context(), agentapi.WPStatusRequest{Site: "blog"}); err != nil || st.State != agentapi.WPNone {
+		t.Fatalf("emptied after an install: %+v %v", st, err)
+	}
+
+	if _, err := e.m.Status(t.Context(), agentapi.WPStatusRequest{Site: "blog", WebDir: "../x"}); err == nil {
+		t.Fatal("status accepted an invalid document root")
+	}
+
+	// A failed run keeps its error, even with an empty document root.
 	e.ctl.props = map[string]string{"ActiveState": "failed", "Result": "exit-code"}
 
 	if st, _ := e.m.Status(t.Context(), agentapi.WPStatusRequest{Site: "blog"}); st.State != agentapi.DeployFailed || st.Error == "" {
@@ -253,5 +273,116 @@ func TestRemove(t *testing.T) {
 
 	if st, _ := e.m.Status(t.Context(), agentapi.WPStatusRequest{Site: "blog"}); st.State != agentapi.WPNone {
 		t.Fatalf("state kept: %+v", st)
+	}
+}
+
+func TestStartReinstall(t *testing.T) {
+	e := newEnv(t)
+
+	if err := os.WriteFile(filepath.Join(e.home, "htdocs", "index.php"), []byte("<?php"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	req := request()
+	req.Reinstall = true
+
+	if _, err := e.m.Start(t.Context(), req); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, _ := os.ReadFile(filepath.Join(e.base, "creds", "blog", wpcli.CredJob))
+
+	var j wpcli.Job
+	if err := json.Unmarshal(raw, &j); err != nil || !j.Clear {
+		t.Fatalf("job %s %v", raw, err)
+	}
+
+	// The agent never deletes; the site user's run does.
+	if _, err := os.Stat(filepath.Join(e.home, "htdocs", "index.php")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestStatusInspectsDocumentRoot(t *testing.T) {
+	e := newEnv(t)
+	htdocs := filepath.Join(e.home, "htdocs")
+
+	status := func() agentapi.WPInstallStatus {
+		t.Helper()
+
+		st, err := e.m.Status(t.Context(), agentapi.WPStatusRequest{Site: "blog"})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return st
+	}
+
+	if st := status(); st.State != agentapi.WPNone || !st.Empty || st.Installed {
+		t.Fatalf("empty: %+v", st)
+	}
+
+	// WordPress installed by hand, without the quick install.
+	if err := os.MkdirAll(filepath.Join(htdocs, "wp-includes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(htdocs, "wp-includes", "version.php"), []byte("<?php"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if st := status(); st.State != agentapi.WPNone || st.Empty || !st.Installed || st.Database != "" {
+		t.Fatalf("by hand: %+v", st)
+	}
+
+	config := "<?php\n// ** Database settings ** //\ndefine( 'DB_NAME', 'blog_wp2' );\ndefine( 'DB_USER', 'blog_wp2' );\n"
+	if err := os.WriteFile(filepath.Join(htdocs, "wp-config.php"), []byte(config), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	if st := status(); !st.Installed || st.Database != "blog_wp2" {
+		t.Fatalf("config: %+v", st)
+	}
+
+	// A name that is no plain database name is not reported.
+	if err := os.WriteFile(filepath.Join(htdocs, "wp-config.php"), []byte("<?php define('DB_NAME', getenv('X'));"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	if st := status(); !st.Installed || st.Database != "" {
+		t.Fatalf("dynamic name: %+v", st)
+	}
+
+	// A wp-config.php that is a link is never read.
+	if err := os.Remove(filepath.Join(htdocs, "wp-config.php")); err != nil {
+		t.Fatal(err)
+	}
+
+	secret := filepath.Join(e.base, "secret.php")
+	if err := os.WriteFile(secret, []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Symlink(secret, filepath.Join(htdocs, "wp-config.php")); err != nil {
+		t.Fatal(err)
+	}
+
+	if st := status(); st.Database != "" {
+		t.Fatalf("link: %+v", st)
+	}
+
+	// Other files, but no WordPress.
+	for _, p := range []string{"wp-config.php", "wp-includes/version.php", "wp-includes"} {
+		if err := os.Remove(filepath.Join(htdocs, p)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(htdocs, "index.html"), []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if st := status(); st.Installed || st.Empty {
+		t.Fatalf("other files: %+v", st)
 	}
 }
