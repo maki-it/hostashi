@@ -1,6 +1,6 @@
 # ADR-0075 Wildcard domains for reverse proxy and redirect sites
 
-**Status:** Proposed. **Date drafted:** 2026-11-26. **Decides:** Kim. **Related:** ADR-0005 (nginx), ADR-0023 (panel address), ADR-0031 (DNS check), ADR-0039 (own certificates), ADR-0042 (panel on 443), ADR-0054 (site types), ADR-0058 (OpenAPI and CLI), ADR-0065 (www redirect), ADR-0068 (change the domain of a site).
+**Status:** Proposed. **Date drafted:** 2026-11-26. **Decides:** Kim. **Related:** ADR-0005 (nginx), ADR-0023 (panel address), ADR-0031 (DNS check), ADR-0039 (own certificates), ADR-0042 (panel on 443), ADR-0054 (site types), ADR-0058 (OpenAPI and CLI), ADR-0065 (www redirect), ADR-0068 (change the domain of a site), ADR-0076 (DNS-01 certificates).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -27,7 +27,7 @@ Kim chose A on 2026-11-26 (decision card in the project thread).
 
 ## Recommendation
 
-**Option A.** B is not recommended: it weakens the default server for little gain. C stays open as its own ADR after this one.
+**Option A, built after ADR-0076.** B is not recommended: it weakens the default server for little gain. C is split out into ADR-0076: Kim decided on 2026-11-26 that DNS-01 comes first, so wildcards get Let's Encrypt certificates from the start.
 
 **Which names**
 
@@ -51,10 +51,10 @@ Kim chose A on 2026-11-26 (decision card in the project thread).
 
 **TLS**
 
-- A site with a wildcard domain can use HTTPS only with an uploaded certificate (ADR-0039) that covers every domain of the site. `CertCovers` already handles this.
-- Let's Encrypt as the certificate source is refused while the domain list contains a wildcard. The error says which name and points to "Upload certificate". HTTP-only stays allowed.
-- The CSR generated in the panel (ADR-0039) includes the wildcard name, so the owner can get the certificate from any CA that does DNS-01 for them. Today `TLSCSRRequest.Validate` refuses `*.` names [V: `internal/agentapi/tls.go`]; for custom CSRs it switches to the pattern check. The ACME flow keeps exact names.
-- The existing expiry warnings (overview 30/7 days, doctor, `/metrics`) cover these certificates. The site page states plainly that the certificate is not renewed automatically.
+- A site with a wildcard domain gets HTTPS in one of two ways: Let's Encrypt over DNS-01 (ADR-0076), with every domain of the site in a zone of a DNS account, or an uploaded certificate (ADR-0039) that covers every domain. `CertCovers` already handles the second.
+- Let's Encrypt over HTTP-01 is refused while the domain list contains a wildcard. The error names the wildcard and points to "DNS accounts" and "Upload certificate". HTTP-only stays allowed.
+- `TLSCSRRequest.Validate` refuses `*.` names today [V: `internal/agentapi/tls.go`]. It switches to the pattern check, for ACME and for custom CSRs.
+- Uploaded wildcard certificates are covered by the existing expiry warnings (overview 30/7 days, doctor, `/metrics`), and the site page says that they are not renewed automatically.
 - Deeper names (`a.b.example.com`) match the nginx block but are not covered by a one-level wildcard certificate. They get a certificate error over HTTPS. The UI says so next to the field [U for the nginx behaviour].
 
 **DNS check (ADR-0031)**
@@ -75,7 +75,7 @@ Kim chose A on 2026-11-26 (decision card in the project thread).
 
 - No new `os/exec` exception and no new agent operation. The agent's site config gets a validated pattern instead of an exact name, and the nginx template writes it into `server_name` as it is. The pattern allows only `*`, `.`, letters, digits and `-`, so no nginx syntax can be injected [V for the allowed characters, by construction].
 - The default server keeps refusing unknown names. The wildcard only widens what a single site answers within its own domain.
-- Without DNS-01 the owner renews wildcard certificates by hand. Forgetting this breaks HTTPS for every covered subdomain at once. The existing expiry warnings are the safeguard.
+- Depends on ADR-0076 for automatic certificates. With an uploaded certificate the owner renews by hand; forgetting it breaks HTTPS for every covered subdomain at once, and the existing expiry warnings are the safeguard.
 - Changes: `agentapi` pattern check and tests, site domain validation per type, the redirect self-target check, the Let's Encrypt source guard, the type-change guard, DNS check, OpenAPI text, UI hint, wiki page "Site types" and "Domains & HTTPS".
 - Effort [E]: 1 PR backend (validation, nginx, guards, OpenAPI, tests), 1 PR UI and wiki with screenshots.
 - Tests: pattern accept and reject table (`*.com`, `*`, `a.*.b.c`, upper case, trailing dot, IDN in xn-- form, length limits), primary domain not a wildcard, uniqueness, wildcard refused on php/static/node/python/app sites and on parked domains, nginx output with an exact name on another site, self-redirect through the wildcard, Let's Encrypt refused, uploaded wildcard certificate accepted, type-change guard, DNS check with a random label.
@@ -84,4 +84,4 @@ Kim chose A on 2026-11-26 (decision card in the project thread).
 
 1. ~~Named wildcard per site (A), server-wide catch-all (B) or both?~~ Decided (Kim, 2026-11-26): A.
 2. Proxy and redirect sites only, as asked, or also PHP and static sites (for example WordPress multisite)? Recommendation: proxy and redirect only for now. The other types have accounts, page cache and application profiles that need their own look.
-3. Build for 1.0, or after the v1 release (1.1)? Recommendation: 1.1, unless a site of yours needs it now.
+3. Build for 1.0, or after the v1 release (1.1)? Recommendation: 1.1, right after ADR-0076, unless a site of yours needs it now.
