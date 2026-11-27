@@ -14,6 +14,7 @@ import (
 type fakeCron struct {
 	applied map[string][]agentapi.CronJob
 	runs    []string
+	outputs []string
 	fail    error
 }
 
@@ -35,6 +36,12 @@ func (f *fakeCron) CronRun(_ context.Context, site string, _ int64) error {
 
 func (f *fakeCron) CronStatus(_ context.Context, site string) (agentapi.CronSiteStatus, error) {
 	return agentapi.CronSiteStatus{Site: site, Jobs: []agentapi.CronJobStatus{}}, f.fail
+}
+
+func (f *fakeCron) CronOutput(_ context.Context, site string, _ int64) (agentapi.CronJobOutput, error) {
+	f.outputs = append(f.outputs, site)
+
+	return agentapi.CronJobOutput{Ran: true, Lines: []string{"ok"}}, f.fail
 }
 
 func TestCronJobs(t *testing.T) {
@@ -113,6 +120,18 @@ func TestCronJobs(t *testing.T) {
 
 	if err := s.RunCronJob(ctx, 1, "shop", j.ID); err != nil || len(ag.runs) != 1 {
 		t.Fatalf("run %v %v", ag.runs, err)
+	}
+
+	if out, err := s.CronOutput(ctx, "shop", j.ID); err != nil || !out.Ran || len(ag.outputs) != 1 {
+		t.Fatalf("output %+v %v", out, err)
+	}
+
+	if _, err := s.CronOutput(ctx, "shop", j.ID+99); !errors.Is(err, ErrCronNotFound) || len(ag.outputs) != 1 {
+		t.Fatalf("output of unknown job: %v", err)
+	}
+
+	if _, err := s.CronOutput(ctx, "nope", j.ID); err == nil {
+		t.Fatal("output of unknown site")
 	}
 
 	if err := s.DeleteCronJob(ctx, 1, "shop", j.ID); err != nil || len(ag.applied["shop"]) != 0 {

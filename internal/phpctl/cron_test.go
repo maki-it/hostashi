@@ -83,3 +83,44 @@ func TestParseTimers(t *testing.T) {
 		t.Error("text output accepted")
 	}
 }
+
+func TestCronJournalRefusesOddInput(t *testing.T) {
+	var c CronController
+
+	inv := "0123456789abcdef0123456789abcdef"
+
+	for _, u := range []string{"hostashi-cron-shop-1.timer", "nginx.service", "", "hostashi-cron-shop-1.service _UID=0"} {
+		if _, _, err := c.Journal(t.Context(), u, inv); err == nil || !strings.Contains(err.Error(), "refusing") {
+			t.Errorf("unit %q: %v", u, err)
+		}
+	}
+
+	for _, i := range []string{"", "0123456789ABCDEF0123456789ABCDEF", inv + "0", inv[:31], "0123456789abcdef0123456789abcde_", inv + " _UID=0"} {
+		if _, _, err := c.Journal(t.Context(), "hostashi-cron-shop-1.service", i); err == nil || !strings.Contains(err.Error(), "refusing") {
+			t.Errorf("invocation %q: %v", i, err)
+		}
+	}
+}
+
+func TestParseJournal(t *testing.T) {
+	out := `{"__CURSOR":"s=1","MESSAGE":"Hi!","_BOOT_ID":"x"}` + "\n" +
+		`{"MESSAGE":[111,107,255]}` + "\n" +
+		`{"MESSAGE":null}` + "\n" +
+		`{"MESSAGE":"trailing newline\n"}` + "\n" +
+		"\n"
+
+	lines, cut := parseJournal(out, false)
+	if cut || len(lines) != 3 || lines[0] != "Hi!" || lines[1] != "ok\xff" || lines[2] != "trailing newline" {
+		t.Errorf("%q %v", lines, cut)
+	}
+
+	// Output cut at the limit: the partial last object is dropped.
+	lines, cut = parseJournal(`{"MESSAGE":"a"}`+"\n"+`{"MESSAGE":"b`, true)
+	if !cut || len(lines) != 1 || lines[0] != "a" {
+		t.Errorf("cut: %q %v", lines, cut)
+	}
+
+	if lines, cut := parseJournal("", false); cut || lines == nil || len(lines) != 0 {
+		t.Errorf("empty: %q %v", lines, cut)
+	}
+}

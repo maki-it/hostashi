@@ -26,6 +26,7 @@ type CronAgent interface {
 	CronApply(ctx context.Context, req agentapi.CronApplyRequest) error
 	CronRun(ctx context.Context, site string, id int64) error
 	CronStatus(ctx context.Context, site string) (agentapi.CronSiteStatus, error)
+	CronOutput(ctx context.Context, site string, id int64) (agentapi.CronJobOutput, error)
 }
 
 // CronApply calls cron.apply.
@@ -45,6 +46,11 @@ func (a RPCAgent) CronRun(ctx context.Context, site string, id int64) error {
 // CronStatus calls cron.status.
 func (a RPCAgent) CronStatus(ctx context.Context, site string) (agentapi.CronSiteStatus, error) {
 	return agentapi.CronStatus.Call(ctx, a.C, agentapi.CronStatusRequest{Site: site})
+}
+
+// CronOutput calls cron.output.
+func (a RPCAgent) CronOutput(ctx context.Context, site string, id int64) (agentapi.CronJobOutput, error) {
+	return agentapi.CronOutput.Call(ctx, a.C, agentapi.CronRunRequest{Site: site, ID: id})
 }
 
 // EnableCron sets the agent for cron jobs. Without it they answer ErrNoCron.
@@ -305,6 +311,23 @@ func (s *Service) CronStatus(ctx context.Context, site string) (agentapi.CronSit
 	}
 
 	return s.cron.CronStatus(ctx, site)
+}
+
+// CronOutput reads what the last run of a job wrote (ADR-0028 Addendum 1).
+// Reading is not audited, like the site logs (ADR-0053).
+func (s *Service) CronOutput(ctx context.Context, site string, id int64) (agentapi.CronJobOutput, error) {
+	st, err := s.cronSite(ctx, site)
+	if err != nil {
+		return agentapi.CronJobOutput{}, err
+	}
+
+	if _, err := s.st.CronJob(ctx, st.ID, id); errors.Is(err, store.ErrNotFound) {
+		return agentapi.CronJobOutput{}, ErrCronNotFound
+	} else if err != nil {
+		return agentapi.CronJobOutput{}, err
+	}
+
+	return s.cron.CronOutput(ctx, site, id)
 }
 
 // SyncCron sends the jobs of every active site again, for example after

@@ -181,13 +181,17 @@ func (e *ExitError) Error() string { return e.msg }
 
 // limitedWriter keeps the first max bytes and drops the rest.
 type limitedWriter struct {
-	buf *bytes.Buffer
-	max int
+	buf     *bytes.Buffer
+	max     int
+	dropped bool // something did not fit
 }
 
 func (w *limitedWriter) Write(p []byte) (int, error) {
-	if room := w.max - w.buf.Len(); room > 0 {
-		_, _ = w.buf.Write(p[:min(room, len(p))])
+	room := max(w.max-w.buf.Len(), 0)
+	_, _ = w.buf.Write(p[:min(room, len(p))])
+
+	if len(p) > room {
+		w.dropped = true
 	}
 
 	return len(p), nil

@@ -2256,6 +2256,135 @@ html:has(.ui-files) {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* The last run's badge opens the job's output. */
+.ui-cron-last {
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+/* A long result wraps instead of leaving the table on a phone. */
+@media (max-width: 760px) {
+  .ui-cron-last .ui-badge {
+    height: auto;
+    min-height: 24px;
+    padding-block: 2px;
+    line-height: 1.35;
+    white-space: normal;
+    text-align: left;
+  }
+}
+.ui-cron-last:hover .ui-badge {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ui-cron-last:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* The output of a job's last run, below its row: a panel with a stripe
+   in the colour of the result, the lines numbered like in an editor. */
+.ui-cron-output {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-1) 0 var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--muted);
+  border-radius: var(--radius);
+}
+.ui-cron-output-ok {
+  border-left-color: var(--ok);
+}
+.ui-cron-output-err {
+  border-left-color: var(--err);
+}
+.ui-cron-output-warn {
+  border-left-color: var(--warn);
+}
+.ui-cron-output-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+.ui-cron-output-lines {
+  max-height: 26rem;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.ui-cron-output-lines:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ui-cron-output-lines ol {
+  margin: 0;
+  padding: var(--space-2) 0;
+  list-style: none;
+  counter-reset: line;
+}
+.ui-cron-output-lines li {
+  display: grid;
+  grid-template-columns: 3.5em 1fr;
+  padding-right: var(--space-3);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  counter-increment: line;
+}
+.ui-cron-output-lines li::before {
+  content: counter(line);
+  padding-right: var(--space-3);
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+}
+.ui-cron-output-nowrap li {
+  width: max-content;
+  min-width: 100%;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.ui-cron-line-err {
+  color: var(--err);
+  background: var(--err-bg);
+}
+.ui-cron-line-warn {
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+.ui-cron-output-cut {
+  padding: var(--space-2) var(--space-3) 0 calc(3.5em + var(--space-3));
+  color: var(--muted);
+  font-style: italic;
+}
+@media (max-width: 760px) {
+  .ui-cron-output {
+    padding: var(--space-3);
+  }
+  .ui-cron-output-lines li {
+    grid-template-columns: 2.5em 1fr;
+    padding-right: var(--space-2);
+  }
+  .ui-cron-output-lines li::before {
+    padding-right: var(--space-2);
+  }
+}
+.ui-cron-output-empty {
+  margin: 0;
+  padding: var(--space-3);
+  color: var(--muted);
+  background: var(--sunken);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+}
 /* A card the Actions menu scrolls to stays clear of the sticky top bar. */
 .ui-card[id] {
   scroll-margin-top: 88px;

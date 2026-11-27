@@ -80,6 +80,16 @@ const shots = [
     act: async (page) => page.getByRole("heading", { name: "Search engines" }).evaluate((h) => h.scrollIntoView({ block: "center" })),
   },
   { name: "site-domains", hash: "#/sites/blog/domains", ready: "text=Domains" },
+  {
+    name: "site-cron-output",
+    hash: "#/sites/blog/cron",
+    ready: "text=Add cron job",
+    full: true,
+    act: async (page) => {
+      await page.getByRole("button", { name: /^Failed/ }).click();
+      await page.getByText("Export failed", { exact: false }).waitFor();
+    },
+  },
   { name: "site-hardening", hash: "#/sites/blog/hardening", ready: "text=Save profile and rules", full: true },
   { name: "profiles", hash: "#/profiles", ready: "table", full: true },
   { name: "profile-copy", hash: "#/profiles?copy=wordpress", ready: "text=Add profile", full: true },

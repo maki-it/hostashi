@@ -1586,6 +1586,15 @@ if [ "$(api GET /api/v1/sites/wp/cron)" != 200 ] || ! x grep -q '"result":"succe
 fi
 # The next run comes from systemd as a Unix time, not "not planned".
 x grep -q '"next":[1-9][0-9]\{9\}' /tmp/api.out || fail "cron job without a next run: $(x cat /tmp/api.out)"
+# The output of the last run comes from the journal (ADR-0028 Addendum 1):
+# standard output and error of this run only.
+[ "$(api PUT "/api/v1/sites/wp/cron/$cid" '{"schedule":"*/5 * * * *","command":"echo cron-stdout; echo cron-stderr >&2"}')" = 200 ] || fail "change cron job: $(x cat /tmp/api.out)"
+[ "$(api POST "/api/v1/sites/wp/cron/$cid/run")" = 202 ] || fail "run cron job again: $(x cat /tmp/api.out)"
+for _ in $(seq 1 30); do
+  [ "$(api GET "/api/v1/sites/wp/cron/$cid/output")" = 200 ] && x grep -q cron-stderr /tmp/api.out && break
+  sleep 1
+done
+x grep -q "\"ran\":true,\"lines\":\[\"cron-stdout\",\"cron-stderr\"\]" /tmp/api.out || fail "cron job output: $(x cat /tmp/api.out)"
 # Pause, then a disabled site keeps the timer stopped until it is enabled.
 [ "$(api PUT "/api/v1/sites/wp/cron/$cid" '{"schedule":"*/5 * * * *","command":"true","paused":true}')" = 200 ] || fail "pause: $(x cat /tmp/api.out)"
 ! x systemctl is-active --quiet "$cunit.timer" || fail "paused cron timer still running"

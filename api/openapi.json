@@ -1768,6 +1768,32 @@
         ],
         "type": "object"
       },
+      "CronOutput": {
+        "additionalProperties": false,
+        "properties": {
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "ran": {
+            "type": "boolean"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "lines",
+          "ran",
+          "truncated"
+        ],
+        "type": "object"
+      },
       "CronStatus": {
         "additionalProperties": false,
         "properties": {
@@ -18561,6 +18587,67 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "cron:write"
+      }
+    },
+    "/api/v1/sites/{name}/cron/{id}/output": {
+      "get": {
+        "operationId": "getCronJobOutput",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CronOutput"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "cron:read"
+            ]
+          }
+        ],
+        "summary": "What the last run of a cron job wrote",
+        "tags": [
+          "cron"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "cron:read"
       }
     },
     "/api/v1/sites/{name}/cron/{id}/run": {
