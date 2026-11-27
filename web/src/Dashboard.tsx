@@ -1,16 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useState } from "react";
-import { bytes, getDashboard, rate, ranges, serviceMessage, type Dashboard, type Range } from "./services";
+import { useTranslation } from "react-i18next";
+import { formatNumber } from "./format";
+import { apiErrorText } from "./i18n";
+import { bytes, getDashboard, rate, ranges, type Dashboard, type Range } from "./services";
 import { Card, LineChart, Meter, Notice } from "./ui";
 
-const rangeLabels: Record<Range, string> = { "1h": "1 hour", "24h": "24 hours", "7d": "7 days", "30d": "30 days" };
-
-const pct = (v: number) => `${v >= 10 || v === 0 ? v.toFixed(0) : v.toFixed(1)} %`;
+// pct writes a share with one decimal below 10: "4.5 %", in German "4,5 %".
+const pct = (v: number) => {
+  const digits = v >= 10 || v === 0 ? 0 : 1;
+  return `${formatNumber(v, { minimumFractionDigits: digits, maximumFractionDigits: digits })} %`;
+};
 
 // ServerDashboard is the server's load over a chosen range (ADR-0052): CPU,
 // memory and network as lines, and the disks as they are now.
 export function ServerDashboard() {
+  const { t } = useTranslation();
   const [range, setRange] = useState<Range>("1h");
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState("");
@@ -24,7 +30,7 @@ export function ServerDashboard() {
           setData(d);
           setError("");
         },
-        (err: unknown) => live && setError(serviceMessage(err)),
+        (err: unknown) => live && setError(apiErrorText(err)),
       );
     void load();
     // The newest point of 1h comes every 15 s; the stored tiers every 5 min.
@@ -36,10 +42,10 @@ export function ServerDashboard() {
   }, [range]);
 
   const picker = (
-    <div className="ui-range" role="group" aria-label="Time range">
+    <div className="ui-range" role="group" aria-label={t("overview.dashboard.timeRange")}>
       {ranges.map((r) => (
         <button key={r} type="button" aria-pressed={r === range} onClick={() => setRange(r)}>
-          {r}
+          {t(`overview.dashboard.range.${r}`)}
         </button>
       ))}
     </div>
@@ -57,69 +63,72 @@ export function ServerDashboard() {
   const memTotal = last?.memTotal ?? 0;
 
   return (
-    <Card title={`Server load, last ${rangeLabels[range]}`} actions={picker}>
+    <Card title={t(`overview.dashboard.title.${range}`)} actions={picker}>
       {error && <Notice tone="err" title={error} />}
       {!data && !error ? (
-        <p aria-busy="true">Loading…</p>
+        <p aria-busy="true">{t("common.status.loading")}</p>
       ) : (
         <div className="ui-stack">
           <div className="ui-charts">
-            <section className="ui-stack-tight" aria-label="CPU">
-              <h3 className="ui-chart-title">CPU</h3>
+            <section className="ui-stack-tight" aria-label={t("overview.dashboard.cpu")}>
+              <h3 className="ui-chart-title">{t("overview.dashboard.cpu")}</h3>
               <LineChart
-                title="CPU use in percent"
+                title={t("overview.dashboard.cpuChart")}
                 times={times}
                 days={days}
                 max={100}
                 format={pct}
                 series={[
-                  { label: "Busy", values: points.map((p) => p.cpuBusy) },
-                  { label: "Waiting for disk", values: points.map((p) => p.cpuIowait) },
+                  { label: t("overview.dashboard.busy"), values: points.map((p) => p.cpuBusy) },
+                  { label: t("overview.dashboard.iowait"), values: points.map((p) => p.cpuIowait) },
                 ]}
               />
             </section>
-            <section className="ui-stack-tight" aria-label="Memory">
-              <h3 className="ui-chart-title">Memory{memTotal > 0 && <span className="ui-hint"> of {bytes(memTotal)}</span>}</h3>
+            <section className="ui-stack-tight" aria-label={t("overview.dashboard.memory")}>
+              <h3 className="ui-chart-title">
+                {t("overview.dashboard.memory")}
+                {memTotal > 0 && <span className="ui-hint"> {t("overview.dashboard.memoryOf", { total: bytes(memTotal) })}</span>}
+              </h3>
               <LineChart
-                title="Memory in use"
+                title={t("overview.dashboard.memoryChart")}
                 times={times}
                 days={days}
                 {...(memTotal > 0 ? { max: memTotal } : {})}
                 format={bytes}
-                series={[{ label: "In use", values: points.map((p) => p.memUsed) }]}
+                series={[{ label: t("overview.dashboard.inUse"), values: points.map((p) => p.memUsed) }]}
               />
             </section>
-            <section className="ui-stack-tight" aria-label="Network">
-              <h3 className="ui-chart-title">Network</h3>
+            <section className="ui-stack-tight" aria-label={t("overview.dashboard.network")}>
+              <h3 className="ui-chart-title">{t("overview.dashboard.network")}</h3>
               <LineChart
-                title="Network traffic"
+                title={t("overview.dashboard.networkChart")}
                 times={times}
                 days={days}
                 format={rate}
                 series={[
-                  { label: "In", values: rx },
-                  { label: "Out", values: tx },
+                  { label: t("overview.dashboard.in"), values: rx },
+                  { label: t("overview.dashboard.out"), values: tx },
                 ]}
               />
             </section>
-            <section className="ui-stack-tight" aria-label="Disks">
-              <h3 className="ui-chart-title">Disks</h3>
+            <section className="ui-stack-tight" aria-label={t("overview.dashboard.disks")}>
+              <h3 className="ui-chart-title">{t("overview.dashboard.disks")}</h3>
               {last && last.disks.length > 0 ? (
                 last.disks.map((d) => (
-                  <Meter key={d.name} label={d.name} value={d.used} max={d.total} detail={`${bytes(d.used)} of ${bytes(d.total)}`} />
+                  <Meter key={d.name} label={d.name} value={d.used} max={d.total} detail={t("overview.dashboard.usedOf", { used: bytes(d.used), total: bytes(d.total) })} />
                 ))
               ) : (
-                <p className="ui-hint ui-flush">No data yet.</p>
+                <p className="ui-hint ui-flush">{t("overview.dashboard.noData")}</p>
               )}
               {last && last.swapTotal > 0 && (
-                <Meter label="Swap" value={last.swapUsed} max={last.swapTotal} detail={`${bytes(last.swapUsed)} of ${bytes(last.swapTotal)}`} />
+                <Meter label={t("overview.dashboard.swap")} value={last.swapUsed} max={last.swapTotal} detail={t("overview.dashboard.usedOf", { used: bytes(last.swapUsed), total: bytes(last.swapTotal) })} />
               )}
             </section>
           </div>
           {last && (
             <p className="ui-hint ui-flush">
-              Load average (1 min): {last.load1.toFixed(2)}
-              {last.cpuSteal >= 1 && <> · CPU taken by the host (steal): {pct(last.cpuSteal)}</>}
+              {t("overview.dashboard.load", { value: formatNumber(last.load1, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })}
+              {last.cpuSteal >= 1 && <> · {t("overview.dashboard.steal", { value: pct(last.cpuSteal) })}</>}
             </p>
           )}
         </div>

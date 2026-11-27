@@ -3,12 +3,10 @@
   "files": [
     "BlockedAddresses.tsx",
     "Cron.tsx",
-    "Dashboard.tsx",
     "Doctor.tsx",
     "Firewall.tsx",
     "NodePage.tsx",
     "ObjectCache.tsx",
-    "Overview.tsx",
     "PHP.tsx",
     "PHPSettings.tsx",
     "PageCache.tsx",
@@ -22,10 +20,6 @@
     "SitePython.tsx",
     "SiteWeb.tsx",
     "Snippets.tsx",
-    "System.tsx",
-    "Unsaved.tsx",
-    "ui/Chart.tsx",
-    "ui/Copy.tsx",
-    "ui/JobCard.tsx"
+    "System.tsx"
   ]
 }

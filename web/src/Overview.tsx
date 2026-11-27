@@ -2,6 +2,7 @@
 
 import { ArrowRight } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import type { User } from "./auth";
 import { daysLeft } from "./certs";
 import { ServerDashboard } from "./Dashboard";
@@ -10,6 +11,7 @@ import { getBackups, overdueHours, type BackupInfo } from "./backups";
 import { checkTitle, runDoctor, type DoctorReport } from "./doctor";
 import { canSee } from "./nav";
 import { listParked, type ParkedDomain } from "./parked";
+import i18n from "./i18n";
 import { formatHash } from "./routes";
 import { bytes } from "./services";
 import { cronFailing, listCron } from "./cron";
@@ -30,30 +32,33 @@ const ignore = () => undefined;
 // doctor's checks cover the sites; without it, failed site certificates
 // stand in for them.
 export function attention(d: Data): Item[] {
+  const t = i18n.t;
+  const warning = t("overview.word.warning");
+  const failed = t("overview.word.failed");
   const items: Item[] = [];
   if (d.backups) {
     const st = d.backups.status;
     if (!d.backups.ready) {
-      items.push({ key: "backups-setup", tone: "warn", word: "Warning", title: "Backups are not set up", href: formatHash({ page: "backups" }), link: "Set up backups" });
+      items.push({ key: "backups-setup", tone: "warn", word: warning, title: t("overview.attention.backupsNotSetUp"), href: formatHash({ page: "backups" }), link: t("overview.attention.setUpBackups") });
     } else if (d.backups.overdue) {
       items.push({
         key: "backups-overdue",
         tone: "warn",
-        word: "Warning",
-        title: "No recent backup",
-        detail: `No backup has finished in the last ${overdueHours(d.backups.settings.intervalHours)} hours.`,
+        word: warning,
+        title: t("overview.attention.backupOverdue"),
+        detail: t("overview.attention.backupOverdueDetail", { hours: overdueHours(d.backups.settings.intervalHours) }),
         href: formatHash({ page: "backups" }),
-        link: "Open backups",
+        link: t("overview.attention.openBackups"),
       });
     } else if (st.started && !st.running && !st.ok) {
       items.push({
         key: "backups",
         tone: "err",
-        word: "Failed",
-        title: "The last backup failed",
+        word: failed,
+        title: t("overview.attention.backupFailed"),
         ...(st.error ? { detail: st.error } : {}),
         href: formatHash({ page: "backups" }),
-        link: "Open backups",
+        link: t("overview.attention.openBackups"),
       });
     }
   }
@@ -68,26 +73,27 @@ export function attention(d: Data): Item[] {
     items.push({
       key: "owncert-" + s.name,
       tone: left < 7 ? "err" : "warn",
-      word: left < 7 ? "Failed" : "Warning",
-      title: left < 0 ? `The own certificate of site ${s.name} has expired` : `The own certificate of site ${s.name} expires in ${left} days`,
-      detail: "It is not renewed automatically. Upload a new one, or switch the site to Let's Encrypt.",
+      word: left < 7 ? failed : warning,
+      title: left < 0 ? t("overview.attention.siteCertExpired", { site: s.name }) : t("overview.attention.siteCertExpires", { site: s.name, count: left }),
+      detail: t("overview.attention.siteCertDetail"),
       href: formatHash({ page: "sites", site: { name: s.name, tab: "domains" } }),
-      link: "Open domains",
+      link: t("overview.attention.openDomains"),
     });
   }
   if (d.doctor) {
     for (const c of d.doctor.checks) {
       if (c.status === "ok") continue;
       if (c.id === "site.tls" && c.site && own.has(c.site)) continue;
-      const where = c.site ? "site " + c.site : "the server";
       items.push({
         key: "doctor-" + c.id + (c.site ?? ""),
         tone: c.status === "fail" ? "err" : "warn",
-        word: c.status === "fail" ? "Failed" : "Warning",
-        title: `${checkTitle(c.id)} on ${where}: ${c.summary}`,
+        word: c.status === "fail" ? failed : warning,
+        title: c.site
+          ? t("overview.attention.checkOnSite", { check: checkTitle(c.id), site: c.site, summary: c.summary })
+          : t("overview.attention.checkOnServer", { check: checkTitle(c.id), summary: c.summary }),
         ...(c.hint ? { detail: c.hint } : {}),
         href: c.site ? formatHash({ page: "sites", site: { name: c.site, tab: "overview" } }) : formatHash({ page: "health" }),
-        link: c.site ? "Open " + c.site : "Open health",
+        link: c.site ? t("overview.attention.open", { name: c.site }) : t("overview.attention.openHealth"),
       });
     }
   } else if (d.sites) {
@@ -96,11 +102,11 @@ export function attention(d: Data): Item[] {
       items.push({
         key: "tls-" + s.name,
         tone: "err",
-        word: "Failed",
-        title: `No certificate for site ${s.name}`,
+        word: failed,
+        title: t("overview.attention.siteNoCert", { site: s.name }),
         detail: s.tls.error,
         href: formatHash({ page: "sites", site: { name: s.name, tab: "domains" } }),
-        link: "Open domains",
+        link: t("overview.attention.openDomains"),
       });
     }
   }
@@ -111,10 +117,10 @@ export function attention(d: Data): Item[] {
     items.push({
       key: "malware-" + s.name,
       tone: "err",
-      word: "Failed",
-      title: n === 1 ? `1 file flagged by the virus scan on site ${s.name}` : `${n} files flagged by the virus scan on site ${s.name}`,
+      word: failed,
+      title: t("overview.attention.malware", { count: n, site: s.name }),
       href: formatHash({ page: "sites", site: { name: s.name, tab: "malware" } }),
-      link: "Open virus scan",
+      link: t("overview.attention.openMalware"),
     });
   }
   // Without Health, failing cron jobs of the own sites stand in for it.
@@ -123,10 +129,10 @@ export function attention(d: Data): Item[] {
     items.push({
       key: "cron-" + site,
       tone: "warn",
-      word: "Warning",
-      title: n === 1 ? `1 cron job of site ${site} fails` : `${n} cron jobs of site ${site} fail`,
+      word: warning,
+      title: t("overview.attention.cron", { count: n, site }),
       href: formatHash({ page: "sites", site: { name: site, tab: "cron" } }),
-      link: "Open cron jobs",
+      link: t("overview.attention.openCron"),
     });
   }
   for (const p of d.parked ?? []) {
@@ -135,9 +141,9 @@ export function attention(d: Data): Item[] {
     items.push({
       key: "owncert-park-" + p.domain,
       tone: left < 7 ? "err" : "warn",
-      word: left < 7 ? "Failed" : "Warning",
-      title: left < 0 ? `The own certificate of ${p.domain} has expired` : `The own certificate of ${p.domain} expires in ${left} days`,
-      detail: "It is not renewed automatically. Upload a new one, or switch the domain to Let's Encrypt.",
+      word: left < 7 ? failed : warning,
+      title: left < 0 ? t("overview.attention.domainCertExpired", { domain: p.domain }) : t("overview.attention.domainCertExpires", { domain: p.domain, count: left }),
+      detail: t("overview.attention.domainCertDetail"),
       href: formatHash({ page: "parked", query: new URLSearchParams({ edit: p.domain }) }),
       link: "Open " + p.domain,
     });
@@ -147,8 +153,8 @@ export function attention(d: Data): Item[] {
     items.push({
       key: "parked-" + p.domain,
       tone: "err",
-      word: "Failed",
-      title: `No certificate for the parked domain ${p.domain}`,
+      word: failed,
+      title: t("overview.attention.parkedNoCert", { domain: p.domain }),
       detail: p.tls.error,
       href: formatHash({ page: "parked", query: new URLSearchParams({ edit: p.domain }) }),
       link: "Open " + p.domain,
@@ -161,6 +167,7 @@ export function attention(d: Data): Item[] {
 // Overview is the first page after login: what needs attention, and the
 // state of sites, health and backups at a glance.
 export function Overview({ user }: { user: User }) {
+  const { t } = useTranslation();
   const [data, setData] = useState<Data | null>(null);
   const may = (p: Parameters<typeof canSee>[1]) => canSee(user.role, p);
 
@@ -205,12 +212,12 @@ export function Overview({ user }: { user: User }) {
     };
   }, [user.role]);
 
-  const head = <PageHead title="Overview" description={`Welcome, ${user.username}.`} />;
+  const head = <PageHead title={t("overview.title")} description={t("overview.welcome", { name: user.username })} />;
   if (!data) {
     return (
       <>
         {head}
-        <p aria-busy="true">Loading…</p>
+        <p aria-busy="true">{t("common.status.loading")}</p>
       </>
     );
   }
@@ -219,25 +226,25 @@ export function Overview({ user }: { user: User }) {
   const sites = data.sites ?? [];
   const disabled = sites.filter((s) => s.disabled).length;
   const maintenance = sites.filter((s) => s.maintenance.enabled).length;
-  const siteNote = [disabled && `${disabled} disabled`, maintenance && `${maintenance} in maintenance`].filter(Boolean).join(", ");
+  const siteNote = [disabled && t("overview.stats.disabled", { count: disabled }), maintenance && t("overview.stats.maintenance", { count: maintenance })].filter(Boolean).join(", ");
 
   return (
     <>
       {head}
       <Card
-        title="Needs attention"
+        title={t("overview.attention.title")}
         padded={items.length === 0}
         actions={
           may("health") &&
           data.doctor && (
             <span className="ui-hint">
-              Checks run <RelTime iso={data.doctor.checkedAt} /> · <a href={formatHash({ page: "health" })}>All checks</a>
+              {t("overview.attention.checksRun")} <RelTime iso={data.doctor.checkedAt} /> · <a href={formatHash({ page: "health" })}>{t("overview.attention.allChecks")}</a>
             </span>
           )
         }
       >
         {items.length === 0 ? (
-          <p className="ui-flush">Nothing needs attention.</p>
+          <p className="ui-flush">{t("overview.attention.none")}</p>
         ) : (
           <ul className="ui-attention-list">
             {items.map((i) => (
@@ -258,24 +265,24 @@ export function Overview({ user }: { user: User }) {
 
       <div className="ui-stats">
         {data.sites && (
-          <Stat title="Sites" href={formatHash({ page: "sites" })} link="All sites">
+          <Stat title={t("overview.stats.sites")} href={formatHash({ page: "sites" })} link={t("overview.stats.allSites")}>
             <span className="ui-stat-value">{sites.length}</span>
             {siteNote && <p className="ui-hint ui-flush">{siteNote}</p>}
           </Stat>
         )}
         {may("backups") && data.backups && (
-          <Stat title="Backups" href={formatHash({ page: "backups" })} link="Open backups">
+          <Stat title={t("overview.stats.backups")} href={formatHash({ page: "backups" })} link={t("overview.attention.openBackups")}>
             {data.backups.status.finished ? (
               <>
                 <Badge tone={data.backups.overdue ? "warn" : data.backups.status.ok ? "ok" : "err"}>
-                  {data.backups.overdue ? "Overdue" : data.backups.status.ok ? "OK" : "Failed"}
+                  {data.backups.overdue ? t("overview.stats.overdue") : data.backups.status.ok ? t("overview.stats.ok") : t("overview.stats.failed")}
                 </Badge>
                 <p className="ui-hint ui-flush">
-                  Last backup <RelTime iso={data.backups.status.finished} />
+                  {t("overview.stats.lastBackup")} <RelTime iso={data.backups.status.finished} />
                 </p>
               </>
             ) : (
-              <Badge tone="off">{data.backups.ready ? "No backup yet" : "Not set up"}</Badge>
+              <Badge tone="off">{data.backups.ready ? t("overview.stats.noBackup") : t("overview.stats.notSetUp")}</Badge>
             )}
           </Stat>
         )}
@@ -283,7 +290,7 @@ export function Overview({ user }: { user: User }) {
       {may("pools") && data.pools && data.pools.length > 0 && <PoolUsage pools={data.pools} />}
       {may("services") && <ServerDashboard />}
       {may("services") && <SitesByUsage />}
-      {!data.sites && <Notice tone="err" title="The sites could not be loaded. Reload the page." />}
+      {!data.sites && <Notice tone="err" title={t("overview.sitesFailed")} />}
     </>
   );
 }
@@ -304,12 +311,13 @@ function Stat({ title, href, link, children }: { title: string; href: string; li
 
 // PoolUsage shows how full each storage pool is (ADR-0016 addendum 2).
 function PoolUsage({ pools }: { pools: Pool[] }) {
+  const { t } = useTranslation();
   return (
     <Card
-      title="Storage pools"
+      title={t("overview.pools.title")}
       actions={
         <a className="ui-stat-link" href={formatHash({ page: "pools" })}>
-          Open storage pools
+          {t("overview.pools.open")}
           <ArrowRight size={14} aria-hidden="true" />
         </a>
       }
@@ -317,15 +325,15 @@ function PoolUsage({ pools }: { pools: Pool[] }) {
       <div className="ui-stack">
         {pools.map((p) => {
           const used = poolUsed(p);
-          const label = `${p.name}${p.default ? " (default)" : ""}`;
-          const sites = p.sites === 1 ? "1 site" : `${p.sites} sites`;
+          const label = p.default ? t("overview.pools.default", { name: p.name }) : p.name;
+          const sites = t("overview.pools.sites", { count: p.sites });
           if (used === null || !p.totalBytes) {
             return (
               <div className="ui-meter" key={p.name}>
                 <div className="ui-meter-head">
                   <strong>{label}</strong>
                   <span>
-                    <Badge tone="err">Not available</Badge> {sites}
+                    <Badge tone="err">{t("overview.pools.unavailable")}</Badge> {sites}
                   </span>
                 </div>
               </div>
@@ -337,7 +345,7 @@ function PoolUsage({ pools }: { pools: Pool[] }) {
               label={label}
               value={used}
               max={p.totalBytes}
-              detail={`${bytes(used)} of ${bytes(p.totalBytes)} used, ${bytes(p.freeBytes ?? 0)} free · ${sites}`}
+              detail={t("overview.pools.usage", { used: bytes(used), total: bytes(p.totalBytes), free: bytes(p.freeBytes ?? 0), sites })}
             />
           );
         })}
