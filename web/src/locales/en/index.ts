@@ -4,12 +4,13 @@
 // every other language must match, and i18next falls back to it.
 import account from "./account.json";
 import auth from "./auth.json";
+import backups from "./backups.json";
 import common from "./common.json";
 import errors from "./errors.json";
 import shell from "./shell.json";
 import tokens from "./tokens.json";
 
-const en = { account, auth, common, errors, shell, tokens };
+const en = { account, auth, backups, common, errors, shell, tokens };
 
 export type Catalog = typeof en;
 

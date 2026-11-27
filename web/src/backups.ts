@@ -5,6 +5,7 @@
 // agent keeps the secrets; nothing here ever sees a password or a key.
 
 import { ApiError, request } from "./api";
+import i18n, { areaErrorText } from "./i18n";
 
 export type Target = { user: string; host: string; port: number; path: string };
 
@@ -66,9 +67,8 @@ export type BackupInfo = {
 
 // The wording of the interval, as in the form.
 export function everyText(hours: number) {
-  if (hours === 1) return "every hour";
-  if (hours > 0 && hours < 24) return `every ${hours} hours`;
-  return "once a day";
+  if (hours > 0 && hours < 24) return i18n.t("backups.every", { count: hours });
+  return i18n.t("backups.onceADay");
 }
 
 // The age after which a run counts as missing, as the panel computes it.
@@ -134,36 +134,11 @@ export const importDump = (restore: string, database: string) =>
   request<ImportJob>("POST", "/backups/restores/" + restore + "/import", { database });
 export const getImport = (id: string) => request<ImportJob>("GET", "/backups/imports/" + id);
 
-// backupMessage turns an API error into a sentence.
+// backupMessage turns an API error into a sentence in the current
+// language. invalid_argument keeps the server's English reason.
 export function backupMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case "invalid_argument":
-        return err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
-      case "unreachable":
-        return "The backup target did not answer over SSH. Check host and port.";
-      case "running":
-        return "A backup run is in progress.";
-      case "restore_running":
-        return "A restore is in progress. Wait for it to finish.";
-      case "database_exists":
-        return "A database with this name exists. Choose a new name.";
-      case "database_not_new":
-        return "A restored dump only goes into a new database.";
-      case "forbidden":
-        return "You are not allowed to do this.";
-      case "target_not_found":
-        return "The site to restore into does not exist.";
-      case "confirm_mismatch":
-        return "Type the site's name to confirm.";
-      case "source_exists":
-        return "A site of this name exists. Restore its earlier snapshots into that site.";
-      default:
-        return err.message ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + "." : "Something went wrong (" + err.code + ").";
-    }
-  }
-  if (err instanceof TypeError) return "The server is not reachable.";
-  return "Something went wrong. Try again.";
+  if (err instanceof ApiError && err.code === "invalid_argument" && err.message) return err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
+  return areaErrorText("backups.errors", err);
 }
 
 // poll calls get every interval until done says so, at most max times.
