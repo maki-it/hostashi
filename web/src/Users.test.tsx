@@ -39,6 +39,7 @@ describe("Users", () => {
     const calls = mockFetch({
       "GET /api/v1/users": { body: { users: [kim] } },
       "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/users/policy": { body: { requireSecondFactor: false } },
       "POST /api/v1/users": (b) =>
         (b as { username: string }).username === "kim"
           ? err(409, "user_exists")
@@ -71,6 +72,7 @@ describe("Users", () => {
     const calls = mockFetch({
       "GET /api/v1/users": { body: { users: [kim] } },
       "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/users/policy": { body: { requireSecondFactor: false } },
       "POST /api/v1/users": {
         status: 201,
         body: {
@@ -90,7 +92,11 @@ describe("Users", () => {
 
   it("lists accounts with filters in the address and no actions on the own account", async () => {
     const user = userEvent.setup();
-    mockFetch({ "GET /api/v1/users": { body: { users: [kim, uma] } }, "GET /api/v1/sites": { body: { sites: [] } } });
+    mockFetch({
+      "GET /api/v1/users": { body: { users: [kim, uma] } },
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/users/policy": { body: { requireSecondFactor: false } },
+    });
     render(<Harness />);
     const table = await screen.findByRole("table", { name: "Users" });
     const rows = within(table).getAllByRole("row").slice(1);
@@ -110,6 +116,7 @@ describe("Users", () => {
     const calls = mockFetch({
       "GET /api/v1/users": { body: { users: [kim, uma] } },
       "GET /api/v1/sites": { body: { sites: [{ name: "alpha" }, { name: "beta" }] } },
+      "GET /api/v1/users/policy": { body: { requireSecondFactor: false } },
       "GET /api/v1/users/2/grants": { body: { sites: ["alpha"] } },
       "PUT /api/v1/users/2/grants": (b) => ({ body: b }),
       "PUT /api/v1/users/2": (b) => ({ body: { ...uma, ...(b as object) } }),
@@ -127,7 +134,11 @@ describe("Users", () => {
   });
 
   it("shows no actions for the own account", async () => {
-    mockFetch({ "GET /api/v1/users": { body: { users: [kim, uma] } }, "GET /api/v1/sites": { body: { sites: [] } } });
+    mockFetch({
+      "GET /api/v1/users": { body: { users: [kim, uma] } },
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/users/policy": { body: { requireSecondFactor: false } },
+    });
     render(<Harness initial="user=kim" />);
     expect(await screen.findByText("This is your own account.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Delete|Disable|Reset/ })).not.toBeInTheDocument();
@@ -139,6 +150,7 @@ describe("Users", () => {
     mockFetch({
       "GET /api/v1/users": { body: { users: [kim, ada] } },
       "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/users/policy": { body: { requireSecondFactor: false } },
       "PUT /api/v1/users/3": err(409, "last_admin"),
     });
     render(<Harness initial="user=ada" />);
@@ -151,6 +163,7 @@ describe("Users", () => {
     mockFetch({
       "GET /api/v1/users": { body: { users: [kim, uma] } },
       "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/users/policy": { body: { requireSecondFactor: false } },
       "GET /api/v1/users/2/grants": { body: { sites: [] } },
       "POST /api/v1/users/2/reset": { body: { invitation: { token: "R".repeat(43), expiresAt: "2026-11-21T12:00:00Z" } } },
     });
@@ -167,6 +180,7 @@ describe("Users", () => {
     const calls = mockFetch({
       "GET /api/v1/users": () => ({ body: { users: list } }),
       "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/users/policy": { body: { requireSecondFactor: false } },
       "GET /api/v1/users/2/grants": { body: { sites: [] } },
       "DELETE /api/v1/users/2": () => {
         list = [kim];
@@ -179,5 +193,45 @@ describe("Users", () => {
     expect(await screen.findByText("Account uma deleted.")).toBeInTheDocument();
     expect(calls.some((c) => c.method === "DELETE")).toBe(true);
     expect(screen.getByRole("table", { name: "Users" })).toBeInTheDocument();
+  });
+
+  it("requires a second factor of every account after naming those without one", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      "GET /api/v1/users": { body: { users: [kim, uma] } },
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/users/policy": { body: { requireSecondFactor: false } },
+      "PUT /api/v1/users/policy": (b) => ({ body: b }),
+    });
+    render(<Harness />);
+    const box = await screen.findByRole("checkbox", { name: "Require a second factor for every account" });
+    expect(box).not.toBeChecked();
+    await user.click(box);
+    const dialog = screen.getByRole("alertdialog", { name: "1 account has no second factor yet" });
+    expect(dialog).toHaveTextContent("uma");
+    expect(calls.some((c) => c.method === "PUT")).toBe(false);
+
+    await user.click(within(dialog).getByRole("button", { name: "Require for every account" }));
+    expect(await screen.findByText("Every account now needs a second factor.")).toBeInTheDocument();
+    expect(box).toBeChecked();
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ requireSecondFactor: true });
+
+    await user.click(box);
+    expect(await screen.findByText("A second factor is optional again for users.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "PUT").at(-1)?.body).toEqual({ requireSecondFactor: false });
+  });
+
+  it("shows the per-account demand as set while every account needs one", async () => {
+    mockFetch({
+      "GET /api/v1/users": { body: { users: [kim, uma] } },
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/users/policy": { body: { requireSecondFactor: true } },
+      "GET /api/v1/users/2/grants": { body: { sites: [] } },
+    });
+    render(<Harness initial="user=uma" />);
+    const box = await screen.findByRole("checkbox", { name: "Require a second factor" });
+    expect(box).toBeChecked();
+    expect(box).toBeDisabled();
+    expect(screen.getByText(/Required for every account/)).toBeInTheDocument();
   });
 });

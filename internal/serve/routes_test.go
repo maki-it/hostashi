@@ -73,6 +73,8 @@ var routeAccess = map[string]authz.Action{
 
 	"GET /api/v1/users":             authz.UsersRead,
 	"POST /api/v1/users":            authz.UsersWrite,
+	"GET /api/v1/users/policy":      authz.UsersRead,
+	"PUT /api/v1/users/policy":      authz.UsersWrite,
 	"GET /api/v1/users/{id}":        authz.UsersRead,
 	"PUT /api/v1/users/{id}":        authz.UsersWrite,
 	"DELETE /api/v1/users/{id}":     authz.UsersWrite,

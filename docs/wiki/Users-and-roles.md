@@ -41,6 +41,8 @@ For the role `user`, choose which sites the account gets on the account's page. 
 
 Admins and managers always need a second factor (authenticator app or passkey). For users it is optional; you can require it per account under **Sign-in**.
 
+To require it of **every** account, turn on **Require a second factor for every account** in the **Second factor** box at the bottom of the **Users** page. The panel first lists the accounts that have none yet. Those accounts can still log in, but only to set one up, and their API tokens stop working until they have. Turning the option off makes it optional for users again; a per-account setting applies again from then on.
+
 ## Your own password, authenticator app and passkeys
 
 Under **Your account → Sign-in and security** every account manages its own login:
