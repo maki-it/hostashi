@@ -1,5 +1,7 @@
 # 2. Vision & scope
 
+> **Planning document.** Written in November 2026 during the planning phase, before the first release, and kept as the record of why Hostashi is built the way it is. Where it differs from the product, the [ADRs](adr/) and the [user documentation](wiki/Home.md) are current.
+
 ## 2.1 Vision
 
 A server should be productive in under five minutes and should not turn into a security construction site afterwards. The panel takes routine work off admins' hands (sites, TLS, databases, backups, updates) without them having to trust it blindly. The code is open, privileges are minimal, the state is traceable.
@@ -12,7 +14,7 @@ A server should be productive in under five minutes and should not turn into a s
 
 **Not the target audience for v1:** cPanel-style shared hosting with thousands of accounts.
 
-This is an assumption you have to confirm (ADR-0010).
+Confirmed in [ADR-0010](adr/0010-target-audience-and-v1-scope.md) (option A): release 1.0 is built for the maintainer's own servers and clients first.
 
 ## 2.3 Positioning and differentiation
 

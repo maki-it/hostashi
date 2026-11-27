@@ -1,6 +1,8 @@
 # 1. Research: CloudPanel
 
-Research as of 2026-11-17. It is based on the five repositories you named (shallow-cloned and read). I did **not** evaluate the GitHub issues, the API was not enabled in that session. This can be done later.
+> **Planning document.** Written in November 2026 during the planning phase, before the first release, and kept as the record of why Hostashi is built the way it is. Where it differs from the product, the [ADRs](adr/) and the [user documentation](wiki/Home.md) are current.
+
+Research as of 2026-11-17. It is based on the five public CloudPanel repositories (shallow-cloned and read). I did **not** evaluate the GitHub issues, the API was not enabled in that session. This can be done later.
 
 ## 1.1 What the repositories actually contain
 
@@ -68,4 +70,4 @@ Derived from the changelog and vhost template, not an assessment of CloudPanel a
 
 ## 1.5 Market landscape (from memory, not researched)
 
-Comparable projects you should look at before fixing the scope: HestiaCP, ISPConfig, Virtualmin, 1Panel, Coolify, Dokploy, CapRover, and commercially Plesk, cPanel, RunCloud, SpinupWP, Ploi, Enhance. A real market analysis (stars, activity, license, target audience, weaknesses) is a task in Phase 0.
+Comparable projects to look at before fixing the scope: HestiaCP, ISPConfig, Virtualmin, 1Panel, Coolify, Dokploy, CapRover, and commercially Plesk, cPanel, RunCloud, SpinupWP, Ploi, Enhance. A real market analysis (stars, activity, license, target audience, weaknesses) is a task in Phase 0.

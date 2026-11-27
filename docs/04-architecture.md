@@ -1,6 +1,8 @@
 # 4. Architecture (proposal)
 
-Everything here is a draft that the spikes in Phase 0 confirm or reject.
+> **Planning document.** Written in November 2026 during the planning phase, before the first release, and kept as the record of why Hostashi is built the way it is. Where it differs from the product, the [ADRs](adr/) and the [user documentation](wiki/Home.md) are current.
+
+This was the proposal that the spikes in Phase 0 confirmed or rejected; the results are in [`spike/`](../spike/README.md) and the ADRs.
 
 ## 4.1 Overview
 

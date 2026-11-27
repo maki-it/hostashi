@@ -1,87 +1,87 @@
 # 7. Decisions (ADRs)
 
-All entries are **proposals** (`Proposed`) until you confirm them. Format: context, options, recommendation, consequences. On acceptance, the status is set to `Accepted` and the date is added. Later changes get a new ADR number instead of overwriting.
+Index of all architecture decision records; the full texts are in [`adr/`](adr/). A new ADR starts as `Proposed` until the maintainer accepts it. Format: context, options, recommendation, consequences. On acceptance, the status is set to `Accepted` and the date is added. Later changes get a new ADR number instead of overwriting.
 
-| ADR | Topic | Status | Decision needed from you? |
+| ADR | Topic | Status | Note |
 |-----|-------|--------|---------------------------|
-| 0001 | Clean-room and handling of reference repositories | Accepted on 2026-11-21 (Kim) | No, minimum legal rule |
-| 0002 | Project license | Accepted on 2026-11-18 ([adr/0002](adr/0002-license.md)), AGPL-3.0 + CC-BY-4.0 + DCO | Done |
-| 0003 | Language and stack | Accepted on 2026-11-18 ([adr/0003](adr/0003-language-and-stack.md)) | **Yes** (team know-how) |
-| 0004 | Web/agent privilege separation | Accepted on 2026-11-21 (Kim) | No |
-| 0005 | Web server | Accepted on 2026-11-18 ([adr/0005](adr/0005-web-server.md)), nginx | No, S3 is done |
-| 0006 | State store and reconciler | Accepted on 2026-11-21 (Kim) | No |
-| 0007 | Isolation model per site | Accepted on 2026-11-21 (Kim) | No |
-| 0008 | Backups with restic | Accepted on 2026-11-19 ([adr/0008](adr/0008-backups-with-restic.md)) | Done |
-| 0009 | Target platforms and packaging | Accepted on 2026-11-21 (Kim) | Partly |
-| 0010 | Target audience and v1 scope | Accepted on 2026-11-25 (Kim), option A ([adr/0010](adr/0010-target-audience-and-v1-scope.md)) | Done |
-| 0011 | Name and trademark | Accepted (subject to trademark search) | Done, trademark open |
-| 0012 | Language of code and documentation | Accepted on 2026-11-21 (Kim) | Yes, briefly |
-| 0013 | Business model and governance | Accepted on 2026-11-27 (Kim) ([adr/0013](adr/0013-business-model-and-governance.md)) | Done |
-| 0014 | Name of the CLI tool | Accepted on 2026-11-21 (Kim) | Yes, briefly |
-| 0015 | Per-site resource limits | Accepted ([adr/0015](adr/0015-per-site-resource-limits.md)) | No |
-| 0016 | Per-site storage location (storage pools) | Accepted on 2026-11-21 ([adr/0016](adr/0016-per-site-storage-location.md)) | Done |
-| 0017 | CloudPanel import as migration, presets | Accepted on 2026-11-18 ([adr/0017](adr/0017-cloudpanel-import-and-presets.md)) | Done |
-| 0018 | Public REST API | Accepted on 2026-11-18 ([adr/0018](adr/0018-public-rest-api.md)) | Done |
-| 0019 | PHP package source and multiple PHP versions | Accepted (Kim, 2026-11-18, [adr/0019](adr/0019-php-package-source-and-versions.md)) | **Yes** |
-| 0020 | nginx package source and Brotli | Accepted on 2026-11-18 ([adr/0020](adr/0020-nginx-package-source-and-brotli.md)) | Done |
-| 0021 | Brute-force and intrusion protection | Accepted on 2026-11-18 ([adr/0021](adr/0021-brute-force-and-intrusion-protection.md)) | Done |
-| 0022 | Metrics, logs and tracing | Accepted on 2026-11-18 ([adr/0022](adr/0022-metrics-and-tracing.md)) | Done |
-| 0023 | HTTPS for the panel | Accepted on 2026-11-18 ([adr/0023](adr/0023-panel-https.md)) | Done |
-| 0024 | MariaDB databases per site | Accepted ([adr/0024](adr/0024-mariadb-databases-per-site.md)) | No |
-| 0025 | Database import and export | Accepted ([adr/0025](adr/0025-database-import-export.md)) | No |
-| 0026 | Data transfer for the CloudPanel migration | Accepted ([adr/0026](adr/0026-cloudpanel-migration-transfer.md)) | No |
-| 0027 | Maintenance and parking pages | Accepted on 2026-11-19 ([adr/0027](adr/0027-maintenance-and-parking-pages.md)) | Done |
-| 0028 | Cron jobs per site | Accepted on 2026-11-19 ([adr/0028](adr/0028-cron-jobs-per-site.md)) | No |
-| 0029 | Custom nginx snippets per site | Accepted on 2026-11-19 ([adr/0029](adr/0029-custom-nginx-snippets.md)) | No |
-| 0030 | Loading imported dumps with definers | Accepted on 2026-11-19 ([adr/0030](adr/0030-loading-dumps-with-definers.md)) | No |
-| 0031 | DNS cut-over per site in the CloudPanel migration | Accepted on 2026-11-19 ([adr/0031](adr/0031-dns-cut-over-per-site.md)) | No |
-| 0032 | SSH and SFTP access per site | Accepted on 2026-11-20 ([adr/0032](adr/0032-ssh-and-sftp-per-site.md)) | **Yes** |
-| 0033 | System hardening baseline before v1 | Accepted on 2026-11-21 ([adr/0033](adr/0033-system-hardening-baseline.md)) | No |
-| 0034 | Firewall rules in the panel | Accepted on 2026-11-20 ([adr/0034](adr/0034-firewall-rules-in-panel.md)) | Done |
-| 0035 | Users and roles | Accepted on 2026-11-20 ([adr/0035](adr/0035-users-and-roles.md)) | Done |
-| 0036 | Installing PHP versions from the panel | Accepted on 2026-11-20 ([adr/0036](adr/0036-php-versions-from-the-panel.md)) | In progress |
-| 0037 | Panel UI redesign: layout, look and themes | Accepted ([adr/0037](adr/0037-panel-ui-redesign.md)) | No |
-| 0038 | Web database tool with short-lived access | Accepted on 2026-11-20 ([adr/0038](adr/0038-web-database-tool.md)) | No |
-| 0039 | Certificate management: own certificates, renew and delete | Accepted on 2026-11-20 ([adr/0039](adr/0039-certificate-management.md)) | No |
-| 0040 | File manager in the panel | Accepted on 2026-11-20 ([adr/0040](adr/0040-file-manager.md)) | No |
-| 0041 | External database servers | Accepted on 2026-11-20 ([adr/0041](adr/0041-external-database-servers.md)) | No |
-| 0042 | Panel on port 443 under its own host name | Accepted on 2026-11-20 ([adr/0042](adr/0042-panel-on-port-443.md)) | No |
-| 0043 | User documentation in the GitHub wiki | Accepted on 2026-11-20 ([adr/0043](adr/0043-user-documentation.md)) | No |
-| 0044 | Outgoing email through an SMTP relay | Accepted on 2026-11-21 ([adr/0044](adr/0044-outgoing-email.md)) | No |
-| 0045 | Object cache (Valkey) per site | Accepted on 2026-11-21 ([adr/0045](adr/0045-object-cache-per-site.md)) | No |
-| 0046 | Page cache (nginx FastCGI cache) per site | Accepted on 2026-11-21 ([adr/0046](adr/0046-page-cache-per-site.md)) | No |
-| 0047 | Status page for disabled sites | Accepted on 2026-11-21 ([adr/0047](adr/0047-status-page-for-disabled-sites.md)) | No |
-| 0048 | Convert a parked domain into a site and back | Accepted on 2026-11-21 ([adr/0048](adr/0048-convert-parked-domain-and-site.md)) | No |
-| 0049 | PHP settings per site | Accepted on 2026-11-21 ([adr/0049](adr/0049-php-settings-per-site.md)) | No |
-| 0050 | Signed releases, install and updates through apt | Accepted on 2026-11-21 ([adr/0050](adr/0050-signed-releases-and-apt-updates.md)) | No |
-| 0051 | External PostgreSQL servers | Accepted on 2026-11-21 ([adr/0051](adr/0051-external-postgresql-servers.md)) | Done |
-| 0052 | Service management and server dashboard | Accepted on 2026-11-21 ([adr/0052](adr/0052-service-management-and-server-dashboard.md)) | No |
-| 0053 | Site logs in the panel | Accepted on 2026-11-21 ([adr/0053](adr/0053-site-logs-in-the-panel.md)) | Done |
-| 0054 | Site types Node.js, reverse proxy and redirect | Accepted on 2026-11-22 ([adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md)) | No |
-| 0055 | Email notifications for service outages | Accepted on 2026-11-22 ([adr/0055](adr/0055-service-outage-notifications.md)) | No |
-| 0056 | Security headers per site | Accepted on 2026-11-22 ([adr/0056](adr/0056-security-headers-per-site.md)) | No |
-| 0057 | Database size and connection limits per site | Accepted on 2026-11-22 ([adr/0057](adr/0057-database-size-and-connection-limits.md)) | No |
-| 0058 | OpenAPI specification and CLI parity | Accepted on 2026-11-22 ([adr/0058](adr/0058-openapi-spec-and-cli-parity.md)) | No |
-| 0059 | Real client IP behind CDNs and proxies | Accepted on 2026-11-22 ([adr/0059](adr/0059-real-client-ip-behind-proxies.md)) | No |
-| 0060 | Time zone, hostname and reboot from the panel | Accepted on 2026-11-22 ([adr/0060](adr/0060-time-zone-hostname-and-reboot.md)) | No |
-| 0061 | Site type Python | Accepted on 2026-11-22 ([adr/0061](adr/0061-site-type-python.md)) | No |
-| 0062 | Git deploy per site | Accepted on 2026-11-24 ([adr/0062](adr/0062-git-deploy-per-site.md)) | No |
-| 0063 | Resource usage per site | Accepted on 2026-11-24 ([adr/0063](adr/0063-resource-usage-per-site.md)) | No |
-| 0064 | Optional malware scan per site | Accepted on 2026-11-24 ([adr/0064](adr/0064-optional-malware-scan.md)) | No |
-| 0065 | www/non-www redirect per site | Accepted on 2026-11-24 ([adr/0065](adr/0065-www-redirect-per-site.md)) | No |
-| 0066 | Password protection and IP rules per site | Accepted on 2026-11-24 ([adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md)) | No |
-| 0067 | Reset the file permissions of a site | Accepted on 2026-11-24 ([adr/0067](adr/0067-reset-site-permissions.md)) | Done |
-| 0068 | Change the domain of a site | Accepted on 2026-11-25 ([adr/0068](adr/0068-change-the-domain-of-a-site.md)) | No |
-| 0069 | Application profiles (vhost templates) and WordPress quick install | Accepted on 2026-11-25 ([adr/0069](adr/0069-application-profiles-and-wordpress-install.md)) | Done |
-| 0070 | Staging and cloning a site | Accepted on 2026-11-25 ([adr/0070](adr/0070-staging-and-cloning-a-site.md)) | Done |
-| 0071 | Panel UI in English and German | Accepted on 2026-11-25 ([adr/0071](adr/0071-panel-ui-in-english-and-german.md)) | Done |
-| 0072 | Rename a site | Accepted on 2026-11-25 ([adr/0072](adr/0072-rename-a-site.md)) | Done |
-| 0073 | MCP server for AI assistants | Accepted on 2026-11-25 ([adr/0073](adr/0073-mcp-server.md)) | Done |
-| 0074 | Backups of deleted sites | Accepted on 2026-11-26 ([adr/0074](adr/0074-backups-of-deleted-sites.md)) | Done |
-| 0075 | Wildcard domains for reverse proxy and redirect sites | Accepted on 2026-11-26 ([adr/0075](adr/0075-wildcard-domains-for-proxy-and-redirect-sites.md)) | No, planned for 1.1 |
-| 0076 | DNS-01 certificates via DNS provider APIs | Accepted on 2026-11-26 ([adr/0076](adr/0076-dns-01-certificates-via-dns-provider-apis.md)) | No, planned for 1.1 |
-| 0077 | Automatic security updates for pinned runtimes | Accepted on 2026-11-26 ([adr/0077](adr/0077-automatic-security-updates-for-pinned-runtimes.md)) | Done |
-| 0078 | fail2ban bans in the panel | Accepted on 2026-11-26 ([adr/0078](adr/0078-fail2ban-bans-in-the-panel.md)) | Done |
+| 0001 | Clean-room and handling of reference repositories | Accepted on 2026-11-21 (Kim) | |
+| 0002 | Project license | Accepted on 2026-11-18 ([adr/0002](adr/0002-license.md)), AGPL-3.0 + CC-BY-4.0 + DCO | |
+| 0003 | Language and stack | Accepted on 2026-11-18 ([adr/0003](adr/0003-language-and-stack.md)) | |
+| 0004 | Web/agent privilege separation | Accepted on 2026-11-21 (Kim) | |
+| 0005 | Web server | Accepted on 2026-11-18 ([adr/0005](adr/0005-web-server.md)), nginx | |
+| 0006 | State store and reconciler | Accepted on 2026-11-21 (Kim) | |
+| 0007 | Isolation model per site | Accepted on 2026-11-21 (Kim) | |
+| 0008 | Backups with restic | Accepted on 2026-11-19 ([adr/0008](adr/0008-backups-with-restic.md)) | |
+| 0009 | Target platforms and packaging | Accepted on 2026-11-21 (Kim) | |
+| 0010 | Target audience and v1 scope | Accepted on 2026-11-25 (Kim), option A ([adr/0010](adr/0010-target-audience-and-v1-scope.md)) | |
+| 0011 | Name and trademark | Accepted (subject to trademark search) | Trademark search open |
+| 0012 | Language of code and documentation | Accepted on 2026-11-21 (Kim) | |
+| 0013 | Business model and governance | Accepted on 2026-11-27 (Kim) ([adr/0013](adr/0013-business-model-and-governance.md)) | |
+| 0014 | Name of the CLI tool | Accepted on 2026-11-21 (Kim) | |
+| 0015 | Per-site resource limits | Accepted ([adr/0015](adr/0015-per-site-resource-limits.md)) | |
+| 0016 | Per-site storage location (storage pools) | Accepted on 2026-11-21 ([adr/0016](adr/0016-per-site-storage-location.md)) | |
+| 0017 | CloudPanel import as migration, presets | Accepted on 2026-11-18 ([adr/0017](adr/0017-cloudpanel-import-and-presets.md)) | |
+| 0018 | Public REST API | Accepted on 2026-11-18 ([adr/0018](adr/0018-public-rest-api.md)) | |
+| 0019 | PHP package source and multiple PHP versions | Accepted (Kim, 2026-11-18, [adr/0019](adr/0019-php-package-source-and-versions.md)) | |
+| 0020 | nginx package source and Brotli | Accepted on 2026-11-18 ([adr/0020](adr/0020-nginx-package-source-and-brotli.md)) | |
+| 0021 | Brute-force and intrusion protection | Accepted on 2026-11-18 ([adr/0021](adr/0021-brute-force-and-intrusion-protection.md)) | |
+| 0022 | Metrics, logs and tracing | Accepted on 2026-11-18 ([adr/0022](adr/0022-metrics-and-tracing.md)) | |
+| 0023 | HTTPS for the panel | Accepted on 2026-11-18 ([adr/0023](adr/0023-panel-https.md)) | |
+| 0024 | MariaDB databases per site | Accepted ([adr/0024](adr/0024-mariadb-databases-per-site.md)) | |
+| 0025 | Database import and export | Accepted ([adr/0025](adr/0025-database-import-export.md)) | |
+| 0026 | Data transfer for the CloudPanel migration | Accepted ([adr/0026](adr/0026-cloudpanel-migration-transfer.md)) | |
+| 0027 | Maintenance and parking pages | Accepted on 2026-11-19 ([adr/0027](adr/0027-maintenance-and-parking-pages.md)) | |
+| 0028 | Cron jobs per site | Accepted on 2026-11-19 ([adr/0028](adr/0028-cron-jobs-per-site.md)) | |
+| 0029 | Custom nginx snippets per site | Accepted on 2026-11-19 ([adr/0029](adr/0029-custom-nginx-snippets.md)) | |
+| 0030 | Loading imported dumps with definers | Accepted on 2026-11-19 ([adr/0030](adr/0030-loading-dumps-with-definers.md)) | |
+| 0031 | DNS cut-over per site in the CloudPanel migration | Accepted on 2026-11-19 ([adr/0031](adr/0031-dns-cut-over-per-site.md)) | |
+| 0032 | SSH and SFTP access per site | Accepted on 2026-11-20 ([adr/0032](adr/0032-ssh-and-sftp-per-site.md)) | |
+| 0033 | System hardening baseline before v1 | Accepted on 2026-11-21 ([adr/0033](adr/0033-system-hardening-baseline.md)) | |
+| 0034 | Firewall rules in the panel | Accepted on 2026-11-20 ([adr/0034](adr/0034-firewall-rules-in-panel.md)) | |
+| 0035 | Users and roles | Accepted on 2026-11-20 ([adr/0035](adr/0035-users-and-roles.md)) | |
+| 0036 | Installing PHP versions from the panel | Accepted on 2026-11-20 ([adr/0036](adr/0036-php-versions-from-the-panel.md)) | |
+| 0037 | Panel UI redesign: layout, look and themes | Accepted ([adr/0037](adr/0037-panel-ui-redesign.md)) | |
+| 0038 | Web database tool with short-lived access | Accepted on 2026-11-20 ([adr/0038](adr/0038-web-database-tool.md)) | |
+| 0039 | Certificate management: own certificates, renew and delete | Accepted on 2026-11-20 ([adr/0039](adr/0039-certificate-management.md)) | |
+| 0040 | File manager in the panel | Accepted on 2026-11-20 ([adr/0040](adr/0040-file-manager.md)) | |
+| 0041 | External database servers | Accepted on 2026-11-20 ([adr/0041](adr/0041-external-database-servers.md)) | |
+| 0042 | Panel on port 443 under its own host name | Accepted on 2026-11-20 ([adr/0042](adr/0042-panel-on-port-443.md)) | |
+| 0043 | User documentation in the GitHub wiki | Accepted on 2026-11-20 ([adr/0043](adr/0043-user-documentation.md)) | |
+| 0044 | Outgoing email through an SMTP relay | Accepted on 2026-11-21 ([adr/0044](adr/0044-outgoing-email.md)) | |
+| 0045 | Object cache (Valkey) per site | Accepted on 2026-11-21 ([adr/0045](adr/0045-object-cache-per-site.md)) | |
+| 0046 | Page cache (nginx FastCGI cache) per site | Accepted on 2026-11-21 ([adr/0046](adr/0046-page-cache-per-site.md)) | |
+| 0047 | Status page for disabled sites | Accepted on 2026-11-21 ([adr/0047](adr/0047-status-page-for-disabled-sites.md)) | |
+| 0048 | Convert a parked domain into a site and back | Accepted on 2026-11-21 ([adr/0048](adr/0048-convert-parked-domain-and-site.md)) | |
+| 0049 | PHP settings per site | Accepted on 2026-11-21 ([adr/0049](adr/0049-php-settings-per-site.md)) | |
+| 0050 | Signed releases, install and updates through apt | Accepted on 2026-11-21 ([adr/0050](adr/0050-signed-releases-and-apt-updates.md)) | |
+| 0051 | External PostgreSQL servers | Accepted on 2026-11-21 ([adr/0051](adr/0051-external-postgresql-servers.md)) | |
+| 0052 | Service management and server dashboard | Accepted on 2026-11-21 ([adr/0052](adr/0052-service-management-and-server-dashboard.md)) | |
+| 0053 | Site logs in the panel | Accepted on 2026-11-21 ([adr/0053](adr/0053-site-logs-in-the-panel.md)) | |
+| 0054 | Site types Node.js, reverse proxy and redirect | Accepted on 2026-11-22 ([adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md)) | |
+| 0055 | Email notifications for service outages | Accepted on 2026-11-22 ([adr/0055](adr/0055-service-outage-notifications.md)) | |
+| 0056 | Security headers per site | Accepted on 2026-11-22 ([adr/0056](adr/0056-security-headers-per-site.md)) | |
+| 0057 | Database size and connection limits per site | Accepted on 2026-11-22 ([adr/0057](adr/0057-database-size-and-connection-limits.md)) | |
+| 0058 | OpenAPI specification and CLI parity | Accepted on 2026-11-22 ([adr/0058](adr/0058-openapi-spec-and-cli-parity.md)) | |
+| 0059 | Real client IP behind CDNs and proxies | Accepted on 2026-11-22 ([adr/0059](adr/0059-real-client-ip-behind-proxies.md)) | |
+| 0060 | Time zone, hostname and reboot from the panel | Accepted on 2026-11-22 ([adr/0060](adr/0060-time-zone-hostname-and-reboot.md)) | |
+| 0061 | Site type Python | Accepted on 2026-11-22 ([adr/0061](adr/0061-site-type-python.md)) | |
+| 0062 | Git deploy per site | Accepted on 2026-11-24 ([adr/0062](adr/0062-git-deploy-per-site.md)) | |
+| 0063 | Resource usage per site | Accepted on 2026-11-24 ([adr/0063](adr/0063-resource-usage-per-site.md)) | |
+| 0064 | Optional malware scan per site | Accepted on 2026-11-24 ([adr/0064](adr/0064-optional-malware-scan.md)) | |
+| 0065 | www/non-www redirect per site | Accepted on 2026-11-24 ([adr/0065](adr/0065-www-redirect-per-site.md)) | |
+| 0066 | Password protection and IP rules per site | Accepted on 2026-11-24 ([adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md)) | |
+| 0067 | Reset the file permissions of a site | Accepted on 2026-11-24 ([adr/0067](adr/0067-reset-site-permissions.md)) | |
+| 0068 | Change the domain of a site | Accepted on 2026-11-25 ([adr/0068](adr/0068-change-the-domain-of-a-site.md)) | |
+| 0069 | Application profiles (vhost templates) and WordPress quick install | Accepted on 2026-11-25 ([adr/0069](adr/0069-application-profiles-and-wordpress-install.md)) | |
+| 0070 | Staging and cloning a site | Accepted on 2026-11-25 ([adr/0070](adr/0070-staging-and-cloning-a-site.md)) | |
+| 0071 | Panel UI in English and German | Accepted on 2026-11-25 ([adr/0071](adr/0071-panel-ui-in-english-and-german.md)) | |
+| 0072 | Rename a site | Accepted on 2026-11-25 ([adr/0072](adr/0072-rename-a-site.md)) | |
+| 0073 | MCP server for AI assistants | Accepted on 2026-11-25 ([adr/0073](adr/0073-mcp-server.md)) | Planned for 1.1 |
+| 0074 | Backups of deleted sites | Accepted on 2026-11-26 ([adr/0074](adr/0074-backups-of-deleted-sites.md)) | |
+| 0075 | Wildcard domains for reverse proxy and redirect sites | Accepted on 2026-11-26 ([adr/0075](adr/0075-wildcard-domains-for-proxy-and-redirect-sites.md)) | Planned for 1.1 |
+| 0076 | DNS-01 certificates via DNS provider APIs | Accepted on 2026-11-26 ([adr/0076](adr/0076-dns-01-certificates-via-dns-provider-apis.md)) | Planned for 1.1 |
+| 0077 | Automatic security updates for pinned runtimes | Accepted on 2026-11-26 ([adr/0077](adr/0077-automatic-security-updates-for-pinned-runtimes.md)) | |
+| 0078 | fail2ban bans in the panel | Accepted on 2026-11-26 ([adr/0078](adr/0078-fail2ban-bans-in-the-panel.md)) | |
 
 ---
 
@@ -258,16 +258,18 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ---
 
-# Open questions for you
+# Open questions from the planning phase
 
-1. **What is the project for?** Own needs (hosting for your own clients), a public open source project, a commercial product or a mix? This decides license, business model and pace.
-2. **How large is the team, and which languages does it know?** This determines whether Go makes sense or another stack fits better.
-3. **License:** Done, see ADR-0002 (AGPL-3.0, CC-BY-4.0 for documentation, DCO).
-4. **Name:** Done, see ADR-0011. Only domains and trademark search are open.
-5. **Scope v1:** Single-server panel for developers/agencies, or reseller/multi-server from the start?
-6. **Where should the repository live?** GitHub (visibility, contributions) or your own Git server (`git.prod.maki-it.de`)? I can create it there if you want. I have not done that yet.
-7. **Integrations:** Are Hetzner (Cloud, Robot, Storage Box), INWX DNS and a Lexware/Lexoffice connection mandatory for you or only nice to have? This affects the order of the provider integrations.
-8. **Budget:** Is there a budget for an external pentest before 1.0 and for legal review (trademark, license)?
+These questions were asked before the first line of code. They are all answered:
+
+1. **What is the project for?** The maintainer's own servers and clients first, public later ([ADR-0010](adr/0010-target-audience-and-v1-scope.md), [ADR-0013](adr/0013-business-model-and-governance.md)).
+2. **Team and languages:** one maintainer, Go ([ADR-0003](adr/0003-language-and-stack.md)).
+3. **License:** AGPL-3.0, CC-BY-4.0 for documentation, DCO ([ADR-0002](adr/0002-license.md)).
+4. **Name:** Hostashi (ADR-0011 below); the trademark search is open.
+5. **Scope v1:** a single-server panel; no reseller or multi-server features ([ADR-0010](adr/0010-target-audience-and-v1-scope.md)).
+6. **Repository:** GitHub, `maki-it/hostashi`.
+7. **Integrations:** backups go to any SFTP server, such as a Hetzner Storage Box. DNS provider APIs come with DNS-01 in 1.1 ([ADR-0076](adr/0076-dns-01-certificates-via-dns-provider-apis.md)); billing is a non-goal.
+8. **Budget:** no external pentest or legal review before 1.0; the project runs its own security reviews instead ([`security-reviews/`](security-reviews/)).
 
 ## ADR-0019 PHP package source and multiple PHP versions
 

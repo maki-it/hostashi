@@ -1,6 +1,8 @@
 # 5. Security
 
-Security is the main selling point and at the same time the biggest risk of the project. This document defines the threat model and mandatory requirements. It will be checked against an external review before Phase 1.
+> **Planning document.** Written in November 2026 during the planning phase, before the first release, and kept as the record of why Hostashi is built the way it is. Where it differs from the product, the [ADRs](adr/) and the [user documentation](wiki/Home.md) are current.
+
+Security is the main selling point and at the same time the biggest risk of the project. This document defines the threat model and mandatory requirements. Instead of an external pentest, release 1.0 was checked by its own security reviews ([`security-reviews/`](security-reviews/)).
 
 ## 5.1 Assets
 
