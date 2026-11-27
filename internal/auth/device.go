@@ -152,7 +152,7 @@ func (s *Service) StartDevice(_ context.Context, client, ip string) (DeviceStart
 		return DeviceStart{}, fmt.Errorf("%w: 1 to %d characters without control characters", ErrInvalidClient, maxClientName)
 	}
 
-	key := "device-ip:" + ip
+	key := ipKey("device-ip:", ip)
 	if s.deviceLimit.Blocked(key) {
 		s.obs.Throttled(KindDevice)
 

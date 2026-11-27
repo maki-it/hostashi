@@ -150,7 +150,7 @@ func (s *Service) SetupRequired(ctx context.Context) (bool, error) {
 // Setup creates the first admin if the setup token matches. The token file
 // is removed on success. Wrong tokens count against the IP limit.
 func (s *Service) Setup(ctx context.Context, token, username, password, ip string) (store.User, error) {
-	if s.ipLimit.Blocked("ip:" + ip) {
+	if s.ipLimit.Blocked(ipKey("ip:", ip)) {
 		return store.User{}, ErrRateLimited
 	}
 
@@ -164,7 +164,7 @@ func (s *Service) Setup(ctx context.Context, token, username, password, ip strin
 
 	want, err := ReadSetupToken(s.tokenPath, s.now())
 	if err != nil || !tokenMatches(want, token) {
-		s.ipLimit.Fail("ip:" + ip)
+		s.ipLimit.Fail(ipKey("ip:", ip))
 
 		return store.User{}, ErrSetupNotAllowed
 	}
@@ -207,8 +207,8 @@ func hashToken(token string) []byte {
 // Unknown user, wrong password and disabled account all return
 // ErrInvalidCredentials, and all of them do one password hash.
 func (s *Service) Login(ctx context.Context, username, password, code, ip string) (string, store.User, error) {
-	ipKey, userKey := "ip:"+ip, "user:"+username
-	if s.ipLimit.Blocked(ipKey) || s.userLimit.Blocked(userKey) {
+	ipk, userKey := ipKey("ip:", ip), "user:"+username
+	if s.ipLimit.Blocked(ipk) || s.userLimit.Blocked(userKey) {
 		s.obs.Throttled(KindPassword)
 
 		return "", store.User{}, ErrRateLimited
@@ -227,7 +227,7 @@ func (s *Service) Login(ctx context.Context, username, password, code, ip string
 
 	ok, verr := VerifyPassword(hash, password)
 	if verr != nil || !ok || u.ID == 0 || u.Disabled {
-		s.ipLimit.Fail(ipKey)
+		s.ipLimit.Fail(ipk)
 		s.userLimit.Fail(userKey)
 		_ = s.st.Audit(ctx, nil, "login.failed", username, map[string]string{"ip": ip})
 		s.failed(ctx, KindPassword, ip)
@@ -241,7 +241,7 @@ func (s *Service) Login(ctx context.Context, username, password, code, ip string
 		}
 
 		if !s.secondFactor(ctx, u, code) {
-			s.ipLimit.Fail(ipKey)
+			s.ipLimit.Fail(ipk)
 			s.userLimit.Fail(userKey)
 			_ = s.st.Audit(ctx, &u.ID, "login.failed", username, map[string]string{"ip": ip, "reason": "second factor"})
 			s.failed(ctx, KindTOTP, ip)
@@ -268,7 +268,7 @@ func (s *Service) Login(ctx context.Context, username, password, code, ip string
 		return "", store.User{}, err
 	}
 
-	s.ipLimit.Reset(ipKey)
+	s.ipLimit.Reset(ipk)
 	s.userLimit.Reset(userKey)
 	_ = s.st.Audit(ctx, &u.ID, "login", username, map[string]string{"ip": ip})
 

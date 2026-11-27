@@ -224,7 +224,8 @@ type Service struct {
 	onMalware func(ctx context.Context, site string, run store.ScanRun, found []store.ScanFinding)
 
 	// localAddrs are the server's own addresses, which no trusted proxy
-	// range may hold (ADR-0059); nil reads the interfaces.
+	// range may hold (ADR-0059); nil leaves that check to the agent, as
+	// the web process cannot read the interfaces.
 	localAddrs func() ([]netip.Addr, error)
 
 	// purged holds the last page cache purge per site (ADR-0046).

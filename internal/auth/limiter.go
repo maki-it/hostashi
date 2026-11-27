@@ -3,9 +3,32 @@
 package auth
 
 import (
+	"net/netip"
 	"sync"
 	"time"
 )
+
+// ipv6Prefix is how much of an IPv6 address one client is counted by. A
+// host usually gets a whole /64, and picks any address in it, so counting
+// single addresses would give one client 2^64 tries.
+const ipv6Prefix = 64
+
+// ipKey is the limiter key of a client address: an IPv4 address (also one
+// mapped into IPv6) as it is, an IPv6 address by its /64. Anything else is
+// used verbatim, so it still counts.
+func ipKey(kind, ip string) string {
+	a, err := netip.ParseAddr(ip)
+	if err != nil {
+		return kind + ip
+	}
+
+	a = a.Unmap().WithZone("")
+	if a.Is4() {
+		return kind + a.String()
+	}
+
+	return kind + netip.PrefixFrom(a, ipv6Prefix).Masked().String()
+}
 
 // Limiter blocks a key after max failures within window. State is in memory
 // and resets on restart, which is acceptable for a login throttle.

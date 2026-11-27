@@ -297,7 +297,7 @@ func (s *Service) PasskeyLoginBegin(ip string) (string, *protocol.CredentialAsse
 		return "", nil, ErrPasskeyUnavailable
 	}
 
-	if s.ipLimit.Blocked("ip:" + ip) {
+	if s.ipLimit.Blocked(ipKey("ip:", ip)) {
 		s.obs.Throttled(KindPasskey)
 
 		return "", nil, ErrRateLimited
@@ -324,15 +324,15 @@ func (s *Service) PasskeyLoginFinish(ctx context.Context, ceremonyID string, res
 		return "", store.User{}, ErrPasskeyUnavailable
 	}
 
-	ipKey := "ip:" + ip
-	if s.ipLimit.Blocked(ipKey) {
+	key := ipKey("ip:", ip)
+	if s.ipLimit.Blocked(key) {
 		s.obs.Throttled(KindPasskey)
 
 		return "", store.User{}, ErrRateLimited
 	}
 
 	fail := func(userID *int64, reason string) (string, store.User, error) {
-		s.ipLimit.Fail(ipKey)
+		s.ipLimit.Fail(key)
 		s.failed(ctx, KindPasskey, ip)
 		_ = s.st.Audit(ctx, userID, "login.failed", "", map[string]string{"ip": ip, "method": "passkey", "reason": reason})
 
@@ -392,7 +392,7 @@ func (s *Service) PasskeyLoginFinish(ctx context.Context, ceremonyID string, res
 		return "", store.User{}, err
 	}
 
-	s.ipLimit.Reset(ipKey)
+	s.ipLimit.Reset(key)
 	_ = s.st.Audit(ctx, &found.u.ID, "login", found.u.Username, map[string]string{"ip": ip, "method": "passkey"})
 
 	u := found.u
