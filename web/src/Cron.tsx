@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { DotsThree, Pause, PencilSimple, Play, Plus, Terminal, Trash, X } from "@phosphor-icons/react";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   commandProblem,
   createCron,
@@ -310,12 +310,16 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
 }
 
 // JobOutput shows what the last run of a job wrote, as the journal kept
-// it. It loads again when a new run has ended.
+// it, below the job's row: how the run went, then the lines with numbers,
+// scrolled to the end where errors usually are. It loads again when a new
+// run has ended.
 function JobOutput({ site, job, onClose }: { site: Site; job: CronJob; onClose: () => void }) {
   const [out, setOut] = useState<CronOutput | null>(null);
   const [error, setError] = useState("");
+  const [wrap, setWrap] = useState(true);
   const st = job.status;
   const runKey = `${st?.lastStart ?? 0}-${st?.running ? 1 : 0}`;
+  const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let live = true;
@@ -329,41 +333,84 @@ function JobOutput({ site, job, onClose }: { site: Site; job: CronJob; onClose: 
     };
   }, [site.name, job.id, runKey]);
 
-  const text = out?.lines.join("\n") ?? "";
+  useEffect(() => {
+    const el = box.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [out]);
+
+  const lines = out?.lines ?? [];
+  const text = lines.join("\n");
   const label = "Output of cron job " + String(job.id);
+  const tone = lastRunTone(st);
+  const took = st?.lastStart && st.lastEnd && st.lastEnd >= st.lastStart ? runDuration(st.lastEnd - st.lastStart) : "";
 
   return (
-    <section className="ui-stack-tight ui-cron-output" aria-label={label}>
-      <div className="ui-cron-output-head">
-        <strong>Output of the last run{st?.lastStart ? ", " + formatTime(st.lastStart) : ""}</strong>
+    <section className={"ui-cron-output ui-cron-output-" + tone} aria-label={label}>
+      <header className="ui-cron-output-head">
+        <div className="ui-stack-tight">
+          <strong>Output of the last run</strong>
+          <span className="ui-hint">
+            {[
+              st?.running ? "Running now" : lastRun(st),
+              took && "took " + took,
+              out?.ran && lines.length > 0 && `${lines.length} ${lines.length === 1 ? "line" : "lines"}${out.truncated ? " (the last ones)" : ""}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+        </div>
         <span className="ui-row ui-row-tight">
+          {lines.length > 0 && (
+            <Button small aria-pressed={wrap} onClick={() => setWrap(!wrap)}>
+              Wrap lines
+            </Button>
+          )}
           {text && <CopyButton text={text} label="Copy output" />}
           <Button small icon={<X size={14} aria-hidden="true" />} onClick={onClose}>
             Close
           </Button>
         </span>
-      </div>
+      </header>
       {error ? (
         <Notice tone="err" title={error} />
       ) : !out ? (
-        <p aria-busy="true" className="ui-flush">
+        <p aria-busy="true" className="ui-cron-output-empty">
           Loading the output…
         </p>
       ) : !out.ran ? (
-        <p className="ui-hint ui-flush">No output known: the job has not run since the server started or since it was last changed.</p>
-      ) : out.lines.length === 0 ? (
-        <p className="ui-hint ui-flush">The last run wrote nothing.</p>
+        <p className="ui-cron-output-empty">No output known: the job has not run since the server started or since it was last changed.</p>
+      ) : lines.length === 0 ? (
+        <p className="ui-cron-output-empty">The last run wrote nothing.</p>
       ) : (
-        <>
-          {out.truncated && <p className="ui-hint ui-flush">The output is long; these are its last lines.</p>}
-          <pre className="ui-code ui-code-scroll" aria-label={label}>
-            {text}
-          </pre>
-        </>
+        <div ref={box} className={"ui-cron-output-lines" + (wrap ? "" : " ui-cron-output-nowrap")} role="log" aria-label={label} tabIndex={0}>
+          {out.truncated && <div className="ui-cron-output-cut">Earlier lines are not shown.</div>}
+          <ol>
+            {lines.map((l, i) => (
+              <li key={i} className={lineClass(l)}>
+                {l || "\u00a0"}
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
-      <p className="ui-hint ui-flush">Standard output and errors, at most the last 200 lines, as long as the system journal keeps them.</p>
+      <p className="ui-hint ui-flush">Standard output and errors of the job, at most the last 200 lines, as long as the system journal keeps them.</p>
     </section>
   );
+}
+
+// lineClass marks lines that read like errors or warnings, so they stand
+// out in a long output. Only a hint: the text is shown as written.
+function lineClass(l: string): string | undefined {
+  if (/\b(warning|deprecated)\b/i.test(l)) return "ui-cron-line-warn";
+  if (/\b(error|fatal|failed|exception|denied|traceback)\b/i.test(l)) return "ui-cron-line-err";
+  return undefined;
+}
+
+function runDuration(s: number): string {
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return s % 60 === 0 ? `${s / 60} min` : `${Math.floor(s / 60)} min ${s % 60} s`;
+  const m = Math.round(s / 60);
+  return m % 60 === 0 ? `${m / 60} h` : `${Math.floor(m / 60)} h ${m % 60} min`;
 }
 
 function JobForm({

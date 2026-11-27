@@ -281,7 +281,7 @@ describe("CronSettings", () => {
     const user = userEvent.setup();
     mockFetch({
       ["GET " + base]: { body: { jobs: [wpCron], statusKnown: true } },
-      ["GET " + base + "/1/output"]: { body: { ran: true, lines: ["Hi!", "Fri Nov 27 15:35:00 CET 2026"], truncated: true } },
+      ["GET " + base + "/1/output"]: { body: { ran: true, lines: ["Hi!", "PHP Warning: x", "Fatal error: y"], truncated: true } },
     });
     render(<CronSettings site={site} />);
 
@@ -291,8 +291,18 @@ describe("CronSettings", () => {
     expect(badge).toHaveAttribute("aria-expanded", "true");
 
     const out = await screen.findByRole("region", { name: "Output of cron job 1" });
-    expect(await within(out).findByText("Hi! Fri Nov 27 15:35:00 CET 2026", { selector: "pre" })).toBeInTheDocument();
-    expect(within(out).getByText("The output is long; these are its last lines.")).toBeInTheDocument();
+    const log = await within(out).findByRole("log", { name: "Output of cron job 1" });
+    expect(within(log).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Hi!", "PHP Warning: x", "Fatal error: y"]);
+    expect(within(log).getByText("PHP Warning: x")).toHaveClass("ui-cron-line-warn");
+    expect(within(log).getByText("Fatal error: y")).toHaveClass("ui-cron-line-err");
+    expect(within(log).getByText("Hi!")).not.toHaveClass("ui-cron-line-err");
+    expect(within(log).getByText("Earlier lines are not shown.")).toBeInTheDocument();
+    expect(within(out).getByText(/took 2 s · 3 lines \(the last ones\)/)).toBeInTheDocument();
+    const wrap = within(out).getByRole("button", { name: "Wrap lines" });
+    expect(wrap).toHaveAttribute("aria-pressed", "true");
+    await user.click(wrap);
+    expect(wrap).toHaveAttribute("aria-pressed", "false");
+    expect(log).toHaveClass("ui-cron-output-nowrap");
     expect(within(out).getByRole("button", { name: "Copy output" })).toBeInTheDocument();
 
     await user.click(within(out).getByRole("button", { name: "Close" }));
