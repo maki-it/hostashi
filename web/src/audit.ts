@@ -3,7 +3,9 @@
 // The append-only audit log of the panel: who did what and when. Only
 // administrators read it (scope audit:read).
 
-import { ApiError, request } from "./api";
+import { request } from "./api";
+import { compare } from "./format";
+import i18n, { areaErrorText } from "./i18n";
 
 export type AuditEntry = {
   id: number;
@@ -69,14 +71,14 @@ export function exportUrl(format: "csv" | "json", f: AuditFilter): string {
   return "/api/v1/audit/export?" + q.toString();
 }
 
-/** actionGroups groups actions by their first part, for the filter: site, user, login, … */
+/** actionGroups groups actions by their first part, for the filter: site, user, login, …, in the order of their names. */
 export function actionGroups(actions: readonly string[]): { prefix: string; actions: string[] }[] {
   const groups = new Map<string, string[]>();
   for (const a of actions) {
     const prefix = a.split(".")[0] ?? a;
     groups.set(prefix, [...(groups.get(prefix) ?? []), a]);
   }
-  return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([prefix, list]) => ({ prefix, actions: list }));
+  return [...groups.entries()].sort(([a], [b]) => compare(actionGroupLabel(a), actionGroupLabel(b))).map(([prefix, list]) => ({ prefix, actions: list }));
 }
 
 /** detailPairs shows the detail object as key and value text, in a fixed order. */
@@ -96,17 +98,11 @@ export function diffRows(diff: AuditEntry["diff"] | undefined): { field: string;
     .map((field) => ({ field, old: diff?.[field]?.old ?? "", new: diff?.[field]?.new ?? "" }));
 }
 
-export function auditMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case "forbidden":
-        return "Only administrators can read the audit log.";
-      case "invalid_query":
-        return err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
-      default:
-        return "Something went wrong (" + err.code + ").";
-    }
-  }
-  if (err instanceof TypeError) return "The server is not reachable.";
-  return "Something went wrong. Try again.";
+/** actionGroupLabel names a group of actions, such as "Sites" for site.*; an unknown group keeps its prefix. */
+export function actionGroupLabel(prefix: string): string {
+  const key = `audit.groups.${prefix}`;
+  return i18n.exists(key) ? (i18n.t as (k: string) => string)(key) : prefix;
 }
+
+/** auditMessage explains an error of the audit routes in the current language; invalid_query keeps the server's words. */
+export const auditMessage = (err: unknown): string => areaErrorText("audit.errors", err);

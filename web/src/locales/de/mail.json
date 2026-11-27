@@ -1,0 +1,51 @@
+{
+  "title": "E-Mail",
+  "description": "Hostashi verschickt Benachrichtigungen und Einladungslinks über ein SMTP-Relay, das du schon nutzt. Es ist kein Mailserver und empfängt keine Mails.",
+  "off": "E-Mail ist aus.",
+  "offText": "Einladungslinks werden zum Kopieren angezeigt, Benachrichtigungen erscheinen nur im Panel. Trag ein Relay ein, um sie auch per Mail zu verschicken.",
+  "relay": {
+    "title": "SMTP-Relay",
+    "host": "Host",
+    "hostHint": "Zum Beispiel smtp.example.com.",
+    "encryption": "Verschlüsselung",
+    "encryptionHint": "Nur verschlüsselte Verbindungen. Das Zertifikat wird immer geprüft.",
+    "starttls": "STARTTLS (Port 587)",
+    "tls": "TLS (Port 465)",
+    "port": "Port",
+    "portProblem": "Gib einen Port zwischen 1 und 65535 ein, meist 587 für STARTTLS oder 465 für TLS.",
+    "username": "Benutzername (optional)",
+    "usernameHint": "Leer lassen, wenn das Relay diesem Server ohne Anmeldung vertraut.",
+    "password": "Passwort",
+    "passwordHint": "Wird mit dem Serverschlüssel verschlüsselt gespeichert und nie wieder angezeigt.",
+    "passwordStored": "Ein Passwort ist gespeichert.",
+    "replacePassword": "Passwort ersetzen"
+  },
+  "sender": {
+    "title": "Absender",
+    "from": "Absenderadresse",
+    "fromHint": "Eine Adresse, mit der das Relay senden darf, zum Beispiel panel@example.com.",
+    "fromName": "Absendername (optional)",
+    "replyTo": "Antwortadresse (optional)",
+    "replyToHint": "Wohin Antworten gehen, zum Beispiel deine eigene Adresse."
+  },
+  "ca": {
+    "title": "Eigene Zertifizierungsstelle (optional)",
+    "label": "CA-Zertifikat (PEM)",
+    "hint": "Nur für ein Relay, dessen Zertifikat von deiner eigenen CA stammt. Den üblichen öffentlichen CAs wird immer vertraut."
+  },
+  "turnOff": "E-Mail ausschalten",
+  "test": {
+    "title": "Test-Mail senden",
+    "to": "Senden an",
+    "sending": "Wird gesendet…",
+    "submit": "Test-Mail senden",
+    "sent": "Das Relay hat die Mail angenommen. Schau in den Posteingang und, falls sie nicht ankommt, in den Spam-Ordner."
+  },
+  "errors": {
+    "forbidden": "Nur Admins können die E-Mail-Einstellungen ändern.",
+    "mail_not_configured": "Speichere zuerst das Relay.",
+    "rate_limited": "Höchstens 10 Test-Mails pro Stunde. Versuch es später noch einmal.",
+    "mail_failed": "Das Relay hat die Mail nicht angenommen: {{message}}",
+    "failed": "Die Anfrage ist fehlgeschlagen. Versuch es noch einmal."
+  }
+}
