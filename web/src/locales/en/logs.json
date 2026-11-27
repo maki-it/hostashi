@@ -1,0 +1,66 @@
+{
+  "title": "Logs",
+  "live": "Live",
+  "paused": "Paused",
+  "pause": "Pause",
+  "follow": "Follow",
+  "reload": "Reload",
+  "download": "Download",
+  "kindLabel": "Log",
+  "lastLines": "Last lines",
+  "filter": "Filter",
+  "filterPlaceholder": "e.g. 404 or wp-login",
+  "kinds": {
+    "access": {
+      "label": "Access",
+      "hint": "Every request to the site, with the visitor's address."
+    },
+    "error": {
+      "label": "Web server errors",
+      "hint": "What nginx reports for the site, including PHP messages it receives."
+    },
+    "php": {
+      "label": "PHP errors",
+      "hint": "Warnings and errors of the site's PHP, written by PHP-FPM."
+    },
+    "app": {
+      "label": "App",
+      "hint": "What the site's Node.js app writes to its output and error output."
+    },
+    "wordpress": {
+      "label": "WordPress install",
+      "hint": "The WP-CLI output of the last WordPress install from the panel. Empty if WordPress was never installed here."
+    }
+  },
+  "viewLabel": "{{kind}} log of {{site}}",
+  "loading": "Loading…",
+  "empty": "The log is empty so far.",
+  "noMatch": "No line matches the filter.",
+  "rotated": "— the log was rotated, new file —",
+  "autoScroll": "Scroll automatically",
+  "every": "New lines appear every {{seconds}} seconds.",
+  "pausedHint": "Paused: press Follow to see new lines.",
+  "shown": "{{shown}} of {{total}} lines shown.",
+  "retentionAdmin": "The server deletes old logs after the days an administrator set under <a>System</a>.",
+  "retentionOther": "The server deletes old logs after the days an administrator set. Ask them if you need logs for longer.",
+  "retention": {
+    "title": "Log retention",
+    "intro": "One value for every site on this server: access, web server, PHP, app and WordPress install logs, and nginx's logs of requests for no site. Logs are rotated daily and deleted after this many days. Match it to what your privacy policy and data processing agreements promise.",
+    "days": "Keep logs for (days)",
+    "save": "Save",
+    "range": "{{min}} to {{max}} days, default {{default}}. A shorter time deletes older logs at the next daily rotation.",
+    "loading": "Loading…",
+    "system": "The panel's own logs and the system journal keep the settings of the distribution.",
+    "done_one": "Logs are kept for {{count}} day from the next rotation on.",
+    "done_other": "Logs are kept for {{count}} days from the next rotation on."
+  },
+  "check": {
+    "whole": "Enter a whole number of days.",
+    "range": "Enter {{min}} to {{max}} days."
+  },
+  "errors": {
+    "precondition": "The log cannot be read on this server: {{reason}}.",
+    "notFound": "There is no such site or log.",
+    "unreachable": "The log could not be loaded. Check the connection and try again."
+  }
+}

@@ -5,6 +5,9 @@
 // the helper runs as the site user, so files keep the site's owner.
 
 import { ApiError, request } from "./api";
+import { formatCount, formatNumber } from "./format";
+import i18n, { areaErrorText } from "./i18n";
+
 
 export type FileType = "file" | "dir" | "symlink" | "other";
 
@@ -51,17 +54,17 @@ export function cleanPath(p: string): string | null {
 
 /** nameProblem checks one new name, mirroring files.ValidName. */
 export function nameProblem(name: string): string {
-  if (name.trim() !== name) return "The name must not start or end with a space.";
-  if (name === "" || name === "." || name === "..") return "Enter a name.";
-  if (name.includes("/")) return "The name must not contain “/”.";
-  if (new TextEncoder().encode(name).length > 255) return "The name is longer than 255 bytes.";
+  if (name.trim() !== name) return i18n.t("files.check.nameSpace");
+  if (name === "" || name === "." || name === "..") return i18n.t("files.check.nameEmpty");
+  if (name.includes("/")) return i18n.t("files.check.nameSlash");
+  if (new TextEncoder().encode(name).length > 255) return i18n.t("files.check.nameLong");
   return "";
 }
 
 /** modeProblem checks permission bits in octal, mirroring files.ParseMode. */
 export function modeProblem(mode: string): string {
-  if (!/^[0-7]{3,4}$/.test(mode)) return "Enter three or four octal digits, for example 644.";
-  if (mode.length === 4 && mode[0] !== "0") return "setuid, setgid and the sticky bit cannot be set here.";
+  if (!/^[0-7]{3,4}$/.test(mode)) return i18n.t("files.check.modeDigits");
+  if (mode.length === 4 && mode[0] !== "0") return i18n.t("files.check.modeSpecial");
   return "";
 }
 
@@ -202,7 +205,7 @@ export async function extract(
     if (!l.done && l.total) onProgress?.(l.entries ?? 0, l.total);
   });
   const last = text.at(-1);
-  if (!last?.done) throw new ApiError(502, "files_unavailable", "The extraction stopped without a result.");
+  if (!last?.done) throw new ApiError(502, "files_stopped", "the extraction stopped without a result");
   if (last.error) throw new ApiError(422, "files_" + last.error, last.message ?? "extraction failed");
   return last.result ?? { files: 0, dirs: 0, kept: 0, skipped: 0 };
 }
@@ -238,39 +241,20 @@ async function readLines(res: Response, each: (l: ExtractLine) => void): Promise
 
 /** filesMessage turns an API error into a sentence for the file manager. */
 export function filesMessage(err: unknown): string {
-  if (!(err instanceof ApiError)) return "The file manager could not be reached. Check the connection and try again.";
+  if (!(err instanceof ApiError)) return i18n.t("files.errors.unreachable");
   switch (err.code) {
-    case "files_not_found":
-      return "It is not there any more. Reload the folder.";
-    case "files_exists":
-      return "An entry with this name exists already.";
-    case "files_changed":
-      return "The file changed since it was opened.";
-    case "files_symlink":
-      return "Symlinks are shown but not followed here. Use SFTP for them.";
-    case "files_not_file":
-      return "This is not a regular file.";
-    case "files_not_dir":
-      return "This is not a folder.";
-    case "files_into_itself":
-      return "A folder cannot be moved or copied into itself.";
-    case "files_no_space":
-      return "The site's disk limit is reached. Free space first or raise the limit.";
-    case "files_denied":
-      return "The site user may not change this entry.";
     case "files_too_large":
-      return err.message.replace(/^files: /, "Too large: ");
-    case "files_unavailable":
+      return i18n.t("files.errors.files_too_large", { detail: err.message.replace(/^files: (too large: )?/, "") });
     case "files_timeout":
-      return "The file manager did not answer. Try again in a moment.";
+      return i18n.t("files.errors.files_unavailable");
     default:
-      return err.message;
+      return areaErrorText("files.errors", err);
   }
 }
 
 /** formatSize shows a byte count, binary units. */
 export function formatSize(n: number): string {
-  if (n < 1024) return String(n) + " B";
+  if (n < 1024) return formatCount(n) + " B";
   const units = ["KiB", "MiB", "GiB", "TiB"];
   let v = n / 1024;
   let u = 0;
@@ -278,5 +262,7 @@ export function formatSize(n: number): string {
     v /= 1024;
     u++;
   }
-  return (v < 10 ? v.toFixed(1) : Math.round(v).toString()) + " " + units[u];
+  const digits = v < 10 ? 1 : 0;
+  return formatNumber(v, { minimumFractionDigits: digits, maximumFractionDigits: digits }) + " " + units[u];
+
 }

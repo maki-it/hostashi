@@ -1,0 +1,43 @@
+{
+  "ranges": {
+    "1h": "1 hour",
+    "24h": "24 hours",
+    "7d": "7 days",
+    "30d": "30 days"
+  },
+  "rangeLabel": "Time range",
+  "title": "Usage, last {{range}}",
+  "loading": "Loading…",
+  "cpuOf": "100 % is the limit of {{cores}}",
+  "cpuAll": "100 % is all {{cores}} of the server",
+  "cpuTitle": "CPU use in percent of the cores the site may use",
+  "memory": "Memory",
+  "memoryOf": "of {{limit}} limit",
+  "memoryTitle": "Memory in use",
+  "inUse": "In use",
+  "traffic": "Web traffic",
+  "in": "In",
+  "out": "Out",
+  "io": "Disk I/O",
+  "ioTitle": "Disk reads and writes",
+  "read": "Read",
+  "write": "Write",
+  "now": "Now: {{used}} of {{cores}} busy · {{requests}} requests/s · {{tasks}} processes · {{cache}} file cache. Database queries run in the shared database server and are not counted here.",
+  "core_one": "{{n}} core",
+  "core_other": "{{n}} cores",
+  "thousand": "{{n}} k",
+  "million": "{{n}} M",
+  "sites": {
+    "title": "Sites by usage, last {{range}}",
+    "label": "Sites by usage",
+    "site": "Site",
+    "cpu": "CPU (avg · peak)",
+    "memory": "Memory (avg · peak)",
+    "traffic": "Web traffic",
+    "io": "Disk I/O",
+    "of": "of {{cores}}",
+    "limit": " (limit)",
+    "requests": "{{n}} req.",
+    "empty": "No data for this range yet."
+  }
+}

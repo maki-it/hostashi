@@ -1,0 +1,23 @@
+{
+  "title": "Dateirechte zurücksetzen",
+  "intro": "Gibt jede Datei und jeden Ordner der Site an ihren Benutzer <code1>{{user}}</code1> zurück und setzt die üblichen Rechte: Ordner <code2>755</code2>, Dateien <code3>644</code3>, ausführbare Dateien <code4>755</code4>. Nutz das, nachdem du Dateien als root hineinkopiert hast oder wenn der Webserver für vorhandene Dateien 403 antwortet.",
+  "private": "Private Dateien, etwa eine <code1>wp-config.php</code1> mit <code2>600</code2>, werden für den Webserver lesbar. <code3>.ssh</code3> bleibt privat. Links werden nicht verfolgt, und Dateien auf anderen Dateisystemen bleiben, wie sie sind.",
+  "open": "Dateirechte zurücksetzen",
+  "confirm": "Gib <phrase>{{name}}</phrase> zur Bestätigung ein",
+  "confirmHint": "Besitzer und Rechte aller Dateien dieser Site ändern sich. Laufende Programme laufen weiter.",
+  "resetting": "Wird zurückgesetzt…",
+  "submit": "Dateirechte von {{name}} zurücksetzen",
+  "cancel": "Abbrechen",
+  "entries_one": "{{n}} Eintrag",
+  "entries_other": "{{n}} Einträge",
+  "nothing": "Nichts zu ändern: alle {{checked}} waren schon richtig.",
+  "changed": "{{changed}} geändert, {{checked}} geprüft.",
+  "skipped_one": "{{n}} Eintrag blieb, wie er ist:",
+  "skipped_other": "{{n}} Einträge blieben, wie sie sind:",
+  "skippedList": "Übersprungene Einträge",
+  "more": "und {{n}} weitere",
+  "errors": {
+    "reset_incomplete": "Das Zurücksetzen hat zu lange gedauert und auf halbem Weg aufgehört. Starte es erneut: es macht weiter und ändert nur, was noch falsch ist.",
+    "permissions_unavailable": "Dateirechte zurücksetzen ist auf diesem Panel nicht verfügbar."
+  }
+}

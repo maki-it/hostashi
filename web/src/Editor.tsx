@@ -7,6 +7,9 @@
 
 import { ArrowsIn, ArrowsOut, MagnifyingGlass, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+
 import { createEditor, language, type EditorHandle } from "./codemirror";
 import { downloadUrl, fileVersion, parentPath, filesMessage, maxEditBytes, saveFile, type FileEntry } from "./files";
 import { ApiError } from "./api";
@@ -71,7 +74,31 @@ export async function loadText(site: string, path: string): Promise<Loaded> {
   return { text, version: res.headers.get("X-Hostashi-Version") ?? "", crlf: text.includes("\r\n"), bom };
 }
 
+// CodeMirror's phrases (the search bar) and their keys in the catalog.
+const phraseKeys = {
+  Find: "find",
+  Replace: "replace",
+  next: "next",
+  previous: "previous",
+  all: "all",
+  "match case": "matchCase",
+  regexp: "regexp",
+  "by word": "byWord",
+  replace: "replaceOne",
+  "replace all": "replaceAll",
+  close: "close",
+  "current match": "currentMatch",
+  "on line": "onLine",
+  "replaced $ matches": "replacedMatches",
+  "replaced match on line $": "replacedOnLine",
+} as const;
+
+function editorPhrases(t: TFunction): Record<string, string> {
+  return Object.fromEntries(Object.entries(phraseKeys).map(([phrase, key]) => [phrase, t(`files.editor.phrases.${key}`)]));
+}
+
 export default function EditorDialog({ site, path, entry, onClose, onSaved }: Props) {
+  const { t } = useTranslation();
   const dialog = useRef<HTMLDialogElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorHandle | null>(null);
@@ -89,6 +116,7 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
 
   const dirty = loaded !== null && doc !== original;
   const lang = language(entry.name).label;
+  const langLabel = lang === "Plain text" ? t("files.editor.plain") : lang;
 
   // Opens as a modal: the page behind it is inert, so the site's tabs
   // cannot be switched while it is open.
@@ -112,7 +140,9 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
         setDoc(l.text.replace(/\r\n/g, "\n"));
       },
       (err: unknown) => {
-        if (live) setLoadError(err instanceof ApiError && err.code === "files_not_text" ? "This file is not UTF-8 text and cannot be edited here. Download it instead." : filesMessage(err));
+        if (!live) return;
+        const code = err instanceof ApiError ? err.code : "";
+        setLoadError(code === "files_not_text" ? t("files.editor.notText") : code === "files_too_large" ? t("files.editor.tooLarge") : filesMessage(err));
       },
     );
     return () => {
@@ -141,14 +171,14 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
     } catch (err) {
       setSaveError(
         err instanceof ApiError && err.code === "files_changed"
-          ? "The file was changed by someone else since it was opened. Copy your changes, close the editor and open the file again."
+          ? t("files.editor.changed")
           : filesMessage(err),
       );
       return false;
     } finally {
       setSaving(false);
     }
-  }, [loaded, saving, doc, site, path, onSaved]);
+  }, [loaded, saving, doc, site, path, onSaved, t]);
   const saveRef = useRef(save);
   saveRef.current = save;
 
@@ -159,7 +189,8 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
       doc: loaded.text.replace(/\r\n/g, "\n"),
       name: entry.name,
       wrap,
-      label: "Content of " + entry.name,
+      label: t("files.editor.content", { name: entry.name }),
+      phrases: editorPhrases(t),
       onChange: (d) => {
         setDoc(d);
         setSaved(false);
@@ -234,23 +265,27 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
           <h2 id="editor-title" className="ui-flush">
             {entry.name}
           </h2>
-          {folder !== "" && <span className="ui-hint">in <span className="ui-mono">{folder}</span></span>}
+          {folder !== "" && (
+            <span className="ui-hint">
+              <Trans i18nKey="files.editor.in" values={{ folder }} components={{ code: <span className="ui-mono" /> }} />
+            </span>
+          )}
         </div>
-        <div className="ui-row ui-nowrap" role="toolbar" aria-label="Editor">
+        <div className="ui-row ui-nowrap" role="toolbar" aria-label={t("files.editor.toolbar")}>
           <IconButton
-            label="Search and replace (Ctrl+F)"
+            label={t("files.editor.search")}
             tipBelow
             disabled={loaded === null}
             icon={<MagnifyingGlass size={18} aria-hidden="true" />}
             onClick={() => editor.current?.openSearch()}
           />
           <IconButton
-            label={full ? "Smaller window" : "Full screen"}
+            label={full ? t("files.editor.smaller") : t("files.editor.full")}
             tipBelow
             icon={full ? <ArrowsIn size={18} aria-hidden="true" /> : <ArrowsOut size={18} aria-hidden="true" />}
             onClick={() => setFull((f) => !f)}
           />
-          <IconButton label="Close" tipBelow icon={<X size={18} aria-hidden="true" />} onClick={requestClose} />
+          <IconButton label={t("files.editor.close")} tipBelow icon={<X size={18} aria-hidden="true" />} onClick={requestClose} />
         </div>
       </div>
       <div className="ui-editor-body">
@@ -260,7 +295,7 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
           </div>
         ) : loaded === null ? (
           <p className="ui-card-body" aria-busy="true">
-            Loading…
+            {t("files.loading")}
           </p>
         ) : (
           <div ref={host} className="ui-editor-host" />
@@ -268,8 +303,8 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
       </div>
       {asking && (
         <div className="ui-editor-ask" role="alertdialog" aria-labelledby="editor-ask">
-          <strong id="editor-ask">Discard your changes?</strong>
-          <span className="ui-hint">The changes to {entry.name} are not saved.</span>
+          <strong id="editor-ask">{t("files.editor.askTitle")}</strong>
+          <span className="ui-hint">{t("files.editor.askText", { name: entry.name })}</span>
           <div className="ui-row">
             <Button
               autoFocus
@@ -278,7 +313,7 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
                 editor.current?.view.focus();
               }}
             >
-              Keep editing
+              {t("files.editor.keep")}
             </Button>
             <Button
               variant="primary"
@@ -290,10 +325,10 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
                 })
               }
             >
-              Save and close
+              {t("files.editor.saveClose")}
             </Button>
             <Button variant="danger" onClick={onClose}>
-              Discard changes
+              {t("files.editor.discard")}
             </Button>
           </div>
         </div>
@@ -307,24 +342,23 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
         <div className="ui-editor-status" aria-live="polite">
           {loaded && (
             <>
-              <span>
-                Ln {cursor.line}, Col {cursor.col}
-              </span>
-              <span>{loaded.bom ? "UTF-8 with BOM" : "UTF-8"}</span>
+              <span>{t("files.editor.position", { line: cursor.line, col: cursor.col })}</span>
+              <span>{loaded.bom ? t("files.editor.bom") : "UTF-8"}</span>
               <span>{loaded.crlf ? "CRLF" : "LF"}</span>
-              <span>{lang}</span>
-              {dirty ? <Badge tone="warn">Unsaved changes</Badge> : saved && <Badge tone="ok">Saved</Badge>}
+              <span>{langLabel}</span>
+              {dirty ? <Badge tone="warn">{t("files.editor.unsaved")}</Badge> : saved && <Badge tone="ok">{t("files.editor.saved")}</Badge>}
             </>
           )}
         </div>
         <label className="ui-check">
           <input type="checkbox" checked={wrap} onChange={(e) => setWrap(e.target.checked)} />
-          Wrap lines
+          {t("files.editor.wrap")}
         </label>
         <div className="ui-row">
-          <Button onClick={requestClose}>Close</Button>
+          <Button onClick={requestClose}>{t("files.editor.close")}</Button>
           <Button variant="primary" disabled={!dirty || saving} onClick={() => void save()}>
-            {saving ? "Saving…" : "Save changes"}
+            {saving ? t("files.editor.saving") : t("files.editor.save")}
+
           </Button>
         </div>
       </div>

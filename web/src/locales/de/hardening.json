@@ -1,0 +1,32 @@
+{
+  "title": "App-Profil und Härtung",
+  "loading": "Wird geladen…",
+  "savedProfile": "Gespeichert. Die Site folgt wieder den Regeln des Profils.",
+  "savedRules": "Gespeichert. nginx nutzt jetzt die neuen Regeln.",
+  "pathHint": "Einer pro Zeile, relativ zum Document Root, etwa wp-content/uploads. Höchstens {{max}}.",
+  "intro": "nginx beantwortet diese Anfragen mit 404, bevor die Dateien der Site oder PHP sie sehen. Versteckte Dateien und Ordner wie <code1>.git</code1> oder <code2>.env</code2> sind immer gesperrt, außer <code3>/.well-known</code3>.",
+  "profile": "Profil",
+  "minPhp": "Braucht PHP {{version}} oder neuer.",
+  "webDir": "Neue Sites liefern den Ordner {{dir}} aus.",
+  "profileHint": "Die Regeln, mit denen die Site startet. Ein Wechsel ändert nie die Dateien oder den Document Root der Site.",
+  "rules": "Regeln",
+  "changed": "Weicht vom Profil ab",
+  "configFiles": "Datenbank-Dumps, Backups, Logs und Editor-Kopien sperren",
+  "suffixes": "Dateien irgendwo unter dem Document Root mit der Endung:",
+  "denyDirs": "Gesperrte Ordner",
+  "denyDirsHint": "{{pathHint}} Alles darin.",
+  "denyFiles": "Gesperrte Dateien",
+  "denyFilesHint": "Eine pro Zeile, etwa xmlrpc.php.",
+  "noPhpDirs": "Ordner ohne PHP",
+  "noPhpDirsHint": "Eine dort hochgeladene PHP-Datei läuft nie. Einer pro Zeile, etwa wp-content/uploads.",
+  "limitFiles": "PHP-Dateien mit Ratenlimit",
+  "limitFilesHint": "Höchstens {{perMinute}} Anfragen pro Minute und Adresse, {{burst}} weitere auf einmal; danach 429. Eine pro Zeile, etwa wp-login.php.",
+  "save": "Profil und Regeln speichern",
+  "useProfile": "Regeln des Profils nutzen",
+  "block": {
+    "show": "Server-Block zeigen",
+    "hint": "Nur zum Lesen, mit Profil und Regeln von oben im aktuellen Stand, gespeichert oder nicht. Pfade unter <code>/placeholder</code> stehen für die des Servers; Passwort-Hashes werden nie gezeigt.",
+    "label": "Server-Block",
+    "loading": "Wird geladen…"
+  }
+}

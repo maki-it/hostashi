@@ -4,6 +4,7 @@
 // home goes back to the site user, with the default modes.
 
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 
 export type PermissionsSkip = { path: string; reason: string };
 
@@ -23,10 +24,10 @@ export function resetMessage(err: unknown): string | null {
   if (!(err instanceof ApiError)) return null;
   switch (err.code) {
     case "reset_incomplete":
-      return "The reset took too long and stopped part way. Run it again: it continues and only changes what is still wrong.";
     case "permissions_unavailable":
-      return "Resetting permissions is not available on this panel.";
+      return i18n.t(`permissions.errors.${err.code}`);
     default:
       return null;
   }
+
 }
