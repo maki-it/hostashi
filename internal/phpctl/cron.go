@@ -204,15 +204,11 @@ func parseJournal(out string, full bool) ([]string, bool) {
 
 		var text string
 		if json.Unmarshal(e.Message, &text) != nil {
+			// Not UTF-8: journalctl gives the bytes as an array of numbers,
+			// which decodes into a byte slice element by element.
 			var b []byte
-
-			var ints []int
-			if json.Unmarshal(e.Message, &ints) != nil {
+			if json.Unmarshal(e.Message, &b) != nil {
 				continue
-			}
-
-			for _, n := range ints {
-				b = append(b, byte(n))
 			}
 
 			text = string(b)

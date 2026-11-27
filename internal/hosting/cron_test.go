@@ -38,7 +38,7 @@ func (f *fakeCron) CronStatus(_ context.Context, site string) (agentapi.CronSite
 	return agentapi.CronSiteStatus{Site: site, Jobs: []agentapi.CronJobStatus{}}, f.fail
 }
 
-func (f *fakeCron) CronOutput(_ context.Context, site string, id int64) (agentapi.CronJobOutput, error) {
+func (f *fakeCron) CronOutput(_ context.Context, site string, _ int64) (agentapi.CronJobOutput, error) {
 	f.outputs = append(f.outputs, site)
 
 	return agentapi.CronJobOutput{Ran: true, Lines: []string{"ok"}}, f.fail
