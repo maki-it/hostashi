@@ -1,0 +1,27 @@
+{
+  "chart": {
+    "empty": "Noch keine Daten. Das Panel nimmt alle 15 Sekunden einen Messwert.",
+    "noData": "keine Daten",
+    "showTable": "Als Tabelle zeigen",
+    "time": "Zeit"
+  },
+  "copy": {
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "byHand": "Markiere den Text und kopiere ihn von Hand."
+  },
+  "job": {
+    "close": "Schließen",
+    "showProgress": "Fortschritt zeigen",
+    "showLog": "Log zeigen"
+  },
+  "unsaved": {
+    "title": "Ungespeicherte Änderungen",
+    "in": "in",
+    "thisTab": "diesem Tab",
+    "saveOrDrop": "Speichere sie zuerst oder verwirf sie, um den anderen Tab zu öffnen.",
+    "saveBeforeLeaving": "Speichere sie, bevor du diesen Tab verlässt.",
+    "stay": "Hierbleiben",
+    "drop": "Änderungen verwerfen"
+  }
+}

@@ -4,11 +4,9 @@
     "BlockedAddresses.tsx",
     "Clone.tsx",
     "Cutover.tsx",
-    "Dashboard.tsx",
     "Doctor.tsx",
     "Firewall.tsx",
     "NodePage.tsx",
-    "Overview.tsx",
     "PHP.tsx",
     "Pools.tsx",
     "PythonPage.tsx",
@@ -20,10 +18,6 @@
     "SiteType.tsx",
     "Sites.tsx",
     "System.tsx",
-    "Unsaved.tsx",
-    "WordPress.tsx",
-    "ui/Chart.tsx",
-    "ui/Copy.tsx",
-    "ui/JobCard.tsx"
+    "WordPress.tsx"
   ]
 }
