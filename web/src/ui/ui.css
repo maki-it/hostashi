@@ -45,7 +45,8 @@
 }
 .ui-btn:disabled,
 .ui-btn-primary:disabled,
-.ui-btn-danger:disabled {
+.ui-btn-danger:disabled,
+.ui-btn-destroy:disabled {
   cursor: not-allowed;
   color: var(--muted);
   background: var(--sunken);
@@ -62,6 +63,16 @@
 }
 .ui-btn-danger {
   color: var(--err);
+}
+/* Filled red: the last step of something that cannot be undone */
+.ui-btn-destroy {
+  color: var(--on-primary);
+  background: var(--err);
+  border-color: var(--err);
+}
+.ui-btn-destroy:hover:not(:disabled) {
+  color: var(--on-primary);
+  border-color: var(--fg);
 }
 .ui-btn-danger:hover:not(:disabled) {
   color: var(--err);
@@ -983,6 +994,16 @@ a.ui-btn {
   padding: var(--space-3) var(--space-5);
   border-bottom: 1px solid var(--line);
 }
+/* The filter sits in the bar between the folder and the toolbar. */
+.ui-files-head .ui-filters {
+  flex: 0 1 300px;
+  margin-left: auto;
+  padding: 0;
+  border-bottom: 0;
+}
+.ui-files-head .ui-filters .ui-input {
+  max-width: none;
+}
 .ui-files-crumbs {
   display: flex;
   flex-wrap: wrap;
@@ -1148,6 +1169,7 @@ html:has(.ui-files) {
   scroll-padding-top: calc(var(--app-top-h, 0px) + var(--files-sticky-h, 0px));
 }
 .ui-files-drop {
+  position: relative;
   outline: 2px dashed transparent;
   outline-offset: -6px;
 }
@@ -1160,6 +1182,89 @@ html:has(.ui-files) {
   gap: var(--space-2);
   min-width: 16ch;
   overflow-wrap: anywhere;
+}
+/* A file name opens the editor: it looks like text until pointed at. */
+.ui-files-file {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.ui-files-file:hover span {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.ui-files-mode {
+  text-decoration: none;
+  cursor: help;
+}
+/* A step for one entry opens in a row below it. */
+.ui-table tr[data-open] td {
+  border-bottom-color: transparent;
+  background: var(--sunken);
+}
+.ui-table .ui-table-after td {
+  padding: 0 var(--space-4) var(--space-4);
+  background: var(--sunken);
+}
+.ui-files-inline {
+  max-width: 640px;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.ui-files-inline[data-tone="err"] {
+  border-color: var(--err);
+}
+.ui-files-inline h3 {
+  font-size: 16px;
+}
+.ui-files-names {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-left: var(--space-5);
+  font-size: 13.5px;
+}
+.ui-files-rename {
+  display: grid;
+  gap: var(--space-1);
+}
+.ui-files-rename .ui-input {
+  flex: 1 1 auto;
+  min-width: 12ch;
+  max-width: 32ch;
+  min-height: 32px;
+}
+.ui-files-rename svg {
+  flex: none;
+  color: var(--muted);
+}
+.ui-files-dropnote {
+  position: absolute;
+  inset: 6px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--accent);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  pointer-events: none;
+}
+.ui-files-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-5);
 }
 .ui-files-target {
   display: block;
@@ -1184,6 +1289,12 @@ html:has(.ui-files) {
   border-radius: var(--radius-card);
   background: var(--surface);
   color: var(--fg);
+}
+.ui-editor[data-full="true"] {
+  width: 100vw;
+  height: 100vh;
+  border: 0;
+  border-radius: 0;
 }
 .ui-editor[open] {
   display: flex;
