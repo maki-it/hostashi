@@ -8,10 +8,14 @@ import backups from "./backups.json";
 import common from "./common.json";
 import databases from "./databases.json";
 import errors from "./errors.json";
+import limits from "./limits.json";
+import pages from "./pages.json";
+import parked from "./parked.json";
+import profiles from "./profiles.json";
 import shell from "./shell.json";
 import tokens from "./tokens.json";
 
-const en = { account, auth, backups, common, databases, errors, shell, tokens };
+const en = { account, auth, backups, common, databases, errors, limits, pages, parked, profiles, shell, tokens };
 
 export type Catalog = typeof en;
 

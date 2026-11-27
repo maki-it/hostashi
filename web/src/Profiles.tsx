@@ -2,6 +2,8 @@
 
 import { ArrowLeft, Copy, DownloadSimple, PencilSimple, Trash, UploadSimple } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
+import i18n from "./i18n";
 import {
   copyName,
   createProfile,
@@ -28,28 +30,33 @@ type QueryProps = {
   onQuery?: (q: URLSearchParams) => void;
 };
 
-const pageCacheLabels: Record<string, string> = {
-  "": "None",
+// The page cache presets (ADR-0046); the application names stay as they are.
+const pageCacheLabels = (): Record<string, string> => ({
+  "": i18n.t("profiles.pageCache.none"),
   wordpress: "WordPress",
   woocommerce: "WooCommerce",
-  php: "Any PHP application (strict)",
-};
+  php: i18n.t("profiles.pageCache.php"),
+});
+
+// The folder of a site's files, a path in every language.
+const docRoot = "htdocs";
 
 const link = (q: Record<string, string>) => formatHash({ page: "profiles", query: new URLSearchParams(q) });
 
 function rulesText(p: Profile): string {
   const h = p.hardening;
   const parts: string[] = [];
-  if (h.configFiles) parts.push("dumps");
+  if (h.configFiles) parts.push(i18n.t("profiles.rules.dumps"));
   const n = (h.noPhpDirs?.length ?? 0) + (h.denyDirs?.length ?? 0) + (h.denyFiles?.length ?? 0) + (h.limitFiles?.length ?? 0);
-  if (n > 0) parts.push(`${String(n)} ${n === 1 ? "path" : "paths"}`);
-  return parts.length > 0 ? parts.join(", ") : "none";
+  if (n > 0) parts.push(i18n.t("profiles.rules.paths", { count: n }));
+  return parts.length > 0 ? parts.join(", ") : i18n.t("profiles.rules.none");
 }
 
 // Profiles is the page of the application profiles (ADR-0069): the
 // built-in ones, which can be copied and exported, and the own ones,
 // which can also be changed and deleted. Only admins see it.
 export function Profiles({ query = new URLSearchParams(), onQuery = () => undefined }: QueryProps) {
+  const { t } = useTranslation();
   const [choices, setChoices] = useState<ProfileChoices | null>(null);
   const [loadError, setLoadError] = useState("");
   const [done, setDone] = useState("");
@@ -89,15 +96,15 @@ export function Profiles({ query = new URLSearchParams(), onQuery = () => undefi
   const listLink = (
     <a className="ui-btn" href={formatHash({ page: "profiles" })}>
       <ArrowLeft size={16} aria-hidden="true" />
-      All profiles
+      {t("profiles.allLink")}
     </a>
   );
 
   if (!choices) {
     return (
       <>
-        <PageHead title="Application profiles" />
-        {loadError ? <Notice tone="err" title={loadError} /> : <p aria-busy="true">Loading profiles…</p>}
+        <PageHead title={t("profiles.title")} />
+        {loadError ? <Notice tone="err" title={loadError} /> : <p aria-busy="true">{t("profiles.loading")}</p>}
       </>
     );
   }
@@ -108,9 +115,9 @@ export function Profiles({ query = new URLSearchParams(), onQuery = () => undefi
   if (query.get("import") === "1") {
     return (
       <>
-        <PageHead title="Import a profile" description="A profile exported from this or another Hostashi panel, in YAML with version: 1." actions={listLink} />
+        <PageHead title={t("profiles.import.title")} description={t("profiles.import.description")} actions={listLink} />
         <Card>
-          <ImportForm onCancel={() => set({ import: "" })} onDone={(p) => changed(`Profile ${p.name} imported.`)} />
+          <ImportForm onCancel={() => set({ import: "" })} onDone={(p) => changed(t("profiles.imported", { name: p.name }))} />
         </Card>
       </>
     );
@@ -123,22 +130,23 @@ export function Profiles({ query = new URLSearchParams(), onQuery = () => undefi
     if (!source || (editName !== null && source.builtin)) {
       return (
         <>
-          <PageHead title="Application profiles" actions={listLink} />
-          <Notice tone="warn" title={source ? `${source.title} is built in and cannot be changed. Copy it instead.` : `There is no profile named ${editName ?? copyOf ?? ""}.`} />
+          <PageHead title={t("profiles.title")} actions={listLink} />
+          <Notice
+            tone="warn"
+            title={source ? t("profiles.builtinNoChange", { title: source.title }) : t("profiles.noSuch", { name: editName ?? copyOf ?? "" })}
+          />
         </>
       );
     }
     const editing = editName !== null;
-    const initial = editing ? source : { ...source, name: copyName(source.name, names), title: source.title + " (copy)" };
-    const title = editing ? "Change profile " + source.name : "Copy " + source.title;
+    const initial = editing ? source : { ...source, name: copyName(source.name, names), title: t("profiles.copyTitle", { title: source.title }) };
+    const title = editing ? t("profiles.change", { name: source.name }) : t("profiles.copy", { title: source.title });
     return (
       <>
         <PageHead
           title={title}
           description={
-            editing
-              ? "Sites that use this profile get the new rules right away and keep their own changes. The web root folder only applies to new sites."
-              : "A copy is your own profile: change its values, then pick it for new sites or on a site's Hardening tab."
+            editing ? t("profiles.changeDescription") : t("profiles.copyDescription")
           }
           actions={listLink}
         />
@@ -154,10 +162,10 @@ export function Profiles({ query = new URLSearchParams(), onQuery = () => undefi
             onSubmit={async (p) => {
               if (editing) {
                 await updateProfile(p);
-                await changed(`Profile ${p.name} saved. Sites that use it got the new rules.`);
+                await changed(t("profiles.saved", { name: p.name }));
               } else {
                 await createProfile(p);
-                await changed(`Profile ${p.name} added.`);
+                await changed(t("profiles.added", { name: p.name }));
               }
             }}
           />
@@ -172,7 +180,7 @@ export function Profiles({ query = new URLSearchParams(), onQuery = () => undefi
     setDone("");
     try {
       await deleteProfile(name);
-      await changed(`Profile ${name} deleted.`);
+      await changed(t("profiles.deleted", { name }));
     } catch (err) {
       setError(ownProfileMessage(err));
     } finally {
@@ -183,34 +191,39 @@ export function Profiles({ query = new URLSearchParams(), onQuery = () => undefi
   const columns: Column<Profile>[] = [
     {
       key: "name",
-      header: "Profile",
+      header: t("profiles.columns.name"),
       sortValue: (p) => p.title.toLowerCase(),
       cell: (p) => (
         <div className="ui-cell-main">
           <span className="ui-row ui-nowrap">
             <strong>{p.title}</strong>
-            {p.builtin ? <Badge tone="off">Built-in</Badge> : <Badge tone="ok">Own</Badge>}
+            {p.builtin ? <Badge tone="off">{t("profiles.builtin")}</Badge> : <Badge tone="ok">{t("profiles.own")}</Badge>}
           </span>
           <span className="ui-hint">{p.name}</span>
         </div>
       ),
     },
-    { key: "type", header: "Type", sortValue: (p) => p.type, cell: (p) => (p.type === "php" ? "PHP" : "Static") },
-    { key: "php", header: "Needs PHP", sortValue: (p) => p.minPhp ?? "", cell: (p) => (p.type === "php" ? (p.minPhp ?? "any") : "–") },
-    { key: "webDir", header: "Serves", sortValue: (p) => p.webDir ?? "", cell: (p) => <code>{p.webDir ? "htdocs/" + p.webDir : "htdocs"}</code> },
-    { key: "rules", header: "Blocks", cell: rulesText },
+    { key: "type", header: t("profiles.columns.type"), sortValue: (p) => p.type, cell: (p) => t(`profiles.types.${p.type}`) },
+    {
+      key: "php",
+      header: t("profiles.columns.php"),
+      sortValue: (p) => p.minPhp ?? "",
+      cell: (p) => (p.type === "php" ? (p.minPhp ?? t("profiles.anyPhp")) : "–"),
+    },
+    { key: "webDir", header: t("profiles.columns.webDir"), sortValue: (p) => p.webDir ?? "", cell: (p) => <code>{p.webDir ? `${docRoot}/${p.webDir}` : docRoot}</code> },
+    { key: "rules", header: t("profiles.columns.rules"), cell: rulesText },
     {
       key: "actions",
-      header: "Actions",
+      header: t("profiles.columns.actions"),
       srHeader: true,
       cell: (p) => (
         <RowActions>
-          <IconLink label={`Copy ${p.title}`} text="Copy" icon={<Copy size={16} />} href={link({ copy: p.name })} />
-          {!p.builtin && <IconLink label={`Change ${p.title}`} icon={<PencilSimple size={16} />} href={link({ edit: p.name })} />}
-          <IconLink label={`Export ${p.title} as YAML`} icon={<DownloadSimple size={16} />} href={exportUrl(p.name)} />
+          <IconLink label={t("profiles.actions.copyLabel", { title: p.title })} text={t("profiles.actions.copy")} icon={<Copy size={16} />} href={link({ copy: p.name })} />
+          {!p.builtin && <IconLink label={t("profiles.actions.changeLabel", { title: p.title })} icon={<PencilSimple size={16} />} href={link({ edit: p.name })} />}
+          <IconLink label={t("profiles.actions.exportLabel", { title: p.title })} icon={<DownloadSimple size={16} />} href={exportUrl(p.name)} />
           {!p.builtin && (
             <IconButton
-              label={`Delete ${p.title}`}
+              label={t("profiles.actions.deleteLabel", { title: p.title })}
               icon={<Trash size={16} />}
               danger
               disabled={busy}
@@ -233,12 +246,12 @@ export function Profiles({ query = new URLSearchParams(), onQuery = () => undefi
   return (
     <>
       <PageHead
-        title="Application profiles"
-        description="A profile brings a site's hardening rules and, for new sites, its web root folder. Copy a built-in profile to make your own."
+        title={t("profiles.title")}
+        description={t("profiles.description")}
         actions={
           <a className="ui-btn" href={link({ import: "1" })}>
             <UploadSimple size={16} aria-hidden="true" />
-            Import YAML
+            {t("profiles.import.button")}
           </a>
         }
       />
@@ -247,16 +260,16 @@ export function Profiles({ query = new URLSearchParams(), onQuery = () => undefi
       {deleting && (
         <section className="ui-card ui-card-body ui-stack" role="alertdialog" aria-labelledby="profile-delete-title">
           <h2 id="profile-delete-title" className="ui-flush">
-            Delete the profile {deleting}?
+            {t("profiles.delete.title", { name: deleting })}
           </h2>
-          <p className="ui-flush">Only a profile that no site uses can be deleted.</p>
+          <p className="ui-flush">{t("profiles.delete.text")}</p>
           {error && <Notice tone="err" title={error} />}
           <div className="ui-row">
             <Button variant="danger" disabled={busy} onClick={() => void remove(deleting)}>
-              Delete profile
+              {t("profiles.delete.confirm")}
             </Button>
             <Button disabled={busy} onClick={() => setDeleting(null)}>
-              Cancel
+              {t("common.actions.cancel")}
             </Button>
           </div>
         </section>
@@ -267,20 +280,20 @@ export function Profiles({ query = new URLSearchParams(), onQuery = () => undefi
           <input
             className="ui-input"
             type="search"
-            aria-label="Filter profiles"
-            placeholder="Filter by name"
+            aria-label={t("profiles.filter.label")}
+            placeholder={t("profiles.filter.placeholder")}
             value={query.get("q") ?? ""}
             onChange={(e) => set({ q: e.target.value })}
           />
         </div>
         <Table
-          label="Application profiles"
+          label={t("profiles.table.label")}
           columns={columns}
           rows={shown}
           rowKey={(p) => p.name}
           sort={sort}
           onSort={(x) => set({ sort: x.key, dir: x.dir })}
-          empty="No profile matches the filter."
+          empty={t("profiles.table.noMatch")}
         />
       </Card>
     </>
@@ -304,6 +317,7 @@ function ProfileEditor({
   onSubmit: (p: Omit<Profile, "builtin">) => Promise<void>;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [f, setF] = useState<ProfileForm>(toProfileForm(initial));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -330,35 +344,35 @@ function ProfileEditor({
     }
   }
 
-  const pathHint = `One per line, relative to the document root. At most ${String(maxPaths)}.`;
+  const pathHint = t("profiles.editor.pathHint", { max: maxPaths });
 
   return (
     <form className="ui-stack" onSubmit={submit} noValidate aria-label={label}>
       <div className="ui-form-grid">
-        <Field label="Name" hint={editing ? "The name cannot change; copy the profile for a new one." : "Lower-case letters, digits and dashes"}>
+        <Field label={t("profiles.editor.name")} hint={editing ? t("profiles.editor.nameHintEdit") : t("profiles.editor.nameHint")}>
           <input className="ui-input" value={f.name} onChange={field("name")} disabled={editing} autoComplete="off" spellCheck={false} />
         </Field>
-        <Field label="Title" hint="Shown in the profile lists">
+        <Field label={t("profiles.editor.title")} hint={t("profiles.editor.titleHint")}>
           <input className="ui-input" value={f.title} onChange={field("title")} autoComplete="off" />
         </Field>
-        <Field label="Site type" hint={editing ? "Cannot change while sites use the profile." : "Static profiles are offered for static sites."}>
+        <Field label={t("profiles.editor.type")} hint={editing ? t("profiles.editor.typeHintEdit") : t("profiles.editor.typeHint")}>
           <select className="ui-select" value={f.type} onChange={field("type")}>
-            <option value="php">PHP</option>
-            <option value="static">Static</option>
+            <option value="php">{t("profiles.types.php")}</option>
+            <option value="static">{t("profiles.types.static")}</option>
           </select>
         </Field>
         {php && (
-          <Field label="Lowest PHP version" hint="Such as 8.2; empty for any">
+          <Field label={t("profiles.editor.minPhp")} hint={t("profiles.editor.minPhpHint")}>
             <input className="ui-input" value={f.minPhp} onChange={field("minPhp")} inputMode="decimal" autoComplete="off" />
           </Field>
         )}
-        <Field label="Web root folder" hint="Below htdocs, such as public; empty for htdocs. Only for new sites.">
+        <Field label={t("profiles.editor.webDir")} hint={t("profiles.editor.webDirHint")}>
           <input className="ui-input" value={f.webDir} onChange={field("webDir")} autoComplete="off" spellCheck={false} />
         </Field>
         {php && (
-          <Field label="Page cache preset" hint="Offered when the page cache is turned on">
+          <Field label={t("profiles.editor.pageCache")} hint={t("profiles.editor.pageCacheHint")}>
             <select className="ui-select" value={f.pageCache} onChange={field("pageCache")}>
-              {Object.entries(pageCacheLabels).map(([v, l]) => (
+              {Object.entries(pageCacheLabels()).map(([v, l]) => (
                 <option key={v} value={v}>
                   {l}
                 </option>
@@ -368,44 +382,44 @@ function ProfileEditor({
         )}
       </div>
       <fieldset className="ui-fieldset ui-stack">
-        <legend>Hardening rules</legend>
+        <legend>{t("profiles.editor.hardening")}</legend>
         <label className="ui-check">
           <input type="checkbox" checked={f.configFiles} onChange={(e) => setF({ ...f, configFiles: e.target.checked })} />
-          Block database dumps, backups, logs and editor copies
+          {t("profiles.editor.configFiles")}
         </label>
         <div className="ui-form-grid">
-          <Field label="Blocked folders" hint={pathHint}>
+          <Field label={t("profiles.editor.denyDirs")} hint={pathHint}>
             <textarea className="ui-input" rows={3} value={f.denyDirs} onChange={field("denyDirs")} spellCheck={false} />
           </Field>
-          <Field label="Blocked files" hint={pathHint}>
+          <Field label={t("profiles.editor.denyFiles")} hint={pathHint}>
             <textarea className="ui-input" rows={3} value={f.denyFiles} onChange={field("denyFiles")} spellCheck={false} />
           </Field>
           {php && (
-            <Field label="Folders without PHP" hint={pathHint}>
+            <Field label={t("profiles.editor.noPhpDirs")} hint={pathHint}>
               <textarea className="ui-input" rows={3} value={f.noPhpDirs} onChange={field("noPhpDirs")} spellCheck={false} />
             </Field>
           )}
           {php && (
-            <Field label="Rate limited PHP files" hint={pathHint}>
+            <Field label={t("profiles.editor.limitFiles")} hint={pathHint}>
               <textarea className="ui-input" rows={3} value={f.limitFiles} onChange={field("limitFiles")} spellCheck={false} />
             </Field>
           )}
         </div>
       </fieldset>
       <div className="ui-form-grid">
-        <Field label="Suggested cron jobs" hint="One per line: schedule, then command, such as */5 * * * * php cron.php. Shown, never created.">
+        <Field label={t("profiles.editor.cron")} hint={t("profiles.editor.cronHint")}>
           <textarea className="ui-input" rows={3} value={f.cron} onChange={field("cron")} spellCheck={false} />
         </Field>
-        <Field label="Checklist" hint="One note per line, shown after a site is created">
+        <Field label={t("profiles.editor.checklist")} hint={t("profiles.editor.checklistHint")}>
           <textarea className="ui-input" rows={3} value={f.checklist} onChange={field("checklist")} />
         </Field>
       </div>
       <div className="ui-row">
         <Button variant="primary" type="submit" disabled={busy}>
-          {editing ? "Save profile" : "Add profile"}
+          {editing ? t("profiles.editor.save") : t("profiles.editor.add")}
         </Button>
         <Button disabled={busy} onClick={onCancel}>
-          Cancel
+          {t("common.actions.cancel")}
         </Button>
       </div>
       {error && <Notice tone="err" title={error} />}
@@ -414,6 +428,7 @@ function ProfileEditor({
 }
 
 function ImportForm({ onDone, onCancel }: { onDone: (p: Profile) => Promise<void>; onCancel: () => void }) {
+  const { t } = useTranslation();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -425,14 +440,14 @@ function ImportForm({ onDone, onCancel }: { onDone: (p: Profile) => Promise<void
       setText(await file.text());
       setError("");
     } catch {
-      setError("The file could not be read.");
+      setError(t("profiles.import.readFailed"));
     }
   }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (text.trim() === "") {
-      setError("Paste the YAML or choose a file.");
+      setError(t("profiles.import.empty"));
       return;
     }
     setBusy(true);
@@ -447,19 +462,19 @@ function ImportForm({ onDone, onCancel }: { onDone: (p: Profile) => Promise<void
   }
 
   return (
-    <form className="ui-stack" onSubmit={submit} noValidate aria-label="Import a profile">
-      <Field label="YAML file" hint="A .yaml file from Export">
+    <form className="ui-stack" onSubmit={submit} noValidate aria-label={t("profiles.import.title")}>
+      <Field label={t("profiles.import.file")} hint={t("profiles.import.fileHint")}>
         <input type="file" accept=".yaml,.yml,application/yaml,text/yaml" onChange={(e) => void pick(e)} />
       </Field>
-      <Field label="YAML" hint="Or paste it here. The name must not be taken; edit it here to import a profile twice.">
+      <Field label={t("profiles.import.yaml")} hint={t("profiles.import.yamlHint")}>
         <textarea className="ui-input ui-mono" rows={14} value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
       </Field>
       <div className="ui-row">
         <Button variant="primary" type="submit" disabled={busy}>
-          Import profile
+          {t("profiles.import.submit")}
         </Button>
         <Button disabled={busy} onClick={onCancel}>
-          Cancel
+          {t("common.actions.cancel")}
         </Button>
       </div>
       {error && <Notice tone="err" title={error} />}

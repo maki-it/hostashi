@@ -1,4 +1,6 @@
 {
+  "agent_timeout": "Der Server hat nicht rechtzeitig geantwortet. Lade die Seite neu, um zu sehen, ob die Änderung durchgeführt wurde.",
+  "agent_unavailable": "Die Änderung konnte nicht abgeschlossen werden. Versuch es noch einmal.",
   "busy": "Der Server ist ausgelastet. Versuch es in einer Minute noch einmal.",
   "database_exists": "Eine Datenbank oder ein Datenbank-Benutzer mit diesem Namen existiert bereits. Wähle einen anderen Namen.",
   "db_server_denied": "Der Datenbankserver hat den Administrator des Panels abgewiesen. Prüfe die Rechte auf dem Server.",

@@ -8,6 +8,7 @@ import { Parked } from "./Parked";
 import type { ParkedDomain } from "./parked";
 import type { StatusPage } from "./pages";
 
+import { setLanguage } from "./i18n";
 import { mockFetch } from "./test-utils";
 
 const page = (id: string, name: string, kind: StatusPage["kind"]): StatusPage => ({
@@ -148,5 +149,20 @@ describe("Parked", () => {
     await user.type(form.getByRole("textbox", { name: "Domain" }), "blog.example");
     await user.click(form.getByRole("button", { name: "Park domain" }));
     expect(await form.findByRole("alert")).toHaveTextContent("This domain is the panel's own address.");
+  });
+});
+
+describe("Parked in German", () => {
+  it("lists the parked domains in German", async () => {
+    setLanguage("de");
+    mockFetch({
+      "GET /api/v1/parked-domains": { body: { parkedDomains: [parkedDomain("old.example", { enabled: false, active: false, notAfter: null })] } },
+      "GET /api/v1/status-pages": { body: { pages } },
+    });
+    render(<Harness />);
+    expect(await screen.findByRole("table", { name: "Geparkte Domains" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Domain parken" })).toBeInTheDocument();
+    expect(screen.getByText("Aus")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Parken von old.example beenden" })).toBeInTheDocument();
   });
 });

@@ -1,4 +1,6 @@
 {
+  "agent_timeout": "The server did not answer in time. Reload the page to see whether the change was made.",
+  "agent_unavailable": "The change could not be completed. Try again.",
   "busy": "The server is busy. Try again in a minute.",
   "database_exists": "A database or database user with this name exists. Choose another name.",
   "db_server_denied": "The database server refused the panel's administrator. Check the server's privileges.",

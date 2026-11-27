@@ -1,0 +1,118 @@
+{
+  "title": "Application profiles",
+  "description": "A profile brings a site's hardening rules and, for new sites, its web root folder. Copy a built-in profile to make your own.",
+  "loading": "Loading profiles…",
+  "allLink": "All profiles",
+  "builtin": "Built-in",
+  "own": "Own",
+  "builtinNoChange": "{{title}} is built in and cannot be changed. Copy it instead.",
+  "noSuch": "There is no profile named {{name}}.",
+  "copyTitle": "{{title}} (copy)",
+  "change": "Change profile {{name}}",
+  "changeDescription": "Sites that use this profile get the new rules right away and keep their own changes. The web root folder only applies to new sites.",
+  "copy": "Copy {{title}}",
+  "copyDescription": "A copy is your own profile: change its values, then pick it for new sites or on a site's Hardening tab.",
+  "saved": "Profile {{name}} saved. Sites that use it got the new rules.",
+  "added": "Profile {{name}} added.",
+  "deleted": "Profile {{name}} deleted.",
+  "imported": "Profile {{name}} imported.",
+  "types": {
+    "php": "PHP",
+    "static": "Static"
+  },
+  "anyPhp": "any",
+  "rules": {
+    "dumps": "dumps",
+    "paths_one": "{{count}} path",
+    "paths_other": "{{count}} paths",
+    "none": "none"
+  },
+  "pageCache": {
+    "none": "None",
+    "php": "Any PHP application (strict)"
+  },
+  "columns": {
+    "name": "Profile",
+    "type": "Type",
+    "php": "Needs PHP",
+    "webDir": "Serves",
+    "rules": "Blocks",
+    "actions": "Actions"
+  },
+  "actions": {
+    "copy": "Copy",
+    "copyLabel": "Copy {{title}}",
+    "changeLabel": "Change {{title}}",
+    "exportLabel": "Export {{title}} as YAML",
+    "deleteLabel": "Delete {{title}}"
+  },
+  "delete": {
+    "title": "Delete the profile {{name}}?",
+    "text": "Only a profile that no site uses can be deleted.",
+    "confirm": "Delete profile"
+  },
+  "filter": {
+    "label": "Filter profiles",
+    "placeholder": "Filter by name"
+  },
+  "table": {
+    "label": "Application profiles",
+    "noMatch": "No profile matches the filter."
+  },
+  "editor": {
+    "name": "Name",
+    "nameHint": "Lower-case letters, digits and dashes",
+    "nameHintEdit": "The name cannot change; copy the profile for a new one.",
+    "title": "Title",
+    "titleHint": "Shown in the profile lists",
+    "type": "Site type",
+    "typeHint": "Static profiles are offered for static sites.",
+    "typeHintEdit": "Cannot change while sites use the profile.",
+    "minPhp": "Lowest PHP version",
+    "minPhpHint": "Such as 8.2; empty for any",
+    "webDir": "Web root folder",
+    "webDirHint": "Below htdocs, such as public; empty for htdocs. Only for new sites.",
+    "pageCache": "Page cache preset",
+    "pageCacheHint": "Offered when the page cache is turned on",
+    "hardening": "Hardening rules",
+    "configFiles": "Block database dumps, backups, logs and editor copies",
+    "denyDirs": "Blocked folders",
+    "denyFiles": "Blocked files",
+    "noPhpDirs": "Folders without PHP",
+    "limitFiles": "Rate limited PHP files",
+    "pathHint": "One per line, relative to the document root. At most {{max}}.",
+    "cron": "Suggested cron jobs",
+    "cronHint": "One per line: schedule, then command, such as */5 * * * * php cron.php. Shown, never created.",
+    "checklist": "Checklist",
+    "checklistHint": "One note per line, shown after a site is created",
+    "save": "Save profile",
+    "add": "Add profile"
+  },
+  "import": {
+    "title": "Import a profile",
+    "description": "A profile exported from this or another Hostashi panel, in YAML with version: 1.",
+    "button": "Import YAML",
+    "file": "YAML file",
+    "fileHint": "A .yaml file from Export",
+    "yaml": "YAML",
+    "yamlHint": "Or paste it here. The name must not be taken; edit it here to import a profile twice.",
+    "submit": "Import profile",
+    "readFailed": "The file could not be read.",
+    "empty": "Paste the YAML or choose a file."
+  },
+  "problems": {
+    "name": "Use up to {{max}} lower-case letters, digits and dashes for the name, starting with a letter.",
+    "nameTaken": "A profile named {{name}} exists already.",
+    "title": "Give the profile a title.",
+    "minPhp": "Write the lowest PHP version like 8.2, or leave it empty.",
+    "cron": "The cron job \"{{line}}\" needs a schedule and a command."
+  },
+  "errors": {
+    "not_found": "The profile does not exist anymore.",
+    "profile_exists": "A profile with this name exists already.",
+    "profile_builtin": "Built-in profiles cannot be changed or deleted. Copy one instead.",
+    "profile_in_use": "{{message}} Give those sites another profile first.",
+    "forbidden": "Only administrators can manage profiles.",
+    "failed": "The profile could not be saved. Try again."
+  }
+}

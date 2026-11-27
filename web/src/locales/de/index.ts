@@ -9,9 +9,13 @@ import backups from "./backups.json";
 import common from "./common.json";
 import databases from "./databases.json";
 import errors from "./errors.json";
+import limits from "./limits.json";
+import pages from "./pages.json";
+import parked from "./parked.json";
+import profiles from "./profiles.json";
 import shell from "./shell.json";
 import tokens from "./tokens.json";
 
-const de: Catalog = { account, auth, backups, common, databases, errors, shell, tokens };
+const de: Catalog = { account, auth, backups, common, databases, errors, limits, pages, parked, profiles, shell, tokens };
 
 export default de;
