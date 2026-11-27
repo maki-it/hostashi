@@ -142,21 +142,12 @@ out=$(x /opt/hostashi/install.sh apply --yes --no-apt --binary /opt/hostashi/hos
 }
 grep 'changes=0' <<<"$out" >/dev/null || fail "apply --no-apt without IPv4 changed something: $out"
 listen=$(x ss -ltnH)
-for p in 80 443 8443 22; do
+for p in 80 443 22; do
   grep -E "(\[::\]|\*):$p " <<<"$listen" >/dev/null || fail "nothing listens on [::]:$p: $listen"
 done
 for u in nginx hostashi-agent hostashi mariadb fail2ban hostashi-firewall; do
   [ "$(x systemctl is-active "$u.service")" = active ] || fail "$u is not running"
 done
-
-step "the panel answers the client over IPv6"
-# panel URL CURL-ARGS...: a request from the client to the panel on 8443.
-panel() {
-  local path=$1; shift
-  c curl -sSk -m 10 --connect-to "panel.example.com:8443:[$S6]:8443" "$@" "https://panel.example.com:8443$path"
-}
-for _ in $(seq 30); do panel /api/v1/health -f -o /dev/null 2>/dev/null && break; sleep 1; done
-panel /api/v1/health -f | grep '"agent":"ok"' >/dev/null || fail "panel not reachable over IPv6"
 
 step "setup, second factor and an API token"
 tok=$(x /usr/local/bin/hostashi setup-token -db /var/lib/hostashi/hostashi.db)
@@ -182,6 +173,26 @@ print("%06d" % ((struct.unpack(">I", h[o:o + 4])[0] & 0x7fffffff) % 1000000))' "
 [ "$(api POST /api/v1/auth/totp/enroll)" = 200 ] || fail "TOTP enroll: $(x cat /tmp/api.out)"
 secret=$(x cat /tmp/api.out | sed -n 's/.*"secret":"\([A-Z2-7]*\)".*/\1/p')
 [ "$(api POST /api/v1/auth/totp/confirm "{\"code\":\"$(totp "$secret")\"}")" = 200 ] || fail "TOTP confirm: $(x cat /tmp/api.out)"
+# Without ACME the panel has no certificate and nginx no panel listener
+# yet; an own (self-signed) one, as in container-test.sh.
+tlsdir=$(mktemp -d)
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 2 -subj /CN=panel.example.com \
+  -addext subjectAltName=DNS:panel.example.com -addext basicConstraints=critical,CA:FALSE -addext extendedKeyUsage=serverAuth -keyout "$tlsdir/key.pem" -out "$tlsdir/cert.pem" 2>/dev/null
+[ "$(api PUT /api/v1/panel/tls/certificate "{\"certificate\":$(jq -Rs . <"$tlsdir/cert.pem"),\"key\":$(jq -Rs . <"$tlsdir/key.pem"),\"allowUntrusted\":true}")" = 200 ] ||
+  fail "own panel certificate: $(x cat /tmp/api.out)"
+rm -rf "$tlsdir"
+for _ in $(seq 30); do x ss -ltnH | grep -E '(\[::\]|\*):8443 ' >/dev/null && break; sleep 1; done
+x ss -ltnH | grep -E '(\[::\]|\*):8443 ' >/dev/null || fail "nothing listens on [::]:8443: $(x ss -ltnH)"
+
+step "the panel answers the client over IPv6"
+# panel URL CURL-ARGS...: a request from the client to the panel on 8443.
+panel() {
+  local path=$1; shift
+  c curl -sSk -m 10 --connect-to "panel.example.com:8443:[$S6]:8443" "$@" "https://panel.example.com:8443$path"
+}
+for _ in $(seq 30); do panel /api/v1/health -f -o /dev/null 2>/dev/null && break; sleep 1; done
+panel /api/v1/health -f | grep '"agent":"ok"' >/dev/null || fail "panel not reachable over IPv6"
+
 [ "$(api GET /api/v1/scopes)" = 200 ] || fail "scopes: $(x cat /tmp/api.out)"
 scopes=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.dumps([s["name"] for s in json.load(sys.stdin)["scopes"]]))')
 [ "$(api POST /api/v1/tokens "{\"name\":\"ipv6 test\",\"scopes\":$scopes,\"expiresInDays\":1}")" = 201 ] || fail "create token: $(x cat /tmp/api.out)"
