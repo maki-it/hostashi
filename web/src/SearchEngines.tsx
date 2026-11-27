@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { getHeaders, headersMessage, setHeaders, type HeadersView } from "./headers";
 import type { Site } from "./sites";
 import { Button, Card, Notice } from "./ui";
@@ -9,6 +10,7 @@ import { Button, Card, Notice } from "./ui";
 // site. It is stored with the security headers (ADR-0056, ADR-0070) and
 // on for staging copies.
 export function SearchEnginesCard({ site }: { site: Site }) {
+  const { t } = useTranslation();
   const [view, setView] = useState<HeadersView | null>(null);
   const [noIndex, setNoIndex] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,7 +39,7 @@ export function SearchEnginesCard({ site }: { site: Site }) {
       const v = await setHeaders(site.name, headers);
       setView(v);
       setNoIndex(v.headers.noIndex === true);
-      setDone(noIndex ? "Search engines are asked not to index the site." : "Search engines may index the site.");
+      setDone(noIndex ? t("siteHeaders.search.doneOn") : t("siteHeaders.search.doneOff"));
     } catch (err) {
       setError(headersMessage(err));
     } finally {
@@ -48,21 +50,20 @@ export function SearchEnginesCard({ site }: { site: Site }) {
   const unchanged = view === null || noIndex === (view.headers.noIndex === true);
 
   return (
-    <Card title="Search engines">
+    <Card title={t("siteHeaders.search.title")}>
       <form className="ui-stack" onSubmit={(e) => void save(e)}>
         <label className="ui-check">
           <input type="checkbox" checked={noIndex} disabled={!view || busy} onChange={(e) => setNoIndex(e.target.checked)} />
-          Ask search engines not to index the site
+          {t("siteHeaders.search.label")}
         </label>
         <p className="ui-hint ui-flush">
-          Every answer gets <span className="ui-mono">X-Robots-Tag: noindex, nofollow</span>, so well-behaved crawlers keep the site out of their results. On
-          for staging copies. It does not hide the site: use a password under Security, Access for that.
+          <Trans i18nKey="siteHeaders.search.hint" components={{ mono: <span className="ui-mono" /> }} />
         </p>
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || unchanged}>
-            Save
+            {t("common.actions.save")}
           </Button>
         </div>
       </form>

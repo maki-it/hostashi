@@ -1,0 +1,59 @@
+{
+  "title": "Sicherheits-Header",
+  "intro": "Wird mit jeder Antwort der Site gesendet, auch mit Fehlerseiten. Ein hier eingeschalteter Header ersetzt denselben Header der Anwendung. Ausgeschaltet geht der eigene Header der Anwendung unverändert durch.",
+  "basic": "Grundlagen",
+  "off": "Aus",
+  "sniff": {
+    "label": "MIME-Type-Sniffing",
+    "hint": "Browser vertrauen dem angegebenen Typ jeder Datei."
+  },
+  "frames": {
+    "label": "In Frames anzeigen",
+    "hint": "Schützt vor Clickjacking.",
+    "sameOrigin": "SAMEORIGIN: nur auf dieser Site",
+    "deny": "DENY: nie"
+  },
+  "referrer": {
+    "label": "Referrer",
+    "hint": "Was andere Sites über die Seite erfahren, von der ein Besucher kommt."
+  },
+  "permissions": {
+    "legend": "Berechtigungen",
+    "label": "Browser-Funktionen",
+    "hint": "Welche Funktionen die Site und eingebettete Frames nutzen dürfen.",
+    "strict": "Streng: Kamera, Mikrofon, Standort, Zahlung und USB aus",
+    "own": "Eigene Richtlinie",
+    "ownHint": "Durch Kommas getrennt, zum Beispiel camera=(), geolocation=(self \"https://maps.example.com\"). Höchstens {{max}} Bytes."
+  },
+  "csp": {
+    "legend": "Content Security Policy",
+    "mode": "Modus",
+    "modeHint": "„Nur melden“ zeigt Verstöße in der Browser-Konsole, ohne etwas zu blockieren.",
+    "report": "Nur melden (zuerst testen)",
+    "enforce": "Durchsetzen",
+    "policy": "Richtlinie",
+    "policyHint": "Direktiven durch \";\" getrennt, zum Beispiel default-src 'self'; img-src 'self' data:. Höchstens {{max}} Bytes.",
+    "enforceWarning": "Eine zu strenge Richtlinie macht die Site sofort kaputt: blockierte Skripte, Styles oder Schriften. Teste sie zuerst mit „Nur melden“."
+  },
+  "save": "Sicherheits-Header speichern",
+  "saved": "Gespeichert. nginx sendet jetzt die neuen Header.",
+  "recommended": "Empfohlene verwenden",
+  "recommendedOn": "Die empfohlenen Header sind an.",
+  "search": {
+    "title": "Suchmaschinen",
+    "label": "Suchmaschinen bitten, die Site nicht zu indexieren",
+    "hint": "Jede Antwort bekommt <mono>X-Robots-Tag: noindex, nofollow</mono>, seriöse Crawler nehmen die Site also nicht in ihre Ergebnisse auf. Bei Staging-Kopien an. Die Site wird dadurch nicht versteckt: Dafür gibt es ein Passwort unter Sicherheit, Zugriff.",
+    "doneOn": "Suchmaschinen werden gebeten, die Site nicht zu indexieren.",
+    "doneOff": "Suchmaschinen dürfen die Site indexieren."
+  },
+  "problems": {
+    "permissions": "Gib eine Permissions-Policy ein oder schalte sie aus.",
+    "csp": "Gib eine Content-Security-Policy ein oder schalte sie aus."
+  },
+  "errors": {
+    "rejected": "Ein Wert wurde abgelehnt: {{reason}}.",
+    "conflict": "{{reason}}. Entferne ihn zuerst aus dem Snippet.",
+    "siteGone": "Diese Site gibt es nicht mehr.",
+    "generic": "Die Sicherheits-Header ließen sich nicht laden oder speichern. Versuch es noch einmal."
+  }
+}

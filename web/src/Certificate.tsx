@@ -2,6 +2,7 @@
 
 import { ArrowClockwise, Copy, DownloadSimple, FileText, Trash, UploadSimple } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   certInfo,
   panelCertBase,
@@ -37,12 +38,17 @@ type Props = {
 };
 type Mode = "" | "upload" | "csr" | "delete";
 
+// Names that read the same in every language.
+const letsEncrypt = "Let's Encrypt";
+const sha256 = "SHA-256";
+
 const emptyUpload: CertUpload = { certificate: "", chain: "", key: "", allowUntrusted: false };
 
 // CertificateCard shows the live certificate of a site, a parked domain or
 // the panel and its actions (ADR-0039): renew now, upload an own
 // certificate, create a CSR, delete.
-export function CertificateCard({ base, name, tls, deletable = true, offHint = "turn HTTPS off first", title = "Certificate", onChange }: Props) {
+export function CertificateCard({ base, name, tls, deletable = true, offHint, title, onChange }: Props) {
+  const { t } = useTranslation();
   const [info, setInfo] = useState<CertInfo | null>(null);
   const [loadError, setLoadError] = useState("");
   const [mode, setMode] = useState<Mode>("");
@@ -99,35 +105,35 @@ export function CertificateCard({ base, name, tls, deletable = true, offHint = "
     }
     void act(async () => {
       await setCertSource(base, "letsencrypt");
-      return "Let's Encrypt is the source again. The own certificate serves until the new one is there.";
+      return t("certificate.done.letsencrypt");
     });
   };
 
   return (
     <Card
-      title={title}
+      title={title ?? t("certificate.title")}
       actions={
         <>
           {canRenew && (
             <IconButton
-              label="Renew now"
-              text="Renew now"
+              label={t("certificate.renew")}
+              text={t("certificate.renew")}
               icon={<ArrowClockwise />}
               disabled={busy}
               onClick={() =>
                 void act(async () => {
                   await renewCert(base);
-                  return "Renewal requested. The new certificate is there in a minute or two.";
+                  return t("certificate.done.renew");
                 })
               }
             />
           )}
-          <IconButton label="Upload certificate" text="Upload" icon={<UploadSimple />} disabled={busy} onClick={() => open("upload")} />
-          <IconButton label="Create CSR" text="Create CSR" icon={<FileText />} disabled={busy} onClick={() => open("csr")} />
+          <IconButton label={t("certificate.upload.title")} text={t("certificate.upload.short")} icon={<UploadSimple />} disabled={busy} onClick={() => open("upload")} />
+          <IconButton label={t("certificate.csr.create")} text={t("certificate.csr.create")} icon={<FileText />} disabled={busy} onClick={() => open("csr")} />
           {deletable && (
             <IconButton
-              label={canDelete ? "Delete certificate" : `Delete certificate (${offHint})`}
-              text="Delete"
+              label={canDelete ? t("certificate.delete.submit") : t("certificate.delete.blocked", { hint: offHint ?? t("certificate.delete.offFirst") })}
+              text={t("certificate.delete.short")}
               icon={<Trash />}
               danger
               disabled={busy || !canDelete}
@@ -139,27 +145,27 @@ export function CertificateCard({ base, name, tls, deletable = true, offHint = "
     >
       <div className="ui-stack">
         <fieldset className="ui-fieldset ui-stack-tight">
-          <legend>Source</legend>
+          <legend>{t("certificate.source.legend")}</legend>
           <label className="ui-check">
             <input type="radio" name={name + "-cert-source"} value="letsencrypt" checked={!own} disabled={busy} onChange={(e) => chooseSource(e.target.value)} />
-            Let's Encrypt, renewed automatically
+            {t("certificate.source.letsencrypt")}
           </label>
           <label className="ui-check">
             <input type="radio" name={name + "-cert-source"} value="custom" checked={own} disabled={busy} onChange={(e) => chooseSource(e.target.value)} />
-            Own certificate, you renew it yourself
+            {t("certificate.source.custom")}
           </label>
         </fieldset>
 
         {loadError && <Notice tone="err" title={loadError} />}
-        {info && !cert && <p className="ui-hint">No certificate yet.</p>}
+        {info && !cert && <p className="ui-hint">{t("certificate.none")}</p>}
         {cert && <CertFacts own={tls.certSource === "custom"} cert={cert} />}
-        {tls.renewPending && <p className="ui-hint">A renewal is on its way.</p>}
+        {tls.renewPending && <p className="ui-hint">{t("certificate.renewPending")}</p>}
 
         {mode === "upload" && (
           <UploadForm busy={busy} withCSR={Boolean(info?.csr)} onCancel={() => setMode("")} onSubmit={(u) =>
             void act(async () => {
               await uploadCert(base, u);
-              return "Certificate installed and served over HTTPS.";
+              return t("certificate.done.installed");
             })
           } />
         )}
@@ -171,16 +177,16 @@ export function CertificateCard({ base, name, tls, deletable = true, offHint = "
             onCreate={() =>
               void act(async () => {
                 await createCSR(base);
-                return "CSR created. Have it signed, then upload the certificate here without a key.";
+                return t("certificate.done.csr");
               }, "csr")
             }
             onUpload={() => open("upload")}
           />
         )}
         {mode === "delete" && (
-          <div className="ui-stack" role="group" aria-label="Confirm delete">
-            <Notice tone="warn" title="Delete the certificate and its key?">
-              HTTPS is off, so nothing serves this certificate any more. A pending CSR is deleted too.
+          <div className="ui-stack" role="group" aria-label={t("certificate.delete.confirmLabel")}>
+            <Notice tone="warn" title={t("certificate.delete.question")}>
+              {t("certificate.delete.text")}
             </Notice>
             <div className="ui-row">
               <Button
@@ -189,13 +195,13 @@ export function CertificateCard({ base, name, tls, deletable = true, offHint = "
                 onClick={() =>
                   void act(async () => {
                     await deleteCert(base);
-                    return "Certificate deleted.";
+                    return t("certificate.done.deleted");
                   })
                 }
               >
-                Delete certificate
+                {t("certificate.delete.submit")}
               </Button>
-              <Button onClick={() => setMode("")}>Cancel</Button>
+              <Button onClick={() => setMode("")}>{t("common.actions.cancel")}</Button>
             </div>
           </div>
         )}
@@ -207,32 +213,33 @@ export function CertificateCard({ base, name, tls, deletable = true, offHint = "
 }
 
 function CertFacts({ own, cert }: { own: boolean; cert: NonNullable<CertInfo["certificate"]> }) {
+  const { t } = useTranslation();
   const left = daysLeft(cert.notAfter);
   return (
-    <dl className="ui-facts" aria-label="Live certificate">
-      <dt>From</dt>
+    <dl className="ui-facts" aria-label={t("certificate.facts.label")}>
+      <dt>{t("certificate.facts.from")}</dt>
       <dd>
-        {own ? "Own certificate" : "Let's Encrypt"} {!cert.trusted && <Badge tone="warn">Not publicly trusted</Badge>}
+        {own ? t("certificate.facts.own") : letsEncrypt} {!cert.trusted && <Badge tone="warn">{t("certificate.facts.untrusted")}</Badge>}
       </dd>
-      <dt>Issuer</dt>
-      <dd>{cert.issuer || "unknown"}</dd>
-      <dt>Names</dt>
+      <dt>{t("certificate.facts.issuer")}</dt>
+      <dd>{cert.issuer || t("certificate.facts.unknown")}</dd>
+      <dt>{t("certificate.facts.names")}</dt>
       <dd>{cert.domains.join(", ")}</dd>
-      <dt>Valid until</dt>
+      <dt>{t("certificate.facts.validUntil")}</dt>
       <dd>
         {cert.notAfter?.slice(0, 10)}
         {left !== null && left < 30 && (
           <>
             {" "}
-            <Badge tone={left < 7 ? "err" : "warn"}>{left < 0 ? "expired" : `${left} days left`}</Badge>
+            <Badge tone={left < 7 ? "err" : "warn"}>{left < 0 ? t("certificate.facts.expired") : t("certificate.facts.daysLeft", { count: left })}</Badge>
           </>
         )}
-        {left !== null && !own && <span className="ui-hint"> Renewed 30 days before.</span>}
-        {left !== null && own && <span className="ui-hint"> Not renewed automatically.</span>}
+        {left !== null && !own && <span className="ui-hint"> {t("certificate.facts.renewedBefore")}</span>}
+        {left !== null && own && <span className="ui-hint"> {t("certificate.facts.notRenewed")}</span>}
       </dd>
-      <dt>SHA-256</dt>
+      <dt>{sha256}</dt>
       <dd className="ui-mono ui-break">
-        <CopyValue value={fingerprintText(cert.fingerprint)} label="Copy the SHA-256 fingerprint" />
+        <CopyValue value={fingerprintText(cert.fingerprint)} label={t("certificate.facts.copyFingerprint")} />
       </dd>
     </dl>
   );
@@ -241,6 +248,7 @@ function CertFacts({ own, cert }: { own: boolean; cert: NonNullable<CertInfo["ce
 type UploadFormProps = { busy: boolean; withCSR: boolean; onCancel: () => void; onSubmit: (u: CertUpload) => void };
 
 function UploadForm({ busy, withCSR, onCancel, onSubmit }: UploadFormProps) {
+  const { t } = useTranslation();
   const [u, setU] = useState<CertUpload>(emptyUpload);
   const [problem, setProblem] = useState("");
 
@@ -261,37 +269,37 @@ function UploadForm({ busy, withCSR, onCancel, onSubmit }: UploadFormProps) {
   }
 
   return (
-    <form className="ui-stack" onSubmit={submit} noValidate aria-label="Upload certificate">
-      <Field label="Certificate" hint="PEM, starting with -----BEGIN CERTIFICATE-----.">
+    <form className="ui-stack" onSubmit={submit} noValidate aria-label={t("certificate.upload.title")}>
+      <Field label={t("certificate.upload.certificate")} hint={t("certificate.upload.certificateHint")}>
         <textarea className="ui-input ui-textarea ui-mono" rows={5} value={u.certificate} onChange={set("certificate")} spellCheck={false} />
       </Field>
-      <input type="file" className="ui-file" aria-label="Certificate file" accept=".pem,.crt,.cer" onChange={(e) => void readFile("certificate")(e)} />
-      <Field label="Chain (optional)" hint="The intermediate certificates of your CA, if they are not in the certificate field.">
+      <input type="file" className="ui-file" aria-label={t("certificate.upload.certificateFile")} accept=".pem,.crt,.cer" onChange={(e) => void readFile("certificate")(e)} />
+      <Field label={t("certificate.upload.chain")} hint={t("certificate.upload.chainHint")}>
         <textarea className="ui-input ui-textarea ui-mono" rows={4} value={u.chain} onChange={set("chain")} spellCheck={false} />
       </Field>
-      <input type="file" className="ui-file" aria-label="Chain file" accept=".pem,.crt,.cer" onChange={(e) => void readFile("chain")(e)} />
+      <input type="file" className="ui-file" aria-label={t("certificate.upload.chainFile")} accept=".pem,.crt,.cer" onChange={(e) => void readFile("chain")(e)} />
       <Field
-        label={withCSR ? "Private key (leave empty for the key of the CSR)" : "Private key"}
-        hint="PEM without passphrase. RSA with at least 2048 bits, or ECDSA P-256 or P-384."
+        label={withCSR ? t("certificate.upload.keyWithCSR") : t("certificate.upload.key")}
+        hint={t("certificate.upload.keyHint")}
       >
         <textarea className="ui-input ui-textarea ui-mono" rows={4} value={u.key} onChange={set("key")} spellCheck={false} autoComplete="off" />
       </Field>
-      <input type="file" className="ui-file" aria-label="Key file" accept=".pem,.key" onChange={(e) => void readFile("key")(e)} />
+      <input type="file" className="ui-file" aria-label={t("certificate.upload.keyFile")} accept=".pem,.key" onChange={(e) => void readFile("key")(e)} />
       {u.key.trim() !== "" && (
-        <Notice tone="info" title="The key passes through your browser and the panel.">
-          It is stored on the server only, readable by root. With “Create CSR” the key never leaves the server.
+        <Notice tone="info" title={t("certificate.upload.keyNotice")}>
+          {t("certificate.upload.keyNoticeText")}
         </Notice>
       )}
       <label className="ui-check">
         <input type="checkbox" checked={u.allowUntrusted} onChange={(e) => setU({ ...u, allowUntrusted: e.target.checked })} />
-        Not publicly trusted (internal CA or self-signed): install anyway
+        {t("certificate.upload.allowUntrusted")}
       </label>
       {problem && <Notice tone="err" title={problem} />}
       <div className="ui-row">
         <Button type="submit" variant="primary" disabled={busy}>
-          Install certificate
+          {t("certificate.upload.submit")}
         </Button>
-        <Button onClick={onCancel}>Cancel</Button>
+        <Button onClick={onCancel}>{t("common.actions.cancel")}</Button>
       </div>
     </form>
   );
@@ -300,6 +308,7 @@ function UploadForm({ busy, withCSR, onCancel, onSubmit }: UploadFormProps) {
 type CSRPanelProps = { name: string; csr: string; busy: boolean; onCreate: () => void; onUpload: () => void };
 
 function CSRPanel({ name, csr, busy, onCreate, onUpload }: CSRPanelProps) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -318,13 +327,10 @@ function CSRPanel({ name, csr, busy, onCreate, onUpload }: CSRPanelProps) {
   if (!csr) {
     return (
       <div className="ui-stack">
-        <p className="ui-hint">
-          The server creates a key that never leaves it, and a certificate signing request (CSR) for its domains. Have the CSR
-          signed by your CA, then upload the certificate here without a key.
-        </p>
+        <p className="ui-hint">{t("certificate.csr.intro")}</p>
         <div className="ui-row">
           <Button variant="primary" disabled={busy} onClick={onCreate}>
-            Create key and CSR
+            {t("certificate.csr.createKey")}
           </Button>
         </div>
       </div>
@@ -333,21 +339,21 @@ function CSRPanel({ name, csr, busy, onCreate, onUpload }: CSRPanelProps) {
 
   return (
     <div className="ui-stack">
-      <Field label="Certificate signing request" hint="Waiting for its certificate. Creating a new one replaces the key.">
+      <Field label={t("certificate.csr.label")} hint={t("certificate.csr.hint")}>
         <textarea className="ui-input ui-textarea ui-mono" rows={6} value={csr} readOnly />
       </Field>
       <div className="ui-row">
         <Button icon={<Copy />} onClick={() => void copy()}>
-          {copied ? "Copied" : "Copy"}
+          {copied ? t("certificate.csr.copied") : t("certificate.csr.copy")}
         </Button>
         <Button icon={<DownloadSimple />} onClick={download}>
-          Download
+          {t("certificate.csr.download")}
         </Button>
         <Button variant="primary" onClick={onUpload}>
-          Upload its certificate
+          {t("certificate.csr.uploadCert")}
         </Button>
         <Button disabled={busy} onClick={onCreate}>
-          Create a new CSR
+          {t("certificate.csr.createNew")}
         </Button>
       </div>
     </div>
@@ -357,6 +363,7 @@ function CSRPanel({ name, csr, busy, onCreate, onUpload }: CSRPanelProps) {
 // PanelCertificate is the certificate of the panel's own address, on the
 // System page (ADR-0039). Without an address of its own there is none.
 export function PanelCertificate() {
+  const { t } = useTranslation();
   const [tls, setTLS] = useState<PanelTLS | null>(null);
 
   const load = useCallback(async () => {
@@ -376,7 +383,7 @@ export function PanelCertificate() {
     <CertificateCard
       base={panelCertBase}
       name="panel"
-      title={"Panel certificate (" + tls.domain + ")"}
+      title={t("certificate.panelTitle", { domain: tls.domain })}
       tls={{ ...tls, enabled: true }}
       deletable={false}
       onChange={load}

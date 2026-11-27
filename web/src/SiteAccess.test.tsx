@@ -3,6 +3,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { setLanguage } from "./i18n";
 import { fromAccessForm, lockout, toAccessForm, type AccessSettings, type AccessView } from "./access";
 import { SiteAccess } from "./SiteAccess";
 import type { Site } from "./sites";
@@ -145,5 +146,24 @@ describe("SiteAccess", () => {
     await user.type(screen.getByRole("textbox", { name: "Addresses" }), "198.51.100.1");
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText(/custom nginx snippet/)).toBeInTheDocument();
+  });
+
+  it("speaks German", async () => {
+    setLanguage("de");
+    const calls = mockFetch({
+      ["GET " + path]: { body: view({}) },
+      ["PUT " + path]: (body) => ({ body: view(body as AccessSettings) }),
+    });
+    const user = userEvent.setup();
+    render(<SiteAccess site={site} />);
+
+    expect(await screen.findByRole("heading", { name: "Zugriffsschutz" })).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: /Benutzername und Passwort abfragen/ }));
+    await user.click(screen.getByRole("radio", { name: /Nur für diese Pfade/ }));
+    await user.type(screen.getByRole("textbox", { name: "Pfade" }), "/wp-admin");
+    await user.click(screen.getByRole("button", { name: "Speichern" }));
+
+    expect(await screen.findByText("Gespeichert: auf 1 Pfad wird ein Passwort abgefragt.")).toBeInTheDocument();
+    expect(calls.length).toBeGreaterThan(0);
   });
 });

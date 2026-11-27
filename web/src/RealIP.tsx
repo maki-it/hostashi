@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   fromRealIPForm,
   getPanelRealIP,
@@ -17,8 +18,6 @@ import {
 import type { Site } from "./sites";
 import { Button, Card, Field, Notice, UnsavedNote } from "./ui";
 
-const title = "Real visitor address";
-
 // RealIPCard sets which proxies a site takes the visitor's address from
 // (ADR-0059). Everyone with access to the site may switch Cloudflare and
 // the header; only admins add own addresses, because they also go into
@@ -27,7 +26,7 @@ export function RealIPCard({ site, admin }: { site: Site; admin: boolean }) {
   const name = site.name;
   const load = useCallback(() => getRealIP(name), [name]);
   const save = useCallback((r: WebRealIP) => setRealIP(name, r), [name]);
-  return <RealIPEditor load={load} save={save} admin={admin} text={siteText} />;
+  return <RealIPEditor load={load} save={save} admin={admin} text="site" />;
 }
 
 // PanelRealIPCard is the same setting for the panel's own host name, for
@@ -38,35 +37,14 @@ export function PanelRealIPCard() {
       load={getPanelRealIP}
       save={setPanelRealIP}
       admin
-      text={panelText}
+      text="panel"
     />
   );
 }
 
-type Text = {
-  title: string;
-  intro: string;
-  behind: string;
-  direct: string;
-};
-
-const siteText: Text = {
-  title,
-  intro:
-    "Behind a CDN or load balancer, every request seems to come from the proxy. With this on, nginx takes the visitor's address from a header, but only for requests that really come from the proxies listed here. Logs, PHP, the app and the maintenance allowlist then see the visitor.",
-  behind: "This site is behind a proxy or CDN",
-  direct:
-    "Visitors can still reach the server directly, past the proxy. Let ports 80 and 443 through only from the proxy if the site must not be reached otherwise.",
-};
-
-const panelText: Text = {
-  title: "Real visitor address of the panel",
-  intro:
-    "Only for a panel address behind a CDN or load balancer. nginx then takes the visitor's address from a header, but only for requests from the proxies listed here. The audit log, the login limit and the panel allowlist then see the visitor instead of the proxy.",
-  behind: "The panel is behind a proxy or CDN",
-  direct:
-    "Visitors can still reach the panel directly, past the proxy. The panel allowlist on the Firewall page also checks the visitor's address once this is on, so list the visitors there, not the proxy.",
-};
+// The texts that differ between a site and the panel: realIp.site.* and
+// realIp.panel.*.
+type Text = "site" | "panel";
 
 function RealIPEditor({
   load: get,
@@ -79,6 +57,7 @@ function RealIPEditor({
   admin: boolean;
   text: Text;
 }) {
+  const { t } = useTranslation();
   const [view, setView] = useState<RealIPView | null>(null);
   const [form, setForm] = useState<RealIPForm | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -103,15 +82,15 @@ function RealIPEditor({
 
   if (loadError) {
     return (
-      <Card title={text.title}>
+      <Card title={t(`realIp.${text}.title`)}>
         <Notice tone="err" title={loadError} />
       </Card>
     );
   }
   if (!view || !form) {
     return (
-      <Card title={text.title}>
-        <p aria-busy="true">Loading…</p>
+      <Card title={t(`realIp.${text}.title`)}>
+        <p aria-busy="true">{t("common.status.loading")}</p>
       </Card>
     );
   }
@@ -139,8 +118,8 @@ function RealIPEditor({
       setForm(toRealIPForm(v.realIp));
       setDone(
         realIp.cloudflare || realIp.ranges
-          ? "Saved. nginx takes the visitor's address from the proxy now."
-          : "Saved. No proxy is trusted.",
+          ? t("realIp.saved.on")
+          : t("realIp.saved.off"),
       );
     } catch (err) {
       setError(realIPMessage(err));
@@ -150,9 +129,9 @@ function RealIPEditor({
   }
 
   return (
-    <Card title={text.title}>
+    <Card title={t(`realIp.${text}.title`)}>
       <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
-        <p className="ui-hint">{text.intro}</p>
+        <p className="ui-hint">{t(`realIp.${text}.intro`)}</p>
         <label className="ui-check">
           <input
             type="checkbox"
@@ -160,34 +139,36 @@ function RealIPEditor({
             disabled={busy}
             onChange={(e) => set({ enabled: e.target.checked })}
           />
-          {text.behind}
+          {t(`realIp.${text}.behind`)}
         </label>
         {form.enabled && (
           <fieldset className="ui-fieldset ui-stack" disabled={busy}>
-            <legend>Trusted proxies</legend>
+            <legend>{t("realIp.trusted")}</legend>
             <label className="ui-check">
               <input
                 type="checkbox"
                 checked={form.cloudflare}
                 onChange={(e) => set({ cloudflare: e.target.checked })}
               />
-              Cloudflare ({view.cloudflare.length} ranges, as of{" "}
-              {view.cloudflareDate})
+              {t("realIp.cloudflare", {
+                count: view.cloudflare.length,
+                date: view.cloudflareDate,
+              })}
             </label>
             {form.cloudflare && (
               <details>
-                <summary className="ui-hint">Show Cloudflare's ranges</summary>
+                <summary className="ui-hint">{t("realIp.showRanges")}</summary>
                 <p className="ui-hint ui-mono">{view.cloudflare.join(" ")}</p>
               </details>
             )}
             <Field
-              label="Own proxies"
+              label={t("realIp.own.label")}
               hint={
                 canEditRanges
-                  ? `Addresses or ranges of your load balancer or another CDN, one per line, at most ${view.maxRanges}. Every hop in front of this server must be listed.`
+                  ? t("realIp.own.hint", { max: view.maxRanges })
                   : stored.length > 0
-                    ? "Only admins add addresses. You can remove them."
-                    : "Only admins add addresses of other proxies."
+                    ? t("realIp.own.adminsOnlyRemove")
+                    : t("realIp.own.adminsOnly")
               }
             >
               <textarea
@@ -204,12 +185,12 @@ function RealIPEditor({
               stored.length > 0 &&
               splitRanges(form.ranges).length > 0 && (
                 <Button onClick={() => set({ ranges: "" })}>
-                  Remove own addresses
+                  {t("realIp.own.remove")}
                 </Button>
               )}
             <Field
-              label="Header"
-              hint="X-Forwarded-For works with Cloudflare and most proxies. Choose another only if your proxy sends the address there."
+              label={t("realIp.header.label")}
+              hint={t("realIp.header.hint")}
             >
               <select
                 className="ui-select"
@@ -218,24 +199,20 @@ function RealIPEditor({
               >
                 {view.headers.map((h, i) => (
                   <option key={h} value={i === 0 ? "" : h}>
-                    {i === 0 ? `${h} (recommended)` : h}
+                    {i === 0 ? t("realIp.header.recommended", { header: h }) : h}
                   </option>
                 ))}
               </select>
             </Field>
-            <Notice tone="warn" title={text.direct} />
-            <p className="ui-hint">
-              fail2ban never bans the trusted proxies, so its bans do not stop
-              visitors who come through them. Block those in the proxy, for
-              example with Cloudflare's WAF rules.
-            </p>
+            <Notice tone="warn" title={t(`realIp.${text}.direct`)} />
+            <p className="ui-hint">{t("realIp.fail2ban")}</p>
           </fieldset>
         )}
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || !dirty}>
-            Save
+            {t("common.actions.save")}
           </Button>
           <UnsavedNote dirty={dirty} />
         </div>

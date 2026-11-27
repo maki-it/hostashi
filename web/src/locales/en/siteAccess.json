@@ -1,0 +1,82 @@
+{
+  "settings": {
+    "title": "Access protection",
+    "intro": "nginx checks these rules before the site sees a request, for every file and page. Let's Encrypt still reaches the site, so certificates keep renewing. Behind a CDN such as Cloudflare, switch on the <a>real visitor address</a> under Operations first, or the rules see the CDN instead of the visitor.",
+    "ipRule": "IP rule",
+    "everybody": "Everybody may visit",
+    "allow": "Only these addresses may visit",
+    "deny": "Block these addresses",
+    "addresses": "Addresses",
+    "addressesHint": "Addresses or ranges such as 203.0.113.0/24, one per line, at most {{max}}. Others get 403 Forbidden.",
+    "yourAddress": "Your address as the panel sees it: <code>{{address}}</code>",
+    "lockout": "Your own address is not on the list. You will not be able to open the site from here after saving.",
+    "password": "Password",
+    "askPassword": "Ask for a user name and password",
+    "addUserFirst": "Add a user below first.",
+    "wholeSite": "For the whole site",
+    "onlyPaths": "Only for these paths",
+    "paths": "Paths",
+    "pathsHint": "One per line, at most {{max}}. A path covers everything below it, in any upper or lower case: /wp-admin covers /wp-admin/ and /WP-Admin/users.php, not /wp-administrator.",
+    "bypass": "No password from these addresses",
+    "bypassHint": "Optional, for example your office or an uptime monitor, one per line, at most {{max}}.",
+    "passwordNote": "The site's application no longer gets the browser's Authorization header on protected paths. Each protected request costs nginx a few milliseconds; on a busy site, protect only the admin paths. After 10 wrong passwords in 10 minutes, fail2ban blocks the address for an hour."
+  },
+  "summary": {
+    "allow_one": "only 1 address may visit",
+    "allow_other": "only {{count}} addresses may visit",
+    "deny_one": "1 address is blocked",
+    "deny_other": "{{count}} addresses are blocked",
+    "paths_one": "a password is asked on 1 path",
+    "paths_other": "a password is asked on {{count}} paths",
+    "site": "a password is asked for the whole site",
+    "open": "Saved. Everybody may visit without a password.",
+    "saved": "Saved: {{parts}}."
+  },
+  "users": {
+    "title": "Users",
+    "user": "User",
+    "passwordSet": "Password set",
+    "actions": "Actions",
+    "newPassword": "New password",
+    "newPasswordFor": "New password for {{user}}",
+    "remove": "Remove",
+    "removeUser": "Remove {{user}}",
+    "removeConfirm": "Remove {{user}}?",
+    "lastStays": "The last user stays while the password is on",
+    "none": "No users yet.",
+    "addLegend": "Add a user",
+    "name": "User name",
+    "nameHint": "Letters, digits and . _ @ -, at most 64 characters.",
+    "generate": "Generate a strong password (shown once)",
+    "choose": "Choose a password",
+    "passwordHint": "{{min}} to {{max}} characters.",
+    "add": "Add user",
+    "enterName": "Enter a user name.",
+    "tooShort": "The password needs at least {{min}} characters.",
+    "added": "User {{user}} added.",
+    "renewed": "User {{user}} has a new password.",
+    "removed": "User {{user}} removed."
+  },
+  "secret": {
+    "title": "Save this password now",
+    "text": "Hostashi stores only a hash and cannot show it again. If it is lost, set a new one.",
+    "site": "Site",
+    "copy": "Copy password",
+    "saved": "I have saved it",
+    "copyFailed": "Copying is not possible here. Select the password and copy it by hand."
+  },
+  "problems": {
+    "noAddress": "Enter at least one address for the IP rule.",
+    "noUser": "Add a user first, then switch the password on.",
+    "noPath": "Enter at least one path, or protect the whole site.",
+    "badPath": "The path {{path}} must start with /."
+  },
+  "errors": {
+    "rejected": "Refused: {{reason}}.",
+    "conflict": "A custom nginx snippet of this site already sets access rules. Remove them from the snippet (nginx tab) first: {{reason}}.",
+    "userExists": "The site already has a user with this name.",
+    "userNotFound": "This user does not exist anymore.",
+    "siteGone": "The site does not exist anymore.",
+    "generic": "The setting could not be loaded or saved. Try again."
+  }
+}
