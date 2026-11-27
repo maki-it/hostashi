@@ -148,6 +148,8 @@ x grep -qF "hostashi $old -> " /var/log/hostashi-upgrade.log || fail "upgrade lo
 x test -f "/var/lib/hostashi-installer/upgrade/hostashi-$old.db" || fail "no database copy of $old"
 x systemctl is-active -q hostashi-agent hostashi || fail "services not active"
 health || fail "panel not up after the upgrade"
+# The binary may have moved (to /usr/bin with 0.15, PR 617): look again.
+bin=$(x bash -c 'command -v hostashi')
 got=$(x "$bin" version | head -n 1)
 grep -qF "${new%%[~+-]*}" <<<"$got" || fail "running '$got', expected $new"
 
