@@ -11,7 +11,7 @@ Result of the v1 completeness check. Release 1.0 contains everything that is alr
 - **P0 rows without code:** site types Node.js and reverse proxy; view and tail logs; view and export the audit log; OpenAPI 3.1 specification; CLI with parity; www/non-www redirect as a setting.
 - **Chosen P1 rows:** site type redirect; site type Python; WordPress quick install; vhost templates; change the domain(s) of a site; Cloudflare real IP; staging/cloning; Git deploy (moved from P2); multilingual UI (EN, DE); time zone, hostname, reboot; basic auth and IP blocking per site as a switch; malware scan with ClamAV, opt-in, including the optional real-time mode ([ADR-0064](adr/0064-optional-malware-scan.md), added 2026-11-24).
 - **Databases:** MariaDB stays the only local engine; PostgreSQL only as external servers ([ADR-0051](adr/0051-external-postgresql-servers.md)).
-- **Status on 2026-11-25:** all rows above are built except changing the domain of a site (in progress), WordPress quick install, vhost templates, staging/cloning and the multilingual UI.
+- **Status on 2026-11-27:** all rows above are built except the multilingual UI ([ADR-0071](adr/0071-panel-ui-in-english-and-german.md) is accepted, the work has not started).
 - **Not chosen for 1.0 (open, see below):** adopt mode on an existing server (the CloudPanel importer moves sites onto a fresh server instead), wildcard via DNS-01, remote DB access through an IP allowlist, zero-downtime deployments, export/apply state as YAML, automatic restore test, restore on a new server, notifications through webhook/Telegram/Slack.
 
 ## 3.1 Server and platform

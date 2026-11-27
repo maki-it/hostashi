@@ -81,7 +81,15 @@ ACME_DIR=/var/lib/hostashi-acme
 STATE_FILE=$STATE_DIR/state
 LOG=/var/log/hostashi-install.log
 OS_RELEASE=${HOSTASHI_OS_RELEASE:-/etc/os-release}
-BIN=/usr/local/bin/hostashi
+# The binary the units start: the one of the hostashi package (ADR-0050).
+# Without the package, apply copies --binary here.
+BIN=/usr/bin/hostashi
+# Where installers before 1.0 put the binary; the oldbinary step removes it.
+OLD_BIN=/usr/local/bin/hostashi
+# The checksum of the binary that agent and panel were last restarted for:
+# dpkg replaces BIN itself, so comparing --binary with BIN does not show a
+# new version.
+BIN_SUM=$STATE_DIR/binary.sha256
 OPTIONS_FILE=${HOSTASHI_OPTIONS_FILE:-/etc/hostashi/install.options}
 # The binary of the hostashi package, the default for upgrade.
 PKG_BIN=${HOSTASHI_PKG_BIN:-/usr/bin/hostashi}
@@ -246,7 +254,7 @@ preflight() {
     local p found=""
     for p in apache2 caddy lighttpd mysql-server; do pkg_installed "$p" && found="$found $p"; done
     [ -z "$found" ] || fail "not a fresh server, found installed:$found"
-    if getent passwd hostashi >/dev/null && [ ! -x "$BIN" ]; then
+    if getent passwd hostashi >/dev/null && [ ! -x "$BIN" ] && [ ! -x "$OLD_BIN" ]; then
       fail "a user 'hostashi' exists that this installer did not create"
     fi
   fi
@@ -259,7 +267,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary completion config ssh harden sysctl system nginx php phpversions pgclient malwarescan node python valkey mariadb dbtool backup units service fail2ban firewall updates runtimes quota"
+STEPS="account dirs key binary completion config ssh harden sysctl system nginx php phpversions pgclient malwarescan node python valkey mariadb dbtool backup units service oldbinary fail2ban firewall updates runtimes quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -309,13 +317,36 @@ do_key() {
   head -c 32 /dev/urandom >"$tmp" && chown hostashi:hostashi "$tmp" && chmod 0400 "$tmp" && mv -n "$tmp" /etc/hostashi/secret.key
 }
 
+# With the package, --binary is BIN itself and nothing is copied; the
+# checksum in BIN_SUM tells whether dpkg put a new version there since the
+# last restart.
+bin_sum() { sha256sum <"$BIN" | cut -d' ' -f1; }
 chk_binary() {
   [ -x "$BIN" ] || { echo "binary missing"; return 1; }
-  [ -z "$BINARY" ] || cmp -s "$BINARY" "$BIN" || { echo "binary differs"; return 1; }
+  [ -z "$BINARY" ] || [ "$BINARY" -ef "$BIN" ] || cmp -s "$BINARY" "$BIN" || { echo "binary differs"; return 1; }
   [ "$(stat -c '%a %U:%G' "$BIN")" = "755 root:root" ] || { echo "binary has wrong owner or mode"; return 1; }
+  [ "$(bin_sum)" = "$(cat "$BIN_SUM" 2>/dev/null)" ] || { echo "new binary, services not restarted for it yet"; return 1; }
 }
 do_binary() {
-  install -m 0755 -o root -g root "$BINARY" "$BIN.new" && mv -f "$BIN.new" "$BIN" && BINARY_CHANGED=yes
+  if [ "$BINARY" -ef "$BIN" ]; then
+    chown root:root "$BIN" && chmod 0755 "$BIN" || return 1
+  else
+    install -m 0755 -o root -g root "$BINARY" "$BIN.new" && mv -f "$BIN.new" "$BIN" || return 1
+  fi
+  bin_sum | write_file "$BIN_SUM" 0600 root:root
+  [ $? -le 1 ] || return 1
+  BINARY_CHANGED=yes
+}
+
+# Installers before 1.0 copied the binary to /usr/local/bin. The units
+# start BIN now; a copy left there would come first in PATH and stay at
+# its old version, so it goes once agent and panel run from BIN. No
+# symlink is left behind: nothing of Hostashi calls the old path.
+chk_oldbinary() {
+  [ ! -e "$OLD_BIN" ] && [ ! -L "$OLD_BIN" ] || { echo "$OLD_BIN from an older installer"; return 1; }
+}
+do_oldbinary() {
+  rm -f "$OLD_BIN"
 }
 
 # Shell completion for the CLI. The scripts come from the installed binary

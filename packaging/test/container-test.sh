@@ -226,11 +226,11 @@ x grep -qx 'HOSTASHI_PUBLIC_URL=https://panel.example.com:8443' /etc/hostashi/ho
 health=$(x curl -fsS http://127.0.0.1:8080/api/v1/health)
 echo "$health"
 grep -q '"agent":"ok"' <<<"$health" || fail "panel cannot reach the agent"
-x /usr/local/bin/hostashi ping
+x /usr/bin/hostashi ping
 
 step "hostashi doctor"
 rc=0
-doc=$(x /usr/local/bin/hostashi doctor) || rc=$?
+doc=$(x /usr/bin/hostashi doctor) || rc=$?
 echo "$doc"
 for id in system.os system.pool service.panel service.nginx service.mariadb service.fail2ban service.dbtool; do
   grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"
@@ -244,7 +244,7 @@ done
 grep -Eq "^  WARN  system.firewall .*--no-firewall" <<<"$doc" || fail "doctor: no warning for --no-firewall"
 grep -Eq "^  (ok  |WARN)  system.ssh " <<<"$doc" || fail "doctor: no SSH check"
 [ "$rc" = 0 ] || fail "doctor exited $rc"
-x /usr/local/bin/hostashi doctor -json | grep '"id": "service.nginx"' >/dev/null || fail "doctor -json"
+x /usr/bin/hostashi doctor -json | grep '"id": "service.nginx"' >/dev/null || fail "doctor -json"
 
 expect_mode() {
   local got
@@ -299,7 +299,7 @@ code=$(x curl -s -o /dev/null -w '%{http_code}' -H 'Host: unknown.example.com' h
 [ "$code" = 000 ] || fail "unknown host answered $code, want no answer"
 
 step "the CLI logs in to the panel with an API token (ADR-0058)"
-tok=$(x /usr/local/bin/hostashi setup-token -db /var/lib/hostashi/hostashi.db)
+tok=$(x /usr/bin/hostashi setup-token -db /var/lib/hostashi/hostashi.db)
 pw="test-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 # api METHOD PATH [BODY] prints the status code and leaves the body in /tmp/api.out (container).
 api() {
@@ -334,8 +334,8 @@ secret=$(x cat /tmp/api.out | sed -n 's/.*"secret":"\([A-Z2-7]*\)".*/\1/p')
 scopes=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.dumps([s["name"] for s in json.load(sys.stdin)["scopes"]]))')
 [ "$(api POST /api/v1/tokens "{\"name\":\"installer test\",\"scopes\":$scopes,\"expiresInDays\":1}")" = 201 ] || fail "create token: $(x cat /tmp/api.out)"
 cli_token=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
-xi /usr/local/bin/hostashi login -token http://127.0.0.1:8080 <<<"$cli_token" || fail "hostashi login -token"
-who=$(x /usr/local/bin/hostashi whoami) || fail "whoami: $who"
+xi /usr/bin/hostashi login -token http://127.0.0.1:8080 <<<"$cli_token" || fail "hostashi login -token"
+who=$(x /usr/bin/hostashi whoami) || fail "whoami: $who"
 grep -qx 'kim (admin) at http://127.0.0.1:8080' <<<"$who" || fail "whoami: $who"
 expect_mode /root/.config/hostashi/credentials.json "600 root:root"
 
@@ -345,22 +345,22 @@ expect_mode /root/.config/hostashi/credentials.json "600 root:root"
 if [ "$PART" != runtimes ]; then
 
 step "services and restarts (ADR-0052)"
-svc=$(x /usr/local/bin/hostashi service list)
+svc=$(x /usr/bin/hostashi service list)
 echo "$svc"
 for id in nginx mariadb fail2ban panel agent adminer; do
   grep -Eq "^$id +- +active " <<<"$svc" || fail "service list: $id is not active"
 done
-x /usr/local/bin/hostashi service list -json | grep '"unit": "hostashi-agent.service"' >/dev/null || fail "service list -json"
+x /usr/bin/hostashi service list -json | grep '"unit": "hostashi-agent.service"' >/dev/null || fail "service list -json"
 for u in nginx.service mariadb.service; do
   [ "$(x systemctl show -p Restart --value $u)" = on-failure ] || fail "$u does not restart after a failure"
 done
 expect_mode /etc/systemd/system/mariadb.service.d/hostashi.conf "644 root:root"
-x /usr/local/bin/hostashi service nginx reload >/dev/null || fail "nginx reload through the API"
-x /usr/local/bin/hostashi service nginx restart | grep '"active": "active"' >/dev/null || fail "nginx restart through the API"
-x /usr/local/bin/hostashi service mariadb restart | grep '"active": "active"' >/dev/null || fail "mariadb restart through the API"
+x /usr/bin/hostashi service nginx reload >/dev/null || fail "nginx reload through the API"
+x /usr/bin/hostashi service nginx restart | grep '"active": "active"' >/dev/null || fail "nginx restart through the API"
+x /usr/bin/hostashi service mariadb restart | grep '"active": "active"' >/dev/null || fail "mariadb restart through the API"
 for a in "nginx stop" "agent restart" "panel stop" "ssh stop" "firewall stop"; do
   # shellcheck disable=SC2086 # two words on purpose
-  if x /usr/local/bin/hostashi service $a >/dev/null 2>&1; then fail "service $a was allowed"; fi
+  if x /usr/bin/hostashi service $a >/dev/null 2>&1; then fail "service $a was allowed"; fi
 done
 [ "$(x systemctl is-active nginx.service)" = active ] || fail "nginx stopped"
 # A crashed MariaDB comes back by itself and systemd counts the restart.
@@ -381,7 +381,7 @@ after=$(x systemctl show -p NRestarts --value mariadb.service)
 shown=
 for _ in $(seq 1 30); do
   after=$(x systemctl show -p NRestarts --value mariadb.service)
-  svc=$(x /usr/local/bin/hostashi service list)
+  svc=$(x /usr/bin/hostashi service list)
   if grep -Eq "^mariadb +- +active \(running\) +$after " <<<"$svc"; then shown=1; break; fi
   sleep 1
 done
@@ -395,42 +395,42 @@ curl_ok=$(x curl -fsS http://127.0.0.1:8080/api/v1/health) || fail "panel gone a
 grep -q '"agent":"ok"' <<<"$curl_ok" || fail "panel cannot reach the agent after the service actions"
 
 step "time zone, hostname and reboot (ADR-0060)"
-info=$(x /usr/local/bin/hostashi system info) || fail "system info: $info"
+info=$(x /usr/bin/hostashi system info) || fail "system info: $info"
 echo "$info"
 grep -q '"timezone":' <<<"$info" || fail "system info has no time zone"
 # Read the whole list first: grep -q would stop early and, with pipefail,
 # the SIGPIPE of the writer fails the pipe.
-zones=$(x /usr/local/bin/hostashi system timezones) || fail "system timezones"
+zones=$(x /usr/bin/hostashi system timezones) || fail "system timezones"
 grep -qx Europe/Berlin <<<"$zones" || fail "time zone list has no Europe/Berlin"
 old_tz=$(x timedatectl show -p Timezone --value)
-x /usr/local/bin/hostashi system timezone Europe/Berlin | grep '"timezone": "Europe/Berlin"' >/dev/null || fail "time zone not set"
+x /usr/bin/hostashi system timezone Europe/Berlin | grep '"timezone": "Europe/Berlin"' >/dev/null || fail "time zone not set"
 [ "$(x readlink -f /etc/localtime)" = /usr/share/zoneinfo/Europe/Berlin ] || fail "/etc/localtime does not point to Europe/Berlin"
-if x /usr/local/bin/hostashi system timezone Europe/Atlantis >/dev/null 2>&1; then fail "unknown time zone accepted"; fi
-if x /usr/local/bin/hostashi system timezone ../../etc/passwd >/dev/null 2>&1; then fail "path accepted as time zone"; fi
-x /usr/local/bin/hostashi system timezone "${old_tz:-UTC}" >/dev/null || fail "time zone not set back"
+if x /usr/bin/hostashi system timezone Europe/Atlantis >/dev/null 2>&1; then fail "unknown time zone accepted"; fi
+if x /usr/bin/hostashi system timezone ../../etc/passwd >/dev/null 2>&1; then fail "path accepted as time zone"; fi
+x /usr/bin/hostashi system timezone "${old_tz:-UTC}" >/dev/null || fail "time zone not set back"
 # The test sets the name the container already has: the whole path runs,
 # nothing changes. Docker bind-mounts /etc/hostname and /etc/hosts; the
 # agent then rewrites /etc/hosts in place.
 host=$(x hostname | tr '[:upper:]' '[:lower:]')
 if [[ "$host" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
-  x /usr/local/bin/hostashi system hostname "$host" | grep "\"hostname\": \"$host\"" >/dev/null || fail "hostname not set"
+  x /usr/bin/hostashi system hostname "$host" | grep "\"hostname\": \"$host\"" >/dev/null || fail "hostname not set"
   [ "$(x cat /etc/hostname)" = "$host" ] || fail "/etc/hostname is not $host"
   x grep -Eq "^127\.0\.1\.1[[:space:]]+$host\$" /etc/hosts || fail "/etc/hosts has no 127.0.1.1 line for $host"
 else
   echo "hostname $host is not a valid name for the panel, set skipped"
 fi
-if x /usr/local/bin/hostashi system hostname 'web;reboot' >/dev/null 2>&1; then fail "invalid hostname accepted"; fi
+if x /usr/bin/hostashi system hostname 'web;reboot' >/dev/null 2>&1; then fail "invalid hostname accepted"; fi
 # The reboot itself is not run: it would end the test. A wrong
 # confirmation must not reach logind.
-if x /usr/local/bin/hostashi system reboot not-this-host >/dev/null 2>&1; then fail "reboot without the right hostname"; fi
+if x /usr/bin/hostashi system reboot not-this-host >/dev/null 2>&1; then fail "reboot without the right hostname"; fi
 [ "$(x systemctl is-system-running 2>/dev/null || true)" != stopping ] || fail "the container is shutting down"
 
 step "a site is served, with brotli"
 # The CLI creates the site through the panel's API (ADR-0058): account,
 # domains and virtual host in one go.
-x /usr/local/bin/hostashi site create blog blog.example.com,www.blog.example.com
-x /usr/local/bin/hostashi site list | grep $'^blog\ttype=static\t.*\tdomains=blog.example.com,www.blog.example.com$' >/dev/null ||
-  fail "site list: $(x /usr/local/bin/hostashi site list)"
+x /usr/bin/hostashi site create blog blog.example.com,www.blog.example.com
+x /usr/bin/hostashi site list | grep $'^blog\ttype=static\t.*\tdomains=blog.example.com,www.blog.example.com$' >/dev/null ||
+  fail "site list: $(x /usr/bin/hostashi site list)"
 expect_mode /home/blog "750 blog:www-data"
 expect_mode /home/blog/htdocs "755 blog:blog"
 
@@ -536,7 +536,7 @@ enc=$(x curl -fsS -o /dev/null -D - -H 'Accept-Encoding: br' -H 'Host: blog.exam
 [ "$enc" = "Content-Encoding: br" ] || fail "no brotli response ($enc)"
 
 step "file manager helper runs as the site user (ADR-0040)"
-sock=$(x /usr/local/bin/hostashi site files blog)
+sock=$(x /usr/bin/hostashi site files blog)
 [ "$sock" = /run/hostashi-files/blog.sock ] || fail "file manager socket is '$sock'"
 expect_mode "$sock" "660 root:hostashi"
 expect_mode /etc/systemd/system/hostashi-files@blog.service.d/50-hostashi-site.conf "644 root:root"
@@ -752,8 +752,8 @@ body=$(x curl -fsS -H 'Host: blog.example.com' http://127.0.0.1/)
 [ "$body" = "hello from blog" ] || fail "site gone after the agent restarted: '$body'"
 
 step "remove the site"
-x /usr/local/bin/hostashi site delete blog
-x /usr/local/bin/hostashi site list | grep $'^blog\t' >/dev/null && fail "deleted site still listed"
+x /usr/bin/hostashi site delete blog
+x /usr/bin/hostashi site list | grep $'^blog\t' >/dev/null && fail "deleted site still listed"
 body=$(x curl -sS -H 'Host: blog.example.com' http://127.0.0.1/ 2>/dev/null || true)
 [ "$body" != "hello from blog" ] || fail "deleted site still served"
 x test ! -e /home/blog || fail "site home still there"
@@ -924,8 +924,8 @@ for p in MemoryMax=536870912 TasksMax=96 CPUWeight=50; do
 done
 # The CLI changes single values through the API; the others stay
 # (ADR-0058).
-x /usr/local/bin/hostashi site limits wp memory=268435456 tasks=64 cpu-priority=high >/dev/null || fail "limits through the CLI"
-lim=$(x /usr/local/bin/hostashi site limits wp) || fail "limits not read back"
+x /usr/bin/hostashi site limits wp memory=268435456 tasks=64 cpu-priority=high >/dev/null || fail "limits through the CLI"
+lim=$(x /usr/bin/hostashi site limits wp) || fail "limits not read back"
 case "$lim" in
   "preset=custom memory=268435456 tasks=64 cpu-priority=high cpu-quota=0 disk=1073741824 inodes=10000 php-workers=7 "*) ;;
   *) fail "limits read back: $lim" ;;
@@ -1023,11 +1023,11 @@ step "a database for the PHP site (MariaDB)"
 [ "$(x mariadb -Nse 'SELECT @@bind_address')" = 127.0.0.1 ] || fail "mariadb listens on more than loopback"
 [ "$(x mariadb -Nse 'SELECT @@local_infile')" = 0 ] || fail "mariadb allows LOAD DATA LOCAL"
 expect_mode /etc/mysql/mariadb.conf.d/90-hostashi.cnf "644 root:root"
-x /usr/local/bin/hostashi db create wp wp_db
-xi /usr/local/bin/hostashi db user create wp_db wp_user <<<"Test-db-pass_12345"
-x /usr/local/bin/hostashi db list | grep '^wp_db	site=wp	users=wp_user$' >/dev/null || fail "db list: $(x /usr/local/bin/hostashi db list)"
+x /usr/bin/hostashi db create wp wp_db
+xi /usr/bin/hostashi db user create wp_db wp_user <<<"Test-db-pass_12345"
+x /usr/bin/hostashi db list | grep '^wp_db	site=wp	users=wp_user$' >/dev/null || fail "db list: $(x /usr/bin/hostashi db list)"
 expect_mode /var/lib/hostashi-agent/databases.json "600 root:root"
-if xi /usr/local/bin/hostashi db create wp mysql </dev/null; then fail "system database accepted"; fi
+if xi /usr/bin/hostashi db create wp mysql </dev/null; then fail "system database accepted"; fi
 # The site's PHP reaches its database over the socket, like WordPress with DB_HOST localhost.
 xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/db.php' <<'PHP'
 <?php
@@ -1040,18 +1040,18 @@ PHP
 body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/db.php)
 [ "$body" = "db 42 jailed" ] || fail "PHP with database answered '$body'"
 # Export and import a dump in the site's home, as the site user.
-x /usr/local/bin/hostashi db export wp_db backup.sql.gz
+x /usr/bin/hostashi db export wp_db backup.sql.gz
 expect_mode /home/wp/backup.sql.gz "600 wp:wp"
 x mariadb -e 'DELETE FROM wp_db.t'
-x /usr/local/bin/hostashi db import wp_db backup.sql.gz
+x /usr/bin/hostashi db import wp_db backup.sql.gz
 [ "$(x mariadb -Nse 'SELECT SUM(i) FROM wp_db.t')" = 42 ] || fail "import did not restore the table"
 # The agent keeps its jobs, so a restart does not forget them.
 expect_mode /var/lib/hostashi-agent/database-jobs.json "600 root:root"
 x grep -q '"kind":"export","database":"wp_db","path":"backup.sql.gz"' /var/lib/hostashi-agent/database-jobs.json || fail "export job not kept"
-if x /usr/local/bin/hostashi db import wp_db ../other/backup.sql; then fail "path outside the home accepted"; fi
+if x /usr/bin/hostashi db import wp_db ../other/backup.sql; then fail "path outside the home accepted"; fi
 [ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User LIKE 'hostashi%job%'")" ] || fail "job user left behind"
 x rm -f /home/wp/backup.sql.gz
-x /usr/local/bin/hostashi db delete wp_db
+x /usr/bin/hostashi db delete wp_db
 [ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User='wp_user'")" ] || fail "database user still there"
 # The same through the panel API: the generated password works once, and
 # deleting the site drops its database and user.
@@ -1463,25 +1463,25 @@ else
   echo "no project quota on the loop volume (host lacks quota_v2), pool without disk limits"
   x mkfs.ext4 -q -F "$loopdev"
 fi
-if out=$(x /usr/local/bin/hostashi pool add vol1 /srv/vol1 2>&1); then fail "an unmounted directory became a pool: $out"; fi
+if out=$(x /usr/bin/hostashi pool add vol1 /srv/vol1 2>&1); then fail "an unmounted directory became a pool: $out"; fi
 grep -q 'not a mount point' <<<"$out" || fail "unmounted directory refused without the reason: $out"
 x mount -o "$volopts" "$loopdev" /srv/vol1
 # The container's root mount is private, so a new mount does not reach the
 # agent's own mount namespace as it would on a server (shared /); a restart
 # gives the agent a fresh view.
 x systemctl restart hostashi-agent.service
-for _ in $(seq 1 30); do x /usr/local/bin/hostashi ping >/dev/null 2>&1 && break; sleep 1; done
-if out=$(x /usr/local/bin/hostashi pool add vol1 /srv/vol1 2>&1); then fail "a volume without fstab entry became a pool: $out"; fi
+for _ in $(seq 1 30); do x /usr/bin/hostashi ping >/dev/null 2>&1 && break; sleep 1; done
+if out=$(x /usr/bin/hostashi pool add vol1 /srv/vol1 2>&1); then fail "a volume without fstab entry became a pool: $out"; fi
 grep -q 'no entry in /etc/fstab' <<<"$out" || fail "missing fstab entry refused without the reason: $out"
 x sh -c "echo '$loopdev /srv/vol1 ext4 $volopts,nofail 0 2' >>/etc/fstab"
 x systemctl daemon-reload
 for p in /etc/vol1 /srv/plain /srv; do
-  if x /usr/local/bin/hostashi pool add bad "$p" >/dev/null 2>&1; then fail "$p became a pool"; fi
+  if x /usr/bin/hostashi pool add bad "$p" >/dev/null 2>&1; then fail "$p became a pool"; fi
 done
-x /usr/local/bin/hostashi pool add vol1 /srv/vol1 || fail "pool add"
+x /usr/bin/hostashi pool add vol1 /srv/vol1 || fail "pool add"
 expect_mode /srv/vol1 "711 root:root"
 expect_mode /srv/vol1/.hostashi-pool "644 root:root"
-x /usr/local/bin/hostashi pool list | grep "^vol1	/srv/vol1	sites=0	quota=$volquota$" >/dev/null || fail "pool list: $(x /usr/local/bin/hostashi pool list)"
+x /usr/bin/hostashi pool list | grep "^vol1	/srv/vol1	sites=0	quota=$volquota$" >/dev/null || fail "pool list: $(x /usr/bin/hostashi pool list)"
 # The running PHP master of wp got the new pool hidden right away.
 wpunit="hostashi-php-$ver@wp.service"
 x grep -qx 'TemporaryFileSystem=/srv/vol1:ro' "/etc/systemd/system/$wpunit.d/50-hostashi-slice.conf" || fail "wp's drop-in does not hide vol1"
@@ -1502,41 +1502,41 @@ seen=$(x sh -c "ls -A /proc/\$(systemctl show -p MainPID --value $bigunit)/root/
 seen=$(x sh -c "ls -A /proc/\$(systemctl show -p MainPID --value $bigunit)/root/home")
 [ -z "$seen" ] || fail "big's PHP master sees in /home: $seen"
 if x runuser -u wp -- ls /srv/vol1 >/dev/null 2>&1; then fail "wp lists vol1"; fi
-if x /usr/local/bin/hostashi pool remove vol1 >/dev/null 2>&1; then fail "a pool with a site was removed"; fi
-doc=$(x /usr/local/bin/hostashi doctor || true)
+if x /usr/bin/hostashi pool remove vol1 >/dev/null 2>&1; then fail "a pool with a site was removed"; fi
+doc=$(x /usr/bin/hostashi doctor || true)
 grep -Eq "^  ok    system.pool.volume +pool vol1 \(/srv/vol1\) is mounted with its marker" <<<"$doc" || fail "doctor on vol1: $doc"
 grep -Eq "^  ok    system.quota +/srv/vol1: disk limits are enforced" <<<"$doc" || [ "$volquota" = off ] || fail "doctor quota on vol1: $doc"
 # Rename and default (ADR-0016 addendum 2): through the API, so the
 # panel's site follows; the path and the home stay.
-x /usr/local/bin/hostashi pool rename vol1 fast >/dev/null || fail "pool rename"
-pl=$(x /usr/local/bin/hostashi pool list)
+x /usr/bin/hostashi pool rename vol1 fast >/dev/null || fail "pool rename"
+pl=$(x /usr/bin/hostashi pool list)
 grep "^fast	/srv/vol1	sites=1	" <<<"$pl" >/dev/null || fail "pool list after rename: $pl"
 [ "$(api GET /api/v1/sites/big)" = 200 ] || fail "get big: $(x cat /tmp/api.out)"
 x grep '"pool":"fast"' /tmp/api.out >/dev/null || fail "big after rename: $(x cat /tmp/api.out)"
 [ "$(x curl -fsS -H 'Host: big.example.com' http://127.0.0.1/)" = "big on vol1" ] || fail "big does not answer after the rename"
-x /usr/local/bin/hostashi pool default fast >/dev/null || fail "pool default"
-pl=$(x /usr/local/bin/hostashi pool list)
+x /usr/bin/hostashi pool default fast >/dev/null || fail "pool default"
+pl=$(x /usr/bin/hostashi pool list)
 grep "^fast	/srv/vol1	sites=1	quota=[a-z]*	default$" <<<"$pl" >/dev/null || fail "pool list after default: $pl"
 [ "$(api POST /api/v1/sites '{"name":"dflt","domains":["dflt.example.com"]}')" = 201 ] || fail "create site on the default pool: $(x cat /tmp/api.out)"
 x test -d /srv/vol1/dflt || fail "a site without a pool did not land on the default pool"
 [ "$(api DELETE /api/v1/sites/dflt)" = 204 ] || fail "delete site dflt: $(x cat /tmp/api.out)"
-x /usr/local/bin/hostashi pool default default >/dev/null || fail "pool default back"
+x /usr/bin/hostashi pool default default >/dev/null || fail "pool default back"
 [ "$(api POST /api/v1/pools/fast/rename '{"name":"vol1"}')" = 200 ] || fail "rename back: $(x cat /tmp/api.out)"
 [ "$(api DELETE /api/v1/sites/big)" = 204 ] || fail "delete site big: $(x cat /tmp/api.out)"
 # A missing volume (as after a boot without it): doctor fails the pool and
 # does not report the root disk's free space for its path.
 x umount /srv/vol1
 x systemctl restart hostashi-agent.service
-for _ in $(seq 1 30); do x /usr/local/bin/hostashi ping >/dev/null 2>&1 && break; sleep 1; done
+for _ in $(seq 1 30); do x /usr/bin/hostashi ping >/dev/null 2>&1 && break; sleep 1; done
 rc=0
-doc=$(x /usr/local/bin/hostashi doctor) || rc=$?
+doc=$(x /usr/bin/hostashi doctor) || rc=$?
 [ "$rc" != 0 ] || fail "doctor passed with the pool's volume missing"
 grep -Eq "^  FAIL  system.pool.volume +pool vol1 \(/srv/vol1\) is not available" <<<"$doc" || fail "doctor without vol1: $doc"
 if grep -Eq "^  [a-zA-Z]+ +system.disk +/srv/vol1:" <<<"$doc"; then fail "doctor reports disk space below the missing volume: $doc"; fi
 x mount /srv/vol1
 x systemctl restart hostashi-agent.service
-for _ in $(seq 1 30); do x /usr/local/bin/hostashi ping >/dev/null 2>&1 && break; sleep 1; done
-x /usr/local/bin/hostashi pool remove vol1 || fail "pool remove"
+for _ in $(seq 1 30); do x /usr/bin/hostashi ping >/dev/null 2>&1 && break; sleep 1; done
+x /usr/bin/hostashi pool remove vol1 || fail "pool remove"
 x test ! -e /srv/vol1/.hostashi-pool || fail "marker left after pool remove"
 x grep -q 'TemporaryFileSystem' "/etc/systemd/system/$wpunit.d/50-hostashi-slice.conf" && fail "wp still hides the removed pool"
 x umount /srv/vol1
@@ -1702,7 +1702,7 @@ x sh -c 'DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-reco
 x sh -c 'echo "127.0.0.1 sftp.test" >>/etc/hosts'
 x useradd -m -s /bin/sh u1
 # The agent creates the password and the SSH key with the target.
-xi /usr/local/bin/hostashi backup set <<JSON >/tmp/bk.$$ || fail "backup set"
+xi /usr/bin/hostashi backup set <<JSON >/tmp/bk.$$ || fail "backup set"
 {"version":1,"target":{"user":"$bk_user","host":"$bk_host","port":$bk_port,"path":"$bk_path"},
  "retention":{"daily":7,"weekly":4,"monthly":6},"windowStart":2,"windowEnd":4,"readParts":12}
 JSON
@@ -1712,7 +1712,7 @@ grep -q '"ready": false' /tmp/bk.$$ || fail "ready without a host key: $(cat /tm
 expect_mode /etc/hostashi-agent/backup "700 root:root"
 expect_mode /etc/hostashi-agent/backup/password "600 root:root"
 expect_mode /etc/hostashi-agent/backup/id_ed25519 "600 root:root"
-if xi /usr/local/bin/hostashi backup start </dev/null; then fail "run started without a host key"; fi
+if xi /usr/bin/hostashi backup start </dev/null; then fail "run started without a host key"; fi
 x install -d -m 0700 -o u1 -g u1 /home/u1/.ssh
 xi sh -c 'cat >/home/u1/.ssh/authorized_keys && chown u1:u1 /home/u1/.ssh/authorized_keys && chmod 600 /home/u1/.ssh/authorized_keys' <<<"$pub"
 x sh -c 'mkdir -p /run/sshd && /usr/sbin/sshd -p 2299 -o ListenAddress=127.0.0.1'
@@ -1730,7 +1730,7 @@ x grep -q '"ready":true' /tmp/api.out || fail "not ready after the host key: $(x
 rm -f /tmp/bk.$$
 [ "$(x systemctl is-enabled hostashi-backup.timer)" = enabled ] || fail "backup timer not on after setup"
 x systemctl cat hostashi-backup.timer | grep '^OnCalendar=\*-\*-\* 02:00:00$' >/dev/null || fail "timer window not applied"
-x /usr/local/bin/hostashi backup key show | grep '^restic password: ' >/dev/null || fail "backup key show"
+x /usr/bin/hostashi backup key show | grep '^restic password: ' >/dev/null || fail "backup key show"
 r() { x env "RESTIC_REPOSITORY=sftp://$bk_user@$bk_host:$bk_port/$bk_path" RESTIC_PASSWORD_FILE=/etc/hostashi-agent/backup/password \
   restic -o 'sftp.args=-F /dev/null -i /etc/hostashi-agent/backup/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/hostashi-agent/backup/known_hosts' --no-cache "$@"; }
 # A site with a file and a database.
@@ -1743,7 +1743,7 @@ x mariadb -e "CREATE TABLE bk_db.t (v VARCHAR(20)); INSERT INTO bk_db.t VALUES (
 x systemctl start hostashi-backup.service || fail "backup run failed: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 x grep -q '"ok": true' /var/lib/hostashi-agent/backup/status.json || fail "status: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 x grep -q '"initialized": true' /var/lib/hostashi-agent/backup/status.json || fail "first run did not create the repository"
-x /usr/local/bin/hostashi backup status | grep '"ok": true' >/dev/null || fail "backup status through the API"
+x /usr/bin/hostashi backup status | grep '"ok": true' >/dev/null || fail "backup status through the API"
 if [ "$(api GET /api/v1/sites/bk/backups)" != 200 ] || ! x grep -q '"kind":"db","database":"bk_db"' /tmp/api.out; then
   fail "site snapshots through the API: $(x cat /tmp/api.out)"
 fi
@@ -1825,7 +1825,7 @@ x runuser -u oldsite -- sh -c 'chmod 4755 /home/oldsite/htdocs/example.com/wp-co
 x runuser -u oldsite -- ln -s /etc/shadow /home/oldsite/htdocs/example.com/shadow-link
 x sh -c 'echo secret >/home/oldsite/htdocs/example.com/root-file'
 [ "$(api POST /api/v1/sites '{"name":"cpimp","domains":["cpimp.example.com"]}')" = 201 ] || fail "create site cpimp: $(x cat /tmp/api.out)"
-if xi /usr/local/bin/hostashi cloudpanel import cpimp oldsite /home/oldsite/htdocs/example.com </dev/null >/dev/null 2>&1; then
+if xi /usr/bin/hostashi cloudpanel import cpimp oldsite /home/oldsite/htdocs/example.com </dev/null >/dev/null 2>&1; then
   fail "import started without a migration source"
 fi
 [ "$(api PUT /api/v1/migrations/cloudpanel/source '{"host":"127.0.0.1","port":2298}')" = 200 ] || fail "set source: $(x cat /tmp/api.out)"
@@ -1854,10 +1854,10 @@ x mariadb -e "CREATE DATABASE olddb; CREATE TABLE olddb.t (v VARCHAR(20)); INSER
 for d in cpimp_db cpimp_db2; do
   [ "$(api POST /api/v1/sites/cpimp/databases "{\"name\":\"$d\"}")" = 201 ] || fail "create $d: $(x cat /tmp/api.out)"
 done
-if xi /usr/local/bin/hostashi cloudpanel import cpimp oldsite /home/oldsite/htdocs/example.com olddb:cpimp_db </dev/null >/dev/null 2>&1; then
+if xi /usr/bin/hostashi cloudpanel import cpimp oldsite /home/oldsite/htdocs/example.com olddb:cpimp_db </dev/null >/dev/null 2>&1; then
   fail "database import started without the dump user"
 fi
-x sh -c '/usr/local/bin/hostashi cloudpanel database >/tmp/cpdb.sql' || fail "cloudpanel database"
+x sh -c '/usr/bin/hostashi cloudpanel database >/tmp/cpdb.sql' || fail "cloudpanel database"
 x grep -q "^CREATE OR REPLACE USER 'hostashi_import'@'127.0.0.1' IDENTIFIED BY '[A-Za-z0-9]\{32\}';$" /tmp/cpdb.sql || fail "dump user SQL: $(x cat /tmp/cpdb.sql)"
 x sh -c 'mariadb </tmp/cpdb.sql && rm /tmp/cpdb.sql' || fail "create the dump user"
 expect_mode /var/lib/hostashi-agent/cloudpanel/db_password "600 root:root"
@@ -1865,10 +1865,10 @@ expect_mode /var/lib/hostashi-agent/cloudpanel/db_password "600 root:root"
 x grep -q '"dbUser":"hostashi_import"' /tmp/api.out || fail "source without dump user: $(x cat /tmp/api.out)"
 cp_import() {
   local id
-  id=$(x /usr/local/bin/hostashi cloudpanel import cpimp oldsite /home/oldsite/htdocs/example.com "$@" | sed -n 's/.*"id": "\([0-9a-f]\{16\}\)".*/\1/p')
+  id=$(x /usr/bin/hostashi cloudpanel import cpimp oldsite /home/oldsite/htdocs/example.com "$@" | sed -n 's/.*"id": "\([0-9a-f]\{16\}\)".*/\1/p')
   [ -n "$id" ] || fail "import did not start"
   for _ in $(seq 1 90); do
-    x /usr/local/bin/hostashi cloudpanel import-status "$id" >/tmp/cp.$$ 2>&1 || true
+    x /usr/bin/hostashi cloudpanel import-status "$id" >/tmp/cp.$$ 2>&1 || true
     grep -q '"state": "\(done\|failed\)"' /tmp/cp.$$ && break
     sleep 1
   done
@@ -1884,7 +1884,7 @@ dump=$(sed -n 's/.*"\(cloudpanel-import-db\/cpimp_db-[0-9-]*\.sql\)".*/\1/p' <<<
 [ -n "$dump" ] || fail "no dump in $out"
 expect_mode "/home/cpimp/$dump" "600 cpimp:cpimp"
 expect_mode /home/cpimp/cloudpanel-import-db "700 cpimp:cpimp"
-x /usr/local/bin/hostashi db import cpimp_db "$dump" || fail "db import of the dump"
+x /usr/bin/hostashi db import cpimp_db "$dump" || fail "db import of the dump"
 [ "$(x mariadb -N -e 'SELECT v FROM cpimp_db.t')" = "from web2" ] || fail "imported content"
 dump2=$(sed -n 's/.*"\(cloudpanel-import-db\/cpimp_db2-[0-9-]*\.sql\)".*/\1/p' <<<"$out")
 x grep -q 'TRIGGER.*tg' "/home/cpimp/$dump2" || fail "trigger not dumped: $(x grep -i 'create\|trigger' "/home/cpimp/$dump2")"
@@ -2904,7 +2904,7 @@ x sh -c 'grep -v " mysql8\.test$" /etc/hosts >/tmp/hosts && cat /tmp/hosts >/etc
 fi # runtimes
 
 step "root gets an account back (ADR-0035)"
-out=$(x /usr/local/bin/hostashi user recover kim) || fail "user recover: $out"
+out=$(x /usr/bin/hostashi user recover kim) || fail "user recover: $out"
 echo "$out"
 inv=$(sed -n 's|^  https://[^/]*/#/invite/\([A-Za-z0-9_-]*\)$|\1|p' <<<"$out")
 [ -n "$inv" ] || fail "no invitation link with the panel address"

@@ -117,7 +117,7 @@ func TestStartWritesRun(t *testing.T) {
 	rel := e.home + "/.deploy/releases/7"
 
 	for _, want := range []string{
-		"ExecStart=\nExecStart=/usr/local/bin/hostashi git-sync \"-url=https://git.example.com/acme/site.git\" \"-branch=main\" \"-auth=token\"",
+		"ExecStart=\nExecStart=/usr/bin/hostashi git-sync \"-url=https://git.example.com/acme/site.git\" \"-branch=main\" \"-auth=token\"",
 		`"-release=` + rel + `"`, `"-cache=` + e.home + `/.deploy/repo"`, `"-result=` + e.home + `/.deploy/results/7.json"`,
 		"-token-file=%d/token", `"-token-user=deploy"`, `"-shared-dir=` + e.home + `/.deploy/shared"`, `"-shared=.env"`, `"-shared=storage"`,
 		"LoadCredential=token:" + filepath.Join(e.m.CredDir, "blog", "token") + "\n",

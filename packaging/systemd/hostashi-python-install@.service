@@ -19,7 +19,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/hostashi python-install %i
+ExecStart=/usr/bin/hostashi python-install %i
 TimeoutStartSec=15min
 # No core dumps (ADR-0033).
 LimitCORE=0

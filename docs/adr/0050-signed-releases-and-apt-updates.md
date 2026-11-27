@@ -153,6 +153,8 @@ What the package does:
 
 The package never changes site configs by itself; the agent's reconciler re-applies nginx and PHP configs only if the new release changed a template, the same path as a panel action. No new agent operation and no new `os/exec` exception: maintainer scripts and the installer run as root outside the panel, like the installer today.
 
+**Addendum (2026-11-27): the units start `/usr/bin/hostashi`.** Until 0.14 the installer copied the package's binary to `/usr/local/bin/hostashi` and the units started that copy. Now every unit, the agent's generated drop-ins (Git deploy, WordPress install) and the installer use `/usr/bin/hostashi`, the file of the package; without the package, `apply --binary PATH` copies to `/usr/bin/hostashi`. Since dpkg replaces that file itself, the installer keeps the checksum of the binary that agent and panel were last restarted for (`/var/lib/hostashi-installer/binary.sha256`) and restarts them when it changes. A new step `oldbinary`, after the restart, removes `/usr/local/bin/hostashi`; no compatibility symlink stays, because nothing of Hostashi calls the old path and an old copy would come first in `PATH`. A downgrade with `hostashi-rollback` to 0.14 or older brings the old layout back, the next upgrade moves it again.
+
 ## 5. Rollback
 
 Decided by Kim (2026-11-21) as below.

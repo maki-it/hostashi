@@ -120,7 +120,7 @@ step "first install changes nothing and says how to set up"
 out=$(apt /pkg/hostashi.deb 2>&1) || { echo "$out" >&2; fail "apt install"; }
 grep -q 'Set the server up with' <<<"$out" || fail "no setup hint: $out"
 x test ! -e /etc/hostashi/install.options || fail "options file before setup"
-x test ! -e /usr/local/bin/hostashi || fail "binary installed before setup"
+x test ! -e /etc/systemd/system/hostashi.service || fail "units installed before setup"
 
 step "set up with the installer"
 x /usr/share/hostashi/install.sh apply --yes --binary /usr/bin/hostashi --no-firewall >/dev/null || {
@@ -137,6 +137,25 @@ x bash -c 'install -m 0644 /repo/hostashi.asc /usr/share/keyrings/hostashi-test.
   printf "Types: deb\nURIs: file:/repo\nSuites: stable\nComponents: main\nSigned-By: /usr/share/keyrings/hostashi-test.asc\n" >/etc/apt/sources.list.d/hostashi.sources'
 x test ! -e /etc/apt/sources.list.d/hostashi-runtimes.sources || fail "suite runtimes before the upgrade"
 
+# agent_pid prints the main PID of hostashi-agent.
+agent_pid() { x systemctl show -p MainPID --value hostashi-agent.service; }
+step "setup starts the package's binary"
+[ "$(x readlink "/proc/$(agent_pid)/exe")" = /usr/bin/hostashi ] || fail "agent does not run /usr/bin/hostashi"
+x test ! -e /usr/local/bin/hostashi || fail "a copy in /usr/local/bin after setup"
+[ "$(x cat /var/lib/hostashi-installer/binary.sha256)" = "$(x sh -c 'sha256sum </usr/bin/hostashi | cut -d" " -f1')" ] || fail "binary checksum not noted"
+
+# A server set up by 0.14 or older: the installer copied the binary to
+# /usr/local/bin, the units started that copy and no checksum was kept.
+step "a server with the binary in /usr/local/bin (before 1.0)"
+x bash -c 'set -e
+  install -m 0755 /usr/bin/hostashi /usr/local/bin/hostashi
+  sed -i "s#/usr/bin/hostashi#/usr/local/bin/hostashi#g" /etc/systemd/system/hostashi*.service
+  rm -f /var/lib/hostashi-installer/binary.sha256
+  systemctl daemon-reload
+  systemctl restart hostashi-agent.service hostashi.service'
+health || fail "panel not up on the old layout"
+[ "$(x readlink "/proc/$(agent_pid)/exe")" = /usr/local/bin/hostashi ] || fail "old layout not set up"
+
 step "upgrade keeps a database copy and restarts the panel"
 out=$(apt /pkg/hostashi-1.deb 2>&1) || { echo "$out" >&2; fail "upgrade"; }
 grep -q "saved to /var/lib/hostashi-installer/upgrade/hostashi-$v.db" <<<"$out" || fail "no database copy reported: $out"
@@ -147,6 +166,21 @@ x grep -q ' is up$' /var/log/hostashi-upgrade.log || fail "postinst did not see 
 [ "$(x dpkg-query -W -f '${Status} ${Version}' hostashi)" = "install ok installed $v.1" ] || fail "not configured"
 x systemctl is-active -q hostashi-agent hostashi || fail "services not active"
 health || fail "panel not up after upgrade"
+
+step "the upgrade moves the server off /usr/local/bin"
+x test ! -e /usr/local/bin/hostashi || fail "/usr/local/bin/hostashi still there"
+if x grep -l /usr/local/bin/hostashi -r /etc/systemd/system; then fail "a unit still starts /usr/local/bin/hostashi"; fi
+for u in hostashi-agent hostashi; do
+  pid=$(x systemctl show -p MainPID --value "$u.service")
+  [ "$(x readlink "/proc/$pid/exe")" = /usr/bin/hostashi ] || fail "$u does not run /usr/bin/hostashi"
+done
+for u in hostashi-backup.service hostashi-dbjob@.service hostashi-restore@.service hostashi-files@.service hostashi-wpcli-install.service; do
+  x systemctl cat "$u" | grep '^ExecStart=/usr/bin/hostashi ' >/dev/null || fail "$u does not start /usr/bin/hostashi"
+done
+[ "$(x bash -lc 'command -v hostashi')" = /usr/bin/hostashi ] || fail "hostashi in PATH is not /usr/bin/hostashi"
+x bash -c 'source /usr/local/share/bash-completion/completions/hostashi && COMP_WORDS=(hostashi site li) COMP_CWORD=2 && _hostashi && [ "${COMPREPLY[*]}" = "list limits" ]' ||
+  fail "bash completion after the move"
+x test -S /run/hostashi/agent.sock || fail "agent socket missing after the move"
 
 # runtimes_installed waits up to 120 s for hostashi-runtimes: the unit the
 # upgrade started waits for dpkg's lock.
@@ -173,6 +207,16 @@ out=$(x /usr/share/hostashi/install.sh upgrade 2>&1) || { echo "$out" >&2; fail 
 grep -q 'installing it in the background' <<<"$out" || fail "install.sh upgrade did not start the install: $out"
 runtimes_installed || fail "hostashi-runtimes not installed after install.sh upgrade"
 health || fail "panel not up after install.sh upgrade"
+
+step "install.sh upgrade restarts agent and panel for a binary dpkg replaced"
+pid=$(agent_pid)
+x sh -c 'echo 0000 >/var/lib/hostashi-installer/binary.sha256'
+out=$(x /usr/share/hostashi/install.sh upgrade 2>&1) || { echo "$out" >&2; fail "install.sh upgrade"; }
+grep -q 'binary: new binary, services not restarted for it yet' <<<"$out" || fail "changed binary not seen: $out"
+[ "$(agent_pid)" != "$pid" ] || fail "agent not restarted for the new binary"
+health || fail "panel not up after the restart"
+out=$(x /usr/share/hostashi/install.sh upgrade 2>&1) || { echo "$out" >&2; fail "second install.sh upgrade"; }
+grep -q 'changes=0' <<<"$out" || fail "second upgrade changed something: $out"
 
 step "broken saved options stop the upgrade until fixed"
 x chmod 0666 /etc/hostashi/install.options

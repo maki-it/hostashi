@@ -68,7 +68,7 @@ x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-fire
   { x tail -n 40 /var/log/hostashi-install.log >&2; die "install"; }
 
 step "admin and login"
-tok=$(x /usr/local/bin/hostashi setup-token -db /var/lib/hostashi/hostashi.db)
+tok=$(x /usr/bin/hostashi setup-token -db /var/lib/hostashi/hostashi.db)
 pw="test-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 cookie=""
 api() {
@@ -159,7 +159,7 @@ code=$(api GET /api/v1/sites/big/limits)
 res quota.api "HTTP $code $(x head -c 200 /tmp/api.out)"
 
 step "doctor with two pools"
-res doctor "$(x /usr/local/bin/hostashi doctor 2>&1 | grep -E 'pool|quota|disk|vol1' | tr '\n' '|')"
+res doctor "$(x /usr/bin/hostashi doctor 2>&1 | grep -E 'pool|quota|disk|vol1' | tr '\n' '|')"
 
 step "the volume goes away (lazy unmount, like a detached volume)"
 x umount -l /srv/vol1
@@ -181,7 +181,7 @@ code=$(api GET /api/v1/sites/big/limits)
 res unmounted.quota "HTTP $code $(x head -c 150 /tmp/api.out)"
 code=$(api DELETE /api/v1/sites/big)
 res unmounted.delete "HTTP $code $(x head -c 200 /tmp/api.out) user:$(x getent passwd big | cut -d: -f1)"
-res unmounted.doctor "$(x /usr/local/bin/hostashi doctor 2>&1 | grep -E 'pool|quota|disk|vol1' | tr '\n' '|')"
+res unmounted.doctor "$(x /usr/bin/hostashi doctor 2>&1 | grep -E 'pool|quota|disk|vol1' | tr '\n' '|')"
 code=$(api PUT /api/v1/sites/small/domains '{"domains":["small.example.com","www.small.example.com"]}')
 res unmounted.other.site.change "HTTP $code $(x head -c 150 /tmp/api.out)"
 res unmounted.agent.restart "$(x systemctl restart hostashi-agent.service && sleep 2 && x systemctl is-active hostashi-agent.service)"

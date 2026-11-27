@@ -100,7 +100,7 @@ func TestStartWritesUnitAndCredentials(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"ExecStart=/usr/local/bin/hostashi wp-run /opt/hostashi/wp-cli/" + agentapi.WPCLI.Version + "/wp-cli.phar\n",
+		"ExecStart=/usr/bin/hostashi wp-run /opt/hostashi/wp-cli/" + agentapi.WPCLI.Version + "/wp-cli.phar\n",
 		"LoadCredential=dbpass:" + filepath.Join(e.base, "creds", "blog", "dbpass"),
 		"StandardOutput=truncate:" + filepath.Join(e.base, "logs", "blog", LogName),
 	} {
