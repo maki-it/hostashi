@@ -2716,7 +2716,7 @@ x test ! -e "/opt/hostashi/node/.old-$NODE_MAJOR" || fail "removed tree of Node.
 # panel gets an own (self-signed) one, and the curl helper is set up again.
 tlsdir=$(mktemp -d)
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 2 -subj /CN=other.example.com \
-  -addext subjectAltName=DNS:other.example.com -keyout "$tlsdir/key.pem" -out "$tlsdir/cert.pem" 2>/dev/null
+  -addext subjectAltName=DNS:other.example.com -addext basicConstraints=critical,CA:FALSE -addext extendedKeyUsage=serverAuth -keyout "$tlsdir/key.pem" -out "$tlsdir/cert.pem" 2>/dev/null
 [ "$(api PUT /api/v1/panel/tls/certificate "{\"certificate\":$(jq -Rs . <"$tlsdir/cert.pem"),\"key\":$(jq -Rs . <"$tlsdir/key.pem"),\"allowUntrusted\":true}")" = 200 ] ||
   fail "own panel certificate: $(x cat /tmp/api.out)"
 rm -rf "$tlsdir"
