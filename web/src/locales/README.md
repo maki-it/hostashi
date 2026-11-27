@@ -72,9 +72,11 @@ The same English term is always translated the same way.
 | user (role, page) | Benutzer | |
 | API token | API-Token | das Token |
 | app profile | App-Profil | |
+| allowlist | Allowlist | die Allowlist |
 | audit log | Audit-Log | |
 | availability (site) | Erreichbarkeit | |
 | backup | Backup | das Backup; restore: wiederherstellen |
+| blocked address | gesperrte Adresse | fail2ban; unblock: entsperren |
 | certificate | Zertifikat | |
 | check (Health) | Prüfung | |
 | colour scheme | Farbschema | |
@@ -102,6 +104,7 @@ The same English term is always translated the same way.
 | home (of a site) | Home-Verzeichnis | |
 | host key | Host-Key | |
 | invitation | Einladung | invitation link: Einladungslink |
+| jail (fail2ban) | Jail | das Jail |
 | limit preset | Limit-Vorlage | |
 | log in / log out | anmelden / abmelden | |
 | maintenance page | Wartungsseite | |
@@ -116,6 +119,7 @@ The same English term is always translated the same way.
 | password | Passwort | |
 | quarantine | Quarantäne | |
 | real-time scan | Echtzeit-Scan | |
+| reboot | Neustart | neu starten |
 | recovery code | Wiederherstellungscode | |
 | redirect | Weiterleitung | |
 | release (Git deploy) | Release | das Release |

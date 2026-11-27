@@ -3,15 +3,11 @@
 import { RuntimesHead } from "./Runtimes";
 import { DownloadSimple, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
-import { daysUntil, getPHPInstall, installPHP, phpMessage, removePHP, support, todayUTC, type PHPInstall, type Support } from "./php";
+import { useTranslation } from "react-i18next";
+import { daysUntil, formatDay, getPHPInstall, installPHP, phpMessage, removePHP, support, todayUTC, type PHPInstall, type Support } from "./php";
 import { listSites, phpVersions, type PHPVersions, type Site } from "./sites";
 import { Badge, Button, Card, IconButton, JobCard, Notice, Table, useJobCard, type Column, type Sort, type Tone } from "./ui";
 
-const supportLabel: Record<Support, string> = {
-  active: "Supported",
-  security: "Security fixes only",
-  eol: "End of life",
-};
 const supportTone: Record<Support, Tone> = { active: "ok", security: "warn", eol: "err" };
 
 type QueryProps = {
@@ -33,6 +29,7 @@ export function PHPPage({
   query = new URLSearchParams(),
   onQuery = () => undefined,
 }: { today?: string; poll?: number } & QueryProps) {
+  const { t } = useTranslation();
   const [versions, setVersions] = useState<PHPVersions | null>(null);
   const [inst, setInst] = useState<PHPInstall | null>(null);
   const [sites, setSites] = useState<Site[] | null>(null);
@@ -97,7 +94,7 @@ export function PHPPage({
     onQuery(next);
   };
 
-  const head = <RuntimesHead active="php" description={"The distribution's PHP is always installed. More versions come from the sury.org repository and get their updates automatically; one that no site uses can be removed."} />;
+  const head = <RuntimesHead active="php" description={t("server.runtimes.php.description")} />;
 
   if (!versions || !inst) {
     return (
@@ -105,10 +102,10 @@ export function PHPPage({
         {head}
         {error ? (
           <Notice tone="err" title={error}>
-            <Button onClick={() => void load()}>Try again</Button>
+            <Button onClick={() => void load()}>{t("common.actions.tryAgain")}</Button>
           </Notice>
         ) : (
-          <p aria-busy="true">Loading…</p>
+          <p aria-busy="true">{t("server.runtimes.loading")}</p>
         )}
       </>
     );
@@ -127,49 +124,53 @@ export function PHPPage({
   const columns: Column<Row>[] = [
     {
       key: "version",
-      header: "Version",
+      header: t("server.runtimes.version"),
       sortValue: (r) => r.version,
       cell: (r) => (
         <span className="ui-row">
-          <strong>PHP {r.version}</strong>
-          {versions.distro === r.version && <Badge tone="off">Distribution</Badge>}
+          <strong>{"PHP " + r.version}</strong>
+          {versions.distro === r.version && <Badge tone="off">{t("server.runtimes.php.distribution")}</Badge>}
         </span>
       ),
     },
     {
       key: "support",
-      header: "Upstream support",
+      header: t("server.runtimes.upstream"),
       sortValue: (r) => r.until,
       cell: (r) => {
         const left = r.until ? daysUntil(r.until, today) : -1;
         return (
           <div className="ui-cell-main">
             <span className="ui-row">
-              <Badge tone={supportTone[r.support]}>{supportLabel[r.support]}</Badge>
+              <Badge tone={supportTone[r.support]}>{t(`server.runtimes.php.support.${r.support}`)}</Badge>
             </span>
-            {r.until && <span>{r.support === "eol" ? "no security fixes since " + r.until : "security fixes until " + r.until}</span>}
+            {r.until && (
+              <span>
+                {r.support === "eol"
+                  ? t("server.runtimes.php.noSecuritySince", { date: formatDay(r.until) })
+                  : t("server.runtimes.php.securityUntil", { date: formatDay(r.until) })}
+              </span>
+            )}
             {r.support !== "eol" && left >= 0 && left <= 60 && (
-              <p className="ui-error">
-                Security fixes end in {left === 1 ? "1 day" : left + " days"}. Move its sites to a newer version.
-              </p>
+              <p className="ui-error">{t("server.runtimes.php.securityEnds", { count: left })}</p>
             )}
           </div>
         );
       },
     },
-    ...(sites ? [{ key: "sites", header: "Sites", sortValue: (r: Row) => r.sites ?? 0, cell: (r: Row) => r.sites ?? "" }] : []),
+    ...(sites ? [{ key: "sites", header: t("server.runtimes.sites"), sortValue: (r: Row) => r.sites ?? 0, cell: (r: Row) => r.sites ?? "" }] : []),
     {
       key: "status",
-      header: "Status",
+      header: t("server.runtimes.status"),
       sortValue: (r) => (r.installed ? 0 : 1),
       cell: (r) =>
         inst.state === "running" && inst.version === r.version ? (
-          <span aria-busy="true">{inst.action === "remove" ? "Removing…" : "Installing…"}</span>
+          <span aria-busy="true">{inst.action === "remove" ? t("server.runtimes.removing") : t("server.runtimes.installing")}</span>
         ) : r.installed ? (
           <span className="ui-row">
-            <Badge tone="ok">Installed</Badge>
+            <Badge tone="ok">{t("server.runtimes.installed")}</Badge>
             {r.sites === 0 && versions.distro !== r.version && (
-              <IconButton label={"Remove PHP " + r.version} text="Remove" icon={<Trash size={16} aria-hidden="true" />} danger disabled={running} onClick={() => setConfirmRemove(r.version)} />
+              <IconButton label={t("server.runtimes.removeName", { name: "PHP " + r.version })} text={t("server.runtimes.remove")} icon={<Trash size={16} aria-hidden="true" />} danger disabled={running} onClick={() => setConfirmRemove(r.version)} />
             )}
           </span>
         ) : (
@@ -178,7 +179,7 @@ export function PHPPage({
             disabled={running}
             onClick={() => (r.support === "eol" ? setConfirm(r.version) : void start(r.version, false))}
           >
-            Install PHP {r.version}
+            {t("server.runtimes.installName", { name: "PHP " + r.version })}
           </Button>
         ),
     },
@@ -194,17 +195,18 @@ export function PHPPage({
       {confirm && (
         <section className="ui-card ui-card-body ui-stack" role="alertdialog" aria-labelledby="php-eol-title">
           <h2 id="php-eol-title" className="ui-flush">
-            Install PHP {confirm} without security fixes?
+            {t("server.runtimes.php.eolTitle", { version: confirm })}
           </h2>
           <p className="ui-flush">
-            PHP {confirm} gets no security fixes from PHP since {versions.securityUntil?.[confirm] ?? "its end of life"}. Install it only
-            for an old application that cannot move yet, and plan the move.
+            {versions.securityUntil?.[confirm]
+              ? t("server.runtimes.php.eolText", { version: confirm, date: formatDay(versions.securityUntil[confirm]) })
+              : t("server.runtimes.php.eolTextNoDate", { version: confirm })}
           </p>
           <div className="ui-row">
             <Button variant="danger" onClick={() => void start(confirm, true)}>
-              Install anyway
+              {t("server.runtimes.php.installAnyway")}
             </Button>
-            <Button onClick={() => setConfirm(null)}>Cancel</Button>
+            <Button onClick={() => setConfirm(null)}>{t("common.actions.cancel")}</Button>
           </div>
         </section>
       )}
@@ -212,14 +214,14 @@ export function PHPPage({
       {confirmRemove && (
         <section className="ui-card ui-card-body ui-stack" role="alertdialog" aria-labelledby="php-remove-title">
           <h2 id="php-remove-title" className="ui-flush">
-            Remove PHP {confirmRemove}?
+            {t("server.runtimes.removeTitle", { name: "PHP " + confirmRemove })}
           </h2>
-          <p className="ui-flush">No site runs on it. Its packages and settings are removed from the server; you can install it again later.</p>
+          <p className="ui-flush">{t("server.runtimes.php.removeText")}</p>
           <div className="ui-row">
             <Button variant="danger" onClick={() => void remove(confirmRemove)}>
-              Remove
+              {t("server.runtimes.remove")}
             </Button>
-            <Button onClick={() => setConfirmRemove(null)}>Cancel</Button>
+            <Button onClick={() => setConfirmRemove(null)}>{t("common.actions.cancel")}</Button>
           </div>
         </section>
       )}
@@ -227,50 +229,53 @@ export function PHPPage({
       {job.show && inst.version && (
         <JobCard
           title={
-            inst.action === "remove"
-              ? inst.state === "running"
-                ? "Removing PHP " + inst.version + "…"
-                : inst.state === "succeeded"
-                  ? "PHP " + inst.version + " was removed"
-                  : "Removing PHP " + inst.version + " failed"
-              : inst.state === "running"
-                ? "Installing PHP " + inst.version + "…"
-                : inst.state === "succeeded"
-                  ? "PHP " + inst.version + " was installed"
-                  : "Installing PHP " + inst.version + " failed"
+            t(
+              inst.action === "remove"
+                ? inst.state === "running"
+                  ? "server.runtimes.jobRemoving"
+                  : inst.state === "succeeded"
+                    ? "server.runtimes.jobRemoved"
+                    : "server.runtimes.jobRemoveFailed"
+                : inst.state === "running"
+                  ? "server.runtimes.jobInstalling"
+                  : inst.state === "succeeded"
+                    ? "server.runtimes.jobInstalled"
+                    : "server.runtimes.jobInstallFailed",
+              { name: "PHP " + inst.version },
+            )
           }
           state={inst.state}
           log={inst.log}
-          logLabel={inst.action === "remove" ? "Removal log" : "Installation log"}
+          logLabel={inst.action === "remove" ? t("server.runtimes.removeLog") : t("server.runtimes.installLog")}
           onClose={job.close}
         >
           {inst.state === "failed" && (
-            <Notice tone="err" title={(inst.action === "remove" ? "The removal" : "The installation") + " did not finish. The log shows why; you can try again."} />
+            <Notice tone="err" title={inst.action === "remove" ? t("server.runtimes.removeFailed") : t("server.runtimes.installFailed")} />
           )}
         </JobCard>
       )}
 
       <Card padded={false}>
         <div className="ui-filters">
-          <select className="ui-select" aria-label="Show" value={onlyInstalled ? "installed" : ""} onChange={(e) => set({ show: e.target.value })}>
-            <option value="">All versions</option>
-            <option value="installed">Installed only</option>
+          <select className="ui-select" aria-label={t("server.runtimes.php.show")} value={onlyInstalled ? "installed" : ""} onChange={(e) => set({ show: e.target.value })}>
+            <option value="">{t("server.runtimes.php.all")}</option>
+            <option value="installed">{t("server.runtimes.php.onlyInstalled")}</option>
           </select>
         </div>
         <Table
-          label="PHP versions"
+          label={t("server.runtimes.php.table")}
           columns={columns}
           rows={shown}
           rowKey={(r) => r.version}
           sort={sort}
           onSort={(s) => set({ sort: s.key, dir: s.dir })}
-          empty="No version matches the filter."
+          empty={t("server.runtimes.php.noMatch")}
         />
       </Card>
 
       {inst.newer.length > 0 && (
-        <Notice tone="info" title={"Not yet released for Hostashi: PHP " + inst.newer.join(", PHP ")}>
-          <p>sury.org offers {inst.newer.length === 1 ? "this version" : "these versions"} already. Support comes with a Hostashi update.</p>
+        <Notice tone="info" title={t("server.runtimes.php.newer", { versions: "PHP " + inst.newer.join(", PHP ") })}>
+          <p>{t("server.runtimes.php.newerText", { count: inst.newer.length })}</p>
         </Notice>
       )}
     </>

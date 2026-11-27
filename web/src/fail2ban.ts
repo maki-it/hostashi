@@ -3,7 +3,8 @@
 // fail2ban's bans in the panel (ADR-0078): the Hostashi jails, the addresses
 // they block, and unblocking one address in every jail at once.
 
-import { ApiError, request } from "./api";
+import { request } from "./api";
+import i18n, { areaErrorText } from "./i18n";
 
 export type Fail2banJail = {
   name: string;
@@ -54,26 +55,7 @@ export const jailLabels: Record<string, string> = {
   recidive: "Repeat offenders",
 };
 
-export const jailLabel = (name: string) => jailLabels[name] ?? name;
+/** jailLabel names a jail in the current language; an unknown jail keeps its name. */
+export const jailLabel = (name: string) => (name in jailLabels ? i18n.t(`server.blocked.jails.${name as "sshd"}`) : name);
 
-export function fail2banMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case "forbidden":
-        return "Only administrators can see and unblock addresses.";
-      case "fail2ban_unavailable":
-        return "fail2ban does not answer, so nothing is blocked right now. Check the service under Services.";
-      case "invalid_argument":
-        return "Enter an IP address, a part of one, or a range such as 203.0.113.0/24.";
-      case "not_banned":
-        return "This address is no longer blocked.";
-      case "agent_timeout":
-      case "agent_unavailable":
-        return "fail2ban could not be reached. Try again.";
-      default:
-        return err.message ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + "." : "Something went wrong (" + err.code + ").";
-    }
-  }
-  if (err instanceof TypeError) return "The server is not reachable.";
-  return "Something went wrong. Try again.";
-}
+export const fail2banMessage = (err: unknown): string => areaErrorText("server.blocked.errors", err);

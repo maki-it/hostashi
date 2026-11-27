@@ -25,6 +25,7 @@ import parked from "./parked.json";
 import permissions from "./permissions.json";
 import profiles from "./profiles.json";
 import realIp from "./realIp.json";
+import server from "./server.json";
 import shell from "./shell.json";
 import siteAccess from "./siteAccess.json";
 import siteApp from "./siteApp.json";
@@ -37,7 +38,7 @@ import ui from "./ui.json";
 import usage from "./usage.json";
 import users from "./users.json";
 
-const en = { account, audit, auth, backups, certificate, common, cron, databases, errors, files, git, hardening, limits, logs, mail, malware, migrate, overview, pages, parked, permissions, profiles, realIp, shell, siteAccess, siteApp, siteDomains, siteHeaders, sites, ssh, tokens, ui, usage, users };
+const en = { account, audit, auth, backups, certificate, common, cron, databases, errors, files, git, hardening, limits, logs, mail, malware, migrate, overview, pages, parked, permissions, profiles, realIp, server, shell, siteAccess, siteApp, siteDomains, siteHeaders, sites, ssh, tokens, ui, usage, users };
 
 export type Catalog = typeof en;
 

@@ -7,14 +7,16 @@
 import { RuntimesHead } from "./Runtimes";
 import { DownloadSimple, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { getPython, installPython, pythonMessage, removePython, sortPythonLines, type PythonRelease, type PythonStatus } from "./python";
-import { daysUntil, todayUTC } from "./php";
+import { daysUntil, formatDay, todayUTC } from "./php";
 import { listSites, type Site } from "./sites";
 import { Badge, Button, Card, IconButton, JobCard, Notice, Table, useJobCard, type Column } from "./ui";
 
 type Row = PythonRelease & { installed: string; installedBuild: string; sites: number | null };
 
 export function PythonPage({ today = todayUTC(), poll = 3000 }: { today?: string; poll?: number }) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<PythonStatus | null>(null);
   const [sites, setSites] = useState<Site[] | null>(null);
   const [error, setError] = useState("");
@@ -70,7 +72,7 @@ export function PythonPage({ today = todayUTC(), poll = 3000 }: { today?: string
     }
   };
 
-  const head = <RuntimesHead active="python" description={"The supported lines of Python, from the CPython builds of python-build-standalone. Hostashi checks every download against its pinned checksum; a Hostashi update brings newer releases and rebuilds."} />;
+  const head = <RuntimesHead active="python" description={t("server.runtimes.python.description")} />;
 
   if (!status) {
     return (
@@ -78,10 +80,10 @@ export function PythonPage({ today = todayUTC(), poll = 3000 }: { today?: string
         {head}
         {error ? (
           <Notice tone="err" title={error}>
-            <Button onClick={() => void load()}>Try again</Button>
+            <Button onClick={() => void load()}>{t("common.actions.tryAgain")}</Button>
           </Notice>
         ) : (
-          <p aria-busy="true">Loading…</p>
+          <p aria-busy="true">{t("server.runtimes.loading")}</p>
         )}
       </>
     );
@@ -98,49 +100,51 @@ export function PythonPage({ today = todayUTC(), poll = 3000 }: { today?: string
   const columns: Column<Row>[] = [
     {
       key: "line",
-      header: "Version",
+      header: t("server.runtimes.version"),
       cell: (r) => (
         <div className="ui-cell-main">
-          <strong>Python {r.line}</strong>
-          <span>
-            release {r.version}, build {r.build}
-          </span>
+          <strong>{"Python " + r.line}</strong>
+          <span>{t("server.runtimes.python.release", { version: r.version, build: r.build })}</span>
         </div>
       ),
     },
     {
       key: "support",
-      header: "Upstream support",
+      header: t("server.runtimes.upstream"),
       cell: (r) => {
         const left = daysUntil(r.end, today);
         return (
           <div className="ui-cell-main">
             <span className="ui-row">
-              <Badge tone={left < 0 ? "err" : left <= 180 ? "warn" : "ok"}>{left < 0 ? "End of life" : "Supported"}</Badge>
+              <Badge tone={left < 0 ? "err" : left <= 180 ? "warn" : "ok"}>{left < 0 ? t("server.runtimes.endOfLife") : t("server.runtimes.supported")}</Badge>
             </span>
-            <span>{left < 0 ? "no fixes since " + r.end : "fixes until " + r.end}</span>
-            {left >= 0 && left <= 180 && <p className="ui-error">Fixes end in {left === 1 ? "1 day" : left + " days"}. Move its sites to a newer version.</p>}
+            <span>{left < 0 ? t("server.runtimes.noFixesSince", { date: formatDay(r.end) }) : t("server.runtimes.fixesUntil", { date: formatDay(r.end) })}</span>
+            {left >= 0 && left <= 180 && <p className="ui-error">{t("server.runtimes.fixesEnd", { count: left })}</p>}
           </div>
         );
       },
     },
-    ...(sites ? [{ key: "sites", header: "Sites", cell: (r: Row) => r.sites ?? "" }] : []),
+    ...(sites ? [{ key: "sites", header: t("server.runtimes.sites"), cell: (r: Row) => r.sites ?? "" }] : []),
     {
       key: "status",
-      header: "Status",
+      header: t("server.runtimes.status"),
       cell: (r) => (
         <span className="ui-row">
           {r.installed === r.version && r.installedBuild === r.build ? (
-            <Badge tone="ok">Installed</Badge>
+            <Badge tone="ok">{t("server.runtimes.installed")}</Badge>
           ) : running && status.last === r.line ? (
-            <span aria-busy="true">Installing…</span>
+            <span aria-busy="true">{t("server.runtimes.installing")}</span>
           ) : (
             <Button icon={<DownloadSimple size={16} aria-hidden="true" />} disabled={running || busy} onClick={() => void start(r.line)}>
-              {r.installed === r.version ? `Update to build ${r.build}` : r.installed ? `Update to ${r.version}` : `Install Python ${r.line}`}
+              {r.installed === r.version
+                ? t("server.runtimes.python.updateBuild", { build: r.build })
+                : r.installed
+                  ? t("server.runtimes.updateTo", { version: r.version })
+                  : t("server.runtimes.installName", { name: "Python " + r.line })}
             </Button>
           )}
           {r.installed && r.sites === 0 && (
-            <IconButton label={"Remove Python " + r.line} text="Remove" icon={<Trash size={16} aria-hidden="true" />} danger disabled={running || busy} onClick={() => setConfirm(r.line)} />
+            <IconButton label={t("server.runtimes.removeName", { name: "Python " + r.line })} text={t("server.runtimes.remove")} icon={<Trash size={16} aria-hidden="true" />} danger disabled={running || busy} onClick={() => setConfirm(r.line)} />
           )}
         </span>
       ),
@@ -151,44 +155,45 @@ export function PythonPage({ today = todayUTC(), poll = 3000 }: { today?: string
     <>
       {head}
       {error && <Notice tone="err" title={error} />}
-      {removed && <Notice tone="ok" title={"Python " + removed + " was removed."} />}
+      {removed && <Notice tone="ok" title={t("server.runtimes.removed", { name: "Python " + removed })} />}
       {confirm && (
         <section className="ui-card ui-card-body ui-stack" role="alertdialog" aria-labelledby="python-remove-title">
           <h2 id="python-remove-title" className="ui-flush">
-            Remove Python {confirm}?
+            {t("server.runtimes.removeTitle", { name: "Python " + confirm })}
           </h2>
-          <p className="ui-flush">No site runs on it. Its files under /opt/hostashi/python are deleted; you can install it again later.</p>
+          <p className="ui-flush">{t("server.runtimes.python.removeText")}</p>
           <div className="ui-row">
             <Button variant="danger" disabled={busy} onClick={() => void remove(confirm)}>
-              Remove
+              {t("server.runtimes.remove")}
             </Button>
-            <Button onClick={() => setConfirm(null)}>Cancel</Button>
+            <Button onClick={() => setConfirm(null)}>{t("common.actions.cancel")}</Button>
           </div>
         </section>
       )}
       {job.show && status.last && (
         <JobCard
           title={
-            status.state === "running"
-              ? "Installing Python " + status.last + "…"
-              : status.state === "succeeded"
-                ? "Python " + status.last + " was installed"
-                : "Installing Python " + status.last + " failed"
+            t(
+              status.state === "running"
+                ? "server.runtimes.jobInstalling"
+                : status.state === "succeeded"
+                  ? "server.runtimes.jobInstalled"
+                  : "server.runtimes.jobInstallFailed",
+              { name: "Python " + status.last },
+            )
           }
           state={status.state}
           log={status.log}
-          logLabel="Installation log"
+          logLabel={t("server.runtimes.installLog")}
           onClose={job.close}
         >
-          {status.state === "failed" && <Notice tone="err" title="The installation did not finish. The log shows why; you can try again." />}
+          {status.state === "failed" && <Notice tone="err" title={t("server.runtimes.installFailed")} />}
         </JobCard>
       )}
       <Card padded={false}>
-        <Table label="Python versions" columns={columns} rows={rows} rowKey={(r) => r.line} empty="No Python version is offered." />
+        <Table label={t("server.runtimes.python.table")} columns={columns} rows={rows} rowKey={(r) => r.line} empty={t("server.runtimes.python.none")} />
       </Card>
-      <p className="ui-hint ui-flush">
-        A Python site runs on the version chosen in its app settings, from its own environment ~/.venv. A newer release or build of a line keeps the environments and restarts their apps. A version can be removed once no site uses it.
-      </p>
+      <p className="ui-hint ui-flush">{t("server.runtimes.python.footer")}</p>
     </>
   );
 }

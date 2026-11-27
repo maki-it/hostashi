@@ -2,7 +2,9 @@
 
 import { Plus, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { ApiError } from "./api";
+import i18n from "./i18n";
 import {
   confirmFirewall,
   firewallMessage,
@@ -19,6 +21,9 @@ import { BlockedAddressesCard } from "./BlockedAddresses";
 import { TokenAllowlistCard } from "./TokenAllowlist";
 
 type RuleDraft = { proto: "tcp" | "udp"; ports: string; sources: string; note: string };
+
+// The protocols are named the same in every language.
+const protocols = ["tcp", "udp"] as const;
 
 const toDraft = (r: FirewallRule): RuleDraft => ({
   proto: r.proto,
@@ -40,7 +45,7 @@ function toState(ssh: string, panel: string, rules: RuleDraft[]): FirewallState 
   const open: FirewallRule[] = [];
   for (const [i, r] of rules.entries()) {
     const p = parsePorts(r.ports);
-    if (!p) return "Port " + (i + 1) + ": enter a port such as 3000 or a range such as 6000-6010.";
+    if (!p) return i18n.t("server.firewall.portError", { n: i + 1 });
     const rule: FirewallRule = { proto: r.proto, ...p };
     const sources = parseList(r.sources);
     if (sources.length) rule.sources = sources;
@@ -64,27 +69,23 @@ type Flash = { alert: boolean; text: string } | null;
 // can link to the blocked addresses.
 type FirewallTab = "rules" | "blocked";
 
-const firewallTabs = [
-  { id: "rules", label: "Firewall" },
-  { id: "blocked", label: "Blocked addresses" },
-] as const;
 
 type FirewallProps = { query: URLSearchParams; onQuery: (q: URLSearchParams) => void };
 
 export function Firewall({ query, onQuery }: FirewallProps) {
+  const { t } = useTranslation();
   const tab: FirewallTab = query.get("tab") === "blocked" ? "blocked" : "rules";
-  const head = (
-    <PageHead
-      title="Firewall"
-      description="Ports 80 and 443 are always open for the sites. SSH, the panel and API tokens are open to everyone until you set an allowlist. fail2ban blocks addresses after too many failed logins."
-    />
-  );
+  const firewallTabs = [
+    { id: "rules", label: t("server.firewall.tabs.rules") },
+    { id: "blocked", label: t("server.firewall.tabs.blocked") },
+  ] as const;
+  const head = <PageHead title={t("server.firewall.title")} description={t("server.firewall.description")} />;
 
   return (
     <>
       {head}
       <Tabs
-        label="Firewall"
+        label={t("server.firewall.title")}
         tabs={firewallTabs}
         active={tab}
         onChange={(t) => onQuery(new URLSearchParams(t === "blocked" ? { tab: "blocked" } : {}))}
@@ -103,6 +104,7 @@ export function Firewall({ query, onQuery }: FirewallProps) {
 }
 
 function FirewallRules() {
+  const { t } = useTranslation();
   const [fw, setFw] = useState<FirewallStatus | null>(null);
   const [error, setError] = useState("");
   // flash outlives the editor, which starts over after every reload.
@@ -126,10 +128,10 @@ function FirewallRules() {
       <>
         {error ? (
           <Notice tone="err" title={error}>
-            <Button onClick={() => void load()}>Try again</Button>
+            <Button onClick={() => void load()}>{t("common.actions.tryAgain")}</Button>
           </Notice>
         ) : (
-          <p aria-busy="true">Loading…</p>
+          <p aria-busy="true">{t("common.status.loading")}</p>
         )}
       </>
     );
@@ -138,9 +140,8 @@ function FirewallRules() {
   if (!fw.enabled) {
     return (
       <>
-        <Notice tone="warn" title="Hostashi's firewall is off: the server was installed with --no-firewall.">
-          Use the firewall in front of the server (for example at your provider), and let only SSH, 80, 443 and the panel port through.
-          Run the installer again without --no-firewall to manage the rules here.
+        <Notice tone="warn" title={t("server.firewall.off")}>
+          {t("server.firewall.offText")}
         </Notice>
         <TokenAllowlistCard clientIp={fw.clientIp} />
       </>
@@ -161,6 +162,7 @@ type Waiting = { id: string; deadline: string; ssh: boolean };
 type EditorProps = { fw: FirewallStatus; reload: () => Promise<void>; flash: Flash; setFlash: (f: Flash) => void };
 
 function Editor({ fw, reload, flash, setFlash }: EditorProps) {
+  const { t } = useTranslation();
   const [ssh, setSSH] = useState(fw.state.sshAllow.join("\n"));
   const [panel, setPanel] = useState(fw.state.panelAllow.join("\n"));
   const [rules, setRules] = useState<RuleDraft[]>(fw.state.open.map(toDraft));
@@ -203,7 +205,7 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
       try {
         await confirmFirewall(id);
         setWaiting(null);
-        setFlash({ alert: false, text: "The new rules stay." });
+        setFlash({ alert: false, text: t("server.firewall.kept") });
         await reload();
       } catch (err) {
         setWaiting(null);
@@ -213,7 +215,7 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
         setBusy(false);
       }
     },
-    [reload, setFlash],
+    [reload, setFlash, t],
   );
 
   const save = async (e: FormEvent) => {
@@ -231,7 +233,7 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
       setLockout("");
       setOtherWay(false);
       if (!res.pending?.id) {
-        setFlash({ alert: false, text: "The rules were applied." });
+        setFlash({ alert: false, text: t("server.firewall.applied") });
         await reload();
         return;
       }
@@ -268,13 +270,12 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
 
   return (
     <form className="ui-stack" onSubmit={(e) => void save(e)}>
-      <Notice tone="info" title={"Your address as the panel sees it: " + fw.clientIp}>
-        Every change rolls back after {fw.confirmWithin} seconds unless it is confirmed. A firewall in front of the server (for example at
-        your provider) still applies: open a port there too.
+      <Notice tone="info" title={t("server.firewall.yourAddress", { ip: fw.clientIp })}>
+        {t("server.firewall.rollsBack", { seconds: fw.confirmWithin })}
       </Notice>
       {fw.rolledBack && !waiting && (
-        <Notice tone="warn" title="The last change was not confirmed in time and was rolled back.">
-          Rolled back <RelTime iso={fw.rolledBack} />.
+        <Notice tone="warn" title={t("server.firewall.rolledBack")}>
+          <Trans i18nKey="server.firewall.rolledBackAt" components={{ time: <RelTime iso={fw.rolledBack} /> }} />
         </Notice>
       )}
       {flash && <Notice tone={flash.alert ? "err" : "ok"} title={flash.text} />}
@@ -282,26 +283,23 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
       {waiting && (
         <section className="ui-card ui-card-body ui-stack ui-attention" aria-labelledby="fw-wait">
           <h2 id="fw-wait" className="ui-flush" ref={waitRef} tabIndex={-1}>
-            Waiting for confirmation
+            {t("server.firewall.waiting.title")}
           </h2>
           {waiting.ssh ? (
             <>
+              <p className="ui-flush">{t("server.firewall.waiting.ssh")}</p>
               <p className="ui-flush">
-                The SSH allowlist changed. Open a new terminal now and log in over SSH. Keep the session you have open until the test
-                works.
-              </p>
-              <p className="ui-flush">
-                The rules roll back in <strong>{now} seconds</strong> unless you keep them.
+                <Trans i18nKey="server.firewall.waiting.countdown" values={{ seconds: now }} components={{ strong: <strong /> }} />
               </p>
               <div className="ui-row">
                 <Button variant="primary" disabled={busy} onClick={() => void confirm(waiting.id)}>
-                  SSH works, keep the rules
+                  {t("server.firewall.waiting.keep")}
                 </Button>
               </div>
             </>
           ) : (
             <p className="ui-flush" aria-busy="true">
-              Checking that the panel still answers…
+              {t("server.firewall.waiting.checking")}
             </p>
           )}
         </section>
@@ -310,33 +308,28 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
       {foreignPending && (
         <section className="ui-card ui-card-body ui-stack ui-attention" aria-labelledby="fw-foreign">
           <h2 id="fw-foreign" className="ui-flush">
-            A change is waiting
+            {t("server.firewall.foreign.title")}
           </h2>
-          <p className="ui-flush">
-            Another browser made a change that waits for its confirmation. It rolls back in {now} seconds unless that browser keeps it.
-          </p>
+          <p className="ui-flush">{t("server.firewall.foreign.text", { seconds: now })}</p>
         </section>
       )}
 
-      <Card title="Allowlists">
+      <Card title={t("server.firewall.allow.title")}>
         <div className="ui-stack">
-          <p className="ui-hint ui-flush">
-            One IP address or CIDR range per line, IPv4 or IPv6. An empty list leaves the port open to everyone. A home connection often
-            gets a new address overnight; a VPN or a fixed office address works better.
-          </p>
+          <p className="ui-hint ui-flush">{t("server.firewall.allow.hint")}</p>
           <div className="ui-allow">
             <div className="ui-stack-tight">
-              <Field label="SSH">
+              <Field label={t("server.firewall.allow.ssh")}>
                 <textarea className="ui-input ui-textarea ui-mono" value={ssh} onChange={(e) => setSSH(e.target.value)} rows={3} spellCheck={false} />
               </Field>
               <div className="ui-row">
                 <Button icon={<Plus size={16} aria-hidden="true" />} onClick={() => addMine(ssh, setSSH)}>
-                  Add my address to SSH
+                  {t("server.firewall.allow.addSSH")}
                 </Button>
               </div>
             </div>
             <div className="ui-stack-tight">
-              <Field label="Panel">
+              <Field label={t("server.firewall.allow.panel")}>
                 <textarea
                   className="ui-input ui-textarea ui-mono"
                   value={panel}
@@ -347,7 +340,7 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
               </Field>
               <div className="ui-row">
                 <Button icon={<Plus size={16} aria-hidden="true" />} onClick={() => addMine(panel, setPanel)}>
-                  Add my address to the panel
+                  {t("server.firewall.allow.addPanel")}
                 </Button>
               </div>
             </div>
@@ -356,51 +349,55 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
       </Card>
 
       <Card
-        title="Opened ports"
+        title={t("server.firewall.ports.title")}
         actions={
           <Button
             icon={<Plus size={16} aria-hidden="true" />}
             onClick={() => setRules([...rules, { proto: "tcp", ports: "", sources: "", note: "" }])}
           >
-            Add port
+            {t("server.firewall.ports.add")}
           </Button>
         }
       >
         {rules.length === 0 ? (
-          <p className="ui-hint ui-flush">No other port is open.</p>
+          <p className="ui-hint ui-flush">{t("server.firewall.ports.none")}</p>
         ) : (
           <ul className="ui-port-rows">
             {rules.map((r, i) => (
-              <li key={i} aria-label={"Port " + (i + 1)} className="ui-port-row">
-                <Field label="Protocol">
+              <li key={i} aria-label={t("server.firewall.ports.row", { n: i + 1 })} className="ui-port-row">
+                <Field label={t("server.firewall.ports.protocol")}>
                   <select className="ui-select" value={r.proto} onChange={(e) => setRule(i, { proto: e.target.value as "tcp" | "udp" })}>
-                    <option value="tcp">TCP</option>
-                    <option value="udp">UDP</option>
+                    {protocols.map((p) => (
+                      <option key={p} value={p}>
+                        {p.toUpperCase()}
+                      </option>
+                    ))}
                   </select>
                 </Field>
-                <Field label="Port or range">
+                <Field label={t("server.firewall.ports.ports")}>
                   <input
                     className="ui-input ui-mono"
                     value={r.ports}
                     onChange={(e) => setRule(i, { ports: e.target.value })}
-                    placeholder="3000 or 6000-6010"
+                    placeholder={t("server.firewall.ports.portsPlaceholder")}
                   />
                 </Field>
-                <Field label="Only from (optional)">
+                <Field label={t("server.firewall.ports.sources")}>
                   <input
                     className="ui-input ui-mono"
                     value={r.sources}
                     onChange={(e) => setRule(i, { sources: e.target.value })}
-                    placeholder="Everyone"
+                    placeholder={t("server.firewall.ports.everyone")}
                     spellCheck={false}
                   />
                 </Field>
-                <Field label="Note">
+                <Field label={t("server.firewall.ports.note")}>
                   <input className="ui-input" value={r.note} onChange={(e) => setRule(i, { note: e.target.value })} maxLength={64} />
                 </Field>
                 <IconButton
-                  label={"Remove port " + (i + 1)}
-                  text="Remove" icon={<Trash size={16} />}
+                  label={t("server.firewall.ports.removeLabel", { n: i + 1 })}
+                  text={t("server.firewall.ports.remove")}
+                  icon={<Trash size={16} />}
                   danger
                   onClick={() => setRules(rules.filter((_, j) => j !== i))}
                 />
@@ -414,18 +411,18 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
       {lockout && (
         <Notice tone="err" title={lockout}>
           <label className="ui-check">
-            <input type="checkbox" checked={otherWay} onChange={(e) => setOtherWay(e.target.checked)} />I reach the server another way (VPN,
-            another address, the provider&apos;s console)
+            <input type="checkbox" checked={otherWay} onChange={(e) => setOtherWay(e.target.checked)} />
+            {t("server.firewall.otherWay")}
           </label>
         </Notice>
       )}
       {/* One bar for both cards above: the allowlists and the ports apply together. */}
       <div className="ui-card ui-card-body ui-apply-bar">
         <Button type="submit" variant="primary" disabled={busy || !!waiting || foreignPending || !dirty}>
-          {busy ? "Applying…" : "Apply rules"}
+          {busy ? t("server.firewall.applying") : t("server.firewall.apply")}
         </Button>
         <UnsavedNote dirty={dirty} />
-        <span className="ui-hint">Rolls back after {fw.confirmWithin} seconds unless it is confirmed.</span>
+        <span className="ui-hint">{t("server.firewall.applyHint", { seconds: fw.confirmWithin })}</span>
       </div>
     </form>
   );
