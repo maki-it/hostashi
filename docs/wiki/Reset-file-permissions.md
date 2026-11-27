@@ -1,10 +1,10 @@
-# Reset permissions
+# Reset file permissions
 
-Files of a site belong to the site's own Linux user (the site's name). When files were copied in as root, unpacked from an archive or set to modes that are too open or too tight, the site can stop working: PHP cannot write its uploads, or nginx answers 403 for a file that exists. **Reset permissions** puts everything back in one step.
+Files of a site belong to the site's own Linux user (the site's name). When files were copied in as root, unpacked from an archive or set to modes that are too open or too tight, the site can stop working: PHP cannot write its uploads, or nginx answers 403 for a file that exists. **Reset file permissions** puts everything back in one step.
 
 It is on the site's **Files › File manager** tab, below the file manager.
 
-![The Reset permissions card with the site's name typed to confirm](images/site-permissions.png)
+![The Reset file permissions card with the site's name typed to confirm](images/site-permissions.png)
 
 ## What it does
 

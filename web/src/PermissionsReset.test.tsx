@@ -34,8 +34,8 @@ describe("PermissionsResetCard", () => {
     const user = userEvent.setup();
     render(<PermissionsResetCard site={site} />);
 
-    await user.click(screen.getByRole("button", { name: "Reset permissions" }));
-    const go = screen.getByRole("button", { name: "Reset permissions of blog" });
+    await user.click(screen.getByRole("button", { name: "Reset file permissions" }));
+    const go = screen.getByRole("button", { name: "Reset file permissions of blog" });
     expect(go).toBeDisabled();
     expect(screen.getByText("blog", { selector: "code" })).toHaveClass("ui-confirm-phrase");
 
@@ -55,9 +55,9 @@ describe("PermissionsResetCard", () => {
     const user = userEvent.setup();
     render(<PermissionsResetCard site={site} />);
 
-    await user.click(screen.getByRole("button", { name: "Reset permissions" }));
+    await user.click(screen.getByRole("button", { name: "Reset file permissions" }));
     await user.type(screen.getByRole("textbox", { name: /to confirm/ }), "blog");
-    await user.click(screen.getByRole("button", { name: "Reset permissions of blog" }));
+    await user.click(screen.getByRole("button", { name: "Reset file permissions of blog" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Nothing to change: all 3 entries were already right.");
   });
@@ -67,9 +67,9 @@ describe("PermissionsResetCard", () => {
     const user = userEvent.setup();
     render(<PermissionsResetCard site={site} />);
 
-    await user.click(screen.getByRole("button", { name: "Reset permissions" }));
+    await user.click(screen.getByRole("button", { name: "Reset file permissions" }));
     await user.type(screen.getByRole("textbox", { name: /to confirm/ }), "blog");
-    await user.click(screen.getByRole("button", { name: "Reset permissions of blog" }));
+    await user.click(screen.getByRole("button", { name: "Reset file permissions of blog" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/stopped part way. Run it again/);
   });
@@ -79,7 +79,7 @@ describe("PermissionsResetCard", () => {
     const user = userEvent.setup();
     render(<PermissionsResetCard site={site} />);
 
-    await user.click(screen.getByRole("button", { name: "Reset permissions" }));
+    await user.click(screen.getByRole("button", { name: "Reset file permissions" }));
     await user.type(screen.getByRole("textbox", { name: /to confirm/ }), "blog");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 

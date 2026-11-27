@@ -36,4 +36,4 @@ The panel never touches the site's files itself. It talks to a small helper, `ho
 
 `hostashi doctor` checks that the helper's units are installed, that no helper runs as root, and that none has run for more than a day.
 
-To give all files of a site back to its user and reset their modes at once, use [Reset permissions](Reset-permissions.md) below the file manager.
+To give all files of a site back to its user and reset their modes at once, use [Reset file permissions](Reset-file-permissions.md) below the file manager.
