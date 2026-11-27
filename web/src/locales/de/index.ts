@@ -5,12 +5,13 @@
 import type { Catalog } from "../en";
 import account from "./account.json";
 import auth from "./auth.json";
+import backups from "./backups.json";
 import common from "./common.json";
 import errors from "./errors.json";
 import shell from "./shell.json";
 import sites from "./sites.json";
 import tokens from "./tokens.json";
 
-const de: Catalog = { account, auth, common, errors, shell, sites, tokens };
+const de: Catalog = { account, auth, common, errors, backups, shell, sites, tokens };
 
 export default de;
