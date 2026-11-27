@@ -359,7 +359,6 @@ export function FileManager({ site, path, onPath }: Props) {
       <div className="ui-files" ref={rootRef}>
       {/* The bar (folder, toolbar, filter and the selection) sticks to the
           top of the window in a compact form while the listing scrolls. */}
-      <div ref={sentinelRef} className="ui-files-sentinel" aria-hidden="true" />
       <div ref={barRef} className="ui-files-bar" data-stuck={stuck} style={gap > 0 ? { marginBottom: gap } : undefined}>
       <div className="ui-files-head">
         <Breadcrumb site={site.name} path={path} onPath={onPath} />
@@ -451,6 +450,7 @@ export function FileManager({ site, path, onPath }: Props) {
           </div>
         )}
       </div>
+      <div ref={sentinelRef} className="ui-files-sentinel" aria-hidden="true" />
       {(loadError || done || scanNote || uploads.length > 0 || listing?.truncated || (listing?.unnamed ?? 0) > 0 || cardDialog) && (
       <div ref={bodyRef} className="ui-card-body ui-stack ui-files-body">
         {loadError && <Notice tone="err" title={loadError} />}
@@ -546,10 +546,11 @@ function stickyHeight(root: HTMLElement | null, bar: HTMLElement | null): number
 }
 
 /**
- * Tells whether the bar is stuck to the top of the window: the sentinel just
- * above it has scrolled out at the top. The compact bar and table head are
- * lower than the full ones; gap keeps the difference as a margin below it while stuck, so
- * the listing does not jump at the moment the bar sticks. The heights of
+ * Tells whether the bar is stuck (compact): the sentinel below the full bar
+ * has scrolled out at the top, that is the listing has reached the bottom
+ * of the compact bar under the top bar. The compact bar and table head are
+ * lower than the full ones; gap keeps the difference as a margin below it
+ * while stuck, so the listing does not jump. The heights of
  * the bar and the table head go to CSS variables: the table head sticks
  * below the bar, and focus scrolls clear of both.
  */
@@ -588,6 +589,7 @@ function useStickyBar(root: RefObject<HTMLDivElement | null>, sentinel: RefObjec
     const html = document.documentElement;
     const measure = () => {
       r.style.setProperty("--files-bar-h", `${String(b.offsetHeight)}px`);
+      if (b.dataset["stuck"] === "true") r.style.setProperty("--files-compact-h", `${String(b.offsetHeight)}px`);
       html.style.setProperty("--files-sticky-h", `${String(stickyHeight(r, b))}px`);
     };
     const ro = new ResizeObserver(measure);

@@ -30,8 +30,8 @@ func TestAddsRanges(t *testing.T) {
 	}
 }
 
-// The panel refuses a range holding one of the server's addresses itself,
-// so the admin gets a clear 422 instead of a failed web.apply.
+// With the server's addresses at hand (tests) the panel refuses a range
+// holding one of them before web.apply; on a server the agent does.
 func TestCheckRealIPOwnAddress(t *testing.T) {
 	s := &Service{localAddrs: func() ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("127.0.0.1"), netip.MustParseAddr("10.0.0.3")}, nil
@@ -53,5 +53,21 @@ func TestCheckRealIPOwnAddress(t *testing.T) {
 
 	if err := s.checkRealIP(agentapi.WebRealIP{}); err != nil {
 		t.Fatalf("off: %v", err)
+	}
+}
+
+// The web process cannot read the interfaces (no netlink socket): without
+// localAddrs the panel leaves the own-address check to the agent instead
+// of failing every range.
+func TestCheckRealIPLeavesOwnAddressToAgent(t *testing.T) {
+	s := &Service{}
+
+	if err := s.checkRealIP(agentapi.WebRealIP{Header: agentapi.RealIPXForwardedFor, Ranges: []string{"2001:db8::/64", "10.0.0.0/24"}}); err != nil {
+		t.Fatalf("ranges refused without interface addresses: %v", err)
+	}
+
+	// Validation still runs in the panel.
+	if err := s.checkRealIP(agentapi.WebRealIP{Header: "X-Evil"}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("bad header: %v", err)
 	}
 }

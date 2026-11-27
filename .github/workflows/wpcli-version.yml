@@ -5,9 +5,11 @@
 # it finds one it opens (or updates) a pull request from the branch
 # automation/wpcli-version that updates the pin in
 # internal/agentapi/wpcli.go. Nothing is merged automatically: a
-# maintainer reviews and merges, and the next Hostashi release brings the
-# new pin; hostashi-wpcli-install.service downloads it on the next
-# WordPress install.
+# maintainer reviews and merges. The merge rebuilds the package
+# hostashi-runtimes (runtimes.yml) and mirrors the phar on get.hostashi.com,
+# so servers get the new pin through apt without a Hostashi release
+# (ADR-0069 addendum 2); hostashi-wpcli-install.service downloads it on the
+# next WordPress install.
 #
 # Pull requests opened with GITHUB_TOKEN start no pull_request workflows,
 # so this workflow starts the checks on the branch itself.
@@ -96,7 +98,7 @@ jobs:
             echo
             echo "- [ ] The Go, Web, REUSE and Licenses runs on this branch are green, including both installer tests."
             echo "- [ ] The WP-CLI changelog has nothing that breaks the quick install."
-            echo "- [ ] Release Hostashi afterwards: the next WordPress install downloads the new phar."
+            echo "- [ ] After the merge the Runtimes workflow is green: servers get the pin through hostashi-runtimes, no release needed."
             echo
             echo "This pull request is never merged automatically."
           } > "$RUNNER_TEMP/body.md"

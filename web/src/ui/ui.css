@@ -1050,11 +1050,14 @@ a.ui-btn {
    measured in Files.tsx). Once
    stuck it gets compact: folder, filter and toolbar share one row, the
    controls are lower and the selection stays on one scrolling row. */
+/* The sentinel sits below the full bar, shifted up by the top bar and the
+   compact bar (measured once stuck; 48px until then). It leaves the window
+   when the listing reaches the bottom of the compact bar: the full bar
+   sticks first and turns compact only then, so neither a gap opens below
+   the compact bar nor does the listing jump. */
 .ui-files-sentinel {
   position: relative;
-  /* Shifted up by the sticky top bar: it leaves the window just when the
-     bar reaches the top bar and sticks. */
-  top: calc(-1 * var(--app-top-h, 0px));
+  top: calc(-1 * (var(--app-top-h, 0px) + var(--files-compact-h, 48px)));
   height: 1px;
   margin-bottom: -1px;
 }
@@ -1131,9 +1134,9 @@ a.ui-btn {
   border-bottom: 0;
   box-shadow: inset 0 -1px 0 var(--line);
 }
+/* The table head keeps its height: a lower head would move the sentinel
+   (below the bar) and let the bar flip between full and compact. */
 .ui-files-bar[data-stuck="true"] ~ .ui-files-drop .ui-table thead th {
-  padding-top: 6px;
-  padding-bottom: 6px;
   box-shadow: inset 0 -1px 0 var(--line), 0 6px 12px -8px color-mix(in srgb, var(--fg) 35%, transparent);
 }
 @media (max-width: 600px) {

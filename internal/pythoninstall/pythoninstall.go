@@ -6,7 +6,8 @@
 //
 // Install runs inside the fixed unit hostashi-python-install@<line>.service
 // (`hostashi python-install <line>`): it downloads the pinned
-// install_only_stripped .tar.gz from the project's GitHub release, checks
+// install_only_stripped .tar.gz from Astral's mirror of the project's
+// GitHub releases (GitHub itself as the fallback), checks
 // its SHA-256 against agentapi.PythonReleases before it reads a byte of
 // the archive, unpacks it and swaps it into Dir/<line>, all through
 // internal/rtinstall, which Node.js shares. No apt, no shell, nothing is
@@ -32,8 +33,14 @@ const (
 	Dir = "/opt/hostashi/python"
 	// LogDir holds one log per line; the unit writes <LogDir>/<line>.log.
 	LogDir = "/var/lib/hostashi-agent/python-install"
-	// DistURL is where python-build-standalone publishes its builds.
-	DistURL = "https://github.com/astral-sh/python-build-standalone/releases/download"
+	// DistURL is Astral's mirror of the python-build-standalone releases:
+	// the same files under the same paths, reachable over IPv6. GitHub's
+	// release downloads have no IPv6 address, so a server without IPv4
+	// could not install Python from there.
+	DistURL = "https://releases.astral.sh/github/python-build-standalone/releases/download"
+	// GitHubURL is where python-build-standalone publishes its builds; it
+	// is tried when the mirror fails.
+	GitHubURL = "https://github.com/astral-sh/python-build-standalone/releases/download"
 	// top is the directory every install_only archive unpacks into.
 	top = "python"
 )
@@ -112,8 +119,11 @@ type Installer struct {
 	Root   string // prefixed to Dir; empty means /
 	Client *http.Client
 	URL    string // DistURL unless set (tests)
-	GOARCH string // runtime.GOARCH unless set (tests)
-	Out    io.Writer
+	// Fallback are the bases tried after URL when URL is set (tests);
+	// GitHubURL after DistURL otherwise.
+	Fallback []string
+	GOARCH   string // runtime.GOARCH unless set (tests)
+	Out      io.Writer
 
 	releases []agentapi.PythonRelease // agentapi.PythonReleases unless set (tests)
 }
@@ -146,14 +156,25 @@ func (in *Installer) Install(ctx context.Context, line string) error {
 		return err
 	}
 
-	base := in.URL
+	base, fallback := in.URL, []string{GitHubURL}
 	if base == "" {
 		base = DistURL
+	} else {
+		fallback = in.Fallback
 	}
 
 	a, err := Archive(base, rel, arch)
 	if err != nil {
 		return err
+	}
+
+	for _, f := range fallback {
+		fa, err := Archive(f, rel, arch)
+		if err != nil {
+			return err
+		}
+
+		a.Fallback = append(a.Fallback, fa.URL)
 	}
 
 	ri := rtinstall.Installer{Runtime: Runtime, Root: in.Root, Client: in.Client, Out: in.Out}

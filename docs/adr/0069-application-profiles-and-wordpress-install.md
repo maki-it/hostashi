@@ -92,3 +92,21 @@ The quick install ran only once per site: after a successful run the card kept s
 
 - Same action and scopes as the install (`sites.wordpress:install` plus `databases:write`), audited as `site.wordpress.reinstall` with the old database.
 - If the install fails after the old database was dropped, the person restores from a backup; the warning says so.
+
+## Addendum 2: WP-CLI from get.hostashi.com (2026-11-27)
+
+**Status:** Accepted (Kim, 2026-11-27). **Decides:** Kim (chose the mirror on 2026-11-27).
+
+### Context
+
+WP-CLI is downloaded from its GitHub release. GitHub (`github.com`, `release-assets.githubusercontent.com`) has no IPv6 address [V: no AAAA record, 2026-11-27], so on a server without IPv4 and without NAT64 the WordPress quick install could not get WP-CLI. get.hostashi.com (GitHub Pages) has IPv6 [V: AAAA record].
+
+### Decision
+
+- The Pages workflow mirrors the pinned phars at `https://get.hostashi.com/wp-cli/v<version>/wp-cli-<version>.phar`, GitHub's layout: the pin of main and the pin of the latest stable release (`packaging/get/wpcli-mirror.sh`). Each phar is downloaded from the GitHub release and kept only if it matches the pinned SHA-512.
+- The agent downloads from the mirror first and from GitHub when that fails. Integrity does not depend on the source: the SHA-512 is fixed in the binary and checked before the phar is moved into place, so a changed file on Pages is refused.
+- The pin also goes into the package `hostashi-runtimes` (ADR-0077 part 2): the binary takes a newer WP-CLI release with a well-formed SHA-512 from it and never goes back to an older one. A new WP-CLI version reaches servers through apt without a Hostashi release (Kim, 2026-11-27: there will be far fewer releases once Hostashi is stable). Merging the pin pull request rebuilds that package and starts the Pages run that mirrors the phar.
+
+### Consequences
+
+About 7 MB more on get.hostashi.com per pinned version. A pin of main that is not released yet is mirrored too, so the first Pages run after a release already has it. Git deploy from GitHub still needs NAT64 on an IPv6-only server; that is the user's repository host, not Hostashi's.

@@ -84,7 +84,7 @@ func (s *Service) RequestEmail(ctx context.Context, u store.User, address, ip st
 // account's. It returns the account and its address before, so the caller
 // can tell the old address. Wrong links count against the client address.
 func (s *Service) ConfirmEmail(ctx context.Context, secret, ip string) (store.User, string, string, error) {
-	key := "ip:" + ip
+	key := ipKey("ip:", ip)
 	if s.ipLimit.Blocked(key) {
 		return store.User{}, "", "", ErrRateLimited
 	}

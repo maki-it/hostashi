@@ -182,6 +182,51 @@ func TestInstallRefuses(t *testing.T) {
 	}
 }
 
+func TestInstallFallback(t *testing.T) {
+	body := archive(t, build("3.99.1"))
+	good := server(t, body)
+	down := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(down.Close)
+
+	// The first source fails, the second has the file.
+	root := t.TempDir()
+	in, out := installer(root, down, sha(body))
+	in.Fallback = []string{good.URL}
+
+	if err := in.Install(context.Background(), "3.99"); err != nil {
+		t.Fatalf("Install: %v\n%s", err, out)
+	}
+
+	if !strings.Contains(out.String(), "trying the next source") || !strings.Contains(out.String(), good.URL) {
+		t.Fatalf("log does not name the fallback:\n%s", out)
+	}
+
+	// A wrong file on the fallback is still refused.
+	in, _ = installer(t.TempDir(), down, strings.Repeat("0", 64))
+	in.Fallback = []string{good.URL}
+
+	if err := in.Install(context.Background(), "3.99"); !errors.Is(err, rtinstall.ErrChecksum) {
+		t.Fatalf("Install = %v, want ErrChecksum", err)
+	}
+
+	// Every source down: the last error.
+	in, _ = installer(t.TempDir(), down, sha(body))
+	in.Fallback = []string{down.URL}
+
+	if err := in.Install(context.Background(), "3.99"); err == nil || !strings.Contains(err.Error(), "404") {
+		t.Fatalf("Install = %v, want the 404", err)
+	}
+}
+
+func TestSources(t *testing.T) {
+	// Astral's mirror keeps GitHub's paths, so the pinned file names work
+	// on both (checked against the 20261124 builds).
+	if DistURL != "https://releases.astral.sh/github/python-build-standalone/releases/download" ||
+		GitHubURL != "https://github.com/astral-sh/python-build-standalone/releases/download" {
+		t.Fatalf("sources %q, %q", DistURL, GitHubURL)
+	}
+}
+
 func TestArchive(t *testing.T) {
 	rel, err := agentapi.PythonReleaseOf("3.13")
 	if err != nil {

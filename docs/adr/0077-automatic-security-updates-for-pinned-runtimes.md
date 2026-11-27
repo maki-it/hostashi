@@ -100,6 +100,7 @@ So a Node.js security release reaches a server only after three manual steps: me
 - Fixed 2026-11-27 (after v0.14.0): the upgrade only enabled the timer, whose first run could be up to a day later and found no list for the new suite, and `install.sh upgrade` passed the step without installing anything. `upgrade-test.sh` now covers the upgrade from a server without the suite.
 - Kim (2026-11-26): the pin workflows run every six hours, the vulnerability check twice a day. unattended-upgrades on the servers stays daily.
 - The stable origin moved to its own file with a panel switch (ADR-0050 addendum); the runtimes origin is always in the installer's file.
+- 2026-11-27 (Kim): the file also carries the WP-CLI pin (`wpcli`: version and SHA-512); the binary takes only a newer release. Its pull request stays manual (as above), but a merge no longer waits for a Hostashi release (ADR-0069 addendum 2). Older binaries ignore the field.
 
 ## Consequences
 

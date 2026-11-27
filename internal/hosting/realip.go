@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"net/netip"
 	"slices"
 
@@ -30,9 +29,9 @@ func (s *Service) RealIP(ctx context.Context, name string) (store.SiteRealIP, er
 	return s.st.SiteRealIP(ctx, site.ID)
 }
 
-// checkRealIP validates r and refuses ranges that hold an address of this
-// server, as the agent does; an error matches ErrInvalid and
-// agentapi.ErrRealIPRejected.
+// checkRealIP validates r; with localAddrs set (tests) it also refuses
+// ranges that hold an address of this server, which the agent checks on
+// the server. An error matches ErrInvalid and agentapi.ErrRealIPRejected.
 func (s *Service) checkRealIP(r agentapi.WebRealIP) error {
 	if err := r.Validate(); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalid, err)
@@ -42,12 +41,14 @@ func (s *Service) checkRealIP(r agentapi.WebRealIP) error {
 		return nil
 	}
 
-	local := s.localAddrs
-	if local == nil {
-		local = interfaceAddrs
+	// The web process has no netlink socket (RestrictAddressFamilies), so
+	// it cannot read the interfaces: the agent checks the ranges against
+	// them with web.apply and refuses with an invalid argument.
+	if s.localAddrs == nil {
+		return nil
 	}
 
-	own, err := local()
+	own, err := s.localAddrs()
 	if err != nil {
 		return fmt.Errorf("hosting: addresses of this server: %w", err)
 	}
@@ -136,27 +137,6 @@ func webRealIP(all map[int64]store.SiteRealIP, site store.Site) *agentapi.WebRea
 	v := r.RealIP
 
 	return &v
-}
-
-// interfaceAddrs returns every address of the server's interfaces,
-// loopback and private ones included.
-func interfaceAddrs() ([]netip.Addr, error) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]netip.Addr, 0, len(addrs))
-
-	for _, a := range addrs {
-		if n, ok := a.(*net.IPNet); ok {
-			if ip, ok := netip.AddrFromSlice(n.IP); ok {
-				out = append(out, ip.Unmap())
-			}
-		}
-	}
-
-	return out, nil
 }
 
 // panelRealIPKey is the settings key of the panel's own setting (ADR-0059),

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Command runtimepins writes the runtimes data file (ADR-0077 part 2) from
-// the Node.js and CPython pins in internal/agentapi. The workflow that
+// the Node.js, CPython and WP-CLI pins in internal/agentapi. The workflow that
 // builds the package hostashi-runtimes runs it on main; the binary reads the
 // file with internal/runtimepins.
 //
@@ -39,7 +39,7 @@ func main() {
 
 	var data []byte
 	if err == nil {
-		data, err = Encode(agentapi.NodeReleases, agentapi.PythonReleases, now.UTC())
+		data, err = Encode(agentapi.NodeReleases, agentapi.PythonReleases, agentapi.WPCLI, now.UTC())
 	}
 
 	if err == nil {
@@ -57,8 +57,12 @@ func main() {
 }
 
 // Encode returns the file for the given pins.
-func Encode(node []agentapi.NodeRelease, python []agentapi.PythonRelease, now time.Time) ([]byte, error) {
+func Encode(node []agentapi.NodeRelease, python []agentapi.PythonRelease, wp agentapi.WPCLIRelease, now time.Time) ([]byte, error) {
 	f := runtimepins.File{Schema: runtimepins.Schema, Generated: now.Format(time.RFC3339)}
+
+	if wp.Version != "" {
+		f.WPCLI = &runtimepins.WPCLI{Version: wp.Version, SHA512: wp.SHA512}
+	}
 
 	for _, r := range node {
 		f.Node = append(f.Node, runtimepins.Node{Major: r.Major, Version: r.Version, Codename: r.Codename, End: r.End, SHA256: maps.Clone(r.SHA256)})
