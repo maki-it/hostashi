@@ -1,33 +1,22 @@
 # Contributing to Hostashi
 
-Thanks for your interest. Hostashi is moving from **Phase 0 (planning)** to the alpha: the first product code is the Go skeleton described below. The license ([ADR-0002](docs/adr/0002-license.md)) and the stack ([ADR-0003](docs/adr/0003-language-and-stack.md)) are decided. Until the first alpha, contributions are mostly discussion, review of the planning documents, and research. Please ask in an issue before you start on code.
+Thanks for your interest. Hostashi is a hosting control panel for a single Linux server. The license ([ADR-0002](docs/adr/0002-license.md)), the stack ([ADR-0003](docs/adr/0003-language-and-stack.md)) and the scope of 1.0 ([`docs/03-features.md`](docs/03-features.md), section 3.0) are decided. Bug reports are welcome; for a larger change, please open an issue first so we can agree on the approach.
 
 ## Code layout
 
-One Go module at the repository root, one binary with three modes (see [`docs/04-architecture.md`](docs/04-architecture.md)):
+One Go module at the repository root and one binary, `hostashi` (see [`docs/04-architecture.md`](docs/04-architecture.md)). `hostashi serve` runs the panel and the API without root, `hostashi agent` runs as root and only accepts typed operations, and every other subcommand is a client of the API or the agent.
 
-- `cmd/hostashi`: the `hostashi` binary (`serve`, `agent`, `ping`, `version`).
-- `internal/serve`: the web process. Refuses to run as root.
-- `internal/agent`: the root agent. Unix socket only, accepts only root and the serve user (by uid).
-- `internal/agentrpc`: the typed RPC between them (length-prefixed JSON, `SO_PEERCRED`).
-- `internal/store`: SQLite (pure Go driver, WAL) with embedded, numbered migrations in `internal/store/migrations/`. Only `serve` opens it. Migrations are append-only: never edit a merged one, add the next number.
-- `internal/auth`: Argon2id passwords, server-side sessions (only the token hash is stored), login rate limits and the one-time setup token (file `setup-token` next to the database, mode 0600, valid 24 hours, shown with `hostashi setup-token`).
-- API tokens (`internal/auth/tokens.go`, ADR-0018): `hst_` plus 32 random bytes, only the SHA-256 is stored and the secret is shown once. Scopes come from the closed catalog in `internal/auth/scopes.go` (no wildcards); a feature that adds an endpoint adds its scope there and wraps the handler with `scoped`. Token management, the IP allowlist and account security need a browser session, never a token.
-- Passkeys (`internal/auth/passkeys.go`, library go-webauthn): discoverable credentials with user verification required, so a passkey login counts as both factors. They are bound to the host name of `serve -public-url` and are off without it. Tests use the software authenticator in `internal/auth/passkeytest`.
-- `internal/secrets`: AES-256-GCM for stored secrets such as TOTP seeds. The key file (`/etc/hostashi/secret.key`, mode 0400) is created on first start and must never be committed or backed up together with the database.
-- `internal/sites`: root-side site accounts. The registry (`sites.json`, in `/var/lib/hostashi-agent`, root-owned, mode 0700, deliberately not below the web process's directory) is the only source of uid, gid and storage pool. Home directories are created and removed with `openat2` on open fds, never with path strings. Deleting a site refuses homes owned by someone else and never crosses mounts or symlinks.
-- `internal/sysuser`: `useradd` and `userdel`, the only place in product code that starts a process (depguard exception in `.golangci.yml`): fixed absolute paths, arguments from validated names, empty environment.
-- `internal/hosting`: the panel side of sites. The database (`sites`, `site_domains`) is the desired state; every change ends with `web.apply` carrying the complete state of all active sites, so a failed or interrupted change is repaired by the next one (or `POST /api/v1/web/sync`). A create whose virtual host cannot go live removes the account again, a failed domain change restores the old domains, and a delete that stops halfway leaves the site in state `deleting` and can be repeated. Routes: `GET/POST /api/v1/sites`, `GET/DELETE /api/v1/sites/{name}`, `PUT /api/v1/sites/{name}/domains`, `PUT /api/v1/sites/{name}/php`, `PUT /api/v1/sites/{name}/tls` (or `"tls": true` and `"hsts": true` on create), `PUT /api/v1/sites/{name}/hsts`, `PUT /api/v1/sites/{name}/disabled` (`{"disabled": true, "page": "p3"}`; a disabled site answers every path except ACME challenges with a maintenance page and 503, without `Retry-After` or allowlist, `page` empty for the built-in one (ADR-0047), and its PHP pool stops; account, files, databases and certificate renewal stay), `GET /api/v1/php/versions`, `GET /api/v1/panel/tls` (the panel certificate, ADR-0023). Own certificates (ADR-0039): `GET/PUT/DELETE /api/v1/sites/{name}/tls/certificate` (`{"certificate", "chain", "key", "allowUntrusted"}`; without `key` the key of the last CSR is used; delete only with HTTPS off), `POST /api/v1/sites/{name}/tls/csr`, `PUT /api/v1/sites/{name}/tls/source` (`letsencrypt` or `custom`; the renewal loop skips `custom`), `POST /api/v1/sites/{name}/tls/renew` (Let's Encrypt now, at most every 10 minutes); the same routes below `/api/v1/parked-domains/{domain}/tls/` (scopes `sites:read`, `sites.maintenance:write`) and `/api/v1/panel/tls/` (admins, `sites:read` and `sites:write`; no delete, going back to Let's Encrypt replaces an own certificate) (scopes `sites:read`, `sites:write`, `sites:delete`). Maintenance and parking pages (ADR-0027): `GET/POST /api/v1/status-pages`, `GET/PUT/DELETE /api/v1/status-pages/{id}` (multipart fields `name`, `kind`, `file`; scopes `pages:read`, `pages:write`) and `PUT /api/v1/sites/{name}/maintenance` (scope `sites.maintenance:write`). `internal/statuspage` checks an upload (one HTML file or a ZIP, counted while unpacking) and holds the built-in pages; `web.apply` sends a page to the agent first when the agent lacks that version. Parked domains: `GET /api/v1/parked-domains`, `GET/PUT/DELETE /api/v1/parked-domains/{domain}` (`{"page": "builtin-parking", "tls": true}`; scopes `sites:read` and `sites.maintenance:write`). A parked domain answers every path with a parking page and 200, gets its certificate under `_park-<n>` and is dropped when a site takes the domain. Custom nginx snippets (ADR-0029): `GET/PUT /api/v1/sites/{name}/snippets` (`{"server": "...", "root": "..."}`; scopes `sites:read` and the high-risk `sites.snippets:write`); the agent checks them first (`site.snippets.check`, a 422 `snippet_rejected` lists every rejected line) and again on every `web.apply`.
-- `internal/web`: the nginx reconciler (spike S2). Every change renders a new generation below `/var/lib/hostashi-agent/web`, runs `nginx -t`, switches the `current` symlink, reloads and only counts as live when nginx's control socket reports the new generation eight times in a row and every site's health location (`/.hostashi/health`, only through that socket, never the application) answers with the site's name; otherwise the previous generation is restored. Templates are typed and must work on nginx 1.26. Custom snippets (ADR-0029) go through `internal/snippet`: an allowlist of directives with typed argument checks, rendered again from the parsed directives into `snippets/<site>-server.conf` and `snippets/<site>-root.conf`; a new directive on the list needs a hostile test case. Its tests start a private nginx and skip without one (`apt install nginx`).
-- `internal/webctl`: the second place allowed to start processes: `nginx -t` and `systemctl reload|restart nginx.service` with fixed arguments.
-- `internal/php`: one PHP-FPM master per site (ADR-0015, ADR-0019) as the unit `hostashi-php-<version>@<site>.service` (template in `packaging/systemd`). It renders the pool file below `/var/lib/hostashi-agent/php`, checks it with `php-fpm -t`, starts, reloads or switches the unit, and restores the previous state if the new one does not start. The pool file does not depend on the version. `web.apply` starts new pools before nginx and stops removed ones after. Its real-`php-fpm` test skips without one (`apt install php-fpm`).
-- `internal/phpctl`: the third place allowed to start processes: `php-fpm<version> -t` and `systemctl enable|reload-or-restart|disable` of the PHP units, with fixed arguments and checked unit names.
-- `internal/pages`: maintenance and parking pages on the agent side (ADR-0027). `page.begin`, `page.write` (chunks of at most 40 KiB) and `page.commit` (SHA-256 of all files, `agentapi.PageDigest`) build a page in `/var/lib/hostashi-pages/.upload-<id>` with `openat2` and no symlinks; the commit checks names, types and sizes again and renames it to the read-only directory `<id>.<digest>`. `web.apply` names a page by id and digest; nginx serves its files under `/.hostashi/page/<id>/` with a strict Content-Security-Policy and answers addresses outside the site's allowlist (`geo`) with the page and 503. ACME challenges and the health check are not affected. A page that the live configuration uses cannot be deleted; old versions are pruned after every commit and apply.
-- `internal/certs`: site TLS keys on the agent side. `tls.csr` creates an ECDSA P-256 key below `/var/lib/hostashi-agent/tls/<site>` (root, 0600) and returns only a CSR; `tls.install` accepts a chain only if it matches that pending key, is valid now and names valid hosts. The private key never leaves root. `web.apply` serves a site over HTTPS only while its certificate covers all its domains, with HTTP/3 (QUIC on UDP 443) when nginx has `http_v3_module` (checked with `nginx -V` at agent start) and optional HSTS per site.
-- `internal/acme`: the panel's ACME client (lego as a library, ADR-0003), HTTP-01 only. Challenge files go to `/var/lib/hostashi-acme/.well-known/acme-challenge` (panel writes, nginx reads through the setgid group `www-data`). The account key is sealed in the settings table, one per directory URL. `hosting.RunTLS` obtains and renews certificates in the background (30 days before expiry, a failed attempt waits an hour). Tests never use the real Let's Encrypt: `container-test.sh` runs Pebble when `PEBBLE_DIR` is set, as CI does.
-- Panel HTTPS (ADR-0023): `serve` derives the panel name from `-public-url` (a host name, not localhost or an IP) and `hosting` gets its certificate under `agentapi.PanelCert` (`_panel`). The agent's `-panel-port` (default 8443) is where nginx serves it; `web.apply` carries the panel next to the sites. nginx proxies to the socket of `hostashi-panel.socket`, which `serve` takes over from systemd (`LISTEN_FDS`); only requests on that socket take the client address from `X-Real-IP`.
-- `internal/agentapi`: the complete list of agent operations. New operations go here, each with a request type that validates its own input. There is no generic exec operation.
-- `packaging/`: systemd units and `install.sh` for a fresh Debian 13 or Ubuntu 26.04 server (step model of spike S5: `plan`, then `apply --yes`; idempotent). The agent unit must not set `RestrictSUIDSGID`, which makes `openat2` fail with ENOSYS. `packaging/test/container-test.sh IMAGE BINARY` runs the installer in a systemd container; CI runs it for both distros.
+- `cmd/hostashi`: the binary and its subcommands.
+- `internal/serve`: the web process (HTTP API, sessions, the embedded UI). It refuses to run as root. The API is described in [`api/openapi.json`](api/openapi.json), which is generated from the routes (see below).
+- `internal/agent`, `internal/agentrpc`: the root agent and the typed RPC to it (Unix socket, length-prefixed JSON, peer checked with `SO_PEERCRED`).
+- `internal/agentapi`: the complete list of agent operations. A new operation goes here, with a request type that validates its own input. There is no generic exec operation.
+- `internal/store`: SQLite with embedded, numbered migrations in `internal/store/migrations/`. Only `serve` opens it. Migrations are append-only and their numbers have no gaps: never edit a merged one, add the next number.
+- `internal/hosting`: the panel side of sites. The database is the desired state; a change ends with a complete `web.apply`, so an interrupted change is repaired by the next one.
+- `internal/web`, `internal/nginxconf`, `internal/php`: the reconcilers for nginx and PHP-FPM. A new configuration is checked (`nginx -t`, `php-fpm -t`) and rolled back if it does not go live.
+- Only a few packages may start processes, each with fixed absolute paths and validated arguments: `sysuser`, `webctl`, `phpctl`, `resticctl`, `mariadbctl`, `pgctl`, `wpcli` and `f2bctl` (depguard exceptions in [`.golangci.yml`](.golangci.yml)). A new exception needs an ADR.
+- `web/`: the React + TypeScript UI (Vite), embedded in the binary. Texts are in English and German, see below.
+- `packaging/`: the `.deb`, systemd units and `install.sh` for a fresh Debian 13 or Ubuntu 26.04 server (`plan`, then `apply --yes`; idempotent). `packaging/test/` holds the installer and upgrade tests that CI runs in systemd containers.
+- `docs/`: planning documents, ADRs in [`docs/adr/`](docs/adr/), security reviews, and the user documentation in [`docs/wiki/`](docs/wiki/).
 - `spike/`: reports of the planning spikes; the prototype code was removed (see `spike/README.md`).
 
 Run the checks locally:
@@ -39,6 +28,15 @@ go vet ./...
 go test -race -tags hostashi_fasthash ./...   # cheap password hashes and pre-migrated test databases, as in CI
 sudo env "PATH=$PATH" go test -race -run '^TestCrossUser$' ./internal/agentrpc/   # needs root
 sudo env "PATH=$PATH" go test -race -run '^TestRoot' ./internal/sysuser/          # needs root, creates and removes real test users
+```
+
+For the UI:
+
+```sh
+cd web
+npm ci
+npm run typecheck && npm test   # TypeScript, unit tests, text catalog checks
+npm run dev                     # development server; the component gallery is at /gallery.html
 ```
 
 ## Clean-room rule
@@ -64,7 +62,7 @@ See [`docs/05-security.md`](docs/05-security.md). Report vulnerabilities private
 
 ## Decisions are made through ADRs
 
-New or changed decisions are proposed as an ADR in [`docs/07-decisions.md`](docs/07-decisions.md): context, options, recommendation, consequences. Proposals start as `Proposed`. Only the maintainer sets `Accepted`. Later changes get a new ADR number instead of rewriting an old one.
+New or changed decisions are proposed as an ADR in [`docs/adr/`](docs/adr/) and listed in the index [`docs/07-decisions.md`](docs/07-decisions.md): context, options, recommendation, consequences. Proposals start as `Proposed`. Only the maintainer sets `Accepted`. Later changes get a new ADR number instead of rewriting an old one.
 
 Separate what is verified (sources, tests, code) from assumptions and estimates.
 
@@ -75,12 +73,13 @@ Mail server, DNS server, billing, reseller features and multi-server are non-goa
 ## Language
 
 - Code, comments, commit messages, issues and public documentation: **English** (ADR-0012).
-- The internal planning documents in `docs/` are currently German and will be translated before publication.
+- The panel and its emails are in English and German ([ADR-0071](docs/adr/0071-panel-ui-in-english-and-german.md)). A text a user reads goes through `t()`, and a new key gets its English and German text in the same pull request. The rules and the glossary are in [`web/src/locales/README.md`](web/src/locales/README.md); the tests in `web/src/locales/` fail for text written directly in the JSX and for a key missing in one language. Texts of emails and server checks live in `internal/mail` and `internal/doctor`.
 
 ## Commits and pull requests
 
-- Commit messages in English, imperative mood, short subject (about 72 characters), for example `Add threat model for agent RPC`.
-- One logical change per pull request. Fill in the PR template.
+- Commit messages and pull request titles follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `ci:`, `chore:`, with an optional scope (`fix(backup): …`). A breaking change gets `!` after the type and a `BREAKING CHANGE:` footer. Subject in English, imperative mood, about 72 characters.
+- One logical change per pull request, with tests including error cases. Fill in the PR template. Each pull request gets a `Kind/*` label; the release notes are grouped by these labels ([`.github/release.yml`](.github/release.yml)).
+- A pull request that adds or changes API routes regenerates the OpenAPI document: `go test ./internal/serve -run TestOpenAPIDocument -update`, then commit `api/openapi.json`.
 - User documentation lives in [`docs/wiki/`](docs/wiki/) and is mirrored to the GitHub wiki after each merge ([ADR-0043](docs/adr/0043-user-documentation.md)). Change it there, not in the wiki. A pull request that changes what users see or do should update the matching page. Pages link each other as `Page.md`. Screenshots in `docs/wiki/images/` come from `cd web && npm run wiki-shots`, which serves the UI with the sample data in `web/e2e/wiki-fixtures.mjs`; renew them after UI changes instead of taking them by hand.
 - Documentation changes must pass the CI checks (Markdown lint and link check). Go changes must pass the Go workflow (golangci-lint format and lint, vet, tests with race detector, short fuzzing, govulncheck). The Go version is pinned in `go.mod`. To run the lint locally: `npx markdownlint-cli2 "**/*.md"`.
 - Do not commit secrets. `.env` files are ignored.

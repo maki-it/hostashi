@@ -22,6 +22,7 @@ A modern, **truly open source** hosting control panel for single Linux servers, 
 - **Backups:** daily restic backups of files and databases to any SFTP server (for example a Hetzner Storage Box), with restore from the panel.
 - **Server:** storage pools on extra volumes, firewall that rolls back unconfirmed changes, fail2ban, virus scan, services and dashboard, time zone and host name, e-mail notifications, audit log.
 - **Users and roles:** admin, manager and user, with a second factor (TOTP or passkeys), and API tokens with an IP allowlist.
+- **Languages:** the panel and its e-mails in English and German, chosen per account.
 - **Import from CloudPanel:** scan the old server, plan, transfer sites and databases, sync once more before you move DNS.
 - **API and command line:** a REST API under `/api/v1` described in [`api/openapi.json`](api/openapi.json). The `hostashi` command uses the same API after `hostashi login` and can run every API operation.
 
