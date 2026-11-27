@@ -4,7 +4,7 @@
 // a mail server: it hands messages to a relay over STARTTLS or TLS.
 
 import { ApiError, request } from "./api";
-import { areaErrorText } from "./i18n";
+import i18n, { areaErrorText } from "./i18n";
 
 export type TLSMode = "starttls" | "tls";
 
@@ -49,18 +49,17 @@ export function mailMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case "forbidden":
-        return "Only administrators can change the email settings.";
-      case "invalid_argument":
-        return err.message.replace(/^mail: invalid settings: /, "").replace(/^./, (c) => c.toUpperCase()) + ".";
       case "mail_not_configured":
-        return "Save the relay first.";
       case "rate_limited":
-        return "At most 10 test emails per hour. Try again later.";
+        return i18n.t(`mail.errors.${err.code}`);
+      case "invalid_argument":
+        // The relay's settings check names the field in English (ADR-0071: the API stays English).
+        return err.message.replace(/^mail: invalid settings: /, "").replace(/^./, (c) => c.toUpperCase()) + ".";
       case "mail_failed":
-        return "The relay did not take the email: " + err.message;
+        return i18n.t("mail.errors.mail_failed", { message: err.message });
     }
   }
-  return "The request failed. Try again.";
+  return i18n.t("mail.errors.failed");
 }
 
 export type AccountEmail = {

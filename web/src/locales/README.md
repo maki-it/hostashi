@@ -79,12 +79,14 @@ The same English term is always translated the same way.
 | cron job | Cron-Job | |
 | database | Datenbank | |
 | database server | Datenbankserver | |
+| DNS switch | DNS-Umstellung | CloudPanel import |
 | domain | Domain | die Domain |
 | email | E-Mail | mail as a message: Mail |
 | file manager | Dateimanager | |
 | firewall | Firewall | die Firewall |
 | hardening | Härtung | |
 | health | Zustand | the Health page |
+| invitation | Einladung | invitation link: Einladungslink |
 | limit preset | Limit-Vorlage | |
 | log in / log out | anmelden / abmelden | |
 | maintenance page | Wartungsseite | |
@@ -95,8 +97,11 @@ The same English term is always translated the same way.
 | password | Passwort | |
 | recovery code | Wiederherstellungscode | |
 | redirect | Weiterleitung | |
+| relay (SMTP) | Relay | das SMTP-Relay |
 | reverse proxy | Reverse Proxy | |
 | runtime | Runtime | the Runtimes page: Runtimes |
+| scan report | Scan-Bericht | CloudPanel import |
+| second factor | zweiter Faktor | TOTP or a passkey |
 | security headers | Sicherheits-Header | |
 | service | Dienst | |
 | settings | Einstellungen | |
@@ -107,3 +112,4 @@ The same English term is always translated the same way.
 | two-factor | Zwei-Faktor | two-factor authentication: Zwei-Faktor-Anmeldung |
 | virus scan | Virenscan | |
 | visitor address | Besucheradresse | the Real IP tab |
+| web root | Web-Root | das Web-Root |
