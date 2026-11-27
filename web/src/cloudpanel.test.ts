@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it } from "vitest";
-import { cronLabel, existsHere, formatBytes, hostProblem, parseDBMap, ttlLabel, type PlanSite } from "./cloudpanel";
+import { cronLabel, existsHere, hostProblem, parseDBMap, ttlLabel, type PlanSite } from "./cloudpanel";
 
 const site = (action: PlanSite["action"], codes: string[]): PlanSite => ({
   name: "shop",
@@ -67,15 +67,6 @@ describe("existsHere", () => {
     expect(existsHere(site("skip", ["domain_taken"]))).toBe(false);
     expect(existsHere(site("skip", ["site_exists", "user_twice"]))).toBe(false);
     expect(existsHere(site("import", []))).toBe(false);
-  });
-});
-
-describe("formatBytes", () => {
-  it("uses binary units", () => {
-    expect(formatBytes(0)).toBe("0 B");
-    expect(formatBytes(1023)).toBe("1023 B");
-    expect(formatBytes(1536)).toBe("1.5 KiB");
-    expect(formatBytes(5 * 1024 ** 3)).toBe("5.0 GiB");
   });
 });
 

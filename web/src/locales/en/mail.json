@@ -1,0 +1,51 @@
+{
+  "title": "Email",
+  "description": "Hostashi sends notifications and invitation links through an SMTP relay you already use. It is not a mail server and receives no mail.",
+  "off": "Email is off.",
+  "offText": "Invitation links are shown to copy, and notifications appear only in the panel. Enter a relay to send them by email as well.",
+  "relay": {
+    "title": "SMTP relay",
+    "host": "Host",
+    "hostHint": "For example smtp.example.com.",
+    "encryption": "Encryption",
+    "encryptionHint": "Only encrypted connections. The certificate is always checked.",
+    "starttls": "STARTTLS (port 587)",
+    "tls": "TLS (port 465)",
+    "port": "Port",
+    "portProblem": "Enter a port between 1 and 65535, usually 587 for STARTTLS or 465 for TLS.",
+    "username": "Username (optional)",
+    "usernameHint": "Leave empty if the relay trusts this server without a login.",
+    "password": "Password",
+    "passwordHint": "Stored encrypted with the server key and never shown again.",
+    "passwordStored": "A password is stored.",
+    "replacePassword": "Replace password"
+  },
+  "sender": {
+    "title": "Sender",
+    "from": "From address",
+    "fromHint": "An address the relay may send as, for example panel@example.com.",
+    "fromName": "From name (optional)",
+    "replyTo": "Reply-to (optional)",
+    "replyToHint": "Where replies go, for example your own address."
+  },
+  "ca": {
+    "title": "Private certificate authority (optional)",
+    "label": "CA certificate (PEM)",
+    "hint": "Only for a relay whose certificate comes from your own CA. The usual public CAs are always trusted."
+  },
+  "turnOff": "Turn email off",
+  "test": {
+    "title": "Send a test email",
+    "to": "Send to",
+    "sending": "Sending…",
+    "submit": "Send test email",
+    "sent": "The relay took the email. Check the inbox, and the spam folder if it does not arrive."
+  },
+  "errors": {
+    "forbidden": "Only administrators can change the email settings.",
+    "mail_not_configured": "Save the relay first.",
+    "rate_limited": "At most 10 test emails per hour. Try again later.",
+    "mail_failed": "The relay did not take the email: {{message}}",
+    "failed": "The request failed. Try again."
+  }
+}
