@@ -5,6 +5,7 @@
 import account from "./account.json";
 import audit from "./audit.json";
 import auth from "./auth.json";
+import backups from "./backups.json";
 import common from "./common.json";
 import errors from "./errors.json";
 import mail from "./mail.json";
@@ -13,7 +14,7 @@ import shell from "./shell.json";
 import tokens from "./tokens.json";
 import users from "./users.json";
 
-const en = { account, audit, auth, common, errors, mail, migrate, shell, tokens, users };
+const en = { account, audit, auth, backups, common, errors, mail, migrate, shell, tokens, users };
 
 export type Catalog = typeof en;
 
