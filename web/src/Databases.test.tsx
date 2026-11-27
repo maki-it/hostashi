@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { describe, expect, it } from "vitest";
 import { Databases } from "./Databases";
 import { defaultDumpPath, dumpFormats, formatOf, nameProblem, pathProblem, uploadPath, withFormat } from "./databases";
+import { setLanguage } from "./i18n";
 import { parseHash } from "./routes";
 import { mockFetch } from "./test-utils";
 
@@ -265,6 +266,34 @@ describe("Database list", () => {
     render(<Harness initial="db=gone" />);
     expect(await screen.findByText("There is no database named gone.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "All databases" })).toHaveAttribute("href", "#/databases");
+  });
+});
+
+describe("Databases in German", () => {
+  it("shows the list, one database and its errors in German", async () => {
+    setLanguage("de");
+    const user = userEvent.setup();
+    mockFetch({
+      ...sites,
+      "GET /api/v1/databases": { body: { databases: [{ ...blogWp, sizeBytes: 1536 * 1024 }] } },
+      "DELETE /api/v1/databases/blog_wp": { status: 409, body: { error: { code: "db_server_unavailable", message: "x" } } },
+    });
+    const { unmount } = render(<Harness />);
+    const table = await screen.findByRole("table", { name: "Datenbanken" });
+    expect(within(table).getByRole("button", { name: "Datenbank" })).toBeInTheDocument();
+    expect(within(table).getByText("1,5 MiB")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Neue Datenbank" })).toBeInTheDocument();
+    expect(nameProblem("database", "Blog")).toContain("Verwende 1 bis 64 Zeichen");
+    unmount();
+
+    render(<Harness initial="db=blog_wp" />);
+    // The value to type stays in code style inside the German label.
+    const label = await screen.findByText((_, el) => el?.tagName === "LABEL" && /Zur Bestätigung/.test(el.textContent ?? ""));
+    expect(within(label).getByText("blog_wp", { selector: "code.ui-confirm-phrase" })).toBeInTheDocument();
+    expect(screen.getByText("Datenbank der Site")).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/Zur Bestätigung/), "blog_wp");
+    await user.click(screen.getByRole("button", { name: "blog_wp löschen" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Der Datenbankserver ist nicht erreichbar.");
   });
 });
 

@@ -82,6 +82,8 @@ The same English term is always translated the same way.
 | cron job | Cron-Job | |
 | database | Datenbank | |
 | database server | Datenbankserver | |
+| database tool session | Adminer-Sitzung | the Adminer sessions card |
+| dump (import/export file) | Dump | dump file: Dump-Datei |
 | DNS switch | DNS-Umstellung | CloudPanel import |
 | domain | Domain | die Domain |
 | email | E-Mail | mail as a message: Mail |
@@ -89,6 +91,7 @@ The same English term is always translated the same way.
 | firewall | Firewall | die Firewall |
 | hardening | Härtung | |
 | health | Zustand | the Health page |
+| home (of a site) | Home-Verzeichnis | |
 | invitation | Einladung | invitation link: Einladungslink |
 | jail (fail2ban) | Jail | das Jail |
 | limit preset | Limit-Vorlage | |
