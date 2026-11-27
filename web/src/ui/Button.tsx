@@ -2,7 +2,9 @@
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-export type ButtonVariant = "primary" | "secondary" | "danger";
+/** danger is outlined red; destroy is filled red, for the final step of
+ *  something that cannot be undone. */
+export type ButtonVariant = "primary" | "secondary" | "danger" | "destroy";
 
 type ButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> & {
   variant?: ButtonVariant;

@@ -4,7 +4,7 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { cleanPath, formatSize, modeProblem, nameProblem, zipUrl, type FileEntry } from "./files";
-import { FileManager } from "./Files";
+import { FileManager, symbolicMode } from "./Files";
 import type { Site } from "./sites";
 import { mockFetch } from "./test-utils";
 
@@ -54,7 +54,9 @@ describe("FileManager", () => {
     expect(within(table).getByText("2.0 KiB")).toBeInTheDocument();
     expect(within(table).getByRole("link", { name: "Download index.php" })).toHaveAttribute("href", api + "/content?path=htdocs%2Findex.php");
     expect(within(table).getByRole("link", { name: "Download wp-content as ZIP" })).toHaveAttribute("href", api + "/zip?path=htdocs%2Fwp-content");
-    expect(within(table).getByRole("button", { name: "Extract site.zip" })).toBeInTheDocument();
+    await userEvent.click(within(table).getByRole("button", { name: "More actions for site.zip" }));
+    expect(screen.getByRole("menuitem", { name: "Extract…" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
     expect(within(table).queryByRole("button", { name: "Extract index.php" })).toBeNull();
     expect(within(table).queryByRole("button", { name: "current" })).toBeNull();
     expect(within(table).getByRole("button", { name: "Edit index.php" })).toBeInTheDocument();
@@ -117,12 +119,48 @@ describe("FileManager", () => {
     expect(await screen.findByText("It is not there any more. Reload the folder.")).toBeInTheDocument();
   });
 
+  it("renames in the row and asks before deleting below it", async () => {
+    const calls = mockFetch({
+      [list("htdocs")]: listing("htdocs"),
+      ["POST " + api + "/rename"]: { body: {} },
+      ["POST " + api + "/delete"]: { body: {} },
+    });
+    render(<FileManager site={site} path="htdocs" onPath={() => undefined} />);
+    const table = await screen.findByRole("table", { name: "Files in htdocs" });
+
+    await userEvent.click(within(table).getByRole("button", { name: "More actions for index.php" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const field = within(table).getByRole<HTMLInputElement>("textbox", { name: "New name" });
+    expect([field.selectionStart, field.selectionEnd]).toEqual([0, 5]);
+    await userEvent.keyboard("{Escape}");
+    expect(within(table).queryByRole("textbox", { name: "New name" })).toBeNull();
+
+    await userEvent.click(within(table).getByRole("button", { name: "More actions for index.php" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    await userEvent.keyboard("home{Enter}");
+    expect(await screen.findByText("Renamed to home.php.")).toBeInTheDocument();
+    expect(calls.find((c) => c.path.endsWith("/rename"))?.body).toEqual({ from: "htdocs/index.php", to: "htdocs/home.php" });
+
+    await userEvent.click(within(table).getByRole("button", { name: "More actions for site.zip" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    const ask = within(within(table).getByRole("alertdialog", { name: "Delete site.zip?" }));
+    await userEvent.click(ask.getByRole("button", { name: "Delete" }));
+    expect(await screen.findByText("site.zip deleted.")).toBeInTheDocument();
+    expect(calls.find((c) => c.path.endsWith("/delete"))?.body).toEqual({ paths: ["htdocs/site.zip"] });
+  });
+
+  it("spells out the mode", () => {
+    expect(symbolicMode("0644")).toBe("rw-r--r--");
+    expect(symbolicMode("0750")).toBe("rwxr-x---");
+  });
+
   it("creates a folder after checking the name", async () => {
     const calls = mockFetch({ [list("htdocs")]: listing("htdocs"), ["POST " + api + "/mkdir"]: { body: {} } });
     render(<FileManager site={site} path="htdocs" onPath={() => undefined} />);
     await screen.findByRole("table");
 
-    await userEvent.click(screen.getByRole("button", { name: "New folder" }));
+    await userEvent.click(screen.getByRole("button", { name: "New" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Folder" }));
     const dialog = within(screen.getByRole("dialog", { name: "New folder" }));
     await userEvent.type(dialog.getByLabelText("Name"), "a/b");
     await userEvent.click(dialog.getByRole("button", { name: "Create" }));
@@ -203,7 +241,7 @@ describe("FileManager", () => {
     const head = screen.getAllByRole("columnheader")[0]!;
     await userEvent.click(within(head).getByRole("checkbox", { name: "Select all" }));
     await userEvent.click(within(screen.getByRole("region", { name: "Selection" })).getByRole("button", { name: "Delete" }));
-    dialog = within(screen.getByRole("alertdialog", { name: "Delete 4 entries?" }));
+    dialog = within(screen.getByRole("alertdialog", { name: "Delete these 4 entries?" }));
     expect(dialog.getByText(/There is no recycle bin/)).toBeInTheDocument();
     await userEvent.click(dialog.getByRole("button", { name: "Delete 4 entries" }));
     expect(await screen.findByText("4 entries deleted.")).toBeInTheDocument();
@@ -234,7 +272,8 @@ describe("FileManager", () => {
       ["POST " + api + "/extract"]: { body: { done: true, result: { files: 3, dirs: 1, kept: 1, skipped: 1 } } },
     });
     render(<FileManager site={site} path="htdocs" onPath={() => undefined} />);
-    await userEvent.click(await screen.findByRole("button", { name: "Extract site.zip" }));
+    await userEvent.click(await screen.findByRole("button", { name: "More actions for site.zip" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Extract…" }));
     const dialog = within(screen.getByRole("dialog", { name: "Extract site.zip" }));
     await userEvent.click(dialog.getByRole("button", { name: "Extract" }));
     expect(await screen.findByText("3 files extracted into htdocs, 1 existing files kept, 1 symlinks or special entries skipped.")).toBeInTheDocument();

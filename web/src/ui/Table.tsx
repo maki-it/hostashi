@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { CaretDown, CaretUp, CaretUpDown } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 
 export type SortDir = "asc" | "desc";
 export type Sort = { key: string; dir: SortDir };
@@ -36,6 +36,9 @@ type TableProps<T> = {
    * labelled columns are hidden, so the main cell should carry them.
    */
   compact?: boolean;
+  /** Content of an extra full-width row below a row, for example a
+   *  confirmation for that row; null for none. */
+  after?: (row: T) => ReactNode;
 };
 
 const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
@@ -66,7 +69,7 @@ export function nextSort(current: Sort | undefined, key: string): Sort {
  * up/down icon, and an up or down arrow on the active column (ADR-0037).
  * The caller keeps the sort, for example in the address.
  */
-export function Table<T>({ label, columns, rows, rowKey, sort, onSort, empty, compact = false }: TableProps<T>) {
+export function Table<T>({ label, columns, rows, rowKey, sort, onSort, empty, compact = false, after }: TableProps<T>) {
   const shown = sortRows(rows, columns, sort);
   return (
     <div className="ui-table-box">
@@ -110,15 +113,25 @@ export function Table<T>({ label, columns, rows, rowKey, sort, onSort, empty, co
               </td>
             </tr>
           ) : (
-            shown.map((row) => (
-              <tr key={rowKey(row)}>
-                {columns.map((c, i) => (
-                  <td key={c.key} data-label={i === 0 || c.srHeader || c.main ? undefined : c.header} data-actions={c.srHeader ? "" : undefined} data-main={c.main ? "" : undefined}>
-                    {c.cell(row)}
-                  </td>
-                ))}
-              </tr>
-            ))
+            shown.map((row) => {
+              const extra = after?.(row) ?? null;
+              return (
+                <Fragment key={rowKey(row)}>
+                  <tr data-open={extra !== null ? "" : undefined}>
+                    {columns.map((c, i) => (
+                      <td key={c.key} data-label={i === 0 || c.srHeader || c.main ? undefined : c.header} data-actions={c.srHeader ? "" : undefined} data-main={c.main ? "" : undefined}>
+                        {c.cell(row)}
+                      </td>
+                    ))}
+                  </tr>
+                  {extra !== null && (
+                    <tr className="ui-table-after">
+                      <td colSpan={columns.length}>{extra}</td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })
           )}
         </tbody>
       </table>

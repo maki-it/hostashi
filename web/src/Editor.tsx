@@ -5,10 +5,10 @@
 // with unsaved changes asks first; leaving the page triggers the browser's
 // own warning. Footer buttons are labelled; icons are for toolbars.
 
-import { X } from "@phosphor-icons/react";
+import { ArrowsIn, ArrowsOut, MagnifyingGlass, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createEditor, language, type EditorHandle } from "./codemirror";
-import { downloadUrl, fileVersion, filesMessage, maxEditBytes, saveFile, type FileEntry } from "./files";
+import { downloadUrl, fileVersion, parentPath, filesMessage, maxEditBytes, saveFile, type FileEntry } from "./files";
 import { ApiError } from "./api";
 import { Badge, Button, IconButton, Notice } from "./ui";
 
@@ -25,18 +25,19 @@ type Props = {
 type Loaded = { text: string; version: string; crlf: boolean; bom: boolean };
 
 const wrapKey = "hostashi.editor.wrap";
+const fullKey = "hostashi.editor.full";
 
-function readWrap(): boolean {
+function readFlag(key: string): boolean {
   try {
-    return localStorage.getItem(wrapKey) === "1";
+    return localStorage.getItem(key) === "1";
   } catch {
     return false;
   }
 }
 
-function storeWrap(on: boolean) {
+function storeFlag(key: string, on: boolean) {
   try {
-    localStorage.setItem(wrapKey, on ? "1" : "0");
+    localStorage.setItem(key, on ? "1" : "0");
   } catch {
     // The setting is a convenience; without storage it lasts until reload.
   }
@@ -79,11 +80,12 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
   const [original, setOriginal] = useState("");
   const [doc, setDoc] = useState("");
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
-  const [wrap, setWrap] = useState(readWrap);
+  const [wrap, setWrap] = useState(() => readFlag(wrapKey));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [asking, setAsking] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [full, setFull] = useState(() => readFlag(fullKey));
 
   const dirty = loaded !== null && doc !== original;
   const lang = language(entry.name).label;
@@ -174,7 +176,7 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
 
   useEffect(() => {
     editor.current?.setWrap(wrap);
-    storeWrap(wrap);
+    storeFlag(wrapKey, wrap);
   }, [wrap]);
 
   // Ctrl/Cmd+S saves wherever the focus is while the editor is open, and
@@ -202,6 +204,10 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
+  useEffect(() => storeFlag(fullKey, full), [full]);
+
+  const folder = parentPath(path);
+
   const requestClose = () => {
     if (dirty) setAsking(true);
     else onClose();
@@ -211,6 +217,7 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
     <dialog
       ref={dialog}
       className="ui-editor"
+      data-full={full}
       aria-labelledby="editor-title"
       onCancel={(e) => {
         // Esc: never close with unsaved changes without asking.
@@ -227,9 +234,24 @@ export default function EditorDialog({ site, path, entry, onClose, onSaved }: Pr
           <h2 id="editor-title" className="ui-flush">
             {entry.name}
           </h2>
-          <span className="ui-hint ui-mono">{path}</span>
+          {folder !== "" && <span className="ui-hint">in <span className="ui-mono">{folder}</span></span>}
         </div>
-        <IconButton label="Close" tipBelow icon={<X size={18} aria-hidden="true" />} onClick={requestClose} />
+        <div className="ui-row ui-nowrap" role="toolbar" aria-label="Editor">
+          <IconButton
+            label="Search and replace (Ctrl+F)"
+            tipBelow
+            disabled={loaded === null}
+            icon={<MagnifyingGlass size={18} aria-hidden="true" />}
+            onClick={() => editor.current?.openSearch()}
+          />
+          <IconButton
+            label={full ? "Smaller window" : "Full screen"}
+            tipBelow
+            icon={full ? <ArrowsIn size={18} aria-hidden="true" /> : <ArrowsOut size={18} aria-hidden="true" />}
+            onClick={() => setFull((f) => !f)}
+          />
+          <IconButton label="Close" tipBelow icon={<X size={18} aria-hidden="true" />} onClick={requestClose} />
+        </div>
       </div>
       <div className="ui-editor-body">
         {loadError ? (

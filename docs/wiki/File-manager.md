@@ -5,15 +5,15 @@ Every site has a **Files › File manager** tab between "Domains & HTTPS" and "P
 ## What you can do
 
 - Browse folders. The folder is part of the address, so the browser's back button and bookmarks work.
-- Upload files and whole folders, with the buttons or by dragging them onto the table. Large files go up in parts of 8 MiB; a cut connection resumes.
+- Upload files and whole folders with **Upload**, or by dragging them onto the table. Large files go up in parts of 8 MiB; a cut connection resumes.
 - Download a file, or a folder or a selection as a ZIP.
-- Create folders and empty files, rename, move, copy and delete, on one entry or a selection.
+- Create folders and empty files with **New**. Rename, move, copy, change the mode and delete one entry from its **⋯** menu, or several at once by ticking them; renaming happens right in the row.
 - Scan a selection for viruses while the [virus scan](Virus-scan.md#scan-some-files-or-folders) is on.
 - Change the mode (for example `644` or `755`). setuid, setgid and the sticky bit cannot be set.
 - Extract a ZIP into a folder. Files that exist already are kept unless you choose to replace them.
-- Edit text files up to 1 MiB in the code editor, with syntax highlighting, find and replace (Ctrl+F) and saving with Ctrl+S. If someone changed the file since you opened it, saving is refused instead of overwriting their change.
+- Edit text files up to 1 MiB: click the file's name to open it in the code editor, with syntax highlighting, find and replace (the magnifier or Ctrl+F), a full screen switch and saving with Ctrl+S. A file too large for the editor downloads when you click its name. If someone changed the file since you opened it, saving is refused instead of overwriting their change.
 
-Deleting asks once. There is no recycle bin; backups are the way back.
+Deleting asks once and lists what it deletes. There is no recycle bin; backups are the way back.
 
 ## Limits
 

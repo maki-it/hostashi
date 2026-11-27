@@ -15,7 +15,7 @@ import { php } from "@codemirror/lang-php";
 import { xml } from "@codemirror/lang-xml";
 import { yaml } from "@codemirror/lang-yaml";
 import { bracketMatching, HighlightStyle, indentOnInput, syntaxHighlighting } from "@codemirror/language";
-import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
+import { highlightSelectionMatches, openSearchPanel, search, searchKeymap } from "@codemirror/search";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
   drawSelection,
@@ -103,6 +103,9 @@ const theme = EditorView.theme({
   ".cm-activeLine": { backgroundColor: "color-mix(in srgb, var(--sunken) 50%, transparent)" },
   ".cm-activeLineGutter": { backgroundColor: "var(--line)", color: "var(--fg)" },
   ".cm-matchingBracket": { outline: "1px solid var(--accent)", backgroundColor: "transparent" },
+  // A bracket without a partner is not marked: the PHP and HTML parsers
+  // count "<?php" and "<" as one, and a red mark there looks like an error.
+  "&.cm-focused .cm-nonmatchingBracket, .cm-nonmatchingBracket": { color: "inherit", backgroundColor: "transparent" },
   ".cm-searchMatch": { backgroundColor: "var(--warn-bg)", outline: "1px solid var(--warn)" },
   ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "var(--ok-bg)" },
   ".cm-selectionMatch": { backgroundColor: "var(--ok-bg)" },
@@ -124,6 +127,8 @@ const theme = EditorView.theme({
 export type EditorHandle = {
   view: EditorView;
   setWrap: (on: boolean) => void;
+  /** Opens the search and replace bar, as Ctrl/Cmd+F does. */
+  openSearch: () => void;
   destroy: () => void;
 };
 
@@ -184,6 +189,9 @@ export function createEditor(o: EditorOptions): EditorHandle {
   return {
     view,
     setWrap: (on) => view.dispatch({ effects: wrap.reconfigure(on ? EditorView.lineWrapping : []) }),
+    openSearch: () => {
+      openSearchPanel(view);
+    },
     destroy: () => view.destroy(),
   };
 }

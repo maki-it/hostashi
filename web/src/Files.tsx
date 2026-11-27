@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The "Files" tab of a site (ADR-0040): one folder at a time, its path in
-// the address (?path=), a toolbar, a table with checkboxes and row actions,
-// and a bar for the selection. Dialogs are cards above the table with
-// labelled buttons; icons are for the toolbar and the rows (ADR-0037).
+// the address (?path=), a bar with the folder, filter and toolbar, a table
+// with checkboxes and row actions, and a bar for the selection. A click on
+// a file's name opens the editor. Steps for one entry open in its row;
+// steps for the selection or a new entry are cards above the table.
 
 import {
   ArrowClockwise,
   ArrowSquareOut,
+  CaretDown,
   Copy,
   DotsThree,
   DownloadSimple,
@@ -16,12 +18,12 @@ import {
   FilePlus,
   Folder,
   FolderPlus,
-  FolderSimpleDashed,
   House,
   LinkSimple,
   LockKey,
   NotePencil,
   PencilSimpleLine,
+  Plus,
   Trash,
   UploadSimple,
   ShieldCheck,
@@ -64,11 +66,13 @@ type Props = {
   onPath: (path: string) => void;
 };
 
+/** row is the entry whose row shows the step; without it, the step is a
+ *  card above the table. */
 type Dialog =
   | { kind: "mkdir" | "touch" }
   | { kind: "rename"; entry: FileEntry }
-  | { kind: "extract"; entry: FileEntry }
-  | { kind: "move" | "copy" | "chmod" | "delete"; names: string[] };
+  | { kind: "extract"; entry: FileEntry; row: string }
+  | { kind: "move" | "copy" | "chmod" | "delete"; names: string[]; row?: string };
 
 type UploadRow = { name: string; size: number; sent: number; error?: string };
 
@@ -76,6 +80,15 @@ type UploadRow = { name: string; size: number; sent: number; error?: string };
 const EditorDialog = lazy(() => import("./Editor"));
 
 const isZip = (e: FileEntry) => e.type === "file" && e.name.toLowerCase().endsWith(".zip");
+const editable = (e: FileEntry) => e.type === "file" && e.size <= maxEditBytes;
+
+/** symbolicMode spells out octal permission bits, "0644" as "rw-r--r--". */
+export function symbolicMode(mode: string): string {
+  return [...mode.slice(-3)].map((d) => {
+    const n = Number(d);
+    return (n & 4 ? "r" : "-") + (n & 2 ? "w" : "-") + (n & 1 ? "x" : "-");
+  }).join("");
+}
 
 export function FileManager({ site, path, onPath }: Props) {
   const [listing, setListing] = useState<Listing | null>(null);
@@ -125,7 +138,7 @@ export function FileManager({ site, path, onPath }: Props) {
   // The selection bar stays in view while the listing scrolls; a dialog or
   // a result it starts shows above the table, so bring that into view.
   useEffect(() => {
-    if (dialog || done || scanNote || loadError) bodyRef.current?.scrollIntoView?.({ block: "nearest" });
+    if (cardDialog || done || scanNote || loadError) bodyRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [dialog, done, scanNote, loadError]);
 
   const stale = listing !== null && listed !== site.name + "/" + path;
@@ -215,17 +228,36 @@ export function FileManager({ site, path, onPath }: Props) {
     void sendFiles(await droppedFiles(e.dataTransfer));
   }
 
-  // entryItems are the row actions as a menu, for the compact rows on a phone.
-  const entryItems = (e: FileEntry): MenuItem[] => {
-    const items: MenuItem[] = [];
+  const download = (e: FileEntry): MenuItem | null => {
     const p = joinPath(path, e.name);
-    if (e.type === "file") items.push({ label: "Download", icon: <DownloadSimple size={16} aria-hidden="true" />, href: downloadUrl(site.name, p), download: true });
-    if (e.type === "dir") items.push({ label: "Download as ZIP", icon: <DownloadSimple size={16} aria-hidden="true" />, href: zipUrl(site.name, [p]), download: true });
-    if (e.type === "file" && e.size <= maxEditBytes) items.push({ label: "Edit", icon: <NotePencil size={16} aria-hidden="true" />, onSelect: () => setEditing(e) });
-    if (isZip(e)) items.push({ label: "Extract", icon: <FileArchive size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "extract", entry: e }) });
+    if (e.type === "file") return { label: "Download", icon: <DownloadSimple size={16} aria-hidden="true" />, href: downloadUrl(site.name, p), download: true };
+    if (e.type === "dir") return { label: "Download as ZIP", icon: <DownloadSimple size={16} aria-hidden="true" />, href: zipUrl(site.name, [p]), download: true };
+    return null;
+  };
+
+  // entryItems are the actions of a row's "More" menu. On a phone the menu
+  // is the only control of a row, so it starts with the download.
+  const entryItems = (e: FileEntry, phone: boolean): MenuItem[] => {
+    const items: MenuItem[] = [];
+    const dl = download(e);
+    if (phone && dl) items.push(dl);
+    if (editable(e)) items.push({ label: "Edit", icon: <NotePencil size={16} aria-hidden="true" />, onSelect: () => setEditing(e) });
+    if (isZip(e)) items.push({ label: "Extract…", icon: <FileArchive size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "extract", entry: e, row: e.name }) });
     items.push({ label: "Rename", icon: <PencilSimpleLine size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "rename", entry: e }) });
-    items.push({ label: "Delete", icon: <Trash size={16} aria-hidden="true" />, danger: true, onSelect: () => setDialog({ kind: "delete", names: [e.name] }) });
+    items.push({ label: "Move…", icon: <ArrowSquareOut size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "move", names: [e.name], row: e.name }) });
+    items.push({ label: "Copy…", icon: <Copy size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "copy", names: [e.name], row: e.name }) });
+    items.push({ label: "Change mode…", icon: <LockKey size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "chmod", names: [e.name], row: e.name }) });
+    if (scanOn) items.push({ label: "Scan for viruses", icon: <ShieldCheck size={16} aria-hidden="true" />, onSelect: () => void scanSelection([joinPath(path, e.name)]) });
+    items.push({ label: "Delete…", icon: <Trash size={16} aria-hidden="true" />, danger: true, onSelect: () => setDialog({ kind: "delete", names: [e.name], row: e.name }) });
     return items;
+  };
+
+  const renaming = dialog?.kind === "rename" ? dialog.entry.name : null;
+  const rowDialog = dialog && "row" in dialog && dialog.row !== undefined ? dialog : null;
+  const cardDialog = dialog && dialog.kind !== "rename" && rowDialog === null ? dialog : null;
+  const dialogDone = (msg: string) => {
+    setSelected(new Set());
+    void finished(msg);
   };
 
   const columns: Column<FileEntry>[] = [
@@ -257,16 +289,38 @@ export function FileManager({ site, path, onPath }: Props) {
       header: "Name",
       main: true,
       sortValue: (e) => (e.type === "dir" ? "0" : "1") + e.name,
-      cell: (e) => (
+      cell: (e) =>
+        renaming === e.name && dialog?.kind === "rename" ? (
+          <RenameForm site={site.name} path={path} entry={dialog.entry} onCancel={() => setDialog(null)} onDone={dialogDone} />
+        ) : (
         <>
-          <EntryName entry={e} onOpen={() => onPath(joinPath(path, e.name))} />
+          <EntryName
+            entry={e}
+            onOpen={() => onPath(joinPath(path, e.name))}
+            onEdit={() => setEditing(e)}
+            href={e.type === "file" ? downloadUrl(site.name, joinPath(path, e.name)) : ""}
+          />
           <span className="ui-phone-only ui-files-meta">{[e.type === "file" ? formatSize(e.size) : "", relativeTime(new Date(e.modified)), e.mode.slice(1)].filter(Boolean).join(" · ")}</span>
         </>
       ),
     },
-    { key: "size", header: "Size", sortValue: (e) => (e.type === "dir" ? -1 : e.size), cell: (e) => (e.type === "file" ? formatSize(e.size) : "") },
+    {
+      key: "size",
+      header: "Size",
+      sortValue: (e) => (e.type === "dir" ? -1 : e.size),
+      cell: (e) => (e.type === "file" ? formatSize(e.size) : <span className="ui-hint" aria-label="no size">—</span>),
+    },
     { key: "modified", header: "Modified", sortValue: (e) => e.modified, cell: (e) => <RelTime iso={e.modified} /> },
-    { key: "mode", header: "Mode", sortValue: (e) => e.mode, cell: (e) => <span className="ui-mono">{e.mode.slice(1)}</span> },
+    {
+      key: "mode",
+      header: "Mode",
+      sortValue: (e) => e.mode,
+      cell: (e) => (
+        <abbr className="ui-mono ui-files-mode" title={symbolicMode(e.mode)}>
+          {e.mode.slice(1)}
+        </abbr>
+      ),
+    },
     {
       key: "actions",
       header: "Actions",
@@ -285,16 +339,11 @@ export function FileManager({ site, path, onPath }: Props) {
                   <DownloadSimple size={18} aria-hidden="true" />
                 </a>
               )}
-              {e.type === "file" && e.size <= maxEditBytes && (
-                <IconButton label={"Edit " + e.name} icon={<NotePencil size={18} aria-hidden="true" />} onClick={() => setEditing(e)} />
-              )}
-              {isZip(e) && <IconButton label={"Extract " + e.name} icon={<FileArchive size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "extract", entry: e })} />}
-              <IconButton label={"Rename " + e.name} icon={<PencilSimpleLine size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "rename", entry: e })} />
-              <IconButton label={"Delete " + e.name} danger icon={<Trash size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "delete", names: [e.name] })} />
+              <Menu label={"More actions for " + e.name} buttonLabel={"More actions for " + e.name} buttonClass="ui-icon-btn" button={<DotsThree size={20} weight="bold" aria-hidden="true" />} items={entryItems(e, false)} />
             </RowActions>
           </span>
           <span className="ui-phone-only">
-            <Menu label={"Actions for " + e.name} buttonLabel={"Actions for " + e.name} buttonClass="ui-icon-btn" button={<DotsThree size={20} aria-hidden="true" />} items={entryItems(e)} />
+            <Menu label={"Actions for " + e.name} buttonLabel={"Actions for " + e.name} buttonClass="ui-icon-btn" button={<DotsThree size={20} aria-hidden="true" />} items={entryItems(e, true)} />
           </span>
         </>
       ),
@@ -313,12 +362,48 @@ export function FileManager({ site, path, onPath }: Props) {
       <div ref={barRef} className="ui-files-bar" data-stuck={stuck} style={gap > 0 ? { marginBottom: gap } : undefined}>
       <div className="ui-files-head">
         <Breadcrumb site={site.name} path={path} onPath={onPath} />
+        <div className="ui-filters">
+          <input className="ui-input" type="search" aria-label="Filter files" placeholder="Filter by name" value={filter} onChange={(e) => setFilter(e.target.value)} />
+          {/* On a phone the table head is hidden, so the box sits here. */}
+          <label className="ui-row ui-phone-only">
+            <input type="checkbox" className="ui-check" checked={allSelected} disabled={shown.length === 0} onChange={selectAll} />
+            Select all
+          </label>
+        </div>
         <div className="ui-row ui-nowrap" role="toolbar" aria-label="Files">
-          <IconButton label="Reload" icon={<ArrowClockwise size={18} aria-hidden="true" />} onClick={() => void load()} />
-          <IconButton label="Upload files" icon={<UploadSimple size={18} aria-hidden="true" />} onClick={() => fileInput.current?.click()} />
-          <IconButton label="Upload a folder" icon={<FolderSimpleDashed size={18} aria-hidden="true" />} onClick={() => folderInput.current?.click()} />
-          <IconButton label="New folder" icon={<FolderPlus size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "mkdir" })} />
-          <IconButton label="New file" icon={<FilePlus size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "touch" })} />
+          <IconButton label="Reload" tipBelow icon={<ArrowClockwise size={18} aria-hidden="true" />} onClick={() => void load()} />
+          <Menu
+            label="Upload"
+            buttonLabel="Upload"
+            buttonClass="ui-btn ui-btn-sm"
+            button={
+              <>
+                <UploadSimple size={16} aria-hidden="true" />
+                <span className="ui-phone-hide">Upload</span>
+                <CaretDown size={12} aria-hidden="true" />
+              </>
+            }
+            items={[
+              { label: "Files…", icon: <FileIcon size={16} aria-hidden="true" />, onSelect: () => fileInput.current?.click() },
+              { label: "A folder…", icon: <Folder size={16} aria-hidden="true" />, onSelect: () => folderInput.current?.click() },
+            ]}
+          />
+          <Menu
+            label="New"
+            buttonLabel="New"
+            buttonClass="ui-btn ui-btn-sm"
+            button={
+              <>
+                <Plus size={16} aria-hidden="true" />
+                <span className="ui-phone-hide">New</span>
+                <CaretDown size={12} aria-hidden="true" />
+              </>
+            }
+            items={[
+              { label: "File", icon: <FilePlus size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "touch" }) },
+              { label: "Folder", icon: <FolderPlus size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "mkdir" }) },
+            ]}
+          />
         </div>
         <input ref={fileInput} type="file" multiple hidden aria-label="Files to upload" onChange={(e) => { onPick(e.target.files); e.target.value = ""; }} />
         <input
@@ -329,14 +414,6 @@ export function FileManager({ site, path, onPath }: Props) {
           {...{ webkitdirectory: "" }}
           onChange={(e) => { onPick(e.target.files); e.target.value = ""; }}
         />
-      </div>
-      <div className="ui-filters">
-        <input className="ui-input" type="search" aria-label="Filter files" placeholder="Filter by name" value={filter} onChange={(e) => setFilter(e.target.value)} />
-        {/* On a phone the table head is hidden, so the box sits here. */}
-        <label className="ui-row ui-phone-only">
-          <input type="checkbox" className="ui-check" checked={allSelected} disabled={shown.length === 0} onChange={selectAll} />
-          Select all
-        </label>
       </div>
         {sel.length > 0 && (
           <div className="ui-files-selection" role="region" aria-label="Selection">
@@ -374,7 +451,7 @@ export function FileManager({ site, path, onPath }: Props) {
         )}
       </div>
       <div ref={sentinelRef} className="ui-files-sentinel" aria-hidden="true" />
-      {(loadError || done || scanNote || uploads.length > 0 || listing?.truncated || (listing?.unnamed ?? 0) > 0 || dialog) && (
+      {(loadError || done || scanNote || uploads.length > 0 || listing?.truncated || (listing?.unnamed ?? 0) > 0 || cardDialog) && (
       <div ref={bodyRef} className="ui-card-body ui-stack ui-files-body">
         {loadError && <Notice tone="err" title={loadError} />}
         {done && <Notice tone="ok" title={done} />}
@@ -392,18 +469,7 @@ export function FileManager({ site, path, onPath }: Props) {
         {listing !== null && listing.unnamed > 0 && (
           <Notice tone="warn" title={`${String(listing.unnamed)} entries have names that are not valid UTF-8 and are not shown. Rename them over SFTP.`} />
         )}
-        {dialog && (
-          <DialogCard
-            site={site.name}
-            path={path}
-            dialog={dialog}
-            onCancel={() => setDialog(null)}
-            onDone={(msg) => {
-              setSelected(new Set());
-              void finished(msg);
-            }}
-          />
-        )}
+        {cardDialog && <DialogCard site={site.name} path={path} dialog={cardDialog} onCancel={() => setDialog(null)} onDone={dialogDone} />}
       </div>
       )}
       <div
@@ -433,7 +499,24 @@ export function FileManager({ site, path, onPath }: Props) {
             onSort={setSort}
             compact
             empty={filter === "" ? "This folder is empty. Drop files here to upload them." : "No entry matches the filter."}
+            after={(e) =>
+              rowDialog?.row === e.name ? (
+                <DialogCard site={site.name} path={path} dialog={rowDialog} inline onCancel={() => setDialog(null)} onDone={dialogDone} />
+              ) : null
+            }
           />
+        )}
+        {dragging && (
+          <div className="ui-files-dropnote" aria-hidden="true">
+            <UploadSimple size={28} aria-hidden="true" />
+            Drop to upload into {path === "" ? "the home folder" : path}
+          </div>
+        )}
+        {listing !== null && entries.length > 0 && (
+          <p className="ui-files-hint ui-hint ui-phone-hide">
+            <UploadSimple size={16} aria-hidden="true" />
+            Drag files or folders from your computer here to upload them.
+          </p>
         )}
       </div>
       {editing && (
@@ -522,7 +605,9 @@ function useStickyBar(root: RefObject<HTMLDivElement | null>, sentinel: RefObjec
   return { stuck, gap };
 }
 
-function EntryName({ entry, onOpen }: { entry: FileEntry; onOpen: () => void }) {
+/** The name of an entry: a folder opens, a text file opens in the editor,
+ *  a file too large for it downloads. */
+function EntryName({ entry, onOpen, onEdit, href }: { entry: FileEntry; onOpen: () => void; onEdit: () => void; href: string }) {
   if (entry.type === "dir") {
     return (
       <button type="button" className="ui-files-name ui-link-btn" onClick={onOpen}>
@@ -542,11 +627,89 @@ function EntryName({ entry, onOpen }: { entry: FileEntry; onOpen: () => void }) 
       </span>
     );
   }
+  if (editable(entry)) {
+    return (
+      <button type="button" className="ui-files-name ui-files-file" onClick={onEdit} aria-label={"Edit " + entry.name}>
+        <FileIcon size={18} aria-hidden="true" />
+        <span>{entry.name}</span>
+      </button>
+    );
+  }
+  if (entry.type === "file") {
+    return (
+      <a className="ui-files-name ui-files-file" href={href} download aria-label={"Download " + entry.name}>
+        <FileIcon size={18} aria-hidden="true" />
+        <span>{entry.name}</span>
+      </a>
+    );
+  }
   return (
     <span className="ui-files-name">
       <FileIcon size={18} aria-hidden="true" />
       <span>{entry.name}</span>
     </span>
+  );
+}
+
+/** Renames an entry in its own row: the name becomes a field. */
+function RenameForm({ site, path, entry, onCancel, onDone }: { site: string; path: string; entry: FileEntry; onCancel: () => void; onDone: (msg: string) => void }) {
+  const [value, setValue] = useState(entry.name);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+
+  // The name is selected without its extension, as in a desktop file manager.
+  useEffect(() => {
+    const el = input.current;
+    if (!el) return;
+    el.focus();
+    const dot = entry.type === "file" ? entry.name.lastIndexOf(".") : -1;
+    el.setSelectionRange(0, dot > 0 ? dot : entry.name.length);
+  }, [entry]);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (value === entry.name) return onCancel();
+    const problem = nameProblem(value);
+    if (problem) return setError(problem);
+    setBusy(true);
+    setError("");
+    try {
+      await rename(site, joinPath(path, entry.name), joinPath(path, value));
+      onDone(`Renamed to ${value}.`);
+    } catch (err) {
+      setError(filesMessage(err));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="ui-files-rename" aria-label={"Rename " + entry.name} onSubmit={(e) => void submit(e)}>
+      <div className="ui-row ui-nowrap">
+        {entry.type === "dir" ? <Folder size={18} aria-hidden="true" /> : <FileIcon size={18} aria-hidden="true" />}
+        <input
+          ref={input}
+          className="ui-input"
+          aria-label="New name"
+          aria-invalid={error ? true : undefined}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              onCancel();
+            }
+          }}
+        />
+        <Button type="submit" variant="primary" small disabled={busy}>
+          Rename
+        </Button>
+        <Button small disabled={busy} onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+      {error && <p className="ui-error ui-flush">{error}</p>}
+    </form>
   );
 }
 
@@ -597,9 +760,12 @@ function Uploads({ rows, onClose }: { rows: UploadRow[]; onClose: () => void }) 
   );
 }
 
-type DialogProps = { site: string; path: string; dialog: Dialog; onCancel: () => void; onDone: (msg: string) => void };
+type DialogProps = { site: string; path: string; dialog: Dialog; inline?: boolean; onCancel: () => void; onDone: (msg: string) => void };
 
-function DialogCard({ site, path, dialog, onCancel, onDone }: DialogProps) {
+/** The names a delete lists before it shows "and N more". */
+const listedNames = 8;
+
+function DialogCard({ site, path, dialog, inline = false, onCancel, onDone }: DialogProps) {
   const [value, setValue] = useState(initialValue(dialog, path));
   const [overwrite, setOverwrite] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -634,7 +800,7 @@ function DialogCard({ site, path, dialog, onCancel, onDone }: DialogProps) {
     move: "Move " + what,
     copy: "Copy " + what,
     chmod: "Change the mode of " + what,
-    delete: "Delete " + what + "?",
+    delete: n === 1 ? "Delete " + what + "?" : `Delete these ${String(n)} entries?`,
   };
 
   let body: ReactNode;
@@ -681,6 +847,16 @@ function DialogCard({ site, path, dialog, onCancel, onDone }: DialogProps) {
       action = n === 1 ? "Delete" : `Delete ${String(n)} entries`;
       body = (
         <>
+          {n > 1 && (
+            <ul className="ui-files-names">
+              {dialog.names.slice(0, listedNames).map((name) => (
+                <li key={name} className="ui-mono">
+                  {name}
+                </li>
+              ))}
+              {n > listedNames && <li className="ui-hint">and {String(n - listedNames)} more</li>}
+            </ul>
+          )}
           <p className="ui-flush">Folders are deleted with their content. There is no recycle bin; backups are the way back.</p>
           {error && <Notice tone="err" title={error} />}
         </>
@@ -689,13 +865,25 @@ function DialogCard({ site, path, dialog, onCancel, onDone }: DialogProps) {
   }
 
   return (
-    <form className="ui-card ui-card-body ui-stack" role={dialog.kind === "delete" ? "alertdialog" : "dialog"} aria-labelledby="files-dialog-title" onSubmit={(e) => void submit(e)}>
-      <h2 id="files-dialog-title" className="ui-flush">
-        {title[dialog.kind]}
-      </h2>
+    <form
+      className={inline ? "ui-files-inline ui-stack" : "ui-card ui-card-body ui-stack"}
+      data-tone={dialog.kind === "delete" ? "err" : undefined}
+      role={dialog.kind === "delete" ? "alertdialog" : "dialog"}
+      aria-labelledby="files-dialog-title"
+      onSubmit={(e) => void submit(e)}
+    >
+      {inline ? (
+        <h3 id="files-dialog-title" className="ui-flush">
+          {title[dialog.kind]}
+        </h3>
+      ) : (
+        <h2 id="files-dialog-title" className="ui-flush">
+          {title[dialog.kind]}
+        </h2>
+      )}
       {body}
       <div className="ui-row">
-        <Button type="submit" variant={dialog.kind === "delete" ? "danger" : "primary"} disabled={busy}>
+        <Button type="submit" variant={dialog.kind === "delete" ? "destroy" : "primary"} disabled={busy} autoFocus={dialog.kind === "delete"}>
           {action}
         </Button>
         <Button disabled={busy} onClick={onCancel}>
