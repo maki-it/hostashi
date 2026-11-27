@@ -138,28 +138,31 @@ func (w *Watcher) backupEvent(s agentapi.BackupStatus) (Event, bool) {
 		return Event{}, false
 	}
 
-	var failed []string
+	var failed, fehler []string
 
 	for _, it := range s.Items {
 		if it.Error == "" && !it.Partial {
 			continue
 		}
 
-		what := it.Kind
+		what, was := it.Kind, it.Kind
 		switch {
 		case it.Database != "":
-			what = "database " + it.Database
+			what, was = "database "+it.Database, "Datenbank "+it.Database
 		case it.Site != "":
-			what = "files of " + it.Site
+			what, was = "files of "+it.Site, "Dateien von "+it.Site
 		}
 
 		if it.Partial && it.Error == "" {
 			what += " (some files could not be read)"
+			was += " (einige Dateien konnten nicht gelesen werden)"
 		} else {
 			what += ": " + firstLine(it.Error)
+			was += ": " + firstLine(it.Error)
 		}
 
 		failed = append(failed, "- "+what)
+		fehler = append(fehler, "- "+was)
 	}
 
 	if s.OK && len(failed) == 0 {
@@ -167,19 +170,26 @@ func (w *Watcher) backupEvent(s agentapi.BackupStatus) (Event, bool) {
 	}
 
 	lines := []string{"the backup that finished on " + when(s.Finished) + " did not save everything."}
+	de := []string{"das Backup, das am " + wann(s.Finished) + " fertig wurde, hat nicht alles gesichert."}
+
 	if s.Error != "" {
 		lines = append(lines, "Error: "+firstLine(s.Error))
+		de = append(de, "Fehler: "+firstLine(s.Error))
 	}
 
 	if len(failed) > 0 {
 		const most = 20
 
 		lines = append(lines, "", "What failed:")
+		de = append(de, "", "Was fehlgeschlagen ist:")
+
 		if len(failed) > most {
 			failed = append(failed[:most], fmt.Sprintf("- and %d more", len(failed)-most))
+			fehler = append(fehler[:most], fmt.Sprintf("- und %d weitere", len(fehler)-most))
 		}
 
 		lines = append(lines, failed...)
+		de = append(de, fehler...)
 	}
 
 	return Event{
@@ -187,7 +197,10 @@ func (w *Watcher) backupEvent(s agentapi.BackupStatus) (Event, bool) {
 		Key:      "backup-failed:" + strconv.FormatInt(s.Finished.Unix(), 10),
 		Window:   longWindow,
 		Fragment: "backups",
-		Mail:     mail.OpsEvent{Template: "backup-failed", Subject: "Backup failed", Lines: lines},
+		Mail: mail.OpsEvent{
+			Template: "backup-failed", Subject: "Backup failed", Lines: lines,
+			German: mail.OpsText{Subject: "Backup fehlgeschlagen", Lines: de},
+		},
 	}, true
 }
 
@@ -215,11 +228,11 @@ func (w *Watcher) overdueEvent(info agentapi.BackupInfo, s agentapi.BackupStatus
 		return Event{}, false
 	}
 
-	every := "every day"
+	every, jede := "every day", "jeden Tag"
 	if h := info.Settings.IntervalHours; h > 0 && h < 24 {
-		every = "every " + strconv.Itoa(h) + " hours"
+		every, jede = "every "+strconv.Itoa(h)+" hours", "alle "+strconv.Itoa(h)+" Stunden"
 		if h == 1 {
-			every = "every hour"
+			every, jede = "every hour", "jede Stunde"
 		}
 	}
 
@@ -227,13 +240,20 @@ func (w *Watcher) overdueEvent(info agentapi.BackupInfo, s agentapi.BackupStatus
 		"no backup has finished since " + when(s.Finished) + ", although backups are scheduled to run " + every + ".",
 		"Check the timer with: systemctl status hostashi-backup.timer hostashi-backup.service",
 	}
+	de := []string{
+		"seit " + wann(s.Finished) + " ist kein Backup fertig geworden, obwohl Backups " + jede + " laufen sollen.",
+		"Prüf den Timer mit: systemctl status hostashi-backup.timer hostashi-backup.service",
+	}
 
 	return Event{
 		Category: Backups,
 		Key:      "backup-overdue:" + strconv.FormatInt(s.Finished.Unix(), 10),
 		Window:   longWindow,
 		Fragment: "backups",
-		Mail:     mail.OpsEvent{Template: "backup-overdue", Subject: "Backup missing", Lines: lines},
+		Mail: mail.OpsEvent{
+			Template: "backup-overdue", Subject: "Backup missing", Lines: lines,
+			German: mail.OpsText{Subject: "Backup fehlt", Lines: de},
+		},
 	}, true
 }
 
@@ -242,22 +262,30 @@ func (w *Watcher) overdueEvent(info agentapi.BackupInfo, s agentapi.BackupStatus
 func (w *Watcher) certEvents(c Cert) []Event {
 	now := w.Now()
 	name, fragment := "the certificate of the site "+c.Name, "sites/"+c.Site
+	name2 := "das Zertifikat der Site " + c.Name
 
 	if c.Site == "" {
 		name, fragment = "the panel's certificate for "+c.Name, "system"
+		name2 = "das Zertifikat des Panels für " + c.Name
 	}
 
 	var out []Event
 
 	if c.Error != "" && !c.FailedAt.IsZero() && now.Sub(c.FailedAt) <= recent {
 		lines := []string{"Hostashi could not renew " + name + " on " + when(c.FailedAt) + ".", "Error: " + firstLine(c.Error)}
+		de := []string{"Hostashi konnte " + name2 + " am " + wann(c.FailedAt) + " nicht erneuern.", "Fehler: " + firstLine(c.Error)}
+
 		if !c.NotAfter.IsZero() {
 			lines = append(lines, "The current certificate is valid until "+when(c.NotAfter)+". Hostashi tries again.")
+			de = append(de, "Das aktuelle Zertifikat ist bis "+wann(c.NotAfter)+" gültig. Hostashi versucht es erneut.")
 		}
 
 		out = append(out, Event{
 			Category: Certificates, Site: c.Site, Key: "cert-failed:" + c.Site + ":" + c.Name, Fragment: fragment,
-			Mail: mail.OpsEvent{Template: "cert-renewal-failed", Subject: "Certificate renewal failed: " + c.Name, Lines: lines},
+			Mail: mail.OpsEvent{
+				Template: "cert-renewal-failed", Subject: "Certificate renewal failed: " + c.Name, Lines: lines,
+				German: mail.OpsText{Subject: "Zertifikat nicht erneuert: " + c.Name, Lines: de},
+			},
 		})
 	}
 
@@ -273,10 +301,13 @@ func (w *Watcher) certEvents(c Cert) []Event {
 		}
 
 		subject := "Certificate expires soon: " + c.Name
-		line := strings.ToUpper(name[:1]) + name[1:] + " expires on " + when(c.NotAfter) + "."
+		line := upper(name) + " expires on " + when(c.NotAfter) + "."
+		betreff := "Zertifikat läuft bald ab: " + c.Name
+		zeile := upper(name2) + " läuft am " + wann(c.NotAfter) + " ab."
 
 		if left <= 0 {
-			subject, line = "Certificate expired: "+c.Name, strings.ToUpper(name[:1])+name[1:]+" expired on "+when(c.NotAfter)+"."
+			subject, line = "Certificate expired: "+c.Name, upper(name)+" expired on "+when(c.NotAfter)+"."
+			betreff, zeile = "Zertifikat abgelaufen: "+c.Name, upper(name2)+" ist am "+wann(c.NotAfter)+" abgelaufen."
 		}
 
 		out = append(out, Event{
@@ -284,7 +315,9 @@ func (w *Watcher) certEvents(c Cert) []Event {
 			Key: "cert-expiry:" + c.Site + ":" + c.Name + ":" + strconv.Itoa(days) + ":" + strconv.FormatInt(c.NotAfter.Unix(), 10),
 			Mail: mail.OpsEvent{Template: "cert-expiry", Subject: subject, Lines: []string{
 				line, "Sites keep working until then; after that, browsers show a warning.",
-			}},
+			}, German: mail.OpsText{Subject: betreff, Lines: []string{
+				zeile, "Bis dahin funktionieren die Sites, danach zeigen Browser eine Warnung.",
+			}}},
 		})
 	}
 
@@ -296,8 +329,8 @@ func (w *Watcher) certEvents(c Cert) []Event {
 // site or site's databases above 90 percent.
 func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 	var (
-		out    []Event
-		digest []string
+		out           []Event
+		digest, liste []string
 	)
 
 	for _, c := range rep.Checks {
@@ -307,7 +340,9 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 				Category: PHP, Site: c.Site, Key: "php-eol:" + c.Site, Window: week, Fragment: "sites/" + c.Site + "/php",
 				Mail: mail.OpsEvent{Template: "php-eol", Subject: "Old PHP version on the site " + c.Site, Lines: []string{
 					"The site " + c.Site + ": " + c.Summary + ".", c.Hint,
-				}},
+				}, German: mail.OpsText{Subject: "Alte PHP-Version auf der Site " + c.Site, Lines: []string{
+					"Die Site " + c.Site + ": " + c.Summary + ".", c.Hint,
+				}}},
 			})
 		case c.ID == "site.disk" && c.Site != "" && used(c, false) >= fullPercent:
 			what, _, _ := strings.Cut(c.Summary, ":")
@@ -315,7 +350,9 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 				Category: Disk, Site: c.Site, Key: "disk:" + c.Site + ":" + what, Fragment: "sites/" + c.Site + "/limits",
 				Mail: mail.OpsEvent{Template: "disk-full", Subject: "The site " + c.Site + " is almost full", Lines: []string{
 					"The site " + c.Site + ", " + c.Summary + ".", c.Hint,
-				}},
+				}, German: mail.OpsText{Subject: "Die Site " + c.Site + " ist fast voll", Lines: []string{
+					"Die Site " + c.Site + ", " + c.Summary + ".", c.Hint,
+				}}},
 			})
 		case c.ID == "site.database" && c.Site != "" && used(c, false) >= fullPercent:
 			// A warning threshold only (ADR-0057): the databases keep growing.
@@ -323,7 +360,9 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 				Category: Disk, Site: c.Site, Key: "database:" + c.Site, Fragment: "sites/" + c.Site + "/limits",
 				Mail: mail.OpsEvent{Template: "disk-full", Subject: "The databases of the site " + c.Site + " passed 90 % of their warning threshold", Lines: []string{
 					"The site " + c.Site + ", " + c.Summary + ".", c.Hint,
-				}},
+				}, German: mail.OpsText{Subject: "Die Datenbanken der Site " + c.Site + " haben 90 % ihrer Warnschwelle überschritten", Lines: []string{
+					"Die Site " + c.Site + ", " + c.Summary + ".", c.Hint,
+				}}},
 			})
 		case c.ID == "system.disk" && used(c, true) >= fullPercent:
 			path, _, _ := strings.Cut(c.Summary, ":")
@@ -331,7 +370,9 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 				Category: Disk, Key: "disk:server:" + path, Fragment: "health",
 				Mail: mail.OpsEvent{Template: "disk-full", Subject: "The server's disk is almost full", Lines: []string{
 					"Free space on the server, " + c.Summary + ".", c.Hint,
-				}},
+				}, German: mail.OpsText{Subject: "Der Speicherplatz des Servers ist fast voll", Lines: []string{
+					"Freier Speicherplatz auf dem Server, " + c.Summary + ".", c.Hint,
+				}}},
 			})
 		case c.ID == "hostashi.update" && c.Status == agentapi.DoctorWarn:
 			// One email per new version (ADR-0050): the summary names it.
@@ -339,15 +380,18 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 				Category: Doctor, Key: "hostashi-update:" + c.Summary, Window: 30 * 24 * time.Hour, Fragment: "health",
 				Mail: mail.OpsEvent{Template: "hostashi-update", Subject: "A new Hostashi version is available", Lines: []string{
 					c.Summary + ".", c.Hint,
-				}},
+				}, German: mail.OpsText{Subject: "Eine neue Hostashi-Version ist verfügbar", Lines: []string{
+					c.Summary + ".", c.Hint,
+				}}},
 			})
 		case c.Status == agentapi.DoctorFail && !ownCategory[c.ID]:
-			line := "- " + c.Summary
+			line, zeile := "- "+c.Summary, "- "+c.Summary
 			if c.Site != "" {
-				line = "- site " + c.Site + ": " + c.Summary
+				line, zeile = "- site "+c.Site+": "+c.Summary, "- Site "+c.Site+": "+c.Summary
 			}
 
 			digest = append(digest, line)
+			liste = append(liste, zeile)
 		}
 	}
 
@@ -356,12 +400,17 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 
 		if len(digest) > most {
 			digest = append(digest[:most], fmt.Sprintf("- and %d more", len(digest)-most))
+			liste = append(liste[:most], fmt.Sprintf("- und %d weitere", len(liste)-most))
 		}
 
 		lines := append([]string{"the server checks found errors:", ""}, digest...)
+		de := append([]string{"die Serverprüfungen haben Fehler gefunden:", ""}, liste...)
 		out = append(out, Event{
 			Category: Doctor, Key: "doctor-digest:" + w.Now().UTC().Format(time.DateOnly), Fragment: "health",
-			Mail: mail.OpsEvent{Template: "doctor-digest", Subject: "Server checks found errors", Lines: lines},
+			Mail: mail.OpsEvent{
+				Template: "doctor-digest", Subject: "Server checks found errors", Lines: lines,
+				German: mail.OpsText{Subject: "Serverprüfungen haben Fehler gefunden", Lines: de},
+			},
 		})
 	}
 
@@ -388,7 +437,19 @@ func used(c agentapi.DoctorCheck, free bool) int {
 	return n
 }
 
-func when(t time.Time) string { return t.UTC().Format("2 January 2006, 15:04 UTC") }
+func when(t time.Time) string { return mail.FormatTime(t, mail.English) }
+
+// wann is when for German emails.
+func wann(t time.Time) string { return mail.FormatTime(t, mail.German) }
+
+// upper starts s with a capital letter.
+func upper(s string) string {
+	if s == "" {
+		return s
+	}
+
+	return strings.ToUpper(s[:1]) + s[1:]
+}
 
 func firstLine(s string) string {
 	s, _, _ = strings.Cut(strings.TrimSpace(s), "\n")

@@ -3,11 +3,15 @@
 package serve
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/maki-it/hostashi/internal/mail"
+	"github.com/maki-it/hostashi/internal/store"
 )
 
 const testPublicURL = "https://panel.example.com"
@@ -332,5 +336,46 @@ func TestAccountSecurityEmail(t *testing.T) {
 
 	if strings.Contains(last.Body, "hst_") {
 		t.Fatal("token secret in the email")
+	}
+
+	// In German once the account reads German (ADR-0071).
+	if rec := e.do(t, reqOpts{method: "PATCH", path: "/api/v1/me", cookie: c, body: `{"language":"de"}`}); rec.Code != http.StatusOK {
+		t.Fatalf("language: %d %s", rec.Code, rec.Body)
+	}
+
+	e.createToken(t, c, `{"name":"nachher","scopes":["sites:read"]}`)
+
+	if err := e.outbox.Process(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	msgs = e.mailSent.messages()
+	last = msgs[len(msgs)-1]
+
+	if last.Subject != "Sicherheitsänderung in deinem Hostashi-Konto" || !strings.Contains(last.Body, "Ein neues API-Token wurde erstellt: nachher.") {
+		t.Fatalf("%+v", last)
+	}
+}
+
+func TestEmailLang(t *testing.T) {
+	prefs := func(_ context.Context, id int64) (store.Preferences, error) {
+		switch id {
+		case 1:
+			return store.Preferences{Language: "de"}, nil
+		case 2:
+			return store.Preferences{Language: "auto"}, nil
+		default:
+			return store.Preferences{}, store.ErrNotFound
+		}
+	}
+
+	for id, want := range map[int64]mail.Lang{1: mail.German, 2: mail.English, 3: mail.English} {
+		if got := emailLang(t.Context(), prefs, id); got != want {
+			t.Errorf("%d: %s", id, got)
+		}
+	}
+
+	if got := emailLang(t.Context(), nil, 1); got != mail.English {
+		t.Errorf("nil: %s", got)
 	}
 }

@@ -25,7 +25,7 @@ func TestNotificationPrefs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := s.RawExec(ctx, `UPDATE users SET email = 'kim@example.com' WHERE id = ?`, kim.ID); err != nil {
+	if err := s.RawExec(ctx, `UPDATE users SET email = 'kim@example.com', language = 'de' WHERE id = ?`, kim.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -64,7 +64,7 @@ func TestNotificationPrefs(t *testing.T) {
 		t.Fatalf("%+v", list)
 	}
 
-	if list[1].Role != "admin" || list[1].Email != "kim@example.com" {
+	if list[1].Role != "admin" || list[1].Email != "kim@example.com" || list[1].Language != "de" || list[0].Language != "auto" {
 		t.Fatalf("%+v", list[1])
 	}
 }

@@ -57,6 +57,10 @@ On **Your account → Email**, enter your address. Hostashi sends a link to it; 
 | PHP versions | Once a week per site, when a site uses a PHP version that loses security fixes within 60 days or already has. |
 | Disk space | A disk of the server or a site's disk limit is 90 percent full or more, or a site's databases reach 90 percent of their [warning size](Database-limits.md). At most once a day. |
 
+### Language
+
+Emails are plain text in English or German. Each recipient gets the language set under **Your account → Appearance → Language**; *Follow the browser* means English, because an email has no browser to follow. An invitation goes to an account that has no setting yet, so it is in the language of the admin who sent it. Times are in UTC in both languages. Details from the server, such as the result of a check or an error message, stay in English.
+
 At most 10 emails per recipient and 100 per server go out each hour. Above that, notifications wait for the next hour; account emails are always sent.
 
 Hostashi itself sends these emails, so it cannot report an outage of the panel, of the whole server or of its network. Use a check from outside for that, for example an uptime monitor that opens your sites.
