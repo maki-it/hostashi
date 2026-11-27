@@ -58,7 +58,7 @@ The acceptance of [phase 3 in the roadmap](06-roadmap.md#phase-3-release-10-810-
 - [ ] Upgrade from the last beta (0.x) to 1.0: section 1, job "Upgrade from the latest release".
 - [ ] Every row of section 3.0 in [03-features](03-features.md) is built or moved out of 1.0 by the maintainer. On 2026-11-27 the only row left was the panel UI in English and German ([ADR-0071](adr/0071-panel-ui-in-english-and-german.md)), which the maintainer kept in 1.0.
 - [ ] No ADR is still `Proposed` that 1.0 depends on ([07-decisions](07-decisions.md), `docs/adr/`).
-- [ ] SBOM per release ([roadmap phase 3](06-roadmap.md#phase-3-release-10-810-weeks): "Signed releases, SBOM, support and update policy").
-- [ ] Support and update policy published in `SECURITY.md` ("Supported versions") and the README.
+- [ ] SBOMs are attached to the release and listed in `SHA256SUMS` (`*.tar.gz.sbom.json`, `*_web.sbom.json`; [roadmap phase 3](06-roadmap.md#phase-3-release-10-810-weeks): "Signed releases, SBOM, support and update policy").
+- [ ] Support and update policy in `SECURITY.md` ("Supported versions": only the newest release) still holds, and the README links it.
 - [ ] README and `SECURITY.md` no longer say "before 1.0" or "Phase 0".
 - [ ] Licenses: REUSE lint and the dependency license allowlist are green (workflow Licenses).

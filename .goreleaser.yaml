@@ -43,6 +43,22 @@ checksum:
   name_template: SHA256SUMS
   algorithm: sha256
 
+# SPDX SBOMs (syft, installed by the Release workflow), listed in SHA256SUMS
+# and so covered by its Sigstore signature: one per tarball with the Go
+# modules built into the binary, and one for the frontend's npm packages
+# from web/package-lock.json (syft runs in dist/), which the binary embeds as built files only.
+# Snapshots in CI skip them.
+sboms:
+  - id: archives
+    artifacts: archive
+    disable: "{{ .IsSnapshot }}"
+  - id: web
+    artifacts: any
+    cmd: syft
+    args: ["scan", "file:../web/package-lock.json", "--output", "spdx-json=$document", "--source-name", "hostashi-web", "--source-version", "{{ .Version }}"]
+    documents: ["hostashi_{{ .Version }}_web.sbom.json"]
+    disable: "{{ .IsSnapshot }}"
+
 snapshot:
   # A build without a tag, for CI and local tests. nFPM writes the pre-release
   # part with "~" into the .deb, so it sorts below the release it precedes.

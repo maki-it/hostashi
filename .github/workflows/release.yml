@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Release (ADR-0050). A tag v* on a commit of main builds the binaries, the
-# .deb files and SHA256SUMS with GoReleaser into a draft GitHub release,
+# .deb files, SPDX SBOMs and SHA256SUMS with GoReleaser into a draft GitHub release,
 # signs SHA256SUMS keyless with Sigstore (cosign) and attests the build
 # provenance. A stable release (no "-" in the tag) then waits for approval
 # in the environment "release", the only place that holds the apt signing
@@ -60,6 +60,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: web/.nvmrc
+      - name: Install syft (SBOMs in .goreleaser.yaml)
+        run: go install github.com/anchore/syft/cmd/syft@v1.57.2
       - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
       - name: Build into a draft release
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0

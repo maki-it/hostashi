@@ -56,7 +56,7 @@ One Go binary with two roles: `hostashi serve` runs the panel and API without ro
 
 ## Contributing and security
 
-Layout, local checks and rules: [`CONTRIBUTING.md`](CONTRIBUTING.md). Report security problems as described in [`SECURITY.md`](SECURITY.md), not in a public issue.
+Layout, local checks and rules: [`CONTRIBUTING.md`](CONTRIBUTING.md). Report security problems as described in [`SECURITY.md`](SECURITY.md), not in a public issue. Only the newest release is supported; updates come through apt ([`SECURITY.md`](SECURITY.md#supported-versions)).
 
 ## License
 
