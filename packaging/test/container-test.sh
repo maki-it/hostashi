@@ -29,7 +29,7 @@ BASE=hostashi-test-base-$$
 
 cleanup() {
   [ -n "${KEEP:-}" ] && return
-  docker rm -f "$NAME" "$NAME-prep" "$NAME-pg" >/dev/null 2>&1 || true; docker rmi -f "$BASE" >/dev/null 2>&1 || true
+  docker rm -f "$NAME" "$NAME-prep" "$NAME-pg" "$NAME-mysql" >/dev/null 2>&1 || true; docker rmi -f "$BASE" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -2711,83 +2711,186 @@ x test ! -e "/opt/hostashi/node/$NODE_MAJOR" || fail "Node.js $NODE_MAJOR left a
 x test ! -e "/opt/hostashi/node/.old-$NODE_MAJOR" || fail "removed tree of Node.js $NODE_MAJOR left"
 [ "$(api POST /api/v1/node/remove "{\"major\":\"$NODE_MAJOR\"}")" = 409 ] || fail "second removal of Node.js $NODE_MAJOR: $(x cat /tmp/api.out)"
 
-if [ -n "${PEBBLE_DIR:-}" ]; then
-  step "a database on an external PostgreSQL server in the web database tool (ADR-0051)"
-  # A PostgreSQL container on the host's network stands in for the
-  # external server, with TLS from a test CA: Adminer's pgsql driver must
-  # check the certificate and the address (verify-full) against the
-  # server's own CA.
-  pgname="$NAME-pg"
-  pgcerts=$(mktemp -d)
-  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj /CN=test-pg-ca \
-    -keyout "$pgcerts/ca.key" -out "$pgcerts/ca.pem" 2>/dev/null
-  openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj "/CN=$ext_ip" \
-    -keyout "$pgcerts/server.key" -out "$pgcerts/server.csr" 2>/dev/null
-  openssl x509 -req -in "$pgcerts/server.csr" -CA "$pgcerts/ca.pem" -CAkey "$pgcerts/ca.key" -CAcreateserial -days 1 \
-    -extfile <(printf 'subjectAltName=IP:%s' "$ext_ip") -out "$pgcerts/server.pem" 2>/dev/null
-  chmod 0644 "$pgcerts"/*
-  # shellcheck disable=SC2016 # expanded by the container's shell
-  docker run -d --name "$pgname" --network host -v "$pgcerts:/certs:ro" \
-    -e POSTGRES_PASSWORD=Pg-super-pw-1234 -e POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --entrypoint sh "postgres:$PG_NEWEST" -c '
-      install -m 0600 -o postgres /certs/server.key /certs/server.pem /tmp/ &&
-      exec docker-entrypoint.sh postgres -c listen_addresses="$0" -c port=55433 -c ssl=on \
-        -c ssl_cert_file=/tmp/server.pem -c ssl_key_file=/tmp/server.key' "$ext_ip" >/dev/null || fail "PostgreSQL container did not start"
-  pgsu() { docker exec "$pgname" psql -U postgres -p 55433 -v ON_ERROR_STOP=1 -qAt "$@"; }
-  for _ in $(seq 1 60); do docker exec "$pgname" pg_isready -q -h "$ext_ip" -p 55433 2>/dev/null && break; sleep 1; done
-  pgsu -c "CREATE ROLE pgadmin LOGIN CREATEDB CREATEROLE PASSWORD 'Pg-admin-pw-1234'" || fail "PostgreSQL admin role"
-  # Over the network only with TLS, so a login proves the tool used it.
-  # shellcheck disable=SC2016 # expanded by the container's shell
-  docker exec "$pgname" sh -c 'sed -i "s/^host all all all /hostssl all all all /" "$PGDATA/pg_hba.conf"' || fail "pg_hba.conf"
-  [ "$(pgsu -c "SELECT pg_reload_conf()")" = t ] || fail "PostgreSQL reload"
-  [ "$(pgsu -c "SELECT count(*) FROM pg_hba_file_rules WHERE type = 'hostssl' AND address = 'all'")" = 1 ] ||
-    fail "no hostssl rule: $(pgsu -c "SELECT type, address FROM pg_hba_file_rules")"
-  ca=$(jq -Rs . <"$pgcerts/ca.pem")
-  [ "$(api POST /api/v1/db-servers "{\"engine\":\"postgresql\",\"name\":\"extpg\",\"host\":\"$ext_ip\",\"port\":55433,\"adminUser\":\"pgadmin\",\"adminPassword\":\"Pg-admin-pw-1234\",\"tlsMode\":\"verify-ca\",\"caCertificate\":$ca}")" = 201 ] ||
-    fail "add PostgreSQL server: $(x cat /tmp/api.out)"
-  [ "$(api POST /api/v1/sites '{"name":"toolpg","domains":["toolpg.example.com"]}')" = 201 ] || fail "create site: $(x cat /tmp/api.out)"
-  [ "$(api POST /api/v1/sites/toolpg/databases '{"name":"toolpg_db","server":"extpg"}')" = 201 ] || fail "create PostgreSQL database: $(x cat /tmp/api.out)"
-  pgsu -d toolpg_db -c "SET ROLE $(pgsu -c "SELECT datdba::regrole FROM pg_database WHERE datname = 'toolpg_db'"); CREATE TABLE posts (title text); INSERT INTO posts VALUES ('hello from pg')" ||
-    fail "PostgreSQL test table"
-  [ "$(api POST /api/v1/databases/toolpg_db/tool '{"minutes":30}')" = 201 ] || fail "open tool on PostgreSQL: $(x cat /tmp/api.out)"
-  url=$(x sed -n 's/.*"url":"\([^"]*\)".*/\1/p' /tmp/api.out)
-  user=$(pgsu -c "SELECT rolname FROM pg_roles WHERE rolname LIKE 'hostashi\_tool\_%'")
-  [ -n "$user" ] || fail "no temporary role on the PostgreSQL server"
-  [ "$(pgsu -c "SELECT rolconnlimit FROM pg_roles WHERE rolname = '$user'")" = 2 ] || fail "temporary role without connection limit"
-  [ -n "$(x find /etc/hostashi-adminer/servers -name 'ca-*.pem' -perm 0644)" ] || fail "the server's CA is not readable by the tool: $(x ls -l /etc/hostashi-adminer/servers/)"
-  x rm -f /tmp/tool.jar
-  page=$(p8444 -L "$url") || fail "tool did not answer"
-  if ! grep -q 'Tables and views' <<<"$page"; then
-    grep -o "class='error'>[^<]*" <<<"$page" || true
-    docker logs --tail 30 "$pgname" 2>&1 || true
-    x journalctl -u hostashi-adminer.service --no-pager -n 30 || true
-    pgca=$(x find /etc/hostashi-adminer/servers -name 'ca-*.pem' -print -quit)
-    pgconn="host=$ext_ip port=55433 dbname=toolpg_db user=pgadmin sslmode=verify-full sslrootcert=$pgca gssencmode=disable"
-    x env PGPASSWORD=Pg-admin-pw-1234 "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
-    x runuser -u hostashi-adminer -- env PGPASSWORD=Pg-admin-pw-1234 "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
-    x php -r 'var_dump(function_exists("pg_connect"));' || true
-    x systemd-run --wait --pipe -q -p User=hostashi-adminer -p ProtectSystem=strict -p ProtectHome=yes -p PrivateDevices=yes \
-      -p SystemCallFilter=@system-service -p UMask=0077 -E PGPASSWORD=Pg-admin-pw-1234 \
-      "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
-    fail "tool did not log in to PostgreSQL"
-  fi
-  grep -q 'pgsql=&amp;username=' <<<"$page" || fail "the tool does not run the pgsql driver"
-  page=$(p8444 "https://other.example.com:8444/?pgsql=&username=$user&db=toolpg_db&ns=public&select=posts") || fail "tool did not answer"
-  grep -q 'hello from pg' <<<"$page" || fail "the tool does not show the table's rows"
-  # Only the session's driver, user and database: another driver's
-  # parameter (SQLite opens files) is sent back to the session's address.
-  for q in "sqlite=&username=$user&db=/etc/passwd" "server=&username=$user&db=toolpg_db" "pgsql=&ext=pdo&username=$user&db=toolpg_db" "pgsql=&username=$user&db=postgres"; do
-    loc=$(p8444 -o /dev/null -w '%{http_code} %{redirect_url}' "https://other.example.com:8444/?$q")
-    [ "$loc" = "303 https://other.example.com:8444/?pgsql=&username=$user&db=toolpg_db" ] || fail "tool with ?$q: '$loc'"
-  done
-  # Ending the session drops the role on the server.
-  [ "$(api DELETE "/api/v1/databases/toolpg_db/tool/sessions/$user")" = 204 ] || fail "end PostgreSQL tool session: $(x cat /tmp/api.out)"
-  [ -z "$(pgsu -c "SELECT rolname FROM pg_roles WHERE rolname = '$user'")" ] || fail "ended session kept its role"
-  [ "$(p8444 -o /dev/null -w '%{http_code}' "https://other.example.com:8444/?pgsql=&username=$user&db=toolpg_db")" = 403 ] || fail "the tool kept an ended PostgreSQL session"
-  [ "$(api DELETE /api/v1/sites/toolpg)" = 204 ] || fail "delete site: $(x cat /tmp/api.out)"
-  [ "$(api DELETE /api/v1/db-servers/extpg)" = 204 ] || fail "remove PostgreSQL server: $(x cat /tmp/api.out)"
-  docker rm -f "$pgname" >/dev/null
-  rm -rf "$pgcerts"
+# The web database tool against external servers in containers. This
+# half runs without Pebble, so the tool's address and curl helper are set
+# up here again.
+p8444() { x curl -sSk --resolve other.example.com:8444:127.0.0.1 -c /tmp/tool.jar -b /tmp/tool.jar "$@"; }
+for _ in $(seq 1 30); do
+  [ "$(api GET /api/v1/dbtool)" = 200 ] && x grep -q '"available":true' /tmp/api.out && break
+  sleep 2
+done
+x grep -q '"available":true' /tmp/api.out || fail "database tool not available: $(x cat /tmp/api.out)"
+
+step "a database on an external PostgreSQL server in the web database tool (ADR-0051)"
+# A PostgreSQL container on the host's network stands in for the
+# external server, with TLS from a test CA: Adminer's pgsql driver must
+# check the certificate and the address (verify-full) against the
+# server's own CA.
+pgname="$NAME-pg"
+pgcerts=$(mktemp -d)
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj /CN=test-pg-ca \
+  -keyout "$pgcerts/ca.key" -out "$pgcerts/ca.pem" 2>/dev/null
+openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj "/CN=$ext_ip" \
+  -keyout "$pgcerts/server.key" -out "$pgcerts/server.csr" 2>/dev/null
+openssl x509 -req -in "$pgcerts/server.csr" -CA "$pgcerts/ca.pem" -CAkey "$pgcerts/ca.key" -CAcreateserial -days 1 \
+  -extfile <(printf 'subjectAltName=IP:%s' "$ext_ip") -out "$pgcerts/server.pem" 2>/dev/null
+chmod 0644 "$pgcerts"/*
+# shellcheck disable=SC2016 # expanded by the container's shell
+docker run -d --name "$pgname" --network host -v "$pgcerts:/certs:ro" \
+  -e POSTGRES_PASSWORD=Pg-super-pw-1234 -e POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --entrypoint sh "postgres:$PG_NEWEST" -c '
+    install -m 0600 -o postgres /certs/server.key /certs/server.pem /tmp/ &&
+    exec docker-entrypoint.sh postgres -c listen_addresses="$0" -c port=55433 -c ssl=on \
+      -c ssl_cert_file=/tmp/server.pem -c ssl_key_file=/tmp/server.key' "$ext_ip" >/dev/null || fail "PostgreSQL container did not start"
+pgsu() { docker exec "$pgname" psql -U postgres -p 55433 -v ON_ERROR_STOP=1 -qAt "$@"; }
+for _ in $(seq 1 60); do docker exec "$pgname" pg_isready -q -h "$ext_ip" -p 55433 2>/dev/null && break; sleep 1; done
+pgsu -c "CREATE ROLE pgadmin LOGIN CREATEDB CREATEROLE PASSWORD 'Pg-admin-pw-1234'" || fail "PostgreSQL admin role"
+# Over the network only with TLS, so a login proves the tool used it.
+# shellcheck disable=SC2016 # expanded by the container's shell
+docker exec "$pgname" sh -c 'sed -i "s/^host all all all /hostssl all all all /" "$PGDATA/pg_hba.conf"' || fail "pg_hba.conf"
+[ "$(pgsu -c "SELECT pg_reload_conf()")" = t ] || fail "PostgreSQL reload"
+[ "$(pgsu -c "SELECT count(*) FROM pg_hba_file_rules WHERE type = 'hostssl' AND address = 'all'")" = 1 ] ||
+  fail "no hostssl rule: $(pgsu -c "SELECT type, address FROM pg_hba_file_rules")"
+ca=$(jq -Rs . <"$pgcerts/ca.pem")
+[ "$(api POST /api/v1/db-servers "{\"engine\":\"postgresql\",\"name\":\"extpg\",\"host\":\"$ext_ip\",\"port\":55433,\"adminUser\":\"pgadmin\",\"adminPassword\":\"Pg-admin-pw-1234\",\"tlsMode\":\"verify-ca\",\"caCertificate\":$ca}")" = 201 ] ||
+  fail "add PostgreSQL server: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites '{"name":"toolpg","domains":["toolpg.example.com"]}')" = 201 ] || fail "create site: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/toolpg/databases '{"name":"toolpg_db","server":"extpg"}')" = 201 ] || fail "create PostgreSQL database: $(x cat /tmp/api.out)"
+pgsu -d toolpg_db -c "SET ROLE $(pgsu -c "SELECT datdba::regrole FROM pg_database WHERE datname = 'toolpg_db'"); CREATE TABLE posts (title text); INSERT INTO posts VALUES ('hello from pg')" ||
+  fail "PostgreSQL test table"
+[ "$(api POST /api/v1/databases/toolpg_db/tool '{"minutes":30}')" = 201 ] || fail "open tool on PostgreSQL: $(x cat /tmp/api.out)"
+url=$(x sed -n 's/.*"url":"\([^"]*\)".*/\1/p' /tmp/api.out)
+user=$(pgsu -c "SELECT rolname FROM pg_roles WHERE rolname LIKE 'hostashi\_tool\_%'")
+[ -n "$user" ] || fail "no temporary role on the PostgreSQL server"
+[ "$(pgsu -c "SELECT rolconnlimit FROM pg_roles WHERE rolname = '$user'")" = 2 ] || fail "temporary role without connection limit"
+[ -n "$(x find /etc/hostashi-adminer/servers -name 'ca-*.pem' -perm 0644)" ] || fail "the server's CA is not readable by the tool: $(x ls -l /etc/hostashi-adminer/servers/)"
+x rm -f /tmp/tool.jar
+page=$(p8444 -L "$url") || fail "tool did not answer"
+if ! grep -q 'Tables and views' <<<"$page"; then
+  grep -o "class='error'>[^<]*" <<<"$page" || true
+  docker logs --tail 30 "$pgname" 2>&1 || true
+  x journalctl -u hostashi-adminer.service --no-pager -n 30 || true
+  pgca=$(x find /etc/hostashi-adminer/servers -name 'ca-*.pem' -print -quit)
+  pgconn="host=$ext_ip port=55433 dbname=toolpg_db user=pgadmin sslmode=verify-full sslrootcert=$pgca gssencmode=disable"
+  x env PGPASSWORD=Pg-admin-pw-1234 "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
+  x runuser -u hostashi-adminer -- env PGPASSWORD=Pg-admin-pw-1234 "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
+  x php -r 'var_dump(function_exists("pg_connect"));' || true
+  x systemd-run --wait --pipe -q -p User=hostashi-adminer -p ProtectSystem=strict -p ProtectHome=yes -p PrivateDevices=yes \
+    -p SystemCallFilter=@system-service -p UMask=0077 -E PGPASSWORD=Pg-admin-pw-1234 \
+    "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
+  fail "tool did not log in to PostgreSQL"
 fi
+grep -q 'pgsql=&amp;username=' <<<"$page" || fail "the tool does not run the pgsql driver"
+page=$(p8444 "https://other.example.com:8444/?pgsql=&username=$user&db=toolpg_db&ns=public&select=posts") || fail "tool did not answer"
+grep -q 'hello from pg' <<<"$page" || fail "the tool does not show the table's rows"
+# Only the session's driver, user and database: another driver's
+# parameter (SQLite opens files) is sent back to the session's address.
+for q in "sqlite=&username=$user&db=/etc/passwd" "server=&username=$user&db=toolpg_db" "pgsql=&ext=pdo&username=$user&db=toolpg_db" "pgsql=&username=$user&db=postgres"; do
+  loc=$(p8444 -o /dev/null -w '%{http_code} %{redirect_url}' "https://other.example.com:8444/?$q")
+  [ "$loc" = "303 https://other.example.com:8444/?pgsql=&username=$user&db=toolpg_db" ] || fail "tool with ?$q: '$loc'"
+done
+# Ending the session drops the role on the server.
+[ "$(api DELETE "/api/v1/databases/toolpg_db/tool/sessions/$user")" = 204 ] || fail "end PostgreSQL tool session: $(x cat /tmp/api.out)"
+[ -z "$(pgsu -c "SELECT rolname FROM pg_roles WHERE rolname = '$user'")" ] || fail "ended session kept its role"
+[ "$(p8444 -o /dev/null -w '%{http_code}' "https://other.example.com:8444/?pgsql=&username=$user&db=toolpg_db")" = 403 ] || fail "the tool kept an ended PostgreSQL session"
+[ "$(api DELETE /api/v1/sites/toolpg)" = 204 ] || fail "delete site: $(x cat /tmp/api.out)"
+[ "$(api DELETE /api/v1/db-servers/extpg)" = 204 ] || fail "remove PostgreSQL server: $(x cat /tmp/api.out)"
+docker rm -f "$pgname" >/dev/null
+rm -rf "$pgcerts"
+
+step "a database on an external MySQL 8 server with its own CA in the web database tool (ADR-0041)"
+# A MySQL 8.4 container on the host's network stands in for the external
+# server. It takes only TLS connections (require_secure_transport), with a
+# certificate from a test CA for a name, not an address: a login proves
+# that Adminer (PHP's mysqli) checked the chain and the name against the
+# server's own CA, reaching the server through the tool's hosts file.
+myname="$NAME-mysql"
+mycerts=$(mktemp -d)
+for c in ca other-ca; do
+  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj "/CN=test-mysql-$c" \
+    -keyout "$mycerts/$c.key" -out "$mycerts/$c.pem" 2>/dev/null
+done
+mycert() { # NAME: the server's certificate for NAME, from the test CA
+  openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj "/CN=$1" \
+    -keyout "$mycerts/server.key" -out "$mycerts/server.csr" 2>/dev/null
+  openssl x509 -req -in "$mycerts/server.csr" -CA "$mycerts/ca.pem" -CAkey "$mycerts/ca.key" -CAcreateserial -days 1 \
+    -extfile <(printf 'subjectAltName=DNS:%s' "$1") -out "$mycerts/server.pem" 2>/dev/null
+  chmod 0644 "$mycerts"/*
+}
+mycert mysql8.test
+docker run -d --name "$myname" --network host -v "$mycerts:/certs:ro" -e MYSQL_ROOT_PASSWORD=My-root-pw-1234 mysql:8.4 \
+  --bind-address="$ext_ip" --port=33306 --mysqlx=OFF --require-secure-transport=ON \
+  --ssl-ca=/certs/ca.pem --ssl-cert=/certs/server.pem --ssl-key=/certs/server.key >/dev/null || fail "MySQL container did not start"
+mysu() { docker exec "$myname" mysql -h"$ext_ip" -P33306 -uroot -pMy-root-pw-1234 --ssl-mode=REQUIRED -N -B "$@" 2>/dev/null; }
+# The image first runs a temporary server on the socket only, then restarts.
+for _ in $(seq 1 120); do mysu -e 'SELECT 1' >/dev/null && break; sleep 1; done
+[ "$(mysu -e "SELECT @@require_secure_transport, VERSION() LIKE '8.%'")" = "$(printf '1\t1')" ] ||
+  fail "MySQL 8 without require_secure_transport: $(docker logs --tail 20 "$myname" 2>&1)"
+mysu -e "CREATE USER 'myadmin'@'%' IDENTIFIED BY 'My-admin-pw-1234'; GRANT ALL ON *.* TO 'myadmin'@'%' WITH GRANT OPTION" || fail "MySQL admin user"
+# The server's name resolves for the panel; the agent hands it to the
+# tool's pool in its own hosts file.
+x sh -c "echo '$ext_ip mysql8.test' >>/etc/hosts"
+ca=$(jq -Rs . <"$mycerts/ca.pem")
+[ "$(api POST /api/v1/db-servers "{\"name\":\"extmy\",\"host\":\"mysql8.test\",\"port\":33306,\"adminUser\":\"myadmin\",\"adminPassword\":\"My-admin-pw-1234\",\"tlsMode\":\"verify-ca\",\"caCertificate\":$ca}")" = 201 ] ||
+  fail "add MySQL server: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites '{"name":"toolmy","domains":["toolmy.example.com"]}')" = 201 ] || fail "create site: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/toolmy/databases '{"name":"toolmy_db","server":"extmy"}')" = 201 ] || fail "create MySQL database: $(x cat /tmp/api.out)"
+mysu toolmy_db -e "CREATE TABLE posts (title text); INSERT INTO posts VALUES ('hello from mysql')" || fail "MySQL test table"
+# mytool opens a session and sets url and user; myend ends it, which drops
+# the user on the server.
+mytool() {
+  [ "$(api POST /api/v1/databases/toolmy_db/tool '{"minutes":30}')" = 201 ] || fail "open tool on MySQL: $(x cat /tmp/api.out)"
+  url=$(x sed -n 's/.*"url":"\([^"]*\)".*/\1/p' /tmp/api.out)
+  user=$(mysu -e "SELECT User FROM mysql.user WHERE User LIKE 'hostashi\\_tool\\_%'")
+  [ -n "$user" ] && [ "$(wc -l <<<"$user")" = 1 ] || fail "temporary users on the MySQL server: '$user'"
+  x rm -f /tmp/tool.jar
+}
+myend() {
+  [ "$(api DELETE "/api/v1/databases/toolmy_db/tool/sessions/$user")" = 204 ] || fail "end MySQL tool session: $(x cat /tmp/api.out)"
+  [ -z "$(mysu -e "SELECT User FROM mysql.user WHERE User = '$user'")" ] || fail "ended session kept its user"
+}
+mytool
+x grep -qx "IPAddressAllow=$ext_ip" /etc/systemd/system/hostashi-adminer.service.d/servers.conf || fail "tool drop-in without the MySQL server"
+x grep -q "mysql8\.test" /etc/hostashi-adminer/servers/hosts || fail "tool hosts file: $(x cat /etc/hostashi-adminer/servers/hosts)"
+myca=$(x find /etc/hostashi-adminer/servers -name 'ca-*.pem')
+[ -n "$myca" ] && [ "$(wc -l <<<"$myca")" = 1 ] || fail "the tool's CA files: '$myca'"
+page=$(p8444 -L "$url") || fail "tool did not answer"
+if ! grep -q 'Tables and views' <<<"$page"; then
+  grep -o "class='error'>[^<]*" <<<"$page" || true
+  x journalctl -u hostashi-adminer.service --no-pager -n 30 || true
+  fail "tool did not log in to MySQL with its own CA"
+fi
+page=$(p8444 "https://other.example.com:8444/?username=$user&db=toolmy_db&select=posts") || fail "tool did not answer"
+grep -q 'hello from mysql' <<<"$page" || fail "the tool does not show the table's rows: $(head -c 400 <<<"$page")"
+# The server is always the ticket's: one in the address is sent back.
+loc=$(p8444 -o /dev/null -w '%{http_code} %{redirect_url}' "https://other.example.com:8444/?server=127.0.0.1&username=$user&db=toolmy_db")
+[ "$loc" = "303 https://other.example.com:8444/?username=$user&db=toolmy_db" ] || fail "tool with another server: '$loc'"
+myend
+# A CA that did not sign the server's certificate: Adminer refuses the
+# server. The test swaps the CA the agent wrote, after the ticket.
+mytool
+xi sh -c "cat >'$myca'" <"$mycerts/other-ca.pem"
+page=$(p8444 -L "$url") || fail "tool did not answer"
+if grep -q 'Tables and views' <<<"$page"; then fail "the tool logged in although the CA did not sign the server's certificate"; fi
+grep -q "class='error'>[^<]*SSL" <<<"$page" || fail "no TLS error with the wrong CA: $(grep -o "class='error'>[^<]*" <<<"$page")"
+xi sh -c "cat >'$myca'" <"$mycerts/ca.pem"
+myend
+# A certificate from the right CA for another name: refused as well. The
+# panel checks the name too, so the server changes it after the ticket.
+mytool
+mycert wrong.test
+mysu -e 'ALTER INSTANCE RELOAD TLS' || fail "MySQL TLS reload"
+page=$(p8444 -L "$url") || fail "tool did not answer"
+if grep -q 'Tables and views' <<<"$page"; then fail "the tool logged in although the certificate is for another name"; fi
+grep -q "class='error'>[^<]*SSL" <<<"$page" || fail "no TLS error with the wrong name: $(grep -o "class='error'>[^<]*" <<<"$page")"
+mycert mysql8.test
+mysu -e 'ALTER INSTANCE RELOAD TLS' || fail "MySQL TLS reload"
+myend
+[ "$(api DELETE /api/v1/sites/toolmy)" = 204 ] || fail "delete site: $(x cat /tmp/api.out)"
+[ "$(api DELETE /api/v1/db-servers/extmy)" = 204 ] || fail "remove MySQL server: $(x cat /tmp/api.out)"
+docker rm -f "$myname" >/dev/null
+rm -rf "$mycerts"
+# /etc/hosts is a bind mount: rewritten in place, not replaced.
+x sh -c 'grep -v " mysql8\.test$" /etc/hosts >/tmp/hosts && cat /tmp/hosts >/etc/hosts'
 
 fi # runtimes
 
