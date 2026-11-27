@@ -90,6 +90,7 @@ The same English term is always translated the same way.
 | DNS switch | DNS-Umstellung | CloudPanel import |
 | domain | Domain | die Domain |
 | email | E-Mail | mail as a message: Mail |
+| environment variable | Umgebungsvariable | of an app |
 | disk | Datenträger | |
 | false positive | Fehlalarm | virus scan |
 | file manager | Dateimanager | |
@@ -105,8 +106,10 @@ The same English term is always translated the same way.
 | log in / log out | anmelden / abmelden | |
 | maintenance page | Wartungsseite | |
 | memory (RAM) | Arbeitsspeicher | |
+| object cache | Objekt-Cache | |
 | one-time code | Einmalcode | |
 | overview | Übersicht | |
+| page cache | Seiten-Cache | |
 | parked domain | geparkte Domain | |
 | primary domain | Hauptdomain | |
 | passkey | Passkey | der Passkey |
@@ -128,10 +131,13 @@ The same English term is always translated the same way.
 | shared path | geteilter Pfad | Git deploy |
 | site | Site | die Site; site user: Site-Benutzer |
 | site type | Site-Typ | static: statisch |
+| snippet (nginx) | Snippet | das Snippet |
 | staging | Staging | staging copy: Staging-Kopie |
+| start command | Startbefehl | |
 | storage pool | Storage-Pool | |
 | two-factor | Zwei-Faktor | two-factor authentication: Zwei-Faktor-Anmeldung |
 | usage | Auslastung | the Usage tab |
 | virus scan | Virenscan | |
 | visitor address | Besucheradresse | the Real IP tab |
 | web root | Web-Root | das Web-Root |
+| working directory | Arbeitsverzeichnis | |
