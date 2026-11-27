@@ -10,8 +10,6 @@ type Props = {
   db: string;
   // server is the database server's name; LOCAL_SERVER for this machine.
   server: string;
-  // plain is set when the panel reaches that server without TLS.
-  plain?: boolean;
   minutes: number[];
   onClose: () => void;
 };
@@ -20,7 +18,7 @@ type Props = {
 // time. The tab is opened in the click itself, so a popup blocker lets it
 // through, and gets the address once the server answers. Without a tab the
 // dialog shows the link instead; its ticket is valid for a minute.
-export function OpenToolDialog({ db, server, plain = false, minutes, onClose }: Props) {
+export function OpenToolDialog({ db, server, minutes, onClose }: Props) {
   const [choice, setChoice] = useState(minutes[0] ?? 30);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -69,12 +67,6 @@ export function OpenToolDialog({ db, server, plain = false, minutes, onClose }: 
           Adminer connects from this machine to {server}, where the panel creates the temporary user. The first session on a server, or one after
           its address changed, ends the Adminer sessions open at that moment.
         </p>
-      )}
-      {plain && (
-        <Notice tone="warn" title={`${server} is set up without TLS.`}>
-          The temporary user's password and everything Adminer shows or changes cross the network unencrypted. Use this only inside a private
-          network you trust, or switch the server to TLS under Database servers.
-        </Notice>
       )}
       {link ? (
         <Notice tone="info" title="Your browser blocked the new tab.">

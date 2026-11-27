@@ -164,7 +164,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
     setOpening(null);
     setToolClosed((n) => n + 1);
   };
-  const toolDialog = opening && toolMinutes && <OpenToolDialog key={opening} db={opening} server={dbs?.find((d) => d.name === opening)?.server ?? LOCAL_SERVER} plain={serverOf(opening)?.tlsMode === "none"} minutes={toolMinutes} onClose={closeTool} />;
+  const toolDialog = opening && toolMinutes && <OpenToolDialog key={opening} db={opening} server={dbs?.find((d) => d.name === opening)?.server ?? LOCAL_SERVER} minutes={toolMinutes} onClose={closeTool} />;
   const listLink = (
     <a className="ui-btn" href={formatHash({ page: "databases" })}>
       <ArrowLeft size={16} aria-hidden="true" />

@@ -88,35 +88,6 @@ describe("Open in Adminer", () => {
     expect(within(dialog).getByText(/connects from this machine to db1/)).toBeInTheDocument();
   });
 
-  it("warns when the external server has no TLS", async () => {
-    const user = userEvent.setup();
-    const local = sites["GET /api/v1/db-servers"].body.servers[0];
-    const servers = [
-      local,
-      { ...local, name: "db1", local: false, default: false, tlsMode: "verify-ca", tlsActive: true },
-      { ...local, name: "db2", local: false, default: false, tlsMode: "none" },
-    ];
-    mockFetch({
-      ...sites,
-      "GET /api/v1/db-servers": { body: { servers } },
-      "GET /api/v1/databases": { body: { databases: [blogWp, { ...blogWp, name: "blog_tls", server: "db1" }, { ...blogWp, name: "blog_plain", server: "db2" }] } },
-      ...available,
-    });
-    render(<Harness />);
-    await user.click(await screen.findByRole("button", { name: "Open blog_plain in Adminer" }));
-    let dialog = screen.getByRole("dialog", { name: "Open blog_plain in Adminer" });
-    expect(within(dialog).getByText("db2 is set up without TLS.")).toBeInTheDocument();
-    expect(within(dialog).getByText(/cross the network unencrypted/)).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    await user.click(screen.getByRole("button", { name: "Open blog_tls in Adminer" }));
-    dialog = screen.getByRole("dialog", { name: "Open blog_tls in Adminer" });
-    expect(within(dialog).queryByText(/without TLS/)).not.toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    await user.click(screen.getByRole("button", { name: "Open blog_wp in Adminer" }));
-    dialog = screen.getByRole("dialog", { name: "Open blog_wp in Adminer" });
-    expect(within(dialog).queryByText(/without TLS/)).not.toBeInTheDocument();
-  });
-
   it("opens a database for the chosen time in a new tab", async () => {
     const user = userEvent.setup();
     const { tab, open } = fakeTab();
