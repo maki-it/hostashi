@@ -231,7 +231,9 @@ code_after() { # BODY: set the access rules, then the client's status code
 [ "$(code_after '{}')" = 200 ] || fail "site closed after the rules were removed"
 
 step "real IP behind a proxy with an IPv6 address (ADR-0059)"
-[ "$(api PUT /api/v1/sites/blog/real-ip "{\"header\":\"X-Forwarded-For\",\"ranges\":[\"$C64\"]}")" = 200 ] || fail "set real IP: $(x cat /tmp/api.out)"
+# The agent refuses a range that holds the server's own address (422).
+[ "$(api PUT /api/v1/sites/blog/real-ip "{\"header\":\"X-Forwarded-For\",\"ranges\":[\"$C64\"]}")" = 422 ] || fail "range with the server's address: $(x cat /tmp/api.out)"
+[ "$(api PUT /api/v1/sites/blog/real-ip "{\"header\":\"X-Forwarded-For\",\"ranges\":[\"$C6\"]}")" = 200 ] || fail "set real IP: $(x cat /tmp/api.out)"
 sleep 1
 site -f -o /dev/null -H 'X-Forwarded-For: 2001:db8::77' || fail "site behind the proxy"
 sleep 1
