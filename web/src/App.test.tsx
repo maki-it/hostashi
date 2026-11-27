@@ -28,14 +28,16 @@ describe("App start", () => {
   });
 
   it("measures the sticky top bar for the parts that stick below it", async () => {
+    // The callback of the observer that watches the top bar; other parts
+    // of the page have observers of their own.
     let measured: (() => void) | undefined;
     vi.stubGlobal(
       "ResizeObserver",
       class {
-        constructor(cb: () => void) {
-          measured = cb;
+        constructor(private cb: () => void) {}
+        observe(el: Element) {
+          if (el.classList.contains("app-top")) measured = this.cb;
         }
-        observe() {}
         disconnect() {}
       },
     );
