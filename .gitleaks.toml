@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# gitleaks (https://github.com/gitleaks/gitleaks) configuration.
+#
+# Run a full scan of every branch, tag and pull request ref with:
+#
+#   git fetch origin '+refs/pull/*/head:refs/remotes/pr/*'
+#   gitleaks git --log-opts="--all" --redact .
+#
+# The default rules stay on. The allowlist below only names test fixtures
+# that were checked by hand: made-up passwords and tokens in unit tests and
+# in the mocked API of the wiki screenshots, RFC test vectors, and a public
+# OpenPGP fingerprint. Add a new value here only after checking that it is
+# not a real secret. Never allowlist whole directories.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Made-up passwords, tokens and webhook secrets in tests and screenshot fixtures"
+regexTarget = "match"
+regexes = [
+  # Database passwords in Go unit tests.
+  '''(Secret|Given|Other)-pass_12345[6]?''',
+  '''"db-secret-123456"''',
+  # Hex placeholder for webhook secrets and spike tokens.
+  '''"0123456789abcdef0123456789abcdef"''',
+  # ACME token and key authorization in internal/acme tests.
+  '''"abcdefghijklmnop_-0123"''',
+  '''"abcdefghijklmnop/q"''',
+  # Mocked API answers in web tests and web/e2e/wiki-fixtures.mjs.
+  '''"Vq7mR2xK9pLt4Wz8Bn3sHc6J"''',
+  '''"q8Zt1vLx4mN7pR0sW3yB6cE9fH2jK5aD8gU1iO4lT7w"''',
+  '''"hst_8bXk2mQv7RtLp0wZ4nYc1sDf6gHj9aEuKo3iTq5Vx2M"''',
+  # Wrong password the installer test sends on purpose.
+  ''':wrong-password"''',
+]
+
+[[allowlists]]
+description = "Public test vectors and fingerprints"
+regexTarget = "match"
+regexes = [
+  # TOTP secrets: RFC 6238 test key ("12345678901234567890") and RFC 4648 sample.
+  '''GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ''',
+  '''KRSXG5DTMVZXIZLT''',
+  # WebSocket handshake sample key from RFC 6455.
+  '''"dGhlIHNhbXBsZSBub25jZQ=="''',
+  # Public fingerprints of the nginx.org signing keys (spike installer).
+  '''NGINX_KEY_FPRS="[0-9A-F ]+''',
+]
