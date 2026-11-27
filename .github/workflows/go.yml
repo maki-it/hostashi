@@ -554,6 +554,39 @@ jobs:
       - name: Upgrade a set-up server with the package (systemd container)
         run: packaging/test/each-distro.sh packaging/test/upgrade-test.sh {} ./dist
 
+  # A server on the latest stable release from get.hostashi.com, upgraded
+  # to this commit's package: real schema changes, not only a higher number
+  # as in the package job. Needs the internet; part of the release
+  # checklist (docs/release-checklist.md).
+  release-upgrade:
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
+    name: Upgrade from the latest release (Debian 13 and Ubuntu 26.04)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # GoReleaser reads tags and the commit time.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build a snapshot (publishes nothing)
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          distribution: goreleaser
+          version: v2.20.3
+          args: release --snapshot --clean
+      - name: Install the latest release, add data, upgrade (systemd containers)
+        run: packaging/test/each-distro.sh packaging/test/release-upgrade-test.sh {} ./dist
+
   dracut:
     needs: changes
     if: needs.changes.outputs.installer == 'true'
@@ -639,7 +672,7 @@ jobs:
         run: go build -trimpath -o hostashi ./cmd/hostashi
       - name: shellcheck
         if: matrix.part == 'core'
-        run: shellcheck -x packaging/install.sh packaging/ssh/wp packaging/php/php-install packaging/postgresql/pg-client-install packaging/clamav/clamav-install packaging/test/container-test.sh packaging/test/deb-test.sh packaging/test/quota-test.sh packaging/test/dracut-test.sh packaging/test/firewall-test.sh packaging/test/ipv6-test.sh packaging/test/apt-update-test.sh packaging/test/upgrade-test.sh packaging/deb/preinst packaging/deb/postinst packaging/deb/prerm packaging/deb/hostashi-rollback tools/release-key/new.sh tools/release-key/renew.sh tools/release-key/set-public.sh packaging/apt-repo/build.sh packaging/runtimes/build-deb.sh packaging/runtimes/postinst packaging/test/apt-repo-test.sh packaging/get/install.sh packaging/get/wpcli-mirror.sh packaging/test/wpcli-mirror-test.sh packaging/test/get-test.sh packaging/test/key-test.sh packaging/test/each-distro.sh
+        run: shellcheck -x packaging/install.sh packaging/ssh/wp packaging/php/php-install packaging/postgresql/pg-client-install packaging/clamav/clamav-install packaging/test/container-test.sh packaging/test/deb-test.sh packaging/test/quota-test.sh packaging/test/dracut-test.sh packaging/test/firewall-test.sh packaging/test/ipv6-test.sh packaging/test/apt-update-test.sh packaging/test/upgrade-test.sh packaging/test/release-upgrade-test.sh packaging/deb/preinst packaging/deb/postinst packaging/deb/prerm packaging/deb/hostashi-rollback tools/release-key/new.sh tools/release-key/renew.sh tools/release-key/set-public.sh packaging/apt-repo/build.sh packaging/runtimes/build-deb.sh packaging/runtimes/postinst packaging/test/apt-repo-test.sh packaging/get/install.sh packaging/get/wpcli-mirror.sh packaging/test/wpcli-mirror-test.sh packaging/test/get-test.sh packaging/test/key-test.sh packaging/test/each-distro.sh
       - name: No pipes into grep -q
         if: matrix.part == 'core'
         # grep -q exits at the first match; the writer then dies of SIGPIPE
