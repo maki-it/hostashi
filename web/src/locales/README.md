@@ -79,12 +79,15 @@ The same English term is always translated the same way.
 | cron job | Cron-Job | |
 | database | Datenbank | |
 | database server | Datenbankserver | |
+| database tool session | Adminer-Sitzung | the Adminer sessions card |
+| dump (import/export file) | Dump | dump file: Dump-Datei |
 | domain | Domain | die Domain |
 | email | E-Mail | mail as a message: Mail |
 | file manager | Dateimanager | |
 | firewall | Firewall | die Firewall |
 | hardening | Härtung | |
 | health | Zustand | the Health page |
+| home (of a site) | Home-Verzeichnis | |
 | limit preset | Limit-Vorlage | |
 | log in / log out | anmelden / abmelden | |
 | maintenance page | Wartungsseite | |

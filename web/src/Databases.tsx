@@ -2,6 +2,8 @@
 
 import { ArrowLeft, Database as DatabaseIcon, Gear, Plus, Table as TableIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { listSites, type Site } from "./backups";
 import {
   createDatabase,
@@ -21,6 +23,7 @@ import {
   listServers,
   nameProblem,
   pgSSLMode,
+  POSTGRESQL,
   serverAddress,
   pathProblem,
   resetPassword,
@@ -55,24 +58,30 @@ type QueryProps = {
 const dbHref = (name: string) => formatHash({ page: "databases", query: new URLSearchParams({ db: name }) });
 
 // serverColumn names the server and, for PostgreSQL, the engine (ADR-0051).
-const serverColumn = (servers: DBServer[]): Column<Database> => ({
+const serverColumn = (tr: TFunction, servers: DBServer[]): Column<Database> => ({
   key: "server",
-  header: "Server",
+  header: tr("databases.columns.server"),
   sortValue: (d) => d.server,
   cell: (d) => (
     <span>
       <span className="ui-mono">{d.server}</span>
-      {isPostgres(servers.find((v) => v.name === d.server)) && <span className="ui-hint"> PostgreSQL</span>}
+      {isPostgres(servers.find((v) => v.name === d.server)) && <span className="ui-hint">{" " + POSTGRESQL}</span>}
     </span>
   ),
 });
 
+// serverOption is a server in the list of the new-database form.
+const serverOption = (tr: TFunction, v: DBServer) => {
+  const name = tr(v.local ? "databases.create.thisMachine" : "databases.create.remote", { name: v.name, address: serverAddress(v) });
+  return v.state === "error" ? tr("databases.create.unreachable", { server: name }) : name;
+};
+
 // columns builds the table; onOpen is set when the database tool can be
 // opened (ADR-0038), for every database, PostgreSQL ones too (ADR-0051).
-const columns = (onOpen?: (db: string) => void): Column<Database>[] => [
+const columns = (tr: TFunction, onOpen?: (db: string) => void): Column<Database>[] => [
   {
     key: "name",
-    header: "Database",
+    header: tr("databases.columns.database"),
     sortValue: (d) => d.name,
     cell: (d) => (
       <a className="ui-mono" href={dbHref(d.name)}>
@@ -82,31 +91,31 @@ const columns = (onOpen?: (db: string) => void): Column<Database>[] => [
   },
   {
     key: "site",
-    header: "Site",
+    header: tr("databases.columns.site"),
     sortValue: (d) => d.site,
     cell: (d) => <a href={formatHash({ page: "sites", site: { name: d.site } })}>{d.site}</a>,
   },
   {
     key: "users",
-    header: "Users",
+    header: tr("databases.columns.users"),
     sortValue: (d) => d.users.length,
-    cell: (d) => (d.users.length === 0 ? <span className="ui-hint">No users</span> : <span className="ui-mono">{d.users.join(", ")}</span>),
+    cell: (d) => (d.users.length === 0 ? <span className="ui-hint">{tr("databases.noUsers")}</span> : <span className="ui-mono">{d.users.join(", ")}</span>),
   },
   {
     key: "size",
-    header: "Size",
+    header: tr("databases.columns.size"),
     sortValue: (d) => d.sizeBytes ?? -1,
-    cell: (d) => (d.sizeBytes === undefined ? <span className="ui-hint">Not measured</span> : formatBytes(d.sizeBytes)),
+    cell: (d) => (d.sizeBytes === undefined ? <span className="ui-hint">{tr("databases.notMeasured")}</span> : formatBytes(d.sizeBytes)),
   },
-  { key: "created", header: "Created", sortValue: (d) => d.createdAt, cell: (d) => <RelTime iso={d.createdAt} /> },
+  { key: "created", header: tr("databases.columns.created"), sortValue: (d) => d.createdAt, cell: (d) => <RelTime iso={d.createdAt} /> },
   {
     key: "actions",
-    header: "Actions",
+    header: tr("databases.columns.actions"),
     srHeader: true,
     cell: (d) => (
       <RowActions>
-        {onOpen && <IconButton label={`Open ${d.name} in Adminer`} text="Open" icon={<TableIcon size={16} />} onClick={() => onOpen(d.name)} />}
-        <IconLink label={`Manage ${d.name}`} text="Manage" icon={<Gear size={16} />} href={dbHref(d.name)} />
+        {onOpen && <IconButton label={tr("databases.openLabel", { name: d.name })} text={tr("databases.open")} icon={<TableIcon size={16} />} onClick={() => onOpen(d.name)} />}
+        <IconLink label={tr("databases.manageLabel", { name: d.name })} text={tr("databases.manage")} icon={<Gear size={16} />} href={dbHref(d.name)} />
       </RowActions>
     ),
   },
@@ -117,6 +126,7 @@ const columns = (onOpen?: (db: string) => void): Column<Database>[] => [
 // of one database (?db=<name>) with its users, import/export and delete.
 // A generated password is shown once, above whatever view is open.
 export function Databases({ role = "user", query, onQuery }: QueryProps) {
+  const { t: tr } = useTranslation();
   const [dbs, setDbs] = useState<Database[] | null>(null);
   const [sites, setSites] = useState<Site[] | null>(null);
   const [servers, setServers] = useState<DBServer[] | null>(null);
@@ -168,15 +178,15 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
   const listLink = (
     <a className="ui-btn" href={formatHash({ page: "databases" })}>
       <ArrowLeft size={16} aria-hidden="true" />
-      All databases
+      {tr("databases.allDatabases")}
     </a>
   );
 
   if (!dbs || !sites || !servers) {
     return (
       <>
-        <PageHead title="Databases" />
-        {error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading…</p>}
+        <PageHead title={tr("databases.title")} />
+        {error ? <Notice tone="err" title={error} /> : <p aria-busy="true">{tr("common.status.loading")}</p>}
       </>
     );
   }
@@ -191,7 +201,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
   if (query.get("new") === "1") {
     return (
       <>
-        <PageHead title="New database" description="A database belongs to one site." actions={listLink} />
+        <PageHead title={tr("databases.create.title")} description={tr("databases.create.description")} actions={listLink} />
         {notice}
         <CreateCard
           sites={sites}
@@ -216,22 +226,18 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
           title={one}
           description={
             db && (
-              <>
-                Database of site <a href={formatHash({ page: "sites", site: { name: db.site } })}>{db.site}</a>
-                {db.server !== LOCAL_SERVER && (
-                  <>
-                    {" "}
-                    on server <span className="ui-mono">{db.server}</span> ({hostOf(db.server)})
-                  </>
-                )}
-              </>
+              <Trans
+                i18nKey={db.server === LOCAL_SERVER ? "databases.view.ofSite" : "databases.view.onServer"}
+                values={{ site: db.site, server: db.server, host: hostOf(db.server) }}
+                components={{ a: <a href={formatHash({ page: "sites", site: { name: db.site } })} />, code: <span className="ui-mono" /> }}
+              />
             )
           }
           actions={
             <>
               {db && onOpen && (
                 <Button icon={<TableIcon size={16} aria-hidden="true" />} onClick={() => onOpen(db.name)}>
-                  Open in Adminer
+                  {tr("databases.view.openInAdminer")}
                 </Button>
               )}
               {listLink}
@@ -257,7 +263,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
         {db ? (
           <DatabaseView key={db.name} db={db} host={hostOf(db.server)} postgres={isPostgres(serverOf(db.name))} onSecret={setSecret} onChange={load} onDeleted={() => set({ db: "" })} />
         ) : (
-          <Notice tone="warn" title={`There is no database named ${one}.`} />
+          <Notice tone="warn" title={tr("databases.notFound", { name: one })} />
         )}
       </>
     );
@@ -268,27 +274,27 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
   const sortKey = query.get("sort");
   const sort: Sort | undefined = sortKey ? { key: sortKey, dir: query.get("dir") === "desc" ? "desc" : "asc" } : undefined;
   // The server column only matters once there is more than one server.
-  const base = columns(onOpen);
-  const tableColumns = servers.length > 1 ? [...base.slice(0, 2), serverColumn(servers), ...base.slice(2)] : base;
+  const base = columns(tr, onOpen);
+  const tableColumns = servers.length > 1 ? [...base.slice(0, 2), serverColumn(tr, servers), ...base.slice(2)] : base;
   const shown = dbs.filter((d) => (!site || d.site === site) && (!q || d.name.includes(q) || d.users.some((u) => u.includes(q))));
 
   return (
     <>
       <PageHead
-        title="Databases"
-        description="Databases of your sites. Hostashi stores no database password."
+        title={tr("databases.title")}
+        description={tr("databases.description")}
         actions={
           <>
             {admin && (
               <a className="ui-btn" href={serversHref()}>
                 <DatabaseIcon size={16} aria-hidden="true" />
-                Servers
+                {tr("databases.servers")}
               </a>
             )}
             {sites.length > 0 && (
               <a className="ui-btn ui-btn-primary" href={formatHash({ page: "databases", query: new URLSearchParams({ new: "1" }) })}>
                 <Plus size={16} aria-hidden="true" />
-                New database
+                {tr("databases.new")}
               </a>
             )}
           </>
@@ -298,20 +304,20 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
       {toolDialog}
       {error && <Notice tone="err" title={error} />}
       {sites.length === 0 && dbs.length === 0 ? (
-        <Notice tone="info" title="Create a site first. Every database belongs to a site." />
+        <Notice tone="info" title={tr("databases.needSite")} />
       ) : (
         <Card padded={false}>
           <div className="ui-filters">
             <input
               className="ui-input"
               type="search"
-              aria-label="Filter databases"
-              placeholder="Filter by database or user"
+              aria-label={tr("databases.filter.label")}
+              placeholder={tr("databases.filter.placeholder")}
               value={query.get("q") ?? ""}
               onChange={(e) => set({ q: e.target.value })}
             />
-            <select className="ui-select" aria-label="Site" value={site} onChange={(e) => set({ site: e.target.value })}>
-              <option value="">All sites</option>
+            <select className="ui-select" aria-label={tr("databases.filter.site")} value={site} onChange={(e) => set({ site: e.target.value })}>
+              <option value="">{tr("databases.filter.allSites")}</option>
               {sites.map((s) => (
                 <option key={s.name} value={s.name}>
                   {s.name}
@@ -320,13 +326,13 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
             </select>
           </div>
           <Table
-            label="Databases"
+            label={tr("databases.title")}
             columns={tableColumns}
             rows={shown}
             rowKey={(d) => d.name}
             sort={sort}
             onSort={(s) => set({ sort: s.key, dir: s.dir })}
-            empty={dbs.length === 0 ? "No databases yet." : "No database matches the filter."}
+            empty={dbs.length === 0 ? tr("databases.empty") : tr("databases.noMatch")}
           />
         </Card>
       )}
@@ -337,6 +343,7 @@ export function Databases({ role = "user", query, onQuery }: QueryProps) {
 // PasswordNotice shows a generated password once. The panel cannot show it
 // again; closing the notice drops it from memory.
 function PasswordNotice({ creds, server, onClose }: { creds: Credentials; server: DBServer | undefined; onClose: () => void }) {
+  const { t: tr } = useTranslation();
   const [copied, setCopied] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -350,43 +357,43 @@ function PasswordNotice({ creds, server, onClose }: { creds: Credentials; server
   async function copy() {
     try {
       await navigator.clipboard.writeText(creds.password);
-      setCopied("Copied.");
+      setCopied(tr("common.status.copied"));
     } catch {
-      setCopied("Copying is not possible here. Select the password and copy it by hand.");
+      setCopied(tr("databases.secret.copyFailed"));
     }
   }
 
   return (
     <section className="ui-card ui-card-body ui-stack ui-attention" aria-labelledby="db-secret">
       <h2 id="db-secret" ref={heading} tabIndex={-1}>
-        Save this password now
+        {tr("databases.secret.title")}
       </h2>
-      <p className="ui-flush">Hostashi does not store it and cannot show it again. If it is lost, set a new one.</p>
+      <p className="ui-flush">{tr("databases.secret.text")}</p>
       <dl className="ui-facts">
-        <dt>Database</dt>
+        <dt>{tr("databases.secret.database")}</dt>
         <dd>
           <code>{creds.database}</code>
         </dd>
-        <dt>User</dt>
+        <dt>{tr("databases.secret.user")}</dt>
         <dd>
           <code>{creds.user}</code>
         </dd>
-        <dt>Host</dt>
+        <dt>{tr("databases.secret.host")}</dt>
         <dd>
           <code>{creds.host}</code>
         </dd>
         {server && isPostgres(server) && (
           <>
-            <dt>Engine</dt>
-            <dd>PostgreSQL</dd>
-            <dt>SSL mode</dt>
+            <dt>{tr("databases.secret.engine")}</dt>
+            <dd>{POSTGRESQL}</dd>
+            <dt>{tr("databases.secret.sslMode")}</dt>
             <dd>
               <code>{pgSSLMode(server)}</code>
             </dd>
           </>
         )}
       </dl>
-      <Field label="Password">
+      <Field label={tr("databases.secret.password")}>
         <input
           readOnly
           value={creds.password}
@@ -397,9 +404,9 @@ function PasswordNotice({ creds, server, onClose }: { creds: Credentials; server
         />
       </Field>
       <div className="ui-row">
-        <Button onClick={() => void copy()}>Copy password</Button>
+        <Button onClick={() => void copy()}>{tr("databases.secret.copy")}</Button>
         <Button variant="primary" onClick={onClose}>
-          I have saved it
+          {tr("databases.secret.saved")}
         </Button>
       </div>
       {copied && <Notice tone="ok" title={copied} />}
@@ -418,6 +425,7 @@ function CreateCard({
   onCreated: (c: Credentials | null) => void;
   onChange: () => Promise<void>;
 }) {
+  const { t: tr } = useTranslation();
   const [site, setSite] = useState(sites[0]?.name ?? "");
   const [server, setServer] = useState(() => (servers.find((v) => v.default) ?? servers[0])?.name ?? LOCAL_SERVER);
   const [name, setName] = useState("");
@@ -455,14 +463,14 @@ function CreateCard({
 
   if (sites.length === 0) {
     return (
-      <Notice tone="info" title="Create a site first. Every database belongs to a site." />
+      <Notice tone="info" title={tr("databases.needSite")} />
     );
   }
 
   return (
     <Card>
       <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
-        <Field label="Site">
+        <Field label={tr("databases.create.site")}>
           <select className="ui-select" value={site} onChange={(e) => setSite(e.target.value)}>
             {sites.map((s) => (
               <option key={s.name} value={s.name}>
@@ -472,25 +480,25 @@ function CreateCard({
           </select>
         </Field>
         {servers.length > 1 && (
-          <Field label="Server" hint="A database stays on the server it is created on.">
+          <Field label={tr("databases.create.server")} hint={tr("databases.create.serverHint")}>
             <select className="ui-select" value={server} onChange={(e) => setServer(e.target.value)}>
               {servers.map((v) => (
                 <option key={v.name} value={v.name}>
-                  {v.name + (v.local ? " (this machine)" : " (" + serverAddress(v) + ")") + (v.state === "error" ? ", not reachable" : "")}
+                  {serverOption(tr, v)}
                 </option>
               ))}
             </select>
           </Field>
         )}
-        <Field label="Database name" hint="Lowercase letters, digits and _, starting with a letter.">
+        <Field label={tr("databases.create.name")} hint={tr("databases.create.nameHint")}>
           <input className="ui-input" value={name} onChange={(e) => setName(e.target.value.trim())} required autoComplete="off" spellCheck={false} />
         </Field>
         <label className="ui-check">
           <input type="checkbox" checked={withUser} onChange={(e) => setWithUser(e.target.checked)} />
-          Create a user for it with a generated password
+          {tr("databases.create.withUser")}
         </label>
         {withUser && (
-          <Field label="User name">
+          <Field label={tr("databases.create.user")}>
             <input
               className="ui-input"
               value={userName}
@@ -506,7 +514,7 @@ function CreateCard({
         )}
         {error && <Notice tone="err" title={error} />}
         <Button variant="primary" type="submit" disabled={busy}>
-          Create database
+          {tr("databases.create.submit")}
         </Button>
       </form>
     </Card>
@@ -530,6 +538,7 @@ function DatabaseView({
   onChange: () => Promise<void>;
   onDeleted: () => void;
 }) {
+  const { t: tr } = useTranslation();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [typed, setTyped] = useState("");
@@ -549,11 +558,11 @@ function DatabaseView({
 
   return (
     <>
-      <Card title="Users">
+      <Card title={tr("databases.users.title")}>
         {db.users.length === 0 ? (
-          <p className="ui-hint ui-flush">No users.</p>
+          <p className="ui-hint ui-flush">{tr("databases.users.none")}</p>
         ) : (
-          <ul className="ui-plain-list ui-stack-tight" aria-label={"Users of " + db.name}>
+          <ul className="ui-plain-list ui-stack-tight" aria-label={tr("databases.users.listLabel", { db: db.name })}>
             {db.users.map((u) => (
               <UserRow key={u} db={db.name} host={host} user={u} onSecret={onSecret} onChange={onChange} />
             ))}
@@ -561,10 +570,10 @@ function DatabaseView({
         )}
         <AddUser db={db.name} host={host} onSecret={onSecret} onChange={onChange} />
       </Card>
-      <Card title="Import or export">
+      <Card title={tr("databases.dump.title")}>
         <DumpForm db={db.name} site={db.site} server={db.server} postgres={postgres} />
       </Card>
-      <Card title="Delete database">
+      <Card title={tr("databases.delete.title")}>
         <form
           className="ui-stack"
           onSubmit={(e) => {
@@ -574,12 +583,8 @@ function DatabaseView({
         >
           <div className="ui-narrow">
             <Field
-              label={
-                <>
-                  Type <code className="ui-confirm-phrase">{db.name}</code> to confirm
-                </>
-              }
-              hint="The database is deleted with its users. This cannot be undone."
+              label={<Trans i18nKey="databases.delete.confirm" values={{ name: db.name }} components={{ code: <code className="ui-confirm-phrase" /> }} />}
+              hint={tr("databases.delete.hint")}
             >
               <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
             </Field>
@@ -587,7 +592,7 @@ function DatabaseView({
           {error && <Notice tone="err" title={error} />}
           <div className="ui-row">
             <Button variant="danger" type="submit" disabled={busy || typed !== db.name}>
-              Delete {db.name}
+              {tr("databases.delete.submit", { name: db.name })}
             </Button>
           </div>
         </form>
@@ -610,6 +615,7 @@ function UserRow({
   onChange: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
+  const { t: tr } = useTranslation();
   const [confirm, setConfirm] = useState<"" | "password" | "delete">("");
   const [error, setError] = useState("");
 
@@ -638,24 +644,24 @@ function UserRow({
       {confirm === "" ? (
         <div className="ui-row">
           <Button disabled={busy} onClick={() => setConfirm("password")}>
-            New password
+            {tr("databases.users.newPassword")}
           </Button>
           <Button variant="danger" disabled={busy} onClick={() => setConfirm("delete")}>
-            Delete user
+            {tr("databases.users.delete")}
           </Button>
         </div>
       ) : (
         <div className="ui-row">
           <span>
             {confirm === "password"
-              ? "The old password stops working at once. Update the site's configuration afterwards."
-              : "The site can no longer log in with this user."}
+              ? tr("databases.users.passwordWarning")
+              : tr("databases.users.deleteWarning")}
           </span>
           <Button variant={confirm === "delete" ? "danger" : "primary"} disabled={busy} onClick={() => void run()}>
-            {confirm === "password" ? "Set new password" : "Delete user " + user}
+            {confirm === "password" ? tr("databases.users.setPassword") : tr("databases.users.deleteSubmit", { user })}
           </Button>
           <Button disabled={busy} onClick={() => setConfirm("")}>
-            Cancel
+            {tr("common.actions.cancel")}
           </Button>
         </div>
       )}
@@ -675,6 +681,7 @@ function AddUser({
   onSecret: (c: Credentials) => void;
   onChange: () => Promise<void>;
 }) {
+  const { t: tr } = useTranslation();
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState("");
   const [busy, setBusy] = useState(false);
@@ -705,25 +712,23 @@ function AddUser({
   if (!open) {
     return (
       <div className="ui-row">
-        <Button onClick={() => setOpen(true)}>
-          Add user
-        </Button>
+        <Button onClick={() => setOpen(true)}>{tr("databases.users.add")}</Button>
       </div>
     );
   }
 
   return (
     <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
-      <Field label={`New user for ${db}`}>
+      <Field label={tr("databases.users.newFor", { db })}>
         <input className="ui-input" value={user} onChange={(e) => setUser(e.target.value.trim())} required autoComplete="off" spellCheck={false} />
       </Field>
       {error && <Notice tone="err" title={error} />}
       <div className="ui-row">
         <Button variant="primary" type="submit" disabled={busy}>
-          Add user
+          {tr("databases.users.add")}
         </Button>
         <Button disabled={busy} onClick={() => setOpen(false)}>
-          Cancel
+          {tr("common.actions.cancel")}
         </Button>
       </div>
     </form>
@@ -737,6 +742,7 @@ function AddUser({
 // For a database on an external server, the job connects to that server
 // with a temporary user (ADR-0041 addendum 1).
 function DumpForm({ db, site, server, postgres }: { db: string; site: string; server: string; postgres: boolean }) {
+  const { t: tr } = useTranslation();
   const [kind, setKind] = useState<"export" | "import">("export");
   const [source, setSource] = useState<"upload" | "home">("upload");
   const [file, setFile] = useState<File | null>(null);
@@ -754,12 +760,12 @@ function DumpForm({ db, site, server, postgres }: { db: string; site: string; se
     let target = path;
     if (fromComputer) {
       if (!file) {
-        setError("Choose a file.");
+        setError(tr("databases.dump.chooseFile"));
         return;
       }
       target = uploadPath(file.name, new Date(), postgres);
       if (target === "") {
-        setError(postgres ? "The file must end in .dump, .sql or .sql.gz." : "The file must end in .sql or .sql.gz.");
+        setError(tr(postgres ? "databases.problems.endingPg" : "databases.problems.ending"));
         return;
       }
     } else {
@@ -795,37 +801,37 @@ function DumpForm({ db, site, server, postgres }: { db: string; site: string; se
   return (
     <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
       <fieldset className="ui-fieldset ui-stack-tight">
-        <legend>Direction</legend>
+        <legend>{tr("databases.dump.direction")}</legend>
         <label className="ui-check">
           <input type="radio" name={"dump-" + db} checked={kind === "export"} onChange={() => setKind("export")} />
-          Export into a new file
+          {tr("databases.dump.export")}
         </label>
         <label className="ui-check">
           <input type="radio" name={"dump-" + db} checked={kind === "import"} onChange={() => setKind("import")} />
-          Import a file
+          {tr("databases.dump.import")}
         </label>
       </fieldset>
       {kind === "import" && (
         <fieldset className="ui-fieldset ui-stack-tight">
-          <legend>File from</legend>
+          <legend>{tr("databases.dump.from")}</legend>
           <label className="ui-check">
             <input type="radio" name={"dump-src-" + db} checked={source === "upload"} onChange={() => setSource("upload")} />
-            My computer
+            {tr("databases.dump.computer")}
           </label>
           <label className="ui-check">
             <input type="radio" name={"dump-src-" + db} checked={source === "home"} onChange={() => setSource("home")} />
-            The home of site {site}
+            {tr("databases.dump.home", { site })}
           </label>
         </fieldset>
       )}
       {kind === "export" && (
-        <Field label="Format">
+        <Field label={tr("databases.dump.format")}>
           <select
             className="ui-select"
             value={formatOf(path)}
             onChange={(e) => e.target.value && setPath(withFormat(path, e.target.value as DumpFormat))}
           >
-            {formatOf(path) === "" && <option value="">Other (see the file name)</option>}
+            {formatOf(path) === "" && <option value="">{tr("databases.dump.otherFormat")}</option>}
             {dumpFormats(postgres).map((f) => (
               <option key={f.value} value={f.value}>
                 {f.label}
@@ -836,11 +842,8 @@ function DumpForm({ db, site, server, postgres }: { db: string; site: string; se
       )}
       {fromComputer ? (
         <Field
-          label="Dump file"
-          hint={
-            (postgres ? "A .dump (pg_dump custom format), .sql or .sql.gz file. " : "A .sql or .sql.gz file. ") +
-            `It is uploaded into the home of site ${site} and removed after the import; it counts towards the site's disk space meanwhile.`
-          }
+          label={tr("databases.dump.file")}
+          hint={tr(postgres ? "databases.dump.fileHintPg" : "databases.dump.fileHint") + " " + tr("databases.dump.uploadHint", { site })}
         >
           <input
             className="ui-input"
@@ -851,48 +854,47 @@ function DumpForm({ db, site, server, postgres }: { db: string; site: string; se
         </Field>
       ) : (
         <Field
-          label={`File in the home of site ${site}`}
+          label={tr("databases.dump.path", { site })}
           hint={
-            (postgres
-              ? "Relative to the home, ending in .dump (pg_dump custom format), .sql or .sql.gz. "
-              : "Relative to the home, ending in .sql or .sql.gz. ") +
-            (kind === "export" ? "An existing file is never replaced." : "Upload it first, for example over SFTP.")
+            tr(postgres ? "databases.dump.pathHintPg" : "databases.dump.pathHint") +
+            " " +
+            tr(kind === "export" ? "databases.dump.neverReplaced" : "databases.dump.uploadFirst")
           }
         >
           <input className="ui-input ui-mono" value={path} onChange={(e) => setPath(e.target.value.trim())} autoComplete="off" spellCheck={false} />
         </Field>
       )}
       {server !== LOCAL_SERVER && (
-        <p className="ui-hint ui-flush">
-          The data goes between this machine and {server} with a temporary database user that the panel removes after the job.
-        </p>
+        <p className="ui-hint ui-flush">{tr("databases.dump.remote", { server })}</p>
       )}
       {kind === "import" &&
         (postgres ? (
           <Notice
             tone="warn"
-            title={`The file runs in ${db} as one transaction: a failed import changes nothing. A .dump file replaces the tables it contains.`}
+            title={tr("databases.dump.importWarnPg", { db })}
           />
         ) : (
-          <Notice tone="warn" title={`The statements in the file run in ${db}. Import into an empty database: a failed import is not rolled back.`} />
+          <Notice tone="warn" title={tr("databases.dump.importWarn", { db })} />
         ))}
       {uploading && file && (
-        <p aria-busy="true">
-          Uploading… {Math.floor(((sent ?? 0) / Math.max(file.size, 1)) * 100)} %
-        </p>
+        <p aria-busy="true">{tr("databases.dump.uploading", { percent: Math.floor(((sent ?? 0) / Math.max(file.size, 1)) * 100) })}</p>
       )}
-      {!uploading && job?.state === "running" && <p aria-busy="true">{job.kind === "import" ? "Importing…" : "Exporting…"}</p>}
+      {!uploading && job?.state === "running" && <p aria-busy="true">{tr(job.kind === "import" ? "databases.dump.importing" : "databases.dump.exporting")}</p>}
       {job?.state === "done" && (
         <Notice
           tone="ok"
-          title={job.kind === "import" ? `Imported ${file && job.path.startsWith(uploadDir + "/") ? file.name : job.path} into ${db}.` : `Exported ${db} into ${job.path}.`}
+          title={
+            job.kind === "import"
+              ? tr("databases.dump.imported", { file: file && job.path.startsWith(uploadDir + "/") ? file.name : job.path, db })
+              : tr("databases.dump.exported", { db, path: job.path })
+          }
         />
       )}
-      {job?.state === "failed" && <Notice tone="err" title={(job.kind === "import" ? "Import" : "Export") + " failed: " + (job.error ?? "unknown error")} />}
+      {job?.state === "failed" && <Notice tone="err" title={tr(job.kind === "import" ? "databases.dump.importFailed" : "databases.dump.exportFailed", { reason: job.error ?? tr("databases.dump.unknownError") })} />}
       {error && <Notice tone="err" title={error} />}
       <div className="ui-row">
         <Button variant="primary" type="submit" disabled={running}>
-          {kind === "import" ? "Start import" : "Start export"}
+          {tr(kind === "import" ? "databases.dump.startImport" : "databases.dump.startExport")}
         </Button>
       </div>
     </form>

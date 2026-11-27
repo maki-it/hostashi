@@ -1,9 +1,21 @@
 {
   "busy": "The server is busy. Try again in a minute.",
+  "database_exists": "A database or database user with this name exists. Choose another name.",
+  "db_server_denied": "The database server refused the panel's administrator. Check the server's privileges.",
+  "db_server_exists": "A database server with this name exists. Choose another name.",
+  "db_server_in_use": "The server still has databases. Delete or move them first.",
+  "db_server_local_only": "This only works for databases on the local server.",
+  "db_server_unavailable": "The database server is not reachable. Check it on the Servers tab or try again later.",
+  "db_server_unresolved": "The database server's name does not resolve to an address this machine can reach. Check its DNS records.",
+  "dbtool_session_limit": "A session can run at most two hours ahead. Extend it again later.",
+  "dbtool_unavailable": "The database tool is not available. It needs the panel's own certificate; see System.",
   "invalid_credentials": "Wrong username or password.",
   "passkey_failed": "The passkey was not accepted.",
   "passkey_required": "This account logs in with a passkey.",
   "passkeys_unavailable": "Passkeys are not set up on this server. Log in with your password.",
+  "pg_client_too_old": "This PostgreSQL server is newer than the client tools this Hostashi version can install. Update Hostashi first.",
+  "postgresql_not_yet": "This does not work for PostgreSQL databases yet.",
   "rate_limited": "Too many attempts. Wait a few minutes and try again.",
-  "setup_not_allowed": "The setup token is wrong or has expired."
+  "setup_not_allowed": "The setup token is wrong or has expired.",
+  "unknown_db_server": "This database server does not exist any more. Reload the page."
 }

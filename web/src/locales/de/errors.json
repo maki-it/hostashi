@@ -1,9 +1,21 @@
 {
   "busy": "Der Server ist ausgelastet. Versuch es in einer Minute noch einmal.",
+  "database_exists": "Eine Datenbank oder ein Datenbank-Benutzer mit diesem Namen existiert bereits. Wähle einen anderen Namen.",
+  "db_server_denied": "Der Datenbankserver hat den Administrator des Panels abgewiesen. Prüfe die Rechte auf dem Server.",
+  "db_server_exists": "Ein Datenbankserver mit diesem Namen existiert bereits. Wähle einen anderen Namen.",
+  "db_server_in_use": "Auf dem Server liegen noch Datenbanken. Lösche oder verschiebe sie zuerst.",
+  "db_server_local_only": "Das geht nur für Datenbanken auf dem lokalen Server.",
+  "db_server_unavailable": "Der Datenbankserver ist nicht erreichbar. Prüfe ihn unter Server oder versuche es später noch einmal.",
+  "db_server_unresolved": "Der Name des Datenbankservers löst sich nicht in eine Adresse auf, die dieser Rechner erreicht. Prüfe seine DNS-Einträge.",
+  "dbtool_session_limit": "Eine Sitzung reicht höchstens zwei Stunden in die Zukunft. Verlängere sie später noch einmal.",
+  "dbtool_unavailable": "Das Datenbank-Tool ist nicht verfügbar. Es braucht das eigene Zertifikat des Panels; siehe System.",
   "invalid_credentials": "Benutzername oder Passwort ist falsch.",
   "passkey_failed": "Der Passkey wurde nicht akzeptiert.",
   "passkey_required": "Dieses Konto meldet sich mit einem Passkey an.",
   "passkeys_unavailable": "Passkeys sind auf diesem Server nicht eingerichtet. Melde dich mit deinem Passwort an.",
+  "pg_client_too_old": "Dieser PostgreSQL-Server ist neuer als die Client-Tools, die diese Hostashi-Version installieren kann. Aktualisiere zuerst Hostashi.",
+  "postgresql_not_yet": "Das geht für PostgreSQL-Datenbanken noch nicht.",
   "rate_limited": "Zu viele Versuche. Warte ein paar Minuten und versuch es dann noch einmal.",
-  "setup_not_allowed": "Das Setup-Token ist falsch oder abgelaufen."
+  "setup_not_allowed": "Das Setup-Token ist falsch oder abgelaufen.",
+  "unknown_db_server": "Dieser Datenbankserver existiert nicht mehr. Lade die Seite neu."
 }
