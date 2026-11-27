@@ -11,7 +11,6 @@
     "DBServers.tsx",
     "DBTool.tsx",
     "DBToolSessions.tsx",
-    "Dashboard.tsx",
     "Databases.tsx",
     "Doctor.tsx",
     "Domains.tsx",
@@ -27,7 +26,6 @@
     "Migrate.tsx",
     "NodePage.tsx",
     "ObjectCache.tsx",
-    "Overview.tsx",
     "PHP.tsx",
     "PHPSettings.tsx",
     "PageCache.tsx",
@@ -58,13 +56,9 @@
     "Sites.tsx",
     "Snippets.tsx",
     "System.tsx",
-    "Unsaved.tsx",
     "Usage.tsx",
     "Users.tsx",
     "WWW.tsx",
-    "WordPress.tsx",
-    "ui/Chart.tsx",
-    "ui/Copy.tsx",
-    "ui/JobCard.tsx"
+    "WordPress.tsx"
   ]
 }

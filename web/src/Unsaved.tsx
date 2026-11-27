@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "./ui";
 
 // The cards of a tab each save on their own. useUnsaved notices typing in
@@ -10,6 +11,7 @@ import { Button } from "./ui";
 // button, a success notice (role=status) in the card makes the form clean
 // again, an error (role=alert) leaves it unsaved.
 export function useUnsaved(key: string) {
+  const { t } = useTranslation();
   const forms = useRef(new Set<HTMLFormElement>());
   const saving = useRef(new Set<HTMLFormElement>());
   const box = useRef<HTMLDivElement | null>(null);
@@ -20,7 +22,7 @@ export function useUnsaved(key: string) {
     setNames(
       [...forms.current]
         .filter((f) => f.isConnected)
-        .map((form) => ({ name: form.closest("section[aria-label]")?.getAttribute("aria-label") ?? "this tab", form }))
+        .map((form) => ({ name: form.closest("section[aria-label]")?.getAttribute("aria-label") ?? t("ui.unsaved.thisTab"), form }))
         .filter((n, i, all) => all.findIndex((x) => x.name === n.name) === i),
     );
 
@@ -106,7 +108,7 @@ export function useUnsaved(key: string) {
     names.length > 0 ? (
       <div className="ui-unsaved" role="status">
         <p>
-          <strong>Unsaved changes</strong> in{" "}
+          <strong>{t("ui.unsaved.title")}</strong> {t("ui.unsaved.in")}{" "}
           {names.map((n, i) => (
             <span key={n.name}>
               {i > 0 && ", "}
@@ -116,11 +118,11 @@ export function useUnsaved(key: string) {
             </span>
           ))}
           .{" "}
-          {pending ? "Save them first, or drop them to open the other tab." : "Save them before you leave this tab."}
+          {pending ? t("ui.unsaved.saveOrDrop") : t("ui.unsaved.saveBeforeLeaving")}
         </p>
         {pending && (
           <>
-            <Button onClick={() => setPending(null)}>Stay here</Button>
+            <Button onClick={() => setPending(null)}>{t("ui.unsaved.stay")}</Button>
             <Button
               variant="danger"
               onClick={() => {
@@ -131,7 +133,7 @@ export function useUnsaved(key: string) {
                 go();
               }}
             >
-              Drop changes
+              {t("ui.unsaved.drop")}
             </Button>
           </>
         )}

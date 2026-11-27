@@ -75,12 +75,14 @@ The same English term is always translated the same way.
 | audit log | Audit-Log | |
 | backup | Backup | das Backup; restore: wiederherstellen |
 | certificate | Zertifikat | |
+| check (Health) | Prüfung | |
 | colour scheme | Farbschema | |
 | cron job | Cron-Job | |
 | database | Datenbank | |
 | database server | Datenbankserver | |
 | domain | Domain | die Domain |
 | email | E-Mail | mail as a message: Mail |
+| disk | Datenträger | |
 | file manager | Dateimanager | |
 | firewall | Firewall | die Firewall |
 | hardening | Härtung | |
@@ -88,6 +90,7 @@ The same English term is always translated the same way.
 | limit preset | Limit-Vorlage | |
 | log in / log out | anmelden / abmelden | |
 | maintenance page | Wartungsseite | |
+| memory (RAM) | Arbeitsspeicher | |
 | one-time code | Einmalcode | |
 | overview | Übersicht | |
 | parked domain | geparkte Domain | |
