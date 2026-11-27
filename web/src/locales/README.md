@@ -81,6 +81,8 @@ The same English term is always translated the same way.
 | database | Datenbank | |
 | danger zone | Gefahrenzone | |
 | database server | Datenbankserver | |
+| database tool session | Adminer-Sitzung | the Adminer sessions card |
+| dump (import/export file) | Dump | dump file: Dump-Datei |
 | display name | Anzeigename | a site's title; system name: Systemname |
 | DNS switch | DNS-Umstellung | CloudPanel import |
 | domain | Domain | die Domain |
@@ -89,6 +91,7 @@ The same English term is always translated the same way.
 | firewall | Firewall | die Firewall |
 | hardening | Härtung | |
 | health | Zustand | the Health page |
+| home (of a site) | Home-Verzeichnis | |
 | invitation | Einladung | invitation link: Einladungslink |
 | limit preset | Limit-Vorlage | |
 | log in / log out | anmelden / abmelden | |

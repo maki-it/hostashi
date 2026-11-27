@@ -3,11 +3,7 @@
   "files": [
     "BlockedAddresses.tsx",
     "Cron.tsx",
-    "DBServers.tsx",
-    "DBTool.tsx",
-    "DBToolSessions.tsx",
     "Dashboard.tsx",
-    "Databases.tsx",
     "Doctor.tsx",
     "Editor.tsx",
     "Files.tsx",
