@@ -306,7 +306,9 @@ function PasswordBox({ secret, onClose }: { secret: Secret; onClose: () => void 
       <dl className="ui-facts">
         <dt>Login</dt>
         <dd>
-          <code>{secret.url}/wp-admin/</code>
+          <a href={secret.url + "/wp-admin/"} target="_blank" rel="noreferrer noopener">
+            <code>{secret.url}/wp-admin/</code>
+          </a>
         </dd>
         <dt>User</dt>
         <dd>

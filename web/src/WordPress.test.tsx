@@ -44,7 +44,7 @@ describe("WordPressCard", () => {
     const box = within(card).getByRole("region", { name: "Save the WordPress admin password now" });
     expect(within(box).getByRole("textbox", { name: "Admin password" })).toHaveValue("Vq7mR2xK9pLt4Wz8Bn3sHc6J");
     expect(within(box).getByRole("button", { name: "Copy password" })).toBeInTheDocument();
-    expect(screen.getByText("https://blog.example.com/wp-admin/")).toBeInTheDocument();
+    expect(within(box).getByRole("link", { name: "https://blog.example.com/wp-admin/" })).toHaveAttribute("href", "https://blog.example.com/wp-admin/");
     expect(screen.getByText(/being installed/)).toBeInTheDocument();
     expect(calls).toContainEqual({
       method: "POST",
