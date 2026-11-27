@@ -32,7 +32,12 @@ const (
 	Dir = "/opt/hostashi/wp-cli"
 	// Phar is the file name inside a version's directory.
 	Phar = "wp-cli.phar"
-	// ReleaseURL is where WP-CLI publishes its release files.
+	// MirrorURL is Hostashi's copy of the pinned phars on get.hostashi.com
+	// (GitHub Pages, with IPv6), in GitHub's layout. The Pages workflow
+	// puts them there after checking their SHA-512 (ADR-0069 addendum 2).
+	MirrorURL = "https://get.hostashi.com/wp-cli"
+	// ReleaseURL is where WP-CLI publishes its release files; tried when
+	// the mirror fails. GitHub has no IPv6 address.
 	ReleaseURL = "https://github.com/wp-cli/wp-cli/releases/download"
 	// MaxBytes bounds the download; the 2.12.0 phar has about 7 MB.
 	MaxBytes = 64 << 20
@@ -50,11 +55,14 @@ func Path(root string, r agentapi.WPCLIRelease) string {
 
 // Installer downloads and checks one release.
 type Installer struct {
-	Root    string // prefixed to Dir; empty means /
-	Client  *http.Client
-	URL     string // ReleaseURL unless set (tests)
-	Out     io.Writer
-	Release agentapi.WPCLIRelease // agentapi.WPCLI unless set (tests)
+	Root   string // prefixed to Dir; empty means /
+	Client *http.Client
+	URL    string // MirrorURL unless set (tests)
+	// Fallback are the bases tried after URL when URL is set (tests);
+	// ReleaseURL after MirrorURL otherwise.
+	Fallback []string
+	Out      io.Writer
+	Release  agentapi.WPCLIRelease // agentapi.WPCLI unless set (tests)
 }
 
 func (in *Installer) logf(format string, a ...any) {
@@ -99,9 +107,9 @@ func (in *Installer) Install(ctx context.Context) error {
 		return err
 	}
 
-	base := in.URL
-	if base == "" {
-		base = ReleaseURL
+	bases := append([]string{in.URL}, in.Fallback...)
+	if in.URL == "" {
+		bases = []string{MirrorURL, ReleaseURL}
 	}
 
 	client := in.Client
@@ -114,9 +122,6 @@ func (in *Installer) Install(ctx context.Context) error {
 		return fmt.Errorf("wpinstall: %w", err)
 	}
 
-	url := base + "/v" + rel.Version + "/wp-cli-" + rel.Version + ".phar"
-	in.logf("downloading %s", url)
-
 	tmp, err := os.CreateTemp(dir, ".new-*.phar")
 	if err != nil {
 		return fmt.Errorf("wpinstall: %w", err)
@@ -125,7 +130,24 @@ func (in *Installer) Install(ctx context.Context) error {
 	defer func() { _ = os.Remove(tmp.Name()) }()
 	defer tmp.Close()
 
-	if err := download(ctx, client, url, tmp, rel.SHA512); err != nil {
+	for i, base := range bases {
+		if i > 0 {
+			in.logf("%v; trying the next source", err)
+		}
+
+		url := base + "/v" + rel.Version + "/wp-cli-" + rel.Version + ".phar"
+		in.logf("downloading %s", url)
+
+		if err = rewind(tmp); err != nil {
+			return err
+		}
+
+		if err = download(ctx, client, url, tmp, rel.SHA512); err == nil || ctx.Err() != nil {
+			break
+		}
+	}
+
+	if err != nil {
 		return err
 	}
 
@@ -147,6 +169,19 @@ func (in *Installer) Install(ctx context.Context) error {
 	}
 
 	in.logf("%s %s", DoneMarker, rel.Version)
+
+	return nil
+}
+
+// rewind empties f for the next download.
+func rewind(f *os.File) error {
+	if err := f.Truncate(0); err != nil {
+		return fmt.Errorf("wpinstall: %w", err)
+	}
+
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("wpinstall: %w", err)
+	}
 
 	return nil
 }

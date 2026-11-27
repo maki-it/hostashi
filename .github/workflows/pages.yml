@@ -14,6 +14,8 @@
 # successful run on main. That suite is checked against the runtimes key.
 # Without any such run the page goes out with stable only.
 #
+# It also mirrors the pinned WP-CLI phars at /wp-cli (ADR-0069 addendum 2).
+#
 # Upload and deploy are separate jobs: right after upload-pages-artifact
 # finishes, the artifact API sometimes does not list the artifact yet and
 # deploy-pages fails with "No artifacts named github-pages". The deploy job
@@ -105,6 +107,16 @@ jobs:
           cp -r "$x/pool/main/h/hostashi-runtimes" site/apt/pool/main/h/
           cp "$x/hostashi-runtimes.asc" site/apt/
           echo "runtimes suite from run $RUN" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: WP-CLI mirror (IPv6, ADR-0069 addendum 2)
+        # The pinned phars of main and of the latest stable release, each
+        # checked against its SHA-512 pin; GitHub has no IPv6 address.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          gh api "repos/$GITHUB_REPOSITORY/contents/internal/agentapi/wpcli.go?ref=$tag" --jq .content | base64 -d >"$RUNNER_TEMP/wpcli-release.go"
+          packaging/get/wpcli-mirror.sh site internal/agentapi/wpcli.go "$RUNNER_TEMP/wpcli-release.go"
       - name: Start page
         run: |
           cat >site/index.html <<'HTML'
@@ -122,6 +134,7 @@ jobs:
           signing key <a href="apt/hostashi.asc">apt/hostashi.asc</a>;
           suite <code>runtimes</code> (Node.js and CPython pins only),
           signing key <a href="apt/hostashi-runtimes.asc">apt/hostashi-runtimes.asc</a>.
+          <code>/wp-cli</code>: the pinned WP-CLI builds, for servers without IPv4.
           Source: <a href="https://github.com/maki-it/hostashi">github.com/maki-it/hostashi</a>.</p>
           </html>
           HTML

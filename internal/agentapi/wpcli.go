@@ -3,8 +3,9 @@
 package agentapi
 
 // WPCLIRelease is the pinned WP-CLI build (ADR-0069). Hostashi downloads
-// the phar of the GitHub release and checks it against SHA512 before it
-// is moved into place; nothing it downloads is run as root.
+// the phar of the GitHub release, from its mirror on get.hostashi.com
+// first (addendum 2), and checks it against SHA512 before it is moved
+// into place; nothing it downloads is run as root.
 type WPCLIRelease struct {
 	Version string
 	// SHA512 of wp-cli-<Version>.phar, from the release's .sha512 file.
