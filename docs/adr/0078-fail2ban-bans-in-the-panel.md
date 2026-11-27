@@ -71,3 +71,17 @@ Constraints:
 2. ~~Unblock in all jails at once or per jail?~~ Decided (Kim, 2026-11-26): in all jails at once.
 
 In v1 (Kim, 2026-11-26).
+
+## Addendum 1: many blocked addresses (Kim's request, 2026-11-27)
+
+**Context.** Kim asked how the card looks with hundreds or thousands of blocked addresses, and wants to filter by block type and address, and the Firewall page split into two tabs. The first version had not considered it [V: code]: `fail2ban.status` sent every ban of every jail in one answer, and an agent frame holds at most 64 KiB (`agentrpc.MaxFrame`). At about 1,000 bans (an address in two jails counts twice) the answer no longer fit and the card showed only an error. Below that, the browser drew every row. `f2bctl` also cut the client's output at 256 KiB per jail (about 4,000 bans) in the middle of a line, which failed the whole reading.
+
+**Decision.**
+
+- The agent filters and pages. `fail2ban.status` takes `{jail, address, offset, limit}` and returns the jail counters, one page of addresses merged per address (with every jail that blocks it, newest first), the number of matches and `truncated`. A page holds at most 100 addresses; a test checks that a full page of the longest IPv6 addresses blocked in all four jails stays below half a frame. The jail filter accepts only the four names; the address filter only hex digits, `.`, `:` and `/` (at most 64 characters), and a `/` must form a valid range. A range keeps the addresses inside it; other text keeps addresses that contain it or equal it.
+- `f2bctl` reads up to 4 MiB per command (about 65,000 bans per jail). Beyond that it keeps the full lines, and the panel warns that the list is incomplete; the counters stay exact.
+- One reading of fail2ban (nine client processes) is kept for 5 seconds, so paging and filtering do not start them again for every keystroke; an unblock drops it.
+- `GET /api/v1/firewall/bans` takes `jail`, `address`, `page` and `perPage` and answers `{jails, addresses, total, page, perPage, truncated}`. This replaces the per-jail `bans` lists, a breaking API change before 1.0. `hostashi firewall bans` reads every page and takes `-jail` and `-address`.
+- The Firewall page has the tabs **Firewall** (rules and API token allowlist) and **Blocked addresses** (`?tab=blocked`, also the link target of the Health check). The rules stay mounted on the other tab, so a change waiting for confirmation is not lost.
+
+No new `os/exec` shape, no migration.

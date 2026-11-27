@@ -117,11 +117,20 @@ const firewall = {
 const inHours = (h) => new Date(Date.parse("2026-11-22T18:00:00Z") + h * 3_600_000).toISOString();
 const fail2ban = {
   jails: [
-    { name: "sshd", running: true, currentlyFailed: 2, totalFailed: 318, currentlyBanned: 1, totalBanned: 41, bans: [{ address: "192.0.2.77", since: inHours(-0.4), until: inHours(0.6) }] },
-    { name: "hostashi-panel", running: true, currentlyFailed: 0, totalFailed: 3, currentlyBanned: 0, totalBanned: 0, bans: [] },
-    { name: "hostashi-site-auth", running: true, currentlyFailed: 1, totalFailed: 24, currentlyBanned: 1, totalBanned: 2, bans: [{ address: "198.51.100.23", since: inHours(-0.2), until: inHours(0.8) }] },
-    { name: "recidive", running: true, currentlyFailed: 0, totalFailed: 9, currentlyBanned: 1, totalBanned: 3, bans: [{ address: "2001:db8:5::9", since: inHours(-30), until: inHours(138) }] },
+    { name: "sshd", running: true, currentlyFailed: 2, totalFailed: 318, currentlyBanned: 1, totalBanned: 41 },
+    { name: "hostashi-panel", running: true, currentlyFailed: 0, totalFailed: 3, currentlyBanned: 0, totalBanned: 0 },
+    { name: "hostashi-site-auth", running: true, currentlyFailed: 1, totalFailed: 24, currentlyBanned: 1, totalBanned: 2 },
+    { name: "recidive", running: true, currentlyFailed: 0, totalFailed: 9, currentlyBanned: 1, totalBanned: 3 },
   ],
+  addresses: [
+    { address: "198.51.100.23", jails: ["hostashi-site-auth"], since: inHours(-0.2), until: inHours(0.8) },
+    { address: "192.0.2.77", jails: ["sshd"], since: inHours(-0.4), until: inHours(0.6) },
+    { address: "2001:db8:5::9", jails: ["recidive"], since: inHours(-30), until: inHours(138) },
+  ],
+  total: 3,
+  page: 1,
+  perPage: 50,
+  truncated: false,
 };
 
 const node = { installed: [{ major: "24", version: "24.11.1" }], last: "", state: "idle", log: [], releases: [{ major: "24", version: "24.11.1", codename: "Krypton", end: "2028-04-30" }] };

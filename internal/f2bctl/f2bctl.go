@@ -21,6 +21,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -31,8 +32,17 @@ const Client = "/usr/bin/fail2ban-client"
 
 const (
 	commandTimeout = 15 * time.Second
-	outputLimit    = 256 << 10
+	// outputLimit is about 65,000 bans of one jail with time; a longer
+	// list is cut at a line end and reported as truncated.
+	outputLimit = 4 << 20
+	// cacheFor keeps one reading of fail2ban for the pages and filters
+	// that follow it; every reading starts nine client processes.
+	cacheFor = 5 * time.Second
 )
+
+// ErrTruncated is returned with the output that fit when a command printed
+// more than the output limit. The output ends at a full line.
+var ErrTruncated = errors.New("f2bctl: output truncated")
 
 // ErrUnavailable is returned when fail2ban does not answer.
 var ErrUnavailable = errors.New("f2bctl: fail2ban does not answer")
@@ -50,6 +60,19 @@ type Controller struct {
 	// Location is the time zone of fail2ban's ban times; nil is
 	// time.Local, which the agent shares with fail2ban.
 	Location *time.Location
+	// Now is the clock of the cache; nil is time.Now.
+	Now func() time.Time
+
+	mu     sync.Mutex
+	cached *snapshot
+	at     time.Time
+}
+
+// snapshot is one reading of every Hostashi jail.
+type snapshot struct {
+	jails     []agentapi.Fail2banJail
+	bans      map[string][]agentapi.Fail2banBan
+	truncated bool
 }
 
 func (c *Controller) run(ctx context.Context, args ...string) (string, error) {
@@ -68,60 +91,202 @@ func (c *Controller) loc() *time.Location {
 	return time.Local
 }
 
-// Status returns every jail of agentapi.Fail2banJails. A jail fail2ban does
-// not know is reported as not running; a fail2ban that does not answer is
-// ErrUnavailable.
-func (c *Controller) Status(ctx context.Context) (agentapi.Fail2banStatus, error) {
-	if _, err := c.run(ctx, "ping"); err != nil {
-		return agentapi.Fail2banStatus{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+// Status returns every jail of agentapi.Fail2banJails and the page of
+// blocked addresses that req asks for. A jail fail2ban does not know is
+// reported as not running; a fail2ban that does not answer is
+// ErrUnavailable. req must have passed Validate.
+func (c *Controller) Status(ctx context.Context, req agentapi.Fail2banStatusRequest) (agentapi.Fail2banStatus, error) {
+	if err := req.Validate(); err != nil {
+		return agentapi.Fail2banStatus{}, err
 	}
 
-	out := agentapi.Fail2banStatus{Jails: make([]agentapi.Fail2banJail, 0, len(agentapi.Fail2banJails))}
+	snap, err := c.read(ctx)
+	if err != nil {
+		return agentapi.Fail2banStatus{}, err
+	}
+
+	st := Page(snap.jails, snap.bans, req)
+	st.Truncated = snap.truncated
+
+	return st, nil
+}
+
+// read returns a reading of fail2ban not older than cacheFor.
+func (c *Controller) read(ctx context.Context) (*snapshot, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := c.now()
+	if c.cached != nil && now.Sub(c.at) >= 0 && now.Sub(c.at) < cacheFor {
+		return c.cached, nil
+	}
+
+	if _, err := c.run(ctx, "ping"); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+
+	snap := &snapshot{jails: make([]agentapi.Fail2banJail, 0, len(agentapi.Fail2banJails)), bans: map[string][]agentapi.Fail2banBan{}}
 
 	for _, name := range agentapi.Fail2banJails {
-		j, err := c.jail(ctx, name)
+		j, bans, truncated, err := c.jail(ctx, name)
 		if errors.Is(err, errNoJail) {
-			out.Jails = append(out.Jails, agentapi.Fail2banJail{Name: name, Bans: []agentapi.Fail2banBan{}})
+			snap.jails = append(snap.jails, agentapi.Fail2banJail{Name: name})
 
 			continue
 		}
 
 		if err != nil {
-			return agentapi.Fail2banStatus{}, err
+			return nil, err
 		}
 
-		out.Jails = append(out.Jails, j)
+		snap.jails = append(snap.jails, j)
+		snap.bans[name] = bans
+		snap.truncated = snap.truncated || truncated
 	}
 
-	return out, nil
+	c.cached, c.at = snap, now
+
+	return snap, nil
 }
 
-func (c *Controller) jail(ctx context.Context, name string) (agentapi.Fail2banJail, error) {
+func (c *Controller) now() time.Time {
+	if c.Now != nil {
+		return c.Now()
+	}
+
+	return time.Now()
+}
+
+// forget drops the cached reading, after a change.
+func (c *Controller) forget() {
+	c.mu.Lock()
+	c.cached = nil
+	c.mu.Unlock()
+}
+
+// Page merges the bans of every jail per address, keeps the addresses that
+// match req and returns the page req asks for, newest first.
+func Page(jails []agentapi.Fail2banJail, bans map[string][]agentapi.Fail2banBan, req agentapi.Fail2banStatusRequest) agentapi.Fail2banStatus {
+	by := map[string]*agentapi.Fail2banBlocked{}
+
+	for _, name := range agentapi.Fail2banJails {
+		for _, b := range bans[name] {
+			cur := by[b.Address]
+			if cur == nil {
+				by[b.Address] = &agentapi.Fail2banBlocked{Address: b.Address, Jails: []string{name}, Since: b.Since, Until: b.Until}
+
+				continue
+			}
+
+			if !slices.Contains(cur.Jails, name) {
+				cur.Jails = append(cur.Jails, name)
+			}
+
+			cur.Since = min(cur.Since, b.Since)
+			// The address stays blocked until its last ban ends; 0 is no end.
+			if cur.Until != 0 && (b.Until == 0 || b.Until > cur.Until) {
+				cur.Until = b.Until
+			}
+		}
+	}
+
+	match := addressMatcher(req.Address)
+	all := make([]agentapi.Fail2banBlocked, 0, len(by))
+
+	for _, b := range by {
+		if req.Jail != "" && !slices.Contains(b.Jails, req.Jail) {
+			continue
+		}
+
+		if match(b.Address) {
+			all = append(all, *b)
+		}
+	}
+
+	slices.SortFunc(all, func(a, b agentapi.Fail2banBlocked) int {
+		if c := cmp.Compare(b.Since, a.Since); c != 0 {
+			return c
+		}
+
+		return cmp.Compare(a.Address, b.Address)
+	})
+
+	limit := req.Limit
+	if limit == 0 {
+		limit = agentapi.Fail2banPageDefault
+	}
+
+	from := min(req.Offset, len(all))
+	to := min(from+limit, len(all))
+	out := agentapi.Fail2banStatus{Jails: jails, Blocked: slices.Clip(all[from:to]), Total: len(all)}
+
+	if out.Jails == nil {
+		out.Jails = []agentapi.Fail2banJail{}
+	}
+
+	return out
+}
+
+// addressMatcher reads an address filter: a range such as 203.0.113.0/24
+// keeps the addresses in it; anything else keeps the addresses that
+// contain it, or equal it when it is an address written another way.
+func addressMatcher(q string) func(string) bool {
+	q = strings.ToLower(strings.TrimSpace(q))
+	if q == "" {
+		return func(string) bool { return true }
+	}
+
+	if p, err := netip.ParsePrefix(q); err == nil {
+		p = p.Masked()
+
+		return func(s string) bool {
+			a, err := netip.ParseAddr(s)
+
+			return err == nil && p.Contains(a)
+		}
+	}
+
+	exact, exactErr := netip.ParseAddr(q)
+
+	return func(s string) bool {
+		if strings.Contains(s, q) {
+			return true
+		}
+
+		a, err := netip.ParseAddr(s)
+
+		return exactErr == nil && err == nil && a == exact
+	}
+}
+
+func (c *Controller) jail(ctx context.Context, name string) (agentapi.Fail2banJail, []agentapi.Fail2banBan, bool, error) {
 	st, err := c.run(ctx, "status", name)
 	if err != nil {
 		if strings.Contains(err.Error(), "does not exist") {
-			return agentapi.Fail2banJail{}, errNoJail
+			return agentapi.Fail2banJail{}, nil, false, errNoJail
 		}
 
-		return agentapi.Fail2banJail{}, err
+		return agentapi.Fail2banJail{}, nil, false, err
 	}
 
 	j, err := ParseStatus(name, st)
 	if err != nil {
-		return agentapi.Fail2banJail{}, err
+		return agentapi.Fail2banJail{}, nil, false, err
 	}
 
-	bans, err := c.run(ctx, "get", name, "banip", "--with-time")
+	out, err := c.run(ctx, "get", name, "banip", "--with-time")
+
+	truncated := errors.Is(err, ErrTruncated)
+	if err != nil && !truncated {
+		return agentapi.Fail2banJail{}, nil, false, err
+	}
+
+	bans, err := ParseBans(out, c.loc())
 	if err != nil {
-		return agentapi.Fail2banJail{}, err
+		return agentapi.Fail2banJail{}, nil, false, err
 	}
 
-	j.Bans, err = ParseBans(bans, c.loc())
-	if err != nil {
-		return agentapi.Fail2banJail{}, err
-	}
-
-	return j, nil
+	return j, bans, truncated, nil
 }
 
 // Unban lifts the ban of addr in every running Hostashi jail and returns
@@ -138,6 +303,9 @@ func (c *Controller) Unban(ctx context.Context, req agentapi.Fail2banUnbanReques
 	}
 
 	resp := agentapi.Fail2banUnbanResponse{Jails: []string{}}
+
+	// The next reading shows the change, also after an error halfway.
+	defer c.forget()
 
 	for _, name := range agentapi.Fail2banJails {
 		out, err := c.run(ctx, "set", name, "unbanip", addr)
@@ -165,7 +333,7 @@ func (c *Controller) Unban(ctx context.Context, req agentapi.Fail2banUnbanReques
 
 // ParseStatus reads the output of "fail2ban-client status <jail>".
 func ParseStatus(name, out string) (agentapi.Fail2banJail, error) {
-	j := agentapi.Fail2banJail{Name: name, Running: true, Bans: []agentapi.Fail2banBan{}}
+	j := agentapi.Fail2banJail{Name: name, Running: true}
 	fields := map[string]*int{
 		"Currently failed": &j.CurrentlyFailed,
 		"Total failed":     &j.TotalFailed,
@@ -264,8 +432,9 @@ func run(ctx context.Context, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, Client, args...)
 	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C"}
 	cmd.Dir = "/"
-	cmd.Stdout = &limitedWriter{buf: &out, max: outputLimit}
-	cmd.Stderr = cmd.Stdout
+	lw := &limitedWriter{buf: &out, max: outputLimit}
+	cmd.Stdout = lw
+	cmd.Stderr = lw
 
 	if err := cmd.Run(); err != nil {
 		var ee *exec.ExitError
@@ -276,17 +445,30 @@ func run(ctx context.Context, args ...string) (string, error) {
 		return "", fmt.Errorf("f2bctl: %w", err)
 	}
 
+	if lw.cut {
+		// Drop the line the limit cut in two.
+		s := out.String()
+
+		return s[:strings.LastIndexByte(s, '\n')+1], ErrTruncated
+	}
+
 	return out.String(), nil
 }
 
 type limitedWriter struct {
 	buf *bytes.Buffer
 	max int
+	cut bool
 }
 
 func (w *limitedWriter) Write(p []byte) (int, error) {
-	if room := w.max - w.buf.Len(); room > 0 {
+	room := w.max - w.buf.Len()
+	if room > 0 {
 		_, _ = w.buf.Write(p[:min(room, len(p))])
+	}
+
+	if len(p) > room {
+		w.cut = true
 	}
 
 	return len(p), nil
