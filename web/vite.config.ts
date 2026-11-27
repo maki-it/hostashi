@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
 import { defineConfig } from "vitest/config";
+import { bundledPaths } from "./scripts/check-licenses.mjs";
 
 // The Go package internal/ui embeds this directory. It must exist in a fresh
 // checkout so that Go builds without Node, hence the committed .gitkeep,
@@ -23,9 +24,9 @@ function keepDir(): Plugin {
 
 // The bundle carries code and fonts from npm packages whose licenses ask
 // that their notice travels with them (MIT, OFL-1.1). This plugin writes
-// the license texts of every bundled package (non-dev in package-lock.json,
-// as checked by scripts/check-licenses.mjs) to third-party-licenses.txt,
-// which the panel serves next to its assets.
+// the license texts of every bundled package (bundledPaths in
+// scripts/check-licenses.mjs, which also checks their licenses) to
+// third-party-licenses.txt, which the panel serves next to its assets.
 function licenseNotices(): Plugin {
   return {
     name: "hostashi-license-notices",
@@ -33,11 +34,11 @@ function licenseNotices(): Plugin {
     generateBundle() {
       const root = import.meta.dirname;
       const lock = JSON.parse(readFileSync(resolve(root, "package-lock.json"), "utf8")) as {
-        packages: Record<string, { dev?: boolean; devOptional?: boolean; version?: string; license?: string }>;
+        packages: Record<string, { version?: string; license?: string }>;
       };
       const parts = ["Third-party software bundled in the Hostashi web interface.\n"];
-      for (const [path, pkg] of Object.entries(lock.packages)) {
-        if (path === "" || pkg.dev || pkg.devOptional) continue;
+      for (const path of bundledPaths(lock)) {
+        const pkg = lock.packages[path] ?? {};
         const dir = resolve(root, path);
         const file = existsSync(dir) ? readdirSync(dir).find((f) => /^(licen[cs]e|copying)(\.|$)/i.test(f)) : undefined;
         if (!file) throw new Error(`no license file in ${path}`);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { allowedFor, bundledPackages, check, licenseAllowed } from "./check-licenses.mjs";
+import { allowedFor, bundledPackages, bundledPaths, check, licenseAllowed } from "./check-licenses.mjs";
 
 describe("licenseAllowed", () => {
   it.each(["MIT", "Apache-2.0", " BSD-3-Clause ", "(MIT OR Apache-2.0)", "MIT OR GPL-2.0-only", "MIT AND ISC"])(
@@ -39,7 +39,14 @@ describe("check", () => {
   const lock = {
     lockfileVersion: 3,
     packages: {
-      "": { name: "hostashi-web", license: "AGPL-3.0-or-later" },
+      "": {
+        name: "hostashi-web",
+        license: "AGPL-3.0-or-later",
+        dependencies: { react: "1", a: "1", nolicense: "1", "@fontsource/sora": "1", "ofl-code": "1" },
+        devDependencies: { vitest: "1" },
+        optionalDependencies: { fsevents: "1" },
+      },
+      "node_modules/a": { dependencies: { b: "1" }, license: "MIT" },
       "node_modules/react": { license: "MIT" },
       "node_modules/a/node_modules/b": { license: "GPL-3.0-only" },
       "node_modules/nolicense": {},
@@ -51,11 +58,41 @@ describe("check", () => {
   };
 
   it("skips the root and dev packages and strips node_modules paths", () => {
-    expect(bundledPackages(lock).map(([n]) => n)).toEqual(["react", "b", "nolicense", "@fontsource/sora", "ofl-code"]);
+    expect(bundledPackages(lock).map(([n]) => n)).toEqual(["a", "react", "b", "nolicense", "@fontsource/sora", "ofl-code"]);
   });
 
   it("reports packages with disallowed or missing licenses", () => {
     expect(check(lock)).toEqual(["b: GPL-3.0-only", "nolicense: (no license field)", "ofl-code: OFL-1.1"]);
+  });
+
+  // npm drops "dev" from the optional platform packages of typescript 7,
+  // which is devOptional; they are not bundled all the same.
+  it("follows dependencies, not the dev flags", () => {
+    const lock = {
+      lockfileVersion: 3,
+      packages: {
+        "": { dependencies: { app: "1" }, devDependencies: { typescript: "7" } },
+        "node_modules/app": {
+          dependencies: { shared: "1" },
+          optionalDependencies: { "app-linux": "1", "app-win32": "1" },
+          peerDependencies: { react: "1", "@types/react": "1" },
+          peerDependenciesMeta: { "@types/react": { optional: true } },
+        },
+        "node_modules/app/node_modules/shared": { license: "MIT" },
+        "node_modules/shared": { license: "GPL-3.0-only" },
+        "node_modules/app-linux": { optional: true, license: "MIT" },
+        "node_modules/react": { license: "MIT" },
+        "node_modules/@types/react": { dev: true, license: "MIT" },
+        "node_modules/typescript": { devOptional: true, optionalDependencies: { "@typescript/typescript-aix-ppc64": "7" } },
+        "node_modules/@typescript/typescript-aix-ppc64": { optional: true, license: "Apache-2.0" },
+      },
+    };
+    expect(bundledPaths(lock)).toEqual([
+      "node_modules/app",
+      "node_modules/app/node_modules/shared",
+      "node_modules/app-linux",
+      "node_modules/react",
+    ]);
   });
 
   it("rejects lockfiles without packages", () => {
