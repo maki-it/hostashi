@@ -16,6 +16,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/dbserver"
+	"github.com/maki-it/hostashi/internal/doctor"
 	"github.com/maki-it/hostashi/internal/extdb"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
@@ -667,36 +668,19 @@ func dbServerChecks(srv store.DBServer, now time.Time) []agentapi.DoctorCheck {
 
 	switch {
 	case st.CheckedAt.IsZero():
-		out = append(out, agentapi.DoctorCheck{
-			ID: "dbserver.reachable", Status: agentapi.DoctorWarn, Summary: "database server " + name + " was not checked yet",
-			Hint: "Check it under Databases, Servers.",
-		})
+		out = append(out, doctor.New(agentapi.DoctorWarn, "dbserver.reachable", "dbserver.unchecked", "dbserver.unchecked.hint", doctor.P{"name": name}))
 	case st.LastError != "":
-		out = append(out, agentapi.DoctorCheck{
-			ID: "dbserver.reachable", Status: agentapi.DoctorFail,
-			Summary: "database server " + what + " is not reachable: " + st.LastError,
-			Hint:    "Sites with databases there fail, and their backups are incomplete. Check the server, the network and the admin user.",
-		})
+		out = append(out, doctor.New(agentapi.DoctorFail, "dbserver.reachable", "dbserver.down", "dbserver.down.hint", doctor.P{"name": what, "error": st.LastError}))
 	default:
-		out = append(out, agentapi.DoctorCheck{
-			ID: "dbserver.reachable", Status: agentapi.DoctorOK, Summary: "database server " + what + " is reachable",
-		})
+		out = append(out, doctor.New(agentapi.DoctorOK, "dbserver.reachable", "dbserver.ok", "", doctor.P{"name": what}))
 	}
 
 	if !st.CheckedAt.IsZero() && now.Sub(st.CheckedAt) > 4*DBServerCheckEvery {
-		out = append(out, agentapi.DoctorCheck{
-			ID: "dbserver.checked", Status: agentapi.DoctorWarn,
-			Summary: "database server " + name + " was last checked " + st.CheckedAt.UTC().Format(time.RFC3339),
-			Hint:    "The panel checks every 15 minutes; restart hostashi.service if this stays.",
-		})
+		out = append(out, doctor.New(agentapi.DoctorWarn, "dbserver.checked", "dbserver.stale", "dbserver.stale.hint", doctor.P{"name": name, "time": st.CheckedAt.UTC().Format(time.RFC3339)}))
 	}
 
 	if srv.TLSMode == string(dbserver.TLSNone) {
-		out = append(out, agentapi.DoctorCheck{
-			ID: "dbserver.tls", Status: agentapi.DoctorWarn,
-			Summary: "database server " + name + " is reached without TLS: passwords and data cross the network in plain text",
-			Hint:    "Fine only in a private network you trust; otherwise turn on TLS on the server and add it again with TLS.",
-		})
+		out = append(out, doctor.New(agentapi.DoctorWarn, "dbserver.tls", "dbserver.notls", "dbserver.notls.hint", doctor.P{"name": name}))
 	}
 
 	if !st.CertExpires.IsZero() {
@@ -704,17 +688,9 @@ func dbServerChecks(srv store.DBServer, now time.Time) []agentapi.DoctorCheck {
 
 		switch {
 		case days < DBServerCertFailDays:
-			out = append(out, agentapi.DoctorCheck{
-				ID: "dbserver.cert", Status: agentapi.DoctorFail,
-				Summary: fmt.Sprintf("the TLS certificate of database server %s ends in %d days", name, days),
-				Hint:    "Renew it on the database server; without it Hostashi cannot connect.",
-			})
+			out = append(out, doctor.New(agentapi.DoctorFail, "dbserver.cert", "dbserver.cert", "dbserver.cert.fail.hint", doctor.P{"name": name, "days": strconv.Itoa(days)}))
 		case days < DBServerCertWarnDays:
-			out = append(out, agentapi.DoctorCheck{
-				ID: "dbserver.cert", Status: agentapi.DoctorWarn,
-				Summary: fmt.Sprintf("the TLS certificate of database server %s ends in %d days", name, days),
-				Hint:    "Renew it on the database server.",
-			})
+			out = append(out, doctor.New(agentapi.DoctorWarn, "dbserver.cert", "dbserver.cert", "dbserver.cert.warn.hint", doctor.P{"name": name, "days": strconv.Itoa(days)}))
 		}
 	}
 

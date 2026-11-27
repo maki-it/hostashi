@@ -92,16 +92,6 @@ func (s System) statfs(path string, st *unix.Statfs_t) error {
 	return s.Statfs(path, st)
 }
 
-func ok(id, summary string) Check { return Check{ID: id, Status: agentapi.DoctorOK, Summary: summary} }
-
-func warn(id, summary, hint string) Check {
-	return Check{ID: id, Status: agentapi.DoctorWarn, Summary: summary, Hint: hint}
-}
-
-func fail(id, summary, hint string) Check {
-	return Check{ID: id, Status: agentapi.DoctorFail, Summary: summary, Hint: hint}
-}
-
 // ParseOSRelease reads the KEY=value lines of an os-release file, with the
 // quotes around a value removed.
 func ParseOSRelease(b []byte) map[string]string {
@@ -124,7 +114,7 @@ func (s System) OS() Check {
 
 	b, err := os.ReadFile(s.osRelease())
 	if err != nil {
-		return warn(id, "cannot read "+s.osRelease(), "Hostashi supports Debian 13 and Ubuntu 26.04.")
+		return warnT(id, "read.failed", "os.supported.hint", P{"path": s.osRelease()})
 	}
 
 	vals := ParseOSRelease(b)
@@ -135,10 +125,10 @@ func (s System) OS() Check {
 	}
 
 	if want, known := Supported[vals["ID"]]; known && want == vals["VERSION_ID"] {
-		return ok(id, name+" is supported")
+		return okT(id, "os.supported", P{"name": name})
 	}
 
-	return warn(id, name+" is not in the support matrix", "Hostashi supports Debian 13 and Ubuntu 26.04. Other systems are untested.")
+	return warnT(id, "os.unsupported", "os.unsupported.hint", P{"name": name})
 }
 
 // Disk checks the free space of each file system that holds one of paths.
@@ -154,7 +144,7 @@ func (s System) Disk(paths []string) []Check {
 	for _, p := range paths {
 		var st unix.Statfs_t
 		if err := s.statfs(p, &st); err != nil {
-			out = append(out, fail(id, p+": "+describe(err), "Check that the directory exists and its file system is mounted."))
+			out = append(out, failT(id, "path.error", "disk.error.hint", P{"path": p, "error": describe(err)}))
 
 			continue
 		}
@@ -172,20 +162,15 @@ func (s System) Disk(paths []string) []Check {
 		bsize := uint64(st.Bsize) //nolint:gosec // the block size is positive
 		total, free := st.Blocks*bsize, st.Bavail*bsize
 		pct := free * 100 / total
-		summary := fmt.Sprintf("%s: %s free of %s (%d %%)", p, Bytes(free), Bytes(total), pct)
-		params := map[string]string{"path": p, "free": Bytes(free), "total": Bytes(total), "percent": strconv.FormatUint(pct, 10)}
+		params := P{"path": p, "free": Bytes(free), "total": Bytes(total), "percent": strconv.FormatUint(pct, 10)}
 
 		switch {
 		case pct < DiskFailPercent || free < DiskFailBytes:
-			c := fail(id, summary, "Free space now: sites, databases and backups fail when the disk is full.")
-			c.Code, c.Params = "system.disk.fail", params
-			out = append(out, c)
+			out = append(out, failT(id, "disk.free", "disk.fail.hint", params))
 		case pct < DiskWarnPercent:
-			c := warn(id, summary, "The disk is filling up. Check the sites' disk use and old backups.")
-			c.Code, c.Params = "system.disk.warn", params
-			out = append(out, c)
+			out = append(out, warnT(id, "disk.free", "disk.warn.hint", params))
 		default:
-			out = append(out, ok(id, summary))
+			out = append(out, okT(id, "disk.free", params))
 		}
 	}
 
@@ -198,15 +183,13 @@ func Quota(dir string, st quota.State, err error) Check {
 
 	switch {
 	case err != nil:
-		return fail(id, dir+": cannot read the quota state: "+describe(err), "")
+		return failT(id, "quota.error", "", P{"path": dir, "error": describe(err)})
 	case st == quota.Enforced:
-		return ok(id, dir+": disk limits are enforced (project quota)")
+		return okT(id, "quota.enforced", P{"path": dir})
 	case st == quota.Counting:
-		return fail(id, dir+": project quota only counts usage, disk limits are not enforced",
-			"Restart hostashi-agent: it switches enforcement on. If this stays, check the agent log.")
+		return failT(id, "quota.counting", "quota.counting.hint", P{"path": dir})
 	default:
-		return warn(id, dir+": no project quota, sites get no disk limit",
-			"Run the installer again: it enables quota with one reboot, or says why it cannot.")
+		return warnT(id, "quota.off", "quota.off.hint", P{"path": dir})
 	}
 }
 
@@ -216,7 +199,7 @@ func (s System) Proc() Check {
 
 	b, err := os.ReadFile(s.mountInfo())
 	if err != nil {
-		return warn(id, "cannot read "+s.mountInfo(), "")
+		return warnT(id, "read.failed", "", P{"path": s.mountInfo()})
 	}
 
 	for line := range strings.SplitSeq(string(b), "\n") {
@@ -233,14 +216,14 @@ func (s System) Proc() Check {
 
 		for o := range strings.SplitSeq(lastField(post), ",") {
 			if o == "hidepid=invisible" || o == "hidepid=2" {
-				return ok(id, "/proc hides other users' processes")
+				return okT(id, "proc.hidden", nil)
 			}
 		}
 
-		return warn(id, "/proc shows every process to every user", "Run the installer again (step harden).")
+		return warnT(id, "proc.visible", "installer.step.hint", P{"step": "harden"})
 	}
 
-	return warn(id, "/proc is not mounted", "")
+	return warnT(id, "proc.unmounted", "", nil)
 }
 
 func lastField(s string) string {
@@ -273,38 +256,35 @@ type PoolState struct {
 func (s System) PoolVolume(p PoolState) Check {
 	const id = "system.pool.volume"
 
-	where := fmt.Sprintf("pool %s (%s)", p.Name, p.Path)
+	params := P{"name": p.Name, "path": p.Path}
 
 	if p.Unavailable != nil {
-		return fail(id, where+" is not available: the volume is not mounted or its marker is missing",
-			fmt.Sprintf("Mount the volume (mount %s) and restart hostashi-agent. Until then its sites do not start and cannot be changed.", p.Path))
+		return failT(id, "pool.unavailable", "pool.unavailable.hint", params)
 	}
 
 	if !p.Volume {
-		return ok(id, where+" is available")
+		return okT(id, "pool.available", params)
 	}
-
-	var problems []string
 
 	var st unix.Statfs_t
 	if err := s.statfs(p.Path, &st); err != nil {
-		return fail(id, where+": "+describe(err), "")
+		params["error"] = describe(err)
+
+		return failT(id, "pool.error", "", params)
 	}
 
-	if st.Flags&unix.ST_NOSUID == 0 || st.Flags&unix.ST_NODEV == 0 {
-		problems = append(problems, "is mounted without nosuid,nodev")
+	nosuid := st.Flags&unix.ST_NOSUID == 0 || st.Flags&unix.ST_NODEV == 0
+
+	switch {
+	case nosuid && !p.InFstab:
+		return warnT(id, "pool.nosuid.nofstab", "pool.mount.hint", params)
+	case nosuid:
+		return warnT(id, "pool.nosuid", "pool.mount.hint", params)
+	case !p.InFstab:
+		return warnT(id, "pool.nofstab", "pool.mount.hint", params)
 	}
 
-	if !p.InFstab {
-		problems = append(problems, "has no entry in /etc/fstab")
-	}
-
-	if len(problems) > 0 {
-		return warn(id, where+" "+strings.Join(problems, " and "),
-			"Mount it from /etc/fstab with nosuid,nodev,nofail, so nothing on the volume can raise privileges and its sites wait for it at boot.")
-	}
-
-	return ok(id, where+" is mounted with its marker, nosuid,nodev and an fstab entry")
+	return okT(id, "pool.mounted", params)
 }
 
 // PoolMode checks that a pool of homes is root 0711, so site users cannot
@@ -314,37 +294,38 @@ func PoolMode(dir string) Check {
 
 	fi, err := os.Stat(dir)
 	if err != nil {
-		return fail(id, dir+": "+describe(err), "")
+		return failT(id, "path.error", "", P{"path": dir, "error": describe(err)})
 	}
 
 	st, isUnix := fi.Sys().(*syscall.Stat_t)
 	if fi.Mode().Perm() == 0o711 && isUnix && st.Uid == 0 {
-		return ok(id, dir+" is root 0711")
+		return okT(id, "pool.mode.ok", P{"path": dir})
 	}
 
-	return warn(id, fmt.Sprintf("%s has mode %04o", dir, fi.Mode().Perm()),
-		"Site users can list the other sites' homes. Run the installer again (step harden).")
+	return warnT(id, "pool.mode", "pool.mode.hint", P{"path": dir, "mode": fmt.Sprintf("%04o", fi.Mode().Perm()), "step": "harden"})
 }
 
 // Socket checks that a service accepts connections on its Unix socket.
-func Socket(ctx context.Context, id, name, path, hint string) Check {
+// name is a value of germanValues or a product name; hintKey is a text.
+func Socket(ctx context.Context, id, name, path, hintKey string) Check {
 	d := net.Dialer{Timeout: 2 * time.Second}
 
 	c, err := d.DialContext(ctx, "unix", path)
 	if err != nil {
-		return fail(id, name+" does not answer on "+path+": "+describe(err), hint)
+		return failT(id, "socket.down", hintKey, P{"name": name, "path": path, "error": describe(err)})
 	}
 
 	_ = c.Close()
 
-	return ok(id, name+" is running")
+	return okT(id, "service.running", P{"name": name})
 }
 
 // Panel asks the panel for its health over its Unix socket.
 func Panel(ctx context.Context, socket string) Check {
 	const id = "service.panel"
 
-	hint := "Check the panel: systemctl status hostashi-panel, journalctl -u hostashi-panel."
+	const hint = "panel.hint"
+
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
@@ -359,7 +340,7 @@ func Panel(ctx context.Context, socket string) Check {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://panel/api/v1/health", nil)
 	if err != nil {
-		return fail(id, "panel: "+err.Error(), hint)
+		return failT(id, "panel.error", hint, P{"error": err.Error()})
 	}
 
 	// The socket trusts only nginx, which always names the client. This
@@ -368,7 +349,7 @@ func Panel(ctx context.Context, socket string) Check {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fail(id, "the panel does not answer on "+socket+": "+describe(err), hint)
+		return failT(id, "panel.down", hint, P{"path": socket, "error": describe(err)})
 	}
 	defer resp.Body.Close()
 
@@ -380,10 +361,10 @@ func Panel(ctx context.Context, socket string) Check {
 	}
 
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<12)).Decode(&h); err != nil || resp.StatusCode != http.StatusOK || h.Status != "ok" {
-		return fail(id, fmt.Sprintf("the panel reports a problem (HTTP %d, agent %q, database %q)", resp.StatusCode, h.Agent, h.DB), hint)
+		return failT(id, "panel.problem", hint, P{"code": strconv.Itoa(resp.StatusCode), "agent": strconv.Quote(h.Agent), "db": strconv.Quote(h.DB)})
 	}
 
-	return ok(id, "the panel is running, version "+h.Version)
+	return okT(id, "panel.running", P{"version": h.Version})
 }
 
 // Usage checks a site's disk use against its limit. A limit of 0 means
@@ -392,24 +373,20 @@ func Usage(site, what string, used, limit uint64, format func(uint64) string) Ch
 	const id = "site.disk"
 
 	if limit == 0 {
-		return Check{ID: id, Site: site, Status: agentapi.DoctorOK, Summary: what + ": " + format(used) + ", unlimited"}
+		return NewSite(agentapi.DoctorOK, id, site, "usage.unlimited", "", P{"what": what, "used": format(used)})
 	}
 
 	pct := used * 100 / limit
-	summary := fmt.Sprintf("%s: %s of %s (%d %%)", what, format(used), format(limit), pct)
-	c := Check{ID: id, Site: site, Status: agentapi.DoctorOK, Summary: summary}
-	params := map[string]string{"what": what, "used": format(used), "limit": format(limit), "percent": strconv.FormatUint(pct, 10)}
+	params := P{"what": what, "used": format(used), "limit": format(limit), "percent": strconv.FormatUint(pct, 10)}
 
 	switch {
 	case pct >= UsageFailPercent:
-		c.Status, c.Hint = agentapi.DoctorFail, "Almost full: writes fail at the limit. Raise the limit or free space."
-		c.Code, c.Params = "site.disk.fail", params
+		return NewSite(agentapi.DoctorFail, id, site, "usage", "usage.fail.hint", params)
 	case pct >= UsageWarnPercent:
-		c.Status, c.Hint = agentapi.DoctorWarn, "Filling up. Raise the limit or free space."
-		c.Code, c.Params = "site.disk.warn", params
+		return NewSite(agentapi.DoctorWarn, id, site, "usage", "usage.warn.hint", params)
 	}
 
-	return c
+	return NewSite(agentapi.DoctorOK, id, site, "usage", "", params)
 }
 
 // DatabaseUsage checks the size of a site's local databases against its
@@ -419,23 +396,20 @@ func DatabaseUsage(site string, used, limit uint64) Check {
 	const id = "site.database"
 
 	if limit == 0 {
-		return Check{ID: id, Site: site, Status: agentapi.DoctorOK, Summary: "databases: " + Bytes(used) + ", no threshold"}
+		return NewSite(agentapi.DoctorOK, id, site, "db.unlimited", "", P{"used": Bytes(used)})
 	}
 
 	pct := used * 100 / limit
-	summary := fmt.Sprintf("databases: %s of %s (%d %%)", Bytes(used), Bytes(limit), pct)
-	c := Check{ID: id, Site: site, Status: agentapi.DoctorOK, Summary: summary}
-	hint := "The databases keep growing past the threshold and fill the server's disk. Clean up old data (logs, sessions, revisions) or raise the threshold."
-	params := map[string]string{"used": Bytes(used), "limit": Bytes(limit), "percent": strconv.FormatUint(pct, 10)}
+	params := P{"used": Bytes(used), "limit": Bytes(limit), "percent": strconv.FormatUint(pct, 10)}
 
 	switch {
 	case pct >= UsageFailPercent:
-		c.Status, c.Hint, c.Code, c.Params = agentapi.DoctorFail, hint, "site.database.full", params
+		return NewSite(agentapi.DoctorFail, id, site, "db.usage", "db.usage.hint", params)
 	case pct >= UsageWarnPercent:
-		c.Status, c.Hint, c.Code, c.Params = agentapi.DoctorWarn, hint, "site.database.full", params
+		return NewSite(agentapi.DoctorWarn, id, site, "db.usage", "db.usage.hint", params)
 	}
 
-	return c
+	return NewSite(agentapi.DoctorOK, id, site, "db.usage", "", params)
 }
 
 // Cert checks when a site's certificate expires.
@@ -444,19 +418,18 @@ func Cert(site string, notAfter, now time.Time) Check {
 
 	left := notAfter.Sub(now)
 	days := int(left.Hours() / 24)
-	c := Check{ID: id, Site: site, Status: agentapi.DoctorOK, Summary: fmt.Sprintf("certificate valid until %s (%d days)", notAfter.UTC().Format("2006-01-02"), days)}
-	hint := "For Let's Encrypt the renewal did not work: check the site's domains in the panel and the panel's log (journalctl -u hostashi-panel). An own certificate is never renewed automatically: upload a new one."
+	params := P{"date": notAfter.UTC().Format("2006-01-02"), "days": strconv.Itoa(days)}
 
 	switch {
 	case left <= 0:
-		c.Status, c.Summary, c.Hint = agentapi.DoctorFail, "certificate expired on "+notAfter.UTC().Format("2006-01-02"), hint
+		return NewSite(agentapi.DoctorFail, id, site, "cert.expired", "cert.hint", params)
 	case days < CertFailDays:
-		c.Status, c.Hint = agentapi.DoctorFail, hint
+		return NewSite(agentapi.DoctorFail, id, site, "cert.valid", "cert.hint", params)
 	case days < CertWarnDays:
-		c.Status, c.Hint = agentapi.DoctorWarn, hint
+		return NewSite(agentapi.DoctorWarn, id, site, "cert.valid", "cert.hint", params)
 	}
 
-	return c
+	return NewSite(agentapi.DoctorOK, id, site, "cert.valid", "", params)
 }
 
 // Bytes formats a size in binary units.
@@ -503,10 +476,7 @@ func PHPSupport(site, version string, now time.Time) Check {
 	end, err := time.Parse(time.DateOnly, until)
 
 	if !ok || err != nil {
-		return Check{
-			ID: id, Site: site, Status: agentapi.DoctorWarn, Summary: "PHP " + version + " has no known support dates", Hint: "Move the site to a supported PHP version.",
-			Code: "site.php.unknown", Params: map[string]string{"version": version},
-		}
+		return NewSite(agentapi.DoctorWarn, id, site, "php.unknown", "php.unknown.hint", P{"version": version})
 	}
 
 	left := end.Add(24 * time.Hour).Sub(now)
@@ -514,24 +484,10 @@ func PHPSupport(site, version string, now time.Time) Check {
 
 	switch {
 	case left <= 0:
-		return Check{
-			ID: id, Site: site, Status: agentapi.DoctorWarn,
-			Summary: "PHP " + version + " gets no security fixes since " + until,
-			Hint:    "Move the site to a supported PHP version in the panel. Hostashi keeps it running and never switches by itself.",
-			Code:    "site.php.ended", Params: map[string]string{"version": version, "until": until},
-		}
+		return NewSite(agentapi.DoctorWarn, id, site, "php.ended", "php.ended.hint", P{"version": version, "until": until})
 	case days <= PHPSoonDays:
-		return Check{
-			ID: id, Site: site, Status: agentapi.DoctorWarn,
-			Summary: fmt.Sprintf("PHP %s gets security fixes only until %s (%d days)", version, until, days),
-			Hint:    "Plan the move to a newer PHP version.",
-			Code:    "site.php.soon", Params: map[string]string{"version": version, "until": until, "days": strconv.Itoa(days)},
-		}
+		return NewSite(agentapi.DoctorWarn, id, site, "php.soon", "php.soon.hint", P{"version": version, "until": until, "days": strconv.Itoa(days)})
 	}
 
-	return siteOK(id, site, "PHP "+version+" gets security fixes until "+until)
-}
-
-func siteOK(id, site, summary string) Check {
-	return Check{ID: id, Site: site, Status: agentapi.DoctorOK, Summary: summary}
+	return NewSite(agentapi.DoctorOK, id, site, "php.supported", "", P{"version": version, "until": until})
 }

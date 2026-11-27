@@ -5,7 +5,6 @@ package agent
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -137,8 +136,7 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	out = append(out, doctor.Panel(ctx, orDefault(d.env.PanelSocket, PanelSocket)))
 	out = append(out, d.nginx(ctx))
 	out = append(out, d.mariadb(ctx))
-	f2bCheck := doctor.Socket(ctx, "service.fail2ban", "fail2ban", orDefault(d.env.Fail2banSocket, Fail2banSocket),
-		"Logins are not protected against brute force. Check: systemctl status fail2ban.")
+	f2bCheck := doctor.Socket(ctx, "service.fail2ban", "fail2ban", orDefault(d.env.Fail2banSocket, Fail2banSocket), "fail2ban.hint")
 	out = append(out, f2bCheck)
 
 	// The jails only when fail2ban answers; otherwise the check above
@@ -149,8 +147,7 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	}
 
 	if d.dbTool {
-		out = append(out, doctor.Socket(ctx, "service.dbtool", "the database tool", orDefault(d.env.DBToolSocket, DBToolSocket),
-			"Databases cannot be opened in Adminer. Check: systemctl status hostashi-adminer."))
+		out = append(out, doctor.Socket(ctx, "service.dbtool", "the database tool", orDefault(d.env.DBToolSocket, DBToolSocket), "dbtool.hint"))
 	}
 
 	hard := d.env.Hardening
@@ -209,16 +206,16 @@ func (d *doctorOps) nginx(ctx context.Context) agentapi.DoctorCheck {
 	const id = "service.nginx"
 
 	if d.h == nil || d.h.web == nil {
-		return agentapi.DoctorCheck{ID: id, Status: agentapi.DoctorFail, Summary: "nginx is not set up", Hint: "Run the installer again."}
+		return doctor.New(agentapi.DoctorFail, id, "nginx.missing", "installer.hint", nil)
 	}
 
 	h, err := d.h.web.Health(ctx)
 	if errors.Is(err, web.ErrBusy) {
-		return agentapi.DoctorCheck{ID: id, Status: agentapi.DoctorWarn, Summary: "the configuration is being changed right now", Hint: "Run hostashi doctor again in a moment."}
+		return doctor.New(agentapi.DoctorWarn, id, "nginx.busy", "nginx.busy.hint", nil)
 	}
 
 	if err != nil {
-		return agentapi.DoctorCheck{ID: id, Status: agentapi.DoctorFail, Summary: "cannot read the web state: " + err.Error()}
+		return doctor.New(agentapi.DoctorFail, id, "nginx.error", "", doctor.P{"error": err.Error()})
 	}
 
 	return nginxCheck(h)
@@ -229,43 +226,35 @@ func nginxCheck(h web.Health) agentapi.DoctorCheck {
 
 	switch {
 	case h.Current == 0:
-		return agentapi.DoctorCheck{ID: id, Status: agentapi.DoctorWarn, Summary: "no configuration has been applied yet", Hint: "Run hostashi web sync, or save a site in the panel."}
+		return doctor.New(agentapi.DoctorWarn, id, "nginx.none", "nginx.none.hint", nil)
 	case h.LiveErr != nil:
-		return agentapi.DoctorCheck{ID: id, Status: agentapi.DoctorFail, Summary: "nginx does not answer: " + h.LiveErr.Error(), Hint: "Check: systemctl status nginx, journalctl -u nginx."}
+		return doctor.New(agentapi.DoctorFail, id, "nginx.down", "nginx.down.hint", doctor.P{"error": h.LiveErr.Error()})
 	case h.Live != h.Current:
-		return agentapi.DoctorCheck{
-			ID: id, Status: agentapi.DoctorFail,
-			Summary: fmt.Sprintf("nginx serves generation %d, the current one is %d", h.Live, h.Current),
-			Hint:    "nginx did not load the current configuration. Run hostashi web sync.",
-		}
+		return doctor.New(agentapi.DoctorFail, id, "nginx.behind", "nginx.behind.hint", doctor.P{"live": strconv.Itoa(h.Live), "current": strconv.Itoa(h.Current)})
 	case len(h.Drift) > 0:
-		return agentapi.DoctorCheck{
-			ID: id, Status: agentapi.DoctorWarn,
-			Summary: "files of the configuration were changed by hand: " + strings.Join(h.Drift, ", "),
-			Hint:    "The next change replaces them. Use the panel's nginx snippets for your own settings.",
-		}
+		return doctor.New(agentapi.DoctorWarn, id, "nginx.drift", "nginx.drift.hint", doctor.P{"files": strings.Join(h.Drift, ", ")})
 	case !h.Confirmed:
-		return agentapi.DoctorCheck{ID: id, Status: agentapi.DoctorWarn, Summary: "generation " + strconv.Itoa(h.Current) + " was never confirmed", Hint: "Run hostashi web sync."}
+		return doctor.New(agentapi.DoctorWarn, id, "nginx.unconfirmed", "websync.hint", doctor.P{"current": strconv.Itoa(h.Current)})
 	}
 
-	return agentapi.DoctorCheck{ID: id, Status: agentapi.DoctorOK, Summary: "nginx serves generation " + strconv.Itoa(h.Live)}
+	return doctor.New(agentapi.DoctorOK, id, "nginx.ok", "", doctor.P{"live": strconv.Itoa(h.Live)})
 }
 
 func (d *doctorOps) mariadb(ctx context.Context) agentapi.DoctorCheck {
 	const id = "service.mariadb"
 
 	if d.h == nil || d.h.db == nil {
-		return agentapi.DoctorCheck{ID: id, Status: agentapi.DoctorWarn, Summary: "MariaDB is not set up", Hint: "Sites cannot have databases. Run the installer again."}
+		return doctor.New(agentapi.DoctorWarn, id, "mariadb.missing", "mariadb.missing.hint", nil)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	if err := d.h.db.Ping(ctx); err != nil {
-		return agentapi.DoctorCheck{ID: id, Status: agentapi.DoctorFail, Summary: "MariaDB does not answer: " + err.Error(), Hint: "Check: systemctl status mariadb."}
+		return doctor.New(agentapi.DoctorFail, id, "mariadb.down", "mariadb.down.hint", doctor.P{"error": err.Error()})
 	}
 
-	return agentapi.DoctorCheck{ID: id, Status: agentapi.DoctorOK, Summary: "MariaDB is running"}
+	return doctor.New(agentapi.DoctorOK, id, "service.running", "", doctor.P{"name": "MariaDB"})
 }
 
 // sites checks each site's disk use, its slice and its certificate.
@@ -286,7 +275,7 @@ func (d *doctorOps) sites(ctx context.Context) []agentapi.DoctorCheck {
 
 		home, ok := d.h.m.Home(s.User)
 		if !ok {
-			out = append(out, agentapi.DoctorCheck{ID: "site.home", Site: s.User, Status: agentapi.DoctorFail, Summary: "the site's pool is not registered"})
+			out = append(out, doctor.NewSite(agentapi.DoctorFail, "site.home", s.User, "home.nopool", "", nil))
 
 			continue
 		}
@@ -294,7 +283,7 @@ func (d *doctorOps) sites(ctx context.Context) []agentapi.DoctorCheck {
 		if d.h.quota != nil {
 			if avail, err := d.h.quota.Available(home); err == nil && avail {
 				if q, err := d.h.readQuota(home, s.UID); err != nil {
-					out = append(out, agentapi.DoctorCheck{ID: "site.disk", Site: s.User, Status: agentapi.DoctorFail, Summary: "cannot read the disk use: " + err.Error()})
+					out = append(out, doctor.NewSite(agentapi.DoctorFail, "site.disk", s.User, "sitedisk.error", "", doctor.P{"error": err.Error()}))
 				} else {
 					out = append(out, doctor.Usage(s.User, "disk space", q.Bytes, q.BytesLimit, doctor.Bytes))
 					out = append(out, doctor.Usage(s.User, "files", q.Inodes, q.InodesLimit, count))
@@ -327,15 +316,12 @@ func (d *doctorOps) slice(user string) agentapi.DoctorCheck {
 
 	switch {
 	case err != nil:
-		return agentapi.DoctorCheck{ID: id, Site: user, Status: agentapi.DoctorFail, Summary: "cannot read the slice: " + err.Error()}
+		return doctor.NewSite(agentapi.DoctorFail, id, user, "slice.error", "", doctor.P{"error": err.Error()})
 	case !ok:
-		return agentapi.DoctorCheck{
-			ID: id, Site: user, Status: agentapi.DoctorWarn, Summary: "no CPU, memory and process limits",
-			Hint: "Save the site's resource limits in the panel.",
-		}
+		return doctor.NewSite(agentapi.DoctorWarn, id, user, "slice.none", "slice.none.hint", nil)
 	}
 
-	return agentapi.DoctorCheck{ID: id, Site: user, Status: agentapi.DoctorOK, Summary: "CPU, memory and process limits are set"}
+	return doctor.NewSite(agentapi.DoctorOK, id, user, "slice.ok", "", nil)
 }
 
 // cert reports false for a site without a certificate.
@@ -346,7 +332,7 @@ func (d *doctorOps) cert(user string) (agentapi.DoctorCheck, bool) {
 	}
 
 	if err != nil {
-		return agentapi.DoctorCheck{ID: "site.tls", Site: user, Status: agentapi.DoctorFail, Summary: "cannot read the certificate: " + err.Error()}, true
+		return doctor.NewSite(agentapi.DoctorFail, "site.tls", user, "cert.error", "", doctor.P{"error": err.Error()}), true
 	}
 
 	return doctor.Cert(user, info.NotAfter, d.now()), true

@@ -6,7 +6,6 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -128,36 +127,35 @@ func (h Hardening) Firewall(ctx context.Context) Check {
 
 	b, err := os.ReadFile(h.path(FirewallFile))
 	if errors.Is(err, os.ErrNotExist) {
-		return warn(id, "Hostashi's firewall is off (--no-firewall)",
-			"Make sure a firewall in front of the server lets through only SSH, 80, 443 and the panel port.")
+		return warnT(id, "fw.off", "fw.off.hint", nil)
 	}
 
 	if err != nil {
-		return fail(id, "cannot read "+FirewallFile+": "+describe(err), "")
+		return failT(id, "read.error", "", P{"path": FirewallFile, "error": describe(err)})
 	}
 
-	hint := "Check: systemctl status " + FirewallUnit + ", journalctl -u " + FirewallUnit + ". Run the installer again (step firewall)."
+	unit := P{"unit": FirewallUnit, "step": "firewall"}
 
 	if !h.exists(systemdWants + "/sysinit.target.wants/" + FirewallUnit) {
-		return fail(id, "the firewall is not enabled and is gone after a reboot", hint)
+		return failT(id, "fw.disabled", "fw.unit.hint", unit)
 	}
 
 	if h.Active == nil {
-		return warn(id, "cannot ask systemd for the firewall's state", "")
+		return warnT(id, "fw.state", "", nil)
 	}
 
 	active, err := h.Active(ctx, FirewallUnit)
 	if err != nil {
-		return warn(id, "cannot ask systemd for the firewall's state: "+err.Error(), "")
+		return warnT(id, "fw.state.error", "", P{"error": err.Error()})
 	}
 
 	if !active {
-		return fail(id, "the firewall unit is not active, so its rules may not be loaded", hint)
+		return failT(id, "fw.inactive", "fw.unit.hint", unit)
 	}
 
 	tcp, udp := firewallPorts(b)
 	if len(tcp) == 0 {
-		return fail(id, FirewallFile+" opens no TCP port", "Run the installer again (step firewall).")
+		return failT(id, "fw.noport", "installer.step.hint", P{"path": FirewallFile, "step": "firewall"})
 	}
 
 	ssh, _ := h.sshd()
@@ -171,50 +169,47 @@ func (h Hardening) Firewall(ctx context.Context) Check {
 	}
 
 	if len(closed) > 0 {
-		return fail(id, "sshd is configured for port "+strings.Join(closed, ", ")+", which the firewall does not open",
-			"Run the installer again (step firewall) before you log out, or the next reload locks you out.")
+		return failT(id, "fw.ssh.closed", "fw.ssh.closed.hint", P{"ports": strings.Join(closed, ", ")})
 	}
 
-	summary := "the firewall is on, open: TCP " + strings.Join(tcp, ", ")
 	if len(udp) > 0 {
-		summary += "; UDP " + strings.Join(udp, ", ")
+		return okT(id, "fw.on.udp", P{"tcp": strings.Join(tcp, ", "), "udp": strings.Join(udp, ", ")})
 	}
 
-	return ok(id, summary)
+	return okT(id, "fw.on", P{"tcp": strings.Join(tcp, ", ")})
 }
 
 // Updates checks the automatic security updates (ADR-0033).
 func (h Hardening) Updates() Check {
 	const id = "system.updates"
 
-	hint := "Run the installer again (step updates)."
+	step := P{"step": "updates"}
 
 	if !h.exists(UpdatesFile) || !h.exists("/usr/bin/unattended-upgrade") {
-		return warn(id, "security updates are not installed automatically", hint)
+		return warnT(id, "updates.off", "installer.step.hint", step)
 	}
 
 	for _, t := range UpdateTimers {
 		if !h.exists(systemdWants + "/timers.target.wants/" + t) {
-			return warn(id, t+" is not enabled, so no updates run", hint)
+			return warnT(id, "updates.timer", "installer.step.hint", P{"timer": t, "step": "updates"})
 		}
 	}
 
 	st, err := os.Stat(h.path(UpdatesStamp))
 	if errors.Is(err, os.ErrNotExist) {
-		return ok(id, "security updates are installed every day (no run yet)")
+		return okT(id, "updates.norun", nil)
 	}
 
 	if err != nil {
-		return warn(id, "cannot read "+UpdatesStamp+": "+describe(err), "")
+		return warnT(id, "read.error", "", P{"path": UpdatesStamp, "error": describe(err)})
 	}
 
 	last := st.ModTime()
 	if h.now().Sub(last) > UpdatesStaleAfter {
-		return warn(id, "the last automatic update ran on "+last.UTC().Format("2006-01-02"),
-			"Check: systemctl status apt-daily-upgrade.timer, /var/log/unattended-upgrades/.")
+		return warnT(id, "updates.stale", "updates.stale.hint", P{"date": last.UTC().Format("2006-01-02")})
 	}
 
-	return ok(id, "security updates are installed every day, last run "+last.UTC().Format("2006-01-02 15:04")+" UTC")
+	return okT(id, "updates.ok", P{"time": last.UTC().Format("2006-01-02 15:04")})
 }
 
 // Reboot reports a reboot that updated packages wait for. The server never
@@ -223,10 +218,10 @@ func (h Hardening) Reboot() Check {
 	const id = "system.reboot"
 
 	if !h.exists(RebootRequired) {
-		return ok(id, "no reboot needed")
+		return okT(id, "reboot.no", nil)
 	}
 
-	summary := "a reboot is needed to finish updates"
+	key, params := "reboot.needed", P{}
 
 	if b, err := os.ReadFile(h.path(RebootRequired + ".pkgs")); err == nil {
 		var pkgs []string
@@ -237,11 +232,11 @@ func (h Hardening) Reboot() Check {
 		}
 
 		if len(pkgs) > 0 {
-			summary += " (" + strings.Join(pkgs, ", ") + ")"
+			key, params["packages"] = "reboot.needed.packages", strings.Join(pkgs, ", ")
 		}
 	}
 
-	return warn(id, summary, "Reboot when it suits you, on the System page or with hostashi system reboot: the server never reboots by itself.")
+	return warnT(id, key, "reboot.hint", params)
 }
 
 var phpUnitRe = regexp.MustCompile(`/(hostashi-php-[0-9]\.[0-9]@([a-z][a-z0-9_-]{1,31})\.service)$`)
@@ -254,7 +249,7 @@ func (h Hardening) PHP() Check {
 
 	dirs, err := os.ReadDir(h.path("/proc"))
 	if err != nil {
-		return warn(id, "cannot read /proc: "+describe(err), "")
+		return warnT(id, "read.error", "", P{"path": "/proc", "error": describe(err)})
 	}
 
 	stale := map[string]string{} // site -> unit
@@ -275,7 +270,7 @@ func (h Hardening) PHP() Check {
 	}
 
 	if len(stale) == 0 {
-		return ok(id, "every site's PHP runs the installed version")
+		return okT(id, "php.current", nil)
 	}
 
 	sites := make([]string, 0, len(stale))
@@ -285,8 +280,7 @@ func (h Hardening) PHP() Check {
 
 	slices.Sort(sites)
 
-	return warn(id, "PHP of "+strings.Join(sites, ", ")+" still runs a replaced binary after an update",
-		fmt.Sprintf("It misses the update's fixes. Restart it: systemctl restart %s.", stale[sites[0]]))
+	return warnT(id, "php.stale", "php.stale.hint", P{"sites": strings.Join(sites, ", "), "unit": stale[sites[0]]})
 }
 
 // phpUnit returns the per-site PHP unit a process belongs to, from its
@@ -467,19 +461,17 @@ func (h Hardening) SSH() Check {
 
 	c, found := h.sshd()
 	if !found {
-		return warn(id, "cannot read "+SSHDConfig, "")
+		return warnT(id, "read.failed", "", P{"path": SSHDConfig})
 	}
-
-	hint := "Log in with a key first, then set PasswordAuthentication no and KbdInteractiveAuthentication no in a file in /etc/ssh/sshd_config.d/ and run systemctl reload ssh."
 
 	switch {
 	case c.root == "yes":
-		return warn(id, "root may log in over SSH with a password", "Set PermitRootLogin prohibit-password. "+hint)
+		return warnT(id, "ssh.root", "ssh.root.hint", nil)
 	case c.password:
-		return warn(id, "SSH accepts passwords for the admin's login", hint)
+		return warnT(id, "ssh.password", "ssh.hint", nil)
 	}
 
-	return ok(id, "SSH logins outside the sites need a key")
+	return okT(id, "ssh.keys", nil)
 }
 
 // Sysctl compares the live kernel settings with the installer's file
@@ -491,16 +483,16 @@ func (h Hardening) Sysctl() Check {
 
 	f, err := os.Open(h.path(SysctlFile))
 	if errors.Is(err, os.ErrNotExist) {
-		return warn(id, "the kernel settings of the baseline are missing", "Run the installer again (step sysctl).")
+		return warnT(id, "sysctl.missing", "installer.step.hint", P{"step": "sysctl"})
 	}
 
 	if err != nil {
-		return warn(id, "cannot read "+SysctlFile+": "+describe(err), "")
+		return warnT(id, "read.error", "", P{"path": SysctlFile, "error": describe(err)})
 	}
 
 	defer f.Close()
 
-	var drift []string
+	var drift, abweichung []string
 
 	n := 0
 
@@ -523,15 +515,15 @@ func (h Hardening) Sysctl() Check {
 		live := strings.Join(strings.Fields(string(b)), " ")
 		if want = strings.Join(strings.Fields(want), " "); live != want {
 			drift = append(drift, key+" = "+live+" (want "+want+")")
+			abweichung = append(abweichung, key+" = "+live+" (soll "+want+")")
 		}
 	}
 
 	if len(drift) > 0 {
-		return warn(id, "kernel settings differ from the baseline: "+strings.Join(drift, ", "),
-			"A file in /etc/sysctl.d/ that sorts later may set them. Otherwise run the installer again (step sysctl).")
+		return warnT(id, "sysctl.drift", "sysctl.drift.hint", P{"drift": strings.Join(drift, ", "), "drift@de": strings.Join(abweichung, ", "), "step": "sysctl"})
 	}
 
-	return ok(id, fmt.Sprintf("%d kernel settings match the baseline", n))
+	return okT(id, "sysctl.ok", P{"count": strconv.Itoa(n)})
 }
 
 // FirewallPanel reports the panel's firewall rules (ADR-0034): what they
@@ -542,7 +534,7 @@ func FirewallPanel(st agentapi.FirewallStatus, err error, now time.Time) (Check,
 	const id = "system.firewall.panel"
 
 	if err != nil {
-		return warn(id, "cannot read the panel's firewall rules: "+err.Error(), ""), true
+		return warnT(id, "fwpanel.error", "", P{"error": err.Error()}), true
 	}
 
 	if !st.Enabled {
@@ -552,29 +544,31 @@ func FirewallPanel(st agentapi.FirewallStatus, err error, now time.Time) (Check,
 	if st.Pending != nil {
 		left := time.Unix(st.Pending.Deadline, 0).Sub(now).Round(time.Second)
 
-		return warn(id, fmt.Sprintf("a change waits for its confirmation and rolls back in %s", max(left, 0)),
-			"Confirm it in the browser that made it, or let it roll back."), true
+		return warnT(id, "fwpanel.pending", "fwpanel.pending.hint", P{"left": max(left, 0).String()}), true
 	}
 
-	var parts []string
+	var parts, teile []string
 
 	if n := len(st.State.Open); n > 0 {
 		parts = append(parts, plural(n, "opened port rule", "opened port rules"))
+		teile = append(teile, plural(n, "Regel für einen offenen Port", "Regeln für offene Ports"))
 	}
 
 	if n := len(st.State.SSHAllow); n > 0 {
 		parts = append(parts, "SSH only from "+plural(n, "address", "addresses"))
+		teile = append(teile, "SSH nur von "+plural(n, "Adresse", "Adressen"))
 	}
 
 	if n := len(st.State.PanelAllow); n > 0 {
 		parts = append(parts, "the panel only from "+plural(n, "address", "addresses"))
+		teile = append(teile, "das Panel nur von "+plural(n, "Adresse", "Adressen"))
 	}
 
 	if len(parts) == 0 {
-		return ok(id, "no rules from the panel: SSH and the panel are open to everyone"), true
+		return okT(id, "fwpanel.none", nil), true
 	}
 
-	return ok(id, "rules from the panel: "+strings.Join(parts, "; ")), true
+	return okT(id, "fwpanel.rules", P{"rules": strings.Join(parts, "; "), "rules@de": strings.Join(teile, "; ")}), true
 }
 
 func plural(n int, one, many string) string {

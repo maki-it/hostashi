@@ -281,12 +281,12 @@ func TestSocket(t *testing.T) {
 	ctx := context.Background()
 	p, _ := listen(t)
 
-	if c := Socket(ctx, "service.x", "x", p, "hint"); c.Status != agentapi.DoctorOK || c.Summary != "x is running" {
+	if c := Socket(ctx, "service.x", "x", p, "fail2ban.hint"); c.Status != agentapi.DoctorOK || c.Summary != "x is running" {
 		t.Errorf("listening: %+v", c)
 	}
 
-	c := Socket(ctx, "service.x", "x", p+"-missing", "hint")
-	if c.Status != agentapi.DoctorFail || c.Hint != "hint" || !strings.Contains(c.Summary, "not found") {
+	c := Socket(ctx, "service.x", "x", p+"-missing", "fail2ban.hint")
+	if c.Status != agentapi.DoctorFail || c.HintCode != "fail2ban.hint" || !strings.Contains(c.Summary, "not found") {
 		t.Errorf("missing: %+v", c)
 	}
 }

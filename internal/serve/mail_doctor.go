@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/doctor"
 	"github.com/maki-it/hostashi/internal/mail"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -34,33 +35,30 @@ func mailCheck(relay MailRelay, hist MailHistory) PanelChecks {
 		}
 
 		if err != nil {
-			return []agentapi.DoctorCheck{{ID: id, Status: agentapi.DoctorFail, Summary: "cannot read the email settings", Hint: "Check the panel's log (journalctl -u hostashi-panel)."}}, fmt.Errorf("mail settings: %w", err)
+			return []agentapi.DoctorCheck{doctor.New(agentapi.DoctorFail, id, "mail.settings.error", "panellog.hint", nil)}, fmt.Errorf("mail settings: %w", err)
 		}
 
 		relayAddr := net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
 
 		failed, err := hist.FailedMailSince(ctx, now.Add(-24*time.Hour))
 		if err != nil {
-			return []agentapi.DoctorCheck{{ID: id, Status: agentapi.DoctorFail, Summary: "cannot read the outbox", Hint: "Check the panel's log (journalctl -u hostashi-panel)."}}, fmt.Errorf("mail outbox: %w", err)
+			return []agentapi.DoctorCheck{doctor.New(agentapi.DoctorFail, id, "mail.outbox.error", "panellog.hint", nil)}, fmt.Errorf("mail outbox: %w", err)
 		}
 
 		if len(failed) == 0 {
-			return []agentapi.DoctorCheck{{ID: id, Status: agentapi.DoctorOK, Summary: "relay " + relayAddr + ", no failed emails in the last 24 hours"}}, nil
+			return []agentapi.DoctorCheck{doctor.New(agentapi.DoctorOK, id, "mail.ok", "", doctor.P{"relay": relayAddr})}, nil
 		}
 
-		summary := fmt.Sprintf("%d emails could not be sent in the last 24 hours", len(failed))
+		key, params := "mail.failed", doctor.P{"count": strconv.Itoa(len(failed))}
 		if len(failed) == 1 {
-			summary = "1 email could not be sent in the last 24 hours"
+			key = "mail.failed.one"
 		}
 
 		if last := failed[0].LastError; last != "" {
-			summary += " (last: " + last + ")"
+			key, params["error"] = key+".last", last
 		}
 
-		return []agentapi.DoctorCheck{{
-			ID: id, Status: agentapi.DoctorWarn, Summary: summary,
-			Hint: "Check the settings on the Email page and send a test email. Links in invitations can still be copied on the Users page.",
-		}}, nil
+		return []agentapi.DoctorCheck{doctor.New(agentapi.DoctorWarn, id, key, "mail.failed.hint", params)}, nil
 	}
 }
 

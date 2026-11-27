@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/doctor"
 	"github.com/maki-it/hostashi/internal/mail"
 )
 
@@ -334,7 +335,7 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 	)
 
 	for _, c := range rep.Checks {
-		sumDE, hintDE := germanCheck(c)
+		sumDE, hintDE := doctor.German(c)
 
 		switch {
 		case c.ID == "site.php" && c.Status != agentapi.DoctorOK && c.Site != "":
@@ -387,9 +388,9 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 				}}},
 			})
 		case c.Status == agentapi.DoctorFail && !ownCategory[c.ID]:
-			line, zeile := "- "+c.Summary, "- "+germanCheckTitle(c.ID)+": "+sumDE
+			line, zeile := "- "+c.Summary, "- "+doctor.GermanTitle(c.ID)+": "+sumDE
 			if c.Site != "" {
-				line, zeile = "- site "+c.Site+": "+c.Summary, "- Site "+c.Site+", "+germanCheckTitle(c.ID)+": "+sumDE
+				line, zeile = "- site "+c.Site+": "+c.Summary, "- Site "+c.Site+", "+doctor.GermanTitle(c.ID)+": "+sumDE
 			}
 
 			digest = append(digest, line)
