@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import i18n from "./i18n";
 import { setDomains, setWWW, siteMessage, type Site, type SiteWWW, type WWWMode } from "./sites";
 import { Button, Card, Notice } from "./ui";
 
@@ -20,11 +22,11 @@ export function wwwExample(site: Site): { bare: string; www: string } {
 export function wwwMessage(mode: WWWMode): string {
   switch (mode) {
     case "to-www":
-      return "Saved. The names without www now redirect to the www names.";
+      return i18n.t("siteDomains.www.saved.toWWW");
     case "to-non-www":
-      return "Saved. The www names now redirect to the names without www.";
+      return i18n.t("siteDomains.www.saved.toNonWWW");
     default:
-      return "Saved. Every domain shows the site again.";
+      return i18n.t("siteDomains.www.saved.off");
   }
 }
 
@@ -33,6 +35,7 @@ export function wwwMessage(mode: WWWMode): string {
 // card offers to add the missing one. onDomains gets the new domain list
 // after such an add.
 export function WWWCard({ site, onChange, onDomains }: { site: Site; onChange: () => Promise<void>; onDomains: (d: string[]) => void }) {
+  const { t } = useTranslation();
   const www = site.www ?? off;
   const ex = wwwExample(site);
   const [busy, setBusy] = useState(false);
@@ -65,25 +68,23 @@ export function WWWCard({ site, onChange, onDomains }: { site: Site; onChange: (
       const list = [...site.domains, name];
       const s = await setDomains(site.name, list);
       onDomains(list);
-      if (s.pendingDomains) return `${name} is added as soon as its certificate is there. The site stays on HTTPS until then.`;
-      return site.tls.enabled
-        ? `${name} added. The site is served over HTTP until its certificate also names ${name}.`
-        : `${name} added. You can choose the redirect now.`;
+      if (s.pendingDomains) return t("siteDomains.www.added.pending", { name });
+      return site.tls.enabled ? t("siteDomains.www.added.http", { name }) : t("siteDomains.www.added.done", { name });
     });
 
   const noPair = www.pairs.length === 0;
   const scheme = site.tls.active ? "https" : "http";
   const choices: { mode: WWWMode; label: string; hint: string }[] = [
-    { mode: "off", label: "No redirect", hint: "Every domain shows the site." },
-    { mode: "to-non-www", label: "Redirect to the name without www", hint: `${ex.www} → ${ex.bare}` },
-    { mode: "to-www", label: "Redirect to the www name", hint: `${ex.bare} → ${ex.www}` },
+    { mode: "off", label: t("siteDomains.www.off"), hint: t("siteDomains.www.offHint") },
+    { mode: "to-non-www", label: t("siteDomains.www.toNonWWW"), hint: `${ex.www} → ${ex.bare}` },
+    { mode: "to-www", label: t("siteDomains.www.toWWW"), hint: `${ex.bare} → ${ex.www}` },
   ];
 
   return (
-    <Card title="www redirect">
+    <Card title={t("siteDomains.www.title")}>
       <div className="ui-stack">
         <fieldset className="ui-fieldset ui-stack-tight">
-          <legend>Between a domain and its www name</legend>
+          <legend>{t("siteDomains.www.legend")}</legend>
           {choices.map((c) => (
             <label className="ui-check" key={c.mode}>
               <input
@@ -105,19 +106,19 @@ export function WWWCard({ site, onChange, onDomains }: { site: Site; onChange: (
         {noPair && (
           <>
             <p className="ui-hint ui-flush">
-              The redirect needs a domain and its www name, both as domains of this site.
-              {www.missing.length > 0 && " Add the missing name first; its certificate is requested with it."}
+              {t("siteDomains.www.needsPair")}
+              {www.missing.length > 0 && " " + t("siteDomains.www.addMissing")}
             </p>
             {www.missing.length > 0 && (
               <div className="ui-row">
                 {www.missing.slice(0, 3).map((m) => (
                   <Button key={m} disabled={busy} onClick={() => void add(m)}>
-                    Add <span className="ui-mono">{m}</span>
+                    <Trans i18nKey="siteDomains.www.add" values={{ name: m }} components={{ mono: <span className="ui-mono" /> }} />
                   </Button>
                 ))}
               </div>
             )}
-            {www.mode !== "off" && <Notice tone="warn" title="No domain has its www partner any more, so the redirect has no effect." />}
+            {www.mode !== "off" && <Notice tone="warn" title={t("siteDomains.www.noEffect")} />}
           </>
         )}
 

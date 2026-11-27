@@ -1,0 +1,127 @@
+{
+  "saved": {
+    "waits": "Gespeichert. Die Änderung wartet auf ein Zertifikat für {{domain}}; bis dahin bleibt die Site, wie sie ist.",
+    "http": "Domains gespeichert. Die Site läuft über HTTP, bis ein Zertifikat für die neuen Domains da ist.",
+    "done": "Domains gespeichert."
+  },
+  "card": {
+    "title": "Domains",
+    "domainsOf": "Domains von {{site}}",
+    "domainsHint": "Eine pro Zeile. Die erste ist die Hauptdomain.",
+    "redirect": "Weiterleitungs-Domains",
+    "redirectHint": "Eine pro Zeile. Sie antworten mit 301 auf {{primary}} und bleiben im Zertifikat, ihr DNS muss also weiter auf diesen Server zeigen.",
+    "thePrimary": "die Hauptdomain",
+    "save": "Domains speichern",
+    "both": "„{{domain}}“ ist zugleich Domain und Weiterleitungs-Domain.",
+    "tooMany": "Eine Site hat höchstens {{max}} Domains, Weiterleitungs-Domains mitgezählt."
+  },
+  "pending": {
+    "title": "Domainwechsel wartet auf sein Zertifikat",
+    "intro": "Die Site bleibt mit ihren bisherigen Domains auf HTTPS, bis ein Zertifikat für die neuen da ist.",
+    "requested": "Angefordert",
+    "label": "Ausstehende Domains",
+    "failed": "Das Zertifikat ließ sich noch nicht holen. Das Panel versucht es innerhalb einer Stunde erneut.",
+    "checkDNS": "Prüfe, ob das DNS jedes neuen Namens auf diesen Server zeigt.",
+    "getting": "Zertifikat wird geholt. Das dauert meist weniger als eine Minute.",
+    "hsts": "HSTS ist an: Browser, die diese Site kennen, lehnen reines HTTP ab. Ohne Warten ist die Site für sie also nicht erreichbar, bis das Zertifikat da ist.",
+    "retry": "Jetzt erneut versuchen",
+    "now": "Jetzt ohne HTTPS wechseln",
+    "cancel": "Wechsel abbrechen",
+    "retried": "Neuer Versuch läuft.",
+    "changedNow": "Domains gewechselt. Die Site läuft über HTTP, bis ein Zertifikat für die neuen Domains da ist.",
+    "canceled": "Domainwechsel abgebrochen. Die Site behält ihre Domains."
+  },
+  "change": {
+    "title": "Hauptdomain ändern",
+    "intro": "Die Site behält ihren Namen <code>{{site}}</code>, ihren Linux-Benutzer, Dateien, Datenbanken, Backups und Einstellungen. Nur die Namen, auf die sie antwortet, ändern sich.",
+    "new": "Neue Hauptdomain",
+    "today": "Bisher: {{domain}}",
+    "alreadyPrimary": "{{domain}} ist schon die Hauptdomain.",
+    "enter": "Gib die neue Hauptdomain ein.",
+    "alsoWWW": "Auch <code>{{name}}</code>",
+    "redirectOld": "<code>{{old}}</code> auf die neue Domain weiterleiten (301)",
+    "redirectOldBoth": "<code1>{{old}}</code1> und <code2>{{www}}</code2> auf die neue Domain weiterleiten (301)",
+    "after": "Nach der Änderung",
+    "newOnCert": "neu im Zertifikat",
+    "waits": "Die Site bleibt mit ihren bisherigen Domains auf HTTPS, bis ein Zertifikat für die neuen Namen da ist, meist innerhalb einer Minute. Ist das DNS eines neuen Namens noch nicht bereit, ändert sich nichts und der Fehler erscheint hier.",
+    "http": "Die Site läuft über HTTP, bis ein Zertifikat für die neuen Namen da ist.",
+    "redirectDNS": "Die Weiterleitungs-Domains bleiben im Zertifikat, ihr DNS muss also weiter auf diesen Server zeigen.",
+    "notChanged": "Ändert das Panel nicht",
+    "dns": "DNS: Richte zuerst jeden neuen Namen auf diesen Server.",
+    "appAddress": "Adressen, die die App gespeichert hat, etwa die WordPress-Adresse. Für WordPress, nach einem Backup:",
+    "copy": "Befehl kopieren",
+    "copied": "Befehl kopiert.",
+    "copyFailed": "Kopieren geht hier nicht. Markiere den Text und kopiere ihn von Hand.",
+    "appConfig": "Werte mit der alten Adresse in der Umgebung oder den Konfigurationsdateien der App, etwa APP_URL.",
+    "submit": "Zu {{domain}} wechseln",
+    "submitEmpty": "Zur neuen Domain wechseln",
+    "close": "Schließen"
+  },
+  "www": {
+    "title": "www-Weiterleitung",
+    "legend": "Zwischen einer Domain und ihrem www-Namen",
+    "off": "Keine Weiterleitung",
+    "offHint": "Jede Domain zeigt die Site.",
+    "toNonWWW": "Auf den Namen ohne www weiterleiten",
+    "toWWW": "Auf den www-Namen weiterleiten",
+    "needsPair": "Die Weiterleitung braucht eine Domain und ihren www-Namen, beide als Domains dieser Site.",
+    "addMissing": "Füge zuerst den fehlenden Namen hinzu; sein Zertifikat wird gleich mit angefordert.",
+    "add": "<mono>{{name}}</mono> hinzufügen",
+    "noEffect": "Keine Domain hat mehr ihren www-Partner, die Weiterleitung wirkt also nicht.",
+    "saved": {
+      "toWWW": "Gespeichert. Die Namen ohne www leiten jetzt auf die www-Namen weiter.",
+      "toNonWWW": "Gespeichert. Die www-Namen leiten jetzt auf die Namen ohne www weiter.",
+      "off": "Gespeichert. Jede Domain zeigt wieder die Site."
+    },
+    "added": {
+      "pending": "{{name}} kommt hinzu, sobald sein Zertifikat da ist. Bis dahin bleibt die Site auf HTTPS.",
+      "http": "{{name}} hinzugefügt. Die Site läuft über HTTP, bis ihr Zertifikat auch {{name}} enthält.",
+      "done": "{{name}} hinzugefügt. Du kannst jetzt die Weiterleitung wählen."
+    }
+  },
+  "redirect": {
+    "title": "Weiterleitung",
+    "target": "Weiterleiten nach",
+    "targetHint": "Die vollständige Adresse, zum Beispiel https://www.example.com oder https://example.com/new-shop.",
+    "status": "Statuscode",
+    "statusHint": "301 für einen dauerhaften Umzug. Browser merken sich 301 und 308; nimm 302, solange du testest.",
+    "statuses": {
+      "301": "301 Dauerhaft verschoben",
+      "302": "302 Gefunden (vorübergehend)",
+      "307": "307 Vorübergehend, behält die Methode",
+      "308": "308 Dauerhaft, behält die Methode"
+    },
+    "keepPath": "Pfad beibehalten",
+    "keepPathHint": "An: /shop/cart?id=1 geht auf denselben Pfad am Ziel. Aus: jede Adresse geht unverändert auf das Ziel.",
+    "save": "Weiterleitung speichern",
+    "saved": "Jede Adresse der Site geht jetzt nach {{target}}."
+  },
+  "proxy": {
+    "title": "Reverse Proxy",
+    "target": "Anfragen weitergeben an",
+    "targetHint": "Die Adresse des anderen Webservers, zum Beispiel http://10.0.0.5:8080 oder https://app.internal.example.com. Private Netze sind erlaubt, die eigenen Adressen dieses Servers nicht.",
+    "targetHost": "Host-Namen des Ziels senden",
+    "targetHostHint": "Aus: Der andere Server sieht die Domain des Besuchers als Host, wie die meisten Apps es erwarten. An: Er sieht den Host der Adresse oben.",
+    "insecure": "Zertifikat des Ziels nicht prüfen",
+    "insecureHint": "Nur für ein Ziel mit selbst signiertem Zertifikat in einem Netz, dem du vertraust.",
+    "insecureWarning": "Die Verbindung zum Ziel ist verschlüsselt, aber nicht geprüft. Jeder zwischen diesem Server und dem Ziel könnte mitlesen.",
+    "save": "Reverse Proxy speichern",
+    "saved": "Anfragen an die Site gehen jetzt an {{target}}."
+  },
+  "target": {
+    "enterRedirect": "Gib die Adresse ein, auf die weitergeleitet wird.",
+    "enterProxy": "Gib die Adresse ein, an die Anfragen gehen.",
+    "tooLong": "Die Adresse ist zu lang.",
+    "scheme": "Die Adresse muss mit https:// oder http:// beginnen.",
+    "characters": "Host und Pfad dürfen nur Buchstaben, Ziffern und - . _ ~ % ! * + , = : @ & ( ) / enthalten, ohne ? oder #.",
+    "invalid": "Das ist keine gültige Adresse.",
+    "noHost": "Die Adresse braucht einen Host.",
+    "lowerCase": "Schreib den Host in Kleinbuchstaben.",
+    "itself": "Die Adresse zeigt auf die Site selbst.",
+    "thisServer": "Die Adresse zeigt auf diesen Server.",
+    "linkLocalMetadata": "Link-lokale Adressen (etwa der Metadaten-Dienst der Cloud) sind nicht erlaubt.",
+    "multicastBroadcast": "Multicast- und Broadcast-Adressen sind nicht erlaubt.",
+    "linkLocal": "Link-lokale Adressen sind nicht erlaubt.",
+    "multicast": "Multicast-Adressen sind nicht erlaubt."
+  }
+}

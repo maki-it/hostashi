@@ -1,0 +1,84 @@
+{
+  "title": "Zertifikat",
+  "panelTitle": "Zertifikat des Panels ({{domain}})",
+  "renew": "Jetzt erneuern",
+  "none": "Noch kein Zertifikat.",
+  "renewPending": "Eine Erneuerung läuft.",
+  "source": {
+    "legend": "Quelle",
+    "letsencrypt": "Let's Encrypt, automatisch erneuert",
+    "custom": "Eigenes Zertifikat, du erneuerst es selbst"
+  },
+  "done": {
+    "letsencrypt": "Let's Encrypt ist wieder die Quelle. Das eigene Zertifikat bleibt aktiv, bis das neue da ist.",
+    "renew": "Erneuerung angefordert. Das neue Zertifikat ist in ein, zwei Minuten da.",
+    "installed": "Zertifikat installiert, die Site läuft über HTTPS.",
+    "csr": "CSR erstellt. Lass ihn signieren und lade das Zertifikat dann hier ohne Schlüssel hoch.",
+    "deleted": "Zertifikat gelöscht."
+  },
+  "delete": {
+    "submit": "Zertifikat löschen",
+    "short": "Löschen",
+    "blocked": "Zertifikat löschen ({{hint}})",
+    "offFirst": "zuerst HTTPS ausschalten",
+    "confirmLabel": "Löschen bestätigen",
+    "question": "Zertifikat und Schlüssel löschen?",
+    "text": "HTTPS ist aus, dieses Zertifikat wird also nicht mehr verwendet. Ein offener CSR wird mit gelöscht."
+  },
+  "facts": {
+    "label": "Aktives Zertifikat",
+    "from": "Von",
+    "own": "Eigenes Zertifikat",
+    "untrusted": "Nicht öffentlich vertrauenswürdig",
+    "issuer": "Aussteller",
+    "unknown": "unbekannt",
+    "names": "Namen",
+    "validUntil": "Gültig bis",
+    "expired": "abgelaufen",
+    "daysLeft_one": "noch {{count}} Tag",
+    "daysLeft_other": "noch {{count}} Tage",
+    "renewedBefore": "Wird 30 Tage vorher erneuert.",
+    "notRenewed": "Wird nicht automatisch erneuert.",
+    "copyFingerprint": "SHA-256-Fingerabdruck kopieren"
+  },
+  "upload": {
+    "title": "Zertifikat hochladen",
+    "short": "Hochladen",
+    "certificate": "Zertifikat",
+    "certificateHint": "PEM, beginnt mit -----BEGIN CERTIFICATE-----.",
+    "certificateFile": "Zertifikatsdatei",
+    "chain": "Kette (optional)",
+    "chainHint": "Die Zwischenzertifikate deiner CA, falls sie nicht im Feld Zertifikat stehen.",
+    "chainFile": "Kettendatei",
+    "key": "Privater Schlüssel",
+    "keyWithCSR": "Privater Schlüssel (leer lassen für den Schlüssel des CSR)",
+    "keyHint": "PEM ohne Passphrase. RSA mit mindestens 2048 Bit oder ECDSA P-256 bzw. P-384.",
+    "keyFile": "Schlüsseldatei",
+    "keyNotice": "Der Schlüssel geht durch deinen Browser und das Panel.",
+    "keyNoticeText": "Er wird nur auf dem Server gespeichert, lesbar für root. Mit „CSR erstellen“ verlässt der Schlüssel den Server nie.",
+    "allowUntrusted": "Nicht öffentlich vertrauenswürdig (interne CA oder selbst signiert): trotzdem installieren",
+    "submit": "Zertifikat installieren"
+  },
+  "csr": {
+    "create": "CSR erstellen",
+    "createKey": "Schlüssel und CSR erstellen",
+    "createNew": "Neuen CSR erstellen",
+    "intro": "Der Server erstellt einen Schlüssel, der ihn nie verlässt, und eine Zertifikatsanforderung (CSR) für seine Domains. Lass den CSR von deiner CA signieren und lade das Zertifikat dann hier ohne Schlüssel hoch.",
+    "label": "Zertifikatsanforderung",
+    "hint": "Wartet auf ihr Zertifikat. Ein neuer CSR ersetzt den Schlüssel.",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "download": "Herunterladen",
+    "uploadCert": "Zertifikat dazu hochladen"
+  },
+  "problems": {
+    "certPEM": "Füge das Zertifikat im PEM-Format ein, beginnend mit -----BEGIN CERTIFICATE-----.",
+    "chainPEM": "Die Kette muss aus PEM-Zertifikaten bestehen oder leer bleiben.",
+    "chainSize": "Zertifikat und Kette sind zu groß (zusammen höchstens 32 KiB).",
+    "keyInCert": "Ein privater Schlüssel gehört ins Feld Schlüssel, nicht zu den Zertifikaten.",
+    "noKey": "Füge den privaten Schlüssel ein oder erstelle zuerst einen CSR.",
+    "encrypted": "Der Schlüssel ist mit einer Passphrase geschützt. Entferne sie zuerst (openssl pkey -in key.pem -out plain.pem).",
+    "keyPEM": "Füge den privaten Schlüssel im PEM-Format ein, beginnend mit -----BEGIN PRIVATE KEY-----.",
+    "keySize": "Der Schlüssel ist zu groß (höchstens 16 KiB)."
+  }
+}
