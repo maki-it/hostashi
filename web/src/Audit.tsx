@@ -2,7 +2,8 @@
 
 import { DownloadSimple } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
-import { actionGroups, auditActions, auditMessage, detailPairs, diffRows, exportUrl, listAudit, type AuditEntry, type AuditFilter } from "./audit";
+import { useTranslation } from "react-i18next";
+import { actionGroups, actionGroupLabel, auditActions, auditMessage, detailPairs, diffRows, exportUrl, listAudit, type AuditEntry, type AuditFilter } from "./audit";
 import { Button, Card, Notice, PageHead, RelTime, Table, type Column } from "./ui";
 
 type QueryProps = {
@@ -16,64 +17,6 @@ const pageSize = 50;
 // Typing in a filter waits this long before the log is read again.
 const typingDelay = 300;
 
-const columns: Column<AuditEntry>[] = [
-  { key: "at", header: "Time", cell: (e) => <RelTime iso={e.at} /> },
-  {
-    key: "actor",
-    header: "Account",
-    cell: (e) =>
-      e.actor ? (
-        <span>
-          {e.actor}
-          {e.userId === null && <span className="ui-hint"> (deleted)</span>}
-        </span>
-      ) : (
-        <span className="ui-hint">none</span>
-      ),
-  },
-  { key: "ip", header: "IP address", cell: (e) => (e.ip ? <span className="ui-mono ui-nowrap">{e.ip}</span> : <span className="ui-hint">—</span>) },
-  { key: "action", header: "Action", cell: (e) => <span className="ui-mono">{e.action}</span> },
-  { key: "target", header: "Target", cell: (e) => <span className="ui-break">{e.target || "—"}</span> },
-  {
-    key: "detail",
-    header: "Details",
-    cell: (e) => {
-      // The address has its own column; older entries also kept it here.
-      const pairs = detailPairs(e.detail).filter(([k]) => k !== "ip");
-      const changes = diffRows(e.diff);
-      if (pairs.length === 0 && changes.length === 0) return <span className="ui-hint">—</span>;
-      return (
-        <div className="ui-stack-tight">
-          {changes.length > 0 && (
-            <dl className="ui-audit-detail ui-audit-diff" aria-label="Changes">
-              {changes.map((c) => (
-                <div key={c.field}>
-                  <dt>{c.field}</dt>
-                  <dd className="ui-mono ui-break">
-                    <del>{c.old || "(none)"}</del>
-                    <span aria-hidden="true"> → </span>
-                    <span className="ui-sr-only"> changed to </span>
-                    <ins>{c.new || "(none)"}</ins>
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          )}
-          {pairs.length > 0 && (
-            <dl className="ui-audit-detail">
-              {pairs.map(([k, v]) => (
-                <div key={k}>
-                  <dt>{k}</dt>
-                  <dd className="ui-mono ui-break">{v}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </div>
-      );
-    },
-  },
-];
 
 // Audit shows the append-only audit log, newest first, with filters in the
 // address and a download of the filtered log. Nothing here changes the
@@ -88,6 +31,66 @@ export function Audit({ query = new URLSearchParams(), onQuery = () => undefined
     to: query.get("to") ?? "",
   };
   const key = JSON.stringify(filter);
+  const { t } = useTranslation();
+
+  const columns: Column<AuditEntry>[] = [
+    { key: "at", header: t("audit.columns.time"), cell: (e) => <RelTime iso={e.at} /> },
+    {
+      key: "actor",
+      header: t("audit.columns.account"),
+      cell: (e) =>
+        e.actor ? (
+          <span>
+            {e.actor}
+            {e.userId === null && <span className="ui-hint"> {t("audit.deleted")}</span>}
+          </span>
+        ) : (
+          <span className="ui-hint">{t("audit.none")}</span>
+        ),
+    },
+    { key: "ip", header: t("audit.columns.ip"), cell: (e) => (e.ip ? <span className="ui-mono ui-nowrap">{e.ip}</span> : <span className="ui-hint">—</span>) },
+    { key: "action", header: t("audit.columns.action"), cell: (e) => <span className="ui-mono">{e.action}</span> },
+    { key: "target", header: t("audit.columns.target"), cell: (e) => <span className="ui-break">{e.target || "—"}</span> },
+    {
+      key: "detail",
+      header: t("audit.columns.details"),
+      cell: (e) => {
+        // The address has its own column; older entries also kept it here.
+        const pairs = detailPairs(e.detail).filter(([k]) => k !== "ip");
+        const changes = diffRows(e.diff);
+        if (pairs.length === 0 && changes.length === 0) return <span className="ui-hint">—</span>;
+        return (
+          <div className="ui-stack-tight">
+            {changes.length > 0 && (
+              <dl className="ui-audit-detail ui-audit-diff" aria-label={t("audit.changes")}>
+                {changes.map((c) => (
+                  <div key={c.field}>
+                    <dt>{c.field}</dt>
+                    <dd className="ui-mono ui-break">
+                      <del>{c.old || t("audit.noValue")}</del>
+                      <span aria-hidden="true"> → </span>
+                      <span className="ui-sr-only"> {t("audit.changedTo")} </span>
+                      <ins>{c.new || t("audit.noValue")}</ins>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            {pairs.length > 0 && (
+              <dl className="ui-audit-detail">
+                {pairs.map(([k, v]) => (
+                  <div key={k}>
+                    <dt>{k}</dt>
+                    <dd className="ui-mono ui-break">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        );
+      },
+    },
+  ];
 
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
@@ -155,30 +158,28 @@ export function Audit({ query = new URLSearchParams(), onQuery = () => undefined
   return (
     <>
       <PageHead
-        title="Audit log"
-        description="Who did what and when, in the panel and through the API. Entries cannot be changed or deleted."
+        title={t("audit.title")}
+        description={t("audit.description")}
         actions={
           <>
-            <a className="ui-btn" href={exportUrl("csv", filter)} download>
-              <DownloadSimple size={16} aria-hidden="true" />
-              CSV
-            </a>
-            <a className="ui-btn" href={exportUrl("json", filter)} download>
-              <DownloadSimple size={16} aria-hidden="true" />
-              JSON
-            </a>
+            {(["csv", "json"] as const).map((format) => (
+              <a key={format} className="ui-btn" href={exportUrl(format, filter)} download>
+                <DownloadSimple size={16} aria-hidden="true" />
+                {format.toUpperCase()}
+              </a>
+            ))}
           </>
         }
       />
       {error && <Notice tone="err" title={error} />}
-      {badRange && <Notice tone="warn" title="The start date is after the end date." />}
+      {badRange && <Notice tone="warn" title={t("audit.badRange")} />}
       <Card padded={false}>
         <div className="ui-filters">
-          <select className="ui-select" aria-label="Action" value={filter.action} onChange={(e) => set({ action: e.target.value })}>
-            <option value="">All actions</option>
+          <select className="ui-select" aria-label={t("audit.columns.action")} value={filter.action} onChange={(e) => set({ action: e.target.value })}>
+            <option value="">{t("audit.filters.allActions")}</option>
             {actionGroups(actions).map((g) => (
-              <optgroup key={g.prefix} label={g.prefix}>
-                {g.actions.length > 1 && <option value={g.prefix}>{g.prefix}.* (all)</option>}
+              <optgroup key={g.prefix} label={actionGroupLabel(g.prefix)}>
+                {g.actions.length > 1 && <option value={g.prefix}>{t("audit.filters.allOfGroup", { prefix: g.prefix })}</option>}
                 {g.actions.map((a) => (
                   <option key={a} value={a}>
                     {a}
@@ -190,8 +191,8 @@ export function Audit({ query = new URLSearchParams(), onQuery = () => undefined
           <input
             className="ui-input"
             type="search"
-            aria-label="Account"
-            placeholder="Account (exact name)"
+            aria-label={t("audit.filters.account")}
+            placeholder={t("audit.filters.accountPlaceholder")}
             maxLength={64}
             value={filter.actor}
             onChange={(e) => set({ actor: e.target.value })}
@@ -199,8 +200,8 @@ export function Audit({ query = new URLSearchParams(), onQuery = () => undefined
           <input
             className="ui-input"
             type="search"
-            aria-label="Target"
-            placeholder="Target contains, such as a site"
+            aria-label={t("audit.filters.target")}
+            placeholder={t("audit.filters.targetPlaceholder")}
             maxLength={200}
             value={filter.target}
             onChange={(e) => set({ target: e.target.value })}
@@ -208,37 +209,37 @@ export function Audit({ query = new URLSearchParams(), onQuery = () => undefined
           <input
             className="ui-input ui-audit-ip"
             type="search"
-            aria-label="IP address"
-            placeholder="IP address"
+            aria-label={t("audit.filters.ip")}
+            placeholder={t("audit.filters.ip")}
             maxLength={45}
             value={filter.ip}
             onChange={(e) => set({ ip: e.target.value })}
           />
           <label className="ui-audit-date">
-            From
+            {t("audit.filters.from")}
             <input className="ui-input" type="date" value={filter.from} onChange={(e) => set({ from: e.target.value })} />
           </label>
           <label className="ui-audit-date">
-            To
+            {t("audit.filters.to")}
             <input className="ui-input" type="date" value={filter.to} onChange={(e) => set({ to: e.target.value })} />
           </label>
         </div>
         {entries === null ? (
-          !error && <p className="ui-empty" aria-busy="true">Loading the audit log…</p>
+          !error && <p className="ui-empty" aria-busy="true">{t("audit.loading")}</p>
         ) : (
           <Table
-            label="Audit log"
+            label={t("audit.title")}
             columns={columns}
             rows={entries}
             rowKey={(e) => String(e.id)}
-            empty={filtered ? "No entry matches the filters." : "The audit log is empty."}
+            empty={filtered ? t("audit.emptyFiltered") : t("audit.empty")}
           />
         )}
       </Card>
       {next && (
         <div className="ui-row">
           <Button disabled={busy} onClick={() => void more()}>
-            {busy ? "Loading…" : "Show older entries"}
+            {busy ? t("common.status.loading") : t("audit.more")}
           </Button>
         </div>
       )}

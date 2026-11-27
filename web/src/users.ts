@@ -3,16 +3,19 @@
 // Panel accounts and their roles (ADR-0035). Only admins manage accounts,
 // in a browser session; a new account gets a one-time invitation link.
 
-import { ApiError, request } from "./api";
+import { request } from "./api";
+import i18n, { areaErrorText } from "./i18n";
 import type { User } from "./auth";
 
 export type Role = "admin" | "manager" | "user";
 
-export const roles: { value: Role; label: string; hint: string }[] = [
-  { value: "admin", label: "Admin", hint: "Everything, including accounts and server settings." },
-  { value: "manager", label: "Manager", hint: "Every site, but not the server or the accounts." },
-  { value: "user", label: "User", hint: "Only the sites you grant." },
-];
+export const roles: readonly Role[] = ["admin", "manager", "user"];
+
+/** roleName is the role's name for lists and selects, such as "Admin". */
+export const roleName = (r: Role): string => (roles.includes(r) ? i18n.t(`users.roles.${r}`) : r);
+
+/** roleHint says in one sentence what the role may do. */
+export const roleHint = (r: Role): string => (roles.includes(r) ? i18n.t(`users.roles.${r}Hint`) : "");
 
 export type Account = {
   id: number;
@@ -71,35 +74,5 @@ export const acceptInvitation = (token: string, password: string) => request<Use
 // fragment, which the browser never sends to a server.
 export const inviteLink = (token: string) => window.location.origin + "/#/invite/" + token;
 
-export function usersMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case "user_exists":
-        return "This username is taken.";
-      case "own_account":
-        return "You cannot change, reset or delete your own account here.";
-      case "last_admin":
-        return "This is the last enabled admin. Make another account admin first.";
-      case "not_grantee":
-        return "Admins and managers reach every site; only users get site grants.";
-      case "invitation_invalid":
-        return "This invitation link is invalid, used or expired. Ask an admin for a new one.";
-      case "rate_limited":
-        return "Too many attempts. Wait a few minutes and try again.";
-      case "not_found":
-        return "This account does not exist any more. Reload the page.";
-      case "second_factor_required":
-        return "Set up a second factor for your own account first (Settings).";
-      case "forbidden":
-        return "Only admins can manage accounts.";
-      case "invalid_argument":
-        return err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
-      case "mail_not_configured":
-        return "Email is not set up (Administration, Email). Leave the address empty and pass the link on yourself.";
-      default:
-        return "Something went wrong (" + err.code + "). Try again.";
-    }
-  }
-  if (err instanceof TypeError) return "The server is not reachable.";
-  return "Something went wrong. Try again.";
-}
+/** usersMessage explains an error of the account routes in the current language. */
+export const usersMessage = (err: unknown): string => areaErrorText("users.errors", err);

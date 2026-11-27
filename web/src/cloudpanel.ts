@@ -5,6 +5,7 @@
 
 import { ApiError, RawJSON, request } from "./api";
 import { nameProblem } from "./databases";
+import i18n, { apiErrorText, areaErrorText } from "./i18n";
 
 export type PlanAction = "import" | "review" | "skip";
 export type PlanReason = { code: string; msg: string };
@@ -160,15 +161,8 @@ export function ttlLabel(s: number): string {
 
 // cutoverMessage explains the errors of the cut-over routes.
 export function cutoverMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case "cutover_running":
-        return "A DNS check of this site is running already. Reload the page.";
-      case "site_state":
-        return "The site does not exist here or is disabled. Enable it first.";
-      case "not_found":
-        return "The DNS check is not available on this panel.";
-    }
+  if (err instanceof ApiError && ["cutover_running", "site_state", "not_found"].includes(err.code)) {
+    return areaErrorText("migrate.cutoverErrors", err);
   }
   return migrationMessage(err);
 }
@@ -190,9 +184,9 @@ const ipv4Re = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-
 
 // hostProblem mirrors CloudPanelSource.Validate loosely; the agent decides.
 export function hostProblem(host: string, port: string): string {
-  if (host === "") return "Enter the old server's address.";
-  if (!ipv4Re.test(host) && !host.includes(":") && !hostRe.test(host)) return "Use an IP address or a lowercase DNS name.";
-  if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) return "Use a port from 1 to 65535.";
+  if (host === "") return i18n.t("migrate.source.noAddress");
+  if (!ipv4Re.test(host) && !host.includes(":") && !hostRe.test(host)) return i18n.t("migrate.source.badHost");
+  if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) return i18n.t("migrate.source.badPort");
   return "";
 }
 
@@ -203,16 +197,16 @@ export function parseDBMap(text: string): { maps: DBMap[]; problem: string } {
   const lines = text.split("\n").map((l) => l.trim()).filter((l) => l !== "");
   for (const [i, line] of lines.entries()) {
     const parts = line.split(/\s+/);
-    const at = `Line ${i + 1}: `;
-    if (parts.length !== 2) return { maps: [], problem: at + "write the old database, a space and the database here." };
+    const at = (problem: string) => i18n.t("migrate.dbMap.line", { line: i + 1, problem });
+    if (parts.length !== 2) return { maps: [], problem: at(i18n.t("migrate.dbMap.pair")) };
     const [from, to] = parts as [string, string];
     const p = nameProblem("database", from) || nameProblem("database", to);
-    if (p) return { maps: [], problem: at + p };
-    if (seen.has(to)) return { maps: [], problem: at + `${to} is named twice.` };
+    if (p) return { maps: [], problem: at(p) };
+    if (seen.has(to)) return { maps: [], problem: at(i18n.t("migrate.dbMap.twice", { name: to })) };
     seen.add(to);
     maps.push({ from, to });
   }
-  if (maps.length > 50) return { maps: [], problem: "At most 50 databases per import." };
+  if (maps.length > 50) return { maps: [], problem: i18n.t("migrate.dbMap.tooMany") };
   return { maps, problem: "" };
 }
 
@@ -221,65 +215,17 @@ export function cronLabel(s: Pick<PlanSite, "cronJobs" | "cronImport">): string 
   const n = s.cronImport ?? 0;
   const rest = s.cronJobs - n;
   const parts: string[] = [];
-  if (n > 0) parts.push(`${n} created paused`);
-  if (rest > 0) parts.push(`${rest} to set up by hand`);
-  return `${s.cronJobs}: ${parts.join(", ")}`;
+  if (n > 0) parts.push(i18n.t("migrate.site.cronCreated", { count: n }));
+  if (rest > 0) parts.push(i18n.t("migrate.site.cronByHand", { count: rest }));
+  return i18n.t("migrate.site.cronSummary", { total: s.cronJobs, parts: parts.join(", ") });
 }
 
-export function formatBytes(n: number): string {
-  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-  let i = 0;
-  let v = n;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return (i === 0 ? String(v) : v.toFixed(1)) + " " + units[i];
-}
-
+/** migrationMessage explains an error of the import routes in the current language. */
 export function migrationMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    switch (err.code) {
-      case "invalid_report":
-        return "This is not a valid scan report: " + err.message + ". Create it with hostashi cloudpanel scan -json -full.";
-      case "too_large":
-        return "The report is larger than 16 MiB.";
-      case "too_many_reports":
-        return "At most 20 reports are kept. Delete one first.";
-      case "unsupported_media_type":
-        return "The report must be a JSON file.";
-      case "not_done":
-        return "The import has not finished copying yet.";
-      case "needs_review":
-        return "Confirm that you checked this site first.";
-      case "pool_unusable":
-        return "The storage pool cannot take this site: its volume is missing or it has too little free space. Choose another pool.";
-      case "skipped":
-        return "The plan skips this site: " + err.message + ".";
-      case "no_site":
-        return "The report has no importable site of this name. Reload the page.";
-      case "not_found":
-        return "This report or import does not exist any more. Reload the page.";
-      case "no_source":
-        return "Set up the old server first.";
-      case "unreachable":
-        return "The old server did not answer over SSH. Check the address, the port and its firewall.";
-      case "unavailable":
-        return "Importing is not available on this panel.";
-      case "site_exists":
-        return "A site with this name exists here already.";
-      case "domain_taken":
-        return "A domain of this site belongs to another site here.";
-      case "forbidden":
-        return "Only administrators can import sites.";
-      case "agent_timeout":
-        return "The server did not answer in time. Reload the page to see whether the change was made.";
-      case "agent_unavailable":
-        return "The change could not be completed. Try again.";
-      default:
-        return err.message ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + "." : "Something went wrong (" + err.code + ").";
-    }
+    // These codes carry the server's detail, which stays English (ADR-0071).
+    if (err.code === "invalid_report" || err.code === "skipped") return i18n.t(`migrate.errors.${err.code}`, { message: err.message });
+    return areaErrorText("migrate.errors", err);
   }
-  if (err instanceof TypeError) return "The server is not reachable.";
-  return "Something went wrong. Try again.";
+  return apiErrorText(err);
 }

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { Migrate } from "./Migrate";
 import type { ImportJob, Plan, PlanSite, SourceInfo } from "./cloudpanel";
+import { setLanguage } from "./i18n";
 import { mockFetch } from "./test-utils";
 
 const base = "/api/v1/migrations/cloudpanel";
@@ -234,7 +235,7 @@ describe("Migrate", () => {
     const status = within(await files.findByRole("region", { name: "Import of shop" }));
     expect(await status.findByText(/^Copying/)).toBeInTheDocument();
     await waitFor(() => expect(status.getByText(/^Done/)).toBeInTheDocument(), { timeout: 5000 });
-    expect(status.getByText("120 files, 3.0 MiB")).toBeInTheDocument();
+    expect(status.getByText("120 files, 3 MiB")).toBeInTheDocument();
     const loads = within(status.getByRole("group", { name: "Database loads" }));
     expect(await loads.findByText("Failed")).toBeInTheDocument();
     expect(loads.getByText(/line 12: ERROR 1227/)).toBeInTheDocument();
@@ -335,7 +336,7 @@ describe("Migrate", () => {
     });
     render(<Harness initial="report=r1&site=shop" />);
     const select = await screen.findByLabelText(/^Storage pool for shop/);
-    expect(screen.getByText("The old home uses 20.0 GiB.")).toBeInTheDocument();
+    expect(screen.getByText("The old home uses 20 GiB.")).toBeInTheDocument();
     // 14 GiB free on the default pool: too small for the old home.
     expect(screen.getByText(/Pool default has less free space/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create shop" })).toBeDisabled();
@@ -497,5 +498,23 @@ describe("Migrate", () => {
     await user.upload(card.getByLabelText("Report file"), new File(["{}"], "x.json", { type: "application/json" }));
     await user.click(card.getByRole("button", { name: "Upload report" }));
     expect(await card.findByRole("alert")).toHaveTextContent("This is not a valid scan report: unknown format.");
+  });
+});
+
+describe("Migrate in German", () => {
+  it("shows the plan with German states and the cron summary", async () => {
+    setLanguage("de");
+    mockFetch({
+      [`GET ${base}/source`]: { body: readySource },
+      [`GET ${base}/reports/r1`]: {
+        body: { id: "r1", sites: 2, createdAt: "2026-11-20T10:00:00Z", plan: plan([planSite("shop", "import"), planSite("blog", "review")]) },
+      },
+      "GET /api/v1/php/versions": { body: { installed: ["8.3"], available: [] } },
+    });
+    render(<Harness initial="report=r1" />);
+    expect(await screen.findByText("2 Sites: 1 bereit, 1 zu prüfen, 0 übersprungen.")).toBeInTheDocument();
+    const table = screen.getByRole("table", { name: "Plan" });
+    expect(within(table).getByText("Bereit")).toBeInTheDocument();
+    expect(within(table).getByText("Prüfen")).toBeInTheDocument();
   });
 });
