@@ -1,5 +1,5 @@
 {
-  "home": "Home-Ordner",
+  "home": "Home-Verzeichnis",
   "columns": {
     "select": "Auswählen",
     "name": "Name",
@@ -113,7 +113,7 @@
     },
     "name": "Name",
     "into": "In den Ordner",
-    "intoHint": "Ein Pfad im Home der Site, zum Beispiel htdocs/old. Leer ist das Home selbst.",
+    "intoHint": "Ein Pfad im Home-Verzeichnis der Site, zum Beispiel htdocs/old. Leer ist das Home-Verzeichnis selbst.",
     "overwrite": "Vorhandene Dateien ersetzen",
     "mode": "Rechte",
     "modeHint": "Oktal, zum Beispiel 644 für Dateien und 755 für Ordner. Gilt für die Einträge selbst, nicht für ihren Inhalt.",

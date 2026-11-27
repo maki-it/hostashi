@@ -79,8 +79,10 @@ The same English term is always translated the same way.
 | cron job | Cron-Job | |
 | database | Datenbank | |
 | database server | Datenbankserver | |
+| database tool session | Adminer-Sitzung | the Adminer sessions card |
 | deploy (Git) | Deploy | der Deploy; verb: deployen |
 | deploy key | Deploy-Key | |
+| dump (import/export file) | Dump | dump file: Dump-Datei |
 | DNS switch | DNS-Umstellung | CloudPanel import |
 | domain | Domain | die Domain |
 | email | E-Mail | mail as a message: Mail |
@@ -91,6 +93,7 @@ The same English term is always translated the same way.
 | flagged (file) | auffällig | virus scan |
 | hardening | Härtung | |
 | health | Zustand | the Health page |
+| home (of a site) | Home-Verzeichnis | |
 | host key | Host-Key | |
 | invitation | Einladung | invitation link: Einladungslink |
 | limit preset | Limit-Vorlage | |
