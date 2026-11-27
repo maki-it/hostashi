@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useId, useRef, useState, type PointerEvent } from "react";
+import { useTranslation } from "react-i18next";
+import { formatDateTime } from "../format";
 
 export type Series = {
   label: string;
@@ -29,8 +31,8 @@ const H = 160;
 function timeLabel(iso: string, days: boolean): string {
   const d = new Date(iso);
   return days
-    ? d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
-    : d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    ? formatDateTime(d, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    : formatDateTime(d, { hour: "2-digit", minute: "2-digit" });
 }
 
 // path draws one series as line segments; a null value breaks the line.
@@ -58,6 +60,7 @@ function path(values: readonly (number | null)[], max: number): string {
  * numbers is available below it for screen readers and copying.
  */
 export function LineChart({ title, times, series, format, max, days = false }: LineChartProps) {
+  const { t } = useTranslation();
   const id = useId();
   const box = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -72,7 +75,7 @@ export function LineChart({ title, times, series, format, max, days = false }: L
   };
 
   if (n === 0) {
-    return <p className="ui-hint ui-flush">No data yet. The panel takes a sample every 15 seconds.</p>;
+    return <p className="ui-hint ui-flush">{t("ui.chart.empty")}</p>;
   }
 
   const x = hover === null ? 0 : n === 1 ? 50 : (hover / (n - 1)) * 100;
@@ -117,7 +120,7 @@ export function LineChart({ title, times, series, format, max, days = false }: L
                 {series.map((s, i) => (
                   <span key={s.label}>
                     <span className={`ui-chart-key ui-series-${i + 1}`} aria-hidden="true" />
-                    {s.label}: {s.values[hover] === null ? "no data" : format(s.values[hover]!)}
+                    {s.label}: {s.values[hover] === null ? t("ui.chart.noData") : format(s.values[hover]!)}
                   </span>
                 ))}
               </div>
@@ -130,11 +133,11 @@ export function LineChart({ title, times, series, format, max, days = false }: L
         <span>{timeLabel(times[n - 1]!, days)}</span>
       </div>
       <details className="ui-chart-table">
-        <summary>Show as table</summary>
+        <summary>{t("ui.chart.showTable")}</summary>
         <table>
           <thead>
             <tr>
-              <th scope="col">Time</th>
+              <th scope="col">{t("ui.chart.time")}</th>
               {series.map((s) => (
                 <th key={s.label} scope="col">
                   {s.label}

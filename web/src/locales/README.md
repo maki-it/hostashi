@@ -75,6 +75,7 @@ The same English term is always translated the same way.
 | audit log | Audit-Log | |
 | backup | Backup | das Backup; restore: wiederherstellen |
 | certificate | Zertifikat | |
+| check (Health) | Prüfung | |
 | colour scheme | Farbschema | |
 | cron job | Cron-Job | |
 | database | Datenbank | |
@@ -86,6 +87,7 @@ The same English term is always translated the same way.
 | DNS switch | DNS-Umstellung | CloudPanel import |
 | domain | Domain | die Domain |
 | email | E-Mail | mail as a message: Mail |
+| disk | Datenträger | |
 | false positive | Fehlalarm | virus scan |
 | file manager | Dateimanager | |
 | file permissions, mode | Dateirechte, Rechte | chmod: Rechte ändern |
@@ -99,6 +101,7 @@ The same English term is always translated the same way.
 | limit preset | Limit-Vorlage | |
 | log in / log out | anmelden / abmelden | |
 | maintenance page | Wartungsseite | |
+| memory (RAM) | Arbeitsspeicher | |
 | one-time code | Einmalcode | |
 | overview | Übersicht | |
 | parked domain | geparkte Domain | |

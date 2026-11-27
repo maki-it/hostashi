@@ -5,12 +5,10 @@
     "Clone.tsx",
     "Cron.tsx",
     "Cutover.tsx",
-    "Dashboard.tsx",
     "Doctor.tsx",
     "Firewall.tsx",
     "NodePage.tsx",
     "ObjectCache.tsx",
-    "Overview.tsx",
     "PHP.tsx",
     "PHPSettings.tsx",
     "PageCache.tsx",
@@ -30,10 +28,6 @@
     "Sites.tsx",
     "Snippets.tsx",
     "System.tsx",
-    "Unsaved.tsx",
-    "WordPress.tsx",
-    "ui/Chart.tsx",
-    "ui/Copy.tsx",
-    "ui/JobCard.tsx"
+    "WordPress.tsx"
   ]
 }
