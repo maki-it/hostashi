@@ -4,6 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { BackupInfo } from "./backups";
 import type { DoctorReport } from "./doctor";
+import { setLanguage } from "./i18n";
 import { attention, Overview } from "./Overview";
 import type { Site } from "./sites";
 import { mockFetch } from "./test-utils";
@@ -119,6 +120,27 @@ describe("Overview", () => {
     expect(pools.getByRole("meter", { name: "default (default)" })).toHaveAttribute("aria-valuenow", "75");
     expect(pools.getByText("Not available")).toBeInTheDocument();
     expect(pools.getByRole("link", { name: "Open storage pools" })).toHaveAttribute("href", "#/pools");
+  });
+
+  it("speaks German, with German numbers", async () => {
+    setLanguage("de");
+    mockFetch({
+      "GET /api/v1/sites": { body: { sites: [site("shop"), broken, site("old", { disabled: true })] } },
+      "GET /api/v1/doctor": { body: doctor },
+      "GET /api/v1/backups": { body: backups(false) },
+      "GET /api/v1/parked-domains": { body: { parkedDomains: [] } },
+      "GET /api/v1/pools": {
+        body: { pools: [{ name: "default", path: "/home", sites: 1, available: true, quota: "enforced", freeBytes: 2.5 * 2 ** 30, totalBytes: 10 * 2 ** 30, default: true }] },
+      },
+    });
+    render(<Overview user={{ username: "kim", role: "admin", secondFactor: true } as never} />);
+    const list = within(await screen.findByRole("region", { name: "Braucht Aufmerksamkeit" }));
+    expect(list.getByText("Das letzte Backup ist fehlgeschlagen")).toBeInTheDocument();
+    expect(list.getByRole("link", { name: "wiki öffnen" })).toHaveAttribute("href", "#/sites/wiki");
+    expect(screen.getByRole("heading", { name: "Übersicht" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Sites" })).getByText("1 deaktiviert")).toBeInTheDocument();
+    const pools = within(screen.getByRole("region", { name: "Storage-Pools" }));
+    expect(pools.getByRole("meter", { name: "default (Standard)" })).toHaveAttribute("aria-valuetext", "7,5 GiB von 10 GiB belegt, 2,5 GiB frei · 1 Site");
   });
 
   it("asks only for what a user may see", async () => {

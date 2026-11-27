@@ -3,6 +3,7 @@
 // Service management and the server dashboard (ADR-0052).
 
 import { ApiError, request } from "./api";
+import { formatNumber } from "./format";
 
 export type ServiceAction = "start" | "stop" | "restart" | "reload";
 
@@ -139,6 +140,10 @@ export function serviceMessage(err: unknown): string {
   return "The panel could not reach the server. Try again.";
 }
 
+// fixed writes v with exactly the given decimals in the panel's language
+// (ADR-0071): "1.5" or "1,5". No grouping: the values stay below 1024.
+const fixed = (v: number, digits: number) => formatNumber(v, { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false });
+
 /** bytes formats a size with a binary unit. */
 export function bytes(n: number): string {
   const units = ["B", "KiB", "MiB", "GiB", "TiB"];
@@ -148,7 +153,7 @@ export function bytes(n: number): string {
     v /= 1024;
     i++;
   }
-  return `${v >= 10 || i === 0 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
+  return `${fixed(v, v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
 /** rate formats bytes per second as bits per second, as network rates are usually read. */
@@ -161,5 +166,5 @@ export function rate(bps: number): string {
     v /= 1000;
     i++;
   }
-  return `${v >= 10 || i === 0 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
+  return `${fixed(v, v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
