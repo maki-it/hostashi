@@ -6,6 +6,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Databases } from "./Databases";
 import { durationLabel, safeToolURL, withLook } from "./dbtool";
+import { setLanguage } from "./i18n";
 import { mockFetch } from "./test-utils";
 
 const sites = {
@@ -40,6 +41,9 @@ describe("database tool helpers", () => {
     expect(durationLabel(30)).toBe("30 minutes");
     expect(durationLabel(120)).toBe("2 hours");
     expect(durationLabel(60)).toBe("1 hour");
+    setLanguage("de");
+    expect(durationLabel(30)).toBe("30 Minuten");
+    expect(durationLabel(60)).toBe("1 Stunde");
   });
 
   it("accepts only the panel's https address with a ticket", () => {
