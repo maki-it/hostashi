@@ -252,7 +252,12 @@ func (s *Service) Login(ctx context.Context, username, password, code, ip string
 
 	// A passkey is no second step after a password: an account that must
 	// have a second factor and has only passkeys logs in with one.
-	if !u.TOTPEnabled && SecondFactorRequired(u) {
+	req, err := s.SecondFactorRequired(ctx, u)
+	if err != nil {
+		return "", store.User{}, err
+	}
+
+	if !u.TOTPEnabled && req {
 		has, err := s.HasSecondFactor(ctx, u)
 		if err != nil {
 			return "", store.User{}, err
