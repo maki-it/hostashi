@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { ApiError } from "./api";
 import { message, totpConfirm, totpEnroll } from "./auth";
 import { Copy } from "@phosphor-icons/react";
@@ -16,9 +17,10 @@ export function groupKey(secret: string): string {
 // SecondFactor sets up TOTP for an account that must have a second factor
 // and has none yet (ADR-0035). Until then the panel refuses everything else.
 export function SecondFactor({ onDone }: Props) {
+  const { t } = useTranslation();
   return (
-    <Card title="Set up a second factor">
-      <TotpEnrolment intro="Your role needs a second factor. Set up an authenticator app (TOTP) before you continue." onDone={onDone} />
+    <Card title={t("auth.totp.title")}>
+      <TotpEnrolment intro={t("auth.totp.intro")} onDone={onDone} />
     </Card>
   );
 }
@@ -33,7 +35,9 @@ type EnrolmentProps = {
   initial?: Enrolment;
   /** confirm checks the first code; it defaults to turning TOTP on. */
   confirm?: (code: string) => Promise<string[]>;
+  /** The submit button; defaults to "Turn on". */
   submitLabel?: string;
+  /** The notice above the recovery codes; defaults to "is on". */
   doneTitle?: string;
 };
 
@@ -46,9 +50,10 @@ export function TotpEnrolment({
   autoStart = false,
   initial,
   confirm: confirmCode = totpConfirm,
-  submitLabel = "Turn on",
-  doneTitle = "Two-factor authentication is on. Keep these recovery codes somewhere safe; each one works once.",
+  submitLabel,
+  doneTitle,
 }: EnrolmentProps) {
+  const { t } = useTranslation();
   const [enrolment, setEnrolment] = useState<Enrolment | null>(initial ?? null);
   const [code, setCode] = useState("");
   const [codes, setCodes] = useState<string[] | null>(null);
@@ -59,9 +64,9 @@ export function TotpEnrolment({
   async function copyKey(secret: string) {
     try {
       await navigator.clipboard.writeText(secret);
-      setCopied("Copied.");
+      setCopied(t("common.status.copied"));
     } catch {
-      setCopied("Copying is not possible here. Select the key and copy it by hand.");
+      setCopied(t("auth.totp.copyFailed"));
     }
   }
 
@@ -94,7 +99,7 @@ export function TotpEnrolment({
     try {
       setCodes(await confirmCode(code.trim()));
     } catch (err) {
-      setError(err instanceof ApiError && err.code === "invalid_credentials" ? "Wrong code. Use the current code from your app." : message(err));
+      setError(err instanceof ApiError && err.code === "invalid_credentials" ? t("auth.totp.wrongCode") : message(err));
       setCode("");
     } finally {
       setBusy(false);
@@ -105,8 +110,8 @@ export function TotpEnrolment({
     <div className="ui-stack">
       {codes ? (
         <>
-          <Notice tone="ok" title={doneTitle} />
-          <ul aria-label="Recovery codes">
+          <Notice tone="ok" title={doneTitle ?? t("auth.totp.done")} />
+          <ul aria-label={t("auth.totp.recoveryCodes")}>
             {codes.map((c) => (
               <li key={c}>
                 <code>{c}</code>
@@ -114,24 +119,24 @@ export function TotpEnrolment({
             ))}
           </ul>
           <Button variant="primary" onClick={onDone}>
-            Continue
+            {t("common.actions.continue")}
           </Button>
         </>
       ) : enrolment ? (
         <form className="ui-stack" onSubmit={(e) => void confirm(e)} noValidate>
-          <p className="ui-flush">Scan this QR code with your authenticator app, then enter the code it shows.</p>
-          <QRCode value={enrolment.uri} label="QR code for your authenticator app" />
+          <p className="ui-flush">{t("auth.totp.scan")}</p>
+          <QRCode value={enrolment.uri} label={t("auth.totp.qr")} />
           <div className="ui-stack-tight">
-            <p className="ui-flush">Cannot scan it? Enter this key in the app instead:</p>
-            <pre className="ui-code" aria-label="Authenticator key">
+            <p className="ui-flush">{t("auth.totp.cannotScan")}</p>
+            <pre className="ui-code" aria-label={t("auth.totp.key")}>
               {groupKey(enrolment.secret)}
             </pre>
             <div className="ui-row">
               <Button icon={<Copy size={16} aria-hidden="true" />} onClick={() => void copyKey(enrolment.secret)}>
-                Copy key
+                {t("auth.totp.copyKey")}
               </Button>
               <a className="ui-btn" href={enrolment.uri}>
-                Open in an authenticator app
+                {t("auth.totp.openApp")}
               </a>
               {copied && (
                 <span role="status" className="ui-hint">
@@ -140,7 +145,7 @@ export function TotpEnrolment({
               )}
             </div>
           </div>
-          <Field label="One-time code">
+          <Field label={t("auth.totp.code")}>
             <input
               className="ui-input"
               name="code"
@@ -152,14 +157,14 @@ export function TotpEnrolment({
             />
           </Field>
           <Button variant="primary" type="submit" disabled={busy || code.trim() === ""}>
-            {submitLabel}
+            {submitLabel ?? t("auth.totp.turnOn")}
           </Button>
         </form>
       ) : (
         <>
           {intro && <p className="ui-flush">{intro}</p>}
           <Button variant="primary" disabled={busy} onClick={() => void start()}>
-            Set up an authenticator app
+            {t("auth.totp.start")}
           </Button>
         </>
       )}

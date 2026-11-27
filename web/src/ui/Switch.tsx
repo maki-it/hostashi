@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useId, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 type SwitchProps = {
   checked: boolean;
@@ -49,10 +50,12 @@ export function Switch({ checked, onChange, disabled, children, hint }: SwitchPr
 
 /** The note in a card header that its switches need no save button. */
 export function AppliesAtOnce() {
-  return <span className="ui-applies">Applies at once</span>;
+  const { t } = useTranslation();
+  return <span className="ui-applies">{t("common.form.appliesAtOnce")}</span>;
 }
 
 /** The note beside a save button: whether the form has changes. */
 export function UnsavedNote({ dirty }: { dirty: boolean }) {
-  return dirty ? <span className="ui-unsaved">Unsaved changes</span> : <span className="ui-hint">No changes</span>;
+  const { t } = useTranslation();
+  return dirty ? <span className="ui-unsaved">{t("common.form.unsaved")}</span> : <span className="ui-hint">{t("common.form.noChanges")}</span>;
 }

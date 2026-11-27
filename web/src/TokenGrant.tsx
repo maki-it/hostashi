@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { listScopes, type Scope } from "./device";
+import i18n from "./i18n";
 import { listSites, type Site } from "./sites";
 import { Badge, Button, Field, Notice } from "./ui";
 
@@ -23,16 +25,17 @@ export function grantReady(g: Grant): boolean {
 
 // scopeGroups sorts the scope catalog into areas by the part before the
 // colon. A scope no group names lands in "Other", so a new one never hides.
-const scopeGroups: { id: string; label: string; areas: string[] }[] = [
+// The label of a group is tokens.grant.groups.<id>.
+type GroupID = "sites" | "databases" | "backups" | "server" | "panel" | "other";
+const scopeGroups: { id: GroupID; areas: string[] }[] = [
   {
     id: "sites",
-    label: "Sites",
     areas: ["sites", "sites.maintenance", "sites.snippets", "files", "git", "logs", "cron", "ssh", "pages", "pagecache", "objectcache", "limits"],
   },
-  { id: "databases", label: "Databases", areas: ["databases", "db_servers"] },
-  { id: "backups", label: "Backups", areas: ["backups"] },
-  { id: "server", label: "Server", areas: ["services", "system", "firewall", "doctor", "metrics", "php", "node", "python"] },
-  { id: "panel", label: "Panel", areas: ["audit", "migrations"] },
+  { id: "databases", areas: ["databases", "db_servers"] },
+  { id: "backups", areas: ["backups"] },
+  { id: "server", areas: ["services", "system", "firewall", "doctor", "metrics", "php", "node", "python"] },
+  { id: "panel", areas: ["audit", "migrations"] },
 ];
 
 const actionOrder = ["read", "write", "purge", "install", "restore", "delete"];
@@ -70,8 +73,9 @@ export type ScopeGroup = { id: string; label: string; scopes: Scope[] };
 export function groupScopes(scopes: Scope[]): ScopeGroup[] {
   const area = areaOf;
   const rank = (list: string[], v: string) => (list.includes(v) ? list.indexOf(v) : list.length);
-  const out: ScopeGroup[] = scopeGroups.map((g) => ({ id: g.id, label: g.label, scopes: [] }));
-  const other: ScopeGroup = { id: "other", label: "Other", scopes: [] };
+  const label = (id: GroupID) => i18n.t(`tokens.grant.groups.${id}`);
+  const out: ScopeGroup[] = scopeGroups.map((g) => ({ id: g.id, label: label(g.id), scopes: [] }));
+  const other: ScopeGroup = { id: "other", label: label("other"), scopes: [] };
   for (const s of scopes) {
     const i = scopeGroups.findIndex((g) => g.areas.includes(area(s)));
     (i >= 0 ? out[i]! : other).scopes.push(s);
@@ -136,18 +140,19 @@ export function GrantFields({
   /** Offers a token that never expires (only on the account page). */
   allowUnlimited?: boolean;
 }) {
+  const { t } = useTranslation();
   const pick = (keep: (s: Scope) => boolean) => onChange({ ...grant, scopes: new Set((scopes ?? []).filter(keep).map((s) => s.name)) });
 
   return (
     <>
       <fieldset className="ui-fieldset ui-stack-tight">
-        <legend>What the token may do</legend>
-        {scopes === null && <p aria-busy="true">Loading…</p>}
+        <legend>{t("tokens.grant.scopes")}</legend>
+        {scopes === null && <p aria-busy="true">{t("common.status.loading")}</p>}
         {scopes !== null && scopes.length > 0 && (
           <div className="ui-row">
-            <Button onClick={() => pick((s) => s.name.endsWith(":read"))}>Only reading</Button>
-            <Button onClick={() => pick((s) => !s.highRisk)}>All but high risk</Button>
-            <Button onClick={() => pick(() => false)}>None</Button>
+            <Button onClick={() => pick((s) => s.name.endsWith(":read"))}>{t("tokens.grant.onlyReading")}</Button>
+            <Button onClick={() => pick((s) => !s.highRisk)}>{t("tokens.grant.allButHighRisk")}</Button>
+            <Button onClick={() => pick(() => false)}>{t("tokens.grant.none")}</Button>
           </div>
         )}
         {scopes !== null &&
@@ -156,15 +161,15 @@ export function GrantFields({
               <div className="ui-scope-head">
                 <h3 id={"scope-group-" + g.id}>{g.label}</h3>
                 <span className="ui-hint">
-                  {g.scopes.filter((s) => grant.scopes.has(s.name)).length} of {g.scopes.length}
+                  {t("tokens.grant.picked", { n: g.scopes.filter((s) => grant.scopes.has(s.name)).length, total: g.scopes.length })}
                 </span>
               </div>
               <div className="ui-scope-grid">
                 <span className="ui-scope-col" aria-hidden="true">
-                  Read
+                  {t("tokens.grant.read")}
                 </span>
                 <span className="ui-scope-col" aria-hidden="true">
-                  Change
+                  {t("tokens.grant.change")}
                 </span>
                 {scopeRows(g.scopes).map(({ scope: s, row }) => (
                   <label
@@ -179,7 +184,7 @@ export function GrantFields({
                     />
                     <span>
                       <span>
-                        <code>{s.name}</code> {s.highRisk && <Badge tone="warn">high risk</Badge>}
+                        <code>{s.name}</code> {s.highRisk && <Badge tone="warn">{t("tokens.grant.highRisk")}</Badge>}
                       </span>
                       <span className="ui-hint">{s.description}</span>
                     </span>
@@ -190,12 +195,12 @@ export function GrantFields({
           ))}
       </fieldset>
       <fieldset className="ui-fieldset ui-stack-tight">
-        <legend>Sites</legend>
+        <legend>{t("tokens.grant.sites")}</legend>
         <label className="ui-check">
           <input type="checkbox" checked={grant.allSites} onChange={(e) => onChange({ ...grant, allSites: e.target.checked })} />
-          Every site I can reach, also later ones
+          {t("tokens.grant.allSites")}
         </label>
-        {!grant.allSites && sites.length === 0 && <p className="ui-hint ui-flush">You cannot reach any site yet.</p>}
+        {!grant.allSites && sites.length === 0 && <p className="ui-hint ui-flush">{t("tokens.grant.noSites")}</p>}
         {!grant.allSites &&
           sites.map((s) => (
             <label key={s.name} className="ui-check">
@@ -209,7 +214,7 @@ export function GrantFields({
           ))}
       </fieldset>
       <div className="ui-narrow">
-        <Field label="Valid for (days)" hint="1 to 365. The token stops working after that.">
+        <Field label={t("tokens.grant.days")} hint={t("tokens.grant.daysHint")}>
           <input
             className="ui-input"
             type="number"
@@ -225,14 +230,14 @@ export function GrantFields({
         <label className="ui-check">
           <input type="checkbox" checked={grant.unlimited} onChange={(e) => onChange({ ...grant, unlimited: e.target.checked })} />
           <span>
-            Never expires
-            <span className="ui-hint"> Only for a monitoring or deploy job you look after.</span>
+            {t("tokens.grant.unlimited")}
+            <span className="ui-hint"> {t("tokens.grant.unlimitedHint")}</span>
           </span>
         </label>
       )}
       {grant.unlimited && (
-        <Notice tone="warn" title="This token works until you revoke it">
-          If it leaks, it stays usable for as long as nobody notices. Prefer a lifetime and renew it.
+        <Notice tone="warn" title={t("tokens.grant.unlimitedTitle")}>
+          {t("tokens.grant.unlimitedText")}
         </Notice>
       )}
     </>

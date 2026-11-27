@@ -609,6 +609,27 @@ describe("Shell", () => {
     window.location.hash = "";
   });
 
+  it("shows the whole account page in German", async () => {
+    window.location.hash = "#/account";
+    mockFetch({
+      ...noSetup,
+      "GET /api/v1/auth/me": { body: { ...admin, auth: "session", language: "de", totp: true } },
+      "GET /api/v1/auth/passkeys": { body: { passkeys: [] } },
+      "GET /api/v1/account/email": { body: { email: "kim@example.com", pending: "", mail_enabled: true } },
+      "GET /api/v1/account/notifications": { body: { email: "kim@example.com", mail_enabled: true, categories: [{ id: "backups", enabled: true }] } },
+      "GET /api/v1/tokens": { body: { tokens: [] } },
+    });
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Anmeldung und Sicherheit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Passwort ändern" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Auf neues Gerät umziehen" })).toBeInTheDocument();
+    expect(await screen.findByText("Noch keine Passkeys.")).toBeInTheDocument();
+    expect(await screen.findByText("kim@example.com")).toBeInTheDocument();
+    expect(await screen.findByText("Ein Backup ist fehlgeschlagen oder hat nicht alles gesichert.")).toBeInTheDocument();
+    expect(await screen.findByText("Noch keine Tokens. Leg eins mit „Neues Token“ an.")).toBeInTheDocument();
+    window.location.hash = "";
+  });
+
   it("starts in the account's language", async () => {
     mockFetch({ ...noSetup, "GET /api/v1/auth/me": { body: { ...admin, auth: "session", language: "de" } }, "GET /api/v1/sites": { body: { sites: [] } } });
     render(<App />);

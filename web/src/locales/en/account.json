@@ -18,5 +18,122 @@
     "de": "Deutsch",
     "failed": "The language could not be saved. It applies until you reload."
   },
-  "saved": "Saved. The panel looks like this in every browser you log in with."
+  "saved": "Saved. The panel looks like this in every browser you log in with.",
+  "email": {
+    "title": "Email",
+    "intro": "For invitations, security notes about your account and the notifications you choose. Hostashi uses it only after you open the link it sends there.",
+    "yours": "Your address: <b>{{email}}</b>",
+    "pending": "Waiting for confirmation: {{email}}",
+    "openLink": "Open the link in the email we sent there.",
+    "openLinkBefore": "Open the link in the email we sent there before it expires <time/>.",
+    "sent": "We sent a link to the new address. Check the inbox, and the spam folder if it does not arrive.",
+    "notSetUp": "Email is not set up on this panel.",
+    "notSetUpHint": "An administrator can set up an SMTP relay under Administration, Email.",
+    "address": "Email address",
+    "newAddress": "New email address",
+    "send": "Send confirmation link",
+    "sending": "Sending…",
+    "change": "Change address",
+    "remove": "Remove address",
+    "errors": {
+      "mail_not_configured": "An administrator has to set up email first.",
+      "no_public_url": "The panel has no public address for links. An administrator has to set one.",
+      "rate_limited": "Too many attempts in the last hour. Try again later.",
+      "link_invalid": "The link is invalid, used or expired. Enter the address again on your account page to get a new one.",
+      "mail_failed": "The confirmation email could not be queued. Try again later."
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "intro": "Emails about problems on the server and your sites. Security notes about your account are always sent.",
+    "noMail": "Notifications need email, which is not set up on this panel yet.",
+    "noAddress": "Add and confirm an email address above to get notifications.",
+    "legend": "Email me about",
+    "categories": {
+      "backups": {
+        "label": "Backups",
+        "hint": "A backup failed or did not save everything."
+      },
+      "certificates": {
+        "label": "Certificates",
+        "hint": "A renewal failed, or a certificate expires in 14 or 3 days."
+      },
+      "doctor": {
+        "label": "Server checks",
+        "hint": "Once a day, when the checks on the Health page find errors."
+      },
+      "services": {
+        "label": "Services",
+        "hint": "A service is down or keeps crashing, and again when it runs."
+      },
+      "deploys": {
+        "label": "Git deploys",
+        "hint": "A Git deploy of a site failed. Off until you switch it on."
+      },
+      "php": {
+        "label": "PHP versions",
+        "hint": "Once a week, when a site uses a PHP version near or past its end of life."
+      },
+      "disk": {
+        "label": "Disk space",
+        "hint": "A disk or a site's quota is more than 90 percent full."
+      }
+    }
+  },
+  "security": {
+    "title": "Sign-in and security",
+    "errors": {
+      "invalid_credentials": "Wrong password or code.",
+      "second_factor_required": "Your account must keep a second factor. Add a passkey or keep the authenticator app.",
+      "too_many_passkeys": "You have the most passkeys an account can have. Remove one first."
+    },
+    "password": {
+      "title": "Password",
+      "current": "Current password",
+      "new": "New password",
+      "newHint": "At least 12 characters. Your other sessions are logged out.",
+      "repeat": "Repeat the new password",
+      "mismatch": "The new passwords do not match.",
+      "wrongCurrent": "The current password is wrong.",
+      "changed": "Password changed. Your other sessions were logged out.",
+      "submit": "Change password",
+      "changing": "Changing…"
+    },
+    "totp": {
+      "title": "Authenticator app (TOTP)",
+      "on": "On. Logging in with your password asks for a code from the app.",
+      "off": "Off. Logging in with your password asks for nothing else.",
+      "turnedOn": "The authenticator app is on.",
+      "turnedOff": "The authenticator app is off. Its recovery codes no longer work.",
+      "moved": "The authenticator app was moved to the new device.",
+      "moveIntro": "Your old app keeps working until the new one shows its first code here.",
+      "useNew": "Use the new app",
+      "moveDone": "The new app is in use. Codes from the old app and the old recovery codes no longer work. Keep these new recovery codes somewhere safe; each one works once.",
+      "verifyMove": "To move to a new phone or app, enter your password and a current code from the old app. If the old phone is gone, use a recovery code.",
+      "verifyOff": "To turn it off, enter your password and a current code from the app or a recovery code.",
+      "password": "Your password",
+      "code": "Code from the app or a recovery code",
+      "turnOff": "Turn off",
+      "move": "Move to a new device",
+      "setUp": "Set up an authenticator app"
+    },
+    "passkeys": {
+      "title": "Passkeys",
+      "intro": "A passkey logs you in without a password, with your device's lock or a security key. It counts as a second factor.",
+      "none": "No passkeys yet.",
+      "list": "Your passkeys",
+      "added": "added <time/>",
+      "lastUsed": ", last used <time/>",
+      "neverUsed": ", never used",
+      "removeLabel": "Remove passkey {{name}}",
+      "remove": "Remove",
+      "name": "Name of the new passkey",
+      "nameHint": "So you know it again, for example the device.",
+      "add": "Add passkey",
+      "waiting": "Waiting for the browser…",
+      "unsupported": "This browser cannot create passkeys.",
+      "addedNote": "Passkey {{name}} added.",
+      "removedNote": "Passkey {{name}} removed."
+    }
+  }
 }

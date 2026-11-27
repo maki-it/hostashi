@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { approveDeviceLogin, deviceMessage, getDeviceLogin, normalizeCode, type DeviceLogin } from "./device";
 import { GrantFields, grantReady, useGrant } from "./TokenGrant";
 import { Button, Card, Field, Notice, PageHead, RelTime } from "./ui";
@@ -9,6 +10,7 @@ import { Button, Card, Field, Notice, PageHead, RelTime } from "./ui";
 // The CLI then gets an API token with the scopes, sites and lifetime chosen
 // here.
 export function Device({ code: initial }: { code: string }) {
+  const { t } = useTranslation();
   const [code, setCode] = useState(normalizeCode(initial));
   const [login, setLogin] = useState<DeviceLogin | null>(null);
   const [done, setDone] = useState<"approved" | "denied" | null>(null);
@@ -39,17 +41,17 @@ export function Device({ code: initial }: { code: string }) {
 
   return (
     <>
-      <PageHead title="Log in a device" description="Approve the code that hostashi login shows in your terminal." />
+      <PageHead title={t("tokens.device.title")} description={t("tokens.device.intro")} />
       {done === "approved" && (
-        <Notice tone="ok" title="Login approved">
-          Return to your terminal: the CLI has its token within a few seconds. You can see and revoke the token under Your account.
+        <Notice tone="ok" title={t("tokens.device.approved")}>
+          {t("tokens.device.approvedText")}
         </Notice>
       )}
-      {done === "denied" && <Notice tone="info" title="Login denied. The CLI gets no token." />}
+      {done === "denied" && <Notice tone="info" title={t("tokens.device.denied")} />}
       {done === null && login === null && (
-        <Card title="Code">
+        <Card title={t("tokens.device.code")}>
           <form className="ui-stack" onSubmit={submit}>
-            <Field label="Code from the terminal" hint="Eight letters, for example WDJB-MJHT.">
+            <Field label={t("tokens.device.codeLabel")} hint={t("tokens.device.codeHint")}>
               <input
                 className="ui-input"
                 value={code}
@@ -63,7 +65,7 @@ export function Device({ code: initial }: { code: string }) {
             {error && <Notice tone="err" title={error} />}
             <div className="ui-row">
               <Button type="submit" variant="primary" disabled={busy || code.trim() === ""}>
-                {busy ? "Looking up…" : "Continue"}
+                {busy ? t("tokens.device.lookingUp") : t("common.actions.continue")}
               </Button>
             </div>
           </form>
@@ -75,6 +77,7 @@ export function Device({ code: initial }: { code: string }) {
 }
 
 function Approve({ login, onDone }: { login: DeviceLogin; onDone: (d: "approved" | "denied") => void }) {
+  const { t } = useTranslation();
   const { scopes, sites, error: loadError, grant, setGrant } = useGrant();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -103,7 +106,7 @@ function Approve({ login, onDone }: { login: DeviceLogin; onDone: (d: "approved"
   }
 
   return (
-    <Card title={"Login " + login.userCode}>
+    <Card title={t("tokens.device.login", { code: login.userCode })}>
       <form
         className="ui-stack"
         onSubmit={(e) => {
@@ -112,26 +115,26 @@ function Approve({ login, onDone }: { login: DeviceLogin; onDone: (d: "approved"
         }}
       >
         <dl className="ui-facts">
-          <dt>Device</dt>
+          <dt>{t("tokens.device.device")}</dt>
           <dd>{login.client}</dd>
-          <dt>Asked from</dt>
+          <dt>{t("tokens.device.from")}</dt>
           <dd>{login.ip}</dd>
-          <dt>Asked</dt>
+          <dt>{t("tokens.device.asked")}</dt>
           <dd>
             <RelTime iso={login.createdAt} />
           </dd>
         </dl>
-        <Notice tone="warn" title="Approve only a login you started yourself">
-          Whoever started it gets an API token for your account. If you did not just run hostashi login, deny it.
+        <Notice tone="warn" title={t("tokens.device.warnTitle")}>
+          {t("tokens.device.warnText")}
         </Notice>
         <GrantFields scopes={loadError ? [] : scopes} sites={sites} grant={grant} onChange={setGrant} />
         {error && <Notice tone="err" title={error} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || !grantReady(grant)}>
-            Approve
+            {t("tokens.device.approve")}
           </Button>
           <Button type="button" disabled={busy} onClick={() => void answer(false)}>
-            Deny
+            {t("tokens.device.deny")}
           </Button>
         </div>
       </form>

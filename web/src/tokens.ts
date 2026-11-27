@@ -4,6 +4,7 @@
 // listing and revoking them needs a browser session; a token cannot do it.
 
 import { ApiError, request } from "./api";
+import { areaErrorText } from "./i18n";
 
 export type APIToken = {
   id: number;
@@ -61,24 +62,11 @@ export function tokenState(t: APIToken, now: number): TokenState {
   return left <= soon ? "expires_soon" : "active";
 }
 
+/** tokenMessage explains an error of the token forms in the current language. */
 export function tokenMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case "too_many_tokens":
-        return "You have 100 working API tokens, the most there can be. Revoke one first.";
-      case "second_factor_required":
-        return "Set up a second factor (TOTP or a passkey) before you create a token.";
-      case "not_found":
-        return "This token does not exist any more. Reload the page.";
-      case "invalid_argument":
-        // "auth: invalid IP allowlist: …" -> "…"
-        return err.message.replace(/^auth: [^:]+: /, "");
-      case "forbidden":
-        return "Only admins can change this.";
-    }
-    return err.message;
-  }
-  return "The server is not reachable.";
+  // "auth: invalid IP allowlist: …" -> "…", the server's English reason.
+  if (err instanceof ApiError && err.code === "invalid_argument") return err.message.replace(/^auth: [^:]+: /, "");
+  return areaErrorText("tokens.errors", err);
 }
 
 // The addresses API tokens may be used from (ADR-0018). It is one list for

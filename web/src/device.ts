@@ -4,6 +4,7 @@
 // code that "hostashi login" shows.
 
 import { ApiError, request } from "./api";
+import { areaErrorText } from "./i18n";
 
 export type DeviceLogin = {
   userCode: string;
@@ -29,19 +30,8 @@ export function normalizeCode(s: string): string {
   return c.length === 8 ? c.slice(0, 4) + "-" + c.slice(4) : c;
 }
 
+/** deviceMessage explains an error of the device login in the current language. */
 export function deviceMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case "not_found":
-        return "No login is waiting for this code. Check it, or run hostashi login again: a code is valid for ten minutes.";
-      case "rate_limited":
-        return "Too many wrong codes. Wait a few minutes and try again.";
-      case "invalid_argument":
-        return err.message;
-      case "too_many_tokens":
-        return "You have too many API tokens. Revoke one first.";
-    }
-    return err.message;
-  }
-  return "The server is not reachable.";
+  if (err instanceof ApiError && err.code === "invalid_argument") return err.message;
+  return areaErrorText("tokens.device.errors", err);
 }

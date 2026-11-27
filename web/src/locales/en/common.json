@@ -1,7 +1,10 @@
 {
   "actions": {
     "back": "Back",
-    "tryAgain": "Try again"
+    "tryAgain": "Try again",
+    "cancel": "Cancel",
+    "continue": "Continue",
+    "save": "Save"
   },
   "roles": {
     "admin": "admin",
@@ -15,5 +18,17 @@
     "generic": "Something went wrong. Try again.",
     "unknown": "Something went wrong ({{code}}). Try again.",
     "unreachable": "The server is not reachable."
+  },
+  "status": {
+    "loading": "Loading…",
+    "saving": "Saving…",
+    "copied": "Copied.",
+    "never": "Never"
+  },
+  "andMore": "and {{count}} more",
+  "form": {
+    "appliesAtOnce": "Applies at once",
+    "unsaved": "Unsaved changes",
+    "noChanges": "No changes"
   }
 }

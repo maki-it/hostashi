@@ -92,4 +92,17 @@ export function apiErrorText(err: unknown): string {
   return i18n.t("common.errors.generic");
 }
 
+/**
+ * areaErrorText is apiErrorText with texts of a page first: a page whose
+ * codes mean something special there keeps them under <prefix>.<code>, for
+ * example account.email.errors.rate_limited.
+ */
+export function areaErrorText(prefix: string, err: unknown): string {
+  if (err instanceof ApiError) {
+    const key = `${prefix}.${err.code}`;
+    if (i18n.exists(key)) return (i18n.t as (k: string) => string)(key);
+  }
+  return apiErrorText(err);
+}
+
 export default i18n;
