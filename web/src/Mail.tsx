@@ -149,7 +149,7 @@ function Editor({ settings, onSaved }: { settings: MailSettings; onSaved: (s: Ma
                 />
               </Field>
               <Field label="Encryption" hint="Only encrypted connections. The certificate is always checked.">
-                <select className="ui-input" value={d.tls} onChange={(e) => setTLS(e.target.value as TLSMode)}>
+                <select className="ui-select" value={d.tls} onChange={(e) => setTLS(e.target.value as TLSMode)}>
                   <option value="starttls">STARTTLS (port 587)</option>
                   <option value="tls">TLS (port 465)</option>
                 </select>

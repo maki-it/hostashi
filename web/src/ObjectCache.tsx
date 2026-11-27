@@ -120,7 +120,7 @@ export function ObjectCacheSettings({ site, canSize }: Props) {
         {site.disabled && !c.enabled && <Notice tone="warn" title="Enable the site first to turn the cache on." />}
         {c.status?.paused && <Notice tone="warn" title="The site is disabled, so its cache is stopped. It starts again with the site." />}
         {canSize && (
-          <form className="ui-row" onSubmit={saveSize} noValidate>
+          <form className="ui-row ui-row-end" onSubmit={saveSize} noValidate>
             <Field label="Size">
               <select className="ui-select" value={size} onChange={(e) => setSize(Number(e.target.value))}>
                 {sizeChoices(c).map((n) => (
