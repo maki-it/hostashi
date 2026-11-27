@@ -5,6 +5,7 @@
 import type { Catalog } from "../en";
 import account from "./account.json";
 import auth from "./auth.json";
+import backups from "./backups.json";
 import common from "./common.json";
 import errors from "./errors.json";
 import overview from "./overview.json";
@@ -12,6 +13,6 @@ import shell from "./shell.json";
 import tokens from "./tokens.json";
 import ui from "./ui.json";
 
-const de: Catalog = { account, auth, common, errors, overview, shell, tokens, ui };
+const de: Catalog = { account, auth, backups, common, errors, overview, shell, tokens, ui };
 
 export default de;
