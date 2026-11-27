@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { CronSettings } from "./Cron";
 import type { CronJob, CronList } from "./cron";
 import type { Site } from "./sites";
+import { setLanguage } from "./i18n";
 import { mockFetch } from "./test-utils";
 
 const site: Site = {
@@ -336,5 +337,18 @@ describe("CronSettings", () => {
     await user.click(await screen.findByRole("button", { name: "More actions for cron job 1" }));
     expect(screen.queryByRole("menuitem", { name: "Show output" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Not run yet/ })).not.toBeInTheDocument();
+  });
+
+  it("speaks German, dates included", async () => {
+    setLanguage("de");
+    mockFetch({ ["GET " + base]: { body: { jobs: [wpCron], statusKnown: true } } });
+    render(<CronSettings site={site} />);
+    const one = within(await screen.findByLabelText("Details von Cron-Job 1"));
+    // 1795600000 is 25 November 2026, 09:46 UTC: the 25th or 26th in any time zone.
+    expect(one.getByText(/^Erfolg: 2[56]\.11\.2026, \d\d:\d\d$/)).toBeInTheDocument();
+    expect(one.getByText("Limits: 60 min, Priorität 10")).toBeInTheDocument();
+    expect(screen.getByText("alle 5 Minuten")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Nächster Lauf" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cron-Job hinzufügen" })).toBeInTheDocument();
   });
 });

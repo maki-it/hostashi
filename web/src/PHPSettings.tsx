@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   fieldOfIni,
   fromForm,
@@ -32,12 +33,11 @@ function timezones(): string[] {
   }
 }
 
-const unitWord = { MiB: " MiB", s: " s", "": "" };
-
 // PHPSettingsCard edits a site's PHP ini settings from the allowlist
 // (ADR-0049). Everyone who may change the site's PHP version may change
 // these. An empty field is the Hostashi default.
 export function PHPSettingsCard({ site }: { site: Site }) {
+  const { t } = useTranslation();
   const [view, setView] = useState<PHPSettingsView | null>(null);
   const [form, setForm] = useState<PHPForm | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -64,15 +64,15 @@ export function PHPSettingsCard({ site }: { site: Site }) {
 
   if (loadError) {
     return (
-      <Card title="PHP settings">
+      <Card title={t("siteApp.php.title")}>
         <Notice tone="err" title={loadError} />
       </Card>
     );
   }
   if (!view || !form) {
     return (
-      <Card title="PHP settings">
-        <p aria-busy="true">Loading…</p>
+      <Card title={t("siteApp.php.title")}>
+        <p aria-busy="true">{t("common.status.loading")}</p>
       </Card>
     );
   }
@@ -92,7 +92,7 @@ export function PHPSettingsCard({ site }: { site: Site }) {
     setError("");
     setDone("");
     if (Object.keys(errs).length > 0) {
-      setError("Some values are out of range. Check the marked fields.");
+      setError(t("siteApp.php.outOfRange"));
       return;
     }
     setBusy(true);
@@ -113,7 +113,7 @@ export function PHPSettingsCard({ site }: { site: Site }) {
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    void save(form!, "Saved. PHP and nginx use the new values now.");
+    void save(form!, t("siteApp.php.saved"));
   }
 
   const empty = toForm({});
@@ -127,8 +127,12 @@ export function PHPSettingsCard({ site }: { site: Site }) {
     return (
       <Field
         key={key}
-        label={`${f.label}${f.unit ? ` (${f.unit})` : ""}`}
-        hint={`${f.ini}, ${b.min} to ${b.max}${unitWord[f.unit]}. Default ${placeholder(key, d)}${unitWord[f.unit]}.`}
+        label={f.unit ? t("siteApp.php.fieldLabel", { label: f.label, unit: f.unit }) : f.label}
+        hint={
+          f.unit
+            ? t("siteApp.php.numberHintUnit", { ini: f.ini, min: b.min, max: b.max, default: placeholder(key, d), unit: f.unit })
+            : t("siteApp.php.numberHint", { ini: f.ini, min: b.min, max: b.max, default: placeholder(key, d) })
+        }
         {...errProp(key)}
       >
         <input className="ui-input" inputMode="numeric" value={form[key]} placeholder={placeholder(key, d)} onChange={(e) => set(key, e.target.value)} />
@@ -139,41 +143,37 @@ export function PHPSettingsCard({ site }: { site: Site }) {
   const onOffField = (key: "displayErrors" | "shortOpenTag", label: string, ini: string) => (
     <Field label={label} hint={ini} {...errProp(key)}>
       <select className="ui-select" value={form[key]} onChange={(e) => set(key, e.target.value)}>
-        <option value="">Default ({d[key] ? "On" : "Off"})</option>
-        <option value="on">On</option>
-        <option value="off">Off</option>
+        <option value="">{t("siteApp.php.defaultValue", { value: d[key] ? t("siteApp.php.on") : t("siteApp.php.off") })}</option>
+        <option value="on">{t("siteApp.php.on")}</option>
+        <option value="off">{t("siteApp.php.off")}</option>
       </select>
     </Field>
   );
 
   return (
-    <Card title="PHP settings">
+    <Card title={t("siteApp.php.title")}>
       <form className="ui-stack" onSubmit={submit} noValidate>
-        <p className="ui-hint">
-          Leave a field empty for the Hostashi default. These are defaults for the site: its own .user.ini or ini_set() can still
-          change them. The server's limits still apply: nginx takes no request larger than the largest request and waits no longer
-          than the execution time, and the site's memory limit stays the ceiling.
-        </p>
+        <p className="ui-hint">{t("siteApp.php.intro")}</p>
         <fieldset className="ui-fieldset ui-group ui-stack" disabled={busy}>
-          <legend>Limits</legend>
+          <legend>{t("siteApp.php.limits")}</legend>
           <div className="ui-form-grid">
             {numberFields.filter((f) => f.group === "limits").map((f) => numberField(f.key))}
           </div>
           {memWarn && <Notice tone="warn" title={memWarn} />}
         </fieldset>
         <fieldset className="ui-fieldset ui-group ui-stack" disabled={busy}>
-          <legend>Behaviour</legend>
+          <legend>{t("siteApp.php.behaviour")}</legend>
           <div className="ui-form-grid">
-            <Field label="Time zone" hint={`date.timezone, an IANA name. Default ${d.timezone}.`} {...errProp("timezone")}>
+            <Field label={t("siteApp.php.timezone")} hint={t("siteApp.php.timezoneHint", { zone: d.timezone })} {...errProp("timezone")}>
               <input className="ui-input" list="php-timezones" value={form.timezone} placeholder={d.timezone} autoComplete="off" onChange={(e) => set("timezone", e.target.value)} />
             </Field>
             <Field
-              label="Error reporting"
-              hint="error_reporting. Production reports all but deprecations, development everything."
+              label={t("siteApp.php.errorReporting")}
+              hint={t("siteApp.php.errorReportingHint")}
               {...errProp("errorReporting")}
             >
               <select className="ui-select" value={form.errorReporting} onChange={(e) => set("errorReporting", e.target.value)}>
-                <option value="">Default ({presetLabels[d.errorReporting] ?? d.errorReporting})</option>
+                <option value="">{t("siteApp.php.defaultValue", { value: presetLabels[d.errorReporting] ?? d.errorReporting })}</option>
                 {view.errorReportingPresets.map((p) => (
                   <option key={p} value={p}>
                     {presetLabels[p] ?? p}
@@ -181,8 +181,8 @@ export function PHPSettingsCard({ site }: { site: Site }) {
                 ))}
               </select>
             </Field>
-            {onOffField("displayErrors", "Show errors in pages", "display_errors. Keep it off on a live site.")}
-            {onOffField("shortOpenTag", "Short open tag", "short_open_tag")}
+            {onOffField("displayErrors", t("siteApp.php.displayErrors"), t("siteApp.php.displayErrorsHint"))}
+            {onOffField("shortOpenTag", t("siteApp.php.shortOpenTag"), "short_open_tag")}
             {numberField("sessionGcMaxlifetime")}
           </div>
           <datalist id="php-timezones">
@@ -195,10 +195,10 @@ export function PHPSettingsCard({ site }: { site: Site }) {
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || !dirty}>
-            Save PHP settings
+            {t("siteApp.php.save")}
           </Button>
-          <Button disabled={busy || allDefault} onClick={() => void save(empty, "All PHP settings are back to the defaults.")}>
-            Reset all to defaults
+          <Button disabled={busy || allDefault} onClick={() => void save(empty, t("siteApp.php.resetDone"))}>
+            {t("siteApp.php.reset")}
           </Button>
           <UnsavedNote dirty={dirty} />
         </div>

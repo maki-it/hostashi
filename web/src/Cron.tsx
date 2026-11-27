@@ -2,6 +2,8 @@
 
 import { DotsThree, Pause, PencilSimple, Play, Plus, Terminal, Trash, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import i18n from "./i18n";
 import {
   commandProblem,
   createCron,
@@ -34,6 +36,7 @@ import { Badge, Button, Card, CopyButton, Field, Menu, Notice, RowActions, type 
 // CronSettings lists the cron jobs of a site and adds, changes, pauses,
 // runs and deletes them. Jobs run as the site user in its home.
 export function CronSettings({ site }: { site: Site }) {
+  const { t } = useTranslation();
   const [list, setList] = useState<CronList | null>(null);
   const [loadError, setLoadError] = useState("");
   const [adding, setAdding] = useState(false);
@@ -57,8 +60,8 @@ export function CronSettings({ site }: { site: Site }) {
   const running = list?.jobs.some((j) => j.status?.running) ?? false;
   useEffect(() => {
     if (!running) return;
-    const t = setInterval(() => void load(), 5000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => void load(), 5000);
+    return () => clearInterval(timer);
   }, [running, load]);
 
   const changed = async (msg: string) => {
@@ -68,7 +71,7 @@ export function CronSettings({ site }: { site: Site }) {
 
   return (
     <Card
-      title="Cron jobs"
+      title={t("cron.title")}
       actions={
         list && !adding && list.jobs.length < maxCronJobs ? (
           <Button
@@ -79,54 +82,51 @@ export function CronSettings({ site }: { site: Site }) {
               setAdding(true);
             }}
           >
-            Add cron job
+            {t("cron.add")}
           </Button>
         ) : undefined
       }
     >
       <div className="ui-stack">
-        <p className="ui-flush">
-          Each job runs one command line as the user {site.name} in its home directory, with lower priority than the site. A “%” is passed to
-          the shell as written, unlike in a crontab.
-        </p>
-        {site.disabled && <Notice tone="warn" title="The site is disabled: its cron jobs do not run until it is enabled." />}
+        <p className="ui-flush">{t("cron.intro", { user: site.name })}</p>
+        {site.disabled && <Notice tone="warn" title={t("cron.siteDisabled")} />}
         {!list ? (
           loadError ? (
             <Notice tone="err" title={loadError} />
           ) : (
-            <p aria-busy="true">Loading cron jobs…</p>
+            <p aria-busy="true">{t("cron.loading")}</p>
           )
         ) : (
           <>
             {loadError && <Notice tone="err" title={loadError} />}
             {adding && (
               <JobForm
-                title="New cron job"
-                submitLabel="Add cron job"
+                title={t("cron.newTitle")}
+                submitLabel={t("cron.add")}
                 onCancel={() => setAdding(false)}
                 onSubmit={async (input) => {
                   await createCron(site.name, input);
                   setAdding(false);
-                  await changed(input.paused ? "Cron job added, paused." : "Cron job added.");
+                  await changed(input.paused ? t("cron.addedPaused") : t("cron.added"));
                 }}
               />
             )}
             {list.jobs.length === 0 ? (
-              <p className="ui-hint ui-flush">No cron jobs yet.</p>
+              <p className="ui-hint ui-flush">{t("cron.none")}</p>
             ) : (
               <>
-                {!list.statusKnown && <p className="ui-hint ui-flush">Last and next runs are not known right now: the server did not answer.</p>}
+                {!list.statusKnown && <p className="ui-hint ui-flush">{t("cron.statusUnknown")}</p>}
                 {/* No scroll box around the table: it would cut off the More menu. */}
                 <div>
-                  <table className="ui-table ui-table-actions-below" aria-label={"Cron jobs of " + site.name}>
+                  <table className="ui-table ui-table-actions-below" aria-label={t("cron.tableAria", { site: site.name })}>
                     <thead>
                       <tr>
-                        <th scope="col">Schedule</th>
-                        <th scope="col">Command</th>
-                        <th scope="col">Last run</th>
-                        <th scope="col">Next run</th>
+                        <th scope="col">{t("cron.columns.schedule")}</th>
+                        <th scope="col">{t("cron.columns.command")}</th>
+                        <th scope="col">{t("cron.columns.lastRun")}</th>
+                        <th scope="col">{t("cron.columns.nextRun")}</th>
                         <th scope="col">
-                          <span className="ui-sr-only">Actions</span>
+                          <span className="ui-sr-only">{t("cron.columns.actions")}</span>
                         </th>
                       </tr>
                     </thead>
@@ -140,7 +140,7 @@ export function CronSettings({ site }: { site: Site }) {
               </>
             )}
             {done && <Notice tone="ok" title={done} />}
-            {list.jobs.length >= maxCronJobs && <p className="ui-hint ui-flush">A site has at most {maxCronJobs} cron jobs.</p>}
+            {list.jobs.length >= maxCronJobs && <p className="ui-hint ui-flush">{t("cron.max", { max: maxCronJobs })}</p>}
           </>
         )}
       </div>
@@ -149,6 +149,7 @@ export function CronSettings({ site }: { site: Site }) {
 }
 
 function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (msg: string) => Promise<void> }) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
@@ -176,14 +177,14 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
       <tr>
         <td colSpan={5}>
           <JobForm
-            title={"Change cron job " + String(job.id)}
-            submitLabel="Save cron job"
+            title={t("cron.changeTitle", { id: job.id })}
+            submitLabel={t("cron.save")}
             initial={job}
             onCancel={() => setEditing(false)}
             onSubmit={async (input) => {
               await updateCron(site.name, job.id, input);
               setEditing(false);
-              await onChange("Cron job saved.");
+              await onChange(t("cron.saved"));
             }}
           />
         </td>
@@ -194,50 +195,48 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
   const run = () =>
     void act(async () => {
       await runCron(site.name, job.id);
-      return "The cron job started. Its result shows up under “Last run”.";
+      return t("cron.started");
     });
   const togglePause = () =>
     void act(async () => {
       await updateCron(site.name, job.id, { ...inputOf(job), paused: !job.paused });
-      return job.paused ? "Cron job resumed." : "Cron job paused. It runs only when started by hand.";
+      return job.paused ? t("cron.resumed") : t("cron.pausedDone");
     });
   const hasRun = Boolean(st?.lastStart);
   const more: MenuItem[] = [
     ...(hasRun
-      ? [{ label: showOutput ? "Hide output" : "Show output", icon: <Terminal size={16} aria-hidden="true" />, onSelect: () => setShowOutput(!showOutput) }]
+      ? [{ label: showOutput ? t("cron.menu.hideOutput") : t("cron.menu.showOutput"), icon: <Terminal size={16} aria-hidden="true" />, onSelect: () => setShowOutput(!showOutput) }]
       : []),
-    { label: "Change", icon: <PencilSimple size={16} aria-hidden="true" />, onSelect: () => setEditing(true) },
-    { label: job.paused ? "Resume" : "Pause", icon: job.paused ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />, onSelect: togglePause },
-    { label: "Delete", icon: <Trash size={16} aria-hidden="true" />, danger: true, onSelect: () => setConfirming(true) },
+    { label: t("cron.menu.change"), icon: <PencilSimple size={16} aria-hidden="true" />, onSelect: () => setEditing(true) },
+    { label: job.paused ? t("cron.menu.resume") : t("cron.menu.pause"), icon: job.paused ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />, onSelect: togglePause },
+    { label: t("cron.menu.delete"), icon: <Trash size={16} aria-hidden="true" />, danger: true, onSelect: () => setConfirming(true) },
   ];
 
   return (
     <>
-      <tr aria-label={"Details of cron job " + String(job.id)}>
+      <tr aria-label={t("cron.detailsAria", { id: job.id })}>
         <td>
           <div className="ui-stack-tight">
             <span className="ui-row ui-row-tight">
               <code>{job.schedule}</code>
-              {job.paused && <Badge tone="warn">Paused</Badge>}
+              {job.paused && <Badge tone="warn">{t("cron.paused")}</Badge>}
             </span>
             {words && <span className="ui-hint">{words}</span>}
           </div>
         </td>
-        <td data-label="Command">
+        <td data-label={t("cron.columns.command")}>
           <div className="ui-stack-tight">
             <code className="ui-cron-cmd">{job.command}</code>
-            <span className="ui-hint">
-              Limits: {limit} min, priority {job.nice ?? defaultNice}
-            </span>
+            <span className="ui-hint">{t("cron.limits", { minutes: limit, nice: job.nice ?? defaultNice })}</span>
           </div>
         </td>
-        <td data-label="Last run">
+        <td data-label={t("cron.columns.lastRun")}>
           {st && st.result && st.lastStart && !st.running ? (
             <button
               type="button"
               className="ui-cron-last"
               aria-expanded={showOutput}
-              title={showOutput ? "Hide the output of this run" : "Show the output of this run"}
+              title={showOutput ? t("cron.hideRun") : t("cron.showRun")}
               onClick={() => setShowOutput(!showOutput)}
             >
               <Badge tone={lastRunTone(st)}>{lastRun(st)}</Badge>
@@ -245,23 +244,25 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
           ) : st ? (
             lastRun(st)
           ) : (
-            "Unknown"
+            t("cron.unknown")
           )}
         </td>
-        <td data-label="Next run">{job.paused ? "Paused" : site.disabled ? "Site disabled" : st?.next ? formatTime(st.next) : st ? "Not planned" : "Unknown"}</td>
+        <td data-label={t("cron.columns.nextRun")}>
+          {job.paused ? t("cron.paused") : site.disabled ? t("cron.nextSiteDisabled") : st?.next ? formatTime(st.next) : st ? t("cron.notPlanned") : t("cron.unknown")}
+        </td>
         <td data-actions="">
           <RowActions>
             <Button small icon={<Play size={14} aria-hidden="true" />} disabled={busy || site.disabled || st?.running === true} onClick={run}>
-              Run now
+              {t("cron.runNow")}
             </Button>
             <Menu
-              label={"Actions for cron job " + String(job.id)}
-              buttonLabel={"More actions for cron job " + String(job.id)}
+              label={t("cron.actionsLabel", { id: job.id })}
+              buttonLabel={t("cron.moreLabel", { id: job.id })}
               buttonClass="ui-btn ui-btn-sm"
               button={
                 <>
                   <DotsThree size={14} aria-hidden="true" />
-                  More
+                  {t("cron.more")}
                 </>
               }
               items={more}
@@ -280,9 +281,9 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
         <tr>
           <td colSpan={5}>
             {confirming && (
-              <div className="ui-row" role="alertdialog" aria-label={"Delete cron job " + String(job.id)}>
+              <div className="ui-row" role="alertdialog" aria-label={t("cron.deleteAria", { id: job.id })}>
                 <span>
-                  Delete the cron job <code>{job.command}</code>?
+                  <Trans i18nKey="cron.deleteConfirm" values={{ command: job.command }} components={{ code: <code /> }} />
                 </span>
                 <Button
                   variant="danger"
@@ -290,14 +291,14 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
                   onClick={() =>
                     void act(async () => {
                       await deleteCron(site.name, job.id);
-                      return "Cron job deleted.";
+                      return t("cron.deleted");
                     })
                   }
                 >
-                  Delete cron job
+                  {t("cron.deleteButton")}
                 </Button>
                 <Button disabled={busy} onClick={() => setConfirming(false)}>
-                  Cancel
+                  {t("common.actions.cancel")}
                 </Button>
               </div>
             )}
@@ -314,6 +315,7 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
 // scrolled to the end where errors usually are. It loads again when a new
 // run has ended.
 function JobOutput({ site, job, onClose }: { site: Site; job: CronJob; onClose: () => void }) {
+  const { t } = useTranslation();
   const [out, setOut] = useState<CronOutput | null>(null);
   const [error, setError] = useState("");
   const [wrap, setWrap] = useState(true);
@@ -340,7 +342,7 @@ function JobOutput({ site, job, onClose }: { site: Site; job: CronJob; onClose: 
 
   const lines = out?.lines ?? [];
   const text = lines.join("\n");
-  const label = "Output of cron job " + String(job.id);
+  const label = t("cron.output.aria", { id: job.id });
   const tone = lastRunTone(st);
   const took = st?.lastStart && st.lastEnd && st.lastEnd >= st.lastStart ? runDuration(st.lastEnd - st.lastStart) : "";
 
@@ -348,12 +350,12 @@ function JobOutput({ site, job, onClose }: { site: Site; job: CronJob; onClose: 
     <section className={"ui-cron-output ui-cron-output-" + tone} aria-label={label}>
       <header className="ui-cron-output-head">
         <div className="ui-stack-tight">
-          <strong>Output of the last run</strong>
+          <strong>{t("cron.output.title")}</strong>
           <span className="ui-hint">
             {[
-              st?.running ? "Running now" : lastRun(st),
-              took && "took " + took,
-              out?.ran && lines.length > 0 && `${lines.length} ${lines.length === 1 ? "line" : "lines"}${out.truncated ? " (the last ones)" : ""}`,
+              st?.running ? t("cron.last.running") : lastRun(st),
+              took && t("cron.output.took", { time: took }),
+              out?.ran && lines.length > 0 && (out.truncated ? t("cron.output.linesCut", { count: lines.length }) : t("cron.output.lines", { count: lines.length })),
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -362,12 +364,12 @@ function JobOutput({ site, job, onClose }: { site: Site; job: CronJob; onClose: 
         <span className="ui-row ui-row-tight">
           {lines.length > 0 && (
             <Button small aria-pressed={wrap} onClick={() => setWrap(!wrap)}>
-              Wrap lines
+              {t("cron.output.wrap")}
             </Button>
           )}
-          {text && <CopyButton text={text} label="Copy output" />}
+          {text && <CopyButton text={text} label={t("cron.output.copy")} />}
           <Button small icon={<X size={14} aria-hidden="true" />} onClick={onClose}>
-            Close
+            {t("cron.output.close")}
           </Button>
         </span>
       </header>
@@ -375,15 +377,15 @@ function JobOutput({ site, job, onClose }: { site: Site; job: CronJob; onClose: 
         <Notice tone="err" title={error} />
       ) : !out ? (
         <p aria-busy="true" className="ui-cron-output-empty">
-          Loading the output…
+          {t("cron.output.loading")}
         </p>
       ) : !out.ran ? (
-        <p className="ui-cron-output-empty">No output known: the job has not run since the server started or since it was last changed.</p>
+        <p className="ui-cron-output-empty">{t("cron.output.notRan")}</p>
       ) : lines.length === 0 ? (
-        <p className="ui-cron-output-empty">The last run wrote nothing.</p>
+        <p className="ui-cron-output-empty">{t("cron.output.empty")}</p>
       ) : (
         <div ref={box} className={"ui-cron-output-lines" + (wrap ? "" : " ui-cron-output-nowrap")} role="log" aria-label={label} tabIndex={0}>
-          {out.truncated && <div className="ui-cron-output-cut">Earlier lines are not shown.</div>}
+          {out.truncated && <div className="ui-cron-output-cut">{t("cron.output.cut")}</div>}
           <ol>
             {lines.map((l, i) => (
               <li key={i} className={lineClass(l)}>
@@ -393,7 +395,7 @@ function JobOutput({ site, job, onClose }: { site: Site; job: CronJob; onClose: 
           </ol>
         </div>
       )}
-      <p className="ui-hint ui-flush">Standard output and errors of the job, at most the last 200 lines, as long as the system journal keeps them.</p>
+      <p className="ui-hint ui-flush">{t("cron.output.footer")}</p>
     </section>
   );
 }
@@ -407,10 +409,11 @@ function lineClass(l: string): string | undefined {
 }
 
 function runDuration(s: number): string {
-  if (s < 60) return `${s} s`;
-  if (s < 3600) return s % 60 === 0 ? `${s / 60} min` : `${Math.floor(s / 60)} min ${s % 60} s`;
+  const t = i18n.t;
+  if (s < 60) return t("cron.duration.s", { s });
+  if (s < 3600) return s % 60 === 0 ? t("cron.duration.min", { min: s / 60 }) : t("cron.duration.minS", { min: Math.floor(s / 60), s: s % 60 });
   const m = Math.round(s / 60);
-  return m % 60 === 0 ? `${m / 60} h` : `${Math.floor(m / 60)} h ${m % 60} min`;
+  return m % 60 === 0 ? t("cron.duration.h", { h: m / 60 }) : t("cron.duration.hMin", { h: Math.floor(m / 60), min: m % 60 });
 }
 
 function JobForm({
@@ -426,6 +429,7 @@ function JobForm({
   onSubmit: (input: CronInput) => Promise<void>;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [schedule, setSchedule] = useState(initial?.schedule ?? "");
   const [command, setCommand] = useState(initial?.command ?? "");
   const [timeout, setTimeoutMin] = useState(
@@ -469,34 +473,34 @@ function JobForm({
     <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate aria-label={title}>
       <strong>{title}</strong>
       <Field
-        label="Schedule"
-        hint="Five cron fields (minute hour day-of-month month day-of-week), like */15 * * * *, or @hourly, @daily, @weekly, @monthly."
+        label={t("cron.form.schedule")}
+        hint={t("cron.form.scheduleHint")}
       >
         <input className="ui-input ui-mono" value={schedule} onChange={(e) => setSchedule(e.target.value)} autoComplete="off" spellCheck={false} />
       </Field>
-      {words && <p className="ui-hint ui-flush">Runs {words}, in the server's time zone.</p>}
-      <Field label="Command" hint="One line, run by the shell. For example: php htdocs/wp-cron.php">
+      {words && <p className="ui-hint ui-flush">{t("cron.form.runs", { words })}</p>}
+      <Field label={t("cron.form.command")} hint={t("cron.form.commandHint")}>
         <input className="ui-input ui-mono" value={command} onChange={(e) => setCommand(e.target.value)} autoComplete="off" spellCheck={false} />
       </Field>
       <div className="ui-narrow ui-stack">
-        <Field label="Time limit in minutes" hint={`A run that takes longer is stopped. 1 to ${maxTimeoutMin}.`}>
+        <Field label={t("cron.form.timeLimit")} hint={t("cron.form.timeLimitHint", { max: maxTimeoutMin })}>
           <input className="ui-input" type="number" min={1} max={maxTimeoutMin} value={timeout} onChange={(e) => setTimeoutMin(e.target.value)} />
         </Field>
-        <Field label="Priority (nice)" hint="0 to 19; higher numbers leave more CPU to the site.">
+        <Field label={t("cron.form.priority")} hint={t("cron.form.priorityHint")}>
           <input className="ui-input" type="number" min={0} max={19} value={nice} onChange={(e) => setNice(e.target.value)} />
         </Field>
       </div>
       <label className="ui-check">
         <input type="checkbox" checked={paused} onChange={(e) => setPaused(e.target.checked)} />
-        Paused: runs only when started by hand
+        {t("cron.form.paused")}
       </label>
       {error && <Notice tone="err" title={error} />}
       <div className="ui-row">
         <Button type="submit" variant="primary" disabled={busy}>
-          {busy ? "Saving…" : submitLabel}
+          {busy ? t("common.status.saving") : submitLabel}
         </Button>
         <Button disabled={busy} onClick={onCancel}>
-          Cancel
+          {t("common.actions.cancel")}
         </Button>
       </div>
     </form>

@@ -6,6 +6,7 @@
 // size, which counts against the site's memory limit.
 
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 import type { Tone } from "./ui/Badge";
 
 export type ObjectCacheStatus = { state: string; paused: boolean; usedBytes: number };
@@ -44,30 +45,26 @@ export function sizeChoices(c: Pick<ObjectCache, "memoryMb" | "minMb" | "maxMb" 
 export const wpConfig = (socket: string) => `define('WP_REDIS_SCHEME', 'unix');\ndefine('WP_REDIS_PATH', '${socket}');`;
 
 export function cacheState(c: ObjectCache): { word: string; tone: Tone } {
-  if (!c.enabled) return { word: "Off", tone: "off" };
-  if (!c.status) return { word: "Unknown", tone: "warn" };
-  if (c.status.paused) return { word: "Paused", tone: "off" };
-  if (c.status.state === "active") return { word: "Running", tone: "ok" };
-  if (c.status.state === "failed") return { word: "Failed", tone: "err" };
-  return { word: c.status.state || "Stopped", tone: "warn" };
+  if (!c.enabled) return { word: i18n.t("siteApp.objectCache.states.off"), tone: "off" };
+  if (!c.status) return { word: i18n.t("siteApp.objectCache.states.unknown"), tone: "warn" };
+  if (c.status.paused) return { word: i18n.t("siteApp.objectCache.states.paused"), tone: "off" };
+  if (c.status.state === "active") return { word: i18n.t("siteApp.objectCache.states.running"), tone: "ok" };
+  if (c.status.state === "failed") return { word: i18n.t("siteApp.objectCache.states.failed"), tone: "err" };
+  return { word: c.status.state || i18n.t("siteApp.objectCache.states.stopped"), tone: "warn" };
 }
 
 export function cacheMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case "object_cache_unavailable":
-        return "The object cache is not available on this server.";
       case "object_cache_off":
-        return "The object cache is off.";
       case "site_busy":
-        return "The site is being created, deleted or is disabled. Try again later.";
       case "forbidden":
-        return "Only administrators and managers can change the size.";
       case "not_found":
-        return "The site does not exist.";
+        return i18n.t(`siteApp.objectCache.errors.${err.code}`);
     }
-    if (err.status === 409 || err.status === 502) return "The cache did not start. The previous setting stays.";
+    if (err.status === 409 || err.status === 502) return i18n.t("siteApp.objectCache.errors.notStarted");
     return err.message;
   }
-  return "The request failed. Check the connection and try again.";
+  return i18n.t("siteApp.objectCache.errors.failed");
 }

@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { NodePage } from "./NodePage";
 import { AppCard, AppSettingsCard } from "./SiteNode";
 import type { Site } from "./sites";
+import { setLanguage } from "./i18n";
 import { mockFetch } from "./test-utils";
 
 const releases = [
@@ -73,6 +74,21 @@ describe("AppCard", () => {
     expect(calls.some((c) => c.method === "POST" && c.path.endsWith("/restart"))).toBe(true);
     expect(await screen.findByText("The app was restarted.")).toBeInTheDocument();
     expect(onChange).toHaveBeenCalled();
+  });
+
+  it("speaks German", async () => {
+    setLanguage("de");
+    const user = userEvent.setup();
+    mockFetch({
+      "GET /api/v1/sites/shop/app": { body: { state: "active", subState: "running", restarts: 2, usedBytes: 50 * 1024 * 1024, since: "" } },
+      "POST /api/v1/sites/shop/app/stop": { body: { state: "inactive", subState: "dead", restarts: 0, usedBytes: 0, since: "" } },
+    });
+    render(<AppCard site={site()} onChange={async () => {}} />);
+    expect(await screen.findByText("Läuft")).toBeInTheDocument();
+    expect(screen.getByText("Neustarts nach Absturz")).toBeInTheDocument();
+    expect(screen.getByText("50 MiB")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Stoppen" }));
+    expect(await screen.findByText("Die App wurde gestoppt.")).toBeInTheDocument();
   });
 
   it("cannot start without a start command and points to the log after a crash", async () => {

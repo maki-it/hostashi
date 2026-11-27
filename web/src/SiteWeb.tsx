@@ -5,6 +5,7 @@
 
 import { WordPressCard } from "./WordPress";
 import { useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { formatHash } from "./routes";
 import { EnvCard } from "./SiteEnv";
 import { AppCard, AppSettingsCard } from "./SiteNode";
@@ -100,6 +101,7 @@ export function SiteWebSettings({ site, php, onChange, admin = false, staff = fa
 }
 
 function TypeCard({ site, php, onChange }: Props) {
+  const { t } = useTranslation();
   const current = siteType(site) === "php" ? "php" : "static";
   const [kind, setKind] = useState<"static" | "php">(current);
   const newest = [...(php?.installed ?? [])].reverse().find((v) => !php?.legacy.includes(v)) ?? "";
@@ -114,7 +116,7 @@ function TypeCard({ site, php, onChange }: Props) {
   async function save(e: FormEvent) {
     e.preventDefault();
     if (kind === "php" && !version) {
-      setError("No PHP version is installed. Install one under PHP first.");
+      setError(t("siteApp.web.type.noVersion"));
       return;
     }
     setBusy(true);
@@ -123,7 +125,7 @@ function TypeCard({ site, php, onChange }: Props) {
     try {
       await setPHP(site.name, target);
       await onChange();
-      setDone(target ? `${site.name} is a PHP site with PHP ${target} now.` : `${site.name} is a static site now. Its PHP pool is stopped.`);
+      setDone(target ? t("siteApp.web.type.nowPHP", { site: site.name, version: target }) : t("siteApp.web.type.nowStatic", { site: site.name }));
     } catch (err) {
       setError(siteMessage(err));
     } finally {
@@ -132,11 +134,11 @@ function TypeCard({ site, php, onChange }: Props) {
   }
 
   return (
-    <Card title="Site type">
+    <Card title={t("siteApp.web.type.title")}>
       <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate>
         <SiteTypeChoice value={kind} onChange={setKind} name={`${site.name}-type`} disabled={busy} />
         {kind === "php" && (
-          <Field label="PHP version">
+          <Field label={t("siteApp.web.type.phpVersion")}>
             <select className="ui-select" value={version} onChange={(e) => setVersion(e.target.value)}>
               <PHPOptions php={php} current={site.php} withoutNone />
             </select>
@@ -144,19 +146,17 @@ function TypeCard({ site, php, onChange }: Props) {
         )}
         {kind !== current && (
           <p className="ui-hint ui-flush">
-            {kind === "static"
-              ? "Files, databases, cron jobs, SSH logins and backups stay. Only the PHP pool is stopped; .php files are no longer run or sent. Your PHP settings are kept for a switch back."
-              : "Files, databases, cron jobs, SSH logins and backups stay. The site gets its own PHP pool."}
+            {kind === "static" ? t("siteApp.web.type.toStatic") : t("siteApp.web.type.toPHP")}
           </p>
         )}
         <p className="ui-hint ui-flush">
-          An administrator or manager can change the site to other types. <a href={formatHash({ page: "php" })}>Install PHP versions</a>
+          {t("siteApp.web.type.staffOnly")} <a href={formatHash({ page: "php" })}>{t("siteApp.web.type.installPHP")}</a>
         </p>
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || unchanged}>
-            Save type
+            {t("siteApp.web.type.save")}
           </Button>
         </div>
       </form>
@@ -165,6 +165,7 @@ function TypeCard({ site, php, onChange }: Props) {
 }
 
 function WebRootCard({ site, onChange }: Omit<Props, "php">) {
+  const { t } = useTranslation();
   const web = site.web ?? { dir: "", spa: false, assetCache: false };
   const isStatic = siteType(site) === "static";
   const [dir, setDir] = useState(web.dir);
@@ -208,7 +209,7 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
         ...(cache ? { assetCacheSeconds: seconds, assetCacheExts: list } : pick(web)),
       });
       await onChange();
-      setDone(dir ? `The site serves htdocs/${dir} now.` : "The site serves htdocs now.");
+      setDone(dir ? t("siteApp.web.root.servesDir", { dir }) : t("siteApp.web.root.servesRoot"));
     } catch (err) {
       setError(siteMessage(err));
     } finally {
@@ -217,15 +218,11 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
   }
 
   return (
-    <Card title="Web root">
+    <Card title={t("siteApp.web.root.title")}>
       <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate>
         <Field
-          label="Folder"
-          hint={
-            "The folder the site serves, below htdocs. Leave it empty for htdocs itself, or enter for example dist, public or build." +
-            (isStatic ? "" : " Laravel and similar frameworks serve public.") +
-            " A folder that does not exist yet answers 404 until it is there."
-          }
+          label={t("siteApp.web.root.folder")}
+          hint={[t("siteApp.web.root.folderHint"), isStatic ? "" : t("siteApp.web.root.folderHintPHP"), t("siteApp.web.root.folderHintMissing")].filter(Boolean).join(" ")}
         >
           <div className="ui-input-prefix">
             <span className="ui-mono" aria-hidden="true">
@@ -235,37 +232,34 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
               className="ui-input ui-mono"
               value={dir}
               onChange={(e) => setDir(e.target.value.trim())}
-              placeholder="dist"
-              aria-label="Folder below htdocs"
+              placeholder={t("siteApp.web.root.folderPlaceholder")}
+              aria-label={t("siteApp.web.root.folderAria")}
               autoComplete="off"
               spellCheck={false}
             />
           </div>
         </Field>
         <fieldset className="ui-fieldset ui-stack-tight">
-          <legend>Options</legend>
+          <legend>{t("siteApp.web.root.options")}</legend>
           {isStatic && (
             <label className="ui-check ui-check-hint">
               <input type="checkbox" checked={spa} disabled={busy} onChange={(e) => setSpa(e.target.checked)} />
               <span>
-                Single-page app
-                <span className="ui-hint ui-flush">Addresses without a file get index.html instead of 404, for apps with their own routing (React, Vue, Svelte).</span>
+                {t("siteApp.web.root.spa")}
+                <span className="ui-hint ui-flush">{t("siteApp.web.root.spaHint")}</span>
               </span>
             </label>
           )}
           <label className="ui-check ui-check-hint">
             <input type="checkbox" checked={assets} disabled={busy} onChange={(e) => setAssets(e.target.checked)} />
             <span>
-              Cache assets in the browser
-              <span className="ui-hint ui-flush">
-                Browsers keep the listed file types for the chosen time without asking again. Turn it on only if file names or addresses change with
-                their content, as with most build tools and WordPress; otherwise visitors see old files after a deploy.
-              </span>
+              {t("siteApp.web.root.assets")}
+              <span className="ui-hint ui-flush">{t("siteApp.web.root.assetsHint")}</span>
             </span>
           </label>
           {assets && (
             <div className="ui-stack ui-indent">
-              <Field label="Cache time" hint="Between 1 minute and 365 days. Default: 30 days.">
+              <Field label={t("siteApp.web.root.cacheTime")} hint={t("siteApp.web.root.cacheTimeHint")}>
                 <div className="ui-row ui-row-tight">
                   <input
                     className="ui-input ui-input-num"
@@ -273,9 +267,9 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
                     min={1}
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    aria-label="Cache time"
+                    aria-label={t("siteApp.web.root.cacheTime")}
                   />
-                  <select className="ui-select" value={unit} onChange={(e) => setUnit(Number(e.target.value))} aria-label="Unit">
+                  <select className="ui-select" value={unit} onChange={(e) => setUnit(Number(e.target.value))} aria-label={t("siteApp.web.root.unit")}>
                     {assetCacheUnits.map((u) => (
                       <option key={u.value} value={u.value}>
                         {u.label}
@@ -284,7 +278,7 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
                   </select>
                 </div>
               </Field>
-              <Field label="File types" hint="Separated by spaces or commas, without the dot. HTML stays fresh unless you add html.">
+              <Field label={t("siteApp.web.root.fileTypes")} hint={t("siteApp.web.root.fileTypesHint")}>
                 <textarea
                   className="ui-input ui-textarea ui-mono"
                   value={exts}
@@ -304,7 +298,7 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
                     setExts(assetCacheDefaults.exts.join(" "));
                   }}
                 >
-                  Use the defaults
+                  {t("siteApp.web.root.defaults")}
                 </Button>
               </div>
             </div>
@@ -314,7 +308,7 @@ function WebRootCard({ site, onChange }: Omit<Props, "php">) {
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || unchanged}>
-            Save web root
+            {t("siteApp.web.root.save")}
           </Button>
         </div>
       </form>
