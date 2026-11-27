@@ -2,7 +2,9 @@
 
 import { ArrowLeft, Globe, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { CertificateCard } from "./Certificate";
+import i18n from "./i18n";
 import { parkedCertBase } from "./certs";
 import { deleteParked, listParked, parkedMessage, setParked, type ParkedDomain, type ParkedTLS } from "./parked";
 import { listPages, type StatusPage } from "./pages";
@@ -37,14 +39,17 @@ const parkedHash = (q?: Record<string, string>) => formatHash({ page: "parked", 
 type HTTPS = { tone: Tone; label: string; rank: number };
 
 function httpsOf(t: ParkedTLS): HTTPS {
-  if (!t.enabled) return { tone: "off", label: "Off", rank: 3 };
-  if (t.active) return { tone: "ok", label: "On", rank: 2 };
-  return t.error ? { tone: "err", label: "Waiting: the last attempt failed", rank: 0 } : { tone: "warn", label: "Waiting for the certificate", rank: 1 };
+  if (!t.enabled) return { tone: "off", label: i18n.t("parked.https.off"), rank: 3 };
+  if (t.active) return { tone: "ok", label: i18n.t("parked.https.on"), rank: 2 };
+  return t.error
+    ? { tone: "err", label: i18n.t("parked.https.failed"), rank: 0 }
+    : { tone: "warn", label: i18n.t("parked.https.waiting"), rank: 1 };
 }
 
 // Parked lists the parked domains and parks new ones. A parked domain shows
 // a parking page on every path; it is dropped when a site takes the domain.
 export function Parked({ query = new URLSearchParams(), onQuery = () => undefined }: QueryProps) {
+  const { t } = useTranslation();
   const [parked, setList] = useState<ParkedDomain[] | null>(null);
   const [pages, setPages] = useState<StatusPage[]>([]);
   const [loadError, setLoadError] = useState("");
@@ -98,7 +103,7 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
     try {
       await deleteParked(domain);
       setUnparking(null);
-      await changed(`${domain} is no longer parked.`);
+      await changed(t("parked.unpark.done", { domain }));
     } catch (err) {
       setError(parkedMessage(err));
     } finally {
@@ -109,20 +114,20 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
   const listLink = (
     <a className="ui-btn" href={parkedHash()}>
       <ArrowLeft size={16} aria-hidden="true" />
-      All parked domains
+      {t("parked.allLink")}
     </a>
   );
 
   if (!parked) {
     return (
       <>
-        <PageHead title="Parked domains" />
+        <PageHead title={t("parked.title")} />
         {loadError ? (
           <Notice tone="err" title={loadError}>
-            <Button onClick={() => void load()}>Try again</Button>
+            <Button onClick={() => void load()}>{t("common.actions.tryAgain")}</Button>
           </Notice>
         ) : (
-          <p aria-busy="true">Loading…</p>
+          <p aria-busy="true">{t("common.status.loading")}</p>
         )}
       </>
     );
@@ -133,16 +138,16 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
   const unparkDialog = unparking && (
     <section className="ui-card ui-card-body ui-stack" role="alertdialog" aria-labelledby="unpark-title">
       <h2 id="unpark-title" className="ui-flush">
-        Unpark {unparking}?
+        {t("parked.unpark.title", { domain: unparking })}
       </h2>
-      <p className="ui-flush">The web server stops answering for it and its certificate is removed.</p>
+      <p className="ui-flush">{t("parked.unpark.text")}</p>
       {error && <Notice tone="err" title={error} />}
       <div className="ui-row">
         <Button variant="danger" disabled={busy} onClick={() => void unpark(unparking)}>
-          Unpark {unparking}
+          {t("parked.unpark.confirm", { domain: unparking })}
         </Button>
         <Button disabled={busy} onClick={() => setUnparking(null)}>
-          Cancel
+          {t("common.actions.cancel")}
         </Button>
       </div>
     </section>
@@ -151,7 +156,7 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
   if (query.get("new") === "1") {
     return (
       <>
-        <PageHead title="Park a domain" description="A domain without a site shows a parking page on every path." actions={listLink} />
+        <PageHead title={t("parked.new.title")} description={t("parked.new.description")} actions={listLink} />
         <Card>
           <ParkForm pages={pages} onCancel={() => set({ new: "" })} onParked={changed} />
         </Card>
@@ -165,42 +170,42 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
     if (!p) {
       return (
         <>
-          <PageHead title="Parked domains" actions={listLink} />
-          <Notice tone="warn" title={`${editDomain} is not parked.`} />
+          <PageHead title={t("parked.title")} actions={listLink} />
+          <Notice tone="warn" title={t("parked.notParked", { domain: editDomain })} />
         </>
       );
     }
     return (
       <>
-        <PageHead title={p.domain} description={<>Parked <RelTime iso={p.createdAt} />.</>} actions={listLink} />
+        <PageHead title={p.domain} description={<Trans i18nKey="parked.parkedSince" components={{ time: <RelTime iso={p.createdAt} /> }} />} actions={listLink} />
         <TLSNotice tls={p.tls} />
-        <Card title="Page and HTTPS">
+        <Card title={t("parked.edit.card")}>
           <EditForm key={p.domain + p.updatedAt} parked={p} pages={pages} onCancel={() => set({ edit: "" })} onSaved={changed} />
         </Card>
         <CertificateCard
           base={parkedCertBase(p.domain)}
           name={p.domain}
           tls={p.tls}
-          offHint="turn HTTPS off above first"
+          offHint={t("parked.edit.certOffHint")}
           onChange={load}
         />
-        <Card title="Make a site">
+        <Card title={t("parked.edit.makeSite")}>
           <div className="ui-stack">
-            <p className="ui-flush">Creates a site for {p.domain}. The parking page ends when the site is live.</p>
+            <p className="ui-flush">{t("parked.edit.makeSiteText", { domain: p.domain })}</p>
             <div className="ui-row">
               <a className="ui-btn" href={newSiteHash(p.domain, p.tls.enabled)}>
-                Make a site
+                {t("parked.edit.makeSite")}
               </a>
             </div>
           </div>
         </Card>
         {unparkDialog || (
-          <Card title="Unpark">
+          <Card title={t("parked.edit.unpark")}>
             <div className="ui-stack">
-              <p className="ui-flush">The web server stops answering for {p.domain} and its certificate is removed.</p>
+              <p className="ui-flush">{t("parked.edit.unparkText", { domain: p.domain })}</p>
               <div className="ui-row">
                 <Button variant="danger" onClick={() => setUnparking(p.domain)}>
-                  Unpark {p.domain}
+                  {t("parked.unpark.confirm", { domain: p.domain })}
                 </Button>
               </div>
             </div>
@@ -213,7 +218,7 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
   const columns: Column<ParkedDomain>[] = [
     {
       key: "domain",
-      header: "Domain",
+      header: t("parked.columns.domain"),
       sortValue: (p) => p.domain,
       cell: (p) => (
         <span className="ui-cell-main">
@@ -221,10 +226,10 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
         </span>
       ),
     },
-    { key: "page", header: "Page", sortValue: (p) => pageName(p.page), cell: (p) => pageName(p.page) },
+    { key: "page", header: t("parked.columns.page"), sortValue: (p) => pageName(p.page), cell: (p) => pageName(p.page) },
     {
       key: "https",
-      header: "HTTPS",
+      header: t("parked.columns.https"),
       sortValue: (p) => httpsOf(p.tls).rank,
       cell: (p) => {
         const h = httpsOf(p.tls);
@@ -235,7 +240,7 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
             </span>
             {p.tls.active && p.tls.notAfter && (
               <p className="ui-hint ui-flush">
-                Certificate expires <RelTime iso={p.tls.notAfter} />
+                <Trans i18nKey="parked.https.expires" components={{ time: <RelTime iso={p.tls.notAfter} /> }} />
               </p>
             )}
             {h.rank === 0 && <p className="ui-hint ui-flush">{p.tls.error}</p>}
@@ -243,18 +248,18 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
         );
       },
     },
-    { key: "created", header: "Parked", sortValue: (p) => p.createdAt, cell: (p) => <RelTime iso={p.createdAt} /> },
+    { key: "created", header: t("parked.columns.created"), sortValue: (p) => p.createdAt, cell: (p) => <RelTime iso={p.createdAt} /> },
     {
       key: "actions",
-      header: "Actions",
+      header: t("parked.columns.actions"),
       srHeader: true,
       cell: (p) => (
         <RowActions>
-          <IconLink label={`Change ${p.domain}`} text="Change" icon={<PencilSimple size={16} />} href={parkedHash({ edit: p.domain })} />
-          <IconLink label={`Make a site of ${p.domain}`} text="Make site" icon={<Globe size={16} />} href={newSiteHash(p.domain, p.tls.enabled)} />
+          <IconLink label={t("parked.actions.changeLabel", { domain: p.domain })} text={t("parked.actions.change")} icon={<PencilSimple size={16} />} href={parkedHash({ edit: p.domain })} />
+          <IconLink label={t("parked.actions.makeSiteLabel", { domain: p.domain })} text={t("parked.actions.makeSite")} icon={<Globe size={16} />} href={newSiteHash(p.domain, p.tls.enabled)} />
           <IconButton
-            label={`Unpark ${p.domain}`}
-            text="Unpark" icon={<Trash size={16} />}
+            label={t("parked.actions.unparkLabel", { domain: p.domain })}
+            text={t("parked.actions.unpark")} icon={<Trash size={16} />}
             danger
             disabled={busy}
             onClick={() => {
@@ -276,12 +281,12 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
   return (
     <>
       <PageHead
-        title="Parked domains"
-        description="A domain without a site that shows a parking page on every path. It is dropped when a site takes the domain."
+        title={t("parked.title")}
+        description={t("parked.description")}
         actions={
           <a className="ui-btn ui-btn-primary" href={parkedHash({ new: "1" })}>
             <Plus size={16} aria-hidden="true" />
-            Park a domain
+            {t("parked.new.button")}
           </a>
         }
       />
@@ -293,13 +298,13 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
           <input
             className="ui-input"
             type="search"
-            aria-label="Filter parked domains"
-            placeholder="Filter by domain"
+            aria-label={t("parked.filter.label")}
+            placeholder={t("parked.filter.placeholder")}
             value={query.get("q") ?? ""}
             onChange={(e) => set({ q: e.target.value })}
           />
-          <select className="ui-select" aria-label="Page" value={pageFilter} onChange={(e) => set({ page: e.target.value })}>
-            <option value="">All pages</option>
+          <select className="ui-select" aria-label={t("parked.filter.page")} value={pageFilter} onChange={(e) => set({ page: e.target.value })}>
+            <option value="">{t("parked.filter.allPages")}</option>
             {pages.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -308,13 +313,14 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
           </select>
         </div>
         <Table
-          label="Parked domains"
+          label={t("parked.table.label")}
+          actionsBelow
           columns={columns}
           rows={shown}
           rowKey={(p) => p.domain}
           {...(sort ? { sort } : {})}
           onSort={(s) => set({ sort: s.key, dir: s.dir })}
-          empty={parked.length === 0 ? "No domain is parked." : "No parked domain matches the filter."}
+          empty={parked.length === 0 ? t("parked.table.none") : t("parked.table.noMatch")}
         />
       </Card>
     </>
@@ -322,21 +328,23 @@ export function Parked({ query = new URLSearchParams(), onQuery = () => undefine
 }
 
 function TLSNotice({ tls }: { tls: ParkedTLS }) {
+  const { t } = useTranslation();
   if (!tls.enabled || tls.active) return null;
   if (tls.error) {
     return (
-      <Notice tone="err" title={"The last certificate attempt failed: " + tls.error}>
-        Hostashi tries again within an hour. Check that the domain points to this server.
+      <Notice tone="err" title={t("parked.tls.failed", { error: tls.error })}>
+        {t("parked.tls.failedText")}
       </Notice>
     );
   }
-  return <Notice tone="warn" title="Waiting for the certificate. The domain is served over HTTP until it is there." />;
+  return <Notice tone="warn" title={t("parked.tls.waiting")} />;
 }
 
 function PageSelect({ pages, value, onChange }: { pages: StatusPage[]; value: string; onChange: (v: string) => void }) {
+  const { t } = useTranslation();
   return (
     <div className="ui-narrow">
-      <Field label="Page" hint="Parking pages are managed under Maintenance pages.">
+      <Field label={t("parked.form.page")} hint={t("parked.form.pageHint")}>
         <select className="ui-select" value={value} onChange={(e) => onChange(e.target.value)}>
           {pages.map((p) => (
             <option key={p.id} value={p.id}>
@@ -350,6 +358,7 @@ function PageSelect({ pages, value, onChange }: { pages: StatusPage[]; value: st
 }
 
 function ParkForm({ pages, onParked, onCancel }: { pages: StatusPage[]; onParked: (msg: string) => Promise<void>; onCancel: () => void }) {
+  const { t } = useTranslation();
   const [domain, setDomain] = useState("");
   const [page, setPage] = useState("builtin-parking");
   const [tls, setTls] = useState(true);
@@ -359,7 +368,7 @@ function ParkForm({ pages, onParked, onCancel }: { pages: StatusPage[]; onParked
   async function submit(e: FormEvent) {
     e.preventDefault();
     const d = domain.trim().toLowerCase();
-    const problem = d === "" ? "Enter a domain." : domainProblem(d);
+    const problem = d === "" ? t("parked.form.enterDomain") : domainProblem(d);
     if (problem) {
       setError(problem);
       return;
@@ -370,8 +379,8 @@ function ParkForm({ pages, onParked, onCancel }: { pages: StatusPage[]; onParked
       const p = await setParked(d, page, tls);
       await onParked(
         p.tls.enabled && !p.tls.active
-          ? `${p.domain} is parked. It is served over HTTP until its certificate is there.`
-          : `${p.domain} is parked.`,
+          ? t("parked.form.parkedHttp", { domain: p.domain })
+          : t("parked.form.parked", { domain: p.domain }),
       );
     } catch (err) {
       setError(parkedMessage(err));
@@ -380,23 +389,23 @@ function ParkForm({ pages, onParked, onCancel }: { pages: StatusPage[]; onParked
   }
 
   return (
-    <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate aria-label="Park a domain">
+    <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate aria-label={t("parked.form.label")}>
       <div className="ui-narrow">
-        <Field label="Domain" hint="A domain without a site, like example.com. Its DNS must point to this server.">
+        <Field label={t("parked.form.domain")} hint={t("parked.form.domainHint")}>
           <input className="ui-input" value={domain} onChange={(e) => setDomain(e.target.value)} autoComplete="off" spellCheck={false} />
         </Field>
       </div>
       <PageSelect pages={pages} value={page} onChange={setPage} />
       <label className="ui-check">
         <input type="checkbox" checked={tls} onChange={(e) => setTls(e.target.checked)} />
-        HTTPS with a Let&apos;s Encrypt certificate
+        {t("parked.form.https")}
       </label>
       {error && <Notice tone="err" title={error} />}
       <div className="ui-row">
         <Button type="submit" variant="primary" disabled={busy}>
-          {busy ? "Parking…" : "Park domain"}
+          {busy ? t("parked.form.parking") : t("parked.form.submit")}
         </Button>
-        <Button onClick={onCancel}>Cancel</Button>
+        <Button onClick={onCancel}>{t("common.actions.cancel")}</Button>
       </div>
     </form>
   );
@@ -405,6 +414,7 @@ function ParkForm({ pages, onParked, onCancel }: { pages: StatusPage[]; onParked
 type EditProps = { parked: ParkedDomain; pages: StatusPage[]; onSaved: (msg: string) => Promise<void>; onCancel: () => void };
 
 function EditForm({ parked, pages, onSaved, onCancel }: EditProps) {
+  const { t } = useTranslation();
   const [page, setPage] = useState(parked.page);
   const [tls, setTls] = useState(parked.tls.enabled);
   const [busy, setBusy] = useState(false);
@@ -416,7 +426,7 @@ function EditForm({ parked, pages, onSaved, onCancel }: EditProps) {
     setError("");
     try {
       await setParked(parked.domain, page, tls);
-      await onSaved(`${parked.domain} saved.`);
+      await onSaved(t("parked.form.saved", { domain: parked.domain }));
     } catch (err) {
       setError(parkedMessage(err));
       setBusy(false);
@@ -428,15 +438,15 @@ function EditForm({ parked, pages, onSaved, onCancel }: EditProps) {
       <PageSelect pages={pages} value={page} onChange={setPage} />
       <label className="ui-check">
         <input type="checkbox" checked={tls} onChange={(e) => setTls(e.target.checked)} />
-        HTTPS with a Let&apos;s Encrypt certificate
+        {t("parked.form.https")}
       </label>
       {error && <Notice tone="err" title={error} />}
       <div className="ui-row">
         <Button type="submit" variant="primary" disabled={busy || (page === parked.page && tls === parked.tls.enabled)}>
-          Save
+          {t("common.actions.save")}
         </Button>
         <Button disabled={busy} onClick={onCancel}>
-          Cancel
+          {t("common.actions.cancel")}
         </Button>
       </div>
     </form>
