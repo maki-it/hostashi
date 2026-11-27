@@ -108,6 +108,7 @@ func germanCheck(c agentapi.DoctorCheck) (summary, hint string) {
 	}
 
 	summary, hint = fill(text[0]), fill(text[1])
+
 	if missing {
 		return c.Summary, c.Hint
 	}
