@@ -16,7 +16,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0010 | Target audience and v1 scope | Accepted on 2026-11-25 (Kim), option A ([adr/0010](adr/0010-target-audience-and-v1-scope.md)) | Done |
 | 0011 | Name and trademark | Accepted (subject to trademark search) | Done, trademark open |
 | 0012 | Language of code and documentation | Accepted on 2026-11-21 (Kim) | Yes, briefly |
-| 0013 | Business model and governance | Proposed (draft: [adr/0013](adr/0013-business-model-and-governance.md)) | **Yes** |
+| 0013 | Business model and governance | Accepted on 2026-11-27 (Kim) ([adr/0013](adr/0013-business-model-and-governance.md)) | Done |
 | 0014 | Name of the CLI tool | Accepted on 2026-11-21 (Kim) | Yes, briefly |
 | 0015 | Per-site resource limits | Accepted ([adr/0015](adr/0015-per-site-resource-limits.md)) | No |
 | 0016 | Per-site storage location (storage pools) | Accepted on 2026-11-21 ([adr/0016](adr/0016-per-site-storage-location.md)) | Done |
@@ -67,6 +67,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0061 | Site type Python | Accepted on 2026-11-22 ([adr/0061](adr/0061-site-type-python.md)) | No |
 | 0062 | Git deploy per site | Accepted on 2026-11-24 ([adr/0062](adr/0062-git-deploy-per-site.md)) | No |
 | 0063 | Resource usage per site | Accepted on 2026-11-24 ([adr/0063](adr/0063-resource-usage-per-site.md)) | No |
+| 0064 | Optional malware scan per site | Accepted on 2026-11-24 ([adr/0064](adr/0064-optional-malware-scan.md)) | No |
 | 0065 | www/non-www redirect per site | Accepted on 2026-11-24 ([adr/0065](adr/0065-www-redirect-per-site.md)) | No |
 | 0066 | Password protection and IP rules per site | Accepted on 2026-11-24 ([adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md)) | No |
 | 0067 | Reset the file permissions of a site | Accepted on 2026-11-24 ([adr/0067](adr/0067-reset-site-permissions.md)) | Done |
@@ -76,7 +77,11 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0071 | Panel UI in English and German | Accepted on 2026-11-25 ([adr/0071](adr/0071-panel-ui-in-english-and-german.md)) | Done |
 | 0072 | Rename a site | Accepted on 2026-11-25 ([adr/0072](adr/0072-rename-a-site.md)) | Done |
 | 0073 | MCP server for AI assistants | Accepted on 2026-11-25 ([adr/0073](adr/0073-mcp-server.md)) | Done |
-| 0074 | Backups of deleted sites | Accepted on 2026-11-26 ([adr/0074](adr/0074-backups-of-deleted-sites.md)) | In progress |
+| 0074 | Backups of deleted sites | Accepted on 2026-11-26 ([adr/0074](adr/0074-backups-of-deleted-sites.md)) | Done |
+| 0075 | Wildcard domains for reverse proxy and redirect sites | Accepted on 2026-11-26 ([adr/0075](adr/0075-wildcard-domains-for-proxy-and-redirect-sites.md)) | No, planned for 1.1 |
+| 0076 | DNS-01 certificates via DNS provider APIs | Accepted on 2026-11-26 ([adr/0076](adr/0076-dns-01-certificates-via-dns-provider-apis.md)) | No, planned for 1.1 |
+| 0077 | Automatic security updates for pinned runtimes | Accepted on 2026-11-26 ([adr/0077](adr/0077-automatic-security-updates-for-pinned-runtimes.md)) | Done |
+| 0078 | fail2ban bans in the panel | Accepted on 2026-11-26 ([adr/0078](adr/0078-fail2ban-bans-in-the-panel.md)) | Done |
 
 ---
 
@@ -212,7 +217,7 @@ Proposal: **English** for code, comments, issues, public documentation and the d
 
 ## ADR-0013 Business model and governance
 
-**Full draft (status Proposed):** [adr/0013-business-model-and-governance.md](adr/0013-business-model-and-governance.md). Summary: a hybrid of own use, a community project with sponsoring and paid services, without open core in v1, DCO instead of CLA.
+**Full text (status Accepted, 2026-11-27, by Kim):** [adr/0013-business-model-and-governance.md](adr/0013-business-model-and-governance.md). Summary: a hybrid of own use, a community project with sponsoring and paid services, without open core in v1, DCO instead of CLA. The external pentest before 1.0 was replaced by an own security review (Kim, 2026-11-21); `GOVERNANCE.md` and a trademark policy are still to be written.
 
 Original options:
 
@@ -444,6 +449,10 @@ ashi site add example.com --type php --php 8.4   # same program
 
 **Full text (status Accepted, 2026-11-24, by Kim):** [adr/0063](adr/0063-resource-usage-per-site.md). Summary: Kim wants CPU, memory and network per site to see which site uses the most. Recommended: the agent reads CPU, memory working set, tasks and disk I/O from each site's slice and its SSH user slice (read-only op `sites.stats`, `IOAccounting=yes` on the slices); web traffic (bytes in and out, requests) from a small extra nginx log per site without IPs or paths; the panel samples every 15 s and keeps tiers like the server dashboard (new table `site_samples`). UI: a "Sites by usage" ranking for admins and a "Usage" tab per site. Outgoing traffic of the site's processes through nftables counters comes later in an addendum. cgroups have no network counters, and SQL load in the shared database server is not counted per site. Decided by Kim on 2026-11-24: web traffic now, outgoing traffic later.
 
+## ADR-0064 Optional malware scan per site
+
+**Full text (status Accepted, 2026-11-24, by Kim):** [adr/0064](adr/0064-optional-malware-scan.md). Summary: an optional ClamAV scan per site, off by default and switched on by an admin, which installs only the distribution's `clamav` and `clamav-freshclam` through a fixed oneshot unit. Scans run weekly, daily or on demand, one at a time on the server, in a sandboxed unit `hostashi-scan@` as the site user with the home bound read-only and no network. Findings are checked by the agent, can be quarantined and restored, and are reported by email. Decided by Kim on 2026-11-24: in 1.0, scheduled and manual scans plus an optional real-time daemon for new files. The UI calls it "Virus scan", the API `malware`.
+
 ## ADR-0065 www/non-www redirect per site
 
 **Full text (status Accepted, 2026-11-24, by Kim):** [adr/0065](adr/0065-www-redirect-per-site.md). Summary: a per-site setting `wwwRedirect` (`off`, `to-www`, `to-non-www`) redirects with 301 between `d` and `www.d` when both are domains of the site; domains without a partner are served as before. The partner is never added implicitly, so domain checks and the certificate stay unchanged; the panel offers a button to add it. nginx gets an extra server block per redirected name with the site's certificate, ACME location, logs and headers. Not for redirect sites. The CloudPanel import maps `www` redirect hosts to the setting. Decided by Kim on 2026-11-24: both names listed explicitly.
@@ -483,3 +492,19 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0074 Backups of deleted sites
 
 **Full text (status Accepted, 2026-11-26, by Kim):** [adr/0074](adr/0074-backups-of-deleted-sites.md). Summary: after a site is deleted its snapshots stay in the repository (restic `forget` never empties a group that gets no new snapshots), but the Backups page only lists existing sites and a restore needs the site's home. Recommendation: list sites with snapshots through a new agent operation `backup.sites`, show "Deleted sites" to administrators, restore a deleted site's snapshot into an existing site the administrator picks, keep the snapshots until the administrator deletes them with a typed-name confirmation, and show a reused name only the snapshots taken after the new site was created. Decided by Kim on 2026-11-26: restore into an existing site (A), keep until deleted by hand (A) with optional automatic expiry set in the UI, name reuse shows only newer snapshots (A).
+
+## ADR-0075 Wildcard domains for reverse proxy and redirect sites
+
+**Full text (status Accepted, 2026-11-26, by Kim):** [adr/0075](adr/0075-wildcard-domains-for-proxy-and-redirect-sites.md). Summary: a site of type proxy or redirect may list a named wildcard `*.example.com` next to exact names; the primary domain stays exact, there is no server-wide catch-all, and exact names on other sites keep their own block. HTTPS comes from Let's Encrypt over DNS-01 (ADR-0076) or an uploaded wildcard certificate. Decided by Kim on 2026-11-26: named wildcard per site (A), proxy and redirect only, in 1.1 right after ADR-0076.
+
+## ADR-0076 DNS-01 certificates via DNS provider APIs
+
+**Full text (status Accepted, 2026-11-26, by Kim):** [adr/0076](adr/0076-dns-01-certificates-via-dns-provider-apis.md). Summary: Let's Encrypt over DNS-01 in the web process through the existing lego client, with DNS accounts (sealed credentials, zones) managed by admins, a per-site choice between HTTP and DNS checks, and CNAME delegation recommended in the docs. No new agent operation and no new `os/exec`. Decided by Kim on 2026-11-26: INWX, Hetzner and Cloudflare first, in 1.1 before ADR-0075.
+
+## ADR-0077 Automatic security updates for pinned runtimes
+
+**Full text (status Accepted, 2026-11-26, by Kim):** [adr/0077](adr/0077-automatic-security-updates-for-pinned-runtimes.md). Summary: pin workflows for Node.js and CPython merge their own PR for patch releases of known lines after the upstream signature check and green checks; pins ship as signed data in a new apt suite `runtimes` (package `hostashi-runtimes`, on by default in unattended-upgrades, own signing key); a twice-daily vulnerability check against the latest release opens an issue; an Adminer watcher opens PRs. `--auto-update` stays opt-in. Decided by Kim on 2026-11-26: 1B, 2C, 3B.
+
+## ADR-0078 fail2ban bans in the panel
+
+**Full text (status Accepted, 2026-11-26, by Kim):** [adr/0078](adr/0078-fail2ban-bans-in-the-panel.md). Summary: a card "Blocked addresses" on the Firewall page shows the four Hostashi jails and their banned addresses, and admins can unblock an address. A new `os/exec` exception `internal/f2bctl` runs only `/usr/bin/fail2ban-client` with three fixed argument shapes; the address is checked with `netip`. Decided by Kim on 2026-11-26: on the Firewall page, unblock in all jails at once, in v1.
