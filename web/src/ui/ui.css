@@ -1501,6 +1501,44 @@ html:has(.ui-files) {
   font-size: 14px;
   font-weight: 600;
 }
+/* A value shown once (a generated password) inside the card it belongs to */
+.ui-secret-box {
+  padding: var(--space-5);
+  margin-bottom: var(--space-5);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--sunken);
+}
+.ui-secret-box h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.ui-secret-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+.ui-secret-row > .ui-input {
+  flex: 1;
+  min-width: 0;
+}
+.ui-secret-value {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--surface);
+  color: var(--fg);
+}
+@media (max-width: 760px) {
+  .ui-secret-row {
+    flex-direction: column;
+  }
+  .ui-secret-value {
+    font-size: 14px;
+    letter-spacing: normal;
+  }
+}
 /* The text a person must type to confirm a risky step */
 .ui-confirm-phrase {
   font-family: var(--font-mono);

@@ -83,8 +83,8 @@ export function WordPressCard({ site }: { site: Site }) {
 
   return (
     <>
-      {secret && <PasswordBox secret={secret} onClose={() => setSecret(null)} />}
       <Card title={title}>
+        {secret && <PasswordBox secret={secret} onClose={() => setSecret(null)} />}
         {status.state === "running" && <Notice tone="info" title="WordPress is being installed. This takes about a minute." />}
         {finished && status.installed && (
           <Notice tone="ok" title="WordPress is installed.">
@@ -276,13 +276,16 @@ function InstallForm({
   );
 }
 
+// PasswordBox sits at the top of the WordPress card, where the person
+// just pressed Install, so the one-time password is not missed.
 function PasswordBox({ secret, onClose }: { secret: Secret; onClose: () => void }) {
   const [copied, setCopied] = useState("");
+  const box = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
-    heading.current?.scrollIntoView?.({ block: "start" });
-    heading.current?.focus();
+    box.current?.scrollIntoView?.({ block: "center" });
+    heading.current?.focus({ preventScroll: true });
   }, []);
 
   async function copy() {
@@ -295,15 +298,17 @@ function PasswordBox({ secret, onClose }: { secret: Secret; onClose: () => void 
   }
 
   return (
-    <section className="ui-card ui-card-body ui-stack ui-attention" aria-labelledby="wp-secret">
-      <h2 id="wp-secret" ref={heading} tabIndex={-1}>
+    <div ref={box} className="ui-secret-box ui-stack" role="region" aria-labelledby="wp-secret">
+      <h3 id="wp-secret" ref={heading} tabIndex={-1}>
         Save the WordPress admin password now
-      </h2>
+      </h3>
       <p className="ui-flush">Hostashi does not keep it and cannot show it again. If it is lost, reset it from the WordPress login page.</p>
       <dl className="ui-facts">
         <dt>Login</dt>
         <dd>
-          <code>{secret.url}/wp-admin/</code>
+          <a href={secret.url + "/wp-admin/"} target="_blank" rel="noreferrer noopener">
+            <code>{secret.url}/wp-admin/</code>
+          </a>
         </dd>
         <dt>User</dt>
         <dd>
@@ -314,23 +319,27 @@ function PasswordBox({ secret, onClose }: { secret: Secret; onClose: () => void 
           <code>{secret.database}</code>
         </dd>
       </dl>
-      <Field label="Password">
-        <input
-          readOnly
-          value={secret.password}
-          onFocus={(e) => e.currentTarget.select()}
-          autoComplete="off"
-          spellCheck={false}
-          className="ui-input ui-mono"
-        />
-      </Field>
+      <div className="ui-field">
+        <label htmlFor="wp-secret-password">Admin password</label>
+        <div className="ui-secret-row">
+          <input
+            id="wp-secret-password"
+            readOnly
+            value={secret.password}
+            onFocus={(e) => e.currentTarget.select()}
+            autoComplete="off"
+            spellCheck={false}
+            className="ui-input ui-secret-value"
+          />
+          <Button onClick={() => void copy()}>Copy password</Button>
+        </div>
+      </div>
+      {copied && <Notice tone="ok" title={copied} />}
       <div className="ui-row">
-        <Button onClick={() => void copy()}>Copy password</Button>
         <Button variant="primary" onClick={onClose}>
           I have saved it
         </Button>
       </div>
-      {copied && <Notice tone="ok" title={copied} />}
-    </section>
+    </div>
   );
 }
