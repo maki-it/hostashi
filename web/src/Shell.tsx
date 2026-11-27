@@ -13,7 +13,7 @@ import { runDoctor } from "./doctor";
 import { Search, shortcut } from "./Search";
 import { listServices } from "./services";
 import { formatHash, type Route } from "./routes";
-import { isDark, saveColorScheme, type ColorScheme } from "./scheme";
+import { saveColorScheme, schemes, type ColorScheme } from "./scheme";
 import { panelVersion, releaseUrl, versionLabel } from "./system";
 import { IconButton } from "./ui";
 import { roleLabel } from "./roles";
@@ -35,6 +35,22 @@ export function Mark() {
         <path d="M9 8v16M23 8v16M9 16h14" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" fill="none" />
       </svg>
     </span>
+  );
+}
+
+/**
+ * SunMoon is the icon for "follow the system": a sun whose body is half
+ * dark, drawn on Phosphor's 256 grid with the stroke of its regular weight.
+ */
+function SunMoon({ size }: { size: number }) {
+  return (
+    <svg viewBox="0 0 256 256" width={size} height={size} aria-hidden="true">
+      <g fill="none" stroke="currentColor" strokeWidth="16" strokeLinecap="round">
+        <circle cx="128" cy="128" r="48" />
+        <path d="M204,128L228,128M182,182L199,199M128,204L128,228M74,182L57,199M52,128L28,128M74,74L57,57M128,52L128,28M182,74L199,57" />
+      </g>
+      <path d="M128,80A48,48,0,0,1,128,176Z" fill="currentColor" />
+    </svg>
   );
 }
 
@@ -170,19 +186,23 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     }
   }
 
-  // The sun/moon button switches between light and dark in one click; the
-  // account page also offers following the system (ADR-0037).
-  const dark = isDark(user.colorScheme ?? "system");
-  async function toggleScheme() {
-    const next: ColorScheme = dark ? "light" : "dark";
-    onScheme(next);
+  // The colour button in the top bar steps through the same three choices
+  // as the account page (ADR-0037) with one click each, system → light →
+  // dark → system, and stores the same value. Its icon shows the current
+  // choice (a half-dark sun for following the system), its tooltip also the next.
+  const scheme = user.colorScheme ?? "system";
+  const nextScheme: ColorScheme = schemes[(schemes.indexOf(scheme) + 1) % schemes.length] ?? "system";
+  async function cycleScheme() {
+    onScheme(nextScheme);
     setError("");
     try {
-      await saveColorScheme(next);
+      await saveColorScheme(nextScheme);
     } catch {
       setError(t("shell.schemeFailed"));
     }
   }
+  const schemeIcon = scheme === "light" ? <Sun size={20} /> : scheme === "dark" ? <Moon size={20} /> : <SunMoon size={20} />;
+  const schemeButton = t("shell.schemeButton", { current: t(`shell.scheme.${scheme}`), next: t(`shell.scheme.${nextScheme}`) });
 
   // Ctrl K (⌘ K on a Mac) opens the search from anywhere.
   const [searching, setSearching] = useState(false);
@@ -351,12 +371,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
                   {shortcut}
                 </kbd>
               </button>
-              <IconButton
-                label={dark ? t("shell.useLight") : t("shell.useDark")}
-                icon={dark ? <Sun size={20} /> : <Moon size={20} />}
-                tipBelow
-                onClick={() => void toggleScheme()}
-              />
+              <IconButton label={schemeButton} icon={schemeIcon} tipBelow onClick={() => void cycleScheme()} />
             </span>
           </div>
         </header>

@@ -536,7 +536,7 @@ describe("Shell", () => {
     window.location.hash = "";
   });
 
-  it("switches between light and dark with one click and saves it for the account", async () => {
+  it("steps through system, light and dark in the top bar and saves it for the account", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({
       ...noSetup,
@@ -545,12 +545,37 @@ describe("Shell", () => {
       "PATCH /api/v1/me": (b) => ({ body: { theme: "default", ...(b as object) } }),
     });
     render(<App />);
-    const toggle = await screen.findByRole("button", { name: "Use dark colours" });
+    const light = await screen.findByRole("button", { name: "Colour scheme: Light (next: Dark)" });
+    expect(light).toHaveAttribute("data-tip", "Colour scheme: Light (next: Dark)");
     expect(document.documentElement.dataset.scheme).toBe("light");
-    await user.click(toggle);
+
+    await user.click(light);
     expect(document.documentElement.dataset.scheme).toBe("dark");
     expect(calls).toContainEqual({ method: "PATCH", path: "/api/v1/me", body: { colorScheme: "dark" } });
-    expect(screen.getByRole("button", { name: "Use light colours" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Colour scheme: Dark (next: System)" }));
+    expect(document.documentElement.dataset.scheme).toBeUndefined();
+    expect(calls).toContainEqual({ method: "PATCH", path: "/api/v1/me", body: { colorScheme: "system" } });
+
+    await user.click(screen.getByRole("button", { name: "Colour scheme: System (next: Light)" }));
+    expect(document.documentElement.dataset.scheme).toBe("light");
+    expect(calls).toContainEqual({ method: "PATCH", path: "/api/v1/me", body: { colorScheme: "light" } });
+  });
+
+  it("keeps the top bar and the account page on the same colour scheme", async () => {
+    const user = userEvent.setup();
+    window.location.hash = "#/account";
+    mockFetch({
+      ...noSetup,
+      "GET /api/v1/auth/me": { body: { ...admin, auth: "session", colorScheme: "dark", theme: "default" } },
+      "PATCH /api/v1/me": (b) => ({ body: { theme: "default", ...(b as object) } }),
+    });
+    render(<App />);
+    const group = within(await screen.findByRole("group", { name: "Colour scheme" }));
+    await user.click(group.getByRole("radio", { name: /Follow the system/ }));
+    await user.click(screen.getByRole("button", { name: "Colour scheme: System (next: Light)" }));
+    expect(group.getByRole("radio", { name: "Light" })).toBeChecked();
+    window.location.hash = "";
   });
 
   it("offers following the system on the account page", async () => {
