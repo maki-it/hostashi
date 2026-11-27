@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { ApiError, request } from "./api";
+import i18n, { apiErrorText, type Language } from "./i18n";
 import type { ColorScheme } from "./scheme";
 import { createCredential, getAssertion } from "./webauthn";
 
@@ -17,6 +18,8 @@ export type User = {
   /** How the panel looks for the account (ADR-0037); missing means the system's scheme. */
   colorScheme?: ColorScheme;
   theme?: string;
+  /** The language of the panel (ADR-0071); missing means "auto", the browser's. */
+  language?: Language;
 };
 
 export const needsSecondFactor = (u: User): boolean => !!u.secondFactorRequired && !u.secondFactor;
@@ -107,33 +110,16 @@ export async function loginWithPasskey(): Promise<User> {
   return request<User>("POST", "/auth/passkey/login/finish", { ceremonyId: begin.ceremonyId, credential });
 }
 
-// message turns an API error into a sentence for the login and setup forms.
+// message turns an error into a sentence for the login and setup forms,
+// in the current language. Known API codes come from the catalog
+// (errors.<code>); invalid_argument shows the server's English reason,
+// any other code names itself.
 export function message(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case "invalid_credentials":
-        return "Wrong username or password.";
-      case "rate_limited":
-        return "Too many attempts. Wait a few minutes and try again.";
-      case "passkey_required":
-        return "This account logs in with a passkey.";
-      case "passkeys_unavailable":
-        return "Passkeys are not set up on this server. Log in with your password.";
-      case "passkey_failed":
-        return "The passkey was not accepted.";
-      case "setup_not_allowed":
-        return "The setup token is wrong or has expired.";
-      case "invalid_argument":
-        return err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
-      case "busy":
-        return "The server is busy. Try again in a minute.";
-      default:
-        return "Something went wrong (" + err.code + "). Try again.";
-    }
+  if (err instanceof ApiError && err.code !== "invalid_argument" && !i18n.exists(`errors.${err.code}`)) {
+    return i18n.t("common.errors.unknown", { code: err.code });
   }
   if (err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "AbortError")) {
-    return "The passkey prompt was closed or timed out.";
+    return i18n.t("auth.login.passkeyClosed");
   }
-  if (err instanceof TypeError) return "The server is not reachable.";
-  return "Something went wrong. Try again.";
+  return apiErrorText(err);
 }

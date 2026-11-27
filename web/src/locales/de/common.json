@@ -1,0 +1,19 @@
+{
+  "actions": {
+    "back": "Zurück",
+    "tryAgain": "Erneut versuchen"
+  },
+  "roles": {
+    "admin": "Admin",
+    "manager": "Manager",
+    "user": "Benutzer"
+  },
+  "time": {
+    "justNow": "gerade eben"
+  },
+  "errors": {
+    "generic": "Etwas ist schiefgelaufen. Versuch es noch einmal.",
+    "unknown": "Etwas ist schiefgelaufen ({{code}}). Versuch es noch einmal.",
+    "unreachable": "Der Server ist nicht erreichbar."
+  }
+}

@@ -15,10 +15,10 @@ describe("search items", () => {
     const items = searchItems("admin", [site("blog"), site("shop", { title: "Müller Shop" })]);
     expect(matchItems(items, "blog logs").map((i) => i.label)).toEqual(["blog › Logs"]);
     expect(matchItems(items, "müller").map((i) => i.label)).toContain("Müller Shop");
-    expect(matchItems(items, "shop.example").map((i) => i.group)).toContain("Sites");
+    expect(matchItems(items, "shop.example").map((i) => i.group)).toContain("sites");
     expect(matchItems(items, "backups").map((i) => i.href)).toContain("#/backups");
     expect(matchItems(items, "blog php")[0]!.href).toBe("#/sites/blog/php");
-    expect(matchItems(items, "blog lo").filter((i) => i.group === "Site sections")[0]!.label).toBe("blog › Logs");
+    expect(matchItems(items, "blog lo").filter((i) => i.group === "sections")[0]!.label).toBe("blog › Logs");
   });
 
   it("leaves out tabs a site does not have and pages the role does not see", () => {
@@ -35,7 +35,7 @@ describe("search items", () => {
 
   it("shows at most six hits per group", () => {
     const sites = Array.from({ length: 10 }, (_, i) => site(`site${i}`));
-    expect(matchItems(searchItems("admin", sites), "site").filter((i) => i.group === "Sites")).toHaveLength(6);
+    expect(matchItems(searchItems("admin", sites), "site").filter((i) => i.group === "sites")).toHaveLength(6);
   });
 });
 

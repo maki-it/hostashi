@@ -1,0 +1,22 @@
+{
+  "title": "Your account",
+  "loggedInAs": "Logged in as {{username}} ({{role}}).",
+  "appearance": "Appearance",
+  "scheme": {
+    "legend": "Colour scheme",
+    "system": "Follow the system",
+    "systemHint": "Light or dark as your device is set.",
+    "light": "Light",
+    "dark": "Dark",
+    "failed": "The colour scheme could not be saved. It applies until you reload."
+  },
+  "language": {
+    "legend": "Language",
+    "auto": "Follow the browser",
+    "autoHint": "English or German as your browser is set. Mails are in English.",
+    "en": "English",
+    "de": "Deutsch",
+    "failed": "The language could not be saved. It applies until you reload."
+  },
+  "saved": "Saved. The panel looks like this in every browser you log in with."
+}

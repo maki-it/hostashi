@@ -18,11 +18,11 @@ func TestUserPreferences(t *testing.T) {
 	}
 
 	p, err := s.UserPreferences(ctx, u.ID)
-	if err != nil || p != (Preferences{ColorScheme: "system", Theme: "default"}) {
+	if err != nil || p != (Preferences{ColorScheme: "system", Theme: "default", Language: "auto"}) {
 		t.Fatalf("default %+v %v", p, err)
 	}
 
-	if err := s.SetUserPreferences(ctx, u.ID, Preferences{ColorScheme: "dark", Theme: "default"}); err != nil {
+	if err := s.SetUserPreferences(ctx, u.ID, Preferences{ColorScheme: "dark", Theme: "default", Language: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -30,15 +30,27 @@ func TestUserPreferences(t *testing.T) {
 		t.Fatalf("stored %+v", p)
 	}
 
-	if err := s.SetUserPreferences(ctx, u.ID, Preferences{ColorScheme: "blue", Theme: "default"}); err == nil {
+	if err := s.SetUserPreferences(ctx, u.ID, Preferences{ColorScheme: "blue", Theme: "default", Language: "auto"}); err == nil {
 		t.Fatal("unknown color scheme accepted")
 	}
 
-	if err := s.SetUserPreferences(ctx, u.ID, Preferences{ColorScheme: "light", Theme: "konsole"}); err == nil {
+	if err := s.SetUserPreferences(ctx, u.ID, Preferences{ColorScheme: "light", Theme: "konsole", Language: "auto"}); err == nil {
 		t.Fatal("unknown theme accepted")
 	}
 
-	if err := s.SetUserPreferences(ctx, u.ID+1, Preferences{ColorScheme: "light", Theme: "default"}); !errors.Is(err, ErrNotFound) {
+	if err := s.SetUserPreferences(ctx, u.ID, Preferences{ColorScheme: "light", Theme: "default", Language: "de"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if p, _ := s.UserPreferences(ctx, u.ID); p.Language != "de" {
+		t.Fatalf("language %+v", p)
+	}
+
+	if err := s.SetUserPreferences(ctx, u.ID, Preferences{ColorScheme: "light", Theme: "default", Language: "fr"}); err == nil {
+		t.Fatal("unknown language accepted")
+	}
+
+	if err := s.SetUserPreferences(ctx, u.ID+1, Preferences{ColorScheme: "light", Theme: "default", Language: "auto"}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("missing user: %v", err)
 	}
 

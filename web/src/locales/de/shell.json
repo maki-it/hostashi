@@ -1,0 +1,57 @@
+{
+  "nav": {
+    "label": "Hauptmenü",
+    "groups": {
+      "hosting": "Hosting",
+      "server": "Server",
+      "administration": "Verwaltung"
+    },
+    "pages": {
+      "home": "Übersicht",
+      "sites": "Sites",
+      "databases": "Datenbanken",
+      "parked": "Geparkte Domains",
+      "pages": "Wartungsseiten",
+      "limits": "Limit-Vorlagen",
+      "profiles": "App-Profile",
+      "health": "Zustand",
+      "services": "Dienste",
+      "system": "System",
+      "pools": "Storage-Pools",
+      "php": "Runtimes",
+      "backups": "Backups",
+      "firewall": "Firewall",
+      "users": "Benutzer",
+      "mail": "E-Mail",
+      "import": "CloudPanel-Import",
+      "audit": "Audit-Log"
+    }
+  },
+  "account": "Dein Konto",
+  "brandHome": "Hostashi, Übersicht",
+  "openMenu": "Menü öffnen",
+  "closeMenu": "Menü schließen",
+  "breadcrumb": "Brotkrümelnavigation",
+  "logout": "Abmelden",
+  "logoutFailed": "Abmelden fehlgeschlagen. Versuch es noch einmal.",
+  "schemeFailed": "Das Farbschema konnte nicht gespeichert werden. Es gilt bis zum Neuladen.",
+  "releaseNotes": "Versionshinweise",
+  "useLight": "Helle Farben verwenden",
+  "useDark": "Dunkle Farben verwenden",
+  "search": {
+    "open": "Suchen",
+    "dialog": "Suche",
+    "placeholder": "Sites, Site-Bereiche und Seiten durchsuchen",
+    "results": "Ergebnisse",
+    "empty": "Nichts gefunden.",
+    "foot": "↑ ↓ wählen · Enter öffnet · Esc schließt",
+    "groups": {
+      "sites": "Sites",
+      "sections": "Site-Bereiche",
+      "pages": "Seiten"
+    },
+    "accountDetail": "Passwort, Zwei-Faktor, Farben, Sprache",
+    "accountWords": "konto account passwort zwei-faktor totp farben sprache api",
+    "runtimeWords": "versionen"
+  }
+}

@@ -2,8 +2,10 @@
 
 import { CaretDown, CaretRight, List, MagnifyingGlass, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { logout, type User } from "./auth";
-import { navFor, navItem } from "./nav";
+import i18n from "./i18n";
+import { groupLabel, navFor, navItem, pageLabel } from "./nav";
 import { runtimes } from "./Runtimes";
 import { siteGroups } from "./SiteNav";
 import { countLabel, healthCount, servicesCount, type NavCount } from "./navcounts";
@@ -14,6 +16,7 @@ import { formatHash, type Route } from "./routes";
 import { isDark, saveColorScheme, type ColorScheme } from "./scheme";
 import { panelVersion, releaseUrl, versionLabel } from "./system";
 import { IconButton } from "./ui";
+import { roleLabel } from "./roles";
 
 type ShellProps = {
   user: User;
@@ -48,20 +51,20 @@ function NavBadge({ count }: { count: NavCount }) {
 type Crumb = { label: string; href?: string };
 
 function crumbs(route: Route): Crumb[] {
-  if (route.page === "account") return [{ label: "Your account" }];
+  if (route.page === "account") return [{ label: i18n.t("shell.account") }];
   const item = navItem(route.page);
   if (!item) return [];
   const out: Crumb[] = [];
-  if (item.group) out.push({ label: item.group });
+  if (item.group) out.push({ label: groupLabel(item.group) });
   const tab = item.also ? runtimes.find((r) => r.page === route.page) : undefined;
   if (route.site) {
-    out.push({ label: item.label, href: formatHash({ page: route.page }) });
+    out.push({ label: pageLabel(item), href: formatHash({ page: route.page }) });
     out.push({ label: route.site.name });
   } else if (tab) {
-    out.push({ label: item.label, href: formatHash({ page: item.page }) });
+    out.push({ label: pageLabel(item), href: formatHash({ page: item.page }) });
     out.push({ label: tab.label });
   } else {
-    out.push({ label: item.label });
+    out.push({ label: pageLabel(item) });
   }
   return out;
 }
@@ -78,12 +81,12 @@ export function pageTitle(route: Route, host: string): string {
     if (tab && route.site.tab !== "overview") parts.push(tab.label);
     parts.push(route.site.name);
   } else if (route.page === "account") {
-    parts.push("Your account");
+    parts.push(i18n.t("shell.account"));
   } else {
     const item = navItem(route.page);
     const tab = runtimes.find((r) => r.page === route.page);
     if (item && tab) parts.push(tab.label);
-    if (item) parts.push(item.label);
+    if (item) parts.push(pageLabel(item));
   }
   parts.push(host || "Hostashi");
   return parts.join(" · ");
@@ -95,6 +98,8 @@ export function pageTitle(route: Route, host: string): string {
  * with breadcrumbs. Below 700 px the sidebar collapses into a menu.
  */
 export function Shell({ user, route, onLogout, onScheme, children }: ShellProps) {
+  // The hook re-renders the frame when the language changes.
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -160,7 +165,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
       await logout();
       onLogout();
     } catch {
-      setError("Logout failed. Try again.");
+      setError(t("shell.logoutFailed"));
       setBusy(false);
     }
   }
@@ -175,7 +180,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     try {
       await saveColorScheme(next);
     } catch {
-      setError("The colour scheme could not be saved. It applies until you reload.");
+      setError(t("shell.schemeFailed"));
     }
   }
 
@@ -226,14 +231,14 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     window.addEventListener("resize", measureNav);
     return () => window.removeEventListener("resize", measureNav);
   }, [measureNav, groups.length]);
-  const lastGroup = groups[groups.length - 1]?.label;
+  const lastGroup = groupLabel(groups[groups.length - 1]?.id ?? null);
 
   return (
     <div className="ui-root app">
       <aside className="app-side" data-open={menuOpen} data-scrolled={navScrolled}>
         <div className="app-brand">
           {/* The name and the panel's host lead to the overview (Kim, 2026-11-25). */}
-          <a className="app-brand-link" href={formatHash({ page: "home" })} aria-label="Hostashi, overview" onClick={() => setMenuOpen(false)}>
+          <a className="app-brand-link" href={formatHash({ page: "home" })} aria-label={t("shell.brandHome")} onClick={() => setMenuOpen(false)}>
             <Mark />
             <span className="app-brand-name">
               Hostashi
@@ -242,7 +247,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
           </a>
           <span className="app-menu-btn">
             <IconButton
-              label={menuOpen ? "Close menu" : "Open menu"}
+              label={menuOpen ? t("shell.closeMenu") : t("shell.openMenu")}
               icon={menuOpen ? <X size={20} /> : <List size={20} />}
               aria-expanded={menuOpen}
               aria-controls="app-nav"
@@ -251,10 +256,10 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
             />
           </span>
         </div>
-        <nav aria-label="Main" id="app-nav" className="app-nav" ref={navRef} onScroll={measureNav}>
+        <nav aria-label={t("shell.nav.label")} id="app-nav" className="app-nav" ref={navRef} onScroll={measureNav}>
           {groups.map((g) => (
-            <div className="app-nav-group" key={g.label ?? "top"}>
-              {g.label && <h2 className="app-nav-label">{g.label}</h2>}
+            <div className="app-nav-group" key={g.id ?? "top"}>
+              {g.id && <h2 className="app-nav-label">{groupLabel(g.id)}</h2>}
               <ul>
                 {g.items.map((i) => {
                   const Icon = i.icon;
@@ -267,7 +272,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
                         onClick={() => setMenuOpen(false)}
                       >
                         <Icon size={20} aria-hidden="true" />
-                        {i.label}
+                        {pageLabel(i)}
                         {(i.page === "health" || i.page === "services") && counts[i.page] && (
                           <NavBadge count={counts[i.page]!} />
                         )}
@@ -300,9 +305,9 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
               onClick={() => setMenuOpen(false)}
             >
               {user.username}
-              <small>{user.role}</small>
+              <small>{roleLabel(user.role)}</small>
             </a>
-            <IconButton label="Log out" icon={<SignOut size={20} />} disabled={busy} onClick={() => void doLogout()} />
+            <IconButton label={t("shell.logout")} icon={<SignOut size={20} />} disabled={busy} onClick={() => void doLogout()} />
           </div>
           {error && (
             <p role="alert" className="app-user-error">
@@ -311,7 +316,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
           )}
           {isAdmin && version && (
             <p className="app-version">
-              <a href={releaseUrl(version)} target="_blank" rel="noopener noreferrer" title="Release notes">
+              <a href={releaseUrl(version)} target="_blank" rel="noopener noreferrer" title={t("shell.releaseNotes")}>
                 Hostashi {versionLabel(version)}
               </a>
             </p>
@@ -320,7 +325,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
       </aside>
       <div className="app-main">
         <header className="app-top" ref={topRef}>
-          <nav aria-label="Breadcrumb">
+          <nav aria-label={t("shell.breadcrumb")}>
             <ol className="app-crumbs">
               {trail.map((c, i) => {
                 const last = i === trail.length - 1;
@@ -340,13 +345,13 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
           <span className="app-top-actions">
             <button type="button" className="app-search-btn" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" onClick={() => setSearching(true)}>
               <MagnifyingGlass size={16} aria-hidden="true" />
-              <span className="app-search-text">Search</span>
+              <span className="app-search-text">{t("shell.search.open")}</span>
               <kbd className="app-kbd" aria-hidden="true">
                 {shortcut}
               </kbd>
             </button>
             <IconButton
-              label={dark ? "Use light colours" : "Use dark colours"}
+              label={dark ? t("shell.useLight") : t("shell.useDark")}
               icon={dark ? <Sun size={20} /> : <Moon size={20} />}
               tipBelow
               onClick={() => void toggleScheme()}
