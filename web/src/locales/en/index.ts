@@ -4,6 +4,7 @@
 // every other language must match, and i18next falls back to it.
 import account from "./account.json";
 import auth from "./auth.json";
+import backups from "./backups.json";
 import certificate from "./certificate.json";
 import common from "./common.json";
 import errors from "./errors.json";
@@ -14,7 +15,7 @@ import siteDomains from "./siteDomains.json";
 import siteHeaders from "./siteHeaders.json";
 import tokens from "./tokens.json";
 
-const en = { account, auth, certificate, common, errors, realIp, shell, siteAccess, siteDomains, siteHeaders, tokens };
+const en = { account, auth, backups, certificate, common, errors, realIp, shell, siteAccess, siteDomains, siteHeaders, tokens };
 
 export type Catalog = typeof en;
 
