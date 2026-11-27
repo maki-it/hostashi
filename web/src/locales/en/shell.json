@@ -36,8 +36,12 @@
   "logoutFailed": "Logout failed. Try again.",
   "schemeFailed": "The colour scheme could not be saved. It applies until you reload.",
   "releaseNotes": "Release notes",
-  "schemeMenu": "Colour scheme",
-  "schemeButton": "Colour scheme: {{current}}",
+  "schemeButton": "Colour scheme: {{current}} (next: {{next}})",
+  "scheme": {
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark"
+  },
   "search": {
     "open": "Search",
     "dialog": "Search",

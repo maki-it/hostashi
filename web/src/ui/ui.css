@@ -2356,7 +2356,7 @@ html:has(.ui-files) {
   border-radius: calc(var(--radius) + 3px);
   box-shadow: 0 8px 24px color-mix(in srgb, var(--fg) 14%, transparent);
 }
-.ui-menu [role^="menuitem"] {
+.ui-menu [role="menuitem"] {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2370,8 +2370,8 @@ html:has(.ui-files) {
   border-radius: var(--radius);
   cursor: pointer;
 }
-.ui-menu [role^="menuitem"]:hover,
-.ui-menu [role^="menuitem"]:focus-visible {
+.ui-menu [role="menuitem"]:hover,
+.ui-menu [role="menuitem"]:focus-visible {
   background: var(--sunken);
   outline: none;
 }
@@ -2420,20 +2420,8 @@ html:has(.ui-files) {
 .ui-menu [role="menuitem"][data-danger] {
   color: var(--err);
 }
-.ui-menu [role^="menuitem"] svg {
+.ui-menu [role="menuitem"] svg {
   flex: none;
-}
-/* The tick after the current choice of a menu of choices. */
-.ui-menu [role="menuitemradio"][aria-checked="true"] {
-  font-weight: 600;
-}
-.ui-menu .ui-menu-check {
-  margin-left: auto;
-  color: var(--accent);
-}
-/* An open menu covers its button's tooltip. */
-.ui-icon-btn[aria-expanded="true"]::after {
-  opacity: 0;
 }
 
 /* Hidden on a phone, where something compact takes its place. */

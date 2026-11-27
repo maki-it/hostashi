@@ -36,8 +36,12 @@
   "logoutFailed": "Abmelden fehlgeschlagen. Versuch es noch einmal.",
   "schemeFailed": "Das Farbschema konnte nicht gespeichert werden. Es gilt bis zum Neuladen.",
   "releaseNotes": "Versionshinweise",
-  "schemeMenu": "Farbschema",
-  "schemeButton": "Farbschema: {{current}}",
+  "schemeButton": "Farbschema: {{current}} (weiter: {{next}})",
+  "scheme": {
+    "system": "System",
+    "light": "Hell",
+    "dark": "Dunkel"
+  },
   "search": {
     "open": "Suchen",
     "dialog": "Suche",

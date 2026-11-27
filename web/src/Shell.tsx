@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { CaretDown, CaretRight, List, MagnifyingGlass, Monitor, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
+import { CaretDown, CaretRight, List, MagnifyingGlass, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { logout, type User } from "./auth";
@@ -15,7 +15,7 @@ import { listServices } from "./services";
 import { formatHash, type Route } from "./routes";
 import { saveColorScheme, schemes, type ColorScheme } from "./scheme";
 import { panelVersion, releaseUrl, versionLabel } from "./system";
-import { IconButton, Menu, type MenuItem } from "./ui";
+import { IconButton } from "./ui";
 import { roleLabel } from "./roles";
 
 type ShellProps = {
@@ -35,6 +35,20 @@ export function Mark() {
         <path d="M9 8v16M23 8v16M9 16h14" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" fill="none" />
       </svg>
     </span>
+  );
+}
+
+/**
+ * SunMoon is the icon for "follow the system": a sun and a moon together,
+ * drawn on Phosphor's 256 grid with the stroke of its regular weight.
+ */
+function SunMoon({ size }: { size: number }) {
+  return (
+    <svg viewBox="0 0 256 256" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="84" cy="84" r="30" />
+      <path d="M130,84L146,84M84,130L84,146M51,117L40,128M38,84L22,84M51,51L40,40M84,38L84,22M117,51L128,40" />
+      <path d="M105,179A66,66,0,1,0,179,105A54,54,0,0,1,105,179Z" />
+    </svg>
   );
 }
 
@@ -170,28 +184,23 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     }
   }
 
-  // The colour button in the top bar offers the same three choices as the
-  // account page (ADR-0037) and stores the same value. Its icon shows the
-  // current choice: sun, moon, or a screen for following the system.
+  // The colour button in the top bar steps through the same three choices
+  // as the account page (ADR-0037) with one click each, system → light →
+  // dark → system, and stores the same value. Its icon shows the current
+  // choice (sun and moon together for following the system), its tooltip also the next.
   const scheme = user.colorScheme ?? "system";
-  async function pickScheme(next: ColorScheme) {
-    if (next === scheme) return;
-    onScheme(next);
+  const nextScheme: ColorScheme = schemes[(schemes.indexOf(scheme) + 1) % schemes.length] ?? "system";
+  async function cycleScheme() {
+    onScheme(nextScheme);
     setError("");
     try {
-      await saveColorScheme(next);
+      await saveColorScheme(nextScheme);
     } catch {
       setError(t("shell.schemeFailed"));
     }
   }
-  const schemeIcon = (s: ColorScheme, size: number) => (s === "light" ? <Sun size={size} /> : s === "dark" ? <Moon size={size} /> : <Monitor size={size} />);
-  const schemeItems: MenuItem[] = schemes.map((s) => ({
-    label: t(`account.scheme.${s}`),
-    icon: schemeIcon(s, 18),
-    checked: s === scheme,
-    onSelect: () => void pickScheme(s),
-  }));
-  const schemeButton = t("shell.schemeButton", { current: t(`account.scheme.${scheme}`) });
+  const schemeIcon = scheme === "light" ? <Sun size={20} /> : scheme === "dark" ? <Moon size={20} /> : <SunMoon size={20} />;
+  const schemeButton = t("shell.schemeButton", { current: t(`shell.scheme.${scheme}`), next: t(`shell.scheme.${nextScheme}`) });
 
   // Ctrl K (⌘ K on a Mac) opens the search from anywhere.
   const [searching, setSearching] = useState(false);
@@ -359,14 +368,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
                 {shortcut}
               </kbd>
             </button>
-            <Menu
-              label={t("shell.schemeMenu")}
-              button={schemeIcon(scheme, 20)}
-              buttonLabel={schemeButton}
-              buttonClass="ui-icon-btn ui-tip-below"
-              tip={schemeButton}
-              items={schemeItems}
-            />
+            <IconButton label={schemeButton} icon={schemeIcon} tipBelow onClick={() => void cycleScheme()} />
           </span>
         </header>
         <div className="app-content">{children}</div>
