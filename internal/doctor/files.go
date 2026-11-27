@@ -3,7 +3,6 @@
 package doctor
 
 import (
-	"fmt"
 	"os"
 	"regexp"
 	"slices"
@@ -36,13 +35,13 @@ func (h Hardening) Files() Check {
 
 	for _, p := range []string{FilesService, FilesSocket} {
 		if !h.exists(p) {
-			return fail(id, "the file manager's units are missing ("+p+")", "The Files tab cannot start. Run the installer again (step units).")
+			return failT(id, "files.units", "files.units.hint", P{"path": p, "step": "units"})
 		}
 	}
 
 	dirs, err := os.ReadDir(h.path("/proc"))
 	if err != nil {
-		return warn(id, "cannot read /proc: "+describe(err), "")
+		return warnT(id, "read.error", "", P{"path": "/proc", "error": describe(err)})
 	}
 
 	boot, bootOK := h.bootTime()
@@ -74,13 +73,11 @@ func (h Hardening) Files() Check {
 
 	switch {
 	case len(root) > 0:
-		return fail(id, "the file manager of "+strings.Join(root, ", ")+" runs as root",
-			"It must run as the site user. Stop it (systemctl stop hostashi-files@"+root[0]+".service) and check the unit: systemctl cat hostashi-files@"+root[0]+".service.")
+		return failT(id, "files.root", "files.root.hint", P{"sites": strings.Join(root, ", "), "site": root[0]})
 	case len(old) > 0:
-		return warn(id, "the file manager of "+strings.Join(old, ", ")+" has run for more than a day",
-			fmt.Sprintf("It should stop 5 minutes after the last request. Check: systemctl status hostashi-files@%s.service; stop it with systemctl stop hostashi-files@%s.service.", old[0], old[0]))
+		return warnT(id, "files.old", "files.old.hint", P{"sites": strings.Join(old, ", "), "site": old[0]})
 	default:
-		return ok(id, "the file manager's units are installed; its helpers run as the site users")
+		return okT(id, "files.ok", nil)
 	}
 }
 

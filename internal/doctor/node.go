@@ -3,7 +3,7 @@
 package doctor
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,9 +31,7 @@ func Node(installed []agentapi.NodeInstalled, users map[string][]string, now tim
 		}
 
 		if i.Version != rel.Version {
-			out = append(out, warn(id,
-				fmt.Sprintf("Node.js %s runs %s, Hostashi brings %s: the automatic update did not finish", i.Major, i.Version, rel.Version),
-				"Install the update under Node.js versions in the panel; its log shows what failed."))
+			out = append(out, warnT(id, "node.behind", "node.behind.hint", P{"line": i.Major, "version": i.Version, "release": rel.Version}))
 		}
 
 		sites := users[i.Major]
@@ -51,18 +49,14 @@ func Node(installed []agentapi.NodeInstalled, users map[string][]string, now tim
 
 		switch {
 		case left <= 0:
-			out = append(out, warn(id,
-				"Node.js "+i.Major+" gets no fixes since "+rel.End+" ("+strings.Join(sites, ", ")+")",
-				"Move the sites to a newer Node.js version on their Web tab."))
+			out = append(out, warnT(id, "node.ended", "node.ended.hint", P{"line": i.Major, "end": rel.End, "sites": strings.Join(sites, ", ")}))
 		case days <= NodeSoonDays:
-			out = append(out, warn(id,
-				fmt.Sprintf("Node.js %s gets fixes only until %s (%d days; %s)", i.Major, rel.End, days, strings.Join(sites, ", ")),
-				"Plan the move of the sites to a newer Node.js version."))
+			out = append(out, warnT(id, "node.soon", "node.soon.hint", P{"line": i.Major, "end": rel.End, "days": strconv.Itoa(days), "sites": strings.Join(sites, ", ")}))
 		}
 	}
 
 	if len(out) == 0 && len(installed) > 0 {
-		out = append(out, ok(id, "every installed Node.js line runs the current release"))
+		out = append(out, okT(id, "node.ok", nil))
 	}
 
 	return out

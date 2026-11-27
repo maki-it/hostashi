@@ -10,6 +10,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/doctor"
 	"github.com/maki-it/hostashi/internal/pagecache"
 	"github.com/maki-it/hostashi/internal/sites"
 	"github.com/maki-it/hostashi/internal/web"
@@ -262,7 +263,7 @@ func (h *siteOps) pageCacheChecks() []agentapi.DoctorCheck {
 
 	cur, _, err := h.web.Current()
 	if err != nil {
-		return []agentapi.DoctorCheck{{ID: "system.pagecache", Status: agentapi.DoctorWarn, Summary: "cannot read the web state: " + err.Error()}}
+		return []agentapi.DoctorCheck{doctor.New(agentapi.DoctorWarn, "system.pagecache", "nginx.error", "", doctor.P{"error": err.Error()})}
 	}
 
 	var out []agentapi.DoctorCheck
@@ -275,7 +276,7 @@ func (h *siteOps) pageCacheChecks() []agentapi.DoctorCheck {
 		}
 
 		want[s.User] = true
-		c := agentapi.DoctorCheck{ID: "site.pagecache", Site: s.User, Status: agentapi.DoctorOK, Summary: "the page cache directory is in order"}
+		c := doctor.NewSite(agentapi.DoctorOK, "site.pagecache", s.User, "pagecache.ok", "", nil)
 
 		_, home, err := h.site(s.User)
 		if err == nil {
@@ -284,12 +285,10 @@ func (h *siteOps) pageCacheChecks() []agentapi.DoctorCheck {
 
 		switch {
 		case err != nil:
-			c.Status, c.Summary, c.Hint = agentapi.DoctorFail, "page cache directory: "+err.Error(), "Run hostashi web sync; it recreates the directory."
+			c = doctor.NewSite(agentapi.DoctorFail, "site.pagecache", s.User, "pagecache.error", "pagecache.error.hint", doctor.P{"error": err.Error()})
 		case h.quota != nil:
 			if ok, qerr := h.quota.Available(home); qerr == nil && !ok {
-				c.Status = agentapi.DoctorWarn
-				c.Summary = "cached pages do not count against the disk limit: the file system has no project quota"
-				c.Hint = "Only the cache size limits it."
+				c = doctor.NewSite(agentapi.DoctorWarn, "site.pagecache", s.User, "pagecache.noquota", "pagecache.noquota.hint", nil)
 			}
 		}
 
@@ -299,18 +298,14 @@ func (h *siteOps) pageCacheChecks() []agentapi.DoctorCheck {
 	for _, p := range h.m.Pools() {
 		names, err := h.cache.List(p.Path)
 		if err != nil {
-			out = append(out, agentapi.DoctorCheck{ID: "system.pagecache", Status: agentapi.DoctorWarn, Summary: "pool " + p.Name + ": " + err.Error()})
+			out = append(out, doctor.New(agentapi.DoctorWarn, "system.pagecache", "pagecache.pool", "", doctor.P{"pool": p.Name, "error": err.Error()}))
 
 			continue
 		}
 
 		for _, n := range names {
 			if !want[n] {
-				out = append(out, agentapi.DoctorCheck{
-					ID: "system.pagecache", Status: agentapi.DoctorWarn,
-					Summary: "pool " + p.Name + " holds a page cache directory of " + n + ", which has no page cache",
-					Hint:    "Run hostashi web sync; it removes the directory.",
-				})
+				out = append(out, doctor.New(agentapi.DoctorWarn, "system.pagecache", "pagecache.orphan", "pagecache.orphan.hint", doctor.P{"pool": p.Name, "site": n}))
 			}
 		}
 	}

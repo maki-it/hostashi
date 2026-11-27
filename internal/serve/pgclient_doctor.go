@@ -10,6 +10,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/dbserver"
+	"github.com/maki-it/hostashi/internal/doctor"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -66,10 +67,7 @@ func pgClientChecks(list []store.DBServer, st agentapi.PGClientStatus, stErr err
 	const id = "dbserver.pg_client"
 
 	if stErr != nil {
-		return []agentapi.DoctorCheck{{
-			ID: id, Status: agentapi.DoctorWarn, Summary: "cannot read which PostgreSQL client is installed",
-			Hint: "The agent did not answer; check hostashi-agent.service.",
-		}}
+		return []agentapi.DoctorCheck{doctor.New(agentapi.DoctorWarn, id, "pgclient.error", "pgclient.error.hint", nil)}
 	}
 
 	client := 0
@@ -90,30 +88,20 @@ func pgClientChecks(list []store.DBServer, st agentapi.PGClientStatus, stErr err
 
 		switch {
 		case client == 0:
-			out = append(out, agentapi.DoctorCheck{
-				ID: id, Status: agentapi.DoctorFail,
-				Summary: "no PostgreSQL client is installed for database server " + s.Name + ": its backups, imports and exports fail",
-				Hint:    "Install it with POST /api/v1/db-servers/postgresql-client; adding a PostgreSQL server starts it too.",
-			})
+			out = append(out, doctor.New(agentapi.DoctorFail, id, "pgclient.none", "pgclient.none.hint", doctor.P{"name": s.Name}))
 		case server == 0:
 			// Not checked yet; dbserver.reachable says so.
 		case server > client:
-			hint := "Update Hostashi: a newer release brings the client for PostgreSQL " + strconv.Itoa(server) + "."
+			params := doctor.P{"client": strconv.Itoa(client), "name": s.Name, "version": s.Status.Version, "server": strconv.Itoa(server), "newest": newest}
+
+			hint := "pgclient.update.hint"
 			if majorOf(newest) >= server {
-				hint = "Install the PostgreSQL " + newest + " client with POST /api/v1/db-servers/postgresql-client."
+				hint = "pgclient.install.hint"
 			}
 
-			out = append(out, agentapi.DoctorCheck{
-				ID: id, Status: agentapi.DoctorFail,
-				Summary: "the PostgreSQL client " + strconv.Itoa(client) + " is older than database server " + s.Name +
-					" (PostgreSQL " + s.Status.Version + "): its backups, imports and exports fail",
-				Hint: hint,
-			})
+			out = append(out, doctor.New(agentapi.DoctorFail, id, "pgclient.old", hint, params))
 		default:
-			out = append(out, agentapi.DoctorCheck{
-				ID: id, Status: agentapi.DoctorOK,
-				Summary: "the PostgreSQL client " + strconv.Itoa(client) + " can dump database server " + s.Name + " (PostgreSQL " + s.Status.Version + ")",
-			})
+			out = append(out, doctor.New(agentapi.DoctorOK, id, "pgclient.ok", "", doctor.P{"client": strconv.Itoa(client), "name": s.Name, "version": s.Status.Version}))
 		}
 	}
 

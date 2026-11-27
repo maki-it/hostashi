@@ -14,6 +14,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/auth"
+	"github.com/maki-it/hostashi/internal/doctor"
 )
 
 // Doctor runs the read-only checks of hostashi doctor in the agent.
@@ -64,9 +65,7 @@ func registerDoctor(mux *routeMux, a authn, run Doctor, panel PanelChecks, log *
 			if err != nil {
 				log.WarnContext(r.Context(), "doctor: panel checks", "err", err)
 
-				more = append(more, agentapi.DoctorCheck{
-					ID: "panel.checks", Status: agentapi.DoctorWarn, Summary: "some of the panel's own checks could not run",
-				})
+				more = append(more, doctor.New(agentapi.DoctorWarn, "panel.checks", "panelchecks.error", "", nil))
 			}
 
 			rep.Checks = append(rep.Checks, more...)

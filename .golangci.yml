@@ -110,6 +110,9 @@ linters:
       default-signifies-exhaustive: false
     misspell:
       locale: US
+      # German texts of the doctor checks (internal/doctor/catalog.go).
+      ignore-rules:
+        - konfiguration
     nolintlint:
       require-explanation: true
       require-specific: true

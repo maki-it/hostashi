@@ -14,9 +14,10 @@ import (
 func Fail2banJails(st agentapi.Fail2banStatus, err error) Check {
 	const id = "service.fail2ban.jails"
 
-	hint := "Check the jails: fail2ban-client status, and a local file under /etc/fail2ban/jail.d/ that may break them."
+	const hint = "jails.hint"
+
 	if err != nil {
-		return warn(id, "the jails cannot be read: "+describe(err), hint)
+		return warnT(id, "jails.error", hint, P{"error": describe(err)})
 	}
 
 	var missing []string
@@ -28,8 +29,8 @@ func Fail2banJails(st agentapi.Fail2banStatus, err error) Check {
 	}
 
 	if len(missing) > 0 {
-		return warn(id, "not running: "+strings.Join(missing, ", "), hint)
+		return warnT(id, "jails.down", hint, P{"jails": strings.Join(missing, ", ")})
 	}
 
-	return ok(id, "all jails are running")
+	return okT(id, "jails.ok", nil)
 }
