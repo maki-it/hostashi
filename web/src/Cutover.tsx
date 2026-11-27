@@ -5,6 +5,8 @@
 // HTTPS on once every domain resolves only to this server.
 
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import i18n from "./i18n";
 import {
   cancelCutover,
   cutoverMessage,
@@ -19,26 +21,24 @@ import { Badge, Button, Notice, RelTime, type Tone } from "./ui";
 // The panel checks once a minute; looking twice as often is enough.
 export const cutoverPollMs = 30_000;
 
+// DNS record types read the same in every language.
+const recordA = "A";
+const recordAAAA = "AAAA";
+
 // A TTL above this keeps old answers cached too long for a quick switch.
 const maxTTL = 300;
-
-const stateLabel: Record<CutoverView["state"], string> = {
-  waiting: "Waiting for DNS",
-  switched: "Done, HTTPS is on",
-  failed: "Failed",
-  canceled: "Canceled",
-};
 
 const stateTone: Record<CutoverView["state"], Tone> = { waiting: "warn", switched: "ok", failed: "err", canceled: "off" };
 
 export function answerLabel(a: DomainAnswer): string {
-  if (a.error) return "Lookup failed: " + a.error;
+  if (a.error) return i18n.t("sites.cutover.lookupFailed", { error: a.error });
   if (a.here) return a.addrs.join(", ");
-  if (a.addrs.length === 0) return "No address";
-  return "Points elsewhere: " + a.addrs.join(", ");
+  if (a.addrs.length === 0) return i18n.t("sites.cutover.noAddress");
+  return i18n.t("sites.cutover.elsewhere", { addrs: a.addrs.join(", ") });
 }
 
 export function Cutover({ site }: { site: string }) {
+  const { t } = useTranslation();
   const [c, setC] = useState<CutoverView | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -80,49 +80,46 @@ export function Cutover({ site }: { site: string }) {
   const longTTL = waiting && (c?.answers.some((a) => a.ttl !== undefined && a.ttl > maxTTL) ?? false);
 
   return (
-    <div className="ui-stack" role="group" aria-label={"DNS switch of " + site}>
+    <div className="ui-stack" role="group" aria-label={t("sites.cutover.label", { site })}>
       {c === undefined ? (
-        !error && <p aria-busy="true">Loading the DNS check…</p>
+        !error && <p aria-busy="true">{t("sites.cutover.loading")}</p>
       ) : c === null ? (
-        <p className="ui-flush">
-          When the files and databases are in place, point the domains of {site} at this server. The panel checks the domains every minute
-          and turns HTTPS on once all of them point here.
-        </p>
+        <p className="ui-flush">{t("sites.cutover.intro", { site })}</p>
       ) : (
         <>
           <dl className="ui-facts">
-            <dt>State</dt>
+            <dt>{t("sites.cutover.state")}</dt>
             <dd>
               <span className="ui-row">
-                <Badge tone={stateTone[c.state]}>{stateLabel[c.state]}</Badge>
+                <Badge tone={stateTone[c.state]}>{t(`sites.cutover.states.${c.state}`)}</Badge>
                 {c.doneAt && <RelTime iso={c.doneAt} />}
               </span>
             </dd>
-            <dt>Started</dt>
+            <dt>{t("sites.cutover.started")}</dt>
             <dd>
               <RelTime iso={c.startedAt} />
             </dd>
             {waiting && (
               <>
-                <dt>Gives up</dt>
+                <dt>{t("sites.cutover.givesUp")}</dt>
                 <dd>
                   <RelTime iso={c.deadline} />
                 </dd>
               </>
             )}
-            <dt>Last check</dt>
-            <dd>{c.checkedAt ? <RelTime iso={c.checkedAt} /> : "Not yet"}</dd>
+            <dt>{t("sites.cutover.lastCheck")}</dt>
+            <dd>{c.checkedAt ? <RelTime iso={c.checkedAt} /> : t("sites.cutover.notYet")}</dd>
           </dl>
           {waiting && (
-            <div className="ui-stack-tight" aria-label={"Records for " + site} role="group">
-              <p className="ui-flush">Set these records for every domain below at your DNS provider and remove all other A and AAAA records:</p>
+            <div className="ui-stack-tight" aria-label={t("sites.cutover.records", { site })} role="group">
+              <p className="ui-flush">{t("sites.cutover.setRecords")}</p>
               {c.server.length === 0 ? (
-                <p className="ui-hint ui-flush">This server&apos;s public addresses are not known yet.</p>
+                <p className="ui-hint ui-flush">{t("sites.cutover.noServer")}</p>
               ) : (
                 <dl className="ui-facts">
                   {v4.length > 0 && (
                     <>
-                      <dt>A</dt>
+                      <dt>{recordA}</dt>
                       <dd>
                         {v4.map((a) => (
                           <div key={a}>
@@ -134,7 +131,7 @@ export function Cutover({ site }: { site: string }) {
                   )}
                   {v6.length > 0 && (
                     <>
-                      <dt>AAAA</dt>
+                      <dt>{recordAAAA}</dt>
                       <dd>
                         {v6.map((a) => (
                           <div key={a}>
@@ -150,19 +147,19 @@ export function Cutover({ site }: { site: string }) {
           )}
           {c.answers.length > 0 ? (
             <>
-              <p className="ui-flush">What the domains resolve to now:</p>
-              <dl className="ui-facts" aria-label={"Domains of " + site}>
+              <p className="ui-flush">{t("sites.cutover.now")}</p>
+              <dl className="ui-facts" aria-label={t("sites.cutover.domains", { site })}>
                 {c.answers.map((a) => (
                   <Fragment key={a.domain}>
                     <dt>{a.domain}</dt>
                     <dd>
                       <span className="ui-row">
-                        <Badge tone={a.here ? "ok" : "warn"}>{a.here ? "Here" : "Not yet"}</Badge> {answerLabel(a)}
+                        <Badge tone={a.here ? "ok" : "warn"}>{a.here ? t("sites.cutover.here") : t("sites.cutover.notYet")}</Badge> {answerLabel(a)}
                       </span>
                       {a.ttl !== undefined && (
                         <span className={a.ttl > maxTTL ? "ui-row" : "ui-row ui-hint"}>
-                          TTL {ttlLabel(a.ttl)}
-                          {a.ttl > maxTTL && waiting && <Badge tone="warn">Lower to 300 s</Badge>}
+                          {t("sites.cutover.ttl", { ttl: ttlLabel(a.ttl) })}
+                          {a.ttl > maxTTL && waiting && <Badge tone="warn">{t("sites.cutover.lower")}</Badge>}
                         </span>
                       )}
                     </dd>
@@ -171,12 +168,11 @@ export function Cutover({ site }: { site: string }) {
               </dl>
             </>
           ) : (
-            waiting && <p className="ui-hint ui-flush">The first check runs in a moment.</p>
+            waiting && <p className="ui-hint ui-flush">{t("sites.cutover.firstCheck")}</p>
           )}
           {longTTL && (
-            <Notice tone="warn" title="Some records are cached for more than 5 minutes.">
-              Lower their TTL to 300 seconds and wait for the old TTL to pass before you change the addresses, so that visitors switch over
-              quickly.
+            <Notice tone="warn" title={t("sites.cutover.longTtl")}>
+              {t("sites.cutover.longTtlText")}
             </Notice>
           )}
           {c.error && <Notice tone="err" title={c.error.charAt(0).toUpperCase() + c.error.slice(1) + "."} />}
@@ -186,16 +182,16 @@ export function Cutover({ site }: { site: string }) {
       <div className="ui-row">
         {c !== undefined && !waiting && c?.state !== "switched" && (
           <Button variant="primary" disabled={busy} onClick={() => void run(startCutover)}>
-            {busy ? "Starting…" : c === null ? "Start DNS check" : "Start DNS check again"}
+            {busy ? t("sites.cutover.starting") : c === null ? t("sites.cutover.start") : t("sites.cutover.startAgain")}
           </Button>
         )}
         {waiting && (
           <>
             <Button disabled={busy} onClick={() => void load()}>
-              Reload
+              {t("sites.cutover.reload")}
             </Button>
             <Button disabled={busy} onClick={() => void run(cancelCutover)}>
-              {busy ? "Canceling…" : "Cancel DNS check"}
+              {busy ? t("sites.cutover.canceling") : t("sites.cutover.cancel")}
             </Button>
           </>
         )}

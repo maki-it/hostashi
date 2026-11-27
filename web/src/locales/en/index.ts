@@ -28,13 +28,14 @@ import shell from "./shell.json";
 import siteAccess from "./siteAccess.json";
 import siteDomains from "./siteDomains.json";
 import siteHeaders from "./siteHeaders.json";
+import sites from "./sites.json";
 import ssh from "./ssh.json";
 import tokens from "./tokens.json";
 import ui from "./ui.json";
 import usage from "./usage.json";
 import users from "./users.json";
 
-const en = { account, audit, auth, backups, certificate, common, databases, errors, files, git, hardening, limits, logs, mail, malware, migrate, overview, pages, parked, permissions, profiles, realIp, shell, siteAccess, siteDomains, siteHeaders, ssh, tokens, ui, usage, users };
+const en = { account, audit, auth, backups, certificate, common, databases, errors, files, git, hardening, limits, logs, mail, malware, migrate, overview, pages, parked, permissions, profiles, realIp, shell, siteAccess, siteDomains, siteHeaders, sites, ssh, tokens, ui, usage, users };
 
 export type Catalog = typeof en;
 

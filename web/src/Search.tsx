@@ -24,6 +24,7 @@ const perGroup = 6;
  */
 export function searchItems(role: string, sites: readonly Site[]): SearchItem[] {
   const out: SearchItem[] = [];
+  const english = i18n.getFixedT("en");
   for (const s of sites) {
     const name = s.title || s.name;
     const domain = s.domains[0] ?? "";
@@ -45,12 +46,12 @@ export function searchItems(role: string, sites: readonly Site[]): SearchItem[] 
           detail: g.label,
           href: formatHash({ page: "sites", site: { name: s.name, tab: t.id } }),
           icon: FileText,
-          words: `${s.name} ${s.title ?? ""} ${domain} ${t.label} ${g.label}`,
+          // The English names too, so "logs" finds the tab in every language.
+          words: `${s.name} ${s.title ?? ""} ${domain} ${t.label} ${g.label} ${english(`sites.nav.tabs.${t.id as "overview"}`)} ${english(`sites.nav.groups.${g.id as "overview"}`)}`,
         });
       }
     }
   }
-  const english = i18n.getFixedT("en");
   for (const g of navFor(role)) {
     const group = groupLabel(g.id);
     for (const i of g.items) {
