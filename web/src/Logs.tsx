@@ -2,6 +2,8 @@
 
 import { ArrowClockwise, DownloadSimple, Pause, Play } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import { formatCount } from "./format";
 import {
   appendLines,
   filterLines,
@@ -26,8 +28,9 @@ export const followInterval = 2000;
 
 const tailChoices = [100, 200, 500, 1000];
 
-// A line the view inserts itself where the server rotated the file.
-const rotatedMark = "— the log was rotated, new file —";
+// A line the view inserts itself where the server rotated the file. It is
+// marked by identity, not text, so a log line with the same words stays a line.
+const rotatedMark = "\u0000rotated";
 
 type Props = {
   site: Site;
@@ -37,6 +40,7 @@ type Props = {
 
 // SiteLogs shows the logs of a site and follows them live.
 export function SiteLogs({ site, admin }: Props) {
+  const { t } = useTranslation();
   const [kind, setKind] = useState<LogKind>("access");
   const [count, setCount] = useState(200);
   const [lines, setLines] = useState<string[] | null>(null);
@@ -117,7 +121,7 @@ export function SiteLogs({ site, admin }: Props) {
   const info = logKinds.find((k) => k.id === kind);
 
   function download() {
-    const blob = new Blob([shown.join("\n") + "\n"], { type: "text/plain;charset=utf-8" });
+    const blob = new Blob([shown.map((l) => (l === rotatedMark ? t("logs.rotated") : l)).join("\n") + "\n"], { type: "text/plain;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `${site.name}-${kind}.log`;
@@ -128,11 +132,11 @@ export function SiteLogs({ site, admin }: Props) {
   return (
     <>
       <Card
-        title="Logs"
+        title={t("logs.title")}
         actions={
           <div className="ui-row">
             <span className={follow ? "ui-live on" : "ui-live"} role="status">
-              {follow ? "Live" : "Paused"}
+              {follow ? t("logs.live") : t("logs.paused")}
             </span>
             <Button
               icon={follow ? <Pause /> : <Play />}
@@ -142,27 +146,27 @@ export function SiteLogs({ site, admin }: Props) {
               }}
               disabled={lines === null}
             >
-              {follow ? "Pause" : "Follow"}
+              {follow ? t("logs.pause") : t("logs.follow")}
             </Button>
             <Button icon={<ArrowClockwise />} onClick={() => void load()} disabled={lines === null}>
-              Reload
+              {t("logs.reload")}
             </Button>
             <Button icon={<DownloadSimple />} onClick={download} disabled={shown.length === 0}>
-              Download
+              {t("logs.download")}
             </Button>
           </div>
         }
       >
         <div className="ui-stack">
           <div className="ui-row ui-log-tools">
-            <div className="ui-seg" role="radiogroup" aria-label="Log">
+            <div className="ui-seg" role="radiogroup" aria-label={t("logs.kindLabel")}>
               {siteLogKinds(siteType(site)).map((k) => (
                 <button key={k.id} type="button" role="radio" aria-checked={kind === k.id} className="ui-seg-btn" onClick={() => setKind(k.id)}>
                   {k.label}
                 </button>
               ))}
             </div>
-            <Field label="Last lines">
+            <Field label={t("logs.lastLines")}>
               <select className="ui-select" value={count} onChange={(e) => setCount(Number(e.target.value))}>
                 {tailChoices.map((n) => (
                   <option key={n} value={n}>
@@ -171,20 +175,18 @@ export function SiteLogs({ site, admin }: Props) {
                 ))}
               </select>
             </Field>
-            <Field label="Filter">
-              <input className="ui-input" type="search" value={filter} placeholder="e.g. 404 or wp-login" onChange={(e) => setFilter(e.target.value)} />
+            <Field label={t("logs.filter")}>
+              <input className="ui-input" type="search" value={filter} placeholder={t("logs.filterPlaceholder")} onChange={(e) => setFilter(e.target.value)} />
             </Field>
           </div>
           {info && <p className="ui-hint">{info.hint}</p>}
           {error && <Notice tone="err" title={error} />}
-          <div ref={view} className="ui-log" role="log" aria-label={`${info?.label ?? ""} log of ${site.name}`} tabIndex={0} onScroll={onScroll}>
-            {lines === null && <p aria-busy="true">Loading…</p>}
-            {lines !== null && shown.length === 0 && !error && (
-              <p className="ui-hint">{lines.length === 0 ? "The log is empty so far." : "No line matches the filter."}</p>
-            )}
+          <div ref={view} className="ui-log" role="log" aria-label={t("logs.viewLabel", { kind: info?.label ?? "", site: site.name })} tabIndex={0} onScroll={onScroll}>
+            {lines === null && <p aria-busy="true">{t("logs.loading")}</p>}
+            {lines !== null && shown.length === 0 && !error && <p className="ui-hint">{lines.length === 0 ? t("logs.empty") : t("logs.noMatch")}</p>}
             {shown.map((l, i) => (
               <div key={i} className={l === rotatedMark ? "ui-log-mark" : "ui-log-line " + lineTone(kind, l)}>
-                {l}
+                {l === rotatedMark ? t("logs.rotated") : l}
               </div>
             ))}
           </div>
@@ -198,25 +200,17 @@ export function SiteLogs({ site, admin }: Props) {
                   setAutoScroll(e.target.checked);
                 }}
               />
-              Scroll automatically
+              {t("logs.autoScroll")}
             </label>
             <p className="ui-hint ui-flush">
-              {follow ? `New lines appear every ${followInterval / 1000} seconds.` : "Paused: press Follow to see new lines."}{" "}
-              {lines !== null && `${shown.length} of ${lines.length} lines shown.`}
+              {follow ? t("logs.every", { seconds: followInterval / 1000 }) : t("logs.pausedHint")}{" "}
+              {lines !== null && t("logs.shown", { shown: formatCount(shown.length), total: formatCount(lines.length) })}
             </p>
           </div>
         </div>
       </Card>
       <p className="ui-hint">
-        The server deletes old logs after the days an administrator set
-        {admin ? (
-          <>
-            {" "}
-            under <a href={formatHash({ page: "system" })}>System</a>.
-          </>
-        ) : (
-          ". Ask them if you need logs for longer."
-        )}
+        {admin ? <Trans i18nKey="logs.retentionAdmin" components={{ a: <a href={formatHash({ page: "system" })} /> }} /> : t("logs.retentionOther")}
       </p>
     </>
   );
@@ -225,6 +219,7 @@ export function SiteLogs({ site, admin }: Props) {
 // LogRetentionCard says how long the server keeps the logs of every site;
 // it lives under System, as it is one value for the server (ADR-0053).
 export function LogRetentionCard() {
+  const { t } = useTranslation();
   const [r, setR] = useState<LogRetention | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -251,7 +246,7 @@ export function LogRetentionCard() {
     try {
       const v = await setLogRetention(Number(text));
       setR(v);
-      setDone(`Logs are kept for ${v.days} ${v.days === 1 ? "day" : "days"} from the next rotation on.`);
+      setDone(t("logs.retention.done", { count: v.days }));
     } catch (err) {
       setError(logMessage(err));
     } finally {
@@ -260,29 +255,25 @@ export function LogRetentionCard() {
   }
 
   return (
-    <Card title="Log retention">
+    <Card title={t("logs.retention.title")}>
       <form className="ui-stack" onSubmit={save} noValidate>
-        <p className="ui-hint">
-          One value for every site on this server: access, web server, PHP, app and WordPress install logs, and nginx's logs of requests for no site. Logs are
-          rotated daily and deleted after this many days. Match it to what your privacy policy and data processing agreements promise.
-        </p>
+        <p className="ui-hint">{t("logs.retention.intro")}</p>
         {r && (
           <>
             <div className="ui-row ui-log-tools">
-              <Field label="Keep logs for (days)" {...(problem ? { error: problem } : {})}>
+              <Field label={t("logs.retention.days")} {...(problem ? { error: problem } : {})}>
                 <input className="ui-input ui-log-days" inputMode="numeric" value={text} onChange={(e) => setText(e.target.value)} />
               </Field>
               <Button type="submit" variant="primary" disabled={busy || !!problem || text === String(r.days)}>
-                Save
+                {t("logs.retention.save")}
               </Button>
             </div>
-            <p className="ui-hint">
-              {r.minDays} to {r.maxDays} days, default {r.defaultDays}. A shorter time deletes older logs at the next daily rotation.
-            </p>
+            <p className="ui-hint">{t("logs.retention.range", { min: r.minDays, max: r.maxDays, default: r.defaultDays })}</p>
           </>
         )}
-        {!r && !error && <p aria-busy="true">Loading…</p>}
-        <p className="ui-hint">The panel's own logs and the system journal keep the settings of the distribution.</p>
+        {!r && !error && <p aria-busy="true">{t("logs.retention.loading")}</p>}
+        <p className="ui-hint">{t("logs.retention.system")}</p>
+
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
       </form>

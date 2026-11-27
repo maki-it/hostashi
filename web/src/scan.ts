@@ -5,6 +5,8 @@
 // quarantines; it never deletes a file.
 
 import { ApiError, request } from "./api";
+import { compare } from "./format";
+import i18n from "./i18n";
 import type { Tone } from "./ui";
 import { siteMessage } from "./sites";
 
@@ -89,7 +91,7 @@ export const maxScanPaths = 100;
 export function scopeText(paths: string[] | undefined): string {
   if (!paths || paths.length === 0) return "";
   const shown = paths.slice(0, 3).join(", ");
-  return paths.length > 3 ? `${shown} and ${String(paths.length - 3)} more` : shown;
+  return paths.length > 3 ? i18n.t("malware.scope", { shown, count: paths.length - 3 }) : shown;
 }
 
 export type FindingAction = "quarantine" | "restore" | "ignore" | "reopen";
@@ -103,78 +105,64 @@ export const engineBusy = (s: EngineState) => s === "installing" || s === "remov
 export function engineWord(s: EngineState): { word: string; tone: Tone } {
   switch (s) {
     case "on":
-      return { word: "On", tone: "ok" };
+      return { word: i18n.t("malware.words.on"), tone: "ok" };
     case "installing":
-      return { word: "Installing…", tone: "warn" };
+      return { word: i18n.t("malware.words.installing"), tone: "warn" };
     case "removing":
-      return { word: "Removing…", tone: "warn" };
+      return { word: i18n.t("malware.words.removing"), tone: "warn" };
     case "failed":
-      return { word: "Failed", tone: "err" };
+      return { word: i18n.t("malware.words.failed"), tone: "err" };
     default:
-      return { word: "Off", tone: "off" };
+      return { word: i18n.t("malware.words.off"), tone: "off" };
   }
 }
 
-export const scheduleLabel: Record<ScanSchedule, string> = {
-  weekly: "Weekly, at night",
-  daily: "Every night",
-  off: "Only on request",
-};
+/** scheduleLabel names a schedule in the panel's language. */
+export const scheduleLabel = (s: ScanSchedule): string => i18n.t(`malware.schedules.${s}`);
 
 export function runWord(r: ScanRun): { word: string; tone: Tone } {
   switch (r.state) {
     case "succeeded":
-      return r.found > 0 ? { word: r.found === 1 ? "1 file flagged" : `${r.found} files flagged`, tone: "err" } : { word: "Clean", tone: "ok" };
+      return r.found > 0 ? { word: i18n.t("malware.words.flagged", { count: r.found }), tone: "err" } : { word: i18n.t("malware.words.clean"), tone: "ok" };
     case "failed":
-      return { word: "Failed", tone: "err" };
+      return { word: i18n.t("malware.words.failed"), tone: "err" };
     case "running":
-      return { word: "Scanning…", tone: "warn" };
+      return { word: i18n.t("malware.words.scanning"), tone: "warn" };
     default:
-      return { word: "Waiting", tone: "off" };
+      return { word: i18n.t("malware.words.waiting"), tone: "off" };
   }
 }
 
 export const runActive = (r: ScanRun) => r.state === "queued" || r.state === "running";
 
-export const sourceLabel = (s: ScanRun["source"]) => ({ panel: "Panel", api: "API", schedule: "Schedule", realtime: "Real time, today" })[s] ?? s;
+const sources = new Set(["panel", "api", "schedule", "realtime"]);
+export const sourceLabel = (s: ScanRun["source"]) => (sources.has(s) ? i18n.t(`malware.sources.${s as "panel"}`) : s);
 
-export function findingWord(s: FindingState): { word: string; tone: Tone } {
+const findingTones = { open: "err", quarantined: "warn", ignored: "off", restored: "warn" } as const;
+
+export function findingWord(
+s: FindingState): { word: string; tone: Tone } {
   switch (s) {
     case "open":
-      return { word: "Flagged", tone: "err" };
     case "quarantined":
-      return { word: "In quarantine", tone: "warn" };
     case "ignored":
-      return { word: "False positive", tone: "off" };
     case "restored":
-      return { word: "Restored", tone: "warn" };
+      return { word: i18n.t(`malware.findingWords.${s}`), tone: findingTones[s] };
     default:
-      return { word: "Gone", tone: "off" };
+      return { word: i18n.t("malware.findingWords.gone"), tone: "off" };
   }
 }
 
 /** The findings that still need a look come first, then the rest by path. */
 export function sortFindings(fs: readonly ScanFinding[]): ScanFinding[] {
   const rank: Record<FindingState, number> = { open: 0, restored: 1, quarantined: 2, ignored: 3, gone: 4 };
-  return [...fs].sort((a, b) => rank[a.state] - rank[b.state] || a.path.localeCompare(b.path));
+  return [...fs].sort((a, b) => rank[a.state] - rank[b.state] || compare(a.path, b.path));
 }
 
 export function scanMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    switch (err.code) {
-      case "scan_unavailable":
-        return "The virus scan is not available on this panel: the agent does not answer.";
-      case "scan_off":
-        return "The virus scan is off on this server. An administrator switches it on under System.";
-      case "scan_running":
-        return "A scan of this site is waiting or running. Wait until it ends.";
-      case "finding_not_found":
-        return "This finding is no longer there. Reload the page.";
-      case "scan_engine_busy":
-        return "ClamAV is being installed or removed. Wait until that ends.";
-      case "finding_state":
-        return "The finding changed in the meantime. Reload the page.";
-    }
+    const key = `malware.errors.${err.code}`;
+    if (i18n.exists(key)) return (i18n.t as (k: string) => string)(key);
   }
   return siteMessage(err);
 }

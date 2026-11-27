@@ -1,0 +1,43 @@
+{
+  "ranges": {
+    "1h": "1 Stunde",
+    "24h": "24 Stunden",
+    "7d": "7 Tage",
+    "30d": "30 Tage"
+  },
+  "rangeLabel": "Zeitraum",
+  "title": "Auslastung, letzte {{range}}",
+  "loading": "Wird geladen…",
+  "cpuOf": "100 % ist das Limit von {{cores}}",
+  "cpuAll": "100 % sind alle {{cores}} des Servers",
+  "cpuTitle": "CPU-Nutzung in Prozent der Kerne, die die Site nutzen darf",
+  "memory": "Arbeitsspeicher",
+  "memoryOf": "von {{limit}} Limit",
+  "memoryTitle": "Belegter Arbeitsspeicher",
+  "inUse": "Belegt",
+  "traffic": "Web-Traffic",
+  "in": "Eingehend",
+  "out": "Ausgehend",
+  "io": "Platten-I/O",
+  "ioTitle": "Lese- und Schreibzugriffe auf der Platte",
+  "read": "Lesen",
+  "write": "Schreiben",
+  "now": "Jetzt: {{used}} von {{cores}} ausgelastet · {{requests}} Anfragen/s · {{tasks}} Prozesse · {{cache}} Datei-Cache. Datenbankabfragen laufen im gemeinsamen Datenbankserver und werden hier nicht gezählt.",
+  "core_one": "{{n}} Kern",
+  "core_other": "{{n}} Kerne",
+  "thousand": "{{n}} Tsd.",
+  "million": "{{n}} Mio.",
+  "sites": {
+    "title": "Sites nach Auslastung, letzte {{range}}",
+    "label": "Sites nach Auslastung",
+    "site": "Site",
+    "cpu": "CPU (Schnitt · Spitze)",
+    "memory": "Arbeitsspeicher (Schnitt · Spitze)",
+    "traffic": "Web-Traffic",
+    "io": "Platten-I/O",
+    "of": "von {{cores}}",
+    "limit": " (Limit)",
+    "requests": "{{n}} Anfr.",
+    "empty": "Für diesen Zeitraum gibt es noch keine Daten."
+  }
+}

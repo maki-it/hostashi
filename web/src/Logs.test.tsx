@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { LogRetentionCard, SiteLogs } from "./Logs";
 import type { Site } from "./sites";
+import { setLanguage } from "./i18n";
 import { mockFetch } from "./test-utils";
 
 const site: Site = {
@@ -113,5 +114,17 @@ describe("SiteLogs", () => {
     await user.click(save);
     expect(await screen.findByText("Logs are kept for 14 days from the next rotation on.")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ days: 14 });
+  });
+});
+
+describe("SiteLogs in German", () => {
+  it("names the logs and counts lines in German", async () => {
+    setLanguage("de");
+    mockFetch({ "GET /api/v1/sites/blog/logs/access?lines=200": chunk(access), "GET /api/v1/settings/logs": retention });
+    render(<SiteLogs site={site} admin={false} />);
+    expect(await screen.findByRole("log", { name: "Log „Zugriffe“ von blog" })).toBeInTheDocument();
+    expect(await screen.findByText("3 von 3 Zeilen gezeigt.", { exact: false })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Webserver-Fehler" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
   });
 });
