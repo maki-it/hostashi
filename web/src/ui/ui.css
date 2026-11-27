@@ -1024,17 +1024,22 @@ a.ui-btn {
 }
 
 /* The bar of the file manager: folder, toolbar, filter and the selection.
-   It sticks to the top of the window while the listing scrolls, and the
-   table head sticks below it (--files-bar-h, measured in Files.tsx). Once
+   It sticks below the top bar (--app-top-h, measured in Shell.tsx) while
+   the listing scrolls, and the table head sticks below it (--files-bar-h,
+   measured in Files.tsx). Once
    stuck it gets compact: folder, filter and toolbar share one row, the
    controls are lower and the selection stays on one scrolling row. */
 .ui-files-sentinel {
+  position: relative;
+  /* Shifted up by the sticky top bar: it leaves the window just when the
+     bar reaches the top bar and sticks. */
+  top: calc(-1 * var(--app-top-h, 0px));
   height: 1px;
   margin-bottom: -1px;
 }
 .ui-files-bar {
   position: sticky;
-  top: 0;
+  top: var(--app-top-h, 0px);
   z-index: 4;
   background: var(--surface);
   border-radius: calc(var(--radius-card) - 1px) calc(var(--radius-card) - 1px) 0 0;
@@ -1100,7 +1105,7 @@ a.ui-btn {
 }
 .ui-files .ui-table thead th {
   position: sticky;
-  top: var(--files-bar-h, 0px);
+  top: calc(var(--app-top-h, 0px) + var(--files-bar-h, 0px));
   z-index: 3;
   border-bottom: 0;
   box-shadow: inset 0 -1px 0 var(--line);
@@ -1140,7 +1145,7 @@ a.ui-btn {
 }
 /* Focus and anchors scroll clear of the bar and the table head. */
 html:has(.ui-files) {
-  scroll-padding-top: var(--files-sticky-h, 0px);
+  scroll-padding-top: calc(var(--app-top-h, 0px) + var(--files-sticky-h, 0px));
 }
 .ui-files-drop {
   outline: 2px dashed transparent;
