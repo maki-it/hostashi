@@ -8743,6 +8743,30 @@
         },
         "type": "object"
       },
+      "UserPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "requireSecondFactor": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "requireSecondFactor"
+        ],
+        "type": "object"
+      },
+      "UserPolicyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "requireSecondFactor": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "UserUpdateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -25240,6 +25264,90 @@
           }
         ],
         "summary": "Invite a new account",
+        "tags": [
+          "users"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "users:write"
+      }
+    },
+    "/api/v1/users/policy": {
+      "get": {
+        "operationId": "getUserPolicy",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "What applies to every account, such as a required second factor",
+        "tags": [
+          "users"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "users:read"
+      },
+      "put": {
+        "operationId": "setUserPolicy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Require a second factor of every account, or stop requiring it",
         "tags": [
           "users"
         ],
