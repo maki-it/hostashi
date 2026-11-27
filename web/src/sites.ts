@@ -210,12 +210,8 @@ export type SiteProxy = { target: string; targetHost: boolean; insecure: boolean
 /** The target of a redirect site (ADR-0054). */
 export type SiteRedirect = { target: string; status: number; keepPath: boolean };
 
-export const redirectStatuses = [
-  { value: 301, label: "301 Moved permanently" },
-  { value: 302, label: "302 Found (temporary)" },
-  { value: 307, label: "307 Temporary, keeps the method" },
-  { value: 308, label: "308 Permanent, keeps the method" },
-];
+/** The status codes of a redirect; the label is siteDomains.redirect.statuses.<code>. */
+export const redirectStatuses = [301, 302, 307, 308] as const;
 
 /**
  * proxyProblem mirrors agentapi.ParseProxyTarget: the rules of a redirect
@@ -224,21 +220,22 @@ export const redirectStatuses = [
  * server also checks the addresses a name resolves to.
  */
 export function proxyProblem(target: string, own: string[]): string {
+  if (!target) return i18n.t("siteDomains.target.enterProxy");
   const problem = redirectProblem(target, own);
-  if (problem) return problem.replace("redirect to", "pass requests to");
+  if (problem) return problem;
   const host = new URL(target).hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  if (host === "localhost" || host.endsWith(".localhost")) return "The address points to this server.";
+  if (host === "localhost" || host.endsWith(".localhost")) return i18n.t("siteDomains.target.thisServer");
   const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host);
   if (v4) {
     const [a, b] = [Number(v4[1]), Number(v4[2])];
-    if (a === 127 || a === 0) return "The address points to this server.";
-    if (a === 169 && b === 254) return "Link-local addresses (such as the cloud metadata service) are not allowed.";
-    if (a >= 224) return "Multicast and broadcast addresses are not allowed.";
+    if (a === 127 || a === 0) return i18n.t("siteDomains.target.thisServer");
+    if (a === 169 && b === 254) return i18n.t("siteDomains.target.linkLocalMetadata");
+    if (a >= 224) return i18n.t("siteDomains.target.multicastBroadcast");
   }
   if (host.includes(":")) {
-    if (host === "::1" || host === "::" || host.startsWith("::ffff:")) return "The address points to this server.";
-    if (/^fe[89ab]/.test(host)) return "Link-local addresses are not allowed.";
-    if (host.startsWith("ff")) return "Multicast addresses are not allowed.";
+    if (host === "::1" || host === "::" || host.startsWith("::ffff:")) return i18n.t("siteDomains.target.thisServer");
+    if (/^fe[89ab]/.test(host)) return i18n.t("siteDomains.target.linkLocal");
+    if (host.startsWith("ff")) return i18n.t("siteDomains.target.multicast");
   }
   return "";
 }
@@ -252,20 +249,20 @@ export const hasAccount = (s: Pick<Site, "account">) => s.account !== false;
  * site's own domains.
  */
 export function redirectProblem(target: string, own: string[]): string {
-  if (!target) return "Enter the address to redirect to.";
-  if (target.length > 2048) return "The address is too long.";
-  if (!/^https?:\/\//.test(target)) return "The address must start with https:// or http://.";
+  if (!target) return i18n.t("siteDomains.target.enterRedirect");
+  if (target.length > 2048) return i18n.t("siteDomains.target.tooLong");
+  if (!/^https?:\/\//.test(target)) return i18n.t("siteDomains.target.scheme");
   if (!/^https?:\/\/[A-Za-z0-9.:[\]-]+(\/[A-Za-z0-9._~%!*+,=:@&()-]*)*$/.test(target))
-    return "Use a host and a path of letters, digits and - . _ ~ % ! * + , = : @ & ( ) / only, without ? or #.";
+    return i18n.t("siteDomains.target.characters");
   let host = "";
   try {
     host = new URL(target).hostname;
   } catch {
-    return "This is not a valid address.";
+    return i18n.t("siteDomains.target.invalid");
   }
-  if (!host) return "The address needs a host.";
-  if (/[A-Z]/.test(target.split("/")[2] ?? "")) return "Write the host in lower case.";
-  if (own.includes(host)) return "The address points to the site itself.";
+  if (!host) return i18n.t("siteDomains.target.noHost");
+  if (/[A-Z]/.test(target.split("/")[2] ?? "")) return i18n.t("siteDomains.target.lowerCase");
+  if (own.includes(host)) return i18n.t("siteDomains.target.itself");
   return "";
 }
 

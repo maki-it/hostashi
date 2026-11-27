@@ -1,0 +1,44 @@
+{
+  "site": {
+    "title": "Besucheradresse",
+    "intro": "Hinter einem CDN oder Load Balancer scheint jede Anfrage vom Proxy zu kommen. Ist dies an, nimmt nginx die Adresse des Besuchers aus einem Header, aber nur bei Anfragen, die wirklich von den hier genannten Proxys kommen. Logs, PHP, die App und die Ausnahmeliste der Wartungsseite sehen dann den Besucher.",
+    "behind": "Diese Site steht hinter einem Proxy oder CDN",
+    "direct": "Besucher erreichen den Server weiterhin direkt, am Proxy vorbei. Lass die Ports 80 und 443 nur vom Proxy durch, wenn die Site anders nicht erreichbar sein soll."
+  },
+  "panel": {
+    "title": "Besucheradresse des Panels",
+    "intro": "Nur für eine Panel-Adresse hinter einem CDN oder Load Balancer. nginx nimmt dann die Adresse des Besuchers aus einem Header, aber nur bei Anfragen von den hier genannten Proxys. Audit-Log, Anmeldelimit und die Panel-Allowlist sehen dann den Besucher statt des Proxys.",
+    "behind": "Das Panel steht hinter einem Proxy oder CDN",
+    "direct": "Besucher erreichen das Panel weiterhin direkt, am Proxy vorbei. Die Panel-Allowlist auf der Seite Firewall prüft danach ebenfalls die Adresse des Besuchers, trag dort also die Besucher ein, nicht den Proxy."
+  },
+  "trusted": "Vertrauenswürdige Proxys",
+  "cloudflare_one": "Cloudflare ({{count}} Bereich, Stand {{date}})",
+  "cloudflare_other": "Cloudflare ({{count}} Bereiche, Stand {{date}})",
+  "showRanges": "Bereiche von Cloudflare anzeigen",
+  "own": {
+    "label": "Eigene Proxys",
+    "hint": "Adressen oder Bereiche deines Load Balancers oder eines anderen CDN, eine pro Zeile, höchstens {{max}}. Jede Station vor diesem Server muss aufgeführt sein.",
+    "adminsOnlyRemove": "Nur Admins fügen Adressen hinzu. Du kannst sie entfernen.",
+    "adminsOnly": "Nur Admins fügen Adressen anderer Proxys hinzu.",
+    "remove": "Eigene Adressen entfernen"
+  },
+  "header": {
+    "label": "Header",
+    "hint": "X-Forwarded-For funktioniert mit Cloudflare und den meisten Proxys. Wähle einen anderen nur, wenn dein Proxy die Adresse dort sendet.",
+    "recommended": "{{header}} (empfohlen)"
+  },
+  "fail2ban": "fail2ban sperrt die vertrauenswürdigen Proxys nie, seine Sperren halten also keine Besucher auf, die über sie kommen. Sperre diese im Proxy, zum Beispiel mit den WAF-Regeln von Cloudflare.",
+  "saved": {
+    "on": "Gespeichert. nginx nimmt die Adresse des Besuchers jetzt vom Proxy.",
+    "off": "Gespeichert. Keinem Proxy wird vertraut."
+  },
+  "problems": {
+    "noProxy": "Wähle Cloudflare oder gib die Adressen deines Proxys ein."
+  },
+  "errors": {
+    "rejected": "Abgelehnt: {{reason}}.",
+    "forbidden": "Nur Admins fügen eigene Proxy-Adressen hinzu. Du kannst Cloudflare und den Header umschalten oder Adressen entfernen.",
+    "siteGone": "Diese Site gibt es nicht mehr.",
+    "generic": "Die Einstellung ließ sich nicht laden oder speichern. Versuch es noch einmal."
+  }
+}

@@ -4,6 +4,7 @@
 // another web server.
 
 import { useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { proxyProblem, setProxy, siteMessage, type Site, type SiteProxy } from "./sites";
 import { Button, Card, Field, Notice } from "./ui";
 
@@ -11,12 +12,13 @@ export const newProxy = (): SiteProxy => ({ target: "", targetHost: false, insec
 
 /** ProxyFields edits a reverse proxy, for New site and the Reverse proxy card. */
 export function ProxyFields({ value, onChange, disabled = false }: { value: SiteProxy; onChange: (p: SiteProxy) => void; disabled?: boolean }) {
+  const { t } = useTranslation();
   const https = value.target.startsWith("https://");
   return (
     <>
       <Field
-        label="Pass requests to"
-        hint="The address of the other web server, for example http://10.0.0.5:8080 or https://app.internal.example.com. Private networks are fine; this server's own addresses are not."
+        label={t("siteDomains.proxy.target")}
+        hint={t("siteDomains.proxy.targetHint")}
       >
         <input
           className="ui-input ui-mono"
@@ -32,23 +34,21 @@ export function ProxyFields({ value, onChange, disabled = false }: { value: Site
       <label className="ui-check ui-check-hint">
         <input type="checkbox" checked={value.targetHost} disabled={disabled} onChange={(e) => onChange({ ...value, targetHost: e.target.checked })} />
         <span>
-          Send the target's host name
-          <span className="ui-hint ui-flush">
-            Off: the other server sees the visitor's domain as Host, as most apps expect. On: it sees the host of the address above.
-          </span>
+          {t("siteDomains.proxy.targetHost")}
+          <span className="ui-hint ui-flush">{t("siteDomains.proxy.targetHostHint")}</span>
         </span>
       </label>
       {https && (
         <label className="ui-check ui-check-hint">
           <input type="checkbox" checked={value.insecure} disabled={disabled} onChange={(e) => onChange({ ...value, insecure: e.target.checked })} />
           <span>
-            Do not verify the target's certificate
-            <span className="ui-hint ui-flush">Only for a target with a self-signed certificate in a network you trust.</span>
+            {t("siteDomains.proxy.insecure")}
+            <span className="ui-hint ui-flush">{t("siteDomains.proxy.insecureHint")}</span>
           </span>
         </label>
       )}
       {https && value.insecure && (
-        <Notice tone="warn" title="The connection to the target is encrypted but not verified. Anyone between this server and the target could read it." />
+        <Notice tone="warn" title={t("siteDomains.proxy.insecureWarning")} />
       )}
     </>
   );
@@ -56,6 +56,7 @@ export function ProxyFields({ value, onChange, disabled = false }: { value: Site
 
 /** ProxyCard changes the target of a reverse proxy site. */
 export function ProxyCard({ site, onChange }: { site: Site; onChange: () => Promise<void> }) {
+  const { t } = useTranslation();
   const saved = site.proxy ?? newProxy();
   const [value, setValue] = useState<SiteProxy>(saved);
   const [busy, setBusy] = useState(false);
@@ -77,7 +78,7 @@ export function ProxyCard({ site, onChange }: { site: Site; onChange: () => Prom
     try {
       await setProxy(site.name, send);
       await onChange();
-      setDone(`Requests to the site now go to ${send.target}.`);
+      setDone(t("siteDomains.proxy.saved", { target: send.target }));
     } catch (err) {
       setError(siteMessage(err));
     } finally {
@@ -86,14 +87,14 @@ export function ProxyCard({ site, onChange }: { site: Site; onChange: () => Prom
   }
 
   return (
-    <Card title="Reverse proxy">
+    <Card title={t("siteDomains.proxy.title")}>
       <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate>
         <ProxyFields value={value} onChange={setValue} disabled={busy} />
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || unchanged}>
-            Save reverse proxy
+            {t("siteDomains.proxy.save")}
           </Button>
         </div>
       </form>
