@@ -81,7 +81,6 @@ The same English term is always translated the same way.
 | database server | Datenbankserver | |
 | domain | Domain | die Domain |
 | email | E-Mail | mail as a message: Mail |
-| environment variable | Umgebungsvariable | of an app |
 | file manager | Dateimanager | |
 | firewall | Firewall | die Firewall |
 | hardening | Härtung | |
@@ -89,10 +88,8 @@ The same English term is always translated the same way.
 | limit preset | Limit-Vorlage | |
 | log in / log out | anmelden / abmelden | |
 | maintenance page | Wartungsseite | |
-| object cache | Objekt-Cache | |
 | one-time code | Einmalcode | |
 | overview | Übersicht | |
-| page cache | Seiten-Cache | |
 | parked domain | geparkte Domain | |
 | passkey | Passkey | der Passkey |
 | password | Passwort | |
@@ -105,12 +102,8 @@ The same English term is always translated the same way.
 | settings | Einstellungen | |
 | setup token | Setup-Token | |
 | site | Site | die Site; site user: Site-Benutzer |
-| snippet (nginx) | Snippet | das Snippet |
 | staging | Staging | staging copy: Staging-Kopie |
-| start command | Startbefehl | |
 | storage pool | Storage-Pool | |
 | two-factor | Zwei-Faktor | two-factor authentication: Zwei-Faktor-Anmeldung |
 | virus scan | Virenscan | |
 | visitor address | Besucheradresse | the Real IP tab |
-| web root | Web-Root | |
-| working directory | Arbeitsverzeichnis | |
