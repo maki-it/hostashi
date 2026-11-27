@@ -5,11 +5,13 @@
 import account from "./account.json";
 import auth from "./auth.json";
 import common from "./common.json";
+import cron from "./cron.json";
 import errors from "./errors.json";
 import shell from "./shell.json";
+import siteApp from "./siteApp.json";
 import tokens from "./tokens.json";
 
-const en = { account, auth, common, errors, shell, tokens };
+const en = { account, auth, common, cron, errors, shell, siteApp, tokens };
 
 export type Catalog = typeof en;
 

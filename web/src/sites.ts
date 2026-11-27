@@ -7,6 +7,7 @@
 import type { NodeApp, ProgramApp } from "./node";
 import type { PythonApp } from "./python";
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 import { formatBytes } from "./limits";
 
 export type SiteTLS = {
@@ -104,9 +105,9 @@ export const assetCacheDefaults = {
   exts: ["css", "js", "mjs", "woff", "woff2", "ttf", "otf", "eot", "svg", "svgz", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "mp4", "webm", "ogg", "ogv"],
 };
 export const assetCacheUnits = [
-  { value: 60, label: "minutes" },
-  { value: 3600, label: "hours" },
-  { value: 86400, label: "days" },
+  { value: 60, get label() { return i18n.t("siteApp.web.root.units.minutes"); } },
+  { value: 3600, get label() { return i18n.t("siteApp.web.root.units.hours"); } },
+  { value: 86400, get label() { return i18n.t("siteApp.web.root.units.days"); } },
 ] as const;
 
 /** Splits a list of file types typed with spaces, commas or dots. */
@@ -118,13 +119,13 @@ export const parseExts = (v: string): string[] =>
     .filter((e) => e !== "");
 
 export function assetCacheProblem(seconds: number, exts: string[]): string {
-  if (!Number.isInteger(seconds) || seconds < 60 || seconds > 365 * 86400) return "Choose a time between 1 minute and 365 days.";
-  if (exts.length === 0) return "Enter at least one file type.";
-  if (exts.length > 40) return "Enter at most 40 file types.";
+  if (!Number.isInteger(seconds) || seconds < 60 || seconds > 365 * 86400) return i18n.t("siteApp.web.problems.cacheTime");
+  if (exts.length === 0) return i18n.t("siteApp.web.problems.noExt");
+  if (exts.length > 40) return i18n.t("siteApp.web.problems.tooManyExts");
   const bad = exts.find((e) => !/^[a-z0-9]{1,10}$/.test(e));
-  if (bad !== undefined) return `"${bad}" is not a file type. Use 1 to 10 letters or digits, without the dot.`;
+  if (bad !== undefined) return i18n.t("siteApp.web.problems.badExt", { ext: bad });
   const dup = exts.find((e, i) => exts.indexOf(e) !== i);
-  if (dup !== undefined) return `"${dup}" is listed twice.`;
+  if (dup !== undefined) return i18n.t("siteApp.web.problems.dupExt", { ext: dup });
   return "";
 }
 
@@ -164,9 +165,9 @@ const webDirSegment = /^[A-Za-z0-9._-]{1,64}$/;
 export function webDirProblem(dir: string): string {
   if (dir === "") return "";
   const segs = dir.split("/");
-  if (dir.length > 255 || segs.length > 4) return "Use at most 4 folder levels.";
+  if (dir.length > 255 || segs.length > 4) return i18n.t("siteApp.web.problems.dirLevels");
   if (segs.some((seg) => seg === "." || seg === ".." || !webDirSegment.test(seg)))
-    return "Use folder names of letters, digits, '.', '_' and '-', separated by '/', without a leading or trailing '/'.";
+    return i18n.t("siteApp.web.problems.dirNames");
   return "";
 }
 

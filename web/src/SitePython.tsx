@@ -5,6 +5,7 @@
 // local port. Start, stop and the state are the AppCard of Node.js sites.
 
 import { useEffect, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { maxArgs, parseArgs } from "./node";
 import {
   getPython,
@@ -59,11 +60,12 @@ export function usePythonStatus() {
   return status;
 }
 
-const kinds: { value: PythonStartKind; label: string; hint: string; example: string }[] = [
-  { value: "wsgi", label: "WSGI with gunicorn", hint: "Django, Flask and other WSGI apps. Install gunicorn in .venv.", example: "mysite.wsgi:application" },
-  { value: "asgi", label: "ASGI with uvicorn", hint: "FastAPI, Starlette, Django with ASGI. Install uvicorn in .venv.", example: "main:app" },
-  { value: "script", label: "Python file", hint: "Runs a .py file that listens on HOST and PORT itself.", example: "app.py" },
-  { value: "", label: "Not yet", hint: "The app stays stopped until a start command is set.", example: "" },
+// The start kinds; label and hint are under siteApp.python.kinds.<id>.
+const kinds: { value: PythonStartKind; id: "wsgi" | "asgi" | "script" | "none"; example: string }[] = [
+  { value: "wsgi", id: "wsgi", example: "mysite.wsgi:application" },
+  { value: "asgi", id: "asgi", example: "main:app" },
+  { value: "script", id: "script", example: "app.py" },
+  { value: "", id: "none", example: "" },
 ];
 
 /** PythonFields edits the app of a Python site, for New site, Change type and the App settings card. */
@@ -80,6 +82,7 @@ export function PythonFields({
   disabled?: boolean;
   admin?: boolean;
 }) {
+  const { t } = useTranslation();
   const lines = installedPythonLines(status);
   const choices = value.version && !lines.includes(value.version) ? [value.version, ...lines] : lines;
   const release = (line: string) => status?.releases.find((r) => r.line === line);
@@ -88,16 +91,20 @@ export function PythonFields({
 
   return (
     <>
-      <Field label="Python version">
+      <Field label={t("siteApp.python.version")}>
         <select className="ui-select" value={value.version} disabled={disabled || choices.length === 0} onChange={(e) => onChange({ ...value, version: e.target.value })}>
-          {choices.length === 0 && <option value="">No version installed</option>}
+          {choices.length === 0 && <option value="">{t("siteApp.node.noVersion")}</option>}
           {choices.map((l) => {
             const r = release(l);
             return (
               <option key={l} value={l}>
-                Python {r ? r.version : l}
-                {r ? ` (until ${r.end})` : ""}
-                {!lines.includes(l) ? " (not installed)" : ""}
+                {[
+                  t("siteApp.python.option", { version: r ? r.version : l }),
+                  r ? t("siteApp.python.optionEnd", { end: r.end }) : "",
+                  lines.includes(l) ? "" : t("siteApp.node.notInstalled"),
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
               </option>
             );
           })}
@@ -105,10 +112,10 @@ export function PythonFields({
       </Field>
       {admin && (
         <p className="ui-hint ui-flush">
-          Only installed versions are listed. <a href={formatHash({ page: "python" })}>Install Python versions</a>
+          {t("siteApp.python.onlyInstalled")} <a href={formatHash({ page: "python" })}>{t("siteApp.python.install")}</a>
         </p>
       )}
-      <Field label="Working directory" hint="The folder the app starts in, below the site's home. Usually where manage.py or main.py is.">
+      <Field label={t("siteApp.settings.workdir")} hint={t("siteApp.python.workdirHint")}>
         <input
           className="ui-input ui-mono"
           value={value.workdir}
@@ -119,7 +126,7 @@ export function PythonFields({
         />
       </Field>
       <fieldset className="ui-fieldset ui-stack-tight">
-        <legend>Start command</legend>
+        <legend>{t("siteApp.node.startCommand")}</legend>
         {kinds.map((k) => (
           <label key={k.value || "none"} className="ui-check ui-check-hint">
             <input
@@ -137,8 +144,8 @@ export function PythonFields({
               }
             />
             <span>
-              {k.label}
-              <span className="ui-hint ui-flush">{k.hint}</span>
+              {t(`siteApp.python.kinds.${k.id}.label`)}
+              <span className="ui-hint ui-flush">{t(`siteApp.python.kinds.${k.id}.hint`)}</span>
             </span>
           </label>
         ))}
@@ -146,8 +153,8 @@ export function PythonFields({
       {value.startKind !== "" && (
         <>
           <Field
-            label={value.startKind === "script" ? "Start file" : "App"}
-            hint={value.startKind === "script" ? "Relative to the working directory." : "module.path:callable, for example " + (kind?.example ?? "") + "."}
+            label={value.startKind === "script" ? t("siteApp.python.startFile") : t("siteApp.python.app")}
+            hint={value.startKind === "script" ? t("siteApp.python.startFileHint") : t("siteApp.python.appHint", { example: kind?.example ?? "" })}
           >
             <input
               className="ui-input ui-mono"
@@ -159,8 +166,8 @@ export function PythonFields({
             />
           </Field>
           <Field
-            label="Extra arguments"
-            hint={`One per line, at most ${maxArgs}, for example --workers and 3 on two lines. ${value.startKind === "script" ? "" : "The address is Hostashi's: --bind, --host and --port are refused."}`}
+            label={t("siteApp.python.extraArgs")}
+            hint={[t("siteApp.python.extraArgsHint", { max: maxArgs }), value.startKind === "script" ? "" : t("siteApp.python.bindRefused")].filter(Boolean).join(" ")}
           >
             <textarea
               className="ui-input ui-textarea ui-mono"
@@ -172,31 +179,25 @@ export function PythonFields({
               spellCheck={false}
             />
           </Field>
-          <p className="ui-hint ui-flush ui-mono">Runs: ~/.venv/bin/{pythonCommand(req)}</p>
+          <p className="ui-hint ui-flush ui-mono">{t("siteApp.python.runs", { command: pythonCommand(req) })}</p>
         </>
       )}
-      <p className="ui-hint ui-flush">
-        Hostashi creates the environment ~/.venv with this version. Install the packages into it over SSH, for example with ~/.venv/bin/pip install -r requirements.txt
-        {value.startKind === "wsgi" ? " and gunicorn" : value.startKind === "asgi" ? " and uvicorn" : ""}. The app gets PORT and HOST=127.0.0.1.
-      </p>
+      <p className="ui-hint ui-flush">{value.startKind === "wsgi" ? t("siteApp.python.noteWSGI") : value.startKind === "asgi" ? t("siteApp.python.noteASGI") : t("siteApp.python.note")}</p>
     </>
   );
 }
 
 /** VenvConfirm asks for the site's name before .venv is rebuilt; the name to type is highlighted. */
 function VenvConfirm({ site, typed, onType, why }: { site: Site; typed: string; onType: (v: string) => void; why: string }) {
+  const { t } = useTranslation();
   return (
     <div className="ui-stack-tight">
-      <Notice tone="warn" title="The environment .venv is rebuilt">
-        {why} Every package installed in it goes, gunicorn and uvicorn too. Install them again over SSH afterwards; until then the app stays stopped. Your files in the home stay.
+      <Notice tone="warn" title={t("siteApp.python.rebuiltTitle")}>
+        {why} {t("siteApp.python.rebuiltBody")}
       </Notice>
       <div className="ui-narrow">
         <Field
-          label={
-            <>
-              Type <code className="ui-confirm-phrase">{site.name}</code> to confirm
-            </>
-          }
+          label={<Trans i18nKey="siteApp.python.confirm" values={{ name: site.name }} components={{ code: <code className="ui-confirm-phrase" /> }} />}
         >
           <input className="ui-input" value={typed} onChange={(e) => onType(e.target.value)} autoComplete="off" spellCheck={false} />
         </Field>
@@ -207,6 +208,7 @@ function VenvConfirm({ site, typed, onType, why }: { site: Site; typed: string; 
 
 /** PythonSettingsCard changes the version, working directory, start command and arguments; a new version asks first. */
 export function PythonSettingsCard({ site, onChange, admin }: { site: Site; onChange: () => Promise<void>; admin: boolean }) {
+  const { t } = useTranslation();
   const status = usePythonStatus();
   const saved = site.python ? pythonFieldsValue(site.python) : newPythonApp(newestPythonLine(status));
   const [value, setValue] = useState<PythonFieldsValue>(saved);
@@ -233,10 +235,10 @@ export function PythonSettingsCard({ site, onChange, admin }: { site: Site; onCh
       setTyped("");
       setDone(
         out.status.problem
-          ? "Saved. The app starts once its packages are installed in .venv."
+          ? t("siteApp.python.savedPackages")
           : site.python?.stopped || !value.startKind
-            ? "Saved."
-            : "Saved. The app was restarted with it.",
+            ? t("siteApp.settings.saved")
+            : t("siteApp.settings.savedRestarted"),
       );
     } catch (err) {
       setError(pythonMessage(err));
@@ -246,15 +248,15 @@ export function PythonSettingsCard({ site, onChange, admin }: { site: Site; onCh
   }
 
   return (
-    <Card title="App settings">
+    <Card title={t("siteApp.settings.title")}>
       <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate>
         <PythonFields value={value} onChange={setValue} status={status} disabled={busy} admin={admin} />
-        {newLine && <VenvConfirm site={site} typed={typed} onType={setTyped} why={`Python ${value.version} needs a new environment.`} />}
+        {newLine && <VenvConfirm site={site} typed={typed} onType={setTyped} why={t("siteApp.python.newVersionWhy", { version: value.version })} />}
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
           <Button type="submit" variant={newLine ? "danger" : "primary"} disabled={busy || unchanged || (newLine && typed !== site.name)}>
-            {newLine ? `Switch to Python ${value.version}` : "Save app settings"}
+            {newLine ? t("siteApp.python.switchTo", { version: value.version }) : t("siteApp.settings.save")}
           </Button>
         </div>
       </form>
@@ -264,6 +266,7 @@ export function PythonSettingsCard({ site, onChange, admin }: { site: Site; onCh
 
 /** VenvCard rebuilds .venv with the site's version, after the site's name is typed. */
 export function VenvCard({ site, onChange }: { site: Site; onChange: () => Promise<void> }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
@@ -280,7 +283,7 @@ export function VenvCard({ site, onChange }: { site: Site; onChange: () => Promi
       await onChange();
       setOpen(false);
       setTyped("");
-      setDone("The environment was created again. Install the packages over SSH, then start the app.");
+      setDone(t("siteApp.python.recreated"));
     } catch (err) {
       setError(pythonMessage(err));
     } finally {
@@ -289,11 +292,10 @@ export function VenvCard({ site, onChange }: { site: Site; onChange: () => Promi
   }
 
   return (
-    <Card title="Python environment">
+    <Card title={t("siteApp.python.venvTitle")}>
       <div className="ui-stack">
         <p className="ui-flush">
-          The app runs from <span className="ui-mono">~/.venv</span> with Python {site.python.version}. Over SSH, <span className="ui-mono">python</span> and <span className="ui-mono">pip</span> in{" "}
-          <span className="ui-mono">~/.venv/bin</span> install into it.
+          <Trans i18nKey="siteApp.python.venvIntro" values={{ version: site.python.version }} components={{ mono: <span className="ui-mono" /> }} />
         </p>
         {!open ? (
           <div className="ui-row">
@@ -303,15 +305,15 @@ export function VenvCard({ site, onChange }: { site: Site; onChange: () => Promi
                 setDone("");
               }}
             >
-              Recreate environment
+              {t("siteApp.python.recreate")}
             </Button>
           </div>
         ) : (
           <form className="ui-stack" onSubmit={(e) => void recreate(e)}>
-            <VenvConfirm site={site} typed={typed} onType={setTyped} why="This helps when .venv is broken or was deleted." />
+            <VenvConfirm site={site} typed={typed} onType={setTyped} why={t("siteApp.python.recreateWhy")} />
             <div className="ui-row">
               <Button type="submit" variant="danger" disabled={busy || typed !== site.name}>
-                Recreate environment
+                {t("siteApp.python.recreate")}
               </Button>
               <Button
                 disabled={busy}
@@ -321,7 +323,7 @@ export function VenvCard({ site, onChange }: { site: Site; onChange: () => Promi
                   setError("");
                 }}
               >
-                Cancel
+                {t("common.actions.cancel")}
               </Button>
             </div>
           </form>

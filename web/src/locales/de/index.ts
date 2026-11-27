@@ -6,10 +6,12 @@ import type { Catalog } from "../en";
 import account from "./account.json";
 import auth from "./auth.json";
 import common from "./common.json";
+import cron from "./cron.json";
 import errors from "./errors.json";
 import shell from "./shell.json";
+import siteApp from "./siteApp.json";
 import tokens from "./tokens.json";
 
-const de: Catalog = { account, auth, common, errors, shell, tokens };
+const de: Catalog = { account, auth, common, cron, errors, shell, siteApp, tokens };
 
 export default de;

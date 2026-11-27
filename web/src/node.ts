@@ -4,6 +4,7 @@
 // the app of a Node.js site.
 
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 import { siteMessage, type Site } from "./sites";
 
 export type NodeRelease = { major: string; version: string; codename: string; end: string };
@@ -54,10 +55,10 @@ const workdirRe = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
 
 /** workdirProblem mirrors agentapi.ValidateAppWorkdir: a folder below the home. */
 export function workdirProblem(dir: string): string {
-  if (!dir) return "Enter the working directory, for example htdocs.";
-  if (dir.length > 255) return "The folder name is too long.";
+  if (!dir) return i18n.t("siteApp.runtime.problems.workdirEmpty");
+  if (dir.length > 255) return i18n.t("siteApp.runtime.problems.workdirLong");
   if (!workdirRe.test(dir) || dir.split("/").some((p) => p === "." || p === ".."))
-    return "Use a folder below the home: letters, digits, . _ - and /, no .. and no leading /.";
+    return i18n.t("siteApp.runtime.problems.workdirInvalid");
   return "";
 }
 
@@ -65,21 +66,21 @@ export function workdirProblem(dir: string): string {
 export function startProblem(kind: StartKind, start: string): string {
   if (kind === "") return "";
   if (kind === "npm") {
-    if (!/^[a-z0-9:_-]{1,64}$/.test(start)) return "Enter the name of an npm script, for example start: lowercase letters, digits and : _ -.";
+    if (!/^[a-z0-9:_-]{1,64}$/.test(start)) return i18n.t("siteApp.runtime.problems.npmScript");
     return "";
   }
-  if (!/\.(js|mjs|cjs)$/.test(start)) return "The start file must end in .js, .mjs or .cjs.";
+  if (!/\.(js|mjs|cjs)$/.test(start)) return i18n.t("siteApp.runtime.problems.nodeExt");
   if (!workdirRe.test(start) || start.split("/").some((p) => p === "." || p === ".."))
-    return "Use a file below the working directory: letters, digits, . _ - and /, no .. and no leading /.";
+    return i18n.t("siteApp.runtime.problems.fileInvalid");
   return "";
 }
 
 /** programProblem mirrors agentapi.ValidateAppStart for a program: a file below the home. */
 export function programProblem(program: string): string {
   if (program === "") return "";
-  if (program.length > 255 || program.split("/").length > 4) return "Use a file at most 4 folders below the home.";
+  if (program.length > 255 || program.split("/").length > 4) return i18n.t("siteApp.runtime.problems.programDepth");
   if (!workdirRe.test(program) || program.split("/").some((p) => p === "." || p === ".."))
-    return "Use a file below the home, for example bin/server: letters, digits, . _ - and /, no .. and no leading /.";
+    return i18n.t("siteApp.runtime.problems.programInvalid");
   return "";
 }
 
@@ -92,10 +93,10 @@ export const parseArgs = (text: string): string[] => text.split("\n").map((l) =>
 
 /** argsProblem mirrors agentapi.ValidateAppArgs. */
 export function argsProblem(args: string[]): string {
-  if (args.length > maxArgs) return `Use at most ${maxArgs} arguments.`;
+  if (args.length > maxArgs) return i18n.t("siteApp.runtime.problems.tooManyArgs", { max: maxArgs });
   const enc = new TextEncoder();
   const long = args.findIndex((a) => enc.encode(a).length > maxArgBytes);
-  if (long >= 0) return `Argument ${long + 1} is longer than ${maxArgBytes} bytes.`;
+  if (long >= 0) return i18n.t("siteApp.runtime.problems.argTooLong", { n: long + 1, max: maxArgBytes });
   return "";
 }
 
@@ -117,21 +118,21 @@ export type AppView = { word: string; tone: "ok" | "warn" | "err" | "off" };
 /** appView says in words what the app of a Node.js, app or Python site does. */
 export function appView(site: Site, st: AppStatus | null): AppView {
   const set = site.node ? site.node.startKind !== "" : site.python ? site.python.startKind !== "" : !!site.app?.program;
-  if (!set) return { word: site.app ? "No program" : "No start command", tone: "off" };
-  if (site.disabled) return { word: "Stopped: site disabled", tone: "off" };
-  if (site.node?.stopped || site.app?.stopped || site.python?.stopped) return { word: "Stopped", tone: "off" };
-  if (!st) return { word: "Unknown", tone: "off" };
-  if (st.problem) return { word: site.python ? "Waiting for its packages" : "Waiting for the program", tone: "warn" };
+  if (!set) return { word: i18n.t(site.app ? "siteApp.app.states.noProgram" : "siteApp.app.states.noStart"), tone: "off" };
+  if (site.disabled) return { word: i18n.t("siteApp.app.states.siteDisabled"), tone: "off" };
+  if (site.node?.stopped || site.app?.stopped || site.python?.stopped) return { word: i18n.t("siteApp.app.states.stopped"), tone: "off" };
+  if (!st) return { word: i18n.t("siteApp.app.states.unknown"), tone: "off" };
+  if (st.problem) return { word: i18n.t(site.python ? "siteApp.app.states.waitingPackages" : "siteApp.app.states.waitingProgram"), tone: "warn" };
   switch (st.state) {
     case "active":
-      return { word: "Running", tone: "ok" };
+      return { word: i18n.t("siteApp.app.states.running"), tone: "ok" };
     case "activating":
     case "reloading":
-      return { word: st.subState === "auto-restart" ? "Restarting after a crash" : "Starting", tone: "warn" };
+      return { word: i18n.t(st.subState === "auto-restart" ? "siteApp.app.states.restarting" : "siteApp.app.states.starting"), tone: "warn" };
     case "failed":
-      return { word: "Crashed", tone: "err" };
+      return { word: i18n.t("siteApp.app.states.crashed"), tone: "err" };
     default:
-      return { word: "Not running", tone: "err" };
+      return { word: i18n.t("siteApp.app.states.notRunning"), tone: "err" };
   }
 }
 
@@ -139,14 +140,19 @@ export function nodeMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case "forbidden":
-        return "Only administrators can install Node.js.";
+        return i18n.t("siteApp.runtime.errors.nodeForbidden");
       case "node_install_refused":
-        if (err.message.includes("apps still run")) return "Sites still run on this version. Move them to another version first.";
-        if (err.message.includes("not installed")) return "This version is not installed.";
-        return err.message.includes("running") ? "Another installation is still running. Wait until it is done." : "The installation could not start.";
+        return installRefused(err.message);
     }
   }
   return siteMessage(err);
+}
+
+/** installRefused explains why the server refused to install or remove a runtime version. */
+export function installRefused(message: string): string {
+  if (message.includes("apps still run")) return i18n.t("siteApp.runtime.errors.appsStillRun");
+  if (message.includes("not installed")) return i18n.t("siteApp.runtime.errors.notInstalled");
+  return i18n.t(message.includes("running") ? "siteApp.runtime.errors.installRunning" : "siteApp.runtime.errors.installFailed");
 }
 
 /** An environment variable of an app (ADR-0054). */
@@ -178,18 +184,18 @@ export function parseEnv(text: string): { vars: EnvVar[]; problem: string } {
   for (let i = 0; i < lines.length; i++) {
     const line = (lines[i] ?? "").replace(/\r$/, "");
     if (line.trim() === "" || line.trimStart().startsWith("#")) continue;
-    const at = "Line " + (i + 1) + ": ";
+    const line_ = { line: i + 1 };
     const eq = line.indexOf("=");
-    if (eq < 0) return { vars, problem: at + "write NAME=value." };
+    if (eq < 0) return { vars, problem: i18n.t("siteApp.env.problems.noEquals", line_) };
     const name = line.slice(0, eq).trim();
     const value = line.slice(eq + 1);
-    if (!envNameRe.test(name)) return { vars, problem: at + "use A-Z, 0-9 and _ in the name, no digit first, at most 64 characters." };
-    if (reservedEnv.includes(name)) return { vars, problem: at + name + " is set by Hostashi." };
-    if (seen.has(name)) return { vars, problem: at + name + " is set twice." };
-    if (new TextEncoder().encode(value).length > maxEnvValue) return { vars, problem: at + "the value is longer than 4096 bytes." };
+    if (!envNameRe.test(name)) return { vars, problem: i18n.t("siteApp.env.problems.badName", line_) };
+    if (reservedEnv.includes(name)) return { vars, problem: i18n.t("siteApp.env.problems.reserved", { ...line_, name }) };
+    if (seen.has(name)) return { vars, problem: i18n.t("siteApp.env.problems.twice", { ...line_, name }) };
+    if (new TextEncoder().encode(value).length > maxEnvValue) return { vars, problem: i18n.t("siteApp.env.problems.valueLong", line_) };
     seen.add(name);
     vars.push({ name, value });
   }
-  if (vars.length > maxEnv) return { vars, problem: "At most " + maxEnv + " variables." };
+  if (vars.length > maxEnv) return { vars, problem: i18n.t("siteApp.env.problems.tooMany", { max: maxEnv }) };
   return { vars, problem: "" };
 }

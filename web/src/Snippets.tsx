@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { type FormEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Site } from "./sites";
 import { Button, Card, Field, Notice } from "./ui";
 import {
@@ -16,6 +17,7 @@ import {
 // SnippetSettings edits the custom nginx snippets of a site. They load only
 // when opened: most sites never need them.
 export function SnippetSettings({ site }: { site: Site }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [server, setServer] = useState("");
   const [root, setRoot] = useState("");
@@ -55,7 +57,7 @@ export function SnippetSettings({ site }: { site: Site }) {
       const s = await setSnippets(site.name, { server, root });
       setServer(s.server);
       setRoot(s.root);
-      setDone(s.server === "" && s.root === "" ? "The site has no custom snippets now." : "Snippets saved and active.");
+      setDone(s.server === "" && s.root === "" ? t("siteApp.snippets.none") : t("siteApp.snippets.saved"));
     } catch (err) {
       setProblems(snippetProblems(err));
       setError(snippetMessage(err));
@@ -65,34 +67,31 @@ export function SnippetSettings({ site }: { site: Site }) {
   }
 
   return (
-    <Card title="Custom nginx snippets">
+    <Card title={t("siteApp.snippets.title")}>
       <div className="ui-stack">
-        <p className="ui-flush">
-          For rules Hostashi has no setting for yet: headers, redirects, extra locations. Only allowed directives pass; paths must stay inside the
-          site's home. Snippets are not used while the site is disabled or in maintenance.
-        </p>
+        <p className="ui-flush">{t("siteApp.snippets.intro")}</p>
         {!open ? (
           <div className="ui-row">
             <Button disabled={busy} onClick={() => void load()}>
-              Edit snippets
+              {t("siteApp.snippets.edit")}
             </Button>
           </div>
         ) : (
           <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate>
-            <SnippetField label="Inside the server block" hint="After Hostashi's own locations." value={server} onChange={setServer} problems={problems?.server} />
+            <SnippetField label={t("siteApp.snippets.server")} hint={t("siteApp.snippets.serverHint")} value={server} onChange={setServer} problems={problems?.server} />
             <SnippetField
-              label="Inside location /"
-              hint="Before Hostashi's try_files, for every request that no other location takes."
+              label={t("siteApp.snippets.root")}
+              hint={t("siteApp.snippets.rootHint")}
               value={root}
               onChange={setRoot}
               problems={problems?.root}
             />
             <div className="ui-row">
               <Button variant="primary" type="submit" disabled={busy}>
-                Save snippets
+                {t("siteApp.snippets.save")}
               </Button>
               <Button disabled={busy} onClick={() => setOpen(false)}>
-                Close snippets
+                {t("siteApp.snippets.close")}
               </Button>
             </div>
           </form>
@@ -117,7 +116,8 @@ export function SnippetField({
   onChange: (v: string) => void;
   problems?: SnippetProblem[] | undefined;
 }) {
-  const lines = problems && problems.length > 0 ? problems.map((p) => `Line ${p.line}: ${p.msg}.`).join(" ") : undefined;
+  const { t } = useTranslation();
+  const lines = problems && problems.length > 0 ? problems.map((p) => t("siteApp.snippets.line", { line: p.line, msg: p.msg })).join(" ") : undefined;
   return (
     <Field label={label} hint={hint} {...(lines ? { error: lines } : {})}>
       <textarea

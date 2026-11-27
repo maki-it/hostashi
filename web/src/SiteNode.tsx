@@ -5,6 +5,7 @@
 
 import { ArrowClockwise, Play, Stop } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   appAction,
   appView,
@@ -24,7 +25,8 @@ import {
   type NodeStatus,
   type StartKind,
 } from "./node";
-import { formatBytes } from "./limits";
+import { formatBytes } from "./format";
+import i18n from "./i18n";
 import { pythonCommand } from "./python";
 import { formatHash } from "./routes";
 import type { Site } from "./sites";
@@ -36,7 +38,7 @@ export const newNodeApp = (version = ""): NodeValue => ({ version, workdir: "htd
 
 /** nodeProblem checks the fields before they are sent. */
 export function nodeProblem(v: NodeValue): string {
-  if (!v.version) return "No Node.js version is installed. An administrator installs one under Runtimes › Node.js.";
+  if (!v.version) return i18n.t("siteApp.runtime.problems.nodeMissing");
   return workdirProblem(v.workdir) || startProblem(v.startKind, v.start);
 }
 
@@ -66,28 +68,32 @@ export function NodeFields({
   /** Shows the link to install more versions. */
   admin?: boolean;
 }) {
+  const { t } = useTranslation();
   const lines = installedLines(status);
   // A version the site has but the server no longer has stays selectable.
   const choices = value.version && !lines.includes(value.version) ? [value.version, ...lines] : lines;
   const release = (major: string) => status?.releases.find((r) => r.major === major);
-  const kinds: { value: StartKind; label: string; hint: string }[] = [
-    { value: "script", label: "Start file", hint: "Runs node with a .js, .mjs or .cjs file, for example server.js or dist/main.js." },
-    { value: "npm", label: "npm script", hint: "Runs npm run with a script from package.json, for example start." },
-    { value: "", label: "Not yet", hint: "The app stays stopped until a start command is set." },
-  ];
+  const kinds: { value: StartKind; label: string; hint: string }[] = (["script", "npm", ""] as const).map((value) => {
+    const k = value || "none";
+    return { value, label: t(`siteApp.node.kinds.${k}.label`), hint: t(`siteApp.node.kinds.${k}.hint`) };
+  });
 
   return (
     <>
-      <Field label="Node.js version">
+      <Field label={t("siteApp.node.version")}>
         <select className="ui-select" value={value.version} disabled={disabled || choices.length === 0} onChange={(e) => onChange({ ...value, version: e.target.value })}>
-          {choices.length === 0 && <option value="">No version installed</option>}
+          {choices.length === 0 && <option value="">{t("siteApp.node.noVersion")}</option>}
           {choices.map((m) => {
             const r = release(m);
             return (
               <option key={m} value={m}>
-                Node.js {m}
-                {r ? ` (${r.codename}, until ${r.end})` : ""}
-                {!lines.includes(m) ? " (not installed)" : ""}
+                {[
+                  t("siteApp.node.option", { major: m }),
+                  r ? t("siteApp.node.optionRelease", { codename: r.codename, end: r.end }) : "",
+                  lines.includes(m) ? "" : t("siteApp.node.notInstalled"),
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
               </option>
             );
           })}
@@ -95,10 +101,10 @@ export function NodeFields({
       </Field>
       {admin && (
         <p className="ui-hint ui-flush">
-          Only installed versions are listed. <a href={formatHash({ page: "node" })}>Install Node.js versions</a>
+          {t("siteApp.node.onlyInstalled")} <a href={formatHash({ page: "node" })}>{t("siteApp.node.install")}</a>
         </p>
       )}
-      <Field label="Working directory" hint="The folder the app starts in, below the site's home. Usually where package.json is.">
+      <Field label={t("siteApp.settings.workdir")} hint={t("siteApp.node.workdirHint")}>
         <input
           className="ui-input ui-mono"
           value={value.workdir}
@@ -109,7 +115,7 @@ export function NodeFields({
         />
       </Field>
       <fieldset className="ui-fieldset ui-stack-tight">
-        <legend>Start command</legend>
+        <legend>{t("siteApp.node.startCommand")}</legend>
         {kinds.map((k) => (
           <label key={k.value || "none"} className="ui-check ui-check-hint">
             <input
@@ -128,7 +134,10 @@ export function NodeFields({
         ))}
       </fieldset>
       {value.startKind !== "" && (
-        <Field label={value.startKind === "npm" ? "npm script" : "Start file"} hint={value.startKind === "npm" ? "Runs: npm run " + (value.start || "…") : "Relative to the working directory. Runs: node " + (value.start || "…")}>
+        <Field
+          label={value.startKind === "npm" ? t("siteApp.node.kinds.npm.label") : t("siteApp.node.kinds.script.label")}
+          hint={value.startKind === "npm" ? t("siteApp.node.npmHint", { start: value.start || "…" }) : t("siteApp.node.fileHint", { start: value.start || "…" })}
+        >
           <input
             className="ui-input ui-mono"
             value={value.start}
@@ -139,17 +148,14 @@ export function NodeFields({
           />
         </Field>
       )}
-      <p className="ui-hint ui-flush">
-        The app gets PORT and HOST=127.0.0.1 and must listen there. NODE_ENV is production. Install the dependencies first, for example with npm ci over SSH.
-      </p>
+      <p className="ui-hint ui-flush">{t("siteApp.node.note")}</p>
     </>
   );
 }
 
-const actionWord: Record<AppAction, string> = { start: "started", stop: "stopped", restart: "restarted" };
-
 /** AppCard shows what the app of a Node.js, app or Python site does and starts, stops or restarts it. */
 export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange: () => Promise<void>; poll?: number }) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -168,8 +174,8 @@ export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange:
 
   useEffect(() => {
     void load();
-    const t = setInterval(() => void load(), poll);
-    return () => clearInterval(t);
+    const timer = setInterval(() => void load(), poll);
+    return () => clearInterval(timer);
   }, [load, poll, site.updatedAt]);
 
   const app = node ?? py ?? prog;
@@ -187,7 +193,7 @@ export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange:
     try {
       setStatus(await appAction(site.name, a));
       await onChange();
-      setDone(`The app was ${actionWord[a]}.`);
+      setDone(t(`siteApp.app.done.${a}`));
     } catch (err) {
       setError(nodeMessage(err));
     } finally {
@@ -196,16 +202,16 @@ export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange:
   }
 
   return (
-    <Card title="App">
+    <Card title={t("siteApp.app.title")}>
       <div className="ui-stack">
-        <dl className="ui-facts" aria-label={"App of " + site.name}>
-          <dt>State</dt>
+        <dl className="ui-facts" aria-label={t("siteApp.app.aria", { site: site.name })}>
+          <dt>{t("siteApp.app.state")}</dt>
           <dd>
             <Badge tone={view.tone}>{view.word}</Badge>
           </dd>
-          <dt>Runs</dt>
-          <dd className="ui-mono">{!set ? "nothing yet" : node ? startCommand(node) : py ? pythonCommand(py, py.port) : prog ? programCommand(prog) : ""}</dd>
-          <dt>In</dt>
+          <dt>{t("siteApp.app.runs")}</dt>
+          <dd className="ui-mono">{!set ? t("siteApp.app.nothing") : node ? startCommand(node) : py ? pythonCommand(py, py.port) : prog ? programCommand(prog) : ""}</dd>
+          <dt>{t("siteApp.app.in")}</dt>
           <dd className="ui-mono">~/{app.workdir}</dd>
           {node && (
             <>
@@ -215,37 +221,37 @@ export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange:
           )}
           {py && (
             <>
-              <dt>Python</dt>
+              <dt>{t("siteApp.app.python")}</dt>
               <dd>
-                {py.version}, environment <span className="ui-mono">~/.venv</span>
+                {t("siteApp.app.pythonEnv", { version: py.version })} <span className="ui-mono">~/.venv</span>
               </dd>
             </>
           )}
-          <dt>Port</dt>
+          <dt>{t("siteApp.app.port")}</dt>
           <dd className="ui-mono">127.0.0.1:{app.port}</dd>
           {status && running && status.usedBytes > 0 && (
             <>
-              <dt>Memory</dt>
+              <dt>{t("siteApp.app.memory")}</dt>
               <dd>{formatBytes(status.usedBytes)}</dd>
             </>
           )}
           {status && running && status.restarts > 0 && (
             <>
-              <dt>Restarts after a crash</dt>
+              <dt>{t("siteApp.app.restarts")}</dt>
               <dd>{status.restarts}</dd>
             </>
           )}
         </dl>
-        {!set && <Notice tone="info" title={node || py ? "Set a start command below, then the app starts." : "Set the program below, then the app starts."} />}
+        {!set && <Notice tone="info" title={node || py ? t("siteApp.app.setStart") : t("siteApp.app.setProgram")} />}
         {problem && (
-          <Notice tone="warn" title={py ? "The app is not started yet." : "The program is not started yet."}>
+          <Notice tone="warn" title={py ? t("siteApp.app.appWaiting") : t("siteApp.app.programWaiting")}>
             {problem.charAt(0).toUpperCase() + problem.slice(1)}.
           </Notice>
         )}
-        {site.disabled && <Notice tone="info" title="The site is disabled, so its app is stopped. It starts again when the site is enabled." />}
+        {site.disabled && <Notice tone="info" title={t("siteApp.app.siteDisabled")} />}
         {view.tone === "err" && (
-          <Notice tone="err" title="The app is not running as it should.">
-            <a href={formatHash({ page: "sites", site: { name: site.name, tab: "logs" } })}>See the app log</a>
+          <Notice tone="err" title={t("siteApp.app.broken")}>
+            <a href={formatHash({ page: "sites", site: { name: site.name, tab: "logs" } })}>{t("siteApp.app.seeLog")}</a>
           </Notice>
         )}
         {error && <Notice tone="err" title={error} />}
@@ -253,20 +259,20 @@ export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange:
         <div className="ui-row">
           {app.stopped || !canRun || problem ? (
             <Button variant="primary" icon={<Play size={16} aria-hidden="true" />} disabled={busy || !canRun} onClick={() => void act("start")}>
-              Start
+              {t("siteApp.app.start")}
             </Button>
           ) : (
             <>
               <Button icon={<ArrowClockwise size={16} aria-hidden="true" />} disabled={busy} onClick={() => void act("restart")}>
-                Restart
+                {t("siteApp.app.restart")}
               </Button>
               <Button icon={<Stop size={16} aria-hidden="true" />} disabled={busy} onClick={() => void act("stop")}>
-                Stop
+                {t("siteApp.app.stop")}
               </Button>
             </>
           )}
         </div>
-        <p className="ui-hint ui-flush">A stopped app stays stopped, also after a reboot, until it is started again. After a crash it restarts by itself.</p>
+        <p className="ui-hint ui-flush">{t("siteApp.app.stoppedNote")}</p>
       </div>
     </Card>
   );
@@ -274,6 +280,7 @@ export function AppCard({ site, onChange, poll = 5000 }: { site: Site; onChange:
 
 /** AppSettingsCard changes the version, working directory and start command. */
 export function AppSettingsCard({ site, onChange, admin }: { site: Site; onChange: () => Promise<void>; admin: boolean }) {
+  const { t } = useTranslation();
   const status = useNodeStatus();
   const saved: NodeValue = site.node ? { version: site.node.version, workdir: site.node.workdir, startKind: site.node.startKind, start: site.node.start } : newNodeApp(newestLine(status));
   const [value, setValue] = useState<NodeValue>(saved);
@@ -295,7 +302,7 @@ export function AppSettingsCard({ site, onChange, admin }: { site: Site; onChang
     try {
       await setNodeApp(site.name, value);
       await onChange();
-      setDone(site.node?.stopped || !value.startKind ? "Saved." : "Saved. The app was restarted with it.");
+      setDone(site.node?.stopped || !value.startKind ? t("siteApp.settings.saved") : t("siteApp.settings.savedRestarted"));
     } catch (err) {
       setError(nodeMessage(err));
     } finally {
@@ -304,14 +311,14 @@ export function AppSettingsCard({ site, onChange, admin }: { site: Site; onChang
   }
 
   return (
-    <Card title="App settings">
+    <Card title={t("siteApp.settings.title")}>
       <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate>
         <NodeFields value={value} onChange={setValue} status={status} disabled={busy} admin={admin} />
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || unchanged}>
-            Save app settings
+            {t("siteApp.settings.save")}
           </Button>
         </div>
       </form>

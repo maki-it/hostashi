@@ -6,9 +6,13 @@
 // the AppCard of Node.js sites.
 
 import { useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { argsProblem, maxArgs, nodeMessage, parseArgs, programCommand, programProblem, setProgramApp, workdirProblem, type ProgramApp } from "./node";
 import type { Site } from "./sites";
 import { Button, Card, Field, Notice } from "./ui";
+
+// An example of two arguments; code, the same in every language.
+const exampleArgs = ["--config", "config.toml"].join("\n");
 
 /** The fields of a program; args as the text of the arguments box. */
 export type ProgramValue = { workdir: string; program: string; argsText: string };
@@ -31,10 +35,11 @@ export function programFieldsProblem(v: ProgramValue): string {
 
 /** ProgramFields edits the program of an app site, for New site and the App settings card. */
 export function ProgramFields({ value, onChange, disabled = false }: { value: ProgramValue; onChange: (v: ProgramValue) => void; disabled?: boolean }) {
+  const { t } = useTranslation();
   const req = programRequest(value);
   return (
     <>
-      <Field label="Program" hint="The executable file below the site's home, for example bin/server. Leave it empty until it is uploaded: the app starts once it is set and there.">
+      <Field label={t("siteApp.program.label")} hint={t("siteApp.program.hint")}>
         <input
           className="ui-input ui-mono"
           value={value.program}
@@ -45,20 +50,20 @@ export function ProgramFields({ value, onChange, disabled = false }: { value: Pr
           spellCheck={false}
         />
       </Field>
-      <Field label="Arguments" hint={`One per line, at most ${maxArgs}. Each line reaches the program exactly as written, spaces and quotes included; no shell reads it.`}>
+      <Field label={t("siteApp.program.args")} hint={t("siteApp.program.argsHint", { max: maxArgs })}>
         <textarea
           className="ui-input ui-textarea ui-mono"
           value={value.argsText}
           onChange={(e) => onChange({ ...value, argsText: e.target.value })}
           rows={Math.min(8, Math.max(3, value.argsText.split("\n").length + 1))}
           disabled={disabled || !value.program}
-          placeholder={"--config\nconfig.toml"}
+          placeholder={exampleArgs}
           autoComplete="off"
           spellCheck={false}
         />
       </Field>
-      {value.program && <p className="ui-hint ui-flush ui-mono">Runs: {programCommand(req)}</p>}
-      <Field label="Working directory" hint="The folder the program starts in, below the site's home.">
+      {value.program && <p className="ui-hint ui-flush ui-mono">{t("siteApp.program.runs", { command: programCommand(req) })}</p>}
+      <Field label={t("siteApp.settings.workdir")} hint={t("siteApp.program.workdirHint")}>
         <input
           className="ui-input ui-mono"
           value={value.workdir}
@@ -68,15 +73,14 @@ export function ProgramFields({ value, onChange, disabled = false }: { value: Pr
           spellCheck={false}
         />
       </Field>
-      <p className="ui-hint ui-flush">
-        The program gets PORT and HOST=127.0.0.1 and must listen there. It must belong to the site's user and be executable (chmod u+x). Upload it over SFTP or in Files, then start or restart the app.
-      </p>
+      <p className="ui-hint ui-flush">{t("siteApp.program.note")}</p>
     </>
   );
 }
 
 /** ProgramSettingsCard changes the program, its arguments and the working directory. */
 export function ProgramSettingsCard({ site, onChange }: { site: Site; onChange: () => Promise<void> }) {
+  const { t } = useTranslation();
   const saved = site.app ? programValue(site.app) : newProgramApp();
   const [value, setValue] = useState<ProgramValue>(saved);
   const [busy, setBusy] = useState(false);
@@ -97,7 +101,7 @@ export function ProgramSettingsCard({ site, onChange }: { site: Site; onChange: 
     try {
       const out = await setProgramApp(site.name, programRequest(value));
       await onChange();
-      setDone(out.status.problem ? "Saved. The app starts once its program is there." : site.app?.stopped || !value.program ? "Saved." : "Saved. The app was restarted with it.");
+      setDone(out.status.problem ? t("siteApp.program.savedWaiting") : site.app?.stopped || !value.program ? t("siteApp.settings.saved") : t("siteApp.settings.savedRestarted"));
     } catch (err) {
       setError(nodeMessage(err));
     } finally {
@@ -106,14 +110,14 @@ export function ProgramSettingsCard({ site, onChange }: { site: Site; onChange: 
   }
 
   return (
-    <Card title="App settings">
+    <Card title={t("siteApp.settings.title")}>
       <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate>
         <ProgramFields value={value} onChange={setValue} disabled={busy} />
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || unchanged}>
-            Save app settings
+            {t("siteApp.settings.save")}
           </Button>
         </div>
       </form>
