@@ -41,6 +41,10 @@ func (s *stubCron) CronStatus(_ context.Context, site string) (agentapi.CronSite
 	return out, nil
 }
 
+func (s *stubCron) CronOutput(_ context.Context, site string, id int64) (agentapi.CronJobOutput, error) {
+	return agentapi.CronJobOutput{Ran: true, Lines: []string{"Hi!", site + " " + strconv.FormatInt(id, 10)}, Truncated: true}, nil
+}
+
 func TestCronOverHTTP(t *testing.T) {
 	e := newAPIWithAgent(t, &stubAgent{})
 	cr := &stubCron{applied: map[string][]agentapi.CronJob{}}
@@ -91,7 +95,12 @@ func TestCronOverHTTP(t *testing.T) {
 		t.Fatalf("run: %d %s", rec.Code, rec.Body)
 	}
 
-	for _, p := range []string{"/api/v1/sites/shop/cron/999", "/api/v1/sites/shop/cron/x", "/api/v1/sites/shop/cron/0"} {
+	rec = e.do(t, reqOpts{method: "GET", path: path + "/output", cookie: c})
+	if want := `{"ran":true,"lines":["Hi!","shop ` + strconv.FormatInt(job.ID, 10) + `"],"truncated":true}`; rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != want {
+		t.Fatalf("output: %d %s", rec.Code, rec.Body)
+	}
+
+	for _, p := range []string{"/api/v1/sites/shop/cron/999", "/api/v1/sites/shop/cron/x", "/api/v1/sites/shop/cron/0", "/api/v1/sites/shop/cron/999/output"} {
 		if rec := e.do(t, reqOpts{method: "GET", path: p, cookie: c}); rec.Code != http.StatusNotFound {
 			t.Errorf("%s: %d", p, rec.Code)
 		}
@@ -104,8 +113,10 @@ func TestCronOverHTTP(t *testing.T) {
 	// cron:read does not write.
 	read := e.createToken(t, c, `{"name":"r","scopes":["cron:read"],"expiresInDays":1}`)
 
-	if rec := e.do(t, reqOpts{method: "GET", path: path, header: bearerHeader(read.Token)}); rec.Code != http.StatusOK {
-		t.Errorf("read with cron:read: %d", rec.Code)
+	for _, p := range []string{path, path + "/output"} {
+		if rec := e.do(t, reqOpts{method: "GET", path: p, header: bearerHeader(read.Token)}); rec.Code != http.StatusOK {
+			t.Errorf("read %s with cron:read: %d", p, rec.Code)
+		}
 	}
 
 	for _, o := range []reqOpts{

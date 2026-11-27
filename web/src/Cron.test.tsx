@@ -276,4 +276,55 @@ describe("CronSettings", () => {
     expect(await screen.findByText("A site has at most 50 cron jobs.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add cron job" })).not.toBeInTheDocument();
   });
+
+  it("shows the output of the last run from the badge and the menu", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      ["GET " + base]: { body: { jobs: [wpCron], statusKnown: true } },
+      ["GET " + base + "/1/output"]: { body: { ran: true, lines: ["Hi!", "Fri Nov 27 15:35:00 CET 2026"], truncated: true } },
+    });
+    render(<CronSettings site={site} />);
+
+    const badge = await screen.findByRole("button", { name: /^Succeeded/ });
+    expect(badge).toHaveAttribute("aria-expanded", "false");
+    await user.click(badge);
+    expect(badge).toHaveAttribute("aria-expanded", "true");
+
+    const out = await screen.findByRole("region", { name: "Output of cron job 1" });
+    expect(await within(out).findByText("Hi! Fri Nov 27 15:35:00 CET 2026", { selector: "pre" })).toBeInTheDocument();
+    expect(within(out).getByText("The output is long; these are its last lines.")).toBeInTheDocument();
+    expect(within(out).getByRole("button", { name: "Copy output" })).toBeInTheDocument();
+
+    await user.click(within(out).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("region", { name: "Output of cron job 1" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "More actions for cron job 1" }));
+    await user.click(screen.getByRole("menuitem", { name: "Show output" }));
+    expect(await screen.findByRole("region", { name: "Output of cron job 1" })).toBeInTheDocument();
+  });
+
+  it("says when there is no output", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      ["GET " + base]: { body: { jobs: [wpCron, { ...wpCron, id: 2 }], statusKnown: true } },
+      ["GET " + base + "/1/output"]: { body: { ran: true, lines: [], truncated: false } },
+      ["GET " + base + "/2/output"]: { body: { ran: false, lines: [], truncated: false } },
+    });
+    render(<CronSettings site={site} />);
+
+    const [one, two] = await screen.findAllByRole("button", { name: /^Succeeded/ });
+    await user.click(one!);
+    expect(await screen.findByText("The last run wrote nothing.")).toBeInTheDocument();
+    await user.click(two!);
+    expect(await screen.findByText(/No output known/)).toBeInTheDocument();
+  });
+
+  it("offers no output for a job that has not run", async () => {
+    const user = userEvent.setup();
+    mockFetch({ ["GET " + base]: { body: { jobs: [{ ...wpCron, status: { running: false } }], statusKnown: true } } });
+    render(<CronSettings site={site} />);
+    await user.click(await screen.findByRole("button", { name: "More actions for cron job 1" }));
+    expect(screen.queryByRole("menuitem", { name: "Show output" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Not run yet/ })).not.toBeInTheDocument();
+  });
 });

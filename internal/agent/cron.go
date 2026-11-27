@@ -48,6 +48,16 @@ func (h *siteOps) registerCron(s *agentrpc.Server) {
 		return agentapi.CronRunResponse{}, mapCronError(h.cron.Run(ctx, req.Site, req.ID))
 	})
 
+	agentrpc.Handle(s, agentapi.CronOutput, func(ctx context.Context, _ agentrpc.Caller, req agentapi.CronRunRequest) (agentapi.CronJobOutput, error) {
+		if h.cron == nil {
+			return agentapi.CronJobOutput{}, errNoCron
+		}
+
+		out, err := h.cron.Output(ctx, req.Site, req.ID)
+
+		return out, mapCronError(err)
+	})
+
 	agentrpc.Handle(s, agentapi.CronStatus, func(ctx context.Context, _ agentrpc.Caller, req agentapi.CronStatusRequest) (agentapi.CronSiteStatus, error) {
 		if h.cron == nil {
 			return agentapi.CronSiteStatus{}, errNoCron

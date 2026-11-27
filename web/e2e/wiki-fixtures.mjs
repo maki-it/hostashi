@@ -506,7 +506,37 @@ const profileChoices = {
   maxPaths: 20,
 };
 
+// Cron jobs of blog: WP-Cron every 5 minutes and a nightly export that
+// writes some output (ADR-0028 Addendum 1). Times are Unix seconds.
+const unix = (d, h = 0, min = 0) => Date.UTC(2026, 10, 22 - d, h, min) / 1000;
+const cronJobs = [
+  {
+    id: 1, schedule: "*/5 * * * *", command: "php htdocs/wp-cron.php", timeoutSec: 0, nice: null, paused: false, createdAt: unix(9), updatedAt: unix(9),
+    status: { running: false, result: "success", exitStatus: 0, lastStart: unix(0, 16, 55), lastEnd: unix(0, 16, 55) + 2, next: unix(0, 17, 0) },
+  },
+  {
+    id: 2, schedule: "@daily", command: "php htdocs/wp-content/export.php --since=yesterday", timeoutSec: 0, nice: null, paused: false, createdAt: unix(9), updatedAt: unix(9),
+    status: { running: false, result: "exit-code", exitStatus: 1, lastStart: unix(0), lastEnd: unix(0) + 14, next: unix(-1) },
+  },
+];
+const cronOutputs = {
+  1: { ran: true, lines: [], truncated: false },
+  2: {
+    ran: true,
+    truncated: false,
+    lines: [
+      "Exporting orders since 2026-11-21 …",
+      "  143 orders, 512 line items",
+      "Writing exports/orders-2026-11-21.csv",
+      "PHP Warning:  fopen(exports/orders-2026-11-21.csv): Failed to open stream: No such file or directory in /home/blog/htdocs/wp-content/export.php on line 88",
+      "Export failed: cannot write exports/orders-2026-11-21.csv",
+    ],
+  },
+};
+
 const routes = [
+  ["GET", /^\/sites\/blog\/cron$/, () => ({ jobs: cronJobs, statusKnown: true })],
+  ["GET", /^\/sites\/blog\/cron\/(\d+)\/output$/, (m) => cronOutputs[m[1]]],
   ["GET", /^\/sites\/([^/]+)\/object-cache$/, (m) => ({
     enabled: true,
     memoryMb: 64,

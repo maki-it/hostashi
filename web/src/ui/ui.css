@@ -2256,6 +2256,43 @@ html:has(.ui-files) {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* The last run's badge opens the job's output. */
+.ui-cron-last {
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+/* A long result wraps instead of leaving the table on a phone. */
+.ui-cron-last .ui-badge {
+  height: auto;
+  min-height: 24px;
+  padding-block: 2px;
+  line-height: 1.35;
+  white-space: normal;
+  text-align: left;
+}
+.ui-cron-last:hover .ui-badge {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ui-cron-last:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ui-cron-output-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.ui-cron-output pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 /* A card the Actions menu scrolls to stays clear of the sticky top bar. */
 .ui-card[id] {
   scroll-margin-top: 88px;

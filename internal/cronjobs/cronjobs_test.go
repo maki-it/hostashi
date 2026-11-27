@@ -8,9 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 )
@@ -19,6 +21,9 @@ type fakeCtl struct {
 	calls []string
 	props map[string]map[string]string
 	next  map[string]int64
+	// journal holds the lines per "unit invocation".
+	journal map[string][]string
+	cut     bool
 }
 
 func (f *fakeCtl) DaemonReload(context.Context) error {
@@ -46,6 +51,12 @@ func (f *fakeCtl) StartNoBlock(_ context.Context, u string) error {
 
 func (f *fakeCtl) Show(_ context.Context, u string, _ ...string) (map[string]string, error) {
 	return f.props[u], nil
+}
+
+func (f *fakeCtl) Journal(_ context.Context, u, inv string) ([]string, bool, error) {
+	f.calls = append(f.calls, "journal "+u+" "+inv)
+
+	return f.journal[u+" "+inv], f.cut, nil
 }
 
 func (f *fakeCtl) NextElapse(_ context.Context, timers ...string) (map[string]int64, error) {
@@ -345,5 +356,94 @@ func TestRefreshRendersUnitsAgain(t *testing.T) {
 
 	if strings.Contains(string(other), "TemporaryFileSystem=") {
 		t.Errorf("unknown site changed:\n%s", other)
+	}
+}
+
+func TestOutput(t *testing.T) {
+	m, ctl := newManager(t)
+	must(t, m.Apply(t.Context(), shop, []agentapi.CronJob{{ID: 1, Schedule: "@hourly", Command: "x"}, {ID: 2, Schedule: "@daily", Command: "y"}}))
+
+	inv := "0123456789abcdef0123456789abcdef"
+	ctl.props = map[string]map[string]string{"hostashi-cron-shop-1.service": {"InvocationID": inv}}
+	ctl.journal = map[string][]string{"hostashi-cron-shop-1.service " + inv: {"Hi!", "Fri Nov 27 15:35:00 CET 2026"}}
+
+	out, err := m.Output(t.Context(), "shop", 1)
+	must(t, err)
+
+	if !out.Ran || out.Truncated || !slices.Equal(out.Lines, []string{"Hi!", "Fri Nov 27 15:35:00 CET 2026"}) {
+		t.Errorf("%+v", out)
+	}
+
+	// Job 2 has no invocation: it has not run.
+	out, err = m.Output(t.Context(), "shop", 2)
+	must(t, err)
+
+	if out.Ran || out.Lines == nil || len(out.Lines) != 0 {
+		t.Errorf("not run: %+v", out)
+	}
+
+	if _, err := m.Output(t.Context(), "shop", 3); !errors.Is(err, ErrUnknownJob) {
+		t.Errorf("unknown job: %v", err)
+	}
+
+	if _, err := m.Output(t.Context(), "blog", 1); !errors.Is(err, ErrUnknownJob) {
+		t.Errorf("other site: %v", err)
+	}
+
+	ctl.cut = true
+
+	out, err = m.Output(t.Context(), "shop", 1)
+	must(t, err)
+
+	if !out.Truncated {
+		t.Errorf("cut by journalctl: %+v", out)
+	}
+}
+
+func TestLimitOutput(t *testing.T) {
+	many := make([]string, 250)
+	for i := range many {
+		many[i] = strconv.Itoa(i)
+	}
+
+	got, cut := limitOutput(many)
+	if !cut || len(got) != agentapi.CronOutputMaxLines || got[0] != "50" || got[len(got)-1] != "249" {
+		t.Errorf("lines: %v %d %q", cut, len(got), got[0])
+	}
+
+	// A long line is cut at a rune boundary; "ä" is two bytes.
+	long := strings.Repeat("ä", agentapi.CronOutputMaxLineBytes)
+
+	got, cut = limitOutput([]string{"a", long})
+	if !cut || len(got) != 2 || len(got[1]) > agentapi.CronOutputMaxLineBytes || !utf8.ValidString(got[1]) {
+		t.Errorf("long line: %v %d", cut, len(got[1]))
+	}
+
+	// The total stays below the limit; the last lines are kept.
+	big := make([]string, 40)
+	for i := range big {
+		big[i] = strings.Repeat("x", agentapi.CronOutputMaxLineBytes)
+	}
+
+	big[len(big)-1] = "last"
+
+	got, cut = limitOutput(big)
+
+	total := 0
+	for _, l := range got {
+		total += len(l) + 1
+	}
+
+	if !cut || total > agentapi.CronOutputMaxBytes || got[len(got)-1] != "last" {
+		t.Errorf("total: %v %d", cut, total)
+	}
+
+	got, cut = limitOutput([]string{"ok\xff"})
+	if cut || got[0] != "ok\uFFFD" {
+		t.Errorf("invalid UTF-8: %q", got)
+	}
+
+	if got, cut := limitOutput(nil); cut || got == nil || len(got) != 0 {
+		t.Errorf("empty: %v %v", got, cut)
 	}
 }

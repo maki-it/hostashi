@@ -108,12 +108,32 @@ func (r CronApplyRequest) Validate() error {
 }
 
 // Cron operations. cron.apply replaces a site's jobs; cron.run starts one
-// job now; cron.status reports the last and next runs.
+// job now; cron.status reports the last and next runs; cron.output reads
+// what the last run of one job wrote (ADR-0028 Addendum 1).
 var (
 	CronApply  = agentrpc.Op[CronApplyRequest, CronApplied]{Name: "cron.apply"}
 	CronRun    = agentrpc.Op[CronRunRequest, CronRunResponse]{Name: "cron.run"}
 	CronStatus = agentrpc.Op[CronStatusRequest, CronSiteStatus]{Name: "cron.status"}
+	CronOutput = agentrpc.Op[CronRunRequest, CronJobOutput]{Name: "cron.output"}
 )
+
+// Limits of cron.output (ADR-0028 Addendum 1).
+const (
+	CronOutputMaxLines     = 200
+	CronOutputMaxLineBytes = 2 << 10
+	CronOutputMaxBytes     = 64 << 10
+)
+
+// CronJobOutput is what the last run of a job wrote to standard output and
+// error, as the journal kept it: at most CronOutputMaxLines lines of at
+// most CronOutputMaxLineBytes, CronOutputMaxBytes in all, the last ones
+// kept. Ran is false when the job has not run since its units were
+// written or the server started.
+type CronJobOutput struct {
+	Ran       bool     `json:"ran"`
+	Lines     []string `json:"lines"`
+	Truncated bool     `json:"truncated,omitempty"`
+}
 
 // CronApplied answers cron.apply.
 type CronApplied struct{}

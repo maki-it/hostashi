@@ -41,6 +41,10 @@ func (c *cronCtl) NextElapse(context.Context, ...string) (map[string]int64, erro
 	return map[string]int64{}, nil
 }
 
+func (c *cronCtl) Journal(context.Context, string, string) ([]string, bool, error) {
+	return nil, false, nil
+}
+
 func (c *cronCtl) has(s string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()

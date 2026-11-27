@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { DotsThree, Pause, PencilSimple, Play, Plus, Trash } from "@phosphor-icons/react";
+import { DotsThree, Pause, PencilSimple, Play, Plus, Terminal, Trash, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   commandProblem,
   createCron,
   cronMessage,
+  cronOutput,
   defaultNice,
   defaultTimeoutMin,
   deleteCron,
@@ -25,9 +26,10 @@ import {
   type CronInput,
   type CronJob,
   type CronList,
+  type CronOutput,
 } from "./cron";
 import type { Site } from "./sites";
-import { Badge, Button, Card, Field, Menu, Notice, RowActions, type MenuItem } from "./ui";
+import { Badge, Button, Card, CopyButton, Field, Menu, Notice, RowActions, type MenuItem } from "./ui";
 
 // CronSettings lists the cron jobs of a site and adds, changes, pauses,
 // runs and deletes them. Jobs run as the site user in its home.
@@ -151,6 +153,7 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [showOutput, setShowOutput] = useState(false);
 
   async function act(f: () => Promise<string>) {
     setBusy(true);
@@ -198,7 +201,11 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
       await updateCron(site.name, job.id, { ...inputOf(job), paused: !job.paused });
       return job.paused ? "Cron job resumed." : "Cron job paused. It runs only when started by hand.";
     });
+  const hasRun = Boolean(st?.lastStart);
   const more: MenuItem[] = [
+    ...(hasRun
+      ? [{ label: showOutput ? "Hide output" : "Show output", icon: <Terminal size={16} aria-hidden="true" />, onSelect: () => setShowOutput(!showOutput) }]
+      : []),
     { label: "Change", icon: <PencilSimple size={16} aria-hidden="true" />, onSelect: () => setEditing(true) },
     { label: job.paused ? "Resume" : "Pause", icon: job.paused ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />, onSelect: togglePause },
     { label: "Delete", icon: <Trash size={16} aria-hidden="true" />, danger: true, onSelect: () => setConfirming(true) },
@@ -225,7 +232,21 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
           </div>
         </td>
         <td data-label="Last run">
-          {st && st.result && st.lastStart && !st.running ? <Badge tone={lastRunTone(st)}>{lastRun(st)}</Badge> : st ? lastRun(st) : "Unknown"}
+          {st && st.result && st.lastStart && !st.running ? (
+            <button
+              type="button"
+              className="ui-cron-last"
+              aria-expanded={showOutput}
+              title={showOutput ? "Hide the output of this run" : "Show the output of this run"}
+              onClick={() => setShowOutput(!showOutput)}
+            >
+              <Badge tone={lastRunTone(st)}>{lastRun(st)}</Badge>
+            </button>
+          ) : st ? (
+            lastRun(st)
+          ) : (
+            "Unknown"
+          )}
         </td>
         <td data-label="Next run">{job.paused ? "Paused" : site.disabled ? "Site disabled" : st?.next ? formatTime(st.next) : st ? "Not planned" : "Unknown"}</td>
         <td data-actions="">
@@ -248,6 +269,13 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
           </RowActions>
         </td>
       </tr>
+      {showOutput && (
+        <tr>
+          <td colSpan={5}>
+            <JobOutput site={site} job={job} onClose={() => setShowOutput(false)} />
+          </td>
+        </tr>
+      )}
       {(confirming || error) && (
         <tr>
           <td colSpan={5}>
@@ -278,6 +306,63 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
         </tr>
       )}
     </>
+  );
+}
+
+// JobOutput shows what the last run of a job wrote, as the journal kept
+// it. It loads again when a new run has ended.
+function JobOutput({ site, job, onClose }: { site: Site; job: CronJob; onClose: () => void }) {
+  const [out, setOut] = useState<CronOutput | null>(null);
+  const [error, setError] = useState("");
+  const st = job.status;
+  const runKey = `${st?.lastStart ?? 0}-${st?.running ? 1 : 0}`;
+
+  useEffect(() => {
+    let live = true;
+    setError("");
+    cronOutput(site.name, job.id).then(
+      (o) => live && setOut(o),
+      (err: unknown) => live && setError(cronMessage(err)),
+    );
+    return () => {
+      live = false;
+    };
+  }, [site.name, job.id, runKey]);
+
+  const text = out?.lines.join("\n") ?? "";
+  const label = "Output of cron job " + String(job.id);
+
+  return (
+    <section className="ui-stack-tight ui-cron-output" aria-label={label}>
+      <div className="ui-cron-output-head">
+        <strong>Output of the last run{st?.lastStart ? ", " + formatTime(st.lastStart) : ""}</strong>
+        <span className="ui-row ui-row-tight">
+          {text && <CopyButton text={text} label="Copy output" />}
+          <Button small icon={<X size={14} aria-hidden="true" />} onClick={onClose}>
+            Close
+          </Button>
+        </span>
+      </div>
+      {error ? (
+        <Notice tone="err" title={error} />
+      ) : !out ? (
+        <p aria-busy="true" className="ui-flush">
+          Loading the output…
+        </p>
+      ) : !out.ran ? (
+        <p className="ui-hint ui-flush">No output known: the job has not run since the server started or since it was last changed.</p>
+      ) : out.lines.length === 0 ? (
+        <p className="ui-hint ui-flush">The last run wrote nothing.</p>
+      ) : (
+        <>
+          {out.truncated && <p className="ui-hint ui-flush">The output is long; these are its last lines.</p>}
+          <pre className="ui-code ui-code-scroll" aria-label={label}>
+            {text}
+          </pre>
+        </>
+      )}
+      <p className="ui-hint ui-flush">Standard output and errors, at most the last 200 lines, as long as the system journal keeps them.</p>
+    </section>
   );
 }
 
