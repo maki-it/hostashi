@@ -4,6 +4,8 @@
 // of one site over a range, and all sites by their usage for admins.
 
 import { request } from "./api";
+import { formatNumber } from "./format";
+import i18n from "./i18n";
 import type { Range } from "./services";
 
 export type SitePoint = {
@@ -47,7 +49,7 @@ export const rankSites = (range: Range, sort: UsageSort = "cpu") =>
 
 /** percent formats a share in percent: 12 %, 3.5 %, 0 %. */
 export function percent(pct: number): string {
-  return `${pct >= 10 || pct === 0 ? pct.toFixed(0) : pct.toFixed(1)} %`;
+  return `${fixed(pct, pct >= 10 || pct === 0 ? 0 : 1)} %`;
 }
 
 /** ofCores turns percent of one core into percent of the cores a site may use. */
@@ -56,13 +58,18 @@ export const ofCores = (pctOfCore: number, cores: number) => pctOfCore / (cores 
 /** cores formats percent of one core as cores: 150 % is "1.5 cores". */
 export function cores(pctOfCore: number): string {
   const n = pctOfCore / 100;
-  const s = n >= 10 || n === 0 ? n.toFixed(0) : n >= 1 ? n.toFixed(1) : n.toFixed(2);
-  return `${s} ${s === "1" || s === "1.0" ? "core" : "cores"}`;
+  const digits = n >= 10 || n === 0 ? 0 : n >= 1 ? 1 : 2;
+  const one = Number(n.toFixed(digits)) === 1;
+  return i18n.t("usage.core", { count: one ? 1 : 2, n: fixed(n, digits) });
 }
 
 /** count formats a number of requests with a k or M suffix. */
 export function count(n: number): string {
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)} M`;
-  if (n >= 1e4) return `${(n / 1e3).toFixed(0)} k`;
-  return n.toFixed(0);
+  if (n >= 1e6) return i18n.t("usage.million", { n: fixed(n / 1e6, 1) });
+  if (n >= 1e4) return i18n.t("usage.thousand", { n: fixed(n / 1e3, 0) });
+  return fixed(n, 0);
 }
+
+/** fixed writes n with exactly the given decimals in the panel's language. */
+export const fixed = (n: number, digits: number) => formatNumber(n, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+

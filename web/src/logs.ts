@@ -5,20 +5,20 @@
 // many days the server keeps them.
 
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 
 export type LogKind = "access" | "error" | "php" | "app" | "wordpress";
 
-export const logKinds: { id: LogKind; label: string; hint: string }[] = [
-  { id: "access", label: "Access", hint: "Every request to the site, with the visitor's address." },
-  { id: "error", label: "Web server errors", hint: "What nginx reports for the site, including PHP messages it receives." },
-  { id: "php", label: "PHP errors", hint: "Warnings and errors of the site's PHP, written by PHP-FPM." },
-  { id: "app", label: "App", hint: "What the site's Node.js app writes to its output and error output." },
-  {
-    id: "wordpress",
-    label: "WordPress install",
-    hint: "The WP-CLI output of the last WordPress install from the panel. Empty if WordPress was never installed here.",
+/** The logs, each with its name and what it holds in the panel's language. */
+export const logKinds: { id: LogKind; readonly label: string; readonly hint: string }[] = (["access", "error", "php", "app", "wordpress"] as const).map((id) => ({
+  id,
+  get label() {
+    return i18n.t(`logs.kinds.${id}.label`);
   },
-];
+  get hint() {
+    return i18n.t(`logs.kinds.${id}.hint`);
+  },
+}));
 
 /**
  * The logs a site has: the app log for a Node.js site, the PHP log for the
@@ -79,17 +79,18 @@ export function lineTone(kind: LogKind, line: string): "err" | "warn" | "" {
 }
 
 export function retentionProblem(text: string, r: Pick<LogRetention, "minDays" | "maxDays">): string {
-  if (!/^\d+$/.test(text.trim())) return "Enter a whole number of days.";
+  if (!/^\d+$/.test(text.trim())) return i18n.t("logs.check.whole");
   const n = Number(text);
-  if (n < r.minDays || n > r.maxDays) return `Enter ${r.minDays} to ${r.maxDays} days.`;
+  if (n < r.minDays || n > r.maxDays) return i18n.t("logs.check.range", { min: r.minDays, max: r.maxDays });
   return "";
 }
 
 export function logMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.code === "agent_failed_precondition") return "The log cannot be read on this server: " + err.message + ".";
-    if (err.status === 404) return "There is no such site or log.";
+    if (err.code === "agent_failed_precondition") return i18n.t("logs.errors.precondition", { reason: err.message });
+    if (err.status === 404) return i18n.t("logs.errors.notFound");
     return err.message;
   }
-  return "The log could not be loaded. Check the connection and try again.";
+  return i18n.t("logs.errors.unreachable");
+
 }

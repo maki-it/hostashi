@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { cleanPath, formatSize, modeProblem, nameProblem, zipUrl, type FileEntry } from "./files";
 import { FileManager, symbolicMode } from "./Files";
 import type { Site } from "./sites";
+import { setLanguage } from "./i18n";
 import { mockFetch } from "./test-utils";
 
 const site: Site = {
@@ -276,8 +277,22 @@ describe("FileManager", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: "Extract…" }));
     const dialog = within(screen.getByRole("dialog", { name: "Extract site.zip" }));
     await userEvent.click(dialog.getByRole("button", { name: "Extract" }));
-    expect(await screen.findByText("3 files extracted into htdocs, 1 existing files kept, 1 symlinks or special entries skipped.")).toBeInTheDocument();
+    expect(await screen.findByText("3 files extracted into htdocs, 1 existing file kept, 1 symlink or special entry skipped.")).toBeInTheDocument();
     expect(calls.find((c) => c.path.endsWith("/extract"))?.body).toEqual({ path: "htdocs/site.zip", to: "htdocs", overwrite: false });
+  });
+
+  it("speaks German with sizes in German numbers", async () => {
+    setLanguage("de");
+    mockFetch({ [list("htdocs")]: listing("htdocs", { unnamed: 2 }) });
+    render(<FileManager site={site} path="htdocs" onPath={() => undefined} />);
+
+    const table = await screen.findByRole("table", { name: "Dateien in: htdocs" });
+    expect(within(table).getByText("2,0 KiB")).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: /Rechte/ })).toBeInTheDocument();
+    expect(screen.getByText(/2 Einträge haben Namen, die kein gültiges UTF-8 sind/)).toBeInTheDocument();
+    await userEvent.click(within(table).getByRole("button", { name: "Weitere Aktionen für site.zip" }));
+    expect(screen.getByRole("menuitem", { name: "Entpacken…" })).toBeInTheDocument();
+    expect(nameProblem("a/b")).toBe("Der Name darf kein „/“ enthalten.");
   });
 });
 

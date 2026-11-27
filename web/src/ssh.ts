@@ -5,6 +5,7 @@
 // The panel database holds the keys; every change is sent to the agent.
 
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 import { siteMessage } from "./sites";
 
 export type SSHAccess = "sftp" | "shell";
@@ -46,20 +47,20 @@ const keyTypes = [
 ];
 
 export function labelProblem(v: string): string {
-  if (v === "") return "Enter a label, for example the name of the computer.";
-  if (new TextEncoder().encode(v).length > maxLabelBytes) return `The label is longer than ${maxLabelBytes} characters.`;
-  if (v.startsWith(" ") || v.endsWith(" ")) return "The label must not start or end with a space.";
-  if (!/^[A-Za-z0-9 ._\-@+]+$/.test(v)) return "The label may contain letters, digits, spaces and . _ - @ + only.";
+  if (v === "") return i18n.t("ssh.check.labelEmpty");
+  if (new TextEncoder().encode(v).length > maxLabelBytes) return i18n.t("ssh.check.labelLong", { max: maxLabelBytes });
+  if (v.startsWith(" ") || v.endsWith(" ")) return i18n.t("ssh.check.labelSpace");
+  if (!/^[A-Za-z0-9 ._\-@+]+$/.test(v)) return i18n.t("ssh.check.labelChars");
   return "";
 }
 
 export function keyProblem(v: string): string {
   const s = v.trim();
-  if (s === "") return "Paste a public key, the contents of a file like id_ed25519.pub.";
-  if (s.includes("PRIVATE KEY")) return "This is a private key. Never paste it anywhere; paste the .pub file instead.";
-  if (/[\r\n]/.test(s)) return "Paste one key on one line.";
+  if (s === "") return i18n.t("ssh.check.keyEmpty");
+  if (s.includes("PRIVATE KEY")) return i18n.t("ssh.check.keyPrivate");
+  if (/[\r\n]/.test(s)) return i18n.t("ssh.check.keyLines");
   const type = s.split(/\s+/)[0] ?? "";
-  if (!keyTypes.includes(type)) return "This does not look like a supported public key. Use an Ed25519, ECDSA or RSA (3072 bits or more) key.";
+  if (!keyTypes.includes(type)) return i18n.t("ssh.check.keyType");
   return "";
 }
 
@@ -70,27 +71,26 @@ export function suggestLabel(key: string): string {
   return comment.slice(0, maxLabelBytes).trim();
 }
 
-export const accessName = (a: SSHAccess) => (a === "shell" ? "Shell and SFTP" : "SFTP only");
+export const accessName = (a: SSHAccess) => i18n.t(a === "shell" ? "ssh.access.shell" : "ssh.access.sftp");
 
 // sshMessage turns an API error into a sentence.
 export function sshMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case "ssh_unavailable":
-        return "SSH access is not available on this panel.";
-      case "too_many_ssh_keys":
-        return `A site has at most ${maxSSHKeys} keys. Delete one first.`;
       case "ssh_key_exists":
-        return "The site already has this key.";
-      case "invalid_argument":
-        return err.message.replace(/^.*sshkeys: invalid: /, "The key was refused: ");
       case "site_busy":
-        return "The site is not active right now. Reload the page in a moment.";
       case "forbidden":
-        return "Only administrators can manage SSH keys.";
+        return i18n.t(`ssh.errors.${err.code}`);
+      case "too_many_ssh_keys":
+        return i18n.t("ssh.errors.too_many_ssh_keys", { max: maxSSHKeys });
+      case "invalid_argument":
+        if (/sshkeys: invalid: /.test(err.message)) return i18n.t("ssh.errors.refused", { reason: err.message.replace(/^.*sshkeys: invalid: /, "") });
+        return err.message;
       case "not_found":
-        if (err.message.includes("SSH key")) return "This key does not exist any more. Reload the page.";
+        if (err.message.includes("SSH key")) return i18n.t("ssh.errors.keyGone");
         break;
+
     }
   }
   return siteMessage(err);

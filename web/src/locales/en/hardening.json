@@ -1,0 +1,32 @@
+{
+  "title": "Application profile and hardening",
+  "loading": "Loading…",
+  "savedProfile": "Saved. The site follows the profile's rules again.",
+  "savedRules": "Saved. nginx uses the new rules now.",
+  "pathHint": "One per line, relative to the document root, such as wp-content/uploads. At most {{max}}.",
+  "intro": "nginx answers these requests with 404 before the site's files or PHP see them. Hidden files and folders such as <code1>.git</code1> or <code2>.env</code2> are always blocked, except <code3>/.well-known</code3>.",
+  "profile": "Profile",
+  "minPhp": "Needs PHP {{version}} or newer.",
+  "webDir": "New sites serve the {{dir}} folder.",
+  "profileHint": "The rules the site starts from. Changing it never touches the site's files or document root.",
+  "rules": "Rules",
+  "changed": "Changed from the profile",
+  "configFiles": "Block database dumps, backups, logs and editor copies",
+  "suffixes": "Files anywhere below the document root that end in:",
+  "denyDirs": "Blocked folders",
+  "denyDirsHint": "{{pathHint}} Everything in them.",
+  "denyFiles": "Blocked files",
+  "denyFilesHint": "One per line, such as xmlrpc.php.",
+  "noPhpDirs": "Folders without PHP",
+  "noPhpDirsHint": "A PHP file uploaded there never runs. One per line, such as wp-content/uploads.",
+  "limitFiles": "Rate limited PHP files",
+  "limitFilesHint": "At most {{perMinute}} requests per minute per address, {{burst}} more at once; then 429. One per line, such as wp-login.php.",
+  "save": "Save profile and rules",
+  "useProfile": "Use the profile's rules",
+  "block": {
+    "show": "Show the server block",
+    "hint": "Read only, with the profile and rules above as they are now, saved or not. Paths below <code>/placeholder</code> stand for the server's own; password hashes are never shown.",
+    "label": "Server block",
+    "loading": "Loading…"
+  }
+}

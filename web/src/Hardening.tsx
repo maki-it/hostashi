@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import {
   fromHardeningForm,
   getSiteProfile,
@@ -18,6 +19,7 @@ import { Badge, Button, Card, Field, Notice } from "./ui";
 // rules (ADR-0069, ADR-0017 Part 4). Only what differs from the profile is
 // stored, so later changes of the profile reach the rules the site kept.
 export function HardeningCard({ site }: { site: Site }) {
+  const { t } = useTranslation();
   const [view, setView] = useState<SiteProfileView | null>(null);
   const [profile, setProfile] = useState("");
   const [form, setForm] = useState<HardeningForm | null>(null);
@@ -45,7 +47,7 @@ export function HardeningCard({ site }: { site: Site }) {
     void load();
   }, [load]);
 
-  const title = "Application profile and hardening";
+  const title = t("hardening.title");
   if (loadError) {
     return (
       <Card title={title}>
@@ -56,7 +58,7 @@ export function HardeningCard({ site }: { site: Site }) {
   if (!view || !form) {
     return (
       <Card title={title}>
-        <p aria-busy="true">Loading…</p>
+        <p aria-busy="true">{t("hardening.loading")}</p>
       </Card>
     );
   }
@@ -81,7 +83,7 @@ export function HardeningCard({ site }: { site: Site }) {
     try {
       const v = await setSiteProfile(site.name, profile, useProfile ? undefined : fromHardeningForm(form!, php));
       show(v);
-      setDone(useProfile ? "Saved. The site follows the profile's rules again." : "Saved. nginx uses the new rules now.");
+      setDone(useProfile ? t("hardening.savedProfile") : t("hardening.savedRules"));
     } catch (err) {
       setError(profileMessage(err));
     } finally {
@@ -94,21 +96,20 @@ export function HardeningCard({ site }: { site: Site }) {
     void save(false);
   }
 
-  const pathHint = `One per line, relative to the document root, such as wp-content/uploads. At most ${choices.maxPaths}.`;
+  const pathHint = t("hardening.pathHint", { max: choices.maxPaths });
 
   return (
     <Card title={title}>
       <form className="ui-stack" onSubmit={submit} noValidate>
         <p className="ui-hint">
-          nginx answers these requests with 404 before the site's files or PHP see them. Hidden files and folders such as <code>.git</code> or{" "}
-          <code>.env</code> are always blocked, except <code>/.well-known</code>.
+          <Trans i18nKey="hardening.intro" components={{ code1: <code />, code2: <code />, code3: <code /> }} />
         </p>
         <Field
-          label="Profile"
+          label={t("hardening.profile")}
           hint={
             chosen?.minPhp
-              ? `Needs PHP ${chosen.minPhp} or newer.${chosen.webDir ? ` New sites serve the ${chosen.webDir} folder.` : ""}`
-              : "The rules the site starts from. Changing it never touches the site's files or document root."
+              ? t("hardening.minPhp", { version: chosen.minPhp }) + (chosen.webDir ? " " + t("hardening.webDir", { dir: chosen.webDir }) : "")
+              : t("hardening.profileHint")
           }
         >
           <select className="ui-select" value={profile} disabled={busy} onChange={(e) => choose(e.target.value)}>
@@ -128,37 +129,37 @@ export function HardeningCard({ site }: { site: Site }) {
         )}
         <fieldset className="ui-fieldset ui-stack" disabled={busy}>
           <legend>
-            Rules {view.changed && profile === view.profile && <Badge tone="warn">Changed from the profile</Badge>}
+            {t("hardening.rules")} {view.changed && profile === view.profile && <Badge tone="warn">{t("hardening.changed")}</Badge>}
           </legend>
           <label className="ui-check">
             <input type="checkbox" checked={form.configFiles} onChange={(e) => set({ configFiles: e.target.checked })} />
-            Block database dumps, backups, logs and editor copies
+            {t("hardening.configFiles")}
           </label>
           <p className="ui-hint">
-            Files ending in{" "}
+            {t("hardening.suffixes")}{" "}
             {choices.configFileSuffixes.map((s, i) => (
-              <span key={s}>
+              <Fragment key={s}>
                 {i > 0 && " "}
                 <code>{s}</code>
-              </span>
+              </Fragment>
             ))}
-            , anywhere below the document root.
+
           </p>
           <div className="ui-form-grid">
-            <Field label="Blocked folders" hint={pathHint + " Everything in them."}>
+            <Field label={t("hardening.denyDirs")} hint={t("hardening.denyDirsHint", { pathHint })}>
               <textarea className="ui-input ui-textarea ui-mono" rows={3} spellCheck={false} value={form.denyDirs} onChange={(e) => set({ denyDirs: e.target.value })} />
             </Field>
-            <Field label="Blocked files" hint="One per line, such as xmlrpc.php.">
+            <Field label={t("hardening.denyFiles")} hint={t("hardening.denyFilesHint")}>
               <textarea className="ui-input ui-textarea ui-mono" rows={3} spellCheck={false} value={form.denyFiles} onChange={(e) => set({ denyFiles: e.target.value })} />
             </Field>
             {php && (
               <>
-                <Field label="Folders without PHP" hint="A PHP file uploaded there never runs. One per line, such as wp-content/uploads.">
+                <Field label={t("hardening.noPhpDirs")} hint={t("hardening.noPhpDirsHint")}>
                   <textarea className="ui-input ui-textarea ui-mono" rows={3} spellCheck={false} value={form.noPhpDirs} onChange={(e) => set({ noPhpDirs: e.target.value })} />
                 </Field>
                 <Field
-                  label="Rate limited PHP files"
-                  hint={`At most ${choices.limitPerMinute} requests per minute per address, ${choices.limitBurst} more at once; then 429. One per line, such as wp-login.php.`}
+                  label={t("hardening.limitFiles")}
+                  hint={t("hardening.limitFilesHint", { perMinute: choices.limitPerMinute, burst: choices.limitBurst })}
                 >
                   <textarea className="ui-input ui-textarea ui-mono" rows={3} spellCheck={false} value={form.limitFiles} onChange={(e) => set({ limitFiles: e.target.value })} />
                 </Field>
@@ -171,10 +172,10 @@ export function HardeningCard({ site }: { site: Site }) {
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy}>
-            Save profile and rules
+            {t("hardening.save")}
           </Button>
           <Button disabled={busy} onClick={() => void save(true)}>
-            Use the profile's rules
+            {t("hardening.useProfile")}
           </Button>
         </div>
       </form>
@@ -186,6 +187,7 @@ export function HardeningCard({ site }: { site: Site }) {
 // profile and the rules in the form, before they are saved (ADR-0069). It
 // loads only while open, and again shortly after the form changes.
 function ServerBlock({ site, profile, form, php }: { site: string; profile: string; form: HardeningForm; php: boolean }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [config, setConfig] = useState("");
   const [error, setError] = useState("");
@@ -214,22 +216,22 @@ function ServerBlock({ site, profile, form, php }: { site: string; profile: stri
 
   return (
     <details onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary>Show the server block</summary>
+      <summary>{t("hardening.block.show")}</summary>
       <div className="ui-stack">
         <p className="ui-hint">
-          Read only, with the profile and rules above as they are now, saved or not. Paths below <code>/placeholder</code> stand for the server's
-          own; password hashes are never shown.
+          <Trans i18nKey="hardening.block.hint" components={{ code: <code /> }} />
         </p>
         {error ? (
           <Notice tone="err" title={error} />
         ) : config ? (
-          <pre className="ui-code ui-code-scroll" aria-label="Server block">
+          <pre className="ui-code ui-code-scroll" aria-label={t("hardening.block.label")}>
             {config}
           </pre>
         ) : (
-          <p aria-busy="true">Loading…</p>
+          <p aria-busy="true">{t("hardening.block.loading")}</p>
         )}
       </div>
     </details>
+
   );
 }

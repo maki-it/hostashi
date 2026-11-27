@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { SSHSettings } from "./SSH";
 import type { SSHKey } from "./ssh";
 import type { Site } from "./sites";
+import { setLanguage } from "./i18n";
 import { mockFetch } from "./test-utils";
 
 const site: Site = {
@@ -135,5 +136,20 @@ describe("SSHSettings", () => {
     await user.click(screen.getByRole("button", { name: "Delete key" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Key deleted.");
     expect(screen.getByText(/No keys yet/)).toBeInTheDocument();
+  });
+});
+
+describe("SSHSettings in German", () => {
+  it("lists keys and checks a pasted key in German", async () => {
+    setLanguage("de");
+    mockFetch({ ...hostRoute, ["GET " + base]: { body: { keys: [laptop] } } });
+    const user = userEvent.setup();
+    render(<SSHSettings site={site} host="h" />);
+
+    expect(await screen.findByLabelText("Details von Key kim laptop")).toBeInTheDocument();
+    expect(screen.getByText("Nur SFTP", { selector: ".ui-badge" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "SSH-Key hinzufügen" }));
+    await user.click(screen.getByRole("button", { name: "Key hinzufügen" }));
+    expect(screen.getByText("Füg einen öffentlichen Key ein, den Inhalt einer Datei wie id_ed25519.pub.")).toBeInTheDocument();
   });
 });
