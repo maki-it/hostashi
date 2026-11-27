@@ -313,6 +313,42 @@ dd > .ui-badge {
 .ui-input[aria-invalid="true"] {
   border-color: var(--err);
 }
+/* Browsers draw native selects in their own style (Safari: a small grey
+   pill). Drop that look and draw the chevron with two gradients, so it takes
+   the theme colour and needs no image. The keyboard and the native option
+   list still work. */
+.ui-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 32px;
+  line-height: calc(var(--control-h) - 2px);
+  /* A chevron from two 1.5px strokes, one per half */
+  background-image:
+    linear-gradient(45deg, transparent calc(50% - 0.75px), var(--muted) calc(50% - 0.75px) calc(50% + 0.75px), transparent calc(50% + 0.75px)),
+    linear-gradient(135deg, transparent calc(50% - 0.75px), var(--muted) calc(50% - 0.75px) calc(50% + 0.75px), transparent calc(50% + 0.75px));
+  background-position:
+    right 18px center,
+    right 12px center;
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+.ui-select:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.ui-select:disabled {
+  color: var(--muted);
+  background-color: var(--sunken);
+  cursor: not-allowed;
+}
+.ui-select[multiple] {
+  padding-right: 10px;
+  background-image: none;
+}
+.ui-select option {
+  color: var(--fg);
+  background: var(--surface);
+}
 /* Settings that belong to the checkbox above them */
 .ui-indent {
   margin-left: calc(16px + var(--space-2));
