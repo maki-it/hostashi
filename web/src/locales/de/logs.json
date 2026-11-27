@@ -1,0 +1,66 @@
+{
+  "title": "Logs",
+  "live": "Live",
+  "paused": "Pausiert",
+  "pause": "Pausieren",
+  "follow": "Folgen",
+  "reload": "Neu laden",
+  "download": "Herunterladen",
+  "kindLabel": "Log",
+  "lastLines": "Letzte Zeilen",
+  "filter": "Filter",
+  "filterPlaceholder": "z. B. 404 oder wp-login",
+  "kinds": {
+    "access": {
+      "label": "Zugriffe",
+      "hint": "Jede Anfrage an die Site, mit der Adresse des Besuchers."
+    },
+    "error": {
+      "label": "Webserver-Fehler",
+      "hint": "Was nginx für die Site meldet, auch PHP-Meldungen, die es erhält."
+    },
+    "php": {
+      "label": "PHP-Fehler",
+      "hint": "Warnungen und Fehler des PHP der Site, geschrieben von PHP-FPM."
+    },
+    "app": {
+      "label": "App",
+      "hint": "Was die Node.js-App der Site in ihre Ausgabe und Fehlerausgabe schreibt."
+    },
+    "wordpress": {
+      "label": "WordPress-Installation",
+      "hint": "Die WP-CLI-Ausgabe der letzten WordPress-Installation aus dem Panel. Leer, wenn WordPress hier nie installiert wurde."
+    }
+  },
+  "viewLabel": "Log „{{kind}}“ von {{site}}",
+  "loading": "Wird geladen…",
+  "empty": "Das Log ist bisher leer.",
+  "noMatch": "Keine Zeile passt zum Filter.",
+  "rotated": "— das Log wurde rotiert, neue Datei —",
+  "autoScroll": "Automatisch scrollen",
+  "every": "Neue Zeilen erscheinen alle {{seconds}} Sekunden.",
+  "pausedHint": "Pausiert: drück Folgen, um neue Zeilen zu sehen.",
+  "shown": "{{shown}} von {{total}} Zeilen gezeigt.",
+  "retentionAdmin": "Der Server löscht alte Logs nach den Tagen, die ein Admin unter <a>System</a> eingestellt hat.",
+  "retentionOther": "Der Server löscht alte Logs nach den Tagen, die ein Admin eingestellt hat. Frag nach, wenn du Logs länger brauchst.",
+  "retention": {
+    "title": "Aufbewahrung der Logs",
+    "intro": "Ein Wert für alle Sites auf diesem Server: Zugriffs-, Webserver-, PHP-, App- und WordPress-Installations-Logs sowie die nginx-Logs von Anfragen ohne Site. Logs werden täglich rotiert und nach so vielen Tagen gelöscht. Stimm ihn mit deiner Datenschutzerklärung und deinen Auftragsverarbeitungsverträgen ab.",
+    "days": "Logs aufbewahren (Tage)",
+    "save": "Speichern",
+    "range": "{{min}} bis {{max}} Tage, Standard {{default}}. Eine kürzere Zeit löscht ältere Logs bei der nächsten täglichen Rotation.",
+    "loading": "Wird geladen…",
+    "system": "Die eigenen Logs des Panels und das System-Journal behalten die Einstellungen der Distribution.",
+    "done_one": "Logs werden ab der nächsten Rotation {{count}} Tag aufbewahrt.",
+    "done_other": "Logs werden ab der nächsten Rotation {{count}} Tage aufbewahrt."
+  },
+  "check": {
+    "whole": "Gib eine ganze Zahl von Tagen ein.",
+    "range": "Gib {{min}} bis {{max}} Tage ein."
+  },
+  "errors": {
+    "precondition": "Das Log lässt sich auf diesem Server nicht lesen: {{reason}}.",
+    "notFound": "Diese Site oder dieses Log gibt es nicht.",
+    "unreachable": "Das Log konnte nicht geladen werden. Prüf die Verbindung und versuch es erneut."
+  }
+}

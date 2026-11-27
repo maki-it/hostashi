@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { PermissionsResetCard } from "./PermissionsReset";
 import type { Site } from "./sites";
+import { setLanguage } from "./i18n";
 import { mockFetch } from "./test-utils";
 
 const site: Site = {
@@ -85,5 +86,20 @@ describe("PermissionsResetCard", () => {
 
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("PermissionsResetCard in German", () => {
+  it("keeps the name to type highlighted and counts in German", async () => {
+    setLanguage("de");
+    mockFetch({ ["POST " + path]: { body: { checked: 1234, changed: 56, skipped: 0, skippedPaths: [] } } });
+    const user = userEvent.setup();
+    render(<PermissionsResetCard site={site} />);
+
+    await user.click(screen.getByRole("button", { name: "Dateirechte zurücksetzen" }));
+    expect(screen.getByText("blog", { selector: "code" })).toHaveClass("ui-confirm-phrase");
+    await user.type(screen.getByRole("textbox", { name: /zur Bestätigung/ }), "blog");
+    await user.click(screen.getByRole("button", { name: "Dateirechte von blog zurücksetzen" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("56 Einträge geändert, 1.234 Einträge geprüft.");
   });
 });

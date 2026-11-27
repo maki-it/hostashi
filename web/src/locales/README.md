@@ -82,16 +82,22 @@ The same English term is always translated the same way.
 | danger zone | Gefahrenzone | |
 | database server | Datenbankserver | |
 | database tool session | Adminer-Sitzung | the Adminer sessions card |
+| deploy (Git) | Deploy | der Deploy; verb: deployen |
+| deploy key | Deploy-Key | |
 | dump (import/export file) | Dump | dump file: Dump-Datei |
 | display name | Anzeigename | a site's title; system name: Systemname |
 | DNS switch | DNS-Umstellung | CloudPanel import |
 | domain | Domain | die Domain |
 | email | E-Mail | mail as a message: Mail |
+| false positive | Fehlalarm | virus scan |
 | file manager | Dateimanager | |
+| file permissions, mode | Dateirechte, Rechte | chmod: Rechte ändern |
 | firewall | Firewall | die Firewall |
+| flagged (file) | auffällig | virus scan |
 | hardening | Härtung | |
 | health | Zustand | the Health page |
 | home (of a site) | Home-Verzeichnis | |
+| host key | Host-Key | |
 | invitation | Einladung | invitation link: Einladungslink |
 | limit preset | Limit-Vorlage | |
 | log in / log out | anmelden / abmelden | |
@@ -102,8 +108,11 @@ The same English term is always translated the same way.
 | primary domain | Hauptdomain | |
 | passkey | Passkey | der Passkey |
 | password | Passwort | |
+| quarantine | Quarantäne | |
+| real-time scan | Echtzeit-Scan | |
 | recovery code | Wiederherstellungscode | |
 | redirect | Weiterleitung | |
+| release (Git deploy) | Release | das Release |
 | relay (SMTP) | Relay | das SMTP-Relay |
 | reverse proxy | Reverse Proxy | |
 | runtime | Runtime | the Runtimes page: Runtimes |
@@ -113,11 +122,13 @@ The same English term is always translated the same way.
 | service | Dienst | |
 | settings | Einstellungen | |
 | setup token | Setup-Token | |
+| shared path | geteilter Pfad | Git deploy |
 | site | Site | die Site; site user: Site-Benutzer |
 | site type | Site-Typ | static: statisch |
 | staging | Staging | staging copy: Staging-Kopie |
 | storage pool | Storage-Pool | |
 | two-factor | Zwei-Faktor | two-factor authentication: Zwei-Faktor-Anmeldung |
+| usage | Auslastung | the Usage tab |
 | virus scan | Virenscan | |
 | visitor address | Besucheradresse | the Real IP tab |
 | web root | Web-Root | das Web-Root |
