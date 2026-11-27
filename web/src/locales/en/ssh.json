@@ -1,0 +1,77 @@
+{
+  "title": "SSH and SFTP",
+  "intro": "Log in as the user {{user}} with a key, never with a password. A key is for SFTP only unless you allow a shell; a shell can run any command as the site user. Logins see the server as the site's PHP code does.",
+  "disabled": "The site is disabled: nobody can log in until it is enabled. The keys are kept.",
+  "loading": "Loading SSH keys…",
+  "none": "No keys yet: nobody can log in.",
+  "list": "SSH keys of {{site}}",
+  "max": "A site has at most {{max}} keys.",
+  "addedShell": "Key added with shell access.",
+  "addedSftp": "Key added for SFTP.",
+  "add": "Add SSH key",
+  "login": {
+    "label": "Login of {{site}}",
+    "with": "Log in with",
+    "or": "or",
+    "copySftp": "Copy the SFTP command",
+    "copySsh": "Copy the SSH command",
+    "fingerprints": "At the first login, check that the server shows one of these fingerprints:",
+    "fingerprintsLabel": "Host key fingerprints",
+    "failed": "The server's host key fingerprints could not be read right now."
+  },
+  "key": {
+    "saved": "Key saved.",
+    "changeLabel": "Change key {{label}}",
+    "label": "Label",
+    "save": "Save key",
+    "cancel": "Cancel",
+    "shell": "Shell",
+    "sftpOnly": "SFTP only",
+    "details": "Details of key {{label}}",
+    "fingerprint": "Fingerprint",
+    "type": "Type",
+    "added": "Added",
+    "deleteLabel": "Delete key {{label}}",
+    "deleteText": "Delete this key? Sessions that are open now keep running.",
+    "deleted": "Key deleted.",
+    "delete": "Delete key",
+    "change": "Change",
+    "deleteShort": "Delete"
+  },
+  "access": {
+    "legend": "Access",
+    "shell": "Shell and SFTP",
+    "sftp": "SFTP only",
+    "sftpText": "{{name}}: upload and download files, no commands",
+    "shellText": "{{name}}: also a terminal, for wp-cli, composer or git"
+  },
+  "new": {
+    "label": "New SSH key",
+    "public": "Public key",
+    "publicHint": "The contents of a .pub file, for example ~/.ssh/id_ed25519.pub. Ed25519, ECDSA or RSA with at least 3072 bits.",
+    "keyLabel": "Label",
+    "keyLabelHint": "Shown in the list, so you know whose key it is.",
+    "adding": "Adding…",
+    "submit": "Add key",
+    "cancel": "Cancel"
+  },
+  "check": {
+    "labelEmpty": "Enter a label, for example the name of the computer.",
+    "labelLong": "The label is longer than {{max}} characters.",
+    "labelSpace": "The label must not start or end with a space.",
+    "labelChars": "The label may contain letters, digits, spaces and . _ - @ + only.",
+    "keyEmpty": "Paste a public key, the contents of a file like id_ed25519.pub.",
+    "keyPrivate": "This is a private key. Never paste it anywhere; paste the .pub file instead.",
+    "keyLines": "Paste one key on one line.",
+    "keyType": "This does not look like a supported public key. Use an Ed25519, ECDSA or RSA (3072 bits or more) key."
+  },
+  "errors": {
+    "ssh_unavailable": "SSH access is not available on this panel.",
+    "too_many_ssh_keys": "A site has at most {{max}} keys. Delete one first.",
+    "ssh_key_exists": "The site already has this key.",
+    "refused": "The key was refused: {{reason}}",
+    "site_busy": "The site is not active right now. Reload the page in a moment.",
+    "forbidden": "Only administrators can manage SSH keys.",
+    "keyGone": "This key does not exist any more. Reload the page."
+  }
+}

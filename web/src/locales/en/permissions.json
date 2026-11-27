@@ -1,0 +1,23 @@
+{
+  "title": "Reset file permissions",
+  "intro": "Gives every file and folder of the site back to its user <code1>{{user}}</code1> and sets the usual modes: folders <code2>755</code2>, files <code3>644</code3>, executable files <code4>755</code4>. Use it after copying files in as root or when the web server answers 403 for files that exist.",
+  "private": "Files that were private, such as a <code1>wp-config.php</code1> with <code2>600</code2>, become readable for the web server. <code3>.ssh</code3> stays private. Links are not followed, and files on other file systems stay as they are.",
+  "open": "Reset file permissions",
+  "confirm": "Type <phrase>{{name}}</phrase> to confirm",
+  "confirmHint": "Owners and modes of all files of this site change. Running programs keep running.",
+  "resetting": "Resetting…",
+  "submit": "Reset file permissions of {{name}}",
+  "cancel": "Cancel",
+  "entries_one": "{{n}} entry",
+  "entries_other": "{{n}} entries",
+  "nothing": "Nothing to change: all {{checked}} were already right.",
+  "changed": "Changed {{changed}} of {{checked}}.",
+  "skipped_one": "{{n}} entry was left as it is:",
+  "skipped_other": "{{n}} entries were left as they are:",
+  "skippedList": "Skipped entries",
+  "more": "and {{n}} more",
+  "errors": {
+    "reset_incomplete": "The reset took too long and stopped part way. Run it again: it continues and only changes what is still wrong.",
+    "permissions_unavailable": "Resetting permissions is not available on this panel."
+  }
+}
