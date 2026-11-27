@@ -153,6 +153,33 @@ export const presets: { label: string; commands: string[]; shared: string[] }[] 
   { label: "Python (pip)", commands: ["pip install -r requirements.txt"], shared: [".env"] },
 ];
 
+export type Preset = (typeof presets)[number];
+
+const sameLines = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((l, i) => l === b[i]);
+
+/** fromPreset tells whether a text area holds nothing or exactly some preset's value. */
+function fromPreset(text: string, field: "commands" | "shared"): boolean {
+  const l = lines(text);
+  return l.length === 0 || presets.some((p) => sameLines(l, p[field]));
+}
+
+/**
+ * applyPreset fills both text areas with a preset. Text that is empty or
+ * came from a preset is replaced silently; own text is replaced too, but
+ * named in edited so the form can offer to undo it.
+ */
+export function applyPreset(p: Preset, commands: string, shared: string) {
+  const edited: ("build commands" | "shared paths")[] = [];
+  if (!fromPreset(commands, "commands") && !sameLines(lines(commands), p.commands)) edited.push("build commands");
+  if (!fromPreset(shared, "shared") && !sameLines(lines(shared), p.shared)) edited.push("shared paths");
+  return { commands: p.commands.join("\n"), shared: p.shared.join("\n"), edited };
+}
+
+/** activePreset is the preset both text areas match, if any. */
+export function activePreset(commands: string, shared: string): string {
+  return presets.find((p) => sameLines(lines(commands), p.commands) && sameLines(lines(shared), p.shared))?.label ?? "";
+}
+
 /** Where Git hosts publish the fingerprints of their SSH host keys. */
 export const publishedFingerprints: { host: string; label: string; href: string }[] = [
   { host: "github.com", label: "GitHub", href: "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints" },

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
+  activePreset,
+  applyPreset,
   commitURL,
   deleteGit,
   deleteWebhook,
@@ -348,6 +350,8 @@ function RepositoryForm({ site, initial, onCancel, onSaved }: { site: Site; init
   const [deployDir, setDeployDir] = useState(start.deployDir);
   const [shared, setShared] = useState(start.shared.join("\n"));
   const [commands, setCommands] = useState(start.commands.join("\n"));
+  // undo holds what a preset replaced when that was the user's own text.
+  const [undo, setUndo] = useState<{ preset: string; commands: string; shared: string; edited: string[] } | null>(null);
   const [keep, setKeep] = useState(String(start.keep));
   const [timeout, setTimeoutMin] = useState(String(start.buildTimeoutMinutes));
   const [busy, setBusy] = useState(false);
@@ -439,27 +443,50 @@ function RepositoryForm({ site, initial, onCancel, onSaved }: { site: Site; init
           </Field>
         </div>
         <Field label="Build commands" hint="One command per line, run in the new release as the site user, in this order. A command that fails stops the deploy.">
-          <textarea className="ui-input ui-textarea ui-mono" rows={4} value={commands} onChange={(e) => setCommands(e.target.value)} spellCheck={false} />
+          <textarea className="ui-input ui-textarea ui-mono" rows={4} value={commands} onChange={(e) => {
+              setCommands(e.target.value);
+              setUndo(null);
+            }} spellCheck={false} />
         </Field>
         <div className="ui-row" role="group" aria-label="Presets">
           <span className="ui-hint">Presets:</span>
           {presets.map((p) => (
             <Button
               key={p.label}
+              aria-pressed={activePreset(commands, shared) === p.label}
               onClick={() => {
-                setCommands(p.commands.join("\n"));
-                if (lines(shared).length === 0) setShared(p.shared.join("\n"));
+                const next = applyPreset(p, commands, shared);
+                setUndo(next.edited.length > 0 ? { preset: p.label, commands, shared, edited: next.edited } : null);
+                setCommands(next.commands);
+                setShared(next.shared);
               }}
             >
               {p.label}
             </Button>
           ))}
         </div>
+        {undo && (
+          <Notice tone="info" title={`${undo.preset} replaced your own ${undo.edited.join(" and ")}.`}>
+            <Button
+              small
+              onClick={() => {
+                setCommands(undo.commands);
+                setShared(undo.shared);
+                setUndo(null);
+              }}
+            >
+              Undo
+            </Button>
+          </Notice>
+        )}
         <Field
           label="Shared paths"
           hint="One per line, relative to the release, such as .env or wp-content/uploads. They stay across deploys; files the site writes elsewhere are replaced by the next deploy."
         >
-          <textarea className="ui-input ui-textarea ui-mono" rows={3} value={shared} onChange={(e) => setShared(e.target.value)} spellCheck={false} />
+          <textarea className="ui-input ui-textarea ui-mono" rows={3} value={shared} onChange={(e) => {
+              setShared(e.target.value);
+              setUndo(null);
+            }} spellCheck={false} />
         </Field>
         <div className="ui-narrow ui-stack">
           <Field label="Releases to keep" hint={`For rollbacks; ${minKeep} to ${maxKeep}.`}>
