@@ -8,11 +8,10 @@ import { NotificationsCard } from "./Notifications";
 import type { User } from "./auth";
 import i18n, { saveLanguage, type Language } from "./i18n";
 import { roleLabel } from "./roles";
-import { saveColorScheme, type ColorScheme } from "./scheme";
+import { saveColorScheme, schemes, type ColorScheme } from "./scheme";
 import { TokensCard } from "./Tokens";
 import { Card, Notice, PageHead } from "./ui";
 
-const schemes: readonly ColorScheme[] = ["system", "light", "dark"];
 const langs: readonly Language[] = ["auto", "en", "de"];
 
 type Props = { user: User; onScheme: (s: ColorScheme) => void; onLanguage: (l: Language) => void };

@@ -199,15 +199,16 @@ try {
   // The colour scheme belongs to the account: it survives a reload and
   // the login page after logout follows the system again (ADR-0037).
   const scheme = () => page.evaluate(() => document.documentElement.dataset.scheme ?? "system");
+  await page.getByRole("button", { name: /^Colour scheme: / }).click();
   const [saved] = await Promise.all([
     page.waitForResponse((r) => r.url().endsWith("/api/v1/me") && r.request().method() === "PATCH"),
-    page.getByRole("button", { name: /^Use (dark|light) colours$/ }).click(),
+    page.getByRole("menuitemradio", { name: "Dark" }).click(),
   ]);
   if (!saved.ok()) throw new Error("saving the scheme: " + saved.status());
   const picked = await scheme();
-  if (picked === "system") throw new Error("the scheme button set nothing");
+  if (picked !== "dark") throw new Error("the scheme menu set " + picked + ", want dark");
   await page.reload();
-  await page.getByRole("button", { name: /^Use (dark|light) colours$/ }).waitFor();
+  await page.getByRole("button", { name: "Colour scheme: Dark" }).waitFor();
   if ((await scheme()) !== picked) throw new Error("scheme after reload " + (await scheme()) + ", want " + picked);
   await ok("the colour scheme is stored for the account");
 

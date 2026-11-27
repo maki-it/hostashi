@@ -536,7 +536,7 @@ describe("Shell", () => {
     window.location.hash = "";
   });
 
-  it("switches between light and dark with one click and saves it for the account", async () => {
+  it("picks light, dark or the system in the top bar and saves it for the account", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({
       ...noSetup,
@@ -545,12 +545,50 @@ describe("Shell", () => {
       "PATCH /api/v1/me": (b) => ({ body: { theme: "default", ...(b as object) } }),
     });
     render(<App />);
-    const toggle = await screen.findByRole("button", { name: "Use dark colours" });
+    const button = await screen.findByRole("button", { name: "Colour scheme: Light" });
+    expect(button).toHaveAttribute("data-tip", "Colour scheme: Light");
     expect(document.documentElement.dataset.scheme).toBe("light");
-    await user.click(toggle);
+
+    await user.click(button);
+    const menu = within(screen.getByRole("menu", { name: "Colour scheme" }));
+    expect(menu.getAllByRole("menuitemradio").map((i) => i.textContent)).toEqual(["Follow the system", "Light", "Dark"]);
+    // The current choice is ticked and has the focus.
+    expect(menu.getByRole("menuitemradio", { name: "Light" })).toHaveAttribute("aria-checked", "true");
+    expect(menu.getByRole("menuitemradio", { name: "Light" })).toHaveFocus();
+    await user.click(menu.getByRole("menuitemradio", { name: "Dark" }));
     expect(document.documentElement.dataset.scheme).toBe("dark");
     expect(calls).toContainEqual({ method: "PATCH", path: "/api/v1/me", body: { colorScheme: "dark" } });
-    expect(screen.getByRole("button", { name: "Use light colours" })).toBeInTheDocument();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Colour scheme: Dark" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Follow the system" }));
+    expect(document.documentElement.dataset.scheme).toBeUndefined();
+    expect(calls).toContainEqual({ method: "PATCH", path: "/api/v1/me", body: { colorScheme: "system" } });
+    expect(screen.getByRole("button", { name: "Colour scheme: Follow the system" })).toBeInTheDocument();
+
+    // Picking the current choice again stores nothing.
+    const patches = calls.filter((c) => c.method === "PATCH").length;
+    await user.click(screen.getByRole("button", { name: "Colour scheme: Follow the system" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Follow the system" }));
+    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(patches);
+  });
+
+  it("keeps the top bar and the account page on the same colour scheme", async () => {
+    const user = userEvent.setup();
+    window.location.hash = "#/account";
+    mockFetch({
+      ...noSetup,
+      "GET /api/v1/auth/me": { body: { ...admin, auth: "session", colorScheme: "dark", theme: "default" } },
+      "PATCH /api/v1/me": (b) => ({ body: { theme: "default", ...(b as object) } }),
+    });
+    render(<App />);
+    const group = within(await screen.findByRole("group", { name: "Colour scheme" }));
+    await user.click(group.getByRole("radio", { name: /Follow the system/ }));
+    expect(screen.getByRole("button", { name: "Colour scheme: Follow the system" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Colour scheme: Follow the system" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Light" }));
+    expect(group.getByRole("radio", { name: "Light" })).toBeChecked();
+    window.location.hash = "";
   });
 
   it("offers following the system on the account page", async () => {

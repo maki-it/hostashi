@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { CaretDown, CaretRight, List, MagnifyingGlass, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
+import { CaretDown, CaretRight, List, MagnifyingGlass, Monitor, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { logout, type User } from "./auth";
@@ -13,9 +13,9 @@ import { runDoctor } from "./doctor";
 import { Search, shortcut } from "./Search";
 import { listServices } from "./services";
 import { formatHash, type Route } from "./routes";
-import { isDark, saveColorScheme, type ColorScheme } from "./scheme";
+import { saveColorScheme, schemes, type ColorScheme } from "./scheme";
 import { panelVersion, releaseUrl, versionLabel } from "./system";
-import { IconButton } from "./ui";
+import { IconButton, Menu, type MenuItem } from "./ui";
 import { roleLabel } from "./roles";
 
 type ShellProps = {
@@ -170,11 +170,12 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     }
   }
 
-  // The sun/moon button switches between light and dark in one click; the
-  // account page also offers following the system (ADR-0037).
-  const dark = isDark(user.colorScheme ?? "system");
-  async function toggleScheme() {
-    const next: ColorScheme = dark ? "light" : "dark";
+  // The colour button in the top bar offers the same three choices as the
+  // account page (ADR-0037) and stores the same value. Its icon shows the
+  // current choice: sun, moon, or a screen for following the system.
+  const scheme = user.colorScheme ?? "system";
+  async function pickScheme(next: ColorScheme) {
+    if (next === scheme) return;
     onScheme(next);
     setError("");
     try {
@@ -183,6 +184,14 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
       setError(t("shell.schemeFailed"));
     }
   }
+  const schemeIcon = (s: ColorScheme, size: number) => (s === "light" ? <Sun size={size} /> : s === "dark" ? <Moon size={size} /> : <Monitor size={size} />);
+  const schemeItems: MenuItem[] = schemes.map((s) => ({
+    label: t(`account.scheme.${s}`),
+    icon: schemeIcon(s, 18),
+    checked: s === scheme,
+    onSelect: () => void pickScheme(s),
+  }));
+  const schemeButton = t("shell.schemeButton", { current: t(`account.scheme.${scheme}`) });
 
   // Ctrl K (⌘ K on a Mac) opens the search from anywhere.
   const [searching, setSearching] = useState(false);
@@ -350,11 +359,13 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
                 {shortcut}
               </kbd>
             </button>
-            <IconButton
-              label={dark ? t("shell.useLight") : t("shell.useDark")}
-              icon={dark ? <Sun size={20} /> : <Moon size={20} />}
-              tipBelow
-              onClick={() => void toggleScheme()}
+            <Menu
+              label={t("shell.schemeMenu")}
+              button={schemeIcon(scheme, 20)}
+              buttonLabel={schemeButton}
+              buttonClass="ui-icon-btn ui-tip-below"
+              tip={schemeButton}
+              items={schemeItems}
             />
           </span>
         </header>

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { Check } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 export type MenuItem = {
@@ -11,6 +12,8 @@ export type MenuItem = {
   href?: string;
   download?: boolean;
   danger?: boolean;
+  /** Makes the item one choice of several (menuitemradio); true marks the current one. */
+  checked?: boolean;
 };
 
 type MenuProps = {
@@ -22,6 +25,8 @@ type MenuProps = {
   buttonLabel?: string;
   /** The class of the button; a secondary button by default. */
   buttonClass?: string;
+  /** A tooltip on the button (data-tip), for an icon button. */
+  tip?: string;
   items: MenuItem[];
 };
 
@@ -30,7 +35,7 @@ type MenuProps = {
  * arrow keys, Home and End move, Escape closes it and returns to the
  * button, Tab leaves it.
  */
-export function Menu({ label, button, buttonLabel, buttonClass = "ui-btn ui-btn-secondary", items }: MenuProps) {
+export function Menu({ label, button, buttonLabel, buttonClass = "ui-btn ui-btn-secondary", tip, items }: MenuProps) {
   const [open, setOpen] = useState(false);
   const [at, setAt] = useState(0);
   const wrap = useRef<HTMLDivElement>(null);
@@ -39,7 +44,7 @@ export function Menu({ label, button, buttonLabel, buttonClass = "ui-btn ui-btn-
 
   useEffect(() => {
     if (!open) return;
-    list.current?.querySelectorAll<HTMLElement>("[role=menuitem]")[at]?.focus();
+    list.current?.querySelectorAll<HTMLElement>("[role^=menuitem]")[at]?.focus();
   }, [open, at]);
 
   useEffect(() => {
@@ -67,14 +72,15 @@ export function Menu({ label, button, buttonLabel, buttonClass = "ui-btn ui-btn-
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={buttonLabel}
+        data-tip={tip}
         onClick={() => {
-          setAt(0);
+          setAt(Math.max(0, items.findIndex((i) => i.checked)));
           setOpen(!open);
         }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") {
             e.preventDefault();
-            setAt(0);
+            setAt(Math.max(0, items.findIndex((i) => i.checked)));
             setOpen(true);
           }
         }}
@@ -99,11 +105,17 @@ export function Menu({ label, button, buttonLabel, buttonClass = "ui-btn ui-btn-
           }}
         >
           {items.map((i, k) => {
-            const common = { role: "menuitem", tabIndex: k === at ? 0 : -1, "data-danger": i.danger ? "" : undefined } as const;
+            const common = {
+              role: i.checked === undefined ? "menuitem" : "menuitemradio",
+              "aria-checked": i.checked,
+              tabIndex: k === at ? 0 : -1,
+              "data-danger": i.danger ? "" : undefined,
+            } as const;
             const body = (
               <>
                 {i.icon}
                 {i.label}
+                {i.checked && <Check size={16} className="ui-menu-check" aria-hidden="true" />}
               </>
             );
             return i.href ? (
