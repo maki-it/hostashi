@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -35,7 +35,7 @@ const rowTexts = () =>
 
 describe("Doctor", () => {
   it("lists the checks problems first, with where and hints", async () => {
-    mockFetch({ "GET /api/v1/doctor": { body: report } });
+    mockFetch({ "GET /api/v1/doctor?lang=en": { body: report } });
     render(<Harness />);
 
     expect(await screen.findByText("1 check failed, 1 warning.")).toBeInTheDocument();
@@ -52,7 +52,7 @@ describe("Doctor", () => {
 
   it("speaks German", async () => {
     setLanguage("de");
-    mockFetch({ "GET /api/v1/doctor": { body: report } });
+    mockFetch({ "GET /api/v1/doctor?lang=de": { body: report } });
     render(<Harness />);
 
     expect(await screen.findByText("1 Prüfung fehlgeschlagen, 1 Warnung.")).toBeInTheDocument();
@@ -62,11 +62,29 @@ describe("Doctor", () => {
     expect(rows[2]?.textContent).toContain("Speicherlimits");
   });
 
+  // The server writes summaries and hints; switching the language asks
+  // for them again.
+  it("loads the texts again in the new language", async () => {
+    const german = {
+      ...report,
+      checks: report.checks.map((c) =>
+        c.id === "system.quota" ? { ...c, summary: "/home: kein Project Quota, Sites bekommen kein Speicherlimit" } : c,
+      ),
+    };
+    const calls = mockFetch({ "GET /api/v1/doctor?lang=en": { body: report }, "GET /api/v1/doctor?lang=de": { body: german } });
+    render(<Harness />);
+    expect(await screen.findByText("/home: no project quota, sites get no disk limit")).toBeInTheDocument();
+
+    act(() => setLanguage("de"));
+    expect(await screen.findByText("/home: kein Project Quota, Sites bekommen kein Speicherlimit")).toBeInTheDocument();
+    expect(calls.map((c) => c.path)).toEqual(["/api/v1/doctor?lang=en", "/api/v1/doctor?lang=de"]);
+  });
+
   it("keeps checks with the same ID apart when sorting", async () => {
     const user = userEvent.setup();
     const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
     mockFetch({
-      "GET /api/v1/doctor": {
+      "GET /api/v1/doctor?lang=en": {
         body: {
           ...report,
           checks: [
@@ -89,18 +107,18 @@ describe("Doctor", () => {
   });
 
   it("leaves the panel's settings to the System page", async () => {
-    const calls = mockFetch({ "GET /api/v1/doctor": { body: report } });
+    const calls = mockFetch({ "GET /api/v1/doctor?lang=en": { body: report } });
     render(<Harness />);
 
     expect(await screen.findByText("1 check failed, 1 warning.")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: /Panel certificate/ })).toBeNull();
     expect(screen.queryByRole("region", { name: "Real visitor address of the panel" })).toBeNull();
-    expect(calls.map((c) => c.path)).toEqual(["/api/v1/doctor"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/v1/doctor?lang=en"]);
   });
 
   it("links the panel certificate check to the System page", async () => {
     mockFetch({
-      "GET /api/v1/doctor": {
+      "GET /api/v1/doctor?lang=en": {
         body: { ...report, checks: [{ id: "panel.tls", status: "warn", summary: "certificate for panel.example.com valid until 2026-12-10 (15 days)", hint: "See System → Panel certificate." }] },
       },
     });
@@ -112,7 +130,7 @@ describe("Doctor", () => {
 
   it("links the jails check to the blocked addresses", async () => {
     mockFetch({
-      "GET /api/v1/doctor": {
+      "GET /api/v1/doctor?lang=en": {
         body: { ...report, checks: [{ id: "service.fail2ban.jails", status: "warn", summary: "not running: sshd", hint: "Check the jails." }] },
       },
     });
@@ -125,7 +143,7 @@ describe("Doctor", () => {
   it("filters by the address and checks again", async () => {
     const user = userEvent.setup();
     let current = report;
-    const calls = mockFetch({ "GET /api/v1/doctor": () => ({ body: current }) });
+    const calls = mockFetch({ "GET /api/v1/doctor?lang=en": () => ({ body: current }) });
     render(<Harness initial="show=problems" />);
     await screen.findByRole("table", { name: "Checks" });
     expect(screen.queryByText("Operating system")).not.toBeInTheDocument();
@@ -140,11 +158,11 @@ describe("Doctor", () => {
     current = { status: "ok", checkedAt: "2026-11-20T09:31:00Z", counts: { ok: 1, warn: 0, fail: 0 }, checks: [report.checks[0]!] };
     await user.click(screen.getByRole("button", { name: "Check again" }));
     expect(await screen.findByText("Everything is fine.")).toBeInTheDocument();
-    expect(calls.filter((c) => c.path === "/api/v1/doctor").length).toBe(2);
+    expect(calls.filter((c) => c.path === "/api/v1/doctor?lang=en").length).toBe(2);
   });
 
   it("explains an agent that does not answer", async () => {
-    mockFetch({ "GET /api/v1/doctor": { status: 503, body: { error: { code: "agent_unavailable", message: "x" } } } });
+    mockFetch({ "GET /api/v1/doctor?lang=en": { status: 503, body: { error: { code: "agent_unavailable", message: "x" } } } });
     render(<Harness />);
     expect(await screen.findByRole("alert")).toHaveTextContent("The checks could not be run. Try again.");
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();

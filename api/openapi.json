@@ -12476,6 +12476,17 @@
     "/api/v1/doctor": {
       "get": {
         "operationId": "runDoctor",
+        "parameters": [
+          {
+            "description": "de for German summaries and hints; anything else is English",
+            "in": "query",
+            "name": "lang",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {

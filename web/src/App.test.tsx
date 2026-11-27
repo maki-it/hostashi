@@ -439,7 +439,7 @@ describe("Roles", () => {
       const { unmount } = render(<App />);
       await screen.findByRole("navigation", { name: "Main" });
       expect(screen.queryByText(/Hostashi v/)).not.toBeInTheDocument();
-      expect(calls.some((c) => c.path === "/api/v1/health" || c.path === "/api/v1/doctor" || c.path === "/api/v1/services")).toBe(false);
+      expect(calls.some((c) => c.path === "/api/v1/health" || c.path === "/api/v1/doctor?lang=en" || c.path === "/api/v1/services")).toBe(false);
       unmount();
     }
   });
@@ -470,7 +470,7 @@ describe("Shell", () => {
       "GET /api/v1/users": { body: { users: [] } },
       "GET /api/v1/invitations": { body: { invitations: [] } },
       "GET /api/v1/health": { body: { status: "ok", version: "0.4.0" } },
-      "GET /api/v1/doctor": {
+      "GET /api/v1/doctor?lang=en": {
         body: { status: "fail", checkedAt: "", counts: {}, checks: [{ id: "system.quota", status: "warn", summary: "" }, { id: "service.nginx", status: "fail", summary: "" }] },
       },
       "GET /api/v1/services": { body: { services: [{ id: "nginx", unit: "nginx.service", installed: true, active: "failed", actions: [], restarts24h: 0 }] } },
