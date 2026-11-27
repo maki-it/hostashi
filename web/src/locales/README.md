@@ -83,15 +83,21 @@ The same English term is always translated the same way.
 | database | Datenbank | |
 | database server | Datenbankserver | |
 | database tool session | Adminer-Sitzung | the Adminer sessions card |
+| deploy (Git) | Deploy | der Deploy; verb: deployen |
+| deploy key | Deploy-Key | |
 | dump (import/export file) | Dump | dump file: Dump-Datei |
 | DNS switch | DNS-Umstellung | CloudPanel import |
 | domain | Domain | die Domain |
 | email | E-Mail | mail as a message: Mail |
+| false positive | Fehlalarm | virus scan |
 | file manager | Dateimanager | |
+| file permissions, mode | Dateirechte, Rechte | chmod: Rechte ändern |
 | firewall | Firewall | die Firewall |
+| flagged (file) | auffällig | virus scan |
 | hardening | Härtung | |
 | health | Zustand | the Health page |
 | home (of a site) | Home-Verzeichnis | |
+| host key | Host-Key | |
 | invitation | Einladung | invitation link: Einladungslink |
 | jail (fail2ban) | Jail | das Jail |
 | limit preset | Limit-Vorlage | |
@@ -102,9 +108,12 @@ The same English term is always translated the same way.
 | parked domain | geparkte Domain | |
 | passkey | Passkey | der Passkey |
 | password | Passwort | |
+| quarantine | Quarantäne | |
+| real-time scan | Echtzeit-Scan | |
 | reboot | Neustart | neu starten |
 | recovery code | Wiederherstellungscode | |
 | redirect | Weiterleitung | |
+| release (Git deploy) | Release | das Release |
 | relay (SMTP) | Relay | das SMTP-Relay |
 | reverse proxy | Reverse Proxy | |
 | runtime | Runtime | the Runtimes page: Runtimes |
@@ -114,10 +123,12 @@ The same English term is always translated the same way.
 | service | Dienst | |
 | settings | Einstellungen | |
 | setup token | Setup-Token | |
+| shared path | geteilter Pfad | Git deploy |
 | site | Site | die Site; site user: Site-Benutzer |
 | staging | Staging | staging copy: Staging-Kopie |
 | storage pool | Storage-Pool | |
 | two-factor | Zwei-Faktor | two-factor authentication: Zwei-Faktor-Anmeldung |
+| usage | Auslastung | the Usage tab |
 | virus scan | Virenscan | |
 | visitor address | Besucheradresse | the Real IP tab |
 | web root | Web-Root | das Web-Root |
