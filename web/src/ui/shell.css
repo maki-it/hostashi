@@ -228,12 +228,23 @@ a.app-user-name[aria-current="page"] {
 }
 .app-top {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
   min-height: 66px;
-  padding: 0 var(--space-6);
   background: var(--surface);
   border-bottom: 1px solid var(--line);
+}
+/* The page column: the content and the top bar's row share one width and
+   sit in the middle of the space beside the sidebar (Kim, 2026-11-27). */
+.app-top-row,
+.app-content {
+  width: 100%;
+  max-width: var(--page-w);
+  margin-inline: auto;
+}
+.app-top-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-6);
 }
 .app-crumbs {
   display: flex;
@@ -265,8 +276,6 @@ a.app-user-name[aria-current="page"] {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  width: 100%;
-  max-width: 1240px;
   padding: 28px var(--space-6) 48px;
 }
 
@@ -310,6 +319,8 @@ a.app-user-name[aria-current="page"] {
   }
   .app-top {
     min-height: 48px;
+  }
+  .app-top-row {
     padding: 0 var(--space-4);
   }
   .app-content {
