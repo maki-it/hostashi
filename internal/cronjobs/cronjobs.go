@@ -52,6 +52,11 @@ type Controller interface {
 	StartNoBlock(ctx context.Context, unit string) error
 	// Show returns the named properties of a unit.
 	Show(ctx context.Context, unit string, props ...string) (map[string]string, error)
+	// NextElapse returns the next elapse of each named timer in Unix
+	// seconds; a timer without a next elapse is missing or 0. systemctl
+	// show prints NextElapseUSecRealtime as a local date whatever
+	// --timestamp= says, so it is read in another way.
+	NextElapse(ctx context.Context, timers ...string) (map[string]int64, error)
 }
 
 // Site is what Apply needs to know of a site.
@@ -380,7 +385,7 @@ func (m *Manager) Run(ctx context.Context, site string, id int64) error {
 
 var (
 	serviceProps = []string{"ActiveState", "Result", "ExecMainStatus", "ExecMainStartTimestamp", "ExecMainExitTimestamp"}
-	timerProps   = []string{"ActiveState", "NextElapseUSecRealtime", "LastTriggerUSec"}
+	timerProps   = []string{"ActiveState"}
 )
 
 // Status reports the jobs of a site with their last and next run.
@@ -395,6 +400,19 @@ func (m *Manager) Status(ctx context.Context, site string) (agentapi.CronSiteSta
 
 	ss := st.Sites[site]
 	out := agentapi.CronSiteStatus{Site: site, Disabled: ss.Disabled, Jobs: []agentapi.CronJobStatus{}}
+
+	var next map[string]int64
+
+	if len(ss.Jobs) > 0 {
+		timers := make([]string, 0, len(ss.Jobs))
+		for _, j := range ss.Jobs {
+			timers = append(timers, unitName(site, j.ID)+".timer")
+		}
+
+		if next, err = m.Ctl.NextElapse(ctx, timers...); err != nil {
+			return agentapi.CronSiteStatus{}, err
+		}
+	}
 
 	for _, j := range ss.Jobs {
 		name := unitName(site, j.ID)
@@ -421,8 +439,8 @@ func (m *Manager) Status(ctx context.Context, site string) (agentapi.CronSiteSta
 			}
 		}
 
-		if tm["ActiveState"] == "active" {
-			js.Next = unixTime(tm["NextElapseUSecRealtime"])
+		if tm["ActiveState"] == "active" && next[name+".timer"] > 0 {
+			js.Next = next[name+".timer"]
 		}
 
 		out.Jobs = append(out.Jobs, js)

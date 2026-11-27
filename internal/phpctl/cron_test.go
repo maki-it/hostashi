@@ -45,3 +45,41 @@ func TestCronRefusesOddUnits(t *testing.T) {
 		}
 	}
 }
+
+func TestCronNextElapseRefusesOddUnits(t *testing.T) {
+	var c CronController
+
+	for _, u := range []string{"hostashi-cron-shop-1.service", "hostashi-cron-shop-*.timer", "--all", "nginx.timer", ""} {
+		if _, err := c.NextElapse(t.Context(), u); err == nil {
+			t.Errorf("%q accepted", u)
+		}
+	}
+
+	if m, err := c.NextElapse(t.Context()); err != nil || len(m) != 0 {
+		t.Errorf("no timers: %v %v", m, err)
+	}
+}
+
+func TestParseTimers(t *testing.T) {
+	// The shape of systemd 257's list-timers --output=json.
+	out := `[{"next":1764284400000000,"left":1764284400000000,"last":null,"passed":null,"unit":"hostashi-cron-shop-1.timer","activates":"hostashi-cron-shop-1.service"},` +
+		`{"next":null,"left":null,"last":1764200000000000,"passed":1764200000000000,"unit":"hostashi-cron-shop-2.timer","activates":"hostashi-cron-shop-2.service"},` +
+		`{"next":0,"unit":"hostashi-cron-shop-3.timer"}]`
+
+	m, err := parseTimers(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(m) != 1 || m["hostashi-cron-shop-1.timer"] != 1764284400 {
+		t.Errorf("%v", m)
+	}
+
+	if m, err := parseTimers("\n"); err != nil || len(m) != 0 {
+		t.Errorf("empty: %v %v", m, err)
+	}
+
+	if _, err := parseTimers("0 timers listed."); err == nil {
+		t.Error("text output accepted")
+	}
+}
