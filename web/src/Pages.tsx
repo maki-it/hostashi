@@ -2,6 +2,8 @@
 
 import { ArrowLeft, Eye, GearSix, Plus, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import i18n from "./i18n";
 import {
   createPage,
   deletePage,
@@ -29,14 +31,12 @@ type QueryProps = {
 const pagesHash = (q?: Record<string, string>) => formatHash({ page: "pages", ...(q ? { query: new URLSearchParams(q) } : {}) });
 const usersOf = (p: StatusPage) => [...p.sites, ...p.parked];
 const sizeOf = (p: StatusPage) => p.files.reduce((n, f) => n + f.size, 0);
-const nobody = (p: StatusPage) => (p.kind === "parking" ? "No domain" : "No site");
-
-const fileHint =
-  "One .html file, or a .zip file with index.html at the top and its CSS, JavaScript, images (png, jpg, webp, gif, svg, ico) and woff2 fonts. At most 2 MiB, 100 files and two folder levels. Files load only from the page itself. %%DOMAIN%% in the HTML shows the domain the visitor opened.";
+const nobody = (p: StatusPage) => (p.kind === "parking" ? i18n.t("pages.noDomain") : i18n.t("pages.noSite"));
 
 // Pages lists the maintenance and parking pages and uploads new ones. Sites
 // choose their maintenance page in their settings.
 export function Pages({ query = new URLSearchParams(), onQuery = () => undefined }: QueryProps) {
+  const { t } = useTranslation();
   const [pages, setPages] = useState<StatusPage[] | null>(null);
   const [loadError, setLoadError] = useState("");
   const [done, setDone] = useState("");
@@ -79,7 +79,7 @@ export function Pages({ query = new URLSearchParams(), onQuery = () => undefined
     try {
       await deletePage(p.id);
       setDeleting(null);
-      await changed(`Page “${p.name}” deleted.`);
+      await changed(t("pages.delete.done", { name: p.name }));
     } catch (err) {
       setError(pageMessage(err));
     } finally {
@@ -90,20 +90,20 @@ export function Pages({ query = new URLSearchParams(), onQuery = () => undefined
   const listLink = (
     <a className="ui-btn" href={pagesHash()}>
       <ArrowLeft size={16} aria-hidden="true" />
-      All pages
+      {t("pages.allLink")}
     </a>
   );
 
   if (!pages) {
     return (
       <>
-        <PageHead title="Maintenance pages" />
+        <PageHead title={t("pages.title")} />
         {loadError ? (
           <Notice tone="err" title={loadError}>
-            <Button onClick={() => void load()}>Try again</Button>
+            <Button onClick={() => void load()}>{t("common.actions.tryAgain")}</Button>
           </Notice>
         ) : (
-          <p aria-busy="true">Loading…</p>
+          <p aria-busy="true">{t("common.status.loading")}</p>
         )}
       </>
     );
@@ -116,18 +116,16 @@ export function Pages({ query = new URLSearchParams(), onQuery = () => undefined
       return (
         <section className="ui-card ui-card-body ui-stack" role="alertdialog" aria-labelledby="page-delete-title">
           <h2 id="page-delete-title" className="ui-flush">
-            Delete the page “{deleting.name}”?
+            {t("pages.delete.title", { name: deleting.name })}
           </h2>
-          <p className="ui-flush">
-            {users.length > 0 ? `${users.join(", ")} still use this page. Choose another page there first.` : "Its files are removed."}
-          </p>
+          <p className="ui-flush">{users.length > 0 ? t("pages.delete.inUse", { users: users.join(", ") }) : t("pages.delete.filesRemoved")}</p>
           {error && <Notice tone="err" title={error} />}
           <div className="ui-row">
             <Button variant="danger" disabled={busy || users.length > 0} onClick={() => void remove(deleting)}>
-              Delete {deleting.name}
+              {t("pages.delete.confirm", { name: deleting.name })}
             </Button>
             <Button disabled={busy} onClick={() => setDeleting(null)}>
-              Cancel
+              {t("common.actions.cancel")}
             </Button>
           </div>
         </section>
@@ -137,7 +135,7 @@ export function Pages({ query = new URLSearchParams(), onQuery = () => undefined
   if (query.get("new") === "1") {
     return (
       <>
-        <PageHead title="Upload a page" description="A maintenance or parking page of your own." actions={listLink} />
+        <PageHead title={t("pages.upload.title")} description={t("pages.upload.description")} actions={listLink} />
         <Card>
           <UploadForm onCancel={() => set({ new: "" })} onUploaded={changed} />
         </Card>
@@ -151,8 +149,8 @@ export function Pages({ query = new URLSearchParams(), onQuery = () => undefined
     if (!p) {
       return (
         <>
-          <PageHead title="Maintenance pages" actions={listLink} />
-          <Notice tone="warn" title="This page does not exist any more." />
+          <PageHead title={t("pages.title")} actions={listLink} />
+          <Notice tone="warn" title={t("pages.gone")} />
         </>
       );
     }
@@ -178,21 +176,21 @@ export function Pages({ query = new URLSearchParams(), onQuery = () => undefined
   const columns: Column<StatusPage>[] = [
     {
       key: "name",
-      header: "Page",
+      header: t("pages.columns.name"),
       sortValue: (p) => p.name,
       cell: (p) => (
         <span className="ui-row ui-nowrap">
           <span className="ui-cell-main">
             <a href={pagesHash({ page: p.id })}>{p.name}</a>
           </span>
-          {p.builtin && <Badge tone="off">Built-in</Badge>}
+          {p.builtin && <Badge tone="off">{t("pages.builtin")}</Badge>}
         </span>
       ),
     },
-    { key: "kind", header: "Kind", sortValue: (p) => p.kind, cell: (p) => kindLabel(p.kind) },
+    { key: "kind", header: t("pages.columns.kind"), sortValue: (p) => p.kind, cell: (p) => kindLabel(p.kind) },
     {
       key: "users",
-      header: "Used by",
+      header: t("pages.columns.users"),
       sortValue: (p) => usersOf(p).length,
       cell: (p) => {
         const users = usersOf(p);
@@ -201,7 +199,7 @@ export function Pages({ query = new URLSearchParams(), onQuery = () => undefined
     },
     {
       key: "files",
-      header: "Files",
+      header: t("pages.columns.files"),
       sortValue: sizeOf,
       cell: (p) => (
         <span className="ui-nowrap">
@@ -211,22 +209,22 @@ export function Pages({ query = new URLSearchParams(), onQuery = () => undefined
     },
     {
       key: "updated",
-      header: "Changed",
+      header: t("pages.columns.updated"),
       sortValue: (p) => p.updatedAt ?? "",
-      cell: (p) => (p.updatedAt ? <RelTime iso={p.updatedAt} /> : <span className="ui-hint">Built in</span>),
+      cell: (p) => (p.updatedAt ? <RelTime iso={p.updatedAt} /> : <span className="ui-hint">{t("pages.builtinChanged")}</span>),
     },
     {
       key: "actions",
-      header: "Actions",
+      header: t("pages.columns.actions"),
       srHeader: true,
       cell: (p) => (
         <RowActions>
-          <IconButton label={`Preview ${p.name}`} text="Preview" icon={<Eye size={16} />} onClick={() => void openPreview(p.id).then(setError)} />
-          <IconLink label={`Manage ${p.name}`} text="Manage" icon={<GearSix size={16} />} href={pagesHash({ page: p.id })} />
+          <IconButton label={t("pages.actions.previewLabel", { name: p.name })} text={t("pages.actions.preview")} icon={<Eye size={16} />} onClick={() => void openPreview(p.id).then(setError)} />
+          <IconLink label={t("pages.actions.manageLabel", { name: p.name })} text={t("pages.actions.manage")} icon={<GearSix size={16} />} href={pagesHash({ page: p.id })} />
           {!p.builtin && (
             <IconButton
-              label={`Delete ${p.name}`}
-              text="Delete" icon={<Trash size={16} />}
+              label={t("pages.actions.deleteLabel", { name: p.name })}
+              text={t("pages.actions.delete")} icon={<Trash size={16} />}
               danger
               disabled={busy}
               onClick={() => {
@@ -249,12 +247,12 @@ export function Pages({ query = new URLSearchParams(), onQuery = () => undefined
   return (
     <>
       <PageHead
-        title="Maintenance pages"
-        description="Pages a site shows during maintenance (with 503) and pages a parked domain shows. Sites choose theirs in their settings."
+        title={t("pages.title")}
+        description={t("pages.description")}
         actions={
           <a className="ui-btn ui-btn-primary" href={pagesHash({ new: "1" })}>
             <Plus size={16} aria-hidden="true" />
-            Upload a page
+            {t("pages.upload.button")}
           </a>
         }
       />
@@ -266,25 +264,26 @@ export function Pages({ query = new URLSearchParams(), onQuery = () => undefined
           <input
             className="ui-input"
             type="search"
-            aria-label="Filter pages"
-            placeholder="Filter by name"
+            aria-label={t("pages.filter.label")}
+            placeholder={t("pages.filter.placeholder")}
             value={query.get("q") ?? ""}
             onChange={(e) => set({ q: e.target.value })}
           />
-          <select className="ui-select" aria-label="Kind" value={kind} onChange={(e) => set({ kind: e.target.value })}>
-            <option value="">All kinds</option>
-            <option value="maintenance">Maintenance</option>
-            <option value="parking">Parking</option>
+          <select className="ui-select" aria-label={t("pages.filter.kind")} value={kind} onChange={(e) => set({ kind: e.target.value })}>
+            <option value="">{t("pages.filter.allKinds")}</option>
+            <option value="maintenance">{t("pages.kinds.maintenance")}</option>
+            <option value="parking">{t("pages.kinds.parking")}</option>
           </select>
         </div>
         <Table
-          label="Pages"
+          label={t("pages.table.label")}
+          actionsBelow
           columns={columns}
           rows={shown}
           rowKey={(p) => p.id}
           {...(sort ? { sort } : {})}
           onSort={(s) => set({ sort: s.key, dir: s.dir })}
-          empty="No page matches the filter."
+          empty={t("pages.table.noMatch")}
         />
       </Card>
     </>
@@ -292,6 +291,7 @@ export function Pages({ query = new URLSearchParams(), onQuery = () => undefined
 }
 
 function UploadForm({ onUploaded, onCancel }: { onUploaded: (msg: string) => Promise<void>; onCancel: () => void }) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [kind, setKind] = useState<PageKind>("maintenance");
   const [file, setFile] = useState<File | null>(null);
@@ -309,7 +309,7 @@ function UploadForm({ onUploaded, onCancel }: { onUploaded: (msg: string) => Pro
     setError("");
     try {
       const p = await createPage(name.trim(), kind, file);
-      await onUploaded(`Page “${p.name}” uploaded with ${p.files.length} ${p.files.length === 1 ? "file" : "files"}.`);
+      await onUploaded(t("pages.upload.done", { name: p.name, count: p.files.length }));
     } catch (err) {
       setError(pageMessage(err));
       setBusy(false);
@@ -317,28 +317,28 @@ function UploadForm({ onUploaded, onCancel }: { onUploaded: (msg: string) => Pro
   }
 
   return (
-    <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate aria-label="Upload a page">
+    <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate aria-label={t("pages.upload.title")}>
       <div className="ui-narrow">
-        <Field label="Name">
+        <Field label={t("pages.upload.name")}>
           <input className="ui-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={64} autoComplete="off" />
         </Field>
       </div>
-      <Field label="Kind">
+      <Field label={t("pages.upload.kind")}>
         <select className="ui-select" value={kind} onChange={(e) => setKind(e.target.value as PageKind)}>
-          <option value="maintenance">Maintenance: shown with 503 while a site is in maintenance</option>
-          <option value="parking">Parking: shown on domains without a site</option>
+          <option value="maintenance">{t("pages.upload.kindMaintenance")}</option>
+          <option value="parking">{t("pages.upload.kindParking")}</option>
         </select>
       </Field>
-      <Field label="File" hint={fileHint}>
+      <Field label={t("pages.upload.file")} hint={t("pages.upload.fileHint")}>
         <input className="ui-file" type="file" accept=".html,.htm,.zip" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
       </Field>
-      <Notice tone="warn" title="Scripts in the page run on the site's domain while the page is shown. Upload only pages you trust." />
+      <Notice tone="warn" title={t("pages.upload.scripts")} />
       {error && <Notice tone="err" title={error} />}
       <div className="ui-row">
         <Button type="submit" variant="primary" disabled={busy}>
-          {busy ? "Uploading…" : "Upload page"}
+          {busy ? t("pages.upload.uploading") : t("pages.upload.submit")}
         </Button>
-        <Button onClick={onCancel}>Cancel</Button>
+        <Button onClick={onCancel}>{t("common.actions.cancel")}</Button>
       </div>
     </form>
   );
@@ -356,6 +356,7 @@ type ViewProps = {
 // PageView shows one page: where it is used and its files, and for an
 // uploaded page lets the admin replace its files, rename or delete it.
 function PageView({ page, back, deleteDialog, onDelete, onChanged, done }: ViewProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState(page.name);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -383,7 +384,7 @@ function PageView({ page, back, deleteDialog, onDelete, onChanged, done }: ViewP
     }
     void act(async () => {
       await updatePage(page.id, { file });
-      return users.length > 0 ? "Files replaced. Sites and domains that show it use the new page now." : "Files replaced.";
+      return users.length > 0 ? t("pages.view.replacedUsed") : t("pages.view.replaced");
     });
   }
 
@@ -396,7 +397,7 @@ function PageView({ page, back, deleteDialog, onDelete, onChanged, done }: ViewP
     }
     void act(async () => {
       await updatePage(page.id, { name: name.trim() });
-      return "Page renamed.";
+      return t("pages.view.renamed");
     });
   }
 
@@ -407,13 +408,13 @@ function PageView({ page, back, deleteDialog, onDelete, onChanged, done }: ViewP
         description={
           <span className="ui-row">
             {kindLabel(page.kind)}
-            {page.builtin && <Badge tone="off">Built-in</Badge>}
+            {page.builtin && <Badge tone="off">{t("pages.builtin")}</Badge>}
           </span>
         }
         actions={
           <span className="ui-row">
             <Button icon={<Eye size={16} aria-hidden="true" />} onClick={() => void openPreview(page.id).then(setError)}>
-              Preview
+              {t("pages.actions.preview")}
             </Button>
             {back}
           </span>
@@ -421,11 +422,11 @@ function PageView({ page, back, deleteDialog, onDelete, onChanged, done }: ViewP
       />
       {done && <Notice tone="ok" title={done} />}
       {error && <Notice tone="err" title={error} />}
-      <Card title="Details">
+      <Card title={t("pages.view.details")}>
         <dl className="ui-facts">
-          <dt>Used by</dt>
+          <dt>{t("pages.columns.users")}</dt>
           <dd>{users.length > 0 ? users.join(", ") : nobody(page)}</dd>
-          <dt>Files</dt>
+          <dt>{t("pages.columns.files")}</dt>
           <dd>
             <ul className="ui-plain-list">
               {page.files.map((f) => (
@@ -437,11 +438,11 @@ function PageView({ page, back, deleteDialog, onDelete, onChanged, done }: ViewP
           </dd>
           {!page.builtin && (
             <>
-              <dt>SHA-256</dt>
+              <dt>{t("pages.view.sha256")}</dt>
               <dd className="ui-mono ui-break">{page.sha256}</dd>
               {page.updatedAt && (
                 <>
-                  <dt>Changed</dt>
+                  <dt>{t("pages.columns.updated")}</dt>
                   <dd>
                     <RelTime iso={page.updatedAt} />
                   </dd>
@@ -452,44 +453,42 @@ function PageView({ page, back, deleteDialog, onDelete, onChanged, done }: ViewP
         </dl>
       </Card>
       {page.builtin ? (
-        <Notice tone="info" title="Built-in pages come with Hostashi and cannot be changed." />
+        <Notice tone="info" title={t("pages.view.builtinNotice")} />
       ) : (
         <>
-          <Card title="Replace files">
+          <Card title={t("pages.view.replace")}>
             <form className="ui-stack" onSubmit={replace} noValidate>
-              <Field label={"New file for " + page.name} hint="An .html or .zip file. It replaces all files of the page.">
+              <Field label={t("pages.view.newFile", { name: page.name })} hint={t("pages.view.newFileHint")}>
                 <input className="ui-file" type="file" accept=".html,.htm,.zip" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
               </Field>
               <div className="ui-row">
                 <Button type="submit" variant="primary" disabled={busy || !file}>
-                  Replace files
+                  {t("pages.view.replace")}
                 </Button>
               </div>
             </form>
           </Card>
-          <Card title="Rename">
+          <Card title={t("pages.view.rename")}>
             <form className="ui-stack" onSubmit={rename} noValidate>
               <div className="ui-narrow">
-                <Field label={"New name for " + page.name}>
+                <Field label={t("pages.view.newName", { name: page.name })}>
                   <input className="ui-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={64} autoComplete="off" />
                 </Field>
               </div>
               <div className="ui-row">
                 <Button type="submit" variant="primary" disabled={busy || name.trim() === page.name}>
-                  Save name
+                  {t("pages.view.saveName")}
                 </Button>
               </div>
             </form>
           </Card>
           {deleteDialog || (
-            <Card title="Delete">
+            <Card title={t("pages.delete.card")}>
               <div className="ui-stack">
-                <p className="ui-flush">
-                  {users.length > 0 ? `${users.join(", ")} still use this page. Choose another page there first.` : "No site or domain uses this page."}
-                </p>
+                <p className="ui-flush">{users.length > 0 ? t("pages.delete.inUse", { users: users.join(", ") }) : t("pages.delete.unused")}</p>
                 <div className="ui-row">
                   <Button variant="danger" disabled={users.length > 0} onClick={onDelete}>
-                    Delete {page.name}
+                    {t("pages.delete.confirm", { name: page.name })}
                   </Button>
                 </div>
               </div>
