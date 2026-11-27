@@ -74,6 +74,7 @@ The same English term is always translated the same way.
 | app profile | App-Profil | |
 | allowlist | Allowlist | die Allowlist |
 | audit log | Audit-Log | |
+| availability (site) | Erreichbarkeit | |
 | backup | Backup | das Backup; restore: wiederherstellen |
 | blocked address | gesperrte Adresse | fail2ban; unblock: entsperren |
 | certificate | Zertifikat | |
@@ -81,11 +82,13 @@ The same English term is always translated the same way.
 | colour scheme | Farbschema | |
 | cron job | Cron-Job | |
 | database | Datenbank | |
+| danger zone | Gefahrenzone | |
 | database server | Datenbankserver | |
 | database tool session | Adminer-Sitzung | the Adminer sessions card |
 | deploy (Git) | Deploy | der Deploy; verb: deployen |
 | deploy key | Deploy-Key | |
 | dump (import/export file) | Dump | dump file: Dump-Datei |
+| display name | Anzeigename | a site's title; system name: Systemname |
 | DNS switch | DNS-Umstellung | CloudPanel import |
 | domain | Domain | die Domain |
 | email | E-Mail | mail as a message: Mail |
@@ -108,6 +111,7 @@ The same English term is always translated the same way.
 | one-time code | Einmalcode | |
 | overview | Übersicht | |
 | parked domain | geparkte Domain | |
+| primary domain | Hauptdomain | |
 | passkey | Passkey | der Passkey |
 | password | Passwort | |
 | quarantine | Quarantäne | |
@@ -127,6 +131,7 @@ The same English term is always translated the same way.
 | setup token | Setup-Token | |
 | shared path | geteilter Pfad | Git deploy |
 | site | Site | die Site; site user: Site-Benutzer |
+| site type | Site-Typ | static: statisch |
 | staging | Staging | staging copy: Staging-Kopie |
 | storage pool | Storage-Pool | |
 | two-factor | Zwei-Faktor | two-factor authentication: Zwei-Faktor-Anmeldung |

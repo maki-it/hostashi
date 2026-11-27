@@ -5,6 +5,7 @@
 // agent checks every save and names each rejected line.
 
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 
 export type Snippets = { server: string; root: string; updatedAt?: string };
 
@@ -37,7 +38,7 @@ export const snippetDraft = (report: string, site: string) =>
 export function sizeProblem(s: { server: string; root: string }): string {
   const enc = new TextEncoder();
   if (enc.encode(s.server).length > maxSnippetBytes || enc.encode(s.root).length > maxSnippetBytes)
-    return "A snippet can be at most 64 KiB.";
+    return i18n.t("siteApp.snippets.tooBig");
   return "";
 }
 
@@ -52,20 +53,16 @@ export function snippetMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case "snippet_rejected":
-        return "Some lines are not allowed. Nothing was saved.";
       case "site_missing":
-        return "Create the site on this server first.";
       case "site_busy":
-        return "The site is being created or deleted. Try again in a moment.";
       case "not_found":
       case "no_site":
-        return "The site does not exist.";
       case "forbidden":
-        return "Only administrators can change snippets.";
+        return i18n.t(`siteApp.snippets.errors.${err.code}`);
     }
     if (err.status === 409 || err.status === 502 || err.status === 503)
-      return "The web server did not accept the change. The previous snippets stay active.";
+      return i18n.t("siteApp.snippets.errors.refused");
     return err.message;
   }
-  return "The request failed. Check the connection and try again.";
+  return i18n.t("siteApp.snippets.errors.failed");
 }

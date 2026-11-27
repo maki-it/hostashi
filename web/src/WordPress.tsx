@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import { currentLang } from "./i18n";
 import type { Site } from "./sites";
 import { Button, Card, Field, Notice } from "./ui";
 import {
@@ -23,6 +25,7 @@ type Secret = { url: string; user: string; password: string; database: string };
 // site (ADR-0069): the panel creates a database, WP-CLI does the rest as
 // the site user. The admin password is shown once.
 export function WordPressCard({ site }: { site: Site }) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<WordPressStatus | null>(null);
   const [loadError, setLoadError] = useState("");
   const [secret, setSecret] = useState<Secret | null>(null);
@@ -61,7 +64,7 @@ export function WordPressCard({ site }: { site: Site }) {
   if (!status) {
     return (
       <Card title={title}>
-        <p aria-busy="true">Loading…</p>
+        <p aria-busy="true">{t("common.status.loading")}</p>
       </Card>
     );
   }
@@ -85,30 +88,26 @@ export function WordPressCard({ site }: { site: Site }) {
     <>
       <Card title={title}>
         {secret && <PasswordBox secret={secret} onClose={() => setSecret(null)} />}
-        {status.state === "running" && <Notice tone="info" title="WordPress is being installed. This takes about a minute." />}
+        {status.state === "running" && <Notice tone="info" title={t("sites.wordpress.running")} />}
         {finished && status.installed && (
-          <Notice tone="ok" title="WordPress is installed.">
-            Log in at{" "}
-            <a href={url + "/wp-admin/"} target="_blank" rel="noreferrer noopener">
-              {url}/wp-admin/
-            </a>
-            .
+          <Notice tone="ok" title={t("sites.wordpress.installed")}>
+            <Trans i18nKey="sites.wordpress.loginAt" values={{ url }} components={{ a: <a href={url + "/wp-admin/"} target="_blank" rel="noreferrer noopener" /> }} />
           </Notice>
         )}
         {status.state === "failed" && (
-          <Notice tone="err" title={`The install failed${status.error ? `: ${status.error}` : ""}.`}>
-            Its database stays.
+          <Notice tone="err" title={status.error ? t("sites.wordpress.failedWith", { error: status.error }) : t("sites.wordpress.failed")}>
+            {t("sites.wordpress.dbStays")}
           </Notice>
         )}
         {finished && !status.installed && status.empty === false && (
-          <Notice tone="info" title="The document root holds files, but no WordPress.">
-            WordPress installs only into an empty folder. Reinstall replaces the files with a new WordPress.
+          <Notice tone="info" title={t("sites.wordpress.occupied")}>
+            {t("sites.wordpress.occupiedText")}
           </Notice>
         )}
         {status.log && status.state !== "none" && (
           <details className="ui-job-log" open={status.state === "failed"}>
-            <summary>{running ? "Show progress" : "Show log"}</summary>
-            <pre className="ui-code" aria-label="Install log">
+            <summary>{running ? t("sites.wordpress.progress") : t("sites.wordpress.log")}</summary>
+            <pre className="ui-code" aria-label={t("sites.wordpress.logLabel")}>
               {status.log}
             </pre>
           </details>
@@ -117,7 +116,7 @@ export function WordPressCard({ site }: { site: Site }) {
         {occupied && !reinstalling && (
           <div className="ui-row">
             <Button variant="danger" onClick={() => setReinstalling(true)}>
-              Reinstall WordPress
+              {t("sites.wordpress.reinstall")}
             </Button>
           </div>
         )}
@@ -142,9 +141,11 @@ function InstallForm({
   onStarted: (st: WordPressStart, input: WordPressInput) => void;
   onCancel?: () => void;
 }) {
+  const { t } = useTranslation();
   const [typed, setTyped] = useState("");
   const [input, setInput] = useState<WordPressInput>({
-    locale: "en_US",
+    // WordPress in the panel's language, which the person can change.
+    locale: currentLang() === "de" ? "de_DE" : "en_US",
     title: site.title || site.domains[0] || "",
     adminUser: "",
     adminEmail: "",
@@ -172,30 +173,24 @@ function InstallForm({
   return (
     <form className="ui-stack" onSubmit={submit} noValidate>
       {reinstall ? (
-        <Notice tone="warn" title="Reinstall replaces the site with a new WordPress.">
-          Everything in the document root is deleted: themes, plugins, uploads and any other files.
+        <Notice tone="warn" title={t("sites.wordpress.reinstallTitle")}>
+          {t("sites.wordpress.reinstallText")}{" "}
           {reinstall.database ? (
-            <>
-              {" "}
-              The database <code>{reinstall.database}</code> is deleted as well.
-            </>
+            <Trans i18nKey="sites.wordpress.reinstallDb" values={{ database: reinstall.database }} components={{ code: <code /> }} />
           ) : (
-            " The site's databases stay."
+            t("sites.wordpress.reinstallDbStays")
           )}{" "}
-          Back up the site first under Backups; this cannot be undone.
+          {t("sites.wordpress.reinstallBackup")}
         </Notice>
       ) : (
-        <p className="ui-hint">
-          Installs the latest WordPress into the empty document root, with a new database and user for it. WP-CLI runs as the site user;
-          file editing in the dashboard stays off.
-        </p>
+        <p className="ui-hint">{t("sites.wordpress.intro")}</p>
       )}
       <fieldset className="ui-fieldset ui-stack" disabled={busy}>
         <div className="ui-form-grid">
-          <Field label="Site title">
+          <Field label={t("sites.wordpress.siteTitle")}>
             <input className="ui-input" value={input.title} onChange={(e) => set({ title: e.target.value })} maxLength={100} />
           </Field>
-          <Field label="Language">
+          <Field label={t("sites.wordpress.language")}>
             <select className="ui-select" value={input.locale} onChange={(e) => set({ locale: e.target.value })}>
               {wpLocales.map((l) => (
                 <option key={l.value} value={l.value}>
@@ -204,7 +199,7 @@ function InstallForm({
               ))}
             </select>
           </Field>
-          <Field label="Admin user" hint="Not admin, which bots try first.">
+          <Field label={t("sites.wordpress.adminUser")} hint={t("sites.wordpress.adminUserHint")}>
             <input
               className="ui-input"
               value={input.adminUser}
@@ -214,20 +209,20 @@ function InstallForm({
               maxLength={60}
             />
           </Field>
-          <Field label="Admin email">
+          <Field label={t("sites.wordpress.adminEmail")}>
             <input className="ui-input" type="email" value={input.adminEmail} onChange={(e) => set({ adminEmail: e.target.value })} />
           </Field>
         </div>
         <label className="ui-check">
           <input type="radio" name={`${site.name}-wp-password`} checked={!own} onChange={() => setOwn(false)} />
-          Generate a strong admin password (shown once)
+          {t("sites.wordpress.generate")}
         </label>
         <label className="ui-check">
           <input type="radio" name={`${site.name}-wp-password`} checked={own} onChange={() => setOwn(true)} />
-          Set my own password
+          {t("sites.wordpress.own")}
         </label>
         {own && (
-          <Field label="Admin password" hint="12 to 128 characters.">
+          <Field label={t("sites.wordpress.adminPassword")} hint={t("sites.wordpress.passwordHint")}>
             <input
               className="ui-input"
               type="password"
@@ -239,17 +234,13 @@ function InstallForm({
         )}
         <label className="ui-check">
           <input type="checkbox" checked={input.discourage === true} onChange={(e) => set({ discourage: e.target.checked })} />
-          Discourage search engines in WordPress (Settings, Reading)
+          {t("sites.wordpress.discourage")}
         </label>
       </fieldset>
       {reinstall && (
         <div className="ui-narrow">
           <Field
-            label={
-              <>
-                Type <code className="ui-confirm-phrase">{site.name}</code> to confirm
-              </>
-            }
+            label={<Trans i18nKey="sites.confirm.type" values={{ name: site.name }} components={{ code: <code className="ui-confirm-phrase" /> }} />}
           >
             <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
           </Field>
@@ -260,15 +251,15 @@ function InstallForm({
         {reinstall ? (
           <>
             <Button type="submit" variant="danger" disabled={busy || typed !== site.name}>
-              Reinstall WordPress
+              {t("sites.wordpress.reinstall")}
             </Button>
             <Button disabled={busy} onClick={onCancel}>
-              Cancel
+              {t("common.actions.cancel")}
             </Button>
           </>
         ) : (
           <Button type="submit" variant="primary" disabled={busy}>
-            Install WordPress
+            {t("sites.wordpress.install")}
           </Button>
         )}
       </div>
@@ -279,6 +270,7 @@ function InstallForm({
 // PasswordBox sits at the top of the WordPress card, where the person
 // just pressed Install, so the one-time password is not missed.
 function PasswordBox({ secret, onClose }: { secret: Secret; onClose: () => void }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState("");
   const box = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -291,36 +283,36 @@ function PasswordBox({ secret, onClose }: { secret: Secret; onClose: () => void 
   async function copy() {
     try {
       await navigator.clipboard.writeText(secret.password);
-      setCopied("Copied.");
+      setCopied(t("sites.wordpress.copied"));
     } catch {
-      setCopied("Copying is not possible here. Select the password and copy it by hand.");
+      setCopied(t("sites.wordpress.copyFailed"));
     }
   }
 
   return (
     <div ref={box} className="ui-secret-box ui-stack" role="region" aria-labelledby="wp-secret">
       <h3 id="wp-secret" ref={heading} tabIndex={-1}>
-        Save the WordPress admin password now
+        {t("sites.wordpress.saveTitle")}
       </h3>
-      <p className="ui-flush">Hostashi does not keep it and cannot show it again. If it is lost, reset it from the WordPress login page.</p>
+      <p className="ui-flush">{t("sites.wordpress.saveText")}</p>
       <dl className="ui-facts">
-        <dt>Login</dt>
+        <dt>{t("sites.wordpress.login")}</dt>
         <dd>
           <a href={secret.url + "/wp-admin/"} target="_blank" rel="noreferrer noopener">
             <code>{secret.url}/wp-admin/</code>
           </a>
         </dd>
-        <dt>User</dt>
+        <dt>{t("sites.wordpress.user")}</dt>
         <dd>
           <code>{secret.user}</code>
         </dd>
-        <dt>Database</dt>
+        <dt>{t("sites.wordpress.database")}</dt>
         <dd>
           <code>{secret.database}</code>
         </dd>
       </dl>
       <div className="ui-field">
-        <label htmlFor="wp-secret-password">Admin password</label>
+        <label htmlFor="wp-secret-password">{t("sites.wordpress.adminPassword")}</label>
         <div className="ui-secret-row">
           <input
             id="wp-secret-password"
@@ -331,13 +323,13 @@ function PasswordBox({ secret, onClose }: { secret: Secret; onClose: () => void 
             spellCheck={false}
             className="ui-input ui-secret-value"
           />
-          <Button onClick={() => void copy()}>Copy password</Button>
+          <Button onClick={() => void copy()}>{t("sites.wordpress.copyPassword")}</Button>
         </div>
       </div>
       {copied && <Notice tone="ok" title={copied} />}
       <div className="ui-row">
         <Button variant="primary" onClick={onClose}>
-          I have saved it
+          {t("sites.wordpress.saved")}
         </Button>
       </div>
     </div>

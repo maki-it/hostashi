@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import {
   excludeProblem,
   formatSize,
@@ -26,6 +27,7 @@ type Props = {
 
 // PageCacheSettings is the page cache card of a site with PHP.
 export function PageCacheSettings({ site, canSize }: Props) {
+  const { t } = useTranslation();
   const [cache, setCache] = useState<PageCache | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [preset, setPreset] = useState<Preset>("wordpress");
@@ -83,20 +85,20 @@ export function PageCacheSettings({ site, canSize }: Props) {
       let c = await setPageCache(site.name, { enabled, preset, minutes, exclude: paths });
       if (canSize && size !== c.sizeMB) c = await setPageCacheSize(site.name, size);
       show(c);
-      return c.enabled ? "The page cache is on." : "The page cache is off.";
+      return c.enabled ? t("siteApp.pageCache.on") : t("siteApp.pageCache.off");
     });
   }
 
   const purge = () =>
     run(async () => {
       await purgePageCache(site.name);
-      return "The page cache is empty. The next visits fill it again.";
+      return t("siteApp.pageCache.emptied");
     });
 
   if (!cache) {
     return (
-      <Card title="Page cache">
-        {error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading…</p>}
+      <Card title={t("siteApp.pageCache.title")}>
+        {error ? <Notice tone="err" title={error} /> : <p aria-busy="true">{t("common.status.loading")}</p>}
       </Card>
     );
   }
@@ -104,23 +106,19 @@ export function PageCacheSettings({ site, canSize }: Props) {
   const stopped = site.disabled || site.maintenance.enabled;
 
   return (
-    <Card title="Page cache">
+    <Card title={t("siteApp.pageCache.title")}>
       <form className="ui-stack" onSubmit={save} noValidate>
-        <p className="ui-flush">
-          nginx keeps the pages that PHP generates for a few minutes and serves them to the next visitors without starting PHP. Changes show
-          up after the cache time at the latest, or right after you empty the cache.
-        </p>
+        <p className="ui-flush">{t("siteApp.pageCache.intro")}</p>
         <label className="ui-check">
           <input type="checkbox" checked={enabled} disabled={busy} onChange={(e) => setEnabled(e.target.checked)} />
-          Cache pages of this site
+          {t("siteApp.pageCache.enable")}
         </label>
         {enabled && !cache.enabled && (
-          <Notice tone="warn" title="Check that no page shows personal data without a login">
-            The cache cannot tell what a page contains. If your application shows personal data without a cookie or a “Cache-Control:
-            private” header, for example through a token in the address, another visitor could get that page. Exclude such paths below.
+          <Notice tone="warn" title={t("siteApp.pageCache.warnTitle")}>
+            {t("siteApp.pageCache.warnBody")}
           </Notice>
         )}
-        <Field label="Application" hint={presetHint[preset]}>
+        <Field label={t("siteApp.pageCache.application")} hint={presetHint[preset]}>
           <select className="ui-select" value={preset} disabled={busy} onChange={(e) => setPreset(e.target.value as Preset)}>
             {cache.choices.presets.map((p) => (
               <option key={p} value={p}>
@@ -129,16 +127,16 @@ export function PageCacheSettings({ site, canSize }: Props) {
             ))}
           </select>
         </Field>
-        <Field label="Cache time" hint="How long a page is kept. Pages with errors other than 404 are never kept.">
+        <Field label={t("siteApp.pageCache.cacheTime")} hint={t("siteApp.pageCache.cacheTimeHint")}>
           <select className="ui-select" value={minutes} disabled={busy} onChange={(e) => setMinutes(Number(e.target.value))}>
             {cache.choices.minutes.map((m) => (
               <option key={m} value={m}>
-                {m === 1 ? "1 minute" : `${m} minutes`}
+                {t("siteApp.pageCache.minutes", { count: m })}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Excluded paths" hint="One per line. /path is only that page, /path* every address that starts with it, for example /warenkorb*.">
+        <Field label={t("siteApp.pageCache.excluded")} hint={t("siteApp.pageCache.excludedHint")}>
           <textarea
             className="ui-input ui-textarea ui-mono"
             value={exclude}
@@ -150,7 +148,7 @@ export function PageCacheSettings({ site, canSize }: Props) {
           />
         </Field>
         {canSize ? (
-          <Field label="Size" hint="Cached pages count against the site's disk space.">
+          <Field label={t("siteApp.pageCache.size")} hint={t("siteApp.pageCache.sizeHint")}>
             <select className="ui-select" value={size} disabled={busy} onChange={(e) => setSize(Number(e.target.value))}>
               {cache.choices.sizesMB.map((s) => (
                 <option key={s} value={s}>
@@ -160,28 +158,24 @@ export function PageCacheSettings({ site, canSize }: Props) {
             </select>
           </Field>
         ) : (
-          <p className="ui-hint">
-            Size: at most {formatSize(cache.sizeMB)}, counted against the site's disk space. Managers and administrators can change it.
-          </p>
+          <p className="ui-hint">{t("siteApp.pageCache.sizeInfo", { size: formatSize(cache.sizeMB) })}</p>
         )}
-        {cache.enabled && stopped && <p className="ui-hint">Not used while the site is disabled or in maintenance. It starts empty afterwards.</p>}
+        {cache.enabled && stopped && <p className="ui-hint">{t("siteApp.pageCache.stopped")}</p>}
         {error && <Notice tone="err" title={error} />}
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy}>
-            Save page cache
+            {t("siteApp.pageCache.save")}
           </Button>
           {cache.enabled && (
             <Button disabled={busy} onClick={() => void purge()}>
-              Empty cache
+              {t("siteApp.pageCache.empty")}
             </Button>
           )}
         </div>
         {cache.enabled && (
           <p className="ui-hint">
-            The answer header <span className="ui-mono">X-Cache</span> shows HIT, MISS or BYPASS. A CMS can empty the cache on save with an API
-            token that has only the scope <span className="ui-mono">pagecache:purge</span> for this site:{" "}
-            <span className="ui-mono">POST /api/v1/sites/{site.name}/page-cache/purge</span>.
+            <Trans i18nKey="siteApp.pageCache.headerHint" values={{ site: site.name }} components={{ mono: <span className="ui-mono" /> }} />
           </p>
         )}
       </form>

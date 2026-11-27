@@ -3,6 +3,7 @@
 // WordPress quick install of a PHP site (ADR-0069): types and API calls.
 
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 
 export type WordPressState = "none" | "running" | "succeeded" | "failed";
 
@@ -60,15 +61,14 @@ export function reinstallWordPress(site: string, input: WordPressInput, confirm:
 
 export function wordPressMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.code === "wordpress_unavailable") return "The WordPress install is not available on this server.";
-    if (err.code === "not_found") return "The site does not exist anymore.";
+    if (err.code === "wordpress_unavailable" || err.code === "not_found") return i18n.t(`sites.wordpress.errors.${err.code}`);
     if (err.code === "invalid_argument")
       return err.message
         .replace(/^hosting: invalid input: (wordpress: )?/, "")
         .replace(/^./, (c) => c.toUpperCase())
         .replace(/\.?$/, ".");
-    if (/not empty/.test(err.message)) return "The document root is not empty. WordPress installs only into an empty folder.";
+    if (/not empty/.test(err.message)) return i18n.t("sites.wordpress.errors.notEmpty");
     return err.message.replace(/^wpunit: /, "").replace(/^./, (c) => c.toUpperCase());
   }
-  return "The WordPress install could not be started or read. Try again.";
+  return i18n.t("sites.wordpress.errors.generic");
 }

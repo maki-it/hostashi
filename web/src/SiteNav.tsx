@@ -5,67 +5,44 @@ import type { SiteTab } from "./routes";
 import { hasAccount, siteType, type Site } from "./sites";
 import { tabPanelProps, Tabs } from "./ui";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import i18n from "./i18n";
+import type { Catalog } from "./locales/en";
 
 export type SiteGroup = { id: string; label: string; tabs: { id: SiteTab; label: string }[] };
+
+// group and tab read their label when it is used, so the names follow the
+// language (ADR-0071).
+type NavTab = keyof Catalog["sites"]["nav"]["tabs"] & SiteTab;
+const tab = (id: NavTab): SiteGroup["tabs"][number] => ({
+  id,
+  get label(): string {
+    return i18n.t(`sites.nav.tabs.${id}`);
+  },
+});
+const group = (id: keyof Catalog["sites"]["nav"]["groups"], tabs: NavTab[]): SiteGroup => ({
+  id,
+  get label(): string {
+    return i18n.t(`sites.nav.groups.${id}`);
+  },
+  tabs: tabs.map(tab),
+});
 
 // The sections of a site page: a few groups, each with its own tabs. The
 // address keeps naming the inner tab (#/sites/<name>/<tab>), so links from
 // before the groups still open the same settings.
 export const siteGroups: readonly SiteGroup[] = [
-  { id: "overview", label: "Overview", tabs: [{ id: "overview", label: "Overview" }] },
-  {
-    id: "domains",
-    label: "Domains & HTTPS",
-    tabs: [
-      { id: "domains", label: "Domains" },
-      { id: "https", label: "HTTPS" },
-    ],
-  },
-  {
-    id: "app",
-    label: "App",
-    tabs: [
-      { id: "web", label: "Web" },
-      { id: "php", label: "PHP" },
-      { id: "cache", label: "Cache" },
-      { id: "cron", label: "Cron" },
-    ],
-  },
-  {
-    id: "files",
-    label: "Files",
-    tabs: [
-      { id: "files", label: "File manager" },
-      { id: "git", label: "Git deploy" },
-    ],
-  },
-  {
-    id: "security",
-    label: "Security",
-    tabs: [
-      { id: "access", label: "Access" },
-      { id: "hardening", label: "Hardening" },
-      { id: "headers", label: "Security headers" },
-      { id: "malware", label: "Virus scan" },
-      { id: "ssh", label: "SSH & SFTP" },
-    ],
-  },
-  {
-    id: "ops",
-    label: "Operations",
-    tabs: [
-      { id: "usage", label: "Usage" },
-      { id: "limits", label: "Limits" },
-      { id: "logs", label: "Logs" },
-      { id: "realip", label: "Visitor address" },
-      { id: "nginx", label: "nginx" },
-    ],
-  },
+  group("overview", ["overview"]),
+  group("domains", ["domains", "https"]),
+  group("app", ["web", "php", "cache", "cron"]),
+  group("files", ["files", "git"]),
+  group("security", ["access", "hardening", "headers", "malware", "ssh"]),
+  group("ops", ["usage", "limits", "logs", "realip", "nginx"]),
 ];
 
 /** visibleGroups keeps the tabs that pass shown, and the groups left with one. */
 export function visibleGroups(shown: (tab: SiteTab) => boolean): SiteGroup[] {
-  return siteGroups.map((g) => ({ ...g, tabs: g.tabs.filter((t) => shown(t.id)) })).filter((g) => g.tabs.length > 0);
+  return siteGroups.map((g) => ({ id: g.id, label: g.label, tabs: g.tabs.filter((t) => shown(t.id)) })).filter((g) => g.tabs.length > 0);
 }
 
 // A site without an account (redirect, reverse proxy) has no files, cron,
@@ -112,6 +89,7 @@ type Props = {
  * group, so no tab hides behind the edge of the screen.
  */
 export function SiteNav({ site, groups, active, onTab, children }: Props) {
+  const { t } = useTranslation();
   const prefix = `site-${site}`;
   const group = groupOf(groups, active) ?? groups[0]!;
   const sub = group.tabs.length > 1;
@@ -119,7 +97,7 @@ export function SiteNav({ site, groups, active, onTab, children }: Props) {
     <>
       <div className="ui-site-select">
         <label className="ui-sr-only" htmlFor={`${prefix}-section`}>
-          Section of {site}
+          {t("sites.nav.section", { site })}
         </label>
         <select id={`${prefix}-section`} className="ui-select" value={active} onChange={(e) => onTab(e.target.value as SiteTab)}>
           {groups.map((g) =>

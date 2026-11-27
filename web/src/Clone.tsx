@@ -2,22 +2,14 @@
 
 import { cardId, CloseButton } from "./SiteStatus";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import { formatBytes, formatCount, formatDateTime } from "./format";
+import i18n from "./i18n";
 import { cloneMessage, cloneSite, cloneSuggestion, configuredProfiles, getClone, refreshClone, type Clone, type CloneStart } from "./clones";
 import { getSiteProfile } from "./profiles";
 import { formatHash } from "./routes";
 import { domainProblem, hasAccount, listPools, siteMessage, siteNameProblem, siteType, type Pool, type Site } from "./sites";
 import { Badge, Button, Card, Field, Notice } from "./ui";
-
-const bytes = (n: number) => {
-  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-  let i = 0;
-  let v = n;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return (i === 0 ? v : v.toFixed(1)) + " " + units[i];
-};
 
 /** canClone: only sites with a Linux account can be copied (ADR-0070). */
 export const canClone = (site: Site) => site.state === "active" && hasAccount(site) && !["redirect", "proxy"].includes(siteType(site));
@@ -48,14 +40,16 @@ export function useClone(site: string): { clone: Clone | null | undefined; reloa
 
 /** CloneBadge marks a copy in the page head. */
 export function CloneBadge({ clone }: { clone: Clone | null | undefined }) {
+  const { t } = useTranslation();
   if (!clone) return null;
-  if (clone.state === "copying") return <Badge tone="warn">{clone.refresh ? "Refreshing" : "Copying"}</Badge>;
-  return <Badge tone="warn">{clone.staging ? "Staging" : "Copy"}</Badge>;
+  if (clone.state === "copying") return <Badge tone="warn">{clone.refresh ? t("sites.clone.refreshing") : t("sites.clone.copying")}</Badge>;
+  return <Badge tone="warn">{clone.staging ? t("sites.clone.staging") : t("sites.clone.copy")}</Badge>;
 }
 
 // CloneCard creates a new site as a copy of this one: files, local
 // databases and settings. A staging copy is protected and not indexed.
 export function CloneCard({ site, onClose }: { site: Site; onClose?: () => void }) {
+  const { t } = useTranslation();
   const suggestion = cloneSuggestion(site);
   const [open, setOpen] = useState(onClose !== undefined);
   const [name, setName] = useState(suggestion.name);
@@ -77,7 +71,7 @@ export function CloneCard({ site, onClose }: { site: Site; onClose?: () => void 
   }, [open]);
 
   const nameErr = siteNameProblem(name.trim());
-  const domainErr = domain.trim() === "" ? "Enter a domain." : domainProblem(domain.trim().toLowerCase());
+  const domainErr = domain.trim() === "" ? t("sites.check.domainEmpty") : domainProblem(domain.trim().toLowerCase());
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -97,32 +91,29 @@ export function CloneCard({ site, onClose }: { site: Site; onClose?: () => void 
   }
 
   return (
-    <Card title="Copy this site" id={cardId(site.name, "clone")} actions={onClose && <CloseButton onClose={onClose} />}>
+    <Card title={t("sites.clone.title")} id={cardId(site.name, "clone")} actions={onClose && <CloseButton onClose={onClose} />}>
       <div className="ui-stack">
-        <p className="ui-hint ui-flush">
-          Creates a new site with a copy of the files, the databases on this server and the settings. A staging copy is for trying changes: its cron jobs
-          are paused, it asks for a password, search engines are asked not to index it, and it can be refreshed from this site later.
-        </p>
+        <p className="ui-hint ui-flush">{t("sites.clone.intro")}</p>
         {started && <CloneStarted started={started} onClose={() => setStarted(null)} />}
         {!open ? (
           !started && (
             <div className="ui-row">
-              <Button onClick={() => setOpen(true)}>Copy site</Button>
+              <Button onClick={() => setOpen(true)}>{t("sites.clone.open")}</Button>
             </div>
           )
         ) : (
           <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
             <div className="ui-narrow ui-stack">
-              <Field label="System name of the copy" hint="Linux user and home folder of the new site." {...(tried && nameErr && { error: nameErr })}>
+              <Field label={t("sites.clone.name")} hint={t("sites.clone.nameHint")} {...(tried && nameErr && { error: nameErr })}>
                 <input className="ui-input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" spellCheck={false} />
               </Field>
-              <Field label="Domain of the copy" hint="Point it to this server first, so the copy gets its certificate." {...(tried && domainErr && { error: domainErr })}>
+              <Field label={t("sites.clone.domain")} hint={t("sites.clone.domainHint")} {...(tried && domainErr && { error: domainErr })}>
                 <input className="ui-input" value={domain} onChange={(e) => setDomain(e.target.value)} autoComplete="off" spellCheck={false} />
               </Field>
               {pools.length > 1 && (
-                <Field label="Storage pool">
+                <Field label={t("sites.clone.pool")}>
                   <select className="ui-select" value={pool} onChange={(e) => setPool(e.target.value)}>
-                    <option value="">Same as this site ({site.pool})</option>
+                    <option value="">{t("sites.clone.samePool", { pool: site.pool })}</option>
                     {pools
                       .filter((p) => p.name !== site.pool)
                       .map((p) => (
@@ -136,20 +127,19 @@ export function CloneCard({ site, onClose }: { site: Site; onClose?: () => void 
             </div>
             <label className="ui-check">
               <input type="checkbox" checked={staging} onChange={(e) => setStaging(e.target.checked)} />
-              Staging copy of {site.name}
+              {t("sites.clone.stagingOf", { site: site.name })}
             </label>
             {!site.maintenance.enabled && <MaintenanceCheck source={site.name} checked={maintenance} onChange={setMaintenance} />}
-            <Notice tone="warn" title="The copy takes over the application's own mail settings and can send real mail.">
-              Environment variables of the app are copied too and may hold live API keys. Databases on external database servers are not copied: the copy
-              keeps using them.
+            <Notice tone="warn" title={t("sites.clone.mailWarning")}>
+              {t("sites.clone.mailWarningText")}
             </Notice>
             {error && <Notice tone="err" title={error} />}
             <div className="ui-row">
               <Button type="submit" variant="primary" disabled={busy}>
-                {busy ? "Starting…" : staging ? "Create staging copy" : "Create copy"}
+                {busy ? t("sites.clone.starting") : staging ? t("sites.clone.createStaging") : t("sites.clone.create")}
               </Button>
               <Button disabled={busy} onClick={() => setOpen(false)}>
-                Cancel
+                {t("common.actions.cancel")}
               </Button>
             </div>
           </form>
@@ -162,6 +152,7 @@ export function CloneCard({ site, onClose }: { site: Site; onClose?: () => void 
 // CloneStarted links to the new site and shows its generated password
 // once: Hostashi keeps only its hash.
 function CloneStarted({ started, onClose }: { started: CloneStart; onClose: () => void }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
   const link = formatHash({ page: "sites", site: { name: started.site.name } });
@@ -173,16 +164,16 @@ function CloneStarted({ started, onClose }: { started: CloneStart; onClose: () =
   async function copy(password: string) {
     try {
       await navigator.clipboard.writeText(password);
-      setCopied("Copied.");
+      setCopied(t("sites.clone.copied"));
     } catch {
-      setCopied("Copying is not possible here. Select the password and copy it by hand.");
+      setCopied(t("sites.clone.copyFailed"));
     }
   }
 
   if (!started.access) {
     return (
-      <Notice tone="ok" title={`The copy ${started.site.name} is being made.`}>
-        <a href={link}>Open {started.site.name}</a> to follow the copy.
+      <Notice tone="ok" title={t("sites.clone.beingMade", { site: started.site.name })}>
+        <Trans i18nKey="sites.clone.follow" values={{ site: started.site.name }} components={{ a: <a href={link} /> }} />
       </Notice>
     );
   }
@@ -190,29 +181,28 @@ function CloneStarted({ started, onClose }: { started: CloneStart; onClose: () =
   return (
     <section className="ui-card ui-card-body ui-stack ui-attention" aria-labelledby="clone-secret">
       <h2 id="clone-secret" ref={heading} tabIndex={-1}>
-        Save the password of the copy now
+        {t("sites.clone.saveTitle")}
       </h2>
       <p className="ui-flush">
-        The copy <a href={link}>{started.site.name}</a> is being made and asks every visitor for this login. Hostashi does not keep the password and cannot
-        show it again; you can set a new one under Security, Access.
+        <Trans i18nKey="sites.clone.saveText" values={{ site: started.site.name }} components={{ a: <a href={link} /> }} />
       </p>
       <dl className="ui-facts">
-        <dt>Address</dt>
+        <dt>{t("sites.clone.address")}</dt>
         <dd>
           <code>{started.site.domains[0]}</code>
         </dd>
-        <dt>User</dt>
+        <dt>{t("sites.clone.user")}</dt>
         <dd>
           <code>{started.access.user}</code>
         </dd>
       </dl>
-      <Field label="Password">
+      <Field label={t("sites.clone.password")}>
         <input readOnly value={started.access.password} onFocus={(e) => e.currentTarget.select()} autoComplete="off" spellCheck={false} className="ui-input ui-mono" />
       </Field>
       <div className="ui-row">
-        <Button onClick={() => void copy(started.access?.password ?? "")}>Copy password</Button>
+        <Button onClick={() => void copy(started.access?.password ?? "")}>{t("sites.clone.copyPassword")}</Button>
         <Button variant="primary" onClick={onClose}>
-          I have saved it
+          {t("sites.clone.saved")}
         </Button>
       </div>
       {copied && <Notice tone="ok" title={copied} />}
@@ -223,15 +213,16 @@ function CloneStarted({ started, onClose }: { started: CloneStart; onClose: () =
 const steps = (c: Clone) => {
   const dbs = c.databases.filter((d) => d.done).length;
   return [
-    { label: "Files", done: c.filesDone },
-    ...(c.databases.length > 0 ? [{ label: `Databases (${dbs} of ${c.databases.length})`, done: dbs === c.databases.length }] : []),
-    { label: "Configuration", done: c.state === "done" },
+    { label: i18n.t("sites.clone.stepFiles"), done: c.filesDone },
+    ...(c.databases.length > 0 ? [{ label: i18n.t("sites.clone.stepDatabases", { done: dbs, total: c.databases.length }), done: dbs === c.databases.length }] : []),
+    { label: i18n.t("sites.clone.stepConfig"), done: c.state === "done" },
   ];
 };
 
 // CloneStatusCard shows where a copy came from and how far it is, and
 // offers "refresh from source" for a staging copy.
 export function CloneStatusCard({ site, clone, staff, onRefresh }: { site: Site; clone: Clone; staff: boolean; onRefresh: () => void }) {
+  const { t } = useTranslation();
   const [profile, setProfile] = useState<string | null>(null);
   useEffect(() => {
     getSiteProfile(site.name)
@@ -239,22 +230,20 @@ export function CloneStatusCard({ site, clone, staff, onRefresh }: { site: Site;
       .catch(() => setProfile(null));
   }, [site.name]);
 
-  const source = clone.source ? (
-    <a href={formatHash({ page: "sites", site: { name: clone.source } })}>{clone.source}</a>
-  ) : (
-    "a site that was deleted since"
-  );
+  const kind = clone.staging ? t("sites.clone.stagingCopy") : t("sites.clone.copy");
+  // A deleted source shows as words, not as a link.
+  const src = clone.source ? <a href={formatHash({ page: "sites", site: { name: clone.source } })} /> : <span />;
+  const values = { kind, source: clone.source || t("sites.clone.deletedSource"), date: clone.finishedAt ? formatDateTime(new Date(clone.finishedAt)) : "" };
 
   return (
-    <Card title={clone.staging ? "Staging copy" : "Copy"}>
+    <Card title={kind}>
       <div className="ui-stack">
         <p className="ui-flush">
-          {clone.staging ? "Staging copy" : "Copy"} of {source}
-          {clone.finishedAt ? `, last copied ${clone.finishedAt.slice(0, 16).replace("T", " ")}` : ""}.
+          <Trans i18nKey={clone.finishedAt ? "sites.clone.ofAt" : "sites.clone.of"} values={values} components={{ src }} />
         </p>
         {clone.state === "copying" && (
           <div className="ui-stack" aria-live="polite">
-            <ul className="ui-flush" aria-label="Copy progress">
+            <ul className="ui-flush" aria-label={t("sites.clone.progress")}>
               {steps(clone).map((s) => (
                 <li key={s.label}>
                   {s.done ? "✓" : "…"} {s.label}
@@ -263,20 +252,20 @@ export function CloneStatusCard({ site, clone, staff, onRefresh }: { site: Site;
             </ul>
             {clone.files && !clone.filesDone && (
               <p className="ui-hint ui-flush">
-                {clone.files.files.toLocaleString("en")} files, {bytes(clone.files.bytes)} copied so far.
+                {t("sites.clone.soFar", { files: formatCount(clone.files.files), bytes: formatBytes(clone.files.bytes) })}
               </p>
             )}
           </div>
         )}
         {clone.state === "failed" && (
-          <Notice tone="err" title="The last copy failed">
+          <Notice tone="err" title={t("sites.clone.failed")}>
             {clone.error}
           </Notice>
         )}
         {clone.files && clone.files.skipped > 0 && (
           <>
-            <Notice tone="warn" title={`${clone.files.skipped.toLocaleString("en")} entries were not copied:`} />
-            <ul className="ui-flush" aria-label="Skipped entries">
+            <Notice tone="warn" title={t("sites.clone.skipped", { count: clone.files.skipped, n: formatCount(clone.files.skipped) })} />
+            <ul className="ui-flush" aria-label={t("sites.clone.skippedLabel")}>
               {clone.files.skippedPaths.map((s) => (
                 <li key={s.path}>
                   <span className="ui-mono">{s.path}</span>: {s.reason}
@@ -286,8 +275,8 @@ export function CloneStatusCard({ site, clone, staff, onRefresh }: { site: Site;
           </>
         )}
         {clone.state !== "copying" && profile !== null && !configuredProfiles.includes(profile) && <Checklist site={site} clone={clone} />}
-        <Notice tone="warn" title="Before you test">
-          The application's own mail settings were copied, so the copy can send real mail. Environment variables of the app may hold live API keys.
+        <Notice tone="warn" title={t("sites.clone.beforeTest")}>
+          {t("sites.clone.beforeTestText")}
         </Notice>
         {clone.staging && staff && clone.source && <RefreshForm site={site} clone={clone} onDone={onRefresh} />}
       </div>
@@ -298,27 +287,30 @@ export function CloneStatusCard({ site, clone, staff, onRefresh }: { site: Site;
 // Checklist lists what to change by hand in an application Hostashi does
 // not configure itself.
 function Checklist({ site, clone }: { site: Site; clone: Clone }) {
+  const { t } = useTranslation();
+  const dbs = (
+    <>
+      {clone.databases.map((d, i) => (
+        <span key={d.target}>
+          {i > 0 && ", "}
+          <code>{d.target}</code>
+        </span>
+      ))}
+    </>
+  );
   return (
     <div className="ui-stack">
-      <p className="ui-flush">Hostashi does not know this application&apos;s configuration. Change it by hand:</p>
-      <ul className="ui-flush" aria-label="What to change">
+      <p className="ui-flush">{t("sites.clone.unknownConfig")}</p>
+      <ul className="ui-flush" aria-label={t("sites.clone.whatToChange")}>
         {clone.databases.length > 0 && (
           <li>
-            The database connection: use{" "}
-            {clone.databases.map((d, i) => (
-              <span key={d.target}>
-                {i > 0 && ", "}
-                <code>{d.target}</code>
-              </span>
-            ))}{" "}
-            instead of the source&apos;s databases. The new passwords are set under Databases.
+            <Trans i18nKey="sites.clone.dbConnection" components={{ dbs }} />
           </li>
         )}
         <li>
-          The site&apos;s own address: <code>{site.domains[0]}</code>
-          {clone.source ? " instead of the source's domain, in the configuration and in the database" : ""}.
+          <Trans i18nKey={clone.source ? "sites.clone.ownAddressSource" : "sites.clone.ownAddress"} values={{ domain: site.domains[0] ?? "" }} components={{ code: <code /> }} />
         </li>
-        <li>Mail, payment and other live services, so tests do not reach real customers.</li>
+        <li>{t("sites.clone.liveServices")}</li>
       </ul>
     </div>
   );
@@ -327,12 +319,13 @@ function Checklist({ site, clone }: { site: Site; clone: Clone }) {
 // MaintenanceCheck offers to put the source in maintenance while its files
 // and databases are copied, so the copy gets one consistent state.
 function MaintenanceCheck({ source, checked, onChange }: { source: string; checked: boolean; onChange: (v: boolean) => void }) {
+  const { t } = useTranslation();
   return (
     <label className="ui-check ui-check-hint">
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       <span>
-        Put {source} in maintenance while copying
-        <span className="ui-hint ui-flush">Visitors see the maintenance page until the files and databases are copied, so nothing changes on the site halfway through the copy.</span>
+        {t("sites.clone.maintenance", { site: source })}
+        <span className="ui-hint ui-flush">{t("sites.clone.maintenanceHint")}</span>
       </span>
     </label>
   );
@@ -341,6 +334,7 @@ function MaintenanceCheck({ source, checked, onChange }: { source: string; check
 // RefreshForm copies the source's files and databases into the staging
 // copy again, after the copy's name is typed.
 function RefreshForm({ site, clone, onDone }: { site: Site; clone: Clone; onDone: () => void }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const [maintenance, setMaintenance] = useState(false);
@@ -369,18 +363,14 @@ function RefreshForm({ site, clone, onDone }: { site: Site; clone: Clone; onDone
     <div className="ui-stack">
       {!open ? (
         <div className="ui-row">
-          <Button onClick={() => setOpen(true)}>Refresh from {clone.source}</Button>
+          <Button onClick={() => setOpen(true)}>{t("sites.clone.refresh", { source: clone.source })}</Button>
         </div>
       ) : (
         <form className="ui-stack" onSubmit={(e) => void run(e)} data-unsaved="ignore">
           <div className="ui-narrow">
             <Field
-              label={
-                <>
-                  Type <code className="ui-confirm-phrase">{site.name}</code> to confirm
-                </>
-              }
-              hint={`The files and databases of ${site.name} are replaced with those of ${clone.source}. Changes made on the copy are lost. Domain, password and users stay.`}
+              label={<Trans i18nKey="sites.confirm.type" values={{ name: site.name }} components={{ code: <code className="ui-confirm-phrase" /> }} />}
+              hint={t("sites.clone.refreshHint", { site: site.name, source: clone.source })}
             >
               <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
             </Field>
@@ -388,7 +378,7 @@ function RefreshForm({ site, clone, onDone }: { site: Site; clone: Clone; onDone
           {clone.source && <MaintenanceCheck source={clone.source} checked={maintenance} onChange={setMaintenance} />}
           <div className="ui-row">
             <Button type="submit" variant="danger" disabled={busy || typed !== site.name}>
-              {busy ? "Starting…" : `Replace ${site.name} with ${clone.source}`}
+              {busy ? t("sites.clone.starting") : t("sites.clone.replace", { site: site.name, source: clone.source })}
             </Button>
             <Button
               disabled={busy}
@@ -398,7 +388,7 @@ function RefreshForm({ site, clone, onDone }: { site: Site; clone: Clone; onDone
                 setError("");
               }}
             >
-              Cancel
+              {t("common.actions.cancel")}
             </Button>
           </div>
         </form>
