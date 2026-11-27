@@ -54,6 +54,15 @@ func toCronStatusJSON(s agentapi.CronJobStatus) *cronStatusJSON {
 	}
 }
 
+// cronOutputJSON is what the last run of a job wrote (ADR-0028 Addendum
+// 1): the last lines, oldest first. ran is false when the job has not run
+// since the server started or its units were written.
+type cronOutputJSON struct {
+	Ran       bool     `json:"ran"`
+	Lines     []string `json:"lines"`
+	Truncated bool     `json:"truncated"`
+}
+
 type cronInputJSON struct {
 	Schedule   string `json:"schedule"`
 	Command    string `json:"command"`
@@ -231,6 +240,32 @@ func registerCron(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger
 		}
 
 		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	mux.Op("GET /api/v1/sites/{name}/cron/{id}/output", openapi.Operation{
+		ID: "getCronJobOutput", Tag: "cron", Summary: "What the last run of a cron job wrote", Out: cronOutputJSON{},
+	}, a.allow("cron:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		id, ok := cronID(w, r)
+		if !ok {
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		out, err := svc.CronOutput(ctx, r.PathValue("name"), id)
+		if err != nil {
+			cronFail(log, w, err, "read cron job output")
+
+			return
+		}
+
+		lines := out.Lines
+		if lines == nil {
+			lines = []string{}
+		}
+
+		writeJSON(w, http.StatusOK, cronOutputJSON{Ran: out.Ran, Lines: lines, Truncated: out.Truncated})
 	}))
 
 	// Starts the job now, paused or not; the run goes on in the background.

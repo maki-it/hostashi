@@ -64,8 +64,8 @@ check the server and every site without changing anything (root on the server); 
 show the managed services with their state and restarts, or start, stop, restart or reload one where the service catalog allows it, through the panel's API (needs hostashi login, ADR\-0052)
 
 .TP
-\fBfirewall bans [\-json] | firewall unban ADDRESS\fP
-show the addresses fail2ban blocks, or unblock one in every Hostashi jail, through the panel's API (needs hostashi login, ADR\-0078)
+\fBfirewall bans [\-jail JAIL] [\-address TEXT] [\-json] | firewall unban ADDRESS\fP
+show the addresses fail2ban blocks, filtered by jail or by address, part of one or range such as 203.0.113.0/24, or unblock one in every Hostashi jail, through the panel's API (needs hostashi login, ADR\-0078)
 
 .TP
 \fBsystem info | system timezones | system timezone ZONE | system hostname NAME | system reboot HOSTNAME\fP

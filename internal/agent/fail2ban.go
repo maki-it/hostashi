@@ -16,12 +16,12 @@ var errNoFail2ban = &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "f
 
 // registerFail2ban serves fail2ban.* (ADR-0078).
 func registerFail2ban(s *agentrpc.Server, c *f2bctl.Controller, log *slog.Logger) {
-	agentrpc.Handle(s, agentapi.Fail2banStatusOp, func(ctx context.Context, _ agentrpc.Caller, _ agentapi.Fail2banStatusRequest) (agentapi.Fail2banStatus, error) {
+	agentrpc.Handle(s, agentapi.Fail2banStatusOp, func(ctx context.Context, _ agentrpc.Caller, req agentapi.Fail2banStatusRequest) (agentapi.Fail2banStatus, error) {
 		if c == nil {
 			return agentapi.Fail2banStatus{}, errNoFail2ban
 		}
 
-		st, err := c.Status(ctx)
+		st, err := c.Status(ctx, req)
 
 		return st, mapFail2banError(err)
 	})

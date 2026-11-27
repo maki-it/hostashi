@@ -15,6 +15,14 @@ A cron job runs a command on a schedule, as the site's Linux user, inside the si
 
 The list shows the last and the next run of each job and how the last run ended.
 
+## See the output of the last run
+
+Click the result under **Last run**, or choose **More → Show output**. You see what the command wrote to standard output and standard error in its last run: at most the last 200 lines, as long as the server's system journal keeps them. **Copy** copies the text. Everybody who can see the site's cron jobs can see their output, so do not let a job print passwords.
+
+![The output of a failed cron job below its row](images/site-cron-output.png)
+
+On the command line: `hostashi api cron get-job-output SITE ID`.
+
 ## Run, pause and delete
 
 - **Run now** starts a job right away; its result shows up under **Last run**.

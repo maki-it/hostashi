@@ -176,7 +176,7 @@ export function App() {
         {show("services") && <Services />}
         {show("system") && <System />}
         {show("pools") && <Pools />}
-        {show("firewall") && <Firewall />}
+        {show("firewall") && <Firewall query={route.query} onQuery={replaceQuery} />}
         {show("parked") && <Parked query={route.query} onQuery={replaceQuery} />}
         {show("pages") && <Pages query={route.query} onQuery={replaceQuery} />}
         {show("users") && <Users me={user.username} query={route.query} onQuery={replaceQuery} />}

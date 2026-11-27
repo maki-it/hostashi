@@ -1,6 +1,6 @@
 # ADR-0028 Cron jobs per site
 
-**Status:** Accepted (2026-11-19, by Kim: option A). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0007 (isolation model), ADR-0015 (per-site resource limits, Proposed), ADR-0017 (CloudPanel import), ADR-0026 (migration transfer), [`03-features.md`](../03-features.md) row "Cron jobs per site" (P0).
+**Status:** Accepted (2026-11-19, by Kim: option A); Addendum 1 Accepted (Kim, 2026-11-27). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0007 (isolation model), ADR-0015 (per-site resource limits, Proposed), ADR-0017 (CloudPanel import), ADR-0026 (migration transfer), [`03-features.md`](../03-features.md) row "Cron jobs per site" (P0).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -69,3 +69,40 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 ## Open questions
 
 None. Decided (Kim, 2026-11-19): imported jobs start paused; Kim starts them after the DNS switch.
+
+## Addendum 1: output of the last run in the panel
+
+**Status:** Accepted (Kim, 2026-11-27). **Decides:** Kim.
+
+### Context
+
+- The recommendation above says the panel shows "the last lines of output through the agent". Only start, end, exit status and the next run are shown today [V: `internal/cronjobs/cronjobs.go`, `web/src/Cron.tsx`].
+- A job's standard output and error go to the journal: the service unit sets no `StandardOutput=`, so systemd's default `journal` applies, with `SyslogIdentifier=hostashi-cron-<site>-<id>` [V: `internal/cron/unit.go`].
+- Reading the journal needs either `journalctl` or a journal file reader. Neither is allowed today: `internal/phpctl` may run `systemctl` only for the cron units [V: `.golangci.yml`, `internal/phpctl/cron.go`].
+- Kim chose the journal over a file per job (`StandardOutput=truncate:`), because journald limits size and rate itself and a file could fill `/var` [V: Kim, decision card in the thread, 2026-11-27].
+
+### Proposal
+
+1. New typed agent operation `cron.output` with `site` and job `id`. The agent checks that the job exists in its state, as `cron.run` does.
+2. The agent reads `InvocationID` of `hostashi-cron-<site>-<id>.service` with the existing `systemctl show` exception. An empty value means the job has not run since boot or since its units were written; the answer is then "no output".
+3. New narrow `os/exec` exception in `internal/phpctl/cron.go`: `/usr/bin/journalctl` by absolute path with exactly these arguments: `--no-pager --quiet --output=json --output-fields=MESSAGE --lines=200 _SYSTEMD_UNIT=<unit> _SYSTEMD_INVOCATION_ID=<id>`. The unit name must match the cron unit pattern and end in `.service`, the invocation id must be 32 lowercase hex digits. Both matches together select the lines the job's processes wrote in that run, not systemd's own "Started"/"Finished" lines [A: journald stores `_SYSTEMD_INVOCATION_ID` with stream lines since systemd 233; to be checked by the container test].
+4. Limits: at most the last 200 lines, each cut to 2 KiB, and at most 64 KiB in total; the answer says whether anything was cut. A message that is not valid UTF-8 (journald stores it as a byte array) is shown with replacement characters. `journalctl` output is read up to 1 MiB, then parsing stops.
+5. API: `GET /api/v1/sites/{name}/cron/{id}/output`, scope `cron:read`, with the run's start, end, result, the lines and `truncated`. Reading is not written to the audit log, like the site logs (ADR-0053).
+6. UI: the "Last run" badge opens a dialog with the output in a monospace block and a copy button; the "More" menu gets "Show output" as well.
+
+No database change: nothing is stored by the panel.
+
+### Options considered
+
+| Option | Pro | Contra |
+|---|---|---|
+| **A. `journalctl` with fixed arguments (recommended, chosen)** | Uses the journal that already has the output; journald caps size and rate; no change to the units | One more binary in the exec exception |
+| B. `StandardOutput=truncate:` into a file per job | No new exec | A job printing gigabytes fills `/var` outside the site quota; a new file per job to clean up |
+| C. Read journal files in Go | No exec | No maintained pure-Go reader; the format is not a stable API [U] |
+
+### Consequences
+
+- `.golangci.yml` names `journalctl` in the `internal/phpctl` comment; the package stays the only place for it.
+- Who may see a job may see its output. A job that prints secrets shows them there; the same people can already read the command and the site's files [A].
+- Output is available as long as journald keeps it. With volatile storage it is gone after a reboot; Debian 13 and Ubuntu 26.04 keep the journal on disk by default [A].
+- journald rate limiting (by default 10,000 messages in 30 s per service) can drop lines of a very chatty job [U: journald.conf defaults].

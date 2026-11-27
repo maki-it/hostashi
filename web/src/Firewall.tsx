@@ -14,7 +14,7 @@ import {
   type FirewallRule,
   type FirewallState,
 } from "./firewall";
-import { Button, Card, Field, IconButton, Notice, PageHead, RelTime, UnsavedNote } from "./ui";
+import { Button, Card, Field, IconButton, Notice, PageHead, RelTime, tabPanelProps, Tabs, UnsavedNote } from "./ui";
 import { BlockedAddressesCard } from "./BlockedAddresses";
 import { TokenAllowlistCard } from "./TokenAllowlist";
 
@@ -59,7 +59,50 @@ const secondsLeft = (deadline: string) => Math.max(0, Math.ceil((new Date(deadli
 // admin to test SSH first when the SSH allowlist changed.
 type Flash = { alert: boolean; text: string } | null;
 
-export function Firewall() {
+// The page has two tabs: the rules of the firewall, and the addresses
+// fail2ban blocks. The tab is part of the address (?tab=blocked), so Health
+// can link to the blocked addresses.
+type FirewallTab = "rules" | "blocked";
+
+const firewallTabs = [
+  { id: "rules", label: "Firewall" },
+  { id: "blocked", label: "Blocked addresses" },
+] as const;
+
+type FirewallProps = { query: URLSearchParams; onQuery: (q: URLSearchParams) => void };
+
+export function Firewall({ query, onQuery }: FirewallProps) {
+  const tab: FirewallTab = query.get("tab") === "blocked" ? "blocked" : "rules";
+  const head = (
+    <PageHead
+      title="Firewall"
+      description="Ports 80 and 443 are always open for the sites. SSH, the panel and API tokens are open to everyone until you set an allowlist. fail2ban blocks addresses after too many failed logins."
+    />
+  );
+
+  return (
+    <>
+      {head}
+      <Tabs
+        label="Firewall"
+        tabs={firewallTabs}
+        active={tab}
+        onChange={(t) => onQuery(new URLSearchParams(t === "blocked" ? { tab: "blocked" } : {}))}
+        idPrefix="firewall"
+      />
+      <div {...tabPanelProps("firewall", tab)} className="ui-stack">
+        {/* The rules stay mounted on the other tab: a change waiting for
+            its confirmation keeps its countdown and confirms in time. */}
+        <div className="ui-stack" hidden={tab !== "rules"}>
+          <FirewallRules />
+        </div>
+        {tab === "blocked" && <BlockedAddressesCard query={query} onQuery={onQuery} />}
+      </div>
+    </>
+  );
+}
+
+function FirewallRules() {
   const [fw, setFw] = useState<FirewallStatus | null>(null);
   const [error, setError] = useState("");
   // flash outlives the editor, which starts over after every reload.
@@ -78,17 +121,9 @@ export function Firewall() {
     void load();
   }, [load]);
 
-  const head = (
-    <PageHead
-      title="Firewall"
-      description="Ports 80 and 443 are always open for the sites. SSH, the panel and API tokens are open to everyone until you set an allowlist."
-    />
-  );
-
   if (!fw) {
     return (
       <>
-        {head}
         {error ? (
           <Notice tone="err" title={error}>
             <Button onClick={() => void load()}>Try again</Button>
@@ -103,12 +138,10 @@ export function Firewall() {
   if (!fw.enabled) {
     return (
       <>
-        {head}
         <Notice tone="warn" title="Hostashi's firewall is off: the server was installed with --no-firewall.">
           Use the firewall in front of the server (for example at your provider), and let only SSH, 80, 443 and the panel port through.
           Run the installer again without --no-firewall to manage the rules here.
         </Notice>
-        <BlockedAddressesCard />
         <TokenAllowlistCard clientIp={fw.clientIp} />
       </>
     );
@@ -116,10 +149,8 @@ export function Firewall() {
 
   return (
     <>
-      {head}
       {error && <Notice tone="err" title={error} />}
       <Editor key={JSON.stringify(fw.state) + (fw.pending?.deadline ?? "")} fw={fw} reload={load} flash={flash} setFlash={setFlash} />
-      <BlockedAddressesCard />
       <TokenAllowlistCard clientIp={fw.clientIp} />
     </>
   );

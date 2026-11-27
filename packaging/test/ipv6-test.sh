@@ -265,7 +265,7 @@ x fail2ban-client status hostashi-panel | grep -F "$C6" >/dev/null || fail "fail
 x nft list set inet f2b-table addr6-set-hostashi-panel | grep -F "$C6" >/dev/null || fail "ban not in nftables: $(x nft list set inet f2b-table addr6-set-hostashi-panel)"
 x nft list set inet f2b-table addr6-set-hostashi-panel | grep -F "/64" >/dev/null && fail "the server's own /64 was banned"
 if port_open 8443; then fail "banned client still reaches the panel"; fi
-[ "$(api GET /api/v1/firewall/bans)" = 200 ] || fail "bans through the panel: $(x cat /tmp/api.out)"
+[ "$(api GET "/api/v1/firewall/bans?address=$C6")" = 200 ] || fail "bans through the panel: $(x cat /tmp/api.out)"
 x grep -F "\"$C6\"" /tmp/api.out >/dev/null || fail "panel does not show the IPv6 ban: $(x cat /tmp/api.out)"
 [ "$(api DELETE "/api/v1/firewall/bans/$C6")" = 200 ] || fail "unblock through the panel: $(x cat /tmp/api.out)"
 port_open 8443 || fail "client still blocked after the unblock"

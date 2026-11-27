@@ -97,6 +97,18 @@ describe("Doctor", () => {
     expect(screen.getByRole("link", { name: "System" })).toHaveAttribute("href", "#/system");
   });
 
+  it("links the jails check to the blocked addresses", async () => {
+    mockFetch({
+      "GET /api/v1/doctor": {
+        body: { ...report, checks: [{ id: "service.fail2ban.jails", status: "warn", summary: "not running: sshd", hint: "Check the jails." }] },
+      },
+    });
+    render(<Harness />);
+
+    expect(await screen.findByText("Brute-force protection jails")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Firewall" })).toHaveAttribute("href", "#/firewall?tab=blocked");
+  });
+
   it("filters by the address and checks again", async () => {
     const user = userEvent.setup();
     let current = report;
