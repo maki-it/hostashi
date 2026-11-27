@@ -92,7 +92,7 @@ describe("Pools", () => {
     expect(await screen.findByRole("region", { name: "fast" })).toBeInTheDocument();
   });
 
-  it("shows the server's refusal", async () => {
+  it("shows the refusal in the panel's words", async () => {
     const user = userEvent.setup();
     mockFetch({
       "GET /api/v1/pools": { body: { pools: [home, vol1] } },
@@ -102,7 +102,7 @@ describe("Pools", () => {
 
     const v1 = await screen.findByRole("region", { name: "vol1" });
     await user.click(within(v1).getByRole("button", { name: "Make default" }));
-    expect(await screen.findByText("the agent could not do this, try again")).toBeInTheDocument();
+    expect(await screen.findByText("The change could not be completed. Try again.")).toBeInTheDocument();
   });
 });
 

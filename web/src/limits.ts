@@ -4,8 +4,9 @@
 // default for new sites, and the limits of each site with its disk use.
 // 0 means unlimited in every limit except the PHP workers.
 
-import { formatBytes, formatCount } from "./format";
+import { formatBytes, formatCount, formatNumber } from "./format";
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 import { siteMessage } from "./sites";
 
 export type CPUPriority = "low" | "normal" | "high";
@@ -81,7 +82,7 @@ export const updatePreset = (old: string, name: string, isDefault: boolean, limi
 export function presetCacheProblem(c: PresetCaches, memoryBytes: number): string {
   if (c.objectCacheMb === 0 || memoryBytes === 0) return "";
   if (c.objectCacheMb * 1024 ** 2 > memoryBytes / 2) {
-    return `The object cache may take at most half of the memory limit (${String(Math.floor(memoryBytes / 2 / 1024 ** 2))} MiB).`;
+    return i18n.t("limits.problems.cacheHalf", { n: formatCount(Math.floor(memoryBytes / 2 / 1024 ** 2)) });
   }
   return "";
 }
@@ -106,7 +107,8 @@ export { formatBytes, formatCount };
 
 const trim = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
 
-export const priorityLabel: Record<CPUPriority, string> = { low: "Low", normal: "Normal", high: "High" };
+/** priorityLabel names a CPU priority in the current language. */
+export const priorityLabel = (p: CPUPriority): string => i18n.t(`limits.priority.${p}`);
 
 // Mirrors of internal/agentapi and internal/hosting, so a form can say what
 // is wrong before a request. The server checks again.
@@ -122,7 +124,7 @@ export const bounds = {
 };
 
 export const presetNameProblem = (name: string) =>
-  /^[a-z0-9][a-z0-9-]{0,31}$/.test(name) ? "" : "A preset name has 1 to 32 lower-case letters, digits and dashes.";
+  /^[a-z0-9][a-z0-9-]{0,31}$/.test(name) ? "" : i18n.t("limits.problems.presetName");
 
 // LimitFields is what a form edits: the numbers as typed, in GiB and MiB,
 // and which limits are switched to unlimited.
@@ -167,23 +169,27 @@ export function fieldsOf(l: Limits): LimitFields {
 
 function whole(s: string, what: string, min: number, max: number): number | string {
   const t = s.trim();
-  if (!/^[0-9]+$/.test(t)) return `${what} must be a whole number.`;
+  if (!/^[0-9]+$/.test(t)) return i18n.t("limits.problems.whole", { what });
   const v = Number(t);
-  if (v < min || v > max) return `${what} must be between ${formatCount(min)} and ${formatCount(max)}.`;
+  if (v < min || v > max) return i18n.t("limits.problems.between", { what, min: formatCount(min), max: formatCount(max) });
   return v;
 }
 
 // formatCores shows a CPU quota in percent of one core as cores: 150 is
-// "1.5", 0 is "0".
+// "1.5", 0 is "0". It is what a form field holds, so it stays in the
+// number format the field reads; displayCores is for text.
 export const formatCores = (percent: number) => String(Math.round(percent) / 100);
+
+/** displayCores shows a CPU quota as cores in the panel's language: "1,5" in German. */
+export const displayCores = (percent: number) => formatNumber(Math.round(percent) / 100, { maximumFractionDigits: 2 });
 
 // coresToPercent reads a number of cores with up to two decimals and turns
 // it into percent of one core, or returns the problem.
 export function coresToPercent(s: string): number | string {
   const t = s.trim().replace(",", ".");
-  if (!/^[0-9]+(\.[0-9]{1,2})?$/.test(t)) return "CPU cores must be a number such as 2 or 0.5, or 0 for no limit.";
+  if (!/^[0-9]+(\.[0-9]{1,2})?$/.test(t)) return i18n.t("limits.problems.coresFormat");
   const v = Math.round(Number(t) * 100);
-  if (v > bounds.cpuQuota.max) return `CPU cores must be at most ${formatCount(bounds.cpuQuota.max / 100)}.`;
+  if (v > bounds.cpuQuota.max) return i18n.t("limits.problems.coresMax", { max: formatCount(bounds.cpuQuota.max / 100) });
   return v;
 }
 
@@ -191,23 +197,23 @@ export function coresToPercent(s: string): number | string {
 // first problem. isDefault refuses unlimited values, like the server.
 export function limitsOf(f: LimitFields, isDefault = false): Limits | string {
   if (isDefault && (f.diskUnlimited || f.inodesUnlimited || f.memoryUnlimited || f.tasksUnlimited)) {
-    return "The default preset must limit disk space, files, memory and processes.";
+    return i18n.t("limits.problems.defaultUnlimited");
   }
-  const disk = f.diskUnlimited ? 0 : whole(f.diskGiB, "Disk space", bounds.diskGiB.min, bounds.diskGiB.max);
+  const disk = f.diskUnlimited ? 0 : whole(f.diskGiB, i18n.t("limits.facts.disk"), bounds.diskGiB.min, bounds.diskGiB.max);
   if (typeof disk === "string") return disk;
-  const inodes = f.inodesUnlimited ? 0 : whole(f.inodes, "Files", bounds.inodes.min, bounds.inodes.max);
+  const inodes = f.inodesUnlimited ? 0 : whole(f.inodes, i18n.t("limits.facts.files"), bounds.inodes.min, bounds.inodes.max);
   if (typeof inodes === "string") return inodes;
-  const mem = f.memoryUnlimited ? 0 : whole(f.memoryMiB, "Memory", bounds.memoryMiB.min, bounds.memoryMiB.max);
+  const mem = f.memoryUnlimited ? 0 : whole(f.memoryMiB, i18n.t("limits.facts.memory"), bounds.memoryMiB.min, bounds.memoryMiB.max);
   if (typeof mem === "string") return mem;
-  const tasks = f.tasksUnlimited ? 0 : whole(f.tasks, "Processes", bounds.tasks.min, bounds.tasks.max);
+  const tasks = f.tasksUnlimited ? 0 : whole(f.tasks, i18n.t("limits.facts.processes"), bounds.tasks.min, bounds.tasks.max);
   if (typeof tasks === "string") return tasks;
-  const workers = whole(f.workers, "PHP workers", bounds.workers.min, bounds.workers.max);
+  const workers = whole(f.workers, i18n.t("limits.facts.workers"), bounds.workers.min, bounds.workers.max);
   if (typeof workers === "string") return workers;
   const quota = coresToPercent(f.cpuCores);
   if (typeof quota === "string") return quota;
-  const db = f.dbUnlimited ? 0 : whole(f.dbGiB, "Database size", bounds.dbGiB.min, bounds.dbGiB.max);
+  const db = f.dbUnlimited ? 0 : whole(f.dbGiB, i18n.t("limits.facts.dbSize"), bounds.dbGiB.min, bounds.dbGiB.max);
   if (typeof db === "string") return db;
-  const conns = f.dbConnectionsUnlimited ? 0 : whole(f.dbConnections, "Database connections", bounds.dbConnections.min, bounds.dbConnections.max);
+  const conns = f.dbConnectionsUnlimited ? 0 : whole(f.dbConnections, i18n.t("limits.facts.dbConnections"), bounds.dbConnections.min, bounds.dbConnections.max);
   if (typeof conns === "string") return conns;
   return {
     diskBytes: disk * GiB,
@@ -228,16 +234,13 @@ export function limitsMessage(err: unknown, about: "site" | "preset" = "site"): 
   if (err instanceof ApiError) {
     switch (err.code) {
       case "not_found":
-        if (about === "preset") return "This preset does not exist any more. Reload the page.";
+        if (about === "preset") return i18n.t("limits.errors.presetNotFound");
         break;
       case "limits_unavailable":
-        return "Resource limits are not available on this panel.";
       case "preset_exists":
-        return "A preset with this name exists. Choose another name.";
       case "preset_is_default":
-        return "This is the default preset. Make another preset the default first.";
       case "forbidden":
-        return "Only administrators can manage resource limits.";
+        return i18n.t(`limits.errors.${err.code}`);
     }
   }
   return siteMessage(err);
