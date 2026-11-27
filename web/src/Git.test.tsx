@@ -4,7 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { GitSettings } from "./Git";
-import { canDeploy, commitURL, hostOf, inputProblem, isSSHURL, liveRelease, type Deploy, type GitInput, type GitSetting } from "./git";
+import { activePreset, applyPreset, canDeploy, commitURL, hostOf, inputProblem, isSSHURL, liveRelease, presets, type Deploy, type GitInput, type GitSetting } from "./git";
 import type { Site } from "./sites";
 import { mockFetch } from "./test-utils";
 
@@ -106,6 +106,18 @@ describe("git helpers", () => {
     expect(inputProblem({ ...ok, buildTimeoutMinutes: 61 }, false)).toMatch(/1 to 60/);
   });
 
+  it("replaces preset values and names own text it replaces", () => {
+    const laravel = applyPreset(presets.find((p) => p.label === "Laravel")!, "", "");
+    expect(laravel).toEqual({ commands: expect.stringContaining("php artisan migrate --force"), shared: ".env\nstorage", edited: [] });
+    const wp = applyPreset(presets.find((p) => p.label === "WordPress")!, laravel.commands, laravel.shared);
+    expect(wp).toEqual({ commands: "", shared: "wp-config.php\nwp-content/uploads", edited: [] });
+    expect(activePreset(wp.commands, wp.shared)).toBe("WordPress");
+    const own = applyPreset(presets[0]!, "make build", " .env \n\nconfig/local.php");
+    expect(own.edited).toEqual(["build commands", "shared paths"]);
+    expect(own.shared).toBe(".env");
+    expect(activePreset("make build", ".env")).toBe("");
+  });
+
   it("finds the live release and the site types", () => {
     expect(liveRelease([run(3, { state: "failed" }), run(2, { kind: "rollback", release: "1" }), run(1)])).toBe("1");
     expect(canDeploy(site)).toBe(true);
@@ -139,6 +151,28 @@ describe("GitSettings", () => {
       keep: 5,
       buildTimeoutMinutes: 15,
     });
+  });
+
+  it("switches presets over filled fields and undoes replaced own text", async () => {
+    mockFetch({ ["GET " + base + "/git"]: { body: unset }, ["GET " + base + "/deploys"]: { body: [] } });
+    render(<GitSettings site={site} canEdit />);
+    const commands = await screen.findByLabelText(/Build commands/);
+    const shared = screen.getByLabelText(/Shared paths/);
+
+    await userEvent.click(screen.getByRole("button", { name: "Laravel" }));
+    await userEvent.click(screen.getByRole("button", { name: "WordPress" }));
+    expect(shared).toHaveValue("wp-config.php\nwp-content/uploads");
+    expect(commands).toHaveValue("");
+    expect(screen.getByRole("button", { name: "WordPress" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
+
+    await userEvent.type(shared, "\nconfig.php");
+    await userEvent.click(screen.getByRole("button", { name: "Node.js (npm)" }));
+    expect(shared).toHaveValue(".env");
+    expect(screen.getByText("Node.js (npm) replaced your own shared paths.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(shared).toHaveValue("wp-config.php\nwp-content/uploads\nconfig.php");
+    expect(commands).toHaveValue("");
   });
 
   it("tells a user without the right that nothing is set up", async () => {
