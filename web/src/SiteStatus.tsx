@@ -22,6 +22,8 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import { formatCount, formatDate } from "./format";
 import { getBackups, type BackupInfo } from "./backups";
 import { canClone } from "./Clone";
 import { cronFailing, lastRun, listCron, type CronList } from "./cron";
@@ -105,6 +107,7 @@ function useStatus(site: Site, groups: SiteGroup[], admin: boolean): Data {
  * each opens its tab.
  */
 export function StatusTiles({ site, groups, admin }: { site: Site; groups: SiteGroup[]; admin: boolean }) {
+  const { t } = useTranslation();
   const d = useStatus(site, groups, admin);
   const tiles: ReactNode[] = [];
   const n = site.name;
@@ -115,10 +118,20 @@ export function StatusTiles({ site, groups, admin }: { site: Site; groups: SiteG
       key="https"
       href={tabHref(n, "https")}
       icon={<LockSimple size={14} aria-hidden="true" />}
-      head="HTTPS"
+      head={t("sites.tiles.https")}
       tone={tls.enabled && !tls.active ? (tls.error ? "err" : "warn") : undefined}
-      value={tls.active ? (tls.notAfter ? `Valid until ${tls.notAfter.slice(0, 10)}` : "On") : tls.enabled ? (tls.error ? "Certificate failed" : "Being issued") : "Off"}
-      sub={tls.active ? (tls.hsts ? "With HSTS" : "Without HSTS") : tls.error || (tls.enabled ? "" : "Visitors use plain HTTP")}
+      value={
+        tls.active
+          ? tls.notAfter
+            ? t("sites.tiles.validUntil", { date: formatDate(new Date(tls.notAfter)) })
+            : t("sites.tiles.on")
+          : tls.enabled
+            ? tls.error
+              ? t("sites.tiles.certFailed")
+              : t("sites.tiles.issuing")
+            : t("sites.tiles.off")
+      }
+      sub={tls.active ? (tls.hsts ? t("sites.tiles.withHsts") : t("sites.tiles.withoutHsts")) : tls.error || (tls.enabled ? "" : t("sites.tiles.plainHttp"))}
     />,
   );
 
@@ -130,11 +143,11 @@ export function StatusTiles({ site, groups, admin }: { site: Site; groups: SiteG
         key="disk"
         href={tabHref(n, "limits")}
         icon={<HardDrives size={14} aria-hidden="true" />}
-        head="Disk"
+        head={t("sites.tiles.disk")}
         tone={u.level === "critical" ? "err" : u.level === "warning" ? "warn" : undefined}
-        value={max > 0 ? `${formatBytes(u.bytes)} of ${formatBytes(max)}` : `${formatBytes(u.bytes)} used`}
+        value={max > 0 ? t("sites.tiles.diskOf", { used: formatBytes(u.bytes), limit: formatBytes(max) }) : t("sites.tiles.diskUsed", { used: formatBytes(u.bytes) })}
         bar={max > 0 ? u.bytesPercent : undefined}
-        sub={`${u.inodes.toLocaleString("en-GB")} files and folders`}
+        sub={t("sites.tiles.inodes", { count: u.inodes, n: formatCount(u.inodes) })}
       />,
     );
   }
@@ -148,10 +161,20 @@ export function StatusTiles({ site, groups, admin }: { site: Site; groups: SiteG
         key="backup"
         href={formatHash({ page: "backups" })}
         icon={<ClockCounterClockwise size={14} aria-hidden="true" />}
-        head="Backup"
+        head={t("sites.tiles.backup")}
         tone={!d.backups.ready ? "warn" : failed ? "err" : d.backups.overdue ? "warn" : undefined}
-        value={!d.backups.ready ? "Not set up" : st.running ? "Running now" : st.finished ? ago(st.finished) : "No backup yet"}
-        sub={!d.backups.ready ? "Set up a backup target" : failed ? item?.error || st.error || "The last run failed" : d.backups.overdue ? "Overdue" : item ? "The last run included this site" : ""}
+        value={!d.backups.ready ? t("sites.tiles.notSetUp") : st.running ? t("sites.tiles.running") : st.finished ? ago(st.finished) : t("sites.tiles.noBackup")}
+        sub={
+          !d.backups.ready
+            ? t("sites.tiles.setUp")
+            : failed
+              ? item?.error || st.error || t("sites.tiles.lastFailed")
+              : d.backups.overdue
+                ? t("sites.tiles.overdue")
+                : item
+                  ? t("sites.tiles.included")
+                  : ""
+        }
       />,
     );
   }
@@ -164,10 +187,10 @@ export function StatusTiles({ site, groups, admin }: { site: Site; groups: SiteG
         key="malware"
         href={tabHref(n, "malware")}
         icon={<Bug size={14} aria-hidden="true" />}
-        head="Virus scan"
+        head={t("sites.tiles.malware")}
         tone={open.length > 0 ? "err" : undefined}
-        value={open.length > 0 ? (open.length === 1 ? "1 file flagged" : `${open.length} files flagged`) : d.scan.engine !== "on" ? "Scanner off" : "No finds"}
-        sub={open.length > 0 ? open[0]!.path : last ? `Last scan ${ago(last.finishedAt || last.createdAt)}` : "No scan yet"}
+        value={open.length > 0 ? t("sites.tiles.flagged", { count: open.length }) : d.scan.engine !== "on" ? t("sites.tiles.scannerOff") : t("sites.tiles.noFinds")}
+        sub={open.length > 0 ? open[0]!.path : last ? t("sites.tiles.lastScan", { when: ago(last.finishedAt || last.createdAt) }) : t("sites.tiles.noScan")}
       />,
     );
   }
@@ -181,10 +204,10 @@ export function StatusTiles({ site, groups, admin }: { site: Site; groups: SiteG
         key="cron"
         href={tabHref(n, "cron")}
         icon={<Timer size={14} aria-hidden="true" />}
-        head="Cron"
+        head={t("sites.tiles.cron")}
         tone={bad ? "warn" : undefined}
-        value={bad ? (failing === 1 ? "1 job failed" : `${failing} jobs failed`) : d.cron.jobs.length === 0 ? "No jobs" : jobs.length === 1 ? "1 job" : `${jobs.length} jobs`}
-        sub={bad ? `${bad.command}: ${lastRun(bad.status)}` : d.cron.jobs.length > jobs.length ? `${d.cron.jobs.length - jobs.length} paused` : ""}
+        value={bad ? t("sites.tiles.jobsFailed", { count: failing }) : d.cron.jobs.length === 0 ? t("sites.tiles.noJobs") : t("sites.tiles.jobs", { count: jobs.length })}
+        sub={bad ? `${bad.command}: ${lastRun(bad.status)}` : d.cron.jobs.length > jobs.length ? t("sites.tiles.paused", { count: d.cron.jobs.length - jobs.length }) : ""}
       />,
     );
   }
@@ -196,17 +219,25 @@ export function StatusTiles({ site, groups, admin }: { site: Site; groups: SiteG
         key="git"
         href={tabHref(n, "git")}
         icon={<GitBranch size={14} aria-hidden="true" />}
-        head="Git deploy"
+        head={t("sites.tiles.git")}
         tone={dep?.state === "failed" ? "err" : undefined}
         value={dep?.commit ? `${d.git.branch} @ ${dep.commit.slice(0, 7)}` : d.git.branch}
-        sub={!dep ? "Not deployed yet" : dep.state === "failed" ? "The last deploy failed" : dep.state === "succeeded" ? `Deployed ${ago(dep.finishedAt || dep.createdAt)}` : "Deploying now"}
+        sub={
+          !dep
+            ? t("sites.tiles.notDeployed")
+            : dep.state === "failed"
+              ? t("sites.tiles.deployFailed")
+              : dep.state === "succeeded"
+                ? t("sites.tiles.deployed", { when: ago(dep.finishedAt || dep.createdAt) })
+                : t("sites.tiles.deploying")
+        }
       />,
     );
   }
 
   return (
-    <Card title="Status" actions={<span className="ui-hint">Each tile opens its tab</span>}>
-      <ul className="ui-tiles" aria-label={"Status of " + n}>
+    <Card title={t("sites.tiles.title")} actions={<span className="ui-hint">{t("sites.tiles.hint")}</span>}>
+      <ul className="ui-tiles" aria-label={t("sites.tiles.label", { site: n })}>
         {tiles}
       </ul>
     </Card>
@@ -215,6 +246,7 @@ export function StatusTiles({ site, groups, admin }: { site: Site; groups: SiteG
 
 /** QuickActions opens the tabs people use most. */
 export function QuickActions({ site, groups }: { site: Site; groups: SiteGroup[] }) {
+  const { t } = useTranslation();
   const n = site.name;
   const link = (tab: SiteTab, icon: ReactNode, label: string) =>
     hasTab(groups, tab) && (
@@ -224,23 +256,23 @@ export function QuickActions({ site, groups }: { site: Site; groups: SiteGroup[]
       </a>
     );
   return (
-    <Card title="Quick actions">
+    <Card title={t("sites.quick.title")}>
       <div className="ui-row">
         {site.domains[0] && (
           <a className="ui-btn ui-btn-secondary" href={siteUrl(site)} target="_blank" rel="noopener noreferrer">
             <ArrowSquareOut size={16} aria-hidden="true" />
-            Open site
+            {t("sites.quick.open")}
           </a>
         )}
-        {link("files", <FolderSimple size={16} aria-hidden="true" />, "File manager")}
-        {link("logs", <FileText size={16} aria-hidden="true" />, "Logs")}
+        {link("files", <FolderSimple size={16} aria-hidden="true" />, t("sites.quick.files"))}
+        {link("logs", <FileText size={16} aria-hidden="true" />, t("sites.quick.logs"))}
         {hasAccount(site) && (
           <a className="ui-btn ui-btn-secondary" href={dbHref(n)}>
             <Database size={16} aria-hidden="true" />
-            Databases
+            {t("sites.quick.databases")}
           </a>
         )}
-        {link("ssh", <Terminal size={16} aria-hidden="true" />, "SSH & SFTP")}
+        {link("ssh", <Terminal size={16} aria-hidden="true" />, t("sites.quick.ssh"))}
       </div>
     </Card>
   );
@@ -248,7 +280,8 @@ export function QuickActions({ site, groups }: { site: Site; groups: SiteGroup[]
 
 /** CloseButton hides an overview card the Actions menu opened. */
 export function CloseButton({ onClose }: { onClose: () => void }) {
-  return <IconButton label="Close" icon={<X size={16} aria-hidden="true" />} onClick={onClose} />;
+  const { t } = useTranslation();
+  return <IconButton data-close="" label={t("sites.actions.close")} icon={<X size={16} aria-hidden="true" />} onClick={onClose} />;
 }
 
 /** The overview cards that only show when the Actions menu opens them. */
@@ -263,6 +296,7 @@ export const cardId = (site: string, card: OverviewCard) => `site-${card}-${site
  * others go to their tab.
  */
 export function SiteActions({ site, groups, staff, admin, onTab, onCard }: { site: Site; groups: SiteGroup[]; staff: boolean; admin: boolean; onTab: (t: SiteTab) => void; onCard: (c: OverviewCard) => void }) {
+  const { t } = useTranslation();
   // open shows a card on the overview and brings it into view.
   const open = (card: OverviewCard) => () => {
     onCard(card);
@@ -271,26 +305,26 @@ export function SiteActions({ site, groups, staff, admin, onTab, onCard }: { sit
       requestAnimationFrame(() => {
         const el = document.getElementById(cardId(site.name, card));
         el?.scrollIntoView?.({ behavior: "smooth", block: "start" });
-        el?.querySelector<HTMLElement>("input, button:not([aria-label=Close])")?.focus({ preventScroll: true });
+        el?.querySelector<HTMLElement>("input, button:not([data-close])")?.focus({ preventScroll: true });
       }),
     );
   };
 
   const items: MenuItem[] = [];
-  if (site.state !== "deleting") items.push({ label: "Rename…", icon: <PencilSimple size={16} aria-hidden="true" />, onSelect: open("rename") });
-  if (staff && canClone(site)) items.push({ label: "Copy site…", icon: <CopySimple size={16} aria-hidden="true" />, onSelect: open("clone") });
-  if (staff && hasTab(groups, "domains")) items.push({ label: "Change domains…", icon: <Globe size={16} aria-hidden="true" />, onSelect: () => onTab("domains") });
-  if (hasAccount(site)) items.push({ label: "Databases…", icon: <Database size={16} aria-hidden="true" />, href: dbHref(site.name) });
-  if (admin && hasAccount(site)) items.push({ label: site.php ? "Restart PHP…" : "Services…", icon: <Gear size={16} aria-hidden="true" />, onSelect: open("services") });
-  if (hasTab(groups, "files") && hasAccount(site)) items.push({ label: "Reset file permissions…", icon: <Key size={16} aria-hidden="true" />, onSelect: () => onTab("files") });
+  if (site.state !== "deleting") items.push({ label: t("sites.actions.rename"), icon: <PencilSimple size={16} aria-hidden="true" />, onSelect: open("rename") });
+  if (staff && canClone(site)) items.push({ label: t("sites.actions.copy"), icon: <CopySimple size={16} aria-hidden="true" />, onSelect: open("clone") });
+  if (staff && hasTab(groups, "domains")) items.push({ label: t("sites.actions.domains"), icon: <Globe size={16} aria-hidden="true" />, onSelect: () => onTab("domains") });
+  if (hasAccount(site)) items.push({ label: t("sites.actions.databases"), icon: <Database size={16} aria-hidden="true" />, href: dbHref(site.name) });
+  if (admin && hasAccount(site)) items.push({ label: site.php ? t("sites.actions.restartPhp") : t("sites.actions.services"), icon: <Gear size={16} aria-hidden="true" />, onSelect: open("services") });
+  if (hasTab(groups, "files") && hasAccount(site)) items.push({ label: t("sites.actions.permissions"), icon: <Key size={16} aria-hidden="true" />, onSelect: () => onTab("files") });
   return (
     <Menu
-      label={"Actions for " + site.name}
+      label={t("sites.actions.label", { site: site.name })}
       items={items}
       button={
         <>
           <DotsThree size={16} aria-hidden="true" />
-          Actions
+          {t("sites.actions.button")}
           <CaretDown size={14} aria-hidden="true" />
         </>
       }

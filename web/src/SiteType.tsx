@@ -4,6 +4,7 @@
 // account a redirect or reverse proxy site kept after such a change.
 
 import { useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { newestLine } from "./node";
 import { newProgramApp, ProgramFields, programFieldsProblem, programRequest, programValue, type ProgramValue } from "./SiteApp";
 import { newNodeApp, NodeFields, nodeProblem, useNodeStatus, type NodeValue } from "./SiteNode";
@@ -30,31 +31,12 @@ import {
 } from "./sites";
 import { Button, Card, Field, Notice } from "./ui";
 
-const typeSites: Record<ChosenType, string> = {
-  static: "a static site",
-  php: "a PHP site",
-  node: "a Node.js site",
-  python: "a Python site",
-  app: "an app site",
-  proxy: "a reverse proxy",
-  redirect: "a redirect",
-};
-
-const typeNames: Record<ChosenType, string> = {
-  static: "static",
-  php: "PHP",
-  node: "Node.js",
-  python: "Python",
-  app: "app",
-  proxy: "reverse proxy",
-  redirect: "redirect",
-};
-
 type Props = { site: Site; php: PHPVersions | null; onChange: () => Promise<void>; admin?: boolean };
 
 // ChangeTypeCard switches the site to another type: the fields of the new
 // type, a summary of what starts, stops and stays, then one request.
 export function ChangeTypeCard({ site, php, onChange, admin = false }: Props) {
+  const { t } = useTranslation();
   const current = siteType(site);
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<ChosenType>(current === "php" ? "static" : "php");
@@ -86,7 +68,7 @@ export function ChangeTypeCard({ site, php, onChange, admin = false }: Props) {
   function problem(): string {
     switch (kind) {
       case "php":
-        return phpValue ? "" : "No PHP version is installed. Install one under PHP first.";
+        return phpValue ? "" : t("sites.typeCard.noPhp");
       case "node":
         return nodeProblem(nodeValue);
       case "app":
@@ -115,7 +97,7 @@ export function ChangeTypeCard({ site, php, onChange, admin = false }: Props) {
       const s = await setSiteType(site.name, req);
       await onChange();
       setOpen(false);
-      setDone(`${site.name} is ${typeSites[kind]} now.` + (hasAccount(s) && !hasAccount(site) ? " Its Linux account is ready." : ""));
+      setDone(t("sites.typeCard.isNow", { site: site.name, type: t(`sites.typeCard.sites.${kind}`) }) + (hasAccount(s) && !hasAccount(site) ? t("sites.typeCard.accountReady") : ""));
     } catch (err) {
       setError(siteMessage(err));
     } finally {
@@ -125,13 +107,11 @@ export function ChangeTypeCard({ site, php, onChange, admin = false }: Props) {
 
   if (!open) {
     return (
-      <Card title="Site type">
+      <Card title={t("sites.typeCard.title")}>
         <div className="ui-stack">
           <p className="ui-flush">
-            This is a <strong>{siteTypeLabel(site)}</strong> site.{" "}
-            {hasAccount(site)
-              ? "Another type keeps the Linux account, files and databases; only what serves the site changes."
-              : "A type with files creates a Linux account for the site."}
+            <Trans i18nKey="sites.typeCard.current" values={{ type: siteTypeLabel(site) }} components={{ b: <strong /> }} />{" "}
+            {hasAccount(site) ? t("sites.typeCard.keepsAccount") : t("sites.typeCard.createsAccount")}
           </p>
           <div className="ui-row">
             <Button
@@ -140,7 +120,7 @@ export function ChangeTypeCard({ site, php, onChange, admin = false }: Props) {
                 setDone("");
               }}
             >
-              Change type
+              {t("sites.typeCard.change")}
             </Button>
           </div>
           {done && <Notice tone="ok" title={done} />}
@@ -150,11 +130,11 @@ export function ChangeTypeCard({ site, php, onChange, admin = false }: Props) {
   }
 
   return (
-    <Card title="Change type">
+    <Card title={t("sites.typeCard.changeTitle")}>
       <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate>
         <SiteTypeChoice value={kind} onChange={setKind} name={`${site.name}-new-type`} disabled={busy} withRedirect except={current} />
         {kind === "php" && (
-          <Field label="PHP version">
+          <Field label={t("sites.typeCard.phpVersion")}>
             <select className="ui-select" value={phpValue} onChange={(e) => setVersion(e.target.value)}>
               <PHPOptions php={php} withoutNone />
             </select>
@@ -165,15 +145,15 @@ export function ChangeTypeCard({ site, php, onChange, admin = false }: Props) {
         {kind === "python" && <PythonFields value={pythonValue} onChange={setPython} status={pythonStatus} disabled={busy} admin={admin} />}
         {kind === "proxy" && <ProxyFields value={proxy} onChange={setProxyValue} disabled={busy} />}
         {kind === "redirect" && <RedirectFields value={redirect} onChange={setRedirectValue} disabled={busy} />}
-        <section className="ui-stack-tight" aria-label="What changes">
-          <h3 className="ui-flush">What changes</h3>
-          <ChangeList title="Starts" items={change.starts} />
-          <ChangeList title="Stops" items={change.stops} />
-          <ChangeList title="Stays" items={change.stays} />
+        <section className="ui-stack-tight" aria-label={t("sites.typeCard.whatChanges")}>
+          <h3 className="ui-flush">{t("sites.typeCard.whatChanges")}</h3>
+          <ChangeList title={t("sites.typeCard.starts")} items={change.starts} />
+          <ChangeList title={t("sites.typeCard.stops")} items={change.stops} />
+          <ChangeList title={t("sites.typeCard.stays")} items={change.stays} />
         </section>
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy}>
-            {`Change to ${typeNames[kind]}`}
+            {t("sites.typeCard.submit", { type: t(`sites.typeCard.names.${kind}`) })}
           </Button>
           <Button
             disabled={busy}
@@ -182,7 +162,7 @@ export function ChangeTypeCard({ site, php, onChange, admin = false }: Props) {
               setError("");
             }}
           >
-            Cancel
+            {t("common.actions.cancel")}
           </Button>
         </div>
         {error && <Notice tone="err" title={error} />}
@@ -208,6 +188,7 @@ function ChangeList({ title, items }: { title: string; items: string[] }) {
 // RemoveAccountCard shows that a redirect or reverse proxy site still has
 // its Linux account, and removes it with a typed confirmation.
 export function RemoveAccountCard({ site, onChange }: { site: Site; onChange: () => Promise<void> }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
@@ -226,45 +207,41 @@ export function RemoveAccountCard({ site, onChange }: { site: Site; onChange: ()
     }
   }
 
-  const what = site.proxy ? "reverse proxy" : "redirect";
+  const proxy = Boolean(site.proxy);
   return (
-    <Card title="Linux account">
+    <Card title={t("sites.account.title")}>
       <div className="ui-stack">
-        <Notice tone="warn" title="This site still has a Linux account and files">
-          They are left from its former type and keep working: SSH and SFTP, cron jobs and backups. nginx serves only the {what}.
+        <Notice tone="warn" title={t("sites.account.left")}>
+          {t(proxy ? "sites.account.leftProxy" : "sites.account.leftRedirect")}
         </Notice>
         {!open ? (
           <div className="ui-row">
             <Button variant="danger" onClick={() => setOpen(true)}>
-              Remove account and files
+              {t("sites.account.remove")}
             </Button>
           </div>
         ) : (
           <form className="ui-stack" onSubmit={(e) => void remove(e)}>
             <div>
-              <strong>This removes</strong>
+              <strong>{t("sites.account.removes")}</strong>
               <ul className="ui-flush">
-                <li>the Linux user {site.name} and its home with all files</li>
-                <li>the site's databases and their users</li>
-                <li>its cron jobs, SSH keys, limits and object cache</li>
+                <li>{t("sites.account.user", { site: site.name })}</li>
+                <li>{t("sites.account.databases")}</li>
+                <li>{t("sites.account.rest")}</li>
               </ul>
-              <p className="ui-hint ui-flush">The {what}, the domains and HTTPS stay. Backups stay until they expire.</p>
+              <p className="ui-hint ui-flush">{t(proxy ? "sites.account.staysProxy" : "sites.account.staysRedirect")}</p>
             </div>
             <div className="ui-narrow">
               <Field
-                label={
-                  <>
-                    Type <code className="ui-confirm-phrase">{site.name}</code> to confirm
-                  </>
-                }
-                hint="This cannot be undone."
+                label={<Trans i18nKey="sites.confirm.type" values={{ name: site.name }} components={{ code: <code className="ui-confirm-phrase" /> }} />}
+                hint={t("sites.confirm.undone")}
               >
                 <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
               </Field>
             </div>
             <div className="ui-row">
               <Button type="submit" variant="danger" disabled={busy || typed !== site.name}>
-                Remove account and files
+                {t("sites.account.remove")}
               </Button>
               <Button
                 disabled={busy}
@@ -274,7 +251,7 @@ export function RemoveAccountCard({ site, onChange }: { site: Site; onChange: ()
                   setError("");
                 }}
               >
-                Cancel
+                {t("common.actions.cancel")}
               </Button>
             </div>
           </form>
