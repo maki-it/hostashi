@@ -1266,8 +1266,10 @@ html:has(.ui-files) {
   margin: 0;
   padding: var(--space-3) var(--space-5);
 }
+/* A symlink shows its target on the same line, after the name */
 .ui-files-target {
-  display: block;
+  margin-left: var(--space-2);
+  font-size: 13px;
 }
 .ui-files-name svg {
   flex: none;

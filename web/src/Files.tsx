@@ -372,7 +372,7 @@ export function FileManager({ site, path, onPath }: Props) {
           </label>
         </div>
         <div className="ui-row ui-nowrap" role="toolbar" aria-label="Files">
-          <IconButton label="Reload" icon={<ArrowClockwise size={18} aria-hidden="true" />} onClick={() => void load()} />
+          <IconButton label="Reload" tipBelow icon={<ArrowClockwise size={18} aria-hidden="true" />} onClick={() => void load()} />
           <Menu
             label="Upload"
             buttonLabel="Upload"
