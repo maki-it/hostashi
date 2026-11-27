@@ -282,7 +282,7 @@ export function SiteActions({ site, groups, staff, admin, onTab, onCard }: { sit
   if (staff && hasTab(groups, "domains")) items.push({ label: "Change domains…", icon: <Globe size={16} aria-hidden="true" />, onSelect: () => onTab("domains") });
   if (hasAccount(site)) items.push({ label: "Databases…", icon: <Database size={16} aria-hidden="true" />, href: dbHref(site.name) });
   if (admin && hasAccount(site)) items.push({ label: site.php ? "Restart PHP…" : "Services…", icon: <Gear size={16} aria-hidden="true" />, onSelect: open("services") });
-  if (hasTab(groups, "files") && hasAccount(site)) items.push({ label: "Reset permissions…", icon: <Key size={16} aria-hidden="true" />, onSelect: () => onTab("files") });
+  if (hasTab(groups, "files") && hasAccount(site)) items.push({ label: "Reset file permissions…", icon: <Key size={16} aria-hidden="true" />, onSelect: () => onTab("files") });
   return (
     <Menu
       label={"Actions for " + site.name}

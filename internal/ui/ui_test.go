@@ -130,7 +130,7 @@ func TestGzip(t *testing.T) {
 func TestNotFound(t *testing.T) {
 	h := newHandler(testFS())
 
-	for _, p := range []string{"/favicon.ico", "/assets/missing.js", "/.gitkeep"} {
+	for _, p := range []string{"/missing.ico", "/assets/missing.js", "/.gitkeep"} {
 		if rec := get(t, h, http.MethodGet, p, nil); rec.Code != http.StatusNotFound {
 			t.Fatalf("%s: status %d", p, rec.Code)
 		}

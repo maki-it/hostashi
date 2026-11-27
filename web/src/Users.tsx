@@ -9,16 +9,20 @@ import {
   createUser,
   deleteUser,
   getGrants,
+  getUserPolicy,
+  hasSecondFactor,
   inviteLink,
   listUsers,
   resetUser,
   roles,
   setGrants,
+  setUserPolicy,
   updateUser,
   usersMessage,
   type Account,
   type Invitation,
   type Role,
+  type UserPolicy,
 } from "./users";
 
 const roleLabel = (r: Role) => roles.find((x) => x.value === r)?.label ?? r;
@@ -44,7 +48,7 @@ function StatusBadges({ a }: { a: Account }) {
         ) : (
           <Badge tone="warn">Invitation expired</Badge>
         )
-      ) : a.totpEnabled || a.passkeys > 0 ? (
+      ) : hasSecondFactor(a) ? (
         <Badge tone="ok">Second factor on</Badge>
       ) : (
         <Badge tone="warn">No second factor</Badge>
@@ -57,6 +61,7 @@ function StatusBadges({ a }: { a: Account }) {
 // one-time invitation link, users get the sites they may work on.
 export function Users({ me, query = new URLSearchParams(), onQuery = () => undefined }: { me: string } & QueryProps) {
   const [users, setUsers] = useState<Account[] | null>(null);
+  const [policy, setPolicy] = useState<UserPolicy>({ requireSecondFactor: false });
   const [sites, setSites] = useState<string[]>([]);
   const [link, setLink] = useState<{ username: string; invitation: Invitation } | null>(null);
   const [done, setDone] = useState("");
@@ -64,8 +69,9 @@ export function Users({ me, query = new URLSearchParams(), onQuery = () => undef
 
   const load = useCallback(async () => {
     try {
-      const [list, all] = await Promise.all([listUsers(), listSites()]);
+      const [list, all, p] = await Promise.all([listUsers(), listSites(), getUserPolicy()]);
       setUsers(list);
+      setPolicy(p);
       setSites(all.map((s) => s.name));
       setError("");
     } catch (err) {
@@ -147,6 +153,7 @@ export function Users({ me, query = new URLSearchParams(), onQuery = () => undef
       <AccountView
         key={account.id}
         account={account}
+        policy={policy}
         self={account.username === me}
         sites={sites}
         back={listLink}
@@ -258,7 +265,86 @@ export function Users({ me, query = new URLSearchParams(), onQuery = () => undef
           empty="No account matches the filter."
         />
       </Card>
+      <PolicyCard users={users} policy={policy} onChange={setPolicy} />
     </>
+  );
+}
+
+// PolicyCard requires a second factor of every account (ADR-0035,
+// addendum 1). Admins and managers need one anyway; this adds users.
+// Turning it on names the accounts that have none yet, because they can
+// do nothing but set one up from their next request on.
+function PolicyCard({ users, policy, onChange }: { users: Account[]; policy: UserPolicy; onChange: (p: UserPolicy) => void }) {
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState("");
+
+  const without = users.filter((u) => !u.disabled && !u.invited && !hasSecondFactor(u)).map((u) => u.username);
+
+  async function save(on: boolean) {
+    setBusy(true);
+    setError("");
+    setDone("");
+    try {
+      onChange(await setUserPolicy(on));
+      setConfirm(false);
+      setDone(on ? "Every account now needs a second factor." : "A second factor is optional again for users.");
+    } catch (err) {
+      setError(usersMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title="Second factor">
+      <div className="ui-stack">
+        <label className="ui-check">
+          <input
+            type="checkbox"
+            checked={policy.requireSecondFactor || confirm}
+            disabled={busy || confirm}
+            onChange={(e) => {
+              if (!e.target.checked) void save(false);
+              else if (without.length > 0) setConfirm(true);
+              else void save(true);
+            }}
+          />
+          Require a second factor for every account
+        </label>
+        <p className="ui-hint ui-flush">
+          Admins and managers always need TOTP or a passkey. With this on, users need one too, whatever is set for the single account. Without
+          one, an account is led to set it up right after logging in and can do nothing else until then; its API tokens stop working.
+        </p>
+        {confirm && (
+          <div className="ui-stack" role="alertdialog" aria-labelledby="policy-confirm-title">
+            <h3 id="policy-confirm-title" className="ui-flush">
+              {without.length === 1 ? "1 account has no second factor yet" : `${String(without.length)} accounts have no second factor yet`}
+            </h3>
+            <p className="ui-flush">
+              {without.map((n, i) => (
+                <span key={n}>
+                  {i > 0 && ", "}
+                  <strong>{n}</strong>
+                </span>
+              ))}
+              . They can still log in, but only to set one up. Their API tokens answer “second factor required” until then.
+            </p>
+            <div className="ui-row">
+              <Button variant="primary" disabled={busy} onClick={() => void save(true)}>
+                Require for every account
+              </Button>
+              <Button disabled={busy} onClick={() => setConfirm(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+        {error && <Notice tone="err" title={error} />}
+        {done && <Notice tone="ok" title={done} />}
+      </div>
+    </Card>
   );
 }
 
@@ -378,6 +464,7 @@ function LinkCard({ username, invitation, onClose }: { username: string; invitat
 
 type ViewProps = {
   account: Account;
+  policy: UserPolicy;
   self: boolean;
   sites: string[];
   back: ReactNode;
@@ -388,7 +475,7 @@ type ViewProps = {
 
 // AccountView manages one account: its role, its sites, how it signs in,
 // and whether it exists at all.
-function AccountView({ account: a, self, sites, back, onChange, onLink, onDeleted }: ViewProps) {
+function AccountView({ account: a, policy, self, sites, back, onChange, onLink, onDeleted }: ViewProps) {
   const [role, setRole] = useState<Role>(a.role);
   const [grants, setGrantsState] = useState<string[] | null>(null);
   const [confirm, setConfirm] = useState<"" | "reset" | "delete">("");
@@ -509,7 +596,18 @@ function AccountView({ account: a, self, sites, back, onChange, onLink, onDelete
 
       <Card title="Sign-in">
         <div className="ui-stack">
-          {a.role === "user" && (
+          {a.role === "user" && policy.requireSecondFactor && (
+            <>
+              <label className="ui-check">
+                <input type="checkbox" checked disabled />
+                Require a second factor
+              </label>
+              <p className="ui-hint ui-flush">
+                Required for every account. Turn it off under <a href={usersHash()}>Users</a>, Second factor.
+              </p>
+            </>
+          )}
+          {a.role === "user" && !policy.requireSecondFactor && (
             <label className="ui-check">
               <input
                 type="checkbox"

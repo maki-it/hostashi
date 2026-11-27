@@ -148,7 +148,10 @@ x grep -qF "hostashi $old -> " /var/log/hostashi-upgrade.log || fail "upgrade lo
 x test -f "/var/lib/hostashi-installer/upgrade/hostashi-$old.db" || fail "no database copy of $old"
 x systemctl is-active -q hostashi-agent hostashi || fail "services not active"
 health || fail "panel not up after the upgrade"
-got=$(x "$bin" version | head -n 1)
+# Releases before 1.0 may run a copy in /usr/local/bin; the upgrade removes
+# it and everything runs the package's file (ADR-0050, PR 617).
+x test ! -e /usr/local/bin/hostashi || fail "/usr/local/bin/hostashi still there after the upgrade"
+got=$(x /usr/bin/hostashi version | head -n 1)
 grep -qF "${new%%[~+-]*}" <<<"$got" || fail "running '$got', expected $new"
 
 step "the data is still there on $new"

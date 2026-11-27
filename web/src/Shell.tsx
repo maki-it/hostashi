@@ -345,33 +345,35 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
       </aside>
       <div className="app-main">
         <header className="app-top" ref={topRef}>
-          <nav aria-label={t("shell.breadcrumb")}>
-            <ol className="app-crumbs">
-              {trail.map((c, i) => {
-                const last = i === trail.length - 1;
-                return (
-                  <li key={`${i}-${c.label}`}>
-                    {c.href && !last ? (
-                      <a href={c.href}>{c.label}</a>
-                    ) : (
-                      <span aria-current={last ? "page" : undefined}>{c.label}</span>
-                    )}
-                    {!last && <CaretRight size={12} aria-hidden="true" />}
-                  </li>
-                );
-              })}
-            </ol>
-          </nav>
-          <span className="app-top-actions">
-            <button type="button" className="app-search-btn" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" onClick={() => setSearching(true)}>
-              <MagnifyingGlass size={16} aria-hidden="true" />
-              <span className="app-search-text">{t("shell.search.open")}</span>
-              <kbd className="app-kbd" aria-hidden="true">
-                {shortcut}
-              </kbd>
-            </button>
-            <IconButton label={schemeButton} icon={schemeIcon} tipBelow onClick={() => void cycleScheme()} />
-          </span>
+          <div className="app-top-row">
+            <nav aria-label={t("shell.breadcrumb")}>
+              <ol className="app-crumbs">
+                {trail.map((c, i) => {
+                  const last = i === trail.length - 1;
+                  return (
+                    <li key={`${i}-${c.label}`}>
+                      {c.href && !last ? (
+                        <a href={c.href}>{c.label}</a>
+                      ) : (
+                        <span aria-current={last ? "page" : undefined}>{c.label}</span>
+                      )}
+                      {!last && <CaretRight size={12} aria-hidden="true" />}
+                    </li>
+                  );
+                })}
+              </ol>
+            </nav>
+            <span className="app-top-actions">
+              <button type="button" className="app-search-btn" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" onClick={() => setSearching(true)}>
+                <MagnifyingGlass size={16} aria-hidden="true" />
+                <span className="app-search-text">{t("shell.search.open")}</span>
+                <kbd className="app-kbd" aria-hidden="true">
+                  {shortcut}
+                </kbd>
+              </button>
+              <IconButton label={schemeButton} icon={schemeIcon} tipBelow onClick={() => void cycleScheme()} />
+            </span>
+          </div>
         </header>
         <div className="app-content">{children}</div>
       </div>
