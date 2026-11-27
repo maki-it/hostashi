@@ -16,6 +16,7 @@ const (
 type DoctorCheck struct {
 	ID      string `json:"id"`             // for example "system.quota" or "site.disk"
 	Site    string `json:"site,omitempty"` // the site of a per-site check
+	Pool    string `json:"pool,omitempty"` // the storage pool of a per-pool check
 	Status  string `json:"status"`         // DoctorOK, DoctorWarn or DoctorFail
 	Summary string `json:"summary"`
 	Hint    string `json:"hint,omitempty"`

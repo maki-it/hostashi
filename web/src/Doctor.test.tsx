@@ -49,6 +49,34 @@ describe("Doctor", () => {
     expect(screen.getAllByRole("link", { name: "Site shop" })[0]).toHaveAttribute("href", "#/sites/shop");
   });
 
+  it("names the storage pool of a per-pool check", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      "GET /api/v1/doctor": {
+        body: {
+          ...report,
+          checks: [
+            { id: "system.disk", status: "ok", summary: "/: 32.7 GiB free of 39.2 GiB (83 %)" },
+            { id: "system.disk", pool: "vol1", status: "ok", summary: "/srv/vol1: 37.1 GiB free of 39.1 GiB (94 %)" },
+            { id: "system.quota", pool: "root", status: "ok", summary: "/home: disk limits are enforced (project quota)" },
+            { id: "system.quota", pool: "vol1", status: "ok", summary: "/srv/vol1: disk limits are enforced (project quota)" },
+          ],
+        },
+      },
+    });
+    render(<Harness />);
+
+    await screen.findByRole("table", { name: "Checks" });
+    const rows = rowTexts();
+    expect(rows).toHaveLength(4);
+    expect(rows.filter((r) => r.includes("Server"))).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: "Pool vol1" })).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "Pool root" })).toHaveAttribute("href", "#/pools");
+
+    await user.click(screen.getByRole("button", { name: /Where/ }));
+    expect(rowTexts()[0]).toContain("Server");
+  });
+
   it("leaves the panel's settings to the System page", async () => {
     const calls = mockFetch({ "GET /api/v1/doctor": { body: report } });
     render(<Harness />);
