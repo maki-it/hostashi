@@ -136,6 +136,7 @@ func Load(path string) (Result, error) {
 	}
 
 	agentapi.NodeReleases, agentapi.PythonReleases, agentapi.WPCLI = node, python, wp
+
 	res.Applied = append(res.Applied, wres.Applied...)
 	res.Skipped = append(res.Skipped, wres.Skipped...)
 
