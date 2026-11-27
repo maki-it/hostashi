@@ -60,8 +60,10 @@ func TestDoctorMailsInGerman(t *testing.T) {
 	rep := agentapi.DoctorReport{Checks: []agentapi.DoctorCheck{
 		doctor.Usage("shop", "disk space", 95, 100, doctor.Bytes),
 		{ID: "site.home", Site: "shop", Status: agentapi.DoctorFail, Summary: "home: 0755"},
-		{ID: "hostashi.update", Status: agentapi.DoctorWarn, Summary: "hostashi 0.2.0 is available (installed: 0.1.0)", Hint: "Install it.",
-			Code: "hostashi.update.available", Params: map[string]string{"available": "0.2.0", "installed": "0.1.0"}},
+		{
+			ID: "hostashi.update", Status: agentapi.DoctorWarn, Summary: "hostashi 0.2.0 is available (installed: 0.1.0)", Hint: "Install it.",
+			Code: "hostashi.update.available", Params: map[string]string{"available": "0.2.0", "installed": "0.1.0"},
+		},
 	}}
 
 	got := map[string]string{}
