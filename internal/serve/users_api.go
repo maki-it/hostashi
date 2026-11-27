@@ -202,7 +202,7 @@ func registerUsers(mux *routeMux, a authn, m *mailer) {
 			return
 		}
 
-		emailed := m.invitation(r.Context(), u.Username, acc.Username, acc.Role, false, inv)
+		emailed := m.invitation(r.Context(), u.ID, acc.ID, u.Username, acc.Username, acc.Role, false, inv)
 		if inv.Email != "" && !emailed {
 			// Not sent: accepting the shown link must not confirm the address.
 			_ = a.svc.ForgetInvitationEmail(r.Context(), acc.ID)
@@ -372,7 +372,7 @@ func registerUsers(mux *routeMux, a authn, m *mailer) {
 			return
 		}
 
-		emailed := m.invitation(r.Context(), u.Username, acc.Username, acc.Role, true, inv)
+		emailed := m.invitation(r.Context(), u.ID, acc.ID, u.Username, acc.Username, acc.Role, true, inv)
 
 		writeJSON(w, http.StatusOK, invitationResultJSON{Invitation: invitationJSON{Token: inv.Secret, ExpiresAt: inv.Expires, EmailedTo: emailedTo(emailed, inv)}})
 	})

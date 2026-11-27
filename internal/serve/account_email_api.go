@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/maki-it/hostashi/internal/openapi"
+	"github.com/maki-it/hostashi/internal/store"
 
 	"github.com/maki-it/hostashi/internal/auth"
 	"github.com/maki-it/hostashi/internal/mail"
@@ -158,7 +159,7 @@ func registerAccountEmail(mux *routeMux, a authn, relay MailRelay, outbox MailOu
 			return
 		}
 
-		msg, env := mail.ConfirmEmail(address, u.Username, panelLink(publicURL, "confirm-email/"+link.Secret), panelHost(publicURL), link.Expires)
+		msg, env := mail.ConfirmEmail(emailLang(r.Context(), a.svc.Preferences, u.ID), address, u.Username, panelLink(publicURL, "confirm-email/"+link.Secret), panelHost(publicURL), link.Expires)
 		if _, err := outbox.Enqueue(r.Context(), msg, env); err != nil {
 			log.ErrorContext(r.Context(), "queue confirmation email", "err", mail.Summary(err))
 			writeError(w, http.StatusBadGateway, "mail_failed", "the confirmation email could not be queued")
@@ -214,7 +215,7 @@ func registerAccountEmail(mux *routeMux, a authn, relay MailRelay, outbox MailOu
 		}
 
 		if old != "" && old != address {
-			msg, env := mail.EmailChanged(old, u.Username, address, panelHost(publicURL), time.Now())
+			msg, env := mail.EmailChanged(emailLang(r.Context(), a.svc.Preferences, u.ID), old, u.Username, address, panelHost(publicURL), time.Now())
 			if _, err := outbox.Enqueue(r.Context(), msg, env); err != nil && !errors.Is(err, mail.ErrNotConfigured) {
 				log.WarnContext(r.Context(), "queue address change note", "err", mail.Summary(err))
 			}
@@ -233,6 +234,24 @@ type mailer struct {
 	log       *slog.Logger
 	// who returns the user name and confirmed address of an account.
 	who func(ctx context.Context, userID int64) (username, address string, err error)
+	// prefs returns the settings of an account, for the language of its
+	// emails; nil sends English.
+	prefs func(ctx context.Context, userID int64) (store.Preferences, error)
+}
+
+// emailLang returns the language of the emails to an account (ADR-0071):
+// its setting, English for auto or when it cannot be read.
+func emailLang(ctx context.Context, prefs func(context.Context, int64) (store.Preferences, error), userID int64) mail.Lang {
+	if prefs == nil {
+		return mail.English
+	}
+
+	p, err := prefs(ctx, userID)
+	if err != nil {
+		return mail.English
+	}
+
+	return mail.Language(p.Language)
 }
 
 // ready reports whether email can be sent now: a relay and a public URL
@@ -262,8 +281,10 @@ func (m *mailer) send(ctx context.Context, msg mail.Message, env mail.Envelope) 
 	return ok && err == nil
 }
 
-// invitation emails an invitation or reset link to inv.Email.
-func (m *mailer) invitation(ctx context.Context, actor, username, role string, reset bool, inv auth.NewInvitation) bool {
+// invitation emails an invitation or reset link to inv.Email. A reset is
+// in the language of the account (to); a new account has no language yet,
+// so its invitation is in the language of the admin who sent it (from).
+func (m *mailer) invitation(ctx context.Context, from, to int64, actor, username, role string, reset bool, inv auth.NewInvitation) bool {
 	if inv.Email == "" || !m.ready(ctx) {
 		return false
 	}
@@ -272,12 +293,12 @@ func (m *mailer) invitation(ctx context.Context, actor, username, role string, r
 	host := panelHost(m.publicURL)
 
 	if reset {
-		msg, env := mail.ResetLink(inv.Email, actor, username, link, host, inv.Expires)
+		msg, env := mail.ResetLink(emailLang(ctx, m.prefs, to), inv.Email, actor, username, link, host, inv.Expires)
 
 		return m.send(ctx, msg, env)
 	}
 
-	msg, env := mail.Invitation(inv.Email, actor, username, role, link, host, inv.Expires)
+	msg, env := mail.Invitation(emailLang(ctx, m.prefs, from), inv.Email, actor, username, role, link, host, inv.Expires)
 
 	return m.send(ctx, msg, env)
 }
@@ -294,7 +315,7 @@ func (m *mailer) accountEvent(ctx context.Context, e auth.AccountEvent) {
 		return
 	}
 
-	msg, env, ok := mail.AccountSecurity(addr, username, e.Kind, e.Name, e.IP, panelHost(m.publicURL), time.Now())
+	msg, env, ok := mail.AccountSecurity(emailLang(ctx, m.prefs, e.UserID), addr, username, e.Kind, e.Name, e.IP, panelHost(m.publicURL), time.Now())
 	if ok {
 		m.send(ctx, msg, env)
 	}

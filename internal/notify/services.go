@@ -46,6 +46,24 @@ var serviceNames = map[string]string{
 	"app":       "the app",
 }
 
+// germanServiceNames are the names in German emails.
+var germanServiceNames = map[string]string{
+	"nginx":     "nginx (Webserver)",
+	"mariadb":   "MariaDB (Datenbanken)",
+	"ssh":       "SSH",
+	"fail2ban":  "fail2ban",
+	"firewall":  "die Firewall",
+	"adminer":   "Adminer (Datenbank-Tool)",
+	"freshclam": "die Signatur-Updates des Virenscans (freshclam)",
+	"clamd":     "der Scanner des Virenscans (clamd)",
+	"clamonacc": "der Echtzeit-Virenscan (clamonacc)",
+	"agent":     "der Hostashi-Agent",
+	"php":       "PHP",
+	"valkey":    "der Objekt-Cache (Valkey)",
+	"node":      "die Node.js-App",
+	"app":       "die App",
+}
+
 // outage is one unit that got a "down" or "keeps crashing" email.
 type outage struct {
 	id, site string
@@ -106,7 +124,13 @@ func (a *ServiceAlerts) AgentUnreachable(ctx context.Context, at time.Time, err 
 			"",
 			"Without the agent the panel cannot change sites, run backups or renew certificates. The sites themselves keep running.",
 			"Check it on the server with: systemctl status hostashi-agent",
-		}},
+		}, German: mail.OpsText{Subject: "Der Hostashi-Agent antwortet nicht", Lines: []string{
+			"das Panel erreicht den Hostashi-Agent seit " + wann(since) + " nicht mehr.",
+			"Fehler: " + firstLine(err.Error()),
+			"",
+			"Ohne den Agent kann das Panel keine Sites ändern, keine Backups ausführen und keine Zertifikate erneuern. Die Sites selbst laufen weiter.",
+			"Prüf ihn auf dem Server mit: systemctl status hostashi-agent",
+		}}},
 	})
 }
 
@@ -125,7 +149,9 @@ func (a *ServiceAlerts) poll(p servermon.ServicePoll) []Event {
 			Category: Services, Key: "agent-back:" + unix(a.agentSince), Window: longWindow, Fragment: "services",
 			Mail: mail.OpsEvent{Template: "agent-back", Subject: "The Hostashi agent answers again", Lines: []string{
 				"the panel reaches the Hostashi agent again since " + when(p.At) + ". It did not answer from " + when(a.agentSince) + ".",
-			}},
+			}, German: mail.OpsText{Subject: "Der Hostashi-Agent antwortet wieder", Lines: []string{
+				"das Panel erreicht den Hostashi-Agent seit " + wann(p.At) + " wieder. Er hat ab " + wann(a.agentSince) + " nicht geantwortet.",
+			}}},
 		})
 	}
 
@@ -200,46 +226,64 @@ func (a *ServiceAlerts) send(ctx context.Context, ev Event) {
 
 func downEvent(e store.ServiceEvent) Event {
 	name, where, fragment := describe(e.Service, e.Site)
+	name2, where2 := describeGerman(e.Service, e.Site)
 	lines := []string{
 		name + where + " stopped on " + when(e.At) + " and systemd gave up restarting it.",
+	}
+	de := []string{
+		name2 + where2 + " ist am " + wann(e.At) + " ausgefallen, und systemd startet den Dienst nicht mehr neu.",
 	}
 
 	if e.Detail != "" {
 		lines = append(lines, "Result: "+e.Detail)
+		de = append(de, "Ergebnis: "+e.Detail)
 	}
 
 	lines = append(lines, "", "Hostashi sends another email when it runs again. The services page shows its state and recent restarts.")
+	de = append(de, "", "Hostashi schickt eine weitere E-Mail, sobald der Dienst wieder läuft. Die Seite Dienste zeigt seinen Zustand und die letzten Neustarts.")
 
 	return Event{
 		Category: Services, Site: e.Site, Window: longWindow, Fragment: fragment,
-		Key:  "service-down:" + servermon.Key(e.Service, e.Site) + ":" + unix(e.At),
-		Mail: mail.OpsEvent{Template: "service-down", Subject: "Service down: " + subjectName(e.Service, e.Site), Lines: lines},
+		Key: "service-down:" + servermon.Key(e.Service, e.Site) + ":" + unix(e.At),
+		Mail: mail.OpsEvent{
+			Template: "service-down", Subject: "Service down: " + subjectName(e.Service, e.Site), Lines: lines,
+			German: mail.OpsText{Subject: "Dienst ausgefallen: " + germanSubjectName(e.Service, e.Site), Lines: de},
+		},
 	}
 }
 
 func crashingEvent(e store.ServiceEvent, n int) Event {
 	name, where, fragment := describe(e.Service, e.Site)
+	name2, where2 := describeGerman(e.Service, e.Site)
+	minutes := strconv.Itoa(int(servermon.CrashWindow / time.Minute))
 
 	return Event{
 		Category: Services, Site: e.Site, Window: crashWindow, Fragment: fragment,
 		Key: "service-crashing:" + servermon.Key(e.Service, e.Site),
 		Mail: mail.OpsEvent{Template: "service-crashing", Subject: "Service keeps crashing: " + subjectName(e.Service, e.Site), Lines: []string{
-			name + where + " crashed " + strconv.Itoa(n) + " times in the last " + strconv.Itoa(int(servermon.CrashWindow/time.Minute)) + " minutes. systemd restarted it each time.",
+			name + where + " crashed " + strconv.Itoa(n) + " times in the last " + minutes + " minutes. systemd restarted it each time.",
 			"",
 			"Hostashi sends another email when it runs steadily again.",
-		}},
+		}, German: mail.OpsText{Subject: "Dienst stürzt immer wieder ab: " + germanSubjectName(e.Service, e.Site), Lines: []string{
+			name2 + where2 + " ist in den letzten " + minutes + " Minuten " + strconv.Itoa(n) + "-mal abgestürzt. systemd hat den Dienst jedes Mal neu gestartet.",
+			"",
+			"Hostashi schickt eine weitere E-Mail, sobald der Dienst wieder stabil läuft.",
+		}}},
 	}
 }
 
 func backEvent(o *outage, at time.Time) Event {
 	name, where, fragment := describe(o.id, o.site)
+	name2, where2 := describeGerman(o.id, o.site)
 
 	return Event{
 		Category: Services, Site: o.site, Window: longWindow, Fragment: fragment,
 		Key: "service-back:" + servermon.Key(o.id, o.site) + ":" + unix(o.since),
 		Mail: mail.OpsEvent{Template: "service-back", Subject: "Service running again: " + subjectName(o.id, o.site), Lines: []string{
 			name + where + " runs again since " + when(at) + ". The problem started on " + when(o.since) + ".",
-		}},
+		}, German: mail.OpsText{Subject: "Dienst läuft wieder: " + germanSubjectName(o.id, o.site), Lines: []string{
+			name2 + where2 + " läuft seit " + wann(at) + " wieder. Das Problem begann am " + wann(o.since) + ".",
+		}}},
 	}
 }
 
@@ -257,6 +301,29 @@ func describe(id, site string) (name, where, fragment string) {
 	}
 
 	return name, " of the site " + site, "sites/" + site
+}
+
+// describeGerman is describe for German emails, without the page.
+func describeGerman(id, site string) (name, where string) {
+	name = germanServiceNames[id]
+	if name == "" {
+		name = id
+	}
+
+	if site == "" {
+		return name, ""
+	}
+
+	return name, " der Site " + site
+}
+
+func germanSubjectName(id, site string) string {
+	name, _ := describeGerman(id, site)
+	if site != "" {
+		return name + " von " + site
+	}
+
+	return name
 }
 
 func subjectName(id, site string) string {

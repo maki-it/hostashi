@@ -242,7 +242,7 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 	if deps.Auth != nil {
 		var m *mailer
 		if deps.Mail != nil && deps.Outbox != nil {
-			m = &mailer{relay: deps.Mail, outbox: deps.Outbox, publicURL: cfg.PublicURL, log: log, who: deps.Auth.ConfirmedEmail}
+			m = &mailer{relay: deps.Mail, outbox: deps.Outbox, publicURL: cfg.PublicURL, log: log, who: deps.Auth.ConfirmedEmail, prefs: deps.Auth.Preferences}
 			deps.Auth.OnAccountEvent(m.accountEvent)
 		}
 

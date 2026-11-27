@@ -48,8 +48,10 @@ func Update(st updates.Status, err error, now time.Time) []Check {
 	case st.Auto:
 		out = append(out, ok("hostashi.update", "hostashi "+st.Available+" is available (installed: "+st.Installed+"); the daily automatic updates install it"))
 	default:
-		out = append(out, warn("hostashi.update", "hostashi "+st.Available+" is available (installed: "+st.Installed+")",
-			"Install it with: sudo apt update && sudo apt upgrade. The update keeps a copy of the panel database first."))
+		c := warn("hostashi.update", "hostashi "+st.Available+" is available (installed: "+st.Installed+")",
+			"Install it with: sudo apt update && sudo apt upgrade. The update keeps a copy of the panel database first.")
+		c.Code, c.Params = "hostashi.update.available", map[string]string{"available": st.Available, "installed": st.Installed}
+		out = append(out, c)
 	}
 
 	return out

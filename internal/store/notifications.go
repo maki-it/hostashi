@@ -17,6 +17,8 @@ type NotifyRecipient struct {
 	Username string
 	Role     string
 	Email    string
+	// Language is the account's setting: auto, en or de (ADR-0071).
+	Language string
 	Prefs    map[string]bool
 }
 
@@ -93,7 +95,7 @@ func (s *Store) SetNotificationPrefs(ctx context.Context, userID int64, prefs ma
 // address, sorted by user name.
 func (s *Store) NotificationRecipients(ctx context.Context) ([]NotifyRecipient, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT u.id, u.username, u.role, u.email, p.category, p.enabled FROM users u
+		`SELECT u.id, u.username, u.role, u.email, u.language, p.category, p.enabled FROM users u
 		 LEFT JOIN notification_prefs p ON p.user_id = u.id
 		 WHERE u.disabled = 0 AND u.email != '' ORDER BY u.username, p.category`)
 	if err != nil {
@@ -111,7 +113,7 @@ func (s *Store) NotificationRecipients(ctx context.Context) ([]NotifyRecipient, 
 			on  *int64
 		)
 
-		if err := rows.Scan(&r.UserID, &r.Username, &r.Role, &r.Email, &cat, &on); err != nil {
+		if err := rows.Scan(&r.UserID, &r.Username, &r.Role, &r.Email, &r.Language, &cat, &on); err != nil {
 			return nil, fmt.Errorf("store: %w", err)
 		}
 

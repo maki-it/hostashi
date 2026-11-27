@@ -44,6 +44,21 @@ var titles = map[Category]string{
 	Services: "services", Deploys: "deploys", Malware: "malware scan",
 }
 
+// germanTitles are the titles in German emails.
+var germanTitles = map[Category]string{
+	Backups: "Backups", Certificates: "Zertifikaten", Doctor: "Serverprüfungen", PHP: "PHP-Versionen", Disk: "Speicherplatz",
+	Services: "Diensten", Deploys: "Deploys", Malware: "Virenscans",
+}
+
+// title names the category in the language.
+func title(c Category, l mail.Lang) string {
+	if l == mail.German {
+		return germanTitles[c]
+	}
+
+	return titles[c]
+}
+
 // Known reports whether c is a category.
 func Known(c Category) bool {
 	_, ok := titles[c]
@@ -147,7 +162,8 @@ func (n *Notifier) Notify(ctx context.Context, ev Event) (int, error) {
 			continue
 		}
 
-		msg, env := mail.OperationsMail(r.Email, r.Username, titles[ev.Category], ev.Mail, link, n.Host)
+		lang := ev.Mail.Lang(mail.Language(r.Language))
+		msg, env := mail.OperationsMail(lang, r.Email, r.Username, title(ev.Category, lang), ev.Mail, link, n.Host)
 		env.DedupKey = ev.Key + ":" + strconv.FormatInt(r.UserID, 10)
 		env.DedupWindow = ev.Window
 
