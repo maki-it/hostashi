@@ -2811,6 +2811,8 @@ step "a database on an external MySQL 8 server with its own CA in the web databa
 # server's own CA, reaching the server through the tool's hosts file.
 myname="$NAME-mysql"
 mycerts=$(mktemp -d)
+# MySQL in the container runs as its own user and reads the files itself.
+chmod 0755 "$mycerts"
 for c in ca other-ca; do
   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj "/CN=test-mysql-$c" \
     -keyout "$mycerts/$c.key" -out "$mycerts/$c.pem" 2>/dev/null
