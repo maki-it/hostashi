@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { Site } from "./sites";
@@ -40,7 +40,10 @@ describe("WordPressCard", () => {
     await user.click(screen.getByRole("button", { name: "Install WordPress" }));
 
     expect(await screen.findByRole("heading", { name: "Save the WordPress admin password now" })).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Vq7mR2xK9pLt4Wz8Bn3sHc6J")).toBeInTheDocument();
+    const card = screen.getByRole("region", { name: "WordPress" });
+    const box = within(card).getByRole("region", { name: "Save the WordPress admin password now" });
+    expect(within(box).getByRole("textbox", { name: "Admin password" })).toHaveValue("Vq7mR2xK9pLt4Wz8Bn3sHc6J");
+    expect(within(box).getByRole("button", { name: "Copy password" })).toBeInTheDocument();
     expect(screen.getByText("https://blog.example.com/wp-admin/")).toBeInTheDocument();
     expect(screen.getByText(/being installed/)).toBeInTheDocument();
     expect(calls).toContainEqual({
