@@ -90,13 +90,10 @@ func (s *Service) checkAccess(a store.AccessSettings, users []store.AuthUser, sn
 		}
 	}
 
-	if len(a.Bypass) > 0 {
-		local := s.localAddrs
-		if local == nil {
-			local = interfaceAddrs
-		}
-
-		own, err := local()
+	// The agent checks the bypass addresses against the interfaces; the
+	// web process cannot read them (no netlink socket).
+	if len(a.Bypass) > 0 && s.localAddrs != nil {
+		own, err := s.localAddrs()
 		if err != nil {
 			return fmt.Errorf("hosting: addresses of this server: %w", err)
 		}

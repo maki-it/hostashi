@@ -333,7 +333,7 @@ func (s *Service) SiteGrants(ctx context.Context, id int64) ([]string, error) {
 // InvitedUsername returns the username of an open invitation, so the page
 // can greet the new user. Wrong links count against the address.
 func (s *Service) InvitedUsername(ctx context.Context, secret, ip string) (string, error) {
-	key := "ip:" + ip
+	key := ipKey("ip:", ip)
 	if s.ipLimit.Blocked(key) {
 		return "", ErrRateLimited
 	}
@@ -361,7 +361,7 @@ func (s *Service) InvitedUsername(ctx context.Context, secret, ip string) (strin
 // AcceptInvitation sets the password through an invitation link and
 // starts a session, so the new user can enroll a second factor right away.
 func (s *Service) AcceptInvitation(ctx context.Context, secret, password, ip string) (string, store.User, error) {
-	key := "ip:" + ip
+	key := ipKey("ip:", ip)
 	if s.ipLimit.Blocked(key) {
 		return "", store.User{}, ErrRateLimited
 	}

@@ -286,7 +286,7 @@ func (s *Service) RevokeToken(ctx context.Context, userID, id int64, ip string) 
 // Failures count against the address, so guessing is rate limited, and are
 // logged without the token.
 func (s *Service) AuthenticateToken(ctx context.Context, raw, ip string) (Principal, error) {
-	key := "token-ip:" + ip
+	key := ipKey("token-ip:", ip)
 	if s.tokenLimit.Blocked(key) {
 		s.obs.Throttled(KindToken)
 

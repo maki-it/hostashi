@@ -114,8 +114,12 @@ func (rt *Runtime) errorf(format string, a ...any) error {
 
 // Archive is the build of one release for this machine.
 type Archive struct {
-	URL    string
-	SHA256 string
+	URL string
+	// Fallback are more URLs of the same file, tried in order when the
+	// download from URL fails, for example a host without IPv6 on a server
+	// without IPv4. Every download is checked against SHA256.
+	Fallback []string
+	SHA256   string
 	// Top is the archive's top directory, which is cut off.
 	Top string
 }
@@ -159,9 +163,22 @@ func (in *Installer) Install(ctx context.Context, rel Release, a Archive) error 
 		return rt.errorf("%w", err)
 	}
 
-	in.logf("downloading %s", a.URL)
+	var tmp *os.File
 
-	tmp, err := in.download(ctx, a.URL, dir, a.SHA256)
+	var err error
+
+	for i, u := range append([]string{a.URL}, a.Fallback...) {
+		if i > 0 {
+			in.logf("%v; trying the next source", err)
+		}
+
+		in.logf("downloading %s", u)
+
+		if tmp, err = in.download(ctx, u, dir, a.SHA256); err == nil || ctx.Err() != nil {
+			break
+		}
+	}
+
 	if err != nil {
 		return err
 	}
