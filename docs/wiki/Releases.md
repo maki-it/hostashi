@@ -48,7 +48,7 @@ If no release comes along, the monthly workflow **apt key** opens an issue a yea
 ## Make a release
 
 1. Tag a commit on `main` and push the tag: `git tag v1.2.3 && git push origin v1.2.3`. A tag with a `-` (`v1.2.3-rc.1`) is a pre-release.
-2. The workflow **Release** builds the binaries, the `.deb` files and `SHA256SUMS` into a draft release, signs `SHA256SUMS` with Sigstore (no key: the signature names the workflow) and records the build provenance.
+2. The workflow **Release** builds the binaries, the `.deb` files, SPDX SBOMs and `SHA256SUMS` into a draft release, signs `SHA256SUMS` with Sigstore (no key: the signature names the workflow) and records the build provenance.
 3. For a stable release it then waits for your approval (environment `release`). Approve it in the workflow run. That job builds the apt repository from this release and the four stable releases before it, signs it with the apt key, attaches it as `apt-repo.tar.gz` and publishes the release.
 4. After the apt job, the workflow **Pages** deploys `get.hostashi.com` from that release's `apt-repo.tar.gz`: the repository at `/apt`, the install script at `/install.sh` and a short start page. It checks the repository's signature against `packaging/keyring` first. Run **Pages** by hand to deploy the latest release again.
 
@@ -63,3 +63,5 @@ cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
 sha256sum --ignore-missing -c SHA256SUMS
 gh attestation verify hostashi_1.2.3_amd64.deb --repo maki-it/hostashi
 ```
+
+Each release also has SPDX SBOMs, listed in `SHA256SUMS` and so covered by its signature: `hostashi_<version>_linux_<arch>.tar.gz.sbom.json` with the Go modules in the binary, and `hostashi_<version>_web.sbom.json` with the npm packages of the panel's frontend.

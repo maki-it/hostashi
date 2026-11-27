@@ -2,7 +2,7 @@
 
 Hostashi is a hosting control panel. A vulnerability in it can mean full server compromise, so we take reports seriously.
 
-> **Status:** Phase 0 (planning). There is no released code yet. This policy already applies to the design documents in `docs/`, for example flaws in the threat model in [`docs/05-security.md`](docs/05-security.md).
+This policy covers the released code and the design documents in `docs/`, for example flaws in the threat model in [`docs/05-security.md`](docs/05-security.md).
 
 ## Reporting a vulnerability
 
@@ -26,10 +26,17 @@ These are targets, not guarantees, until a team exists:
 
 ## Scope
 
-In scope once code exists: the web service, the privileged agent and its RPC interface, the installer, generated configuration, and release artifacts.
+In scope: the web service, the privileged agent and its RPC interface, the installer, generated configuration, and release artifacts.
 
 Out of scope: vulnerabilities in third-party software we only configure (Nginx, PHP, MariaDB, ...). Please report those upstream.
 
 ## Supported versions
 
-None yet. This section will list supported releases from the first release on.
+Only the newest release is supported. Fixes, security fixes included, come as a new release through the signed apt repository (`apt upgrade`, or automatically with `--auto-update`); older releases get no backports. Upgrade to the newest release before you report a problem.
+
+| Version | Supported |
+|---------|-----------|
+| newest release ([latest](https://github.com/maki-it/hostashi/releases/latest)) | yes |
+| any older release | no |
+
+Hostashi supports Debian 13 and Ubuntu 26.04 for as long as their vendors support them.
