@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -172,12 +173,17 @@ func (s System) Disk(paths []string) []Check {
 		total, free := st.Blocks*bsize, st.Bavail*bsize
 		pct := free * 100 / total
 		summary := fmt.Sprintf("%s: %s free of %s (%d %%)", p, Bytes(free), Bytes(total), pct)
+		params := map[string]string{"path": p, "free": Bytes(free), "total": Bytes(total), "percent": strconv.FormatUint(pct, 10)}
 
 		switch {
 		case pct < DiskFailPercent || free < DiskFailBytes:
-			out = append(out, fail(id, summary, "Free space now: sites, databases and backups fail when the disk is full."))
+			c := fail(id, summary, "Free space now: sites, databases and backups fail when the disk is full.")
+			c.Code, c.Params = "system.disk.fail", params
+			out = append(out, c)
 		case pct < DiskWarnPercent:
-			out = append(out, warn(id, summary, "The disk is filling up. Check the sites' disk use and old backups."))
+			c := warn(id, summary, "The disk is filling up. Check the sites' disk use and old backups.")
+			c.Code, c.Params = "system.disk.warn", params
+			out = append(out, c)
 		default:
 			out = append(out, ok(id, summary))
 		}
@@ -392,12 +398,15 @@ func Usage(site, what string, used, limit uint64, format func(uint64) string) Ch
 	pct := used * 100 / limit
 	summary := fmt.Sprintf("%s: %s of %s (%d %%)", what, format(used), format(limit), pct)
 	c := Check{ID: id, Site: site, Status: agentapi.DoctorOK, Summary: summary}
+	params := map[string]string{"what": what, "used": format(used), "limit": format(limit), "percent": strconv.FormatUint(pct, 10)}
 
 	switch {
 	case pct >= UsageFailPercent:
 		c.Status, c.Hint = agentapi.DoctorFail, "Almost full: writes fail at the limit. Raise the limit or free space."
+		c.Code, c.Params = "site.disk.fail", params
 	case pct >= UsageWarnPercent:
 		c.Status, c.Hint = agentapi.DoctorWarn, "Filling up. Raise the limit or free space."
+		c.Code, c.Params = "site.disk.warn", params
 	}
 
 	return c
@@ -417,12 +426,13 @@ func DatabaseUsage(site string, used, limit uint64) Check {
 	summary := fmt.Sprintf("databases: %s of %s (%d %%)", Bytes(used), Bytes(limit), pct)
 	c := Check{ID: id, Site: site, Status: agentapi.DoctorOK, Summary: summary}
 	hint := "The databases keep growing past the threshold and fill the server's disk. Clean up old data (logs, sessions, revisions) or raise the threshold."
+	params := map[string]string{"used": Bytes(used), "limit": Bytes(limit), "percent": strconv.FormatUint(pct, 10)}
 
 	switch {
 	case pct >= UsageFailPercent:
-		c.Status, c.Hint = agentapi.DoctorFail, hint
+		c.Status, c.Hint, c.Code, c.Params = agentapi.DoctorFail, hint, "site.database.full", params
 	case pct >= UsageWarnPercent:
-		c.Status, c.Hint = agentapi.DoctorWarn, hint
+		c.Status, c.Hint, c.Code, c.Params = agentapi.DoctorWarn, hint, "site.database.full", params
 	}
 
 	return c
@@ -493,7 +503,10 @@ func PHPSupport(site, version string, now time.Time) Check {
 	end, err := time.Parse(time.DateOnly, until)
 
 	if !ok || err != nil {
-		return Check{ID: id, Site: site, Status: agentapi.DoctorWarn, Summary: "PHP " + version + " has no known support dates", Hint: "Move the site to a supported PHP version."}
+		return Check{
+			ID: id, Site: site, Status: agentapi.DoctorWarn, Summary: "PHP " + version + " has no known support dates", Hint: "Move the site to a supported PHP version.",
+			Code: "site.php.unknown", Params: map[string]string{"version": version},
+		}
 	}
 
 	left := end.Add(24 * time.Hour).Sub(now)
@@ -505,12 +518,14 @@ func PHPSupport(site, version string, now time.Time) Check {
 			ID: id, Site: site, Status: agentapi.DoctorWarn,
 			Summary: "PHP " + version + " gets no security fixes since " + until,
 			Hint:    "Move the site to a supported PHP version in the panel. Hostashi keeps it running and never switches by itself.",
+			Code:    "site.php.ended", Params: map[string]string{"version": version, "until": until},
 		}
 	case days <= PHPSoonDays:
 		return Check{
 			ID: id, Site: site, Status: agentapi.DoctorWarn,
 			Summary: fmt.Sprintf("PHP %s gets security fixes only until %s (%d days)", version, until, days),
 			Hint:    "Plan the move to a newer PHP version.",
+			Code:    "site.php.soon", Params: map[string]string{"version": version, "until": until, "days": strconv.Itoa(days)},
 		}
 	}
 

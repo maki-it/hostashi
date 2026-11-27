@@ -59,7 +59,7 @@ On **Your account → Email**, enter your address. Hostashi sends a link to it; 
 
 ### Language
 
-Emails are plain text in English or German. Each recipient gets the language set under **Your account → Appearance → Language**; *Follow the browser* means English, because an email has no browser to follow. An invitation goes to an account that has no setting yet, so it is in the language of the admin who sent it. Times are in UTC in both languages. Details from the server, such as the result of a check or an error message, stay in English.
+Emails are plain text in English or German. Each recipient gets the language set under **Your account → Appearance → Language**; *Follow the browser* means English, because an email has no browser to follow. An invitation goes to an account that has no setting yet, so it is in the language of the admin who sent it. Times are in the server's time zone (Server → System). The disk space, database size, PHP version and Hostashi update emails are fully translated; the daily list of failed checks names each check in German, and its details and error messages from programs such as restic or the ACME client stay in English.
 
 At most 10 emails per recipient and 100 per server go out each hour. Above that, notifications wait for the next hour; account emails are always sent.
 

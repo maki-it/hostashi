@@ -334,6 +334,8 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 	)
 
 	for _, c := range rep.Checks {
+		sumDE, hintDE := germanCheck(c)
+
 		switch {
 		case c.ID == "site.php" && c.Status != agentapi.DoctorOK && c.Site != "":
 			out = append(out, Event{
@@ -341,7 +343,7 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 				Mail: mail.OpsEvent{Template: "php-eol", Subject: "Old PHP version on the site " + c.Site, Lines: []string{
 					"The site " + c.Site + ": " + c.Summary + ".", c.Hint,
 				}, German: mail.OpsText{Subject: "Alte PHP-Version auf der Site " + c.Site, Lines: []string{
-					"Die Site " + c.Site + ": " + c.Summary + ".", c.Hint,
+					"die Site " + c.Site + ": " + sumDE + ".", hintDE,
 				}}},
 			})
 		case c.ID == "site.disk" && c.Site != "" && used(c, false) >= fullPercent:
@@ -351,7 +353,7 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 				Mail: mail.OpsEvent{Template: "disk-full", Subject: "The site " + c.Site + " is almost full", Lines: []string{
 					"The site " + c.Site + ", " + c.Summary + ".", c.Hint,
 				}, German: mail.OpsText{Subject: "Die Site " + c.Site + " ist fast voll", Lines: []string{
-					"Die Site " + c.Site + ", " + c.Summary + ".", c.Hint,
+					"die Site " + c.Site + ", " + sumDE + ".", hintDE,
 				}}},
 			})
 		case c.ID == "site.database" && c.Site != "" && used(c, false) >= fullPercent:
@@ -361,7 +363,7 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 				Mail: mail.OpsEvent{Template: "disk-full", Subject: "The databases of the site " + c.Site + " passed 90 % of their warning threshold", Lines: []string{
 					"The site " + c.Site + ", " + c.Summary + ".", c.Hint,
 				}, German: mail.OpsText{Subject: "Die Datenbanken der Site " + c.Site + " haben 90 % ihrer Warnschwelle überschritten", Lines: []string{
-					"Die Site " + c.Site + ", " + c.Summary + ".", c.Hint,
+					"die Site " + c.Site + ", " + sumDE + ".", hintDE,
 				}}},
 			})
 		case c.ID == "system.disk" && used(c, true) >= fullPercent:
@@ -371,7 +373,7 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 				Mail: mail.OpsEvent{Template: "disk-full", Subject: "The server's disk is almost full", Lines: []string{
 					"Free space on the server, " + c.Summary + ".", c.Hint,
 				}, German: mail.OpsText{Subject: "Der Speicherplatz des Servers ist fast voll", Lines: []string{
-					"Freier Speicherplatz auf dem Server, " + c.Summary + ".", c.Hint,
+					"Freier Speicherplatz auf dem Server, " + sumDE + ".", hintDE,
 				}}},
 			})
 		case c.ID == "hostashi.update" && c.Status == agentapi.DoctorWarn:
@@ -381,13 +383,13 @@ func (w *Watcher) doctorEvents(rep agentapi.DoctorReport) []Event {
 				Mail: mail.OpsEvent{Template: "hostashi-update", Subject: "A new Hostashi version is available", Lines: []string{
 					c.Summary + ".", c.Hint,
 				}, German: mail.OpsText{Subject: "Eine neue Hostashi-Version ist verfügbar", Lines: []string{
-					c.Summary + ".", c.Hint,
+					sumDE + ".", hintDE,
 				}}},
 			})
 		case c.Status == agentapi.DoctorFail && !ownCategory[c.ID]:
-			line, zeile := "- "+c.Summary, "- "+c.Summary
+			line, zeile := "- "+c.Summary, "- "+germanCheckTitle(c.ID)+": "+sumDE
 			if c.Site != "" {
-				line, zeile = "- site "+c.Site+": "+c.Summary, "- Site "+c.Site+": "+c.Summary
+				line, zeile = "- site "+c.Site+": "+c.Summary, "- Site "+c.Site+", "+germanCheckTitle(c.ID)+": "+sumDE
 			}
 
 			digest = append(digest, line)

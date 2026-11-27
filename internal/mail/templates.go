@@ -3,6 +3,8 @@
 package mail
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
@@ -56,15 +58,46 @@ var germanMonths = [...]string{
 	"Juli", "August", "September", "Oktober", "November", "Dezember",
 }
 
-// FormatTime writes a time in UTC the way the emails of the language do:
-// "2 January 2006, 15:04 UTC" or "2. Januar 2006, 15:04 UTC".
-func FormatTime(t time.Time, l Lang) string {
-	t = t.UTC()
-	if l == German {
-		return t.Format("2. ") + germanMonths[t.Month()-1] + t.Format(" 2006, 15:04 UTC")
+// ServerZone returns the server's time zone, which the emails use. It is
+// read again for each email, so a zone changed in the panel (ADR-0060)
+// applies without a restart. Tests replace it.
+var ServerZone = func() *time.Location { return zoneAt("/") }
+
+// zoneAt reads the zone of the system under root: /etc/timezone, else the
+// target of the /etc/localtime link, else the process's zone.
+func zoneAt(root string) *time.Location {
+	name := ""
+
+	if b, err := os.ReadFile(filepath.Join(root, "etc/timezone")); err == nil {
+		name = strings.TrimSpace(string(b))
 	}
 
-	return t.Format("2 January 2006, 15:04 UTC")
+	if name == "" {
+		if target, err := os.Readlink(filepath.Join(root, "etc/localtime")); err == nil {
+			if _, after, ok := strings.Cut(target, "zoneinfo/"); ok {
+				name = after
+			}
+		}
+	}
+
+	if name != "" {
+		if loc, err := time.LoadLocation(name); err == nil {
+			return loc
+		}
+	}
+
+	return time.Local
+}
+
+// FormatTime writes a time in the server's zone the way the emails of the
+// language do: "2 January 2006, 15:04 CET" or "2. Januar 2006, 15:04 CET".
+func FormatTime(t time.Time, l Lang) string {
+	t = t.In(ServerZone())
+	if l == German {
+		return t.Format("2. ") + germanMonths[t.Month()-1] + t.Format(" 2006, 15:04 MST")
+	}
+
+	return t.Format("2 January 2006, 15:04 MST")
 }
 
 // words are the parts every email shares.
