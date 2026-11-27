@@ -212,8 +212,8 @@ func ResetLink(l Lang, to, resetBy, username, link, panel string, expires time.T
 }
 
 // securityText says what happened, by event kind of internal/auth.
-var securityText = map[Lang]map[string]string{ //nolint:gosec // event texts, not credentials
-	English: {
+var securityText = map[Lang]map[string]string{
+	English: { //nolint:gosec // event texts, not credentials
 		"totp-enabled":     "An authenticator app (TOTP) was set up as a second factor.",
 		"totp-disabled":    "The authenticator app (TOTP) was removed as a second factor.",
 		"totp-replaced":    "The authenticator app (TOTP) was moved to a new device. Codes from the old app and the old recovery codes no longer work.",
@@ -222,7 +222,7 @@ var securityText = map[Lang]map[string]string{ //nolint:gosec // event texts, no
 		"token-created":    "A new API token was created",
 		"password-changed": "The password was changed and every other session was logged out.",
 	},
-	German: {
+	German: { //nolint:gosec // event texts, not credentials
 		"totp-enabled":     "Eine Authenticator-App (TOTP) wurde als zweiter Faktor eingerichtet.",
 		"totp-disabled":    "Die Authenticator-App (TOTP) wurde als zweiter Faktor entfernt.",
 		"totp-replaced":    "Die Authenticator-App (TOTP) ist auf ein neues Gerät umgezogen. Codes aus der alten App und die alten Wiederherstellungscodes funktionieren nicht mehr.",
