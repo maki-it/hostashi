@@ -81,6 +81,7 @@ The same English term is always translated the same way.
 | database server | Datenbankserver | |
 | deploy (Git) | Deploy | der Deploy; verb: deployen |
 | deploy key | Deploy-Key | |
+| DNS switch | DNS-Umstellung | CloudPanel import |
 | domain | Domain | die Domain |
 | email | E-Mail | mail as a message: Mail |
 | false positive | Fehlalarm | virus scan |
@@ -91,6 +92,7 @@ The same English term is always translated the same way.
 | hardening | Härtung | |
 | health | Zustand | the Health page |
 | host key | Host-Key | |
+| invitation | Einladung | invitation link: Einladungslink |
 | limit preset | Limit-Vorlage | |
 | log in / log out | anmelden / abmelden | |
 | maintenance page | Wartungsseite | |
@@ -104,8 +106,11 @@ The same English term is always translated the same way.
 | recovery code | Wiederherstellungscode | |
 | redirect | Weiterleitung | |
 | release (Git deploy) | Release | das Release |
+| relay (SMTP) | Relay | das SMTP-Relay |
 | reverse proxy | Reverse Proxy | |
 | runtime | Runtime | the Runtimes page: Runtimes |
+| scan report | Scan-Bericht | CloudPanel import |
+| second factor | zweiter Faktor | TOTP or a passkey |
 | security headers | Sicherheits-Header | |
 | service | Dienst | |
 | settings | Einstellungen | |
@@ -118,3 +123,4 @@ The same English term is always translated the same way.
 | usage | Auslastung | the Usage tab |
 | virus scan | Virenscan | |
 | visitor address | Besucheradresse | the Real IP tab |
+| web root | Web-Root | das Web-Root |

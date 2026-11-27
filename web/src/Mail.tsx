@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { clearMail, defaultPort, getMail, mailMessage, setMail, testMail, type MailInput, type MailSettings, type TLSMode } from "./mail";
 import { Button, Card, Field, Notice, PageHead } from "./ui";
 
@@ -36,6 +37,7 @@ type Flash = { alert: boolean; text: string } | null;
 // Mail sets up the SMTP relay the panel sends notifications and invitation
 // links through (ADR-0044). Without one, the panel works as before.
 export function Mail() {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<MailSettings | null>(null);
   const [error, setError] = useState("");
 
@@ -55,16 +57,16 @@ export function Mail() {
   return (
     <>
       <PageHead
-        title="Email"
-        description="Hostashi sends notifications and invitation links through an SMTP relay you already use. It is not a mail server and receives no mail."
+        title={t("mail.title")}
+        description={t("mail.description")}
       />
       {!settings ? (
         error ? (
           <Notice tone="err" title={error}>
-            <Button onClick={() => void load()}>Try again</Button>
+            <Button onClick={() => void load()}>{t("common.actions.tryAgain")}</Button>
           </Notice>
         ) : (
-          <p aria-busy="true">Loading…</p>
+          <p aria-busy="true">{t("common.status.loading")}</p>
         )
       ) : (
         <Editor key={JSON.stringify(settings)} settings={settings} onSaved={setSettings} />
@@ -77,6 +79,7 @@ function Editor({ settings, onSaved }: { settings: MailSettings; onSaved: (s: Ma
   const [d, setD] = useState<Draft>(() => toDraft(settings));
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<Flash>(null);
+  const { t } = useTranslation();
   const set = (patch: Partial<Draft>) => setD((x) => ({ ...x, ...patch }));
 
   const setTLS = (tls: TLSMode) => {
@@ -89,7 +92,7 @@ function Editor({ settings, onSaved }: { settings: MailSettings; onSaved: (s: Ma
     e.preventDefault();
     const port = Number(d.port);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      setFlash({ alert: true, text: "Enter a port between 1 and 65535, usually 587 for STARTTLS or 465 for TLS." });
+      setFlash({ alert: true, text: t("mail.relay.portProblem") });
       return;
     }
     const input: MailInput = {
@@ -129,15 +132,15 @@ function Editor({ settings, onSaved }: { settings: MailSettings; onSaved: (s: Ma
   return (
     <div className="ui-stack">
       {!settings.configured && (
-        <Notice tone="info" title="Email is off.">
-          Invitation links are shown to copy, and notifications appear only in the panel. Enter a relay to send them by email as well.
+        <Notice tone="info" title={t("mail.off")}>
+          {t("mail.offText")}
         </Notice>
       )}
       <form className="ui-stack" onSubmit={(e) => void save(e)}>
-        <Card title="SMTP relay">
+        <Card title={t("mail.relay.title")}>
           <div className="ui-stack">
             <div className="ui-fields">
-              <Field label="Host" hint="For example smtp.example.com.">
+              <Field label={t("mail.relay.host")} hint={t("mail.relay.hostHint")}>
                 <input
                   className="ui-input ui-mono"
                   value={d.host}
@@ -148,18 +151,18 @@ function Editor({ settings, onSaved }: { settings: MailSettings; onSaved: (s: Ma
                   spellCheck={false}
                 />
               </Field>
-              <Field label="Encryption" hint="Only encrypted connections. The certificate is always checked.">
+              <Field label={t("mail.relay.encryption")} hint={t("mail.relay.encryptionHint")}>
                 <select className="ui-select" value={d.tls} onChange={(e) => setTLS(e.target.value as TLSMode)}>
-                  <option value="starttls">STARTTLS (port 587)</option>
-                  <option value="tls">TLS (port 465)</option>
+                  <option value="starttls">{t("mail.relay.starttls")}</option>
+                  <option value="tls">{t("mail.relay.tls")}</option>
                 </select>
               </Field>
-              <Field label="Port">
+              <Field label={t("mail.relay.port")}>
                 <input className="ui-input ui-mono" inputMode="numeric" value={d.port} onChange={(e) => set({ port: e.target.value })} required />
               </Field>
             </div>
             <div className="ui-fields">
-              <Field label="Username (optional)" hint="Leave empty if the relay trusts this server without a login.">
+              <Field label={t("mail.relay.username")} hint={t("mail.relay.usernameHint")}>
                 <input
                   className="ui-input"
                   value={d.username}
@@ -171,7 +174,7 @@ function Editor({ settings, onSaved }: { settings: MailSettings; onSaved: (s: Ma
               </Field>
               {d.username.trim() !== "" &&
                 (d.replacePassword || d.username.trim() !== settings.username ? (
-                  <Field label="Password" hint="Stored encrypted with the server key and never shown again.">
+                  <Field label={t("mail.relay.password")} hint={t("mail.relay.passwordHint")}>
                     <input
                       className="ui-input"
                       type="password"
@@ -183,18 +186,18 @@ function Editor({ settings, onSaved }: { settings: MailSettings; onSaved: (s: Ma
                   </Field>
                 ) : (
                   <div className="ui-stack-tight">
-                    <span className="ui-hint">A password is stored.</span>
+                    <span className="ui-hint">{t("mail.relay.passwordStored")}</span>
                     <div className="ui-row">
-                      <Button onClick={() => set({ replacePassword: true, password: "" })}>Replace password</Button>
+                      <Button onClick={() => set({ replacePassword: true, password: "" })}>{t("mail.relay.replacePassword")}</Button>
                     </div>
                   </div>
                 ))}
             </div>
           </div>
         </Card>
-        <Card title="Sender">
+        <Card title={t("mail.sender.title")}>
           <div className="ui-fields">
-            <Field label="From address" hint="An address the relay may send as, for example panel@example.com.">
+            <Field label={t("mail.sender.from")} hint={t("mail.sender.fromHint")}>
               <input
                 className="ui-input"
                 type="email"
@@ -205,10 +208,10 @@ function Editor({ settings, onSaved }: { settings: MailSettings; onSaved: (s: Ma
                 spellCheck={false}
               />
             </Field>
-            <Field label="From name (optional)">
+            <Field label={t("mail.sender.fromName")}>
               <input className="ui-input" value={d.fromName} onChange={(e) => set({ fromName: e.target.value })} maxLength={64} />
             </Field>
-            <Field label="Reply-to (optional)" hint="Where replies go, for example your own address.">
+            <Field label={t("mail.sender.replyTo")} hint={t("mail.sender.replyToHint")}>
               <input
                 className="ui-input"
                 type="email"
@@ -221,9 +224,9 @@ function Editor({ settings, onSaved }: { settings: MailSettings; onSaved: (s: Ma
           </div>
         </Card>
         <details className="ui-card">
-          <summary className="ui-card-body">Private certificate authority (optional)</summary>
+          <summary className="ui-card-body">{t("mail.ca.title")}</summary>
           <div className="ui-card-body">
-            <Field label="CA certificate (PEM)" hint="Only for a relay whose certificate comes from your own CA. The usual public CAs are always trusted.">
+            <Field label={t("mail.ca.label")} hint={t("mail.ca.hint")}>
               <textarea
                 className="ui-input ui-textarea ui-mono"
                 rows={4}
@@ -237,11 +240,11 @@ function Editor({ settings, onSaved }: { settings: MailSettings; onSaved: (s: Ma
         {flash && <Notice tone={flash.alert ? "err" : "ok"} title={flash.text} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? "Saving…" : "Save"}
+            {busy ? t("common.status.saving") : t("common.actions.save")}
           </Button>
           {settings.configured && (
             <Button variant="danger" disabled={busy} onClick={() => void remove()}>
-              Turn email off
+              {t("mail.turnOff")}
             </Button>
           )}
         </div>
@@ -255,6 +258,7 @@ function TestMail() {
   const [to, setTo] = useState("");
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<Flash>(null);
+  const { t } = useTranslation();
 
   const send = async (e: FormEvent) => {
     e.preventDefault();
@@ -262,7 +266,7 @@ function TestMail() {
     setFlash(null);
     try {
       await testMail(to.trim());
-      setFlash({ alert: false, text: "The relay took the email. Check the inbox, and the spam folder if it does not arrive." });
+      setFlash({ alert: false, text: t("mail.test.sent") });
     } catch (err) {
       setFlash({ alert: true, text: mailMessage(err) });
     } finally {
@@ -271,17 +275,17 @@ function TestMail() {
   };
 
   return (
-    <Card title="Send a test email">
+    <Card title={t("mail.test.title")}>
       <form className="ui-stack" onSubmit={(e) => void send(e)}>
         <div className="ui-narrow">
-          <Field label="Send to">
+          <Field label={t("mail.test.to")}>
             <input className="ui-input" type="email" value={to} onChange={(e) => setTo(e.target.value)} required maxLength={254} spellCheck={false} />
           </Field>
         </div>
         {flash && <Notice tone={flash.alert ? "err" : "ok"} title={flash.text} />}
         <div className="ui-row">
           <Button type="submit" disabled={busy}>
-            {busy ? "Sending…" : "Send test email"}
+            {busy ? t("mail.test.sending") : t("mail.test.submit")}
           </Button>
         </div>
       </form>

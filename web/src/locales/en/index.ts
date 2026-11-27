@@ -3,6 +3,7 @@
 // The English catalog (ADR-0071). It is the source: its shape is the type
 // every other language must match, and i18next falls back to it.
 import account from "./account.json";
+import audit from "./audit.json";
 import auth from "./auth.json";
 import backups from "./backups.json";
 import certificate from "./certificate.json";
@@ -13,7 +14,9 @@ import git from "./git.json";
 import hardening from "./hardening.json";
 import limits from "./limits.json";
 import logs from "./logs.json";
+import mail from "./mail.json";
 import malware from "./malware.json";
+import migrate from "./migrate.json";
 import pages from "./pages.json";
 import parked from "./parked.json";
 import permissions from "./permissions.json";
@@ -26,8 +29,9 @@ import siteHeaders from "./siteHeaders.json";
 import ssh from "./ssh.json";
 import tokens from "./tokens.json";
 import usage from "./usage.json";
+import users from "./users.json";
 
-const en = { account, auth, backups, certificate, common, errors, files, git, hardening, limits, logs, malware, pages, parked, permissions, profiles, realIp, shell, siteAccess, siteDomains, siteHeaders, ssh, tokens, usage };
+const en = { account, audit, auth, backups, certificate, common, errors, files, git, hardening, limits, logs, mail, malware, migrate, pages, parked, permissions, profiles, realIp, shell, siteAccess, siteDomains, siteHeaders, ssh, tokens, usage, users };
 
 export type Catalog = typeof en;
 
