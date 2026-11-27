@@ -39,15 +39,17 @@ export function Mark() {
 }
 
 /**
- * SunMoon is the icon for "follow the system": a sun and a moon together,
- * drawn on Phosphor's 256 grid with the stroke of its regular weight.
+ * SunMoon is the icon for "follow the system": a sun whose body is half
+ * dark, drawn on Phosphor's 256 grid with the stroke of its regular weight.
  */
 function SunMoon({ size }: { size: number }) {
   return (
-    <svg viewBox="0 0 256 256" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="84" cy="84" r="30" />
-      <path d="M130,84L146,84M84,130L84,146M51,117L40,128M38,84L22,84M51,51L40,40M84,38L84,22M117,51L128,40" />
-      <path d="M105,179A66,66,0,1,0,179,105A54,54,0,0,1,105,179Z" />
+    <svg viewBox="0 0 256 256" width={size} height={size} aria-hidden="true">
+      <g fill="none" stroke="currentColor" strokeWidth="16" strokeLinecap="round">
+        <circle cx="128" cy="128" r="48" />
+        <path d="M204,128L228,128M182,182L199,199M128,204L128,228M74,182L57,199M52,128L28,128M74,74L57,57M128,52L128,28M182,74L199,57" />
+      </g>
+      <path d="M128,80A48,48,0,0,1,128,176Z" fill="currentColor" />
     </svg>
   );
 }
@@ -187,7 +189,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
   // The colour button in the top bar steps through the same three choices
   // as the account page (ADR-0037) with one click each, system → light →
   // dark → system, and stores the same value. Its icon shows the current
-  // choice (sun and moon together for following the system), its tooltip also the next.
+  // choice (a half-dark sun for following the system), its tooltip also the next.
   const scheme = user.colorScheme ?? "system";
   const nextScheme: ColorScheme = schemes[(schemes.indexOf(scheme) + 1) % schemes.length] ?? "system";
   async function cycleScheme() {
