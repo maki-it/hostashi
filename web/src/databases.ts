@@ -5,6 +5,7 @@
 // it only in component state until the user closes the notice.
 
 import { ApiError, request } from "./api";
+import i18n, { areaErrorText } from "./i18n";
 
 // sizeBytes is the size of a local database (ADR-0057); external ones and
 // failed measurements have none.
@@ -50,13 +51,13 @@ const reservedUsers = ["root", "mysql", "mariadb", "debian_sys_maint", "healthch
 export function nameProblem(kind: "database" | "user", v: string): string {
   const re = kind === "database" ? dbNameRe : dbUserRe;
   const max = kind === "database" ? 64 : 32;
-  if (v === "") return "Enter a name.";
-  if (!re.test(v)) return `Use 1 to ${max} characters: lowercase letters, digits and _, starting with a letter.`;
+  if (v === "") return i18n.t("databases.problems.enterName");
+  if (!re.test(v)) return i18n.t("databases.problems.nameChars", { max });
   const taken =
     kind === "database"
       ? reservedDatabases.includes(v) || v.startsWith("hostashi")
       : reservedUsers.includes(v) || v.startsWith("hostashi") || v.startsWith("mariadb");
-  if (taken) return "This name is reserved.";
+  if (taken) return i18n.t("databases.problems.reserved");
   return "";
 }
 
@@ -65,42 +66,8 @@ export const suggestUser = (db: string) => db.slice(0, 32);
 
 // databaseMessage turns an API error into a sentence.
 export function databaseMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case "database_exists":
-        return "A database or database user with this name exists. Choose another name.";
-      case "not_found":
-        return "This database or user does not exist any more. Reload the page.";
-      case "forbidden":
-        return "Only administrators can manage databases.";
-      case "agent_timeout":
-        return "The server did not answer in time. Reload the page to see whether the change was made.";
-      case "pg_client_too_old":
-        return "This PostgreSQL server is newer than the client tools this Hostashi version can install. Update Hostashi first.";
-      case "postgresql_not_yet":
-        return "This does not work for PostgreSQL databases yet.";
-      case "db_server_local_only":
-        return "This only works for databases on the local server.";
-      case "db_server_unresolved":
-        return "The database server's name does not resolve to an address this machine can reach. Check its DNS records.";
-      case "unknown_db_server":
-        return "This database server does not exist any more. Reload the page.";
-      case "db_server_unavailable":
-        return "The database server is not reachable. Check it on the Servers tab or try again later.";
-      case "db_server_denied":
-        return "The database server refused the panel's administrator. Check the server's privileges.";
-      case "db_server_exists":
-        return "A database server with this name exists. Choose another name.";
-      case "db_server_in_use":
-        return "The server still has databases. Delete or move them first.";
-      case "db_server_check_failed":
-        return "The check failed: " + err.message + ".";
-      default:
-        return err.message ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + "." : "Something went wrong (" + err.code + ").";
-    }
-  }
-  if (err instanceof TypeError) return "The server is not reachable.";
-  return "Something went wrong. Try again.";
+  if (err instanceof ApiError && err.code === "db_server_check_failed") return i18n.t("databases.errors.checkFailed", { reason: err.message });
+  return areaErrorText("databases.errors", err);
 }
 
 // DumpJob is an import or export running in the agent (ADR-0025).
@@ -126,14 +93,14 @@ export const getDumpJob = (db: string, id: string) =>
 const dumpComponentRe = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
 
 export function pathProblem(p: string, postgres = false): string {
-  if (p === "" || p.length > 255) return "Enter a path of 1 to 255 characters.";
+  if (p === "" || p.length > 255) return i18n.t("databases.problems.pathLength");
   if (postgres) {
-    if (!p.endsWith(".dump") && !p.endsWith(".sql") && !p.endsWith(".sql.gz")) return "The file must end in .dump, .sql or .sql.gz.";
+    if (!p.endsWith(".dump") && !p.endsWith(".sql") && !p.endsWith(".sql.gz")) return i18n.t("databases.problems.endingPg");
   } else if (!p.endsWith(".sql") && !p.endsWith(".sql.gz")) {
-    return "The file must end in .sql or .sql.gz.";
+    return i18n.t("databases.problems.ending");
   }
   for (const c of p.split("/")) {
-    if (!dumpComponentRe.test(c)) return "Use a path inside the site's home, like backups/shop.sql.gz, without parts that start with a dot or dash.";
+    if (!dumpComponentRe.test(c)) return i18n.t("databases.problems.pathParts");
   }
   return "";
 }
@@ -148,9 +115,9 @@ export const defaultDumpPath = (db: string, now = new Date(), postgres = false) 
 export type DumpFormat = ".dump" | ".sql.gz" | ".sql";
 
 export const dumpFormats = (postgres: boolean): { value: DumpFormat; label: string }[] => [
-  ...(postgres ? [{ value: ".dump" as DumpFormat, label: "PostgreSQL format (.dump, compressed)" }] : []),
-  { value: ".sql.gz", label: "SQL, compressed (.sql.gz)" },
-  { value: ".sql", label: "SQL, uncompressed (.sql)" },
+  ...(postgres ? [{ value: ".dump" as DumpFormat, label: i18n.t("databases.dump.formats.dump") }] : []),
+  { value: ".sql.gz", label: i18n.t("databases.dump.formats.sqlgz") },
+  { value: ".sql", label: i18n.t("databases.dump.formats.sql") },
 ];
 
 // formatOf is the format a path ends in, or "" for none.
@@ -228,7 +195,10 @@ export const deleteServer = (name: string) => request<void>("DELETE", "/db-serve
 // defaultPort is the usual port of an engine.
 export const defaultPort = (engine: DBEngine) => (engine === "postgresql" ? 5432 : 3306);
 
-export const isPostgres = (s: DBServer | undefined) => s?.engine === "PostgreSQL";
+// POSTGRESQL is the engine's name, the same in every language.
+export const POSTGRESQL = "PostgreSQL";
+
+export const isPostgres = (s: DBServer | undefined) => s?.engine === POSTGRESQL;
 
 // serverAddress is what goes into the site's configuration as DB_HOST.
 export function serverAddress(s: DBServer | undefined): string {
@@ -251,15 +221,15 @@ export function pgSSLMode(s: DBServer): string {
 
 // engineLabel names the engine and version, like "MariaDB 11.8.6".
 export function engineLabel(s: DBServer): string {
-  if (!s.engine) return s.local ? "MariaDB" : "Not checked yet";
+  if (!s.engine) return s.local ? "MariaDB" : i18n.t("databases.dbServers.notChecked");
   return s.engine + (s.version ? " " + s.version : "");
 }
 
 // serverNameProblem mirrors hosting.ValidateDBServerName.
 export function serverNameProblem(v: string): string {
-  if (v === "") return "Enter a name.";
-  if (!/^[a-z][a-z0-9-]{0,31}$/.test(v)) return "Use 1 to 32 characters: lowercase letters, digits and -, starting with a letter.";
-  if (v === LOCAL_SERVER) return "This name is reserved for the local server.";
+  if (v === "") return i18n.t("databases.problems.enterName");
+  if (!/^[a-z][a-z0-9-]{0,31}$/.test(v)) return i18n.t("databases.problems.serverChars");
+  if (v === LOCAL_SERVER) return i18n.t("databases.problems.serverReserved");
   return "";
 }
 
