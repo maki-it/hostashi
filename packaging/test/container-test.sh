@@ -1584,6 +1584,8 @@ out=$(x cat /home/wp/cron.out)
 if [ "$(api GET /api/v1/sites/wp/cron)" != 200 ] || ! x grep -q '"result":"success"' /tmp/api.out || ! x grep -q '"exitStatus":0' /tmp/api.out; then
   fail "cron status: $(x cat /tmp/api.out)"
 fi
+# The next run comes from systemd as a Unix time, not "not planned".
+x grep -q '"next":[1-9][0-9]\{9\}' /tmp/api.out || fail "cron job without a next run: $(x cat /tmp/api.out)"
 # Pause, then a disabled site keeps the timer stopped until it is enabled.
 [ "$(api PUT "/api/v1/sites/wp/cron/$cid" '{"schedule":"*/5 * * * *","command":"true","paused":true}')" = 200 ] || fail "pause: $(x cat /tmp/api.out)"
 ! x systemctl is-active --quiet "$cunit.timer" || fail "paused cron timer still running"

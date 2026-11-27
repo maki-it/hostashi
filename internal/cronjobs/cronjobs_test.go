@@ -18,6 +18,7 @@ import (
 type fakeCtl struct {
 	calls []string
 	props map[string]map[string]string
+	next  map[string]int64
 }
 
 func (f *fakeCtl) DaemonReload(context.Context) error {
@@ -45,6 +46,12 @@ func (f *fakeCtl) StartNoBlock(_ context.Context, u string) error {
 
 func (f *fakeCtl) Show(_ context.Context, u string, _ ...string) (map[string]string, error) {
 	return f.props[u], nil
+}
+
+func (f *fakeCtl) NextElapse(_ context.Context, timers ...string) (map[string]int64, error) {
+	f.calls = append(f.calls, "next "+strings.Join(timers, " "))
+
+	return f.next, nil
 }
 
 func newManager(t *testing.T) (*Manager, *fakeCtl) {
@@ -265,18 +272,25 @@ func TestStatus(t *testing.T) {
 			"ActiveState": "inactive", "Result": "exit-code", "ExecMainStatus": "3",
 			"ExecMainStartTimestamp": "@1700000000", "ExecMainExitTimestamp": "@1700000060",
 		},
-		"hostashi-cron-shop-1.timer": {"ActiveState": "active", "NextElapseUSecRealtime": "@1700003600"},
+		"hostashi-cron-shop-1.timer": {"ActiveState": "active"},
 		"hostashi-cron-shop-2.service": {
 			"ActiveState": "inactive", "ExecMainStatus": "0", "ExecMainStartTimestamp": "",
 		},
-		"hostashi-cron-shop-2.timer": {"ActiveState": "inactive", "NextElapseUSecRealtime": "@1700009999"},
+		"hostashi-cron-shop-2.timer": {"ActiveState": "inactive"},
 	}
+	// A paused job's timer may still report a next elapse; it is not shown.
+	ctl.next = map[string]int64{"hostashi-cron-shop-1.timer": 1700003600, "hostashi-cron-shop-2.timer": 1700009999}
+	ctl.calls = nil
 
 	st, err := m.Status(t.Context(), "shop")
 	must(t, err)
 
 	if len(st.Jobs) != 2 {
 		t.Fatalf("%+v", st)
+	}
+
+	if len(ctl.calls) != 1 || ctl.calls[0] != "next hostashi-cron-shop-1.timer hostashi-cron-shop-2.timer" {
+		t.Errorf("calls %q", ctl.calls)
 	}
 
 	j := st.Jobs[0]

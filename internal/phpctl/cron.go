@@ -5,6 +5,7 @@ package phpctl
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -70,6 +71,60 @@ func (CronController) Show(ctx context.Context, unit string, props ...string) (m
 	for l := range strings.SplitSeq(out, "\n") {
 		if k, v, ok := strings.Cut(l, "="); ok {
 			m[k] = v
+		}
+	}
+
+	return m, nil
+}
+
+// NextElapse reads the next elapse of cron timers from systemctl
+// list-timers --output=json, which gives it in microseconds since the
+// epoch (null for none). systemctl show prints NextElapseUSecRealtime as a
+// local date even with --timestamp=unix, so Show cannot read it.
+func (CronController) NextElapse(ctx context.Context, timers ...string) (map[string]int64, error) {
+	if len(timers) == 0 {
+		return map[string]int64{}, nil
+	}
+
+	args := []string{"list-timers", "--all", "--no-pager", "--output=json", "--"}
+
+	for _, t := range timers {
+		if !cronUnitRe.MatchString(t) || !strings.HasSuffix(t, ".timer") {
+			return nil, fmt.Errorf("phpctl: refusing unit name %q", t)
+		}
+
+		args = append(args, t)
+	}
+
+	out, err := output(ctx, Systemctl, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseTimers(out)
+}
+
+// parseTimers reads list-timers' JSON: unit name to Unix seconds, timers
+// without a next elapse left out.
+func parseTimers(out string) (map[string]int64, error) {
+	var rows []struct {
+		Unit string `json:"unit"`
+		Next *int64 `json:"next"`
+	}
+
+	if strings.TrimSpace(out) == "" {
+		return map[string]int64{}, nil // no timer matched
+	}
+
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		return nil, fmt.Errorf("phpctl: list-timers: %w", err)
+	}
+
+	m := make(map[string]int64, len(rows))
+
+	for _, r := range rows {
+		if r.Next != nil && *r.Next > 0 {
+			m[r.Unit] = *r.Next / 1_000_000
 		}
 	}
 
