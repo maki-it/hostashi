@@ -2,22 +2,20 @@
 
 import { Plus, Prohibit } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { formatHash } from "./routes";
 import { GrantFields, grantReady, useGrant } from "./TokenGrant";
 import { createToken, listTokens, revokeToken, tokenMessage, tokenState, type APIToken, type CreatedToken, type TokenState } from "./tokens";
 import { Badge, Button, Card, Field, IconButton, Notice, RelTime, RowActions, Table, type Column, type Tone } from "./ui";
 
-const states: Record<TokenState, { label: string; tone: Tone }> = {
-  active: { label: "Active", tone: "ok" },
-  expires_soon: { label: "Expires soon", tone: "warn" },
-  expired: { label: "Expired", tone: "off" },
-  revoked: { label: "Revoked", tone: "off" },
-};
+// The label of a state is tokens.states.<state>.
+const tones: Record<TokenState, Tone> = { active: "ok", expires_soon: "warn", expired: "off", revoked: "off" };
 
 // TokensCard lists the account's API tokens and creates and revokes them
 // (ADR-0018). A token never gets more than its owner: only the scopes of the
 // role and only sites the account reaches (ADR-0035).
 export function TokensCard({ admin = false }: { admin?: boolean }) {
+  const { t: tr } = useTranslation();
   const [tokens, setTokens] = useState<APIToken[] | null>(null);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
@@ -60,7 +58,7 @@ export function TokensCard({ admin = false }: { admin?: boolean }) {
   const columns: Column<APIToken>[] = [
     {
       key: "name",
-      header: "Name",
+      header: tr("tokens.columns.name"),
       cell: (t) => (
         <span className="ui-cell-main">
           <strong>{t.name}</strong>
@@ -68,17 +66,17 @@ export function TokensCard({ admin = false }: { admin?: boolean }) {
         </span>
       ),
     },
-    { key: "state", header: "State", cell: (t) => <Badge tone={states[tokenState(t, now)].tone}>{states[tokenState(t, now)].label}</Badge> },
-    { key: "scopes", header: "Scopes", cell: (t) => <ScopeList scopes={t.scopes} /> },
-    { key: "sites", header: "Sites", cell: (t) => (t.sites === null ? "All" : t.sites.join(", ")) },
+    { key: "state", header: tr("tokens.columns.state"), cell: (t) => <Badge tone={tones[tokenState(t, now)]}>{tr(`tokens.states.${tokenState(t, now)}`)}</Badge> },
+    { key: "scopes", header: tr("tokens.columns.scopes"), cell: (t) => <ScopeList scopes={t.scopes} /> },
+    { key: "sites", header: tr("tokens.columns.sites"), cell: (t) => (t.sites === null ? tr("tokens.allSites") : t.sites.join(", ")) },
     {
       key: "expires",
-      header: "Expires",
-      cell: (t) => (t.expiresAt === null ? <Badge tone="warn">Never</Badge> : <RelTime iso={t.expiresAt} />),
+      header: tr("tokens.columns.expires"),
+      cell: (t) => (t.expiresAt === null ? <Badge tone="warn">{tr("common.status.never")}</Badge> : <RelTime iso={t.expiresAt} />),
     },
     {
       key: "used",
-      header: "Last used",
+      header: tr("tokens.columns.used"),
       cell: (t) =>
         t.lastUsedAt ? (
           <span className="ui-cell-main">
@@ -86,19 +84,20 @@ export function TokensCard({ admin = false }: { admin?: boolean }) {
             {t.lastUsedIp && <span className="ui-hint">{t.lastUsedIp}</span>}
           </span>
         ) : (
-          <span className="ui-hint">Never</span>
+          <span className="ui-hint">{tr("common.status.never")}</span>
         ),
     },
     {
       key: "actions",
-      header: "Actions",
+      header: tr("tokens.columns.actions"),
       srHeader: true,
       cell: (t) =>
         tokenState(t, now) === "revoked" ? null : (
           <RowActions>
             <IconButton
-              label={`Revoke ${t.name}`}
-              text="Revoke" icon={<Prohibit size={16} />}
+              label={tr("tokens.revokeLabel", { name: t.name })}
+              text={tr("tokens.revoke")}
+              icon={<Prohibit size={16} />}
               danger
               disabled={busy}
               onClick={() => {
@@ -125,7 +124,7 @@ export function TokensCard({ admin = false }: { admin?: boolean }) {
         />
       )}
       <Card
-        title="API tokens"
+        title={tr("tokens.title")}
         padded={false}
         actions={
           !creating && (
@@ -138,53 +137,52 @@ export function TokensCard({ admin = false }: { admin?: boolean }) {
                 setCreating(true);
               }}
             >
-              New token
+              {tr("tokens.new")}
             </Button>
           )
         }
       >
         <div className="ui-card-body ui-stack">
           <p className="ui-flush ui-hint">
-            Tokens let scripts, monitoring and the hostashi command line use the API as you. Each has its own scopes, sites and lifetime, and
-            you can revoke each one on its own.
+            {tr("tokens.intro")}
             {admin && (
               <>
                 {" "}
-                Where tokens are accepted from is set under <a href={formatHash({ page: "firewall" })}>Firewall</a>.
+                <Trans i18nKey="tokens.introAdmin" components={{ a: <a href={formatHash({ page: "firewall" })} /> }} />
               </>
             )}
           </p>
           {revoking && (
-            <Notice tone="warn" title={`Revoke the token “${revoking.name}”?`}>
+            <Notice tone="warn" title={tr("tokens.revokeTitle", { name: revoking.name })}>
               <p className="ui-flush">
-                Everything that uses <code>{revoking.prefix}…</code> stops working at once. This cannot be undone.
+                <Trans i18nKey="tokens.revokeText" values={{ prefix: revoking.prefix }} components={{ code: <code /> }} />
               </p>
               <div className="ui-row">
                 <Button variant="danger" disabled={busy} onClick={() => void revoke(revoking)}>
-                  Revoke token
+                  {tr("tokens.revokeSubmit")}
                 </Button>
                 <Button disabled={busy} onClick={() => setRevoking(null)}>
-                  Cancel
+                  {tr("common.actions.cancel")}
                 </Button>
               </div>
             </Notice>
           )}
           {error && <Notice tone="err" title={error} />}
-          {tokens === null && !error && <p aria-busy="true">Loading…</p>}
+          {tokens === null && !error && <p aria-busy="true">{tr("common.status.loading")}</p>}
           {old.length > 0 && (
             <label className="ui-check">
               <input type="checkbox" checked={showOld} onChange={(e) => setShowOld(e.target.checked)} />
-              Show revoked and expired tokens ({old.length})
+              {tr("tokens.showOld", { count: old.length })}
             </label>
           )}
         </div>
         {tokens !== null && (
           <Table
-            label="API tokens"
+            label={tr("tokens.title")}
             columns={columns}
             rows={shown}
             rowKey={(t) => String(t.id)}
-            empty={old.length > 0 ? "No working tokens." : "No tokens yet. Create one with New token."}
+            empty={old.length > 0 ? tr("tokens.noWorking") : tr("tokens.none")}
           />
         )}
       </Card>
@@ -195,6 +193,7 @@ export function TokensCard({ admin = false }: { admin?: boolean }) {
 const scopesShown = 3;
 
 function ScopeList({ scopes }: { scopes: string[] }) {
+  const { t } = useTranslation();
   const rest = scopes.length - scopesShown;
   return (
     <span title={scopes.join(", ")}>
@@ -204,12 +203,13 @@ function ScopeList({ scopes }: { scopes: string[] }) {
           <code>{s}</code>
         </span>
       ))}
-      {rest > 0 && <span className="ui-hint"> and {rest} more</span>}
+      {rest > 0 && <span className="ui-hint"> {t("common.andMore", { count: rest })}</span>}
     </span>
   );
 }
 
 function NewToken({ onCancel, onCreated }: { onCancel: () => void; onCreated: (t: CreatedToken) => void }) {
+  const { t } = useTranslation();
   const { scopes, sites, error: loadError, grant, setGrant } = useGrant("90");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -239,10 +239,10 @@ function NewToken({ onCancel, onCreated }: { onCancel: () => void; onCreated: (t
   const nameOK = name.trim().length >= 1 && name.trim().length <= 64;
 
   return (
-    <Card title="New API token">
+    <Card title={t("tokens.create.title")}>
       <form className="ui-stack" onSubmit={(e) => void submit(e)}>
         <div className="ui-narrow">
-          <Field label="Name" hint="What uses it, for example “Uptime monitoring” or “Deploy from CI”. Up to 64 characters.">
+          <Field label={t("tokens.create.name")} hint={t("tokens.create.nameHint")}>
             <input className="ui-input" value={name} maxLength={64} onChange={(e) => setName(e.target.value)} autoComplete="off" autoFocus />
           </Field>
         </div>
@@ -251,10 +251,10 @@ function NewToken({ onCancel, onCreated }: { onCancel: () => void; onCreated: (t
         {error && <Notice tone="err" title={error} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || !nameOK || !grantReady(grant)}>
-            {busy ? "Creating…" : "Create token"}
+            {busy ? t("tokens.create.creating") : t("tokens.create.submit")}
           </Button>
           <Button disabled={busy} onClick={onCancel}>
-            Cancel
+            {t("common.actions.cancel")}
           </Button>
         </div>
       </form>
@@ -265,6 +265,7 @@ function NewToken({ onCancel, onCreated }: { onCancel: () => void; onCreated: (t
 // SecretNotice shows a new token once. The panel stores only its hash and
 // cannot show it again; closing the notice drops it from memory.
 function SecretNotice({ token, onClose }: { token: CreatedToken; onClose: () => void }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
   const highRisk = token.warnings.filter((w) => w.startsWith("high_risk_scope: ")).map((w) => w.slice("high_risk_scope: ".length));
@@ -277,21 +278,19 @@ function SecretNotice({ token, onClose }: { token: CreatedToken; onClose: () => 
   async function copy() {
     try {
       await navigator.clipboard.writeText(token.token);
-      setCopied("Copied.");
+      setCopied(t("common.status.copied"));
     } catch {
-      setCopied("Copying is not possible here. Select the token and copy it by hand.");
+      setCopied(t("tokens.secret.copyFailed"));
     }
   }
 
   return (
     <section className="ui-card ui-card-body ui-stack ui-attention" aria-labelledby="token-secret">
       <h2 id="token-secret" ref={heading} tabIndex={-1}>
-        Save this token now
+        {t("tokens.secret.title")}
       </h2>
-      <p className="ui-flush">
-        Hostashi stores only a hash of “{token.name}” and cannot show it again. If it is lost, revoke it and create a new one.
-      </p>
-      <Field label="Token">
+      <p className="ui-flush">{t("tokens.secret.text", { name: token.name })}</p>
+      <Field label={t("tokens.secret.token")}>
         <input
           readOnly
           value={token.token}
@@ -302,27 +301,26 @@ function SecretNotice({ token, onClose }: { token: CreatedToken; onClose: () => 
         />
       </Field>
       <div className="ui-row">
-        <Button onClick={() => void copy()}>Copy token</Button>
+        <Button onClick={() => void copy()}>{t("tokens.secret.copy")}</Button>
         <Button variant="primary" onClick={onClose}>
-          I have saved it
+          {t("tokens.secret.saved")}
         </Button>
       </div>
       {copied && <Notice tone="ok" title={copied} />}
-      {token.neverExpires && <Notice tone="warn" title="This token never expires. Revoke it when the job that uses it ends." />}
+      {token.neverExpires && <Notice tone="warn" title={t("tokens.secret.neverExpires")} />}
       {highRisk.length > 0 && (
-        <Notice tone="warn" title="This token has high-risk scopes">
+        <Notice tone="warn" title={t("tokens.secret.highRisk")}>
           {highRisk.map((s, i) => (
             <span key={s}>
               {i > 0 && ", "}
               <code>{s}</code>
             </span>
           ))}
-          . Keep it where only you can read it.
+          {t("tokens.secret.highRiskKeep")}
         </Notice>
       )}
       <p className="ui-flush ui-hint">
-        Send it as <code>Authorization: Bearer …</code>, or give it to the command line with{" "}
-        <code>hostashi login -token {window.location.origin}</code> on stdin.
+        <Trans i18nKey="tokens.secret.use" values={{ origin: window.location.origin }} components={{ code1: <code />, code2: <code /> }} />
       </p>
     </section>
   );

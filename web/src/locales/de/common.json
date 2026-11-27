@@ -1,7 +1,10 @@
 {
   "actions": {
     "back": "Zurück",
-    "tryAgain": "Erneut versuchen"
+    "tryAgain": "Erneut versuchen",
+    "cancel": "Abbrechen",
+    "continue": "Weiter",
+    "save": "Speichern"
   },
   "roles": {
     "admin": "Admin",
@@ -15,5 +18,17 @@
     "generic": "Etwas ist schiefgelaufen. Versuch es noch einmal.",
     "unknown": "Etwas ist schiefgelaufen ({{code}}). Versuch es noch einmal.",
     "unreachable": "Der Server ist nicht erreichbar."
+  },
+  "status": {
+    "loading": "Wird geladen …",
+    "saving": "Wird gespeichert …",
+    "copied": "Kopiert.",
+    "never": "Nie"
+  },
+  "andMore": "und {{count}} weitere",
+  "form": {
+    "appliesAtOnce": "Gilt sofort",
+    "unsaved": "Ungespeicherte Änderungen",
+    "noChanges": "Keine Änderungen"
   }
 }

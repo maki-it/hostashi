@@ -4,6 +4,7 @@
 // a mail server: it hands messages to a relay over STARTTLS or TLS.
 
 import { ApiError, request } from "./api";
+import { areaErrorText } from "./i18n";
 
 export type TLSMode = "starttls" | "tls";
 
@@ -78,25 +79,8 @@ export const removeAccountEmail = () => request<void>("DELETE", "/account/email"
 
 export const confirmAccountEmail = (token: string) => request<{ email: string }>("POST", "/account/email/confirm", { token });
 
-export function accountEmailMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case "invalid_argument":
-        return err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
-      case "mail_not_configured":
-        return "An administrator has to set up email first.";
-      case "no_public_url":
-        return "The panel has no public address for links. An administrator has to set one.";
-      case "rate_limited":
-        return "Too many attempts in the last hour. Try again later.";
-      case "link_invalid":
-        return "The link is invalid, used or expired. Enter the address again on your account page to get a new one.";
-      case "mail_failed":
-        return "The confirmation email could not be queued. Try again later.";
-    }
-  }
-  return "The request failed. Try again.";
-}
+/** accountEmailMessage explains an error of the account's email address in the current language. */
+export const accountEmailMessage = (err: unknown): string => areaErrorText("account.email.errors", err);
 
 export type NotifyCategory = "backups" | "certificates" | "doctor" | "services" | "deploys" | "php" | "disk";
 

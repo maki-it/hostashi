@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { accountEmailMessage, getAccountEmail, removeAccountEmail, setAccountEmail, type AccountEmail } from "./mail";
 import { Button, Card, Field, Notice, RelTime } from "./ui";
 
 // EmailCard holds the account's own email address (ADR-0044). A new
 // address is used only after the link sent to it is opened.
 export function EmailCard() {
+  const { t } = useTranslation();
   const [state, setState] = useState<AccountEmail | null>(null);
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
@@ -58,7 +60,7 @@ export function EmailCard() {
 
   if (!state) {
     return (
-      <Card title="Email">{error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading…</p>}</Card>
+      <Card title={t("account.email.title")}>{error ? <Notice tone="err" title={error} /> : <p aria-busy="true">{t("common.status.loading")}</p>}</Card>
     );
   }
 
@@ -66,39 +68,33 @@ export function EmailCard() {
   const showForm = canAdd && (editing || (state.email === "" && state.pending === ""));
 
   return (
-    <Card title="Email">
+    <Card title={t("account.email.title")}>
       <div className="ui-stack">
-        <p className="ui-flush ui-hint">
-          For invitations, security notes about your account and the notifications you choose. Hostashi uses it only after you open the link it
-          sends there.
-        </p>
+        <p className="ui-flush ui-hint">{t("account.email.intro")}</p>
         {state.email !== "" && (
           <p className="ui-flush">
-            Your address: <strong>{state.email}</strong>
+            <Trans i18nKey="account.email.yours" values={{ email: state.email }} components={{ b: <strong /> }} />
           </p>
         )}
         {state.pending !== "" && (
-          <Notice tone="info" title={"Waiting for confirmation: " + state.pending}>
-            Open the link in the email we sent there
-            {state.pending_expires && (
-              <>
-                {" "}
-                before it expires <RelTime iso={state.pending_expires} />
-              </>
+          <Notice tone="info" title={t("account.email.pending", { email: state.pending })}>
+            {state.pending_expires ? (
+              <Trans i18nKey="account.email.openLinkBefore" components={{ time: <RelTime iso={state.pending_expires} /> }} />
+            ) : (
+              t("account.email.openLink")
             )}
-            .
           </Notice>
         )}
-        {sent && !error && <Notice tone="ok" title="We sent a link to the new address. Check the inbox, and the spam folder if it does not arrive." />}
+        {sent && !error && <Notice tone="ok" title={t("account.email.sent")} />}
         {!canAdd && state.email === "" && (
-          <Notice tone="info" title="Email is not set up on this panel.">
-            An administrator can set up an SMTP relay under Administration, Email.
+          <Notice tone="info" title={t("account.email.notSetUp")}>
+            {t("account.email.notSetUpHint")}
           </Notice>
         )}
         {showForm ? (
           <form className="ui-stack" onSubmit={(e) => void save(e)}>
             <div className="ui-narrow">
-              <Field label={state.email === "" ? "Email address" : "New email address"}>
+              <Field label={state.email === "" ? t("account.email.address") : t("account.email.newAddress")}>
                 <input
                   className="ui-input"
                   type="email"
@@ -113,11 +109,11 @@ export function EmailCard() {
             {error && <Notice tone="err" title={error} />}
             <div className="ui-row">
               <Button type="submit" variant="primary" disabled={busy || draft.trim() === ""}>
-                {busy ? "Sending…" : "Send confirmation link"}
+                {busy ? t("account.email.sending") : t("account.email.send")}
               </Button>
               {editing && (
                 <Button disabled={busy} onClick={() => setEditing(false)}>
-                  Cancel
+                  {t("common.actions.cancel")}
                 </Button>
               )}
             </div>
@@ -129,11 +125,11 @@ export function EmailCard() {
               <div className="ui-row">
                 {canAdd && (
                   <Button disabled={busy} onClick={() => setEditing(true)}>
-                    Change address
+                    {t("account.email.change")}
                   </Button>
                 )}
                 <Button variant="danger" disabled={busy} onClick={() => void remove()}>
-                  Remove address
+                  {t("account.email.remove")}
                 </Button>
               </div>
             )}

@@ -18,5 +18,122 @@
     "de": "Deutsch",
     "failed": "Die Sprache konnte nicht gespeichert werden. Sie gilt bis zum Neuladen."
   },
-  "saved": "Gespeichert. So sieht das Panel in jedem Browser aus, mit dem du dich anmeldest."
+  "saved": "Gespeichert. So sieht das Panel in jedem Browser aus, mit dem du dich anmeldest.",
+  "email": {
+    "title": "E-Mail",
+    "intro": "Für Einladungen, Sicherheitshinweise zu deinem Konto und die Benachrichtigungen, die du auswählst. Hostashi nutzt sie erst, wenn du den Link öffnest, den es dorthin schickt.",
+    "yours": "Deine Adresse: <b>{{email}}</b>",
+    "pending": "Wartet auf Bestätigung: {{email}}",
+    "openLink": "Öffne den Link in der E-Mail, die wir dorthin geschickt haben.",
+    "openLinkBefore": "Öffne den Link in der E-Mail, die wir dorthin geschickt haben, bevor er abläuft (<time/>).",
+    "sent": "Wir haben einen Link an die neue Adresse geschickt. Schau in den Posteingang und, falls nichts ankommt, in den Spam-Ordner.",
+    "notSetUp": "E-Mail ist auf diesem Panel nicht eingerichtet.",
+    "notSetUpHint": "Ein Admin kann unter Verwaltung, E-Mail ein SMTP-Relay einrichten.",
+    "address": "E-Mail-Adresse",
+    "newAddress": "Neue E-Mail-Adresse",
+    "send": "Bestätigungslink senden",
+    "sending": "Wird gesendet …",
+    "change": "Adresse ändern",
+    "remove": "Adresse entfernen",
+    "errors": {
+      "mail_not_configured": "Ein Admin muss zuerst E-Mail einrichten.",
+      "no_public_url": "Das Panel hat keine öffentliche Adresse für Links. Ein Admin muss eine festlegen.",
+      "rate_limited": "Zu viele Versuche in der letzten Stunde. Versuch es später noch einmal.",
+      "link_invalid": "Der Link ist ungültig, schon benutzt oder abgelaufen. Gib die Adresse auf deiner Kontoseite noch einmal ein, um einen neuen zu bekommen.",
+      "mail_failed": "Die Bestätigungsmail konnte nicht eingereiht werden. Versuch es später noch einmal."
+    }
+  },
+  "notifications": {
+    "title": "Benachrichtigungen",
+    "intro": "E-Mails über Probleme auf dem Server und deinen Sites. Sicherheitshinweise zu deinem Konto kommen immer.",
+    "noMail": "Benachrichtigungen brauchen E-Mail, und die ist auf diesem Panel noch nicht eingerichtet.",
+    "noAddress": "Trag oben eine E-Mail-Adresse ein und bestätige sie, um Benachrichtigungen zu bekommen.",
+    "legend": "Schick mir eine E-Mail bei",
+    "categories": {
+      "backups": {
+        "label": "Backups",
+        "hint": "Ein Backup ist fehlgeschlagen oder hat nicht alles gesichert."
+      },
+      "certificates": {
+        "label": "Zertifikate",
+        "hint": "Eine Verlängerung ist fehlgeschlagen oder ein Zertifikat läuft in 14 oder 3 Tagen ab."
+      },
+      "doctor": {
+        "label": "Server-Prüfungen",
+        "hint": "Einmal am Tag, wenn die Prüfungen auf der Seite Zustand Fehler finden."
+      },
+      "services": {
+        "label": "Dienste",
+        "hint": "Ein Dienst ist aus oder stürzt immer wieder ab, und noch einmal, wenn er wieder läuft."
+      },
+      "deploys": {
+        "label": "Git-Deploys",
+        "hint": "Ein Git-Deploy einer Site ist fehlgeschlagen. Aus, bis du es einschaltest."
+      },
+      "php": {
+        "label": "PHP-Versionen",
+        "hint": "Einmal pro Woche, wenn eine Site eine PHP-Version kurz vor oder nach ihrem Support-Ende nutzt."
+      },
+      "disk": {
+        "label": "Speicherplatz",
+        "hint": "Eine Platte oder die Quota einer Site ist zu mehr als 90 Prozent voll."
+      }
+    }
+  },
+  "security": {
+    "title": "Anmeldung und Sicherheit",
+    "errors": {
+      "invalid_credentials": "Falsches Passwort oder falscher Code.",
+      "second_factor_required": "Dein Konto muss einen zweiten Faktor behalten. Füge einen Passkey hinzu oder behalte die Authenticator-App.",
+      "too_many_passkeys": "Du hast schon so viele Passkeys, wie ein Konto haben kann. Entferne zuerst einen."
+    },
+    "password": {
+      "title": "Passwort",
+      "current": "Aktuelles Passwort",
+      "new": "Neues Passwort",
+      "newHint": "Mindestens 12 Zeichen. Deine anderen Sitzungen werden abgemeldet.",
+      "repeat": "Neues Passwort wiederholen",
+      "mismatch": "Die neuen Passwörter stimmen nicht überein.",
+      "wrongCurrent": "Das aktuelle Passwort ist falsch.",
+      "changed": "Passwort geändert. Deine anderen Sitzungen wurden abgemeldet.",
+      "submit": "Passwort ändern",
+      "changing": "Wird geändert …"
+    },
+    "totp": {
+      "title": "Authenticator-App (TOTP)",
+      "on": "An. Bei der Anmeldung mit Passwort fragt das Panel nach einem Code aus der App.",
+      "off": "Aus. Bei der Anmeldung mit Passwort fragt das Panel nach nichts weiter.",
+      "turnedOn": "Die Authenticator-App ist an.",
+      "turnedOff": "Die Authenticator-App ist aus. Ihre Wiederherstellungscodes funktionieren nicht mehr.",
+      "moved": "Die Authenticator-App ist auf das neue Gerät umgezogen.",
+      "moveIntro": "Deine alte App funktioniert weiter, bis die neue hier ihren ersten Code zeigt.",
+      "useNew": "Neue App verwenden",
+      "moveDone": "Die neue App ist in Gebrauch. Codes aus der alten App und die alten Wiederherstellungscodes funktionieren nicht mehr. Bewahre diese neuen Wiederherstellungscodes sicher auf; jeder funktioniert einmal.",
+      "verifyMove": "Für den Umzug auf ein neues Handy oder eine neue App gib dein Passwort und einen aktuellen Code aus der alten App ein. Ist das alte Handy weg, nimm einen Wiederherstellungscode.",
+      "verifyOff": "Zum Ausschalten gib dein Passwort und einen aktuellen Code aus der App oder einen Wiederherstellungscode ein.",
+      "password": "Dein Passwort",
+      "code": "Code aus der App oder Wiederherstellungscode",
+      "turnOff": "Ausschalten",
+      "move": "Auf neues Gerät umziehen",
+      "setUp": "Authenticator-App einrichten"
+    },
+    "passkeys": {
+      "title": "Passkeys",
+      "intro": "Mit einem Passkey meldest du dich ohne Passwort an, über die Sperre deines Geräts oder einen Sicherheitsschlüssel. Er zählt als zweiter Faktor.",
+      "none": "Noch keine Passkeys.",
+      "list": "Deine Passkeys",
+      "added": "hinzugefügt <time/>",
+      "lastUsed": ", zuletzt benutzt <time/>",
+      "neverUsed": ", nie benutzt",
+      "removeLabel": "Passkey {{name}} entfernen",
+      "remove": "Entfernen",
+      "name": "Name des neuen Passkeys",
+      "nameHint": "Damit du ihn wiedererkennst, zum Beispiel das Gerät.",
+      "add": "Passkey hinzufügen",
+      "waiting": "Warte auf den Browser …",
+      "unsupported": "Dieser Browser kann keine Passkeys anlegen.",
+      "addedNote": "Passkey {{name}} hinzugefügt.",
+      "removedNote": "Passkey {{name}} entfernt."
+    }
+  }
 }

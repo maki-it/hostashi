@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { Trash } from "@phosphor-icons/react";
 import { ApiError } from "./api";
+import i18n from "./i18n";
 import { addPasskey, changePassword, deletePasskey, listPasskeys, message, totpDisable, totpReplace, totpReplaceConfirm, type Passkey, type User } from "./auth";
 import { TotpEnrolment } from "./SecondFactor";
 import { Button, Card, Field, IconButton, Notice, RelTime } from "./ui";
@@ -11,14 +13,8 @@ import { passkeysSupported } from "./webauthn";
 // securityMessage explains the errors of the account security forms.
 export function securityMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    switch (err.code) {
-      case "invalid_credentials":
-        return "Wrong password or code.";
-      case "second_factor_required":
-        return "Your account must keep a second factor. Add a passkey or keep the authenticator app.";
-      case "too_many_passkeys":
-        return "You have the most passkeys an account can have. Remove one first.";
-    }
+    const key = `account.security.errors.${err.code}`;
+    if (i18n.exists(key)) return (i18n.t as (k: string) => string)(key);
   }
   return message(err);
 }
@@ -27,8 +23,9 @@ export function securityMessage(err: unknown): string {
 // turn off the authenticator app (TOTP) and manage its passkeys. Every
 // change needs this browser session; the server sends a security email.
 export function SecurityCard({ user }: { user: User }) {
+  const { t } = useTranslation();
   return (
-    <Card title="Sign-in and security">
+    <Card title={t("account.security.title")}>
       <div className="ui-stack">
         <PasswordSection />
         <TotpSection user={user} />
@@ -39,6 +36,7 @@ export function SecurityCard({ user }: { user: User }) {
 }
 
 function PasswordSection() {
+  const { t } = useTranslation();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [repeat, setRepeat] = useState("");
@@ -50,7 +48,7 @@ function PasswordSection() {
     e.preventDefault();
     setDone(false);
     if (next !== repeat) {
-      setError("The new passwords do not match.");
+      setError(t("account.security.password.mismatch"));
       return;
     }
     setBusy(true);
@@ -62,7 +60,7 @@ function PasswordSection() {
       setNext("");
       setRepeat("");
     } catch (err) {
-      setError(err instanceof ApiError && err.code === "invalid_credentials" ? "The current password is wrong." : securityMessage(err));
+      setError(err instanceof ApiError && err.code === "invalid_credentials" ? t("account.security.password.wrongCurrent") : securityMessage(err));
     } finally {
       setBusy(false);
     }
@@ -71,23 +69,23 @@ function PasswordSection() {
   return (
     <section className="ui-stack" aria-labelledby="sec-password">
       <h3 id="sec-password" className="ui-flush">
-        Password
+        {t("account.security.password.title")}
       </h3>
       <form className="ui-stack ui-narrow" onSubmit={(e) => void submit(e)} noValidate>
-        <Field label="Current password">
+        <Field label={t("account.security.password.current")}>
           <input className="ui-input" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
         </Field>
-        <Field label="New password" hint="At least 12 characters. Your other sessions are logged out.">
+        <Field label={t("account.security.password.new")} hint={t("account.security.password.newHint")}>
           <input className="ui-input" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />
         </Field>
-        <Field label="Repeat the new password">
+        <Field label={t("account.security.password.repeat")}>
           <input className="ui-input" type="password" autoComplete="new-password" value={repeat} onChange={(e) => setRepeat(e.target.value)} />
         </Field>
         {error && <Notice tone="err" title={error} />}
-        {done && !error && <Notice tone="ok" title="Password changed. Your other sessions were logged out." />}
+        {done && !error && <Notice tone="ok" title={t("account.security.password.changed")} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || current === "" || next === "" || repeat === ""}>
-            {busy ? "Changing…" : "Change password"}
+            {busy ? t("account.security.password.changing") : t("account.security.password.submit")}
           </Button>
         </div>
       </form>
@@ -96,6 +94,7 @@ function PasswordSection() {
 }
 
 function TotpSection({ user }: { user: User }) {
+  const { t } = useTranslation();
   const [on, setOn] = useState(!!user.totp);
   const [mode, setMode] = useState<"" | "setup" | "off" | "move">("");
   const [moving, setMoving] = useState<{ secret: string; uri: string } | null>(null);
@@ -129,7 +128,7 @@ function TotpSection({ user }: { user: User }) {
         await totpDisable(password, code.trim());
         setOn(false);
         setMode("");
-        setNote("The authenticator app is off. Its recovery codes no longer work.");
+        setNote(t("account.security.totp.turnedOff"));
       }
     } catch (err) {
       setError(securityMessage(err));
@@ -143,7 +142,7 @@ function TotpSection({ user }: { user: User }) {
   return (
     <section className="ui-stack" aria-labelledby="sec-totp">
       <h3 id="sec-totp" className="ui-flush">
-        Authenticator app (TOTP)
+        {t("account.security.totp.title")}
       </h3>
       {mode === "setup" ? (
         <>
@@ -153,71 +152,71 @@ function TotpSection({ user }: { user: User }) {
             onDone={() => {
               setOn(true);
               setMode("");
-              setNote("The authenticator app is on.");
+              setNote(t("account.security.totp.turnedOn"));
             }}
           />
           <div className="ui-row">
-            <Button onClick={close}>Cancel</Button>
+            <Button onClick={close}>{t("common.actions.cancel")}</Button>
           </div>
         </>
       ) : mode === "move" && moving ? (
         <>
-          <p className="ui-flush">Your old app keeps working until the new one shows its first code here.</p>
+          <p className="ui-flush">{t("account.security.totp.moveIntro")}</p>
           <TotpEnrolment
             intro=""
             initial={moving}
             confirm={totpReplaceConfirm}
-            submitLabel="Use the new app"
-            doneTitle="The new app is in use. Codes from the old app and the old recovery codes no longer work. Keep these new recovery codes somewhere safe; each one works once."
+            submitLabel={t("account.security.totp.useNew")}
+            doneTitle={t("account.security.totp.moveDone")}
             onDone={() => {
               close();
-              setNote("The authenticator app was moved to the new device.");
+              setNote(t("account.security.totp.moved"));
             }}
           />
           <div className="ui-row">
-            <Button onClick={close}>Cancel</Button>
+            <Button onClick={close}>{t("common.actions.cancel")}</Button>
           </div>
         </>
       ) : mode === "off" || mode === "move" ? (
         <form className="ui-stack ui-narrow" onSubmit={(e) => void verify(e)} noValidate>
           <p className="ui-flush">
             {mode === "move"
-              ? "To move to a new phone or app, enter your password and a current code from the old app. If the old phone is gone, use a recovery code."
-              : "To turn it off, enter your password and a current code from the app or a recovery code."}
+              ? t("account.security.totp.verifyMove")
+              : t("account.security.totp.verifyOff")}
           </p>
-          <Field label="Your password">
+          <Field label={t("account.security.totp.password")}>
             <input className="ui-input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </Field>
-          <Field label="Code from the app or a recovery code">
+          <Field label={t("account.security.totp.code")}>
             <input className="ui-input" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} />
           </Field>
           {error && <Notice tone="err" title={error} />}
           <div className="ui-row">
             <Button type="submit" variant={mode === "move" ? "primary" : "danger"} disabled={busy || password === "" || code.trim() === ""}>
-              {mode === "move" ? "Continue" : "Turn off"}
+              {mode === "move" ? t("common.actions.continue") : t("account.security.totp.turnOff")}
             </Button>
             <Button disabled={busy} onClick={close}>
-              Cancel
+              {t("common.actions.cancel")}
             </Button>
           </div>
         </form>
       ) : (
         <>
           <p className="ui-flush">
-            {on ? "On. Logging in with your password asks for a code from the app." : "Off. Logging in with your password asks for nothing else."}
+            {on ? t("account.security.totp.on") : t("account.security.totp.off")}
           </p>
           {note && <Notice tone="ok" title={note} />}
           <div className="ui-row">
             {on ? (
               <>
-                <Button onClick={() => open("move")}>Move to a new device</Button>
+                <Button onClick={() => open("move")}>{t("account.security.totp.move")}</Button>
                 <Button variant="danger" onClick={() => open("off")}>
-                  Turn off
+                  {t("account.security.totp.turnOff")}
                 </Button>
               </>
             ) : (
               <Button variant="primary" onClick={() => open("setup")}>
-                Set up an authenticator app
+                {t("account.security.totp.setUp")}
               </Button>
             )}
           </div>
@@ -227,6 +226,7 @@ function TotpSection({ user }: { user: User }) {
   );
 }
 function PasskeySection() {
+  const { t } = useTranslation();
   const [keys, setKeys] = useState<Passkey[] | null>(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -253,7 +253,7 @@ function PasskeySection() {
     setNote("");
     try {
       const p = await addPasskey(name.trim());
-      setNote(`Passkey ${p.name} added.`);
+      setNote(t("account.security.passkeys.addedNote", { name: p.name }));
       setName("");
       await load();
     } catch (err) {
@@ -269,7 +269,7 @@ function PasskeySection() {
     setNote("");
     try {
       await deletePasskey(p.id);
-      setNote(`Passkey ${p.name} removed.`);
+      setNote(t("account.security.passkeys.removedNote", { name: p.name }));
       await load();
     } catch (err) {
       setError(securityMessage(err));
@@ -281,48 +281,46 @@ function PasskeySection() {
   return (
     <section className="ui-stack" aria-labelledby="sec-passkeys">
       <h3 id="sec-passkeys" className="ui-flush">
-        Passkeys
+        {t("account.security.passkeys.title")}
       </h3>
-      <p className="ui-flush ui-hint">A passkey logs you in without a password, with your device's lock or a security key. It counts as a second factor.</p>
+      <p className="ui-flush ui-hint">{t("account.security.passkeys.intro")}</p>
       {keys === null ? (
-        !error && <p aria-busy="true">Loading…</p>
+        !error && <p aria-busy="true">{t("common.status.loading")}</p>
       ) : keys.length === 0 ? (
-        <p className="ui-flush">No passkeys yet.</p>
+        <p className="ui-flush">{t("account.security.passkeys.none")}</p>
       ) : (
-        <ul className="ui-plain-list" aria-label="Your passkeys">
+        <ul className="ui-plain-list" aria-label={t("account.security.passkeys.list")}>
           {keys.map((p) => (
             <li key={p.id} className="ui-list-row">
               <span>
                 <strong>{p.name}</strong>{" "}
                 <span className="ui-hint">
-                  added <RelTime iso={p.createdAt} />
+                  <Trans i18nKey="account.security.passkeys.added" components={{ time: <RelTime iso={p.createdAt} /> }} />
                   {p.lastUsedAt ? (
-                    <>
-                      , last used <RelTime iso={p.lastUsedAt} />
-                    </>
+                    <Trans i18nKey="account.security.passkeys.lastUsed" components={{ time: <RelTime iso={p.lastUsedAt} /> }} />
                   ) : (
-                    ", never used"
+                    t("account.security.passkeys.neverUsed")
                   )}
                 </span>
               </span>
-              <IconButton label={`Remove passkey ${p.name}`} text="Remove" icon={<Trash size={16} aria-hidden="true" />} danger disabled={busy} onClick={() => void remove(p)} />
+              <IconButton label={t("account.security.passkeys.removeLabel", { name: p.name })} text={t("account.security.passkeys.remove")} icon={<Trash size={16} aria-hidden="true" />} danger disabled={busy} onClick={() => void remove(p)} />
             </li>
           ))}
         </ul>
       )}
       {supported ? (
         <form className="ui-stack ui-narrow" onSubmit={(e) => void add(e)} noValidate>
-          <Field label="Name of the new passkey" hint="So you know it again, for example the device.">
+          <Field label={t("account.security.passkeys.name")} hint={t("account.security.passkeys.nameHint")}>
             <input className="ui-input" maxLength={64} value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
           <div className="ui-row">
             <Button type="submit" variant="primary" disabled={busy || name.trim() === ""}>
-              {busy ? "Waiting for the browser…" : "Add passkey"}
+              {busy ? t("account.security.passkeys.waiting") : t("account.security.passkeys.add")}
             </Button>
           </div>
         </form>
       ) : (
-        <Notice tone="info" title="This browser cannot create passkeys." />
+        <Notice tone="info" title={t("account.security.passkeys.unsupported")} />
       )}
       {error && <Notice tone="err" title={error} />}
       {note && !error && <Notice tone="ok" title={note} />}

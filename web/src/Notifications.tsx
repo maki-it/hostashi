@@ -1,22 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { accountEmailMessage, getNotifications, setNotifications, type Notifications, type NotifyCategory } from "./mail";
 import { AppliesAtOnce, Card, Notice, Switch } from "./ui";
 
-const labels: Record<NotifyCategory, { label: string; hint: string }> = {
-  backups: { label: "Backups", hint: "A backup failed or did not save everything." },
-  certificates: { label: "Certificates", hint: "A renewal failed, or a certificate expires in 14 or 3 days." },
-  doctor: { label: "Server checks", hint: "Once a day, when the checks on the Health page find errors." },
-  services: { label: "Services", hint: "A service is down or keeps crashing, and again when it runs." },
-  deploys: { label: "Git deploys", hint: "A Git deploy of a site failed. Off until you switch it on." },
-  php: { label: "PHP versions", hint: "Once a week, when a site uses a PHP version near or past its end of life." },
-  disk: { label: "Disk space", hint: "A disk or a site's quota is more than 90 percent full." },
-};
+// The categories the panel knows; each has a label and a hint under
+// account.notifications.categories.<id>. A category from a newer server
+// that this page does not know is left out.
+const known: readonly NotifyCategory[] = ["backups", "certificates", "doctor", "services", "deploys", "php", "disk"];
 
 // NotificationsCard holds the switches for operations emails (ADR-0044).
 // Account emails, such as security notes, cannot be switched off.
 export function NotificationsCard() {
+  const { t } = useTranslation();
   const [state, setState] = useState<Notifications | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -39,25 +36,23 @@ export function NotificationsCard() {
 
   if (!state) {
     return (
-      <Card title="Notifications">{error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading…</p>}</Card>
+      <Card title={t("account.notifications.title")}>{error ? <Notice tone="err" title={error} /> : <p aria-busy="true">{t("common.status.loading")}</p>}</Card>
     );
   }
 
   const off = !state.mail_enabled || state.email === "";
 
   return (
-    <Card title="Notifications" actions={<AppliesAtOnce />}>
+    <Card title={t("account.notifications.title")} actions={<AppliesAtOnce />}>
       <div className="ui-stack">
-        <p className="ui-flush ui-hint">
-          Emails about problems on the server and your sites. Security notes about your account are always sent.
-        </p>
-        {!state.mail_enabled && <Notice tone="info" title="Notifications need email, which is not set up on this panel yet." />}
-        {state.mail_enabled && state.email === "" && <Notice tone="info" title="Add and confirm an email address above to get notifications." />}
+        <p className="ui-flush ui-hint">{t("account.notifications.intro")}</p>
+        {!state.mail_enabled && <Notice tone="info" title={t("account.notifications.noMail")} />}
+        {state.mail_enabled && state.email === "" && <Notice tone="info" title={t("account.notifications.noAddress")} />}
         <fieldset className="ui-stack-tight ui-fieldset" disabled={busy || off}>
-          <legend className="ui-sr-only">Email me about</legend>
-          {state.categories.filter((c) => c.id in labels).map((c) => (
-            <Switch key={c.id} checked={c.enabled} onChange={(on) => void toggle(c.id, on)} hint={labels[c.id].hint}>
-              {labels[c.id].label}
+          <legend className="ui-sr-only">{t("account.notifications.legend")}</legend>
+          {state.categories.filter((c) => known.includes(c.id)).map((c) => (
+            <Switch key={c.id} checked={c.enabled} onChange={(on) => void toggle(c.id, on)} hint={t(`account.notifications.categories.${c.id}.hint`)}>
+              {t(`account.notifications.categories.${c.id}.label`)}
             </Switch>
           ))}
         </fieldset>

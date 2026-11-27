@@ -2,6 +2,7 @@
 
 import { Plus } from "@phosphor-icons/react";
 import { useEffect, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { parseList } from "./firewall";
 import { getTokenAllowlist, setTokenAllowlist, tokenMessage } from "./tokens";
 import { Button, Card, Field, Notice } from "./ui";
@@ -12,6 +13,7 @@ import { Button, Card, Field, Notice } from "./ui";
 // a wrong list cannot lock an admin out of the panel. The server itself is
 // always allowed.
 export function TokenAllowlistCard({ clientIp }: { clientIp?: string | undefined }) {
+  const { t } = useTranslation();
   const [saved, setSaved] = useState<string[] | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -54,18 +56,14 @@ export function TokenAllowlistCard({ clientIp }: { clientIp?: string | undefined
   }
 
   return (
-    <Card title="API tokens">
+    <Card title={t("tokens.title")}>
       {saved === null && !error ? (
-        <p aria-busy="true">Loading…</p>
+        <p aria-busy="true">{t("common.status.loading")}</p>
       ) : (
         <form className="ui-stack" onSubmit={(e) => void save(e)}>
-          <p className="ui-hint ui-flush">
-            Addresses API tokens are accepted from, one IP address or CIDR range per line. An empty list accepts them from anywhere. This
-            is not a firewall rule: it applies at once, to every account&apos;s tokens, and logins in the browser keep working. The server
-            itself (127.0.0.1 and ::1) is always allowed, so the hostashi command on it keeps working.
-          </p>
+          <p className="ui-hint ui-flush">{t("tokens.allowlist.intro")}</p>
           <div className="ui-narrow">
-            <Field label="Allowed addresses">
+            <Field label={t("tokens.allowlist.label")}>
               <textarea
                 className="ui-input ui-textarea ui-mono"
                 value={text}
@@ -75,24 +73,24 @@ export function TokenAllowlistCard({ clientIp }: { clientIp?: string | undefined
                 }}
                 rows={4}
                 spellCheck={false}
-                placeholder="Anywhere"
+                placeholder={t("tokens.allowlist.anywhere")}
               />
             </Field>
           </div>
           {clientIp && (
             <div className="ui-row">
               <Button icon={<Plus size={16} aria-hidden="true" />} onClick={() => add(clientIp)}>
-                Add my address
+                {t("tokens.allowlist.addMine")}
               </Button>
             </div>
           )}
           {error && <Notice tone="err" title={error} />}
           {done && !changed && (
-            <Notice tone="ok" title={saved?.length ? "Saved. Tokens now work only from these addresses and the server itself." : "Saved. Tokens work from anywhere."} />
+            <Notice tone="ok" title={saved?.length ? t("tokens.allowlist.savedList") : t("tokens.allowlist.savedEmpty")} />
           )}
           <div className="ui-row">
             <Button type="submit" variant="primary" disabled={busy || !changed}>
-              {busy ? "Saving…" : "Save"}
+              {busy ? t("common.status.saving") : t("common.actions.save")}
             </Button>
           </div>
         </form>
