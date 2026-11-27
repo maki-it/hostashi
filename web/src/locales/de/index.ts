@@ -31,12 +31,13 @@ import siteAccess from "./siteAccess.json";
 import siteApp from "./siteApp.json";
 import siteDomains from "./siteDomains.json";
 import siteHeaders from "./siteHeaders.json";
+import sites from "./sites.json";
 import ssh from "./ssh.json";
 import tokens from "./tokens.json";
 import ui from "./ui.json";
 import usage from "./usage.json";
 import users from "./users.json";
 
-const de: Catalog = { account, audit, auth, backups, certificate, common, cron, databases, errors, files, git, hardening, limits, logs, mail, malware, migrate, overview, pages, parked, permissions, profiles, realIp, shell, siteAccess, siteApp, siteDomains, siteHeaders, ssh, tokens, ui, usage, users };
+const de: Catalog = { account, audit, auth, backups, certificate, common, cron, databases, errors, files, git, hardening, limits, logs, mail, malware, migrate, overview, pages, parked, permissions, profiles, realIp, shell, siteAccess, siteApp, siteDomains, siteHeaders, sites, ssh, tokens, ui, usage, users };
 
 export default de;

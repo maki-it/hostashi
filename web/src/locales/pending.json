@@ -2,8 +2,6 @@
   "$comment": "Pages whose texts are not in the catalog yet (ADR-0071). Each area PR removes its files; jsx-text.test.ts fails while a listed file has no text left.",
   "files": [
     "BlockedAddresses.tsx",
-    "Clone.tsx",
-    "Cutover.tsx",
     "Doctor.tsx",
     "Firewall.tsx",
     "NodePage.tsx",
@@ -12,12 +10,6 @@
     "PythonPage.tsx",
     "Runtimes.tsx",
     "Services.tsx",
-    "SiteNav.tsx",
-    "SitePage.tsx",
-    "SiteStatus.tsx",
-    "SiteType.tsx",
-    "Sites.tsx",
-    "System.tsx",
-    "WordPress.tsx"
+    "System.tsx"
   ]
 }

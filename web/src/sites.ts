@@ -6,9 +6,9 @@
 
 import type { NodeApp, ProgramApp } from "./node";
 import type { PythonApp } from "./python";
-import { ApiError, request } from "./api";
-import i18n from "./i18n";
+import { request } from "./api";
 import { formatBytes } from "./limits";
+import i18n, { areaErrorText } from "./i18n";
 
 export type SiteTLS = {
   enabled: boolean; // HTTPS wanted
@@ -141,20 +141,10 @@ export const siteType = (s: Pick<Site, "type" | "php">): SiteType => s.type ?? (
 /** The type as the panel shows it, with the PHP version. */
 export function siteTypeLabel(s: Pick<Site, "type" | "php">): string {
   switch (siteType(s)) {
-    case "static":
-      return "Static";
     case "php":
-      return s.php ? `PHP ${s.php}` : "PHP";
-    case "node":
-      return "Node.js";
-    case "app":
-      return "App";
-    case "python":
-      return "Python";
-    case "proxy":
-      return "Reverse proxy";
-    case "redirect":
-      return "Redirect";
+      return s.php ? i18n.t("sites.type.phpVersion", { version: s.php }) : i18n.t("sites.type.php");
+    default:
+      return i18n.t(`sites.type.${siteType(s)}` as const);
   }
 }
 
@@ -311,18 +301,18 @@ export function poolUsed(p: Pool): number | null {
 
 /** The text of a pool in the choice: name, path and free space. */
 export function poolLabel(p: Pool): string {
-  const base = `${p.name} (${p.path})`;
-  if (!p.available) return `${base}, not available`;
-  if (p.freeBytes === undefined) return base;
-  return `${base}, ${formatBytes(p.freeBytes)} free`;
+  const v = { name: p.name, path: p.path };
+  if (!p.available) return i18n.t("sites.pool.unavailable", v);
+  if (p.freeBytes === undefined) return i18n.t("sites.pool.label", v);
+  return i18n.t("sites.pool.free", { ...v, free: formatBytes(p.freeBytes) });
 }
 
 /** What to know before putting a site on the pool, or "". */
 export function poolNote(p: Pool | undefined): string {
   if (!p) return "";
-  if (!p.available) return "The volume of this pool is not mounted. Sites cannot be created there until it is.";
-  if (p.quota === "off") return "This pool has no disk quota: sites on it get no disk limit.";
-  if (p.quota === "counting") return "Disk limits on this pool are not enforced. See Health.";
+  if (!p.available) return i18n.t("sites.pool.unmounted");
+  if (p.quota === "off") return i18n.t("sites.pool.noQuota");
+  if (p.quota === "counting") return i18n.t("sites.pool.counting");
   return "";
 }
 
@@ -396,46 +386,45 @@ export function typeChange(s: Site, to: SiteTypeRequest): { starts: string[]; st
   const account = hasAccount(s);
   const toAccount = accountTypes.includes(to.type);
 
-  if (from === "php") stops.push(`The PHP ${s.php} pool stops. The PHP settings and the page cache stay stored for a switch back.`);
+  const t = i18n.t;
+  const target = (v: string | undefined) => v ?? t("sites.change.theTarget");
+  if (from === "php") stops.push(t("sites.change.phpStops", { version: s.php }));
   // Between the app types the port stays (addendum 3).
-  const port = to.type === "node" || to.type === "app" || to.type === "python" ? " The new one keeps its port." : " Its port is freed.";
-  if (from === "node") stops.push("The Node.js app stops." + port);
-  if (from === "app") stops.push("The program stops." + port);
-  if (from === "python") stops.push("The Python app stops." + port + " The environment .venv stays in the home.");
-  if (from === "proxy") stops.push(`nginx no longer passes requests to ${s.proxy?.target ?? "the target"}.`);
-  if (from === "redirect") stops.push(`nginx no longer redirects to ${s.redirect?.target ?? "the target"}.`);
+  const port = " " + (to.type === "node" || to.type === "app" || to.type === "python" ? t("sites.change.keepsPort") : t("sites.change.freesPort"));
+  if (from === "node") stops.push(t("sites.change.nodeStops") + port);
+  if (from === "app") stops.push(t("sites.change.appStops") + port);
+  if (from === "python") stops.push(t("sites.change.pythonStops") + port + " " + t("sites.change.venvStays"));
+  if (from === "proxy") stops.push(t("sites.change.proxyStops", { target: target(s.proxy?.target) }));
+  if (from === "redirect") stops.push(t("sites.change.redirectStops", { target: target(s.redirect?.target) }));
 
-  if (toAccount && !account) starts.push(`A Linux account with its home is created in the pool ${s.pool}, with the default limits.`);
+  if (toAccount && !account) starts.push(t("sites.change.accountStarts", { pool: s.pool }));
   switch (to.type) {
     case "static":
-      starts.push("nginx serves the files of htdocs" + (s.web?.dir ? "/" + s.web.dir : "") + " as they are, without PHP.");
+      starts.push(t("sites.change.staticStarts", { dir: "htdocs" + (s.web?.dir ? "/" + s.web.dir : "") }));
       break;
     case "php":
-      starts.push(`A PHP ${to.php ?? ""} pool starts and serves the site's PHP files.`);
+      starts.push(t("sites.change.phpStarts", { version: to.php ?? "" }));
       break;
     case "node":
-      starts.push(to.node?.startKind ? `The Node.js ${to.node.version} app starts on its own port.` : "The Node.js app gets its own port. It starts once its start command is set.");
+      starts.push(to.node?.startKind ? t("sites.change.nodeStarts", { version: to.node.version }) : t("sites.change.nodeWaits"));
       break;
     case "app":
-      starts.push(to.app?.program ? `The program ${to.app.program} starts on its own port.` : "The app gets its own port. It starts once its program is set.");
+      starts.push(to.app?.program ? t("sites.change.appStarts", { program: to.app.program }) : t("sites.change.appWaits"));
       break;
     case "python":
-      starts.push(
-        `Hostashi creates the environment .venv with Python ${to.python?.version ?? ""} if the home has none, and the app gets its own port. It starts once its start command is set and its packages are installed.`,
-      );
+      starts.push(t("sites.change.pythonStarts", { version: to.python?.version ?? "" }));
       break;
     case "proxy":
-      starts.push(`nginx passes every request to ${to.proxy?.target ?? "the target"}.`);
+      starts.push(t("sites.change.proxyStarts", { target: target(to.proxy?.target) }));
       break;
     case "redirect":
-      starts.push(`nginx sends every address to ${to.redirect?.target ?? "the target"} with status ${to.redirect?.status ?? 301}.`);
+      starts.push(t("sites.change.redirectStarts", { target: target(to.redirect?.target), status: to.redirect?.status ?? 301 }));
       break;
   }
 
-  stays.push("The domains, HTTPS and the certificate.");
-  if (account && toAccount) stays.push("The Linux account with its files, databases, cron jobs, SSH logins, backups and limits.");
-  if (account && !toAccount)
-    stays.push("The Linux account with its files, databases, cron jobs, SSH logins and backups. You can remove them afterwards on the overview.");
+  stays.push(t("sites.change.domainsStay"));
+  if (account && toAccount) stays.push(t("sites.change.accountStays"));
+  if (account && !toAccount) stays.push(t("sites.change.accountKept"));
   return { starts, stops, stays };
 }
 
@@ -462,20 +451,20 @@ const reservedSiteNames = [
 export const maxDomainsPerSite = 50;
 
 export function siteNameProblem(v: string): string {
-  if (v === "") return "Enter a name.";
-  if (!siteNameRe.test(v)) return "Use 2 to 32 characters: lowercase letters, digits, _ and -, starting with a letter.";
-  if (reservedSiteNames.includes(v) || v.startsWith("systemd-")) return "This name is reserved.";
+  if (v === "") return i18n.t("sites.check.nameEmpty");
+  if (!siteNameRe.test(v)) return i18n.t("sites.check.nameFormat");
+  if (reservedSiteNames.includes(v) || v.startsWith("systemd-")) return i18n.t("sites.check.nameReserved");
   return "";
 }
 
 const labelRe = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 export function domainProblem(d: string): string {
-  if (d.length < 3 || d.length > 253) return `"${d}" is not a domain.`;
+  if (d.length < 3 || d.length > 253) return i18n.t("sites.check.domainInvalid", { domain: d });
   const labels = d.split(".");
-  if (labels.length < 2) return `"${d}" needs at least two parts, like example.com.`;
-  if (!labels.every((l) => labelRe.test(l))) return `"${d}" is not a domain. Use letters, digits and inner hyphens; write other characters in their xn-- form.`;
-  if (/^[0-9]+$/.test(labels[labels.length - 1] ?? "")) return `"${d}" is not a domain. IP addresses are not allowed.`;
+  if (labels.length < 2) return i18n.t("sites.check.domainParts", { domain: d });
+  if (!labels.every((l) => labelRe.test(l))) return i18n.t("sites.check.domainChars", { domain: d });
+  if (/^[0-9]+$/.test(labels[labels.length - 1] ?? "")) return i18n.t("sites.check.domainIp", { domain: d });
   return "";
 }
 
@@ -488,13 +477,13 @@ export const parseDomains = (text: string) =>
     .filter((d) => d !== "");
 
 export function domainsProblem(domains: string[]): string {
-  if (domains.length === 0) return "Enter at least one domain.";
-  if (domains.length > maxDomainsPerSite) return `A site can have at most ${maxDomainsPerSite} domains.`;
+  if (domains.length === 0) return i18n.t("sites.check.domainsEmpty");
+  if (domains.length > maxDomainsPerSite) return i18n.t("sites.check.domainsMax", { count: maxDomainsPerSite });
   const seen = new Set<string>();
   for (const d of domains) {
     const p = domainProblem(d);
     if (p) return p;
-    if (seen.has(d)) return `"${d}" is listed twice.`;
+    if (seen.has(d)) return i18n.t("sites.check.domainTwice", { domain: d });
     seen.add(d);
   }
   return "";
@@ -502,56 +491,16 @@ export function domainsProblem(domains: string[]): string {
 
 // httpsLabel says in a few words where HTTPS of a site stands.
 export function httpsLabel(t: SiteTLS): string {
-  if (!t.enabled) return "HTTP only";
-  if (t.active) return "HTTPS";
-  if (t.error) return "Certificate failed";
-  return "Waiting for certificate";
+  if (!t.enabled) return i18n.t("sites.https.httpOnly");
+  if (t.active) return i18n.t("sites.https.on");
+  if (t.error) return i18n.t("sites.https.failed");
+  return i18n.t("sites.https.waiting");
 }
 
-// siteMessage turns an API error into a sentence.
+// siteMessage turns an API error into a sentence: the site texts of
+// sites.errors first, then the shared ones (ADR-0071).
 export function siteMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case "site_exists":
-        return "A site with this name exists. Choose another name.";
-      case "domain_taken":
-        return "A domain belongs to another site. Remove it there first.";
-      case "domain_reserved":
-        return "A domain is the panel's own address. Choose another domain.";
-      case "tls_unavailable":
-        return "Certificates are not available on this panel. Start it with a public address to use Let's Encrypt.";
-      case "renew_too_soon":
-        return "The certificate was renewed less than 10 minutes ago. Try again later.";
-      case "certificate_in_use":
-        return "Turn HTTPS off before deleting the certificate.";
-      case "not_letsencrypt":
-        return "Only a certificate from Let's Encrypt can be renewed here. Upload a new own certificate instead.";
-      case "node_missing":
-        return "This Node.js version is not installed. An administrator installs it under Runtimes › Node.js.";
-      case "apps_unavailable":
-        return "Apps are not available on this panel.";
-      case "python_missing":
-        return "This Python version is not installed. An administrator installs it under Runtimes › Python.";
-      case "confirm_required":
-        return "Type the site's name to confirm: this rebuilds .venv and its installed packages go.";
-      case "wrong_site_type":
-        return "This is not possible for this type of site.";
-      case "site_busy":
-        return "The site is being created or deleted. Reload the page in a moment.";
-      case "not_found":
-        return "This site does not exist any more. Reload the page.";
-      case "forbidden":
-        return "Only administrators can manage sites.";
-      case "agent_timeout":
-        return "The server did not answer in time. Reload the page to see whether the change was made.";
-      case "agent_unavailable":
-        return "The change could not be completed. Try again.";
-      default:
-        return err.message ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + "." : "Something went wrong (" + err.code + ").";
-    }
-  }
-  if (err instanceof TypeError) return "The server is not reachable.";
-  return "Something went wrong. Try again.";
+  return areaErrorText("sites.errors", err);
 }
 
 export type SiteStatus = { tone: "ok" | "warn" | "err" | "off"; word: string; key: "active" | "creating" | "deleting" | "disabled" | "maintenance" };
@@ -569,11 +518,12 @@ export function runtimeWord(s: Pick<Site, "type" | "php">): "PHP" | "app" | "" {
 }
 
 export function siteStatus(s: Site): SiteStatus {
-  if (s.state === "deleting") return { tone: "off", word: "Being deleted", key: "deleting" };
-  if (s.state !== "active") return { tone: "warn", word: "Being created", key: "creating" };
-  if (s.disabled) return { tone: "off", word: "Disabled", key: "disabled" };
-  if (s.maintenance.enabled) return { tone: "warn", word: "Maintenance", key: "maintenance" };
-  return { tone: "ok", word: "Active", key: "active" };
+  const st = (tone: SiteStatus["tone"], key: SiteStatus["key"]): SiteStatus => ({ tone, key, word: i18n.t(`sites.state.${key}`) });
+  if (s.state === "deleting") return st("off", "deleting");
+  if (s.state !== "active") return st("warn", "creating");
+  if (s.disabled) return st("off", "disabled");
+  if (s.maintenance.enabled) return st("warn", "maintenance");
+  return st("ok", "active");
 }
 
 // httpsTone is the badge tone for httpsLabel.

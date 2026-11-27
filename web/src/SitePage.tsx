@@ -2,6 +2,8 @@
 
 import { ArrowSquareOut } from "@phosphor-icons/react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import { formatDate } from "./format";
 import { CertificateCard } from "./Certificate";
 import { canClone, CloneBadge, CloneCard, CloneStatusCard, useClone } from "./Clone";
 import type { Clone } from "./clones";
@@ -42,6 +44,7 @@ import {
   type Site,
 } from "./sites";
 import { PageCacheSettings } from "./PageCache";
+import i18n from "./i18n";
 import { PHPSettingsCard } from "./PHPSettings";
 import { Services } from "./Services";
 import { programCommand, startCommand } from "./node";
@@ -80,6 +83,7 @@ type Props = {
  * finds and cron jobs whose last run failed. Each badge opens its tab.
  */
 function SiteAlerts({ site, groups, tab }: { site: string; groups: SiteGroup[]; tab: SiteTab }) {
+  const { t } = useTranslation();
   const [finds, setFinds] = useState(0);
   const [failing, setFailing] = useState(0);
   const has = (id: SiteTab) => groups.some((g) => g.tabs.some((t) => t.id === id));
@@ -107,12 +111,12 @@ function SiteAlerts({ site, groups, tab }: { site: string; groups: SiteGroup[]; 
     <>
       {finds > 0 && (
         <a href={formatHash({ page: "sites", site: { name: site, tab: "malware" } })}>
-          <Badge tone="err">{finds === 1 ? "1 virus find" : `${finds} virus finds`}</Badge>
+          <Badge tone="err">{t("sites.alerts.virusFinds", { count: finds })}</Badge>
         </a>
       )}
       {failing > 0 && (
         <a href={formatHash({ page: "sites", site: { name: site, tab: "cron" } })}>
-          <Badge tone="warn">{failing === 1 ? "1 cron job fails" : `${failing} cron jobs fail`}</Badge>
+          <Badge tone="warn">{t("sites.alerts.cronFails", { count: failing })}</Badge>
         </a>
       )}
     </>
@@ -121,6 +125,7 @@ function SiteAlerts({ site, groups, tab }: { site: string; groups: SiteGroup[]; 
 
 // SitePage shows one site with its settings in tabs (#/sites/<name>/<tab>).
 export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = () => undefined }: Props) {
+  const { t } = useTranslation();
   const { sites, php, error, load } = useSites();
   const site = sites?.find((s) => s.name === name);
   const { clone, reload: reloadClone } = useClone(name);
@@ -128,11 +133,11 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
   const [card, setCard] = useState<OverviewCard | null>(null);
   useEffect(() => setCard(null), [name]);
 
-  if (!sites) return error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading…</p>;
+  if (!sites) return error ? <Notice tone="err" title={error} /> : <p aria-busy="true">{t("common.status.loading")}</p>;
   if (!site) {
     return (
-      <Notice tone="err" title={`There is no site named ${name}.`}>
-        <a href={formatHash({ page: "sites" })}>Back to the sites</a>
+      <Notice tone="err" title={t("sites.page.missing", { name })}>
+        <a href={formatHash({ page: "sites" })}>{t("sites.page.back")}</a>
       </Notice>
     );
   }
@@ -185,7 +190,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
       )}
       {active === "usage" && <SiteUsageCard site={site.name} />}
       {active === "nginx" && (
-        <ReadOnly when={role !== "admin"} who="An administrator">
+        <ReadOnly when={role !== "admin"} adminOnly>
           <SnippetSettings site={site} />
         </ReadOnly>
       )}
@@ -199,12 +204,12 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
           <h1>{siteLabel(site)}</h1>
           <p className="ui-row">
             {site.title && (
-              <span title="Linux user, home folder and SSH login">
-                System name <code>{site.name}</code>
+              <span title={t("sites.page.systemNameTip")}>
+                <Trans i18nKey="sites.page.systemName" values={{ name: site.name }} components={{ code: <code /> }} />
               </span>
             )}
             {site.domains[0] && (
-              <a className="ui-mono ui-ext" href={siteUrl(site)} target="_blank" rel="noopener noreferrer" title="Open the site in a new tab">
+              <a className="ui-mono ui-ext" href={siteUrl(site)} target="_blank" rel="noopener noreferrer" title={t("sites.page.openTip")}>
                 {site.domains[0]}
                 <ArrowSquareOut size={14} aria-hidden="true" />
               </a>
@@ -224,8 +229,8 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
       </div>
       {error && <Notice tone="err" title={error} />}
       {site.tls.enabled && !site.tls.active && site.tls.error && (
-        <Notice tone="err" title="The certificate could not be issued">
-          Last attempt failed: {site.tls.error}. Hostashi tries again within an hour.
+        <Notice tone="err" title={t("sites.page.certFailed")}>
+          {t("sites.page.certFailedText", { error: site.tls.error })}
         </Notice>
       )}
       {ready ? (
@@ -295,6 +300,7 @@ function Overview({
   card,
   onCard,
 }: TabProps & { groups: SiteGroup[]; staff: boolean; admin: boolean; clone: Clone | null; onCloneChange: () => void; card: OverviewCard | null; onCard: (c: OverviewCard | null) => void }) {
+  const { t } = useTranslation();
   const [primary, ...aliases] = site.domains;
   const close = () => onCard(null);
   return (
@@ -309,109 +315,108 @@ function Overview({
         </>
       )}
       <div className="ui-two">
-        <Card title="Details">
-          <dl className="ui-facts" aria-label={"Details of " + site.name}>
-            <dt>System name</dt>
+        <Card title={t("sites.details.title")}>
+          <dl className="ui-facts" aria-label={t("sites.details.label", { site: site.name })}>
+            <dt>{t("sites.details.systemName")}</dt>
             <dd>
               <code>{site.name}</code>
-              {hasAccount(site) ? " (Linux user, home folder and SSH login)" : ""}
+              {hasAccount(site) ? t("sites.details.accountNote") : ""}
             </dd>
             {site.title && (
               <>
-                <dt>Display name</dt>
+                <dt>{t("sites.details.displayName")}</dt>
                 <dd>{site.title}</dd>
               </>
             )}
-            <dt>State</dt>
+            <dt>{t("sites.details.state")}</dt>
             <dd>
               {site.state === "deleting"
-                ? "Being deleted"
+                ? t("sites.state.deleting")
                 : site.state !== "active"
-                  ? "Being created"
+                  ? t("sites.state.creating")
                   : site.disabled
-                    ? "Disabled: everybody gets the chosen maintenance page" + (runtimeWord(site) ? `, ${runtimeWord(site) === "PHP" ? "PHP" : "the app"} is stopped` : "")
+                    ? t(runtimeWord(site) === "PHP" ? "sites.details.disabledPhp" : runtimeWord(site) === "app" ? "sites.details.disabledApp" : "sites.details.disabled")
                     : site.maintenance.enabled
-                      ? "Maintenance: visitors get the maintenance page" +
-                        (site.maintenance.allowIps.length > 0 ? ", except " + site.maintenance.allowIps.join(", ") : "")
-                      : "Active"}
+                      ? site.maintenance.allowIps.length > 0
+                        ? t("sites.details.maintenanceExcept", { ips: site.maintenance.allowIps.join(", ") })
+                        : t("sites.details.maintenance")
+                      : t("sites.state.active")}
             </dd>
-            <dt>Primary domain</dt>
+            <dt>{t("sites.details.primaryDomain")}</dt>
             <dd className="ui-mono">{primary}</dd>
             {aliases.length > 0 && (
               <>
-                <dt>Other domains</dt>
+                <dt>{t("sites.details.otherDomains")}</dt>
                 <dd className="ui-mono">{aliases.join(", ")}</dd>
               </>
             )}
             {site.node && (
               <>
-                <dt>Node.js app</dt>
+                <dt>{t("sites.details.nodeApp")}</dt>
                 <dd>
-                  {site.node.startKind ? <span className="ui-mono">{startCommand(site.node)}</span> : "No start command yet"}
-                  {" on Node.js "}
-                  {site.node.version}
-                  {site.node.stopped ? ", stopped" : ""}
+                  {site.node.startKind ? <span className="ui-mono">{startCommand(site.node)}</span> : t("sites.details.noStart")}
+                  {t("sites.details.onNode", { version: site.node.version })}
+                  {site.node.stopped ? t("sites.details.stopped") : ""}
                 </dd>
               </>
             )}
             {site.python && (
               <>
-                <dt>Python app</dt>
+                <dt>{t("sites.details.pythonApp")}</dt>
                 <dd>
-                  {site.python.startKind ? <span className="ui-mono">{pythonCommand(site.python)}</span> : "No start command yet"}
-                  {" on Python "}
-                  {site.python.version}
-                  {site.python.stopped ? ", stopped" : ""}
+                  {site.python.startKind ? <span className="ui-mono">{pythonCommand(site.python)}</span> : t("sites.details.noStart")}
+                  {t("sites.details.onPython", { version: site.python.version })}
+                  {site.python.stopped ? t("sites.details.stopped") : ""}
                 </dd>
               </>
             )}
             {site.app && (
               <>
-                <dt>App</dt>
+                <dt>{t("sites.details.app")}</dt>
                 <dd>
-                  {site.app.program ? <span className="ui-mono">{programCommand(site.app)}</span> : "No program yet"}
-                  {site.app.stopped ? ", stopped" : ""}
+                  {site.app.program ? <span className="ui-mono">{programCommand(site.app)}</span> : t("sites.details.noProgram")}
+                  {site.app.stopped ? t("sites.details.stopped") : ""}
                 </dd>
               </>
             )}
             {site.proxy ? (
               <>
-                <dt>Reverse proxy</dt>
+                <dt>{t("sites.details.proxy")}</dt>
                 <dd>
                   <span className="ui-mono">{site.proxy.target}</span>
-                  {site.proxy.insecure ? " (certificate not verified)" : ""}
+                  {site.proxy.insecure ? t("sites.details.insecure") : ""}
                 </dd>
               </>
             ) : site.redirect ? (
               <>
-                <dt>Redirect</dt>
+                <dt>{t("sites.details.redirect")}</dt>
                 <dd>
-                  <span className="ui-mono">{site.redirect.target}</span> ({site.redirect.status}
-                  {site.redirect.keepPath ? ", keeps the path" : ""})
+                  <span className="ui-mono">{site.redirect.target}</span>
+                  {t(site.redirect.keepPath ? "sites.details.redirectKeepsPath" : "sites.details.redirectStatus", { status: site.redirect.status })}
                 </dd>
               </>
             ) : (
               <>
-                <dt>PHP</dt>
-                <dd>{site.php ? "PHP " + site.php + (site.disabled ? " (stopped)" : "") : "No PHP"}</dd>
+                <dt>{t("sites.details.php")}</dt>
+                <dd>{site.php ? t(site.disabled ? "sites.details.phpStopped" : "sites.details.phpVersion", { version: site.php }) : t("sites.details.noPhp")}</dd>
               </>
             )}
-            <dt>HTTPS</dt>
+            <dt>{t("sites.details.https")}</dt>
             <dd>
               {httpsLabel(site.tls)}
-              {site.tls.active && site.tls.hsts ? ", HSTS" : ""}
-              {site.tls.active && site.tls.notAfter ? ", valid until " + site.tls.notAfter.slice(0, 10) : ""}
+              {site.tls.active && site.tls.hsts ? t("sites.details.hsts") : ""}
+              {site.tls.active && site.tls.notAfter ? t("sites.details.validUntil", { date: formatDate(new Date(site.tls.notAfter)) }) : ""}
             </dd>
             {hasAccount(site) && (
               <>
-                <dt>Storage pool</dt>
+                <dt>{t("sites.details.pool")}</dt>
                 <dd className="ui-mono">{site.pool}</dd>
               </>
             )}
           </dl>
         </Card>
         {site.state === "active" && (
-          <Card title="Maintenance" actions={<AppliesAtOnce />}>
+          <Card title={t("sites.details.maintenanceCard")} actions={<AppliesAtOnce />}>
             <MaintenanceSettings site={site} onChange={onChange} />
           </Card>
         )}
@@ -420,7 +425,7 @@ function Overview({
       {/* Disabling and deleting are for administrators and managers (ADR-0035). */}
       {site.state === "active" && staff && (
         <section className="ui-danger-zone" aria-labelledby={`danger-${site.name}`}>
-          <h2 id={`danger-${site.name}`}>Danger zone</h2>
+          <h2 id={`danger-${site.name}`}>{t("sites.details.danger")}</h2>
           <Availability site={site} onChange={onChange} />
           {hasAccount(site) && ["redirect", "proxy"].includes(siteType(site)) && <RemoveAccountCard site={site} onChange={onChange} />}
           <DeleteSite site={site} canPark />
@@ -433,6 +438,7 @@ function Overview({
 // RenameCard sets the display name (ADR-0072). The system name stays, and
 // the card says so with the name in code style.
 function RenameCard({ site, onChange, onClose }: TabProps & { onClose: () => void }) {
+  const { t } = useTranslation();
   const [title, setTitleText] = useState(site.title ?? "");
   const { busy, act, result } = useAction(onChange);
   const current = site.title ?? "";
@@ -444,32 +450,27 @@ function RenameCard({ site, onChange, onClose }: TabProps & { onClose: () => voi
     e.preventDefault();
     void act(async () => {
       await setTitle(site.name, value);
-      return value ? `The site is now shown as ${value}.` : "The display name is removed.";
+      return value ? t("sites.rename.shownAs", { title: value }) : t("sites.rename.removed");
     });
   }
 
   return (
-    <Card title="Rename" id={cardId(site.name, "rename")} actions={<CloseButton onClose={onClose} />}>
+    <Card title={t("sites.rename.title")} id={cardId(site.name, "rename")} actions={<CloseButton onClose={onClose} />}>
       <form className="ui-stack" onSubmit={(e) => save(e, next)} noValidate>
         <Field
-          label="Display name"
-          hint={
-            <>
-              Shown in the panel instead of the system name, up to {maxTitleLength} characters. The system name <code>{site.name}</code>
-              {hasAccount(site) ? " stays: Linux user, home folder, SSH login and API keep it." : " stays in the API."}
-            </>
-          }
+          label={t("sites.rename.label")}
+          hint={<Trans i18nKey={hasAccount(site) ? "sites.rename.hintAccount" : "sites.rename.hint"} values={{ max: maxTitleLength, name: site.name }} components={{ code: <code /> }} />}
         >
           <input className="ui-input" value={title} onChange={(e) => setTitleText(e.target.value)} maxLength={maxTitleLength} placeholder={site.name} autoComplete="off" />
         </Field>
         {result}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || next === current}>
-            Save display name
+            {t("sites.rename.save")}
           </Button>
           {current && (
             <Button type="button" variant="secondary" disabled={busy} onClick={(e) => save(e, "")}>
-              Remove display name
+              {t("sites.rename.remove")}
             </Button>
           )}
         </div>
@@ -491,7 +492,7 @@ function useMaintenancePages(current: string): { id: string; name: string }[] {
 
   const choices: { id: string; name: string }[] = [...(pages ?? [])];
   if (!choices.some((p) => p.id === current)) {
-    choices.unshift({ id: current, name: current === "builtin-maintenance" ? "Built-in maintenance page" : current });
+    choices.unshift({ id: current, name: current === "builtin-maintenance" ? i18n.t("sites.availability.builtin") : current });
   }
   return choices;
 }
@@ -511,6 +512,7 @@ function PageSelect({ label, value, choices, onChange }: { label: string; value:
 }
 
 function Availability({ site, onChange }: TabProps) {
+  const { t } = useTranslation();
   const { busy, act, result } = useAction(onChange);
   const [confirm, setConfirm] = useState(false);
   const [page, setPage] = useState(site.disabledPage);
@@ -520,57 +522,52 @@ function Availability({ site, onChange }: TabProps) {
     act(async () => {
       await setDisabled(site.name, on, page);
       setConfirm(false);
-      return on ? `${site.name} is disabled.` : `${site.name} is enabled again.`;
+      return t(on ? "sites.availability.disabledDone" : "sites.availability.enabledDone", { site: site.name });
     });
 
   const changePage = () =>
     act(async () => {
       await setDisabled(site.name, true, page);
-      return "The page is changed.";
+      return t("sites.availability.pageChanged");
     });
 
   return (
-    <Card title="Availability">
+    <Card title={t("sites.availability.title")}>
       <div className="ui-stack">
         {site.disabled ? (
           <>
-            <p className="ui-hint">
-              The site is disabled: visitors get the page below with “503 Service Unavailable”. Enabling it serves its files and starts PHP again.
-            </p>
-            <PageSelect label="Page while disabled" value={page} choices={choices} onChange={setPage} />
+            <p className="ui-hint">{t("sites.availability.disabledText")}</p>
+            <PageSelect label={t("sites.availability.page")} value={page} choices={choices} onChange={setPage} />
             <div className="ui-row">
               <Button disabled={busy || page === site.disabledPage} onClick={() => void changePage()}>
-                Change page
+                {t("sites.availability.changePage")}
               </Button>
               <Button disabled={busy} onClick={() => void toggle(false)}>
-                Enable {site.name}
+                {t("sites.availability.enable", { site: site.name })}
               </Button>
             </div>
           </>
         ) : confirm ? (
           <>
-            <p>
-              Visitors get the chosen maintenance page with “503 Service Unavailable” and PHP stops. There are no allowed addresses. Files,
-              databases, backups and the certificate stay. You can enable the site again at any time.
-            </p>
-            <PageSelect label="Page while disabled" value={page} choices={choices} onChange={setPage} />
+            <p>{t("sites.availability.confirmText")}</p>
+            <PageSelect label={t("sites.availability.page")} value={page} choices={choices} onChange={setPage} />
             <div className="ui-row">
               <Button variant="danger" disabled={busy} onClick={() => void toggle(true)}>
-                Disable {site.name}
+                {t("sites.availability.disable", { site: site.name })}
               </Button>
               <Button disabled={busy} onClick={() => setConfirm(false)}>
-                Cancel
+                {t("common.actions.cancel")}
               </Button>
             </div>
           </>
         ) : (
           <>
             <p className="ui-hint">
-              A disabled site shows a maintenance page to everybody{runtimeWord(site) ? ` and its ${runtimeWord(site)} is stopped` : ""}.
+              {t(runtimeWord(site) === "PHP" ? "sites.availability.hintPhp" : runtimeWord(site) === "app" ? "sites.availability.hintApp" : "sites.availability.hint")}
             </p>
             <div className="ui-row">
               <Button variant="danger" disabled={busy} onClick={() => setConfirm(true)}>
-                Disable site
+                {t("sites.availability.disableSite")}
               </Button>
             </div>
           </>
@@ -582,6 +579,7 @@ function Availability({ site, onChange }: TabProps) {
 }
 
 function DeleteSite({ site, canPark }: { site: Site; canPark: boolean }) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<"" | "delete" | "park">("");
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
@@ -627,22 +625,20 @@ function DeleteSite({ site, canPark }: { site: Site; canPark: boolean }) {
   const toggle = (d: string, on: boolean) => setChosen((c) => (on ? site.domains.filter((x) => x === d || c.includes(x)) : c.filter((x) => x !== d)));
 
   return (
-    <Card title="Delete site">
+    <Card title={t("sites.delete.title")}>
       {mode === "" ? (
         <div className="ui-stack">
           <p className="ui-hint">
-            {hasAccount(site)
-              ? "Deletes the site with its files and its databases. Backups stay until they expire."
-              : `Deletes the site and its ${site.proxy ? "reverse proxy" : "redirect"}. It has no files or databases.`}
+            {t(hasAccount(site) ? "sites.delete.hintAccount" : site.proxy ? "sites.delete.hintProxy" : "sites.delete.hintRedirect")}
           </p>
-          {canPark && <p className="ui-hint ui-flush">To keep the domains answering, delete the site and park its domains in one step.</p>}
+          {canPark && <p className="ui-hint ui-flush">{t("sites.delete.parkHint")}</p>}
           <div className="ui-row">
             <Button variant="danger" onClick={() => setMode("delete")}>
-              Delete
+              {t("sites.delete.delete")}
             </Button>
             {canPark && (
               <Button variant="danger" onClick={() => setMode("park")}>
-                Delete and park domains
+                {t("sites.delete.deleteAndPark")}
               </Button>
             )}
           </div>
@@ -652,19 +648,19 @@ function DeleteSite({ site, canPark }: { site: Site; canPark: boolean }) {
           {mode === "park" && (
             <>
               <fieldset className="ui-fieldset ui-stack-tight">
-                <legend>Domains to park</legend>
+                <legend>{t("sites.delete.domainsToPark")}</legend>
                 {site.domains.map((d) => (
                   <label key={d} className="ui-check">
                     <input type="checkbox" checked={chosen.includes(d)} onChange={(e) => toggle(d, e.target.checked)} />
                     {d}
                   </label>
                 ))}
-                <p className="ui-hint ui-flush">Domains you leave out are free afterwards.</p>
+                <p className="ui-hint ui-flush">{t("sites.delete.leftOut")}</p>
               </fieldset>
               <div className="ui-narrow">
-                <Field label="Parking page">
+                <Field label={t("sites.delete.parkingPage")}>
                   <select className="ui-select" value={page} onChange={(e) => setPage(e.target.value)}>
-                    <option value="">Built-in parking page</option>
+                    <option value="">{t("sites.delete.builtinParking")}</option>
                     {pages
                       .filter((p) => !p.builtin)
                       .map((p) => (
@@ -677,28 +673,24 @@ function DeleteSite({ site, canPark }: { site: Site; canPark: boolean }) {
               </div>
               <label className="ui-check">
                 <input type="checkbox" checked={tls} onChange={(e) => setTls(e.target.checked)} />
-                HTTPS with a Let's Encrypt certificate
+                {t("sites.delete.tls")}
               </label>
             </>
           )}
           <div className="ui-narrow">
             <Field
-              label={
-                <>
-                  Type <code className="ui-confirm-phrase">{site.name}</code> to confirm
-                </>
-              }
-              hint="The site is deleted with its files and its databases. This cannot be undone."
+              label={<Trans i18nKey="sites.confirm.type" values={{ name: site.name }} components={{ code: <code className="ui-confirm-phrase" /> }} />}
+              hint={t("sites.delete.confirmHint")}
             >
               <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
             </Field>
           </div>
           <div className="ui-row">
             <Button type="submit" variant="danger" disabled={busy || typed !== site.name || (mode === "park" && chosen.length === 0)}>
-              {mode === "park" ? `Delete ${site.name} and park` : `Delete ${site.name}`}
+              {t(mode === "park" ? "sites.delete.submitPark" : "sites.delete.submit", { site: site.name })}
             </Button>
             <Button disabled={busy} onClick={cancel}>
-              Cancel
+              {t("common.actions.cancel")}
             </Button>
           </div>
           {error && <Notice tone="err" title={error} />}
@@ -719,6 +711,7 @@ function DomainsTab({ site, onChange }: TabProps) {
 }
 
 function HTTPSTab({ site, onChange, staff }: TabProps & { staff: boolean }) {
+  const { t } = useTranslation();
   const h = useAction(onChange);
   // Turning HTTPS off and HSTS on are asked again: the first serves the
   // site over plain HTTP, the second sticks in browsers for a long time.
@@ -727,69 +720,63 @@ function HTTPSTab({ site, onChange, staff }: TabProps & { staff: boolean }) {
   const toggleTLS = (on: boolean) =>
     h.act(async () => {
       const s = await setTLS(site.name, on);
-      if (!on) return "HTTPS is off. The site is served over HTTP.";
-      return s.tls.active ? "HTTPS is on." : "HTTPS is on. The site switches when its certificate is there.";
+      if (!on) return t("sites.httpsTab.off");
+      return s.tls.active ? t("sites.httpsTab.on") : t("sites.httpsTab.onWaiting");
     });
 
   const toggleHSTS = (on: boolean) =>
     h.act(async () => {
       await setHSTS(site.name, on);
-      return on ? "HSTS is on. Browsers keep using HTTPS for this site, even if HTTPS is turned off later." : "HSTS is off.";
+      return on ? t("sites.httpsTab.hstsOn") : t("sites.httpsTab.hstsOff");
     });
 
   return (
     <>
-      <Card title="HTTPS" actions={<AppliesAtOnce />}>
+      <Card title={t("sites.httpsTab.title")} actions={<AppliesAtOnce />}>
         <div className="ui-stack">
           <Switch
             checked={site.tls.enabled}
             disabled={h.busy || ask !== null || !staff}
-            hint={staff ? "Turning it off asks first." : "An administrator or manager turns HTTPS on or off."}
+            hint={staff ? t("sites.httpsTab.tlsHint") : t("sites.httpsTab.tlsHintReadOnly")}
             onChange={(on) => (on ? void toggleTLS(true) : setAsk("tls-off"))}
           >
-            {site.tls.source === "custom" ? "HTTPS with the own certificate" : "HTTPS with a Let's Encrypt certificate"}
+            {site.tls.source === "custom" ? t("sites.httpsTab.own") : t("sites.httpsTab.letsEncrypt")}
           </Switch>
           <Switch
             checked={site.tls.hsts}
             disabled={h.busy || ask !== null}
-            hint="Turning it on asks first: browsers remember it for a year."
+            hint={t("sites.httpsTab.hstsHint")}
             onChange={(on) => (on ? setAsk("hsts-on") : void toggleHSTS(false))}
           >
-            HSTS: browsers use only HTTPS for this site
+            {t("sites.httpsTab.hsts")}
           </Switch>
           {ask === "tls-off" && (
-            <Notice tone="warn" title="Turn HTTPS off?">
-              <p className="ui-flush">
-                The site is then served over plain HTTP: passwords and cookies travel unencrypted. Browsers that know HSTS for it refuse to open
-                it.
-              </p>
+            <Notice tone="warn" title={t("sites.httpsTab.askOff")}>
+              <p className="ui-flush">{t("sites.httpsTab.askOffText")}</p>
               <div className="ui-row">
                 <Button variant="danger" disabled={h.busy} onClick={() => void toggleTLS(false).finally(() => setAsk(null))}>
-                  Turn HTTPS off
+                  {t("sites.httpsTab.turnOff")}
                 </Button>
                 <Button disabled={h.busy} onClick={() => setAsk(null)}>
-                  Cancel
+                  {t("common.actions.cancel")}
                 </Button>
               </div>
             </Notice>
           )}
           {ask === "hsts-on" && (
-            <Notice tone="warn" title="Turn HSTS on?">
-              <p className="ui-flush">
-                Browsers that visit the site remember for a year to use only HTTPS, even if HTTPS is turned off here later. Turn it on once the
-                certificate works for every domain of the site.
-              </p>
+            <Notice tone="warn" title={t("sites.httpsTab.askHsts")}>
+              <p className="ui-flush">{t("sites.httpsTab.askHstsText")}</p>
               <div className="ui-row">
                 <Button variant="primary" disabled={h.busy} onClick={() => void toggleHSTS(true).finally(() => setAsk(null))}>
-                  Turn HSTS on
+                  {t("sites.httpsTab.turnHstsOn")}
                 </Button>
                 <Button disabled={h.busy} onClick={() => setAsk(null)}>
-                  Cancel
+                  {t("common.actions.cancel")}
                 </Button>
               </div>
             </Notice>
           )}
-          {site.tls.hsts && !site.tls.active && <p className="ui-hint">HSTS is sent only while the site is served over HTTPS.</p>}
+          {site.tls.hsts && !site.tls.active && <p className="ui-hint">{t("sites.httpsTab.hstsOnlyHttps")}</p>}
           {h.result}
         </div>
       </Card>
@@ -802,12 +789,13 @@ function HTTPSTab({ site, onChange, staff }: TabProps & { staff: boolean }) {
 
 // ReadOnly shows settings a role may see but not change: a note on top and
 // every control below it switched off. The server refuses the change anyway.
-function ReadOnly({ when, who = "An administrator or manager", children }: { when: boolean; who?: string; children: ReactNode }) {
+function ReadOnly({ when, adminOnly = false, children }: { when: boolean; adminOnly?: boolean; children: ReactNode }) {
+  const { t } = useTranslation();
   if (!when) return <>{children}</>;
   return (
     <>
-      <Notice tone="info" title={`${who} changes these settings.`} />
-      <fieldset className="ui-fieldset ui-stack" disabled aria-label="Read only">
+      <Notice tone="info" title={t(adminOnly ? "sites.page.readOnlyAdmin" : "sites.page.readOnlyStaff")} />
+      <fieldset className="ui-fieldset ui-stack" disabled aria-label={t("sites.page.readOnly")}>
         {children}
       </fieldset>
     </>
@@ -815,6 +803,7 @@ function ReadOnly({ when, who = "An administrator or manager", children }: { whe
 }
 
 function PHPTab({ site, php, onChange, staff }: TabProps & { php: PHPVersions | null; staff: boolean }) {
+  const { t } = useTranslation();
   const [version, setVersion] = useState(site.php);
   const v = useAction(onChange);
   const p = useAction(onChange);
@@ -823,50 +812,52 @@ function PHPTab({ site, php, onChange, staff }: TabProps & { php: PHPVersions | 
     e.preventDefault();
     void v.act(async () => {
       await setPHP(site.name, version);
-      return version ? `The site runs on PHP ${version} now.` : "PHP is off for this site now.";
+      return version ? t("sites.phpTab.runsOn", { version }) : t("sites.phpTab.off");
     });
   }
 
   const togglePrograms = (on: boolean) =>
     p.act(async () => {
       await setPHPPrograms(site.name, on);
-      return on ? "PHP of this site may start programs now." : "PHP of this site can no longer start programs.";
+      return on ? t("sites.phpTab.programsOn") : t("sites.phpTab.programsOff");
     });
 
   return (
     <>
-      <Card title="PHP version">
+      <Card title={t("sites.phpTab.title")}>
         <form className="ui-stack" onSubmit={savePHP} noValidate>
-          <Field label={`PHP of ${site.name}`}>
+          <Field label={t("sites.phpTab.label", { site: site.name })}>
             <select className="ui-select" value={version} onChange={(e) => setVersion(e.target.value)}>
               <PHPOptions php={php} current={site.php} withoutNone />
             </select>
           </Field>
           {php?.legacy.includes(version) && version !== site.php && (
-            <p className="ui-hint">PHP {version} gets no or only security fixes upstream. Use it only for software that needs it.</p>
+            <p className="ui-hint">{t("sites.create.legacy", { version })}</p>
           )}
           <p className="ui-hint">
-            Only installed versions are listed. <a href={formatHash({ page: "php" })}>Install more PHP versions</a>. To turn PHP off, make
-            it a static site on the <a href={formatHash({ page: "sites", site: { name: site.name, tab: "web" } })}>Web</a> tab.
+            <Trans
+              i18nKey="sites.phpTab.onlyInstalled"
+              components={{ php: <a href={formatHash({ page: "php" })} />, web: <a href={formatHash({ page: "sites", site: { name: site.name, tab: "web" } })} /> }}
+            />
           </p>
           {v.result}
           <div className="ui-row">
             <Button type="submit" variant="primary" disabled={v.busy || version === site.php}>
-              Save PHP version
+              {t("sites.phpTab.save")}
             </Button>
           </div>
         </form>
       </Card>
       {site.php && (
-        <Card title="Programs from PHP" actions={<AppliesAtOnce />}>
+        <Card title={t("sites.phpTab.programs")} actions={<AppliesAtOnce />}>
           <div className="ui-stack">
             <Switch
               checked={site.phpPrograms}
               disabled={p.busy || !staff}
               onChange={(on) => void togglePrograms(on)}
-              hint={(staff ? "" : "An administrator or manager changes this. ") + "Off by default: a hacked plugin then cannot run commands on the server. Turn it on only for software that needs it, for example image optimizers or PDF tools. WP-CLI, Composer and cron jobs are not affected."}
+              hint={(staff ? "" : t("sites.phpTab.programsReadOnly") + " ") + t("sites.phpTab.programsHint")}
             >
-              Allow PHP to start programs (exec, system, shell_exec, proc_open, popen)
+              {t("sites.phpTab.programsSwitch")}
             </Switch>
             {p.result}
           </div>
@@ -879,6 +870,7 @@ function PHPTab({ site, php, onChange, staff }: TabProps & { php: PHPVersions | 
 // MaintenanceSettings switches the maintenance page of a site: addresses
 // outside the list get the page with 503, the listed ones see the site.
 function MaintenanceSettings({ site, onChange }: { site: Site; onChange: () => Promise<void> }) {
+  const { t } = useTranslation();
   const m = site.maintenance;
   const [page, setPage] = useState(m.page);
   const choices = useMaintenancePages(page);
@@ -906,10 +898,10 @@ function MaintenanceSettings({ site, onChange }: { site: Site; onChange: () => P
       await onChange();
       setDone(
         !enabled
-          ? "Maintenance is off. Everybody sees the site again."
+          ? t("sites.maintenance.off")
           : s.maintenance.allowIps.length > 0
-            ? "Maintenance is on. The listed addresses still see the site."
-            : "Maintenance is on. Every visitor gets the maintenance page.",
+            ? t("sites.maintenance.onListed")
+            : t("sites.maintenance.on"),
       );
     } catch (err) {
       setError(pageMessage(err));
@@ -923,7 +915,7 @@ function MaintenanceSettings({ site, onChange }: { site: Site; onChange: () => P
     try {
       const ip = await clientIp();
       if (!ip) {
-        setError("Your address is not known to the panel.");
+        setError(t("sites.maintenance.noIp"));
         return;
       }
       const list = parseAllowIps(allow);
@@ -934,41 +926,41 @@ function MaintenanceSettings({ site, onChange }: { site: Site; onChange: () => P
   }
 
   const rt = runtimeWord(site);
-  const keeps = rt === "PHP" ? " PHP keeps running." : rt === "app" ? " The app keeps running." : "";
+  const keeps = rt === "PHP" ? t("sites.maintenance.keepsPhp") : rt === "app" ? t("sites.maintenance.keepsApp") : "";
 
   const pageName = choices.find((c) => c.id === m.page)?.name ?? m.page;
-  const allowed = m.allowIps.length === 0 ? "none" : m.allowIps.length <= 2 ? m.allowIps.join(", ") : `${m.allowIps.length} addresses`;
+  const allowed = m.allowIps.length === 0 ? t("sites.maintenance.none") : m.allowIps.length <= 2 ? m.allowIps.join(", ") : t("sites.maintenance.addresses", { count: m.allowIps.length });
 
   return (
     <div className="ui-stack">
-      <Switch checked={m.enabled} disabled={busy} onChange={(on) => void save(on)} hint={(m.enabled ? "On: visitors get the page with “503 Service Unavailable”." : "Visitors get the page with “503 Service Unavailable”; the allowed addresses still see the site.") + keeps}>
-        Maintenance mode
+      <Switch checked={m.enabled} disabled={busy} onChange={(on) => void save(on)} hint={(m.enabled ? t("sites.maintenance.hintOn") : t("sites.maintenance.hintOff")) + keeps}>
+        {t("sites.maintenance.switch")}
       </Switch>
-      {site.disabled && <Notice tone="warn" title="The site is disabled. Disabled wins: everybody gets the page chosen under Availability until it is enabled." />}
+      {site.disabled && <Notice tone="warn" title={t("sites.maintenance.disabledWins")} />}
       {!editing ? (
         <p className="ui-hint ui-flush">
-          Page: {pageName} · Allowed: {allowed} ·{" "}
+          {t("sites.maintenance.summary", { page: pageName, allowed })}{" "}
           <button type="button" className="ui-link-btn" onClick={() => setEditing(true)}>
-            Change…
+            {t("sites.maintenance.change")}
           </button>
         </p>
       ) : (
         <form className="ui-stack" onSubmit={(e) => void save(m.enabled, e)} noValidate>
           <fieldset className="ui-fieldset ui-stack">
-            <legend className="ui-sr-only">Maintenance of {site.name}</legend>
-            <PageSelect label="Maintenance page" value={page} choices={choices} onChange={setPage} />
-            <Field label="Allowed addresses" hint="IPv4 or IPv6 addresses or ranges like 10.0.0.0/8, one per line, at most 20.">
+            <legend className="ui-sr-only">{t("sites.maintenance.legend", { site: site.name })}</legend>
+            <PageSelect label={t("sites.maintenance.page")} value={page} choices={choices} onChange={setPage} />
+            <Field label={t("sites.maintenance.allowed")} hint={t("sites.maintenance.allowedHint")}>
               <textarea className="ui-input ui-textarea" value={allow} onChange={(e) => setAllow(e.target.value)} rows={3} autoComplete="off" spellCheck={false} />
             </Field>
             <div className="ui-row">
               <Button disabled={busy} onClick={() => void addMine()}>
-                Add my current IP
+                {t("sites.maintenance.addMine")}
               </Button>
               <Button variant="primary" type="submit" disabled={busy}>
-                Save maintenance
+                {t("sites.maintenance.save")}
               </Button>
               <Button disabled={busy} onClick={() => setEditing(false)}>
-                Close
+                {t("sites.maintenance.close")}
               </Button>
             </div>
           </fieldset>

@@ -9,6 +9,7 @@ import { SitePage } from "./SitePage";
 import { Sites } from "./Sites";
 import { compareVersions, domainsProblem, proxyProblem,
   redirectProblem, httpsLabel, parseDomains, phpChoices, siteNameProblem, siteStatus, type Site, type SiteTLS } from "./sites";
+import { setLanguage } from "./i18n";
 import { mockFetch } from "./test-utils";
 
 const noTLS: SiteTLS = { enabled: false, active: false, hsts: false, domains: [], notAfter: null };
@@ -129,6 +130,18 @@ describe("Sites", () => {
       .getAllByRole("row")
       .slice(1)
       .map((r) => within(r).getAllByRole("cell")[0]!.querySelector("a")?.textContent);
+
+  it("lists sites in German", async () => {
+    setLanguage("de");
+    mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [blog, shop] } } });
+    render(<ListHarness />);
+    const table = await screen.findByRole("table", { name: "Sites" });
+    expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(expect.arrayContaining(["Site", "Typ", "Speicher", "Status"]));
+    const s = within(within(table).getByRole("link", { name: "shop" }).closest("tr")!);
+    expect(s.getByText("Statisch")).toBeInTheDocument();
+    expect(s.getByText("Zertifikat fehlgeschlagen")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Status" })).toHaveTextContent("Alle Status");
+  });
 
   it("lists sites with their state in a table", async () => {
     mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [blog, shop] } } });
@@ -723,7 +736,7 @@ describe("SitePage", () => {
     expect(await screen.findByRole("heading", { name: "blog", level: 1 })).toBeInTheDocument();
     const d = within(screen.getByLabelText("Details of blog"));
     expect(d.getByText("PHP 8.4")).toBeInTheDocument();
-    expect(d.getByText("HTTPS, HSTS, valid until 2027-02-01")).toBeInTheDocument();
+    expect(d.getByText("HTTPS, HSTS, valid until 1 Feb 2027")).toBeInTheDocument();
     expect(d.getByText("www.blog.example.com")).toBeInTheDocument();
     const tabs = screen.getByRole("tablist", { name: "blog" });
     expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "App", "Files", "Security", "Operations"]);
@@ -739,6 +752,21 @@ describe("SitePage", () => {
     await user.click(within(inner).getByRole("tab", { name: "PHP" }));
     expect(screen.getByRole("tabpanel", { name: "PHP" })).toHaveTextContent("PHP of blog");
     expect(within(tabs).getByRole("tab", { name: "App" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("shows a site in German", async () => {
+    setLanguage("de");
+    mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [blog] } } });
+    render(<PageHarness />);
+    const d = within(await screen.findByLabelText("Details von blog"));
+    expect(d.getByText("Systemname")).toBeInTheDocument();
+    expect(d.getByText("Aktiv")).toBeInTheDocument();
+    expect(d.getByText("HTTPS, HSTS, gültig bis 01.02.2027")).toBeInTheDocument();
+    const tabs = screen.getByRole("tablist", { name: "blog" });
+    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Übersicht", "Domains & HTTPS", "App", "Dateien", "Sicherheit", "Betrieb"]);
+    expect(screen.getByLabelText("Bereich von blog")).toHaveValue("overview");
+    const danger = screen.getByRole("region", { name: "Gefahrenzone" });
+    expect(within(danger).getByRole("region", { name: "Site löschen" })).toBeInTheDocument();
   });
 
   it("sets and removes the display name, keeping the system name visible", async () => {
