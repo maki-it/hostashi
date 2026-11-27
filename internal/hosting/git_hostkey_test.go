@@ -109,6 +109,23 @@ func TestGitHostKey(t *testing.T) {
 		t.Fatalf("unreachable: %v", err)
 	}
 
+	// An IPv6-only server without NAT64: IPv4 is not routed.
+	s.hostKeyScan = func(context.Context, string, string) (ssh.PublicKey, error) {
+		return nil, errors.New("dial tcp 10.0.0.9:2222: connect: network is unreachable")
+	}
+
+	if _, err := s.ScanGitHostKey(ctx, "blog"); !errors.Is(err, ErrIPv4Only) {
+		t.Fatalf("IPv4 only: %v", err)
+	}
+
+	s.SetResolver(&fakeResolver{addrs: addrs("10.0.0.9", "2001:db8::9")})
+
+	if _, err := s.ScanGitHostKey(ctx, "blog"); !errors.Is(err, ErrHostKeyUnreachable) {
+		t.Fatalf("with an IPv6 address: %v", err)
+	}
+
+	s.SetResolver(&fakeResolver{addrs: addrs("10.0.0.9", "10.0.0.8")})
+
 	// Confirm: a usable key only.
 	if _, err := s.SetGitHostKey(ctx, 1, "blog", "ssh-ed25519 AAAA nope"); !errors.Is(err, ErrBadHostKey) {
 		t.Fatalf("bad key: %v", err)
