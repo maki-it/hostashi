@@ -2499,3 +2499,16 @@ html:has(.ui-files) {
   background: var(--surface);
   box-shadow: 0 0 0 1px var(--line-strong);
 }
+/* Below a paged table: what is shown, and the way to the other pages */
+.ui-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--line);
+}
+.ui-stack[hidden] {
+  display: none;
+}

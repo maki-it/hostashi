@@ -333,14 +333,15 @@ func TestPoolRenameAndDefaultOverAPI(t *testing.T) {
 
 func TestFirewallOverAPI(t *testing.T) {
 	got := fakeAPI(t, map[string]string{
-		"GET /api/v1/firewall/bans": `{"jails":[{"name":"sshd","running":false,"bans":[]},` +
-			`{"name":"hostashi-site-auth","running":true,"totalFailed":10,"bans":[{"address":"203.0.113.7","since":"2026-11-26T22:00:00Z","until":"2026-11-26T23:00:00Z"}]},` +
-			`{"name":"recidive","running":true,"bans":[{"address":"2001:db8::1","since":"2026-11-26T22:00:00Z","until":null}]}]}`,
+		"GET /api/v1/firewall/bans": `{"jails":[{"name":"sshd","running":false},{"name":"hostashi-site-auth","running":true,"totalFailed":10},{"name":"recidive","running":true}],` +
+			`"addresses":[{"address":"2001:db8::1","jails":["recidive"],"since":"2026-11-26T22:00:00Z","until":null},` +
+			`{"address":"203.0.113.7","jails":["hostashi-site-auth","recidive"],"since":"2026-11-26T22:00:00Z","until":"2026-11-26T23:00:00Z"}],"total":2,"page":1,"perPage":100,"truncated":false}`,
 		"DELETE /api/v1/firewall/bans/203.0.113.7": `{"address":"203.0.113.7","jails":["hostashi-site-auth"]}`,
 	})
 
 	code, out, _ := runCLI(t, "", "firewall", "bans")
-	if code != 0 || !strings.Contains(out, "203.0.113.7") || !strings.Contains(out, "no end") || !strings.Contains(out, "(not running)") {
+	if code != 0 || !strings.Contains(out, "203.0.113.7") || !strings.Contains(out, "no end") || !strings.Contains(out, "sshd is not running") ||
+		!strings.Contains(out, "hostashi-site-auth,recidive") {
 		t.Errorf("bans = %d: %s", code, out)
 	}
 
@@ -364,5 +365,43 @@ func TestFirewallOverAPI(t *testing.T) {
 		if code, _, _ := runCLI(t, "", args...); code != 2 {
 			t.Errorf("%v = %d", args, code)
 		}
+	}
+}
+
+// "firewall bans" reads every page and passes the filters on.
+func TestFirewallBansPages(t *testing.T) {
+	loginEnv(t)
+
+	var queries []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queries = append(queries, r.URL.RawQuery)
+		page := r.URL.Query().Get("page")
+		addr := map[string]string{"1": "203.0.113.1", "2": "203.0.113.2", "3": "203.0.113.3"}[page]
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jails":[],"addresses":[{"address":"` + addr + `","jails":["recidive"],"since":"2026-11-26T22:00:00Z","until":null}],"total":3,"truncated":true}`))
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("HOSTASHI_URL", srv.URL)
+	t.Setenv("HOSTASHI_TOKEN", "hst_x")
+
+	code, out, errOut := runCLI(t, "", "firewall", "bans", "-jail", "recidive", "-address", "203.0.113.0/24")
+	if code != 0 || !strings.Contains(out, "203.0.113.3") || !strings.Contains(out, "some are missing") {
+		t.Fatalf("bans = %d: %s %s", code, out, errOut)
+	}
+
+	if len(queries) != 3 || queries[0] != "address=203.0.113.0%2F24&jail=recidive&page=1&perPage=100" {
+		t.Errorf("queries %v", queries)
+	}
+
+	queries = nil
+
+	if code, out, _ = runCLI(t, "", "firewall", "bans", "-json"); code != 0 || !strings.Contains(out, `"total": 3`) || strings.Count(out, `"address"`) != 3 {
+		t.Errorf("bans -json = %d: %s", code, out)
+	}
+
+	if code, _, _ := runCLI(t, "", "firewall", "bans", "extra"); code != 2 {
+		t.Errorf("extra argument = %d", code)
 	}
 }

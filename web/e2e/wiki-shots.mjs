@@ -352,7 +352,7 @@ const shots = [
   { name: "firewall", hash: "#/firewall", ready: "text=Allowlists" },
   {
     name: "firewall-bans",
-    hash: "#/firewall",
+    hash: "#/firewall?tab=blocked",
     ready: "text=Blocked addresses",
     act: async (page) => {
       await page.getByRole("button", { name: "Unblock 198.51.100.23" }).click();
