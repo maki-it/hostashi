@@ -110,7 +110,7 @@ describe("SiteActions", () => {
     button.focus();
     await user.keyboard("{ArrowDown}");
     const menu = screen.getByRole("menu", { name: "Actions for blog" });
-    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Rename…", "Copy site…", "Change domains…", "Databases…", "Restart PHP…", "Reset permissions…"]);
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Rename…", "Copy site…", "Change domains…", "Databases…", "Restart PHP…", "Reset file permissions…"]);
     expect(within(menu).getByRole("menuitem", { name: "Rename…" })).toHaveFocus();
     await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
     expect(onTab).toHaveBeenCalledWith("domains");

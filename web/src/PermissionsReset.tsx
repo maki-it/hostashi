@@ -39,7 +39,7 @@ export function PermissionsResetCard({ site }: { site: Site }) {
   }
 
   return (
-    <Card title="Reset permissions">
+    <Card title="Reset file permissions">
       <div className="ui-stack">
         <p className="ui-hint ui-flush">
           Gives every file and folder of the site back to its user <span className="ui-mono">{site.name}</span> and sets the usual modes: folders{" "}
@@ -53,7 +53,7 @@ export function PermissionsResetCard({ site }: { site: Site }) {
         {!open ? (
           <div className="ui-row">
             <Button onClick={() => setOpen(true)} disabled={busy}>
-              Reset permissions
+              Reset file permissions
             </Button>
           </div>
         ) : (
@@ -72,7 +72,7 @@ export function PermissionsResetCard({ site }: { site: Site }) {
             </div>
             <div className="ui-row">
               <Button type="submit" variant="danger" disabled={busy || typed !== site.name}>
-                {busy ? "Resetting…" : `Reset permissions of ${site.name}`}
+                {busy ? "Resetting…" : `Reset file permissions of ${site.name}`}
               </Button>
               <Button disabled={busy} onClick={cancel}>
                 Cancel
