@@ -259,3 +259,82 @@ func TestGrantsOverHTTP(t *testing.T) {
 		t.Fatalf("clear: %d %s", rec.Code, rec.Body)
 	}
 }
+
+// TestUserPolicyOverHTTP requires a second factor of every account
+// (ADR-0035, addendum 1).
+func TestUserPolicyOverHTTP(t *testing.T) {
+	e := newAPI(t)
+	c := e.adminCookie(t)
+
+	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/users/policy", cookie: c})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"requireSecondFactor":false`) {
+		t.Fatalf("default policy: %d %s", rec.Code, rec.Body)
+	}
+
+	bob := e.createUser(t, c, "bob", "user")
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/invitations/accept",
+		body: `{"token":"` + bob.Invitation.Token + `","password":"` + apiPassword + `"}`,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("accept: %d %s", rec.Code, rec.Body)
+	}
+
+	bobCookie := sessionCookieOf(t, rec)
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/auth/me", cookie: bobCookie})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"secondFactor":false,"secondFactorRequired":false`) {
+		t.Fatalf("me before: %d %s", rec.Code, rec.Body)
+	}
+
+	for _, body := range []string{`{}`, `{"requireSecondFactor":"yes"}`} {
+		rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/users/policy", cookie: c, body: body})
+		if rec.Code != http.StatusUnprocessableEntity && rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d %s", body, rec.Code, rec.Body)
+		}
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/users/policy", cookie: c, body: `{"requireSecondFactor":true}`})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"requireSecondFactor":true`) {
+		t.Fatalf("turn on: %d %s", rec.Code, rec.Body)
+	}
+
+	// Bob is led to the setup and can do nothing else until then.
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/auth/me", cookie: bobCookie})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"secondFactor":false,"secondFactorRequired":true`) {
+		t.Fatalf("me after: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/account/notifications", cookie: bobCookie})
+	if rec.Code != http.StatusForbidden || errCode(t, rec) != "second_factor_required" {
+		t.Fatalf("notifications without second factor: %d %s", rec.Code, rec.Body)
+	}
+
+	// The admin who turned it on still works.
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/users", cookie: c}); rec.Code != http.StatusOK {
+		t.Fatalf("admin after: %d %s", rec.Code, rec.Body)
+	}
+
+	e.giveSecondFactor(t, "bob")
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/account/notifications", cookie: bobCookie}); rec.Code != http.StatusOK {
+		t.Fatalf("notifications with second factor: %d %s", rec.Code, rec.Body)
+	}
+
+	// Only admins read or change the policy.
+	for _, o := range []reqOpts{
+		{method: "GET", path: "/api/v1/users/policy"},
+		{method: "PUT", path: "/api/v1/users/policy", body: `{"requireSecondFactor":false}`},
+	} {
+		o.cookie = bobCookie
+		if rec := e.do(t, o); rec.Code != http.StatusForbidden || errCode(t, rec) != "forbidden" {
+			t.Errorf("user %s: %d %s", o.method, rec.Code, rec.Body)
+		}
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/users/policy", cookie: c, body: `{"requireSecondFactor":false}`})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"requireSecondFactor":false`) {
+		t.Fatalf("turn off: %d %s", rec.Code, rec.Body)
+	}
+}

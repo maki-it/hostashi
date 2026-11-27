@@ -47,6 +47,16 @@ export const deleteUser = (id: number) => request<void>("DELETE", userPath(id));
 
 export const resetUser = async (id: number) => (await request<{ invitation: Invitation }>("POST", userPath(id) + "/reset")).invitation;
 
+/** What applies to every account (ADR-0035, addendum 1). */
+export type UserPolicy = { requireSecondFactor: boolean };
+
+export const getUserPolicy = () => request<UserPolicy>("GET", "/users/policy");
+
+export const setUserPolicy = (requireSecondFactor: boolean) => request<UserPolicy>("PUT", "/users/policy", { requireSecondFactor });
+
+/** hasSecondFactor reports whether the account has TOTP or a passkey. */
+export const hasSecondFactor = (a: Account) => a.totpEnabled || a.passkeys > 0;
+
 export const getGrants = async (id: number) => (await request<{ sites: string[] }>("GET", userPath(id) + "/grants")).sites;
 
 export const setGrants = async (id: number, sites: string[]) =>
@@ -78,6 +88,8 @@ export function usersMessage(err: unknown): string {
         return "Too many attempts. Wait a few minutes and try again.";
       case "not_found":
         return "This account does not exist any more. Reload the page.";
+      case "second_factor_required":
+        return "Set up a second factor for your own account first (Settings).";
       case "forbidden":
         return "Only admins can manage accounts.";
       case "invalid_argument":

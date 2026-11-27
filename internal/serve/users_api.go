@@ -89,6 +89,19 @@ func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	return id, true
 }
 
+// userPolicyJSON is what applies to every account (ADR-0035, addendum 1).
+type userPolicyJSON struct {
+	// RequireSecondFactor requires TOTP or a passkey of every account,
+	// whatever its role. Accounts without one are led to set one up at
+	// their next login; until then they and their API tokens can do
+	// nothing else.
+	RequireSecondFactor bool `json:"requireSecondFactor"`
+}
+
+type userPolicyRequest struct {
+	RequireSecondFactor *bool `json:"requireSecondFactor"`
+}
+
 type accountListJSON struct {
 	Users []accountJSON `json:"users"`
 }
@@ -199,6 +212,57 @@ func registerUsers(mux *routeMux, a authn, m *mailer) {
 			User:       toAccountJSON(acc),
 			Invitation: invitationJSON{Token: inv.Secret, ExpiresAt: inv.Expires, EmailedTo: emailedTo(emailed, inv)},
 		})
+	})
+
+	mux.Op("GET /api/v1/users/policy", openapi.Operation{
+		ID: "getUserPolicy", Tag: "users", Summary: "What applies to every account, such as a required second factor", Out: userPolicyJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := a.sessionAllow(w, r, authz.UsersRead); !ok {
+			return
+		}
+
+		on, err := a.svc.SecondFactorForAll(r.Context())
+		if err != nil {
+			usersFail(a, w, err, "read user policy")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, userPolicyJSON{RequireSecondFactor: on})
+	})
+
+	mux.Op("PUT /api/v1/users/policy", openapi.Operation{
+		ID: "setUserPolicy", Tag: "users", Summary: "Require a second factor of every account, or stop requiring it", In: userPolicyRequest{}, Out: userPolicyJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		u, ok := a.sessionAllow(w, r, authz.UsersWrite)
+		if !ok {
+			return
+		}
+
+		var in userPolicyRequest
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if in.RequireSecondFactor == nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", "requireSecondFactor is required")
+
+			return
+		}
+
+		if err := a.svc.SetSecondFactorForAll(r.Context(), u, *in.RequireSecondFactor, clientIP(r)); err != nil {
+			if errors.Is(err, auth.ErrSecondFactorRequired) {
+				writeError(w, http.StatusConflict, "second_factor_required", "set up a second factor for your own account first")
+
+				return
+			}
+
+			usersFail(a, w, err, "store user policy")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, userPolicyJSON{RequireSecondFactor: *in.RequireSecondFactor})
 	})
 
 	mux.Op("GET /api/v1/users/{id}", openapi.Operation{
