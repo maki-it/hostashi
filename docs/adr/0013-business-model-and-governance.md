@@ -1,6 +1,6 @@
 # ADR-0013 Business model and governance
 
-**Status:** Proposed (not accepted). **Date drafted:** 2026-11-17. **Decides:** Kim. **Blocks:** ADR-0002, contribution rules, funding of the pentest.
+**Status:** Accepted (Kim, 2026-11-27). **Date drafted:** 2026-11-17. **Decides:** Kim. **Blocks:** ADR-0002, contribution rules, funding of the pentest.
 
 ## Context
 
@@ -18,7 +18,7 @@
 - Q8: no budget for an external pentest or legal review [V: Kim, thread].
 - Owner of the trademark: Maki IT, Kim's sole proprietorship [V: Kim, thread]. The repository stays in the `maki-it` GitHub organization, there is no separate Hostashi organization [V: Kim, thread, 2026-11-17]. A sole proprietorship is not a separate legal person, so personal liability remains [U: general knowledge, not legal advice].
 - Money: no sponsoring or paid services are set up until a tax advisor has been asked [V: Kim agreed in thread].
-- Contributions: DCO for now, no CLA, open core stays off the table for the moment [V: Kim, thread]. Not final: the ADRs are still Proposed.
+- Contributions: DCO for now, no CLA, open core stays off the table for the moment [V: Kim, thread]. Confirmed with this ADR's acceptance (Kim, 2026-11-27).
 
 Effect: option (d) fits the start. The missing budget is an uncovered risk, see below.
 
@@ -79,4 +79,15 @@ The roadmap requires an external pentest before 1.0 [V: `06-roadmap.md`]. Withou
 
 ## Open questions
 
-None at this level. Remaining before Accepted: Kim sets the status, the tax advisor is asked before any income, and the funding of an external pentest stays open (no budget).
+None at this level. Still open after acceptance: the tax advisor is asked before any income, and the funding of an external pentest stays open (no budget).
+
+## Acceptance (2026-11-27)
+
+Accepted by Kim on 2026-11-27: option (e), DCO without CLA, no open core in v1, no telemetry and no license-key checks.
+
+State at acceptance, which amends the text above where they differ:
+
+- The repository is public, under AGPL-3.0 for the code and CC-BY-4.0 for the documentation, with DCO (ADR-0002) [V].
+- `SECURITY.md` and `CONTRIBUTING.md` exist [V]. `GOVERNANCE.md` and a trademark policy are still to be written [V: not in the repository].
+- The external pentest before 1.0 was replaced by an own security review before 1.0 (Kim, 2026-11-21, see `06-roadmap.md` and `05-security.md`). The recommendation "do not call a release 1.0 without the pentest" is superseded by that decision; an external pentest stays a goal for later.
+- Sponsoring and paid services are still not set up; that stays an outward-facing step that needs Kim's approval and the tax advisor first.
