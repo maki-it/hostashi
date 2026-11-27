@@ -173,16 +173,16 @@ func (s System) FstabDevices() Check {
 
 	f, err := os.Open(s.fstab())
 	if errors.Is(err, fs.ErrNotExist) {
-		return ok(id, s.fstab()+" does not exist")
+		return okT(id, "fstab.none", P{"path": s.fstab()})
 	}
 
 	if err != nil {
-		return warn(id, "cannot read "+s.fstab()+": "+describe(err), "")
+		return warnT(id, "read.error", "", P{"path": s.fstab(), "error": describe(err)})
 	}
 
 	defer f.Close()
 
-	var waiting, optional []string
+	var waiting, optional, waitingDE, optionalDE []string
 
 	for _, e := range ParseFstab(f) {
 		if s.deviceExists(e.Source) {
@@ -190,25 +190,25 @@ func (s System) FstabDevices() Check {
 		}
 
 		what := fmt.Sprintf("%s for %s (line %d)", e.Source, e.Target, e.Line)
+		was := fmt.Sprintf("%s für %s (Zeile %d)", e.Source, e.Target, e.Line)
+
 		if e.Wait {
-			waiting = append(waiting, what)
+			waiting, waitingDE = append(waiting, what), append(waitingDE, was)
 		} else {
-			optional = append(optional, what)
+			optional, optionalDE = append(optional, what), append(optionalDE, was)
 		}
 	}
 
-	const fix = " Correct the line or comment it out, then run systemctl daemon-reload. Before formatting a volume, check with lsblk -f and /etc/fstab that nothing uses it."
-
 	switch {
 	case len(waiting) > 0:
-		return fail(id, s.fstab()+" names a device that does not exist: "+strings.Join(append(waiting, optional...), ", "),
-			"Without nofail, the next boot stops in emergency mode, and logins wait 90 seconds for the device."+fix)
+		return failT(id, "fstab.missing", "fstab.wait.hint", P{
+			"path": s.fstab(), "devices": strings.Join(append(waiting, optional...), ", "), "devices@de": strings.Join(append(waitingDE, optionalDE...), ", "),
+		})
 	case len(optional) > 0:
-		return warn(id, s.fstab()+" names a device that does not exist: "+strings.Join(optional, ", "),
-			"The entry has nofail or noauto, so the boot goes on, but anything below the mount point now lands on the root disk."+fix)
+		return warnT(id, "fstab.missing", "fstab.nofail.hint", P{"path": s.fstab(), "devices": strings.Join(optional, ", "), "devices@de": strings.Join(optionalDE, ", ")})
 	}
 
-	return ok(id, "every device in "+s.fstab()+" exists")
+	return okT(id, "fstab.ok", P{"path": s.fstab()})
 }
 
 func (s System) deviceExists(src string) bool {

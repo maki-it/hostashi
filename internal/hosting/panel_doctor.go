@@ -5,16 +5,13 @@ package hosting
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/doctor"
 )
-
-// panelTLSHint says where the panel's certificate is managed.
-const panelTLSHint = "See System → Panel certificate. Let's Encrypt needs the panel's host name to point at this server; " +
-	"an own certificate is never renewed automatically: upload a new one."
 
 // PanelTLSDoctor reports the panel's own certificate on the Health page
 // (ADR-0023, ADR-0039): when it expires within the thresholds of the site
@@ -30,7 +27,7 @@ func (s *Service) PanelTLSDoctor(ctx context.Context, now time.Time) ([]agentapi
 
 	p, err := s.PanelTLS(ctx)
 	if err != nil {
-		return []agentapi.DoctorCheck{{ID: id, Status: agentapi.DoctorFail, Summary: "cannot read the state of the panel's certificate"}}, fmt.Errorf("panel tls: %w", err)
+		return []agentapi.DoctorCheck{doctor.New(agentapi.DoctorFail, id, "paneltls.error", "", nil)}, fmt.Errorf("panel tls: %w", err)
 	}
 
 	// Waiting for the first certificate, nothing failed yet.
@@ -44,31 +41,30 @@ func (s *Service) PanelTLSDoctor(ctx context.Context, now time.Time) ([]agentapi
 func panelTLSCheck(p PanelTLS, now time.Time) agentapi.DoctorCheck {
 	const id = "panel.tls"
 
-	c := agentapi.DoctorCheck{ID: id, Status: agentapi.DoctorOK}
+	const hint = "paneltls.hint"
 
 	if p.NotAfter.IsZero() {
-		c.Status, c.Summary, c.Hint = agentapi.DoctorFail, "no certificate for "+p.Domain+": "+firstErrLine(p.Error), panelTLSHint
-
-		return c
+		return doctor.New(agentapi.DoctorFail, id, "paneltls.none", hint, doctor.P{"domain": p.Domain, "error": firstErrLine(p.Error)})
 	}
 
 	left := p.NotAfter.Sub(now)
 	days := int(left.Hours() / 24)
-	until := p.NotAfter.UTC().Format("2006-01-02")
-	c.Summary = fmt.Sprintf("certificate for %s valid until %s (%d days)", p.Domain, until, days)
+	params := doctor.P{"domain": p.Domain, "date": p.NotAfter.UTC().Format("2006-01-02"), "days": strconv.Itoa(days)}
 
 	switch {
 	case left <= 0:
-		c.Status, c.Summary, c.Hint = agentapi.DoctorFail, "certificate for "+p.Domain+" expired on "+until, panelTLSHint
+		return doctor.New(agentapi.DoctorFail, id, "paneltls.expired", hint, params)
 	case days < doctor.CertFailDays:
-		c.Status, c.Hint = agentapi.DoctorFail, panelTLSHint
+		return doctor.New(agentapi.DoctorFail, id, "paneltls.valid", hint, params)
 	case days < doctor.CertWarnDays:
-		c.Status, c.Hint = agentapi.DoctorWarn, panelTLSHint
+		return doctor.New(agentapi.DoctorWarn, id, "paneltls.valid", hint, params)
 	case p.Error != "":
-		c.Status, c.Summary, c.Hint = agentapi.DoctorWarn, c.Summary+"; the last renewal failed: "+firstErrLine(p.Error), panelTLSHint
+		params["error"] = firstErrLine(p.Error)
+
+		return doctor.New(agentapi.DoctorWarn, id, "paneltls.renewfail", hint, params)
 	}
 
-	return c
+	return doctor.New(agentapi.DoctorOK, id, "paneltls.valid", "", params)
 }
 
 func firstErrLine(s string) string {

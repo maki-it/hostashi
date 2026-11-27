@@ -6,10 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/doctor"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -28,7 +30,7 @@ func (s *Service) MalwareDoctor(ctx context.Context, now time.Time) ([]agentapi.
 	if errors.Is(err, ErrNoScans) || isCode(err, agentrpc.CodePrecondition) {
 		return nil, nil
 	} else if err != nil {
-		return []agentapi.DoctorCheck{{ID: id, Status: agentapi.DoctorFail, Summary: "cannot read the state of ClamAV", Hint: "Check the agent's log (journalctl -u hostashi-agent)."}}, fmt.Errorf("scan engine: %w", err)
+		return []agentapi.DoctorCheck{doctor.New(agentapi.DoctorFail, id, "clamav.error", "agentlog.hint", nil)}, fmt.Errorf("scan engine: %w", err)
 	}
 
 	var out []agentapi.DoctorCheck
@@ -37,19 +39,13 @@ func (s *Service) MalwareDoctor(ctx context.Context, now time.Time) ([]agentapi.
 	case agentapi.ScanEngineOn:
 		out = append(out, engineCheck(eng, now))
 	case agentapi.ScanEngineFailed:
-		out = append(out, agentapi.DoctorCheck{
-			ID: id, Status: agentapi.DoctorWarn, Summary: "ClamAV could not be installed or removed",
-			Hint: "See the install log under System → Virus scan and switch it on or off again.",
-		})
+		out = append(out, doctor.New(agentapi.DoctorWarn, id, "clamav.failed", "clamav.failed.hint", nil))
 	default:
 		// Off, or installing or removing right now.
 	}
 
 	if eng.Realtime == agentapi.ScanEngineFailed {
-		out = append(out, agentapi.DoctorCheck{
-			ID: id, Status: agentapi.DoctorWarn, Summary: "the real-time scan could not be switched",
-			Hint: "See the install log under System → Virus scan and switch the real-time scan on or off again.",
-		})
+		out = append(out, doctor.New(agentapi.DoctorWarn, id, "realtime.failed", "realtime.failed.hint", nil))
 	}
 
 	sites, err := s.findingSites(ctx)
@@ -69,26 +65,19 @@ func engineCheck(eng agentapi.ScanEngineStatus, now time.Time) agentapi.DoctorCh
 	}
 
 	if eng.Signatures == "" {
-		return agentapi.DoctorCheck{
-			ID: id, Status: agentapi.DoctorWarn, Summary: what + " has no signatures yet",
-			Hint: "freshclam downloads them within minutes of the install. If this stays, check journalctl -u clamav-freshclam.",
-		}
+		return doctor.New(agentapi.DoctorWarn, id, "clamav.nosigs", "clamav.nosigs.hint", doctor.P{"engine": what})
 	}
 
 	at, err := time.Parse(time.RFC3339, eng.Signatures)
 	if err != nil {
-		return agentapi.DoctorCheck{ID: id, Status: agentapi.DoctorWarn, Summary: what + ": cannot read the age of the signatures"}
+		return doctor.New(agentapi.DoctorWarn, id, "clamav.sigage", "", doctor.P{"engine": what})
 	}
 
 	if age := now.Sub(at); age > signaturesMaxAge {
-		return agentapi.DoctorCheck{
-			ID: id, Status: agentapi.DoctorWarn,
-			Summary: fmt.Sprintf("%s: the signatures are %d days old", what, int(age.Hours()/24)),
-			Hint:    "freshclam has not updated them. Check journalctl -u clamav-freshclam; a distribution that stopped updating ClamAV makes the downloads fail.",
-		}
+		return doctor.New(agentapi.DoctorWarn, id, "clamav.old", "clamav.old.hint", doctor.P{"engine": what, "days": strconv.Itoa(int(age.Hours() / 24))})
 	}
 
-	return agentapi.DoctorCheck{ID: id, Status: agentapi.DoctorOK, Summary: what + ", signatures from " + at.UTC().Format("2006-01-02 15:04") + " UTC"}
+	return doctor.New(agentapi.DoctorOK, id, "clamav.ok", "", doctor.P{"engine": what, "time": at.UTC().Format("2006-01-02 15:04")})
 }
 
 // findingSites is one warning per site with open findings, also while
@@ -112,15 +101,12 @@ func (s *Service) findingSites(ctx context.Context) ([]agentapi.DoctorCheck, err
 			continue
 		}
 
-		summary := fmt.Sprintf("%d open virus scan findings", n)
+		key := "malware.findings"
 		if n == 1 {
-			summary = "1 open virus scan finding"
+			key = "malware.finding"
 		}
 
-		out = append(out, agentapi.DoctorCheck{
-			ID: "site.malware", Site: site.Name, Status: agentapi.DoctorWarn, Summary: summary,
-			Hint: "Open the site's Virus scan tab: quarantine the files, or mark them as false positives.",
-		})
+		out = append(out, doctor.NewSite(agentapi.DoctorWarn, "site.malware", site.Name, key, "malware.findings.hint", doctor.P{"count": strconv.Itoa(n)}))
 	}
 
 	return out, nil

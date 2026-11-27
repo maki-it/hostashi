@@ -19,11 +19,13 @@ type DoctorCheck struct {
 	Status  string `json:"status"`         // DoctorOK, DoctorWarn or DoctorFail
 	Summary string `json:"summary"`
 	Hint    string `json:"hint,omitempty"`
-	// Code names the wording of Summary and Hint, and Params holds its
-	// values, so emails can say it in the recipient's language (ADR-0071).
-	// Only some checks set them; Summary and Hint stay the English text.
-	Code   string            `json:"code,omitempty"`
-	Params map[string]string `json:"params,omitempty"`
+	// Code and HintCode name the wording of Summary and Hint in the texts
+	// of internal/doctor, and Params holds their values, so emails and the
+	// panel can say them in the reader's language (ADR-0071). Summary and
+	// Hint stay the English text.
+	Code     string            `json:"code,omitempty"`
+	HintCode string            `json:"hintCode,omitempty"`
+	Params   map[string]string `json:"params,omitempty"`
 }
 
 // DoctorRequest has no parameters: the agent runs every check.

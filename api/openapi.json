@@ -2711,6 +2711,9 @@
           "hint": {
             "type": "string"
           },
+          "hintCode": {
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },

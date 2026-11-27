@@ -52,15 +52,51 @@ export function licenseAllowed(expr) {
   return ALLOWED.has(s);
 }
 
-// bundledPackages returns [name, license] for every non-dev package in a
-// lockfile (lockfileVersion 2 or 3).
-export function bundledPackages(lock) {
+// bundledPaths returns the lockfile paths of the packages the bundle can
+// contain: those the root's dependencies reach through dependencies,
+// optionalDependencies and required peerDependencies, resolved as Node does (the
+// nearest node_modules up the tree). The dev flags in the lockfile are not
+// enough: npm drops them from the optional platform packages of a
+// devOptional package (typescript 7), which then look bundled. An optional
+// package missing from the lockfile (another platform) is skipped.
+export function bundledPaths(lock) {
   if (!lock || typeof lock.packages !== "object" || lock.packages === null) {
     throw new Error("package-lock.json has no 'packages' (lockfileVersion 2 or newer is required)");
   }
-  return Object.entries(lock.packages)
-    .filter(([path, pkg]) => path !== "" && !pkg.dev && !pkg.devOptional)
-    .map(([path, pkg]) => [path.replace(/^(.*\/)?node_modules\//, ""), pkg.license]);
+  const pkgs = lock.packages;
+  const resolveDep = (from, name) => {
+    for (let dir = from; ; ) {
+      const path = (dir === "" ? "" : dir + "/") + "node_modules/" + name;
+      if (path in pkgs) return path;
+      if (dir === "") return undefined;
+      const i = dir.lastIndexOf("/node_modules/");
+      dir = i < 0 ? "" : dir.slice(0, i);
+    }
+  };
+  // An optional peer is the app's choice; the root lists it if it is used.
+  const requiredPeers = (pkg) =>
+    Object.fromEntries(Object.entries(pkg.peerDependencies ?? {}).filter(([n]) => !pkg.peerDependenciesMeta?.[n]?.optional));
+  const seen = new Set();
+  const visit = (path, depMaps) => {
+    for (const deps of depMaps) {
+      for (const name of Object.keys(deps ?? {})) {
+        const dep = resolveDep(path, name);
+        if (dep === undefined || seen.has(dep)) continue;
+        seen.add(dep);
+        const pkg = pkgs[dep];
+        visit(dep, [pkg.dependencies, pkg.optionalDependencies, requiredPeers(pkg)]);
+      }
+    }
+  };
+  // From the root only its dependencies: the rest are dev or build tools.
+  visit("", [pkgs[""]?.dependencies]);
+  return Object.keys(pkgs).filter((path) => seen.has(path));
+}
+
+// bundledPackages returns [name, license] for every package the bundle can
+// contain (see bundledPaths).
+export function bundledPackages(lock) {
+  return bundledPaths(lock).map((path) => [path.replace(/^(.*\/)?node_modules\//, ""), lock.packages[path].license]);
 }
 
 // check returns the offending packages as "name: license" strings.
