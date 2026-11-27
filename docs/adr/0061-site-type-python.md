@@ -136,3 +136,9 @@ Notes on how the site type is built; they change no decision.
 - API: `POST /api/v1/sites` with `type: "python"` and `python {version, workdir, startKind, target, args}`, the same object on the type change; `PUT /api/v1/sites/{name}/python`; `POST /api/v1/sites/{name}/python/venv`. A new version and the recreate need `confirm` with the site's name, else 422 `confirm_required`; the UI shows the name to type highlighted. A line that is not installed answers 409 `python_missing`. Both changes are audited as `site.python.venv`. CLI: `hostashi api sites set-python NAME …` and `hostashi api sites recreate-python-venv NAME confirm=NAME`.
 - `python.remove` refuses a line a site's app runs on; a newer build of a line restarts its running apps.
 - Not yet: the panel pages, doctor `system.python`, the CloudPanel import of Python sites and the wiki (next PRs).
+
+## Implementation notes: download over IPv6 (2026-11-27)
+
+- GitHub's release downloads (`github.com`, `release-assets.githubusercontent.com`) have no IPv6 address [V: no AAAA record, 2026-11-27], so a server without IPv4 and without NAT64 could not install Python.
+- The agent now downloads from Astral's mirror `https://releases.astral.sh/github/python-build-standalone/releases/download`, which keeps GitHub's paths and has IPv6 [V: AAAA record; the 3.13.18 `x86_64` build of `20261124` from the mirror has the pinned SHA-256]. GitHub is tried when the mirror fails. Integrity does not depend on the source: every download is checked against the pinned SHA-256 before a byte is unpacked, and the workflow still verifies the Sigstore provenance on GitHub.
+- The unit's log names each source it tried.
