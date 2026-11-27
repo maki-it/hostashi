@@ -148,6 +148,10 @@ x grep -qF "hostashi $old -> " /var/log/hostashi-upgrade.log || fail "upgrade lo
 x test -f "/var/lib/hostashi-installer/upgrade/hostashi-$old.db" || fail "no database copy of $old"
 x systemctl is-active -q hostashi-agent hostashi || fail "services not active"
 health || fail "panel not up after the upgrade"
+# Since 0.15 the program is /usr/bin/hostashi and the upgrade removes the
+# old copy in /usr/local/bin (ADR-0050 addendum): look it up again.
+bin=$(x bash -c 'command -v hostashi') || fail "no hostashi in PATH after the upgrade"
+[ "$bin" = /usr/bin/hostashi ] || fail "hostashi is $bin after the upgrade, expected /usr/bin/hostashi"
 got=$(x "$bin" version | head -n 1)
 grep -qF "${new%%[~+-]*}" <<<"$got" || fail "running '$got', expected $new"
 
