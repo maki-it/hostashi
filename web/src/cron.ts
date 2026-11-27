@@ -5,6 +5,8 @@
 // database holds the jobs; every change is sent to the agent at once.
 
 import { ApiError, request } from "./api";
+import { formatDateTime } from "./format";
+import i18n from "./i18n";
 import { siteMessage } from "./sites";
 
 export type CronStatus = {
@@ -67,22 +69,25 @@ const keywords = ["@hourly", "@daily", "@midnight", "@weekly", "@monthly", "@yea
 const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const weekdays = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
-type Field = { name: string; min: number; max: number; names?: string[] };
+type FieldKey = "minute" | "hour" | "dayOfMonth" | "month" | "dayOfWeek";
+type Field = { key: FieldKey; min: number; max: number; names?: string[] };
+
+const fieldName = (f: Field) => i18n.t(`cron.fields.${f.key}`);
 
 const fields: Field[] = [
-  { name: "minute", min: 0, max: 59 },
-  { name: "hour", min: 0, max: 23 },
-  { name: "day of month", min: 1, max: 31 },
-  { name: "month", min: 1, max: 12, names: months },
-  { name: "day of week", min: 0, max: 7, names: weekdays },
+  { key: "minute", min: 0, max: 59 },
+  { key: "hour", min: 0, max: 23 },
+  { key: "dayOfMonth", min: 1, max: 31 },
+  { key: "month", min: 1, max: 12, names: months },
+  { key: "dayOfWeek", min: 0, max: 7, names: weekdays },
 ];
 
 function valueProblem(s: string, f: Field): string {
-  if (s === "" || s.length > 3) return `The ${f.name} "${s}" is not valid.`;
+  if (s === "" || s.length > 3) return i18n.t("cron.problems.valueInvalid", { field: fieldName(f), value: s });
   if (f.names?.includes(s.toLowerCase())) return "";
-  if (!/^[0-9]+$/.test(s)) return `The ${f.name} "${s}" is not valid.`;
+  if (!/^[0-9]+$/.test(s)) return i18n.t("cron.problems.valueInvalid", { field: fieldName(f), value: s });
   const v = Number(s);
-  if (v < f.min || v > f.max) return `The ${f.name} ${v} is outside ${f.min}-${f.max}.`;
+  if (v < f.min || v > f.max) return i18n.t("cron.problems.outside", { field: fieldName(f), value: v, min: f.min, max: f.max });
   return "";
 }
 
@@ -95,7 +100,7 @@ function fieldProblem(p: string, f: Field): string {
     const rng = slash < 0 ? item : item.slice(0, slash);
     if (slash >= 0) {
       const step = item.slice(slash + 1);
-      if (!/^[0-9]+$/.test(step) || Number(step) < 1 || Number(step) > f.max - f.min + 1) return `The ${f.name} step "${step}" is not valid.`;
+      if (!/^[0-9]+$/.test(step) || Number(step) < 1 || Number(step) > f.max - f.min + 1) return i18n.t("cron.problems.stepInvalid", { field: fieldName(f), value: step });
     }
     if (rng === "*") continue;
     const dash = rng.indexOf("-");
@@ -104,7 +109,7 @@ function fieldProblem(p: string, f: Field): string {
       const b = rng.slice(dash + 1);
       const problem = valueProblem(a, f) || valueProblem(b, f);
       if (problem) return problem;
-      if (valueOf(a, f) > valueOf(b, f)) return `The ${f.name} range "${rng}" runs backwards.`;
+      if (valueOf(a, f) > valueOf(b, f)) return i18n.t("cron.problems.backwards", { field: fieldName(f), value: rng });
       continue;
     }
     const problem = valueProblem(rng, f);
@@ -115,14 +120,14 @@ function fieldProblem(p: string, f: Field): string {
 
 export function scheduleProblem(v: string): string {
   const s = v.trim();
-  if (s === "") return "Enter a schedule.";
-  if (s.length > 200) return "The schedule is longer than 200 characters.";
+  if (s === "") return i18n.t("cron.problems.empty");
+  if (s.length > 200) return i18n.t("cron.problems.tooLong");
   if (s.startsWith("@")) {
-    if (s.toLowerCase() === "@reboot") return "@reboot is not supported. Use a time, like @daily.";
-    return keywords.includes(s.toLowerCase()) ? "" : `"${s}" is not a known keyword. Use @hourly, @daily, @weekly, @monthly or @yearly.`;
+    if (s.toLowerCase() === "@reboot") return i18n.t("cron.problems.reboot");
+    return keywords.includes(s.toLowerCase()) ? "" : i18n.t("cron.problems.keyword", { value: s });
   }
   const parts = s.split(/\s+/);
-  if (parts.length !== 5) return "Use five fields (minute hour day-of-month month day-of-week), like */5 * * * *, or a keyword like @daily.";
+  if (parts.length !== 5) return i18n.t("cron.problems.fiveFields");
   for (let i = 0; i < 5; i++) {
     const problem = fieldProblem(parts[i] ?? "", fields[i] as Field);
     if (problem) return problem;
@@ -131,20 +136,20 @@ export function scheduleProblem(v: string): string {
 }
 
 export function commandProblem(c: string): string {
-  if (c.trim() === "") return "Enter a command.";
-  if (new TextEncoder().encode(c).length > maxCommandBytes) return `The command is longer than ${maxCommandBytes} bytes.`;
+  if (c.trim() === "") return i18n.t("cron.problems.commandEmpty");
+  if (new TextEncoder().encode(c).length > maxCommandBytes) return i18n.t("cron.problems.commandLong", { max: maxCommandBytes });
   // One line: no control characters other than tab, no line or paragraph separators.
-  if (/[\u0000-\u0008\u000a-\u001f\u007f-\u009f\u2028\u2029]/.test(c)) return "Write the command on one line.";
+  if (/[\u0000-\u0008\u000a-\u001f\u007f-\u009f\u2028\u2029]/.test(c)) return i18n.t("cron.problems.oneLine");
   return "";
 }
 
 export function timeoutProblem(min: number): string {
-  if (!Number.isInteger(min) || min < 1 || min > maxTimeoutMin) return `The time limit must be whole minutes from 1 to ${maxTimeoutMin}.`;
+  if (!Number.isInteger(min) || min < 1 || min > maxTimeoutMin) return i18n.t("cron.problems.timeout", { max: maxTimeoutMin });
   return "";
 }
 
 export function niceProblem(n: number): string {
-  if (!Number.isInteger(n) || n < 0 || n > 19) return "The priority must be a whole number from 0 to 19.";
+  if (!Number.isInteger(n) || n < 0 || n > 19) return i18n.t("cron.problems.nice");
   return "";
 }
 
@@ -152,44 +157,45 @@ export function niceProblem(n: number): string {
 // written.
 export function describeSchedule(s: string): string {
   const t = s.trim().toLowerCase();
-  const named: Record<string, string> = {
-    "@hourly": "every hour",
-    "@daily": "every day at 00:00",
-    "@midnight": "every day at 00:00",
-    "@weekly": "every Sunday at 00:00",
-    "@monthly": "on the 1st of every month at 00:00",
-    "@yearly": "every 1 January at 00:00",
-    "@annually": "every 1 January at 00:00",
-    "* * * * *": "every minute",
+  const named: Record<string, "hourly" | "daily" | "weekly" | "monthly" | "yearly" | "minute"> = {
+    "@hourly": "hourly",
+    "@daily": "daily",
+    "@midnight": "daily",
+    "@weekly": "weekly",
+    "@monthly": "monthly",
+    "@yearly": "yearly",
+    "@annually": "yearly",
+    "* * * * *": "minute",
   };
-  if (named[t]) return named[t];
+  const key = named[t];
+  if (key) return i18n.t(`cron.describe.${key}`);
   let m = /^\*\/([0-9]+) \* \* \* \*$/.exec(t);
-  if (m) return `every ${m[1]} minutes`;
+  if (m) return i18n.t("cron.describe.everyMinutes", { n: m[1] });
   m = /^([0-9]{1,2}) \* \* \* \*$/.exec(t);
-  if (m) return `every hour at minute ${m[1]}`;
+  if (m) return i18n.t("cron.describe.hourAt", { minute: m[1] });
   m = /^([0-9]{1,2}) ([0-9]{1,2}) \* \* \*$/.exec(t);
-  if (m) return `every day at ${(m[2] ?? "").padStart(2, "0")}:${(m[1] ?? "").padStart(2, "0")}`;
+  if (m) return i18n.t("cron.describe.dayAt", { time: `${(m[2] ?? "").padStart(2, "0")}:${(m[1] ?? "").padStart(2, "0")}` });
   return "";
 }
 
 // lastRun says how the last run went.
 export function lastRun(st: CronStatus | undefined): string {
   if (!st) return "";
-  if (st.running) return "Running now";
-  if (!st.result || !st.lastStart) return "Not run yet";
+  if (st.running) return i18n.t("cron.last.running");
+  if (!st.result || !st.lastStart) return i18n.t("cron.last.notRun");
   const when = formatTime(st.lastStart);
   switch (st.result) {
     case "success":
-      return `Succeeded ${when}`;
+      return i18n.t("cron.last.success", { when });
     case "exit-code":
-      return `Failed ${when} with exit code ${st.exitStatus ?? "unknown"}`;
+      return i18n.t("cron.last.exitCode", { when, code: st.exitStatus ?? i18n.t("cron.last.unknownCode") });
     case "timeout":
-      return `Stopped ${when}: it ran longer than its time limit`;
+      return i18n.t("cron.last.timeout", { when });
     case "signal":
     case "core-dump":
-      return `Killed ${when}`;
+      return i18n.t("cron.last.killed", { when });
     default:
-      return `Failed ${when} (${st.result})`;
+      return i18n.t("cron.last.other", { when, result: st.result });
   }
 }
 
@@ -204,25 +210,22 @@ export function lastRunTone(st: CronStatus | undefined): "ok" | "warn" | "err" |
 /** cronFailing reports a job whose last run failed. */
 export const cronFailing = (st: CronStatus | undefined) => lastRunTone(st) === "err";
 
-export const formatTime = (unix: number) =>
-  new Date(unix * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+/** formatTime writes a Unix time in the panel's language: "27 Nov 2026, 14:05" or "27.11.2026, 14:05". */
+export const formatTime = (unix: number) => formatDateTime(new Date(unix * 1000));
 
 // cronMessage turns an API error into a sentence.
 export function cronMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case "cron_unavailable":
-        return "Cron jobs are not available on this panel.";
-      case "too_many_cron_jobs":
-        return `A site has at most ${maxCronJobs} cron jobs. Delete one first.`;
       case "agent_precondition":
-        return "The site is disabled. Enable it to run its cron jobs.";
       case "site_busy":
-        return "The site is not active right now. Reload the page in a moment.";
       case "forbidden":
-        return "Only administrators can manage cron jobs.";
+        return i18n.t(`cron.errors.${err.code}`);
+      case "too_many_cron_jobs":
+        return i18n.t("cron.errors.too_many_cron_jobs", { max: maxCronJobs });
       case "not_found":
-        if (err.message.includes("cron")) return "This cron job does not exist any more. Reload the page.";
+        if (err.message.includes("cron")) return i18n.t("cron.errors.gone");
         break;
     }
   }

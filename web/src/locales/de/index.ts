@@ -9,6 +9,7 @@ import auth from "./auth.json";
 import backups from "./backups.json";
 import certificate from "./certificate.json";
 import common from "./common.json";
+import cron from "./cron.json";
 import databases from "./databases.json";
 import errors from "./errors.json";
 import files from "./files.json";
@@ -27,6 +28,7 @@ import profiles from "./profiles.json";
 import realIp from "./realIp.json";
 import shell from "./shell.json";
 import siteAccess from "./siteAccess.json";
+import siteApp from "./siteApp.json";
 import siteDomains from "./siteDomains.json";
 import siteHeaders from "./siteHeaders.json";
 import sites from "./sites.json";
@@ -36,6 +38,6 @@ import ui from "./ui.json";
 import usage from "./usage.json";
 import users from "./users.json";
 
-const de: Catalog = { account, audit, auth, backups, certificate, common, databases, errors, files, git, hardening, limits, logs, mail, malware, migrate, overview, pages, parked, permissions, profiles, realIp, shell, siteAccess, siteDomains, siteHeaders, sites, ssh, tokens, ui, usage, users };
+const de: Catalog = { account, audit, auth, backups, certificate, common, cron, databases, errors, files, git, hardening, limits, logs, mail, malware, migrate, overview, pages, parked, permissions, profiles, realIp, shell, siteAccess, siteApp, siteDomains, siteHeaders, sites, ssh, tokens, ui, usage, users };
 
 export default de;

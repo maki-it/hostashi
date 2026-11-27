@@ -6,6 +6,7 @@
 // boundary. A field left out means the Hostashi default.
 
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 
 export type PHPSettings = {
   memoryLimit?: number; // bytes
@@ -43,17 +44,19 @@ export const setPHPSettings = (site: string, s: PHPSettings) => request<PHPSetti
 
 export const MiB = 1 << 20;
 
+const fieldLabel = (k: NumberKey) => i18n.t(`siteApp.php.fields.${k}`);
+
 // The number fields of the form, with their ini key and unit. Sizes are
 // entered in MiB and sent in bytes.
 export const numberFields: { key: NumberKey; ini: string; label: string; unit: "MiB" | "s" | ""; group: "limits" | "behaviour" }[] = [
-  { key: "memoryLimit", ini: "memory_limit", label: "Memory limit", unit: "MiB", group: "limits" },
-  { key: "uploadMaxFilesize", ini: "upload_max_filesize", label: "Largest upload", unit: "MiB", group: "limits" },
-  { key: "postMaxSize", ini: "post_max_size", label: "Largest request", unit: "MiB", group: "limits" },
-  { key: "maxExecutionTime", ini: "max_execution_time", label: "Execution time", unit: "s", group: "limits" },
-  { key: "maxInputTime", ini: "max_input_time", label: "Input time", unit: "s", group: "limits" },
-  { key: "maxInputVars", ini: "max_input_vars", label: "Input variables", unit: "", group: "limits" },
-  { key: "maxFileUploads", ini: "max_file_uploads", label: "Files per request", unit: "", group: "limits" },
-  { key: "sessionGcMaxlifetime", ini: "session.gc_maxlifetime", label: "Session lifetime", unit: "s", group: "behaviour" },
+  { key: "memoryLimit", ini: "memory_limit", get label() { return fieldLabel("memoryLimit"); }, unit: "MiB", group: "limits" },
+  { key: "uploadMaxFilesize", ini: "upload_max_filesize", get label() { return fieldLabel("uploadMaxFilesize"); }, unit: "MiB", group: "limits" },
+  { key: "postMaxSize", ini: "post_max_size", get label() { return fieldLabel("postMaxSize"); }, unit: "MiB", group: "limits" },
+  { key: "maxExecutionTime", ini: "max_execution_time", get label() { return fieldLabel("maxExecutionTime"); }, unit: "s", group: "limits" },
+  { key: "maxInputTime", ini: "max_input_time", get label() { return fieldLabel("maxInputTime"); }, unit: "s", group: "limits" },
+  { key: "maxInputVars", ini: "max_input_vars", get label() { return fieldLabel("maxInputVars"); }, unit: "", group: "limits" },
+  { key: "maxFileUploads", ini: "max_file_uploads", get label() { return fieldLabel("maxFileUploads"); }, unit: "", group: "limits" },
+  { key: "sessionGcMaxlifetime", ini: "session.gc_maxlifetime", get label() { return fieldLabel("sessionGcMaxlifetime"); }, unit: "s", group: "behaviour" },
 ];
 
 // The form keeps every field as text; "" is the default.
@@ -94,7 +97,7 @@ export function fromForm(f: PHPForm, b: PHPSettingsView["bounds"]): { settings: 
     if (text === "") continue;
     const { min, max } = unitBounds(key, b);
     if (!/^\d+$/.test(text) || Number(text) < min || Number(text) > max) {
-      errors[key] = `Enter a whole number from ${min} to ${max}, or leave it empty for the default.`;
+      errors[key] = i18n.t("siteApp.php.numberProblem", { min, max });
       continue;
     }
     settings[key] = isSize(key) ? Number(text) * MiB : Number(text);
@@ -125,11 +128,11 @@ export function rejectedKey(err: unknown): string | undefined {
 
 export function phpSettingsMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.code === "php_setting_rejected") return "A value was refused: " + err.message.replace(/^php setting /, "") + ".";
-    if (err.code === "not_found") return "The site does not exist anymore.";
+    if (err.code === "php_setting_rejected") return i18n.t("siteApp.php.errors.rejected", { reason: err.message.replace(/^php setting /, "") });
+    if (err.code === "not_found") return i18n.t("siteApp.php.errors.notFound");
     return err.message;
   }
-  return "The PHP settings could not be loaded or saved. Try again.";
+  return i18n.t("siteApp.php.errors.failed");
 }
 
 // memoryWarning warns when memory_limit times the PHP workers exceeds the
@@ -140,11 +143,11 @@ export function memoryWarning(form: Pick<PHPForm, "memoryLimit">, v: Pick<PHPSet
   const text = form.memoryLimit.trim();
   const mem = /^\d+$/.test(text) ? Number(text) * MiB : v.defaults.memoryLimit;
   if (mem * v.phpWorkers <= v.memoryLimitBytes) return "";
-  return `${v.phpWorkers} PHP workers with ${mem / MiB} MiB each could use ${(mem * v.phpWorkers) / MiB} MiB, more than the site's memory limit of ${Math.floor(v.memoryLimitBytes / MiB)} MiB. If they all need that much at once, the kernel stops one of them. Lower the memory limit or the workers, or raise the site's limit.`;
+  return i18n.t("siteApp.php.memoryWarning", { workers: v.phpWorkers, each: mem / MiB, total: (mem * v.phpWorkers) / MiB, limit: Math.floor(v.memoryLimitBytes / MiB) });
 }
 
 export const presetLabels: Record<string, string> = {
-  production: "Production",
-  development: "Development",
-  errors: "Errors only",
+  get production() { return i18n.t("siteApp.php.presets.production"); },
+  get development() { return i18n.t("siteApp.php.presets.development"); },
+  get errors() { return i18n.t("siteApp.php.presets.errors"); },
 };

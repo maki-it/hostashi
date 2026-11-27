@@ -4,7 +4,8 @@
 // python-build-standalone, and the app of a Python site.
 
 import { ApiError, request } from "./api";
-import { argsProblem, quoteArg, workdirProblem, type AppStatus } from "./node";
+import i18n from "./i18n";
+import { argsProblem, installRefused, quoteArg, workdirProblem, type AppStatus } from "./node";
 import { siteMessage, type Site } from "./sites";
 
 export type PythonRelease = { line: string; version: string; build: string; end: string };
@@ -55,12 +56,12 @@ const bindArgs = ["-b", "--bind", "--host", "--port", "--fd", "--uds"];
 export function targetProblem(kind: PythonStartKind, target: string): string {
   if (kind === "") return "";
   if (kind === "script") {
-    if (!target.endsWith(".py")) return "The start file must end in .py.";
+    if (!target.endsWith(".py")) return i18n.t("siteApp.runtime.problems.pythonExt");
     if (!fileRe.test(target) || target.split("/").some((p) => p === "." || p === ".."))
-      return "Use a file below the working directory: letters, digits, . _ - and /, no .. and no leading /.";
+      return i18n.t("siteApp.runtime.problems.fileInvalid");
     return "";
   }
-  if (target.length > 255 || !targetRe.test(target)) return "Enter module.path:callable, for example mysite.wsgi:application or main:app.";
+  if (target.length > 255 || !targetRe.test(target)) return i18n.t("siteApp.runtime.problems.pythonTarget");
   return "";
 }
 
@@ -68,18 +69,18 @@ export function targetProblem(kind: PythonStartKind, target: string): string {
 export function pythonArgsProblem(kind: PythonStartKind, args: string[]): string {
   const p = argsProblem(args);
   if (p) return p;
-  if (kind === "") return args.length > 0 ? "Arguments need a start command." : "";
+  if (kind === "") return args.length > 0 ? i18n.t("siteApp.runtime.problems.argsNeedStart") : "";
   if (kind === "script") return "";
   for (const a of args)
     for (const o of bindArgs)
       if (a === o || a.startsWith(o + "=") || (o.length === 2 && a.startsWith(o)))
-        return `${o} is set by Hostashi: the app listens on 127.0.0.1 and its own port.`;
+        return i18n.t("siteApp.runtime.problems.bindSet", { option: o });
   return "";
 }
 
 /** pythonProblem checks the fields before they are sent. */
 export function pythonProblem(v: PythonValue): string {
-  if (!v.version) return "No Python version is installed. An administrator installs one under Runtimes › Python.";
+  if (!v.version) return i18n.t("siteApp.runtime.problems.pythonMissing");
   return workdirProblem(v.workdir) || targetProblem(v.startKind, v.target) || pythonArgsProblem(v.startKind, v.args);
 }
 
@@ -102,13 +103,11 @@ export function pythonMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case "forbidden":
-        return "Only administrators can install Python.";
+        return i18n.t("siteApp.runtime.errors.pythonForbidden");
       case "python_install_refused":
-        if (err.message.includes("apps still run")) return "Sites still run on this version. Move them to another version first.";
-        if (err.message.includes("not installed")) return "This version is not installed.";
-        return err.message.includes("running") ? "Another installation is still running. Wait until it is done." : "The installation could not start.";
+        return installRefused(err.message);
       case "agent_precondition":
-        if (err.message.includes("environment could not be created")) return "The environment .venv could not be created: " + err.message.replace(/^.*could not be created: ?/, "");
+        if (err.message.includes("environment could not be created")) return i18n.t("siteApp.runtime.errors.venvFailed", { reason: err.message.replace(/^.*could not be created: ?/, "") });
         break;
     }
   }
