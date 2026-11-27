@@ -2,10 +2,13 @@
 
 import { ArrowClockwise, ArrowsCounterClockwise, DotsThree, Play, Stop, X, type Icon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import { formatBytes } from "./format";
+import i18n from "./i18n";
 import { formatHash } from "./routes";
 import {
+  actionVerb,
   actionWord,
-  bytes,
   eventText,
   listServiceEvents,
   listServices,
@@ -57,7 +60,12 @@ type Group = "all" | "server" | "sites" | "problems";
  * actions the catalog allows. With site set it shows only that site's
  * services, for the site's overview tab.
  */
+// ofSite names a service with its site, if it has one.
+const ofSite = (r: { id: string; site?: string | undefined }) =>
+  r.site ? i18n.t("server.services.ofSite", { name: serviceName(r.id), site: r.site }) : serviceName(r.id);
+
 export function Services({ site, id, onClose }: { site?: string; id?: string; onClose?: () => void }) {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<ServiceRow[] | null>(null);
   const [events, setEvents] = useState<ServiceEvent[]>([]);
   const [error, setError] = useState("");
@@ -94,7 +102,7 @@ export function Services({ site, id, onClose }: { site?: string; id?: string; on
     try {
       await runServiceAction(row, action, confirm);
       setPending(null);
-      setDone(`${actionWord(action)}: ${serviceName(row.id)}${row.site ? " of site " + row.site : ""} done.`);
+      setDone(t("server.services.done", { action: actionWord(action), name: ofSite(row) }));
       await load();
     } catch (err) {
       setError(serviceMessage(err));
@@ -112,7 +120,7 @@ export function Services({ site, id, onClose }: { site?: string; id?: string; on
   const columns: Column<ServiceRow>[] = [
     {
       key: "service",
-      header: "Service",
+      header: t("server.services.columns.service"),
       main: true,
       sortValue: (r) => serviceName(r.id),
       cell: (r) => (
@@ -129,7 +137,7 @@ export function Services({ site, id, onClose }: { site?: string; id?: string; on
           <code className="ui-hint ui-phone-hide">{r.unit}</code>
           <span className="ui-phone-only ui-compact-meta">
             <Badge tone={stateWord(r).tone}>{stateWord(r).word}</Badge>
-            {[r.restarts24h > 0 ? (r.restarts24h === 1 ? "1 restart today" : `${r.restarts24h} restarts today`) : "", r.memoryKnown && r.memoryBytes !== undefined ? bytes(r.memoryBytes) : ""]
+            {[r.restarts24h > 0 ? t("server.services.restartsToday", { count: r.restarts24h }) : "", r.memoryKnown && r.memoryBytes !== undefined ? formatBytes(r.memoryBytes) : ""]
               .filter(Boolean)
               .join(" · ")}
           </span>
@@ -138,7 +146,7 @@ export function Services({ site, id, onClose }: { site?: string; id?: string; on
     },
     {
       key: "state",
-      header: "State",
+      header: t("server.services.columns.state"),
       sortValue: (r) => stateWord(r).word,
       cell: (r) => {
         const s = stateWord(r);
@@ -147,33 +155,33 @@ export function Services({ site, id, onClose }: { site?: string; id?: string; on
             <Badge tone={s.tone}>{s.word}</Badge>
             {r.installed && r.active === "active" && r.activeSince && (
               <span className="ui-hint ui-nowrap">
-                since <RelTime iso={r.activeSince} />
+                <Trans i18nKey="server.services.since" components={{ time: <RelTime iso={r.activeSince} /> }} />
               </span>
             )}
-            {r.active === "failed" && r.result && <span className="ui-hint">Result: {r.result}</span>}
+            {r.active === "failed" && r.result && <span className="ui-hint">{t("server.services.result", { result: r.result })}</span>}
           </div>
         );
       },
     },
     {
       key: "restarts",
-      header: "Restarts (24 h)",
+      header: t("server.services.columns.restarts"),
       sortValue: (r) => r.restarts24h,
       cell: (r) => (r.restarts24h > 0 ? <Badge tone="warn">{String(r.restarts24h)}</Badge> : <span className="ui-hint">0</span>),
     },
     {
       key: "memory",
-      header: "Memory",
+      header: t("server.services.columns.memory"),
       sortValue: (r) => r.memoryBytes ?? 0,
-      cell: (r) => (r.memoryKnown && r.memoryBytes !== undefined ? bytes(r.memoryBytes) : <span className="ui-hint">–</span>),
+      cell: (r) => (r.memoryKnown && r.memoryBytes !== undefined ? formatBytes(r.memoryBytes) : <span className="ui-hint">–</span>),
     },
     {
       key: "actions",
-      header: "Actions",
+      header: t("server.services.columns.actions"),
       srHeader: true,
       cell: (r) =>
         r.actions.length === 0 ? (
-          <span className="ui-hint ui-phone-hide">Managed by Hostashi</span>
+          <span className="ui-hint ui-phone-hide">{t("server.services.managed")}</span>
         ) : (
           <>
             <span className="ui-phone-hide">
@@ -183,7 +191,7 @@ export function Services({ site, id, onClose }: { site?: string; id?: string; on
                   return (
                     <IconButton
                       key={a}
-                      label={`${actionWord(a)} ${serviceName(r.id)}${r.site ? " of " + r.site : ""}`}
+                      label={r.site ? t("server.services.actionLabelSite", { verb: actionVerb(a), name: serviceName(r.id), site: r.site }) : t("server.services.actionLabel", { verb: actionVerb(a), name: serviceName(r.id) })}
                       text={actionWord(a)}
                       icon={<I size={16} aria-hidden="true" />}
                       danger={a === "stop"}
@@ -196,8 +204,8 @@ export function Services({ site, id, onClose }: { site?: string; id?: string; on
             </span>
             <span className="ui-phone-only">
               <Menu
-                label={`Actions for ${serviceName(r.id)}${r.site ? " of " + r.site : ""}`}
-                buttonLabel={`Actions for ${serviceName(r.id)}${r.site ? " of " + r.site : ""}`}
+                label={r.site ? t("server.services.menuLabelSite", { name: serviceName(r.id), site: r.site }) : t("server.services.menuLabel", { name: serviceName(r.id) })}
+                buttonLabel={r.site ? t("server.services.menuLabelSite", { name: serviceName(r.id), site: r.site }) : t("server.services.menuLabel", { name: serviceName(r.id) })}
                 buttonClass="ui-icon-btn"
                 button={<DotsThree size={20} aria-hidden="true" />}
                 items={r.actions
@@ -219,11 +227,11 @@ export function Services({ site, id, onClose }: { site?: string; id?: string; on
       {done && <Notice tone="ok" title={done} />}
       {pending && <ConfirmAction pending={pending} busy={busy !== ""} onRun={(c) => void run(pending.row, pending.action, c)} onCancel={() => setPending(null)} />}
       {rows === null ? (
-        !error && <p aria-busy="true">Loading the services…</p>
+        !error && <p aria-busy="true">{t("server.services.loading")}</p>
       ) : (
         site ? (
-          <Card padded={false} title="Services" id={id} actions={onClose && <IconButton label="Close" icon={<X size={16} aria-hidden="true" />} onClick={onClose} />}>
-            <Table label="Services" columns={columns} rows={rows} rowKey={rowKey} empty="No services." />
+          <Card padded={false} title={t("server.services.title")} id={id} actions={onClose && <IconButton label={t("server.services.close")} icon={<X size={16} aria-hidden="true" />} onClick={onClose} />}>
+            <Table label={t("server.services.title")} columns={columns} rows={rows} rowKey={rowKey} empty={t("server.services.none")} />
           </Card>
         ) : (
           <Grouped rows={rows} columns={columns} group={group} onGroup={setGroup} text={text} onText={setText} />
@@ -237,8 +245,8 @@ export function Services({ site, id, onClose }: { site?: string; id?: string; on
   return (
     <>
       <PageHead
-        title="Services"
-        description="The system services of the server and the sites. systemd restarts a crashed service on its own; each automatic restart is listed below."
+        title={t("server.services.title")}
+        description={t("server.services.description")}
       />
       {body}
       {rows !== null && <Events events={events} />}
@@ -250,9 +258,11 @@ export function Services({ site, id, onClose }: { site?: string; id?: string; on
 function summary(rows: ServiceRow[]): string {
   const bad = rows.filter(problem).length;
   if (rows.length === 0) return "";
-  if (bad > 0) return `${bad} of ${rows.length} with a problem`;
+  if (bad > 0) return i18n.t("server.services.summary.problems", { bad, count: rows.length });
   const off = rows.filter((r) => stateWord(r).tone !== "ok").length;
-  return off === 0 ? `All ${rows.length} running` : `${rows.length - off} of ${rows.length} running`;
+  return off === 0
+    ? i18n.t("server.services.summary.allRunning", { count: rows.length })
+    : i18n.t("server.services.summary.running", { running: rows.length - off, count: rows.length });
 }
 
 /**
@@ -274,6 +284,7 @@ function Grouped({
   text: string;
   onText: (t: string) => void;
 }) {
+  const { t } = useTranslation();
   const q = text.trim().toLowerCase();
   const hit = (r: ServiceRow) => !q || `${serviceName(r.id)} ${r.unit} ${r.site ?? ""}`.toLowerCase().includes(q);
   const shownRows = rows.filter(hit);
@@ -281,10 +292,10 @@ function Grouped({
   const sites = shownRows.filter((r) => r.site);
   const problems = shownRows.filter(problem);
   const groups: { id: Group; label: string }[] = [
-    { id: "all", label: "All" },
-    { id: "problems", label: `Problems (${rows.filter(problem).length})` },
-    { id: "sites", label: `Sites (${rows.filter((r) => r.site).length})` },
-    { id: "server", label: `Server (${rows.filter((r) => !r.site).length})` },
+    { id: "all", label: t("server.services.groups.all") },
+    { id: "problems", label: t("server.services.groups.problems", { count: rows.filter(problem).length }) },
+    { id: "sites", label: t("server.services.groups.sites", { count: rows.filter((r) => r.site).length }) },
+    { id: "server", label: t("server.services.groups.server", { count: rows.filter((r) => !r.site).length }) },
   ];
   const table = (title: string, list: ServiceRow[], empty: string) => (
     <Card padded={false} title={title} actions={<span className="ui-hint">{summary(list)}</span>}>
@@ -294,23 +305,26 @@ function Grouped({
   return (
     <>
       <div className="ui-filters ui-filters-bare">
-        <div className="ui-seg" role="radiogroup" aria-label="Show">
+        <div className="ui-seg" role="radiogroup" aria-label={t("server.services.show")}>
           {groups.map((g) => (
             <button key={g.id} type="button" role="radio" aria-checked={group === g.id} className="ui-seg-btn" onClick={() => onGroup(g.id)}>
               {g.label}
             </button>
           ))}
         </div>
-        <input className="ui-input" type="search" aria-label="Filter services" placeholder="Filter by site or service" value={text} onChange={(e) => onText(e.target.value)} />
+        <input className="ui-input" type="search" aria-label={t("server.services.filter")} placeholder={t("server.services.filterPlaceholder")} value={text} onChange={(e) => onText(e.target.value)} />
       </div>
-      {group === "problems" && table("Problems", problems, "No problems. Every service is running.")}
-      {(group === "all" || group === "sites") && table("Sites", sites, q ? "No site service matches the filter." : "No site has a service of its own.")}
-      {(group === "all" || group === "server") && table("Server", server, q ? "No server service matches the filter." : "No services.")}
+      {group === "problems" && table(t("server.services.tables.problems"), problems, t("server.services.empty.problems"))}
+      {(group === "all" || group === "sites") &&
+        table(t("server.services.tables.sites"), sites, q ? t("server.services.empty.sitesFilter") : t("server.services.empty.sites"))}
+      {(group === "all" || group === "server") &&
+        table(t("server.services.tables.server"), server, q ? t("server.services.empty.serverFilter") : t("server.services.none"))}
     </>
   );
 }
 
 function ConfirmAction({ pending, busy, onRun, onCancel }: { pending: Pending; busy: boolean; onRun: (confirm?: string) => void; onCancel: () => void }) {
+  const { t } = useTranslation();
   const [typed, setTyped] = useState("");
   const { row, action } = pending;
   const name = serviceName(row.id);
@@ -318,17 +332,17 @@ function ConfirmAction({ pending, busy, onRun, onCancel }: { pending: Pending; b
   const typedNeeded = row.confirm?.includes(action) ?? false;
   const effect =
     row.id === "mariadb"
-      ? "Every site that uses a local database stops working until MariaDB runs again."
+      ? t("server.services.confirm.mariadb")
       : row.id === "fail2ban"
-        ? "Brute-force attempts are not blocked while it is stopped."
+        ? t("server.services.confirm.fail2ban")
         : row.id === "adminer"
-          ? "Open database tool sessions end."
-          : "The service stays stopped until you start it again.";
+          ? t("server.services.confirm.adminer")
+          : t("server.services.confirm.other");
 
   return (
     <section className="ui-card ui-card-body ui-stack" role="alertdialog" aria-labelledby="service-confirm-title">
       <h2 id="service-confirm-title" className="ui-flush">
-        {actionWord(action)} {name}?
+        {t("server.services.confirm.title", { verb: actionVerb(action), name })}
       </h2>
       <p className="ui-flush">{effect}</p>
       <form
@@ -341,11 +355,7 @@ function ConfirmAction({ pending, busy, onRun, onCancel }: { pending: Pending; b
         {typedNeeded && (
           <div className="ui-narrow">
             <Field
-              label={
-                <>
-                  Type <code className="ui-confirm-phrase">{phrase}</code> to confirm
-                </>
-              }
+              label={<Trans i18nKey="server.services.confirm.type" values={{ phrase }} components={{ code: <code className="ui-confirm-phrase" /> }} />}
             >
               <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
             </Field>
@@ -353,10 +363,10 @@ function ConfirmAction({ pending, busy, onRun, onCancel }: { pending: Pending; b
         )}
         <div className="ui-row">
           <Button variant="danger" type="submit" disabled={busy || (typedNeeded && typed !== phrase)}>
-            {actionWord(action)} {name}
+            {t("server.services.confirm.submit", { verb: actionVerb(action), name })}
           </Button>
           <Button disabled={busy} onClick={onCancel}>
-            Cancel
+            {t("common.actions.cancel")}
           </Button>
         </div>
       </form>
@@ -364,31 +374,29 @@ function ConfirmAction({ pending, busy, onRun, onCancel }: { pending: Pending; b
   );
 }
 
-const eventBadges: Record<ServiceEvent["kind"], { word: string; tone: Tone }> = {
-  failed: { word: "Failed", tone: "err" },
-  "crash-restart": { word: "Restart", tone: "warn" },
-  recovered: { word: "Running", tone: "ok" },
-  started: { word: "Started", tone: "off" },
-  action: { word: "Action", tone: "off" },
+const eventTones: Record<ServiceEvent["kind"], Tone> = {
+  failed: "err",
+  "crash-restart": "warn",
+  recovered: "ok",
+  started: "off",
+  action: "off",
 };
 
 function Events({ events }: { events: ServiceEvent[] }) {
+  const { t } = useTranslation();
   return (
-    <Card title="Recent events" padded={events.length === 0}>
+    <Card title={t("server.services.events.title")} padded={events.length === 0}>
       {events.length === 0 ? (
-        <p className="ui-flush ui-hint">No restarts, failures or actions in the last 30 days.</p>
+        <p className="ui-flush ui-hint">{t("server.services.events.none")}</p>
       ) : (
-        <ul className="ui-attention-list" aria-label="Recent events">
+        <ul className="ui-attention-list" aria-label={t("server.services.events.title")}>
           {events.map((e, i) => (
             <li key={e.at + e.service + (e.site ?? "") + i}>
-              <Badge tone={eventBadges[e.kind].tone}>{eventBadges[e.kind].word}</Badge>
+              <Badge tone={eventTones[e.kind]}>{t(`server.services.events.badges.${e.kind}`)}</Badge>
               <div className="ui-stack-tight">
-                <strong>
-                  {serviceName(e.service)}
-                  {e.site ? " of site " + e.site : ""}
-                </strong>
+                <strong>{ofSite({ id: e.service, site: e.site })}</strong>
                 <span className="ui-hint">
-                  {eventText(e)}, <RelTime iso={e.at} />
+                  <Trans i18nKey="server.services.events.line" values={{ text: eventText(e) }} components={{ time: <RelTime iso={e.at} /> }} />
                 </span>
               </div>
             </li>

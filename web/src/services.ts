@@ -4,6 +4,7 @@
 
 import { ApiError, request } from "./api";
 import { formatNumber } from "./format";
+import i18n, { apiErrorText } from "./i18n";
 
 export type ServiceAction = "start" | "stop" | "restart" | "reload";
 
@@ -91,53 +92,64 @@ const names: Record<string, string> = {
   valkey: "Object cache (Valkey)",
 };
 
-/** serviceName is the label of a catalog ID. */
-export const serviceName = (id: string) => names[id] ?? id;
+/** serviceName is the label of a catalog ID, in the current language. */
+export function serviceName(id: string): string {
+  const key = `server.services.names.${id}`;
+  return i18n.exists(key) ? (i18n.t as (k: string) => string)(key) : (names[id] ?? id);
+}
 
 export type StateWord = { word: string; tone: "ok" | "warn" | "err" | "off" };
 
 /** stateWord turns systemd's state into a badge. */
 export function stateWord(r: Pick<ServiceRow, "installed" | "active">): StateWord {
-  if (!r.installed) return { word: "Not installed", tone: "off" };
+  if (!r.installed) return { word: i18n.t("server.services.state.notInstalled"), tone: "off" };
   switch (r.active) {
     case "active":
     case "reloading":
     case "refreshing":
-      return { word: "Running", tone: "ok" };
+      return { word: i18n.t("server.services.state.running"), tone: "ok" };
     case "activating":
-      return { word: "Starting", tone: "warn" };
+      return { word: i18n.t("server.services.state.starting"), tone: "warn" };
     case "deactivating":
-      return { word: "Stopping", tone: "warn" };
+      return { word: i18n.t("server.services.state.stopping"), tone: "warn" };
     case "failed":
-      return { word: "Failed", tone: "err" };
+      return { word: i18n.t("server.services.state.failed"), tone: "err" };
     default:
-      return { word: "Stopped", tone: "off" };
+      return { word: i18n.t("server.services.state.stopped"), tone: "off" };
   }
 }
 
-const actionWords: Record<ServiceAction, string> = { start: "Start", stop: "Stop", restart: "Restart", reload: "Reload" };
-export const actionWord = (a: ServiceAction) => actionWords[a];
+const serviceActions: readonly string[] = ["start", "stop", "restart", "reload"];
+export const actionWord = (a: ServiceAction) => i18n.t(`server.services.actions.${a}`);
+/** actionVerb is the action as a verb in a phrase such as "Stop MariaDB" ("MariaDB stoppen"). */
+export const actionVerb = (a: ServiceAction) => i18n.t(`server.services.verbs.${a}`);
 
 /** eventText describes one event in a sentence. */
 export function eventText(e: ServiceEvent): string {
   switch (e.kind) {
     case "crash-restart":
-      return e.restarts && e.restarts > 1 ? `Restarted by systemd ${e.restarts} times after a crash` : "Restarted by systemd after a crash";
+      return e.restarts && e.restarts > 1
+        ? i18n.t("server.services.events.crashRestarts", { n: e.restarts })
+        : i18n.t("server.services.events.crashRestart");
     case "started":
-      return "Started";
+      return i18n.t("server.services.events.started");
     case "failed":
-      return e.detail ? `Failed (${e.detail})` : "Failed";
+      return e.detail ? i18n.t("server.services.events.failedDetail", { detail: e.detail }) : i18n.t("server.services.events.failed");
     case "recovered":
-      return "Running again after a failure";
-    case "action":
-      return `${actionWords[e.detail as ServiceAction] ?? e.detail ?? "Action"}${e.user ? " by " + e.user : ""}`;
+      return i18n.t("server.services.events.recovered");
+    case "action": {
+      const action = e.detail && serviceActions.includes(e.detail) ? actionWord(e.detail as ServiceAction) : (e.detail ?? i18n.t("server.services.events.action"));
+      return e.user ? i18n.t("server.services.events.by", { action, user: e.user }) : action;
+    }
   }
 }
 
 /** serviceMessage is the text for a failed call. */
 export function serviceMessage(err: unknown): string {
-  if (err instanceof ApiError) return err.message;
-  return "The panel could not reach the server. Try again.";
+  // The server's own reason (such as "nginx -t rejected the configuration")
+  // stays as it is unless the catalog has a sentence for its code.
+  if (err instanceof ApiError) return i18n.exists(`errors.${err.code}`) || err.message === "" ? apiErrorText(err) : err.message;
+  return i18n.t("server.services.errors.unreachable");
 }
 
 // fixed writes v with exactly the given decimals in the panel's language

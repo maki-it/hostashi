@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { formatHash, type Page } from "./routes";
 import { PageHead } from "./ui";
 
@@ -17,10 +18,11 @@ export const runtimes: readonly { page: Page; label: string }[] = [
  * tabs are links, so each keeps its own address.
  */
 export function RuntimesHead({ active, description }: { active: Page; description: ReactNode }) {
+  const { t } = useTranslation();
   return (
     <>
-      <PageHead title="Runtimes" description={description} />
-      <nav className="ui-seg ui-seg-nav" aria-label="Runtimes">
+      <PageHead title={t("server.runtimes.title")} description={description} />
+      <nav className="ui-seg ui-seg-nav" aria-label={t("server.runtimes.title")}>
         {runtimes.map((r) => (
           <a key={r.page} className="ui-seg-btn" href={formatHash({ page: r.page })} aria-current={r.page === active ? "page" : undefined}>
             {r.label}

@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { bytes, serviceMessage } from "./services";
+import { Trans, useTranslation } from "react-i18next";
+import { formatBytes } from "./format";
+import { serviceMessage } from "./services";
 import { listPools, poolNameProblem, poolNote, poolUsed, renamePool, setDefaultPool, type Pool } from "./sites";
 import { Badge, Button, Card, Field, Meter, Notice, PageHead } from "./ui";
-
-const quotaText: Record<NonNullable<Pool["quota"]>, string> = {
-  enforced: "Disk limits enforced",
-  counting: "Usage counted, limits not enforced",
-  off: "No disk quota",
-};
 
 /**
  * Pools lists the storage pools with their usage (ADR-0016) and lets an
@@ -17,6 +13,7 @@ const quotaText: Record<NonNullable<Pool["quota"]>, string> = {
  * removing a pool stay on the server, because they need a mounted volume.
  */
 export function Pools() {
+  const { t } = useTranslation();
   const [pools, setPools] = useState<Pool[] | null>(null);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
@@ -53,13 +50,13 @@ export function Pools() {
   return (
     <>
       <PageHead
-        title="Storage pools"
-        description="Where the home directories of the sites live. A site stays on the pool it was created on; new sites land on the default pool unless you pick another."
+        title={t("server.pools.title")}
+        description={t("server.pools.description")}
       />
       {error && <Notice tone="err" title={error} />}
       {done && <Notice tone="ok" title={done} />}
       {pools === null ? (
-        !error && <p aria-busy="true">Loading the storage pools…</p>
+        !error && <p aria-busy="true">{t("server.pools.loading")}</p>
       ) : (
         <>
           {pools.map((p) => (
@@ -68,8 +65,8 @@ export function Pools() {
               pool={p}
               pools={pools}
               busy={busy !== ""}
-              onDefault={() => void run(p.name, () => setDefaultPool(p.name), (n) => `New sites now land on ${n.name}.`)}
-              onRename={(to) => void run(p.name, () => renamePool(p.name, to), (n) => `The pool ${p.name} is now called ${n.name}.`)}
+              onDefault={() => void run(p.name, () => setDefaultPool(p.name), (n) => t("server.pools.defaultDone", { name: n.name }))}
+              onRename={(to) => void run(p.name, () => renamePool(p.name, to), (n) => t("server.pools.renameDone", { old: p.name, name: n.name }))}
             />
           ))}
           <AddHint />
@@ -92,6 +89,7 @@ function PoolCard({
   onDefault: () => void;
   onRename: (to: string) => void;
 }) {
+  const { t } = useTranslation();
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(p.name);
   const used = poolUsed(p);
@@ -103,26 +101,31 @@ function PoolCard({
       title={p.name}
       actions={
         <>
-          {p.default && <Badge tone="off">Default</Badge>}
-          {p.available ? <Badge tone="ok">Mounted</Badge> : <Badge tone="err">Not available</Badge>}
+          {p.default && <Badge tone="off">{t("server.pools.default")}</Badge>}
+          {p.available ? <Badge tone="ok">{t("server.pools.mounted")}</Badge> : <Badge tone="err">{t("server.pools.notAvailable")}</Badge>}
         </>
       }
     >
       <div className="ui-stack">
         <dl className="ui-facts">
-          <dt>Path</dt>
+          <dt>{t("server.pools.path")}</dt>
           <dd>
             <code>{p.path}</code>
           </dd>
-          <dt>Sites</dt>
-          <dd>{p.sites === 1 ? "1 site" : `${p.sites} sites`}</dd>
-          <dt>Disk quota</dt>
-          <dd>{p.quota ? quotaText[p.quota] : "Unknown while the volume is missing"}</dd>
+          <dt>{t("server.pools.sites")}</dt>
+          <dd>{t("server.pools.siteCount", { count: p.sites })}</dd>
+          <dt>{t("server.pools.diskQuota")}</dt>
+          <dd>{p.quota ? t(`server.pools.quota.${p.quota}`) : t("server.pools.quota.unknown")}</dd>
         </dl>
         {used !== null && p.totalBytes ? (
-          <Meter label="Used" value={used} max={p.totalBytes} detail={`${bytes(used)} of ${bytes(p.totalBytes)}, ${bytes(p.freeBytes ?? 0)} free`} />
+          <Meter
+            label={t("server.pools.used")}
+            value={used}
+            max={p.totalBytes}
+            detail={t("server.pools.usedDetail", { used: formatBytes(used), total: formatBytes(p.totalBytes), free: formatBytes(p.freeBytes ?? 0) })}
+          />
         ) : (
-          <p className="ui-hint ui-flush">No usage while the volume is not mounted.</p>
+          <p className="ui-hint ui-flush">{t("server.pools.noUsage")}</p>
         )}
         {note && <Notice tone="warn" title={note} />}
         {renaming ? (
@@ -136,8 +139,8 @@ function PoolCard({
           >
             <div className="ui-narrow">
               <Field
-                label="New name"
-                hint="The path, the sites and their files stay where they are. Scripts and API calls that use the old name need the new one."
+                label={t("server.pools.newName")}
+                hint={t("server.pools.newNameHint")}
                 {...(name !== p.name && problem ? { error: problem } : {})}
               >
                 <input className="ui-input" value={name} onChange={(e) => setName(e.target.value.trim())} autoComplete="off" spellCheck={false} autoFocus />
@@ -145,7 +148,7 @@ function PoolCard({
             </div>
             <div className="ui-row">
               <Button variant="primary" type="submit" disabled={busy || name === p.name || problem !== ""}>
-                Rename pool
+                {t("server.pools.renameSubmit")}
               </Button>
               <Button
                 onClick={() => {
@@ -153,7 +156,7 @@ function PoolCard({
                   setName(p.name);
                 }}
               >
-                Cancel
+                {t("common.actions.cancel")}
               </Button>
             </div>
           </form>
@@ -161,11 +164,11 @@ function PoolCard({
           <div className="ui-row">
             {!p.default && (
               <Button onClick={onDefault} disabled={busy || !p.available}>
-                Make default
+                {t("server.pools.makeDefault")}
               </Button>
             )}
             <Button onClick={() => setRenaming(true)} disabled={busy}>
-              Rename
+              {t("server.pools.rename")}
             </Button>
           </div>
         )}
@@ -174,16 +177,19 @@ function PoolCard({
   );
 }
 
+// The commands stay the same in every language.
+const poolCommands = "hostashi pool add [-default] NAME PATH\nhostashi pool remove NAME";
+
 function AddHint() {
+  const { t } = useTranslation();
   return (
-    <Card title="Add or remove a pool">
+    <Card title={t("server.pools.add.title")}>
       <div className="ui-stack">
         <p className="ui-flush">
-          A new pool is a mounted, empty ext4 or XFS volume with <code>nosuid,nodev</code> and an entry in <code>/etc/fstab</code>. Hostashi never
-          formats or mounts disks, so this happens on the server as root:
+          <Trans i18nKey="server.pools.add.text" components={{ code1: <code />, code2: <code /> }} />
         </p>
-        <pre className="ui-code">{"hostashi pool add [-default] NAME PATH\nhostashi pool remove NAME"}</pre>
-        <p className="ui-hint ui-flush">A pool can be removed when no site is on it and it is not the default.</p>
+        <pre className="ui-code">{poolCommands}</pre>
+        <p className="ui-hint ui-flush">{t("server.pools.add.remove")}</p>
       </div>
     </Card>
   );

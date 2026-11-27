@@ -4,6 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { ServerDashboard } from "./Dashboard";
+import { setLanguage } from "./i18n";
 import { Services } from "./Services";
 import { bytes, eventText, rate, stateWord, type HostPoint, type ServiceRow } from "./services";
 import { mockFetch } from "./test-utils";
@@ -95,6 +96,22 @@ describe("Services", () => {
 
     expect(await screen.findByText("Stop: MariaDB done.")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({ confirm: "stop mariadb" });
+  });
+
+  it("speaks German, with the typed phrase unchanged", async () => {
+    setLanguage("de");
+    const user = userEvent.setup();
+    mockFetch({
+      "GET /api/v1/services": { body: { services: rows } },
+      "GET /api/v1/services/events?limit=50": { body: { events: [] } },
+    });
+    render(<Services />);
+
+    expect(await screen.findByRole("heading", { name: "Dienste" })).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "MariaDB stoppen" }));
+    const dialog = screen.getByRole("alertdialog", { name: "MariaDB stoppen?" });
+    expect(within(dialog).getByLabelText("Zum Bestätigen stop mariadb eintippen")).toBeInTheDocument();
+    expect(within(dialog).getByText("stop mariadb")).toHaveClass("ui-confirm-phrase");
   });
 
   it("runs a reload at once and shows a refusal", async () => {
