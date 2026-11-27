@@ -162,23 +162,23 @@ const shots = [
   {
     name: "site-permissions",
     hash: "#/sites/blog/files",
-    ready: "text=Reset permissions",
+    ready: "text=Reset file permissions",
     act: async (page) => {
-      await page.getByRole("button", { name: "Reset permissions" }).click();
+      await page.getByRole("button", { name: "Reset file permissions" }).click();
       await page.getByLabel(/to confirm/).fill("blog");
-      await page.getByRole("heading", { name: "Reset permissions" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+      await page.getByRole("heading", { name: "Reset file permissions" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
     },
   },
   {
     name: "site-permissions-done",
     hash: "#/sites/blog/files",
-    ready: "text=Reset permissions",
+    ready: "text=Reset file permissions",
     act: async (page) => {
-      await page.getByRole("button", { name: "Reset permissions" }).click();
+      await page.getByRole("button", { name: "Reset file permissions" }).click();
       await page.getByLabel(/to confirm/).fill("blog");
-      await page.getByRole("button", { name: "Reset permissions of blog" }).click();
+      await page.getByRole("button", { name: "Reset file permissions of blog" }).click();
       await page.getByRole("list", { name: "Skipped entries" }).waitFor();
-      await page.getByRole("heading", { name: "Reset permissions" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+      await page.getByRole("heading", { name: "Reset file permissions" }).evaluate((h) => h.scrollIntoView({ block: "start" }));
     },
   },
   {
