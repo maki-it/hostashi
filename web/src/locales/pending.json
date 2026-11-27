@@ -4,9 +4,7 @@
     "Clone.tsx",
     "Cron.tsx",
     "Cutover.tsx",
-    "Dashboard.tsx",
     "ObjectCache.tsx",
-    "Overview.tsx",
     "PHPSettings.tsx",
     "PageCache.tsx",
     "SiteApp.tsx",
@@ -20,10 +18,6 @@
     "SiteWeb.tsx",
     "Sites.tsx",
     "Snippets.tsx",
-    "Unsaved.tsx",
-    "WordPress.tsx",
-    "ui/Chart.tsx",
-    "ui/Copy.tsx",
-    "ui/JobCard.tsx"
+    "WordPress.tsx"
   ]
 }

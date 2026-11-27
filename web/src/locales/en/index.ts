@@ -18,6 +18,7 @@ import logs from "./logs.json";
 import mail from "./mail.json";
 import malware from "./malware.json";
 import migrate from "./migrate.json";
+import overview from "./overview.json";
 import pages from "./pages.json";
 import parked from "./parked.json";
 import permissions from "./permissions.json";
@@ -30,10 +31,11 @@ import siteDomains from "./siteDomains.json";
 import siteHeaders from "./siteHeaders.json";
 import ssh from "./ssh.json";
 import tokens from "./tokens.json";
+import ui from "./ui.json";
 import usage from "./usage.json";
 import users from "./users.json";
 
-const en = { account, audit, auth, backups, certificate, common, databases, errors, files, git, hardening, limits, logs, mail, malware, migrate, pages, parked, permissions, profiles, realIp, server, shell, siteAccess, siteDomains, siteHeaders, ssh, tokens, usage, users };
+const en = { account, audit, auth, backups, certificate, common, databases, errors, files, git, hardening, limits, logs, mail, malware, migrate, overview, pages, parked, permissions, profiles, realIp, server, shell, siteAccess, siteDomains, siteHeaders, ssh, tokens, ui, usage, users };
 
 export type Catalog = typeof en;
 

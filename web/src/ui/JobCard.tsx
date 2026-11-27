@@ -2,6 +2,7 @@
 
 import { X } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Card } from "./Card";
 import { IconButton } from "./Button";
 
@@ -43,14 +44,15 @@ type JobCardProps = {
  * folded away unless the job failed; the card closes once the job ended.
  */
 export function JobCard({ title, state, log, logLabel, onClose, children }: JobCardProps) {
+  const { t } = useTranslation();
   const running = state === "running";
   return (
-    <Card title={title} actions={!running && <IconButton label="Close" icon={<X size={18} />} onClick={onClose} />}>
+    <Card title={title} actions={!running && <IconButton label={t("ui.job.close")} icon={<X size={18} />} onClick={onClose} />}>
       <div className="ui-stack">
         {children}
         {log.length > 0 && (
           <details className="ui-job-log" open={state === "failed"}>
-            <summary>{running ? "Show progress" : "Show log"}</summary>
+            <summary>{running ? t("ui.job.showProgress") : t("ui.job.showLog")}</summary>
             <pre className="ui-code" aria-label={logLabel}>
               {log.join("\n")}
             </pre>

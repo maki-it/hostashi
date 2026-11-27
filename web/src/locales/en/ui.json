@@ -1,0 +1,27 @@
+{
+  "chart": {
+    "empty": "No data yet. The panel takes a sample every 15 seconds.",
+    "noData": "no data",
+    "showTable": "Show as table",
+    "time": "Time"
+  },
+  "copy": {
+    "copy": "Copy",
+    "copied": "Copied",
+    "byHand": "Select the text and copy it by hand."
+  },
+  "job": {
+    "close": "Close",
+    "showProgress": "Show progress",
+    "showLog": "Show log"
+  },
+  "unsaved": {
+    "title": "Unsaved changes",
+    "in": "in",
+    "thisTab": "this tab",
+    "saveOrDrop": "Save them first, or drop them to open the other tab.",
+    "saveBeforeLeaving": "Save them before you leave this tab.",
+    "stay": "Stay here",
+    "drop": "Drop changes"
+  }
+}
