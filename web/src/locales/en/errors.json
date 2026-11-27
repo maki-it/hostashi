@@ -1,4 +1,6 @@
 {
+  "agent_timeout": "The server did not answer in time. Reload the page to see whether the change was made.",
+  "agent_unavailable": "The change could not be completed. Try again.",
   "busy": "The server is busy. Try again in a minute.",
   "invalid_credentials": "Wrong username or password.",
   "passkey_failed": "The passkey was not accepted.",

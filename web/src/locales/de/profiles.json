@@ -1,0 +1,118 @@
+{
+  "title": "App-Profile",
+  "description": "Ein Profil bringt die Härtungsregeln einer Site und, bei neuen Sites, ihren Web-Root-Ordner mit. Kopiere ein mitgeliefertes Profil, um ein eigenes zu erstellen.",
+  "loading": "Profile werden geladen…",
+  "allLink": "Alle Profile",
+  "builtin": "Mitgeliefert",
+  "own": "Eigenes",
+  "builtinNoChange": "{{title}} ist mitgeliefert und lässt sich nicht ändern. Kopiere es stattdessen.",
+  "noSuch": "Es gibt kein Profil namens {{name}}.",
+  "copyTitle": "{{title}} (Kopie)",
+  "change": "Profil {{name}} ändern",
+  "changeDescription": "Sites, die dieses Profil nutzen, bekommen die neuen Regeln sofort und behalten ihre eigenen Änderungen. Der Web-Root-Ordner gilt nur für neue Sites.",
+  "copy": "{{title}} kopieren",
+  "copyDescription": "Eine Kopie ist dein eigenes Profil: ändere die Werte und wähle es dann für neue Sites oder im Tab „Härtung“ einer Site.",
+  "saved": "Profil {{name}} gespeichert. Sites, die es nutzen, haben die neuen Regeln bekommen.",
+  "added": "Profil {{name}} hinzugefügt.",
+  "deleted": "Profil {{name}} gelöscht.",
+  "imported": "Profil {{name}} importiert.",
+  "types": {
+    "php": "PHP",
+    "static": "Statisch"
+  },
+  "anyPhp": "beliebig",
+  "rules": {
+    "dumps": "Dumps",
+    "paths_one": "{{count}} Pfad",
+    "paths_other": "{{count}} Pfade",
+    "none": "keine"
+  },
+  "pageCache": {
+    "none": "Keine",
+    "php": "Jede PHP-Anwendung (streng)"
+  },
+  "columns": {
+    "name": "Profil",
+    "type": "Typ",
+    "php": "Braucht PHP",
+    "webDir": "Liefert aus",
+    "rules": "Sperrt",
+    "actions": "Aktionen"
+  },
+  "actions": {
+    "copy": "Kopieren",
+    "copyLabel": "{{title}} kopieren",
+    "changeLabel": "{{title}} ändern",
+    "exportLabel": "{{title}} als YAML exportieren",
+    "deleteLabel": "{{title}} löschen"
+  },
+  "delete": {
+    "title": "Profil {{name}} löschen?",
+    "text": "Nur ein Profil, das keine Site nutzt, lässt sich löschen.",
+    "confirm": "Profil löschen"
+  },
+  "filter": {
+    "label": "Profile filtern",
+    "placeholder": "Nach Name filtern"
+  },
+  "table": {
+    "label": "App-Profile",
+    "noMatch": "Kein Profil passt zum Filter."
+  },
+  "editor": {
+    "name": "Name",
+    "nameHint": "Kleinbuchstaben, Ziffern und Bindestriche",
+    "nameHintEdit": "Der Name lässt sich nicht ändern; kopiere das Profil für ein neues.",
+    "title": "Titel",
+    "titleHint": "Wird in den Profillisten gezeigt",
+    "type": "Site-Typ",
+    "typeHint": "Statische Profile werden für statische Sites angeboten.",
+    "typeHintEdit": "Lässt sich nicht ändern, solange Sites das Profil nutzen.",
+    "minPhp": "Niedrigste PHP-Version",
+    "minPhpHint": "Etwa 8.2; leer für beliebig",
+    "webDir": "Web-Root-Ordner",
+    "webDirHint": "Unterhalb von htdocs, etwa public; leer für htdocs. Nur für neue Sites.",
+    "pageCache": "Voreinstellung für den Seiten-Cache",
+    "pageCacheHint": "Wird angeboten, wenn der Seiten-Cache eingeschaltet wird",
+    "hardening": "Härtungsregeln",
+    "configFiles": "Datenbank-Dumps, Backups, Logs und Editor-Kopien sperren",
+    "denyDirs": "Gesperrte Ordner",
+    "denyFiles": "Gesperrte Dateien",
+    "noPhpDirs": "Ordner ohne PHP",
+    "limitFiles": "PHP-Dateien mit Ratenbegrenzung",
+    "pathHint": "Einer pro Zeile, relativ zum Document Root. Höchstens {{max}}.",
+    "cron": "Vorgeschlagene Cron-Jobs",
+    "cronHint": "Einer pro Zeile: Zeitplan, dann Befehl, etwa */5 * * * * php cron.php. Wird nur gezeigt, nie angelegt.",
+    "checklist": "Checkliste",
+    "checklistHint": "Eine Notiz pro Zeile, wird nach dem Anlegen einer Site gezeigt",
+    "save": "Profil speichern",
+    "add": "Profil hinzufügen"
+  },
+  "import": {
+    "title": "Profil importieren",
+    "description": "Ein Profil, das aus diesem oder einem anderen Hostashi-Panel exportiert wurde, als YAML mit version: 1.",
+    "button": "YAML importieren",
+    "file": "YAML-Datei",
+    "fileHint": "Eine .yaml-Datei aus dem Export",
+    "yaml": "YAML",
+    "yamlHint": "Oder füge es hier ein. Der Name darf nicht vergeben sein; ändere ihn hier, um ein Profil zweimal zu importieren.",
+    "submit": "Profil importieren",
+    "readFailed": "Die Datei konnte nicht gelesen werden.",
+    "empty": "Füge das YAML ein oder wähle eine Datei."
+  },
+  "problems": {
+    "name": "Verwende für den Namen bis zu {{max}} Kleinbuchstaben, Ziffern und Bindestriche, beginnend mit einem Buchstaben.",
+    "nameTaken": "Ein Profil namens {{name}} gibt es schon.",
+    "title": "Gib dem Profil einen Titel.",
+    "minPhp": "Schreib die niedrigste PHP-Version wie 8.2 oder lass das Feld leer.",
+    "cron": "Der Cron-Job „{{line}}“ braucht einen Zeitplan und einen Befehl."
+  },
+  "errors": {
+    "not_found": "Das Profil gibt es nicht mehr.",
+    "profile_exists": "Ein Profil mit diesem Namen gibt es schon.",
+    "profile_builtin": "Mitgelieferte Profile lassen sich nicht ändern oder löschen. Kopiere stattdessen eines.",
+    "profile_in_use": "{{message}} Gib diesen Sites zuerst ein anderes Profil.",
+    "forbidden": "Nur Admins können Profile verwalten.",
+    "failed": "Das Profil konnte nicht gespeichert werden. Versuch es noch einmal."
+  }
+}

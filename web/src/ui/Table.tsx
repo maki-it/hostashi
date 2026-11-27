@@ -37,6 +37,8 @@ type TableProps<T> = {
    * labelled columns are hidden, so the main cell should carry them.
    */
   compact?: boolean;
+  /** On a phone, the row buttons go under the row instead of beside its title: for rows with several labelled buttons. */
+  actionsBelow?: boolean;
   /** Content of an extra full-width row below a row, for example a
    *  confirmation for that row; null for none. */
   after?: (row: T) => ReactNode;
@@ -69,11 +71,11 @@ export function nextSort(current: Sort | undefined, key: string): Sort {
  * up/down icon, and an up or down arrow on the active column (ADR-0037).
  * The caller keeps the sort, for example in the address.
  */
-export function Table<T>({ label, columns, rows, rowKey, sort, onSort, empty, compact = false, after }: TableProps<T>) {
+export function Table<T>({ label, columns, rows, rowKey, sort, onSort, empty, compact = false, actionsBelow = false, after }: TableProps<T>) {
   const shown = sortRows(rows, columns, sort);
   return (
     <div className="ui-table-box">
-      <table className="ui-table" aria-label={label} data-compact={compact ? "" : undefined}>
+      <table className={actionsBelow ? "ui-table ui-table-actions-below" : "ui-table"} aria-label={label} data-compact={compact ? "" : undefined}>
         <thead>
           <tr>
             {columns.map((c) => {
